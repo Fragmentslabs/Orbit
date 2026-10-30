@@ -20,18 +20,18 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * O painel do overlay (⇧⌘espaço), no rodapé da tela.
+ * The overlay panel (⇧⌘space), at the bottom of the screen.
  *
- * Ele é um "visor" sobre uma sessão de verdade: a mesma engine, o mesmo
- * histórico, o mesmo modelo — só que numa faixa estreita, com a persona no
- * lugar do ícone e respostas curtas. A sessão é fixa (a última do overlay)
- * para o "e agora traduz isso" ter para onde apontar; ela aparece no sidebar
- * como qualquer outra conversa.
+ * It is a "viewfinder" over a real session: the same engine, the same
+ * history, the same model — only in a narrow strip, with the persona in
+ * place of the icon and short answers. The session is fixed (the last one of the overlay)
+ * so that "and now translate this" has something to point at; it appears in the sidebar
+ * like any other conversation.
  *
- * Dois modos, o mesmo dono do estado (o modo chamada existente):
- *  - texto: campo focado, pergunta digitada, resposta em streaming;
- *  - chamada: ditado ao vivo e resposta falada — a resposta chega escrita e
- *    falada ao mesmo tempo, como no painel do input da janela principal.
+ * Two modes, the same owner of the state (the existing call mode):
+ *  - text: focused field, typed question, streaming answer;
+ *  - call: live dictation and spoken answer — the answer arrives written and
+ *    spoken at the same time, as in the input panel of the main window.
  */
 
 const SESSION_KEY = "orbit-overlay-session"
@@ -50,7 +50,7 @@ export function OverlayApp() {
   const [text, setText] = useState("")
   const [notice, setNotice] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  /** Instante da pergunta: a resposta anterior sai da tela assim que se pergunta. */
+  /** Instant of the question: the previous answer leaves the screen as soon as one asks. */
   const [askedAt, setAskedAt] = useState(0)
 
   const inputRef = useRef<HTMLInputElement>(null)
@@ -59,17 +59,17 @@ export function OverlayApp() {
   const autoStarted = useRef<number | null>(null)
 
   /**
-   * Altura do card para a janela acompanhar. A janela é transparente e o card
-   * tem cantos arredondados: se ela ficar MENOR que ele, o topo é cortado e os
-   * cantos de cima viram uma linha reta. Por isso a medida é reportada também a
-   * cada ABERTURA — o ResizeObserver só fala quando o tamanho muda, e reabrir
-   * o painel no mesmo estado deixava a janela no piso.
+   * Card height for the window to follow. The window is transparent and the card
+   * has rounded corners: if it becomes SMALLER than it, the top is cut and the
+   * top corners become a straight line. That is why the measurement is reported also on
+   * every OPENING — the ResizeObserver only speaks when the size changes, and reopening
+   * the panel in the same state left the window at the floor.
    */
   const reportHeight = useCallback(() => {
     const node = panelRef.current
     if (!node) return
-    // +16 é o vão do wrapper (p-2): 8 em cima e 8 embaixo. A janela precisa
-    // dele inteiro, senão o card encosta nas bordas e perde o arredondamento.
+    // +16 is the gap of the wrapper (p-2): 8 on top and 8 at the bottom. The window needs
+    // all of it, otherwise the card touches the edges and loses the rounding.
     void overlayApi.resize(Math.ceil(node.getBoundingClientRect().height) + 16)
   }, [])
 
@@ -77,16 +77,16 @@ export function OverlayApp() {
   const selectedModel = useProviderStore((s) => s.selectedModel)
   const model = overlayModel ?? selectedModel
 
-  // Sessão fixa do overlay: criada na primeira abertura, não no boot (senão
-  // toda abertura do app deixaria uma conversa "Atalho" órfã no sidebar).
+  // Fixed overlay session: created on the first opening, not at boot (otherwise
+  // every app opening would leave an orphan "Shortcut" conversation in the sidebar).
   const ensureSession = useCallback(async (): Promise<string | null> => {
-    // O store sobe na PRIMEIRA abertura, não no pré-aquecimento: a janela é
-    // criada no boot e carregar todas as sessões ali seria trabalho pago por
-    // quem talvez nunca use o atalho.
+    // The store comes up on the FIRST opening, not in the pre-warm: the window is
+    // created at boot and loading all the sessions there would be work paid by
+    // whoever may never use the shortcut.
     initRef.current ??= Promise.all([
       useSessionStore.getState().initialize(),
-      // Catálogo junto: sem ele o painel não sabe se o modelo pensa sempre
-      // (`reasoningAlwaysOn`) nem o nome dos modelos que mostra.
+      // Catalog along: without it the panel does not know whether the model always thinks
+      // (`reasoningAlwaysOn`) nor the name of the models it shows.
       useProviderStore.getState().initialize(),
     ]).then(() => undefined)
     await initRef.current
@@ -94,8 +94,8 @@ export function OverlayApp() {
     const stored = localStorage.getItem(SESSION_KEY)
     const existing = stored ? state.sessions.find((session) => session.id === stored) : undefined
     if (existing) {
-      // Histórico da conversa: sem isto a reabertura do painel mostraria só o
-      // turno novo, e o "e agora traduz isso" perderia o fio.
+      // Conversation history: without this the reopening of the panel would show only the
+      // new turn, and the "and now translate this" would lose the thread.
       await state.ensureMessages(existing.id)
       return existing.id
     }
@@ -111,7 +111,7 @@ export function OverlayApp() {
   ensureSessionRef.current = ensureSession
 
   useEffect(() => {
-    // Avisa o main que a página já escuta `overlay:open` (ver markOverlayReady).
+    // Tells the main process that the page already listens to `overlay:open` (see markOverlayReady).
     overlayApi.ready()
   }, [])
 
@@ -130,12 +130,12 @@ export function OverlayApp() {
       setNotice(null)
       setCopied(false)
       setAskedAt(Date.now())
-      // Visão e thinking lidos do storage AGORA: podem ter mudado nas
-      // Preferências depois que esta janela nasceu (o painel é pré-aquecido no
-      // boot e vive a sessão inteira).
+      // Vision and thinking read from storage NOW: they may have changed in
+      // Preferences after this window was born (the panel is pre-warmed at
+      // boot and lives the whole session).
       const vision = look.vision ? readVisionModel() : null
-      // Nível do chat do overlay: a escolha dele, senão o do modelo. Lido do
-      // storage agora — esta janela é pré-aquecida no boot.
+      // Level of the overlay chat: its choice, otherwise the model's. Read from
+      // storage now — this window is pre-warmed at boot.
       const reasoningPref = sessionReasoningFor(sessionId, model.providerId, model.modelId)
       const catalogModel = useProviderStore.getState().catalog[model.providerId]?.models[model.modelId]
       void chatApi.send({
@@ -144,26 +144,26 @@ export function OverlayApp() {
         providerId: model.providerId,
         modelId: model.modelId,
         mode: "chat",
-        // `overlay` liga as tools de tela/seleção e o prompt de resposta curta;
-        // `voiceCall` só no modo falado (a resposta vai ser lida em voz alta);
-        // `computer` deixa o Computer Use valer quando ele está ativo nas
-        // Preferências — sem esta chave o gate em app-settings.ts nem cria as
-        // tools cu_*.
+        // `overlay` turns on the screen/selection tools and the short answer prompt;
+        // `voiceCall` only in spoken mode (the answer is going to be read aloud);
+        // `computer` lets Computer Use count when it is active in
+        // Preferences — without this key the gate in app-settings.ts does not even create the
+        // cu_* tools.
         options: {
           overlay: true,
           computer: true,
           voiceCall: spoken || undefined,
-          // Nível de thinking do chat do overlay (ou o do modelo, nas
-          // Preferências) — o mesmo mapa por chat que o input do chat usa.
+          // Thinking level of the overlay chat (or the model's, in
+          // Preferences) — the same per-chat map the chat input uses.
           reasoning: {
             enabled: (reasoningPref?.enabled ?? false) || !!catalogModel?.reasoningAlwaysOn,
             variantId: reasoningPref?.variantId,
           },
         },
-        // Modo Visão ligado (padrão): a tela vai para o modelo de visão, que
-        // devolve texto — funciona com qualquer modelo principal. Desligado, a
-        // imagem só vai ao modelo se ele enxergar; sem nenhum dos dois o
-        // `see_screen` recusa e o agente diz que não consegue olhar.
+        // Vision mode on (default): the screen goes to the vision model, which
+        // returns text — it works with any main model. Turned off, the
+        // image only goes to the model if it can see; without either of the two the
+        // `see_screen` refuses and the agent says it cannot look.
         visionModel: vision ?? undefined,
       })
       return true
@@ -183,20 +183,20 @@ export function OverlayApp() {
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
   const status = useSessionStore((s) => (sessionId ? s.status[sessionId] : undefined))
   const busy = status === "submitted" || status === "streaming" || status === "fallback" || status === "cancelling"
-  // Pedidos de aprovação/pergunta DESTA conversa: sem isto, o agente do atalho
-  // pedia permissão para agir num app e o pedido só existia numa notificação —
-  // a tarefa ficava parada e, no modo chamada, a voz em silêncio.
+  // Approval/question requests of THIS conversation: without this, the shortcut agent
+  // asked permission to act in an app and the request only existed in a notification —
+  // the task stayed stopped and, in call mode, the voice in silence.
   const asks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
-  // Permissão é a mais comum e a mais simples: fica no topo, numa linha. O resto
-  // (perguntas, subchats, lotes) segue no cartão completo.
+  // Permission is the most common and the simplest: it stays at the top, in one line. The rest
+  // (questions, sub-chats, batches) goes on in the full card.
   const permissionAsks = useMemo(() => asks.filter((ask) => ask.kind === "permission" && !ask.batchId), [asks])
   const otherAsks = useMemo(() => asks.filter((ask) => !(ask.kind === "permission" && !ask.batchId)), [asks])
   const view = useMemo(() => assistantView(messages, askedAt, busy), [messages, askedAt, busy])
   const answer = view.final
-  /** Sessão para os componentes inline do Markdown (orbit-ui) falarem com ela. */
+  /** Session for the inline Markdown components (orbit-ui) to talk to it. */
   const uiHost = useMemo(() => ({ sessionId: sessionId ?? undefined }), [sessionId])
 
-  // O main manda o contexto ao abrir (seleção já lida, modo e preferências).
+  // The main process sends the context on opening (selection already read, mode and preferences).
   useEffect(() => {
     const offOpen = overlayApi.onOpen((next) => {
       setContext(next)
@@ -204,14 +204,14 @@ export function OverlayApp() {
       setText("")
       setNotice(null)
       setCopied(false)
-      // Abrir limpo: a resposta do uso anterior não reaparece na tela. O fio da
-      // conversa continua no histórico (o "e agora traduz isso" ainda aponta
-      // para o que foi dito antes), mas o painel nasce vazio.
+      // Opening clean: the answer from the previous use does not reappear on screen. The thread of the
+      // conversation goes on in the history (the "and now translate this" still points
+      // to what was said before), but the panel is born empty.
       setAskedAt(Date.now())
       autoStarted.current = null
-      // Reporta a altura no próximo frame: o main reancora a janela sem saber
-      // o tamanho do card, e sem isto uma reabertura no mesmo estado mantinha a
-      // janela no piso — cortando o topo e os cantos de cima.
+      // Reports the height on the next frame: the main process re-anchors the window without knowing
+      // the card size, and without this a reopening in the same state kept the
+      // window at the floor — cutting the top and the top corners.
       requestAnimationFrame(reportHeight)
       void ensureSessionRef
         .current()
@@ -222,8 +222,8 @@ export function OverlayApp() {
       if (event.type === "hangup") controlRef.current.call.hangUp()
       else if (event.type === "settings") setLook(event.settings)
       else if (event.type === "selection") {
-        // Lida alguns instantes depois de abrir (a janela não espera o
-        // `osascript`): entra no contexto sem apagar o que já está lá.
+        // Read a few instants after opening (the window does not wait for the
+        // `osascript`): it enters the context without erasing what is already there.
         setContext((current) =>
           current ? { ...current, selection: event.text, selectionApp: event.app } : current,
         )
@@ -235,8 +235,8 @@ export function OverlayApp() {
     }
   }, [reportHeight])
 
-  // Abriu em modo chamada: começa a ouvir assim que a sessão existe. Uma vez
-  // por abertura — desligar a chamada não pode religá-la em seguida.
+  // Opened in call mode: it starts listening as soon as the session exists. Once
+  // per opening — turning the call off cannot turn it back on right after.
   useEffect(() => {
     if (!context?.call || !sessionId || autoStarted.current === context.at) return
     if (!control.ready) {
@@ -247,14 +247,14 @@ export function OverlayApp() {
     control.start()
   }, [context, sessionId, control, t])
 
-  // Modo texto: o campo já nasce com o foco (é o que a pessoa veio fazer).
+  // Text mode: the field is born with the focus (it is what the person came to do).
   useEffect(() => {
     if (!context || context.call) return
     const handle = requestAnimationFrame(() => inputRef.current?.focus())
     return () => cancelAnimationFrame(handle)
   }, [context])
 
-  // Esc fecha de qualquer modo; o painel não é uma janela de trabalho.
+  // Esc closes it in any mode; the panel is not a work window.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -266,7 +266,7 @@ export function OverlayApp() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  // A janela acompanha o conteúdo (a borda de baixo fica ancorada no main).
+  // The window follows the content (the bottom edge stays anchored in the main process).
   useEffect(() => {
     const node = panelRef.current
     if (!node) return
@@ -310,9 +310,9 @@ export function OverlayApp() {
   const errorText = call.error === "reply" ? t("voice.call.replyError") : call.error
   const opacity = Math.round(Math.min(1, Math.max(0.5, look.opacity)) * 100)
   /**
-   * O corpo nasce FECHADO: o atalho abre só o campo. Ele abre quando há o que
-   * mostrar — a resposta chegando, um aviso ou um erro. A seleção sozinha não
-   * abre nada (ela aparece como placeholder do campo e como contexto do turno).
+   * The body is born CLOSED: the shortcut opens only the field. It opens when there is something
+   * to show — the answer arriving, a warning or an error. The selection alone opens
+   * nothing (it appears as the field placeholder and as context of the turn).
    */
   const showBody = Boolean(answer || view.progress || errorText || notice || busy)
 
@@ -326,7 +326,7 @@ export function OverlayApp() {
         {permissionAsks.map((ask) => (
           <OverlayPermission key={ask.requestId} ask={ask} />
         ))}
-        {/* Cabeçalho: persona + pergunta OU escuta ao vivo */}
+        {/* Header: persona + question OR live listening */}
         <div className="flex items-center gap-2.5 px-3 py-2.5">
           <div className="flex size-9 shrink-0 items-center justify-center">
             {look.persona ? (
@@ -382,9 +382,9 @@ export function OverlayApp() {
           </div>
 
           {call.active ? (
-            // Voltar a digitar sem fechar o painel: desliga a escuta e devolve o
-            // foco ao campo. Sem isto, quem abre falando ficaria preso no modo
-            // chamada até fechar e reabrir (e o atalho reabre falando).
+            // Going back to typing without closing the panel: it turns off the listening and gives the
+            // focus to the field. Without this, whoever opens it speaking would stay stuck in call
+            // mode until closing and reopening (and the shortcut reopens speaking).
             <Hint label={t("overlay.type")}>
               <button
                 type="button"
@@ -451,7 +451,7 @@ export function OverlayApp() {
                 showBody ? "opacity-100" : "opacity-0",
               )}
             >
-              {/* De onde veio o texto: sem rótulo, "traduz isso" não tem sujeito. */}
+              {/* Where the text came from: without a label, "translate this" has no subject. */}
               {selection && !answer && (
                 <p className="mb-1.5 line-clamp-1 text-[11px] text-muted-foreground">
                   <span className="text-muted-foreground/70">
@@ -470,16 +470,16 @@ export function OverlayApp() {
                 <>
                   <div
                     className={cn(
-                      // Markdown de verdade: o painel mostrava o texto CRU, com
-                      // `**` e `#` à vista. É o mesmo renderizador da resposta
-                      // na conversa — então lista, tabela e código saem iguais.
+                      // Real Markdown: the panel showed the RAW text, with
+                      // `**` and `#` in view. It is the same renderer as the answer
+                      // in the conversation — so list, table and code come out the same.
                       "select-text overflow-y-auto text-[13px] leading-[1.55] text-foreground",
-                      // Falada, a resposta é curta; se passar disso, rola.
+                      // Spoken, the answer is short; if it goes past that, it scrolls.
                       call.active ? "max-h-[132px]" : "max-h-[320px]",
                     )}
                   >
-                    {/* O host leva a sessão desta conversa: um bloco orbit-ui
-                        (botões, tabela) continua funcionando aqui. */}
+                    {/* The host carries the session of this conversation: an orbit-ui block
+                        (buttons, table) keeps working here. */}
                     <OrbitUiHostContext.Provider value={uiHost}>
                       <MessageResponse>{answer}</MessageResponse>
                     </OrbitUiHostContext.Provider>
@@ -498,7 +498,7 @@ export function OverlayApp() {
               )}
 
               {!answer && busy && (
-                // Trabalhando: o que ele vai narrando, em cinza — não é a resposta.
+                // Working: what it narrates along the way, in gray — it is not the answer.
                 <p className="line-clamp-3 select-text whitespace-pre-wrap text-[12px] leading-[1.5] text-muted-foreground">
                   {view.progress || t("overlay.thinking")}
                 </p>
@@ -511,14 +511,14 @@ export function OverlayApp() {
   )
 }
 
-/** Modelo escolhido em Preferências → Overlay (null = o modelo da conversa). */
+/** Model chosen in Preferences → Overlay (null = the conversation model). */
 function useAppSettingsModel() {
   const [model, setModel] = useState<OverlaySettings["model"]>(null)
   useEffect(() => {
     void overlayApi.settings().then((settings) => {
       setModel(settings.model)
-      // A opacidade/persona o main já manda no contexto ao abrir; aqui só o
-      // modelo, que muda com o painel fechado.
+      // The opacity/persona the main process already sends in the context on opening; here only the
+      // model, which changes with the panel closed.
     })
     const off = overlayApi.onEvent((event) => {
       if (event.type === "settings") setModel(event.settings.model)
@@ -529,10 +529,10 @@ function useAppSettingsModel() {
 }
 
 /**
- * Pedido de permissão no painel do atalho: uma linha no topo, com o título do
- * pedido e Permitir (o X nega). O painel é estreito e quem está falando com
- * ele quer seguir — o detalhe completo (sempre neste chat, sempre) continua no
- * cartão da conversa na janela principal.
+ * Permission request in the shortcut panel: one line at the top, with the title of the
+ * request and Allow (the X denies). The panel is narrow and whoever is talking to
+ * it wants to move on — the full detail (always in this chat, always) stays in the
+ * conversation card in the main window.
  */
 function OverlayPermission({ ask }: { ask: PendingAskUI }) {
   const { t } = useTranslation()

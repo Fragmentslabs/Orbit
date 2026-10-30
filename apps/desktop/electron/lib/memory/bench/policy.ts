@@ -1,22 +1,22 @@
 /**
- * Políticas PRÉ-REGISTRADAS para a validação final.
+ * PRE-REGISTERED policies for the final validation.
  *
- * A escolha da política foi feita no split `dev` (família F, teto de 2 falsos
- * positivos). Estas constantes existem para que o conjunto bloqueado seja
- * avaliado UMA vez, contra regras definidas antes — e não para ajustar limiar
- * depois de ver o resultado.
+ * The choice of policy was made on the `dev` split (family F, ceiling of 2 false
+ * positives). These constants exist so the blocked set is
+ * evaluated ONCE, against rules defined beforehand — and not to tune a threshold
+ * after seeing the result.
  *
- * Escada de segurança (a decisão é tomada nesta ordem, sem voltar atrás):
+ * Safety ladder (the decision is taken in this order, with no going back):
  *
- *   P1 — injeção calibrada (família F). Só é aprovada se a precisão por
- *        memória injetada no conjunto bloqueado for >= 98% E o limite
- *        inferior do IC95 dessa precisão for >= 90%.
- *   P2 — só ponteiros: injeção automática desligada. Rede de segurança quando
- *        a evidência não sustenta injeção.
- *   P3 — injeção estrita: maior limiar que ainda injeta no dev com ZERO
- *        falsos positivos. Usada se P1 reprovar e P3 passar no critério.
+ *   P1 — calibrated injection (family F). It is only approved if the precision per
+ *        injected memory on the blocked set is >= 98% AND the lower
+ *        bound of the 95% CI of that precision is >= 90%.
+ *   P2 — pointers only: automatic injection off. The safety net when
+ *        the evidence does not support injection.
+ *   P3 — strict injection: the highest threshold that still injects on dev with ZERO
+ *        false positives. Used if P1 fails and P3 passes the criterion.
  *
- * Se nenhuma passar, o padrão é P2 — nunca relaxar o limiar para ganhar recall.
+ * If none passes, the default is P2 — never relax the threshold to gain recall.
  */
 import {
   PRODUCTION_RETRIEVAL,
@@ -25,9 +25,9 @@ import {
   type SelectionParams,
 } from '@shared/memory-select'
 
-/** Meta de precisão da injeção automática, definida ANTES de ver o bloqueado. */
+/** Precision target for automatic injection, defined BEFORE looking at the blocked set. */
 export const INJECTION_PRECISION_TARGET = 0.98
-/** Piso do IC95 (Wilson) exigido junto da meta. */
+/** Lower bound of the 95% CI (Wilson) required along with the target. */
 export const INJECTION_PRECISION_CI_FLOOR = 0.9
 
 export interface Policy {
@@ -35,27 +35,27 @@ export interface Policy {
   name: string
   retrieval: RetrievalParams
   selection: SelectionParams
-  /** Usa o piso de ruído do acervo como base dos limiares relativos. */
+  /** Uses the pool's noise floor as the base for the relative thresholds. */
   useNoise: boolean
 }
 
 /**
- * Fusão calibrada no dev: peso lexical pequeno + corte de cobertura. Com peso
- * igual o RRF perde ~30 pp de R@1 (medido); com o corte, empata com o
- * semântico e mantém o identificador exato.
+ * Fusion calibrated on dev: small lexical weight + coverage cut. At equal
+ * weight RRF loses ~30 pp of R@1 (measured); with the cut, it ties with the
+ * semantic one and keeps the exact identifier.
  *
- * A definição mora em `@shared/memory-select`: a busca de produção usa a MESMA
- * constante, e duplicá-la aqui deixaria o benchmark medindo outra coisa.
+ * The definition lives in `@shared/memory-select`: the production search uses the SAME
+ * constant, and duplicating it here would leave the benchmark measuring something else.
  */
 export { PRODUCTION_RETRIEVAL }
 
 /**
- * Parâmetros vencedores da calibração em `dev` (família F, Bekko a8m).
- * `useNoise: false` → os limiares efetivos são absolutos: 0,60 e 0,50.
+ * Winning parameters of the calibration on `dev` (family F, Bekko a8m).
+ * `useNoise: false` → the effective thresholds are absolute: 0.60 and 0.50.
  */
 export const P1_SELECTION: SelectionParams = {
   ...DEFAULT_SELECTION,
-  threshold: 'acervo',
+  threshold: 'collection',
   injectCos: 0.6,
   pointerCos: 0.5,
   injectDelta: 0.22,
@@ -76,7 +76,7 @@ export const P1: Policy = {
   useNoise: false,
 }
 
-/** Só ponteiros: nenhuma injeção automática (injectCos impossível). */
+/** Pointers only: no automatic injection (impossible injectCos). */
 export const P2: Policy = {
   id: 'P2',
   name: 'somente ponteiros (injeção desligada)',
@@ -86,8 +86,8 @@ export const P2: Policy = {
 }
 
 /**
- * Injeção estrita. O limiar não é escolhido a dedo: `strictInjectCos()` acha,
- * no dev, o maior limiar que ainda injeta alguma coisa com zero FP.
+ * Strict injection. The threshold is not picked by hand: `strictInjectCos()` finds,
+ * on dev, the highest threshold that still injects something with zero FP.
  */
 export function P3(injectCos: number): Policy {
   return {

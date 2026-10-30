@@ -14,8 +14,8 @@ import {
 import { afterEditNote } from './code'
 
 /**
- * Ferramentas de arquivo portadas do opencode (read/write/edit/ls/glob/grep)
- * em versão enxuta: mesmas semânticas, sem LSP nem tracking de mutação.
+ * File tools ported from opencode (read/write/edit/ls/glob/grep)
+ * in a lean version: same semantics, without LSP or mutation tracking.
  */
 
 const MAX_READ_LINES = 2000
@@ -23,18 +23,18 @@ const MAX_LINE_LENGTH = 2000
 const MAX_GREP_MATCHES = 100
 const MAX_GLOB_RESULTS = 200
 
-/** Quantas páginas de documento uma leitura devolve por padrão. Baixo de
- *  propósito: o ponto da paginação é o agente pedir mais quando precisar, não
- *  arrastar o documento inteiro para o contexto em duas chamadas. */
+/** How many document pages a read returns by default. Low on
+ *  purpose: the point of pagination is the agent asking for more when it needs to, not
+ *  dragging the whole document into the context in two calls. */
 const DEFAULT_DOC_PAGES = 3
 const MAX_DOC_PAGES = 20
 
 /**
- * Leitura de documento (PDF/DOCX/planilha) com a MESMA semântica offset/limit
- * do arquivo de texto — só que a unidade é página, não linha. Reaproveitar o
- * `read` em vez de criar uma tool nova é deliberado: o modelo já sabe paginar
- * com offset/limit, e um `read` que engasga em .pdf é justamente o bug que
- * isto corrige.
+ * Document reading (PDF/DOCX/spreadsheet) with the SAME offset/limit semantics
+ * as the text file — except the unit is a page, not a line. Reusing
+ * `read` instead of creating a new tool is deliberate: the model already knows how to paginate
+ * with offset/limit, and a `read` that chokes on .pdf is exactly the bug that
+ * this fixes.
  */
 async function readDocument(file: string, offset?: number, limit?: number): Promise<string> {
   const doc = await extractDocumentFile(file)
@@ -91,8 +91,8 @@ export function createWriteTool(ctx: ToolContext) {
 }
 
 function replaceOnce(content: string, oldString: string, newString: string): string | null {
-  // Correspondência exata primeiro; depois tenta ignorando espaços à direita
-  // de cada linha (fallback simplificado dos "replacers" do opencode).
+  // Exact match first; then it tries ignoring trailing spaces
+  // of each line (simplified fallback of opencode's "replacers").
   if (content.includes(oldString)) {
     return content.replace(oldString, newString)
   }
@@ -101,7 +101,7 @@ function replaceOnce(content: string, oldString: string, newString: string): str
   const normalizedOld = normalize(oldString)
   const idx = normalizedContent.indexOf(normalizedOld)
   if (idx < 0) return null
-  // Mapeia o índice normalizado de volta para o conteúdo original por linhas
+  // Maps the normalized index back to the original content by lines
   const linesBefore = normalizedContent.slice(0, idx).split('\n').length - 1
   const oldLineCount = normalizedOld.split('\n').length
   const lines = content.split('\n')
@@ -215,7 +215,7 @@ export function createGlobTool(ctx: ToolContext) {
         }
       }
       if (matches.length === 0) return 'No files found'
-      const suffix = matches.length >= MAX_GLOB_RESULTS ? '\n… (resultados truncados)' : ''
+      const suffix = matches.length >= MAX_GLOB_RESULTS ? '\n… (results truncated)' : ''
       return matches.join('\n') + suffix
     },
   })
@@ -240,9 +240,9 @@ export function createGrepTool(ctx: ToolContext) {
         const rel = path.relative(base, file).replace(/\\/g, '/')
         if (includeRegex && !includeRegex.test(rel)) continue
 
-        // Documento: busca no texto extraído (cacheado) e reporta a PÁGINA.
-        // Sem isto o walk pulava o arquivo — PDF é binário e cai no teste de
-        // \0 abaixo —, então o agente nem sabia que havia conteúdo ali.
+        // Document: it searches the extracted text (cached) and reports the PAGE.
+        // Without this the walk skipped the file — PDF is binary and falls into the
+        // \0 test below —, so the agent did not even know there was content there.
         if (isDocumentPath(file)) {
           try {
             const doc = await extractDocumentFile(file)
@@ -252,12 +252,12 @@ export function createGrepTool(ctx: ToolContext) {
                 results.push(
                   `${rel}:${pageLocator(page, doc.kind)}: ${line.trim().slice(0, 250)}`,
                 )
-                break // uma ocorrência por página basta para localizar o trecho
+                break // one hit per page is enough to locate the excerpt
               }
               if (results.length >= MAX_GREP_MATCHES) break
             }
           } catch {
-            // documento ilegível (protegido, corrompido) — segue o walk
+            // unreadable document (protected, corrupted) — the walk goes on
           }
           if (results.length >= MAX_GREP_MATCHES) break
           continue
@@ -283,7 +283,7 @@ export function createGrepTool(ctx: ToolContext) {
       }
 
       if (results.length === 0) return 'No matches found'
-      const suffix = results.length >= MAX_GREP_MATCHES ? '\n… (resultados truncados)' : ''
+      const suffix = results.length >= MAX_GREP_MATCHES ? '\n… (results truncated)' : ''
       return results.join('\n') + suffix
     },
   })

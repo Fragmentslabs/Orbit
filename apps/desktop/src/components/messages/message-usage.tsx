@@ -4,8 +4,8 @@ import type { TokenUsage } from "@shared/chat"
 import { formatCost, formatTokens } from "@/src/lib/format"
 
 /**
- * Badge discreto de tokens/custo no rodapé da mensagem do assistente.
- * Detalhes (reasoning, cache) ficam no tooltip.
+ * Discreet tokens/cost badge in the footer of the assistant message.
+ * Details (reasoning, cache) stay in the tooltip.
  */
 
 export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
@@ -31,7 +31,7 @@ export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
       <TooltipContent side="top" className="bg-popover text-popover-foreground">
         <div className="flex flex-col gap-0.5 text-xs">
           <span>{t("usage.inputLine", { count: nf.format(tokens.input) })}</span>
-          {/* Entrada = sem cache + lido + gravado: sub-linhas que somam o total. */}
+          {/* Input = no cache + read + written: sub-lines that add up to the total. */}
           {tokens.cacheRead + (tokens.cacheWrite ?? 0) > 0 && (
             <span className="pl-2 text-muted-foreground">
               ↳ {t("usage.noCache")}: {nf.format(Math.max(0, tokens.input - tokens.cacheRead - (tokens.cacheWrite ?? 0)))}

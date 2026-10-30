@@ -2,24 +2,24 @@ import type { MotionAudioPlan } from './motion-audio'
 import type { MotionTransitionInfo } from './motion-transitions'
 
 /**
- * O LINT de uma composição de motion: o que dá para dizer sobre ela ANTES de
- * pagar um render — e antes de o usuário descobrir pelo vídeo.
+ * The LINT of a motion composition: what can be said about it BEFORE
+ * paying for a render — and before the user finds out from the video.
  *
- * O contrato do Orbit é um só: o quadro N é uma função pura de N. Quase todo
- * defeito caro de uma composição é uma quebra dele, e quase todas se enxergam no
- * texto: um relógio de parede (`Date.now()`), um sorteio sem semente
- * (`Math.random()`), um timer que anda sozinho, uma transição CSS que só dispara
- * numa mudança de classe, um arquivo que não está ao lado do HTML. Cada regra
- * abaixo nasceu de uma dessas falhas e diz o que fazer no lugar.
+ * Orbit's contract is one: frame N is a pure function of N. Almost every
+ * expensive defect of a composition is a break of it, and almost all of them can be seen in
+ * the text: a wall clock (`Date.now()`), a draw without a seed
+ * (`Math.random()`), a timer that runs on its own, a CSS transition that only fires
+ * on a class change, a file that is not next to the HTML. Each rule
+ * below was born from one of those failures and says what to do instead.
  *
- * Três fontes, três funções puras (testáveis sem janela e sem disco):
- *  - `lintMotionSources`: o HTML de entrada e os scripts locais dele;
- *  - `lintMotionAudio`: o manifest de áudio contra o comprimento da peça;
- *  - `lintMotionTransitions`: o que a composição registrou em runtime.
+ * Three sources, three pure functions (testable without a window and without disk):
+ *  - `lintMotionSources`: the entry HTML and its local scripts;
+ *  - `lintMotionAudio`: the audio manifest against the length of the piece;
+ *  - `lintMotionTransitions`: what the composition registered at runtime.
  *
- * Severidade: `error` é uma composição que vai sair ERRADA (ou nem sair);
- * `warning` é suspeita — pode ser intencional, mas merece olhar. Nada aqui
- * bloqueia um render: o relatório é informação para quem escreve a peça.
+ * Severity: `error` is a composition that will come out WRONG (or not come out at all);
+ * `warning` is suspicion — it may be intentional, but it deserves a look. Nothing here
+ * blocks a render: the report is information for whoever writes the piece.
  */
 
 export type LintSeverity = 'error' | 'warning'
@@ -28,35 +28,35 @@ export interface LintFinding {
   rule: string
   severity: LintSeverity
   message: string
-  /** O que fazer no lugar. */
+  /** What to do instead. */
   hint?: string
-  /** Linha no arquivo (1-based), quando a regra sabe apontar. */
+  /** Line in the file (1-based), when the rule can point to it. */
   line?: number
-  /** Arquivo, quando não é o de entrada. */
+  /** File, when it is not the entry one. */
   file?: string
 }
 
-/** Um arquivo de texto da composição. */
+/** A text file of the composition. */
 export interface LintSource {
   name: string
   text: string
 }
 
-/** O que há por trás de uma referência relativa (`src`, `url(...)`). */
+/** What lies behind a relative reference (`src`, `url(...)`). */
 export type AssetStatus = 'ok' | 'missing' | 'outside'
 
 export interface LintSourceOptions {
-  /** Confere uma referência relativa contra a pasta da composição. */
+  /** Checks a relative reference against the composition's folder. */
   assetStatus?: (ref: string) => AssetStatus
 }
 
-// ----------------------------------------------------------------- máscaras
+// ----------------------------------------------------------------- masks
 
 /**
- * O JS sem comentários e sem o CONTEÚDO das strings (as aspas ficam). Mantém os
- * tamanhos e as quebras de linha, então um índice no resultado é o mesmo índice
- * no original — é isso que permite apontar a linha. Evita o falso positivo
- * clássico: `"Math.random()"` num texto, ou `// Date.now() não!` num comentário.
+ * The JS without comments and without the CONTENT of strings (the quotes stay). It keeps
+ * the lengths and the line breaks, so an index in the result is the same index
+ * in the original — that is what allows pointing to the line. It avoids the classic
+ * false positive: `"Math.random()"` in a text, or `// Date.now() is not it!` in a comment.
  */
 export function maskJs(source: string): string {
   let out = ''
@@ -83,9 +83,9 @@ export function maskJs(source: string): string {
           out += ' '
           i++
         }
-        // Uma string simples não atravessa linha: se atravessar, o laço de quem
-        // mascara teria virado o arquivo inteiro numa string por causa de uma
-        // regex com aspas. Fecha ali e segue.
+        // A single-quoted string does not cross lines: if it does, the loop of whoever
+        // masks would have turned the whole file into a string because of a
+        // regex with quotes. Closes there and moves on.
         if (ch !== '`' && source[i] === '\n') break
         out += blank(source[i++])
       }
@@ -98,7 +98,7 @@ export function maskJs(source: string): string {
   return out
 }
 
-/** O CSS sem comentários, nos mesmos tamanhos. */
+/** The CSS without comments, at the same lengths. */
 function maskCss(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n\r]/g, ' '))
 }
@@ -109,7 +109,7 @@ function lineAt(text: string, index: number): number {
   return line
 }
 
-// ------------------------------------------------------------------- regras
+// ------------------------------------------------------------------- rules
 
 interface Rule {
   rule: string
@@ -117,7 +117,7 @@ interface Rule {
   pattern: RegExp
   message: (match: string) => string
   hint: string
-  /** Descarta o achado quando devolve true (a regra não cabe no contexto). */
+  /** Discards the finding when it returns true (the rule does not fit the context). */
   skip?: (match: RegExpExecArray) => boolean
 }
 
@@ -198,18 +198,18 @@ const CSS_RULES: Rule[] = [
   },
 ]
 
-/** Atributos que apontam para arquivo, por tag. */
+/** Attributes that point to a file, per tag. */
 const ASSET_ATTRIBUTES = /<(script|link|img|video|audio|source|image|iframe|embed|object)\b([^>]*)>/gi
 const ATTRIBUTE = /\b(src|href|poster|data)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
 const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)/gi
-/** O que a regra de rede aceita sem reclamar: o contrato do guia permite Google Fonts. */
+/** What the network rule accepts without complaining: the guide's contract allows Google Fonts. */
 const ALLOWED_REMOTE = /^(?:https?:)?\/\/fonts\.(?:googleapis|gstatic)\.com\//i
 
 function isRemote(ref: string): boolean {
   return /^(?:https?:)?\/\//i.test(ref)
 }
 
-/** Referência para um arquivo local (nem URL, nem âncora, nem data:). */
+/** Reference to a local file (not a URL, not an anchor, not a data: URI). */
 function isLocalRef(ref: string): boolean {
   const value = ref.trim()
   if (!value || value.startsWith('#') || isRemote(value)) return false
@@ -218,11 +218,11 @@ function isLocalRef(ref: string): boolean {
 
 interface Block {
   text: string
-  /** Onde o bloco começa no arquivo, para calcular a linha. */
+  /** Where the block starts in the file, to compute the line. */
   offset: number
 }
 
-/** Os blocos `<script>` sem `src` e `<style>` do HTML. */
+/** The HTML's `<script>` blocks without `src` and its `<style>` blocks. */
 function htmlBlocks(html: string): { scripts: Block[]; styles: Block[]; remoteScripts: string[] } {
   const scripts: Block[] = []
   const styles: Block[] = []
@@ -235,7 +235,7 @@ function htmlBlocks(html: string): { scripts: Block[]; styles: Block[]; remoteSc
       if (src) remoteScripts.push(src[1] ?? src[2] ?? src[3])
       continue
     }
-    // JSON de dados e módulos de template não são código da composição.
+    // Data JSON and template modules are not code of the composition.
     if (/\btype\s*=\s*["']?(?:application\/json|application\/ld\+json|text\/template)/i.test(attrs)) continue
     scripts.push({ text: m[2], offset: (m.index ?? 0) + m[0].indexOf(m[2], m[1].length) })
   }
@@ -265,7 +265,7 @@ function runRules(rules: Rule[], masked: string, base: number, whole: string, fi
   return out
 }
 
-/** Junta achados repetidos da mesma regra numa linha só (`also at lines …`). */
+/** Merges repeated findings of the same rule into a single line (`also at lines …`). */
 function collapse(findings: LintFinding[]): LintFinding[] {
   const byKey = new Map<string, LintFinding & { more: number[] }>()
   const order: string[] = []
@@ -288,11 +288,11 @@ function collapse(findings: LintFinding[]): LintFinding[] {
 export interface AssetRef {
   ref: string
   line: number
-  /** `script`, `img`, `css`… — só para a mensagem. */
+  /** `script`, `img`, `css`… — only for the message. */
   tag: string
 }
 
-/** Toda referência a arquivo do HTML: atributos de tag, `url(...)` e `@import` do CSS. */
+/** Every file reference in the HTML: tag attributes, `url(...)` and the CSS `@import`. */
 export function collectAssetRefs(html: string): AssetRef[] {
   const refs: AssetRef[] = []
   const stripped = html.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n\r]/g, ' '))
@@ -300,7 +300,7 @@ export function collectAssetRefs(html: string): AssetRef[] {
     for (const attr of tag[2].matchAll(ATTRIBUTE)) {
       const ref = (attr[2] ?? attr[3] ?? attr[4] ?? '').trim()
       const name = attr[1].toLowerCase()
-      // <link rel="canonical"> e afins apontam para a web, não para um arquivo da peça.
+      // <link rel="canonical"> and the like point at the web, not at a file of the piece.
       if (name === 'href' && tag[1].toLowerCase() === 'link' && /rel\s*=\s*["']?(?:canonical|alternate|author|help)/i.test(tag[2])) continue
       refs.push({ ref, line: lineAt(html, (tag.index ?? 0) + tag[0].indexOf(attr[0])), tag: tag[1].toLowerCase() })
     }
@@ -317,7 +317,7 @@ export function collectAssetRefs(html: string): AssetRef[] {
   return refs
 }
 
-/** Os `src` de `<script>` que apontam para arquivo da pasta (nem URL, nem data:). */
+/** The `<script>` `src`s that point at a file in the folder (not a URL, not a data: URI). */
 export function localScriptRefs(html: string): string[] {
   return collectAssetRefs(html)
     .filter((r) => r.tag === 'script' && isLocalRef(r.ref))
@@ -325,8 +325,8 @@ export function localScriptRefs(html: string): string[] {
 }
 
 /**
- * O HTML de entrada e os scripts locais dele. `scripts` são os arquivos .js
- * AUTORAIS da pasta — bibliotecas (`*.min.js`) ficam de fora quem monta a lista.
+ * The entry HTML and its local scripts. `scripts` are the folder's AUTHORED
+ * .js files — libraries (`*.min.js`) are left out by whoever builds the list.
  */
 export function lintMotionSources(entry: LintSource, scripts: LintSource[] = [], options: LintSourceOptions = {}): LintFinding[] {
   const findings: LintFinding[] = []
@@ -346,7 +346,7 @@ export function lintMotionSources(entry: LintSource, scripts: LintSource[] = [],
     findings.push(...runRules(CSS_RULES, masked, block.offset, html))
     if (signals.some((s) => s.test(masked))) animated = true
   }
-  // `style="…"` em linha: só a regra de unidades de viewport e a de transição.
+  // Inline `style="…"`: only the viewport-unit rule and the transition rule.
   for (const m of html.matchAll(/\bstyle\s*=\s*"([^"]*)"/gi)) {
     const offset = (m.index ?? 0) + m[0].indexOf(m[1])
     findings.push(...runRules(CSS_RULES, maskCss(m[1]), offset, html))
@@ -356,11 +356,11 @@ export function lintMotionSources(entry: LintSource, scripts: LintSource[] = [],
     findings.push(...runRules(JS_RULES, masked, 0, script.text, script.name))
     if (signals.some((s) => s.test(masked))) animated = true
   }
-  // Um script externo (gsap, three) ou um <video> também anima.
+  // An external script (gsap, three) or a <video> also animates.
   if (remoteScripts.some((src) => /gsap|anime|lottie|three/i.test(src))) animated = true
   if (/<video\b/i.test(html)) animated = true
 
-  // ----------------------------------------------- tags de áudio na página
+  // ----------------------------------------------- audio tags on the page
   if (/<audio\b/i.test(html.replace(/<!--[\s\S]*?-->/g, ''))) {
     findings.push({
       rule: 'page-audio',
@@ -371,7 +371,7 @@ export function lintMotionSources(entry: LintSource, scripts: LintSource[] = [],
     })
   }
 
-  // -------------------------------------------- arquivos e rede (atributos)
+  // -------------------------------------------- files and network (attributes)
   const refs = collectAssetRefs(html)
   const seenRefs = new Set<string>()
   for (const { ref, line, tag } of refs) {
@@ -421,11 +421,11 @@ export function lintMotionSources(entry: LintSource, scripts: LintSource[] = [],
   return collapse(findings)
 }
 
-// -------------------------------------------------------------------- áudio
+// -------------------------------------------------------------------- audio
 
 const at = (seconds: number): string => `${Number(seconds.toFixed(2))}s`
 
-/** O manifest de áudio contra o comprimento da peça, em segundos. */
+/** The audio manifest against the piece's length, in seconds. */
 export function lintMotionAudio(plan: MotionAudioPlan, durationSeconds: number): LintFinding[] {
   const out: LintFinding[] = []
   const { tracks, master } = plan
@@ -481,9 +481,9 @@ export function lintMotionAudio(plan: MotionAudioPlan, durationSeconds: number):
   return out
 }
 
-// --------------------------------------------------------------- transições
+// --------------------------------------------------------------- transitions
 
-/** O que a composição registrou em runtime contra o comprimento da peça. */
+/** What the composition registered at runtime against the piece's length. */
 export function lintMotionTransitions(transitions: MotionTransitionInfo[], durationSeconds: number): LintFinding[] {
   const out: LintFinding[] = []
   const name = (t: MotionTransitionInfo) =>
@@ -505,8 +505,8 @@ export function lintMotionTransitions(transitions: MotionTransitionInfo[], durat
       })
     }
   }
-  // Duas transições sobre o mesmo elemento ao mesmo tempo disputam as mesmas
-  // propriedades: a que foi registrada por último vence, e a outra some.
+  // Two transitions on the same element at the same time fight over the same
+  // properties: the one registered last wins, and the other vanishes.
   for (let i = 0; i < transitions.length; i++) {
     for (let j = i + 1; j < transitions.length; j++) {
       const a = transitions[i]
@@ -526,7 +526,7 @@ export function lintMotionTransitions(transitions: MotionTransitionInfo[], durat
   return out
 }
 
-// ----------------------------------------------------------------- relatório
+// ----------------------------------------------------------------- report
 
 export function lintCounts(findings: LintFinding[]): { errors: number; warnings: number } {
   return {
@@ -537,7 +537,7 @@ export function lintCounts(findings: LintFinding[]): { errors: number; warnings:
 
 const MAX_REPORTED = 12
 
-/** O relatório que o agente lê: erros primeiro, cada um com o que fazer. */
+/** The report the agent reads: errors first, each with what to do about it. */
 export function describeLint(findings: LintFinding[]): string {
   if (findings.length === 0) return 'Lint: clean.'
   const { errors, warnings } = lintCounts(findings)

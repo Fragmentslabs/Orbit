@@ -16,7 +16,7 @@ import { fieldBg, useTokens } from './style'
 
 type Of<T extends OrbitUiBlock['type']> = Extract<OrbitUiBlock, { type: T }>
 
-/** Rótulo em cima, valor atual à direita — o mesmo `Field` do desktop. */
+/** Label on top, current value on the right — the same `Field` as the desktop. */
 export function Field({ label, aside, children }: { label?: string; aside?: string; children: ReactNode }) {
   const tokens = useTokens()
   return (
@@ -40,8 +40,8 @@ export function Field({ label, aside, children }: { label?: string; aside?: stri
   )
 }
 
-/** Valor de uma entrada: o estado do fence, com o default do bloco quando o
- *  usuário ainda não mexeu. */
+/** Value of an input: the state of the fence, with the block default when the
+ *  user has not touched it yet. */
 function useInput<T extends Value>(id: string, fallback: T) {
   const { scope, setValue } = useUi()
   const value = (Object.hasOwn(scope, id) ? scope[id] : fallback) as T
@@ -53,10 +53,10 @@ const INPUT_STYLE = { height: 36, borderRadius: 8, paddingHorizontal: 10, fontSi
 // ── slider ─────────────────────────────────────────────────────────────────
 
 /**
- * Slider sem dependência nova: o RN não traz slider no core (e o primitivo do
- * @rn-primitives só responde a gestos de leitor de tela, não a arrasto). A
- * trilha e o dedo são `View`s; o arrasto vem do sistema de responder nativo,
- * que entrega `locationX` relativo à própria trilha.
+ * Slider without a new dependency: RN does not ship a slider in the core (and the
+ * @rn-primitives one only responds to screen-reader gestures, not to dragging). The
+ * track and the thumb are `View`s; the drag comes from the native responder system,
+ * which delivers `locationX` relative to the track itself.
  */
 export function SliderInput(block: Of<'slider'>) {
   const tx = useText()
@@ -67,7 +67,7 @@ export function SliderInput(block: Of<'slider'>) {
   const span = block.max - block.min
   const step = block.step ?? (Number.isInteger(block.min) && Number.isInteger(block.max) ? 1 : span / 100)
 
-  /** O toque vira valor: `locationX` é relativo à trilha, então razão = x/largura. */
+  /** The touch becomes a value: `locationX` is relative to the track, so ratio = x/width. */
   const apply = (locationX: number) => {
     if (trackWidth <= 0 || span <= 0) return
     const ratio = Math.min(1, Math.max(0, locationX / trackWidth))
@@ -123,10 +123,10 @@ export function NumberInput(block: Of<'number'>) {
   const tx = useText()
   const tokens = useTokens()
   const [value, set] = useInput<number>(block.id, block.value)
-  // Rascunho em texto enquanto o campo está em foco: "1." e "-" são estados
-  // legítimos de quem digita e não sobreviveriam a um valor numérico controlado
-  // (mesma razão do desktop). Fora do foco, quem manda é o valor — inclusive
-  // quando outro bloco o reescreve (`action: "set"`).
+  // Text draft while the field is focused: "1." and "-" are legitimate
+  // states of someone typing and would not survive a controlled numeric value
+  // (same reason as the desktop). Outside the focus, the value rules — including
+  // when another block rewrites it (`action: "set"`).
   const [draft, setDraft] = useState<string | null>(null)
 
   return (
@@ -151,9 +151,9 @@ export function NumberInput(block: Of<'number'>) {
 // ── select ─────────────────────────────────────────────────────────────────
 
 /**
- * Select como fila de opções tocáveis, em vez de um picker modal: o celular não
- * tem `<select>`, e com até 12 opções o valor escolhido precisa continuar
- * visível enquanto o resto da resposta reage a ele.
+ * Select as a line of tappable options, instead of a modal picker: the phone has no
+ * `<select>`, and with up to 12 options the chosen value needs to stay
+ * visible while the rest of the answer reacts to it.
  */
 export function SelectInput(block: Of<'select'>) {
   const tx = useText()
@@ -269,9 +269,9 @@ export function ToggleInput(block: Of<'toggle'>) {
       }}
     >
       <Text style={{ flexShrink: 1, fontSize: 13, color: tokens.foreground }}>{tx(block.label)}</Text>
-      {/* O switch é só o desenho: quem recebe o toque é a linha inteira. Sem
-          isso, tocar no próprio switch dispararia os dois handlers e o valor
-          voltaria ao que era. */}
+      {/* The switch is only the drawing: what receives the touch is the whole row. Without
+          that, tapping the switch itself would fire both handlers and the value
+          would go back to what it was. */}
       <View pointerEvents="none">
         <Switch
           value={Boolean(value)}
@@ -307,12 +307,12 @@ export function TextInputBlock(block: Of<'text'>) {
 // ── buttons ────────────────────────────────────────────────────────────────
 
 /**
- * Botões do bloco — o único caminho de SAÍDA do fence.
+ * Buttons of the block — the only way OUT of the fence.
  *
- * `send` manda `text` como mensagem do usuário (é assim que a resposta
- * pergunta "quer que eu faça?"), `copy` copia e `set` grava um valor nas
- * entradas. O check de 1,5 s confirma o toque; sem ele o botão parece não ter
- * feito nada até a resposta do agente chegar.
+ * `send` sends `text` as a user message (this is how the answer
+ * asks "want me to do it?"), `copy` copies and `set` writes a value into the
+ * inputs. The 1.5 s check confirms the touch; without it the button seems to have
+ * done nothing until the agent answer arrives.
  */
 export function Buttons({ items }: Of<'buttons'>) {
   const { scope, setValue, send } = useUi()

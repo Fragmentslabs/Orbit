@@ -11,8 +11,8 @@ vi.mock('electron', () => ({
 
 const { clock } = await import('./audio')
 
-describe('relógio de duração', () => {
-  it('relógio em m:ss, com hora só quando precisa', () => {
+describe('duration clock', () => {
+  it('clock in m:ss, with hours only when needed', () => {
     expect(clock(0)).toBe('0:00')
     expect(clock(65_400)).toBe('1:05')
     expect(clock(3_725_000)).toBe('1:02:05')

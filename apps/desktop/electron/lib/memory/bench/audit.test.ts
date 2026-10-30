@@ -1,12 +1,12 @@
 /**
- * Runner de VALIDAÇÃO (não de ajuste).
+ * VALIDATION runner (not tuning).
  *
  *   MEMORY_AUDIT=1 npx vitest run electron/lib/memory/bench/audit.test.ts
  *
- * Diferente do eval.test.ts, este arquivo NÃO calibra nada sobre o conjunto
- * que avalia: aplica as políticas pré-registradas em policy.ts e mede. Aqui
- * entram a matriz de confusão, a forense dos ponteiros, o conjunto bloqueado
- * e as ablações (lexical, idioma, diálogo).
+ * Unlike eval.test.ts, this file does NOT calibrate anything on the set
+ * it evaluates: it applies the policies pre-registered in policy.ts and measures. Here
+ * go the confusion matrix, the pointer forensics, the blocked set
+ * and the ablations (lexical, language, dialog).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -25,9 +25,9 @@ const EXPECT = ['inject', 'pointer', 'none'] as const
 type Decision = (typeof EXPECT)[number]
 
 /**
- * Decisão tomada, do ponto de vista do caso.
- * Para `expect: none` QUALQUER memória é ruído: uma injeção conta como
- * 'inject' e um ponteiro como 'pointer' mesmo sem memória relevante existir.
+ * Decision taken, from the case's point of view.
+ * For `expect: none` ANY memory is noise: an injection counts as
+ * 'inject' and a pointer as 'pointer' even with no relevant memory existing.
  */
 function predicted(o: Outcome): Decision {
   const rel = new Set(o.case.relevant)
@@ -64,7 +64,7 @@ export interface Precision {
   ci: [number, number]
 }
 
-/** Precisão por MEMÓRIA injetada (não por consulta) — o que decide injeção. */
+/** Precision per injected MEMORY (not per query) — the one that decides injection. */
 export function injectionPrecision(outs: Outcome[]): Precision {
   let correct = 0
   let total = 0
@@ -76,7 +76,7 @@ export function injectionPrecision(outs: Outcome[]): Precision {
   return { correct, total, precision: total ? correct / total : NaN, ci: wilson(correct, total) }
 }
 
-/** Injeções que não eram relevantes, com o caso e o cosseno — auditoria. */
+/** Injections that were not relevant, with the case and the cosine — audit. */
 export function falsePositiveDetail(outs: Outcome[]) {
   const rows: Array<{ case: string; lang: string; injected: string; relevant: string[]; cos: number | null; expect: string }> = []
   for (const o of outs) {
@@ -110,7 +110,7 @@ export interface PointerRow {
   decided: Decision
 }
 
-/** Por que cada caso `pointer` terminou como terminou. */
+/** Why each `pointer` case ended the way it did. */
 export function pointerForensics(outs: Outcome[], data: ModelData, policy: Policy): PointerRow[] {
   const pointerT = policy.useNoise
     ? quantile(data.noise.full.tops, policy.selection.noiseQuantile) + policy.selection.pointerDelta
@@ -137,10 +137,10 @@ export function pointerForensics(outs: Outcome[], data: ModelData, policy: Polic
 }
 
 /**
- * Curva do nível de ponteiro, calculada sobre os CANDIDATOS (que não dependem
- * do limiar): para cada limiar e cada teto de ponteiros, quantos casos
- * `pointer` seriam atendidos e em quantas consultas sem memória sairia
- * ponteiro.
+ * Pointer-level curve, computed over the CANDIDATES (which do not depend on
+ * the threshold): for each threshold and each pointer ceiling, how many
+ * `pointer` cases would be served and in how many no-memory queries a
+ * pointer would come out.
  */
 export function pointerCurve(outs: Outcome[], thresholds: number[], maxPointers: number[]) {
   const rows: Array<{ t: number; max: number; useful: number; pointerCases: number; negWithPointer: number; negatives: number; anyPointer: number }> = []
@@ -174,8 +174,8 @@ export function pointerCurve(outs: Outcome[], thresholds: number[], maxPointers:
 }
 
 /**
- * Limiar de injeção "estrito": o MAIOR que ainda injeta alguma coisa com zero
- * memória irrelevante no dev. Escolhido só no dev, como manda o procedimento.
+ * "Strict" injection threshold: the HIGHEST one that still injects something with zero
+ * irrelevant memories on dev. Chosen on dev only, as the procedure demands.
  */
 function strictInjectCos(data: ModelData, fx: ReturnType<typeof loadFixture>, policy: Policy): number {
   let chosen = 2
@@ -186,7 +186,7 @@ function strictInjectCos(data: ModelData, fx: ReturnType<typeof loadFixture>, po
   return Number(chosen.toFixed(2))
 }
 
-/** Regra pré-registrada da escada: precisão >= 98% E IC95 inferior >= 90%. */
+/** Pre-registered ladder rule: precision >= 98% AND lower 95% CI >= 90%. */
 function verdict(p: Precision): 'aprovada' | 'reprovada' {
   if (!Number.isFinite(p.precision) || !p.total) return 'reprovada'
   return p.precision >= INJECTION_PRECISION_TARGET && p.ci[0] >= INJECTION_PRECISION_CI_FLOOR ? 'aprovada' : 'reprovada'
@@ -199,7 +199,7 @@ function summarize(label: string, outs: Outcome[]) {
 }
 
 
-/** AUC: P(cosseno da memória certa > maior cosseno de uma consulta sem memória). */
+/** AUC: P(cosine of the right memory > highest cosine of a no-memory query). */
 export function aucOnSet(outs: Outcome[]): number {
   const pos: number[] = []
   const neg: number[] = []
@@ -229,21 +229,21 @@ gated('validação da memória contextual', () => {
         const dataMain = await prepare(model.embed, main)
         const dataBlocked = await prepare(model.embed, blocked)
 
-        // ---- 1. Política atual (P1) na fixture de ajuste ------------------
+        // ---- 1. Current policy (P1) on the tuning fixture -----------------
         const evalOut = evaluatePolicy(dataMain, main, 'full', P1.selection, P1.useNoise, 'eval', P1.retrieval)
         const devOut = evaluatePolicy(dataMain, main, 'full', P1.selection, P1.useNoise, 'dev', P1.retrieval)
         const forensic = pointerForensics(evalOut.outs, dataMain, P1)
 
-        // Curva do ponteiro: calibrada no DEV (nunca no eval).
+        // Pointer curve: calibrated on DEV (never on eval).
         const thresholds = Array.from({ length: 27 }, (_, i) => Number((0.3 + i * 0.01).toFixed(2)))
         const curveDev = pointerCurve(devOut.outs, thresholds, [1, 2])
         const negatives = curveDev.find((r) => r.max === 2)?.negatives ?? 1
         const viable = curveDev.filter((r) => r.negWithPointer / Math.max(1, negatives) <= 0.25 && r.useful > 0)
-        // Regra: mais casos `pointer` atendidos; empate → limiar mais alto e menos ponteiros.
+        // Rule: most `pointer` cases served; tie → higher threshold and fewer pointers.
         const pick = viable.sort((a, b) => b.useful - a.useful || b.t - a.t || a.max - b.max)[0]
         const pointerFix = pick ? { pointerCos: pick.t, maxPointers: pick.max, devUseful: pick.useful, devNeg: pick.negWithPointer } : null
 
-        // P1b = P1 com o nível de ponteiro recalibrado separadamente no dev.
+        // P1b = P1 with the pointer level recalibrated separately on dev.
         const P1b: Policy = {
           ...P1,
           id: 'P1',
@@ -255,7 +255,7 @@ gated('validação da memória contextual', () => {
           },
         }
 
-        // ---- 2. Escada de decisão no conjunto BLOQUEADO -------------------
+        // ---- 2. Decision ladder on the BLOCKED set ------------------------
         const strictCos = strictInjectCos(dataMain, main, P1)
         const P3s = { ...P3(strictCos), selection: { ...P3(strictCos).selection, pointerCos: P1b.selection.pointerCos, maxPointers: P1b.selection.maxPointers } }
         const candidates = [
@@ -277,8 +277,8 @@ gated('validação da memória contextual', () => {
         for (const b of blockedRuns) if (b.policy.injectCos > 1 && b.policy.pointerCos <= 1 && b.precision.total === 0) (b as { verdict: string }).verdict = 'segura (sem injeção)'
         const shipped = candidates.find((c) => c.name === chosen.name)!.policy
 
-        // ---- 3. Ablações -------------------------------------------------
-        // 3a. fusão: semântico puro x híbrido, por idioma, na fixture de ajuste
+        // ---- 3. Ablations ------------------------------------------------
+        // 3a. fusion: pure semantic vs hybrid, by language, on the tuning fixture
         const langMain = {
           semantic: rankingBreakdown(dataMain, main, 'eval', 'full', 'semantic', P1.retrieval),
           hybrid: rankingBreakdown(dataMain, main, 'eval', 'full', 'hybrid', P1.retrieval),
@@ -287,18 +287,18 @@ gated('validação da memória contextual', () => {
           semantic: rankingBreakdown(dataBlocked, blocked, 'blocked', 'full', 'semantic', P1.retrieval),
           hybrid: rankingBreakdown(dataBlocked, blocked, 'blocked', 'full', 'hybrid', P1.retrieval),
         }
-        // 3b. caminho lexical da política: ligado x desligado
+        // 3b. the policy's lexical path: on vs off
         const noLexPath: Policy = { ...P1b, selection: { ...P1b.selection, lexInjectCoverage: 2 } }
         const lexMain = {
-          comCaminho: injectionPrecision(evaluatePolicy(dataMain, main, 'full', P1b.selection, P1b.useNoise, 'eval', P1b.retrieval).outs),
-          semCaminho: injectionPrecision(evaluatePolicy(dataMain, main, 'full', noLexPath.selection, noLexPath.useNoise, 'eval', noLexPath.retrieval).outs),
+          withPath: injectionPrecision(evaluatePolicy(dataMain, main, 'full', P1b.selection, P1b.useNoise, 'eval', P1b.retrieval).outs),
+          withoutPath: injectionPrecision(evaluatePolicy(dataMain, main, 'full', noLexPath.selection, noLexPath.useNoise, 'eval', noLexPath.retrieval).outs),
         }
         const lexBlocked = {
-          comCaminho: injectionPrecision(evaluatePolicy(dataBlocked, blocked, 'full', P1b.selection, P1b.useNoise, 'blocked', P1b.retrieval).outs),
-          semCaminho: injectionPrecision(evaluatePolicy(dataBlocked, blocked, 'full', noLexPath.selection, noLexPath.useNoise, 'blocked', noLexPath.retrieval).outs),
+          withPath: injectionPrecision(evaluatePolicy(dataBlocked, blocked, 'full', P1b.selection, P1b.useNoise, 'blocked', P1b.retrieval).outs),
+          withoutPath: injectionPrecision(evaluatePolicy(dataBlocked, blocked, 'full', noLexPath.selection, noLexPath.useNoise, 'blocked', noLexPath.retrieval).outs),
         }
 
-        // ---- 4. Diálogo (mensagem dependente de contexto) ----------------
+        // ---- 4. Dialog (message that depends on context) -----------------
         const dialogs = [
           ...main.dialogs.filter((d) => d.split === 'eval').map((d) => ({ d, data: dataMain })),
           ...blocked.dialogs.map((d) => ({ d, data: dataBlocked })),
@@ -318,7 +318,7 @@ gated('validação da memória contextual', () => {
           }
         })
 
-        // ---- 5. Casos que um modelo pega e o outro não -------------------
+        // ---- 5. Cases one model catches and the other does not -----------
         const caseHits = (data: ModelData, fx: ReturnType<typeof loadFixture>, split: 'eval' | 'blocked') =>
           evaluatePolicy(data, fx, 'full', shipped.selection, shipped.useNoise, split, shipped.retrieval).outs.map((o) => ({
             id: o.case.id,
@@ -350,17 +350,17 @@ gated('validação da memória contextual', () => {
           p95Ms: quantile([...model.latencies].sort((a, b) => a - b), 0.95),
         }
 
-        // ---- impressão ---------------------------------------------------
+        // ---- printing ----------------------------------------------------
         const p = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : '—')
         console.log(`\n================ Bekko ${id} ================`)
         console.log(`P1 na fixture de ajuste (eval): injeção ${result.precisionEval.correct}/${result.precisionEval.total} = ${p(result.precisionEval.precision)} IC95 [${p(result.precisionEval.ci[0])}; ${p(result.precisionEval.ci[1])}]`)
-        console.log('matriz eval (linha esperado → decidido):')
+        console.log('eval matrix (expected row -> decided):')
         for (const e of EXPECT) {
           const m = result.confusionEval.matrix[e]
           console.log(`  ${e.padEnd(8)} inj=${m.inject} ptr=${m.pointer} nada=${m.none}`)
         }
         console.log('injeções irrelevantes:')
-        for (const f of result.falsePositivesEval) console.log(`  ${f.case} (${f.expect}) injetou ${f.injected} cos=${f.cos?.toFixed(3)} esperado=${f.relevant.join(',') || '—'}`)
+        for (const f of result.falsePositivesEval) console.log(`  ${f.case} (${f.expect}) injetou ${f.injected} cos=${f.cos?.toFixed(3)} expected=${f.relevant.join(',') || '—'}`)
         console.log(`forense dos ponteiros (limiar P1 = ${P1.selection.pointerCos}):`)
         for (const r of forensic) console.log(`  ${r.id} gold=${r.relevant} rank=${r.goldRank ?? '-'} cos=${r.goldCos?.toFixed(3) ?? '-'} acima=${r.nAbovePointerT} → ${r.decided}`)
         console.log('forense dos ponteiros no conjunto bloqueado (P1b):')
@@ -373,7 +373,7 @@ gated('validação da memória contextual', () => {
         console.log(`  ESCOLHIDA: ${chosen.name}`)
         console.log(`AUC eval ${result.aucEval.toFixed(3)} · AUC bloqueado ${result.aucBlocked.toFixed(3)}`)
         console.log(`injeção estrita (dev, 0 FP) = ${strictCos}`)
-        console.log(`diálogo: ${dialogRows.map((d) => `${d.id} isolada=${d.isolated} ctx=${d.contextual} ideal=${d.ideal}`).join(' | ')}`)
+        console.log(`diálogo: ${dialogRows.map((d) => `${d.id} isolated=${d.isolated} ctx=${d.contextual} ideal=${d.ideal}`).join(' | ')}`)
 
         fs.mkdirSync(OUT, { recursive: true })
         fs.writeFileSync(path.join(OUT, `audit-${id}.json`), JSON.stringify(result, null, 2))

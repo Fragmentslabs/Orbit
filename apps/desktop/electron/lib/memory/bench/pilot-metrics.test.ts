@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { summarize, triage, type LabelEntry, type QueueEntry, type RankRow } from './pilot-metrics'
 
 /**
- * Testes da triagem e dos denominadores do piloto. Nenhum dado real: só ids
- * sintéticos e ranks inventados, para provar *sobre o que* cada métrica é
- * calculada.
+ * Tests for the triage and the pilot denominators. No real data: only synthetic
+ * ids and invented ranks, to prove *what* each metric is
+ * computed over.
  */
 
 const queue = (n: number, role: 'target' | 'no-memory' = 'target'): QueueEntry[] =>
@@ -31,8 +31,8 @@ const row = (id: string, patch: Partial<RankRow> = {}): RankRow => ({
   ...patch,
 })
 
-describe('triagem de rótulos', () => {
-  it('dez revisados e dez pendentes: os pendentes ficam fora de tudo', () => {
+describe('label triage', () => {
+  it('ten reviewed and ten pending: the pending ones stay out of everything', () => {
     const q = queue(20)
     const corpus = new Set(q.map((x) => x.memoryId!))
     const labels = q.slice(0, 10).map((x) => label(x.id, { memoryId: x.memoryId }))
@@ -44,11 +44,11 @@ describe('triagem de rótulos', () => {
     expect(t.decided).toHaveLength(10)
     expect(t.unreviewed).toHaveLength(0)
     expect(t.inconclusive).toHaveLength(0)
-    // nenhum pendente virou rótulo "none"
+    // no pending item turned into a "none" label
     expect(t.valid.some((l) => q.slice(10).some((p) => p.id === l.id))).toBe(false)
   })
 
-  it('cenário no arquivo sem consulta é "não revisado", não "nenhuma memória"', () => {
+  it('a scenario in the file with no query is "not reviewed", not "no memory"', () => {
     const q = queue(3)
     const corpus = new Set(q.map((x) => x.memoryId!))
     const t = triage([label('sc01', { query: '' }), label('sc02', { query: '   ' }), label('sc03', { query: 'ok' })], q, corpus)
@@ -58,7 +58,7 @@ describe('triagem de rótulos', () => {
     expect(t.notInFile).toHaveLength(0)
   })
 
-  it('inconclusivo sai de todos os denominadores', () => {
+  it('inconclusive leaves every denominator', () => {
     const q = queue(2)
     const corpus = new Set(q.map((x) => x.memoryId!))
     const t = triage(
@@ -72,11 +72,11 @@ describe('triagem de rótulos', () => {
     expect(t.decided).toHaveLength(1)
   })
 
-  it('decisão ausente entra no ranking e sai da decisão', () => {
+  it('a missing decision enters the ranking and leaves the decision', () => {
     const q = queue(3)
     const corpus = new Set(q.map((x) => x.memoryId!))
     const t = triage(
-      [label('sc01', { decision: '' }), label('sc02', { decision: 'talvez' }), label('sc03', { decision: 'pointer' })],
+      [label('sc01', { decision: '' }), label('sc02', { decision: 'maybe' }), label('sc03', { decision: 'pointer' })],
       q,
       corpus,
     )
@@ -86,13 +86,13 @@ describe('triagem de rótulos', () => {
     expect(t.decided.map((l) => l.id)).toEqual(['sc03'])
   })
 
-  it('id órfão e alvo inexistente são contados e descartados', () => {
+  it('an orphan id and a nonexistent target are counted and dropped', () => {
     const q = queue(3)
     const corpus = new Set(q.map((x) => x.memoryId!))
     const t = triage(
       [
-        label('sc99', { memoryId: 'mem_1' }), // id que não existe no lote
-        label('sc01', { memoryId: 'mem_apagada' }), // alvo fora do acervo
+        label('sc99', { memoryId: 'mem_1' }), // id that does not exist in the batch
+        label('sc01', { memoryId: 'mem_apagada' }), // target outside the pool
         label('sc02', { memoryId: 'mem_2' }),
       ],
       q,
@@ -105,8 +105,8 @@ describe('triagem de rótulos', () => {
   })
 })
 
-describe('agregação do piloto', () => {
-  it('usa o mesmo conjunto nos dois rankings e particiona top-5 sem sobreposição', () => {
+describe('pilot aggregation', () => {
+  it('uses the same set in both rankings and partitions the top-5 without overlap', () => {
     const rows = [
       row('a', { lexRank: 1, hybRank: 1 }),
       row('b', { lexRank: 4, hybRank: 2 }),
@@ -125,7 +125,7 @@ describe('agregação do piloto', () => {
     expect(rep.targets.hybOnly).toEqual(['c'])
     expect(rep.targets.lexOnly).toEqual(['d'])
     expect(rep.targets.neither.sort()).toEqual(['e', 'f'])
-    // as quatro categorias cobrem exatamente n, sem sobreposição
+    // the four categories cover exactly n, with no overlap
     const total =
       rep.targets.both.length + rep.targets.hybOnly.length + rep.targets.lexOnly.length + rep.targets.neither.length
     expect(total).toBe(rep.targets.n)
@@ -133,11 +133,11 @@ describe('agregação do piloto', () => {
     expect(rep.targets.lexical.r1).toBeCloseTo(1 / 6)
     expect(rep.targets.lexical.r5).toBeCloseTo(3 / 6)
     expect(rep.targets.hybrid.r5).toBeCloseTo(3 / 6)
-    // MRR não tem corte em 5: a posição 7 também conta como 1/7
+    // MRR has no cut at 5: position 7 also counts as 1/7
 expect(rep.targets.hybrid.mrr).toBeCloseTo((1 + 1 / 2 + 1 / 3 + 1 / 7) / 6)
   })
 
-  it('dez rotulados com alvo produzem métricas sobre dez, e as sem-memória ficam à parte', () => {
+  it('ten labeled with a target produce metrics over ten, and the no-memory ones stay apart', () => {
     const labeled = [
       ...Array.from({ length: 6 }, (_, i) => row(`t${i}`, { lexRank: 1, hybRank: 1, decision: 'inject', tier: 'inject' })),
       ...Array.from({ length: 4 }, (_, i) => row(`n${i}`, { role: 'no-memory', memoryId: null, lexHits: 1, hybTopCos: 0.2, decision: '' })),
@@ -152,7 +152,7 @@ expect(rep.targets.hybrid.mrr).toBeCloseTo((1 + 1 / 2 + 1 / 3 + 1 / 7) / 6)
     expect(rep.decision).toEqual([{ expected: 'inject', n: 6, match: 6, tiers: { inject: 6 } }])
   })
 
-  it('sem alvo, o ranking não inventa denominador', () => {
+  it('with no target, the ranking does not invent a denominator', () => {
     const rep = summarize([row('n1', { role: 'no-memory', memoryId: null })], 0.5)
     expect(rep.targets.n).toBe(0)
     expect(rep.targets.lexical.r1).toBe(0)

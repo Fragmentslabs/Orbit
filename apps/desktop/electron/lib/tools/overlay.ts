@@ -24,9 +24,9 @@ import { endCallEverywhere, lastOverlaySelection } from '../overlay/window'
  */
 
 export interface OverlayToolOptions {
-  /** O modelo do turno aceita imagem? */
+  /** Does the turn's model accept images? */
   modelVision: boolean
-  /** Modo Visão: descreve a imagem com outro modelo e manda só o texto. */
+  /** Vision mode: describes the image with another model and sends only the text. */
   visionModel?: { providerId: string; modelId: string }
   /** Conversation the window reads are registered under (Computer Use's registry) */
   sessionId: string
@@ -61,9 +61,9 @@ function screenRecording(): boolean {
 }
 
 /**
- * `end_call` vale em QUALQUER conversa falada — overlay e o modo chamada da
- * janela principal. Por isso é criada à parte: quem liga o modo chamada sem o
- * overlay também ganha o "tchau, Orbit".
+ * `end_call` holds in ANY spoken conversation — overlay and the main window's
+ * call mode. That is why it is created separately: whoever turns on call mode without the
+ * overlay also gets the "bye, Orbit".
  */
 export function createEndCallTool() {
   return tool({
@@ -102,9 +102,9 @@ export function createOverlayTools(options: OverlayToolOptions): ToolSet {
             : 'Screen Recording permission is not granted to Orbit, so the screen is unavailable. Tell the user to enable it in System Settings → Privacy & Security → Screen Recording.'
         }
         const header = `Screen ${shot.width}×${shot.height} px (${shot.display}).`
-        // Modo Visão PRIMEIRO: é o caminho padrão porque funciona com qualquer
-        // modelo principal e é o único que enxerga quando o modelo do painel é
-        // só de texto. A imagem crua só vai ao modelo quando ele tem visão.
+        // Vision mode FIRST: it is the default path because it works with any
+        // main model and is the only one that sees when the panel model is
+        // text-only. The raw image only goes to the model when it has vision.
         if (options.visionModel) {
           const described = await describeImage({
             model: options.visionModel,
@@ -114,7 +114,7 @@ export function createOverlayTools(options: OverlayToolOptions): ToolSet {
             stash.set(toolCallId, { text: described })
             return `${header}\nA vision model looked at the screen and its description is attached. Answer from that description only; if it says something was unreadable, say so.`
           }
-          // Descrição falhou: se o modelo do painel enxerga, ainda vale a imagem.
+          // Description failed: if the panel model can see, the image is still worth it.
           if (!options.modelVision) {
             return `${header}\nNO screenshot and NO description arrived: you cannot see the screen this turn. Tell the user in one line that the vision model failed, instead of guessing.`
           }
@@ -142,9 +142,9 @@ export function createOverlayTools(options: OverlayToolOptions): ToolSet {
           const where = selection.app ? ` in ${selection.app}` : ''
           return `Selection${where} (${text.length} chars):\n\n${text}`
         }
-        // O painel foi aberto em modo texto: o foco veio para o Orbit, e um app
-        // que só entrega a seleção pelo clipboard não é mais alcançável. Vale a
-        // leitura feita na abertura (recente).
+        // The panel was opened in text mode: the focus came to Orbit, and an app
+        // that only delivers the selection through the clipboard is no longer reachable. The
+        // read made at opening (recent) counts.
         const cached = lastOverlaySelection()
         if (cached && Date.now() - cached.at < 120_000) {
           const text = cached.text.slice(0, MAX_SELECTION_CHARS)

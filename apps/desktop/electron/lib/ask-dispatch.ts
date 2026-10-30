@@ -5,12 +5,12 @@ import { notifyPendingAsk, notifyPendingAskBatch } from './notifications'
 import { notifyCompanionAsk } from './companion-server'
 
 /**
- * Camada de emissão dos pedidos (acima do ask-broker, que permanece puro):
- * - Pedido da sessão principal: evento individual imediato.
- * - Pedido de WORKER (tem origin): entra numa janela de batching de 1.5s por
- *   sessão-pai — 4 workers perguntando em paralelo viram UM card em lote no
- *   chat do orquestrador, com submit único.
- * O "ask:done" por item continua sendo emitido pelo requester (finally).
+ * Emission layer of the requests (above the ask-broker, which stays pure):
+ * - Main session request: immediate individual event.
+ * - WORKER request (it has an origin): enters a 1.5s batching window per parent
+ *   session — 4 workers asking in parallel become ONE batch card in the
+ *   orchestrator's chat, with a single submit.
+ * The "ask:done" per item keeps being emitted by the requester (finally).
  */
 
 const BATCH_WINDOW_MS = 1500
@@ -23,13 +23,13 @@ interface PendingBatch {
 const batches = new Map<string, PendingBatch>()
 
 /**
- * Título humano do pedido para o companion. Vazio quando o item não traz texto
- * próprio: o app mobile (que pode estar em outro idioma) aplica o fallback
- * traduzido dele — mandar uma frase pronta daqui era o que fazia um celular em
- * inglês receber aviso em português. A notificação nativa do desktop resolve o
- * fallback do lado de cá, em lib/notifications.ts.
+ * Human title of the request for the companion. Empty when the item does not bring its own
+ * text: the mobile app (which may be in another language) applies its own translated
+ * fallback — sending a ready-made sentence from here was what made a phone in
+ * English receive a notice in Portuguese. The desktop's native notification resolves the
+ * fallback on this side, in lib/notifications.ts.
  */
-function tituloDoPedido(item: AskItem): string {
+function requestTitle(item: AskItem): string {
   if (item.kind === 'subchat') return item.subchat?.title ?? ''
   return item.kind === 'permission' ? (item.claim?.title ?? '') : (item.questions?.[0]?.text ?? '')
 }
@@ -40,7 +40,7 @@ function emitSingle(target: string, item: AskItem): void {
     target,
     item.requestId,
     item.kind === 'permission' ? 'permission' : 'question',
-    tituloDoPedido(item),
+    requestTitle(item),
     item.questions,
   )
   if (item.kind === 'subchat') {
@@ -83,18 +83,18 @@ function flushBatch(target: string): void {
     return
   }
   void notifyPendingAskBatch(target, batch.items)
-  const primeiro = batch.items[0]
+  const first = batch.items[0]
   notifyCompanionAsk(
     target,
-    primeiro.requestId,
-    primeiro.kind === 'permission' ? 'permission' : 'question',
-    tituloDoPedido(primeiro),
-    primeiro.questions,
+    first.requestId,
+    first.kind === 'permission' ? 'permission' : 'question',
+    requestTitle(first),
+    first.questions,
   )
   broadcastChatEvent({ type: 'ask:batch', sessionId: target, batchId: newRequestId(), items: batch.items })
 }
 
-/** Remove um item ainda não emitido (pedido rejeitado por abort na janela). */
+/** Removes an item not yet emitted (request rejected by an abort in the window). */
 function dropFromBatch(target: string, requestId: string): void {
   const batch = batches.get(target)
   if (!batch) return
@@ -102,8 +102,8 @@ function dropFromBatch(target: string, requestId: string): void {
 }
 
 /**
- * Registra o Deferred no broker e emite o pedido (direto ou em lote).
- * A promise resolve com o valor enviado pela UI via chat:askReply.
+ * Registers the Deferred in the broker and emits the request (directly or in a batch).
+ * The promise resolves with the value sent by the UI via chat:askReply.
  */
 export function dispatchAsk<T>(target: string, item: AskItem, signal?: AbortSignal): Promise<T> {
   const promise = ask<T>(target, item.requestId, signal)
@@ -115,7 +115,7 @@ export function dispatchAsk<T>(target: string, item: AskItem, signal?: AbortSign
       batches.set(target, batch)
     }
     batch.items.push(item)
-    // Abortado enquanto aguardava a janela → não emitir um card morto
+    // Aborted while waiting for the window → do not emit a dead card
     promise.catch(() => dropFromBatch(target, item.requestId))
   } else {
     emitSingle(target, item)

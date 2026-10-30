@@ -1,14 +1,14 @@
 /**
- * Localizar um trecho dentro do texto posicionado de uma página de PDF.
+ * Locating a stretch inside the positioned text of a PDF page.
  *
- * Roda no RENDERER, a partir dos itens que vieram junto com a imagem. Antes
- * isso era feito no main a cada busca, o que obrigava a redesenhar a página
- * inteira a cada letra digitada — e o painel piscava "carregando". Com os
- * itens em mãos, procurar é uma busca em string e o destaque aparece sem
- * nenhuma ida ao main.
+ * Runs in the RENDERER, from the items that came along with the image. Before,
+ * this was done in main on every search, which forced redrawing the whole
+ * page on every typed letter — and the panel blinked "loading". With the
+ * items in hand, searching is a string search and the highlight shows up without
+ * any round trip to main.
  *
- * As coordenadas são FRAÇÕES da página (0 a 1), então valem para qualquer
- * zoom: trocar a escala não invalida nada.
+ * The coordinates are FRACTIONS of the page (0 to 1), so they hold at any
+ * zoom: changing the scale invalidates nothing.
  */
 
 export interface PdfTextItem {
@@ -27,21 +27,21 @@ export interface Rect {
 }
 
 /**
- * Remove os espaços para a comparação.
+ * Removes the spaces for the comparison.
  *
- * O PDF quebra a frase em vários itens e a posição dos espaços entre eles não
- * é confiável — "um destino" pode chegar como "um", "des", "tino". Colar tudo
- * e procurar o trecho igualmente colado é o que casa na prática.
+ * The PDF breaks the sentence into several items and the position of the spaces between them is not
+ * reliable — "a destination" may arrive as "a", "des", "tino". Gluing everything
+ * and searching the equally glued stretch is what matches in practice.
  */
 function squash(text: string): string {
   return text.replace(/\s+/g, "").toLowerCase()
 }
 
 /**
- * Retângulos de TODAS as ocorrências do trecho na página.
+ * Rectangles of ALL occurrences of the stretch on the page.
  *
- * Todas, e não só a primeira: na busca a palavra costuma repetir na mesma
- * página, e marcar uma só faria o contador dizer 7 enquanto a página mostra 1.
+ * All of them, and not only the first: in a search the word usually repeats on the same
+ * page, and marking only one would make the counter say 7 while the page shows 1.
  */
 export function locateText(items: PdfTextItem[], needle: string, max = 200): Rect[] {
   const target = squash(needle)
@@ -75,20 +75,20 @@ export function locateText(items: PdfTextItem[], needle: string, max = 200): Rec
 }
 
 /**
- * Fator horizontal para a camada de seleção encostar no texto desenhado.
+ * Horizontal factor so the selection layer touches the drawn text.
  *
- * A camada é de spans transparentes por cima da imagem: o texto real está no
- * pixel, e estes spans existem só para dar seleção e cópia. Sem correção eles
- * ficariam mais largos ou mais estreitos que os glifos e a marca da seleção
- * apareceria torta. A estimativa usa meia altura por caractere, que é a
- * proporção média das fontes de texto corrido — é aproximação, não medição.
+ * The layer is made of transparent spans over the image: the real text is in the
+ * pixel, and these spans exist only to give selection and copy. Without correction they
+ * would be wider or narrower than the glyphs and the selection mark
+ * would come out crooked. The estimate uses half a height per character, which is the
+ * average proportion of body text fonts — it is an approximation, not a measurement.
  */
 export function selectionScaleX(item: PdfTextItem, aspect: number): number {
   const chars = item.text.length
   if (chars === 0 || item.height <= 0 || aspect <= 0) return 1
-  // `height` é fração da ALTURA e `width` é fração da LARGURA: comparar os
-  // dois exige passar pela proporção da página, senão o fator sai errado em
-  // tudo que não for quadrado.
+  // `height` is a fraction of the HEIGHT and `width` is a fraction of the WIDTH: comparing the
+  // two requires going through the page proportion, otherwise the factor comes out wrong on
+  // everything that is not square.
   const estimated = (chars * item.height * 0.5) / aspect
   if (estimated <= 0) return 1
   return Math.min(3, Math.max(0.2, item.width / estimated))

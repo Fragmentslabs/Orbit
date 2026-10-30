@@ -4,19 +4,19 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 /**
- * Gera build/icon.ico a partir do PNG de origem.
+ * Generates build/icon.ico from the source PNG.
  *
- * O Windows escolhe o tamanho do ícone conforme o lugar (16px na barra de
- * título, 32px na barra de tarefas, 256px no explorador) e, quando só existe
- * um PNG grande, ele reduz na hora — o resultado no tamanho pequeno fica
- * borrado ou simplesmente não aparece. Um .ico traz todos os tamanhos já
- * rasterizados.
+ * Windows chooses the icon size according to the place (16px in the title
+ * bar, 32px in the taskbar, 256px in the explorer) and, when there is only
+ * one large PNG, it shrinks it on the fly — the result at the small size comes out
+ * blurry or simply does not appear. An .ico brings all the sizes already
+ * rasterized.
  *
- * O ICO aqui embute PNGs (formato aceito desde o Vista), em vez de bitmaps
- * BMP: é o mesmo que o próprio electron-builder produz e evita ter que
- * escrever a máscara AND de transparência à mão.
+ * The ICO here embeds PNGs (format accepted since Vista), instead of BMP
+ * bitmaps: it is the same as what electron-builder itself produces and avoids having to
+ * write the AND transparency mask by hand.
  *
- * Rode com: node scripts/make-ico.mjs
+ * Run with: node scripts/make-ico.mjs
  */
 
 const SIZES = [16, 24, 32, 48, 64, 128, 256]
@@ -33,8 +33,8 @@ const images = await Promise.all(
 )
 
 const header = Buffer.alloc(6)
-header.writeUInt16LE(0, 0) // reservado
-header.writeUInt16LE(1, 2) // 1 = ícone
+header.writeUInt16LE(0, 0) // reserved
+header.writeUInt16LE(1, 2) // 1 = icon
 header.writeUInt16LE(images.length, 4)
 
 const ENTRY_BYTES = 16
@@ -42,13 +42,13 @@ let offset = header.length + images.length * ENTRY_BYTES
 
 const entries = images.map(({ size, png }) => {
   const entry = Buffer.alloc(ENTRY_BYTES)
-  // 256 é gravado como 0: o campo tem 1 byte só.
+  // 256 is written as 0: the field has only 1 byte.
   entry.writeUInt8(size === 256 ? 0 : size, 0)
   entry.writeUInt8(size === 256 ? 0 : size, 1)
-  entry.writeUInt8(0, 2) // cores da paleta (0 = sem paleta)
-  entry.writeUInt8(0, 3) // reservado
-  entry.writeUInt16LE(1, 4) // planos de cor
-  entry.writeUInt16LE(32, 6) // bits por pixel
+  entry.writeUInt8(0, 2) // palette colors (0 = no palette)
+  entry.writeUInt8(0, 3) // reserved
+  entry.writeUInt16LE(1, 4) // color planes
+  entry.writeUInt16LE(32, 6) // bits per pixel
   entry.writeUInt32LE(png.length, 8)
   entry.writeUInt32LE(offset, 12)
   offset += png.length
@@ -56,4 +56,4 @@ const entries = images.map(({ size, png }) => {
 })
 
 await fs.writeFile(target, Buffer.concat([header, ...entries, ...images.map((i) => i.png)]))
-console.log(`${path.relative(process.cwd(), target)} — ${images.length} tamanhos: ${SIZES.join(', ')}`)
+console.log(`${path.relative(process.cwd(), target)} — ${images.length} sizes: ${SIZES.join(', ')}`)

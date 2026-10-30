@@ -98,7 +98,7 @@
     "newChat": "New Chat",
     "newSession": "New Session",
     "memories": "Memories",
-    "rotinas": "Routines",
+    "routines": "Routines",
     "media": "Media",
     "usage": "Usage",
     "tools": "Tools",
@@ -138,7 +138,7 @@
     "navigation": "Navigation",
     "sessions": "Sessions",
     "theme": "Theme",
-    "esteira": "Pipelines",
+    "pipeline": "Pipelines",
     "newChatInFolder": "New chat in this folder"
   },
   "media": {
@@ -365,7 +365,13 @@
       "screens_other": "{{count}} screens",
       "slides_one": "{{count}} slide",
       "slides_other": "{{count}} slides"
-    }
+    },
+    "slides": {
+      "counter": "{{index}} / {{count}}",
+      "previous": "Previous slide",
+      "next": "Next slide"
+    },
+    "closeFullscreen": "Close fullscreen"
   },
   "askCard": {
     "allowOnce": "Allow for this turn",
@@ -1093,48 +1099,48 @@
     "dark": "Dark",
     "system": "System"
   },
-  "rotinas": {
-    "titulo": "Routines",
-    "subtitulo": "Sessions that come back on their own: the agent runs the same prompt at the scheduled time.",
-    "subtituloChat": "Chat sessions that come back on their own — no working folders, just conversation and chat tools.",
-    "modo": {
+  "routines": {
+    "title": "Routines",
+    "subtitle": "Sessions that come back on their own: the agent runs the same prompt at the scheduled time.",
+    "subtitleChat": "Chat sessions that come back on their own — no working folders, just conversation and chat tools.",
+    "mode": {
       "chat": "Chat mode",
       "code": "Code mode"
     },
-    "criar": {
-      "titulo": "New routine",
-      "descreverDica": "Describe it in plain text. The model turns that into a title, prompt, schedule and modes — you review everything in the next step.",
+    "create": {
+      "title": "New routine",
+      "describeHint": "Describe it in plain text. The model turns that into a title, prompt, schedule and modes — you review everything in the next step.",
       "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.",
       "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
-      "modelo": "Model",
-      "gerar": "Generate",
-      "gerando": "Generating…",
-      "semModelo": "Choose a model to generate the routine.",
-      "modoChatDica": "Chat mode: the routine runs without working folders — just conversation and chat tools."
+      "model": "Model",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "noModel": "Choose a model to generate the routine.",
+      "modeChatHint": "Chat mode: the routine runs without working folders — just conversation and chat tools."
     },
-    "revisar": {
-      "voltar": "Back",
-      "campoTitulo": "Title",
-      "campoPrompt": "Routine prompt",
-      "campoPromptDica": "This is what the agent receives on every run. It must be self-contained: there is no one to answer questions.",
-      "agenda": "When to run",
-      "modos": "Modes",
-      "modosDica": "The agent suggested these based on the described work. Toggle them freely.",
-      "pastas": "Working folders",
-      "pastasDica": "Picked in this step — the routine always runs in them.",
-      "semPastas": "No folder open. Open a folder in code mode before creating the routine.",
-      "criar": "Create routine"
+    "review": {
+      "back": "Back",
+      "titleField": "Title",
+      "promptField": "Routine prompt",
+      "promptFieldHint": "This is what the agent receives on every run. It must be self-contained: there is no one to answer questions.",
+      "schedule": "When to run",
+      "modes": "Modes",
+      "modesHint": "The agent suggested these based on the described work. Toggle them freely.",
+      "folders": "Working folders",
+      "foldersHint": "Picked in this step — the routine always runs in them.",
+      "noFolders": "No folder open. Open a folder in code mode before creating the routine.",
+      "create": "Create routine"
     },
-    "agenda": {
-      "modo": {
-        "diario": "Every day",
-        "semanal": "Weekdays",
-        "intervalo": "Every N days",
-        "horas": "Every N hours",
-        "unico": "Once"
+    "schedule": {
+      "mode": {
+        "daily": "Every day",
+        "weekly": "Weekdays",
+        "intervalDays": "Every N days",
+        "intervalHours": "Every N hours",
+        "once": "Once"
       },
-      "horario": "at",
-      "dia": {
+      "time": "at",
+      "day": {
         "0": "S",
         "1": "M",
         "2": "T",
@@ -1143,14 +1149,14 @@
         "5": "F",
         "6": "S"
       },
-      "uteis": "Mon-Fri",
-      "fimDeSemana": "Weekend",
-      "aCada": "Every",
-      "dias": "days",
-      "resumoDiario": "Every day at {{horario}}",
-      "resumoDias": "{{dias}} at {{horario}}",
-      "resumoIntervalo": "Every {{dias}} days at {{horario}}",
-      "diaAbrev": {
+      "workdays": "Mon-Fri",
+      "weekend": "Weekend",
+      "every": "Every",
+      "days": "days",
+      "summaryDaily": "Every day at {{time}}",
+      "summaryDays": "{{days}} at {{time}}",
+      "summaryInterval": "Every {{days}} days at {{time}}",
+      "dayAbbr": {
         "0": "Sun",
         "1": "Mon",
         "2": "Tue",
@@ -1159,71 +1165,72 @@
         "5": "Fri",
         "6": "Sat"
       },
-      "resumoUteis": "Mon-Fri at {{horario}}",
-      "resumoFimDeSemana": "Weekend at {{horario}}",
-      "selecionarHorario": "Time",
-      "horas": "hours",
+      "summaryWorkdays": "Mon-Fri at {{time}}",
+      "summaryWeekend": "Weekend at {{time}}",
+      "selectTime": "Time",
+      "hours": "hours",
       "em": "on",
-      "umaVezDica": "The routine turns itself off after running.",
-      "resumoHoras": "Every {{horas}} hours",
-      "resumoUnico": "Once on {{data}} at {{horario}}"
+      "onceHint": "The routine turns itself off after running.",
+      "summaryHours": "Every {{hours}} hours",
+      "summarySingle": "Once on {{date}} at {{time}}",
+      "datePlaceholder": "YYYY-MM-DD"
     },
-    "modos": {
+    "modes": {
       "loop": {
-        "nome": "Loop"
+        "name": "Loop"
       },
       "subagents": {
-        "nome": "Subagents"
+        "name": "Subagents"
       },
       "orchestrate": {
-        "nome": "Orchestrate"
+        "name": "Orchestrate"
       },
       "brain": {
-        "nome": "Memory"
+        "name": "Memory"
       },
       "browser": {
-        "nome": "Browser"
+        "name": "Browser"
       },
       "plan": {
-        "nome": "Plan mode"
+        "name": "Plan mode"
       },
       "simple": {
-        "nome": "Simple"
+        "name": "Simple"
       },
       "search": {
-        "nome": "Search"
+        "name": "Search"
       },
       "vision": {
-        "nome": "Vision"
+        "name": "Vision"
       },
-      "permissao": "Permissions",
-      "permissaoAviso": "The routine fires on its own: in \"Ask\" it stops at the first sensitive action and waits for you to reply in the run's session."
+      "permission": "Permissions",
+      "permissionWarning": "The routine fires on its own: in \"Ask\" it stops at the first sensitive action and waits for you to reply in the run's session."
     },
-    "lista": {
-      "nova": "New routine",
-      "vazioTitulo": "No routines yet",
-      "vazioSubtitulo": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a post-deploy check.",
-      "vazioSubtituloChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
-      "criarPrimeira": "Create your first routine",
-      "ativa": "Active",
-      "pausada": "Paused",
-      "proxima": "Next: {{quando}}",
-      "executarAgora": "Run now",
-      "editar": "Edit",
-      "salvar": "Save",
-      "salvando": "Saving…",
-      "excluir": "Delete",
-      "excluirTitulo": "Delete routine",
-      "excluirDescricao": "\"{{titulo}}\" and ALL sessions it generated will be deleted. This cannot be undone."
+    "list": {
+      "new": "New routine",
+      "emptyTitle": "No routines yet",
+      "emptySubtitle": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a post-deploy check.",
+      "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
+      "createFirst": "Create your first routine",
+      "active": "Active",
+      "paused": "Paused",
+      "next": "Next: {{when}}",
+      "runNow": "Run now",
+      "edit": "Edit",
+      "save": "Save",
+      "saving": "Saving…",
+      "delete": "Delete",
+      "deleteTitle": "Delete routine",
+      "deleteDescription": "\"{{title}}\" and ALL sessions it generated will be deleted. This cannot be undone."
     },
     "runs": {
-      "titulo": "Runs",
-      "vazio": "It hasn't run yet.",
-      "abrirChat": "Open session",
-      "rodando": "Running…",
+      "title": "Runs",
+      "empty": "It hasn't run yet.",
+      "openChat": "Open session",
+      "running": "Running…",
       "ok": "Completed",
-      "erro": "Failed",
-      "tokens": "{{valor}} tokens"
+      "error": "Failed",
+      "tokens": "{{value}} tokens"
     }
   },
   "memoriesScreen": {
@@ -1236,152 +1243,152 @@
     "emptyChatHint": "Chat with Brain enabled and Orbit will start remembering facts and preferences automatically.",
     "emptyCodeHint": "Work on a project with Brain enabled and Orbit memorizes decisions, conventions, and structure."
   },
-  "esteira": {
-    "titulo": "Pipelines",
-    "subtitulo": "Pipelines that run tasks phase by phase, without chats",
-    "carregando": "Loading board...",
-    "vazioTitulo": "No boards yet",
-    "vazioSubtitulo": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
-    "novaEsteira": "New pipeline",
-    "criar": "Create",
-    "salvar": "Save",
-    "editarEsteira": "Edit pipeline",
-    "nomeEsteira": "Pipeline name",
-    "nomeExemplo": "e.g. Features",
-    "pastas": "Folders",
-    "pastasDica": "Working folders, same as in chat",
-    "repositorioPrincipal": "Main repository",
-    "modeloPadrao": "Default model",
-    "modeloDica": "Propagated to every phase; each phase can be changed later",
-    "fases": "Phases",
-    "fasesDica": "Copied from the system templates — press and hold a phase to reorder",
-    "pendentes": "Pending",
-    "concluidas": "Done",
-    "emAndamento": "Running",
-    "falhas": "Failed",
+  "pipeline": {
+    "title": "Pipelines",
+    "subtitle": "Pipelines that run tasks phase by phase, without chats",
+    "loading": "Loading board...",
+    "emptyTitle": "No boards yet",
+    "emptySubtitle": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
+    "newPipeline": "New pipeline",
+    "create": "Create",
+    "save": "Save",
+    "editPipeline": "Edit pipeline",
+    "pipelineName": "Pipeline name",
+    "nameExample": "e.g. Features",
+    "folders": "Folders",
+    "foldersHint": "Working folders, same as in chat",
+    "mainRepository": "Main repository",
+    "defaultModel": "Default model",
+    "modelHint": "Propagated to every phase; each phase can be changed later",
+    "phases": "Phases",
+    "phasesHint": "Copied from the system templates — press and hold a phase to reorder",
+    "pendingPlural": "Pending",
+    "completedPlural": "Done",
+    "inProgress": "Running",
+    "failures": "Failed",
     "commits": "Commits",
-    "tempoTotal": "Total time",
+    "totalTime": "Total time",
     "tokens": "Tokens",
-    "custo": "Cost",
-    "iniciar": "Start",
-    "pausar": "Pause",
-    "retomar": "Resume",
-    "pausada": "Paused",
-    "erro": "Error",
-    "pushFalhou": "Push failed",
-    "pausadaPorErro": "Task paused after failing the phase",
-    "filaLigada": "Auto queue on",
-    "filaDesligada": "Auto queue off",
-    "filaDica": "Runs pending tasks one at a time, respecting dependencies",
-    "removerEsteira": "Delete pipeline",
-    "confirmarRemocao": "Delete the pipeline \"{{nome}}\" and its tasks?",
-    "descricao": "Description",
-    "semAnotacao": "This phase has not run yet.",
-    "executando": "Running…",
-    "iniciando": "Starting the phase…",
-    "comandosControlados": "Recorded commands",
-    "criadaEm": "Created",
-    "concluidaEm": "Finished",
-    "tempoTrabalho": "Work time",
-    "dependenciasTitulo": "Dependencies",
-    "semDependencias": "None",
-    "adicionarDependencia": "add dependency",
-    "selecioneTask": "Select a task...",
-    "dependencias_one": "{{count}} dependency",
-    "dependencias_other": "{{count}} dependencies",
-    "excluirTask": "Delete task",
-    "confirmarExclusaoTask": "Delete task \"{{titulo}}\"?",
-    "exclusaoTaskDescricao": "This action cannot be undone — the task and its phase notes will be lost.",
+    "cost": "Cost",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "paused": "Paused",
+    "error": "Error",
+    "pushFailed": "Push failed",
+    "pausedByError": "Task paused after failing the phase",
+    "queueOn": "Auto queue on",
+    "queueOff": "Auto queue off",
+    "queueHint": "Runs pending tasks one at a time, respecting dependencies",
+    "removePipeline": "Delete pipeline",
+    "confirmRemoval": "Delete the pipeline \"{{name}}\" and its tasks?",
+    "description": "Description",
+    "noNote": "This phase has not run yet.",
+    "running": "Running…",
+    "starting": "Starting the phase…",
+    "controlledCommands": "Recorded commands",
+    "createdAt": "Created",
+    "completedAt": "Finished",
+    "workTime": "Work time",
+    "dependenciesTitle": "Dependencies",
+    "noDependencies": "None",
+    "addDependency": "add dependency",
+    "selectTask": "Select a task...",
+    "dependencies_one": "{{count}} dependency",
+    "dependencies_other": "{{count}} dependencies",
+    "deleteTask": "Delete task",
+    "confirmTaskDeletion": "Delete task \"{{title}}\"?",
+    "taskDeletionDescription": "This action cannot be undone — the task and its phase notes will be lost.",
     "status": {
-      "pendente": "Pending",
-      "em_progresso": "Running",
-      "pausada": "Paused",
-      "concluida": "Done"
+      "pending": "Pending",
+      "in_progress": "Running",
+      "paused": "Paused",
+      "completed": "Done"
     },
-    "criarPrimeira": "Create the first pipeline",
-    "erroCarregarTitulo": "Couldn't load the pipelines",
-    "erroCarregarDica": "Make sure Orbit Desktop is open, paired and up to date — the local server only picks up new features when the app restarts.",
-    "tentarNovamente": "Try again",
-    "voltar": "Back to the list",
-    "adicionarTarefa": "Add task",
-    "semPendentes": "No pending tasks",
-    "tasksResumo": "{{concluidas}}/{{total}} tasks",
-    "adicionarFase": "Add phase",
-    "criarFase": "Create my own phase",
-    "editarFase": "Edit phase",
-    "novaFase": "New phase",
-    "faseNome": "Name",
-    "faseDescricao": "Description",
-    "faseDescricaoDica": "One line — shown in the pipeline list",
-    "faseTipo": "Role",
-    "faseTipoDica": "Defines what the phase does (and what it leaves to the next ones), regardless of its name",
-    "fasePrompt": "Prompt",
-    "fasePromptDica": "Instructions for the agent in this phase, including what it must record in the note.",
-    "faseCapacidades": "Capabilities",
-    "salvarComoPadrao": "Save as default",
-    "salvarNestaEsteira": "Save in this pipeline",
-    "capacidade": {
-      "leitura": "Read",
+    "createFirst": "Create the first pipeline",
+    "loadErrorTitle": "Couldn't load the pipelines",
+    "loadErrorHint": "Make sure Orbit Desktop is open, paired and up to date — the local server only picks up new features when the app restarts.",
+    "tryAgain": "Try again",
+    "back": "Back to the list",
+    "addTask": "Add task",
+    "noPending": "No pending tasks",
+    "tasksSummary": "{{completed}}/{{total}} tasks",
+    "addPhase": "Add phase",
+    "createPhase": "Create my own phase",
+    "editPhase": "Edit phase",
+    "newPhase": "New phase",
+    "phaseName": "Name",
+    "phaseDescription": "Description",
+    "phaseDescriptionHint": "One line — shown in the pipeline list",
+    "phaseKind": "Role",
+    "phaseKindHint": "Defines what the phase does (and what it leaves to the next ones), regardless of its name",
+    "phasePrompt": "Prompt",
+    "phasePromptHint": "Instructions for the agent in this phase, including what it must record in the note.",
+    "phaseCapabilities": "Capabilities",
+    "saveAsDefault": "Save as default",
+    "saveInThisPipeline": "Save in this pipeline",
+    "capability": {
+      "read": "Read",
       "edit": "Edit",
       "shell": "Shell",
       "browser": "Browser",
-      "memoria": "Memory"
+      "memory": "Memory"
     },
-    "tipo": {
-      "desenvolvimento": "Development",
-      "validacao": "Validation",
-      "seguranca": "Security",
-      "revisao": "Code review",
+    "kind": {
+      "development": "Development",
+      "validation": "Validation",
+      "security": "Security",
+      "review": "Code review",
       "infra": "Infra",
-      "generico": "Generic"
+      "generic": "Generic"
     },
-    "arquivosAlterados_one": "{{count}} file changed",
-    "arquivosAlterados_other": "{{count}} files changed",
-    "fase": {
-      "desenvolvimento": {
-        "nome": "Development",
-        "descricao": "Implements the task following the project conventions"
+    "changedFiles_one": "{{count}} file changed",
+    "changedFiles_other": "{{count}} files changed",
+    "phase": {
+      "development": {
+        "name": "Development",
+        "description": "Implements the task following the project conventions"
       },
-      "validacao": {
-        "nome": "Validation",
-        "descricao": "Validates the implementation: build, tests and diff review"
+      "validation": {
+        "name": "Validation",
+        "description": "Validates the implementation: build, tests and diff review"
       },
-      "seguranca": {
-        "nome": "Security",
-        "descricao": "Audit of dependencies, secrets and permissions"
+      "security": {
+        "name": "Security",
+        "description": "Audit of dependencies, secrets and permissions"
       },
-      "revisao": {
-        "nome": "Code review",
-        "descricao": "Quality and style review"
+      "review": {
+        "name": "Code review",
+        "description": "Quality and style review"
       },
       "infra": {
-        "nome": "Infra",
-        "descricao": "Deploy and environment checklist"
+        "name": "Infra",
+        "description": "Deploy and environment checklist"
       }
     },
     "push": "Push the branch when finishing",
     "prints": "Capture screenshots of the result",
-    "novaTask": "New task",
-    "criarTask": "Create task",
-    "taskTitulo": "Title",
-    "taskTituloExemplo": "e.g. Fix login on mobile",
-    "taskDescricao": "Description",
-    "taskDescricaoDica": "The full brief the phases receive — the task runs without a chat, so what is not here never reaches the agent.",
-    "taskDependencias": "Depends on",
-    "taskDependenciasDica": "This task only starts after the selected ones are done.",
-    "selecioneDependencias": "None — starts right away",
-    "semTasksParaDependencia": "No other task in this pipeline yet",
-    "buscarTask": "Search task...",
-    "nenhumaTask": "No task found",
-    "aguardando": "Waiting for {{titulo}}",
-    "aguardandoTitulo": "Waiting for: {{titulo}}",
-    "proxima": "Next",
+    "newTask": "New task",
+    "createTask": "Create task",
+    "taskTitle": "Title",
+    "taskTitleExample": "e.g. Fix login on mobile",
+    "taskDescription": "Description",
+    "taskDescriptionHint": "The full brief the phases receive — the task runs without a chat, so what is not here never reaches the agent.",
+    "taskDependencies": "Depends on",
+    "taskDependenciesHint": "This task only starts after the selected ones are done.",
+    "selectDependencies": "None — starts right away",
+    "noTasksForDependency": "No other task in this pipeline yet",
+    "searchTask": "Search task...",
+    "noTasks": "No task found",
+    "waiting": "Waiting for {{title}}",
+    "waitingTitle": "Waiting for: {{title}}",
+    "next": "Next",
     "commit": "Create a commit when finishing",
-    "commitPromptTitulo": "Final commit message",
-    "commitPromptDica": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase, the changed files and the repository's most recent commit — exactly the same context a phase gets. Empty uses the default: what the task asks about the commit; with none, the style of the most recent commit; with no history, the memory preferences; and finally Conventional Commits (header + body of summarized topics).",
-    "commitPromptVazio": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
-    "commitFalhou": "Final commit failed",
-    "conecteDesktop": "Connect to Orbit Desktop to load the esteiras"
+    "commitPromptTitle": "Final commit message",
+    "commitPromptHint": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase, the changed files and the repository's most recent commit — exactly the same context a phase gets. Empty uses the default: what the task asks about the commit; with none, the style of the most recent commit; with no history, the memory preferences; and finally Conventional Commits (header + body of summarized topics).",
+    "commitPromptEmpty": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
+    "commitFailed": "Final commit failed",
+    "connectDesktop": "Connect to Orbit Desktop to load the esteiras"
   },
   "branch": {
     "title": "Branch",
@@ -1452,5 +1459,12 @@
       "errorUnavailable": "The desktop's voice engine isn't ready yet — the model hasn't been downloaded",
       "offline": "No connection to the desktop — speech is generated there"
     }
+  },
+  "mermaid": {
+    "failed": "Could not draw this diagram."
+  },
+  "codeBlock": {
+    "copy": "Copy",
+    "copied": "Copied"
   }
 }

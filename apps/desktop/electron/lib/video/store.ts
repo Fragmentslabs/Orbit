@@ -7,13 +7,13 @@ import { Readable } from 'node:stream'
 import { VIDEO_SCHEME } from '@shared/media'
 
 /**
- * Registro dos vídeos mostrados no chat. Diferente do áudio, o arquivo NÃO é
- * copiado para a pasta do app: um corte de 2 GB dobraria no disco. O registro
- * só guarda id → caminho, e o `orbit-video://` serve o arquivo do projeto
- * com Range (por stream, nunca lido inteiro na memória).
+ * Registry of the videos shown in the chat. Unlike audio, the file is NOT
+ * copied to the app's folder: a 2 GB clip would double on disk. The registry
+ * only keeps id → path, and `orbit-video://` serves the project's file
+ * with Range (by stream, never read whole into memory).
  *
- * Só o que o agente mostrou entra aqui — o scheme não abre caminho arbitrário.
- * Se o usuário apagar ou mover o arquivo, o player mostra o erro do <video>.
+ * Only what the agent showed enters here — the scheme does not open an arbitrary path.
+ * If the user deletes or moves the file, the player shows the <video> error.
  */
 
 const SAFE_VIDEO_ID = /^vid_[a-z0-9]+$/
@@ -60,7 +60,7 @@ function persist(): Promise<void> {
   return writing
 }
 
-/** Registra (ou reaproveita) um vídeo do disco e devolve a URL do player. */
+/** Registers (or reuses) a video from disk and returns the player URL. */
 export async function registerVideo(file: string, sessionId?: string): Promise<{ id: string; url: string }> {
   const entries = await load()
   const resolved = path.resolve(file)
@@ -74,9 +74,9 @@ export async function registerVideo(file: string, sessionId?: string): Promise<{
 }
 
 /**
- * Põe de volta o registro do player com o MESMO id da URL — o revert devolve à
- * galeria um vídeo cuja exclusão tinha tirado o registro, e a entrada guarda a
- * URL antiga (`orbit-video://<id>`), que tem de voltar a tocar.
+ * Puts the player registry back with the SAME id as the URL — the revert returns to the
+ * gallery a video whose deletion had removed the registry, and the entry keeps the
+ * old URL (`orbit-video://<id>`), which has to play again.
  */
 export async function restoreVideoRegistration(url: string, file: string, sessionId?: string): Promise<void> {
   const id = url.startsWith(`${VIDEO_SCHEME}://`) ? url.slice(`${VIDEO_SCHEME}://`.length) : ''
@@ -88,9 +88,9 @@ export async function restoreVideoRegistration(url: string, file: string, sessio
 }
 
 /**
- * Tira do registro do player todo vídeo que aponta para este arquivo. Chamado
- * quando o arquivo é apagado (galeria): sem isso o índice guardaria para sempre
- * um caminho morto, e o `orbit-video://` responderia "moved or deleted".
+ * Removes from the player registry every video pointing at this file. Called
+ * when the file is deleted (gallery): without that the index would keep forever
+ * a dead path, and `orbit-video://` would answer "moved or deleted".
  */
 export async function unregisterVideosFor(file: string): Promise<void> {
   const entries = await load()
@@ -106,9 +106,9 @@ export async function unregisterVideosFor(file: string): Promise<void> {
 }
 
 /**
- * Caminho do arquivo de um vídeo registrado (`null` se o id é inválido ou o
- * registro não existe). É o que o servidor HTTP do companion usa para servir o
- * vídeo por Range ao celular, que não tem o scheme orbit-video://.
+ * File path of a registered video (`null` if the id is invalid or the
+ * registry does not exist). It is what the companion's HTTP server uses to serve the
+ * video by Range to the phone, which does not have the orbit-video:// scheme.
  */
 export async function videoFilePath(id: string): Promise<string | null> {
   if (!SAFE_VIDEO_ID.test(id)) return null
@@ -116,7 +116,7 @@ export async function videoFilePath(id: string): Promise<string | null> {
   return entry ? entry.path : null
 }
 
-/** O <video> busca posição e lê a duração por Range — sem isso não há barra. */
+/** The <video> seeks and reads the duration by Range — without it there is no bar. */
 export function registerVideoProtocol(): void {
   protocol.handle(VIDEO_SCHEME, async (request) => {
     const id = new URL(request.url).host

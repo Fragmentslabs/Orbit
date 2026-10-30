@@ -7,40 +7,40 @@ import { sanitizeDocxHtml } from './docx-sanitize'
 import { sessionDocumentFile } from './session-documents'
 
 /**
- * Um .docx anexado, visto como documento.
+ * An attached .docx, seen as a document.
  *
- * O painel sabia desenhar só PDF: o .docx era guardado, mas aberto ele virava
- * a lista de linhas do texto extraído — título, tabela e negrito achatados
- * numa coluna numerada, como se fosse código. O mammoth, que já está no
- * projeto para a prévia dos documentos do agente, converte o arquivo em HTML
- * com a estrutura dele: títulos, listas, tabelas, ênfase e as imagens
- * embutidas.
+ * The panel only knew how to draw PDF: the .docx was stored, but opened it became
+ * the extracted text's list of lines — title, table and bold flattened
+ * into a numbered column, as if it were code. mammoth, which is already in the
+ * project for the agent documents' preview, converts the file into HTML
+ * with its structure: headings, lists, tables, emphasis and the
+ * embedded images.
  *
- * O HTML vem de um arquivo de fora, então sai daqui limpo: só o que o mammoth
- * escreve, sem manipulador de evento, e com todo link apontando para fora do
- * app — um `javascript:` no hyperlink de um .docx não pode virar código
- * rodando no painel.
+ * The HTML comes from a file from outside, so it leaves here clean: only what mammoth
+ * writes, with no event handler, and with every link pointing outside the
+ * app — a `javascript:` in a .docx hyperlink cannot become code
+ * running in the panel.
  *
- * Paginação: o .docx não guarda páginas, mas guarda as quebras que o autor
- * forçou — e eram elas que sumiam, deixando o documento inteiro numa folha só.
- * As duas funções abaixo as preservam: `normalizePageBreaks` faz o Word dizer a
- * quebra do jeito que o mammoth entende, e `markPageBreaks` deixa a marca no
- * HTML para o painel cortar as folhas.
+ * Pagination: the .docx does not store pages, but it stores the breaks the author
+ * forced — and those were what vanished, leaving the whole document on a single sheet.
+ * The two functions below preserve them: `normalizePageBreaks` makes Word say the
+ * break the way mammoth understands it, and `markPageBreaks` leaves the mark in the
+ * HTML for the panel to cut the sheets.
  */
 
-/** A quebra de run, que é a forma que o mammoth lê (o Ctrl+Enter do Word). */
+/** The run break, which is the form mammoth reads (Word's Ctrl+Enter). */
 const PAGE_BREAK_RUN = '<w:r><w:br w:type="page"/></w:r>'
 
 /**
- * O Word guarda a quebra de página de duas formas: `<w:br w:type="page"/>`
- * dentro de um run (Ctrl+Enter) e `<w:pageBreakBefore/>` nas propriedades do
- * parágrafo ("quebrar página antes"). O mammoth entende a primeira e **ignora a
- * segunda em silêncio** — que é justamente a que o nosso gerador de .docx
- * escreve, e a que o Word usa quando a quebra é propriedade do parágrafo.
+ * Word stores the page break in two ways: `<w:br w:type="page"/>`
+ * inside a run (Ctrl+Enter) and `<w:pageBreakBefore/>` in the
+ * paragraph properties ("page break before"). mammoth understands the first and **silently
+ * ignores the second** — which is precisely the one our .docx generator
+ * writes, and the one Word uses when the break is a paragraph property.
  *
- * Aqui a marcação do pPr vira a quebra de run correspondente, no começo do
- * mesmo parágrafo: o Word desenha a mesma coisa, e o arquivo original não é
- * tocado. Zip que não abre volta como estava.
+ * Here the pPr markup becomes the corresponding run break, at the start of the
+ * same paragraph: Word draws the same thing, and the original file is not
+ * touched. A zip that does not open comes back as it was.
  */
 export async function normalizePageBreaks(buffer: Buffer): Promise<Buffer> {
   try {
@@ -52,7 +52,7 @@ export async function normalizePageBreaks(buffer: Buffer): Promise<Buffer> {
     const fixed = xml.replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph) => {
       if (!paragraph.includes('<w:pageBreakBefore')) return paragraph
       const withoutBreak = paragraph.replace(/<w:pageBreakBefore\s*\/>/g, '')
-      // O fim do pPr, se houver: a quebra entra logo depois, como primeiro run.
+      // The end of pPr, if any: the break enters right after, as the first run.
       const head = /^<w:p(?:\s[^>]*)?>(?:\s*<w:pPr>[\s\S]*?<\/w:pPr>)?/.exec(withoutBreak)
       if (!head) return withoutBreak
       return `${head[0]}${PAGE_BREAK_RUN}${withoutBreak.slice(head[0].length)}`
@@ -61,7 +61,7 @@ export async function normalizePageBreaks(buffer: Buffer): Promise<Buffer> {
     zip.file('word/document.xml', fixed)
     return (await zip.generateAsync({ type: 'nodebuffer' })) as Buffer
   } catch {
-    // Pacote estranho: segue com o original, que ainda abre no painel.
+    // Strange package: it goes on with the original, which still opens in the panel.
     return buffer
   }
 }
@@ -77,7 +77,7 @@ function isPageBreak(node: DocNode): boolean {
   return node.type === 'break' && node.breakType === 'page'
 }
 
-/** O parágrafo que carrega só a marca — é nele que o painel corta a folha. */
+/** The paragraph that carries only the mark — it is where the panel cuts the sheet. */
 function breakParagraph(): DocNode {
   return {
     type: 'paragraph',
@@ -86,8 +86,8 @@ function breakParagraph(): DocNode {
 }
 
 /**
- * Um parágrafo cortado nos pontos de quebra, com a marca num parágrafo próprio.
- * O corte é no MODELO, antes do HTML, para nunca partir uma tag ao meio.
+ * A paragraph cut at the break points, with the mark in a paragraph of its own.
+ * The cut is on the MODEL, before the HTML, so as never to split a tag in half.
  */
 function splitParagraph(paragraph: DocNode): DocNode[] {
   const out: DocNode[] = []
@@ -119,9 +119,9 @@ function splitParagraph(paragraph: DocNode): DocNode[] {
 }
 
 /**
- * As quebras viram um parágrafo marcador no documento que o mammoth converte.
- * Só os parágrafos do corpo são cortados: quebra dentro de célula de tabela não
- * existe no Word, e cortar ali partiria a tabela em duas.
+ * The breaks become a marker paragraph in the document mammoth converts.
+ * Only the body's paragraphs are cut: a break inside a table cell does not
+ * exist in Word, and cutting there would split the table in two.
  */
 export function markPageBreaks(document: DocNode): DocNode {
   if (!Array.isArray(document.children)) return document
@@ -134,9 +134,9 @@ export function markPageBreaks(document: DocNode): DocNode {
 }
 
 /**
- * Um arquivo .docx em HTML limpo, venha de onde vier. As duas origens — o
- * anexo da conversa e o documento que o agente editou — passam por aqui, para
- * nenhuma delas ficar sem o saneamento.
+ * A .docx file as clean HTML, wherever it comes from. Both origins — the
+ * conversation's attachment and the document the agent edited — go through here, so
+ * that neither is left without the sanitization.
  */
 export async function docxFileToHtml(filePath: string): Promise<{ html: string } | null> {
   try {
@@ -145,11 +145,11 @@ export async function docxFileToHtml(filePath: string): Promise<{ html: string }
       { buffer: await normalizePageBreaks(buffer) },
       { transformDocument: (document) => markPageBreaks(document as DocNode) },
     )
-    // O mammoth só converte o corpo; cabeçalho e rodapé vêm à parte.
+    // mammoth only converts the body; header and footer come separately.
     return { html: sanitizeDocxHtml(withHeadFoot(value, await docxHeadFoot(buffer))) }
   } catch {
-    // Arquivo corrompido ou num formato que o mammoth não lê: o painel cai
-    // para o modo Texto, que continua funcionando com o que foi extraído.
+    // Corrupted file or a format mammoth does not read: the panel falls back
+    // to Text mode, which keeps working with what was extracted.
     return null
   }
 }
@@ -163,8 +163,8 @@ export async function renderSessionDocx(
   try {
     return await docxFileToHtml(file.path)
   } catch {
-    // Arquivo corrompido ou num formato que o mammoth não lê: o painel cai
-    // para o modo Texto, que continua funcionando com o que foi extraído.
+    // Corrupted file or a format mammoth does not read: the panel falls back
+    // to Text mode, which keeps working with what was extracted.
     return null
   }
 }

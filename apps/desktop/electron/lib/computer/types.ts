@@ -1,13 +1,13 @@
 /**
- * Tipos do Computer Use. O driver fala o protocolo da bridge (JSON por
- * operação); o resto do módulo só conhece estes tipos — é o que permite testar
- * tudo com um driver falso, sem tocar no sistema.
+ * Computer Use types. The driver speaks the bridge protocol (JSON per operation); the
+ * rest of the module only knows these types — which is what allows testing everything
+ * with a fake driver, without touching the system.
  */
 
 /**
- * [x, y, largura, altura] em coordenadas globais: pontos no macOS (origem no
- * topo do monitor principal), pixels físicos do desktop virtual no Windows (o
- * host é per-monitor DPI aware).
+ * [x, y, width, height] in global coordinates: points on macOS (origin at the top of
+ * the main monitor), physical pixels of the virtual desktop on Windows (the host is
+ * per-monitor DPI aware).
  */
 export type Frame = [number, number, number, number]
 
@@ -18,40 +18,40 @@ export interface AppInfo {
   active: boolean
   hidden: boolean
   /**
-   * Windows: o app roda com integridade maior que a do Orbit (administrador).
-   * O UIPI descarta mensagens e SendInput vindos de um processo comum.
+   * Windows: the app runs with higher integrity than Orbit's (administrator).
+   * UIPI discards messages and SendInput coming from a common process.
    */
   elevated?: boolean
-  /** Windows: nome do executável ("chrome.exe"); o `bundleId` é o AUMID quando o app é empacotado */
+  /** Windows: name of the executable ("chrome.exe"); the `bundleId` is the AUMID when the app is packaged */
   exe?: string
 }
 
 export interface WindowInfo {
-  /** CGWindowID no macOS; HWND no Windows */
+  /** CGWindowID on macOS; HWND on Windows */
   id: number
   pid: number
-  /** null sem a permissão de Gravação de Tela */
+  /** null without the Screen Recording permission */
   title: string | null
   frame: Frame
 }
 
 export interface AppsSnapshot {
   apps: AppInfo[]
-  /** Janelas visíveis, da frente para trás */
+  /** Visible windows, from the front to the back */
   windows: WindowInfo[]
 }
 
 export interface AxNode {
-  /** Ordem do BFS na bridge — não é o índice mostrado ao modelo */
+  /** BFS order in the bridge — it is not the index shown to the model */
   id: number
   parent: number
   depth: number
-  /** Índices de AXChildren a partir da janela: é o que re-encontra o elemento */
+  /** AXChildren indices from the window: it is what finds the element again */
   path: number[]
   /**
-   * Identidade estável do elemento dentro da observação (Windows: RuntimeId
-   * da UIA). Quando existe, a ação vai por ela e o `path` fica de fallback; o
-   * macOS não manda.
+   * Stable identity of the element within the observation (Windows: UIA RuntimeId).
+   * When it exists, the action goes by it and `path` becomes a fallback; macOS does not
+   * send it.
    */
   ref?: string
   role: string
@@ -75,7 +75,7 @@ export interface AxNode {
 export interface TreeSnapshot {
   nodes: AxNode[]
   focusedId: number | null
-  /** Por que a árvore parou antes do fim (null = completa) */
+  /** Why the tree stopped before the end (null = complete) */
   truncated: 'maxNodes' | 'deadline' | 'axTimeout' | null
   omitted: number
   timeouts: number
@@ -83,7 +83,7 @@ export interface TreeSnapshot {
   ms: number
 }
 
-/** A janela-alvo. `id` (HWND) é o que o Windows usa; o macOS acha pelo frame e título. */
+/** The target window. `id` (HWND) is what Windows uses; macOS finds it by frame and title. */
 export interface WindowRef {
   id?: number
   frame: Frame
@@ -97,17 +97,17 @@ export interface TreeRequest {
   maxDepth?: number
   textLimit?: number
   deadlineMs?: number
-  /** Liga a árvore de apps Chromium/Electron (AXManualAccessibility) */
+  /** Turns on the tree of Chromium/Electron apps (AXManualAccessibility) */
   enhance?: boolean
-  /** Também AXEnhancedUserInterface — só navegadores Chromium */
+  /** AXEnhancedUserInterface too — Chromium browsers only */
   enhanceFull?: boolean
-  /** Espera depois de ligar a flag (o Chromium monta a árvore assíncrono); 0 se o app já estava ligado */
+  /** Wait after turning on the flag (Chromium builds the tree asynchronously); 0 if the app was already on */
   enhanceWaitMs?: number
 }
 
 export type PointerMode = 'directed' | 'global'
 
-/** Entrega dos eventos de entrada: por pid (sem mover o cursor) ou pelo HID. */
+/** Delivery of the input events: by pid (without moving the cursor) or through HID. */
 export type DeliveryMode = 'pid' | 'global'
 
 export type BridgeAction =
@@ -120,64 +120,64 @@ export type BridgeAction =
   | { op: 'hit'; pid: number; x: number; y: number; actions?: string[]; focusText?: boolean }
   | { op: 'scrollAx'; pid: number; x: number; y: number; dx: number; dy: number }
   | { op: 'selection'; pid: number }
-  /** Texto selecionado no app, sem o corte do `selection` (overlay) */
+  /** Text selected in the app, without the cut of `selection` (overlay) */
   | { op: 'readSelection'; pid: number }
   | {
       op: 'element'
       pid: number
       window: WindowRef
       path: number[]
-      /** Identidade da observação (Windows); sem ela, o host vai pelo `path` */
+      /** Identity of the observation (Windows); without it, the host goes by `path` */
       ref?: string
       expect?: { role: string; title?: string | null }
       kind: 'info' | 'press' | 'focus' | 'setValue' | 'select'
       actions?: string[]
       value?: string
-      /** select: texto a achar no valor do elemento (sem ele, seleciona tudo) */
+      /** select: text to find in the element's value (without it, selects everything) */
       find?: string
-      /** select: qual ocorrência (1 = a primeira) */
+      /** select: which occurrence (1 = the first one) */
       occurrence?: number
     }
 
 export interface ElementResult {
   done: string | null
   action?: string
-  /** O AX não confirmou a tempo (-25204) — a ação provavelmente rodou */
+  /** AX did not confirm in time (-25204) — the action probably ran */
   unconfirmed?: boolean
-  /** Seleção de texto no elemento com foco (op selection) */
+  /** Text selection in the focused element (op selection) */
   selection?: { location: number; length: number; text: string | null } | null
   node?: Omit<AxNode, 'id' | 'parent' | 'depth' | 'path'>
   readBack?: string | null
 }
 
-/** O que o driver de cada SO entrega. Os testes usam uma implementação falsa. */
+/** What the driver of each OS delivers. The tests use a fake implementation. */
 export interface ComputerDriver {
   readonly platform: NodeJS.Platform
   capabilities(): Capabilities
-  /** `notes`: o que mais limita o controle nesta máquina (Windows: CLM, integridade) */
+  /** `notes`: what else limits the control on this machine (Windows: CLM, integrity) */
   perms(signal?: AbortSignal): Promise<{ accessibility: boolean; notes?: string[] }>
-  /** Pede a Gravação de Tela pelo CGRequestScreenCaptureAccess (diálogo do sistema) */
+  /** Asks for Screen Recording through CGRequestScreenCaptureAccess (system dialog) */
   requestScreen(): Promise<{ before: boolean; granted: boolean }>
   apps(signal?: AbortSignal): Promise<AppsSnapshot>
   tree(request: TreeRequest, signal?: AbortSignal): Promise<TreeSnapshot>
-  /** PNG da janela (CGWindowID) */
+  /** PNG of the window (CGWindowID) */
   capture(windowId: number, signal?: AbortSignal): Promise<Buffer>
   act(action: BridgeAction, signal?: AbortSignal): Promise<ElementResult>
-  /** Desliga a flag de acessibilidade ligada por `enhance` */
+  /** Turns off the accessibility flag turned on by `enhance` */
   restore(pids: number[]): Promise<void>
   openApp(app: string, signal?: AbortSignal): Promise<void>
 }
 
 export interface Capabilities {
-  /** Clique por pid sem mover o cursor */
+  /** Click by pid without moving the cursor */
   directedPointer: boolean
-  /** Arrastar exige o ponteiro global */
+  /** Dragging requires the global pointer */
   dragNeedsGlobal: boolean
   accessibilityTree: boolean
   /**
-   * Mouse e roda por mensagem de janela chegam ao app sem mover o cursor
-   * (Windows). No macOS é false: a Fase 0 mostrou que o AppKit ignora mouse
-   * por pid, e o modo dirigido vai todo pela acessibilidade.
+   * Mouse and wheel through a window message reach the app without moving the cursor
+   * (Windows). On macOS it is false: Phase 0 showed that AppKit ignores mouse by pid, and
+   * the directed mode goes entirely through accessibility.
    */
   messageMouse: boolean
 }
@@ -191,11 +191,11 @@ export type ComputerErrorCode =
   | 'windowNotFound'
   | 'appNotFound'
   | 'staleIndex'
-  /** O elemento do `ref` não existe mais (Windows) */
+  /** The element of `ref` no longer exists (Windows) */
   | 'staleRef'
-  /** App como administrador: o UIPI bloqueia a entrada (Windows) */
+  /** App as administrator: UIPI blocks the input (Windows) */
   | 'elevated'
-  /** UAC, tela de bloqueio ou Ctrl+Alt+Del na frente (Windows) */
+  /** UAC, lock screen or Ctrl+Alt+Del in front (Windows) */
   | 'secureDesktop'
   | 'secureField'
   | 'blocked'

@@ -2,44 +2,44 @@ import { MOTION_TIMING_SCRIPT } from './motion-timing'
 import { MOTION_TRANSITIONS_SCRIPT } from './motion-transitions'
 
 /**
- * Runtime de seek das composições de motion — o ÚNICO lugar onde o contrato de
- * busca vive, compartilhado por dois caminhos:
+ * The seek runtime of motion compositions — the ONLY place where the seek
+ * contract lives, shared by two paths:
  *
- *  1. o RENDER (motion.ts), que carrega a composição numa janela offscreen e
- *     injeta este script por executeJavaScript;
- *  2. o PREVIEW (aba do painel), que serve a pasta da composição por
- *     `orbit-motion://` e injeta o script como PRIMEIRO script do `<head>`
- *     (`/__orbit-runtime.js`), conversando com o host por postMessage.
+ *  1. the RENDER (motion.ts), which loads the composition in an offscreen window and
+ *     injects this script via executeJavaScript;
+ *  2. the PREVIEW (panel tab), which serves the composition's folder through
+ *     `orbit-motion://` and injects the script as the FIRST script of the `<head>`
+ *     (`/__orbit-runtime.js`), talking to the host via postMessage.
  *
- * Unidade de tempo é QUADRO INTEIRO: `window.orbitMotion.seek(frame)` recebe um
- * inteiro e converte internamente para segundos (`t = frame / fps`). Quadro
- * inteiro elimina a deriva de float do `frame / fps` acumulado e permite partir
- * uma faixa em quadros exatos (o mesmo motivo pelo qual o Remotion trabalha em
+ * The unit of time is WHOLE FRAME: `window.orbitMotion.seek(frame)` receives an
+ * integer and converts internally to seconds (`t = frame / fps`). Whole
+ * frame eliminates the float drift of the accumulated `frame / fps` and allows splitting
+ * a track into exact frames (the same reason why Remotion works in
  * frames).
  *
- * O texto é uma string de propósito: ele roda NA página, não no main. A cópia
- * aqui é a fonte da verdade — o render e o protocolo servem exatamente este
- * script. As MESMAS regras da ponte valem nas funções puras de parsing abaixo,
- * que os testes cobrem e que o host usa para validar o que chega.
+ * The text is a string on purpose: it runs ON the page, not in the main. The copy
+ * here is the source of truth — the render and the protocol serve exactly this
+ * script. The SAME bridge rules hold in the pure parsing functions below,
+ * which the tests cover and which the host uses to validate what arrives.
  */
 
-/** Fps do app — a composição pode declarar outro, mas este é o padrão. */
+/** App fps — the composition may declare another, but this is the default. */
 export const MOTION_FPS = 30
 
-/** Versão do contrato; a composição lê em window.orbitMotion.version. */
+/** Contract version; the composition reads it in window.orbitMotion.version. */
 export const MOTION_RUNTIME_VERSION = 1
 
-/** Marca das mensagens da ponte (host ⇄ iframe). */
+/** Mark of the bridge messages (host ⇄ iframe). */
 export const MOTION_SOURCE = 'orbit-motion'
 
-/** Caminho reservado que serve o script do runtime pela pasta da composição. */
+/** Reserved path that serves the runtime script from the composition's folder. */
 export const MOTION_RUNTIME_PATH = '/__orbit-runtime.js'
 
 /**
- * O script do runtime. Preserva o que já funcionava no render antigo (timeline
- * global do GSAP, document.getAnimations(), document.fonts.ready, o double rAF,
- * o seek de <video> e o cuidado com HiDPI) e acrescenta o contrato em quadros,
- * delayRender/continueRender, a ponte postMessage e o modo play.
+ * The runtime script. It preserves what already worked in the old render (the GSAP
+ * global timeline, document.getAnimations(), document.fonts.ready, the double rAF,
+ * the <video> seek and the care with HiDPI) and adds the contract in frames,
+ * delayRender/continueRender, the postMessage bridge and the play mode.
  */
 export const MOTION_RUNTIME = `(() => {
   if (window.__orbitMotionReady) return
@@ -48,21 +48,21 @@ export const MOTION_RUNTIME = `(() => {
   const FPS = ${MOTION_FPS}
   const VERSION = ${MOTION_RUNTIME_VERSION}
   const SOURCE = '${MOTION_SOURCE}'
-  // Um delayRender() que ninguém fecha NÃO pode pendurar o seek para sempre:
-  // estoura em erro (a composição tem um bug e o host precisa saber).
+  // A delayRender() that nobody closes CANNOT hang the seek forever:
+  // it blows up into an error (the composition has a bug and the host must know).
   const HANDLE_TIMEOUT_MS = 10000
 
-  // --------------------------------------------------------------- estado
-  const declared = {}          // números que a COMPOSIÇÃO declarou
+  // --------------------------------------------------------------- state
+  const declared = {}          // numbers the COMPOSITION declared
   const resolved = { width: 1920, height: 1080, fps: FPS, duration: undefined, durationInFrames: undefined }
   let failedFonts = []
-  let customSeek = null        // seek próprio da composição (canvas/three.js)
+  let customSeek = null        // the composition own seek (canvas/three.js)
   let currentFrame = 0
 
-  // A composição pode ter declarado window.orbitMotion = { … } ANTES do runtime
-  // (é o caso do render, que injeta o script depois do load). Guarda os números
-  // e um seek próprio; o resto da API é anexado no MESMO objeto para não
-  // invalidar a referência que a página já tem.
+  // The composition may have declared window.orbitMotion = { … } BEFORE the runtime
+  // (it is the render case, which injects the script after the load). The numbers are
+  // kept, and a seek of its own; the rest of the API is attached to the SAME object so as not to
+  // invalidate the reference the page already has.
   const seed = window.orbitMotion && typeof window.orbitMotion === 'object' ? window.orbitMotion : null
   if (seed) {
     for (const k of ['width', 'height', 'fps', 'duration', 'durationInFrames']) {
@@ -73,20 +73,20 @@ export const MOTION_RUNTIME = `(() => {
   }
   const api = seed || {}
 
-  // ----------------------------------------------------------- transições
-  // Validação e keyframes das transições (motion-transitions.ts): o mesmo texto
-  // que os testes executam, embutido aqui porque a página não tem import.
+  // ----------------------------------------------------------- transitions
+  // Validation and keyframes of the transitions (motion-transitions.ts): the same text
+  // the tests execute, embedded here because the page has no import.
 ${MOTION_TRANSITIONS_SCRIPT}
-  // O tempo das mídias (vídeo e GIF) em função do instante da peça (motion-timing.ts).
+  // The time of media (video and GIF) as a function of the piece instant (motion-timing.ts).
 ${MOTION_TIMING_SCRIPT}
-  const transitions = []       // o que a composição registrou (lint e relatório)
-  // As animações que o runtime criou (as das transições). document.getAnimations()
-  // só devolve as RELEVANTES: uma que terminou, sem fill que a mantenha em efeito,
-  // sai da lista — e voltar no tempo (arrastar a régua para trás, o laço do play)
-  // a deixaria presa no fim, com a cena "de depois" ainda visível no quadro 0.
+  const transitions = []       // what the composition registered (lint and report)
+  // The animations the runtime created (the transitions ones). document.getAnimations()
+  // only returns the RELEVANT ones: an animation that ended, without a fill keeping it in effect,
+  // leaves the list — and going back in time (dragging the ruler backwards, the play loop)
+  // would leave it stuck at the end, with the "after" scene still visible on frame 0.
   const ownAnimations = []
-  // Põe TODA animação da página no instante t: as que a página tem (CSS, WAAPI) e
-  // as nossas, mesmo as que já saíram da lista.
+  // Puts EVERY animation of the page at instant t: the ones the page has (CSS, WAAPI) and
+  // ours, even the ones that already left the list.
   function positionAnimations(t) {
     const seen = new Set()
     for (const a of document.getAnimations()) {
@@ -122,13 +122,13 @@ ${MOTION_TIMING_SCRIPT}
     const tl = window.orbitTimeline
     return tl && typeof tl.duration === 'function' ? tl.duration() : undefined
   }
-  // Precedência preservada do render antigo: o que a composição declarou vence a
-  // <meta>, que vence o default. O comprimento NÃO tem default — sem ele o
-  // render tem que falhar em vez de chutar tamanho.
+  // Precedence preserved from the old render: what the composition declared wins over the
+  // <meta>, which wins over the default. The length has NO default — without it the
+  // render has to fail instead of guessing a size.
   //
-  // O comprimento pode ser declarado em QUADROS (durationInFrames, o contrato
-  // novo) ou em segundos (duration / timeline / meta). Quadros é canônico e
-  // manda: em segundos, converte-se UMA vez com o fps resolvido.
+  // The length may be declared in FRAMES (durationInFrames, the new
+  // contract) or in seconds (duration / timeline / meta). Frames is canonical and
+  // rules: in seconds, it is converted ONCE with the resolved fps.
   function refresh() {
     const meta = readMeta()
     const fps = declared.fps || meta.fps || FPS
@@ -142,14 +142,14 @@ ${MOTION_TIMING_SCRIPT}
     return resolved
   }
 
-  // --------------------------------------------------------- ponte postMessage
+  // --------------------------------------------------------- postMessage bridge
   function post(type, payload) {
     const parent = window.parent
-    if (!parent || parent === window) return   // topo (janela do render): ninguém para ouvir
+    if (!parent || parent === window) return   // top (render window): nobody to listen
     try {
       const message = Object.assign({ source: SOURCE, type: type }, payload || {})
       parent.postMessage(message, '*')
-    } catch (err) { /* host já foi embora */ }
+    } catch (err) { /* the host is already gone */ }
   }
   function reportError(err) {
     post('error', {
@@ -159,8 +159,8 @@ ${MOTION_TIMING_SCRIPT}
   }
 
   // --------------------------------------------------- delayRender/continueRender
-  // A composição abre um handle antes de carregar algo assíncrono (fonte, imagem,
-  // fetch) e fecha quando termina; o seek espera os handles abertos.
+  // The composition opens a handle before loading something asynchronous (font, image,
+  // fetch) and closes it when done; the seek waits for the open handles.
   const openHandles = new Set()
   let handleSeq = 1
   let waiters = []
@@ -195,9 +195,9 @@ ${MOTION_TIMING_SCRIPT}
   }
 
   // --------------------------------------------------------------- seek
-  // O GSAP é lido do window a cada uso (não capturado aqui): no preview o
-  // runtime é o primeiro script do head e o gsap.min.js da composição carrega
-  // DEPOIS — capturar agora daria undefined e a timeline nunca seria buscada.
+  // GSAP is read from window on every use (not captured here): in the preview the
+  // runtime is the first script of the head and the composition gsap.min.js loads
+  // AFTERWARDS — capturing it now would give undefined and the timeline would never be fetched.
   let gsapReady = false
   let gsapBase = 0
   function prepareGsap() {
@@ -216,7 +216,7 @@ ${MOTION_TIMING_SCRIPT}
   function videos() {
     return Array.prototype.slice.call(document.querySelectorAll('video'))
   }
-  // Os atributos de tempo de um <video> (data-start / data-in / data-end), em segundos.
+  // The time attributes of a <video> (data-start / data-in / data-end), in seconds.
   function numberAttr(el, name) {
     const raw = el.getAttribute(name)
     if (raw === null || raw === '') return undefined
@@ -232,9 +232,9 @@ ${MOTION_TIMING_SCRIPT}
       duration: v.duration,
     }
   }
-  // O que o host precisa saber dos <video>: de onde vem o som, e com que tempo.
-  // O runtime SILENCIA o vídeo da página (a janela do render não tem som), então é
-  // o host quem põe o som dele na mixagem — a partir deste retrato.
+  // What the host needs to know about the <video>s: where the sound comes from, and at what time.
+  // The runtime MUTES the page video (the render window has no sound), so it is
+  // the host that puts its sound into the mix — from this snapshot.
   function videoFacts() {
     return videos().map(function (v) {
       return {
@@ -250,10 +250,10 @@ ${MOTION_TIMING_SCRIPT}
   }
 
   // ----------------------------------------------------------------- GIF
-  // Um <img> GIF anima sozinho, no relógio de parede: dois renders mostrariam
-  // quadros diferentes. Aqui o GIF é decodificado (ImageDecoder) em quadros
-  // inteiros e o <img> passa a mostrar o quadro que o INSTANTE manda — o elemento
-  // continua o mesmo, então CSS, object-fit, transform e data-layer seguem valendo.
+  // An <img> GIF animates on its own, on the wall clock: two renders would show
+  // different frames. Here the GIF is decoded (ImageDecoder) into whole frames
+  // and the <img> starts showing the frame the INSTANT demands — the element
+  // stays the same, so CSS, object-fit, transform and data-layer still apply.
   const gifs = []
   const MAX_GIF_FRAMES = 1500
   function isGifImage(img) {
@@ -314,8 +314,8 @@ ${MOTION_TIMING_SCRIPT}
     }
   }
   for (const v of videos()) { v.muted = true; v.pause() }
-  // Pausa o GSAP já na entrada (como o render antigo fazia): a composição não
-  // pode andar sozinha antes do primeiro seek.
+  // Pauses GSAP right at entry (as the old render did): the composition cannot
+  // run on its own before the first seek.
   prepareGsap()
 
   function nextFrame() {
@@ -337,10 +337,10 @@ ${MOTION_TIMING_SCRIPT}
     positionAnimations(t)
     await Promise.all(videos().map(function (v) {
       return new Promise(function (res) {
-        // O runtime é o primeiro script do <head>: no boot os <video> da página
-        // AINDA NÃO EXISTEM, então silenciar só lá não pegava nenhum. É aqui, a cada
-        // quadro, que o vídeo deixa de tocar sozinho (autoplay) — o som dele entra
-        // pela mixagem do host, nunca pela página.
+        // The runtime is the first script of the <head>: at boot the page <video>s
+        // DO NOT EXIST YET, so muting only there caught none of them. It is here, on every
+        // frame, that the video stops playing on its own (autoplay) — its sound enters
+        // through the host mix, never through the page.
         v.muted = true
         v.pause()
         const target = orbitVideoTime(t, mediaTiming(v))
@@ -354,9 +354,9 @@ ${MOTION_TIMING_SCRIPT}
     await nextFrame()
   }
 
-  // latest-wins: um seek que chega enquanto outro roda SUBSTITUI o anterior (que
-  // é descartado, nunca enfileirado). No modo play o rAF pede um quadro por vez e
-  // a máquina nunca acumula seeks sobrepostos.
+  // latest-wins: a seek that arrives while another one runs REPLACES the previous one (which
+  // is discarded, never queued). In play mode the rAF asks for one frame at a time and
+  // the machine never piles up overlapping seeks.
   let queued = null
   let running = false
   function pump() {
@@ -369,8 +369,8 @@ ${MOTION_TIMING_SCRIPT}
           queued = null
           try {
             await waitForHandles()
-            // Um pedido mais novo chegou enquanto este esperava (delayRender,
-            // fonte, rAF): este é velho e sai sem aplicar nada.
+            // A newer request arrived while this one was waiting (delayRender,
+            // font, rAF): this one is stale and leaves without applying anything.
             if (queued) { job.resolve(); continue }
             await applyFrame(job.f)
             job.resolve()
@@ -387,7 +387,7 @@ ${MOTION_TIMING_SCRIPT}
   function seekFrame(frame) {
     const f = Math.max(0, Math.round(Number(frame) || 0))
     return new Promise(function (resolve, reject) {
-      if (queued) queued.resolve()   // requisição velha: sai sem fazer nada
+      if (queued) queued.resolve()   // stale request: leaves without doing anything
       queued = { f: f, resolve: resolve, reject: reject }
       pump()
     })
@@ -411,15 +411,15 @@ ${MOTION_TIMING_SCRIPT}
       const total = resolved.durationInFrames
       if (total && frame >= total) {
         if (loopOn) {
-          // Com loop ligado, o play dá a VOLTA. A pergunta tem que ser
-          // "frame >= total": com "frame >= total - 1" no outro ramo, o último
-          // quadro caía nele primeiro e o play morria ali — com loop ligado.
+          // With loop on, play WRAPS AROUND. The question has to be
+          // "frame >= total": with "frame >= total - 1" in the other branch, the last
+          // frame fell into it first and play died there — with loop on.
           playBase = performance.now()
           playBaseFrame = 0
           frame = 0
         } else {
-          // Sem loop, para no ÚLTIMO quadro (preso nele, não num quadro que não
-          // existe).
+          // Without loop, it stops on the LAST frame (stuck on it, not on a frame that does not
+          // exist).
           frame = total - 1
           seekFrame(frame).catch(function () {})
           post('time', { frame: frame })
@@ -439,11 +439,11 @@ ${MOTION_TIMING_SCRIPT}
     rafId = 0
   }
 
-  // ------------------------------------------------------------- transição
+  // ------------------------------------------------------------- transition
   // orbitMotion.transition({ out, in, at, duration, type, direction, easing, amount })
-  // vira uma animação pausada por elemento. NÃO há nada a fazer no quadro: o
-  // applyFrame já põe todo document.getAnimations() em t * 1000, então a
-  // transição é buscada como qualquer @keyframes — preview, medição e render.
+  // becomes one paused animation per element. There is NOTHING to do per frame: the
+  // applyFrame already puts every document.getAnimations() at t * 1000, so the
+  // transition is fetched like any @keyframes — preview, measurement and render.
   function transitionTarget(ref, role) {
     if (ref === undefined || ref === null) return null
     if (typeof ref === 'string') {
@@ -495,27 +495,27 @@ ${MOTION_TIMING_SCRIPT}
   }
 
   // --------------------------------------------------------------- API
-  // window.orbitMotion é o contrato: a composição lê fps/width/height/
-  // durationInFrames e usa delayRender/continueRender; o host chama seek(frame).
-  // Os números e o seek são ACESSORES: atribuir (a composição declarando o
-  // próprio formato ou o próprio seek) cai no lugar certo em vez de apagar a API.
+  // window.orbitMotion is the contract: the composition reads fps/width/height/
+  // durationInFrames and uses delayRender/continueRender; the host calls seek(frame).
+  // The numbers and the seek are ACCESSORS: assigning (the composition declaring its
+  // own format or its own seek) lands in the right place instead of wiping the API.
   function defineNumbers() {
     for (const k of ['width', 'height', 'fps', 'duration']) {
       Object.defineProperty(api, k, {
         configurable: true,
         enumerable: true,
         get: function () { return resolved[k] },
-        // Declarar o formato DEPOIS do runtime (script da composição) reanuncia
-        // o ready, em vez de deixar o host com o valor antigo.
+        // Declaring the format AFTER the runtime (the composition script) re-announces
+        // ready, instead of leaving the host with the old value.
         set: function (v) {
           if (typeof v === 'number' && isFinite(v) && v > 0) declared[k] = v
           announce()
         },
       })
     }
-    // durationInFrames aceita atribuição: a composição declara o comprimento em
-    // quadros (window.orbitMotion = { durationInFrames: 120 }) e o valor vira o
-    // canônico da resolução.
+    // durationInFrames accepts assignment: the composition declares the length in
+    // frames (window.orbitMotion = { durationInFrames: 120 }) and the value becomes the
+    // canonical one of the resolution.
     Object.defineProperty(api, 'durationInFrames', {
       configurable: true,
       enumerable: true,
@@ -552,8 +552,8 @@ ${MOTION_TIMING_SCRIPT}
       configurable: true,
       enumerable: true,
       get: function () { return api },
-      // Atribuir window.orbitMotion = { duration: 4 } (declaração antiga) faz
-      // MERGE na API em vez de trocar o objeto — senão delayRender/seek sumiriam.
+      // Assigning window.orbitMotion = { duration: 4 } (old declaration) MERGES
+      // into the API instead of swapping the object — otherwise delayRender/seek would vanish.
       set: function (value) {
         if (!value || typeof value !== 'object' || value === api) return
         for (const k of Object.keys(value)) {
@@ -564,11 +564,11 @@ ${MOTION_TIMING_SCRIPT}
       },
     })
   } catch (err) {
-    // Já existe um window.orbitMotion não-configurável: segue com o que deu.
+    // There is already a non-configurable window.orbitMotion: go on with what we got.
   }
 
-  // Foto do estado para o host do RENDER (que lê por executeJavaScript, sem
-  // ponte). Mesmos nomes do antigo PAGE_SPEC para o render manter a precedência.
+  // Snapshot of the state for the RENDER host (which reads it through executeJavaScript, without a
+  // bridge). Same names as the old PAGE_SPEC so the render keeps the precedence.
   window.__orbitMotionSpec = function () {
     return {
       meta: metaContent(),
@@ -584,21 +584,21 @@ ${MOTION_TIMING_SCRIPT}
     }
   }
 
-  // ------------------------------------------------------------- camadas
-  // Quem aparece e some ao longo do tempo: varre os quadros SEM pintar (só
-  // estilo e layout, que o getBoundingClientRect força) e devolve, por
-  // elemento, os intervalos em que ele está visível — o que a aba desenha como
-  // faixas de entrada e saída. Roda na janela offscreen do main, nunca no
-  // preview: a varredura mexe no playhead. A escolha de QUAIS elementos viram
-  // camada é do host (motion-layers.ts), que conhece só este retrato cru.
+  // ------------------------------------------------------------- layers
+  // Who appears and vanishes over time: scans the frames WITHOUT painting (only
+  // style and layout, which getBoundingClientRect forces) and returns, per
+  // element, the intervals in which it is visible — what the tab draws as
+  // entry and exit bands. It runs in the main offscreen window, never in the
+  // preview: the scan moves the playhead. WHICH elements become a
+  // layer is the host call (motion-layers.ts), which only knows this raw snapshot.
   const SKIP_TAGS = /^(SCRIPT|STYLE|LINK|META|TEMPLATE|NOSCRIPT|BR|HEAD|TITLE)$/
   function layerLabel(el) {
     const named = el.getAttribute('data-layer')
     if (named) return named
     if (el.id) return '#' + el.id
-    // Mídia sem nome: o ARQUIVO diz mais do que a tag ("video") ou a classe
-    // (".hero") — "Mimi.mp4" é o que a pessoa reconhece na lista de camadas.
-    // Antes do texto porque um <video> pode carregar o fallback do navegador.
+    // Unnamed media: the FILE says more than the tag ("video") or the class
+    // (".hero") — "Mimi.mp4" is what the person recognizes in the layer list.
+    // Before the text because a <video> may carry the browser fallback.
     if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO') {
       const src = String(el.currentSrc || el.getAttribute('src') || '')
       const file = src.split(/[?#]/)[0].split(/[\\\\/]/).filter(Boolean).pop()
@@ -609,10 +609,10 @@ ${MOTION_TIMING_SCRIPT}
     const cls = (el.getAttribute('class') || '').trim().split(/\\s+/)[0]
     return cls ? '.' + cls : el.tagName.toLowerCase()
   }
-  // Que tipo de coisa a camada é. O rótulo diz o NOME, não o que o elemento é:
-  // um título e uma foto podem se chamar os dois de ".caption". A ordem vai do
-  // concreto para o vago — um contêiner que TEM mídia dentro é a mídia (é o que
-  // se vê), e só o que não tem mídia nem texto sobra como "outro".
+  // What kind of thing the layer is. The label says the NAME, not what the element is:
+  // a heading and a photo can both be called ".caption". The order goes from the
+  // concrete to the vague — a container that HAS media inside is the media (it is what
+  // one sees), and only what has neither media nor text is left as "other".
   function layerKind(el) {
     const tag = (el.tagName || '').toUpperCase()
     if (tag === 'VIDEO') return 'video'
@@ -645,8 +645,8 @@ ${MOTION_TIMING_SCRIPT}
     if (r.width * r.height < 4) return false
     return r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh
   }
-  // O mesmo caminho do applyFrame, sem <video> e sem esperar o paint: a
-  // varredura só lê estilo e geometria.
+  // The same path as applyFrame, without <video> and without waiting for the paint: the
+  // scan only reads style and geometry.
   async function seekForProbe(frame) {
     currentFrame = frame
     const t = frame / resolved.fps
@@ -662,19 +662,19 @@ ${MOTION_TIMING_SCRIPT}
     positionAnimations(t)
   }
 
-  // ------------------------------------------------------- realce da camada
-  // A camada selecionada na aba ganha um contorno AQUI, no documento do preview.
-  // O host não alcança este DOM (o palco é sandbox sem same-origin), então quem
-  // desenha é o runtime, a pedido dele. Duas regras:
-  //   - guardar o 'outline' que já estava lá e devolvê-lo ao desmarcar: a
-  //     composição pode ter o seu, e sair da seleção não pode deixar marca;
-  //   - o índice vem da MEDIÇÃO, feita noutra janela da mesma composição. Se o
-  //     rótulo não bater, a página mexeu no meio — melhor não contornar nada do
-  //     que contornar o elemento errado.
-  // Não passa por applyFrame(): o contorno é do ELEMENTO, não do quadro, então
-  // ele acompanha sozinho o que a composição fizer com ele (transform, keyframe).
-  // A cor vai literal porque a página da composição não tem as variáveis de CSS
-  // do app: é o dourado do tema (o mesmo hsl(44 100% 47%) do mobile).
+  // ------------------------------------------------------- layer highlight
+  // The layer selected in the tab gets an outline HERE, in the preview document.
+  // The host cannot reach this DOM (the stage is a sandbox without same-origin), so the one
+  // that draws is the runtime, at its request. Two rules:
+  //   - keep the 'outline' that was already there and give it back when unselected: the
+  //     composition may have its own, and leaving the selection cannot leave a mark;
+  //   - the index comes from the MEASUREMENT, taken in another window of the same composition. If the
+  //     label does not match, the page changed in the meantime — better not to outline anything
+  //     than to outline the wrong element.
+  // It does not go through applyFrame(): the outline belongs to the ELEMENT, not to the frame, so
+  // it follows by itself whatever the composition does with it (transform, keyframe).
+  // The color is literal because the composition page does not have the app
+  // CSS variables: it is the theme gold (the same hsl(44 100% 47%) as on mobile).
   const HIGHLIGHT_RING = '2px solid #f0b000'
   let highlighted = null
   let highlightedOutline = null
@@ -694,11 +694,11 @@ ${MOTION_TIMING_SCRIPT}
     highlighted = item.el
     highlightedOutline = { outline: item.el.style.outline || '', offset: item.el.style.outlineOffset || '' }
     item.el.style.outline = HIGHLIGHT_RING
-    // POR DENTRO (-2px) de propósito: o contorno é pintado fora da caixa do
-    // elemento, e a camada mais comum de todas é a que ocupa a tela inteira — ali
-    // um contorno externo cairia fora do viewport (ou seria cortado pelo
-    // overflow:hidden do palco) e não apareceria justamente na camada que mais
-    // precisa ser identificada. Por dentro ele aparece sempre.
+    // INSIDE (-2px) on purpose: the outline is painted outside the element
+    // box, and the most common layer of all is the one that fills the whole screen — there
+    // an outer outline would fall outside the viewport (or be clipped by the
+    // stage overflow:hidden) and would not show up precisely on the layer that most
+    // needs to be identified. Inside, it always shows.
     item.el.style.outlineOffset = '-2px'
   }
 
@@ -736,13 +736,13 @@ ${MOTION_TIMING_SCRIPT}
           named: item.el.hasAttribute('data-layer'),
           parent: item.parent,
           spans: spans[i],
-          // Posição na caminhada da página: é o endereço do elemento para o
-          // realce (o preview percorre os mesmos candidatos, na mesma ordem).
+          // Position in the page walk: it is the element address for the
+          // highlight (the preview walks the same candidates, in the same order).
           index: i,
           kind: layerKind(item.el),
-          // A tag separa a mídia do contêiner que a envolve: um <div> com um
-          // <video> dentro também é "video" pelo tipo medido, e o host precisa
-          // saber qual dos dois é a camada de verdade (ver pickLayers).
+          // The tag separates the media from the container around it: a <div> with a
+          // <video> inside is also "video" by the measured type, and the host needs
+          // to know which of the two is the real layer (see pickLayers).
           tag: String(item.el.tagName || '').toLowerCase(),
         }
       }),
@@ -750,9 +750,9 @@ ${MOTION_TIMING_SCRIPT}
   }
 
   // --------------------------------------------------------------- boot
-  // HiDPI: a captura sai no fator de escala da tela e o host normaliza a imagem
-  // (scale= no ffmpeg); aqui só garantimos altura no documento — sem ela a
-  // janela offscreen pinta vazio e o quadro sai em branco.
+  // HiDPI: the capture comes out at the screen scale factor and the host normalizes the image
+  // (scale= in ffmpeg); here we only guarantee height in the document — without it the
+  // offscreen window paints empty and the frame comes out blank.
   function syncDocumentHeight() {
     const root = document.documentElement
     if (!root || !resolved.height) return
@@ -768,17 +768,17 @@ ${MOTION_TIMING_SCRIPT}
   function announce() {
     refresh()
     const frames = resolved.durationInFrames
-    // Só (re)anuncia quando o comprimento mudou: a composição pode declarar o
-    // formato depois do runtime (script dela, no meio do head) e o host precisa
-    // saber; sem mudança, nada é repetido.
+    // Only (re)announces when the length changed: the composition may declare the
+    // format after the runtime (its script, in the middle of the head) and the host needs
+    // to know; without a change, nothing is repeated.
     if (!frames || frames === readyFrames) return
     readyFrames = frames
     post('ready', {
       durationInFrames: resolved.durationInFrames,
       width: resolved.width,
       height: resolved.height,
-      // O fps da COMPOSIÇÃO vai junto: a aba desenhava tudo em 30 fixo, e uma
-      // peça de 60 fps tinha o playhead, a régua e os timecodes na metade.
+      // The COMPOSITION fps goes along: the tab used to draw everything at a fixed 30, and a
+      // 60 fps piece had the playhead, the ruler and the timecodes at half speed.
       fps: resolved.fps,
       version: VERSION,
     })
@@ -787,8 +787,8 @@ ${MOTION_TIMING_SCRIPT}
     syncDocumentHeight()
     announce()
   }
-  // Os GIFs são decodificados assim que o documento existe (e não só no load: o
-  // render espera o delayRender, e o load já pode ter passado).
+  // GIFs are decoded as soon as the document exists (and not only on load: the
+  // render waits on delayRender, and the load may already have gone by).
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { prepareGifs() }, { once: true })
   else prepareGifs()
   if (document.fonts && document.fonts.ready) {
@@ -797,8 +797,8 @@ ${MOTION_TIMING_SCRIPT}
   if (document.readyState === 'complete') boot()
   else window.addEventListener('load', boot, { once: true })
 
-  // Comandos do host (preview). Só do parent: a composição é conteúdo não
-  // confiável e não manda no playhead de outra página.
+  // Host commands (preview). Only from the parent: the composition is untrusted
+  // content and does not command another page playhead.
   window.addEventListener('message', function (event) {
     if (window.parent !== window && event.source !== window.parent) return
     const cmd = parseCommand(event.data)
@@ -810,16 +810,16 @@ ${MOTION_TIMING_SCRIPT}
     else if (cmd.type === 'highlight') applyHighlight(cmd.index, cmd.name)
   })
 
-  // Mesmas regras da função pura parseMotionCommand (motion-runtime.ts) — aqui em
-  // JS de página, sem import, porque o runtime não passa pelo bundler.
+  // Same rules as the pure function parseMotionCommand (motion-runtime.ts) — here in page
+  // JS, without import, because the runtime does not go through the bundler.
   function parseCommand(data) {
     if (!data || typeof data !== 'object' || data.source !== SOURCE) return null
     if (data.type === 'seek') return isFinite(data.frame) ? { type: 'seek', frame: Math.max(0, Math.round(data.frame)) } : null
     if (data.type === 'play') return { type: 'play' }
     if (data.type === 'pause') return { type: 'pause' }
     if (data.type === 'loop') return { type: 'loop', on: Boolean(data.on) }
-    // Índice negativo é "tire o realce": desmarcar é um comando, não a ausência
-    // de um — sem ele a marca ficaria na tela até a próxima seleção.
+    // A negative index is "remove the highlight": unselecting is a command, not the absence
+    // of one — without it the mark would stay on screen until the next selection.
     if (data.type === 'highlight') {
       return {
         type: 'highlight',
@@ -834,15 +834,15 @@ ${MOTION_TIMING_SCRIPT}
 })()`
 
 /**
- * Lido no host do render logo depois de injetar o runtime: devolve a foto do
- * estado da página, ou null se o runtime não chegou a rodar.
+ * Read in the render host right after injecting the runtime: returns the snapshot of the
+ * page state, or null if the runtime never ran.
  */
 export const MOTION_SPEC = `(() => {
   const spec = window.__orbitMotionSpec
   return typeof spec === 'function' ? spec() : null
 })()`
 
-/** Comando do host para o iframe (mesmas regras do parseCommand da página). */
+/** Host command to the iframe (same rules as the page's parseCommand). */
 export type MotionHostCommand =
   | { type: 'seek'; frame: number }
   | { type: 'play' }
@@ -850,14 +850,14 @@ export type MotionHostCommand =
   | { type: 'loop'; on: boolean }
   | { type: 'highlight'; index: number; name: string | null }
 
-/** Mensagem do iframe para o host. */
+/** Iframe message to the host. */
 export type MotionRuntimeMessage =
   | { type: 'ready'; durationInFrames: number; width: number; height: number; fps: number; version: number }
   | { type: 'time'; frame: number }
   | { type: 'error'; message: string; stack?: string }
   | { type: 'assets'; failedFonts: string[] }
 
-/** Valida um comando host→iframe (mesmas regras do runtime na página). */
+/** Validates a host→iframe command (same rules as the runtime on the page). */
 export function parseMotionCommand(raw: unknown): MotionHostCommand | null {
   if (!raw || typeof raw !== 'object') return null
   const msg = raw as Record<string, unknown>
@@ -880,7 +880,7 @@ export function parseMotionCommand(raw: unknown): MotionHostCommand | null {
   return null
 }
 
-/** Valida uma mensagem iframe→host (ready/time/error/assets). */
+/** Validates an iframe→host message (ready/time/error/assets). */
 export function parseMotionMessage(raw: unknown): MotionRuntimeMessage | null {
   if (!raw || typeof raw !== 'object') return null
   const msg = raw as Record<string, unknown>
@@ -892,7 +892,7 @@ export function parseMotionMessage(raw: unknown): MotionRuntimeMessage | null {
       durationInFrames: Math.max(1, Math.round(msg.durationInFrames)),
       width: typeof msg.width === 'number' ? msg.width : 1920,
       height: typeof msg.height === 'number' ? msg.height : 1080,
-      // Peça antiga (runtime anterior) não manda fps: 30 é o padrão do contrato.
+      // An old piece (previous runtime) does not send fps: 30 is the contract default.
       fps: typeof msg.fps === 'number' && Number.isFinite(msg.fps) && msg.fps > 0 ? msg.fps : 30,
       version: typeof msg.version === 'number' ? msg.version : 0,
     }
@@ -913,19 +913,19 @@ export function parseMotionMessage(raw: unknown): MotionRuntimeMessage | null {
   return null
 }
 
-/** Marca do `<script>` injetado, para não duplicar numa composição já servida. */
+/** Mark of the injected `<script>`, so it is not duplicated in a composition already served. */
 const RUNTIME_MARK = 'data-orbit-motion-runtime'
 
-/** Tag do runtime para a composição de `id` (o `/__orbit-runtime.js` reservado). */
+/** Runtime tag for the composition of `id` (the reserved `/__orbit-runtime.js`). */
 export function motionRuntimeTag(scheme: string, id: string): string {
   return `<script ${RUNTIME_MARK} src="${scheme}://${id}${MOTION_RUNTIME_PATH}"></script>`
 }
 
 /**
- * Injeta o runtime como PRIMEIRO script do `<head>` (o mais cedo possível: a
- * composição roda depois e já conta com a API e com a captura de delayRender).
- * Sem `<head>`, o script é prefixado ao documento — o parser o executa antes de
- * qualquer script da composição de qualquer forma.
+ * Injects the runtime as the FIRST script of the `<head>` (as early as possible: the
+ * composition runs afterwards and already counts on the API and on the delayRender capture).
+ * Without `<head>`, the script is prefixed to the document — the parser executes it before
+ * any script of the composition anyway.
  */
 export function injectMotionRuntime(html: string, scheme: string, id: string): string {
   if (html.includes(RUNTIME_MARK)) return html

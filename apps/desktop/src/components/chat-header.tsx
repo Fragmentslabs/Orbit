@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import type { SessionInfo } from "@shared/chat"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { WorktreeSelector } from "@/src/components/worktree-selector"
-import { ExcluirChatDialog } from "@/src/components/excluir-chat-dialog"
+import { DeleteChatDialog } from "@/src/components/delete-chat-dialog"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { ComputerChip } from "@/src/components/computer-chip"
 import { VoiceCallBadge } from "@/src/components/voice-call-badge"
@@ -33,7 +33,7 @@ interface ChatHeaderProps {
   title?: string
   hasMenu?: boolean
   session?: SessionInfo
-  /** Sessão ativa (chat ou código) — para o indicador de browser do agente. */
+  /** Active session (chat or code) — for the agent browser indicator. */
   sessionId?: string
   rightPanelOpen?: boolean
   onToggleSidebar?: () => void
@@ -43,7 +43,7 @@ interface ChatHeaderProps {
   onRequestAgentAction?: (instruction: string) => void
   folders?: string[]
   onFoldersChange?: (folders: string[]) => void
-  /** Conteúdo extra à esquerda do botão do painel (ex.: modelo da esteira) */
+  /** Extra content to the left of the panel button (e.g. the pipeline model) */
   extra?: React.ReactNode
 }
 
@@ -93,26 +93,26 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
   const [renaming, setRenaming] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
-  // Com 4+ pastas os chips do modo inline não cabem de forma confiável em
-  // largura nenhuma: com a sidebar e o painel direito abertos, a régua de
-  // pastas quebra até acima do `@5xl` (64rem = 1024px) — subir o threshold
-  // só empurraria o problema para telas maiores. Então >3 pastas vai direto
-  // para o dropdown compacto, em qualquer largura, sem esperar o container
-  // query. Com até 3 pastas (3 pastas + branch + título ≈ 750-800px;
-  // `@xl` = 36rem) o inline segue valendo a partir do `@xl`.
+  // With 4+ folders the chips of inline mode do not fit reliably in
+  // any width: with the sidebar and the right panel open, the ruler of
+  // folders breaks even above `@5xl` (64rem = 1024px) — raising the threshold
+  // would only push the problem to larger screens. So >3 folders goes straight
+  // to the compact dropdown, at any width, without waiting for the container
+  // query. With up to 3 folders (3 folders + branch + title ≈ 750-800px;
+  // `@xl` = 36rem) the inline mode still holds from `@xl` up.
   const manyFolders = (folders?.length ?? 0) > 3
 
   return (
-    // O `@container` da raiz mede a largura real do header (que encolhe com a
-    // sidebar e o painel direito abertos, sem o viewport mudar) — é o que o
-    // chip do browser usa para decidir entre ícone+texto e só o ícone. Como
-    // container cria stacking context, o z-index explícito tem que vir junto:
-    // sem ele o degrade do topo do chat (z-10, num irmão posterior) passaria
-    // por cima do header inteiro.
+    // The root `@container` measures the real width of the header (which shrinks with the
+    // sidebar and the right panel open, without the viewport changing) — it is what the
+    // browser chip uses to decide between icon+text and icon only. Since
+    // container creates a stacking context, the explicit z-index has to come along:
+    // without it the gradient at the top of the chat (z-10, in a later sibling) would pass
+    // over the whole header.
     //
-    // z-50 e não z-20: a persona do topo do chat é `absolute z-40` num irmão
-    // posterior, então com z-20 ela ficava por cima do header — e o dropdown de
-    // pastas, preso no stacking context do @container, abria por baixo dela.
+    // z-50 and not z-20: the persona at the top of the chat is `absolute z-40` in a later
+    // sibling, so with z-20 it stayed over the header — and the folders
+    // dropdown, trapped in the @container stacking context, opened below it.
     <div className="@container relative z-50 flex h-12 items-center gap-2 px-4">
       {onToggleSidebar && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleSidebar}>
@@ -120,10 +120,10 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           <span className="sr-only">{t("header.toggleSidebar")}</span>
         </Button>
       )}
-      {/* `@container` aplica layout containment, que cria um stacking context:
-          sem um z-index explícito aqui, o z-[60] do dropdown de pastas fica
-          preso dentro dele e o degrade do topo do chat (z-10, num irmão
-          posterior) passa por cima do header inteiro. */}
+      {/* `@container` applies layout containment, which creates a stacking context:
+          without an explicit z-index here, the z-[60] of the folders dropdown stays
+          trapped inside it and the gradient at the top of the chat (z-10, in a later
+          sibling) passes over the whole header. */}
       <div className="@container relative z-20 flex items-center gap-1 min-w-0 flex-1">
         <Truncate text={title ?? t("header.newChat")}>
           <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
@@ -132,13 +132,13 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           <>
             {!manyFolders && (
               <div className="hidden min-w-0 items-center gap-1 @xl:flex">
-                {/* Worktree antes do branch: é ele que define em que branch o
-                    chat está. Só aparece em repositório git. */}
+                {/* Worktree before the branch: it is what defines which branch the
+                    chat is on. It only appears in a git repository. */}
                 {folders?.[0] && onFoldersChange && (
                   <WorktreeSelector
-                    pasta={folders[0]}
-                    onTrocar={(pasta) => onFoldersChange([pasta, ...folders.slice(1)])}
-                    sugestaoNome={title}
+                    folder={folders[0]}
+                    onSwitch={(folder) => onFoldersChange([folder, ...folders.slice(1)])}
+                    suggestedName={title}
                   />
                 )}
                 {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
@@ -154,7 +154,7 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
                   folders={folders ?? []}
                   onFoldersChange={onFoldersChange}
                   onRequestAgentAction={onRequestAgentAction}
-                  sugestaoNomeWorktree={title}
+                  suggestedWorktreeName={title}
                 />
               </div>
             )}
@@ -164,14 +164,14 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
       {extra}
       {sessionId && <BrowserTestChip sessionId={sessionId} compact className="self-center" />}
       {sessionId && <ComputerChip sessionId={sessionId} />}
-      {/* Chamada em curso fora da conversa dela: badge no header (o painel do
-          composer só existe na própria conversa da chamada). */}
+      {/* Call in progress outside its own conversation: badge in the header (the composer
+          panel only exists in the call's own conversation). */}
       <VoiceCallBadge activeSessionId={sessionId} />
-      {/* O menu da sessão fica no grupo da direita, colado ao botão do painel:
-          fora do trecho elástico, ele não se desloca com o título nem com a
-          régua de pastas (que crescem e encolhem no meio do header), e o menu
-          abre alinhado pela direita — na borda da janela, um menu alinhado
-          pela esquerda vazaria para fora. */}
+      {/* The session menu stays in the right group, next to the panel button:
+          outside the elastic stretch, it does not shift with the title nor with the
+          folders ruler (which grow and shrink in the middle of the header), and the menu
+          opens right-aligned — at the window edge, a menu aligned
+          to the left would leak outside. */}
       {hasMenu && (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
@@ -220,7 +220,7 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
             initialValue={session.title}
             onSubmit={(value) => useSessionStore.getState().renameSession(session.id, value)}
           />
-          <ExcluirChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
+          <DeleteChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
         </>
       )}
     </div>

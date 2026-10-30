@@ -4,10 +4,10 @@ import type { MediaKind } from "@shared/media"
 import { buildStartSuggestions, MAX_SUGGESTIONS, type StartContext, type Translate } from "@/src/lib/start-suggestions"
 
 /**
- * As sugestões da tela inicial são a primeira coisa que a pessoa vê e o único
- * lugar onde capacidades escondidas (motion, áudio, edição de foto) aparecem
- * sem ela procurar. O que estes testes travam: nunca prometer o que não dá
- * para fazer, preencher em vez de enviar, e não repetir a mesma capacidade.
+ * The start screen suggestions are the first thing the person sees and the only
+ * place where hidden capabilities (motion, audio, photo editing) show up
+ * without them looking for it. What these tests lock down: never promise what cannot
+ * be done, fill in instead of sending, and do not repeat the same capability.
  */
 
 const t: Translate = (key, options) => (options?.title ? `${key}:${String(options.title)}` : key)
@@ -17,22 +17,22 @@ const base: StartContext = { mode: "chat", day: "2026-10-21" }
 const ids = (ctx: StartContext) => buildStartSuggestions(ctx, t).map((suggestion) => suggestion.id)
 
 describe("buildStartSuggestions", () => {
-  it("não sugere nada no modo código sem pasta de trabalho", () => {
+  it("suggests nothing in code mode with no working folder", () => {
     expect(buildStartSuggestions({ ...base, mode: "code" }, t)).toEqual([])
   })
 
-  it("devolve sugestões no modo código quando há pasta", () => {
+  it("returns suggestions in code mode when there is a folder", () => {
     expect(buildStartSuggestions({ ...base, mode: "code", directory: "/ws/app" }, t).length).toBeGreaterThan(0)
   })
 
-  it("preenche o composer em vez de enviar a mensagem", () => {
+  it("fills the composer instead of sending the message", () => {
     const suggestions = buildStartSuggestions(base, t)
     for (const suggestion of suggestions) {
       expect(suggestion.action.kind).toBe("fill")
     }
   })
 
-  it("põe a sessão anterior em primeiro, como navegação", () => {
+  it("puts the previous session first, as navigation", () => {
     const [first, ...rest] = buildStartSuggestions(
       { ...base, lastSession: { id: "s1", title: "Planejamento da viagem", mode: "chat" } },
       t,
@@ -42,34 +42,34 @@ describe("buildStartSuggestions", () => {
     expect(rest.every((suggestion) => suggestion.action.kind === "fill")).toBe(true)
   })
 
-  it(`não passa de ${MAX_SUGGESTIONS} sugestões, com ou sem sessão anterior`, () => {
+  it(`never goes past ${MAX_SUGGESTIONS} suggestions, with or without a previous session`, () => {
     expect(buildStartSuggestions(base, t).length).toBeLessThanOrEqual(MAX_SUGGESTIONS)
     expect(
       buildStartSuggestions({ ...base, lastSession: { id: "s1", title: "Ontem", mode: "chat" } }, t).length,
     ).toBeLessThanOrEqual(MAX_SUGGESTIONS)
   })
 
-  it("não repete a mesma capacidade", () => {
+  it("does not repeat the same capability", () => {
     const suggestions = buildStartSuggestions(base, t)
     expect(new Set(suggestions.map((suggestion) => suggestion.id)).size).toBe(suggestions.length)
   })
 
-  it("é determinístico no mesmo dia e no mesmo modo", () => {
+  it("is deterministic on the same day and in the same mode", () => {
     expect(ids(base)).toEqual(ids(base))
   })
 
-  it("muda a seleção de um dia para o outro", () => {
+  it("changes the selection from one day to the next", () => {
     const days = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]
     const assinaturas = new Set(days.map((day) => ids({ ...base, day: `2026-10-${day}` }).join("|")))
     expect(assinaturas.size).toBeGreaterThan(1)
   })
 
-  it("prioriza a família que a pessoa nunca produziu", () => {
-    // Já fez imagem, artefato, documento, motion e áudio — nunca fez vídeo.
+  it("prioritizes the family the person never produced", () => {
+    // Already made image, artifact, document, motion and audio — never made video.
     const usedKinds: MediaKind[] = ["image", "artifact", "document", "motion", "audio"]
     const suggestions = buildStartSuggestions({ ...base, usedKinds }, t)
-    // Duas capacidades produzem vídeo: editar um que já existe e gravar um
-    // novo. Qualquer uma das duas serve ao convite.
+    // Two capabilities produce video: editing one that already exists and recording a
+    // new one. Either of the two serves the invitation.
     expect(
       suggestions.some(
         (suggestion) => suggestion.capability === "video" || suggestion.capability === "record",
@@ -77,9 +77,9 @@ describe("buildStartSuggestions", () => {
     ).toBe(true)
   })
 
-  it("não oferece áudio gerado nem transcrição com a voz desligada", () => {
-    // Desligada, a tool nem é registrada no turno — a pill seria uma promessa
-    // que o agente não consegue cumprir. Trinta dias cobrem as rotações.
+  it("offers neither generated audio nor transcription with voice off", () => {
+    // Off, the tool is not even registered in the turn — the pill would be a promise
+    // the agent cannot keep. Thirty days cover the rotations.
     for (let day = 1; day <= 30; day++) {
       const suggestions = buildStartSuggestions(
         {
@@ -96,7 +96,7 @@ describe("buildStartSuggestions", () => {
     }
   })
 
-  it("não promete gravação de vídeo sem as ferramentas de navegador", () => {
+  it("does not promise video recording without the browser tools", () => {
     for (let day = 1; day <= 30; day++) {
       const suggestions = buildStartSuggestions(
         {
@@ -110,7 +110,7 @@ describe("buildStartSuggestions", () => {
     }
   })
 
-  it("volta a oferecer áudio e transcrição com as duas metades ligadas", () => {
+  it("offers audio and transcription again with both halves on", () => {
     const seen = new Set<string>()
     for (let day = 1; day <= 30; day++) {
       const suggestions = buildStartSuggestions(
@@ -129,7 +129,7 @@ describe("buildStartSuggestions", () => {
     expect(seen.has("transcript")).toBe(true)
   })
 
-  it("mesmo com todas as famílias já usadas, ainda sugere três", () => {
+  it("even with every family already used, it still suggests three", () => {
     const usedKinds: MediaKind[] = ["image", "artifact", "document", "motion", "audio", "video"]
     const suggestions = buildStartSuggestions({ ...base, usedKinds }, t)
     expect(suggestions).toHaveLength(MAX_SUGGESTIONS)

@@ -1,30 +1,30 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 
-/** Um repositório git encontrado dentro de uma pasta de trabalho. */
+/** A git repository found inside a working folder. */
 export interface GitRepoEntry {
-  /** Caminho absoluto do repositório. */
+  /** Absolute path of the repository. */
   path: string;
-  /** Rótulo curto: o nome da pasta. */
+  /** Short label: the folder name. */
   name: string;
   /**
-   * Caminho visível até o repo: relativo à pasta principal quando ele está
-   * dentro dela; fora dela, prefixado com o nome da pasta anexada em que vive
-   * (`outro-projeto/api`). "" quando é a própria pasta principal.
+   * Visible path to the repo: relative to the main folder when it is
+   * inside it; outside it, prefixed with the name of the attached folder it lives in
+   * (`other-project/api`). "" when it is the main folder itself.
    */
   relative: string;
 }
 
-/** Teto de segurança: um espaço com dezenas de repos não vira uma lista infinita. */
+/** Safety ceiling: a workspace with dozens of repos does not become an endless list. */
 const MAX_REPOS = 12;
-/** Teto do conjunto: várias pastas anexadas somam, e o total também tem limite. */
+/** Ceiling for the whole set: several attached folders add up, and the total is limited too. */
 const MAX_WORKSPACE_REPOS = 24;
 
-/** Pastas que nunca valem uma varredura. */
+/** Folders that are never worth a scan. */
 const SKIP = new Set(["node_modules", "vendor"]);
 
 async function hasGit(dir: string): Promise<boolean> {
-  // `.git` é pasta no repo normal e ARQUIVO em worktree e submódulo: existir já basta.
+  // `.git` is a folder in a normal repo and a FILE in a worktree and a submodule: existing is enough.
   try {
     await fsp.stat(path.join(dir, ".git"));
     return true;
@@ -43,26 +43,26 @@ async function subdirs(dir: string): Promise<string[]> {
             e.isDirectory() && !e.name.startsWith(".") && !SKIP.has(e.name),
         )
         .map((e) => path.join(dir, e.name))
-        // Ordem estável: a lista do painel não pode depender de como o disco
-        // devolveu as pastas.
+        // Stable order: the panel's list cannot depend on how the disk
+        // returned the folders.
         .sort((a, b) => a.localeCompare(b))
     );
   } catch {
-    // Pasta ilegível (permissão, sumiu no meio): não é motivo para falhar a descoberta.
+    // Unreadable folder (permissions, vanished midway): no reason to fail the discovery.
     return [];
   }
 }
 
 /**
- * Descobre os repositórios que vivem numa pasta de trabalho.
+ * Discovers the repositories that live in a working folder.
  *
- * A própria pasta entra quando é repo; depois as subpastas com git próprio — o
- * caso de um espaço com `front/` e `back/`, cada um com o seu. Sem nenhum nesses
- * dois níveis, desce mais um: pasta guarda-chuva que só guarda projetos, onde o
- * repo fica em `projeto/alguma-coisa`.
+ * The folder itself enters when it is a repo; then the subfolders with their own git — the
+ * case of a workspace with `front/` and `back/`, each with its own. With none at those
+ * two levels, it goes one deeper: an umbrella folder that only holds projects, where the
+ * repo lives in `project/something`.
  *
- * Lista vazia significa "nenhum repo aqui" — e aí o painel segue como sempre
- * foi, falando com a pasta raiz.
+ * An empty list means "no repo here" — and then the panel goes on as it always
+ * did, talking to the root folder.
  */
 export async function discoverGitRepos(root: string): Promise<GitRepoEntry[]> {
   const found: GitRepoEntry[] = [];
@@ -94,19 +94,19 @@ export async function discoverGitRepos(root: string): Promise<GitRepoEntry[]> {
   return found;
 }
 
-/** Caminho normalizado para comparar: sem barra final e sempre com '/'. */
+/** Normalized path for comparison: no trailing slash and always with '/'. */
 function normalizePath(p: string): string {
   return p.replace(/[\\/]+$/, "").replace(/\\/g, "/");
 }
 
-/** `dir` está dentro de `root` — ou é ele mesmo? */
+/** `dir` is inside `root` — or is it itself? */
 function isInside(root: string, dir: string): boolean {
   const base = normalizePath(root);
   const target = normalizePath(dir);
   return target === base || target.startsWith(`${base}/`);
 }
 
-/** Caminho de `dir` a partir de `root` ("" quando são a mesma pasta). */
+/** Path of `dir` from `root` ("" when they are the same folder). */
 function relativeTo(root: string, dir: string): string {
   const base = normalizePath(root);
   const target = normalizePath(dir);
@@ -115,21 +115,21 @@ function relativeTo(root: string, dir: string): string {
 }
 
 /**
- * Descobre os repositórios de TODAS as pastas de trabalho do chat — a principal
- * e as anexadas.
+ * Discovers the repositories of ALL the chat's working folders — the main one
+ * and the attached ones.
  *
- * A primeira pasta é a principal e dá o vocabulário dos rótulos: um repo dentro
- * dela tem o caminho relativo a ela, como sempre teve. Um repo que vive numa
- * pasta anexada, fora da principal, ganha o nome dessa pasta como prefixo
- * (`outro/api`) — é o que desfaz a dúvida de qual "api" é este quando duas
- * pastas anexadas têm um. O caminho absoluto continua sendo a identidade.
+ * The first folder is the main one and provides the vocabulary of the labels: a repo inside
+ * it has the path relative to it, as it always did. A repo that lives in an
+ * attached folder, outside the main one, gets that folder's name as a prefix
+ * (`other/api`) — it is what settles the doubt of which "api" this one is when two
+ * attached folders have one. The absolute path remains the identity.
  *
- * Repo que já apareceu numa pasta anterior não volta: uma pasta anexada que
- * esteja dentro da principal é encontrada pela varredura da principal, e o
- * rótulo dela fica o de lá.
+ * A repo that already showed up in a previous folder does not come back: an attached folder that
+ * is inside the main one is found by the main one's scan, and its label
+ * stays the one from there.
  *
- * Lista vazia significa "nenhum repo em pasta nenhuma" — e aí o painel segue
- * como sempre foi, falando com a pasta principal.
+ * An empty list means "no repo in any folder" — and then the panel goes on
+ * as it always did, talking to the main folder.
  */
 export async function discoverWorkspaceRepos(
   roots: string[],
@@ -156,8 +156,8 @@ export async function discoverWorkspaceRepos(
       seen.add(key);
       found.push({
         ...repo,
-        // Dentro da principal o caminho já é relativo a ela; fora, o nome da
-        // pasta anexada é o que dá um caminho legível.
+        // Inside the main one the path is already relative to it; outside, the name of the
+        // attached folder is what gives a readable path.
         relative: isInside(main, repo.path)
           ? relativeTo(main, repo.path)
           : [path.basename(normalizePath(root)), repo.relative]

@@ -36,7 +36,7 @@ export function ResponsiveContainer({
   onBreakpointChange,
 }: ResponsiveContainerProps) {
   const { width } = useWindowDimensions()
-  // Derivado direto da largura — não precisa de estado próprio
+  // Derived straight from the width — needs no state of its own
   const breakpoint = getBreakpoint(width)
 
   useEffect(() => {

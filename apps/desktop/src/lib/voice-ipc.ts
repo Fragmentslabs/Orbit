@@ -1,15 +1,15 @@
 import type { VoiceDownloadProgress, VoiceHardwareInfo, VoiceModelInfo, VoiceStatusSnapshot } from "@shared/voice"
 
 /**
- * Ponte do renderer com os canais de voz do main (`voice:*`).
+ * The renderer's bridge to main's voice channels (`voice:*`).
  *
- * Baixar, cancelar e remover modelos é do main; aqui só disparamos a ação,
- * escutamos o progresso e lemos o catálogo e o estado da máquina. Os canais de
- * síntese (`voice:tts:*`) não passam por aqui — quem fala é o `use-speak`.
+ * Downloading, cancelling and removing models is main's job; here we only fire the action,
+ * listen to the progress and read the catalog and the machine state. The synthesis
+ * channels (`voice:tts:*`) do not go through here — the one that speaks is `use-speak`.
  *
- * `voice:status-changed` é o aviso de que o estado mudou (download, extração,
- * remoção, falha): quem assina reconsulta o `voice:status` em vez de confiar no
- * payload, que pode vir inteiro ou só com o que mudou.
+ * `voice:status-changed` is the notice that the state changed (download, extraction,
+ * removal, failure): whoever subscribes re-queries `voice:status` instead of trusting the
+ * payload, which may come whole or only with what changed.
  */
 export const voiceApi = {
   hardware: () => window.ipcRenderer.invoke("voice:hardware") as Promise<VoiceHardwareInfo>,
@@ -20,17 +20,17 @@ export const voiceApi = {
     window.ipcRenderer.invoke("voice:download-cancel", { modelId }) as Promise<unknown>,
   removeModel: (modelId: string) => window.ipcRenderer.invoke("voice:remove-model", { modelId }) as Promise<unknown>,
   /**
-   * Aquece um motor de ditado em SEGUNDO PLANO: a resposta volta na hora e a
-   * carga do modelo corre fora do caminho do usuário. Idempotente — chamar de
-   * novo só devolve o trabalho já em andamento, então pode ser disparado sempre
-   * que o microfone aparece.
+   * Warms up a dictation engine in the BACKGROUND: the response comes back right away and the
+   * model load runs off the user's path. Idempotent — calling it
+   * again only returns the work already in progress, so it can be fired whenever
+   * the microphone shows up.
    */
   sttWarm: (input: { modelId?: string; engine?: string; threads?: number } = {}) =>
     window.ipcRenderer.invoke("voice:stt:warm", input) as Promise<unknown>,
   /**
-   * Solta na hora o que os motores de ditado carregaram. É o que o painel chama
-   * ao DESLIGAR o pré-carregamento: a RAM volta na hora, em vez de no ciclo
-   * ocioso. Com ditado em curso o main adia, em vez de arrancar o modelo.
+   * Releases right away what the dictation engines loaded. It is what the panel calls
+   * when TURNING OFF preloading: the RAM comes back right away, instead of on the idle
+   * cycle. With a dictation in progress main postpones it, instead of tearing the model down.
    */
   sttRelease: () => window.ipcRenderer.invoke("voice:stt:release") as Promise<unknown>,
   onDownloadProgress: (listener: (progress: VoiceDownloadProgress) => void) => {
@@ -40,10 +40,10 @@ export const voiceApi = {
     return () => window.ipcRenderer.off("voice:download-progress", wrapper)
   },
   /**
-   * Estado de voz mudou no main (download concluído, extração, remoção, falha).
-   * O payload é o retrato novo quando vem inteiro, mas o main pode mandar só o
-   * que mudou — trate o evento como sinal e normalize com `parseVoiceStatus` /
-   * `readTtsStatus`, que aceitam mapa por id, lista e `installed`/`downloaded`.
+   * Voice state changed in main (download finished, extraction, removal, failure).
+   * The payload is the new snapshot when it comes whole, but main may send only what
+   * changed — treat the event as a signal and normalize with `parseVoiceStatus` /
+   * `readTtsStatus`, which accept a map by id, a list and `installed`/`downloaded`.
    */
   onStatusChanged: (listener: (status: VoiceStatusSnapshot) => void) => {
     const wrapper = window.ipcRenderer.on("voice:status-changed", (payload) =>

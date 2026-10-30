@@ -1,11 +1,11 @@
 /**
- * Guia de ofício da edição de vídeo, para o MODELO (por isso em inglês).
+ * The craft guide of video editing, for the MODEL (hence in English).
  *
- * Fica fora do system prompt: são ~2k tokens que só valem quando há vídeo na
- * conversa. O prompt leva só um parágrafo (VIDEO_INSTRUCTION em prompts.ts)
- * mandando chamar `video_guide` antes do primeiro corte. Baseado nas regras de
- * produção do video-use (browser-use), adaptadas às tools do Orbit — o que lá
- * era regra para o modelo lembrar, aqui o render já faz sozinho.
+ * It stays out of the system prompt: it is ~2k tokens that are only worth it when there is video in
+ * the conversation. The prompt carries only one paragraph (VIDEO_INSTRUCTION in prompts.ts)
+ * telling it to call `video_guide` before the first cut. Based on the production
+ * rules of video-use (browser-use), adapted to Orbit's tools — what over there
+ * was a rule for the model to remember, here the render already does on its own.
  */
 
 const EDITING = `# Video editing — workflow and craft

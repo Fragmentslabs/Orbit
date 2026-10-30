@@ -3,27 +3,27 @@ import type { Memory } from '@orbit/shared'
 import { useConnectionStore } from './connection-store'
 
 interface MemoryState {
-  /** Índice completo de memórias do desktop. */
+  /** Complete memory index of the desktop. */
   index: Memory[]
   loading: boolean
-  /** Já houve uma carga automática (o pull-to-refresh da tela usa `fetch`). */
+  /** There has already been an automatic load (the pull-to-refresh of the screen uses `fetch`). */
   loadedOnce: boolean
 
-  /** Busca o índice via WS. */
+  /** Fetches the index via WS. */
   fetch: () => Promise<void>
   /**
-   * Carga preguiçosa para quem só precisa RESOLVER um id — o chip de memória
-   * numa conversa. Busca no máximo uma vez por sessão: sem isso, cada chip de
-   * cada mensagem dispararia a mesma lista.
+   * Lazy load for whoever only needs to RESOLVE an id — the memory chip
+   * in a conversation. It fetches at most once per session: without that, each chip of
+   * each message would fire the same list.
    */
   ensureIndex: () => Promise<void>
-  /** Edita texto/tags/peso. */
+  /** Edits text/tags/weight. */
   update: (id: string, patch: { text?: string; tags?: string[]; weight?: number }) => Promise<void>
-  /** Exclui uma memória (e o doc anexado). */
+  /** Deletes a memory (and the attached doc). */
   remove: (id: string) => Promise<void>
-  /** Promove (seasonal → core; project/context → decision). */
+  /** Promotes (seasonal → core; project/context → decision). */
   promote: (id: string) => Promise<void>
-  /** Documento .md anexado (hasDoc). */
+  /** Attached .md document (hasDoc). */
   openDoc: (id: string) => Promise<string | null>
 }
 
@@ -34,7 +34,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   ensureIndex: async () => {
     if (get().loadedOnce) return
-    // Marca antes da chamada: um chip por mensagem pediria a lista ao mesmo tempo.
+    // Marked before the call: one chip per message would ask for the list at the same time.
     set({ loadedOnce: true })
     await get().fetch()
   },
@@ -48,7 +48,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         set({ index: res.data as Memory[] })
       }
     } catch {
-      // WS indisponível — mantém o índice atual
+      // WS unavailable — keeps the current index
     } finally {
       set({ loading: false })
     }
@@ -86,7 +86,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const res = await wsClient.send({ type: 'memory:doc', id })
       if (res.ok) return (res.data as string | null) ?? null
     } catch {
-      // sem doc
+      // no doc
     }
     return null
   },

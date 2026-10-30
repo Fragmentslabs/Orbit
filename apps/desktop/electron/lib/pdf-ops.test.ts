@@ -3,42 +3,42 @@ import { describe, expect, it } from 'vitest'
 import { parsePageRange } from './pdf-ops'
 
 /**
- * A faixa de páginas é onde o modelo mais erra e onde o erro é silencioso:
- * uma faixa mal lida produz um PDF com as páginas erradas, que parece
- * perfeitamente válido.
+ * The page range is where the model most often errs and where the error is silent:
+ * a badly read range produces a PDF with the wrong pages, which looks
+ * perfectly valid.
  */
 describe('parsePageRange', () => {
-  it('lê páginas soltas e intervalos', () => {
+  it('reads loose pages and ranges', () => {
     expect(parsePageRange('1,3,5', 10)).toEqual([1, 3, 5])
     expect(parsePageRange('2-5', 10)).toEqual([2, 3, 4, 5])
     expect(parsePageRange('1-3,7', 10)).toEqual([1, 2, 3, 7])
   })
 
-  it('preserva a ORDEM pedida — é o que permite reordenar, não só filtrar', () => {
+  it('preserves the requested ORDER — that is what allows reordering, not just filtering', () => {
     expect(parsePageRange('5,1,3', 10)).toEqual([5, 1, 3])
   })
 
-  it('intervalo invertido conta de trás para frente', () => {
-    // "9-7" é intenção de ordem inversa; devolver vazio seria obedecer a
-    // sintaxe e ignorar o pedido.
+  it('an inverted range counts backwards', () => {
+    // "9-7" is an intention of reverse order; returning empty would obey the
+    // syntax and ignore the request.
     expect(parsePageRange('9-7', 10)).toEqual([9, 8, 7])
   })
 
-  it('descarta páginas fora do documento em vez de falhar', () => {
+  it('discards pages outside the document instead of failing', () => {
     expect(parsePageRange('1,99,3', 5)).toEqual([1, 3])
     expect(parsePageRange('0,1', 5)).toEqual([1])
   })
 
-  it('tolera espaço e entradas vazias', () => {
+  it('tolerates spaces and empty entries', () => {
     expect(parsePageRange(' 1 - 2 , , 4 ', 10)).toEqual([1, 2, 4])
   })
 
-  it('faixa sem nada válido devolve lista vazia — quem chama avisa o usuário', () => {
+  it('a range with nothing valid returns an empty list — the caller warns the user', () => {
     expect(parsePageRange('abc', 10)).toEqual([])
     expect(parsePageRange('', 10)).toEqual([])
   })
 
-  it('repetir página é permitido (duplicar folha é pedido legítimo)', () => {
+  it('repeating a page is allowed (duplicating a sheet is a legitimate request)', () => {
     expect(parsePageRange('1,1,2', 5)).toEqual([1, 1, 2])
   })
 })

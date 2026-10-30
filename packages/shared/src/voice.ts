@@ -1,135 +1,135 @@
 /**
- * Núcleo de voz (texto→fala e fala→texto) rodando LOCAL, no processo main.
+ * Voice core (text→speech and speech→text) running LOCALLY, in the main process.
  *
- * Dois motores independentes, com uma regra em comum: o PESO do modelo nunca
- * entra no build. O app baixa sob demanda para `<userData>/voice/models/<id>` e,
- * depois disso, funciona 100 % offline — a única rede que existe é o download.
+ * Two independent engines, with one rule in common: the WEIGHT of the model never
+ * enters the build. The app downloads on demand to `<userData>/voice/models/<id>` and,
+ * after that, works 100 % offline — the only network there is, is the download.
  *
- *  - TTS: Supertonic 3 (ONNX Runtime, CPU). Voz padrão F2, idioma pt.
- *  - STT: Parakeet TDT 0.6B v3 (sherpa-onnx) ou whisper.cpp — a escolha por
- *    máquina sai de `VoiceHardwareInfo` (ver hardware.ts no main).
+ *  - TTS: Supertonic 3 (ONNX Runtime, CPU). Default voice F2, language pt.
+ *  - STT: Parakeet TDT 0.6B v3 (sherpa-onnx) or whisper.cpp — the choice per
+ *    machine comes from `VoiceHardwareInfo` (see hardware.ts in the main).
  *
- * `VoiceEngineId` cobre só os motores de STT de propósito: o TTS é um só
- * ("supertonic") e não é escolhido por hardware.
+ * `VoiceEngineId` covers only the STT engines on purpose: the TTS is a single one
+ * ("supertonic") and is not chosen by hardware.
  */
 
-/** Motor de transcrição (fala→texto) disponível na máquina. */
+/** Transcription engine (speech→text) available on the machine. */
 export type VoiceEngineId = "parakeet" | "whisper"
 
 /**
- * Onde a fala é SINTETIZADA.
+ * Where the speech is SYNTHESIZED.
  *
- *  - `model`: pela rota do MODELO (provedor de IA) quando existe uma — é o
- *    padrão. Sem provedor configurado, ou com a rota falhando, o pipeline cai
- *    no motor local: a preferência nunca deixa a leitura muda.
- *  - `local`: sempre pelo motor local (Supertonic 3), 100 % offline.
+ *  - `model`: through the MODEL route (AI provider) when there is one — it is the
+ *    default. With no provider configured, or with the route failing, the pipeline falls
+ *    back to the local engine: the preference never leaves the reading mute.
+ *  - `local`: always through the local engine (Supertonic 3), 100 % offline.
  */
 export type VoiceTtsEngine = "model" | "local"
 
-/** Natureza do modelo: sintetiza fala (tts) ou transcreve áudio (stt). */
+/** Nature of the model: synthesizes speech (tts) or transcribes audio (stt). */
 export type VoiceModelKind = "tts" | "stt"
 
 /**
- * As duas funções de voz, que ligam e desligam separadamente nas Preferências.
- * Desligada, a ferramenta nem é registrada no turno.
+ * The two voice functions, which are turned on and off separately in the Preferences.
+ * Turned off, the tool is not even registered in the turn.
  */
 export type VoiceFeature = VoiceModelKind
 
 /**
- * Um modelo baixável (arquivo único de STT, ou o pacote de arquivos do TTS).
- * `bytes` é o total que o download ocupa em disco, não o tamanho de um arquivo
- * específico — é o número que a UI mostra antes de o usuário decidir baixar.
+ * A downloadable model (single STT file, or the TTS bundle of files).
+ * `bytes` is the total the download takes on disk, not the size of a specific
+ * file — it is the number the UI shows before the user decides to download.
  */
 export interface VoiceModelInfo {
-  /** id estável; é também o nome da pasta em `<userData>/voice/models/<id>`. */
+  /** stable id; it is also the folder name in `<userData>/voice/models/<id>`. */
   id: string
   kind: VoiceModelKind
-  /** Motor que consome o modelo ("supertonic", "parakeet", "whisper"). */
+  /** Engine that consumes the model ("supertonic", "parakeet", "whisper"). */
   engine: string
-  /** Rótulo para a UI, com o que o modelo faz e quanto pesa. */
+  /** Label for the UI, with what the model does and how much it weighs. */
   label: string
-  /** Tamanho total do download, em bytes. */
+  /** Total size of the download, in bytes. */
   bytes: number
-  /** Origem dos arquivos (o arquivo, ou a página do modelo quando é um pacote). */
+  /** Origin of the files (the file, or the model page when it is a bundle). */
   url: string
-  /** sha256 do arquivo, quando a origem publica um por modelo. */
+  /** sha256 of the file, when the origin publishes one per model. */
   sha256?: string
-  /** Idiomas cobertos (códigos ISO/BCP-47 curtos), quando o modelo limita. */
+  /** Languages covered (short ISO/BCP-47 codes), when the model limits them. */
   langs?: string[]
   /**
-   * O modelo vem em PACOTE (ex.: o `.tar.bz2` do Parakeet) e precisa ser
-   * EXTRAÍDO antes de o motor usar. Um pacote baixado ainda não é "pronto".
+   * The model comes as a BUNDLE (e.g. the Parakeet `.tar.bz2`) and has to be
+   * EXTRACTED before the engine uses it. A downloaded bundle is not "ready" yet.
    */
   archive?: boolean
 }
 
-/** Progresso de um download em curso (evento `voice:download-progress`). */
+/** Progress of a download in progress (event `voice:download-progress`). */
 export interface VoiceDownloadProgress {
   modelId: string
-  /** Bytes já no disco (soma dos arquivos do modelo). */
+  /** Bytes already on disk (sum of the files of the model). */
   received: number
-  /** Bytes totais do modelo — 0 até a origem informar o content-length. */
+  /** Total bytes of the model — 0 until the origin informs the content-length. */
   total: number
   done: boolean
-  /** Preenchido quando terminou com erro (rede, disco, integridade). */
+  /** Filled when it finished with an error (network, disk, integrity). */
   error?: string
 }
 
 /**
- * O que a máquina é capaz de rodar — o `voice:hardware` devolve isto para a UI
- * poder explicar a escolha em vez de só mostrá-la. `reason` e `warnings` vêm
- * SEMPRE preenchidos: a recomendação sem justificativa vira caixa-preta.
+ * What the machine is able to run — the `voice:hardware` returns this so the UI
+ * can explain the choice instead of only showing it. `reason` and `warnings` ALWAYS
+ * come filled: a recommendation without a justification becomes a black box.
  */
 export interface VoiceHardwareInfo {
   platform: string
   arch: string
-  /** RAM total da máquina, em GB (GiB arredondado para 0,1). */
+  /** Total RAM of the machine, in GB (GiB rounded to 0.1). */
   totalMemGb: number
   cpus: number
   recommendedEngine: VoiceEngineId
-  /** id de um modelo do catálogo (`voice:models`) — não uma string livre. */
+  /** id of a model from the catalog (`voice:models`) — not a free string. */
   recommendedModel: string
-  /** Por que este motor/modelo, nesta máquina, em uma frase. */
+  /** Why this engine/model, on this machine, in one sentence. */
   reason: string
-  /** O que pode dar errado mesmo assim (memória baixa, modelo não baixado...). */
+  /** What can go wrong anyway (low memory, model not downloaded...). */
   warnings: string[]
 }
 
-/** Disponibilidade de um motor de transcrição (sem tocar em modelo nenhum). */
+/** Availability of a transcription engine (without touching any model). */
 export interface VoiceEngineStatus {
   engine: VoiceEngineId
-  /** O artefato do motor está no disco (o modelo escolhido foi baixado). */
+  /** The engine's artifact is on disk (the chosen model was downloaded). */
   installed: boolean
   /**
-   * Os BYTES do modelo estão no disco — o que o downloader sabe, sem opinar se o
-   * motor já consegue usar (o pacote do Parakeet fica assim antes de extrair).
-   * É o que evita o selo dizer "não baixado" ao lado de um texto dizendo que
-   * baixou; quem responde "dá para usar?" é `installed`/`available`.
+   * The BYTES of the model are on disk — what the downloader knows, without opining whether the
+   * engine can already use them (the Parakeet bundle stays like this before extraction).
+   * It is what keeps the badge from saying "not downloaded" next to a text saying it
+   * downloaded; whoever answers "can it be used?" is `installed`/`available`.
    */
   downloaded?: boolean
-  /** Dá para rodar JÁ nesta máquina (binário existe/compila, arch suportada). */
+  /** It can run NOW on this machine (binary exists/compiles, arch supported). */
   available: boolean
-  /** Motivo, sempre que `available` for false (ou quando vale avisar algo). */
+  /** Reason, whenever `available` is false (or when something is worth warning about). */
   reason?: string
   /**
-   * O modelo que o motor usa com o "Automático" (`modelId` nulo) — quem decide
-   * é o motor, então a tela mostra o "Em uso" daqui em vez de adivinhar.
+   * The model the engine uses with "Automatic" (null `modelId`) — whoever decides
+   * is the engine, so the screen shows the "In use" from here instead of guessing.
    */
   autoModelId?: string
 }
 
 /**
- * Estado fino de um modelo no disco. É a fonte ÚNICA do selo ("installed") e do
- * texto do motivo: os dois saem deste mesmo retrato, então não podem discordar.
+ * Fine state of a model on disk. It is the SINGLE source of the badge ("installed") and of
+ * the reason text: both come out of this same portrait, so they cannot disagree.
  *
- *   absent      nada no disco
- *   partial     download interrompido/cancelado (há bytes, não o modelo inteiro)
- *   downloading download em curso
- *   downloaded  bytes completos e conferidos, mas o motor AINDA não consegue usar
- *               (é o caso do pacote que falta extrair)
- *   extracting  extração do pacote em curso
- *   ready       o motor consegue usar AGORA (equivale a `installed`)
- *   error       a última operação falhou (download ou extração)
+ *   absent      nothing on disk
+ *   partial     interrupted/canceled download (there are bytes, not the whole model)
+ *   downloading download in progress
+ *   downloaded  complete and checked bytes, but the engine CANNOT use them yet
+ *               (it is the case of the bundle still to be extracted)
+ *   extracting  bundle extraction in progress
+ *   ready       the engine can use it NOW (equivalent to `installed`)
+ *   error       the last operation failed (download or extraction)
  */
 export type VoiceModelState =
   | "absent"
@@ -140,120 +140,120 @@ export type VoiceModelState =
   | "ready"
   | "error"
 
-/** Retrato de UM modelo do catálogo — a resposta honesta de "dá para usar?". */
+/** Portrait of ONE model of the catalog — the honest answer to "can it be used?". */
 export interface VoiceModelStatus {
   /**
-   * Os bytes estão no disco e conferidos (tamanho EXATO de cada arquivo; o
-   * sha256 é conferido no fim do download). Não significa que dá para usar: um
-   * pacote fica `downloaded` e ainda precisa de extração.
+   * The bytes are on disk and checked (EXACT size of each file; the
+   * sha256 is checked at the end of the download). It does not mean it can be used: a
+   * bundle stays `downloaded` and still needs extraction.
    */
   downloaded: boolean
   /**
-   * O MOTOR consegue usar o modelo agora. Para o Parakeet isto é o pacote
-   * EXTRAÍDO com o VAD Silero presente; para o TTS e os modelos de whisper é o
-   * arquivo completo. O selo da UI e o texto do motivo devem sair daqui
-   * (`installed` + `state` + `reason`), nunca do estado do downloader.
+   * The ENGINE can use the model now. For Parakeet this is the EXTRACTED bundle
+   * with the Silero VAD present; for TTS and the whisper models it is the
+   * complete file. The UI badge and the reason text must come from here
+   * (`installed` + `state` + `reason`), never from the downloader state.
    */
   installed: boolean
   /**
-   * Mesmo que `installed`, com o nome explícito que o renderer já esperava
-   * (`downloaded` para "os bytes chegaram", `ready` para "dá para usar").
+   * Same as `installed`, with the explicit name the renderer already expected
+   * (`downloaded` for "the bytes arrived", `ready` for "it can be used").
    */
   ready: boolean
-  /** Estado fino; `ready` é o único estado em que `installed` é true. */
+  /** Fine state; `ready` is the only state in which `installed` is true. */
   state: VoiceModelState
-  /** Bytes já no disco (inclui o `.part` de um download retomável). */
+  /** Bytes already on disk (includes the `.part` of a resumable download). */
   received: number
-  /** Bytes totais esperados (`VoiceModelInfo.bytes`). */
+  /** Total bytes expected (`VoiceModelInfo.bytes`). */
   total: number
-  /** Por que NÃO está utilizável agora, quando `installed` é false. */
+  /** Why it is NOT usable now, when `installed` is false. */
   reason?: string
-  /** A falha concreta quando `state === "error"`. */
+  /** The concrete failure when `state === "error"`. */
   error?: string
 }
 
-/** Retrato do núcleo de voz para a tela de configurações. */
+/** Portrait of the voice core for the settings screen. */
 export interface VoiceStatusSnapshot {
-  /** Estado por id do catálogo (TTS e STT) — mesma fonte para selo e motivo. */
+  /** State per catalog id (TTS and STT) — same source for badge and reason. */
   models: Record<string, VoiceModelStatus>
   engines: VoiceEngineStatus[]
-  /** O motor de TTS está REALMENTE utilizável: modelo presente/válido + motor no build. */
+  /** The TTS engine is REALLY usable: model present/valid + engine in the build. */
   ttsReady: boolean
   /**
-   * Rota de fala PELO MODELO (provedor de IA). É a metade da prioridade de
-   * áudio que não depende do disco: sem provedor configurado com fala, a
-   * preferência "modelo" cai no motor local e a UI diz por quê.
+   * Speech route THROUGH THE MODEL (AI provider). It is the half of the audio
+   * priority that does not depend on the disk: with no provider configured with speech, the
+   * "model" preference falls back to the local engine and the UI says why.
    */
   modelTts?: VoiceModelTtsStatus
 }
 
-/** Disponibilidade da síntese de fala pelo provedor de IA (preferência "Modelo de voz"). */
+/** Availability of speech synthesis through the AI provider ("Voice model" preference). */
 export interface VoiceModelTtsStatus {
-  /** Há uma rota de fala utilizável agora (provedor configurado + modelo de fala). */
+  /** There is a usable speech route now (provider configured + speech model). */
   available: boolean
-  /** Provedor e modelo que a rota usaria, quando disponível. */
+  /** Provider and model the route would use, when available. */
   providerId?: string
   modelId?: string
-  /** Motivo de estar indisponível — a fala então sai pelo motor local. */
+  /** Reason for being unavailable — the speech then comes out through the local engine. */
   reason?: string
 }
 
-/** Preferências do TTS (texto→fala). */
+/** TTS preferences (text→speech). */
 export interface VoiceTtsSettings {
   enabled: boolean
-  /** Voz do Supertonic: M1–M5 (masculinas) ou F1–F5 (femininas). */
+  /** Supertonic voice: M1–M5 (male) or F1–F5 (female). */
   voice: string
-  /** Código do idioma (`pt`, `en`, …) ou `na` (agnóstico). */
+  /** Language code (`pt`, `en`, …) or `na` (agnostic). */
   lang: string
-  /** Fator de velocidade, 0,5–2,0 (1 = natural). */
+  /** Speed factor, 0.5–2.0 (1 = natural). */
   speed: number
   /**
-   * Prioridade do áudio: por onde a fala é sintetizada. `model` (padrão) tenta
-   * a rota do provedor e, sem ela, usa o motor local; `local` força o motor
-   * local. Ver `VoiceTtsEngine`.
+   * Audio priority: where the speech is synthesized. `model` (default) tries
+   * the provider route and, without it, uses the local engine; `local` forces the local
+   * engine. See `VoiceTtsEngine`.
    */
   engine: VoiceTtsEngine
 }
 
-/** Preferências do STT (fala→texto). */
+/** STT preferences (speech→text). */
 export interface VoiceSttSettings {
   enabled: boolean
   engine: VoiceEngineId
-  /** id do modelo de STT escolhido; null = usar o recomendado pelo hardware. */
+  /** id of the chosen STT model; null = use the one recommended by the hardware. */
   modelId: string | null
-  /** Idioma da fala (`pt`, `en`, …) ou `auto` quando o motor detecta sozinho. */
+  /** Language of the speech (`pt`, `en`, …) or `auto` when the engine detects it on its own. */
   language: string
-  /** Texto ao vivo enquanto a pessoa fala (o motor decide como publicar). */
+  /** Live text while the person speaks (the engine decides how to publish it). */
   live: boolean
-  /** Threads de inferência (3–4 é o ponto doce medido; ver vozlab §18). */
+  /** Inference threads (3–4 is the measured sweet spot; see vozlab §18). */
   threads: number
   /**
-   * Pré-carrega o modelo de ditado: RAM em troca de ditado instantâneo.
+   * Preloads the dictation model: RAM in exchange for instant dictation.
    *
-   * Ligado (padrão), o motor aquece assim que o download termina e quando o
-   * microfone aparece, e solta o modelo depois de um tempo ocioso. Desligado,
-   * só o primeiro ditado paga o carregamento — e ele fica esperando.
+   * On (default), the engine warms up as soon as the download finishes and when the
+   * microphone shows up, and releases the model after an idle time. Off,
+   * only the first dictation pays for the load — and it sits waiting.
    */
   preload: boolean
   /**
-   * Microfone da captura (`deviceId` do `enumerateDevices`); null = o padrão do
-   * sistema. Vale para o ditado e para o modo chamada (os dois abrem o
-   * microfone pelo mesmo hook). Um aparelho que sumiu cai no padrão.
+   * Microphone of the capture (`deviceId` of `enumerateDevices`); null = the system
+   * default. It applies to dictation and to call mode (both open the
+   * microphone through the same hook). A device that vanished falls back to the default.
    */
   micDeviceId: string | null
 }
 
-/** Opções do silêncio que encerra a fala no modo chamada (ms). */
+/** Options of the silence that ends the speech in call mode (ms). */
 export const VOICE_CALL_SILENCE_OPTIONS = [900, 1300, 1800, 2500] as const
 
 /**
- * Modo chamada: conversa por voz em tempo real — o ditado ouve (com prévia ao
- * vivo), a fala lê a resposta enquanto ela chega, e o agente responde curto.
+ * Call mode: real-time voice conversation — dictation listens (with live
+ * preview), speech reads the answer while it arrives, and the agent answers short.
  */
 export interface VoiceCallSettings {
-  /** Mostra o botão de chamada ao lado do microfone. */
+  /** Shows the call button next to the microphone. */
   enabled: boolean
-  /** Silêncio (ms) depois da fala que encerra a sua vez e envia a mensagem. */
+  /** Silence (ms) after the speech that ends your turn and sends the message. */
   silenceMs: number
 }
 
@@ -264,8 +264,8 @@ export interface VoiceSettings {
 }
 
 /**
- * Padrões do núcleo de voz: fala em pt-BR desde o primeiro clique, com a
- * prioridade de áudio no MODELO (cai no motor local quando não há rota).
+ * Defaults of the voice core: speech in pt-BR from the first click, with the
+ * audio priority on the MODEL (falls back to the local engine when there is no route).
  */
 export const VOICE_DEFAULTS: VoiceSettings = {
   tts: { enabled: true, voice: "F2", lang: "auto", speed: 1, engine: "model" },

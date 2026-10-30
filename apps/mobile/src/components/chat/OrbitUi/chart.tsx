@@ -14,14 +14,14 @@ import { panelBg, useTokens } from './style'
 type Of<T extends OrbitUiBlock['type']> = Extract<OrbitUiBlock, { type: T }>
 
 /**
- * Gráfico dos blocos `orbit-ui`, desenhado com o que o app já tem: barras em
- * `View`s e linha/área/pizza em `react-native-svg` (que o lucide e o
- * ContextMeter já usam — nenhuma biblioteca de gráfico é adicionada).
+ * Chart of the `orbit-ui` blocks, drawn with what the app already has: bars in
+ * `View`s and line/area/pie in `react-native-svg` (which lucide and
+ * ContextMeter already use — no chart library is added).
  *
- * Os dados são as mesmas duas fontes do desktop: pontos prontos (`data`) ou
- * funções amostradas em `x` (`fns` + `x` + `steps`). Valor que não avalia vira
- * buraco na série, e uma série inteira inválida cai na tabela de valores — um
- * gráfico em branco esconderia o número que a resposta quis mostrar.
+ * The data are the same two sources as the desktop: ready points (`data`) or
+ * functions sampled in `x` (`fns` + `x` + `steps`). A value that does not evaluate becomes
+ * a hole in the series, and a whole invalid series falls back to the value table — a
+ * blank chart would hide the number the answer meant to show.
  */
 
 const SERIES = ['#f2b705', '#5b8def', '#37a169', '#c26bd8', '#e2725b', '#8a8f98']
@@ -59,7 +59,7 @@ function num(v: number | null | undefined): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0
 }
 
-/** Todos os valores de uma coluna são inválidos: não há o que desenhar. */
+/** Every value of a column is invalid: there is nothing to draw. */
 function isEmpty(rows: ChartRow[]): boolean {
   return rows.every((row) => row.values.every((v) => v === null)) || rows.length === 0
 }
@@ -79,7 +79,7 @@ function Legend({ keys, showValues }: { keys: { name: string }[]; showValues?: b
   )
 }
 
-/** Último recurso: os números como texto, para o bloco não virar um retângulo vazio. */
+/** Last resort: the numbers as text, so the block does not become an empty rectangle. */
 function ValuesTable({ rows, keys }: { rows: ChartRow[]; keys: { name: string }[] }) {
   const tokens = useTokens()
   return (
@@ -170,8 +170,8 @@ function Lines({
   const x = (i: number) => (rows.length <= 1 ? 0 : (i / (rows.length - 1)) * (width - 8) + 4)
   const y = (v: number) => height - 8 - ((v - min) / span) * (height - 20)
 
-  /** Trechos contínuos de valores válidos: um buraco na série não liga pontos
-   *  que não existem. */
+  /** Continuous stretches of valid values: a hole in the series does not connect points
+   *  that do not exist. */
   const runs = (series: (number | null)[]): [number, number][][] => {
     const out: [number, number][][] = []
     let current: [number, number][] = []

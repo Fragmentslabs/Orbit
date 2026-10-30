@@ -9,40 +9,40 @@ import {
 } from './sheet-query'
 
 /**
- * Esta camada existe para o agente CALCULAR em vez de estimar. Duas falhas
- * aqui são piores que um erro visível, porque saem com cara de resposta certa:
+ * This layer exists for the agent to CALCULATE instead of estimating. Two failures
+ * here are worse than a visible error, because they come out looking like a right answer:
  *
- * 1. Um número mal parseado (locale) entrar na soma como outro valor.
- * 2. Células não numéricas serem ignoradas SEM o resultado dizer — uma soma
- *    que cobriu metade da coluna parece idêntica a uma soma completa.
+ * 1. A badly parsed number (locale) entering the sum as another value.
+ * 2. Non-numeric cells being ignored WITHOUT the result saying so — a sum
+ *    that covered half the column looks identical to a complete sum.
  */
 
 const rows: CellValue[][] = [
-  ['id', 'cliente', 'regiao', 'valor', 'status'],
-  [1, 'Alfa', 'Sul', 100, 'pago'],
-  [2, 'Beta', 'Sul', 250.5, 'pendente'],
-  [3, 'Gama', 'Norte', 300, 'pago'],
-  [4, 'Delta', 'Norte', 50, 'pendente'],
-  [5, 'Épsilon', 'Sul', 99.5, 'pago'],
+  ['id', 'customer', 'region', 'amount', 'status'],
+  [1, 'Alpha', 'South', 100, 'paid'],
+  [2, 'Beta', 'South', 250.5, 'pending'],
+  [3, 'Gamma', 'North', 300, 'paid'],
+  [4, 'Delta', 'North', 50, 'pending'],
+  [5, 'Epsilon', 'South', 99.5, 'paid'],
 ]
 
 describe('toNumber', () => {
-  it('aceita número puro e booleano', () => {
+  it('accepts a plain number and a boolean', () => {
     expect(toNumber(1234.5)).toBe(1234.5)
     expect(toNumber(true)).toBe(1)
   })
 
-  it('entende decimal pt-BR e separador de milhar', () => {
+  it('understands pt-BR decimal and thousands separator', () => {
     expect(toNumber('1.234,56')).toBeCloseTo(1234.56)
     expect(toNumber('1234,5')).toBeCloseTo(1234.5)
   })
 
-  it('entende decimal en com vírgula de milhar', () => {
+  it('understands decimal and thousands comma', () => {
     expect(toNumber('1,234.56')).toBeCloseTo(1234.56)
     expect(toNumber('1,234')).toBe(1234)
   })
 
-  it('tolera moeda e porcentagem coladas no valor', () => {
+  it('tolerates currency and percentage glued to the value', () => {
     expect(toNumber('R$ 1.234,00')).toBeCloseTo(1234)
     expect(toNumber('45%')).toBe(45)
   })
@@ -51,7 +51,7 @@ describe('toNumber', () => {
     expect(toNumber('-250,75')).toBeCloseTo(-250.75)
   })
 
-  it('devolve null no que NÃO é número — nunca zero, que mentiria na soma', () => {
+  it('returns null for what is NOT a number — never zero, which would lie in the sum', () => {
     expect(toNumber('n/a')).toBeNull()
     expect(toNumber('')).toBeNull()
     expect(toNumber(null)).toBeNull()
@@ -59,80 +59,80 @@ describe('toNumber', () => {
   })
 })
 
-describe('runSheetQuery — filtro', () => {
-  it('filtra por igualdade de texto sem diferenciar maiúscula', () => {
-    const result = runSheetQuery(rows, { where: [{ column: 'regiao', op: 'eq', value: 'sul' }] })
+describe('runSheetQuery — filter', () => {
+  it('filters by text equality ignoring case', () => {
+    const result = runSheetQuery(rows, { where: [{ column: 'region', op: 'eq', value: 'south' }] })
     expect(result.matched).toBe(3)
     expect(result.scanned).toBe(5)
   })
 
-  it('compara número como número, não como texto', () => {
-    // Discrimina de verdade: 100, 250.5, 300 e 99.5 passam. Comparando como
-    // TEXTO, só "99.5" > "60" seria verdade ("1" e "2" e "3" < "6") e o
-    // resultado cairia para 1.
-    const result = runSheetQuery(rows, { where: [{ column: 'valor', op: 'gt', value: 60 }] })
+  it('compares a number as a number, not as text', () => {
+    // It really discriminates: 100, 250.5, 300 and 99.5 pass. Comparing as
+    // TEXT, only "99.5" > "60" would be true ("1" and "2" and "3" < "6") and the
+    // result would fall to 1.
+    const result = runSheetQuery(rows, { where: [{ column: 'amount', op: 'gt', value: 60 }] })
     expect(result.matched).toBe(4)
   })
 
-  it('combina condições em E', () => {
+  it('combines conditions with AND', () => {
     const result = runSheetQuery(rows, {
       where: [
-        { column: 'regiao', op: 'eq', value: 'Sul' },
-        { column: 'status', op: 'eq', value: 'pago' },
+        { column: 'region', op: 'eq', value: 'South' },
+        { column: 'status', op: 'eq', value: 'paid' },
       ],
     })
     expect(result.matched).toBe(2)
   })
 
-  it('contains acha trecho no meio', () => {
-    // "ta" casa Beta e Delta, no meio e no fim — não é prefixo
-    expect(runSheetQuery(rows, { where: [{ column: 'cliente', op: 'contains', value: 'ta' }] }).matched).toBe(2)
+  it('contains finds a stretch in the middle', () => {
+    // "ta" matches Beta and Delta, in the middle and at the end — it is not a prefix
+    expect(runSheetQuery(rows, { where: [{ column: 'customer', op: 'contains', value: 'ta' }] }).matched).toBe(2)
   })
 
-  it('erro explícito quando a coluna não existe — e lista as que existem', () => {
+  it('explicit error when the column does not exist — and it lists the ones that do', () => {
     expect(() => runSheetQuery(rows, { where: [{ column: 'inexistente', op: 'eq', value: 1 }] }))
       .toThrow(SheetQueryError)
     try {
       runSheetQuery(rows, { where: [{ column: 'inexistente', op: 'eq', value: 1 }] })
     } catch (err) {
-      expect((err as Error).message).toContain('cliente')
+      expect((err as Error).message).toContain('customer')
     }
   })
 })
 
-describe('runSheetQuery — agregação', () => {
-  it('soma a coluna inteira quando não há groupBy', () => {
-    const result = runSheetQuery(rows, { aggregate: [{ fn: 'sum', column: 'valor' }] })
+describe('runSheetQuery — aggregation', () => {
+  it('sums the whole column when there is no groupBy', () => {
+    const result = runSheetQuery(rows, { aggregate: [{ fn: 'sum', column: 'amount' }] })
     expect(result.rows[0][0]).toBeCloseTo(800)
   })
 
-  it('agrupa e soma por chave', () => {
+  it('groups and sums by key', () => {
     const result = runSheetQuery(rows, {
-      groupBy: ['regiao'],
-      aggregate: [{ fn: 'sum', column: 'valor', as: 'total' }],
+      groupBy: ['region'],
+      aggregate: [{ fn: 'sum', column: 'amount', as: 'total' }],
       orderBy: { column: 'total', direction: 'desc' },
     })
-    expect(result.columns).toEqual(['regiao', 'total'])
-    expect(result.rows[0][0]).toBe('Sul')
+    expect(result.columns).toEqual(['region', 'total'])
+    expect(result.rows[0][0]).toBe('South')
     expect(result.rows[0][1]).toBeCloseTo(450)
     expect(result.rows[1][1]).toBeCloseTo(350)
   })
 
-  it('filtro e agregação juntos', () => {
+  it('filter and aggregation together', () => {
     const result = runSheetQuery(rows, {
-      where: [{ column: 'status', op: 'eq', value: 'pago' }],
-      aggregate: [{ fn: 'sum', column: 'valor' }, { fn: 'count' }],
+      where: [{ column: 'status', op: 'eq', value: 'paid' }],
+      aggregate: [{ fn: 'sum', column: 'amount' }, { fn: 'count' }],
     })
     expect(result.rows[0][0]).toBeCloseTo(499.5)
     expect(result.rows[0][1]).toBe(3)
   })
 
-  it('avg, min e max', () => {
+  it('avg, min and max', () => {
     const result = runSheetQuery(rows, {
       aggregate: [
-        { fn: 'avg', column: 'valor', as: 'media' },
-        { fn: 'min', column: 'valor', as: 'menor' },
-        { fn: 'max', column: 'valor', as: 'maior' },
+        { fn: 'avg', column: 'amount', as: 'avg' },
+        { fn: 'min', column: 'amount', as: 'smallest' },
+        { fn: 'max', column: 'amount', as: 'largest' },
       ],
     })
     expect(result.rows[0][0]).toBeCloseTo(160)
@@ -140,122 +140,122 @@ describe('runSheetQuery — agregação', () => {
     expect(result.rows[0][2]).toBe(300)
   })
 
-  it('CONTA as células não numéricas ignoradas em vez de tratá-las como zero', () => {
-    const sujo: CellValue[][] = [
-      ['item', 'valor'],
+  it('COUNTS the ignored non-numeric cells instead of treating them as zero', () => {
+    const dirty: CellValue[][] = [
+      ['item', 'amount'],
       ['a', 100],
       ['b', 'n/a'],
-      ['c', 'pendente'],
+      ['c', 'pending'],
       ['d', 50],
     ]
-    const result = runSheetQuery(sujo, { aggregate: [{ fn: 'sum', column: 'valor' }] })
+    const result = runSheetQuery(dirty, { aggregate: [{ fn: 'sum', column: 'amount' }] })
     expect(result.rows[0][0]).toBe(150)
     expect(result.skippedCells).toBe(2)
     expect(formatQueryResult(result)).toContain('skipped')
   })
 
-  it('célula vazia é ausência, não erro de tipo — não entra na contagem de ignoradas', () => {
-    const comVazio: CellValue[][] = [
-      ['item', 'valor'],
+  it('an empty cell is absence, not a type error — it does not enter the ignored count', () => {
+    const withEmpty: CellValue[][] = [
+      ['item', 'amount'],
       ['a', 100],
       ['b', ''],
       ['c', null],
     ]
-    const result = runSheetQuery(comVazio, { aggregate: [{ fn: 'sum', column: 'valor' }] })
+    const result = runSheetQuery(withEmpty, { aggregate: [{ fn: 'sum', column: 'amount' }] })
     expect(result.rows[0][0]).toBe(100)
     expect(result.skippedCells).toBe(0)
   })
 
-  it('coluna sem nenhum número devolve null, não zero', () => {
-    const texto: CellValue[][] = [['item', 'valor'], ['a', 'x'], ['b', 'y']]
-    const result = runSheetQuery(texto, { aggregate: [{ fn: 'sum', column: 'valor' }] })
+  it('a column with no number at all returns null, not zero', () => {
+    const values: CellValue[][] = [['item', 'amount'], ['a', 'x'], ['b', 'y']]
+    const result = runSheetQuery(values, { aggregate: [{ fn: 'sum', column: 'amount' }] })
     expect(result.rows[0][0]).toBeNull()
     expect(result.skippedCells).toBe(2)
   })
 
-  it('soma valores escritos como texto em pt-BR', () => {
-    const ptbr: CellValue[][] = [['item', 'valor'], ['a', '1.234,56'], ['b', '2.000,00']]
-    const result = runSheetQuery(ptbr, { aggregate: [{ fn: 'sum', column: 'valor' }] })
+  it('sums values written as text in pt-BR', () => {
+    const ptbr: CellValue[][] = [['item', 'amount'], ['a', '1.234,56'], ['b', '2.000,00']]
+    const result = runSheetQuery(ptbr, { aggregate: [{ fn: 'sum', column: 'amount' }] })
     expect(result.rows[0][0] as number).toBeCloseTo(3234.56)
     expect(result.skippedCells).toBe(0)
   })
 })
 
-describe('runSheetQuery — projeção e limites', () => {
-  it('select devolve só as colunas pedidas', () => {
-    const result = runSheetQuery(rows, { select: ['cliente', 'valor'], limit: 2 })
-    expect(result.columns).toEqual(['cliente', 'valor'])
+describe('runSheetQuery — projection and limits', () => {
+  it('select returns only the requested columns', () => {
+    const result = runSheetQuery(rows, { select: ['customer', 'amount'], limit: 2 })
+    expect(result.columns).toEqual(['customer', 'amount'])
     expect(result.rows[0]).toHaveLength(2)
   })
 
-  it('limit corta o retorno mas o total conferido continua verdadeiro', () => {
+  it('limit cuts the response but the checked total stays true', () => {
     const result = runSheetQuery(rows, { limit: 2 })
     expect(result.returned).toBe(2)
     expect(result.matched).toBe(5)
     expect(result.truncated).toBe(true)
   })
 
-  it('teto de linhas impede a consulta de virar despejo da planilha', () => {
-    const grande: CellValue[][] = [['n'], ...Array.from({ length: 5000 }, (_, i) => [i])]
-    const result = runSheetQuery(grande, { limit: 99999 })
+  it('the row ceiling keeps the query from becoming a spreadsheet dump', () => {
+    const huge: CellValue[][] = [['n'], ...Array.from({ length: 5000 }, (_, i) => [i])]
+    const result = runSheetQuery(huge, { limit: 99999 })
     expect(result.returned).toBe(200)
     expect(result.scanned).toBe(5000)
     expect(result.truncated).toBe(true)
   })
 
-  it('planilha vazia não quebra', () => {
+  it('an empty spreadsheet does not break', () => {
     expect(runSheetQuery([], {}).scanned).toBe(0)
   })
 })
 
 describe('formatQueryResult', () => {
-  it('declara quantas linhas foram varridas — é o que torna o número auditável', () => {
-    const out = formatQueryResult(runSheetQuery(rows, { aggregate: [{ fn: 'sum', column: 'valor' }] }))
+  it('declares how many rows were scanned — that is what makes the number auditable', () => {
+    const out = formatQueryResult(runSheetQuery(rows, { aggregate: [{ fn: 'sum', column: 'amount' }] }))
     expect(out).toContain('5 rows in the sheet')
   })
 
-  it('avisa o corte quando houve truncamento', () => {
+  it('warns about the cut when there was truncation', () => {
     expect(formatQueryResult(runSheetQuery(rows, { limit: 2 }))).toContain('showing 2')
   })
 })
 
-describe('runSheetQuery — chave de grupo e contagens do rodapé', () => {
-  it('valor com espaço não vira dois grupos', () => {
-    const cidades: CellValue[][] = [
-      ['cidade', 'uf', 'valor'],
-      ['São Paulo', 'SP', 10],
-      ['São Paulo', 'SP', 20],
-      ['Rio de Janeiro', 'RJ', 5],
+describe('runSheetQuery — group key and footer counts', () => {
+  it('a value with an extra space does not become two groups', () => {
+    const cities: CellValue[][] = [
+      ['city', 'state', 'amount'],
+      ['New York', 'NY', 10],
+      ['New York', 'NY', 20],
+      ['Los Angeles', 'LA', 5],
     ]
-    const result = runSheetQuery(cidades, {
-      groupBy: ['cidade'],
-      aggregate: [{ fn: 'sum', column: 'valor', as: 'total' }],
+    const result = runSheetQuery(cities, {
+      groupBy: ['city'],
+      aggregate: [{ fn: 'sum', column: 'amount', as: 'total' }],
     })
     expect(result.rows).toHaveLength(2)
-    expect(result.rows.find((r) => r[0] === 'São Paulo')?.[1]).toBe(30)
+    expect(result.rows.find((r) => r[0] === 'New York')?.[1]).toBe(30)
   })
 
-  it('agrupa por mais de uma coluna sem embaralhar as chaves', () => {
-    const dados: CellValue[][] = [
-      ['regiao', 'status', 'valor'],
-      ['Sul', 'pago', 10],
-      ['Sul', 'pendente', 20],
-      ['Norte', 'pago', 5],
+  it('groups by more than one column without shuffling the keys', () => {
+    const rows: CellValue[][] = [
+      ['region', 'status', 'amount'],
+      ['South', 'paid', 10],
+      ['South', 'pending', 20],
+      ['North', 'paid', 5],
     ]
-    const result = runSheetQuery(dados, {
-      groupBy: ['regiao', 'status'],
-      aggregate: [{ fn: 'sum', column: 'valor', as: 'total' }],
+    const result = runSheetQuery(rows, {
+      groupBy: ['region', 'status'],
+      aggregate: [{ fn: 'sum', column: 'amount', as: 'total' }],
     })
     expect(result.rows).toHaveLength(3)
-    expect(result.columns).toEqual(['regiao', 'status', 'total'])
+    expect(result.columns).toEqual(['region', 'status', 'total'])
   })
 
-  it('numa consulta agregada, "consideradas" são LINHAS e os grupos vêm à parte', () => {
-    // O rodapé dizia "3 após o filtro" para 8000 linhas em 3 grupos — o modelo
-    // relataria que só 3 linhas entraram na conta.
+  it('in an aggregated query, "considered" are ROWS and the groups come separately', () => {
+    // The footer said "3 after the filter" for 8000 rows in 3 groups — the model
+    // would report that only 3 rows entered the count.
     const result = runSheetQuery(rows, {
-      groupBy: ['regiao'],
-      aggregate: [{ fn: 'sum', column: 'valor' }],
+      groupBy: ['region'],
+      aggregate: [{ fn: 'sum', column: 'amount' }],
     })
     expect(result.matched).toBe(5)
     expect(result.groups).toBe(2)
@@ -264,7 +264,7 @@ describe('runSheetQuery — chave de grupo e contagens do rodapé', () => {
     expect(out).toContain('2 group(s)')
   })
 
-  it('consulta sem agregação não reporta grupos', () => {
+  it('a query without aggregation reports no groups', () => {
     expect(runSheetQuery(rows, {}).groups).toBeUndefined()
   })
 })

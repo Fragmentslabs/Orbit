@@ -27,8 +27,8 @@ export function ConnectionStatus({ state, detailed }: ConnectionStatusProps) {
   const { Icon } = config
   const label = t(`connectionStatus.${state.status}`)
   const errorMessage = connectionErrorMessage(state, t)
-  // Na tela de conexão o "Desconectado" é redundante (a tela inteira já diz
-  // isso) — só mostra o badge quando há algo relevante a informar.
+  // On the connection screen "Disconnected" is redundant (the whole screen already says
+  // it) — the badge only shows when there is something relevant to report.
   const showBadge = state.status !== 'disconnected'
 
   return (

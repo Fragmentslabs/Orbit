@@ -7,37 +7,37 @@ import {
 } from './markdown-images'
 
 /**
- * A pré-visualização de .md mostrava "Image not available" em todo documento
- * com figura: o caminho relativo resolvia contra a origem do app, não contra a
- * pasta do arquivo. Achar o que perguntar e trocar depois é o que estes testes
- * protegem — errar aqui quebra a figura de novo, e em silêncio.
+ * The .md preview showed "Image not available" in every document
+ * with a figure: the relative path resolved against the app's origin, not against the
+ * file's folder. Finding what to ask for and swapping it afterwards is what these tests
+ * protect — getting it wrong here breaks the figure again, and in silence.
  */
 describe('markdownImageSources', () => {
-  it('acha as três formas que aparecem em documentação', () => {
+  it('finds the three forms that appear in documentation', () => {
     const md = [
-      '![tela](./imagens/producao.png)',
-      '![com titulo](../docs/fluxo.png "Fluxo")',
-      '![com espaco](<pasta com espaco/x.png>)',
+      '![screen](./images/production.png)',
+      '![with title](../docs/flow.png "Flow")',
+      '![with space](<folder with space/x.png>)',
       '<img src="assets/logo.svg" width="40">',
     ].join('\n\n')
 
     expect(markdownImageSources(md).sort()).toEqual([
-      '../docs/fluxo.png',
-      './imagens/producao.png',
+      '../docs/flow.png',
+      './images/production.png',
       'assets/logo.svg',
-      'pasta com espaco/x.png',
+      'folder with space/x.png',
     ])
   })
 
-  it('o título não entra no caminho', () => {
+  it('the title does not go into the path', () => {
     expect(markdownImageSources('![a](img/x.png "Uma legenda")')).toEqual(['img/x.png'])
   })
 
-  it('não repete o mesmo caminho', () => {
+  it('does not repeat the same path', () => {
     expect(markdownImageSources('![a](img/x.png)\n\n![b](img/x.png)')).toEqual(['img/x.png'])
   })
 
-  it('deixa quem o renderer já carrega sozinho', () => {
+  it('leaves alone what the renderer already loads by itself', () => {
     const md = [
       '![remota](https://exemplo.com/a.png)',
       '![embutida](data:image/png;base64,AAAA)',
@@ -48,13 +48,13 @@ describe('markdownImageSources', () => {
     expect(markdownImageSources(md)).toEqual([])
   })
 
-  it('não confunde link com figura', () => {
+  it('does not confuse a link with a figure', () => {
     expect(markdownImageSources('[não é imagem](./doc.md)')).toEqual([])
   })
 })
 
 describe('isExternalSrc', () => {
-  it('separa endereço de caminho', () => {
+  it('separates address from path', () => {
     expect(isExternalSrc('https://a/b.png')).toBe(true)
     expect(isExternalSrc('data:image/png;base64,AA')).toBe(true)
     expect(isExternalSrc('orbit-artifact://x.png')).toBe(true)
@@ -65,23 +65,23 @@ describe('isExternalSrc', () => {
 })
 
 describe('withResolvedImages', () => {
-  it('troca o caminho pelo data URL, preservando o resto da linha', () => {
-    const out = withResolvedImages('![tela](./imagens/x.png "Legenda")', {
-      './imagens/x.png': 'data:image/png;base64,AA',
+  it('replaces the path with the data URL, preserving the rest of the line', () => {
+    const out = withResolvedImages('![screen](./images/x.png "Caption")', {
+      './images/x.png': 'data:image/png;base64,AA',
     })
 
-    expect(out).toBe('![tela](data:image/png;base64,AA "Legenda")')
+    expect(out).toBe('![screen](data:image/png;base64,AA "Caption")')
   })
 
-  it('troca no caminho com espaço, sem desfazer os <>', () => {
-    const out = withResolvedImages('![a](<pasta com espaco/x.png>)', {
-      'pasta com espaco/x.png': 'data:image/png;base64,AA',
+  it('replaces in a path with spaces, without undoing the <>', () => {
+    const out = withResolvedImages('![a](<folder with space/x.png>)', {
+      'folder with space/x.png': 'data:image/png;base64,AA',
     })
 
     expect(out).toBe('![a](<data:image/png;base64,AA>)')
   })
 
-  it('troca também no <img>', () => {
+  it('replaces it in the <img> too', () => {
     const out = withResolvedImages('<img src="assets/logo.svg" width="40">', {
       'assets/logo.svg': 'data:image/svg+xml;base64,BB',
     })
@@ -89,7 +89,7 @@ describe('withResolvedImages', () => {
     expect(out).toBe('<img src="data:image/svg+xml;base64,BB" width="40">')
   })
 
-  it('figura que não resolveu fica como estava — é assim que se vê que falta', () => {
+  it('a figure that did not resolve stays as it was — that is how you see it is missing', () => {
     const out = withResolvedImages('![existe](a.png)\n\n![sumiu](b.png)', {
       'a.png': 'data:image/png;base64,AA',
     })
@@ -98,7 +98,7 @@ describe('withResolvedImages', () => {
     expect(out).toContain('![sumiu](b.png)')
   })
 
-  it('sem nada resolvido, devolve o texto intacto', () => {
+  it('with nothing resolved, it returns the text intact', () => {
     const md = '![a](x.png)'
 
     expect(withResolvedImages(md, {})).toBe(md)

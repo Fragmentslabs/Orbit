@@ -7,18 +7,18 @@ import { synthesizeToWav } from '../voice'
 import { resolveWritePath, type ToolContext } from './context'
 
 /**
- * Texto em fala: um arquivo de áudio do texto pedido, na voz configurada.
+ * Text to speech: an audio file of the requested text, in the configured voice.
  *
- * O caminho inverso (fala em texto) não mora aqui: `transcribe` — em
- * tools/video.ts — é a ÚNICA tool de transcrição, para áudio e vídeo, com o
- * detalhe que o chamador pedir (texto, frases ou palavra por palavra).
+ * The inverse path (speech to text) does not live here: `transcribe` — in
+ * tools/video.ts — is the ONLY transcription tool, for audio and video, with the
+ * detail the caller asks for (text, sentences or word by word).
  *
- * Sem interruptor próprio: a tool só existe com "Texto em fala" ligado em
- * Preferências → Voz — quem decide é `buildToolSet`. Desligada, o prompt diz
- * ao agente que o recurso está desativado e onde ativar (ver prompts.ts).
+ * No switch of its own: the tool only exists with "Text to speech" on in
+ * Preferences → Voice — the decision is `buildToolSet`'s. When off, the prompt tells
+ * the agent the feature is disabled and where to enable it (see prompts.ts).
  */
 
-/** 0:42, 12:05, 1:02:09 — com hora só quando o áudio passa de uma. */
+/** 0:42, 12:05, 1:02:09 — with hours only when the audio goes past one. */
 export function clock(ms: number, withHours = false): string {
   const total = Math.max(0, Math.round(ms / 1000))
   const h = Math.floor(total / 3600)
@@ -64,8 +64,8 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
     execute: async (input) => {
       const { text, title, voice, speed, lang } = input
       const savePath = (input as { savePath?: string }).savePath
-      // O idioma é o do TEXTO que o agente escreveu, não o fixo das preferências:
-      // pedir "gere em inglês" com a leitura em português tem que sair em inglês.
+      // The language is that of the TEXT the agent wrote, not the fixed one from Preferences:
+      // asking "generate in English" with the reading in Portuguese has to come out in English.
       const { wav, durationMs } = await synthesizeToWav(text, { voice, speed, lang: lang ?? 'auto' })
       const { url } = await saveAudio(wav, 'wav', { sessionId, name: title || undefined, source: 'chat' })
       let savedTo: string | null = null

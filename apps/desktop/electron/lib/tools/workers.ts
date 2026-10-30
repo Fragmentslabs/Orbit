@@ -5,18 +5,19 @@ import { listKeys, readJson } from '../storage'
 import { getRunningSessionIds } from '../chat-engine'
 
 /**
- * Ferramentas do orquestrador sobre os workers que ele já criou — em qualquer
- * plano desta conversa, não só no que está rodando. Antes ele só via os
- * workers na fase de revisão (lista em memória, que sumia ao fim da execução):
- * no turno seguinte não sabia quais existiam, não lia as conversas, não via o
- * que o usuário mandou direto num worker e só sabia criar workers novos.
+ * The orchestrator's tools over the workers it has already created — in any plan
+ * of this conversation, not only in the one running. It used to see the workers
+ * only during the review phase (an in-memory list that vanished when the run
+ * ended): on the next turn it did not know which ones existed, could not read
+ * the conversations, did not see what the user sent straight to a worker and
+ * only knew how to create new workers.
  */
 
-/** Teto de texto por mensagem no read_worker — tool output detalhado não cabe. */
+/** Text cap per message in read_worker — a detailed tool output does not fit. */
 const MAX_MESSAGE_CHARS = 4000
-/** Teto do texto devolvido pelo message_worker. */
+/** Cap of the text returned by message_worker. */
 const MAX_REPLY_CHARS = 6000
-/** Quantos workers o aviso automático lista (os mais recentes). */
+/** How many workers the automatic notice lists (the most recent ones). */
 const NOTICE_MAX_WORKERS = 20
 
 export async function loadWorkers(orchestratorSessionId: string): Promise<SessionInfo[]> {
@@ -44,10 +45,10 @@ function messageText(m: ChatMessage): string {
 }
 
 /**
- * A mensagem de usuário veio do orquestrador? Quem diz é a marca ESTRUTURAL
- * (`origin`); nas conversas antigas, que não a têm, a primeira mensagem é o
- * prompt da tarefa. Reconhecer o texto da mensagem ("[Revisão N]") prendia a
- * regra a um formato escrito à mão num idioma.
+ * Did the user message come from the orchestrator? The STRUCTURAL mark (`origin`)
+ * is what says so; in older conversations, which lack it, the first message is
+ * the task prompt. Recognising the message text ("[Review N]") tied the rule to
+ * a hand-written format in one language.
  */
 function fromOrchestrator(m: ChatMessage, firstUserId: string | undefined): boolean {
   return m.origin === 'orchestrator' || m.id === firstUserId
@@ -57,7 +58,7 @@ interface WorkerDigest {
   session: SessionInfo
   status: 'running' | 'error' | 'idle'
   messageCount: number
-  /** Mensagens que o próprio usuário digitou no chat do worker */
+  /** Messages the user themselves typed in the worker's chat */
   direct: ChatMessage[]
   lastActivity: number
 }
@@ -89,9 +90,9 @@ function snippet(text: string, max = 160): string {
 }
 
 /**
- * Aviso automático para o prompt do orquestrador: quais workers existem e o
- * que o usuário mandou direto neles desde o último turno do orquestrador.
- * Vazio quando a conversa ainda não tem workers.
+ * Automatic notice for the orchestrator's prompt: which workers exist and what
+ * the user sent straight to them since the orchestrator's last turn. Empty when
+ * the conversation has no workers yet.
  */
 export async function buildWorkersNotice(orchestratorSessionId: string, since: number): Promise<string> {
   const workers = await loadWorkers(orchestratorSessionId)
@@ -115,12 +116,12 @@ export async function buildWorkersNotice(orchestratorSessionId: string, since: n
   ].filter(Boolean).join('\n')
 }
 
-/** Executa um turno do worker com a mensagem do orquestrador e devolve a resposta. */
+/** Runs a turn of the worker with the orchestrator's message and returns the reply. */
 export type RunWorkerTurn = (worker: SessionInfo, message: string) => Promise<{ text: string; error?: string }>
 
 export function createWorkerTools(orchestratorSessionId: string, runWorkerTurn: RunWorkerTurn): ToolSet {
-  // Chamadas paralelas no mesmo passo: duas mensagens ao mesmo worker
-  // disputariam o chat dele — a segunda recusa.
+  // Parallel calls in the same step: two messages to the same worker
+  // would compete for its chat — the second one refuses.
   const inFlight = new Set<string>()
 
   const findWorker = async (workerId: string) =>

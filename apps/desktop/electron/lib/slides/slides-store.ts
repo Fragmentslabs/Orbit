@@ -10,40 +10,40 @@ import { slidesSlug } from './slides-slug'
 import { journalPath } from '../session/media-journal'
 
 /**
- * Registro dos decks de slides (uma PASTA com um HTML de entrada) e o scheme
- * `orbit-slides://` que a serve.
+ * Registry of the slide decks (a FOLDER with an entry HTML) and the
+ * `orbit-slides://` scheme that serves it.
  *
- * Espelha video/motion-store.ts e design/design-store.ts: o registro guarda
- * id → pasta + entrada, nada é copiado, e todo arquivo servido é resolvido
- * DENTRO da pasta registrada — `..`, caminho absoluto e escape são recusados.
+ * Mirrors video/motion-store.ts and design/design-store.ts: the registry holds
+ * id → folder + entry, nothing is copied, and every served file is resolved
+ * INSIDE the registered folder — `..`, absolute path and escape are refused.
  *
- * A diferença de contrato com o design é o que faz o slide ser rápido de
- * escrever: o deck é UM arquivo (`index.html` com um `<section class="slide">`
- * por slide), não um canvas.json + N artboards. A diferença com o motion é que
- * não há linha do tempo: o runtime aqui só monta o palco e obedece ao teclado.
+ * The contract difference from design is what makes a slide fast to write: the
+ * deck is ONE file (`index.html` with one `<section class="slide">` per slide), not
+ * a canvas.json + N artboards. The difference from motion is that there is no
+ * timeline: the runtime here only builds the stage and obeys the keyboard.
  *
- * O HTML sai com o runtime injetado no `<head>` (como o motion injeta o de
- * seek): o deck continua sendo conteúdo puro no disco, e quem sabe navegar é o
- * app.
+ * The HTML comes out with the runtime injected in the `<head>` (as motion injects
+ * the seek one): the deck remains pure content on disk, and the app is what knows
+ * how to navigate.
  */
 
 const SAFE_SLIDES_ID = /^sld_[a-z0-9]+$/
 
-/** Id de sessão como nome de pasta (ver slidesPiecesDir). */
+/** Session id as a folder name (see slidesPiecesDir). */
 const SAFE_SESSION = /^[A-Za-z0-9_-]{1,80}$/
 
-/** Canal do renderer para a recarga ao vivo. */
+/** Renderer channel for the live reload. */
 export const SLIDES_CHANGED_CHANNEL = 'slides:changed'
 
-/** Debounce do fs.watch: o editor grava em rajada e não queremos N eventos. */
+/** fs.watch debounce: the editor writes in bursts and we do not want N events. */
 const WATCH_DEBOUNCE_MS = 150
 
 export interface SlidesEntry {
-  /** Pasta raiz do deck: o scheme não serve nada fora dela. */
+  /** Root folder of the deck: the scheme serves nothing outside of it. */
   folder: string
-  /** Arquivo de entrada (absoluto), sempre dentro de `folder`. */
+  /** Entry file (absolute), always inside `folder`. */
   entry: string
-  /** Pasta de trabalho que registrou — revalidada quando o painel reabre. */
+  /** Working folder that registered it — revalidated when the panel reopens. */
   root?: string
   sessionId?: string
   createdAt: number
@@ -79,7 +79,7 @@ async function load(fresh = false): Promise<Record<string, SlidesEntry>> {
   if (index && !fresh) return index
   try {
     const disk = JSON.parse(await fsp.readFile(indexFile(), 'utf8')) as Record<string, SlidesEntry>
-    // Releitura: o que está em memória e ainda não foi gravado não pode sumir.
+    // Re-read: what is in memory and not yet written cannot vanish.
     index = fresh && index ? { ...disk, ...index } : disk
   } catch {
     index = index ?? {}
@@ -88,21 +88,21 @@ async function load(fresh = false): Promise<Record<string, SlidesEntry>> {
 }
 
 /**
- * Id do deck: derivado da pasta + entrada, não sorteado. Registrar de novo o
- * mesmo deck (o preview reaberto, o card do chat) devolve o MESMO id — a aba
- * aberta continua apontando para uma URL válida.
+ * Deck id: derived from the folder + entry, not drawn at random. Registering the
+ * same deck again (the reopened preview, the chat card) returns the SAME id — the
+ * open tab keeps pointing to a valid URL.
  */
 export function slidesIdFor(folder: string, entry: string): string {
   const key = `${path.resolve(folder).toLowerCase()}|${path.resolve(entry).toLowerCase()}`
   return `sld_${createHash('sha1').update(key).digest('hex').slice(0, 16)}`
 }
 
-/** Caminho comparável: separador normalizado, sem `./` na frente, minúsculo. */
+/** Comparable path: normalized separator, no leading `./`, lowercase. */
 function normalize(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase()
 }
 
-/** O deck registrado a partir do caminho que o agente usou (pasta ou entrada). */
+/** The deck registered from the path the agent used (folder or entry). */
 export async function slidesIdForPath(target: string): Promise<string | null> {
   const wanted = path.resolve(target).toLowerCase()
   const entries = await load(true)
@@ -110,8 +110,8 @@ export async function slidesIdForPath(target: string): Promise<string | null> {
     if (path.resolve(entry.entry).toLowerCase() === wanted) return id
     if (path.resolve(entry.folder).toLowerCase() === wanted) return id
   }
-  // O agente manda caminho RELATIVO à pasta da sessão, e aqui não há sessão para
-  // resolver contra: o FIM do caminho ainda distingue o deck (o registro é curto).
+  // The agent sends a path RELATIVE to the session folder, and here there is no session
+  // to resolve against: the END of the path still distinguishes the deck (the registry is short).
   const tail = normalize(target)
   if (!tail.includes('/')) return null
   for (const [id, entry] of Object.entries(entries)) {
@@ -121,11 +121,11 @@ export async function slidesIdForPath(target: string): Promise<string | null> {
   return null
 }
 
-/** O deck registrado a partir do NOME que ele tem na conversa (modo chat). */
+/** The deck registered from the NAME it has in the conversation (chat mode). */
 export async function slidesIdForName(sessionId: string, name: string): Promise<string | null> {
   if (!name.trim()) return null
-  // Os dois lados passam pelo MESMO slug: o card manda o TÍTULO ("Orbit em 12
-  // slides") e a pasta é o slug dele ("orbit-em-12-slides").
+  // Both sides go through the SAME slug: the card sends the TITLE ("Orbit em 12
+  // slides") and the folder is its slug ("orbit-em-12-slides").
   const wanted = slidesSlug(name)
   const entries = await load(true)
   for (const [id, entry] of Object.entries(entries)) {
@@ -147,22 +147,22 @@ function persist(): Promise<void> {
   return writing
 }
 
-/** `target` está dentro de `root`? (o mesmo teste do resolveSafePath). */
+/** Is `target` inside `root`? (the same test as resolveSafePath). */
 function isInside(root: string, target: string): boolean {
   const rel = path.relative(path.resolve(root), path.resolve(target))
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
-/** Dentro de `root`, mas não o próprio `root` — a trava do delete. */
+/** Inside `root`, but not `root` itself — the lock for delete. */
 function isStrictlyInside(root: string, target: string): boolean {
   const rel = path.relative(path.resolve(root), path.resolve(target))
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
 }
 
 /**
- * Resolve o caminho de uma URL `orbit-slides://<id>/<caminho>` dentro da pasta
- * do deck. Puro. Recusa caminho vazio, absoluto (inclusive `C:\…`), com `..` em
- * qualquer posição ou que escape da pasta depois de normalizado.
+ * Resolves the path of an `orbit-slides://<id>/<path>` URL inside the deck folder.
+ * Pure. Refuses an empty path, an absolute one (including `C:\…`), one with `..` in
+ * any position or one that escapes the folder after normalization.
  */
 export function resolveSlidesFile(folder: string, relative: string): string | null {
   let rel = relative ?? ''
@@ -180,7 +180,7 @@ export function resolveSlidesFile(folder: string, relative: string): string | nu
   return isInside(root, target) ? target : null
 }
 
-/** Relativo (com `/`) do arquivo de entrada em relação à pasta. */
+/** Path (with `/`) of the entry file relative to the folder. */
 function relativeEntry(entry: SlidesEntry): string {
   return path
     .relative(entry.folder, entry.entry)
@@ -190,8 +190,8 @@ function relativeEntry(entry: SlidesEntry): string {
 }
 
 /**
- * Pasta + entrada a partir do que quem chama tem em mãos: o par (pasta,
- * entrada) ou só o caminho (se for pasta, a entrada é o index.html dela).
+ * Folder + entry from whatever the caller has at hand: the pair (folder, entry)
+ * or just the path (if it is a folder, the entry is its index.html).
  */
 async function resolveDeck(target: string, entry?: string): Promise<{ folder: string; entry: string }> {
   const abs = path.resolve(target)
@@ -205,7 +205,7 @@ async function resolveDeck(target: string, entry?: string): Promise<{ folder: st
   return isDir ? { folder: abs, entry: path.join(abs, 'index.html') } : { folder: path.dirname(abs), entry: abs }
 }
 
-/** Registra (ou reaproveita) um deck e devolve a URL do palco. */
+/** Registers (or reuses) a deck and returns the stage URL. */
 export async function registerSlides(
   target: string,
   opts: { entry?: string; root?: string; sessionId?: string } = {},
@@ -250,35 +250,36 @@ export async function registerSlides(
   }
 }
 
-// ---------------------------------------------------------- pasta das peças
+// ---------------------------------------------------------- pieces folder
 
-/** Raiz dos decks do Orbit (nos dois modos) — fora de qualquer projeto. */
+/** Root of the Orbit decks (in both modes) — outside of any project. */
 export function slidesPiecesRoot(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'slides')
 }
 
 /**
- * Pasta dos decks de uma conversa. O id da sessão vira nome de pasta, então é
- * validado: sem isso um `../` no sessionId escreveria fora do armazenamento.
+ * Folder of the decks of a conversation. The session id becomes a folder name, so it
+ * is validated: without that a `../` in the sessionId would write outside the
+ * storage.
  */
 export function slidesPiecesDir(sessionId: string): string {
   if (!SAFE_SESSION.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
   return path.join(slidesPiecesRoot(), sessionId)
 }
 
-/** Registro de um deck (valida o id antes de tocar no índice). */
+/** Record of a deck (validates the id before touching the index). */
 export async function getSlides(id: string): Promise<SlidesEntry | undefined> {
   if (!SAFE_SLIDES_ID.test(id)) return undefined
   return (await load())[id] ?? (await load(true))[id]
 }
 
-/** URL `orbit-slides://<id>/<entrada>` de um deck REGISTRADO. */
+/** `orbit-slides://<id>/<entry>` URL of a REGISTERED deck. */
 export async function registeredSlidesUrl(id: string): Promise<string | null> {
   const entry = await getSlides(id)
   return entry ? `${SLIDES_SCHEME}://${id}/${relativeEntry(entry)}` : null
 }
 
-/** Tira o deck do registro e libera o watcher dele. */
+/** Takes the deck out of the registry and releases its watcher. */
 export async function unregisterSlides(id: string): Promise<void> {
   const entries = await load()
   if (!entries[id]) return
@@ -289,19 +290,19 @@ export async function unregisterSlides(id: string): Promise<void> {
 
 export interface SlidesDeletion {
   removedFolder: boolean
-  /** Por que a pasta foi preservada (ausente quando ela foi apagada). */
+  /** Why the folder was preserved (absent when it was deleted). */
   keptBecause?: string
 }
 
 /**
- * Apaga um deck de verdade: a pasta, o registro e o watcher. Espelha
- * `deleteMotionComposition`, com as mesmas travas — excluir na galeria é
- * liberar espaço, mas nunca pode apagar o projeto em si.
+ * Deletes a deck for real: the folder, the registry and the watcher. Mirrors
+ * `deleteMotionComposition`, with the same locks — deleting in the gallery frees
+ * space, but it can never delete the project itself.
  *
- * As três condições de recusa são o que separa "liberar espaço" de "destruir o
- * repositório de quem trabalha": a pasta tem de existir, conter a entrada do
- * deck, e estar DENTRO da raiz do chat ou do projeto que a registrou — nunca
- * SER o projeto.
+ * The three refusal conditions are what separates "freeing space" from "destroying
+ * the repository of whoever is working": the folder has to exist, contain the deck
+ * entry, and be INSIDE the root of the chat or of the project that registered it —
+ * never BE the project.
  */
 export async function deleteSlidesDeck(id: string): Promise<SlidesDeletion> {
   const entry = await getSlides(id)
@@ -316,15 +317,15 @@ export async function deleteSlidesDeck(id: string): Promise<SlidesDeletion> {
   } else if (!hasEntry) {
     keptBecause = 'the folder does not contain the deck entry'
   } else if (isStrictlyInside(slidesPiecesRoot(), folder)) {
-    // do Orbit
+    // of Orbit's own storage
   } else if (entry.root && isStrictlyInside(entry.root, folder)) {
-    // dentro do projeto que o registrou, e não o projeto em si
+    // inside the project that registered it, and not the project itself
   } else {
     keptBecause = 'the folder is the project itself (or outside the working folder it was registered from)'
   }
 
   if (!keptBecause) {
-    // No turno do agente (slides_delete), a pasta vai para o diário antes.
+    // In the agent's turn (slides_delete), the folder goes to the journal first.
     await journalPath(folder, { kind: 'slides', id, folder, entry: entry.entry, root: entry.root, sessionId: entry.sessionId })
     await fsp.rm(folder, { recursive: true, force: true })
   }
@@ -351,14 +352,14 @@ function notifyChanged(id: string): void {
 }
 
 /**
- * O que NÃO recarrega o palco: exportações, temporários e o que a apresentação
- * gera ao lado do deck. Puro — os testes cobrem a lista.
+ * What does NOT reload the stage: exports, temporaries and what the presentation
+ * generates next to the deck. Pure — the tests cover the list.
  */
 export function isSlidesSourceChange(filename: string | null | undefined): boolean {
   if (!filename) return true
   const name = filename.replace(/\\/g, '/')
   if (name.split('/').some((segment) => segment.startsWith('.slides-') || segment === '.render')) return false
-  // Imagem NÃO entra na lista: `assets/fundo.png` é fonte do deck, não saída.
+  // Images do NOT go in the list: `assets/fundo.png` is a source of the deck, not output.
   return !/\.(pdf|mp4|mov|webm|tmp|part|crdownload)$/i.test(name)
 }
 
@@ -370,17 +371,17 @@ function watchSlides(id: string, folder: string): void {
   try {
     watchers.set(id, fs.watch(folder, { recursive: true }, listener))
   } catch {
-    // Linux não suporta watch recursivo: cai para o nível de cima (o deck é um
-    // arquivo por pasta, na prática).
+    // Linux does not support recursive watch: it falls back to the parent level (the deck is
+    // one file per folder, in practice).
     try {
       watchers.set(id, fs.watch(folder, listener))
     } catch {
-      // pasta sumiu desde o registro — o protocolo devolve 404 na hora.
+      // folder gone since registration — the protocol returns 404 right away.
     }
   }
 }
 
-/** Religa o watcher e recarrega a aba depois que a pasta foi trocada inteira (revert). */
+/** Reconnects the watcher and reloads the tab after the folder was swapped entirely (revert). */
 export async function rewatchSlides(id: string): Promise<void> {
   const entry = await getSlides(id)
   if (!entry) return
@@ -394,7 +395,7 @@ export function unwatchSlides(id: string): void {
     try {
       watcher.close()
     } catch {
-      // já fechado
+      // already closed
     }
     watchers.delete(id)
   }
@@ -415,8 +416,8 @@ function respond(body: BodyInit | null, type: string, status = 200, extra: Recor
     headers: {
       ...CORS_HEADERS,
       'Content-Type': type,
-      // O deck é editado com o palco aberto: cache serviria a versão antiga e a
-      // recarga ao vivo pareceria não funcionar.
+      // The deck is edited with the stage open: the cache would serve the old version and
+      // the live reload would look like it is not working.
       'Cache-Control': 'no-store',
       ...(length === null ? {} : { 'Content-Length': String(length) }),
       ...extra,
@@ -424,7 +425,7 @@ function respond(body: BodyInit | null, type: string, status = 200, extra: Recor
   })
 }
 
-/** Registra o protocolo dos decks (chamar após app.whenReady). */
+/** Registers the protocol of the decks (call after app.whenReady). */
 export function registerSlidesProtocol(): void {
   protocol.handle(SLIDES_SCHEME, async (request) => {
     let url: URL
@@ -437,7 +438,7 @@ export function registerSlidesProtocol(): void {
     if (!SAFE_SLIDES_ID.test(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
     const entry = await getSlides(id)
     if (!entry) return respond('not found', 'text/plain; charset=utf-8', 404)
-    // Caminho reservado: o script que monta o palco (ver slides-runtime.ts).
+    // Reserved path: the script that builds the stage (see slides-runtime.ts).
     if (url.pathname === SLIDES_RUNTIME_PATH) {
       return respond(SLIDES_RUNTIME, 'text/javascript; charset=utf-8')
     }
@@ -445,8 +446,8 @@ export function registerSlidesProtocol(): void {
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)
     const ext = path.extname(file).toLowerCase()
     const type = CONTENT_TYPES[ext] ?? 'application/octet-stream'
-    // O HTML sai com o runtime no <head>; `?raw` é o FONTE como está no disco
-    // (o que um dia o "ver código" da aba vai mostrar).
+    // The HTML comes out with the runtime in the <head>; `?raw` is the SOURCE as it is on disk
+    // (what the tab's "view code" will one day show).
     if ((ext === '.html' || ext === '.htm') && !url.searchParams.has('raw')) {
       const html = await fsp.readFile(file, 'utf8').catch(() => null)
       if (html === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)

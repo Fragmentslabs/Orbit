@@ -14,11 +14,11 @@ export type { ModelInput, VariantMap, VariantPayload } from './types'
 export { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './variants'
 
 /**
- * Namespace de providerOptions lido por cada SDK empacotado. Provedores que
- * caem no adaptador openai-compatible usam o camelCase do id do provedor como
- * namespace (createOpenAICompatible({ name: provider.id }) em providers.ts) —
- * a forma crua (ex: "my-gateway") ainda é aceita pelo SDK, mas emite
- * DeprecationWarning. A regra é a mesma do to-camel-case.ts do adaptador.
+ * providerOptions namespace read by each bundled SDK. Providers that
+ * fall into the openai-compatible adapter use the camelCase of the provider id as the
+ * namespace (createOpenAICompatible({ name: provider.id }) in providers.ts) —
+ * the raw form (e.g. "my-gateway") is still accepted by the SDK, but emits a
+ * DeprecationWarning. The rule is the same as the adapter's to-camel-case.ts.
  */
 const SDK_NAMESPACES: Record<string, string> = {
   '@ai-sdk/anthropic': 'anthropic',
@@ -26,14 +26,14 @@ const SDK_NAMESPACES: Record<string, string> = {
   '@ai-sdk/openai': 'openai',
 }
 
-/** Espelha o toCamelCase do @ai-sdk/openai-compatible: "-x"/"_x" → "X". */
+/** Mirrors @ai-sdk/openai-compatible's toCamelCase: "-x"/"_x" → "X". */
 const toCamelCase = (s: string): string => s.replace(/[_-]([a-z])/g, (g) => g[1].toUpperCase())
 
 /**
- * Constrói o providerOptions da requisição a partir da configuração de
- * reasoning: baseline do provedor → payload da variant selecionada → wrap no
- * namespace do SDK. Retorna undefined quando thinking está desligado ou o
- * modelo não suporta reasoning.
+ * Builds the request's providerOptions from the reasoning
+ * configuration: provider baseline → payload of the selected variant → wrap in the
+ * SDK namespace. Returns undefined when thinking is off or the
+ * model does not support reasoning.
  */
 export async function buildProviderOptions(
   input: SendMessageInput,
@@ -42,11 +42,11 @@ export async function buildProviderOptions(
   if (!reasoning?.enabled) return undefined
 
   const provider = await getProvider(input.providerId)
-  // Segue renomeação do models.dev: com o id antigo salvo, o modelo "sumia"
-  // daqui e o turno saía sem reasoning nenhum, mesmo com o nível ligado na UI.
+  // Follows the models.dev rename: with the old id saved, the model "vanished"
+  // from here and the turn went out with no reasoning at all, even with the level on in the UI.
   const found = provider && findCatalogModel({ [provider.id]: provider }, provider.id, input.modelId)
   if (!provider || !found) {
-    console.warn('[reasoning] modelo fora do catálogo — turno sem reasoning', input.providerId, input.modelId)
+    console.warn('[reasoning] model outside the catalog — turn without reasoning', input.providerId, input.modelId)
     return undefined
   }
   const model = found.model
@@ -56,8 +56,8 @@ export async function buildProviderOptions(
   const modelInput = toModelInput(input.providerId, runtime.npm, model, runtime.api)
   const variants = generateVariants(modelInput)
 
-  // Nível salvo que o modelo não tem vira o vizinho mais próximo; sem nível
-  // escolhido, fica só o baseline.
+  // A saved level the model does not have becomes the nearest neighbor; with no level
+  // chosen, only the baseline remains.
   const variantId = closestVariant(Object.keys(variants), reasoning.variantId)
   const variantPayload = variantId ? variants[variantId] : {}
 
@@ -69,15 +69,15 @@ export async function buildProviderOptions(
   return { [namespace]: merged as Record<string, JSONValue> }
 }
 
-/** Do mais barato para o mais caro: o primeiro que o modelo tiver. */
+/** From the cheapest to the most expensive: the first one the model has. */
 const CHEAPEST_VARIANTS = ['none', 'minimal', 'low']
 
 /**
- * providerOptions com o MENOR raciocínio que o modelo aceita — para laços de
- * muitos passos curtos (o subagente de Computer Use), onde cada passo é "clicar
- * no botão que acabei de ver" e o raciocínio do padrão do provedor é custo e
- * espera sem ganho. undefined quando o modelo não raciocina ou não tem nível
- * baixo (aí vale o padrão do provedor).
+ * providerOptions with the LOWEST reasoning the model accepts — for loops of
+ * many short steps (the Computer Use subagent), where each step is "click
+ * the button I just saw" and the provider default reasoning is cost and
+ * waiting with no gain. undefined when the model does not reason or has no low
+ * level (then the provider default applies).
  */
 export async function buildCheapestReasoningOptions(
   providerId: string,
@@ -99,29 +99,29 @@ export async function buildCheapestReasoningOptions(
 }
 
 /**
- * Campo usado para reenviar o raciocínio na mensagem do assistente. Modelos DeepSeek servidos
- * pelo adaptador openai-compatible usam `reasoning_content`; o DeepSeek exige
- * o campo em TODAS as mensagens de assistente em turnos seguintes, mesmo
- * quando vazio (senão a API retorna 400). O gate usa a regra de resolução real
- * do runtime (isServedByOpenAiCompatible), não só o npm do catálogo — senão
- * provedores como OpenRouter (npm "@openrouter/ai-sdk-provider", servido via
- * createOpenAICompatible no resolveModel) ficariam de fora.
+ * Field used to resend the reasoning in the assistant message. DeepSeek models served
+ * by the openai-compatible adapter use `reasoning_content`; DeepSeek requires
+ * the field in ALL assistant messages in subsequent turns, even
+ * when empty (otherwise the API returns 400). The gate uses the runtime's real
+ * resolution rule (isServedByOpenAiCompatible), not just the catalog npm — otherwise
+ * providers like OpenRouter (npm "@openrouter/ai-sdk-provider", served via
+ * createOpenAICompatible in resolveModel) would be left out.
  */
 export function interleavedReasoningField(
   provider: CatalogProvider | undefined,
   modelId: string,
 ): string | undefined {
-  // Ajuste explícito do provedor personalizado: um gateway pode servir um
-  // modelo DeepSeek com nome que não contém "deepseek" (ds-v3), ou servir um
-  // modelo de outro fornecedor que também exige o campo.
+  // Explicit setting of the custom provider: a gateway may serve a
+  // DeepSeek model whose name does not contain "deepseek" (ds-v3), or serve a
+  // model from another vendor that also requires the field.
   const format = provider?.compat?.thinkingFormat
   if (format === 'none') return undefined
 
   const model = provider && findCatalogModel({ [provider.id]: provider }, provider.id, modelId)?.model
   const servedByOpenAiCompatible = isServedByOpenAiCompatible(modelRuntime(provider, model).npm)
-  // `reasoning_content` é campo do dialeto openai-compatible (e o
-  // normalizeMessages reescreve providerOptions.openaiCompatible): num
-  // protocolo Anthropic/Responses o campo não existe.
+  // `reasoning_content` is a field of the openai-compatible dialect (and
+  // normalizeMessages rewrites providerOptions.openaiCompatible): in an
+  // Anthropic/Responses protocol the field does not exist.
   if (!servedByOpenAiCompatible) return undefined
 
   if (format === 'deepseek' || modelId.toLowerCase().includes('deepseek')) {
@@ -131,16 +131,16 @@ export function interleavedReasoningField(
 }
 
 /**
- * Garante que o conteúdo de mensagens de tool nunca quebre o conversor do
- * adaptador openai-compatible: ele lê `output.type` de cada part que não seja
+ * Guarantees that the content of tool messages never breaks the openai-compatible
+ * adapter's converter: it reads `output.type` from every part that is not
  * `tool-approval-response` (openai-compatible/dist/internal/index.js, case
- * "tool") e lança `TypeError: Cannot read properties of undefined (reading
- * 'type')` quando `output` está ausente — edge cases do tool loop do SDK podem
- * produzir parts assim. Parts sem output válido viram um `tool-result` com
- * output de texto neutro; conteúdo que não é array (ex: string, que o
- * `for...of` do conversor iteraria por caracteres) é normalizado para array; e
- * null/undefined vira `[]` (o SDK descarta mensagens de tool vazias). Retorna
- * a mesma referência quando nada muda.
+ * "tool") and throws `TypeError: Cannot read properties of undefined (reading
+ * 'type')` when `output` is missing — edge cases of the SDK's tool loop can
+ * produce parts like that. Parts without a valid output become a `tool-result` with
+ * neutral text output; content that is not an array (e.g. a string, which the
+ * converter's `for...of` would iterate character by character) is normalized to an array; and
+ * null/undefined becomes `[]` (the SDK drops empty tool messages). Returns
+ * the same reference when nothing changes.
  */
 function sanitizeToolContent(content: ToolContent): ToolContent {
   if (content == null) return []
@@ -175,7 +175,7 @@ function sanitizeToolContent(content: ToolContent): ToolContent {
         value:
           typeof part === 'string' || typeof part === 'number' || typeof part === 'boolean'
             ? String(part)
-            : '[resultado indisponível]',
+            : '[result unavailable]',
       },
     }
   })
@@ -183,21 +183,21 @@ function sanitizeToolContent(content: ToolContent): ToolContent {
 }
 
 /**
- * Move o raciocínio das mensagens de assistente para o providerOptions do
- * SDK. Sempre define
- * o campo, mesmo vazio: provedores como o DeepSeek exigem o reasoning_content
- * de volta em todas as mensagens de assistente em turnos subsequentes, e o
- * conversor do @ai-sdk/openai-compatible descartaria um valor vazio vindo dos
- * parts (ele só emite `reasoning_content` quando `reasoning.length > 0`).
+ * Moves the reasoning of assistant messages into the SDK's providerOptions.
+ * Always sets
+ * the field, even empty: providers like DeepSeek require the reasoning_content
+ * back in every assistant message in subsequent turns, and the
+ * @ai-sdk/openai-compatible converter would drop an empty value coming from the
+ * parts (it only emits `reasoning_content` when `reasoning.length > 0`).
  *
- * Também roda sempre (independente do campo de reasoning) a sanitização de
- * mensagens de tool via sanitizeToolContent — protege o conversor de parts
- * malformadas produzidas por edge cases do tool loop do SDK.
+ * It also always runs (regardless of the reasoning field) the sanitization of
+ * tool messages via sanitizeToolContent — it protects the converter from malformed
+ * parts produced by edge cases of the SDK's tool loop.
  *
- * É idempotente: se a mensagem não tem parts de reasoning (porque já foi
- * normalizada antes, ex: prepareStep), preserva o valor já presente no
- * providerOptions em vez de sobrescrever com vazio. Retorna a mesma referência
- * quando nada muda (para o prepareStep devolver `{}` e o SDK pular a reescrita).
+ * It is idempotent: if the message has no reasoning parts (because it was already
+ * normalized before, e.g. prepareStep), it preserves the value already present in
+ * providerOptions instead of overwriting it with empty. Returns the same reference
+ * when nothing changes (so prepareStep returns `{}` and the SDK skips the rewrite).
  */
 export function normalizeMessages(msgs: ModelMessage[], field?: string): ModelMessage[] {
   let changed = false

@@ -9,13 +9,13 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import type { FilePart } from "@shared/chat"
 
 /**
- * Anexos persistidos guardam data URL; o input trabalha com File (converte para
- * blob URL no chip e de volta para data URL no submit). Esta é a volta desse
- * caminho, usada quando um revert devolve a mensagem para o input.
+ * Persisted attachments keep a data URL; the input works with File (converts it to
+ * a blob URL in the chip and back to a data URL on submit). This is the way back of that
+ * path, used when a revert returns the message to the input.
  *
- * O anexo que é uma REFERÊNCIA à galeria (`mediaId`) NÃO volta como File: montar
- * um File a partir da URL o faria virar cópia nova no reenvio. Ele volta pelo
- * mesmo caminho do drag da aba Mídia (addMedia), mantendo a referência.
+ * The attachment that is a REFERENCE to the gallery (`mediaId`) does NOT come back as a File: building
+ * a File from the URL would make it become a new copy on resend. It comes back through the
+ * same path as the drag from the Media tab (addMedia), keeping the reference.
  */
 async function restoreAttachments(parts: FilePart[]): Promise<{
   files: File[]
@@ -27,8 +27,8 @@ async function restoreAttachments(parts: FilePart[]): Promise<{
   const sources: SourceAttachmentRef[] = []
   await Promise.all(
     parts.map(async (part) => {
-      // Fonte da conversa: volta pelo caminho do arrasto da aba Fontes, para o
-      // reenvio continuar sendo uma REFERÊNCIA ao documento e não uma cópia.
+      // Conversation source: it comes back through the drag path of the Sources tab, so the
+      // resend keeps being a REFERENCE to the document and not a copy.
       if (part.sourceId) {
         sources.push({ id: part.sourceId, name: part.filename, kind: part.mime })
         return
@@ -41,7 +41,7 @@ async function restoreAttachments(parts: FilePart[]): Promise<{
         const blob = await (await fetch(part.url)).blob()
         files.push(new File([blob], part.filename ?? "anexo", { type: part.mime }))
       } catch {
-        // Anexo corrompido não pode impedir o texto de voltar ao input
+        // A corrupted attachment cannot prevent the text from coming back to the input
       }
     }),
   )

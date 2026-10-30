@@ -1,18 +1,18 @@
 import { create } from "zustand"
 
 /**
- * Ativação por chat dos modos que antes eram estado local dos inputs
- * (pesquisa, navegador, plano, subagentes, orquestração e visão).
+ * Per-chat enablement of the modes that used to be input-local state
+ * (research, browser, plan, subagents, orchestration and vision).
  *
- * Semântica igual a brain-prefs/simple-prefs: o valor efetivo é
- * `override ?? default`, onde o default vem das preferências
- * (model-mode-prefs, separado por modo chat/code). Chats novos (sem sessão)
- * usam a chave "draft"; quando a sessão é criada no primeiro envio, o
- * session-store chama adopt() para transferir os overrides.
+ * Same semantics as brain-prefs/simple-prefs: the effective value is
+ * `override ?? default`, where the default comes from the preferences
+ * (model-mode-prefs, split by chat/code mode). New chats (without a session)
+ * use the "draft" key; when the session is created on the first send, the
+ * session-store calls adopt() to transfer the overrides.
  */
 
-// "computer" não entra no sync de modos com o celular (session-modes-sync):
-// controlar o computador é decisão de quem está diante dele.
+// "computer" is not part of the mode sync with the phone (session-modes-sync):
+// controlling the computer is a decision for whoever is in front of it.
 export type OverridableMode = "search" | "browser" | "plan" | "subagents" | "orchestra" | "vision" | "computer"
 
 const STORAGE_KEY = "orbit-mode-overrides"
@@ -28,7 +28,7 @@ function load(): OverrideMap {
       if (parsed && typeof parsed === "object") return parsed
     }
   } catch {
-    // prefs corrompidas → sem overrides
+    // corrupted prefs → no overrides
   }
   return {}
 }
@@ -40,7 +40,7 @@ function persist(overrides: OverrideMap) {
 interface ModeOverridesState {
   overrides: OverrideMap
   setMode: (mode: OverridableMode, sessionId: string | null | undefined, value: boolean) => void
-  /** Transfere os overrides do rascunho para a sessão recém-criada */
+  /** Transfers the draft's overrides to the newly created session */
   adopt: (sessionId: string) => void
 }
 
@@ -80,7 +80,7 @@ export function useModeActive(mode: OverridableMode, sessionId?: string | null, 
   return useModeOverrides((s) => s.overrides[mode]?.[sessionId ?? DRAFT_KEY] ?? fallback)
 }
 
-/** Leitura fora de componentes React (callbacks de envio) */
+/** Read outside React components (send callbacks) */
 export function modeActiveFor(mode: OverridableMode, sessionId?: string | null, fallback = false): boolean {
   return useModeOverrides.getState().overrides[mode]?.[sessionId ?? DRAFT_KEY] ?? fallback
 }

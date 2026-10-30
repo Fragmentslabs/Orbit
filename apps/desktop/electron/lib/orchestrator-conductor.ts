@@ -1,10 +1,10 @@
 import type { SendMessageInput } from '@shared/chat'
 
 /**
- * O input do condutor da orquestra (planejamento e síntese): o modelo e o
- * raciocínio configurados em Preferências / "+" → Orquestra, ou o próprio chat.
- * Os workers não passam por aqui — seguem workerModel e, sem ele, o modelo do
- * chat, como a configuração promete.
+ * The orchestra conductor's input (planning and synthesis): the model and
+ * reasoning configured in Preferences / "+" → Orchestra, or the chat's own.
+ * The workers do not come through here — they follow workerModel and, without
+ * it, the chat's model, as the settings promise.
  */
 export function conductorInput(input: SendMessageInput): SendMessageInput {
   const conductor = input.orchestratorModel

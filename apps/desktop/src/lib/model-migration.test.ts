@@ -25,18 +25,18 @@ const catalog: Catalog = {
 }
 
 describe("findCatalogModel", () => {
-  it("acha pelo id exato", () => {
+  it("finds by the exact id", () => {
     expect(findCatalogModel(catalog, "opencode-go", "glm-5.3")).toMatchObject({ modelId: "glm-5.3", renamed: false })
   })
 
-  it("id renomeado vira o sucessor mais novo da família", () => {
+  it("a renamed id becomes the family's newest successor", () => {
     expect(findCatalogModel(catalog, "opencode-go", "deepseek-flash")).toMatchObject({
       modelId: "deepseek-v4.1-flash",
       renamed: true,
     })
   })
 
-  it("não procura sucessor em outro provedor", () => {
+  it("does not look for a successor in another provider", () => {
     expect(findCatalogModel(catalog, "opencode", "deepseek-flash")).toBeUndefined()
   })
 
@@ -50,15 +50,15 @@ describe("findCatalogModel", () => {
 
 describe("closestVariant", () => {
   const levels = ["low", "high", "max"]
-  it("mantém o nível que existe", () => expect(closestVariant(levels, "high")).toBe("high"))
-  it("sobe para o próximo mais forte", () => expect(closestVariant(levels, "medium")).toBe("high"))
-  it("acima de tudo, fica com o mais forte", () => expect(closestVariant(["low", "medium"], "xhigh")).toBe("medium"))
-  it("sem nível pedido, nada", () => expect(closestVariant(levels, undefined)).toBeUndefined())
-  it("nível fora da escala, nada", () => expect(closestVariant(levels, "turbo")).toBeUndefined())
+  it("keeps the level that exists", () => expect(closestVariant(levels, "high")).toBe("high"))
+  it("goes up to the next strongest", () => expect(closestVariant(levels, "medium")).toBe("high"))
+  it("above everything, it keeps the strongest", () => expect(closestVariant(["low", "medium"], "xhigh")).toBe("medium"))
+  it("with no level requested, nothing", () => expect(closestVariant(levels, undefined)).toBeUndefined())
+  it("a level outside the scale, nothing", () => expect(closestVariant(levels, "turbo")).toBeUndefined())
 })
 
-describe("migração das escolhas salvas", () => {
-  it("troca o modelo renomeado e preserva os outros campos", () => {
+describe("migration of the saved choices", () => {
+  it("swaps the renamed model and preserves the other fields", () => {
     expect(renamedRef(catalog, { providerId: "opencode-go", modelId: "deepseek-flash", extra: 1 })).toEqual({
       providerId: "opencode-go",
       modelId: "deepseek-v4.1-flash",
@@ -66,18 +66,18 @@ describe("migração das escolhas salvas", () => {
     })
   })
 
-  it("não mexe no que ainda existe nem no que sumiu sem sucessor", () => {
+  it("leaves alone what still exists and what vanished with no successor", () => {
     expect(renamedRef(catalog, { providerId: "opencode-go", modelId: "glm-5.3" })).toBeUndefined()
     expect(renamedRef(catalog, { providerId: "opencode-go", modelId: "sumiu" })).toBeUndefined()
   })
 
-  it("copia a preferência de reasoning para a chave nova", () => {
+  it("copies the reasoning preference to the new key", () => {
     expect(renamedPrefKeys(catalog, ["opencode-go/deepseek-flash", "opencode-go/glm-5.3", "lixo"])).toEqual([
       ["opencode-go/deepseek-flash", "opencode-go/deepseek-v4.1-flash"],
     ])
   })
 
-  it("só acusa indisponível o que não existe nem por renomeação", () => {
+  it("only reports as unavailable what does not exist even by renaming", () => {
     expect(isKnownModel(catalog, { providerId: "opencode-go", modelId: "deepseek-flash" })).toBe(true)
     expect(isKnownModel(catalog, { providerId: "opencode-go", modelId: "sumiu" })).toBe(false)
     expect(isKnownModel({}, { providerId: "opencode-go", modelId: "sumiu" })).toBe(true)

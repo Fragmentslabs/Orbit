@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Revisão de memórias — Orbit</title>
+<title>Memory review — Orbit</title>
 <style>
   :root {
     --bg: #131316; --card: #1c1c21; --line: #2c2c33; --fg: #e9e9ee;
@@ -61,25 +61,25 @@
 </head>
 <body>
 <header>
-  <h1>Revisão de memórias</h1>
-  <span class="pill" id="filterPilot">Piloto (20)</span>
-  <span class="pill" id="filterAll">Todos (50)</span>
+  <h1>Memory review</h1>
+  <span class="pill" id="filterPilot">Pilot (20)</span>
+  <span class="pill" id="filterAll">All (50)</span>
   <span class="spacer"></span>
   <span class="count" id="progress"></span>
-  <button class="ghost" id="importBtn">Importar</button>
-  <button class="primary" id="exportBtn">Exportar rótulos</button>
+  <button class="ghost" id="importBtn">Import</button>
+  <button class="primary" id="exportBtn">Export labels</button>
 </header>
 <main>
   <div class="warnbox">
-    Tudo aqui roda no seu computador. Escreva a consulta como você perguntaria de verdade — não copie
-    palavras da memória. Marque <strong>inconclusivo</strong> quando o caso for ambíguo.
+    Everything here runs on your computer. Write the query the way you would actually ask it — do not copy
+    words from the memory. Mark <strong>inconclusive</strong> when the case is ambiguous.
   </div>
   <div class="card" id="card"></div>
   <footer>
-    <button id="prevBtn">← Anterior</button>
-    <button id="nextBtn">Próximo →</button>
+    <button id="prevBtn">← Previous</button>
+    <button id="nextBtn">Next →</button>
     <span class="spacer"></span>
-    <span class="count">Atalhos: <kbd>⌘↵</kbd> próximo · <kbd>⌘⇧I</kbd> inconclusivo</span>
+    <span class="count">Shortcuts: <kbd>&#8984;&#9166;</kbd> next · <kbd>&#8984;&#8679;I</kbd> inconclusive</span>
   </footer>
 </main>
 <input type="file" id="fileInput" accept="application/json" hidden>
@@ -87,11 +87,16 @@
 const DATA = __ORBIT_DATA__;
 const KEY = 'orbit-memory-review-v2';
 const DECISIONS = [
-  ['inject', 'Conteúdo completo', 'A memória responde ou é indispensável para responder.'],
-  ['pointer', 'Só um ponteiro', 'Ajuda, mas não é indispensável — o modelo pode abrir.'],
-  ['none', 'Nenhuma memória', 'A pergunta não precisa de nada do que está guardado.'],
-  ['inconclusive', 'Inconclusivo', 'Ambíguo demais para rotular.'],
+  ['inject', 'Full content', 'The memory answers the question or is indispensable to answer it.'],
+  ['pointer', 'Just a pointer', 'It helps, but is not indispensable — the model can open it.'],
+  ['none', 'No memory', 'The question needs nothing from what is stored.'],
+  ['inconclusive', 'Inconclusive', 'Too ambiguous to label.'],
 ];
+
+// The classification of the review schema maps back to the page's decision when a
+// label file is imported. `inject` and `pointer` both count as `relevant`: either way
+// the memory is the right one to retrieve.
+const DECISION = { relevant: 'inject', irrelevant: 'none', inconclusive: 'inconclusive' };
 
 let state = load();
 let filter = 'pilot';
@@ -112,7 +117,7 @@ function current() {
 function visible() {
   return DATA.scenarios.filter((s) => filter === 'all' || s.pilot);
 }
-function blank(label) {
+function blankLabel(label) {
   return label || { query: '', context: '', decision: '', reason: '' };
 }
 function answered(id) {
@@ -126,42 +131,42 @@ function render() {
   document.getElementById('filterPilot').className = 'pill' + (filter === 'pilot' ? ' on' : '');
   document.getElementById('filterAll').className = 'pill' + (filter === 'all' ? ' on' : '');
   const done = list.filter((s) => answered(s.id)).length;
-  document.getElementById('progress').textContent = `${done}/${list.length} respondidos`;
+  document.getElementById('progress').textContent = `${done}/${list.length} answered`;
 
-  if (!list.length) { card.innerHTML = '<div class="empty">Nenhum cenário neste filtro.</div>'; return; }
+  if (!list.length) { card.innerHTML = '<div class="empty">No scenario in this filter.</div>'; return; }
   const s = current();
-  const l = blank(labels()[s.id]);
+  const l = blankLabel(labels()[s.id]);
   const neg = s.role === 'no-memory';
 
   card.innerHTML = `
     <div class="meta">
       <span class="tag">${s.id}</span>
-      <span class="tag">${neg ? 'tema relacionado — NÃO deve recuperar' : 'memória-alvo'}</span>
+      <span class="tag">${neg ? 'related topic — should NOT be retrieved' : 'target memory'}</span>
       <span class="tag">${s.kind}${s.category ? ' · ' + s.category : ''}${s.area ? ' · ' + s.area : ''}</span>
       <span class="tag">${s.length}</span>
-      ${s.similar ? '<span class="tag warn">parecida com outras</span>' : ''}
-      ${s.crossLang ? '<span class="tag ok">sugerido: consulta em outro idioma</span>' : ''}
+      ${s.similar ? '<span class="tag warn">similar to others</span>' : ''}
+      ${s.crossLang ? '<span class="tag ok">suggested: query in another language</span>' : ''}
       ${s.memoryId ? '<span class="tag">' + s.memoryId + '</span>' : ''}
     </div>
-    <label>${neg ? 'Memória do tema (só para você situar a pergunta)' : 'Memória que deveria ser encontrada'}</label>
-    <div class="anchor ${neg ? 'neg' : ''}">${escapeHtml(s.text || '(sem texto)')}</div>
-    <label for="q">Sua pergunta, como você faria a um assistente</label>
-    <textarea id="q" class="q" placeholder="ex.: preciso organizar a viagem do mês que vem, o que você lembra sobre como eu gosto de viajar?">${escapeHtml(l.query)}</textarea>
-    <label for="c">Contexto recente (opcional — só se a pergunta depender dele)</label>
-    <textarea id="c" class="ctx" placeholder="ex.: usuário: vou marcar a viagem para o Recife / assistente: prefere sair de manhã ou à noite?">${escapeHtml(l.context)}</textarea>
-    <label>Resultado correto para essa pergunta</label>
+    <label>${neg ? 'Topic memory (just so you can frame the question)' : 'Memory that should be found'}</label>
+    <div class="anchor ${neg ? 'neg' : ''}">${escapeHtml(s.text || '(no text)')}</div>
+    <label for="q">Your question, as you would ask an assistant</label>
+    <textarea id="q" class="q" placeholder="e.g.: I need to plan next month's trip, what do you remember about how I like to travel?">${escapeHtml(l.query)}</textarea>
+    <label for="c">Recent context (optional — only if the question depends on it)</label>
+    <textarea id="c" class="ctx" placeholder="e.g.: user: I am booking the trip to Recife / assistant: do you prefer leaving in the morning or at night?">${escapeHtml(l.context)}</textarea>
+    <label>Correct outcome for this question</label>
     <div class="decisions">
       ${DECISIONS.map(([v, t]) => `<label title="${t}"><input type="radio" name="d" value="${v}" ${l.decision === v ? 'checked' : ''}> ${t}</label>`).join('')}
     </div>
-    <div class="hint">${neg ? 'Aqui o esperado costuma ser <strong>Nenhuma memória</strong> — mas decida pelo que a pergunta pede.' : 'Sugestão do metadado: <strong>' + s.suggested + '</strong>. Corrija se não fizer sentido.'}</div>
-    <label for="r">Motivo curto (uma linha)</label>
-    <input type="text" id="r" placeholder="ex.: a pergunta é sobre o tema, mas não precisa do meu fato" value="${escapeAttr(l.reason)}">
+    <div class="hint">${neg ? 'Here the expected outcome is usually <strong>No memory</strong> — but decide by what the question asks.' : 'Metadata suggestion: <strong>' + s.suggested + '</strong>. Fix it if it does not make sense.'}</div>
+    <label for="r">Short reason (one line)</label>
+    <input type="text" id="r" placeholder="e.g.: the question is about the topic, but does not need my fact" value="${escapeAttr(l.reason)}">
   `;
 
   const q = card.querySelector('#q');
   const c = card.querySelector('#c');
   const r = card.querySelector('#r');
-  const set = (patch) => { labels()[s.id] = Object.assign(blank(labels()[s.id]), patch); save(); updateProgress(); };
+  const set = (patch) => { labels()[s.id] = Object.assign(blankLabel(labels()[s.id]), patch); save(); updateProgress(); };
   q.addEventListener('input', () => set({ query: q.value }));
   c.addEventListener('input', () => set({ context: c.value }));
   r.addEventListener('input', () => set({ reason: r.value }));
@@ -173,7 +178,7 @@ function render() {
 function updateProgress() {
   const list = visible();
   document.getElementById('progress').textContent =
-    `${list.filter((s) => answered(s.id)).length}/${list.length} respondidos`;
+    `${list.filter((s) => answered(s.id)).length}/${list.length} answered`;
 }
 
 function escapeHtml(s) {
@@ -193,6 +198,10 @@ document.getElementById('filterAll').onclick = () => { filter = 'all'; index = 0
 document.getElementById('prevBtn').onclick = () => go(-1);
 document.getElementById('nextBtn').onclick = () => go(1);
 
+// ---------------------------------------------------------------------------
+// Export — the label file `eval` reads (see review.test.ts: LabelsFile)
+// ---------------------------------------------------------------------------
+
 function buildExport() {
   const store = labels();
   return {
@@ -201,7 +210,7 @@ function buildExport() {
     corpus: DATA.corpus,
     pilot: DATA.scenarios.filter((s) => s.pilot).map((s) => s.id),
     labels: DATA.scenarios.map((s) => {
-      const l = blank(store[s.id]);
+      const l = blankLabel(store[s.id]);
       return {
         id: s.id, memoryId: s.memoryId, role: s.role, pilot: !!s.pilot,
         stratum: `${s.kind}/${s.category || '-'}/${s.length}${s.crossLang ? '/cross' : ''}`,
@@ -211,12 +220,12 @@ function buildExport() {
   };
 }
 
-function baixar(json) {
+function downloadFile(json) {
   try {
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'rotulos.json';
+    a.download = 'labels.json';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -236,8 +245,8 @@ function showExport(json, n) {
   const h = document.createElement('div');
   h.style.cssText = 'font-size:13px;color:#a9adb7;line-height:1.5';
   h.innerHTML = n
-    ? '<strong>' + n + ' cenário(s) no export.</strong> Copie o texto abaixo e salve como <code>rotulos.json</code> em <code>~/.orbit-memory-review/</code>.'
-    : '<strong>Nada respondido ainda.</strong> Preencha pelo menos a consulta ou a decisão — o export sai vazio assim.';
+    ? '<strong>' + n + ' scenario(s) in the export.</strong> Copy the text below and save it as <code>labels.json</code> in <code>~/.orbit-memory-review/</code>.'
+    : '<strong>Nothing answered yet.</strong> Fill in at least the query or the decision — otherwise the export comes out empty.';
   const ta = document.createElement('textarea');
   ta.value = json;
   ta.readOnly = true;
@@ -251,16 +260,16 @@ function showExport(json, n) {
     b.onclick = fn;
     return b;
   };
-  row.appendChild(mk('Baixar arquivo', function () { if (!baixar(json)) alert('O navegador bloqueou o download — use Copiar.'); }, false));
-  row.appendChild(mk('Copiar', async function () {
+  row.appendChild(mk('Download file', function () { if (!downloadFile(json)) alert('The browser blocked the download — use Copy.'); }, false));
+  row.appendChild(mk('Copy', async function () {
     ta.focus(); ta.select();
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(json);
       else document.execCommand('copy');
-      row.querySelectorAll('button').forEach(function (b) { if (b.textContent === 'Copiar') b.textContent = 'Copiado'; });
+      row.querySelectorAll('button').forEach(function (b) { if (b.textContent === 'Copy') b.textContent = 'Copied'; });
     } catch (e) { try { document.execCommand('copy'); } catch (e2) {} }
   }, true));
-  row.appendChild(mk('Fechar', function () { wrap.remove(); }, false));
+  row.appendChild(mk('Close', function () { wrap.remove(); }, false));
   box.appendChild(h); box.appendChild(ta); box.appendChild(row);
   wrap.appendChild(box);
   wrap.addEventListener('click', function (e) { if (e.target === wrap) wrap.remove(); });
@@ -271,9 +280,117 @@ function showExport(json, n) {
 document.getElementById('exportBtn').onclick = () => {
   const out = buildExport();
   const json = JSON.stringify(out, null, 2);
-  baixar(json);
-  showExport(json, out.labels.length);
+  downloadFile(json);
+  showExport(json, out.queries.length);
 };
+
+// ---------------------------------------------------------------------------
+// Import — reads the English schema and the older Portuguese keys, which is what
+// an existing `rotulos.json` on this machine carries (`consultas`, `esperado`
+// with `recuperar` / `nenhuma`, `memorias`, `hibrido`, `cobertura`, `obs`).
+// ---------------------------------------------------------------------------
+
+function firstOf(object, ...keys) {
+  if (!object) return undefined;
+  for (const key of keys) if (object[key] !== undefined) return object[key];
+  return undefined;
+}
+
+function asObject(value) {
+  return value && typeof value === 'object' ? value : null;
+}
+
+/** `cobertura` → `coverage`; the rest of the hit keeps the same name. */
+function normalizeHits(value) {
+  const raw = asObject(value);
+  const list = raw && Array.isArray(raw.top5) ? raw.top5 : null;
+  if (!list) return null;
+  return {
+    top5: list.map((hit) => {
+      const h = asObject(hit) || {};
+      const out = { rank: Number(h.rank), id: String(h.id) };
+      const score = firstOf(h, 'score');
+      if (score !== undefined) out.score = score;
+      const cos = firstOf(h, 'cos');
+      if (cos !== undefined) out.cos = cos;
+      const coverage = firstOf(h, 'coverage', 'cobertura');
+      if (coverage !== undefined) out.coverage = coverage;
+      return out;
+    }),
+  };
+}
+
+/** A label file written elsewhere may use other query ids — fall back to the memory. */
+function scenarioOf(query) {
+  const direct = DATA.scenarios.find((s) => s.id === query.id);
+  if (direct) return direct;
+  const memoryIds = [];
+  const derived = firstOf(query, 'derivedFrom');
+  if (derived) memoryIds.push(String(derived));
+  const memories = asObject(firstOf(query, 'memories', 'memorias'));
+  if (memories) for (const id of Object.keys(memories)) memoryIds.push(id);
+  const matches = DATA.scenarios.filter((s) => s.memoryId && memoryIds.indexOf(s.memoryId) >= 0);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function importQueries(list) {
+  for (const raw of list) {
+    const query = asObject(raw);
+    if (!query || !query.id) continue;
+    const scenario = scenarioOf(query);
+    const key = scenario ? scenario.id : String(query.id);
+
+    const memories = asObject(firstOf(query, 'memories', 'memorias'));
+    const ids = memories ? Object.keys(memories) : [];
+    // The batch labels one memory per scenario: prefer that one, then any other
+    // memory the file already judged.
+    const own = scenario && scenario.memoryId && memories ? scenario.memoryId : null;
+    const order = own ? [own].concat(ids.filter((id) => id !== own)) : ids;
+
+    let decision = '';
+    let notes = '';
+    for (const id of order) {
+      const entry = asObject(memories[id]) || {};
+      const classification = String(firstOf(entry, 'classification', 'classificacao') || '').trim();
+      if (!classification) continue;
+      decision = DECISION[classification] || '';
+      notes = String(firstOf(entry, 'notes', 'obs') || '');
+      break;
+    }
+
+    labels()[key] = {
+      query: String(firstOf(query, 'text', 'query') || ''),
+      context: String(firstOf(query, 'context') || ''),
+      decision,
+      reason: notes,
+      lexical: normalizeHits(firstOf(query, 'lexical')),
+      hybrid: normalizeHits(firstOf(query, 'hybrid', 'hibrido')),
+    };
+  }
+}
+
+/** The page's own export from before the schema translation (`labels[]`). */
+function importLegacyLabels(list) {
+  for (const raw of list) {
+    const l = asObject(raw);
+    if (!l || !l.id) continue;
+    labels()[l.id] = {
+      query: l.query || '', context: l.context || '',
+      decision: l.decision || '', reason: l.reason || '',
+    };
+  }
+}
+
+function importFile(text) {
+  const data = JSON.parse(text);
+  if (Array.isArray(data)) { importQueries(data); return; }
+  const list = asObject(data);
+  if (!list) throw new Error('unexpected file');
+  const queries = firstOf(list, 'queries', 'consultas');
+  if (Array.isArray(queries)) { importQueries(queries); return; }
+  if (Array.isArray(list.labels)) { importLegacyLabels(list.labels); return; }
+  throw new Error('no "queries" list found');
+}
 
 document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('fileInput').onchange = (ev) => {
@@ -282,17 +399,9 @@ document.getElementById('fileInput').onchange = (ev) => {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const data = JSON.parse(String(reader.result));
-      const incoming = Array.isArray(data.labels) ? data.labels : [];
-      for (const l of incoming) {
-        if (!l.id) continue;
-        labels()[l.id] = {
-          query: l.query || '', context: l.context || '',
-          decision: l.decision || '', reason: l.reason || '',
-        };
-      }
+      importFile(String(reader.result));
       save(); render();
-    } catch (err) { alert('Arquivo inválido: ' + err.message); }
+    } catch (err) { alert('Invalid file: ' + err.message); }
   };
   reader.readAsText(file);
   ev.target.value = '';
@@ -305,7 +414,7 @@ document.addEventListener('keydown', (ev) => {
   if (ev.shiftKey && (ev.key === 'i' || ev.key === 'I')) {
     ev.preventDefault();
     const s = current(); if (!s) return;
-    labels()[s.id] = Object.assign(blank(labels()[s.id]), { decision: 'inconclusive' });
+    labels()[s.id] = Object.assign(blankLabel(labels()[s.id]), { decision: 'inconclusive' });
     save(); render(); go(1);
   }
 });

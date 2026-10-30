@@ -1,107 +1,107 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ListaWorktrees } from '@shared/worktrees'
+import type { WorktreeList } from '@shared/worktrees'
 
-const estado = vi.hoisted(() => ({
-  sessao: { id: 's1', directory: '/repo' } as Record<string, unknown>,
-  eventos: [] as unknown[],
-  lista: null as ListaWorktrees | null,
+const state = vi.hoisted(() => ({
+  session: { id: 's1', directory: '/repo' } as Record<string, unknown>,
+  events: [] as unknown[],
+  list: null as WorktreeList | null,
 }))
 
 vi.mock('../storage', () => ({
-  readJson: async () => estado.sessao,
-  writeJson: async (_k: string, valor: Record<string, unknown>) => {
-    estado.sessao = valor
+  readJson: async () => state.session,
+  writeJson: async (_k: string, value: Record<string, unknown>) => {
+    state.session = value
   },
 }))
-vi.mock('../broadcast', () => ({ broadcastChatEvent: (e: unknown) => estado.eventos.push(e) }))
-const servico = vi.hoisted(() => ({
-  listarWorktrees: vi.fn(async () => estado.lista),
-  criarWorktreeDoChat: vi.fn(async () => ({
-    caminho: '/wt/novo',
-    pasta: '/wt/novo/apps/web',
-    branch: 'orbit/novo',
+vi.mock('../broadcast', () => ({ broadcastChatEvent: (e: unknown) => state.events.push(e) }))
+const service = vi.hoisted(() => ({
+  listWorktrees: vi.fn(async () => state.list),
+  createChatWorktree: vi.fn(async () => ({
+    path: '/wt/new',
+    folder: '/wt/new/apps/web',
+    branch: 'orbit/new',
     base: 'main',
-    dependencias: 'clonadas',
+    dependencies: 'cloned',
   })),
-  removerWorktreeDoChat: vi.fn(async () => {}),
+  removeChatWorktree: vi.fn(async () => {}),
 }))
-vi.mock('../worktrees/servico', () => servico)
+vi.mock('../worktrees/service', () => service)
 
 const { createWorktreeTools } = await import('./worktrees')
 const { assess } = await import('../permission/rules')
 
 const ctx = { sessionId: 's1', directory: '/repo/apps/web', extraDirectories: [], abort: new AbortController().signal }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const executar = (nome: string, args: unknown) => (createWorktreeTools(ctx)[nome] as any).execute(args, {}) as Promise<string>
+const run = (name: string, args: unknown) => (createWorktreeTools(ctx)[name] as any).execute(args, {}) as Promise<string>
 
-const w = (caminho: string, extra: Partial<ListaWorktrees['worktrees'][number]> = {}) => ({
-  caminho,
-  pasta: `${caminho}/apps/web`,
-  nome: caminho.split('/').pop()!,
+const w = (worktreePath: string, extra: Partial<WorktreeList['worktrees'][number]> = {}) => ({
+  path: worktreePath,
+  folder: `${worktreePath}/apps/web`,
+  name: worktreePath.split('/').pop()!,
   branch: 'main',
   head: 'abc1234',
-  principal: false,
-  origem: 'chat' as const,
-  disponivel: true,
-  travado: false,
-  alteracoes: 0,
-  aFrente: 0,
+  primary: false,
+  origin: 'chat' as const,
+  available: true,
+  locked: false,
+  changes: 0,
+  ahead: 0,
   ...extra,
 })
 
 beforeEach(() => {
-  estado.sessao = { id: 's1', directory: '/repo/apps/web' }
-  estado.eventos = []
-  estado.lista = {
+  state.session = { id: 's1', directory: '/repo/apps/web' }
+  state.events = []
+  state.list = {
     repo: '/repo',
-    atual: '/repo',
-    worktrees: [w('/repo', { principal: true, origem: 'principal' }), w('/wt/login', { branch: 'orbit/login' })],
+    current: '/repo',
+    worktrees: [w('/repo', { primary: true, origin: 'main' }), w('/wt/login', { branch: 'orbit/login' })],
   }
-  servico.removerWorktreeDoChat.mockClear()
+  service.removeChatWorktree.mockClear()
 })
 
-describe('ferramentas de worktree', () => {
-  it('worktree_create troca a pasta da sessão (mesma subpasta) e avisa a interface', async () => {
-    const saida = await executar('worktree_create', { nome: 'novo' })
-    expect(estado.sessao.directory).toBe('/wt/novo/apps/web')
-    expect(estado.eventos).toHaveLength(1)
-    expect(saida).toContain('NEXT message')
+describe('worktree tools', () => {
+  it('worktree_create switches the session folder (same subfolder) and tells the UI', async () => {
+    const output = await run('worktree_create', { name: 'new' })
+    expect(state.session.directory).toBe('/wt/new/apps/web')
+    expect(state.events).toHaveLength(1)
+    expect(output).toContain('NEXT message')
   })
 
-  it('worktree_create com trocar=false não mexe na sessão', async () => {
-    await executar('worktree_create', { nome: 'novo', trocar: false })
-    expect(estado.sessao.directory).toBe('/repo/apps/web')
-    expect(estado.eventos).toHaveLength(0)
+  it('worktree_create with switchChat=false does not touch the session', async () => {
+    await run('worktree_create', { name: 'new', switchChat: false })
+    expect(state.session.directory).toBe('/repo/apps/web')
+    expect(state.events).toHaveLength(0)
   })
 
-  it('worktree_switch acha pelo nome do branch sem o prefixo e volta para o principal', async () => {
-    await executar('worktree_switch', { destino: 'login' })
-    expect(estado.sessao.directory).toBe('/wt/login/apps/web')
-    estado.lista!.atual = '/wt/login'
-    await executar('worktree_switch', { destino: 'principal' })
-    expect(estado.sessao.directory).toBe('/repo/apps/web')
+  it('worktree_switch finds it by the branch name without the prefix and goes back to the main one', async () => {
+    await run('worktree_switch', { target: 'login' })
+    expect(state.session.directory).toBe('/wt/login/apps/web')
+    state.list!.current = '/wt/login'
+    await run('worktree_switch', { target: 'main' })
+    expect(state.session.directory).toBe('/repo/apps/web')
   })
 
-  it('worktree_remove recusa o worktree em que o chat está', async () => {
-    estado.lista!.atual = '/wt/login'
-    const saida = await executar('worktree_remove', { destino: 'login' })
-    expect(saida).toContain('Switch to another one first')
-    expect(servico.removerWorktreeDoChat).not.toHaveBeenCalled()
+  it('worktree_remove refuses the worktree the chat is in', async () => {
+    state.list!.current = '/wt/login'
+    const output = await run('worktree_remove', { target: 'login' })
+    expect(output).toContain('Switch to another one first')
+    expect(service.removeChatWorktree).not.toHaveBeenCalled()
   })
 
-  it('worktree_remove remove outro worktree', async () => {
-    await executar('worktree_remove', { destino: 'orbit/login', apagarBranch: true })
-    expect(servico.removerWorktreeDoChat).toHaveBeenCalledWith({ pasta: '/repo/apps/web', caminho: '/wt/login', apagarBranch: true })
+  it('worktree_remove removes another worktree', async () => {
+    await run('worktree_remove', { target: 'orbit/login', deleteBranch: true })
+    expect(service.removeChatWorktree).toHaveBeenCalledWith({ folder: '/repo/apps/web', path: '/wt/login', deleteBranch: true })
   })
 })
 
-describe('aprovação', () => {
-  it('listar, criar e trocar não pedem permissão; remover pede sempre', () => {
+describe('approval', () => {
+  it('list, create and switch do not ask permission; remove always asks', () => {
     expect(assess('worktree_list', {}, '/repo')).toBeNull()
-    expect(assess('worktree_create', { nome: 'x' }, '/repo')).toBeNull()
-    expect(assess('worktree_switch', { destino: 'x' }, '/repo')).toBeNull()
-    const remover = assess('worktree_remove', { destino: 'login' }, '/repo')
-    expect(remover?.sempre).toBe(true)
-    expect(remover?.ruleId).toBe('worktree:remove')
+    expect(assess('worktree_create', { name: 'x' }, '/repo')).toBeNull()
+    expect(assess('worktree_switch', { target: 'x' }, '/repo')).toBeNull()
+    const remove = assess('worktree_remove', { target: 'login' }, '/repo')
+    expect(remove?.alwaysAsk).toBe(true)
+    expect(remove?.ruleId).toBe('worktree:remove')
   })
 })

@@ -108,12 +108,12 @@ function ContextSelect({ value, onChange }: {
   )
 }
 
-function MemoriaSection({ isCode }: { isCode: boolean }) {
+function MemorySection({ isCode }: { isCode: boolean }) {
   const { t } = useTranslation()
-  // A condição vai DENTRO do seletor: chamar um hook ou outro conforme a
-  // prop deixa a ordem de hooks dependendo dela. Hoje funciona porque cada
-  // call site passa um `isCode` fixo, mas basta alguém tornar a prop dinâmica
-  // para quebrar em runtime.
+  // The condition goes INSIDE the selector: calling one hook or another according to the
+  // prop leaves the hook order depending on it. Today it works because each
+  // call site passes a fixed `isCode`, but it is enough for someone to make the prop dynamic
+  // to break it at runtime.
   const context = useBrainPrefs((s) => (isCode ? s.codeContext : s.chatContext))
   const setter = useBrainPrefs((s) => (isCode ? s.setCodeContext : s.setChatContext))
 
@@ -140,7 +140,7 @@ function ChatPrefs() {
     <div className="flex flex-col gap-4">
       <ModelField label={t("preferences.defaultModel")} value={chatModel} onChange={setChatModel} action={<ModelThinkingMenu model={chatModel} />} />
       <ActiveModesSection modes={chatActiveModes} onChange={setChatActiveMode} isCode={false} />
-      <MemoriaSection isCode={false} />
+      <MemorySection isCode={false} />
     </div>
   )
 }
@@ -148,8 +148,8 @@ function ChatPrefs() {
 function CodePrefs() {
   const { t } = useTranslation()
   const { codeModel, setCodeModel, codeActiveModes, setCodeActiveMode, autoCreateFolders, setAutoCreateFolders } = useModelModePrefs()
-  // Subagentes e orquestra: o mesmo estado das engrenagens do "+" (provider-store),
-  // sincronizado com o celular — mudar aqui muda lá, e vice-versa.
+  // Subagents and orchestra: the same state as the "+" gears (provider-store),
+  // synced with the phone — changing it here changes it there, and vice versa.
   const workerModel = useProviderStore((s) => s.workerModel)
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
   const workerReasoning = useProviderStore((s) => s.workerReasoning)
@@ -162,9 +162,9 @@ function CodePrefs() {
   return (
     <div className="flex flex-col gap-4">
       <ModelField label={t("preferences.defaultModel")} value={codeModel} onChange={setCodeModel} action={<ModelThinkingMenu model={codeModel} />} />
-      {/* Limpar grava null: null é o que faz o worker (ou o condutor) seguir o
-          modelo do chat — o mesmo contrato do diálogo do "+". Trocar de modelo
-          volta o raciocínio a desligado: outro modelo, outros níveis. */}
+      {/* Clearing records null: null is what makes the worker (or the conductor) follow the
+          chat model — the same contract as the "+" dialog. Switching model
+          turns the reasoning back to off: another model, other levels. */}
       <ModelField
         label={t("preferences.subagentModel")}
         value={workerModel}
@@ -186,7 +186,7 @@ function CodePrefs() {
         action={<ThinkingMenu model={orchestratorModel} value={orchestratorReasoning} onChange={setOrchestratorReasoning} />}
       />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
-      <MemoriaSection isCode={true} />
+      <MemorySection isCode={true} />
       <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
           <FolderIcon className="size-4 text-muted-foreground" />
@@ -256,25 +256,25 @@ function LanguageSection() {
 
 
 
-/** Ordem em que os estilos aparecem na tela. */
+/** Order in which the styles appear on screen. */
 const PERSONA_OPTIONS: PersonaStyle[] = ["default", "direct", "mentor", "technical"]
 
 /**
- * Como o Orbit fala. Vale nos dois modos, por isso fica acima das abas.
+ * How Orbit speaks. It counts in both modes, which is why it sits above the tabs.
  *
- * O ajuste é COMPLEMENTO, não edição do prompt: o texto que o modelo lê vive
- * em inglês no pacote compartilhado, e o usuário escreve na língua dele uma
- * frase que se soma ao estilo. O "ver o texto exato" mostra o literal, somente
- * leitura — quem quiser conferir confere, e ninguém quebra a identidade sem
- * perceber.
+ * The adjustment is a COMPLEMENT, not an edit of the prompt: the text the model reads lives
+ * in English in the shared package, and the user writes in their language a
+ * sentence that is added to the style. The "see the exact text" shows the literal, read-
+ * only — whoever wants to check can check, and nobody breaks the identity without
+ * noticing.
  */
 function BehaviorSection() {
   const { t } = useTranslation()
   const persona = useAppSettings((s) => s.settings.persona)
   const update = useAppSettings((s) => s.update)
   const [showPrompt, setShowPrompt] = useState(false)
-  // Composição do chat (estilo + ajuste); no código entra mais uma linha de
-  // calibração de registro que não interessa mostrar aqui.
+  // Chat composition (style + adjustment); in code one more line of register
+  // calibration enters that is not worth showing here.
   const exact = personaPromptLines(persona.style, persona.note, "chat").join("\n\n")
 
   return (
@@ -357,7 +357,7 @@ export function PreferencesPanel() {
         </p>
       </div>
 
-      {/* Opções que valem para o app inteiro vêm antes das abas por tipo de conversa. */}
+      {/* Options that count for the whole app come before the tabs per conversation type. */}
       <LanguageSection />
       <BehaviorSection />
       <GeneralSettings />

@@ -9,12 +9,12 @@ import { useThemeStore } from '~/stores/theme-store'
 import { useModelRotationStore, MAX_ROTATION_SLOTS } from '~/stores/model-rotation-store'
 
 /**
- * Lista das rotações de modelo (espelho da coluna esquerda do modal do
- * desktop). O split-view de lá não cabe no celular: a lista é a tela e o
- * editor é a tela seguinte (`rotations/[id]`).
+ * List of the model rotations (mirror of the left column of the desktop
+ * modal). The split-view of that one does not fit on the phone: the list is the screen and the
+ * editor is the next screen (`rotations/[id]`).
  *
- * As rotações vivem no desktop — aqui a tela só reflete o store, que
- * sincroniza nos dois sentidos (ver model-rotation-store).
+ * The rotations live on the desktop — here the screen only reflects the store, which
+ * syncs in both directions (see model-rotation-store).
  */
 export default function RotationsScreen() {
   const { t } = useTranslation()

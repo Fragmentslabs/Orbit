@@ -1,441 +1,441 @@
-# Computer Use (controle do computador)
+# Computer Use (controlling the computer)
 
-O agente do Orbit vê e opera outros apps do Mac: lê a tela (screenshot) e a
-árvore de acessibilidade do app-alvo e age sobre ele (clique, digitação, teclas,
-scroll, drag). Tudo em TypeScript dentro do `electron/lib`, sem binário
-compilado, addon nativo ou MCP externo. A única peça fora do TS é a bridge JXA,
-um script que o próprio macOS executa.
+The Orbit agent sees and operates other Mac apps: it reads the screen (screenshot)
+and the accessibility tree of the target app and acts on it (click, typing, keys,
+scroll, drag). All in TypeScript inside `electron/lib`, with no compiled binary,
+native addon or external MCP. The only piece outside TS is the JXA bridge,
+a script that macOS itself runs.
 
-A v1 é **só macOS** e fica **desligada na Mac App Store**, porque o sandbox da
-loja bloqueia acessibilidade e injeção de eventos. Windows e Linux terão planos
-próprios (ver "Fora da v1").
+v1 is **macOS only** and stays **off in the Mac App Store**, because the store's
+sandbox blocks accessibility and event injection. Windows and Linux will have their own
+plans (see "Outside v1").
 
-## Como ligar
+## How to turn it on
 
-São duas chaves, e as duas precisam estar ligadas:
+There are two switches, and both need to be on:
 
-1. **Preferências → Computador → Controlar o computador** (vem desligado).
-2. **Modo Computador** na conversa: no menu "+" do composer, em chat ou código.
-   Todo chat começa com o modo desligado e não existe padrão global. O modo
-   também não vai para o celular: fica fora de `session-modes-sync.ts`.
+1. **Preferences → Computer → Control the computer** (comes turned off).
+2. **Computer mode** in the conversation: in the composer's "+" menu, in chat or code.
+   Every chat starts with the mode off and there is no global default. The mode
+   does not go to the phone either: it stays out of `session-modes-sync.ts`.
 
-Na barra de modos abaixo do composer, o Computador fica **oculto por padrão**.
-Quem quiser o atalho na barra liga em Preferências → Aparência → modos
-visíveis.
+In the mode bar below the composer, Computer stays **hidden by default**.
+Whoever wants the shortcut in the bar turns it on in Preferences → Appearance → visible
+modes.
 
-Com só uma das chaves ligada, as tools `cu_*` não existem no turno. Se o modo
-estiver ligado e o interruptor não, o prompt explica ao agente como ligar.
+With only one of the switches on, the `cu_*` tools do not exist in the turn. If the
+mode is on and the switch is not, the prompt explains to the agent how to turn it on.
 
-## Arquitetura
+## Architecture
 
 ```
 electron/lib/computer/
-  bridges/macos.js   bridge JXA (osascript -l JavaScript): uma invocação = uma operação
-  runner.ts          spawn + timeout + abort + parse; erro sempre vira ComputerError
-  drivers/macos.ts   driver: bridge, screencapture e "open"
+  bridges/macos.js   JXA bridge (osascript -l JavaScript): one invocation = one operation
+  runner.ts          spawn + timeout + abort + parse; an error always becomes ComputerError
+  drivers/macos.ts   driver: bridge, screencapture and "open"
   types.ts           AppInfo, WindowInfo, AxNode, TreeSnapshot, BridgeAction, ComputerDriver
-  geometry.ts        px do screenshot ↔ pontos globais
-  keys.ts            "cmd+s" → código virtual + flags
-  safety.ts          denylist, recusa do próprio Orbit, chave de aprovação por app/site
-  registry.ts        observações numeradas por sessão, handles path+identidade, TTL de 120 s
-  format.ts          árvore → texto indentado com índice (o contrato com o modelo)
-  observe.ts         observe (screenshot + árvore) e query (busca sem screenshot)
-  act.ts             as ações do cu_computer
-  session.ts         controle ativo: faixa no topo, atalho de pânico, devolução das flags
-  index.ts           fachada: disponibilidade, status, teste, dispose
-electron/lib/tools/computer.ts   as 5 tools (zod + toModelOutput com imagem)
+  geometry.ts        screenshot px ↔ global points
+  keys.ts            "cmd+s" → virtual code + flags
+  safety.ts          denylist, refusing Orbit itself, approval key per app/site
+  registry.ts        numbered observations per session, path+identity handles, 120 s TTL
+  format.ts          tree → indented text with an index (the contract with the model)
+  observe.ts         observe (screenshot + tree) and query (search without a screenshot)
+  act.ts             the cu_computer actions
+  session.ts         active control: top banner, panic shortcut, returning the flags
+  index.ts           façade: availability, status, test, dispose
+electron/lib/tools/computer.ts   the 5 tools (zod + toModelOutput with an image)
 ```
 
-**Protocolo da bridge.** O JSON de entrada vai em `argv[0]` (`{ op, args }`) e a
-resposta sai no stdout: `{ ok: true, result }` ou
-`{ ok: false, error: { code, message } }`. As operações são `perms`, `apps`,
+**Bridge protocol.** The input JSON goes in `argv[0]` (`{ op, args }`) and the
+response comes out on stdout: `{ ok: true, result }` or
+`{ ok: false, error: { code, message } }`. The operations are `perms`, `apps`,
 `tree`, `element` (info/press/focus/setValue), `mouse`, `drag`, `scroll`, `keys`,
-`focused`, `activate` e `restore`. A bridge é importada com `?raw` e gravada uma
-vez em `$TMPDIR/orbit-computer/macos-bridge-<hash>.js`. A probe e o smoke leem o
-mesmo arquivo, então o código medido é o mesmo que roda no app.
+`focused`, `activate` and `restore`. The bridge is imported with `?raw` and written
+once into `$TMPDIR/orbit-computer/macos-bridge-<hash>.js`. The probe and the smoke read the
+same file, so the measured code is the same one that runs in the app.
 
-**Handle de elemento.** O `AXUIElementRef` não sobrevive entre processos. Por
-isso cada índice mostrado ao modelo guarda o caminho (índices de `AXChildren` a
-partir da janela) e a identidade (papel e título). Na hora de agir, a bridge
-re-caminha o caminho e confere a identidade. Se divergir, vira o erro
-`staleIndex`, nunca um clique no lugar errado. Uma observação nova do mesmo app
-invalida a anterior, e toda observação vence em 120 s.
+**Element handle.** The `AXUIElementRef` does not survive across processes. That is why
+every index shown to the model keeps the path (`AXChildren` indices starting at
+the window) and the identity (role and title). When acting, the bridge
+re-walks the path and checks the identity. If they diverge, it becomes the
+`staleIndex` error, never a click in the wrong place. A new observation of the same app
+invalidates the previous one, and every observation expires in 120 s.
 
-**Árvore.** A árvore é lida por BFS com orçamento (nós, profundidade, filhos por
-nó e prazo), uma chamada `AXUIElementCopyMultipleAttributeValues` por nó, e
-exibida em DFS. Grupos vazios não ganham linha. O frame de cada elemento é
-mostrado **no espaço do screenshot** (`@x,y wxh`), o mesmo das coordenadas
-`x`/`y`. Campo seguro (`AXSecureTextField`) nunca tem o valor lido.
+**Tree.** The tree is read with BFS and a budget (nodes, depth, children per
+node and deadline), one `AXUIElementCopyMultipleAttributeValues` call per node, and
+displayed in DFS. Empty groups get no line. Each element's frame is
+shown **in the screenshot's space** (`@x,y wxh`), the same one as the `x`/`y`
+coordinates. A secure field (`AXSecureTextField`) never has its value read.
 
-**Um só espaço de coordenadas por janela.** x/y e os frames da árvore
-(`@x,y wxh`) estão sempre nos pixels do screenshot daquela janela, ou seja,
-pontos × escala do monitor, reduzidos ao lado máximo (`windowSpace`), **com ou
-sem imagem na observação**. Antes, sem screenshot, eles viravam pontos da janela.
-No teste no app, o agente repetiu "os mesmos passos" de uma observação com
-imagem numa sem imagem: manteve o deslocamento "+15" (que era 7,5 pt) como
-15 pt, e o arrasto caiu **abaixo da linha de texto**, selecionando nada. No
-TextEdit, o arrasto seleciona a linha a +4/+8/+10 pt do topo e nada a
-+13/+15/+20 pt. A explicação que o agente deu ("soltar 2 px fora do campo
-cancela a seleção") não se confirmou: medido, a seleção fica.
+**One coordinate space per window.** x/y and the tree's frames
+(`@x,y wxh`) are always in the pixels of that window's screenshot, that is,
+points × monitor scale, reduced to the longest side (`windowSpace`), **with or
+without an image in the observation**. Before, without a screenshot, they became window points.
+In the test in the app, the agent repeated "the same steps" from an observation with
+an image in one without an image: it kept the "+15" offset (which was 7.5 pt) as
+15 pt, and the drag fell **below the text line**, selecting nothing. In
+TextEdit, the drag selects the line at +4/+8/+10 pt from the top and nothing at
++13/+15/+20 pt. The explanation the agent gave ("releasing 2 px outside the field
+cancels the selection") did not hold up: measured, the selection stays.
 
-**`select_text`.** Seleciona um trecho de um campo de texto **pelo AX**
-(`AXSelectedTextRange`), sem coordenada nem mouse. Funciona com o app em
-segundo plano, e o `type` seguinte substitui a seleção. Ele acha o texto pedido
-(com `occurrence` para repetições) ou seleciona tudo. O JXA não monta o
-`CFRange` sozinho: os bytes vão num `NSData` para o `AXValueCreate`, e o valor
-volta embrulhado com `castRefToObject`. Sem o embrulho, o set responde OK e
-não seleciona nada. Medido no TextEdit atrás do Claude: a 2ª ocorrência de
-"beta", o texto todo, um erro claro para texto inexistente, e "selecionar gama
-+ digitar" trocou só a palavra.
+**`select_text`.** Selects an excerpt of a text field **through AX**
+(`AXSelectedTextRange`), with no coordinate and no mouse. It works with the app in
+the background, and the following `type` replaces the selection. It finds the requested
+text (with `occurrence` for repetitions) or selects everything. JXA does not build the
+`CFRange` on its own: the bytes go in an `NSData` for the `AXValueCreate`, and the value
+comes back wrapped with `castRefToObject`. Without the wrapper, the set answers OK and
+selects nothing. Measured in TextEdit behind Claude: the 2nd occurrence of
+"beta", the whole text, a clear error for nonexistent text, and "select range
++ type" replaced only the word.
 
-**No chat.** Cada ação `cu_*` aparece com a frase do que foi feito ("Clicar no
-elemento 12 · TextEdit") e, embaixo, o que aconteceu (o resumo do
-`cu_computer`, a linha do app no `cu_observe`, os resultados do `cu_query`).
-Um clique mostra a saída completa.
+**In the chat.** Each `cu_*` action appears with the sentence of what was done ("Click
+element 12 · TextEdit") and, below it, what happened (the summary of
+`cu_computer`, the app line in `cu_observe`, the results of `cu_query`).
+A click shows the full output.
 
-**Retorno da seleção.** Depois de arrastar ou de clique duplo/triplo, o
-resultado diz o que ficou selecionado (`op: 'selection'`, `AXSelectedTextRange`
-+ `AXSelectedText`), ou avisa que nada foi e por quê. `triple_click` seleciona a
-linha (só no ponteiro global).
+**Return of the selection.** After dragging or a double/triple click, the
+result says what ended up selected (`op: 'selection'`, `AXSelectedTextRange`
++ `AXSelectedText`), or warns that nothing was and why. `triple_click` selects the
+line (global pointer only).
 
-**Geometria.** No macOS, AX, CGWindowList e eventos usam pontos globais, com
-origem no topo esquerdo do monitor principal e coordenadas negativas para
-monitores à esquerda ou acima. Entre o screenshot e esses pontos só existe a
-razão de escala da janela. A conversão DIP↔px (`screen.dipToScreenPoint`) é do
-Windows e não é usada aqui.
+**Geometry.** On macOS, AX, CGWindowList and events use global points, with the
+origin at the top left of the main monitor and negative coordinates for
+monitors to the left or above. Between the screenshot and those points there is only the
+window's scale ratio. The DIP↔px conversion (`screen.dipToScreenPoint`) is from
+Windows and is not used here.
 
 ## Tools
 
-| Tool | Papel | Gate |
+| Tool | Role | Gate |
 |---|---|---|
-| `cu_apps` | Apps e janelas visíveis (pid, bundle, id, título, tamanho) | Nativa (não pede) |
-| `cu_observe` | Screenshot e árvore numerada de uma janela | Nativa |
-| `cu_query` | Busca na árvore por texto/papel, sem screenshot | Nativa |
-| `cu_permissions` | Status das permissões; `request: true` pede ao usuário | Nativa |
-| `cu_computer` | Ações: left/right/middle/double/triple_click, move, drag, scroll, type, key, set_value, select_text, invoke, open_app, wait | Aprovação por app |
+| `cu_apps` | Visible apps and windows (pid, bundle, id, title, size) | Native (does not ask) |
+| `cu_observe` | Screenshot and numbered tree of a window | Native |
+| `cu_query` | Search in the tree by text/role, without a screenshot | Native |
+| `cu_permissions` | Permission status; `request: true` asks the user | Native |
+| `cu_computer` | Actions: left/right/middle/double/triple_click, move, drag, scroll, type, key, set_value, select_text, invoke, open_app, wait | Approval per app |
 
-O `cu_computer` tenta primeiro a ação de acessibilidade (AXPress, AXValue). No
-ponteiro **dirigido** (o padrão) tudo vai pela acessibilidade, porque o AppKit
-ignora mouse e roda entregues por pid (Fase 0). O clique por x/y vira hit-test
-do AX, a rolagem move a barra de rolagem do AX, e teclado e texto vão por pid.
-Nada move o cursor do usuário, e o app pode ficar em segundo plano. Clique
-duplo, clique do meio, hover e drag exigem o ponteiro **global**, que usa
-eventos HID reais. Com `read_back` (o padrão), a resposta já traz a observação
-seguinte. Se a árvore não mudar, a resposta avisa que a ação talvez
-não tenha funcionado.
+`cu_computer` tries the accessibility action first (AXPress, AXValue). On the
+**directed** pointer (the default) everything goes through accessibility, because AppKit
+ignores mouse and wheel events delivered by pid (Stage 0). The click by x/y becomes an AX
+hit-test, scrolling moves the AX scroll bar, and keyboard and text go by pid.
+Nothing moves the user's cursor, and the app can stay in the background. Double
+click, middle click, hover and drag require the **global** pointer, which uses real
+HID events. With `read_back` (the default), the response already brings the next
+observation. If the tree does not change, the response warns that the action may
+not have worked.
 
-## Segurança
+## Security
 
-- **Denylist, bloqueio duro** em qualquer modo de permissão: cofres de senha
-  (1Password, Bitwarden, LastPass, Dashlane, Keychain, Senhas), Ajustes do
-  Sistema e prompts de segurança. Vale também para observar. É checada no gate
-  (`isForbidden`, pelo texto) e de novo na tool (depois de resolver o app).
-- **O próprio Orbit** nunca é alvo.
-- **Campo de senha**: o agente recusa `type` e `set_value`, seja no elemento
-  indicado, seja no foco do app.
-- **Aprovação por app.** A primeira ação em cada app pede aprovação
-  (`cu:app:<bundleId>`). Nos navegadores a aprovação é por site
-  (`cu:app:<bundleId>@<host>`, com a URL da última observação). As opções são
-  as mesmas de qualquer permissão do Orbit:
-  - **Permitir neste turno:** a mesma regra não pergunta de novo até o turno
-    acabar. Isso vale para toda permissão, não só o Computer Use. Antes era "só
-    esta vez", e o agente pedia a mesma coisa a cada clique;
-  - **Sempre neste chat:** vale pela conversa;
-  - **Sempre:** grava a regra daquele app (ou site), que vale daqui para frente.
+- **Denylist, hard block** in any permission mode: password vaults
+  (1Password, Bitwarden, LastPass, Dashlane, Keychain, Passwords), System
+  Settings and security prompts. It applies to observing too. It is checked at the gate
+  (`isForbidden`, by the text) and again in the tool (after resolving the app).
+- **Orbit itself** is never a target.
+- **Password field**: the agent refuses `type` and `set_value`, whether on the indicated
+  element or on the app's focus.
+- **Approval per app.** The first action in each app asks for approval
+  (`cu:app:<bundleId>`). In browsers the approval is per site
+  (`cu:app:<bundleId>@<host>`, with the URL of the last observation). The options are
+  the same as any Orbit permission:
+  - **Allow in this turn:** the same rule does not ask again until the turn
+    ends. That applies to every permission, not only Computer Use. Before it was "only
+    this time", and the agent asked for the same thing on every click;
+  - **Always in this chat:** applies to the conversation;
+  - **Always:** saves that app's (or site's) rule, which applies from then on.
 
-  Ações que perguntam sempre (como remover worktree) continuam uma a uma. O
-  modo Irrestrito aprova sozinho, como o `bash`.
-- **Prompt injection.** Todo texto vindo da tela vai dentro de
-  `<screen_content untrusted="true">`, e o prompt diz que isso é dado e nunca
-  instrução. Ação que a tela pede e o usuário não pediu: parar e perguntar.
-- **Visibilidade e parada.** Enquanto o agente controla, aparecem a faixa
-  amarela no topo da tela, com o botão **Parar** (painel não ativador, sem
-  foco, do tamanho da faixa: clicar não traz o Orbit para a frente), e o chip
-  "Controlando <app>" no header, com **Parar**. O atalho global
-  **⌘⇧.** (ou ⌘⇧Esc) para tudo. Os atalhos, a faixa e os painéis duram o
-  turno inteiro: com o vencimento antigo de 20 s sem ação, o agente pensando
-  entre duas ações perdia o atalho, e o ⌘⇧. não parava nada. Parar aborta o turno, o que mata a bridge em andamento e
-  limpa as aprovações da conversa. Fim do turno ou 20 s sem atividade encerram
-  o controle, soltam o atalho e devolvem as flags de acessibilidade ligadas nos
+  Actions that always ask (like removing a worktree) stay one by one. The
+  Unrestricted mode approves on its own, like `bash`.
+- **Prompt injection.** Every text coming from the screen goes inside
+  `<screen_content untrusted="true">`, and the prompt says that this is data and never
+  an instruction. An action the screen asks for and the user did not ask for: stop and ask.
+- **Visibility and stopping.** While the agent is in control, the yellow banner
+  appears at the top of the screen, with the **Stop** button (a non-activating panel, without
+  focus, the size of the banner: clicking does not bring Orbit to the front), and the
+  "Controlling <app>" chip in the header, with **Stop**. The global shortcut
+  **⌘⇧.** (or ⌘⇧Esc) stops everything. The shortcuts, the banner and the panels last the
+  whole turn: with the old 20 s expiry without action, the agent thinking
+  between two actions lost the shortcut, and ⌘⇧. did not stop anything. Stopping aborts the turn, which kills the
+  bridge in progress and clears the conversation's approvals. The end of the turn or 20 s without activity end
+  the control, release the shortcut and restore the accessibility flags turned on in the
   apps.
 
-## Com o Orbit fora de foco
+## With Orbit out of focus
 
-Enquanto o agente controla outro app e nenhuma janela do Orbit tem foco, uma
-janela transparente por cima da tela mostra dois painéis no desenho da tela
-cheia do navegador (alça recolhida que abre no hover):
+While the agent controls another app and no Orbit window has focus, a
+transparent window over the screen shows two panels in the design of the browser's
+fullscreen (a collapsed handle that opens on hover):
 
-- **esquerda: a conversa**, ao vivo, com os cards de aprovação. Um pedido novo
-  abre o painel sozinho, senão o agente ficaria esperando um card que ninguém vê;
-- **direita: as ações** `cu_*` desta conversa, da mais recente para a mais
-  antiga, cada uma com a frase do que fez, o resumo da saída (clique expande) e
-  o botão Parar. No topo, a **miniatura do último screenshot** da janela
-  controlada, com o alvo da última ação marcado (retângulo no elemento, círculo
-  no ponto). Ela mostra *onde* o agente agiu mesmo com o app atrás de outras
-  janelas, porque o screenshot é da janela, não da tela.
+- **left: the conversation**, live, with the approval cards. A new request
+  opens the panel on its own, otherwise the agent would be waiting for a card nobody sees;
+- **right: the `cu_*` actions** of this conversation, from the most recent to the
+  oldest, each with the sentence of what it did, the output summary (a click expands) and
+  the Stop button. At the top, the **thumbnail of the last screenshot** of the window
+  being controlled, with the target of the last action marked (a rectangle on the element, a circle
+  on the point). It shows *where* the agent acted even with the app behind other
+  windows, because the screenshot is of the window, not of the screen.
 
-**Screenshots fora da galeria.** Com uma observação por ação (`read_back`),
-gravar cada screenshot na galeria encheria a aba de mídia com dezenas de
-arquivos por tarefa. O modelo recebe a imagem pelo `toModelOutput`, e o main
-guarda só o último screenshot de cada conversa, em memória (`computer/shots.ts`),
-apagado quando o controle termina.
+**Screenshots outside the gallery.** With one observation per action (`read_back`),
+saving every screenshot in the gallery would fill the media tab with dozens of
+files per task. The model receives the image through `toModelOutput`, and main
+keeps only the last screenshot of each conversation, in memory (`computer/shots.ts`),
+deleted when the control ends.
 
-**Cursor no ponteiro global.** No modo global, o cursor real desliza até o alvo
-numa curva suavizada (~250 ms) antes de clicar, rolar ou arrastar, em vez de
-pular. No modo dirigido não há cursor nenhum, nem desenhado: o app costuma estar
-em segundo plano ou coberto, e um cursor pintado por cima da tela apontaria para
-a janela da frente. É a miniatura com o marcador que mostra o lugar. (O OCU
-desenha um cursor de software sobre o app; ele só faz sentido com a janela alvo
-visível.)
+**Cursor on the global pointer.** In global mode, the real cursor slides to the target
+on a smoothed curve (~250 ms) before clicking, scrolling or dragging, instead of
+jumping. In directed mode there is no cursor at all, not even drawn: the app is usually
+in the background or covered, and a cursor painted over the screen would point at
+the front window. It is the thumbnail with the marker that shows the place. (OCU
+draws a software cursor over the app; it only makes sense with the target window
+visible.)
 
-Peças: `computer/panels.ts` (a janela: área útil da tela, `focusable: false`,
-atravessável pelo mouse fora dos painéis, nível `floating`, abaixo da faixa
-amarela), `computer-panels.html` + `src/computer-panels-main.tsx` (entrada
-própria do renderer, sem os sincronizadores da janela principal) e
-`src/components/computer-panels.tsx`. A janela espelha o chat por
-`startChatMirror()` no store das sessões: aplica os eventos ao estado e pula os
-efeitos colaterais (disco, preferências e, principalmente, a fila de mensagens,
-que a janela principal já dispara).
+Pieces: `computer/panels.ts` (the window: screen work area, `focusable: false`,
+pass-through to the mouse outside the panels, `floating` level, below the yellow
+banner), `computer-panels.html` + `src/computer-panels-main.tsx` (the
+renderer's own entry, without the main window's synchronizers) and
+`src/components/computer-panels.tsx`. The window mirrors the chat through
+`startChatMirror()` in the sessions store: it applies the events to the state and skips the
+side effects (disk, preferences and, above all, the message queue,
+which the main window already fires).
 
-## Gravação de uma janela
+## Recording a window
 
-`cu_record_start` → ações com `cu_computer` → `cu_record_stop` grava **uma
-janela** e entrega um MP4 no chat (e na galeria).
+`cu_record_start` → actions with `cu_computer` → `cu_record_stop` records **one
+window** and delivers an MP4 in the chat (and in the gallery).
 
-- **Captura:** é do próprio Electron. O `desktopCapturer` acha a janela pelo
-  CGWindowID, e uma janela oculta grava com o `MediaRecorder` (H.264). Por
-  baixo é o ScreenCaptureKit: a janela sai inteira **mesmo coberta por outras**
-  (medido). A página do gravador é um arquivo, porque `data:` não é contexto
-  seguro e não tem `mediaDevices`. O bruto vai para o disco a cada segundo.
-- **Sem tempo ocioso:** a gravação roda direto e é **cortada depois**
-  (`recording-plan.ts`). Cada ação fica com 0,3 s antes e 0,9 s depois, trechos
-  a menos de 0,5 s se juntam, e `wait` fica inteiro (é o agente segurando um
-  estado de propósito). Cortar depois, em vez de pausar o gravador, não
-  depende da latência do pause/resume.
-- **Pulso de clique:** um retângulo amarelo no alvo de cada ação, no instante
-  dela (`drawbox`). No modo dirigido, sem cursor na tela, é ele que mostra o
-  que foi clicado.
-- **O agente sabe o tempo:** o `cu_record_stop` devolve a linha do tempo do
-  **vídeo final** ("0.3–0.5s left_click on element 3"), para refinar com o
-  `video_render` (EDL) se precisar. `cu_record_mark` põe marcos.
-- **Não se perde:** se o turno acaba, ou se a pessoa clica Parar ou aperta ⌘⇧.
-  sem o `cu_record_stop`, o vídeo é montado assim mesmo e vai para a galeria.
-  Limite de 20 min por gravação.
-- **Medido em 2026-10-23:** 9,8 s gravados com 6 s de ociosidade viraram
-  **2,7 s** de vídeo, com 7,1 s cortados. A montagem levou 0,3 s, e o arquivo
-  final tem 22 KB. Enquanto grava, o macOS mostra o ícone de "janela sendo
-  compartilhada" na barra de título, e ele aparece no vídeo.
-- Para páginas web, o `browser_record` (roteiro declarativo) continua melhor.
+- **Capture:** it is Electron's own. `desktopCapturer` finds the window by
+  CGWindowID, and a hidden window records with `MediaRecorder` (H.264). Underneath
+  it is ScreenCaptureKit: the window comes out whole **even covered by others**
+  (measured). The recorder's page is a file, because `data:` is not a secure
+  context and has no `mediaDevices`. The raw data goes to disk every second.
+- **No idle time:** the recording runs straight and is **cut afterwards**
+  (`recording-plan.ts`). Each action gets 0.3 s before and 0.9 s after, segments
+  less than 0.5 s apart are joined, and `wait` stays whole (it is the agent holding a
+  state on purpose). Cutting afterwards, instead of pausing the recorder, does not
+  depend on the pause/resume latency.
+- **Click pulse:** a yellow rectangle on the target of each action, at the instant of
+  it (`drawbox`). In directed mode, with no cursor on the screen, it is what shows
+  what was clicked.
+- **The agent knows the timing:** `cu_record_stop` returns the timeline of the
+  **final video** ("0.3–0.5s left_click on element 3"), to refine with
+  `video_render` (EDL) if needed. `cu_record_mark` places marks.
+- **Nothing is lost:** if the turn ends, or if the person clicks Stop or presses ⌘⇧.
+  without `cu_record_stop`, the video is assembled anyway and goes to the gallery.
+  Limit of 20 min per recording.
+- **Measured on 2026-10-23:** 9.8 s recorded with 6 s of idleness became
+  **2.7 s** of video, with 7.1 s cut. The assembly took 0.3 s, and the final file
+  has 22 KB. While recording, macOS shows the "window being shared" icon in the title
+  bar, and it shows up in the video.
+- For web pages, `browser_record` (declarative script) remains better.
 
-## Velocidade, subagente e lote
+## Speed, subagent and batch
 
-- **Read_back em texto.** Depois de cada ação, o `cu_computer` devolve a árvore
-  em texto. O screenshot só entra no contexto com `screenshot: true` ou quando a
-  árvore está quase vazia. A captura continua acontecendo, porque é ela que
-  atualiza a miniatura. No teste real (Chrome, ~30 ações em 12 min), o custo
-  crescia a cada passo, porque o histórico reenviava todos os screenshots.
-- **`cu_batch`.** Até 15 ações num app numa chamada só, em ordem, parando no
-  primeiro erro (que é dito pelo número) e com uma observação no fim. Serve para
-  sequências previsíveis, como clicar no endereço, digitar e dar Enter.
-- **`computer_task` (subagente).** O agente principal manda um objetivo e um
-  agente dedicado roda o laço com **contexto curto** (só o objetivo e as
-  observações dele, nunca a conversa), usando o modelo de **Preferências →
-  Computador → Modelo do agente de computador** (padrão: o da conversa). As
-  tools `cu_*` dele usam o mesmo `sessionId`, então a faixa, o chip, a miniatura
-  e uma gravação em andamento enxergam o que ele faz, e as permissões aparecem na
-  conversa. Gravação e permissões ficam com o agente principal.
+- **Read_back in text.** After each action, `cu_computer` returns the tree
+  as text. The screenshot only enters the context with `screenshot: true` or when the
+  tree is almost empty. The capture keeps happening, because it is what
+  updates the thumbnail. In the real test (Chrome, ~30 actions in 12 min), the cost
+  grew at every step, because the history resent all the screenshots.
+- **`cu_batch`.** Up to 15 actions in one app in a single call, in order, stopping at
+  the first error (which is told by its number) and with one observation at the end. It serves for
+  predictable sequences, like clicking the address, typing and pressing Enter.
+- **`computer_task` (subagent).** The main agent sends an objective and a dedicated
+  agent runs the loop with a **short context** (only the objective and its own
+  observations, never the conversation), using the model from **Preferences →
+  Computer → Computer agent model** (default: the conversation's). Its `cu_*`
+  tools use the same `sessionId`, so the banner, the chip, the thumbnail
+  and a recording in progress see what it does, and the permissions show up in the
+  conversation. Recording and permissions stay with the main agent.
 
-## Gravação: o que mudou depois do teste no Chrome
+## Recording: what changed after the Chrome test
 
-- **Traz a janela para a frente** ao começar (`bring_to_front`, padrão
-  verdadeiro): ativa o app e faz `AXRaise` na janela. Gravando com a janela
-  atrás, a pessoa não percebia que tinha começado.
-- **Pulso só em clique.** Na rolagem, o "alvo" é o centro da janela, e o vídeo
-  enchia de quadrados amarelos.
-- **Cursor desenhado no modo dirigido.** Uma seta no estilo do macOS desliza de
-  alvo em alvo (450 ms, suavizada) e chega no instante de cada ação. No modo
-  global ela não aparece, porque o cursor real já está no vídeo. Validado com o
-  ffmpeg: parada no 1º alvo, no meio do caminho e no 2º alvo.
-- **Ponteiro global avisa.** A faixa diz "Orbit está usando o seu mouse em … —
-  não mexa". No teste, o ponteiro global estava ligado, e o agente e a pessoa
-  disputaram o mesmo cursor, o que apareceu misturado no vídeo.
+- **Brings the window to the front** when starting (`bring_to_front`, default
+  true): activates the app and does `AXRaise` on the window. Recording with the window
+  behind, the person did not notice it had started.
+- **Pulse only on click.** On scrolling, the "target" is the center of the window, and the video
+  filled with yellow squares.
+- **Cursor drawn in directed mode.** A macOS-style arrow slides from
+  target to target (450 ms, smoothed) and arrives at the instant of each action. In global
+  mode it does not appear, because the real cursor is already in the video. Validated with
+  ffmpeg: a still on the 1st target, in the middle of the path and on the 2nd target.
+- **Global pointer warns.** The banner says "Orbit is using your mouse on … —
+  do not touch". In the test, the global pointer was on, and the agent and the person
+  fought over the same cursor, which showed up mixed in the video.
 
-## Permissões do macOS
+## macOS permissions
 
-| Permissão | Para quê | Sem ela |
+| Permission | For what | Without it |
 |---|---|---|
-| Acessibilidade | Árvore AX, ações AX e eventos de teclado/mouse | Nada funciona (`axDenied`) |
-| Gravação de Tela | Screenshot (`screencapture -l`) e títulos de janela | Só a árvore (o texto avisa) |
+| Accessibility | AX tree, AX actions and keyboard/mouse events | Nothing works (`axDenied`) |
+| Screen Recording | Screenshot (`screencapture -l`) and window titles | Only the tree (the text warns) |
 
-O TCC atribui a permissão ao **processo responsável**: o `osascript` e o
-`screencapture` filhos herdam a do Orbit. Em desenvolvimento o dono é o binário
-do **Electron**, não o Orbit, e o item aparece como "Electron" em Ajustes. O
-botão **Testar** das Preferências faz uma leitura real pelo processo filho, o que
-prova a herança de verdade. A flag `isTrustedAccessibilityClient` sozinha não
-prova isso. No Sequoia, a Gravação de Tela volta a pedir confirmação
-periodicamente.
+TCC assigns the permission to the **responsible process**: the child `osascript` and
+`screencapture` inherit Orbit's. In development the owner is the **Electron**
+binary, not Orbit, and the item shows up as "Electron" in Settings. The
+**Test** button in Preferences does a real read through the child process, which
+proves the inheritance for real. The `isTrustedAccessibilityClient` flag alone does not
+prove it. On Sequoia, Screen Recording goes back to asking for confirmation
+periodically.
 
-**Pedido da Gravação de Tela.** O **Pedir** chama `CGRequestScreenCaptureAccess`
-pela bridge, ou seja, num filho do Orbit, para o pedido sair em nome dele. Se
-não vier, as Preferências explicam o caminho manual. No build 0.1.4 instalado
-(não notarizado), o macOS negou o pedido "por política", sem diálogo e sem pôr
-o Orbit na lista. Só o **+** da lista resolveu. Um build antigo com o
-identificador padrão do template (`YourAppID`, release 0.1.1) também aparecia
-como "Orbit" nas duas listas e confundia o teste.
+**Screen Recording request.** **Request** calls `CGRequestScreenCaptureAccess`
+through the bridge, that is, in a child of Orbit, so the request goes out in its name. If
+it does not come, Preferences explain the manual path. In the installed 0.1.4 build
+(not notarized), macOS denied the request "by policy", with no dialog and without putting
+Orbit in the list. Only the list's **+** solved it. An old build with the template's
+default identifier (`YourAppID`, release 0.1.1) also appeared
+as "Orbit" in both lists and confused the test.
 
-Não usamos o System Events, então nem `NSAppleEventsUsageDescription` nem a
-entitlement `com.apple.security.automation.apple-events` são necessários. Se
-algum caminho passar a usá-lo, os dois entram juntos.
+We do not use System Events, so neither `NSAppleEventsUsageDescription` nor
+the `com.apple.security.automation.apple-events` entitlement are needed. If
+some path starts using it, both go in together.
 
-## Fase 0: medição
+## Stage 0: measurement
 
-O spike mede a bridge antes de qualquer decisão de produto:
+The spike measures the bridge before any product decision:
 
 ```bash
 node apps/desktop/scripts/cu-probe.mjs --runs 5
 node apps/desktop/scripts/cu-probe.mjs --frozen
 ```
 
-**Critérios de aprovação** (fixados antes de medir):
+**Approval criteria** (fixed before measuring):
 
-| Critério | Aprovado se |
+| Criterion | Approved if |
 |---|---|
-| Latência de observe | p95 < 1,5 s com 250 nós em Safari e TextEdit (bridge fria) |
-| Chromium | Árvore não vazia em Chrome e VS Code com a flag de acessibilidade |
-| Timeout | App congelado (SIGSTOP) responde em < 3 s, com árvore parcial |
-| Clique em background | Funciona em ≥ 1 app Chromium e 1 nativo sem mover o cursor (smoke) |
-| TCC | A permissão do Orbit vale para os filhos, em dev e no build assinado |
-| Captura | p95 < 600 ms por janela |
+| Observe latency | p95 < 1.5 s with 250 nodes in Safari and TextEdit (cold bridge) |
+| Chromium | Non-empty tree in Chrome and VS Code with the accessibility flag |
+| Timeout | Frozen app (SIGSTOP) responds in < 3 s, with a partial tree |
+| Background click | Works in ≥ 1 Chromium app and 1 native one without moving the cursor (smoke) |
+| TCC | Orbit's permission applies to the children, in dev and in the signed build |
+| Capture | p95 < 600 ms per window |
 
-Se a latência ou o TCC reprovarem, a decisão 2 é reaberta e entra o helper
-Swift. Se reprovar só o clique em background, o ponteiro "dirigido" deixa de ser
-o padrão para apps Chromium.
+If the latency or TCC fail, decision 2 is reopened and the Swift helper comes in.
+If only the background click fails, the "directed" pointer stops being
+the default for Chromium apps.
 
-### Resultados
+### Results
 
-Medido em 2026-10-23, Darwin 25.4.0 (Apple Silicon), pelo Electron 44.3.0 do
-projeto aberto pelo LaunchServices (o mesmo caminho de permissão do Orbit em
-dev), 5 execuções por medição:
+Measured on 2026-10-23, Darwin 25.4.0 (Apple Silicon), by the project's Electron 44.3.0
+opened by LaunchServices (the same permission path as Orbit in
+dev), 5 runs per measurement:
 
-| Critério | Resultado | |
+| Criterion | Result | |
 |---|---|---|
-| Latência de observe | TextEdit: p95 **166–196 ms**. Safari (250 nós): p95 **390–421 ms**. Claude/Electron (250 nós): p95 **342–346 ms** | ✓ |
-| Chromium | Electron (Claude): **13 nós** lidos logo após ligar `AXManualAccessibility` → **250+** depois de ~300 ms | ✓ (com espera na 1ª vez) |
-| Timeout | App congelado (SIGSTOP): resposta em **615–623 ms**, erro `axTimeout` acionável (a lista de janelas já não responde, então não há árvore parcial) | ✓ |
-| Clique em background | Evento de mouse **por pid é ignorado** pelo AppKit (TextEdit, nem na frente nem atrás). Hit-test + AXPress/foco por AX: ✓ em segundo plano, cursor parado | ✓ com mudança de desenho |
-| Teclado em background | Unicode por pid (acentos, ✓, 👍🏽) chega com o app atrás | ✓ |
-| Rolagem em background | Roda por pid ignorada; barra de rolagem por `AXValue`: ✓ (300 px → conteúdo sobe 306 px) | ✓ com mudança de desenho |
-| TCC | `osascript` filho atribuído ao Electron do Orbit (log do `tccd`) e com `accessibility: true` | ✓ em dev; build assinado ainda não medido |
-| Captura | TextEdit p95 **107–109 ms**, Safari **191–197 ms**, Electron **145–158 ms** | ✓ |
+| Observe latency | TextEdit: p95 **166–196 ms**. Safari (250 nodes): p95 **390–421 ms**. Claude/Electron (250 nodes): p95 **342–346 ms** | ✓ |
+| Chromium | Electron (Claude): **13 nodes** read right after turning `AXManualAccessibility` on → **250+** after ~300 ms | ✓ (with a wait the 1st time) |
+| Timeout | Frozen app (SIGSTOP): response in **615–623 ms**, actionable `axTimeout` error (the window list no longer responds, so there is no partial tree) | ✓ |
+| Background click | Mouse event **by pid is ignored** by AppKit (TextEdit, neither in front nor behind). Hit-test + AXPress/focus by AX: ✓ in the background, cursor still | ✓ with a design change |
+| Background keyboard | Unicode by pid (accents, ✓, 👍🏽) arrives with the app behind | ✓ |
+| Background scrolling | Wheel by pid ignored; scroll bar by `AXValue`: ✓ (300 px → content goes up 306 px) | ✓ with a design change |
+| TCC | Child `osascript` assigned to Orbit's Electron (`tccd` log) and with `accessibility: true` | ✓ in dev; signed build not measured yet |
+| Capture | TextEdit p95 **107–109 ms**, Safari **191–197 ms**, Electron **145–158 ms** | ✓ |
 
-Custos fixos: subir o `osascript` ~55 ms, invocação mínima da bridge ~115 ms,
-lista de apps e janelas p95 ~150 ms.
+Fixed costs: starting `osascript` ~55 ms, minimal bridge invocation ~115 ms,
+apps and windows list p95 ~150 ms.
 
-**O que a Fase 0 mudou no código:**
+**What Stage 0 changed in the code:**
 
-1. **Conversão da árvore 4x mais rápida.** O Safari levava p95 de 1,2 a 2,8 s
-   (reprovado). Os números finais acima já são da bridge corrigida. O perfil mostrou 65% do tempo em converter valores JXA → JS
-   (vários `isKindOfClass` por atributo e `description` em todo atributo
-   ausente). Trocado por um `ObjC.unwrap` raso do array e um por item. A
-   `AXURL` saiu do pedido em lote e só é lida em links e áreas web. Resultado:
-   ~830 ms → ~190 ms de conversão, e p95 de 390 ms no Safari.
-2. **Frame de AXValue.** O `unwrap` de um AXValue é um `{}` vazio, não
-   `undefined`, e por isso posição e tamanho saem do valor bruto. Os testes com
-   driver falso não pegavam isso; o smoke pegou.
-3. **Texto Unicode.** O `CGEventKeyboardSetUnicodeString` recebia a string JS e
-   a descartava: todo caractere virava a tecla 0 ("a"). A função foi religada
-   com `ObjC.bindFunction(... 'void*')`, com os bytes UTF-16 de um `NSData`.
-4. **Modo dirigido sem mouse.** Como o AppKit ignora mouse e roda por pid, o
-   clique por coordenada no modo dirigido virou hit-test do AX
-   (`AXUIElementCopyElementAtPosition` → AXPress/AXShowMenu ou foco em campo de
-   texto, subindo até 4 ancestrais) e a rolagem virou a barra de rolagem do AX
-   (com Page Up/Down de reserva). Clique duplo, clique do meio, hover e drag
-   passam a exigir o ponteiro global, com erro explicativo. É o mesmo recorte do
+1. **Tree conversion 4x faster.** Safari took a p95 of 1.2 to 2.8 s
+   (rejected). The final numbers above are already from the fixed bridge. The profile showed 65% of the time converting JXA → JS values
+   (several `isKindOfClass` per attribute and `description` on every missing
+   attribute). Replaced by a shallow `ObjC.unwrap` of the array and one per item. The
+   `AXURL` left the batch request and is only read on links and web areas. Result:
+   ~830 ms → ~190 ms of conversion, and a p95 of 390 ms in Safari.
+2. **AXValue frame.** The `unwrap` of an AXValue is an empty `{}`, not
+   `undefined`, and that is why position and size come from the raw value. The tests with a
+   fake driver did not catch that; the smoke did.
+3. **Unicode text.** `CGEventKeyboardSetUnicodeString` received the JS string and
+   discarded it: every character became key 0 ("a"). The function was rewired
+   with `ObjC.bindFunction(... 'void*')`, with the UTF-16 bytes of an `NSData`.
+4. **Directed mode without a mouse.** Since AppKit ignores mouse and wheel events by pid, the
+   click by coordinate in directed mode became an AX hit-test
+   (`AXUIElementCopyElementAtPosition` → AXPress/AXShowMenu or focus on a text
+   field, going up to 4 ancestors) and scrolling became the AX scroll bar
+   (with Page Up/Down as a fallback). Double click, middle click, hover and drag
+   now require the global pointer, with an explanatory error. It is the same cut as
    OCU.
-5. **Ação sem confirmação.** Uma ação que abre animação ou diálogo pode
-   responder -25204 já tendo rodado (o botão de tela cheia entrou em tela cheia
-   e respondeu -25204). Agora isso conta como "provavelmente executada", e a
-   bridge não tenta outra ação nem o ancestral.
-6. **Chromium.** A primeira leitura depois de ligar a flag espera 450 ms.
-   `AXEnhancedUserInterface` ficou só para navegadores Chromium, porque em app
-   nativo ele mexe em animação de janela. O Chromium mantém a árvore ligada
-   mesmo depois do `restore`.
+5. **Action without confirmation.** An action that opens an animation or a dialog may
+   answer -25204 having already run (the fullscreen button entered fullscreen
+   and answered -25204). Now that counts as "probably executed", and the
+   bridge does not try another action nor the ancestor.
+6. **Chromium.** The first read after turning the flag on waits 450 ms.
+   `AXEnhancedUserInterface` was left only for Chromium browsers, because in a native
+   app it messes with window animation. Chromium keeps the tree on
+   even after `restore`.
 
-**Pendente:** clique dirigido em Chrome/VS Code de verdade (não estavam abertos;
-o Electron medido foi o app Claude, só leitura) e o TCC no build assinado.
+**Pending:** directed click in real Chrome/VS Code (they were not open;
+the Electron measured was the Claude app, read-only) and TCC in the signed build.
 
-**Como medir pelo mesmo caminho do app.** Rodar a probe pelo Electron do projeto,
-aberto pelo LaunchServices, faz o `osascript` herdar a permissão do Electron,
-exatamente como no Orbit em dev:
+**How to measure through the same path as the app.** Running the probe through the project's Electron,
+opened by LaunchServices, makes `osascript` inherit Electron's permission,
+exactly as in Orbit in dev:
 
 ```bash
 open -n -W -a "$PWD/node_modules/electron/dist/Electron.app" --env ELECTRON_RUN_AS_NODE=1 --stdout /tmp/cu-probe.txt --stderr /tmp/cu-probe.err --args "$PWD/apps/desktop/scripts/cu-probe.mjs" --runs 5
 ```
 
-**Armadilha em dev: vários "Electron".** Cada projeto Electron da máquina tem o
-próprio `Electron.app` com assinatura ad-hoc (`Identifier=Electron`), e o TCC
-amarra a permissão ao hash do binário. Em Ajustes, todos aparecem como
-"Electron": liberar o de outro projeto (aqui, o Electron 30.5.1 do Fracta) não
-libera o do Orbit (44.3.0). Para criar a entrada certa, o próprio binário deve
-pedir a permissão (`isTrustedAccessibilityClient(true)` e uma chamada a
-`desktopCapturer.getSources`). É o que o botão "Pedir" das Preferências faz.
+**Trap in dev: several "Electron".** Every Electron project on the machine has its
+own `Electron.app` with an ad-hoc signature (`Identifier=Electron`), and TCC
+ties the permission to the binary's hash. In Settings, they all show up as
+"Electron": freeing another project's (here, Fracta's Electron 30.5.1) does not
+free Orbit's (44.3.0). To create the right entry, the binary itself must
+ask for the permission (`isTrustedAccessibilityClient(true)` and a call to
+`desktopCapturer.getSources`). That is what the Preferences' "Request" button does.
 
-Para diagnosticar, o log do `tccd` mostra a quem a permissão foi atribuída e o
-veredito (`authValue`: 0 negado, 1 sem entrada, 2 permitido):
+To diagnose, the `tccd` log shows whom the permission was assigned to and the
+verdict (`authValue`: 0 denied, 1 no entry, 2 allowed):
 
 ```bash
 /usr/bin/log show --last 2m --style compact --predicate 'process == "tccd"' | grep -E "AUTHREQ_ATTRIBUTION|AUTHREQ_RESULT"
 ```
 
-Em 2026-10-23, o log confirmou que o `osascript` filho é atribuído ao Electron
-do Orbit (`responsible_path=…/Orbit/node_modules/electron/…/Electron`). A herança
-funciona. O que faltava era a entrada certa ligada em Ajustes.
+On 2026-10-23, the log confirmed that the child `osascript` is assigned to Orbit's
+Electron (`responsible_path=…/Orbit/node_modules/electron/…/Electron`). The inheritance
+works. What was missing was the right entry turned on in Settings.
 
-**Orbit em `npm run dev` é do terminal.** No primeiro teste no app, as
-Preferências mostravam "não concedido" com o Electron liberado. A cadeia era
-`Electron ← node ← npm run dev ← zsh ← login ← Terminal.app`, e o log do `tccd`
-registrava todos os pedidos do Orbit com `responsible=com.apple.Terminal`. Quem
-roda o app por um terminal precisa liberar **o terminal** (Terminal, iTerm,
-VS Code…) em Acessibilidade e Gravação de Tela. Abrir pelo Finder ou pelo
-LaunchServices torna o próprio app o dono. As Preferências → Computador mostram
-esse app (`responsibleApp()`: sobe pelos processos pais até o primeiro `.app`).
+**Orbit under `npm run dev` belongs to the terminal.** In the first test in the app, the
+Preferences showed "not granted" with Electron freed. The chain was
+`Electron ← node ← npm run dev ← zsh ← login ← Terminal.app`, and the `tccd` log
+recorded all of Orbit's requests with `responsible=com.apple.Terminal`. Whoever
+runs the app from a terminal needs to free **the terminal** (Terminal, iTerm,
+VS Code…) in Accessibility and Screen Recording. Opening from Finder or from
+LaunchServices makes the app itself the owner. Preferences → Computer show
+that app (`responsibleApp()`: climbs through the parent processes up to the first `.app`).
 
-**Sem as tools, o agente improvisava.** Com o Computer Use desligado na
-conversa, o agente ofereceu `osascript` + System Events no bash, o que passa
-por fora da denylist, da aprovação por app e da recusa de campo de senha. Agora
-o prompt, no macOS, diz como ligar e proíbe o improviso, e o gate pede
-aprovação para `osascript` com System Events (`bash:gui-automation`).
+**Without the tools, the agent improvised.** With Computer Use off in the
+conversation, the agent offered `osascript` + System Events in bash, which goes
+around the denylist, the approval per app and the password-field refusal. Now
+the prompt, on macOS, says how to turn it on and forbids the improvisation, and the gate asks for
+approval for `osascript` with System Events (`bash:gui-automation`).
 
-A lição para o produto: a permissão é de quem **lança** o processo filho. O
-Orbit chama `osascript` direto pelo `child_process`, então herda a do próprio
-app. Um wrapper que se declare responsável (como o `disclaimer` do Claude)
-quebraria essa herança.
+The lesson for the product: the permission belongs to whoever **launches** the child
+process. Orbit calls `osascript` directly through `child_process`, so it inherits the
+app's own. A wrapper that declares itself responsible (like Claude's `disclaimer`)
+would break that inheritance.
 
-## Como validar
+## How to validate
 
-1. Conceda Acessibilidade e Gravação de Tela ao Electron do projeto e rode a
-   probe e o smoke por ele (o terminal do Claude Code não serve: o `disclaimer`
-   no meio da cadeia o torna dono das próprias permissões):
+1. Grant Accessibility and Screen Recording to the project's Electron and run the
+   probe and the smoke through it (Claude Code's terminal does not work: the `disclaimer`
+   in the middle of the chain makes it the owner of its own permissions):
    ```bash
    open -n -W -a "$PWD/node_modules/electron/dist/Electron.app" --env ELECTRON_RUN_AS_NODE=1 --stdout /tmp/cu-smoke.txt --stderr /tmp/cu-smoke.err --args "$PWD/apps/desktop/scripts/cu-smoke.mjs" --act
    ```
-   O smoke só age num documento novo do TextEdit que ele mesmo abre.
-2. No app: Preferências → Computador → ligar, conceder as permissões ao
-   Orbit/Electron, clicar em **Testar**.
-3. Numa conversa com o modo Computador ligado, peça algo como "abra o TextEdit e
-   escreva uma lista de compras". O esperado: o card de aprovação, a faixa no
-   topo, o chip com Parar, e ⌘⇧. interrompendo o turno.
+   The smoke only acts on a new TextEdit document that it opens itself.
+2. In the app: Preferences → Computer → turn it on, grant the permissions to
+   Orbit/Electron, click **Test**.
+3. In a conversation with Computer mode on, ask for something like "open TextEdit and
+   write a shopping list". The expected: the approval card, the top banner,
+   the chip with Stop, and ⌘⇧. interrupting the turn.
 
-Testes automáticos (`vitest`, com driver falso, sem tocar no SO):
+Automatic tests (`vitest`, with a fake driver, without touching the OS):
 `electron/lib/computer/*.test.ts`, `permission/rules.test.ts`,
-`permission/modo-global.test.ts` e `app-settings.test.ts`.
+`permission/global-mode.test.ts` and `app-settings.test.ts`.
 
-## Fora da v1
+## Outside v1
 
-- **Windows**: plano e estado em [computer-use-windows.md](computer-use-windows.md).
-- **Linux**: AT-SPI via PyGObject. Ficam para o plano dele a dependência de
-  `python3-gi`, a acessibilidade habilitada e o Wayland (captura e injeção só
-  via portal, best-effort).
-- Rotinas, esteira e celular, display virtual, `select_text` e aba
-  "Computador" no painel direito (Fase 2 de polimento). O cursor desenhado saiu
-  do plano: veja "Cursor no ponteiro global".
+- **Windows**: plan and state in [computer-use-windows.md](computer-use-windows.md).
+- **Linux**: AT-SPI via PyGObject. The dependence on
+  `python3-gi`, the accessibility enabled and Wayland (capture and injection only
+  through a portal, best-effort) are left for its plan.
+- Routines, pipeline and mobile, virtual display, `select_text` and a "Computer"
+  tab in the right panel (polishing Stage 2). The drawn cursor left
+  the plan: see "Cursor on the global pointer".

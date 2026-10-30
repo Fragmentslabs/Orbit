@@ -30,23 +30,23 @@ import { cueText, matchLanguage, parseSubtitleFile, timestampedCues, type Subtit
 import { resolveWritePath, type ToolContext } from './context'
 
 /**
- * Mídia por LINK: baixar vídeo, extrair áudio, ler a transcrição e (com o
- * texto em mãos) resumir.
+ * Media by LINK: download video, extract audio, read the transcript and (with the
+ * text in hand) summarize.
  *
- * Quem faz o trabalho pesado é o yt-dlp, que resolve milhares de sites; o que
- * este módulo acrescenta é o que ele não faz sozinho:
+ * The one doing the heavy lifting is yt-dlp, which handles thousands of sites; what
+ * this module adds is what it does not do on its own:
  *
- *  - decidir por QUAL transcrição: a legenda que o site já tem (segundos,
- *    sem modelo nenhum) antes de baixar o áudio e passar pelo motor de ditado;
- *  - entregar o resultado no lugar certo: o acervo do próprio app e a aba
- *    Mídia, ou a pasta do projeto quando o pedido diz onde salvar;
- *  - relatar números medidos (duração, tamanho, resolução, idioma da legenda),
- *    nunca o que o modelo de vídeo promete.
+ *  - deciding by WHICH transcript: the subtitles the site already has (seconds,
+ *    with no model at all) before downloading the audio and running it through the dictation engine;
+ *  - delivering the result in the right place: the app's own collection and the
+ *    Media tab, or the project folder when the request says where to save;
+ *  - reporting measured numbers (duration, size, resolution, subtitle language),
+ *    never what the video model promises.
  *
- * Resumir NÃO é uma tool: é o que o agente faz com o texto que a transcrição
- * devolve. Uma tool "resumir" esconderia a transcrição e impediria o usuário
- * de pedir o texto; do jeito que está, pedir um resumo é chamar
- * ytdlp_transcript com deliver "context" e escrever o resumo.
+ * Summarizing is NOT a tool: it is what the agent does with the text the transcript
+ * returns. A "summarize" tool would hide the transcript and prevent the user
+ * from asking for the text; the way it is, asking for a summary is calling
+ * ytdlp_transcript with deliver "context" and writing the summary.
  */
 
 const SAFE_SESSION = /^[A-Za-z0-9_-]{1,80}$/
@@ -54,9 +54,9 @@ const VIDEO_EXT = new Set(['mp4', 'mkv', 'webm', 'mov', 'm4v', 'avi', 'flv', 'ts
 const AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'opus', 'ogg', 'oga', 'wav', 'flac', 'weba'])
 const SUB_EXT = new Set(['json3', 'vtt', 'srt', 'srv'])
 const COOKIE_BROWSERS = ['chrome', 'safari', 'firefox', 'edge', 'brave', 'chromium', 'opera', 'vivaldi'] as const
-/** Texto maior que isto não entra inteiro no contexto (o arquivo/documento tem tudo). */
+/** Text longer than this does not enter the context whole (the file/document has everything). */
 const MAX_TRANSCRIPT_CHARS = 40_000
-/** Restos de execuções interrompidas somem depois disso. */
+/** Leftovers from interrupted runs disappear after this. */
 const STALE_TMP_MS = 24 * 60 * 60 * 1000
 
 function extOf(file: string): string {
@@ -64,8 +64,8 @@ function extOf(file: string): string {
 }
 
 /**
- * Onde o app guarda o que baixa. Fica no armazenamento dele, nunca na pasta do
- * projeto — e é isso que faz do arquivo um item do acervo, listável na aba.
+ * Where the app keeps what it downloads. It stays in its storage, never in the
+ * project folder — and that is what makes the file a collection item, listable in the tab.
  */
 function downloadsDir(sessionId: string): string {
   if (!SAFE_SESSION.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
@@ -85,15 +85,15 @@ function assertLink(url: string): void {
 }
 
 /**
- * Onde os arquivos caem.
+ * Where the files land.
  *
- * Sem `outputDir`: o acervo do próprio app (`orbit-data/ytdlp/<sessão>`), nos
- * DOIS modos. Nada é inventado dentro do projeto do usuário, e o arquivo — por
- * ser do app — entra na aba Mídia, onde a pessoa o encontra e o apaga.
+ * Without `outputDir`: the app's own collection (`orbit-data/ytdlp/<session>`), in
+ * BOTH modes. Nothing is invented inside the user's project, and the file — because
+ * it belongs to the app — enters the Media tab, where the person finds it and deletes it.
  *
- * `outputDir` explícito é outra coisa: o arquivo vai para a pasta do projeto,
- * passa a ser do usuário e a galeria NÃO o lista — excluir um item de lá
- * apagaria um arquivo dele.
+ * An explicit `outputDir` is another thing: the file goes to the project folder,
+ * becomes the user's and the gallery does NOT list it — deleting an item from there
+ * would delete a file of theirs.
  */
 function outputDirFor(ctx: ToolContext | null, sessionId: string, wanted?: string): string {
   const explicit = wanted?.trim()
@@ -112,11 +112,11 @@ async function pruneStale(outDir: string): Promise<void> {
         const stat = await fs.stat(full)
         if (stat.mtimeMs < cutoff) await fs.rm(full, { recursive: true, force: true })
       } catch {
-        // pasta sumiu no meio — nada a fazer
+        // folder vanished in the middle — nothing to do
       }
     }
   } catch {
-    // pasta de saída ainda não existe
+    // output folder does not exist yet
   }
 }
 
@@ -136,9 +136,9 @@ async function exists(file: string): Promise<boolean> {
 }
 
 /**
- * Tira os arquivos da pasta temporária e leva para a de saída. Nome repetido
- * ganha um sufixo curto em vez de ser sobrescrito — baixar o mesmo vídeo em
- * duas qualidades não pode apagar a primeira.
+ * Takes the files out of the temporary folder and moves them to the output one. A repeated
+ * name gets a short suffix instead of being overwritten — downloading the same video in
+ * two qualities cannot delete the first one.
  */
 async function moveOut(tmp: string, outDir: string): Promise<string[]> {
   const names = await fs.readdir(tmp)
@@ -188,13 +188,13 @@ async function factOf(file: string): Promise<FileFact> {
   }
 }
 
-/** Caminho como o usuário o lê: relativo à pasta de trabalho no código. */
+/** Path as the user reads it: relative to the working folder in code. */
 function shownPath(file: string, ctx: ToolContext | null): string {
   if (!ctx) return path.basename(file)
   const rel = path.relative(ctx.directory, file)
-  // Fora das pastas de trabalho (a pasta escolhida para o download, o
-  // armazenamento do app para o transcript) o relativo vira uma escada de
-  // "../": ali o caminho absoluto é o que a pessoa reconhece.
+  // Outside the working folders (the folder chosen for the download, the
+  // app's storage for the transcript) the relative path becomes a ladder of
+  // "../": there the absolute path is what the person recognizes.
   return !rel || rel.startsWith('..') || path.isAbsolute(rel) ? file : rel
 }
 
@@ -216,7 +216,7 @@ function noFilesError(res: YtdlpRunResult, maxBytes: number | undefined): string
     : `${reason}\nNothing was saved.`
 }
 
-/** Legenda baixada junto, ou áudio, viram o texto que o agente lê. */
+/** A subtitle downloaded along with it, or audio, becomes the text the agent reads. */
 function transcriptBody(cues: SubtitleCue[], timestamps: boolean): string {
   return timestamps ? timestampedCues(cues) : cueText(cues)
 }
@@ -225,7 +225,7 @@ function wordCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length
 }
 
-/** Os idiomas que a legenda deve tentar: o pedido, o do ditado, e inglês. */
+/** The languages the subtitle should try: the requested one, the dictation one, and English. */
 function requestedLanguages(language: string | undefined): string[] {
   const out: string[] = []
   if (language?.trim()) out.push(language.trim())
@@ -238,9 +238,9 @@ function requestedLanguages(language: string | undefined): string[] {
 export function createYtdlpTools(
   scope: {
     sessionId: string
-    /** Worker não mostra player nem grava na galeria — o resultado é só texto. */
+    /** A worker shows no player and writes nothing to the gallery — the result is text only. */
     canShow: boolean
-    /** Idioma da conversa, para o título do documento entregue ao usuário. */
+    /** The conversation's language, for the title of the document delivered to the user. */
     language?: string
   },
   ctx: ToolContext | null,
@@ -248,9 +248,9 @@ export function createYtdlpTools(
   const sessionId = scope.sessionId
 
   /**
-   * Vídeo entregue: toca na conversa e, quando o arquivo é do app, entra na aba
-   * Mídia. Arquivo que a pessoa mandou salvar na pasta do projeto fica FORA da
-   * aba — a galeria só lista o que ela mesma apaga.
+   * Video delivered: it plays in the conversation and, when the file belongs to the app, it enters the
+   * Media tab. A file the person asked to save in the project folder stays OUT of the
+   * tab — the gallery only lists what it deletes itself.
    */
   const publishVideo = async (file: string, owned: boolean): Promise<string | null> => {
     if (!scope.canShow) return null
@@ -263,9 +263,9 @@ export function createYtdlpTools(
   }
 
   /**
-   * Áudio entregue: uma cópia na pasta de áudio do acervo (a que toca na aba).
-   * Cópia de arquivo, não de bytes — um podcast de duas horas não passa pela
-   * memória. Fora do acervo (arquivo do projeto) não entra na aba.
+   * Audio delivered: a copy in the collection's audio folder (the one that plays in the tab).
+   * A file copy, not of bytes — a two-hour podcast does not go through
+   * memory. Outside the collection (a project file) it does not enter the tab.
    */
   const publishAudio = async (file: string, owned: boolean): Promise<string | null> => {
     if (!scope.canShow || !owned) return null
@@ -282,15 +282,15 @@ export function createYtdlpTools(
       name: path.basename(file, path.extname(file)),
       source: 'chat',
     })
-    // A cópia do acervo é a que vale; a baixada só existia para ela.
+    // The collection copy is the one that counts; the downloaded one existed only for it.
     await fs.rm(file, { force: true })
     return `${AUDIO_SCHEME}://${id}`
   }
 
   /**
-   * Quando o binário velho era a causa, o runYtdlp atualizou e repetiu sozinho.
-   * Contar isso ao modelo evita que ele peça ao usuário uma atualização que já
-   * aconteceu — e explica por que a chamada demorou.
+   * When the old binary was the cause, runYtdlp updated and retried on its own.
+   * Telling the model that avoids it asking the user for an update that already
+   * happened — and explains why the call took so long.
    */
   const refreshNote = (res: YtdlpRunResult | null): string => {
     if (!res?.refresh?.updated) return ''
@@ -343,8 +343,8 @@ export function createYtdlpTools(
       const kind = input.kind ?? 'video'
       const wanted = (input as { outputDir?: string }).outputDir?.trim()
       const outDir = outputDirFor(ctx, sessionId, wanted)
-      // Sem caminho declarado o arquivo é do app (entra na aba Mídia); com
-      // caminho, é arquivo do projeto — toca, mas não entra na aba.
+      // With no declared path the file belongs to the app (it enters the Media tab); with
+      // a path, it is a project file — it plays, but does not enter the tab.
       const owned = !wanted
       await fs.mkdir(outDir, { recursive: true })
       await pruneStale(outDir)
@@ -379,10 +379,10 @@ export function createYtdlpTools(
       const videos = facts.filter((fact) => fact.kind === 'video')
       const audios = facts.filter((fact) => fact.kind === 'audio')
 
-      // Arquivo do app: TODA mídia entra na galeria (senão o que foi baixado
-      // fica preso no storage, sem o usuário alcançar pela aba), e a resposta
-      // mostra a primeira de cada tipo. Arquivo do projeto: só registra para
-      // tocar — a galeria não lista o que não é dela.
+      // App file: ALL media enters the gallery (otherwise what was downloaded
+      // stays stuck in storage, with the user unable to reach it through the tab), and the response
+      // shows the first of each type. Project file: it is only registered to
+      // play — the gallery does not list what is not its own.
       let videoUrl: string | null = null
       let audioUrl: string | null = null
       for (const fact of videos) {
@@ -437,8 +437,8 @@ export function createYtdlpTools(
 
   return {
     /**
-     * Só aparece quando falta o binário — o modelo chama quando alguma tool
-     * acima responde "yt-dlp is not installed".
+     * It only appears when the binary is missing — the model calls it when some tool
+     * above answers "yt-dlp is not installed".
      */
     ytdlp_install: tool({
       description:
@@ -482,8 +482,8 @@ export function createYtdlpTools(
         })
         if (res.code !== 0) throw new Error(ytdlpError(res))
         const text = describeInfo(parseInfo(res.stdout), { maxEntries: input.playlist ? 50 : 25 })
-        // Qual binário respondeu, e há quanto tempo ele foi compilado: uma data
-        // velha aqui explica uma extração que falha, antes de culpar o site.
+        // Which binary answered, and how long ago it was built: an old
+        // date here explains an extraction that fails, before blaming the site.
         const found = requireYtdlp()
         const version = await ytdlpVersion(found.bin)
         const footer = [describeBinary(found, version), refreshNote(res)].filter(Boolean).join(' ')
@@ -532,9 +532,9 @@ export function createYtdlpTools(
       execute: async (input, { abortSignal }) => {
         assertLink(input.url)
         const mode = input.mode ?? 'auto'
-        // Temporários e o texto final ficam na pasta interna da sessão: um
-        // transcript não inventa pasta dentro do projeto. Para ter o arquivo no
-        // repositório, o agente passa savePath — aí a escolha está declarada.
+        // Temporaries and the final text stay in the session's internal folder: a
+        // transcript does not invent a folder inside the project. To have the file in the
+        // repository, the agent passes savePath — then the choice is declared.
         const outDir = downloadsDir(sessionId)
         await fs.mkdir(outDir, { recursive: true })
         await pruneStale(outDir)
@@ -564,7 +564,7 @@ export function createYtdlpTools(
           let usedLanguage: string | null = null
 
           if (mode !== 'audio') {
-            // Manual vence a automática: é a legenda que alguém revisou.
+            // Manual beats automatic: it is the subtitle someone reviewed.
             const manualLang = matchLanguage(manual, wanted)
             const autoLang = manualLang ? null : matchLanguage(auto, wanted)
             const chosen = manualLang ?? autoLang
@@ -647,7 +647,7 @@ export function createYtdlpTools(
             source = `local transcription (engine ${result.engine})`
             cues = result.segments.map((segment) => ({ startMs: segment.startMs, endMs: segment.endMs, text: segment.text }))
             if (!cues.length) {
-              // Motor sem trechos: o texto corrido ainda serve.
+              // Engine with no segments: the running text still serves.
               cues = [{ startMs: 0, endMs: durationMs, text: result.text }]
             }
           }
@@ -660,8 +660,8 @@ export function createYtdlpTools(
 
           const headline =
             `${source ?? 'transcript'}${usedLanguage ? ` (${usedLanguage})` : ''}, ${words} words, ${durationText(info.duration)}.`
-          // Nome de arquivo sem acento e com o id: dois vídeos de mesmo título
-          // não podem gravar por cima um do outro.
+          // File name without accents and with the id: two videos with the same title
+          // cannot write over each other.
           const slug =
             title
               .normalize('NFD')
@@ -690,9 +690,9 @@ export function createYtdlpTools(
             }
           }
 
-          // O texto inteiro vai para um arquivo (código) e/ou documento (chat),
-          // e o contexto recebe o começo: uma palestra de 2 h não cabe no
-          // histórico, mas o resumo ainda sai dos primeiros milhares de chars.
+          // The whole text goes to a file (code) and/or a document (chat),
+          // and the context receives the beginning: a 2 h talk does not fit in the
+          // history, but the summary still comes from the first few thousand chars.
           let savedTo: string | null = null
           if (ctx) {
             const chosenPath = (input as { savePath?: string }).savePath

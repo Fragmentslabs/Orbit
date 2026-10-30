@@ -4,13 +4,13 @@ import { chatApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
- * Nível de autonomia POR CHAT, no mesmo desenho do modelo por chat.
+ * Autonomy level PER CHAT, in the same design as the per-chat model.
  *
- * `defaultMode` é o padrão (o último nível usado num chat novo) e também o
- * fallback de quem nunca escolheu nada — é o que as Preferências e os
- * companions veem como "modo do app". `modes` guarda a escolha de cada sessão:
- * mudar para Irrestrito num chat NÃO afrouxa os outros (antes era uma chave só,
- * `orbit-permission-mode`, e o seletor mudava o app inteiro).
+ * `defaultMode` is the default (the last level used in a new chat) and also the
+ * fallback for whoever never chose anything — it is what the Preferences and the
+ * companions see as the "app mode". `modes` keeps each session's choice:
+ * switching to Unrestricted in one chat does NOT loosen the others (before it was a single key,
+ * `orbit-permission-mode`, and the selector changed the whole app).
  */
 
 const DEFAULT_KEY = "orbit-permission-mode"
@@ -38,7 +38,7 @@ function loadModes(): Record<string, PermissionMode> {
     }
     return modes
   } catch {
-    // prefs corrompidas → todo chat segue o padrão
+    // corrupted prefs → every chat follows the default
     return {}
   }
 }
@@ -48,33 +48,33 @@ function persistModes(modes: Record<string, PermissionMode>) {
 }
 
 interface PermissionPrefsState {
-  /** Padrão de um chat novo (e fallback de quem não escolheu). */
+  /** Default of a new chat (and fallback for whoever has not chosen). */
   defaultMode: PermissionMode
-  /** sessionId → nível escolhido naquele chat */
+  /** sessionId → level chosen in that chat */
   modes: Record<string, PermissionMode>
-  /** Troca feita nesta tela: ir para Irrestrito também libera os pedidos já
-   *  abertos no chat alvo. `null`/ausente = chat novo (draft). */
+  /** Switch made on this screen: going to Unrestricted also releases the requests already
+   *  open in the target chat. `null`/absent = new chat (draft). */
   setMode: (sessionId: string | null | undefined, mode: PermissionMode) => void
-  /** Troca que veio de fora (o celular): só muda o nível daquele chat. O
-   *  rascunho não viaja — "draft" no celular é outro chat. */
+  /** Switch that came from outside (the phone): it only changes that chat's level. The
+   *  draft does not travel — "draft" on the phone is another chat. */
   applyRemoteMode: (sessionId: string, mode: PermissionMode) => void
-  /** Padrão vindo de outro aparelho (preferências do app). */
+  /** Default coming from another device (app preferences). */
   setDefaultMode: (mode: PermissionMode) => void
-  /** Move a escolha do rascunho para a sessão recém-criada. */
+  /** Moves the draft's choice to the newly created session. */
   adopt: (sessionId: string) => void
   clear: (sessionId: string) => void
 }
 
 /**
- * Ao mudar para Irrestrito, os pedidos de permissão que já estão abertos no
- * chat alvo são aprovados (pelo turno) — o usuário acabou de dizer que não
- * quer mais ser perguntado. Os de outros chats ficam: quem mudou o nível não
- * os viu. Pedidos que perguntam sempre (ex.: remover worktree) também ficam.
+ * On switching to Unrestricted, the permission requests already open in the
+ * target chat are approved (per turn) — the user has just said they do not
+ * want to be asked anymore. The ones in other chats stay: whoever changed the level did not
+ * see them. Requests that always ask (e.g.: removing a worktree) also stay.
  */
-function liberarPedidos(sessionId: string | null | undefined) {
+function releaseRequests(sessionId: string | null | undefined) {
   if (!sessionId) return
-  const pendentes = useSessionStore.getState().pendingAsks[sessionId] ?? []
-  for (const ask of pendentes) {
+  const pending = useSessionStore.getState().pendingAsks[sessionId] ?? []
+  for (const ask of pending) {
     if (ask.kind !== "permission" || ask.claim?.alwaysAsk) continue
     void chatApi.askReply(ask.requestId, "allow")
   }
@@ -86,12 +86,12 @@ export const usePermissionPrefs = create<PermissionPrefsState>((set, get) => ({
 
   setMode: (sessionId, mode) => {
     const key = sessionId ?? DRAFT_KEY
-    const anterior = get().modes[key] ?? get().defaultMode
+    const previous = get().modes[key] ?? get().defaultMode
     const modes = { ...get().modes, [key]: mode }
     persistModes(modes)
 
-    // Chat novo: o nível escolhido também vira o padrão, para o próximo chat
-    // novo já abrir nele (mesmo contrato do modelo por chat).
+    // New chat: the chosen level also becomes the default, so the next new
+    // chat already opens in it (same contract as the per-chat model).
     if (sessionId) {
       set({ modes })
     } else {
@@ -99,7 +99,7 @@ export const usePermissionPrefs = create<PermissionPrefsState>((set, get) => ({
       set({ modes, defaultMode: mode })
     }
 
-    if (mode === "full" && anterior !== "full") liberarPedidos(sessionId)
+    if (mode === "full" && previous !== "full") releaseRequests(sessionId)
   },
 
   applyRemoteMode: (sessionId, mode) => {
@@ -132,7 +132,7 @@ export const usePermissionPrefs = create<PermissionPrefsState>((set, get) => ({
   },
 }))
 
-/** Nível efetivo do chat: override da sessão > padrão do app. */
+/** Effective level of the chat: session override > app default. */
 export function permissionFor(sessionId?: string | null): PermissionMode {
   const { modes, defaultMode } = usePermissionPrefs.getState()
   return modes[sessionId ?? DRAFT_KEY] ?? defaultMode

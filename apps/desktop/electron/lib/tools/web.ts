@@ -2,9 +2,9 @@ import { tool } from 'ai'
 import { z } from 'zod'
 
 /**
- * Pesquisa e leitura da web, portadas do opencode:
- * - websearch usa o endpoint MCP público da Exa (mesmo do opencode)
- * - webfetch baixa a página e converte HTML em texto legível
+ * Web search and reading, ported from opencode:
+ * - websearch uses Exa's public MCP endpoint (the same as opencode's)
+ * - webfetch downloads the page and converts HTML into readable text
  */
 
 const EXA_MCP_URL = 'https://mcp.exa.ai/mcp'
@@ -102,11 +102,11 @@ export function htmlToText(html: string): string {
 }
 
 /**
- * Baixa uma página e devolve o texto legível e o título.
+ * Downloads a page and returns the readable text and the title.
  *
- * Separado da tool porque o painel de fontes usa o mesmo caminho: adicionar um
- * site como fonte é baixar a página e guardar o texto — não faria sentido ter
- * dois extratores de HTML com resultados diferentes para o mesmo endereço.
+ * Separate from the tool because the sources panel uses the same path: adding a
+ * site as a source is downloading the page and storing the text — it would make no sense to have
+ * two HTML extractors with different results for the same address.
  */
 export async function fetchReadablePage(
   url: string,

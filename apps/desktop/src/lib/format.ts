@@ -1,4 +1,4 @@
-/** Formatação compartilhada de tokens e custo (badge de usage, card da orchestra). */
+/** Shared token and cost formatting (usage badge, orchestra card). */
 
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -12,9 +12,9 @@ export function formatCost(cost: number): string {
 }
 
 /**
- * Horário no padrão do locale: pt-BR usa 24h ("14:00") e inglês usa 12h ("2:00 PM").
- * O `hour12` é forçado explicitamente porque alguns runtimes (ICU reduzido) caem no
- * padrão en-US e mostrariam "02:00 PM" mesmo com o locale pt-BR.
+ * Time in the locale's pattern: pt-BR uses 24h ("14:00") and English uses 12h ("2:00 PM").
+ * `hour12` is forced explicitly because some runtimes (reduced ICU) fall back to the
+ * en-US default and would show "02:00 PM" even with the pt-BR locale.
  */
 export function formatTime(ts: number, locale: string): string {
   const hour12 = !locale.toLowerCase().startsWith("pt")
@@ -25,27 +25,27 @@ export function formatTime(ts: number, locale: string): string {
   })
 }
 
-/** Ligação entre data e hora: "às" em português, "at" nos demais. */
+/** Link between date and time: "às" in Portuguese, "at" in the others. */
 function dateTimeConnector(locale: string): string {
   return locale.toLowerCase().startsWith("pt") ? "às" : "at"
 }
 
-/** Data completa + horário no padrão do locale (ex.: pt "quinta-feira, 6 de agosto de 2026 às 14:00"). */
+/** Full date + time in the locale's pattern (e.g.: pt "quinta-feira, 6 de agosto de 2026 às 14:00"). */
 export function formatDateTime(ts: number, locale: string): string {
   const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "full" })
   return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
 }
 
-/** Data (dia, mês e ano, sem o nome do dia da semana) + horário (ex.: pt "6 de agosto de 2026 às 14:00"). */
+/** Date (day, month and year, without the weekday name) + time (e.g.: pt "6 de agosto de 2026 às 14:00"). */
 export function formatDateTimeShort(ts: number, locale: string): string {
   const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "long" })
   return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
 }
 
 /**
- * Data só em números + horário (pt "27/08/2026 às 14:30", en "08/27/2026 at
- * 02:30 PM"). A ordem dia/mês sai do próprio locale — em inglês o mês vem na
- * frente. Para onde o mês por extenso não cabe, como o card de commit.
+ * Date in numbers only + time (pt "27/08/2026 às 14:30", en "08/27/2026 at
+ * 02:30 PM"). The day/month order comes from the locale itself — in English the month comes
+ * first. For where the spelled-out month does not fit, like the commit card.
  */
 export function formatDateTimeNumeric(ts: number, locale: string): string {
   const date = new Date(ts).toLocaleDateString(locale, {
@@ -56,7 +56,7 @@ export function formatDateTimeNumeric(ts: number, locale: string): string {
   return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
 }
 
-/** Duração legível (ex.: "3s", "1m 12s", "2h 05m") a partir de um intervalo em ms. */
+/** Readable duration (e.g.: "3s", "1m 12s", "2h 05m") from an interval in ms. */
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000))
   if (totalSeconds < 60) return `${totalSeconds}s`

@@ -4,15 +4,15 @@ import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 
 /**
- * Preferências do app com os companions: defaults de modo por tipo de chat,
- * modo de permissão e criação automática de pastas.
+ * App preferences with the companions: mode defaults per chat type,
+ * permission mode and automatic folder creation.
  *
- * Antes cada app guardava as suas. O `/api/preferences` do companion existia,
- * mas era um armazém paralelo que ninguém no desktop lia — mexer no celular não
- * mudava nada aqui, e o celular nascia com os defaults dele em vez dos do
- * desktop. Aqui é o mesmo desenho do worker-config-sync: o renderer é a fonte
- * da verdade (as prefs vivem no localStorage dele), empurra a cada mudança e
- * aplica o que vier do celular.
+ * Before, each app kept its own. The companion's `/api/preferences` existed,
+ * but it was a parallel store nobody on the desktop read — touching the phone changed
+ * nothing here, and the phone was born with its own defaults instead of the
+ * desktop's. Here it is the same design as worker-config-sync: the renderer is the source
+ * of truth (the prefs live in its localStorage), pushes on every change and
+ * applies whatever comes from the phone.
  */
 
 function snapshot(): AppPreferences {
@@ -20,15 +20,15 @@ function snapshot(): AppPreferences {
   return {
     chatModes: modes.chatActiveModes,
     codeModes: modes.codeActiveModes,
-    // O padrão do app (chat novo); o nível de cada chat viaja em session-prefs.
+    // The app default (new chat); each chat's level travels in session-prefs.
     permissionMode: usePermissionPrefs.getState().defaultMode,
     autoCreateFolders: modes.autoCreateFolders,
   }
 }
 
-// Os dois stores mudam por mais coisa do que estas prefs (modelo por modo, por
-// exemplo): sem comparar, cada troca viraria um broadcast à toa. Também é o que
-// impede o eco — aplicar o que veio do celular gera o mesmo snapshot.
+// Both stores change for more than these prefs (model per mode, for
+// example): without comparing, every switch would become a pointless broadcast. It is also what
+// prevents the echo — applying what came from the phone generates the same snapshot.
 let lastPushed = ""
 
 function push() {
@@ -41,8 +41,8 @@ function push() {
 
 function apply(prefs: AppPreferences) {
   if (!prefs || typeof prefs !== "object") return
-  // Marca como já enviado ANTES de aplicar: o push disparado pelos subscribes
-  // veria exatamente este valor e voltaria para o celular como se fosse novo.
+  // Marks it as already sent BEFORE applying: the push fired by the subscribes
+  // would see exactly this value and go back to the phone as if it were new.
   lastPushed = JSON.stringify(prefs)
 
   const modes = useModelModePrefs.getState()
@@ -60,8 +60,8 @@ function apply(prefs: AppPreferences) {
     modes.setAutoCreateFolders(prefs.autoCreateFolders)
   }
   if (prefs.permissionMode && prefs.permissionMode !== usePermissionPrefs.getState().defaultMode) {
-    // Preferência do app vinda do celular: vira o padrão de chat novo. O
-    // nível de cada chat chega pelo 'session:prefs-select', com sessão.
+    // App preference coming from the phone: it becomes the new chat default. The
+    // level of each chat arrives through 'session:prefs-select', with a session.
     usePermissionPrefs.getState().setDefaultMode(prefs.permissionMode)
   }
 }

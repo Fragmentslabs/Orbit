@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { eslintDiagnostics, jsonDiagnostics, jsonErrorOffset } from './code-diagnostics'
 
 /**
- * Posição fora dos limites do documento derruba o CodeMirror inteiro — ficar
- * vermelho não vale quebrar o editor. E o buffer muda entre o pedido do lint e
- * a resposta, então o caso "a mensagem aponta para um lugar que não existe
- * mais" não é exótico: é o que acontece quando se continua digitando.
+ * A position outside the document limits takes the whole CodeMirror down — being
+ * red is not worth breaking the editor. And the buffer changes between the lint request and
+ * the response, so the case "the message points to a place that no longer
+ * exists" is not exotic: it is what happens when you keep typing.
  */
 
-/** Um `Text` do CodeMirror no mínimo que o mapeamento usa. */
+/** A CodeMirror `Text` with the minimum the mapping uses. */
 function doc(text: string) {
   const lines = text.split('\n')
   const starts: number[] = []
@@ -40,26 +40,26 @@ const msg = (over: Partial<Parameters<typeof eslintDiagnostics>[1][number]> = {}
 describe('eslintDiagnostics', () => {
   const text = 'const a = 1\nconst b = 2\n'
 
-  it('converte linha/coluna em offset', () => {
+  it('converts line/column into an offset', () => {
     const [d] = eslintDiagnostics(doc(text), [msg({ line: 2, column: 7, endLine: 2, endColumn: 8 })])
     expect(text.slice(d.from, d.to)).toBe('b')
   })
 
-  it('traduz a severidade do eslint', () => {
-    const [erro] = eslintDiagnostics(doc(text), [msg({ severity: 2 })])
-    const [aviso] = eslintDiagnostics(doc(text), [msg({ severity: 1 })])
-    expect(erro.severity).toBe('error')
-    expect(aviso.severity).toBe('warning')
+  it("translates the eslint severity", () => {
+    const [error] = eslintDiagnostics(doc(text), [msg({ severity: 2 })])
+    const [warning] = eslintDiagnostics(doc(text), [msg({ severity: 1 })])
+    expect(error.severity).toBe('error')
+    expect(warning.severity).toBe('warning')
   })
 
-  it('nunca produz marca de largura zero', () => {
-    // Sem endLine/endColumn a marca não teria largura e não apareceria.
+  it('never produces a zero-width mark', () => {
+    // Without endLine/endColumn the mark would have no width and would not show.
     const [d] = eslintDiagnostics(doc(text), [msg({ line: 1, column: 1 })])
     expect(d.to).toBeGreaterThan(d.from)
   })
 
-  it('prende posições além do fim do documento', () => {
-    // O buffer encolheu depois que o lint foi pedido.
+  it('clamps positions past the end of the document', () => {
+    // The buffer shrank after the lint was requested.
     const [d] = eslintDiagnostics(doc('a\n'), [
       msg({ line: 99, column: 99, endLine: 99, endColumn: 200 }),
     ])
@@ -67,7 +67,7 @@ describe('eslintDiagnostics', () => {
     expect(d.to).toBeLessThanOrEqual(2)
   })
 
-  it('usa o nome da regra como fonte, com reserva', () => {
+  it('uses the rule name as the source, with a fallback', () => {
     expect(eslintDiagnostics(doc(text), [msg({ ruleId: 'no-unused-vars' })])[0].source).toBe(
       'no-unused-vars',
     )
@@ -76,14 +76,14 @@ describe('eslintDiagnostics', () => {
 })
 
 describe('jsonDiagnostics', () => {
-  it('não acusa nada em JSON válido, nem em arquivo vazio', () => {
+  it('reports nothing on valid JSON, nor on an empty file', () => {
     expect(jsonDiagnostics('{"a": 1}')).toEqual([])
     expect(jsonDiagnostics('   \n')).toEqual([])
   })
 
-  it('acusa JSON inválido e preserva a mensagem do parser', () => {
-    // A mensagem do JSON.parse diz o que houve; o nó de erro do Lezer só
-    // diria que existe um.
+  it("reports invalid JSON and keeps the parser message", () => {
+    // The JSON.parse message says what happened; the Lezer error node would only
+    // say that there is one.
     const [d] = jsonDiagnostics('{"a": }')
     expect(d.severity).toBe('error')
     expect(d.message.length).toBeGreaterThan(0)
@@ -92,17 +92,17 @@ describe('jsonDiagnostics', () => {
 })
 
 describe('jsonErrorOffset', () => {
-  it('extrai a posição da mensagem do V8', () => {
+  it('extracts the position from the V8 message', () => {
     expect(jsonErrorOffset('Unexpected token } in JSON at position 6', 100)).toBe(6)
-    // O V8 novo acrescenta linha e coluna depois da posição.
+    // The new V8 adds line and column after the position.
     expect(jsonErrorOffset("Expected ',' or '}' at position 12 (line 2 column 3)", 100)).toBe(12)
   })
 
-  it('cai no começo quando a mensagem não diz a posição', () => {
+  it('falls back to the beginning when the message does not state the position', () => {
     expect(jsonErrorOffset('Unexpected end of JSON input', 100)).toBe(0)
   })
 
-  it('não passa do fim do documento', () => {
+  it('does not go past the end of the document', () => {
     expect(jsonErrorOffset('at position 9999', 10)).toBe(9)
   })
 })

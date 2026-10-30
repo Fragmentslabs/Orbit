@@ -4,13 +4,13 @@ import type { McpServerStatus } from "@shared/mcp"
 import { mcpApi, skillsApi } from "@/src/lib/ipc"
 
 /**
- * Skills + servidores MCP disponíveis para a paleta "/". O watcher do main
- * avisa mudanças na pasta global (inclusive criações da tool create_skill);
- * a troca de pasta do workspace dispara refresh com o directory ativo.
+ * Skills + MCP servers available to the "/" palette. Main's watcher
+ * reports changes in the global folder (including creations from the create_skill tool);
+ * changing the workspace folder triggers a refresh with the active directory.
  *
- * "discarded" guarda os slugs que o USUÁRIO realmente recusou no card
- * (persistido em localStorage). É a única fonte para o estado "dispensada" —
- * a ausência em "pending" nunca é tratada como recusa.
+ * "discarded" keeps the slugs the USER really refused in the card
+ * (persisted in localStorage). It is the only source for the "dismissed" state —
+ * absence from "pending" is never treated as a refusal.
  */
 
 const DISCARDED_KEY = "orbit_skill_proposals_discarded"
@@ -18,12 +18,12 @@ const DISCARDED_KEY = "orbit_skill_proposals_discarded"
 interface SkillsState {
   initialized: boolean
   skills: Skill[]
-  /** Propostas do agente (create_skill) aguardando aprovação no card */
+  /** Agent proposals (create_skill) awaiting approval in the card */
   pending: SkillProposal[]
   mcpServers: McpServerStatus[]
-  /** Slugs recusados pelo usuário (não inferidos pela ausência em pending) */
+  /** Slugs refused by the user (not inferred from absence in pending) */
   discarded: string[]
-  /** Última pasta usada no refresh (para o watcher recarregar com o mesmo escopo) */
+  /** Last folder used in the refresh (so the watcher reloads with the same scope) */
   directory?: string
   initialize: () => Promise<void>
   refresh: (directory?: string) => Promise<void>
@@ -49,9 +49,9 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   directory: undefined,
 
   initialize: async () => {
-    // Listener registrado uma única vez; o refresh roda em cada initialize —
-    // cada card de proposta que monta re-sincroniza com o disco, então o card
-    // nunca fica "preso" sem a proposta recém-estagiada pela tool.
+    // Listener registered only once; the refresh runs on every initialize —
+    // every proposal card that mounts re-syncs with the disk, so the card
+    // never gets "stuck" without the proposal just staged by the tool.
     if (!get().initialized) {
       set({ initialized: true })
       skillsApi.onChanged(() => void get().refresh(get().directory))
@@ -71,7 +71,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   approve: async (slug) => {
     const ok = await skillsApi.approve(slug)
-    // Resolve o estado local sem depender do evento skills:changed
+    // Resolves the local state without depending on the skills:changed event
     set((s) => ({ discarded: s.discarded.filter((d) => d !== slug) }))
     localStorage.setItem(DISCARDED_KEY, JSON.stringify(get().discarded))
     await get().refresh()

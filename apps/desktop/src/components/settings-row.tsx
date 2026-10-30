@@ -3,8 +3,8 @@ import type { LucideIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 /**
- * Linha de configuração: ícone, título, descrição e o controle à direita —
- * o mesmo desenho dos toggles de notificação e de "Criar pastas".
+ * Settings row: icon, title, description and the control on the right —
+ * the same drawing as the notification toggles and "Create folders".
  */
 export function SettingRow({
   icon: Icon,
@@ -52,7 +52,7 @@ export function SettingSwitch({ checked, onChange, label }: { checked: boolean; 
   )
 }
 
-/** Select de opções fixas. Os valores viajam como string (o Select é de string). */
+/** Select of fixed options. The values travel as string (the Select is a string one). */
 export function SettingSelect<T extends string>({
   value,
   options,
@@ -62,7 +62,7 @@ export function SettingSelect<T extends string>({
   value: T
   options: Array<{ value: T; label: string }>
   onChange: (value: T) => void
-  /** Opção existe mas depende de outra coisa estar ligada (ex.: voz). */
+  /** Option exists but depends on something else being on (e.g. voice). */
   disabled?: boolean
 }) {
   return (

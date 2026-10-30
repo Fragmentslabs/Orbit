@@ -1,5 +1,5 @@
-/** Primeira linha que diz alguma coisa: nem título (já está no card), nem
- *  régua, nem marcação crua. */
+/** First line that says something: neither a title (already in the card), nor a
+ *  rule, nor raw markup. */
 export function firstLine(markdown: string): string | null {
   for (const raw of markdown.split(/\r?\n/)) {
     const line = raw.trim()

@@ -10,13 +10,13 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Modelos do catálogo com o estado de cada um e as ações (baixar, cancelar,
- * remover). O download em si é do main — o que corre aqui é o progresso que
- * ele emite em `voice:download-progress`.
+ * Catalog models with the state of each one and the actions (download, cancel,
+ * remove). The download itself belongs to the main process — what runs here is the progress it
+ * emits in `voice:download-progress`.
  */
 
-/** Linha do catálogo que a tela mostra: a visão de `src/lib/voice-models` mais
- *  os idiomas, que aparecem como metadado secundário (truncado). */
+/** Catalog row the screen shows: the `src/lib/voice-models` view plus
+ *  the languages, which appear as secondary metadata (truncated). */
 export interface VoiceModelRow {
   id: string
   label: string
@@ -27,22 +27,22 @@ export interface VoiceModelRow {
 }
 
 /**
- * Estado do motor, num lugar só — o selo e o texto saem daqui, então os dois
- * nunca se contradizem:
- *   - `ready`: dá para usar agora;
- *   - `preparing`: os arquivos estão no disco e falta só o preparo do primeiro
- *     uso (a extração do pacote e o VAD Silero do Parakeet);
- *   - `missing`: falta baixar — ou o motor não roda nesta máquina, e aí o
- *     `reason` do main diz qual dos dois é.
+ * Engine state, in a single place — the badge and the text come from here, so the two
+ * never contradict each other:
+ *   - `ready`: it can be used now;
+ *   - `preparing`: the files are on disk and only the preparation of the first
+ *     use is missing (the package extraction and the Parakeet Silero VAD);
+ *   - `missing`: the download is missing — or the engine does not run on this machine, and then the
+ *     main process `reason` says which of the two it is.
  *
- * O main está separando "baixado" de "pronto": quando ele publicar `downloaded`
- * e `ready`, esses campos mandam. Sem eles a conta cai na combinação que o
- * retrato sempre teve — `available` (dá para abrir sessão) e `installed`
- * (nada a preparar) —, e só quem tem os dois está pronto.
+ * The main process is separating "downloaded" from "ready": when it publishes `downloaded`
+ * and `ready`, those fields rule. Without them the count falls into the combination the
+ * snapshot always had — `available` (a session can be opened) and `installed`
+ * (nothing to prepare) —, and only whoever has both is ready.
  */
 export type EnginePhase = "ready" | "preparing" | "missing"
 
-/** O que a fase lê do status do motor (aceita os campos novos, se vierem). */
+/** What the phase reads from the engine status (it accepts the new fields, if they come). */
 export interface EngineStatusLike {
   installed?: boolean
   available?: boolean
@@ -60,21 +60,21 @@ export function enginePhase(engine: EngineStatusLike | null | undefined, modelDo
   const ready =
     typeof engine.ready === "boolean" ? engine.ready : engine.available === true && engine.installed === true
   if (ready) return "ready"
-  // Motor que não roda nesta máquina (whisper sem o `whisper-server`, sherpa que
-  // não carregou) não tem preparo a oferecer: o "Preparar agora" virava um
-  // botão sem efeito. Fica "missing", e o selo/motivo dizem o porquê.
+  // An engine that does not run on this machine (whisper without `whisper-server`, sherpa that
+  // did not load) has no preparation to offer: the "Prepare now" became a
+  // button with no effect. It stays "missing", and the badge/reason say why.
   if (engine.available === false) return "missing"
-  // Com os bytes no disco já não é "missing": o que falta é o PREPARO (extração
-  // do pacote e VAD) — ou o motor não roda nesta máquina, e aí o `reason` diz
-  // exatamente isso. Chamar de "não instalado" o que está baixado era o bug.
+  // With the bytes on disk it is no longer "missing": what is missing is the PREPARATION (extraction
+  // of the package and VAD) — or the engine does not run on this machine, and then the `reason` says
+  // exactly that. Calling "not installed" what is downloaded was the bug.
   if (downloaded) return "preparing"
   return "missing"
 }
 
 /**
- * Nome curto para o seletor: os rótulos do catálogo são frases inteiras
- * ("Whisper large-v3-turbo (whisper.cpp) — 574 MB, …"). Fica o que identifica o
- * modelo; o rótulo completo vai no `title` do controle.
+ * Short name for the selector: the catalog labels are whole sentences
+ * ("Whisper large-v3-turbo (whisper.cpp) — 574 MB, …"). What identifies the
+ * model stays; the full label goes in the control's `title`.
  */
 export function shortModelName(label: string, id: string): string {
   const head = (label || "").split("—")[0]?.replace(/\([^)]*\)\s*$/, "").trim() ?? ""
@@ -94,8 +94,8 @@ function percentOf(progress: VoiceDownloadProgress): number {
   return Math.min(100, Math.max(0, Math.round((progress.received / progress.total) * 100)))
 }
 
-/** Fase de um modelo do catálogo: o TTS tem um motor só e o resumo é
- *  `ttsReady`; o STT sai do estado do motor que consome o modelo. */
+/** Phase of a catalog model: the TTS has a single engine and the summary is
+ *  `ttsReady`; the STT comes from the state of the engine that consumes the model. */
 function modelPhase(model: VoiceModelRow, downloaded: boolean, status: VoiceStatusSnapshot | null): EnginePhase {
   if (model.kind === "tts") return status?.ttsReady ? "ready" : downloaded ? "preparing" : "missing"
   const engine = status?.engines.find((info) => info.engine === model.engine) ?? null
@@ -110,17 +110,17 @@ export function VoiceModelsSection({
 }: {
   models: VoiceModelRow[]
   status: VoiceStatusSnapshot | null
-  /** Recarrega catálogo e estado (quando um download termina ou um modelo sai). */
+  /** Reloads catalog and state (when a download ends or a model is removed). */
   onChanged: () => void
   /**
-   * Um download começado NESTA lista terminou bem. Só os daqui: as duas listas
-   * da tela (a rápida, junto do seletor, e a completa) ouvem os mesmos eventos.
+   * A download started IN THIS list ended well. Only the ones from here: the two lists
+   * of the screen (the quick one, next to the selector, and the full one) hear the same events.
    */
   onDownloaded?: (modelId: string) => void
 }) {
   const { t } = useTranslation()
   const [progress, setProgress] = useState<Record<string, VoiceDownloadProgress>>({})
-  /** Modelo com ação em andamento antes de o primeiro evento de progresso chegar. */
+  /** Model with an action in progress before the first progress event arrives. */
   const [busy, setBusy] = useState<Record<string, boolean>>({})
   const startedHere = useRef(new Set<string>())
   const onDownloadedRef = useRef(onDownloaded)
@@ -154,9 +154,9 @@ export function VoiceModelsSection({
     void voiceApi
       .download(modelId)
       .then((result) => {
-        // `started: false` = não havia o que baixar (já está no disco). Sem isto
-        // o giro ficaria ligado para sempre, sem evento de progresso que o
-        // desligasse — era o clique que "não fazia nada".
+        // `started: false` = there was nothing to download (it is already on disk). Without this
+        // the spinner would stay on forever, with no progress event to
+        // turn it off — it was the click that "did nothing".
         if (!(result as { started?: boolean } | undefined)?.started) {
           startedHere.current.delete(modelId)
           setBusy((current) => ({ ...current, [modelId]: false }))
@@ -190,10 +190,10 @@ export function VoiceModelsSection({
     <div className="flex flex-col gap-2">
       {models.map((model) => {
         const modelStatus = status?.models[model.id]
-        // Dois fatos diferentes, e o selo precisa separar os dois: "baixado" são
-        // os BYTES no disco; "pronto" é o motor conseguindo usar (o pacote do
-        // Parakeet extraído, com o VAD Silero). Sem isso o selo dizia "não
-        // baixado" ao lado de um texto dizendo que o pacote já estava baixado.
+        // Two different facts, and the badge needs to separate the two: "downloaded" are
+        // the BYTES on disk; "ready" is the engine being able to use it (the
+        // Parakeet package extracted, with the Silero VAD). Without this the badge said "not
+        // downloaded" next to a text saying the package was already downloaded.
         const downloaded = modelStatus?.downloaded ?? modelStatus?.installed ?? false
         const ready = modelStatus?.ready ?? modelStatus?.installed ?? false
         const event = progress[model.id]
@@ -203,8 +203,8 @@ export function VoiceModelsSection({
         const percent = event ? percentOf(event) : 0
         const running = downloading || !!busy[model.id]
         const phase = modelPhase(model, downloaded, status)
-        // Tamanho e idiomas juntos na linha secundária; sem tamanho conhecido,
-        // fica só o que o catálogo informou.
+        // Size and languages together in the secondary row; without a known size,
+        // only what the catalog informed stays.
         const meta = [size ?? t("voice.settings.models.sizeUnknown"), model.langs.join(", ")]
           .filter((part) => !!part)
           .join(" · ")
@@ -259,8 +259,8 @@ export function VoiceModelsSection({
               </Truncate>
             </div>
 
-            {/* Baixado e ainda não utilizável: o selo (baixado) continua valendo,
-                mas o texto diz o que falta — nunca um sem o outro. */}
+            {/* Downloaded and not usable yet: the badge (downloaded) keeps counting,
+                but the text says what is missing — never one without the other. */}
             {downloaded && !ready && phase === "preparing" && (
               <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Timer className="size-3 shrink-0" />

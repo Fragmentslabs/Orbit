@@ -2,19 +2,19 @@ import { create } from "zustand"
 import { storage } from "@/src/lib/ipc"
 
 /**
- * Preferências de notificações nativas do desktop.
- * A chave `notification-prefs` é a MESMA que o main process lê
- * (electron/lib/notifications.ts via readJson) na hora de mostrar o
- * banner — grava por aqui, consome lá.
+ * Preferences of the desktop's native notifications.
+ * The `notification-prefs` key is the SAME one the main process reads
+ * (electron/lib/notifications.ts via readJson) when showing the
+ * banner — write it here, consume it there.
  */
 const STORAGE_KEY = "notification-prefs"
 
 export interface NotificationPrefs {
-  /** Desktop faz pergunta/pede permissão */
+  /** Desktop asks a question/requests permission */
   pendingAsk: boolean
-  /** Nova mensagem do assistente (sessão inativa) */
+  /** New assistant message (inactive session) */
   newMessage: boolean
-  /** Erro no chat */
+  /** Error in the chat */
   chatError: boolean
 }
 
@@ -44,7 +44,7 @@ export const useNotificationPrefsStore = create<NotificationPrefsStore>((set, ge
       const saved = await storage.read<Partial<NotificationPrefs>>(STORAGE_KEY)
       if (saved) set({ prefs: { ...DEFAULTS, ...saved } })
     } catch {
-      // Corrompido ou ausente — usa defaults
+      // Corrupted or absent — uses defaults
     }
   },
 }))

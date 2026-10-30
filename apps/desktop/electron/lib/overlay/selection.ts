@@ -3,24 +3,24 @@ import { getComputerDriver, isComputerAvailable } from '../computer'
 import type { AppInfo, WindowInfo } from '../computer/types'
 
 /**
- * Lê o texto selecionado no app que a pessoa está usando, para o overlay
- * (⇧⌘espaço) poder traduzir/resumir sem ela copiar nada.
+ * Reads the selected text in the app the person is using, so the overlay (⇧⌘space)
+ * can translate/summarize without them copying anything.
  *
- * Duas camadas, na ordem:
- *  1. AXSelectedText do elemento com foco do app (sem efeito colateral);
- *  2. cópia por Cmd+C + área de transferência, restaurando o que estava lá.
+ * Two layers, in order:
+ *  1. AXSelectedText of the focused element of the app (no side effect);
+ *  2. copy via Cmd+C + clipboard, restoring what was there.
  *
- * A camada 2 só roda quando pedida (`allowClipboard`) e só com o app em
- * primeiro plano — teclar Cmd+C num app que não está na frente copiaria outra
- * coisa. Nenhuma das duas funciona sem a permissão de Acessibilidade, que é a
- * mesma do Computer Use.
+ * Layer 2 only runs when requested (`allowClipboard`) and only with the app in the
+ * foreground — pressing Cmd+C in an app that is not in front would copy something
+ * else. Neither of them works without the Accessibility permission, which is the
+ * same one Computer Use needs.
  */
 
 export interface SelectionRead {
   text: string
-  /** App de onde o texto saiu (nome exibido). */
+  /** App the text came from (display name). */
   app: string | null
-  /** `ax` = leitura direta; `clipboard` = copiou e restaurou a área de transferência. */
+  /** `ax` = direct read; `clipboard` = copied and restored the clipboard. */
   source: 'ax' | 'clipboard'
 }
 
@@ -31,25 +31,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** O app é o próprio Orbit (a janela do overlay ou a principal)? */
+/** Is the app Orbit itself (the overlay window or the main one)? */
 function isOrbitApp(app: AppInfo): boolean {
   if (/^orbit$/i.test(app.name) || /^electron$/i.test(app.name)) return true
   return (app.bundleId ?? '').toLowerCase().startsWith('com.fragmentslabs')
 }
 
-/** App em primeiro plano, ignorando o Orbit. `null` quando só existe o Orbit. */
+/** App in the foreground, ignoring Orbit. `null` when only Orbit exists. */
 export async function frontmostForeignApp(): Promise<AppInfo | null> {
   return (await frontmostForeignWindow())?.app ?? null
 }
 
-/** O app em primeiro plano (ignorando o Orbit) e a janela da frente dele, numa leitura só. */
+/** The app in the foreground (ignoring Orbit) and its front window, in a single read. */
 export async function frontmostForeignWindow(): Promise<{ app: AppInfo; window: WindowInfo | null } | null> {
   if (!isComputerAvailable() || process.platform !== 'darwin') return null
   try {
     const snapshot = await getComputerDriver().apps()
-    // `apps` vem na ordem do NSWorkspace (arbitrária); `windows` vem da frente
-    // para trás. O primeiro pid com janela que não é o Orbit é o app em que a
-    // pessoa estava — mesmo que o painel já tenha roubado o foco.
+    // `apps` comes in NSWorkspace order (arbitrary); `windows` comes from the front
+    // to the back. The first pid with a window that is not Orbit is the app the
+    // person was in — even if the panel has already stolen the focus.
     const byPid = new Map(snapshot.apps.map((app) => [app.pid, app]))
     for (const window of snapshot.windows) {
       const app = byPid.get(window.pid)
@@ -63,7 +63,7 @@ export async function frontmostForeignWindow(): Promise<{ app: AppInfo; window: 
   }
 }
 
-/** Texto selecionado via AX no app indicado (sem tocar na área de transferência). */
+/** Selected text via AX in the given app (without touching the clipboard). */
 async function readFromAx(pid: number): Promise<string | null> {
   try {
     const result = await getComputerDriver().act({ op: 'readSelection', pid })
@@ -75,12 +75,13 @@ async function readFromAx(pid: number): Promise<string | null> {
 }
 
 /**
- * Cmd+C no app e leitura da área de transferência, devolvendo o que estava lá
- * ao final. Sem isso, um "traduz isso" sem seleção deixaria a conversa com o
- * texto errado no clipboard — e o próximo Cmd+V da pessoa colaria lixo.
+ * Cmd+C in the app and reading of the clipboard, giving back what was there at the
+ * end. Without that, a "translate this" with no selection would leave the
+ * conversation with the wrong text on the clipboard — and the person's next Cmd+V
+ * would paste garbage.
  */
 async function readFromClipboard(pid: number): Promise<string | null> {
-  // No Electron 44 a área de transferência é assíncrona nos dois sentidos.
+  // In Electron 44 the clipboard is asynchronous in both directions.
   const before = await clipboard.readText()
   try {
     await getComputerDriver().act({
@@ -95,7 +96,7 @@ async function readFromClipboard(pid: number): Promise<string | null> {
   await sleep(COPY_WAIT_MS)
   const copied = await clipboard.readText()
   if (before !== copied) {
-    // Restaura depois de ler: a próxima colagem da pessoa continua sendo a dela.
+    // Restores after reading: the person's next paste is still theirs.
     await clipboard.writeText(before)
   }
   if (!copied.trim() || copied === before) return null
@@ -103,9 +104,9 @@ async function readFromClipboard(pid: number): Promise<string | null> {
 }
 
 /**
- * Texto selecionado agora. `allowClipboard` deve ser true só quando a pessoa
- * pediu explicitamente (a tool `see_selection`), nunca na abertura do overlay —
- * abrir o painel não pode mexer na área de transferência.
+ * Text selected right now. `allowClipboard` must be true only when the person asked
+ * explicitly (the `see_selection` tool), never when the overlay opens — opening the
+ * panel cannot touch the clipboard.
  */
 export async function readSelectedText(options?: { allowClipboard?: boolean }): Promise<SelectionRead | null> {
   if (!isComputerAvailable() || process.platform !== 'darwin') return null
@@ -116,8 +117,8 @@ export async function readSelectedText(options?: { allowClipboard?: boolean }): 
   if (ax) return { text: ax.slice(0, MAX_SELECTION), app: target.name, source: 'ax' }
 
   if (!options?.allowClipboard) return null
-  // Cmd+C vai para o app em primeiro plano: com outro app na frente (o overlay
-  // recebeu o foco), teclar agora copiaria do lugar errado.
+  // Cmd+C goes to the app in the foreground: with another app in front (the overlay
+  // received the focus), pressing it now would copy from the wrong place.
   if (!target.active) return null
   const copied = await readFromClipboard(target.pid)
   return copied ? { text: copied.slice(0, MAX_SELECTION), app: target.name, source: 'clipboard' } : null

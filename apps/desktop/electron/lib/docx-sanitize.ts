@@ -1,25 +1,25 @@
 /**
- * Saneamento do HTML que o mammoth gera a partir de um .docx de fora.
+ * Sanitizing of the HTML that mammoth generates from a .docx from outside.
  *
- * Separado do resto para ser testável sem o Electron: é a parte do caminho
- * que responde pela segurança, e é a que mais precisa de teste.
+ * Separated from the rest so it is testable without Electron: it is the part of the path
+ * that answers for security, and it is the one that most needs testing.
  */
 
-/** Esquemas que um link do documento pode ter. O resto vira âncora morta. */
+/** Schemes a document link may have. The rest becomes a dead anchor. */
 const LINK_SEGURO = /^(https?:|mailto:|#)/i
 
 export function sanitizeDocxHtml(html: string): string {
   return (
     html
-      // O mammoth não escreve <script>, mas a garantia não pode depender disso.
+      // mammoth does not write <script>, but the guarantee cannot depend on that.
       .replace(/<script[\s\S]*?<\/script>/gi, '')
       .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-      .replace(/<a\s+([^>]*?)href\s*=\s*"([^"]*)"([^>]*)>/gi, (_all, antes, href, depois) => {
-        const alvo = LINK_SEGURO.test(href.trim()) ? href : '#'
-        // target=_blank leva o clique ao setWindowOpenHandler do main, que só
-        // abre http(s) no navegador do sistema e nega o resto — o documento
-        // nunca navega o próprio painel.
-        return `<a ${antes}href="${alvo}"${depois} target="_blank" rel="noreferrer">`
+      .replace(/<a\s+([^>]*?)href\s*=\s*"([^"]*)"([^>]*)>/gi, (_all, before, href, after) => {
+        const target = LINK_SEGURO.test(href.trim()) ? href : '#'
+        // target=_blank takes the click to the main's setWindowOpenHandler, which only
+        // opens http(s) in the system browser and denies the rest — the document
+        // never navigates the panel itself.
+        return `<a ${before}href="${target}"${after} target="_blank" rel="noreferrer">`
       })
   )
 }

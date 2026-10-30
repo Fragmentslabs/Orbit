@@ -13,50 +13,50 @@ import {
 } from './motion-audio-fx'
 
 /**
- * A parte PURA do render de motion: os argumentos do ffmpeg, a desmultiplicação
- * do alfa e a divisão do trabalho em faixas. Fica separada de motion.ts (que abre
- * janela, captura e conversa com o Electron) para poder ser testada sem nenhuma
- * janela — é onde moram as decisões que, erradas, só apareceriam num vídeo torto.
+ * The PURE part of the motion render: the ffmpeg arguments, the alpha
+ * unpremultiplication and the splitting of the work into tracks. It sits apart from motion.ts (which opens
+ * the window, captures and talks to Electron) so it can be tested without any
+ * window — it is where the decisions live that, wrong, would only show up in a crooked video.
  *
- * O caminho de pixels mudou de PNG para rawvideo (o bitmap BGRA cru que o
- * nativeImage já tem): um PNG por quadro custava um encode no Chromium e um
- * decode no ffmpeg, por quadro. Em troca, o rawvideo impõe duas regras:
+ * The pixel path changed from PNG to rawvideo (the raw BGRA bitmap that
+ * nativeImage already has): a PNG per frame cost an encode in Chromium and a
+ * decode in ffmpeg, per frame. In exchange, rawvideo imposes two rules:
  *
- *  1. o tamanho do quadro tem que ser CONSTANTE — daí a sondagem de um quadro
- *     em motion.ts antes de subir o ffmpeg (a captura pode vir na escala da
- *     tela, HiDPI) e a conferência de bytes por quadro;
- *  2. o alfa do Chromium é PRÉ-MULTIPLICADO e tem que virar cor reta ANTES da
- *     conversão de formato — depois de virar yuva444p10le/yuva420p não dá mais
- *     para recuperar. Quem faz isso é `unpremultiplyBgra`, aqui embaixo (e não um
- *     filtro do ffmpeg: ver a nota na função).
+ *  1. the frame size has to be CONSTANT — hence the probing of one frame
+ *     in motion.ts before starting ffmpeg (the capture may come at the screen
+ *     scale, HiDPI) and the byte-per-frame check;
+ *  2. Chromium's alpha is PREMULTIPLIED and has to become straight color BEFORE the
+ *     format conversion — after it becomes yuva444p10le/yuva420p there is no more
+ *     recovering it. What does that is `unpremultiplyBgra`, down below (and not an
+ *     ffmpeg filter: see the note in the function).
  */
 
-/** Formatos de saída. `-alpha` = o contêiner leva alfa de verdade. */
+/** Output formats. `-alpha` = the container really carries alpha. */
 export type MotionFormat = 'mp4' | 'webm' | 'mov-alpha' | 'webm-alpha'
 
 /**
- * Nome que o IPC `motion:render` aceita. Contrato congelado com a aba do painel
- * (ver src/lib/ipc.ts): `mp4`, `mov-alpha` e `webm-alpha`. Os nomes antigos
- * (`mov`, `webm`) continuam sendo aceitos por normalizeMotionFormat.
+ * Name that the `motion:render` IPC accepts. Frozen contract with the panel
+ * tab (see src/lib/ipc.ts): `mp4`, `mov-alpha` and `webm-alpha`. The old names
+ * (`mov`, `webm`) are still accepted by normalizeMotionFormat.
  */
 export type MotionFormatInput = MotionFormat | 'mov'
 
-/** Teto de faixas paralelas: mais que isso não acelera e multiplica janelas. */
+/** Cap on parallel tracks: more than that does not speed things up and multiplies windows. */
 export const MAX_MOTION_BANDS = 4
 
-/** Extensão do arquivo de saída de cada formato. */
+/** File extension of each format's output. */
 export function motionFormatExt(format: MotionFormat): string {
   if (format === 'mov-alpha') return '.mov'
   if (format === 'webm' || format === 'webm-alpha') return '.webm'
   return '.mp4'
 }
 
-/** O contêiner leva alfa? (só ProRes 4444 e VP9 com alfa). */
+/** Does the container carry alpha? (only ProRes 4444 and VP9 with alpha). */
 export function isAlphaFormat(format: MotionFormat): boolean {
   return format === 'mov-alpha' || format === 'webm-alpha'
 }
 
-/** Formato de pixel com alfa do encoder (null quando não há alfa). */
+/** Alpha pixel format of the encoder (null when there is no alpha). */
 export function alphaPixelFormat(format: MotionFormat): string | null {
   if (format === 'mov-alpha') return 'yuva444p10le'
   if (format === 'webm-alpha') return 'yuva420p'
@@ -64,9 +64,9 @@ export function alphaPixelFormat(format: MotionFormat): string | null {
 }
 
 /**
- * Formato a partir do NOME do arquivo de saída e da transparência — o caminho da
- * tool `motion_render`, que só recebe `output` + `transparent`. Puro.
- * `.mov` sem transparência continua saindo em H.264, como antes.
+ * Format from the output file NAME and the transparency — the path of the
+ * `motion_render` tool, which only receives `output` + `transparent`. Pure.
+ * `.mov` without transparency still comes out as H.264, as before.
  */
 export function motionFormatFor(output: string, transparent: boolean): MotionFormat {
   const ext = path.extname(output).toLowerCase()
@@ -79,9 +79,9 @@ export function motionFormatFor(output: string, transparent: boolean): MotionFor
 }
 
 /**
- * Normaliza o `format` que chega por fora (IPC, aba). Sem formato, mp4. Os nomes
- * antigos seguem valendo: `mov` sempre foi ProRes 4444 (com alfa) e `webm` sem
- * transparência era VP9 sem alfa.
+ * Normalizes the `format` that arrives from outside (IPC, tab). Without a format, mp4. The old
+ * names still hold: `mov` was always ProRes 4444 (with alpha) and `webm` without
+ * transparency was VP9 without alpha.
  */
 export function normalizeMotionFormat(raw: string | undefined, transparent = false): MotionFormat {
   switch (raw) {
@@ -102,12 +102,12 @@ export function normalizeMotionFormat(raw: string | undefined, transparent = fal
 }
 
 /**
- * O quanto o arquivo pode pesar. `balanced` é o que sempre sai sem escolha —
- * é o padrão de antes, e é ele que o botão antigo produzia.
+ * How much the file may weigh. `balanced` is what always comes out with no choice —
+ * it is the previous default, and it is what the old button produced.
  */
 export type MotionQuality = 'high' | 'balanced' | 'small'
 
-/** Números por formato: CRF (menor = melhor) e preset do x264. */
+/** Numbers per format: CRF (smaller = better) and x264 preset. */
 const QUALITY: Record<MotionFormat, Record<MotionQuality, { crf: number; preset: string }>> = {
   mp4: {
     high: { crf: 16, preset: 'slow' },
@@ -124,7 +124,7 @@ const QUALITY: Record<MotionFormat, Record<MotionQuality, { crf: number; preset:
     balanced: { crf: 28, preset: 'medium' },
     small: { crf: 34, preset: 'medium' },
   },
-  // ProRes 4444 não tem CRF: a qualidade é fixa pelo perfil. A escolha é ignorada.
+  // ProRes 4444 has no CRF: the quality is fixed by the profile. The choice is ignored.
   'mov-alpha': {
     high: { crf: 0, preset: 'medium' },
     balanced: { crf: 0, preset: 'medium' },
@@ -132,7 +132,7 @@ const QUALITY: Record<MotionFormat, Record<MotionQuality, { crf: number; preset:
   },
 }
 
-/** Argumentos do encoder por formato (os mesmos parâmetros de antes do rawvideo). */
+/** Encoder arguments per format (the same parameters as before rawvideo). */
 export function motionEncoderArgs(format: MotionFormat, quality: MotionQuality = 'balanced'): string[] {
   if (format === 'mov-alpha') return ['-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le']
   const { crf, preset } = QUALITY[format][quality]
@@ -146,32 +146,32 @@ export function motionEncoderArgs(format: MotionFormat, quality: MotionQuality =
 }
 
 /**
- * Entrada rawvideo: um quadro BGRA por leitura do stdin, sem cabeçalho. O `-s`
- * é obrigatório e é o que obriga o tamanho do quadro a ser constante.
+ * Rawvideo input: one BGRA frame per stdin read, no header. The `-s`
+ * is mandatory and it is what forces the frame size to be constant.
  */
 export function rawVideoInputArgs(width: number, height: number, fps: number): string[] {
   return ['-f', 'rawvideo', '-pix_fmt', 'bgra', '-s', `${width}x${height}`, '-framerate', String(fps), '-i', 'pipe:0']
 }
 
 export interface RawVideoFilterOptions {
-  /** Tamanho FINAL do vídeo — o mesmo de antes do rawvideo. */
+  /** FINAL size of the video — the same as before rawvideo. */
   width: number
   height: number
-  /** Tamanho do quadro que a janela devolve (pode vir na escala da tela). */
+  /** Size of the frame the window returns (it may come at the screen scale). */
   captureWidth: number
   captureHeight: number
   format: MotionFormat
 }
 
 /**
- * Filtros do quadro cru, na ordem que importa:
+ * Filters of the raw frame, in the order that matters:
  *
- *  1. `scale` só quando a captura vem maior (HiDPI) — o vídeo tem que sair no
- *     mesmo tamanho de antes;
- *  2. `format=` no modo transparente, para o alfa chegar inteiro ao encoder.
+ *  1. `scale` only when the capture comes larger (HiDPI) — the video has to come out at the
+ *     same size as before;
+ *  2. `format=` in transparent mode, so the alpha arrives whole at the encoder.
  *
- * Não há filtro de desmultiplicação: ela já aconteceu em `unpremultiplyBgra`,
- * sobre o buffer, ANTES desta conversão de formato (ver a nota na função).
+ * There is no unpremultiplication filter: it already happened in `unpremultiplyBgra`,
+ * over the buffer, BEFORE this format conversion (see the note in the function).
  */
 export function rawVideoFilters(o: RawVideoFilterOptions): string[] {
   const filters: string[] = []
@@ -188,13 +188,13 @@ export function rawVideoFilters(o: RawVideoFilterOptions): string[] {
 export interface MotionFfmpegSpec extends RawVideoFilterOptions {
   fps: number
   output: string
-  /** Peso/qualidade do arquivo; sem ele, o `balanced` de sempre. */
+  /** File weight/quality; without it, the usual `balanced`. */
   quality?: MotionQuality
 }
 
 /**
- * Argumentos COMPLETOS do ffmpeg de um segmento (uma faixa): o stdin é o
- * rawvideo e a saída já sai no encoder final. Puro — é o que os testes travam.
+ * COMPLETE ffmpeg arguments of one segment (one track): the stdin is
+ * rawvideo and the output already comes out of the final encoder. Pure — it is what the tests lock down.
  */
 export function motionFfmpegArgs(spec: MotionFfmpegSpec): string[] {
   const filters = rawVideoFilters(spec)
@@ -208,16 +208,16 @@ export function motionFfmpegArgs(spec: MotionFfmpegSpec): string[] {
   ]
 }
 
-/** Bytes de um quadro BGRA — o tamanho CONSTANTE que o rawvideo exige. */
+/** Bytes of one BGRA frame — the CONSTANT size that rawvideo demands. */
 export function expectedFrameBytes(width: number, height: number): number {
   return width * height * 4
 }
 
 /**
- * O rawvideo não tem cabeçalho de tamanho: um quadro com bytes a mais ou a menos
- * desalinha todo o resto do stream e o vídeo sai como lixo colorido, sem erro
- * nenhum. Por isso o render confere TODO quadro e para aqui, com o tamanho que
- * veio e o que era esperado.
+ * Rawvideo has no size header: a frame with one byte more or less
+ * misaligns the whole rest of the stream and the video comes out as colored garbage, with no
+ * error at all. That is why the render checks EVERY frame and stops here, with the size that
+ * came and the one that was expected.
  */
 export function assertFrameBytes(bufferLength: number, width: number, height: number, frame: number): void {
   const expected = expectedFrameBytes(width, height)
@@ -228,38 +228,38 @@ export function assertFrameBytes(bufferLength: number, width: number, height: nu
   )
 }
 
-/** `255 * 256 / alfa`, arredondado: dividir por pixel vira multiplicar e deslocar. */
+/** `255 * 256 / alpha`, rounded: dividing per pixel becomes multiplying and shifting. */
 const UNPREMULTIPLY = (() => {
   const table = new Uint16Array(256)
   for (let alpha = 1; alpha < 256; alpha++) table[alpha] = Math.round((255 * 256) / alpha)
   return table
 })()
 
-/** valor * 255 / alfa, arredondado e preso em 255 (cor maior que o alfa sairia do byte). */
+/** value * 255 / alpha, rounded and clamped to 255 (a color larger than the alpha would leave the byte). */
 function straight(value: number, factor: number): number {
-  // +128 antes do deslocamento é o arredondamento para o inteiro mais próximo.
+  // +128 before the shift is the rounding to the nearest integer.
   const scaled = (value * factor + 128) >> 8
   return scaled > 255 ? 255 : scaled
 }
 
 /**
- * Desmultiplica o alfa NO LUGAR: BGRA pré-multiplicado (o que o `toBitmap` do
- * Chromium entrega) vira cor reta, que é o que o encoder espera.
+ * Unpremultiplies the alpha IN PLACE: premultiplied BGRA (what Chromium's `toBitmap`
+ * delivers) becomes straight color, which is what the encoder expects.
  *
- * Por que aqui e não num filtro do ffmpeg: o `unpremultiply` do build que o app
- * leva junto (ffmpeg 9.0.2) não dá conta disto. Ele tem DUAS entradas ("UnPre
- * Multiply first stream with first plane of second stream") e com `-vf
- * unpremultiply` o ffmpeg recusa o grafo — "Simple filtergraph '(null)' was
+ * Why here and not in an ffmpeg filter: the `unpremultiply` of the build the app
+ * ships with (ffmpeg 9.0.2) does not handle this. It has TWO inputs ("UnPre
+ * Multiply first stream with first plane of second stream") and with `-vf
+ * unpremultiply` ffmpeg refuses the graph — "Simple filtergraph '(null)' was
  * expected to have exactly 1 input and 1 output. However, it had 2 input(s)".
- * A variante de uma entrada (`unpremultiply=inplace=1`) roda, mas não muda nada
- * (medido com (100,50,25,128): sai (99,50,26,129), o mesmo quadro), e o grafo de
- * duas entradas com `alphaextract` devolve a imagem em CINZA. Fazer a conta aqui
- * é determinístico, não depende da build do ffmpeg e acontece antes da conversão
- * de formato — que é o que importa, porque depois de virar yuva444p10le/yuva420p
- * o alfa já não é recuperável.
+ * The one-input variant (`unpremultiply=inplace=1`) runs, but changes nothing
+ * (measured with (100,50,25,128): it comes out (99,50,26,129), the same frame), and the
+ * two-input graph with `alphaextract` returns the image in GRAY. Doing the math here
+ * is deterministic, does not depend on the ffmpeg build and happens before the format
+ * conversion — which is what matters, because after it becomes yuva444p10le/yuva420p
+ * the alpha is no longer recoverable.
  *
- * Custo: só nos pixels SEMI-transparentes (opacos e vazios saem na hora) e só no
- * caminho com alfa — o caminho opaco tem fundo preto sólido e chega com alfa 255.
+ * Cost: only on the SEMI-transparent pixels (opaque and empty ones go right away) and only on the
+ * alpha path — the opaque path has a solid black background and arrives with alpha 255.
  */
 export function unpremultiplyBgra(buffer: Buffer): void {
   for (let i = 0; i + 3 < buffer.length; i += 4) {
@@ -273,8 +273,8 @@ export function unpremultiplyBgra(buffer: Buffer): void {
 }
 
 /**
- * Quantas faixas paralelas: `bands` explícito quando vem (1 = o caminho
- * sequencial, determinístico), senão min(4, max(1, núcleos/2)).
+ * How many parallel tracks: explicit `bands` when it comes (1 = the sequential,
+ * deterministic path), otherwise min(4, max(1, cores/2)).
  */
 export function bandCount(requested: number | undefined, cores: number): number {
   if (requested !== undefined && Number.isFinite(requested)) {
@@ -285,9 +285,9 @@ export function bandCount(requested: number | undefined, cores: number): number 
 }
 
 /**
- * Divide [0, total) em faixas contíguas e equilibradas, na ordem — `[start, end)`,
- * em QUADROS inteiros: cada faixa busca só os quadros dela (nada é buscado duas
- * vezes) e a concatenação sai na ordem certa. Nunca devolve faixa vazia.
+ * Splits [0, total) into contiguous, balanced tracks, in order — `[start, end)`,
+ * in WHOLE FRAMES: each track fetches only its own frames (nothing is fetched
+ * twice) and the concatenation comes out in the right order. Never returns an empty track.
  */
 export function splitBands(total: number, bands: number): Array<{ start: number; end: number }> {
   const frames = Math.max(1, Math.floor(total))
@@ -303,24 +303,24 @@ export function splitBands(total: number, bands: number): Array<{ start: number;
 }
 
 export interface ConcatSpec {
-  /** Lista do concat demuxer (nomes relativos ao cwd do ffmpeg). */
+  /** concat demuxer list (names relative to ffmpeg's cwd). */
   listFile: string
   output: string
   format: MotionFormat
 }
 
-/** Conteúdo do `list.txt` do concat demuxer: um `file '...'` por segmento. */
+/** Content of the concat demuxer's `list.txt`: one `file '...'` per segment. */
 export function concatList(names: string[]): string {
   return names.map((name) => `file '${name}'`).join('\n')
 }
 
 /**
- * Junta os segmentos das faixas SEM segunda perda (`-c copy`), como o render de
- * EDL. Os segmentos já saíram no encoder final, então aqui é só remux — o
- * `+faststart` volta para o mp4.
+ * Joins the segments of the tracks WITHOUT a second loss (`-c copy`), like the EDL
+ * render. The segments already came out of the final encoder, so here it is only a remux — the
+ * `+faststart` goes back for the mp4.
  *
- * Não promete saída byte-idêntica à do caminho sequencial: cada faixa começa o
- * próprio GOP, então os keyframes caem em pontos diferentes.
+ * It does not promise output byte-identical to the sequential path: each track starts its
+ * own GOP, so the keyframes fall at different points.
  */
 export function concatFfmpegArgs(spec: ConcatSpec): string[] {
   return [
@@ -332,26 +332,26 @@ export function concatFfmpegArgs(spec: ConcatSpec): string[] {
   ]
 }
 
-// -------------------------------------------------------------------- áudio
+// -------------------------------------------------------------------- audio
 
 /**
- * Áudio da peça. O capture pega QUADROS, não som (a janela é offscreen e o
- * ffmpeg recebe rawvideo no stdin), então a trilha entra numa passada final,
- * depois do vídeo montado — sem re-encodar imagem (`-c:v copy`).
+ * The piece's audio. The capture takes FRAMES, not sound (the window is offscreen and
+ * ffmpeg receives rawvideo on stdin), so the track enters on a final pass,
+ * after the video is assembled — without re-encoding the picture (`-c:v copy`).
  *
- * Sem caminho explícito, vale o nome convencional dentro da pasta da composição:
- * áudio, como as imagens e as fontes, é conteúdo da peça e mora junto dela.
+ * Without an explicit path, the conventional name inside the composition's folder counts:
+ * audio, like images and fonts, is content of the piece and lives with it.
  */
 export const MOTION_AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.flac']
 
-/** É áudio pelo nome do arquivo? Puro. */
+/** Is it audio by the file name? Pure. */
 export function isMotionAudioFile(file: string): boolean {
   return MOTION_AUDIO_EXTENSIONS.includes(path.extname(file).toLowerCase())
 }
 
 /**
- * Codec do áudio pelo CONTÊINER — não é escolha estética: é o que cada um
- * aceita. aac no mp4/mov (ProRes 4444 inclusive), Opus no webm.
+ * Audio codec by the CONTAINER — it is not an aesthetic choice: it is what each one
+ * accepts. aac in mp4/mov (ProRes 4444 included), Opus in webm.
  */
 export function motionAudioCodec(format: MotionFormat): string[] {
   if (format === 'webm' || format === 'webm-alpha') return ['-c:a', 'libopus', '-b:a', '128k']
@@ -359,26 +359,26 @@ export function motionAudioCodec(format: MotionFormat): string[] {
 }
 
 export interface MotionAudioSpec {
-  /** Vídeo JÁ montado (o segmento único, ou a concatenação das faixas). */
+  /** Video ALREADY assembled (the single segment, or the concatenation of the tracks). */
   video: string
   audio: string
   output: string
-  /** Duração da composição, em segundos: é ela que manda no comprimento. */
+  /** Duration of the composition, in seconds: it is what rules the length. */
   duration: number
   format: MotionFormat
 }
 
 /**
- * Passada final: junta o áudio ao vídeo e SÓ ela escreve o arquivo pedido. A
- * imagem não é tocada (`-c:v copy`), só o som é codificado.
+ * Final pass: joins the audio to the video and ONLY it writes the requested file. The
+ * picture is not touched (`-c:v copy`), only the sound is encoded.
  *
- * O `-t` fixa o comprimento na duração da peça, e é a decisão que importa:
- *  - áudio mais LONGO que a peça é cortado no fim dela (nunca estica o vídeo);
- *  - áudio mais CURTO deixa a cauda em silêncio;
- *  - `-shortest`, que é o reflexo comum, faria o contrário do primeiro caso:
- *    um áudio curto encurtaria o VÍDEO, e a peça terminaria antes do desenho.
- * O `-t` nunca come o último quadro: o último pacote está em `(total-1)/fps`,
- * sempre mais de um quadro antes da duração declarada.
+ * `-t` fixes the length at the piece's duration, and it is the decision that matters:
+ *  - audio LONGER than the piece is cut at its end (it never stretches the video);
+ *  - shorter audio leaves the tail in silence;
+ *  - `-shortest`, which is the common reflex, would do the opposite of the first case:
+ *    short audio would shorten the VIDEO, and the piece would end before the drawing.
+ * `-t` never eats the last frame: the last packet is at `(total-1)/fps`,
+ * always more than one frame before the declared duration.
  */
 export function motionAudioFfmpegArgs(spec: MotionAudioSpec): string[] {
   return [
@@ -395,43 +395,43 @@ export function motionAudioFfmpegArgs(spec: MotionAudioSpec): string[] {
   ]
 }
 
-/** Uma faixa já resolvida, pronta para virar filtro (caminhos absolutos). */
+/** A track already resolved, ready to become a filter (absolute paths). */
 export interface MotionAudioEvent {
   file: string
-  /** Segundo da peça em que entra. */
+  /** Second of the piece at which it comes in. */
   start: number
-  /** Segundo em que sai; ausente = até o fim do arquivo. */
+  /** Second at which it goes out; absent = to the end of the file. */
   end?: number
   gainDb: number
   fadeIn: number
   fadeOut: number
-  /** Cama que abaixa sob as outras faixas. */
+  /** Bed that goes down under the other tracks. */
   duck: boolean
-  /** Como ela abaixa; ausente = os números de sempre (DEFAULT_DUCK). */
+  /** How it goes down; absent = the usual numbers (DEFAULT_DUCK). */
   duckSettings?: DuckSettings
-  /** Timbre, dinâmica e curva de volume; ausente = faixa como está. */
+  /** Timbre, dynamics and volume curve; absent = track as it is. */
   fx?: TrackFx
-  /** Segundo do ARQUIVO em que o som começa (corte no início). */
+  /** Second OF THE FILE at which the sound starts (cut at the beginning). */
   offset?: number
-  /** Repete o arquivo até o fim do trecho. */
+  /** Repeats the file until the end of the stretch. */
   loop?: boolean
 }
 
 export interface MotionAudioMixSpec {
-  /** Vídeo JÁ montado (o segmento único, ou a concatenação das faixas). */
+  /** Video ALREADY assembled (the single segment, or the concatenation of the tracks). */
   video: string
   output: string
   duration: number
   format: MotionFormat
   events: MotionAudioEvent[]
-  /** Acabamento da mixagem inteira (teto de pico, volume de entrega). */
+  /** Finishing of the whole mix (peak ceiling, delivery loudness). */
   master?: MasterFx | null
 }
 
 /**
- * O caso simples — uma faixa, a peça inteira, sem processamento — tem caminho
- * próprio (`motionAudioFfmpegArgs`): um `-i` a mais, sem grafo de filtros. Vale
- * manter os dois porque o grafo só se paga quando há o que misturar.
+ * The simple case — one track, the whole piece, no processing — has its own
+ * path (`motionAudioFfmpegArgs`): one more `-i`, no filter graph. Worth
+ * keeping both because the graph only pays off when there is something to mix.
  */
 export function isPlainAudioEvent(event: MotionAudioEvent): boolean {
   return (
@@ -448,37 +448,37 @@ export function isPlainAudioEvent(event: MotionAudioEvent): boolean {
 }
 
 /**
- * O caminho simples só serve quando NADA mexe no som: nem a faixa (isPlainAudioEvent),
- * nem o acabamento da mixagem. Um teto de pico numa faixa única ainda precisa do grafo.
+ * The simple path only works when NOTHING touches the sound: neither the track (isPlainAudioEvent),
+ * nor the mix finishing. A peak ceiling on a single track still needs the graph.
  */
 export function isPlainAudioMix(events: MotionAudioEvent[], master?: MasterFx | null): boolean {
   return events.length === 1 && isPlainAudioEvent(events[0]) && !hasMasterFx(master)
 }
 
 /**
- * A passada final quando há MIXAGEM: cada faixa é recortada, ganha nível e rampas,
- * é posta no instante dela (`adelay`) e as camas (`duck: true`) abaixam sozinhas
- * sob as faixas de frente (`sidechaincompress`) antes da soma.
+ * The final pass when there is MIXING: each track is trimmed, gets level and ramps,
+ * is placed at its instant (`adelay`) and the beds (`duck: true`) go down by themselves
+ * under the front tracks (`sidechaincompress`) before the sum.
  *
- * Dois detalhes que decidem o resultado:
+ * Two details that decide the result:
  *
- *  - `normalize=0` no `amix` é obrigatório. Por padrão o `amix` DIVIDE pelo número
- *    de entradas, e a narração sairia mais baixa só porque existe música — o nível
- *    que o manifest pede é o nível que sai;
- *  - `duration` do `amix` fica no padrão (`longest`), e NÃO no `duration=first` do
- *    render de EDL: lá a voz é a primeira entrada e manda no comprimento, aqui a
- *    primeira faixa pode ser um efeito de meio segundo, e o mix não pode acabar
- *    com ele. Quem manda no comprimento continua sendo o `-t` da peça.
+ *  - `normalize=0` in `amix` is mandatory. By default `amix` DIVIDES by the number
+ *    of inputs, and the narration would come out lower just because there is music — the level
+ *    the manifest asks for is the level that comes out;
+ *  - `duration` of `amix` stays at the default (`longest`), and NOT at the `duration=first` of
+ *    the EDL render: there the voice is the first input and rules the length, here the
+ *    first track may be a half-second effect, and the mix cannot end
+ *    with it. Whoever rules the length is still the piece's `-t`.
  *
- * O gatilho do duck é a soma das faixas de frente: a cama abaixa quando QUALQUER
- * voz ou efeito está tocando, que é o que se espera de "música de fundo".
+ * The duck trigger is the sum of the front tracks: the bed goes down when ANY
+ * voice or effect is playing, which is what one expects from "background music".
  */
 /**
- * "Áudio separado": o arquivo leva o vídeo com som e a pessoa quer a trilha
- * sozinha também (para editar fora ou reusar a narração). Extrair do arquivo
- * FINAL é uma passada só, sem recodificar imagem e sem remisturar: o WAV sai
- * com exatamente o som que está no vídeo — mixado, cortado e normalizado igual.
- * PCM 16 bits em 48 kHz é o que qualquer editor abre sem reclamar.
+ * "Separate audio": the file carries the video with sound and the person wants the track
+ * alone too (to edit outside or reuse the narration). Extracting from the
+ * FINAL file is a single pass, without re-encoding picture and without remixing: the WAV comes out
+ * with exactly the sound that is in the video — mixed, cut and normalized the same way.
+ * 16-bit PCM at 48 kHz is what any editor opens without complaining.
  */
 export function audioExtractFfmpegArgs(spec: { video: string; output: string }): string[] {
   return ['-v', 'error', '-i', spec.video, '-vn', '-c:a', 'pcm_s16le', '-ar', '48000', spec.output]
@@ -489,44 +489,44 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
   const labels = spec.events.map((event, index) => {
     const out = `t${index}`
     const chain: string[] = []
-    // Comprimento do trecho na linha do tempo da PRÓPRIA faixa: com `end`, é o
-    // recorte; sem ele, o que resta da peça depois do `start` — é onde a rampa de
-    // saída tem que começar.
+    // Length of the stretch on the track's OWN timeline: with `end`, it is the
+    // trim; without it, what remains of the piece after `start` — it is where the out
+    // ramp has to start.
     const length = event.end === undefined ? spec.duration - event.start : event.end - event.start
     const offset = event.offset ?? 0
-    // Um arquivo curto que se repete é infinito: sem o recorte o mix não teria fim.
+    // A short file that repeats is infinite: without the trim the mix would have no end.
     if (event.loop) chain.push('aloop=loop=-1:size=2147483647')
     if (offset > 0) {
-      // Corte no início: o som começa de `offset`, e o relógio da faixa volta a zero
-      // para o atraso (adelay) contar a partir dele.
+      // Cut at the beginning: the sound starts from `offset`, and the track's clock goes back to zero
+      // so the delay (adelay) counts from it.
       const end = event.end !== undefined || event.loop ? `:end=${(offset + Math.max(0, length)).toFixed(3)}` : ''
       chain.push(`atrim=start=${offset.toFixed(3)}${end}`, 'asetpts=PTS-STARTPTS')
     } else if (event.end !== undefined || event.loop) {
       chain.push(`atrim=end=${Math.max(0, length).toFixed(3)}`)
     }
-    // Timbre e dinâmica antes do nível: o compressor reage ao sinal como a faixa
-    // é, e o ganho (e as rampas) vêm por cima do resultado.
+    // Timbre and dynamics before the level: the compressor reacts to the signal as the track
+    // is, and the gain (and the ramps) come on top of the result.
     if (event.fx) chain.push(...toneFilters(event.fx))
     if (event.gainDb !== 0) chain.push(`volume=${event.gainDb.toFixed(2)}dB`)
     if (event.fadeIn > 0) chain.push(`afade=in:st=0:d=${event.fadeIn.toFixed(3)}`)
     if (event.fadeOut > 0) {
       chain.push(`afade=out:st=${Math.max(0, length - event.fadeOut).toFixed(3)}:d=${event.fadeOut.toFixed(3)}`)
     }
-    // `all=1` cobre mono e estéreo sem precisar saber quantos canais o arquivo tem.
+    // `all=1` covers mono and stereo without needing to know how many channels the file has.
     if (event.start > 0) chain.push(`adelay=${Math.round(event.start * 1000)}:all=1`)
-    // `atrim=start` seguido de `adelay` faz o ffmpeg perder o silêncio do atraso
-    // quando o resultado vai para mp4/aac (o som aparece adiantado, e a faixa sai
-    // mais curta). O `atrim=end` + `adelay` de antes não sofre disso; o corte
-    // inicial sim. O resample por timestamp devolve o atraso inteiro.
+    // `atrim=start` followed by `adelay` makes ffmpeg lose the delay's silence
+    // when the result goes to mp4/aac (the sound shows up early, and the track comes out
+    // shorter). The `atrim=end` + `adelay` from before does not suffer from that; the
+    // initial cut does. The timestamp-based resample gives the whole delay back.
     if (offset > 0 && event.start > 0) chain.push('aresample=async=1:first_pts=0')
-    // A curva de volume depois do atraso: ali o `t` do filtro já é o tempo da
-    // PEÇA, que é a régua em que o manifest escreve os pontos.
+    // The volume curve after the delay: there the filter's `t` is already the
+    // PIECE's time, which is the ruler in which the manifest writes the points.
     const curve = event.fx ? automationFilter(event.fx.automation) : null
     if (curve) chain.push(curve)
-    // Cadeia vazia (faixa crua: nada a recortar, nenhum nível, nenhuma rampa)
-    // precisa de um filtro mesmo assim — `[1:a][t0]` sem filtro entre os rótulos é
-    // grafo inválido, e o ffmpeg responde "No such filter: ''". `anull` é a
-    // passagem direta.
+    // Empty chain (raw track: nothing to trim, no level, no ramp)
+    // needs a filter anyway — `[1:a][t0]` without a filter between the labels is
+    // an invalid graph, and ffmpeg answers "No such filter: ''". `anull` is the
+    // pass-through.
     graph.push(`[${index + 1}:a]${(chain.length ? chain : ['anull']).join(',')}[${out}]`)
     return out
   })
@@ -539,19 +539,19 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
 
   let output = labels[0]
   if (labels.length === 1) {
-    // Uma faixa só: a cadeia dela já é a saída, não há o que somar.
+    // A single track: its chain is already the output, there is nothing to sum.
   } else if (front.length === 0 || bed.length === 0) {
-    // Sem as duas famílias não há duck a fazer: é a soma de todas.
+    // Without both families there is no duck to do: it is the sum of all.
     output = 'mix'
     sum(labels, output)
   } else {
-    // A frente aciona o duck: uma cópia dela vai para a soma, outra para o gatilho.
-    // Mesma montagem e mesmos parâmetros do render de EDL (render.ts:246).
+    // The front triggers the duck: one copy of it goes to the sum, another to the trigger.
+    // Same assembly and same parameters as the EDL render (render.ts:246).
     sum(front, 'front')
     graph.push('[front]asplit=2[frontmix][frontsc]')
     sum(bed, 'bed')
-    // Os números do duck vêm da primeira cama que os personalizou (todas as camas
-    // são somadas ANTES de passar pelo gatilho, então há um duck só).
+    // The duck numbers come from the first bed that customized them (all beds
+    // are summed BEFORE going through the trigger, so there is only one duck).
     const settings = spec.events.find((event) => event.duck && event.duckSettings)?.duckSettings ?? DEFAULT_DUCK
     graph.push(`[bed][frontsc]${duckFilter(settings)}[bedducked]`)
     output = 'mix'

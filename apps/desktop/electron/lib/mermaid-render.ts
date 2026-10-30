@@ -5,32 +5,32 @@ import { BrowserWindow } from 'electron'
 import { mermaidSourcesOf, type Block, type RenderedDiagram } from './document-render'
 
 /**
- * Diagramas Mermaid desenhados no MAIN, para os arquivos que saem do app.
+ * Mermaid diagrams drawn in the MAIN, for the files that leave the app.
  *
- * Na tela quem desenha é o Streamdown, no renderer. O PDF e o .docx não passam
- * por lá: o PDF é a impressão de um HTML estático (sem script nenhum rodando),
- * e o .docx é XML montado à mão. Os dois precisam do diagrama já pronto — o PDF
- * como SVG embutido no HTML (vetor, nítido em qualquer zoom) e o .docx como PNG
- * (o Word até aceita SVG, mas só versões recentes, e o LibreOffice/Google Docs
- * o descartam; PNG abre em todo lugar).
+ * On screen whoever draws is Streamdown, in the renderer. The PDF and the .docx do not go
+ * through there: the PDF is the printing of a static HTML (with no script running),
+ * and the .docx is hand-assembled XML. Both need the diagram ready — the PDF
+ * as SVG embedded in the HTML (vector, sharp at any zoom) and the .docx as PNG
+ * (Word even accepts SVG, but only recent versions, and LibreOffice/Google Docs
+ * discard it; PNG opens everywhere).
  *
- * O Mermaid precisa de DOM para medir texto, então roda numa janela oculta e
- * isolada (sandbox, sem Node), a mesma receita da miniatura e do PDF. A janela
- * é aberta por lote e fechada no fim — manter uma viva gastaria memória o tempo
- * todo por um recurso que se usa de vez em quando.
+ * Mermaid needs a DOM to measure text, so it runs in a hidden and isolated
+ * window (sandbox, no Node), the same recipe as the thumbnail and the PDF. The window
+ * is opened per batch and closed at the end — keeping one alive would spend memory all the
+ * time for a resource that is used now and then.
  */
 
 const _require = createRequire(import.meta.url)
 
-/** Tempo máximo por lote. Um diagrama que não sai nesse tempo vira código. */
+/** Maximum time per batch. A diagram that does not come out in that time becomes code. */
 const RENDER_TIMEOUT_MS = 20_000
-/** Resolução do PNG em relação ao tamanho do SVG: 2x fica nítido impresso. */
+/** PNG resolution relative to the SVG size: 2x stays sharp in print. */
 const PNG_SCALE = 2
 
 /**
- * O mesmo diagrama é desenhado várias vezes na vida de um documento (salvar,
- * miniatura, PDF, .docx), sempre com a mesma fonte. Cache pelo hash da fonte
- * evita abrir a janela de novo para o que não mudou.
+ * The same diagram is drawn several times in a document's life (save,
+ * thumbnail, PDF, .docx), always from the same source. Cache by the source's hash
+ * avoids opening the window again for what has not changed.
  */
 const cache = new Map<string, RenderedDiagram | null>()
 const CACHE_LIMIT = 200
@@ -52,18 +52,18 @@ interface PageResult {
 }
 
 /**
- * Roda DENTRO da janela oculta. É texto, e não uma função serializada com
- * toString: o bundle do main pode reescrever a função (helpers injetados,
- * nomes trocados) e ela chegaria à página referenciando o que lá não existe.
- * Recebe `sources` e `scale`; usa só o `mermaid` global e o DOM.
+ * Runs INSIDE the hidden window. It is text, and not a function serialized with
+ * toString: the main's bundle may rewrite the function (injected helpers, renamed
+ * names) and it would reach the page referencing what does not exist there.
+ * It receives `sources` and `scale`; it uses only the global `mermaid` and the DOM.
  */
 const PAGE_SCRIPT = `async (sources, scale) => {
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
     theme: 'default',
-    // Rótulos em HTML (foreignObject) sujam o canvas e o toDataURL falha —
-    // o PNG do .docx sairia vazio. Em SVG puro o diagrama rasteriza limpo.
+    // HTML labels (foreignObject) dirty the canvas and toDataURL fails —
+    // the .docx PNG would come out empty. In pure SVG the diagram rasterizes cleanly.
     htmlLabels: false,
     flowchart: { htmlLabels: false },
     fontFamily: 'Arial, Helvetica, sans-serif',
@@ -72,8 +72,8 @@ const PAGE_SCRIPT = `async (sources, scale) => {
   for (let i = 0; i < sources.length; i++) {
     try {
       const { svg } = await mermaid.render('orbit-diagram-' + i, sources[i])
-      // Mermaid devolve width="100%" e o tamanho real só no viewBox. Fixar
-      // largura e altura em px é o que dá ao PNG e ao Word uma medida.
+      // Mermaid returns width="100%" and the real size only in the viewBox. Fixing
+      // width and height in px is what gives the PNG and Word a measurement.
       const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
       const el = doc.documentElement
       const box = (el.getAttribute('viewBox') || '').trim().split(/[ ,]+/).map(Number)
@@ -91,7 +91,7 @@ const PAGE_SCRIPT = `async (sources, scale) => {
       canvas.width = Math.round(width * scale)
       canvas.height = Math.round(height * scale)
       const ctx = canvas.getContext('2d')
-      // Fundo branco: PNG transparente fica preto no tema escuro do Word.
+      // White background: a transparent PNG turns black in the dark theme of Word.
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
@@ -99,7 +99,7 @@ const PAGE_SCRIPT = `async (sources, scale) => {
     } catch (err) {
       out.push({ error: err && err.message ? err.message : String(err) })
     }
-    // O Mermaid deixa nós temporários no body quando a sintaxe falha.
+    // Mermaid leaves temporary nodes in the body when the syntax fails.
     document.body.innerHTML = ''
   }
   return out
@@ -121,15 +121,15 @@ async function renderBatch(sources: string[]): Promise<PageResult[]> {
   })
   try {
     await win.loadURL('about:blank')
-    // O `void 0` no fim é obrigatório: o executeJavaScript devolve o valor da
-    // última expressão, que no bundle do Mermaid é um objeto que não passa
-    // pelo IPC ("could not be cloned") — e a promessa rejeitaria.
+    // The `void 0` at the end is mandatory: executeJavaScript returns the value of the
+    // last expression, which in Mermaid's bundle is an object that does not pass
+    // through IPC ("could not be cloned") — and the promise would reject.
     await win.webContents.executeJavaScript(`${await loadMermaidScript()}\n;void 0`)
     const call = `(${PAGE_SCRIPT})(${JSON.stringify(sources)}, ${PNG_SCALE})`
     return (await Promise.race([
       win.webContents.executeJavaScript(call),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Mermaid demorou demais')), RENDER_TIMEOUT_MS),
+        setTimeout(() => reject(new Error('Mermaid took too long')), RENDER_TIMEOUT_MS),
       ),
     ])) as PageResult[]
   } finally {
@@ -138,10 +138,10 @@ async function renderBatch(sources: string[]): Promise<PageResult[]> {
 }
 
 /**
- * Os diagramas Mermaid dos blocos, prontos para o HTML e o .docx. Devolve um
- * lookup pela fonte; o que não desenhou (sintaxe inválida, timeout) fica de
- * fora, e o renderizador cai para o bloco de código — o documento sai inteiro
- * mesmo com um diagrama quebrado.
+ * The Mermaid diagrams of the blocks, ready for the HTML and the .docx. It returns a
+ * lookup by source; what did not draw (invalid syntax, timeout) stays
+ * out, and the renderer falls back to the code block — the document comes out whole
+ * even with a broken diagram.
  */
 export async function renderDiagrams(
   blocks: Block[],
@@ -154,13 +154,13 @@ export async function renderDiagrams(
     try {
       results = await renderBatch(missing)
     } catch (err) {
-      console.warn('[mermaid] render falhou:', err)
+      console.warn('[mermaid] render failed:', err)
     }
     missing.forEach((source, i) => {
       const r = results[i]
       const ok = r?.svg && r.png && r.width && r.height
-      // Falha por timeout não entra no cache: pode ter sido só a máquina
-      // ocupada. Erro de sintaxe entra, senão cada salvamento reabriria a janela.
+      // A timeout failure does not enter the cache: it may have been just the machine
+      // being busy. A syntax error enters, otherwise every save would reopen the window.
       if (!ok && !r) return
       if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!)
       cache.set(
@@ -174,7 +174,7 @@ export async function renderDiagrams(
             }
           : null,
       )
-      if (!ok) console.warn('[mermaid] diagrama inválido:', r.error)
+      if (!ok) console.warn('[mermaid] invalid diagram:', r.error)
     })
   }
 

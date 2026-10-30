@@ -4,9 +4,9 @@ import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Design — as mesmas tools nos dois modos: o canvas mora no armazenamento do app e
- * entra na galeria — espelha video-chat.test.ts (o mock de 'electron' é o
- * mesmo molde, sem ffmpeg nenhum envolvido aqui).
+ * Design — the same tools in both modes: the canvas lives in the app's storage and
+ * enters the gallery — mirrors video-chat.test.ts (the 'electron' mock is the
+ * same mold, with no ffmpeg involved here).
  */
 
 const userData = path.join(os.tmpdir(), `orbit-design-chat-${process.pid}`)
@@ -20,9 +20,9 @@ vi.mock('electron', () => ({
   dialog: {},
 }))
 
-// design_asset copia um ANEXO para a pasta do canvas — o resolvedor de
-// referências (e o ffmpeg, que ele alcança para vídeo) é o mesmo do
-// motion-asset.test.ts, mockado aqui do mesmo jeito.
+// design_asset copies an ATTACHMENT into the canvas folder — the reference
+// resolver (and ffmpeg, which it reaches for video) is the same as
+// motion-asset.test.ts, mocked here the same way.
 const resolved: Record<string, { kind: string; id: string; file: string; name: string }> = {}
 vi.mock('../attachment-ref', () => ({
   resolveAttachmentRef: async (ref: string) => resolved[ref.replace(/^ref\s+/, '')] ?? null,
@@ -54,7 +54,7 @@ describe('designSlug', () => {
 
 describe('designPiecesDir', () => {
   it('refuses a session id that could escape the folder', () => {
-    expect(() => designPiecesDir('../outro')).toThrow(/invalid session/)
+    expect(() => designPiecesDir('../other')).toThrow(/invalid session/)
     expect(designPiecesDir('sess1')).toContain('sess1')
   })
 })
@@ -73,14 +73,14 @@ describe('createDesignTools — design_write / design_read / design_edit', () =>
       ],
       styles: [{ file: 'base.css', css: ':root{--gap:8px} body{margin:0}' }],
     })
-    // O relatório usa o SLUG da pasta (como o motion), não a grafia original.
+    // The report uses the folder's SLUG (like motion), not the original spelling.
     expect(report).toContain('Design "landing" is open in the Design tab')
     expect(report).toContain('with 2 artboards')
-    // "Main.html" tem título ("Hero"), então aparece como "Hero" (Main.html, …).
+    // "Main.html" has a title ("Hero"), so it appears as "Hero" (Main.html, …).
     expect(report).toContain('"Hero" (Main.html,')
     expect(report).toContain('"Pricing.html" (Pricing.html,')
-    // A folha compartilhada não está no canvas.json: o relatório a nomeia para o
-    // modelo não repetir o CSS dentro de cada documento.
+    // The shared sheet is not in canvas.json: the report names it so the
+    // model does not repeat the CSS inside each document.
     expect(report).toContain('Shared stylesheets: base.css')
 
     const canvas = JSON.parse(await fsp.readFile(path.join(folder, 'canvas.json'), 'utf8'))
@@ -102,7 +102,7 @@ describe('createDesignTools — design_write / design_read / design_edit', () =>
   it('design_read returns the layout (with the stylesheets), and one file\'s content', async () => {
     const layout = await run(tools, 'design_read', { name: 'Landing' })
     expect(JSON.parse(layout).order).toEqual(['Main.html', 'Pricing.html'])
-    // O canvas.json é só o arranjo; as folhas entram na leitura.
+    // canvas.json is only the arrangement; the sheets come in on read.
     expect(JSON.parse(layout).styles).toEqual(['base.css'])
 
     const html = await run(tools, 'design_read', { name: 'Landing', file: 'Main.html' })
@@ -218,15 +218,15 @@ describe('createDesignTools — design_asset', () => {
   it('copies an attached photo into the canvas folder and hints the relative src', async () => {
     const source = path.join(userData, 'orig.png')
     await fsp.writeFile(source, 'PNG')
-    resolved['img_ab1.png'] = { kind: 'image', id: 'img_ab1.png', file: source, name: 'Foto da equipe.png' }
+    resolved['img_ab1.png'] = { kind: 'image', id: 'img_ab1.png', file: source, name: 'Team photo.png' }
 
     const tools = createDesignTools({ sessionId: 'sess1' })
     const report = await run(tools, 'design_asset', { ref: 'img_ab1.png', name: 'Moodboard' })
 
-    expect(report).toContain('Copied: image "Foto da equipe.png" → Foto-da-equipe.png')
-    expect(report).toContain('<img src="Foto-da-equipe.png">')
+    expect(report).toContain('Copied: image "Team photo.png" → Team-photo.png')
+    expect(report).toContain('<img src="Team-photo.png">')
     const folder = path.join(designPiecesDir('sess1'), 'moodboard')
-    expect(await fsp.readFile(path.join(folder, 'Foto-da-equipe.png'), 'utf8')).toBe('PNG')
+    expect(await fsp.readFile(path.join(folder, 'Team-photo.png'), 'utf8')).toBe('PNG')
   })
 
   it('design_asset refuses a ref that is not an attachment', async () => {
@@ -237,21 +237,21 @@ describe('createDesignTools — design_asset', () => {
   })
 })
 
-describe('createDesignTools — design_preview / design_delete / código / modo plano', () => {
-  it('design_preview reabre um canvas que existe e recusa um que não existe', async () => {
+describe('createDesignTools — design_preview / design_delete / code / plan mode', () => {
+  it('design_preview reopens an existing canvas and refuses a missing one', async () => {
     const tools = createDesignTools({ sessionId: 'sess2' })
     await run(tools, 'design_write', { name: 'Logo', boards: [{ file: 'Main.html', x: 0, y: 0, w: 400, h: 400, html: '<html></html>' }] })
     expect(await run(tools, 'design_preview', { name: 'Logo' })).toContain('with 1 artboard')
-    await expect(run(tools, 'design_preview', { name: 'Nenhum' })).rejects.toThrow(/no design canvas named "nenhum"/)
+    await expect(run(tools, 'design_preview', { name: 'None' })).rejects.toThrow(/no design canvas named "none"/)
   })
 
-  it('design_delete apaga a pasta do canvas', async () => {
+  it('design_delete deletes the canvas folder', async () => {
     const tools = createDesignTools({ sessionId: 'sess2' })
     expect(await run(tools, 'design_delete', { name: 'Logo' })).toContain('deleted')
     await expect(fsp.stat(path.join(designPiecesDir('sess2'), 'logo'))).rejects.toThrow()
   })
 
-  it('no código o canvas mora no Orbit, e um arquivo do projeto entra pelo design_asset({ path })', async () => {
+  it('in code mode the canvas lives in Orbit, and a project file comes in through design_asset({ path })', async () => {
     const directory = path.join(userData, 'proj')
     await fsp.mkdir(path.join(directory, 'public'), { recursive: true })
     await fsp.writeFile(path.join(directory, 'public', 'logo.svg'), '<svg/>')
@@ -262,11 +262,11 @@ describe('createDesignTools — design_preview / design_delete / código / modo 
 
     expect(report).toContain('<img src="logo.svg">')
     expect(await fsp.readFile(path.join(designPiecesDir('sess4'), 'site', 'logo.svg'), 'utf8')).toBe('<svg/>')
-    // Nada foi escrito no projeto.
+    // Nothing was written to the project.
     expect(await fsp.readdir(directory)).toEqual(['public'])
   })
 
-  it('modo plano: só ler e mostrar', () => {
+  it('plan mode: read and show only', () => {
     const tools = createDesignTools({ sessionId: 'sess4', readOnly: true })
     expect(Object.keys(tools).sort()).toEqual(['design_preview', 'design_read'])
   })

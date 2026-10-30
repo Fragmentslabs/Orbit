@@ -13,8 +13,8 @@ import { createSvgTools } from './svg'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createBrowserRecordTools } from './browser-record'
-import { createEsteiraTools } from './esteira'
-import { createRotinasTool } from './rotinas'
+import { createPipelineTools } from './pipeline'
+import { createRoutinesTool } from './routines'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
 import { createSubchatTools } from './subchats'
@@ -67,28 +67,28 @@ export type { ToolContext, TurnSnapshot } from './context'
 export type { ImageToolHooks } from './image'
 
 /**
- * Monta o conjunto de ferramentas de acordo com o modo, seguindo a lógica de
- * agentes do opencode: "plan" só permite leitura; "build" (código) tem acesso
- * completo; no chat cada toggle controla estritamente sua capacidade —
- * Pesquisa habilita web, Browser habilita o browser nativo.
+ * Assembles the tool set according to the mode, following opencode's agent
+ * logic: "plan" only allows reading; "build" (code) has full
+ * access; in the chat each toggle strictly controls its own capability —
+ * Search enables web, Browser enables the native browser.
  *
- * `imageHooks` liga o image_delete ao estado vivo da resposta em andamento
- * (chat-engine) — sem ele a tool ainda existe mas se recusa a apagar nada.
+ * `imageHooks` ties image_delete to the live state of the response in progress
+ * (chat-engine) — without it the tool still exists but refuses to delete anything.
  */
 export function buildToolSet(
   input: SendMessageInput,
   ctx: ToolContext | null,
   imageHooks?: ImageToolHooks,
-  /** Visão do modelo do turno — no chat não há ctx para carregá-la */
+  /** Vision of the turn's model — in the chat there is no ctx to load it from */
   modelVision?: boolean,
-  /** Janela do turno: o subchat precisa dela para disparar o próprio turno.
-   *  Ausente nos workers efêmeros — lá a tool não é registrada. */
+  /** Turn window: the subchat needs it to fire its own turn.
+   *  Absent in ephemeral workers — there the tool is not registered. */
   win?: BrowserWindow,
 ): ToolSet {
   const tools: ToolSet = {}
-  // Controle do computador: duas chaves (Preferências + modo da conversa),
-  // só a sessão principal e só onde há driver. Desligado, as tools nem
-  // existem — o prompt explica ao agente como ligar.
+  // Computer control: two switches (Preferences + conversation mode),
+  // main session only and only where there is a driver. When off, the tools do not
+  // even exist — the prompt explains to the agent how to turn it on.
   if (agentMayControlComputer(input, isComputerAvailable())) {
     Object.assign(
       tools,
@@ -99,38 +99,38 @@ export function buildToolSet(
         conversation: { providerId: input.providerId, modelId: input.modelId },
       }),
     )
-    // Subagente: o laço de várias ações roda com contexto curto (e o modelo
-    // das Preferências → Computador, se houver), não a cada passo aqui.
+    // Subagent: the multi-action loop runs with a short context (and the
+    // Preferences → Computer model, if any), not on every step here.
     tools.computer_task = createComputerTaskTool(input, ctx?.abort)
   }
-  // Skills: no prompt entram com a descrição; o conteúdo completo vem sob
-  // demanda (skill_read), para que uma skill nativa não pague o texto inteiro
-  // em todo turno. Não expõe capacidade nova — só lê o que o agente já vê.
+  // Skills: they enter the prompt with the description; the full content comes on
+  // demand (skill_read), so that a native skill does not pay for the whole text
+  // on every turn. It exposes no new capability — it only reads what the agent already sees.
   tools.skill_read = createSkillReadTool(ctx?.directory)
-  // Identidade: o nome que a pessoa disse, no MESMO campo das Preferências. A
-  // detecção automática cobre "meu nome é X"; esta tool cobre o resto —
-  // "sou o Rafael", uma correção, e o pedido para esquecer o nome. Workers
-  // ficam de fora: quem conversa com a pessoa é a sessão principal.
+  // Identity: the name the person said, in the SAME Preferences field. Automatic
+  // detection covers "my name is X"; this tool covers the rest —
+  // "I am Rafael", a correction, and the request to forget the name. Workers
+  // stay out: whoever talks to the person is the main session.
   if (input.orchestrationRole !== 'worker') tools.set_user_name = createUserNameTool()
-  // Áudio: "Texto em fala" liga a geração aqui; a leitura (fala em texto) é a
-  // tool `transcribe`, que vive junto das tools de mídia e também só existe com
-  // o interruptor ligado — desligada, o prompt explica ao agente como ativar.
+  // Audio: "Text to speech" enables generation here; reading (speech to text) is the
+  // `transcribe` tool, which lives with the media tools and also only exists with
+  // the switch on — when off, the prompt explains to the agent how to enable it.
   const voice = getAppSettings().voice
   const addAudioTools = (scope: ToolContext | null) => {
     if (voice.tts.enabled) tools.audio_generate = createAudioGenerateTool(input.sessionId, scope)
   }
-  // Overlay (⇧⌘espaço): a pergunta é sobre o que está na TELA. Sem estas duas
-  // tools o agente responderia no escuro e pediria para a pessoa colar o texto.
-  // Só overlays expõem — no chat normal o custo de uma imagem por turno não se
-  // justifica. `end_call` vale em qualquer conversa falada.
+  // Overlay (⇧⌘space): the question is about what is on the SCREEN. Without these two
+  // tools the agent would answer in the dark and ask the person to paste the text.
+  // Only overlays expose them — in the normal chat the cost of one image per turn is not
+  // justified. `end_call` holds in any spoken conversation.
   if (input.options.overlay) {
-    // Controlando pelo atalho, quem mostra o status é o próprio painel (ver session.ts).
+    // When driven from the shortcut, the status is shown by the panel itself (see session.ts).
     markOverlaySession(input.sessionId)
     Object.assign(
       tools,
       createOverlayTools({
-        // Sem visão declarada, a resposta segura é NÃO anexar imagem: um modelo
-        // só de texto com um print anexado quebra ou inventa.
+        // With no declared vision, the safe answer is NOT to attach an image: a
+        // text-only model with a screenshot attached breaks or makes things up.
         modelVision: modelVision ?? ctx?.modelVision ?? false,
         visionModel: input.visionModel,
         sessionId: input.sessionId,
@@ -138,104 +138,104 @@ export function buildToolSet(
     )
   }
   if (input.options.overlay || input.options.voiceCall) tools.end_call = createEndCallTool()
-  // Regra de ouro: workers podem usar subagentes, mas NUNCA orquestrar (sem recursão infinita).
-  // Se orchestrate está ativo (este worker é um orquestrador), bloqueamos delegação.
+  // Golden rule: workers may use subagents, but NEVER orchestrate (no infinite recursion).
+  // If orchestrate is active (this worker is an orchestrator), delegation is blocked.
   const allowDelegation = input.options.subagents === true && !input.options.orchestrate
-  // Brain: ferramentas de memória — workers também ficam de fora
+  // Brain: memory tools — workers stay out too
   const allowBrain = input.options.brain === true && input.orchestrationRole !== 'worker'
-  // question: sessão principal sempre; workers só quando o pai não está em "full"
-  // (em "ask" a pergunta sobe ao usuário; em "approve" é auto-respondida)
+  // question: main session always; workers only when the parent is not in "full"
+  // (in "ask" the question goes up to the user; in "approve" it is auto-answered)
   const allowQuestion =
     input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
 
-  // Rotinas: o agente agenda pelo chat. A ação "criar" só PROPÕE — o card da
-  // conversa é quem cria; as demais ações são imediatas. Fora dos workers
-  // (quem agenda é quem conversa com a pessoa) e do modo plano (grava a
-  // proposta em disco).
+  // Routines: the agent schedules from the chat. The "create" action only
+  // PROPOSES — the conversation card is what creates it; the other actions are
+  // immediate. Kept out of workers (scheduling is for whoever talks to the
+  // person) and out of plan mode (it writes the proposal to disk).
   if (input.orchestrationRole !== 'worker' && !input.options.plan) {
-    tools.rotinas_manage = createRotinasTool(input)
+    tools.routines_manage = createRoutinesTool(input)
   }
 
   if (input.mode === 'chat') {
-    // Modo chat: as tools de fábrica só entram quando um toggle está ativo, e
-    // cada toggle expõe apenas as suas próprias. Servidores MCP são a exceção:
-    // existem sempre que há servidor ligado, recortados pela escolha desta
-    // conversa (`toolsServers`; ausente = todos).
+    // Chat mode: the built-in tools only enter when a toggle is active, and
+    // each toggle exposes only its own. MCP servers are the exception:
+    // they exist whenever there is a server on, sliced by this
+    // conversation's choice (`toolsServers`; absent = all).
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
       tools.webfetch = createWebFetchTool()
-      // No chat `ctx` é null por construção: a visão do turno vem do parâmetro
-      // `modelVision` (é por isso que ele existe — ver o comentário acima).
+      // In the chat `ctx` is null by construction: the turn's vision comes from the
+      // `modelVision` parameter (that is why it exists — see the comment above).
       Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: modelVision !== false }))
     }
     if (input.options.browser) {
       tools.browser_open = createBrowserOpenTool(input.sessionId)
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
-    // Artefatos HTML: no chat o agente não tem write/bash — é a única forma
-    // dele entregar algo renderizável. Não é toggle (não expõe capacidade
-    // nova: não lê, não escreve no projeto, não acessa a rede em nome do
-    // agente) e workers ficam de fora, porque quem responde ao usuário é a
-    // sessão principal.
+    // HTML artifacts: in the chat the agent has no write/bash — it is the only way
+    // for it to deliver something renderable. It is not a toggle (it exposes no new
+    // capability: it does not read, does not write to the project, does not access the network on the
+    // agent's behalf) and workers stay out, because whoever answers the user is the
+    // main session.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createArtifactTools(input.sessionId))
-      // O que está aberto na aba lateral agora — deixa o agente responder a
-      // "isso"/"aqui" sem o usuário reanexar. Read-only, sem permissão.
+      // What is open in the side tab right now — it lets the agent answer
+      // "this"/"here" without the user re-attaching. Read-only, no permission.
       Object.assign(tools, createPanelTools(input.sessionId))
-      // Mostrar uma imagem do app na resposta: no chat o markdown de imagem é
-      // bloqueado, e este é o único caminho.
+      // Showing an app image in the response: in the chat image markdown is
+      // blocked, and this is the only path.
       Object.assign(tools, createGalleryShowImageTool())
     }
-    // Documentos anexados: o equivalente do read/grep para o chat, que não
-    // tem nenhum dos dois. Sempre disponíveis — quando não há anexo, doc_list
-    // responde que não há, e é justamente isso que impede o agente de
-    // alucinar sobre um documento que ele não leu.
+    // Attached documents: the equivalent of read/grep for the chat, which has
+    // neither of them. Always available — when there is no attachment, doc_list
+    // answers that there is none, and that is exactly what keeps the agent from
+    // hallucinating about a document it did not read.
     Object.assign(tools, createDocumentTools(input.sessionId))
-    // Ver pagina de PDF: no chat a fonte e sempre um anexo.
+    // Viewing a PDF page: in the chat the source is always an attachment.
     tools.pdf_view_page = createPdfViewTool(input.sessionId, null, modelVision !== false)
-    // Consulta de planilha: no chat a fonte e sempre um anexo (nao ha pasta
-    // de trabalho), por isso ctx entra como null.
+    // Spreadsheet query: in the chat the source is always an attachment (there is no working
+    // folder), which is why ctx goes in as null.
     tools.sheet_query = createSheetQueryTool(input.sessionId, null)
-    // Documentos entregaveis (PDF/DOCX). No chat o escopo e a pasta da
-    // sidebar, quando houver — nao existe diretorio de trabalho aqui.
+    // Deliverable documents (PDF/DOCX). In the chat the scope is the sidebar
+    // folder, when there is one — there is no working directory here.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(
         tools,
         createDocumentAuthoringTools({ sessionId: input.sessionId }),
       )
-      // Editar .docx anexado: a copia fica no Orbit, o original nao e tocado.
+      // Editing an attached .docx: the copy stays in Orbit, the original is not touched.
       Object.assign(tools, createDocxEditTools({ sessionId: input.sessionId }, null))
       Object.assign(tools, createPdfOpsTools({ sessionId: input.sessionId }, null))
-      // Editar imagem por processamento de pixel (redimensionar, comprimir,
-      // ajustar tom, tirar o fundo). No chat a fonte e sempre a galeria — todo
-      // anexo de imagem e registrado la —, por isso ctx entra como null.
+      // Editing an image by pixel processing (resize, compress,
+      // adjust tone, remove the background). In the chat the source is always the gallery — every
+      // image attachment is registered there —, which is why ctx goes in as null.
       Object.assign(tools, createImageTools({ sessionId: input.sessionId }, null, imageHooks))
-      // SVG e imagem sao tools separadas porque a natureza e outra: uma
-      // reprocessa pixel, a outra reescreve texto.
+      // SVG and image are separate tools because their nature is different: one
+      // reprocesses pixels, the other rewrites text.
       Object.assign(tools, createSvgTools({ sessionId: input.sessionId }, null))
-      // No chat o áudio vem sempre de um anexo (não há pasta de trabalho).
+      // In the chat the audio always comes from an attachment (there is no working folder).
       addAudioTools(null)
-      // Comprimir vídeo/áudio (caber num teto em bytes, converter, extrair o
-      // áudio). No chat a origem é sempre um anexo e o resultado entra na
-      // galeria — a imagem continua no image_edit, que se mede sozinho. Sem
-      // ffmpeg a tool nem existe (e o prompt não a anuncia).
+      // Compressing video/audio (fit under a byte ceiling, convert, extract the
+      // audio). In the chat the source is always an attachment and the result goes into the
+      // gallery — the image stays in image_edit, which measures itself. Without
+      // ffmpeg the tool does not even exist (and the prompt does not announce it).
       if (resolveFfmpeg()) {
         Object.assign(tools, createMediaTools({ sessionId: input.sessionId, canShow: true }, null))
       }
-      // Mídia por link (yt-dlp): baixar vídeo/áudio, ler a transcrição e, com
-      // ela, resumir. No chat o arquivo mora no storage do Orbit e entra na
-      // galeria. Sem o binário instalado o conjunto não some: ytdlp_install é
-      // a porta, e as outras tools respondem o que instalar.
+      // Media by link (yt-dlp): download video/audio, read the transcript and, with
+      // it, summarize. In the chat the file lives in Orbit's storage and goes into the
+      // gallery. Without the binary installed the set does not vanish: ytdlp_install is
+      // the door, and the other tools answer what to install.
       Object.assign(
         tools,
         createYtdlpTools({ sessionId: input.sessionId, canShow: true, language: input.language }, null),
       )
-      // Peças do Orbit (motion, design, slides): as MESMAS tools do modo
-      // código — a peça mora no armazenamento do app, é endereçada por nome e
-      // toda escrita passa pelo diário do turno. Sem pasta de trabalho, o
-      // material entra só pelos anexos, e a edição de vídeo (EDL) vem junto do
-      // motion, lendo os anexos pela referência. O render só existe com o
-      // ffmpeg do app.
+      // Orbit pieces (motion, design, slides): the SAME tools as code
+      // mode — the piece lives in the app's storage, is addressed by name and
+      // every write goes through the turn's journal. With no working folder, the
+      // material comes in only through attachments, and video editing (EDL) comes along with
+      // motion, reading the attachments by reference. Render only exists with the app's
+      // ffmpeg.
       Object.assign(
         tools,
         createMotionTools({
@@ -248,38 +248,38 @@ export function buildToolSet(
       )
       Object.assign(tools, createDesignTools({ sessionId: input.sessionId }))
       Object.assign(tools, createSlidesTools({ sessionId: input.sessionId }))
-      // Fontes externas (biblioteca do Orbit): instalar não pede permissão nem
-      // escreve no projeto — o scheme orbit-font:// entrega o arquivo ao
-      // artboard e à composição. Sem toggle: não expõe nada que o app já não
-      // faça ao renderizar uma fonte.
+      // External fonts (Orbit's library): installing does not ask permission nor
+      // write to the project — the orbit-font:// scheme delivers the file to the
+      // artboard and to the composition. No toggle: it exposes nothing the app does not already
+      // do when rendering a font.
       Object.assign(tools, createFontTools())
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
-    // Esteira: transformar o que foi discutido no chat em esteira/task de um
-    // board. Fica sempre disponível (não é toggle): a esteira é outra forma de
-    // trabalhar, não um modo da conversa — o chat só empurra trabalho pra lá.
-    // Workers ficam de fora: quem decide o que vira task é a sessão principal.
+    // Pipeline: turn what was discussed in the chat into a pipeline/task on a
+    // board. Always available (not a toggle): the pipeline is another way of
+    // working, not a mode of the conversation — the chat only pushes work there.
+    // Workers stay out: the main session decides what becomes a task.
     if (input.orchestrationRole !== 'worker') {
-      Object.assign(tools, createEsteiraTools(input.sessionId, input))
-      // Manutenção de chats (listar por inatividade, arquivar, excluir): base
-      // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
-      // quem decide o que sai da sidebar é a sessão principal.
+      Object.assign(tools, createPipelineTools(input.sessionId, input))
+      // Chat maintenance (list by inactivity, archive, delete): the basis of the
+      // cleanup routines. Out of the workers for the same reason as the pipeline —
+      // the main session decides what leaves the sidebar.
       Object.assign(tools, createSessionTools())
-      // Subchats: conversa nova, anexada a esta, para o que não pertence a este
-      // contexto (ou quando um contexto novo vale mais que outra compactação).
-      // Fora dos workers — quem decide abrir conversa é quem fala com a pessoa.
+      // Subchats: a new conversation, attached to this one, for what does not belong to this
+      // context (or when a new context is worth more than another compaction).
+      // Out of the workers — whoever decides to open a conversation is whoever talks to the person.
       if (win) Object.assign(tools, createSubchatTools(input, win))
-      // Relatório de horas/custo: a mesma conta da tela de uso, para o agente
-      // responder "quantas horas no projeto X" sem chutar. Fora dos workers
-      // porque quem escreve o relatório é a sessão que fala com o usuário.
+      // Hours/cost report: the same math as the usage screen, so the agent can
+      // answer "how many hours on project X" without guessing. Out of the workers
+      // because whoever writes the report is the session that talks to the user.
       Object.assign(tools, createUsageTools())
     }
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
-    // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
-    // describe_image descreve sob demanda (com o contexto que ele passar).
+    // Vision mode: seeing the attached images is the agent's decision — the
+    // describe_image tool describes on demand (with the context it passes).
     if (input.visionModel) tools.describe_image = createDescribeImageTool(input)
-    // Servidores MCP: não são toggle — as tools existem sempre, recortadas
-    // pela escolha desta conversa (ausente = todos os ligados no app).
+    // MCP servers: they are not a toggle — the tools always exist, sliced
+    // by this conversation's choice (absent = all the ones on in the app).
     Object.assign(
       tools,
       getMcpTools({
@@ -289,24 +289,26 @@ export function buildToolSet(
         only: input.options.toolsServers,
       }),
     )
-    // Fluxo explícito /create-skill: habilita só a tool de propor skill
+    // Explicit /create-skill flow: enables only the propose-skill tool
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
       tools.create_skill = createSkillTool()
     }
-    // Conexões MCP: propor uma conexão nova, corrigir uma existente e ler o
-    // estado. Elas só propõem — quem aplica é o card na conversa —, então não
-    // são um toggle: valem em qualquer conversa, como a esteira e os chats.
+    // MCP connections: propose a new connection, fix an existing one and read
+    // the state. They only propose — the card in the conversation applies it —,
+    // so they are not a toggle: they hold in any conversation, like the
+    // pipeline and the chats.
     if (input.orchestrationRole !== 'worker') Object.assign(tools, createMcpTools())
     return tools
   }
 
-  // Modo código: MCP disponível (servidores configurados) + skill flow, com o
-  // recorte da conversa (`toolsServers`; ausente = todos, que é também o de
-  // quem chama o engine sem passar pelo composer: celular, rotinas, esteira).
-  // As imagens que um servidor devolve vão para a galeria deste chat; o
-  // resultado diz ao modelo como mostrá-las ou olhá-las — por isso o MCP
-  // precisa saber se show_image e describe_image existem neste turno (as
-  // condições espelham as de mais abaixo).
+  // Code mode: MCP available (configured servers) + skill flow, with the
+  // conversation's slice (`toolsServers`; absent = all, which is also what
+  // callers that do not go through the composer get: mobile, routines,
+  // pipeline).
+  // The images a server returns go to this chat's gallery; the
+  // result tells the model how to show or look at them — that is why MCP
+  // needs to know whether show_image and describe_image exist in this turn (the
+  // conditions mirror the ones further below).
   Object.assign(
     tools,
     getMcpTools({
@@ -318,27 +320,27 @@ export function buildToolSet(
   )
   if (input.orchestrationRole !== 'worker') {
     tools.create_skill = createSkillTool()
-    // Conexões MCP: propor uma conexão nova, corrigir uma existente e ler o
-    // estado. Só propõem — quem aplica é o card na conversa.
+    // MCP connections: propose a new connection, fix an existing one and read the
+    // state. They only propose — what applies it is the card in the conversation.
     Object.assign(tools, createMcpTools())
-    // Artefatos também no código: relatório de análise, diagrama de
-    // arquitetura, comparativo — coisas que o usuário quer VER e que não
-    // deveriam virar arquivo solto no repositório dele.
+    // Artifacts in code mode too: an analysis report, an architecture
+    // diagram, a comparison — things the user wants to SEE and that should not
+    // become a loose file in their repository.
     Object.assign(tools, createArtifactTools(input.sessionId))
-    // O que está aberto no painel (tool read_open_panel) — vale nos dois modos.
+    // What is open in the panel (the read_open_panel tool) — holds in both modes.
     Object.assign(tools, createPanelTools(input.sessionId))
   }
-  // Documentos anexados também no código: `read`/`grep` alcançam o
-  // repositório, não o que o usuário arrastou para a conversa. Sem isto, o
-  // trecho de abertura do anexo apontaria para uma tool inexistente.
+  // Attached documents in code mode too: `read`/`grep` reach the
+  // repository, not what the user dragged into the conversation. Without this, the
+  // opening excerpt of the attachment would point to a nonexistent tool.
   Object.assign(tools, createDocumentTools(input.sessionId))
   tools.pdf_view_page = createPdfViewTool(input.sessionId, ctx, ctx?.modelVision !== false)
-  // No codigo a consulta alcanca as duas fontes: planilha do repositorio
-  // (filePath, via ctx) e planilha anexada na conversa (docId).
+  // In code mode the query reaches both sources: a spreadsheet from the repository
+  // (filePath, via ctx) and a spreadsheet attached to the conversation (docId).
   tools.sheet_query = createSheetQueryTool(input.sessionId, ctx)
-  // No codigo o escopo e o REPOSITORIO: list_documents reencontra o que foi
-  // produzido sobre a mesma pasta de trabalho em qualquer conversa anterior,
-  // nao so nesta sessao.
+  // In code mode the scope is the REPOSITORY: list_documents finds again what was
+  // produced over the same working folder in any earlier conversation,
+  // not just in this session.
   if (input.orchestrationRole !== 'worker') {
     Object.assign(
       tools,
@@ -352,9 +354,9 @@ export function buildToolSet(
       tools,
       createPdfOpsTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
     )
-    // No codigo a imagem tambem pode vir da pasta de trabalho (um asset do
-    // projeto), entao aqui o ctx entra — e com ele o savePath, para gravar a
-    // versao editada de volta no repositorio quando o usuario pedir.
+    // In code mode the image can also come from the working folder (a project
+    // asset), so here ctx goes in — and with it savePath, to write the
+    // edited version back into the repository when the user asks.
     Object.assign(
       tools,
       createImageTools({ sessionId: input.sessionId, directory: input.directory }, ctx, imageHooks),
@@ -363,8 +365,8 @@ export function buildToolSet(
       tools,
       createSvgTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
     )
-    // No código o áudio também pode ser um arquivo da pasta (e o gerado pode
-    // ser gravado nela).
+    // In code mode the audio can also be a file from the folder (and the generated one can
+    // be written there).
     addAudioTools(ctx)
   }
 
@@ -378,14 +380,14 @@ export function buildToolSet(
     tools.ls = createListTool(ctx)
     tools.glob = createGlobTool(ctx)
     tools.grep = createGrepTool(ctx)
-    // Índice de símbolos: acha o trecho certo (arquivo:linha + código + quem
-    // usa) numa chamada, no lugar da rodada grep → read → read.
+    // Symbol index: finds the right excerpt (file:line + code + who
+    // uses it) in one call, instead of the grep → read → read round.
     Object.assign(tools, createCodeTools(ctx))
     tools.todowrite = createTodoTool()
-    // Leitura do estado do turno: verify_changes confere o que foi escrito;
-    // session_context traz metadados dos turnos recentes. Ambas são leitura
-    // (ok no plano) e não recebem orientação extra no prompt — o modelo
-    // decide quando chamá-las.
+    // Reading the turn state: verify_changes checks what was written;
+    // session_context brings metadata of recent turns. Both are reads
+    // (fine in plan) and get no extra guidance in the prompt — the model
+    // decides when to call them.
     tools.verify_changes = createVerifyChangesTool(ctx)
     tools.session_context = createSessionContextTool(ctx)
     if (!input.options.plan) {
@@ -395,9 +397,9 @@ export function buildToolSet(
       Object.assign(tools, createBackgroundTools(ctx))
     }
   }
-  // Edição de vídeo (EDL): precisa de pasta (as saídas vão para edit/ ao lado
-  // do material) e do ffmpeg que vem com o app. Workers entram, mas não
-  // mostram player: quem fala com o usuário é a sessão principal.
+  // Video editing (EDL): needs a folder (the outputs go to edit/ next to
+  // the material) and the ffmpeg that comes with the app. Workers get in, but do not
+  // show a player: whoever talks to the user is the main session.
   if (ctx && resolveFfmpeg()) {
     Object.assign(
       tools,
@@ -406,22 +408,22 @@ export function buildToolSet(
         canShow: input.orchestrationRole !== 'worker',
         readOnly: Boolean(input.options.plan),
         language: input.language,
-        // Sem "Fala em texto" ligado o motor não transcreve: a tool nem aparece
-        // e o prompt (AUDIO_TRANSCRIBE_OFF) diz onde ligar.
+        // With "Speech to text" off the engine does not transcribe: the tool does not even appear
+        // and the prompt (AUDIO_TRANSCRIBE_OFF) says where to turn it on.
         sttEnabled: voice.stt.enabled,
       }),
     )
-    // Compressão de mídia: usa o mesmo ffmpeg e o mesmo material do vídeo, mas
-    // é outra tarefa — cabe no plano, porque escreve um arquivo NOVO em media/
-    // e nunca toca na origem.
+    // Media compression: uses the same ffmpeg and the same material as video, but
+    // it is another task — it fits in plan, because it writes a NEW file in media/
+    // and never touches the source.
     Object.assign(
       tools,
       createMediaTools({ sessionId: input.sessionId, canShow: input.orchestrationRole !== 'worker' }, ctx),
     )
   }
-  // Mídia por link (yt-dlp): depende de pasta, não do ffmpeg — o áudio e a
-  // legenda funcionam sem ele, e o merge de vídeo usa o ffmpeg do app quando
-  // existe. Fica fora do bloco acima para não sumir num sistema sem ffmpeg.
+  // Media by link (yt-dlp): depends on a folder, not on ffmpeg — the audio and the
+  // subtitles work without it, and the video merge uses the app's ffmpeg when
+  // it exists. It stays out of the block above so it does not vanish on a system without ffmpeg.
   if (ctx) {
     Object.assign(
       tools,
@@ -431,17 +433,17 @@ export function buildToolSet(
       ),
     )
   }
-  // Peças do Orbit (motion, design, slides): as MESMAS tools do chat. A peça
-  // mora no armazenamento do app, não no repositório — o projeto entra como
-  // FONTE de material (os *_asset com `path`) e como destino só quando o
-  // usuário pede (piece_export, motion_render com `output`). Assim toda
-  // escrita passa pelo diário do turno e o revert da mensagem a desfaz.
+  // Orbit pieces (motion, design, slides): the SAME tools as the chat. The piece
+  // lives in the app's storage, not in the repository — the project comes in as a
+  // SOURCE of material (the *_asset ones with `path`) and as a destination only when the
+  // user asks (piece_export, motion_render with `output`). That way every
+  // write goes through the turn's journal and the message's revert undoes it.
   if (ctx) {
     const plan = Boolean(input.options.plan)
     const isWorker = input.orchestrationRole === 'worker'
-    // Motion entra também nos workers — a skill manda fazer cada animação num
-    // sub-agente em paralelo —, mas sem abrir aba: o painel é da sessão
-    // principal, que mostra a peça pelo id que o worker devolve.
+    // Motion also gets into the workers — the skill says to make each animation in a
+    // sub-agent in parallel —, but without opening a tab: the panel belongs to the main
+    // session, which shows the piece by the id the worker returns.
     Object.assign(
       tools,
       createMotionTools({
@@ -455,7 +457,7 @@ export function buildToolSet(
         sttEnabled: voice.stt.enabled,
       }),
     )
-    // Design e slides: só a sessão principal — o painel é um recurso visível.
+    // Design and slides: main session only — the panel is a visible resource.
     if (!isWorker) {
       Object.assign(tools, createDesignTools({ sessionId: input.sessionId, project: ctx, readOnly: plan }))
       Object.assign(tools, createSlidesTools({ sessionId: input.sessionId, project: ctx, readOnly: plan }))
@@ -464,23 +466,23 @@ export function buildToolSet(
     }
   }
 
-  // Browser do painel direito: teste de apps web + modo documentação.
-  // Workers ficam de fora — o painel é um recurso único e visível. Com as
-  // ferramentas de navegador desligadas nas Preferências, só quando o pedido
-  // veio do próprio navegador em tela cheia (ver agentMayUseBrowser).
+  // Right panel browser: testing web apps + documentation mode.
+  // Workers stay out — the panel is a single, visible resource. With the
+  // browser tools off in Preferences, only when the request
+  // came from the full-screen browser itself (see agentMayUseBrowser).
   if (ctx && input.orchestrationRole !== 'worker') {
     const panelTools = createPanelBrowserTools(ctx)
     if (agentMayUseBrowser(input)) {
       Object.assign(tools, panelTools)
-      // Automação em lote: roda numa janela oculta, sem disputar o painel.
+      // Batch automation: runs in a hidden window, without competing for the panel.
       Object.assign(tools, createBrowserScriptTools(ctx))
-      // Gravação de um roteiro em vídeo (mesma janela oculta, captura por CDP).
-      // Não pede permissão e não abre janela — mas só deve ser chamada quando o
-      // usuário pede uma gravação (ver a descrição da tool).
+      // Recording a script to video (same hidden window, capture via CDP).
+      // It does not ask permission and does not open a window — but it should only be called when
+      // the user asks for a recording (see the tool's description).
       Object.assign(tools, createBrowserRecordTools(ctx))
     } else {
-      // show_image também mostra imagens do projeto e da galeria — isso não é
-      // usar o navegador, então fica.
+      // show_image also shows images from the project and the gallery — that is not
+      // using the browser, so it stays.
       tools.show_image = panelTools.show_image
     }
   }
@@ -489,23 +491,24 @@ export function buildToolSet(
     tools.memory_graph = createGraphTool(input, ctx)
   }
   if (input.orchestrationRole !== 'worker') {
-    Object.assign(tools, createEsteiraTools(input.sessionId, input))
-    // Manutenção de chats (listar por inatividade, arquivar, excluir): base
-    // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
-    // quem decide o que sai da sidebar é a sessão principal.
+    Object.assign(tools, createPipelineTools(input.sessionId, input))
+    // Chat maintenance (list by inactivity, archive, delete): the basis of the
+    // cleanup routines. Out of the workers for the same reason as the pipeline —
+    // the main session decides what leaves the sidebar.
     Object.assign(tools, createSessionTools())
-    // Subchats: conversa nova, anexada a esta, para o que não pertence a este
-    // contexto (ou quando um contexto novo vale mais que outra compactação).
+    // Subchats: a new conversation, attached to this one, for what does not belong to this
+    // context (or when a new context is worth more than another compaction).
+    // Out of the workers — whoever decides to open a conversation is whoever talks to the person.
     if (win) Object.assign(tools, createSubchatTools(input, win))
     Object.assign(tools, createUsageTools())
-    // Worktrees: trocar a pasta do chat é decisão da sessão principal — um
-    // worker mudando a pasta de quem o chamou desorientaria a conversa.
+    // Worktrees: switching the chat's folder is the main session's decision — a
+    // worker changing the folder of whoever called it would derail the conversation.
     if (ctx) Object.assign(tools, createWorktreeTools(ctx))
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
-  // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
-  // describe_image descreve sob demanda (com o contexto que ele passar).
+  // Vision mode: seeing the attached images is the agent's decision — the
+  // describe_image tool describes on demand (with the context it passes).
   if (input.visionModel) tools.describe_image = createDescribeImageTool(input)
 
   return tools

@@ -2,17 +2,17 @@ import { globalToShot, type ShotGeometry } from './geometry'
 import type { Frame } from './types'
 
 /**
- * Último screenshot de cada conversa, em memória, com o ponto da última ação —
- * é o que a miniatura do painel de ações mostra. Os screenshots do Computer Use
- * NÃO vão para a galeria: com uma observação por ação (read_back), uma tarefa
- * curta já gravaria dezenas de arquivos na aba de mídia. O modelo recebe a
- * imagem pelo toModelOutput; a pessoa vê só a mais recente, aqui.
+ * Last screenshot of each conversation, in memory, with the point of the last action —
+ * it is what the thumbnail of the actions panel shows. Computer Use screenshots do NOT
+ * go to the gallery: with one observation per action (read_back), a short task would
+ * already write dozens of files in the media tab. The model receives the image through
+ * toModelOutput; the person sees only the most recent one, here.
  */
 
 export interface ShotTarget {
-  /** Frame global do elemento (clique por índice) */
+  /** Global frame of the element (click by index) */
   frame?: Frame
-  /** Ponto global (clique por x/y, rolagem) */
+  /** Global point (click by x/y, scroll) */
   point?: [number, number]
 }
 
@@ -22,7 +22,7 @@ interface LastShot {
   geometry: ShotGeometry
   app: string
   at: number
-  /** Em pontos globais: vale para o screenshot seguinte da mesma janela também */
+  /** In global points: it holds for the next screenshot of the same window too */
   target: (ShotTarget & { label: string; at: number }) | null
 }
 
@@ -32,13 +32,13 @@ export interface ShotView {
   height: number
   app: string
   at: number
-  /** Retângulo no espaço do screenshot (ponto = tamanho 0) */
+  /** Rectangle in the screenshot space (a point = size 0) */
   marker: { x: number; y: number; w: number; h: number; label: string } | null
 }
 
 const shots = new Map<string, LastShot>()
 
-/** Guarda o screenshot novo; o alvo da última ação continua (é a mesma janela, depois da ação). */
+/** Stores the new screenshot; the target of the last action stays (it is the same window, after the action). */
 export function rememberShot(sessionId: string, shot: Omit<LastShot, 'target'>): void {
   const previous = shots.get(sessionId)
   shots.set(sessionId, { ...shot, target: previous?.target ?? null })
@@ -53,7 +53,7 @@ export function forgetShots(sessionId: string): void {
   shots.delete(sessionId)
 }
 
-/** O marcador no espaço da imagem — fora dela (janela mudou, elemento rolado), sem marcador. */
+/** The marker in the image space — outside it (window changed, element scrolled), no marker. */
 export function markerFor(geometry: ShotGeometry, target: ShotTarget): ShotView['marker'] {
   const frame: Frame | null = target.frame ?? (target.point ? [target.point[0], target.point[1], 0, 0] : null)
   if (!frame) return null

@@ -1,12 +1,12 @@
 /**
- * Erro do cliente HTTP do companion → o que mostrar na tela.
+ * Error of the companion HTTP client → what to show on screen.
  *
- * O `CompanionHttp` devolve o corpo cru junto do status (`"503: {"error":…}"`),
- * e cada rota manda o que sabe. O ditado manda a frase pronta, e é dela que
- * `reasonFromHttpError` vive. A fala manda CÓDIGO, não frase — quem traduz é
- * este lado, onde se sabe em que idioma a pessoa está lendo.
+ * `CompanionHttp` returns the raw body along with the status (`"503: {"error":…}"`),
+ * and each route sends what it knows. The dictation sends the ready-made sentence, and that is
+ * where `reasonFromHttpError` lives. Speech sends a CODE, not a sentence — the
+ * translation happens on this side, where it is known in which language the person is reading.
  *
- * Os dois leitores ficam no mesmo módulo porque leem o mesmo corpo.
+ * Both readers live in the same module because they read the same body.
  */
 export function reasonFromHttpError(error?: string): string | null {
   if (!error) return null
@@ -21,12 +21,12 @@ export function reasonFromHttpError(error?: string): string | null {
 }
 
 /**
- * Código do corpo de erro → código, sem tradução.
+ * Code from the error body → code, without translation.
  *
- * A rota de fala responde `{"error":"tts_disabled"}` — um código fechado, não
- * uma frase. Devolve o que veio sem julgar: quem sabe quais códigos existem e
- * em que frase cada um vira é a tela. Corpo ilegível ou sem `error` → null, e
- * a tela cai no aviso genérico em vez de mostrar um pedaço de JSON.
+ * The speech route answers `{"error":"tts_disabled"}` — a closed code, not
+ * a sentence. Returns what came without judging: whoever knows which codes exist and
+ * what sentence each one becomes is the screen. Unreadable body or no `error` → null, and
+ * the screen falls back to the generic notice instead of showing a piece of JSON.
  */
 export function errorCodeFromHttpError(error?: string): string | null {
   if (!error) return null

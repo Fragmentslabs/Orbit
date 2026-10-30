@@ -3,17 +3,17 @@ import sharp from 'sharp'
 import { getOverlayWindow } from './window'
 
 /**
- * Captura a tela para a tool `see_screen` do overlay.
+ * Captures the screen for the overlay's `see_screen` tool.
  *
- * O painel não pode sair no print — ele está sempre na frente, no rodapé, e o
- * modelo descreveria a própria interface — mas também não pode piscar fora da
- * tela. A janela do overlay nasce com `setContentProtection(true)`: o sistema a
- * desenha para a pessoa e a exclui de qualquer captura, então o print sai limpo
- * com o painel parado no lugar. Só no Linux, onde a proteção é no-op, o painel
- * ainda é escondido durante o quadro e devolvido depois.
+ * The panel cannot show up in the print — it is always in front, at the bottom, and
+ * the model would describe its own interface — but it cannot blink out of the screen
+ * either. The overlay window is born with `setContentProtection(true)`: the system
+ * draws it for the person and excludes it from any capture, so the print comes out
+ * clean with the panel sitting where it is. Only on Linux, where the protection is a
+ * no-op, the panel is still hidden during the frame and given back afterwards.
  *
- * Também captura o monitor onde está o cursor, não "a tela principal" — quem usa
- * dois monitores pergunta sobre o que está vendo.
+ * It also captures the monitor where the cursor is, not "the main screen" — whoever
+ * uses two monitors is asking about what they are looking at.
  */
 
 export interface OverlayShot {
@@ -21,23 +21,23 @@ export interface OverlayShot {
   mediaType: 'image/jpeg'
   width: number
   height: number
-  /** Nome do monitor capturado (para o texto de retorno). */
+  /** Name of the captured monitor (for the return text). */
   display: string
 }
 
 /**
- * Teto de bytes da imagem que vai ao modelo — o mesmo do Computer Use. Um PNG
- * de tela cheia passa fácil de 1 MB e era recusado ("o print ficou muito
- * grande"); em JPEG, 1200 px fica na casa das centenas de KB.
+ * Ceiling in bytes of the image sent to the model — the same as Computer Use's. A
+ * full-screen PNG easily goes over 1 MB and was refused ("the print came out too
+ * big"); as JPEG, 1200 px stays in the hundreds of KB.
  */
 export const MAX_MODEL_IMAGE_BYTES = 280_000
 const MAX_EDGE = 1200
 const MIN_EDGE = 640
 const QUALITY = 82
-/** Tempo para o compositor tirar a janela do quadro antes do print (só Linux). */
+/** Time for the compositor to take the window out of the frame before the print (Linux only). */
 const HIDE_SETTLE_MS = 120
 
-/** macOS e Windows excluem a janela protegida da captura; no Linux é no-op. */
+/** macOS and Windows exclude the protected window from the capture; on Linux it is a no-op. */
 const CONTENT_PROTECTION_WORKS = process.platform === 'darwin' || process.platform === 'win32'
 
 function sleep(ms: number): Promise<void> {
@@ -54,9 +54,9 @@ async function encode(raw: Buffer, edge: number) {
 
 export async function captureScreenForOverlay(maxEdge = MAX_EDGE): Promise<OverlayShot | null> {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  // Com a proteção de conteúdo nada sai do lugar: o painel continua na tela
-  // (e com o foco, se tinha) enquanto o print é tirado. O caminho antigo de
-  // esconder-e-mostrar fica só como rede no Linux.
+  // With content protection nothing moves: the panel stays on screen
+  // (and with the focus, if it had it) while the print is taken. The old
+  // hide-and-show path remains only as a fallback on Linux.
   const win = CONTENT_PROTECTION_WORKS ? null : getOverlayWindow()
   const wasVisible = !!win && win.isVisible()
   const wasFocused = !!win && win.isFocused()
@@ -81,9 +81,9 @@ export async function captureScreenForOverlay(maxEdge = MAX_EDGE): Promise<Overl
     const raw = source.thumbnail
     if (raw.isEmpty()) return null
 
-    // Orçamento de bytes: desce a aresta até caber, em vez de omitir a imagem
-    // (um print de tela cheia nunca caberia no teto como PNG). O PNG de origem
-    // é gerado UMA vez: recodificar a cada tentativa custaria centenas de ms.
+    // Byte budget: it lowers the edge until it fits, instead of omitting the image
+    // (a full-screen print would never fit the ceiling as PNG). The source PNG
+    // is generated ONCE: re-encoding on every attempt would cost hundreds of ms.
     const png = raw.toPNG()
     let edge = Math.min(maxEdge, MAX_EDGE)
     let sized = await encode(png, edge)

@@ -1,18 +1,18 @@
 /**
- * Os documentos anexados vistos pelo VETOR: quanto o índice semântico ganha ao
- * enxergar o que está dentro do `.md`, e se vale fragmentar.
+ * The attached documents as seen by the VECTOR: how much the semantic index gains by
+ * seeing what is inside the `.md`, and whether chunking pays off.
  *
  *   MEMORY_DOC_VECTORS=1 npx vitest run electron/lib/memory/bench/doc-vectors.test.ts
  *
- * PRIVACIDADE: nada de texto é impresso — só contagens, percentuais e tempos. O
- * embedding roda no modelo local (onnxruntime), nenhum conteúdo sai da máquina.
+ * PRIVACY: no text is printed — only counts, percentages and timings. The
+ * embedding runs on the local model (onnxruntime), no content leaves the machine.
  *
- * Quatro representações, comparadas nas MESMAS consultas de doc-probe.ts:
+ * Four representations, compared on the SAME queries from doc-probe.ts:
  *
- *   texto     — o que a produção tem hoje (só `buildRetrievalText`)
- *   doc único — o documento inteiro num vetor só
- *   trechos   — N vetores por documento, vence o melhor cosseno
- *   híbrido   — RRF entre o lexical (que já vê o documento) e os trechos
+ *   text      — what production has today (only `buildRetrievalText`)
+ *   single doc — the whole document in a single vector
+ *   chunks     — N vectors per document, the best cosine wins
+ *   hybrid     — RRF between the lexical index (which already sees the document) and the chunks
  */
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -26,15 +26,15 @@ import { buildProbes, delta, line, measure } from './doc-probe'
 const enabled = process.env.MEMORY_DOC_VECTORS === '1'
 const MODEL = path.resolve(__dirname, '../../../../.cache/memory-embed/bekko-a8m')
 
-/** Mesmo teto de caracteres usado em `buildRetrievalText`, por coerência. */
+/** Same character ceiling used in `buildRetrievalText`, for consistency. */
 const CHUNK_CHARS = 700
-/** Janela do modelo: o que passar disso é descartado silenciosamente. */
+/** Model window: anything beyond it is silently discarded. */
 const MAX_TOKENS = 512
 
 /**
- * Quebra o documento em trechos de até `size` caracteres, respeitando fim de
- * frase e parágrafo. Um parágrafo sozinho maior que o teto vira um trecho
- * grande — é medido, não escondido.
+ * Splits the document into chunks of up to `size` characters, respecting sentence
+ * and paragraph ends. A single paragraph larger than the ceiling becomes one large
+ * chunk — it is measured, not hidden.
  */
 function chunkDoc(doc: string, size = CHUNK_CHARS): string[] {
   const parts = doc
@@ -62,7 +62,7 @@ function cos(a: Float32Array, b: Float32Array): number {
   return s
 }
 
-/** Ids ordenados pelo melhor cosseno de cada memória (o melhor trecho vence). */
+/** Ids ordered by each memory's best cosine (the best chunk wins). */
 function rank(
   query: Float32Array,
   ids: string[],
@@ -81,7 +81,7 @@ function rank(
   return scored.slice(0, limit).map((x) => x.id)
 }
 
-/** Reciprocal Rank Fusion, como em memory-select. */
+/** Reciprocal Rank Fusion, as in memory-select. */
 function rrf(a: string[], b: string[], k = 60): string[] {
   const score = new Map<string, number>()
   a.forEach((id, i) => score.set(id, (score.get(id) ?? 0) + 1 / (k + i + 1)))
@@ -97,7 +97,7 @@ const quantile = (values: number[], q: number): number => {
 
 describe.skipIf(!enabled)('documento anexado visto pelo vetor', () => {
   it(
-    'compara texto, documento único, trechos e híbrido nas mesmas consultas',
+    'compares text, single document, chunks and hybrid on the same queries',
     async () => {
       const pool = readMemories()
       const docs = readDocs()
@@ -115,18 +115,18 @@ describe.skipIf(!enabled)('documento anexado visto pelo vetor', () => {
       })
       const tokenizer = loadTokenizer(path.join(MODEL, 'tokenizer.bin'))
 
-      // --- Vetores do texto da memória (o que a produção tem hoje)
+      // --- Vectors of the memory text (what production has today)
       const t0 = performance.now()
       const textVectors = await embedder.embed(pool.map((m) => buildRetrievalText(m)))
       const textMs = performance.now() - t0
       const textById = new Map(pool.map((m, i) => [m.id, textVectors[i]]))
 
-      // --- Documento inteiro num vetor
+      // --- Whole document in one vector
       const docIds = [...docs.keys()]
       const docVectors = await embedder.embed(docIds.map((id) => docs.get(id) ?? ''))
       const docById = new Map(docIds.map((id, i) => [id, docVectors[i]]))
 
-      // --- Trechos
+      // --- Chunks
       const chunkTexts: string[] = []
       const chunkOwner: string[] = []
       let truncDocs = 0
@@ -148,7 +148,7 @@ describe.skipIf(!enabled)('documento anexado visto pelo vetor', () => {
         chunksById.set(owner, list)
       })
 
-      // --- Consultas
+      // --- Queries
       const queries = [...probes.doc, ...probes.text]
       const tq0 = performance.now()
       const queryVectors = await embedder.embed(queries.map((q) => q.text))

@@ -1,40 +1,40 @@
 /**
- * Um player por vez no app.
+ * One player at a time in the app.
  *
- * Três coisas disputam a mesma saída de áudio: o player de um áudio do agente
- * (`AudioPartView`), o da galeria e a leitura em voz alta de uma resposta. Sem
- * um dono, dois tocam juntos e a pessoa não sabe qual pausar — cada player só
- * conhece a si mesmo.
+ * Three things compete for the same audio output: the player of an agent audio
+ * (`AudioPartView`), the one of the gallery and the read-aloud of an answer. Without
+ * an owner, two play together and the person does not know which one to pause — each player
+ * only knows about itself.
  *
- * Quem assume o foco pausa o anterior e é AVISADO quando perde o foco
- * (`onPreempted`), porque quem manda no player nem sempre deriva o estado dele:
- * a bolha do áudio lê `status.playing` e se corrige sozinha, mas o botão de
- * falar guarda o próprio estado e ficaria em "parar" falando nada.
+ * Whoever takes the focus pauses the previous one and is NOTIFIED when it loses the focus
+ * (`onPreempted`), because whoever drives the player does not always derive its state:
+ * the audio bubble reads `status.playing` and corrects itself, but the speak
+ * button keeps its own state and would stay on "stop" while speaking nothing.
  */
 import type { AudioPlayer } from 'expo-audio'
 
 let active: AudioPlayer | null = null
-/** O que fazer quando ESTE dono perder o foco (o próximo assume). */
+/** What to do when THIS owner loses the focus (the next one takes over). */
 let preempted: (() => void) | null = null
 
-/** Assume o áudio: pausa quem estava tocando e passa a ser o dono. */
+/** Takes the audio: pauses whoever was playing and becomes the owner. */
 export function claimAudioFocus(player: AudioPlayer, onPreempted?: () => void): void {
   if (active && active !== player) {
     try {
       active.pause()
     } catch {
-      // Player já liberado (tela desmontada no meio) — nada a pausar.
+      // Player already released (screen unmounted in the middle) — nothing to pause.
     }
-    const anterior = preempted
+    const previous = preempted
     preempted = null
-    anterior?.()
+    previous?.()
   }
   active = player
   preempted = onPreempted ?? null
 }
 
-/** Devolve o foco, se ainda for o dono (parar um player que já perdeu o foco
- *  não pode derrubar o foco de quem está tocando agora). */
+/** Gives the focus back, if it is still the owner (stopping a player that already lost the focus
+ *  cannot drop the focus of whoever is playing now). */
 export function releaseAudioFocus(player: AudioPlayer): void {
   if (active !== player) return
   active = null

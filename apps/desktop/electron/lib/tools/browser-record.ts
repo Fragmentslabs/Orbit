@@ -6,17 +6,17 @@ import { addVideoToGallery } from '../video/video-gallery'
 import type { ToolContext } from './context'
 
 /**
- * `browser_record` — grava um ROTEIRO no browser oculto e entrega um MP4.
+ * `browser_record` — records a SCRIPT in the hidden browser and delivers an MP4.
  *
- * Diferente de `run_browser_script` (JS livre, feito para fotos), aqui o script
- * são passos declarativos e a saída é vídeo. O valor é o timing: o roteiro roda
- * na velocidade das ações, não na do agente pensando entre elas — por isso o
- * vídeo tem a duração do fluxo, e não a duração da conversa.
+ * Unlike `run_browser_script` (free JS, made for photos), here the script
+ * is declarative steps and the output is video. The value is timing: the script runs
+ * at the speed of the actions, not at the speed of the agent thinking between them — that is why the
+ * video lasts as long as the flow, and not as long as the conversation.
  *
- * Só existe quando o browser está permitido no turno (mesma porta do
- * run_browser_script) e, por escolha de produto, só deve ser chamada quando o
- * USUÁRIO pede uma gravação — nunca por iniciativa do agente para "olhar" uma
- * página (para isso existem panel_* e capture_batch).
+ * It only exists when the browser is allowed in the turn (same door as
+ * run_browser_script) and, by product choice, it should only be called when the
+ * USER asks for a recording — never on the agent's own initiative to "look" at a
+ * page (for that there are panel_* and capture_batch).
  */
 
 const STEPS_DOC = `Steps run in order; each one is visible in the video:
@@ -152,10 +152,10 @@ export function createBrowserRecordTools(ctx: ToolContext): ToolSet {
           `Quality: ${result.quality} · ${result.fps} fps · crf ${result.crf} (machine: ${result.tier}).`,
           `Gallery: ${entry.id}`,
         ]
-        // Pedir acima do que a máquina aguenta é permitido — mas o agente precisa
-        // saber, para não prometer um take perfeito. O sinal é o TIER, não o
-        // `capturedFps`: uma página parada também emite poucos quadros, e usar
-        // esse número aqui acusaria falta de máquina onde só faltou movimento.
+        // Asking for more than the machine can handle is allowed — but the agent needs to
+        // know, so as not to promise a perfect take. The signal is the TIER, not
+        // `capturedFps`: a still page also emits few frames, and using
+        // that number here would blame the machine where only movement was missing.
         if ((result.quality === 'high' || result.quality === 'max') && result.tier === 'weak') {
           lines.push(
             'Note: this machine scored "weak" — the take was recorded at the requested quality, but the encoder may have repeated frames to hold the fps. Lower "quality" (or "fps") if smooth motion matters more than sharpness.',

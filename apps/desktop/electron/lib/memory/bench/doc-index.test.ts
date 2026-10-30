@@ -1,18 +1,18 @@
 /**
- * Ganho de indexar o documento anexado na busca lexical, medido no acervo real.
+ * Gain from indexing the attached document in the lexical search, measured on the real pool.
  *
- * Roda só com MEMORY_DOC_GAIN=1, porque depende das memórias do usuário.
- * NENHUM texto de memória ou de documento é impresso: a saída são contagens e
- * percentuais, calculados sobre objetos em memória. O conteúdo não sai daqui.
+ * It only runs with MEMORY_DOC_GAIN=1, because it depends on the user's memories.
+ * NO memory or document text is printed: the output is counts and
+ * percentages, computed over objects in memory. The content does not leave here.
  *
- * Dois conjuntos, com propósitos diferentes:
+ * Two sets, with different purposes:
  *
- *  - `doc`  — consultas tiradas do próprio `.md`, quase sem token em comum com o
- *             texto da memória. Só o documento pode respondê-las: mede a
- *             capacidade NOVA, isolada.
- *  - `text` — consultas tiradas do texto da memória. Mede REGRESSÃO: o
- *             documento alonga o documento lexical, e a normalização de tamanho
- *             do BM25 poderia empurrar para baixo o que já era achado.
+ *  - `doc`  — queries taken from the `.md` itself, with almost no token in common with the
+ *             memory text. Only the document can answer them: it measures the
+ *             NEW capability, in isolation.
+ *  - `text` — queries taken from the memory text. It measures REGRESSION: the
+ *             document lengthens the lexical document, and BM25's length
+ *             normalisation could push down what was already found.
  */
 import { describe, expect, it } from 'vitest'
 import { searchMemories, type SearchOptions } from '@shared/memory'
@@ -22,9 +22,9 @@ import { buildProbes, delta, line, measure } from './doc-probe'
 
 const enabled = process.env.MEMORY_DOC_GAIN === '1'
 
-describe.skipIf(!enabled)('documento anexado no índice lexical', () => {
+describe.skipIf(!enabled)('document attached to the lexical index', () => {
   it(
-    'mede ganho nas consultas do .md e regressão nas consultas de texto',
+    'measures the gain on the .md queries and the regression on the text queries',
     () => {
       const pool = readMemories()
       const docs = readDocs()
@@ -54,31 +54,31 @@ describe.skipIf(!enabled)('documento anexado no índice lexical', () => {
 
       const report = [
         '',
-        `[doc-index] ${pool.length} memórias · ${docs.size} documentos · ${docQueries.length} consultas de doc · ${textQueries.length} de texto`,
+        `[doc-index] ${pool.length} memories · ${docs.size} documents · ${docQueries.length} document queries · ${textQueries.length} text queries`,
         '',
-        'searchMemories (memory_search) — consultas que só o documento responde',
+        'searchMemories (memory_search) — queries only the document answers',
         line('sem documento (hoje)', lexBefore),
         line('com documento', lexWithDocs),
         `  → ${delta(lexBefore, lexWithDocs)}`,
         '',
-        'searchMemories — regressão nas consultas de texto',
+        'searchMemories — regression on the text queries',
         line('sem documento (hoje)', textBefore),
         line('com documento', textWithDocs),
         `  → ${delta(textBefore, textWithDocs)}`,
         '',
-        'BM25 (injeção/híbrido) — consultas que só o documento responde',
+        'BM25 (injection/hybrid) — queries only the document answers',
         line('sem documento (hoje)', bm25DocBefore),
         line('com documento', bm25DocAfter),
         `  → ${delta(bm25DocBefore, bm25DocAfter)}`,
         '',
-        'BM25 — regressão nas consultas de texto',
+        'BM25 — regression on the text queries',
         line('sem documento (hoje)', bm25TextBefore),
         line('com documento', bm25TextAfter),
         `  → ${delta(bm25TextBefore, bm25TextAfter)}`,
         '',
-        'calibração do peso do token do documento (searchMemories, consultas de doc)',
+        'calibration of the document token weight (searchMemories, document queries)',
         ...[0.6, 0.8, 0.9, 1].map((w) => line(`peso ${w.toFixed(1)}`, measure(docQueries, lex({ docs, docWeight: w })))),
-        'calibração do peso do token do documento (regressão nas de texto)',
+        'calibration of the document token weight (regression on the text ones)',
         ...[0.6, 0.8, 0.9, 1].map((w) => line(`peso ${w.toFixed(1)}`, measure(textQueries, lex({ docs, docWeight: w })))),
         '',
       ]

@@ -14,10 +14,10 @@ import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
 
 /**
- * Card de aviso — espelho do VisionHintCard do desktop: o usuário anexou uma
- * imagem e o modelo atual não tem visão e o modo Visão não está configurado —
- * a imagem não chega ao agente. Oferece o atalho para abrir a configuração.
- * Descartável por sessão.
+ * Notice card — mirror of the desktop VisionHintCard: the user attached an
+ * image and the current model has no vision and the Vision mode is not configured —
+ * the image does not reach the agent. Offers the shortcut to open the settings.
+ * Dismissible per session.
  */
 export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
@@ -25,7 +25,7 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const [dismissed, setDismissed] = useState(false)
   const prevSessionRef = useRef(sessionId)
 
-  // Descarte é por sessão: ao trocar de chat, o card volta a poder aparecer
+  // Dismissal is per session: when switching chats, the card can show up again
   useEffect(() => {
     if (prevSessionRef.current !== sessionId) {
       prevSessionRef.current = sessionId
@@ -43,8 +43,8 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const setVisionConfigOpen = useSettingsStore((s) => s.setVisionConfigOpen)
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
 
-  // Sem modelo selecionado assume que tem visão (o desktop faz o mesmo: o
-  // catálogo pode não estar carregado ainda — não incomoda o usuário).
+  // With no model selected it assumes it has vision (the desktop does the same: the
+  // catalog may not be loaded yet — do not bother the user).
   const provider = selected && catalog ? catalog[selected.providerId] : undefined
   const modelVision = selected ? modelSupportsVision(provider, selected.modelId) : true
 

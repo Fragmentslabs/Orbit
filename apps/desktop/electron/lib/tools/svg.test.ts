@@ -5,12 +5,12 @@ import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * A volta completa do SVG pela galeria.
+ * The full SVG round through the gallery.
  *
- * O svg-ops.test.ts cobre a manipulação do texto. O que se verifica aqui é o
- * que faltava para o formato EXISTIR no Orbit: ser aceito, servido com o tipo
- * certo, lido de volta e rasterizado. Sem essa ponta, o agente sabia escrever
- * SVG e não tinha o que fazer com ele.
+ * svg-ops.test.ts covers the text manipulation. What is checked here is what
+ * was missing for the format to EXIST in Orbit: being accepted, served with the right
+ * type, read back and rasterized. Without that end, the agent knew how to write
+ * SVG and had nothing to do with it.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-svg-test-${process.pid}`)
@@ -29,12 +29,12 @@ type ToolLike = { execute: (input: Record<string, unknown>) => Promise<unknown> 
 let tools: Record<string, ToolLike>
 let media: typeof import('../media')
 
-const ICONE = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#ff0000"/></svg>`
+const ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#ff0000"/></svg>`
 
 beforeAll(async () => {
   media = await import('../media')
   const { createSvgTools } = await import('./svg')
-  tools = createSvgTools({ sessionId: 'sessao1' }, null) as unknown as Record<string, ToolLike>
+  tools = createSvgTools({ sessionId: 'session1' }, null) as unknown as Record<string, ToolLike>
 })
 
 afterAll(async () => {
@@ -42,29 +42,29 @@ afterAll(async () => {
 })
 
 describe('svg_create', () => {
-  it('vira arquivo .svg de verdade na galeria', async () => {
-    const out = (await tools.svg_create.execute({ markup: ICONE, title: 'bolinha' })) as {
+  it('becomes a real .svg file in the gallery', async () => {
+    const out = (await tools.svg_create.execute({ markup: ICON, title: 'bolinha' })) as {
       mediaUrl: string
       message: string
     }
-    // A chave mediaUrl é o que faz o chat materializar a imagem na resposta.
+    // The mediaUrl key is what makes the chat materialize the image in the response.
     expect(out.mediaUrl).toMatch(/^orbit-media:\/\/\w+\.svg$/)
 
     const id = media.mediaIdFromUrl(out.mediaUrl)!
     const file = await media.readMedia(id)
-    // Servido como imagem, que é o que permite desenhá-lo em <img> — onde
-    // script embutido não executa.
+    // Served as an image, which is what allows drawing it in <img> — where
+    // embedded script does not run.
     expect(file!.contentType).toBe('image/svg+xml')
     expect(file!.buffer.toString('utf8')).toContain('<svg')
   })
 
-  it('recusa markup sem viewBox — sem ele o SVG não escala', async () => {
-    const semBox = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`
-    const out = (await tools.svg_create.execute({ markup: semBox })) as string
+  it('refuses markup without a viewBox — without it the SVG does not scale', async () => {
+    const withoutViewBox = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>`
+    const out = (await tools.svg_create.execute({ markup: withoutViewBox })) as string
     expect(out).toContain('viewBox')
   })
 
-  it('recusa script, que acompanharia o arquivo baixado', async () => {
+  it('refuses script, which would travel with the downloaded file', async () => {
     const out = (await tools.svg_create.execute({
       markup: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><script>alert(1)</script></svg>`,
     })) as string
@@ -76,19 +76,19 @@ describe('svg_info e svg_edit', () => {
   let url: string
 
   beforeAll(async () => {
-    const criado = (await tools.svg_create.execute({ markup: ICONE, title: 'base' })) as {
+    const created = (await tools.svg_create.execute({ markup: ICON, title: 'base' })) as {
       mediaUrl: string
     }
-    url = criado.mediaUrl
+    url = created.mediaUrl
   })
 
-  it('svg_info relata as cores reais, sem abrir o arquivo à mão', async () => {
+  it('svg_info reports the real colors, without opening the file by hand', async () => {
     const out = (await tools.svg_info.execute({ ref: url })) as string
     expect(out).toContain('#ff0000')
     expect(out).toContain('0 0 24 24')
   })
 
-  it('recolorir devolve um SVG novo, com a cor trocada', async () => {
+  it('recoloring returns a new SVG, with the color swapped', async () => {
     const out = (await tools.svg_edit.execute({
       ref: url,
       recolorMap: { '#ff0000': '#2563eb' },
@@ -99,7 +99,7 @@ describe('svg_info e svg_edit', () => {
     expect(lido!.buffer.toString('utf8')).toContain('#2563eb')
   })
 
-  it('mapa que não casa avisa em vez de entregar cópia como sucesso', async () => {
+  it('a map that does not match warns instead of handing back a copy as success', async () => {
     const out = (await tools.svg_edit.execute({
       ref: url,
       recolorMap: { '#00ff00': '#000000' },
@@ -107,8 +107,8 @@ describe('svg_info e svg_edit', () => {
     expect(out.message).toContain('no paint matched')
   })
 
-  it('rasteriza nítido no tamanho pedido — o caminho do favicon', async () => {
-    // O ponto do vetor: 512 a partir de um arquivo de 24, sem upscale.
+  it('rasterizes sharp at the requested size — the favicon path', async () => {
+    // The point of the vector: 512 from a 24 file, without upscale.
     const out = (await tools.svg_edit.execute({
       ref: url,
       width: 512,
@@ -121,23 +121,23 @@ describe('svg_info e svg_edit', () => {
     expect(meta.width).toBe(512)
   })
 
-  it('o SVG de origem não é alterado por nenhuma edição', async () => {
+  it('the source SVG is not changed by any edit', async () => {
     const original = await media.readMedia(media.mediaIdFromUrl(url)!)
     expect(original!.buffer.toString('utf8')).toContain('#ff0000')
   })
 
-  it('pedido sem operação nenhuma não gera cópia silenciosa', async () => {
+  it('a request with no operation does not create a silent copy', async () => {
     const out = (await tools.svg_edit.execute({ ref: url })) as string
     expect(out).toContain('No operation requested')
   })
 
-  it('apontar para um raster explica em vez de estourar', async () => {
+  it('pointing at a raster explains instead of throwing', async () => {
     const png = await sharp({
       create: { width: 8, height: 8, channels: 3, background: '#000' },
     })
       .png()
       .toBuffer()
-    const raster = await media.saveMedia(png, 'png', { source: 'chat', sessionId: 'sessao1' })
+    const raster = await media.saveMedia(png, 'png', { source: 'chat', sessionId: 'session1' })
     const out = (await tools.svg_info.execute({ ref: raster })) as string
     expect(out).toContain('is not an SVG')
   })

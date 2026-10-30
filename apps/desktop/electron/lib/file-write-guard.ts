@@ -1,23 +1,23 @@
 import path from 'node:path'
 
 /**
- * Guardas do `fs:writeFile` — o único canal pelo qual o renderer escreve em
- * disco (o painel de arquivos).
+ * Guards of `fs:writeFile` — the only channel through which the renderer writes to
+ * disk (the files panel).
  *
- * As tools do agente já têm o `resolveSafePath` ([tools/context.ts]); isto é o
- * equivalente para o painel. Vale registrar o limite honesto: as pastas do
- * workspace vivem no renderer (localStorage), então é o próprio renderer que
- * informa as raízes aqui. Ou seja, a contenção é rede contra BUG de caminho —
- * um arquivo aberto de um lugar e salvo em outro —, não fronteira de
- * segurança. O que realmente limita o estrago são as checagens de arquivo
- * existente, `.git` e binário aplicadas no handler.
+ * The agent's tools already have `resolveSafePath` ([tools/context.ts]); this is the
+ * equivalent for the panel. It is worth recording the honest limit: the workspace's
+ * folders live in the renderer (localStorage), so it is the renderer itself that
+ * informs the roots here. That is, the containment is a net against a PATH bug —
+ * a file opened from one place and saved to another —, not a security
+ * boundary. What really limits the damage are the checks for an existing file,
+ * `.git` and binary, applied in the handler.
  */
 
 export type PathVerdict =
   | { ok: true; resolved: string }
   | { ok: false; reason: 'outside-workspace' | 'git-internal' }
 
-/** Um segmento `.git` em qualquer posição do caminho. */
+/** A `.git` segment in any position of the path. */
 function touchesGitInternals(resolved: string): boolean {
   return resolved.split(/[\\/]+/).includes('.git')
 }
@@ -28,10 +28,10 @@ function isInside(root: string, resolved: string): boolean {
 }
 
 /**
- * O caminho pode ser escrito? Mesma aritmética de contenção do
- * `resolveSafePath`, mais a recusa do diretório do git: um save acidental
- * dentro de `.git` corrompe o repositório, e nada que o painel abre para ler
- * precisa ser reescrito ali.
+ * May the path be written? Same containment arithmetic as
+ * `resolveSafePath`, plus the refusal of the git directory: an accidental save
+ * inside `.git` corrupts the repository, and nothing the panel opens to read
+ * needs to be rewritten there.
  */
 export function checkWritePath(target: string, roots: string[]): PathVerdict {
   const resolved = path.resolve(target)

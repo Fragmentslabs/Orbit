@@ -84,44 +84,44 @@ import { Truncate } from "@/components/ui/truncated-text"
 // ============================================================================
 
 /**
- * Um anexo do composer. Igual ao FileUIPart + id, com `mediaId` para o anexo
- * que é uma REFERÊNCIA à galeria (arrastado da aba Mídia): nesse caso `url` é só
- * o preview e os bytes nunca passam pelo renderer.
+ * A composer attachment. Same as FileUIPart + id, with `mediaId` for the attachment
+ * that is a REFERENCE to the gallery (dragged from the Media tab): in that case `url` is only
+ * the preview and the bytes never go through the renderer.
  */
 export type PromptInputFile = FileUIPart & {
   id: string
   mediaId?: string
-  /** Fonte da conversa anexada por referência (arrastada da aba Fontes) —
-   *  ver FilePart.sourceId. `url` fica vazio: não há bytes a carregar. */
+  /** Conversation source attached by reference (dragged from the Sources tab) —
+   *  see FilePart.sourceId. `url` stays empty: there are no bytes to load. */
   sourceId?: string
   /**
-   * Texto de origem quando o anexo nasceu de um PASTE grande (ver
-   * PASTE_AS_SOURCE_CHARS). Vive só no composer, para a prévia do hover: a
-   * mensagem leva o arquivo, não este campo (toFileParts não o repassa).
+   * Source text when the attachment was born from a large PASTE (see
+   * PASTE_AS_SOURCE_CHARS). Lives only in the composer, for the hover preview: the
+   * message carries the file, not this field (toFileParts does not pass it on).
    */
   pastedText?: string
 }
 
 /**
- * A partir daqui, texto colado no campo vira ANEXO em vez de entrar no texto.
+ * From here on, text pasted into the field becomes an ATTACHMENT instead of entering the text.
  *
- * Um paste desse tamanho é material, não frase: como anexo ele vira fonte da
- * conversa no envio — o main guarda o texto e a mensagem leva só o trecho de
- * abertura (ver preprocessAttachment) —, em vez de ficar no histórico sendo
- * reenviado ao modelo a cada turno. O corte é baixo o bastante para pegar um
- * documento colado e alto o bastante para não transformar três linhas num
- * anexo.
+ * A paste of that size is material, not a sentence: as an attachment it becomes a source of the
+ * conversation on send — the main process stores the text and the message carries only the opening
+ * excerpt (see preprocessAttachment) —, instead of staying in the history being
+ * resent to the model on every turn. The cut is low enough to catch a
+ * pasted document and high enough not to turn three lines into an
+ * attachment.
  */
 export const PASTE_AS_SOURCE_CHARS = 1500
 
-/** Quanto do texto aparece na prévia do hover (o resto está na fonte). */
+/** How much of the text appears in the hover preview (the rest is in the source). */
 const PASTED_PREVIEW_CHARS = 1200
 
-/** Texto de origem de cada arquivo sintético de paste, pelo próprio `File`. */
+/** Source text of each synthetic paste file, by the `File` itself. */
 const pastedTexts = new WeakMap<File, string>()
 
-/** "1,4 KB" — para o nome do anexo (o tamanho em BYTES, não em caracteres:
- *  um texto em português ocupa mais bytes do que a contagem de letras sugere). */
+/** "1,4 KB" — for the attachment name (the size in BYTES, not in characters:
+ *  a text in Portuguese takes more bytes than the letter count suggests). */
 function pastedSize(text: string): string {
   const bytes = new TextEncoder().encode(text).length
   if (bytes < 1024) return `${bytes} B`
@@ -129,16 +129,16 @@ function pastedSize(text: string): string {
   return `${kb.toLocaleString(i18n.language, { maximumFractionDigits: kb < 10 ? 1 : 0 })} KB`
 }
 
-/** O `File` que representa um texto colado — o nome vira o título da fonte.
- *  `.txt` de propósito: `.md` cai no caminho de skill do engine (frontmatter),
- *  e um texto colado não é uma skill. */
+/** The `File` that represents a pasted text — the name becomes the title of the source.
+ *  `.txt` on purpose: `.md` falls into the engine's skill path (frontmatter),
+ *  and a pasted text is not a skill. */
 function pastedTextFile(text: string): File {
   return new File([text], i18n.t("attachments.pastedTextName", { size: pastedSize(text) }), {
     type: "text/plain",
   })
 }
 
-/** Um anexo do composer a partir de um arquivo escolhido, arrastado ou colado. */
+/** A composer attachment from a chosen, dragged or pasted file. */
 function fileAttachment(file: File): PromptInputFile {
   const pasted = pastedTexts.get(file)
   return {
@@ -152,10 +152,10 @@ function fileAttachment(file: File): PromptInputFile {
 }
 
 /**
- * O arrasto traz algo que este composer sabe receber? Arquivo do disco, item
- * da galeria (aba Mídia) ou fonte da conversa (aba Fontes) — cada um pelo seu
- * MIME. É o que decide o preventDefault do dragover: sem ele o navegador trata
- * o drop como texto e o handler nunca roda.
+ * Does the drag bring something this composer knows how to receive? File from disk, item
+ * from the gallery (Media tab) or conversation source (Sources tab) — each one by its own
+ * MIME. It is what decides the preventDefault of dragover: without it the browser treats
+ * the drop as text and the handler never runs.
  */
 function isAttachmentDrag(types: readonly string[] | undefined): boolean {
   return (
@@ -165,35 +165,35 @@ function isAttachmentDrag(types: readonly string[] | undefined): boolean {
   )
 }
 
-/** O que o tile da aba Mídia manda no drop — a identidade do item, nunca bytes. */
+/** What the Media tab tile sends on drop — the identity of the item, never bytes. */
 export interface MediaAttachmentRef {
   id: string
   name?: string
   mime?: string
-  /** URL de preview (thumbnail) do item na galeria. */
+  /** Preview URL (thumbnail) of the item in the gallery. */
   url?: string
 }
 
 /**
- * O que a linha da aba Fontes manda no drop: a identidade de uma fonte da
- * conversa (`doc1`, `src2`). É o mesmo princípio do MediaAttachmentRef — nada
- * de bytes —, mas o destino é outro: a fonte já está guardada e é alcançada
- * pelo id, e é isso que o agente recebe.
+ * What the Sources tab row sends on drop: the identity of a conversation
+ * source (`doc1`, `src2`). It is the same principle as MediaAttachmentRef — no
+ * bytes —, but the destination is another: the source is already stored and is reached
+ * by the id, and that is what the agent receives.
  */
 export interface SourceAttachmentRef {
   id: string
   name?: string
   kind?: string
-  /** Rótulo curto do tipo ("PDF", "MD") para o chip. */
+  /** Short label of the type ("PDF", "MD") for the chip. */
   type?: string
 }
 
 export interface AttachmentsContext {
   files: PromptInputFile[]
   add: (files: File[] | FileList) => void
-  /** Anexa um item da galeria POR REFERÊNCIA — sem File e sem copiar bytes. */
+  /** Attaches a gallery item BY REFERENCE — no File and no copying bytes. */
   addMedia: (ref: MediaAttachmentRef) => void
-  /** Anexa uma FONTE da conversa por referência (arrastada da aba Fontes). */
+  /** Attaches a conversation SOURCE by reference (dragged from the Sources tab). */
   addSource: (ref: SourceAttachmentRef) => void
   remove: (id: string) => void
   clear: () => void
@@ -251,9 +251,9 @@ export type PromptInputProviderProps = PropsWithChildren<{
  * If you don't use it, PromptInput stays fully self-managed.
  */
 /**
- * Blob URL de um anexo, guardando o caminho do arquivo no disco quando ele existe.
- * Um vídeo de arquivo vai para o main POR CAMINHO (ver blobUrlsToDataUrls): é o
- * que evita transformar um filme em base64 dentro do renderer.
+ * Blob URL of an attachment, keeping the file path on disk when it exists.
+ * A file video goes to the main process BY PATH (see blobUrlsToDataUrls): that is
+ * what avoids turning a film into base64 inside the renderer.
  */
 function objectUrlFor(file: File): string {
   const url = URL.createObjectURL(file)
@@ -261,16 +261,16 @@ function objectUrlFor(file: File): string {
     try {
       rememberAttachmentPath(url, window.getPathForFile?.(file) ?? "")
     } catch {
-      // sem caminho (arquivo colado): cai no limite de tamanho de readableAttachments
+      // no path (pasted file): falls into the size limit of readableAttachments
     }
   }
   return url
 }
 
 /**
- * Um vídeo SEM caminho (colado da área de transferência) só existe como bytes, e
- * bytes viram base64 na memória do renderer — acima de um limite isso derruba o
- * app. Esses são recusados com um aviso; os de arquivo passam por caminho.
+ * A video WITHOUT a path (pasted from the clipboard) only exists as bytes, and
+ * bytes become base64 in the renderer's memory — above a limit that brings the
+ * app down. Those are refused with a warning; the file ones go by path.
  */
 function readableAttachments(files: File[]): File[] {
   const kept: File[] = []
@@ -335,8 +335,8 @@ export function PromptInputProvider({
     setAttachmentFiles(prev => prev.concat({
       id: nanoid(),
       type: "file" as const,
-      // Sem bytes: `url` vazio é o que diz ao main "isto é uma referência"
-      // (ver FilePart.sourceId) — o conteúdo já está guardado na conversa.
+      // No bytes: an empty `url` is what tells the main process "this is a reference"
+      // (see FilePart.sourceId) — the content is already stored in the conversation.
       url: "",
       mediaType: "",
       filename: ref.name ?? ref.id,
@@ -469,10 +469,10 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
       <PromptInputHoverCard>
         <HoverCardTrigger render={
           <div className={cn(
-                          // max-w: o chip cresce com o nome do arquivo, e nome
-                          // longo (um texto colado, um PDF baixado) virava uma
-                          // barra atravessando o composer. Com o teto, o
-                          // `truncate` do label finalmente tem onde cortar.
+                          // max-w: the chip grows with the file name, and a long
+                          // name (a pasted text, a downloaded PDF) became a
+                          // bar crossing the composer. With the ceiling, the
+                          // label's `truncate` finally has somewhere to cut.
                           "group relative flex h-8 max-w-64 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
                           className,
                         )} key={data.id} {...props} onClick={(e) => { props.onClick?.(e); if (isImage) setLightboxOpen(true) }} />}><div className="relative size-5 shrink-0">
@@ -486,9 +486,9 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                                 width={20}
                               />
                             ) : data.pastedText !== undefined || data.sourceId ? (
-                              // Fonte da conversa: ícone de documento, como no
-                              // texto colado — o chip não carrega bytes, o que
-                              // se vê é o NOME do documento citado.
+                              // Conversation source: document icon, as in the
+                              // pasted text — the chip carries no bytes, what
+                              // is seen is the NAME of the cited document.
                               <div className="flex size-5 items-center justify-center text-muted-foreground">
                                 <FileTextIcon className="size-3" />
                               </div>
@@ -514,9 +514,9 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                       </div><Truncate text={attachmentLabel}>
                         <span className="flex-1 truncate">{attachmentLabel}</span>
                       </Truncate></HoverCardTrigger>
-      {/* `w-auto` sem teto + título com `truncate`: o título é nowrap, então o
-          card crescia até a largura do nome inteiro (e o preview, de largura
-          fixa, ficava pequeno dentro dele). Com max-w, o truncate corta. */}
+      {/* `w-auto` with no ceiling + title with `truncate`: the title is nowrap, so the
+          card grew to the width of the whole name (and the preview, of fixed
+          width, stayed small inside it). With max-w, the truncate cuts. */}
       <PromptInputHoverCardContent className="w-auto max-w-80 p-2">
         <div className="w-auto space-y-3">
           {isImage && (
@@ -542,8 +542,8 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
               )}
             </div>
           </div>
-          {/* Paste grande: o chip guarda o texto, e o hover mostra o começo —
-              o resto continua na fonte, depois do envio. */}
+          {/* Large paste: the chip keeps the text, and the hover shows the beginning —
+              the rest stays in the source, after sending. */}
           {data.pastedText !== undefined && (
             <pre className="max-h-40 w-72 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background p-2 font-mono text-[11px] leading-snug text-muted-foreground">
               {data.pastedText.slice(0, PASTED_PREVIEW_CHARS)}
@@ -561,8 +561,8 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
 
 export type PromptInputAttachmentsProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: (attachment: PromptInputFile) => ReactNode
-  /** Elemento que entra na MESMA linha dos badges, antes deles (ex.: o badge da
-   *  resposta citada). */
+  /** Element that enters the SAME line as the badges, before them (e.g. the badge of the
+   *  quoted reply). */
   leading?: ReactNode
 }
 
@@ -574,9 +574,9 @@ export function PromptInputAttachments({
 }: PromptInputAttachmentsProps) {
   const attachments = usePromptInputAttachments()
 
-  // A linha existe se houver anexo OU algo que anda junto com eles (o badge da
-  // resposta citada, por exemplo): sem isso, responder sem anexo nenhum
-  // esconderia a citação pendente.
+  // The row exists if there is an attachment OR something that travels with them (the badge of the
+  // quoted reply, for example): without that, replying with no attachment at all
+  // would hide the pending quote.
   if (!attachments.files.length && !leading) {
     return null
   }
@@ -646,8 +646,8 @@ export const PromptInput = ({
   children,
   ...props
 }: PromptInputProps) => {
-  // Declarado no topo do corpo: os callbacks abaixo usam `t` e precisam
-  // cita-lo nas proprias deps (no fim do corpo isso cairia na TDZ).
+  // Declared at the top of the body: the callbacks below use `t` and need to
+  // cite it in their own deps (at the end of the body that would fall into the TDZ).
   const { t } = useTranslation()
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController()
@@ -806,11 +806,11 @@ export const PromptInput = ({
   }, [files, syncHiddenInput])
 
   /**
-   * Tile da aba Mídia arrastado até o composer: vira um anexo POR REFERÊNCIA.
-   * O payload traz só a identidade (id, nome, tipo e preview) — os bytes ficam
-   * onde estão, na galeria, e o main NÃO copia nada no envio (ver
-   * preprocessAttachment). Serve a qualquer tipo: imagem, vídeo, áudio, motion,
-   * artefato, documento, canvas de design.
+   * Media tab tile dragged to the composer: becomes an attachment BY REFERENCE.
+   * The payload brings only the identity (id, name, type and preview) — the bytes stay
+   * where they are, in the gallery, and the main process copies NOTHING on send (see
+   * preprocessAttachment). It serves any type: image, video, audio, motion,
+   * artifact, document, design canvas.
    */
   const attachMediaDrag = useCallback(
     (payload: string) => {
@@ -831,18 +831,18 @@ export const PromptInput = ({
           url: typeof parsed.url === "string" ? parsed.url : undefined,
         })
       } catch {
-        // payload inválido — ignora o drop
+        // invalid payload — ignores the drop
       }
     },
     [addMedia],
   )
 
   /**
-   * Fonte arrastada da aba Fontes: mesma ideia do tile da galeria, com outro
-   * destino. O payload é só a identidade (`doc1`, o nome, o tipo); o conteúdo
-   * continua guardado na conversa e o anexo é uma referência — o agente lê o
-   * documento pelo id, e a bolha mostra o nome exato do que foi citado em vez
-   * de um "src3" solto.
+   * Source dragged from the Sources tab: same idea as the gallery tile, with another
+   * destination. The payload is only the identity (`doc1`, the name, the type); the content
+   * stays stored in the conversation and the attachment is a reference — the agent reads the
+   * document by the id, and the bubble shows the exact name of what was cited instead
+   * of a loose "src3".
    */
   const attachSourceDrag = useCallback(
     (payload: string) => {
@@ -863,15 +863,15 @@ export const PromptInput = ({
           type: typeof parsed.type === "string" ? parsed.type : undefined,
         })
       } catch {
-        // payload inválido — ignora o drop
+        // invalid payload — ignores the drop
       }
     },
     [addSource],
   )
 
   /**
-   * Um drop pode trazer arquivo do disco, item da galeria ou fonte. A ordem
-   * importa: as duas referências vêm por MIME próprio, e só o que sobra é
+   * A drop can bring a file from disk, a gallery item or a source. The order
+   * matters: the two references come by their own MIME, and only what is left is
    * `Files`.
    */
   const dropAttachments = useCallback(
@@ -907,16 +907,16 @@ export const PromptInput = ({
     }
 
     const onDragOver = (e: DragEvent) => {
-      // Também segura o arrasto de uma REFERÊNCIA (galeria ou fonte): sem o
-      // preventDefault o navegador trata o drop como texto e não deixa o
-      // handler rodar.
+      // Also holds back the drag of a REFERENCE (gallery or source): without the
+      // preventDefault the browser treats the drop as text and does not let the
+      // handler run.
       if (isAttachmentDrag(e.dataTransfer?.types)) {
         e.preventDefault()
       }
     }
     const onDrop = (e: DragEvent) => {
-      // Item da galeria ou fonte da conversa: anexa (por cima do drop nativo
-      // do <textarea>, que colaria o texto da URL no campo).
+      // Gallery item or conversation source: attaches (over the native drop
+      // of the <textarea>, which would paste the URL text into the field).
       if (dropAttachments(e.dataTransfer ?? null)) {
         e.preventDefault()
       }
@@ -962,7 +962,7 @@ export const PromptInput = ({
         }
       }
     },
-    // Cleanup só no unmount; filesRef está sempre atual.
+    // Cleanup only on unmount; filesRef is always current.
     [usingProvider],
   )
 
@@ -999,23 +999,23 @@ export const PromptInput = ({
           return (formData.get("message") as string) || ""
         })()
 
-    // Limpa o TEXTO imediatamente (síncrono) para evitar que seja salvo como
-    // rascunho se o usuário trocar de chat antes da resposta. Os anexos NÃO
-    // são limpos aqui: clear() revoga os blob URLs (URL.revokeObjectURL), e a
-    // conversão blob→dataURL abaixo ainda precisa lê-los via fetch — revogar
-    // antes gera uma corrida em que o fetch falha e um blob URL morto vaza
-    // para o backend (que então rejeita: "Formato de data URL inválido").
+    // Clears the TEXT immediately (synchronous) to avoid it being saved as
+    // a draft if the user switches chats before the reply. The attachments are NOT
+    // cleared here: clear() revokes the blob URLs (URL.revokeObjectURL), and the
+    // blob→dataURL conversion below still needs to read them via fetch — revoking
+    // before that creates a race in which the fetch fails and a dead blob URL leaks
+    // to the backend (which then rejects it as an invalid data URL).
     if (usingProvider) {
       controller.textInput.clear()
     }
 
     // Convert blob URLs to data URLs asynchronously
     blobUrlsToDataUrls(files).then((convertedFiles: FileUIPart[]) => {
-      // Conversão concluída — agora é seguro revogar os blob URLs e limpar os
-      // chips de anexo do input.
+      // Conversion done — now it is safe to revoke the blob URLs and clear the
+      // attachment chips of the input.
       clear()
-      // Chama o submit (async — o resultado é deliberadamente ignorado:
-      // o input já foi limpo e erros aparecem no chat via store)
+      // Calls submit (async — the result is deliberately ignored:
+      // the input was already cleared and errors appear in the chat via the store)
       const result = onSubmit({ text, files: convertedFiles }, event)
       if (result instanceof Promise) {
         result.catch(() => {})
@@ -1072,12 +1072,12 @@ export const PromptInputBody = ({ className, ...props }: PromptInputBodyProps) =
 )
 
 export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea> & {
-  /** Próxima mensagem sugerida: com o campo vazio, aparece no lugar do
-   *  placeholder e Tab a coloca no campo. */
+  /** Suggested next message: with the field empty, it appears in place of the
+   *  placeholder and Tab puts it in the field. */
   suggestion?: string
-  /** ↑/↓ do histórico de mensagens enviadas (ver useInputHistory): devolve o
-   *  texto a colocar no campo, já com a resposta armada, ou `null` quando a
-   *  tecla é do caret e não do histórico. */
+  /** ↑/↓ of the history of sent messages (see useInputHistory): returns the
+   *  text to put in the field, already with the reply armed, or `null` when the
+   *  key belongs to the caret and not to the history. */
   onHistory?: (direction: "older" | "newer", input: HistoryInput) => string | null
 }
 
@@ -1098,17 +1098,17 @@ export const PromptInputTextarea = ({
   const showSuggestion = Boolean(suggestion && controller && empty)
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = e => {
-    // Sem sugestão o Tab segue o padrão (mover o foco) — só é capturado
-    // quando há algo para completar.
+    // With no suggestion Tab follows the default (move the focus) — it is only captured
+    // when there is something to complete.
     if (e.key === "Tab" && !e.shiftKey && showSuggestion && suggestion && controller) {
       e.preventDefault()
       controller.textInput.setInput(suggestion)
       return
     }
-    // ↑/↓ trazem de volta o que já foi enviado (useInputHistory), mas só na
-    // PONTA do campo: em qualquer outra posição a seta é do caret — inclusive
-    // num texto sem "\n" que apenas QUEBROU em várias linhas na tela.
-    // Modificador (Shift+↑ seleciona) e IME nunca são histórico.
+    // ↑/↓ bring back what was already sent (useInputHistory), but only at the
+    // EDGE of the field: in any other position the arrow belongs to the caret — including
+    // in a text with no line break that merely WRAPPED into several lines on screen.
+    // A modifier (Shift+↑ selects) and IME are never history.
     if (
       onHistory &&
       controller &&
@@ -1121,7 +1121,7 @@ export const PromptInputTextarea = ({
       !e.nativeEvent.isComposing
     ) {
       const node = e.currentTarget
-      // Do textarea, não do estado: o que vale é o que está na tela.
+      // From the textarea, not from the state: what counts is what is on screen.
       const field = historyKeyInput(node)
       if (field) {
         const direction = e.key === "ArrowUp" ? "older" : "newer"
@@ -1129,9 +1129,9 @@ export const PromptInputTextarea = ({
         if (text !== null) {
           e.preventDefault()
           controller.textInput.setInput(text)
-          // O caret vai para a ponta que dá continuidade à navegação: ↑ deixa
-          // na primeira posição (de onde se sobe de novo), ↓ na última. Depois
-          // do commit do React, que é quem troca o valor do campo.
+          // The caret goes to the edge that gives continuity to the navigation: ↑ leaves it
+          // at the first position (from where one goes up again), ↓ at the last. After
+          // React's commit, which is what swaps the field value.
           requestAnimationFrame(() => {
             const caret = direction === "older" ? 0 : node.value.length
             node.setSelectionRange(caret, caret)
@@ -1194,10 +1194,10 @@ export const PromptInputTextarea = ({
       return
     }
 
-    // Texto colado GRANDE vira anexo, não texto: o campo é para a mensagem, e
-    // um documento inteiro ali seria reenviado ao modelo em todo turno. Vira
-    // um chip como qualquer arquivo — e, no envio, uma fonte da conversa
-    // (preprocessAttachment guarda o texto e manda só a abertura ao modelo).
+    // LARGE pasted text becomes an attachment, not text: the field is for the message, and
+    // a whole document there would be resent to the model on every turn. It becomes
+    // a chip like any file — and, on send, a conversation source
+    // (preprocessAttachment stores the text and sends only the opening to the model).
     const text = event.clipboardData?.getData("text/plain") ?? ""
     if (text.trim().length >= PASTE_AS_SOURCE_CHARS) {
       event.preventDefault()

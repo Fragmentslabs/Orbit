@@ -1,12 +1,12 @@
 import { ComputerError, type AppInfo } from './types'
 
 /**
- * Política de segurança do Computer Use. O que está aqui é bloqueio duro: nem
- * o modo de permissão total libera. O resto (aprovação por app) é do gate de
- * permissões — ver assessComputer em permission/rules.ts.
+ * Security policy of Computer Use. What is here is a hard block: not even the
+ * full-permission mode releases it. The rest (approval per app) belongs to the
+ * permission gate — see assessComputer in permission/rules.ts.
  */
 
-/** Cofres de senha, ajustes do sistema e prompts de segurança. */
+/** Password vaults, system settings and security prompts. */
 const DENIED_BUNDLES = new Set([
   'com.1password.1password',
   'com.agilebits.onepassword7',
@@ -25,10 +25,10 @@ const DENIED_BUNDLES = new Set([
 ])
 
 /**
- * Windows: exe (minúsculo) e família de pacote (AUMID sem o "!App"). Cofres de
- * senha, Segurança do Windows, Configurações, o UAC (`consent.exe`), o diálogo
- * de credenciais e a tela de bloqueio. O UAC e a tela de bloqueio rodam no
- * desktop seguro e nem seriam alcançáveis — ficam aqui como segunda trava.
+ * Windows: exe (lowercase) and package family (AUMID without the "!App"). Password
+ * vaults, Windows Security, Settings, the UAC (`consent.exe`), the credentials dialog
+ * and the lock screen. The UAC and the lock screen run on the secure desktop and would
+ * not even be reachable — they stay here as a second lock.
  */
 const DENIED_WIN_EXES = new Set([
   '1password.exe',
@@ -59,7 +59,7 @@ const DENIED_WIN_PACKAGES = [
   'agilebits.1password',
 ]
 
-/** Nomes que o modelo pode mandar no lugar do bundle id. */
+/** Names the model may send instead of the bundle id. */
 const DENIED_NAMES = [
   /1password/i,
   /bitwarden/i,
@@ -86,8 +86,8 @@ const DENIED_NAMES = [
 ]
 
 /**
- * Navegadores: a aprovação vale por site, não pelo app inteiro — aprovar
- * "Safari" uma vez não pode liberar o banco aberto na outra aba.
+ * Browsers: the approval holds per site, not for the whole app — approving "Safari"
+ * once cannot release the bank open in the other tab.
  */
 export const BROWSER_BUNDLES = new Set([
   'com.apple.Safari',
@@ -100,7 +100,7 @@ export const BROWSER_BUNDLES = new Set([
   'org.mozilla.firefox',
   'com.operasoftware.Opera',
   'com.vivaldi.Vivaldi',
-  // Windows: o id do app é o exe.
+  // Windows: the app id is the exe.
   'chrome.exe',
   'msedge.exe',
   'brave.exe',
@@ -111,15 +111,14 @@ export const BROWSER_BUNDLES = new Set([
   'chromium.exe',
 ])
 
-/** O id é de navegador? (no Windows o exe chega com qualquer caixa) */
+/** Is the id a browser's? (on Windows the exe arrives in any case) */
 export function isBrowserId(id: string): boolean {
   return BROWSER_BUNDLES.has(id) || BROWSER_BUNDLES.has(id.toLowerCase())
 }
 
 /**
- * Navegadores Chromium: além do AXManualAccessibility (Electron), só eles
- * recebem AXEnhancedUserInterface — em app nativo a flag mexe em animação de
- * janela.
+ * Chromium browsers: besides AXManualAccessibility (Electron), only they receive
+ * AXEnhancedUserInterface — in a native app the flag messes with window animation.
  */
 export const CHROMIUM_BROWSERS = new Set([
   'com.google.Chrome',
@@ -144,14 +143,14 @@ export function isDeniedApp(app: { bundleId: string | null; name: string; exe?: 
   return DENIED_NAMES.some((re) => re.test(app.name))
 }
 
-/** Versão por texto livre (o `app` que o modelo mandou), usada antes de resolver o app. */
+/** Version by free text (the `app` the model sent), used before resolving the app. */
 export function isDeniedQuery(query: string): boolean {
   const q = query.trim()
   if (DENIED_BUNDLES.has(q) || deniedWindowsId(q)) return true
   return DENIED_NAMES.some((re) => re.test(q))
 }
 
-/** Recusa o alvo: app negado ou o próprio Orbit (para ele existem as outras tools). */
+/** Refuses the target: denied app or Orbit itself (for it there are the other tools). */
 export function assertTargetAllowed(app: AppInfo, ownPid: number = process.pid): void {
   if (app.pid === ownPid) {
     throw new ComputerError('blocked', 'Orbit cannot control its own window — use Orbit\'s own tools for that.')
@@ -162,8 +161,8 @@ export function assertTargetAllowed(app: AppInfo, ownPid: number = process.pid):
       `${app.name} is on the safety denylist (password managers, system settings and security prompts). Ask the user to do this themselves.`,
     )
   }
-  // O UIPI descarta a entrada vinda de um processo comum para um app elevado:
-  // a ação "funcionaria" sem efeito nenhum. Melhor recusar com o motivo.
+  // UIPI discards input coming from a common process to an elevated app:
+  // the action would "work" with no effect at all. Better to refuse with the reason.
   if (app.elevated) {
     throw new ComputerError(
       'elevated',
@@ -182,7 +181,7 @@ export function hostOf(url: string | null | undefined): string | null {
   }
 }
 
-/** Chave de aprovação do gate: por app, e por site quando o app é navegador. */
+/** Gate approval key: per app, and per site when the app is a browser. */
 export function approvalKey(bundleOrName: string, url?: string | null): string {
   const host = isBrowserId(bundleOrName) ? hostOf(url) : null
   return host ? `cu:app:${bundleOrName}@${host}` : `cu:app:${bundleOrName}`

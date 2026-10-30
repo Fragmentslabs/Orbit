@@ -1,54 +1,55 @@
 import type { Diagnostic } from "@codemirror/lint"
+import i18n from "@/src/i18n"
 import { syntaxTree } from "@codemirror/language"
 import type { EditorState } from "@codemirror/state"
 
 /**
- * Diagnósticos do editor do painel de arquivos.
+ * Diagnostics of the file panel editor.
  *
- * Duas fontes, deliberadamente separadas porque têm custos muito diferentes:
+ * Two sources, deliberately separated because they have very different costs:
  *
- * - **Sintaxe** (aqui): sai da árvore que o Lezer já construiu para colorir o
- *   arquivo. Não há trabalho novo — só percorrer os nós de erro —, então
- *   aparece a cada tecla, em qualquer linguagem que o editor carregue.
- * - **ESLint** (`eslint-service` no main): o que o PROJETO considera errado.
- *   Custa uma ida ao processo principal e chega depois.
+ * - **Syntax** (here): comes out of the tree Lezer already built to color the
+ *   file. There is no new work — only walking the error nodes —, so it
+ *   shows up on every keystroke, in any language the editor loads.
+ * - **ESLint** (`eslint-service` in main): what the PROJECT considers wrong.
+ *   It costs a round trip to the main process and arrives later.
  *
- * O que o Lezer marca é erro de ESTRUTURA — chave não fechada, string aberta.
- * Ele não sabe nada de tipos, de import inexistente ou de regra de estilo;
- * para isso existe a segunda fonte.
+ * What Lezer marks is a STRUCTURE error — unclosed brace, open string.
+ * It knows nothing about types, a missing import or a style rule;
+ * that is what the second source is for.
  */
 
-/** Teto de marcas por arquivo. */
+/** Cap on marks per file. */
 const MAX_SYNTAX_DIAGNOSTICS = 100
 
 /**
- * Erros de estrutura, direto da árvore sintática.
+ * Structure errors, straight from the syntax tree.
  *
- * Gramáticas do Lezer são tolerantes a erro de propósito (precisam continuar
- * colorindo o resto do arquivo), então um trecho quebrado costuma render um nó
- * de erro só — e não uma cascata. Ainda assim há teto: linguagem que a
- * gramática cobre mal produziria uma parede de vermelho, e uma parede de
- * vermelho é indistinguível de nenhum aviso.
+ * Lezer grammars are error-tolerant on purpose (they need to keep
+ * coloring the rest of the file), so a broken stretch usually yields a single error
+ * node — and not a cascade. Even so there is a cap: a language the
+ * grammar covers poorly would produce a wall of red, and a wall of
+ * red is indistinguishable from no warning at all.
  */
 export function syntaxDiagnostics(state: EditorState): Diagnostic[] {
   const tree = syntaxTree(state)
-  // Sem linguagem carregada a árvore é vazia — nada a dizer, e nunca um falso
-  // positivo por ausência de parser.
+  // With no language loaded the tree is empty — nothing to say, and never a false
+  // positive for lack of a parser.
   if (tree.length === 0) return []
   const found: Diagnostic[] = []
   tree.cursor().iterate((node) => {
     if (found.length >= MAX_SYNTAX_DIAGNOSTICS) return false
     if (!node.type.isError) return
-    // Nó de erro de comprimento zero é o caso comum (o parser aponta a
-    // POSIÇÃO em que faltou algo). Sublinhar nada não marca nada na tela,
-    // então o intervalo cobre ao menos um caractere.
+    // A zero-length error node is the common case (the parser points at the
+    // POSITION where something is missing). Underlining nothing marks nothing on screen,
+    // so the range covers at least one character.
     const from = node.from
     const to = node.to > node.from ? node.to : Math.min(node.from + 1, state.doc.length)
     found.push({
       from: Math.min(from, state.doc.length),
       to,
       severity: "error",
-      message: "Erro de sintaxe",
+      message: i18n.t("codeInput.syntaxError"),
       source: "sintaxe",
     })
   })
@@ -56,10 +57,10 @@ export function syntaxDiagnostics(state: EditorState): Diagnostic[] {
 }
 
 /**
- * Posição do erro dentro da mensagem do `JSON.parse`.
+ * Position of the error inside the `JSON.parse` message.
  *
- * O V8 mudou o texto entre versões ("at position 12" ganhou o sufixo
- * "(line 2 column 3)"), então vale o que aparecer primeiro e há fallback.
+ * V8 changed the text between versions ("at position 12" gained the suffix
+ * "(line 2 column 3)"), so whichever appears first counts and there is a fallback.
  */
 export function jsonErrorOffset(message: string, docLength: number): number {
   const at = /at position (\d+)/i.exec(message)
@@ -68,9 +69,9 @@ export function jsonErrorOffset(message: string, docLength: number): number {
 }
 
 /**
- * JSON tem tratamento próprio porque a mensagem do `JSON.parse` diz o que
- * houve ("Unexpected token }", "Expected double-quoted property name") — o nó
- * de erro do Lezer só diria que há um.
+ * JSON gets its own treatment because the `JSON.parse` message says what
+ * happened ("Unexpected token }", "Expected double-quoted property name") — the Lezer error
+ * node would only say that there is one.
  */
 export function jsonDiagnostics(text: string): Diagnostic[] {
   if (!text.trim()) return []
@@ -92,7 +93,7 @@ export function jsonDiagnostics(text: string): Diagnostic[] {
   }
 }
 
-/** Uma mensagem do eslint, como o main a entrega. */
+/** An eslint message, as main delivers it. */
 export interface LintMessage {
   line: number
   column: number
@@ -103,7 +104,7 @@ export interface LintMessage {
   severity: number
 }
 
-/** Converte linha/coluna (base 1) em offset, tolerando posição fora do texto. */
+/** Converts line/column (1-based) into an offset, tolerating a position outside the text. */
 function offsetAt(
   doc: { lines: number; length: number; line: (n: number) => { from: number; to: number } },
   line: number,
@@ -116,11 +117,11 @@ function offsetAt(
 }
 
 /**
- * Mensagens do eslint viram marcas no editor.
+ * Eslint messages become marks in the editor.
  *
- * O buffer pode ter mudado entre o pedido e a resposta, então toda posição é
- * presa aos limites do documento atual — uma posição fora do texto derruba o
- * CodeMirror, e ficar vermelho não vale quebrar o editor.
+ * The buffer may have changed between the request and the response, so every position is
+ * pinned to the limits of the current document — a position outside the text takes
+ * CodeMirror down, and being red is not worth breaking the editor.
  */
 export function eslintDiagnostics(
   doc: { lines: number; length: number; line: (n: number) => { from: number; to: number } },
@@ -134,8 +135,8 @@ export function eslintDiagnostics(
         : from + 1
     return {
       from,
-      // Marca de largura zero não aparece; garante ao menos um caractere sem
-      // passar do fim do documento.
+      // A zero-width mark does not show; it guarantees at least one character without
+      // going past the end of the document.
       to: Math.min(Math.max(rawTo, from + 1), doc.length),
       severity: message.severity === 2 ? "error" : "warning",
       message: message.message,

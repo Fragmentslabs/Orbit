@@ -1,25 +1,25 @@
 import { folderKey, normalizeFolderName, type FolderInfo, type SessionMode } from "@shared/chat"
 
 /**
- * Qual pasta recebe uma sessão de código nova, com "criar pastas
- * automaticamente" ligado.
+ * Which folder receives a new code session, with "create folders
+ * automatically" on.
  *
- * Vive fora do store porque a decisão é pura e as consequências não são: ela
- * cria pasta, desarquiva, grava o mapa e persiste a sessão. Separado, o
- * caminho todo pode ser fechado por teste — e é um caminho que falhava CALADO,
- * que é o pior jeito de falhar: a sessão nascia solta e nada dizia por quê.
+ * It lives outside the store because the decision is pure and the consequences are not: it
+ * creates a folder, unarchives it, writes the map and persists the session. Separated, the
+ * whole path can be closed off by a test — and it is a path that used to fail SILENTLY,
+ * which is the worst way to fail: the session was born loose and nothing said why.
  *
- * O mapa diretório → pasta é uma PISTA, não um veredito. Ele guarda o que
- * aconteceu da última vez, e o que aconteceu desde então (a pasta foi
- * arquivada, renomeada, apagada) ele não sabe.
+ * The directory → folder map is a HINT, not a verdict. It keeps what
+ * happened the last time, and what happened since then (the folder was
+ * archived, renamed, deleted) it does not know.
  */
 export interface AutoFolderPlan {
-  /** Pasta existente que recebe a sessão. */
+  /** Existing folder that receives the session. */
   folderId?: string
-  /** Nome da pasta a criar, quando nenhuma serve. */
+  /** Name of the folder to create, when none is usable. */
   create?: string
-  /** A pasta escolhida está arquivada e precisa voltar à sidebar antes de
-   *  receber a sessão. */
+  /** The chosen folder is archived and needs to come back to the sidebar before
+   *  receiving the session. */
   revive?: boolean
 }
 
@@ -27,30 +27,30 @@ export function planAutoFolder(input: {
   directory: string
   mode: SessionMode
   folders: FolderInfo[]
-  /** O que o mapa automático diz sobre este diretório, se disser algo. */
+  /** What the automatic map says about this directory, if it says anything. */
   mappedId?: string
 }): AutoFolderPlan {
   const { directory, mode, folders, mappedId } = input
 
-  // A pasta apontada pelo mapa só serve se ainda existir e for do mesmo modo.
-  // Quando não serve, a busca por nome assume — antes, este ramo simplesmente
-  // não fazia nada, e como o mapa continuava apontando para a mesma pasta, o
-  // projeto ficava sem pasta PARA SEMPRE. Arquivar a pasta de um projeto
-  // desligava a criação automática dele em definitivo.
+  // The folder pointed to by the map is only usable if it still exists and is of the same mode.
+  // When it is not, the search by name takes over — before, this branch simply
+  // did nothing, and since the map kept pointing to the same folder, the
+  // project stayed without a folder FOR GOOD. Archiving a project's folder
+  // turned its automatic creation off for good.
   const mapped = folders.find((f) => f.id === mappedId)
   if (mapped && mapped.mode === mode) {
     return { folderId: mapped.id, ...(mapped.archived ? { revive: true } : {}) }
   }
 
-  // Sem mapa utilizável, o nome do projeto decide. Cobre o mapa perdido
-  // (localStorage limpo, máquina nova) e o mesmo projeto aberto por um caminho
-  // diferente — barra no fim, outra caixa, ~ em vez do absoluto.
+  // With no usable map, the project name decides. It covers the lost map
+  // (cleared localStorage, new machine) and the same project opened by a different
+  // path — trailing slash, another case, ~ instead of the absolute path.
   const name = normalizeFolderName(directory)
   const sameName = folders.filter((f) => f.mode === mode && folderKey(f.name) === folderKey(name))
   const alive = sameName.find((f) => !f.archived)
   if (alive) return { folderId: alive.id }
-  // A arquivada também conta: criar uma segunda pasta com o mesmo nome ao lado
-  // dela é exatamente a duplicata que o "Organizar" existe para desfazer.
+  // The archived one counts too: creating a second folder with the same name next to
+  // it is exactly the duplicate that "Organize" exists to undo.
   if (sameName[0]) return { folderId: sameName[0].id, revive: true }
 
   return { create: name }

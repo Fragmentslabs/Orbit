@@ -1,28 +1,28 @@
 import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
-/** Níveis do microfone, do mais antigo ao mais novo, e quando chegou o último. */
+/** Microphone levels, from the oldest to the newest, and when the last one arrived. */
 export interface WaveLevels {
   values: number[]
   at: number
 }
 
-/** Duração de um bloco do worklet (1024 quadros a 16 kHz): uma barra por bloco. */
+/** Duration of a worklet block (1024 frames at 16 kHz): one bar per block. */
 const BLOCK_MS = 64
 const BAR = 3
 const GAP = 3
 const STEP = BAR + GAP
-/** Abaixo disto a barra vira ponto: silêncio não ganha "risco". */
+/** Below this the bar becomes a dot: silence gets no "dash". */
 const FLOOR = 0.04
 
 /**
- * Onda da gravação: cada bloco do microfone entra como uma barra pela DIREITA e
- * desliza para a esquerda enquanto se fala; o trecho ainda sem áudio fica
- * pontilhado. Desenhada num canvas por `requestAnimationFrame` — os níveis
- * chegam a cada ~64 ms por ref, sem re-render do React por bloco.
+ * Recording wave: each microphone block enters as a bar from the RIGHT and
+ * slides to the left while one speaks; the stretch still without audio stays
+ * dotted. Drawn on a canvas by `requestAnimationFrame` — the levels
+ * arrive every ~64 ms through a ref, without a React re-render per block.
  *
- * Aparece quando não há texto ao vivo para mostrar (preferência `live`
- * desligada, ou o áudio indo para o modelo): é o retorno de que está gravando.
+ * It appears when there is no live text to show (the `live` preference
+ * off, or the audio going to the model): it is the feedback that it is recording.
  */
 export function DictationWave({
   levels,
@@ -60,9 +60,9 @@ export function DictationWave({
       frame = requestAnimationFrame(draw)
       const { values, at } = levels.current
       const slots = Math.ceil(width / STEP) + 1
-      // Mantém só o que cabe na tela (a gravação pode durar minutos).
+      // Keeps only what fits on screen (the recording may last minutes).
       if (values.length > slots + 4) values.splice(0, values.length - slots - 4)
-      // Fração do deslize desde o último bloco: o movimento é contínuo, não aos saltos.
+      // Fraction of the slide since the last block: the movement is continuous, not in jumps.
       const frac = reduceMotion ? 1 : Math.min(1, (performance.now() - at) / BLOCK_MS)
       const mid = height / 2
       ctx.clearRect(0, 0, width, height)
@@ -96,7 +96,7 @@ export function DictationWave({
   return (
     <div
       className={cn(
-        // Fundo opaco: cobre o texto/placeholder do campo enquanto grava.
+        // Opaque background: it covers the text/placeholder of the field while recording.
         "flex h-7 items-center rounded-md bg-background px-1",
         className,
       )}

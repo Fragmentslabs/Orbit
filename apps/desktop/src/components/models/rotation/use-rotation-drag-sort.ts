@@ -8,19 +8,19 @@ import {
 } from "@dnd-kit/core"
 
 /**
- * Hook de reordenação da lista de modelos da rotação.
+ * Reordering hook of the rotation model list.
  *
- * IDs dnd-kit usados:
+ * dnd-kit ids used:
  *   draggable:  `slot-<index>`
  *   droppable:  `alvo-<index>`
  *
- * Validações no drop:
- *   - origem e destino precisam ser índices válidos da lista
- *   - origem ≠ destino
+ * Validations on drop:
+ *   - origin and destination must be valid indexes of the list
+ *   - origin ≠ destination
  *
- * Devolve um `contextProps` pronto para o `<DndContext>` e dois helpers para
- * que o componente (que conhece o índice da linha) monte o par
- * draggable+droppable com IDs consistentes.
+ * It returns a `contextProps` ready for the `<DndContext>` and two helpers so
+ * that the component (which knows the row index) builds the
+ * draggable+droppable pair with consistent ids.
  */
 export function useRotationDragSort(count: number, onReorder: (from: number, to: number) => void) {
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -50,7 +50,7 @@ export function useRotationDragSort(count: number, onReorder: (from: number, to:
 
   const contextProps = useMemo(
     () => ({ sensors, onDragStart, onDragOver, onDragEnd }),
-    // sensors/handlers são estáveis para o ciclo de vida do hook
+    // sensors/handlers are stable for the life cycle of the hook
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )

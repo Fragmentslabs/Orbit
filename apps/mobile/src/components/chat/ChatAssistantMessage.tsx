@@ -57,7 +57,7 @@ interface ChatAssistantMessageProps {
   isLast?: boolean
   isBusy?: boolean
   onRevert?: () => void
-  /** Responder esta mensagem (vira citação do próximo envio). */
+  /** Reply to this message (becomes a quote of the next send). */
   onReply?: (message: ChatMessage) => void
 }
 
@@ -68,9 +68,9 @@ function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onR
   const files = message.parts.filter((p): p is FilePart => p.type === 'file')
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const replyLabel = useReplyLabel()
-  // A citação da mensagem respondida vive no TEXTO gravado (ver
-  // formatMessageReply); aqui ela só é separada para aparecer em destaque,
-  // dentro da própria bolha — como no WhatsApp.
+  // The quote of the replied message lives in the STORED text (see
+  // formatMessageReply); here it is only separated so it can be highlighted,
+  // inside the bubble itself — as in WhatsApp.
   const { reply, body } = useMemo(() => parseMessageReply(text), [text])
 
   const handleCopy = useCallback(async () => {
@@ -121,14 +121,14 @@ function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onR
   )
 }
 
-// ─── Reasoning (Raciocínio) ──────────────────────────────────────────────────
+// ─── Reasoning ───────────────────────────────────────────────────────────────
 
 function ReasoningPartView({ part }: { part: ReasoningPart }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  // Fecha automaticamente 1s após o streaming terminar (espelha o desktop)
+  // Closes automatically 1s after the streaming ends (mirrors the desktop)
   const isStreaming = part.state === 'streaming'
   const wasStreaming = useRef(isStreaming)
   useEffect(() => {
@@ -291,7 +291,7 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   )
 }
 
-// ─── Task group (tools limitadas, acordeon — espelho do desktop code mode) ───
+// ─── Task group (limited tools, accordion — desktop code mode) ───
 
 const MAX_VISIBLE_TOOLS = 5
 
@@ -364,8 +364,8 @@ function ToolActionRow({ part }: { part: ToolPart }) {
       {showOutput && detail ? (
         <ScrollView style={{ maxHeight: 160, marginTop: 6 }} nestedScrollEnabled>
           <Text style={{ fontSize: 11, fontFamily: 'monospace', color: tokens.mutedForeground, lineHeight: 16 }}>
-            {/* A saída das tools lista as memórias como "#mem_xxx": o id cru não
-                diz nada, então vira o mesmo chip da conversa. */}
+            {/* The output of the tools lists the memories as "#mem_xxx": the raw id says
+                nothing, so it becomes the same chip as in the conversation. */}
             {splitMemoryIds(detail).map((part, i) =>
               typeof part === 'string' ? (
                 <Text key={i}>{part}</Text>
@@ -506,7 +506,7 @@ function SourcesBlock({ sources }: { sources: any[] }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   const handleOpenLink = (url: string) => {
-    Linking.openURL(url).catch((err) => console.error('Erro ao abrir link:', err))
+    Linking.openURL(url).catch((err) => console.error('Failed to open link:', err))
   }
 
   return (
@@ -546,12 +546,12 @@ function SourcesBlock({ sources }: { sources: any[] }) {
   )
 }
 
-// ─── Imagem da resposta ──────────────────────────────────────────────────────
+// ─── Image of the answer ─────────────────────────────────────────────────────
 
 /**
- * Imagem que o assistente anexou (show_image). O arquivo pode ter sido
- * excluído depois na galeria do desktop — quando a carga falha, mostramos um
- * placeholder no lugar do quadro vazio.
+ * Image the assistant attached (show_image). The file may have been
+ * deleted later in the desktop gallery — when the load fails, we show a
+ * placeholder in place of the empty frame.
  */
 function AssistantImage({ part }: { part: ImagePart }) {
   const { t } = useTranslation()
@@ -559,10 +559,10 @@ function AssistantImage({ part }: { part: ImagePart }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
-  // O estado de falha é atado à URL: quando a part é reemitida/reescrita com
-  // nova src (refetch com token fresco, part substituída), a imagem volta a
-  // tentar carregar — antes o latch `failed` congelava o placeholder até o
-  // componente remontar.
+  // The failure state is tied to the URL: when the part is re-emitted/rewritten with
+  // a new src (refetch with a fresh token, replaced part), the image tries to
+  // load again — before, the `failed` latch froze the placeholder until the
+  // component remounted.
   const failed = failedSrc === part.src
 
   if (failed) {
@@ -598,19 +598,19 @@ function AssistantImage({ part }: { part: ImagePart }) {
 // ─── Segment Parts helper ────────────────────────────────────────────────────
 
 /**
- * Ferramentas que NÃO entram no acordeon de ações: o que elas produzem já tem
- * um card na conversa (o subagente, a imagem, o artefato, o documento), e a
- * chamada ao lado do próprio resultado é ruído. A proposta de skill e a
- * checklist de TODO ficam de fora por outro motivo: são interativas, e
- * recolhê-las esconderia o que se espera que a pessoa responda.
+ * Tools that do NOT enter the actions accordion: what they produce already has
+ * a card in the conversation (the subagent, the image, the artifact, the document), and the
+ * call next to its own result is noise. The skill proposal and the
+ * TODO checklist stay out for another reason: they are interactive, and
+ * collapsing them would hide what the person is expected to answer.
  *
- * Mesma lista do desktop — as duas telas mostram a mesma conversa.
+ * Same list as the desktop — both screens show the same conversation.
  */
 const SPECIAL_TOOLS = new Set([
   'subagent',
   'todowrite',
   'create_skill',
-  // Conexão MCP é uma decisão do usuário no card — igual à proposta de skill.
+  // MCP connection is a user decision in the card — same as the skill proposal.
   'mcp_connect',
   'mcp_update',
   'show_image',
@@ -618,9 +618,9 @@ const SPECIAL_TOOLS = new Set([
   'update_artifact',
   'create_document',
   'update_document',
-  // Peças: o card padrão já mostra o que a tool fez, com a URL que o desktop
-  // anexou no part. A chamada da tool ao lado seria a mesma informação duas
-  // vezes.
+  // Pieces: the standard card already shows what the tool did, with the URL the desktop
+  // attached in the part. The tool call next to it would be the same information
+  // twice.
   'motion_write',
   'motion_edit',
   'design_write',
@@ -655,8 +655,8 @@ function segmentParts(parts: MessagePart[]): Segment[] {
 export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRevert, onReply }: ChatAssistantMessageProps) {
   const { t } = useTranslation()
   const isUser = message.role === 'user'
-  // Estável por mensagem: closure nova a cada render derrubaria o memo do
-  // MessageBubble — o mesmo motivo do handleRevert.
+  // Stable per message: a new closure on every render would bring down the memo of
+  // MessageBubble — the same reason as handleRevert.
   const handleReply = useCallback(() => onReply?.(message), [onReply, message])
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
@@ -664,16 +664,16 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   const finished = message.error === undefined
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
 
-  // Só a última todowrite é a checklist viva; anteriores viram uma linha discreta
+  // Only the last todowrite is the live checklist; earlier ones become a discreet line
   const lastTodoId = [...message.parts]
     .reverse()
     .find((p) => p.type === 'tool' && p.tool === 'todowrite')?.id
 
   const waiting = message.role === 'assistant' && isLast && isBusy && message.parts.length === 0
 
-  // Agente navegando no browser (browser_open/browser_links em execução) —
-  // paridade com o BrowserTestChip do desktop ("testando…"), aqui inline na
-  // conversa (o mobile não tem painel lateral).
+  // Agent browsing the browser (browser_open/browser_links running) —
+  // parity with the desktop BrowserTestChip ("testing…"), here inline in the
+  // conversation (mobile has no side panel).
   const usingBrowser = useMemo(
     () =>
       message.parts.some(
@@ -717,14 +717,14 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
         const part = segment.part
         switch (part.type) {
           case 'text':
-            // Nudge de overclaim que terminou como "nada a corrigir": o
-            // engine marca como 'internal' e a UI não renderiza (verificação
-            // interna, não conteúdo para o usuário).
+            // Overclaim nudge that ended as "nothing to fix": the engine marks it as 'internal'
+            // and the UI does not render it (an internal check, not content for
+            // the user).
             if (part.source === 'internal') {
               return null
             }
-            // Indicador transitório do modo Visão ("Analisando imagem…") —
-            // paridade com o VisionWorkingRow do desktop: ícone Eye + shimmer.
+            // Transient indicator of the Vision mode ("Analyzing image…") —
+            // parity with the desktop VisionWorkingRow: Eye icon + shimmer.
             if (part.source === 'vision') {
               return (
                 <View key={part.id} className="w-full flex-row items-center gap-1.5 py-0.5">
@@ -738,10 +738,10 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
                 <AssistantMarkdown
                   text={part.text}
                   streaming={part.state === 'streaming'}
-                  // Texto interno do engine — nudge de verificação
-                  // (anti-overclaim) ou fechamento da checklist ('todo'):
-                  // pensamento interno, sempre em cor apagada — paridade com
-                  // o muted do desktop.
+                  // Internal text of the engine — check nudge
+                  // (anti-overclaim) or closing of the checklist ('todo'):
+                  // internal thought, always in faded color — parity with
+                  // the muted of the desktop.
                   muted={part.source === 'nudge' || part.source === 'todo'}
                 />
               </View>
@@ -749,10 +749,10 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
           case 'reasoning':
             return <ReasoningPartView key={part.id} part={part} />
           case 'tool':
-            // Peça (motion, design, slides): o desktop anexou a URL assinada no
-            // próprio part — é a única parte do caminho que o celular não
-            // consegue montar sozinho, porque o scheme do Electron não existe
-            // aqui. Um card para os três; o visualizador é que muda.
+            // Piece (motion, design, slides): the desktop attached the signed URL in the
+            // part itself — it is the only part of the path the phone cannot
+            // assemble on its own, because the Electron scheme does not exist
+            // here. One card for the three; what changes is the viewer.
             if (part.piece) {
               return <PieceCard key={part.id} piece={part.piece} />
             }
@@ -768,16 +768,16 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             if (part.tool === 'todowrite') {
               return <TodoChecklist key={part.id} part={part} stale={part.id !== lastTodoId} />
             }
-            // tools especiais que não entram no TaskGroup
+            // special tools that do not enter the TaskGroup
             return <TaskGroup key={part.id} parts={[part]} />
           case 'agent':
             return <AgentPartView key={part.id} part={part} />
           case 'image':
             return <AssistantImage key={part.id} part={part} />
-          // Áudio, vídeo, artefato e documento: o desktop já reescreveu a URL
-          // deles para http assinado (companion-assets), então aqui cada um
-          // renderiza de verdade. Antes, áudio e vídeo caíam no `default` e
-          // sumiam sem aviso, e artefato/documento viravam um cartão "só no
+          // Audio, video, artifact and document: the desktop has already rewritten their
+          // URL to signed http (companion-assets), so here each one
+          // really renders. Before, audio and video fell into `default` and
+          // vanished without warning, and artifact/document became a card "only on the
           // desktop".
           case 'audio':
             return <AudioPartView key={part.id} part={part} />
@@ -800,8 +800,8 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
 
       {message.error && (
         <View className="mt-2 w-full rounded-lg px-3 py-2" style={{ borderWidth: 1, borderColor: tokens.destructive, backgroundColor: hslToRgba(tokens.destructive.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), 0.12) }}>
-          {/* Falha classificada tem explicação traduzida; o texto cru do provedor
-              desce para detalhe secundário (mesma regra do desktop). */}
+          {/* A classified failure has a translated explanation; the raw provider text
+              goes down to a secondary detail (same rule as the desktop). */}
           {message.errorKind && message.errorKind !== 'unknown' ? (
             <>
               <Text className="text-xs" style={{ color: tokens.destructive }}>

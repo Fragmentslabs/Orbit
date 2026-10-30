@@ -1,18 +1,18 @@
 /**
- * Host de WebView para uma "peça" HTML vinda do desktop.
+ * WebView host for an HTML "piece" coming from the desktop.
  *
- * O desktop reescreve a URL antes de mandá-la para o celular (`companion-media`):
- * o que chega aqui já é uma URL http absoluta, com token no caminho. Este
- * componente NÃO monta URL nenhuma — ele só renderiza o que recebeu, seja de
- * uma URL, seja do HTML que o próprio celular escreveu (o diagrama mermaid).
- * Fonte vazia (part antiga em cache, arquivo que não pôde ser servido) degrada
- * para um card discreto em vez de um buraco na conversa.
+ * The desktop rewrites the URL before sending it to the phone (`companion-media`):
+ * what arrives here is already an absolute http URL, with the token in the path. This
+ * component does NOT assemble any URL — it only renders what it received, whether from
+ * a URL or from the HTML the phone itself wrote (the mermaid diagram).
+ * An empty source (an old part in the cache, a file that could not be served) degrades
+ * to a discreet card instead of a hole in the conversation.
  *
- * A API é a mesma para todos os tipos de peça porque todos compartilham o mesmo
- * problema: um HTML que precisa de um host, um poster enquanto carrega, um erro
- * que não pode derrubar a bolha e uma tela cheia para o que não cabe na largura
- * do celular. Artefato e documento usam agora; motion, design e slides usam
- * depois, sem inventar um segundo host.
+ * The API is the same for all piece types because they all share the same
+ * problem: an HTML that needs a host, a poster while loading, an error
+ * that cannot bring down the bubble and a full screen for what does not fit in the width
+ * of the phone. Artifact and document use it now; motion, design and slides use it
+ * later, without inventing a second host.
  */
 import { useCallback, useState, type ReactNode } from 'react'
 import {
@@ -36,53 +36,53 @@ type WebViewErrorEvent = Parameters<NonNullable<WebViewProps['onError']>>[0]
 type WebViewHttpErrorEvent = Parameters<NonNullable<WebViewProps['onHttpError']>>[0]
 
 export interface PieceViewProps {
-  /** URL http absoluta do HTML (já reescrita pelo desktop). Vazia = sem prévia. */
+  /** Absolute http URL of the HTML (already rewritten by the desktop). Empty = no preview. */
   src?: string
   /**
-   * HTML montado no próprio celular, sem arquivo no desktop — o diagrama
-   * mermaid não tem URL para servir. Tem prioridade sobre `src` quando os dois
-   * vêm; vazio nos dois = card de "prévia indisponível".
+   * HTML assembled on the phone itself, without a file on the desktop — the mermaid
+   * diagram has no URL to serve. It takes precedence over `src` when both
+   * come; empty in both = "preview unavailable" card.
    */
   html?: string
-  /** Título na barra do card e no cabeçalho da tela cheia. */
+  /** Title in the bar of the card and in the header of the full screen. */
   title?: string
-  /** Poster mostrado enquanto o HTML carrega — normalmente o `thumb` da part. */
+  /** Poster shown while the HTML loads — usually the `thumb` of the part. */
   poster?: string
   /**
-   * Revisão do conteúdo (`revision` da part). O desktop reescreve o mesmo
-   * arquivo no mesmo caminho, então sem isto o WebView continuaria mostrando a
-   * versão anterior depois de um `update_artifact`.
+   * Revision of the content (`revision` of the part). The desktop rewrites the same
+   * file at the same path, so without this the WebView would keep showing the
+   * previous version after an `update_artifact`.
    */
   revision?: number
-  /** Altura do host inline, em px. Padrão 320. */
+  /** Height of the inline host, in px. Default 320. */
   height?: number
-  /** Mostra o botão de expandir para tela cheia. Padrão true. */
+  /** Shows the expand button to full screen. Default true. */
   expandable?: boolean
-  /** Conteúdo extra logo abaixo do host (os botões do documento, por exemplo). */
+  /** Extra content right below the host (the document buttons, for example). */
   footer?: ReactNode
-  /** Rótulo do estado vazio (URL ausente). */
+  /** Label of the empty state (missing URL). */
   emptyLabel?: string
-  /** Rótulo do estado de carregamento, para leitor de tela. */
+  /** Label of the loading state, for the screen reader. */
   loadingLabel?: string
-  /** Rótulo do estado de erro. */
+  /** Label of the error state. */
   errorLabel?: string
-  /** Avisa quem chamou quando a página não carrega (rede, 404, token expirado). */
+  /** Notifies the caller when the page does not load (network, 404, expired token). */
   onError?: (message: string) => void
   /**
-   * Mensagens do documento (`window.ReactNativeWebView.postMessage`). É por
-   * aqui que uma peça que se desenha sozinha — o diagrama mermaid — avisa a
-   * altura de que precisa.
+   * Messages of the document (`window.ReactNativeWebView.postMessage`). It is through
+   * here that a piece that draws itself — the mermaid diagram — reports the
+   * height it needs.
    */
   onMessage?: (data: string) => void
   /**
-   * Canal para falar com a página depois que ela carrega (seek, paging).
+   * Channel to talk to the page after it loads (seek, paging).
    *
-   * Chamada a cada `onLoadEnd`, com o `injectJavaScript` do WebView que acabou
-   * de carregar: quem chama guarda o `inject` e o usa enquanto a página viver.
-   * É o único caminho de movimento de uma peça de motion — ela não tem relógio
-   * próprio e só anda quando alguém manda um quadro —, e também o de navegação
-   * de um deck, que o HTML não traz. O `inject` entregue é o da instância certa
-   * (inline ou tela cheia), então um seek nunca cai num WebView escondido.
+   * Called on every `onLoadEnd`, with the `injectJavaScript` of the WebView that has just
+   * loaded: the caller stores the `inject` and uses it for as long as the page lives.
+   * It is the only path of motion for a motion piece — it has no clock
+   * of its own and only moves when someone sends a frame —, and also the one of navigation
+   * of a deck, which the HTML does not bring. The `inject` delivered is the one of the right instance
+   * (inline or full screen), so a seek never lands in a hidden WebView.
    */
   onReady?: (inject: (js: string) => void) => void
 }
@@ -109,8 +109,8 @@ export function PieceView({
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
 
-  // Cada parte fala a sua língua ("Prévia do artefato", "Carregando documento").
-  // Sem rótulo do chamador, o genérico traduzido — nunca uma string solta.
+  // Each part speaks its own language ("Artifact preview", "Loading document").
+  // Without a label from the caller, the translated generic one — never a loose string.
   const emptyText = emptyLabel ?? t('parts.preview.empty')
   const loadingText = loadingLabel ?? t('parts.preview.loading')
   const errorText = errorLabel ?? t('parts.preview.error')
@@ -120,13 +120,13 @@ export function PieceView({
   const [attempt, setAttempt] = useState(0)
   const [fullscreen, setFullscreen] = useState(false)
 
-  // Nova URL (ou nova revisão do mesmo arquivo) recomeça do loading: o latch de
-  // erro/ready não pode sobreviver à troca de fonte, senão a part reemitida com
-  // token fresco mostraria o erro da anterior. Ajuste durante a renderização
-  // (padrão do React para estado derivado de prop) em vez de efeito: o efeito
-  // deixaria um render intermediário mostrando o estado da fonte anterior.
-  // Com `html` a identidade da fonte é o próprio documento — o diagrama é
-  // montado aqui, não tem URL. Trocar de tema ou de diagrama remonta o WebView.
+  // A new URL (or a new revision of the same file) starts over from loading: the error/ready
+  // latch cannot survive the source change, otherwise the part re-emitted with a fresh
+  // token would show the error of the previous one. Adjustment during rendering
+  // (the React pattern for state derived from a prop) instead of an effect: the effect
+  // would leave an intermediate render showing the state of the previous source.
+  // With `html` the identity of the source is the document itself — the diagram is
+  // assembled here, it has no URL. Changing the theme or the diagram remounts the WebView.
   const sourceKey = src ? `${src}#${revision ?? 0}` : `html:${html ?? ''}`
   const [seenSource, setSeenSource] = useState(sourceKey)
   if (seenSource !== sourceKey) {
@@ -150,8 +150,8 @@ export function PieceView({
     setAttempt((n) => n + 1)
   }, [])
 
-  // `attempt` no key força um WebView novo a cada tentativa — `reload()` não
-  // resolve quando o problema foi a resposta HTTP em si.
+  // `attempt` in the key forces a new WebView on every attempt — `reload()` does not
+  // solve it when the problem was the HTTP response itself.
   const webKey = `${sourceKey}#${attempt}`
 
   const handleError = useCallback(
@@ -164,16 +164,16 @@ export function PieceView({
     [fail],
   )
 
-  // Um alvo por instância: o `inject` entregue ao `onReady` tem que falar com o
-  // WebView que acabou de carregar, não com o último que existiu. Com tela cheia
-  // aberta há dois montados e o `onLoadEnd` do de baixo chegaria com o alvo do de
-  // cima se fosse um só.
+  // One target per instance: the `inject` delivered to `onReady` has to talk to the
+  // WebView that has just loaded, not to the last one that existed. With the full screen
+  // open there are two mounted and the `onLoadEnd` of the bottom one would arrive with the target of the
+  // top one if it were a single one.
   //
-  // O invólucro é estado, não `useRef`: o `WebView` é um componente de um pacote
-  // que o compilador do React não conhece, então entregar (ou ler) um ref dele
-  // em qualquer callback é tratado como "ref lido durante o render" pelo
-  // `react-hooks/refs`. Escrito pelo callback ref — que o React executa no
-  // commit, nunca no render — o invólucro guarda a instância sem esse risco.
+  // The wrapper is state, not `useRef`: the `WebView` is a component of a package
+  // the React compiler does not know, so handing (or reading) a ref of it
+  // in any callback is treated as "ref read during render" by
+  // `react-hooks/refs`. Written by the ref callback — which React runs at
+  // commit, never during render — the wrapper stores the instance without that risk.
   const [web] = useState(() => ({
     inline: null as WebView | null,
     fullscreen: null as WebView | null,
@@ -188,23 +188,23 @@ export function PieceView({
       }}
       source={html ? { html } : { uri: src as string }}
       style={styles.web}
-      // A página da peça puxa os próprios assets por caminho relativo (CSS,
-      // fonte, clipe) e pode apontar para fora — nada de whitelist restritiva.
+      // The page of the piece pulls its own assets by relative path (CSS,
+      // font, clip) and may point outside — no restrictive whitelist.
       originWhitelist={['*']}
       javaScriptEnabled
       domStorageEnabled
       allowsInlineMediaPlayback
       mediaPlaybackRequiresUserAction={false}
-      // A peça é um documento, não um navegador: `window.open` abriria uma
-      // janela que o RN não tem onde mostrar.
+      // The piece is a document, not a browser: `window.open` would open a
+      // window RN has nowhere to show.
       setSupportMultipleWindows={false}
       onLoadStart={() => setState((prev) => (prev === 'error' ? prev : 'loading'))}
       onLoadEnd={() => {
         setState((prev) => (prev === 'error' ? prev : 'ready'))
         if (!onReady) return
-        // O alvo é lido aqui, no evento, e a instância é capturada agora: quem
-        // recebe o `inject` fala com o WebView que acabou de carregar, e nenhum
-        // objeto mutável atravessa o render.
+        // The target is read here, in the event, and the instance is captured now: whoever
+        // receives the `inject` talks to the WebView that has just loaded, and no
+        // mutable object crosses the render.
         const instance = expanded ? web.fullscreen : web.inline
         onReady((js) => instance?.injectJavaScript(js))
       }}
@@ -216,8 +216,8 @@ export function PieceView({
     />
   )
 
-  // Part antiga em cache (ou arquivo que o desktop não conseguiu servir): o
-  // card continua lá, dizendo o que era, em vez de sumir.
+  // Old part in the cache (or a file the desktop could not serve): the
+  // card stays there, saying what it was, instead of vanishing.
   if (!src && !html) {
     return <UnavailablePart title={title} label={emptyText} testID="piece-empty" />
   }
@@ -261,7 +261,7 @@ export function PieceView({
                   source={poster}
                   style={StyleSheet.absoluteFill}
                   contentFit="cover"
-                  // Poster é enfeite: se o thumb falhar, o spinner já resolve.
+                  // Poster is decoration: if the thumb fails, the spinner already handles it.
                   accessibilityIgnoresInvertColors
                 />
               ) : null}
@@ -287,7 +287,7 @@ export function PieceView({
               >
                 <RotateCw size={12} color={tokens.foreground} />
                 <Text className="text-xs" style={{ color: tokens.foreground }}>
-                  Tentar de novo
+                  {t('parts.preview.retry')}
                 </Text>
               </Pressable>
               {errorDetail ? (
@@ -325,7 +325,7 @@ export function PieceView({
               onPress={() => setFullscreen(false)}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel="Fechar"
+              accessibilityLabel={t('pieces.closeFullscreen')}
             >
               <X size={20} color={tokens.foreground} />
             </Pressable>

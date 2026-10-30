@@ -6,9 +6,9 @@ import { Readable } from 'node:stream'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * O caminho de um vídeo anexado, de ponta a ponta, com o ffmpeg/ffprobe de
- * verdade: guardar → ficha (ffprobe) → miniatura → nota → levar para uma peça.
- * Sem ffmpeg na máquina, a suíte pula (como as outras que dependem dele).
+ * The path of an attached video, end to end, with the real ffmpeg/ffprobe:
+ * store → facts (ffprobe) → thumbnail → note → bring it into a piece.
+ * With no ffmpeg on the machine, the suite skips (like the others that need it).
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -49,7 +49,7 @@ async function makeClip(file: string, withSound: boolean): Promise<void> {
   await runFfmpeg(motionAudioFfmpegArgs({ video: silent, audio: wav, output: file, duration: FRAMES / FPS, format: 'mp4' }))
 }
 
-describe.skipIf(!hasFfmpeg)('vídeo anexado (ffmpeg real)', () => {
+describe.skipIf(!hasFfmpeg)('attached video (real ffmpeg)', () => {
   beforeAll(async () => {
     await fsp.mkdir(work, { recursive: true })
   })
@@ -57,7 +57,7 @@ describe.skipIf(!hasFfmpeg)('vídeo anexado (ffmpeg real)', () => {
     await fsp.rm(work, { recursive: true, force: true })
   })
 
-  it('guarda por cópia, sonda, tira a miniatura e escreve a nota curta', async () => {
+  it('stores by copy, probes, takes the thumbnail and writes the short note', async () => {
     const original = path.join(work, 'Entrevista.mp4')
     await makeClip(original, true)
     const saved = await saveVideoAttachment({ copyFrom: original }, 'mp4', { name: 'Entrevista.mp4' })
@@ -75,17 +75,17 @@ describe.skipIf(!hasFfmpeg)('vídeo anexado (ffmpeg real)', () => {
     expect(note).toContain(`ref ${saved.id}`)
     expect(note).toContain('64x64 @ 5 fps')
     expect(note).toContain('transcribe for what is SAID')
-    // O original continua onde estava.
+    // The original stays where it was.
     expect(fs.existsSync(original)).toBe(true)
   })
 
-  it('arquivo que não é vídeo não tem faixa de vídeo para sondar', async () => {
+  it('a file that is not a video has no video stream to probe', async () => {
     const fake = path.join(work, 'fake.mp4')
-    await fsp.writeFile(fake, 'isto não é um vídeo')
+    await fsp.writeFile(fake, 'this is not a video')
     expect(await probeVideoAttachment(fake)).toBeNull()
   })
 
-  it('motion_asset leva o anexo para a peça e a ficha diz que ele tem som', async () => {
+  it('motion_asset takes the attachment into the piece and the sheet says it has sound', async () => {
     const original = path.join(work, 'Cena.mp4')
     await makeClip(original, true)
     const saved = await saveVideoAttachment({ copyFrom: original }, 'mp4', { name: 'Cena.mp4' })

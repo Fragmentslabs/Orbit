@@ -1,20 +1,20 @@
 /**
- * Conversão do resultado de uma tool MCP no texto que vai ao modelo.
+ * Conversion of an MCP tool result into the text that goes to the model.
  *
- * O MCP devolve uma lista de blocos tipados (text, image, audio, resource…).
- * A versão anterior serializava com JSON.stringify tudo o que não fosse texto —
- * um screenshot do Nodara (PNG 1220×2712) entrava no contexto como 3,3M
- * caracteres de base64, o provedor recusava o request inteiro por estouro de
- * janela e a sessão gravava os mesmos megabytes em disco.
+ * MCP returns a list of typed blocks (text, image, audio, resource…). The previous
+ * version serialized with JSON.stringify everything that was not text — a Nodara
+ * screenshot (PNG 1220×2712) entered the context as 3.3M characters of base64, the
+ * provider refused the whole request for overflowing the window and the session wrote
+ * the same megabytes to disk.
  *
- * Imagem não é texto: vai para a galeria da conversa e o modelo recebe só a
- * referência orbit-media://. Mostrar ao usuário (show_image) e olhar
- * (describe_image, modo Visão) viram decisões do agente, sob demanda — o mesmo
- * contrato do run_browser_script.
+ * An image is not text: it goes to the conversation's gallery and the model only gets
+ * the orbit-media:// reference. Showing it to the user (show_image) and looking at it
+ * (describe_image, Vision mode) become the agent's decisions, on demand — the same
+ * contract as run_browser_script.
  */
 
-/** Teto do texto de um resultado (~25k tokens). Um servidor que despeja um
- *  dump inteiro não pode, sozinho, ocupar a janela do turno. */
+/** Ceiling for the text of a result (~25k tokens). A server that dumps a whole file
+ *  cannot, on its own, fill the turn's window. */
 export const MAX_MCP_TEXT_CHARS = 100_000
 
 export interface SavedImage {
@@ -25,11 +25,11 @@ export interface SavedImage {
 }
 
 export interface McpResultScope {
-  /** Grava a imagem na galeria; null quando não deu (o modelo é avisado). */
+  /** Stores the image in the gallery; null when it did not work (the model is warned). */
   saveImage: (data: Buffer, mimeType: string) => Promise<SavedImage | null>
-  /** show_image está no toolset deste turno */
+  /** show_image is in this turn's toolset */
   canShow: boolean
-  /** describe_image está no toolset deste turno (modo Visão) */
+  /** describe_image is in this turn's toolset (Vision mode) */
   canDescribe: boolean
 }
 
@@ -54,7 +54,7 @@ function imageGuidance(scope: McpResultScope): string {
   return lines.join('\n')
 }
 
-/** Bloco de recurso embutido: texto entra (com o teto geral), binário não. */
+/** Embedded resource block: text gets in (with the general ceiling), binary does not. */
 function resourceText(block: Block): string {
   const resource = block.resource as Block | undefined
   const uri = typeof resource?.uri === 'string' ? resource.uri : 'resource'
@@ -109,10 +109,10 @@ export async function mcpResultToText(result: unknown, scope: McpResultScope): P
   }
 
   const text = capText(parts.join('\n'))
-  // A orientação vem depois do teto: um texto gigante antes dela não pode
-  // cortar justamente a linha que diz como ver a imagem.
+  // The guidance comes after the ceiling: a giant text before it cannot cut exactly the
+  // line that says how to see the image.
   if (saved.length > 0) return `${text}\n${imageGuidance(scope)}`
-  return text || '(sem retorno)'
+  return text || '(no return)'
 }
 
 function safeJson(value: unknown): string {

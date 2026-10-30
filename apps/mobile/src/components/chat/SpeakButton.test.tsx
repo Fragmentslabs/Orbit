@@ -1,27 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ChatMessage, MessagePart } from '@orbit/shared'
-// Os `vi.mock` abaixo são içados pelo vitest acima destes imports — a ordem
-// aqui é só de leitura (o `import/first` reclama de import depois de mock).
+// The `vi.mock` below are hoisted by vitest above these imports — the order
+// here is only for reading (the `import/first` rule complains about an import after a mock).
 import { SpeakButton } from './SpeakButton'
 import { MessageActions } from './MessageActions'
 import { useSpeakStore } from '~/stores/speak-store'
 import { useConnectionStore } from '~/stores/connection-store'
 
 /**
- * OUVIR: o botão que pede a fala ao desktop e toca o WAV.
+ * LISTEN: the button that asks the desktop for the speech and plays the WAV.
  *
- * O que se prova aqui é o contrato com o desktop e as três regras que a pessoa
- * percebe: só lê RESPOSTA (nunca o que ela mesma escreveu), só lê o texto final
- * (sem o JSON do orbit-ui), e um segundo toque cala em vez de abrir uma segunda
- * fala. A falha tem de dizer POR QUE — "baixe o modelo" —, não deixar um botão
- * morto.
+ * What is proven here is the contract with the desktop and the three rules the person
+ * perceives: it only reads an ANSWER (never what they wrote themselves), it only reads the final text
+ * (without the orbit-ui JSON), and a second tap silences it instead of opening a second
+ * speech. The failure has to say WHY — "download the model" —, not leave a dead
+ * button.
  *
- * O motor de voz e o player nativo não existem no jsdom: `expo-audio` é o
- * módulo substituído aqui, e a rede é o `http` falso do connection-store.
+ * The voice engine and the native player do not exist in jsdom: `expo-audio` is the
+ * module replaced here, and the network is the fake `http` of the connection-store.
  */
 
-// O código do Expo lê `__DEV__`, que existe no bundle do RN e não no Node.
+// The Expo code reads `__DEV__`, which exists in the RN bundle and not in Node.
 vi.hoisted(() => {
   ;(globalThis as Record<string, unknown>).__DEV__ = false
 })
@@ -41,7 +41,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }),
 }))
 
-// A store fala com o i18n fora de componente: aqui a chave volta como texto.
+// The store talks to i18n outside a component: here the key comes back as text.
 vi.mock('~/i18n', () => ({ default: { t: (key: string) => key } }))
 
 vi.mock('~/stores/theme-store', () => ({
@@ -54,7 +54,7 @@ vi.mock('lucide-react-native', async () => {
   return {
     Square: Icon,
     Volume2: Icon,
-    // Ícones da barra de ações, onde o aviso de falha aparece.
+    // Icons of the actions bar, where the failure notice shows up.
     CheckCircle: Icon,
     Copy: Icon,
     Reply: Icon,
@@ -62,23 +62,23 @@ vi.mock('lucide-react-native', async () => {
   }
 })
 
-const URL_FALA = 'http://192.168.0.10:3848/api/file/audio/aud_speech.wav/tok-audio'
+const SPEECH_URL = 'http://192.168.0.10:3848/api/file/audio/aud_speech.wav/tok-audio'
 
 const fakeHttp = vi.hoisted(() => ({ speak: vi.fn() }))
 
-const texto = (text: string): MessagePart => ({ id: 't1', type: 'text', text }) as MessagePart
+const textPart = (text: string): MessagePart => ({ id: 't1', type: 'text', text }) as MessagePart
 
-const ferramenta = (): MessagePart =>
+const toolPart = (): MessagePart =>
   ({ id: 'tool1', type: 'tool', toolName: 'read', toolCallId: 'c1', state: 'output-available' }) as unknown as MessagePart
 
-function mensagem(role: 'assistant' | 'user', parts: MessagePart[]): ChatMessage {
+function message(role: 'assistant' | 'user', parts: MessagePart[]): ChatMessage {
   return { id: 'msg-1', role, parts, createdAt: 0, completedAt: 0 } as ChatMessage
 }
 
-function falaPronta() {
+function speechReady() {
   fakeHttp.speak.mockResolvedValue({
     ok: true,
-    data: { id: 'aud_speech.wav', url: URL_FALA, durationMs: 1200, cached: false },
+    data: { id: 'aud_speech.wav', url: SPEECH_URL, durationMs: 1200, cached: false },
   })
 }
 
@@ -96,54 +96,54 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('quando o botão existe', () => {
-  it('não aparece em mensagem do usuário — o que ela escreveu não se lê de volta', () => {
-    render(<SpeakButton message={mensagem('user', [texto('bom dia')])} />)
+describe('when the button exists', () => {
+  it('does not show up on a user message — what they wrote is not read back', () => {
+    render(<SpeakButton message={message('user', [textPart('good morning')])} />)
     expect(screen.queryByTestId('speak-button')).toBeNull()
   })
 
-  it('não aparece em turno só de ferramenta: não há prosa para ler', () => {
-    render(<SpeakButton message={mensagem('assistant', [ferramenta()])} />)
+  it('does not show up on a tool-only turn: there is no prose to read', () => {
+    render(<SpeakButton message={message('assistant', [toolPart()])} />)
     expect(screen.queryByTestId('speak-button')).toBeNull()
   })
 
-  it('aparece na resposta com prosa', () => {
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+  it('shows up on an answer with prose', () => {
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
     expect(screen.getByTestId('speak-button')).toBeTruthy()
   })
 })
 
-describe('o que é falado', () => {
-  it('só a resposta final, sem a narração anterior à ferramenta', async () => {
-    falaPronta()
-    const parts = [texto('vou verificar'), ferramenta(), texto('pronto, três arquivos.')]
-    render(<SpeakButton message={mensagem('assistant', parts)} />)
+describe('what gets spoken', () => {
+  it('only the final answer, without the narration before the tool', async () => {
+    speechReady()
+    const parts = [textPart('let me check'), toolPart(), textPart('done, three files.')]
+    render(<SpeakButton message={message('assistant', parts)} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
 
     await waitFor(() => expect(fakeHttp.speak).toHaveBeenCalledTimes(1))
-    expect(fakeHttp.speak.mock.calls[0][0]).toBe('pronto, três arquivos.')
-    // A URL vem pronta do desktop (token no caminho): não se monta nada aqui.
-    expect(audio.player.replace).toHaveBeenCalledWith({ uri: URL_FALA })
+    expect(fakeHttp.speak.mock.calls[0][0]).toBe('done, three files.')
+    // The URL comes ready from the desktop (token in the path): nothing is assembled here.
+    expect(audio.player.replace).toHaveBeenCalledWith({ uri: SPEECH_URL })
     expect(audio.player.play).toHaveBeenCalled()
   })
 
-  it('o JSON do orbit-ui não vira fala', async () => {
-    falaPronta()
-    const parts = [texto('aqui está:\n```orbit-ui\n{"type":"stats","items":[]}\n```')]
-    render(<SpeakButton message={mensagem('assistant', parts)} />)
+  it('the orbit-ui JSON does not become speech', async () => {
+    speechReady()
+    const parts = [textPart('here it is:\n```orbit-ui\n{"type":"stats","items":[]}\n```')]
+    render(<SpeakButton message={message('assistant', parts)} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
 
     await waitFor(() => expect(fakeHttp.speak).toHaveBeenCalledTimes(1))
-    expect(fakeHttp.speak.mock.calls[0][0]).toBe('aqui está:')
+    expect(fakeHttp.speak.mock.calls[0][0]).toBe('here it is:')
   })
 })
 
-describe('controle', () => {
-  it('segundo toque na mesma mensagem interrompe', async () => {
-    falaPronta()
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+describe('control', () => {
+  it('a second tap on the same message stops it', async () => {
+    speechReady()
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
     await waitFor(() => expect(useSpeakStore.getState().state).toBe('playing'))
@@ -153,30 +153,30 @@ describe('controle', () => {
     expect(useSpeakStore.getState().state).toBe('idle')
   })
 
-  it('pedido que volta depois de um stop não toca', async () => {
-    let liberar: (v: unknown) => void = () => {}
-    fakeHttp.speak.mockReturnValue(new Promise((resolve) => { liberar = resolve }))
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+  it('a request that comes back after a stop does not play', async () => {
+    let release: (v: unknown) => void = () => {}
+    fakeHttp.speak.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
     expect(useSpeakStore.getState().state).toBe('generating')
 
-    // A pessoa desiste antes da síntese terminar.
+    // The person gives up before the synthesis finishes.
     fireEvent.click(screen.getByTestId('speak-button'))
-    liberar({ ok: true, data: { id: 'aud_x.wav', url: URL_FALA, durationMs: 1, cached: false } })
+    release({ ok: true, data: { id: 'aud_x.wav', url: SPEECH_URL, durationMs: 1, cached: false } })
 
     await waitFor(() => expect(useSpeakStore.getState().state).toBe('idle'))
     expect(audio.player.play).not.toHaveBeenCalled()
   })
 })
 
-describe('falha', () => {
-  it('traduz o código do desktop — a frase de lá não chega à tela', async () => {
+describe('failure', () => {
+  it('translates the desktop code — the phrase from there never reaches the screen', async () => {
     fakeHttp.speak.mockResolvedValue({
       ok: false,
-      error: '503: {"error":"voice_unavailable","detail":"os modelos do TTS ainda não foram baixados"}',
+      error: '503: {"error":"voice_unavailable","detail":"the TTS models were not downloaded yet"}',
     })
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
 
@@ -184,27 +184,27 @@ describe('falha', () => {
     expect(audio.player.play).not.toHaveBeenCalled()
   })
 
-  it('desligado nas preferências do desktop tem frase própria', async () => {
+  it('turned off in the desktop preferences has its own phrase', async () => {
     fakeHttp.speak.mockResolvedValue({ ok: false, error: '503: {"error":"tts_disabled"}' })
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
 
     await waitFor(() => expect(useSpeakStore.getState().error).toBe('voice.tts.errorDisabled'))
   })
 
-  it('código fora do mapa cai no aviso genérico, não em JSON na tela', async () => {
+  it('a code outside the map falls back to the generic notice, not to JSON on screen', async () => {
     fakeHttp.speak.mockResolvedValue({ ok: false, error: '400: {"error":"invalid_speed"}' })
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
 
     await waitFor(() => expect(useSpeakStore.getState().error).toBe('voice.tts.failed'))
   })
 
-  it('sem conexão com o desktop, avisa em vez de falhar calado', async () => {
+  it('without a connection to the desktop, it warns instead of failing silently', async () => {
     useConnectionStore.setState({ http: null })
-    render(<SpeakButton message={mensagem('assistant', [texto('pronto.')])} />)
+    render(<SpeakButton message={message('assistant', [textPart('done.')])} />)
 
     fireEvent.click(screen.getByTestId('speak-button'))
 
@@ -212,14 +212,14 @@ describe('falha', () => {
     expect(fakeHttp.speak).not.toHaveBeenCalled()
   })
 
-  it('o aviso fica na barra da mensagem que falhou, não em todas', () => {
-    useSpeakStore.setState({ error: 'sem motor de voz', errorMessageId: 'outra-msg' })
-    render(<MessageActions message={mensagem('assistant', [texto('pronto.')])} />)
-    expect(screen.queryByText('sem motor de voz')).toBeNull()
+  it('the notice stays on the bar of the message that failed, not on all of them', () => {
+    useSpeakStore.setState({ error: 'no voice engine', errorMessageId: 'other-msg' })
+    render(<MessageActions message={message('assistant', [textPart('done.')])} />)
+    expect(screen.queryByText('no voice engine')).toBeNull()
 
     cleanup()
-    useSpeakStore.setState({ error: 'sem motor de voz', errorMessageId: 'msg-1' })
-    render(<MessageActions message={mensagem('assistant', [texto('pronto.')])} />)
-    expect(screen.getByText('sem motor de voz')).toBeTruthy()
+    useSpeakStore.setState({ error: 'no voice engine', errorMessageId: 'msg-1' })
+    render(<MessageActions message={message('assistant', [textPart('done.')])} />)
+    expect(screen.getByText('no voice engine')).toBeTruthy()
   })
 })

@@ -1,23 +1,23 @@
 /**
- * O molde de um deck criado pelo agente (modo chat, `slides_write`).
+ * The template of a deck created by the agent (chat mode, `slides_write`).
  *
- * Mora aqui, e não junto da tool, porque é PURO: montar o documento é uma
- * função de (título, slides) para HTML, sem tocar em disco nem em `app`. É o
- * que os testes cobrem — o arquivo que a tool grava é exatamente o que esta
- * função devolve.
+ * It lives here, and not next to the tool, because it is PURE: building the
+ * document is a function from (title, slides) to HTML, without touching disk or
+ * `app`. That is what the tests cover — the file the tool writes is exactly what
+ * this function returns.
  *
- * O tema é da casa: fundo escuro, acento dourado, tipografia grande e classes
- * de apoio (`.cover`, `.section`, `.grid`, `.card`, `.stat`, `.quote`, `.pill`)
- * para o modelo montar slides bonitos sem escrever CSS. Quem quer controle
- * total escreve o HTML inteiro e usa `slides_preview` sobre o arquivo.
+ * The theme is ours: dark background, gold accent, large typography and helper
+ * classes (`.cover`, `.section`, `.grid`, `.card`, `.stat`, `.quote`, `.pill`)
+ * so the model can build good-looking slides without writing CSS. Whoever wants
+ * full control writes the whole HTML and uses `slides_preview` on the file.
  */
 
 export interface DeckSlideInput {
-  /** Nome do slide na lista da aba (padrão: o primeiro h1/h2/h3). */
+  /** Slide name in the tab list (default: the first h1/h2/h3). */
   title?: string
-  /** O corpo do slide em HTML — sem `<section>` (o molde põe), sem `<script>`. */
+  /** The slide body in HTML — without `<section>` (the template adds it), without `<script>`. */
   html: string
-  /** Notas do apresentador (o que DIZER), fora do palco. */
+  /** Presenter notes (what to SAY), off the stage. */
   notes?: string
 }
 
@@ -29,7 +29,7 @@ export function escapeDeckText(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
-/** CSS do tema da casa. Fica no `<style>` do deck — o runtime não pinta nada. */
+/** CSS of our theme. It goes in the deck's `<style>` — the runtime paints nothing. */
 export const DECK_CSS = `
 :root{
   --slide-bg:#12100d;
@@ -97,8 +97,8 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;colo
 `.trim()
 
 /**
- * Monta o documento do deck. Puro e determinístico — o teste cobre contagem de
- * seções, título, notas e o `<meta>` do palco.
+ * Builds the deck document. Pure and deterministic — the test covers section
+ * count, title, notes and the stage `<meta>`.
  */
 export function buildDeckHtml(input: { title: string; slides: DeckSlideInput[]; lang?: string }): string {
   const sections = input.slides

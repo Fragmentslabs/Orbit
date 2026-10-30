@@ -1,30 +1,30 @@
 /**
- * Motor de ditado Parakeet TDT 0.6B v3 (NVIDIA) via `sherpa-onnx-node`.
+ * Parakeet TDT 0.6B v3 (NVIDIA) dictation engine via `sherpa-onnx-node`.
  *
- * Por que este motor: é o candidato que roda em Windows e Linux (onde não há
- * reconhecedor do sistema em pt-BR) e o `sherpa-onnx-node` é um addon N-API —
- * ABI estável, então o MESMO pacote roda dentro do Electron sem rebuild. Roda
- * na CPU de propósito (tanto que a medição do Mac serve de referência para as
- * outras plataformas).
+ * Why this engine: it is the candidate that runs on Windows and Linux (where there is no
+ * system recognizer in pt-BR) and `sherpa-onnx-node` is an N-API addon —
+ * stable ABI, so the SAME package runs inside Electron without a rebuild. It runs
+ * on the CPU on purpose (so much so that the Mac measurement serves as a reference for the
+ * other platforms).
  *
- * O Parakeet NÃO é um modelo de streaming. O "ao vivo" é montado assim (é o
- * desenho medido no laboratório, `Testes/vozlab/lib/parakeet-stt.js`):
- *   - o Silero VAD fecha um trecho a cada pausa; cada trecho fechado é
- *     transcrito UMA vez e vira texto confirmado;
- *   - o trecho ainda aberto é retranscrito de tempos em tempos e aparece como
- *     provisório — o custo do Parakeet cresce com o áudio, então retranscrever
- *     só o trecho atual é barato;
- *   - ao parar, o VAD fecha o último trecho e só ele falta transcrever (é o que
- *     o push-to-talk espera).
+ * Parakeet is NOT a streaming model. The "live" mode is assembled like this (it is the
+ * design measured in the lab, `Testes/vozlab/lib/parakeet-stt.js`):
+ *   - the Silero VAD closes a segment at every pause; each closed segment is
+ *     transcribed ONCE and becomes confirmed text;
+ *   - the still-open segment is re-transcribed from time to time and shows up as
+ *     provisional — Parakeet's cost grows with the audio, so re-transcribing
+ *     only the current segment is cheap;
+ *   - on stop, the VAD closes the last segment and only it is left to transcribe (it is what
+ *     push-to-talk waits for).
  *
- * Três cuidados que só apareceram medindo no lab (e estão aqui):
- *   1. o trecho do VAD começa DEPOIS do início real da fala, então ele é
- *      transcrito a partir do nosso buffer com 0,4 s de folga antes e 0,25 s
- *      depois — sem isso a primeira palavra some ("Manda mensagem" → "mensagem");
- *   2. o provisório tem freio (intervalo ≥ 2× a duração da última inferência),
- *      senão a CPU fica 100% ocupada retranscrevendo um trecho que cresce;
- *   3. o contexto do recognizer NÃO é reentrante: todas as decodificações de um
- *      mesmo modelo passam por uma fila única.
+ * Three precautions that only showed up while measuring in the lab (and are here):
+ *   1. the VAD segment starts AFTER the real beginning of the speech, so it is
+ *      transcribed from our buffer with 0.4 s of preroll before and 0.25 s
+ *      after — without that the first word disappears ("Send message" → "message");
+ *   2. the provisional one has a brake (interval ≥ 2× the duration of the last inference),
+ *      otherwise the CPU stays 100% busy re-transcribing a segment that grows;
+ *   3. the recognizer context is NOT reentrant: every decoding of the
+ *      same model goes through a single queue.
  */
 
 import { createRequire } from 'node:module'
@@ -45,7 +45,7 @@ import { SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
 import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput, SttSegment, SttWord } from './engine'
 
 // ---------------------------------------------------------------------------
-// Carregamento do módulo nativo (opcional: o app funciona sem ele, sem o motor)
+// Native module loading (optional: the app works without it, without the engine)
 // ---------------------------------------------------------------------------
 
 interface SherpaStream {
@@ -55,7 +55,7 @@ interface SherpaRecognizer {
   createStream(): SherpaStream
   decodeAsync(stream: SherpaStream): Promise<SherpaResult>
 }
-/** Resultado do transducer: tokens BPE com o início (s) e, no TDT, a duração (s). */
+/** Transducer result: BPE tokens with the start (s) and, in TDT, the duration (s). */
 interface SherpaResult {
   text?: string
   tokens?: string[]
@@ -98,17 +98,17 @@ const DEFAULT_MODEL_ID = PARAKEET_ID
 const THREADS = [2, 4, 8]
 const DEFAULT_THREADS = 4
 
-const VAD_WINDOW = 512 // o Silero quer janelas de exatamente 512 amostras a 16 kHz
-const TAIL_EVERY_SAMPLES = RATE / 2 // retranscreve o trecho aberto a cada ~0,5 s...
-const TAIL_DUTY = 2 // ...ou a cada 2× o tempo da última retranscrição, o que for maior
+const VAD_WINDOW = 512 // Silero wants windows of exactly 512 samples at 16 kHz
+const TAIL_EVERY_SAMPLES = RATE / 2 // re-transcribes the open segment every ~0.5 s...
+const TAIL_DUTY = 2 // ...or every 2× the time of the last re-transcription, whichever is greater
 const TAIL_MAX_SAMPLES = RATE * 20
-// Folgas do trecho confirmado (o VAD atrasa o início da fala em ~0,25 s).
+// Padding of the confirmed segment (the VAD delays the speech start by ~0.25 s).
 const SEG_PREROLL = Math.round(RATE * 0.4)
 const SEG_POSTROLL = Math.round(RATE * 0.25)
 const STOP_TIMEOUT_MS = 20_000
 
 // ---------------------------------------------------------------------------
-// Recognizer: um carregado por nº de threads, aquecido, com fila única
+// Recognizer: one loaded per thread count, warmed up, with a single queue
 // ---------------------------------------------------------------------------
 
 interface RecognizerEntry {
@@ -120,7 +120,7 @@ interface RecognizerEntry {
 
 let recognizerEntry: RecognizerEntry | null = null
 
-/** Fila única do recognizer: o contexto não é reentrante (medido no lab). */
+/** Single recognizer queue: the context is not reentrant (measured in the lab). */
 let decodeChain: Promise<unknown> = Promise.resolve()
 function withRecognizer<T>(fn: () => Promise<T>): Promise<T> {
   const run = decodeChain.then(fn, fn)
@@ -152,7 +152,7 @@ function recognizerConfig(threads: number): Record<string, unknown> {
 
 function warmRecognizer(threads: number): Promise<SherpaRecognizer> {
   const mod = sherpa
-  if (!mod) throw new Error(`sherpa-onnx-node não está disponível: ${loadError}`)
+  if (!mod) throw new Error(`sherpa-onnx-node is not available: ${loadError}`)
   if (recognizerEntry && recognizerEntry.threads === threads && !recognizerEntry.error) {
     return recognizerEntry.promise
   }
@@ -160,7 +160,7 @@ function warmRecognizer(threads: number): Promise<SherpaRecognizer> {
   let loadMs: number | null = null
   const promise = (async () => {
     const rec = await mod.OfflineRecognizer.createAsync(recognizerConfig(threads))
-    // A 1ª inferência inicializa o ONNX Runtime: paga aqui, não na fala do usuário.
+    // The 1st inference initialises the ONNX Runtime: paid here, not in the user's speech.
     const stream = rec.createStream()
     stream.acceptWaveform({ sampleRate: RATE, samples: new Float32Array(RATE) })
     await rec.decodeAsync(stream)
@@ -181,13 +181,13 @@ function warmRecognizer(threads: number): Promise<SherpaRecognizer> {
 }
 
 /**
- * Aquece o recognizer SEM abrir sessão: extrai o pacote (se preciso) e carrega
- * o modelo, incluindo a primeira inferência que inicializa o ONNX Runtime.
+ * Warms the recognizer WITHOUT opening a session: extracts the package (if needed) and loads
+ * the model, including the first inference that initialises the ONNX Runtime.
  *
- * É o que tira o carregamento do caminho do usuário — sem isto, prender o
- * microfone pela primeira vez fica esperando centenas de MB serem lidos, com o
- * botão vermelho. Idempotente (o `warmRecognizer` devolve a promessa já em voo)
- * e silencioso: erro de carga não vira exceção, fica registrado e aparece no
+ * It is what takes the loading off the user's path — without it, holding the
+ * microphone for the first time waits for hundreds of MB to be read, with the
+ * button red. Idempotent (`warmRecognizer` returns the promise already in flight)
+ * and silent: a load error does not become an exception, it is recorded and shows up in
  * `status()`.
  */
 export async function warm(modelId?: string | null, threads = DEFAULT_THREADS): Promise<void> {
@@ -196,32 +196,32 @@ export async function warm(modelId?: string | null, threads = DEFAULT_THREADS): 
     await ensureParakeetExtracted()
     await warmRecognizer(THREADS.includes(threads) ? threads : DEFAULT_THREADS)
   } catch {
-    // sem motor ou carga falhou: o motivo já está no `status()`
+    // no engine or load failed: the reason is already in `status()`
   }
 }
 
 /**
- * Solta o recognizer carregado (a fachada chama quando o ditado fica ocioso).
- * O próximo `warm`/`start` carrega de novo — é o que impede o modelo de centenas
- * de MB de ficar residente a sessão inteira.
+ * Releases the loaded recognizer (the facade calls it when dictation goes idle).
+ * The next `warm`/`start` loads it again — it is what keeps the hundreds-of-MB
+ * model from staying resident for the whole session.
  */
 export function release(): void {
   if (!recognizerEntry) return
   recognizerEntry = null
-  // Soltar a referência não basta: os ~700 MB são nativos e só voltam quando o
-  // GC coleta o wrapper — o que, sem pressão no heap JS, não acontece nunca.
+  // Dropping the reference is not enough: the ~700 MB are native and only come back when the
+  // GC collects the wrapper — which, with no pressure on the JS heap, never happens.
   collectGarbageSoon()
 }
 
 // ---------------------------------------------------------------------------
-// Sessão
+// Session
 // ---------------------------------------------------------------------------
 
 interface ParakeetSession {
   id: string
   threads: number
   live: boolean
-  /** Montar o tempo de cada palavra (transcrição para edição de vídeo). */
+  /** Build the timing of each word (transcription for video editing). */
   words: boolean
   onPartial: (text: string) => void
   vad: SherpaVad
@@ -239,11 +239,11 @@ interface ParakeetSession {
   stopping: boolean
   cancelled: boolean
   segments: number
-  /** Trechos confirmados com a posição no áudio — os tempos da transcrição. */
+  /** Confirmed segments with their position in the audio — the transcription timings. */
   timed: SttSegment[]
 }
 
-/** Enfileira trabalho na sessão: nunca em paralelo, nunca fora de ordem. */
+/** Queues work in the session: never in parallel, never out of order. */
 function enqueue(s: ParakeetSession, fn: () => Promise<void>): Promise<void> {
   const run = s.chain.then(fn, fn)
   s.chain = run.then(
@@ -267,10 +267,10 @@ async function decode(s: ParakeetSession, samples: Float32Array): Promise<string
 }
 
 /**
- * Palavras a partir dos tokens do transducer. O token que abre palavra vem com
- * espaço na frente (" H", "ello" → "Hello"); pontuação gruda na anterior. O fim
- * é o início do último token + a duração dele (TDT); sem duração, o início do
- * próximo token. `offsetMs` é onde o trecho decodificado começa no áudio.
+ * Words from the transducer tokens. The token that opens a word comes with a
+ * leading space (" H", "ello" → "Hello"); punctuation sticks to the previous one. The end
+ * is the start of the last token + its duration (TDT); without a duration, the start of the
+ * next token. `offsetMs` is where the decoded segment starts in the audio.
  */
 export function tokensToWords(r: SherpaResult, offsetMs: number): SttWord[] {
   const tokens = r.tokens ?? []
@@ -293,7 +293,7 @@ export function tokensToWords(r: SherpaResult, offsetMs: number): SttWord[] {
     if (opens && !punctuation) {
       close()
       current = { text: token.replace(/^[\s▁]+/, ''), start, end }
-      // Token de espaço puro (" "): a palavra começa no próximo.
+      // Pure space token (" "): the word starts at the next one.
       if (!current.text) current = null
       return
     }
@@ -305,9 +305,9 @@ export function tokensToWords(r: SherpaResult, offsetMs: number): SttWord[] {
   return words
 }
 
-/** Publica o texto ao vivo: confirmado + provisório, só quando muda. */
+/** Publishes the live text: confirmed + provisional, only when it changes. */
 function publish(s: ParakeetSession): void {
-  // Sem prévia ao vivo, quem chamou não quer callback nenhum — nem no fim.
+  // Without a live preview, the caller wants no callback at all — not even at the end.
   if (!s.live) return
   const confirmed = s.confirmed.filter(Boolean).join(' ')
   const provisional = s.provisional
@@ -317,16 +317,16 @@ function publish(s: ParakeetSession): void {
   try {
     s.onPartial(text)
   } catch {
-    // o callback é do chamador; um erro nele não pode derrubar a sessão
+    // the callback belongs to the caller; an error in it cannot take the session down
   }
 }
 
-/** Trecho fechado pelo VAD: transcreve uma vez (com as folgas) e confirma. */
+/** Segment closed by the VAD: transcribes once (with the padding) and confirms it. */
 function commitSegment(s: ParakeetSession, seg: SherpaSpeechSegment): void {
   const from = Math.max(s.commitPos, seg.start - SEG_PREROLL)
   const end = Math.min(s.buffer.samples, seg.start + seg.samples.length + SEG_POSTROLL)
   s.commitPos = Math.max(s.commitPos, end)
-  s.gen += 1 // invalida retranscrições do trecho aberto que estão em voo
+  s.gen += 1 // invalidates in-flight re-transcriptions of the open segment
   s.segments += 1
   const samples = s.buffer.slice(from, end)
   void enqueue(s, async () => {
@@ -343,11 +343,11 @@ function commitSegment(s: ParakeetSession, seg: SherpaSpeechSegment): void {
   })
 }
 
-/** Retranscreve o trecho aberto (provisório); no máximo uma na fila por vez. */
+/** Re-transcribes the open segment (provisional); at most one in the queue at a time. */
 function scheduleTail(s: ParakeetSession): void {
   if (!s.live || s.tailQueued || s.stopping || s.cancelled) return
-  // Freio: o trecho aberto cresce e cada retranscrição fica mais cara. Sem isto
-  // o clipe de 21 s custou 9,3 s de CPU no lab (44 decodificações).
+  // Brake: the open segment grows and each re-transcription gets more expensive. Without this
+  // the 21 s clip cost 9.3 s of CPU in the lab (44 decodings).
   const every = Math.max(TAIL_EVERY_SAMPLES, Math.round(s.lastTailMs * TAIL_DUTY * (RATE / 1000)))
   if (s.buffer.samples - s.lastTailAt < every) return
   if (!s.vad.isDetected()) {
@@ -375,7 +375,7 @@ function scheduleTail(s: ParakeetSession): void {
 
 function drainVad(s: ParakeetSession): void {
   while (!s.vad.isEmpty()) {
-    const seg = s.vad.front(false) // cópia: o buffer interno é reaproveitado no pop
+    const seg = s.vad.front(false) // copy: the internal buffer is reused on pop
     s.vad.pop()
     commitSegment(s, seg)
   }
@@ -393,12 +393,12 @@ function feedVad(s: ParakeetSession, chunk: Float32Array): void {
 }
 
 /**
- * Estado do motor.
+ * Engine state.
  *
- * `available` = dá para abrir uma sessão agora: o módulo carregou e o pacote do
- * modelo está no disco (a extração e o VAD, que o motor resolve no primeiro
- * uso, não tiram de `available` — só de `installed`).
- * `installed` = já extraído e com o VAD: nada a preparar antes de falar.
+ * `available` = a session can be opened now: the module loaded and the model
+ * package is on disk (the extraction and the VAD, which the engine resolves on first
+ * use, do not take away from `available` — only from `installed`).
+ * `installed` = already extracted and with the VAD: nothing to prepare before speaking.
  */
 async function status(): Promise<SttEngineStatus> {
   const archive = parakeetArchiveComplete()
@@ -417,7 +417,7 @@ async function status(): Promise<SttEngineStatus> {
       engine: ENGINE_ID,
       available: false,
       installed: ready,
-      reason: `o módulo sherpa-onnx-node não carregou: ${loadError}`,
+      reason: `the sherpa-onnx-node module did not load: ${loadError}`,
       detail: models,
     }
   }
@@ -426,7 +426,7 @@ async function status(): Promise<SttEngineStatus> {
       engine: ENGINE_ID,
       available: false,
       installed: false,
-      reason: `o pacote do Parakeet ainda não foi baixado (~487 MB em <userData>/voice/models/${DEFAULT_MODEL_ID})`,
+      reason: `the Parakeet package has not been downloaded yet (~487 MB at <userData>/voice/models/${DEFAULT_MODEL_ID})`,
       detail: { ...models, threads: THREADS, defaultThreads: DEFAULT_THREADS },
     }
   }
@@ -434,12 +434,12 @@ async function status(): Promise<SttEngineStatus> {
     engine: ENGINE_ID,
     available: true,
     installed: ready,
-    // "Baixado" não é "pronto": o pacote precisa ser extraído e o VAD Silero
-    // baixado. Isto agora começa sozinho ao fim do download (ver status.ts), e o
-    // estado fino de cada modelo (com o motivo) é o `voice:status`.
+    // "Downloaded" is not "ready": the package needs to be extracted and the Silero VAD
+    // downloaded. This now starts on its own at the end of the download (see status.ts), and the
+    // fine-grained state of each model (with the reason) is `voice:status`.
     reason: ready
       ? undefined
-      : 'o pacote está baixado; a extração (e o VAD Silero) ainda não terminou',
+      : 'the package is downloaded; extraction (and the Silero VAD) has not finished',
     detail: {
       ...models,
       threads: THREADS,
@@ -453,21 +453,21 @@ async function status(): Promise<SttEngineStatus> {
 
 async function start(input: SttStartInput, onPartial: (text: string) => void): Promise<SttHandle> {
   const st = await status()
-  if (!st.available) throw new Error(st.reason || 'o motor Parakeet não está disponível')
+  if (!st.available) throw new Error(st.reason || 'the Parakeet engine is not available')
   const mod = sherpa
-  if (!mod) throw new Error(`sherpa-onnx-node não está disponível: ${loadError}`)
+  if (!mod) throw new Error(`sherpa-onnx-node is not available: ${loadError}`)
 
   const modelId = input.modelId || DEFAULT_MODEL_ID
   if (modelId !== DEFAULT_MODEL_ID) {
-    throw new Error(`o motor Parakeet só tem o modelo "${DEFAULT_MODEL_ID}" (recebido "${modelId}")`)
+    throw new Error(`the Parakeet engine only has the model "${DEFAULT_MODEL_ID}" (got "${modelId}")`)
   }
   const threads = input.threads ?? DEFAULT_THREADS
   if (!THREADS.includes(threads)) {
-    throw new Error(`threads inválido para o Parakeet: ${threads} (use ${THREADS.join(', ')})`)
+    throw new Error(`invalid threads for the Parakeet: ${threads} (use ${THREADS.join(', ')})`)
   }
 
-  // Extrai o pacote (se preciso) e AQUEÇE antes de abrir a sessão: qualquer erro
-  // de preparo sai no start, não no meio da fala do usuário.
+  // Extracts the package (if needed) and WARMS UP before opening the session: any preparation
+  // error comes out at start, not in the middle of the user's speech.
   await ensureParakeetExtracted()
   await warmRecognizer(threads)
 
@@ -522,8 +522,8 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
 
     async stop(): Promise<{ text: string; audioMs: number; segments: SttSegment[] }> {
       s.stopping = true
-      s.gen += 1 // descarta provisório em voo
-      // Fecha o resto do buffer no VAD para o último trecho virar confirmado.
+      s.gen += 1 // discards the in-flight provisional
+      // Closes the rest of the buffer in the VAD so the last segment becomes confirmed.
       if (s.leftover.length) {
         const pad = new Float32Array(VAD_WINDOW)
         pad.set(s.leftover)
@@ -532,7 +532,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       }
       s.vad.flush()
       drainVad(s)
-      // O VAD não viu fala nenhuma (sussurro, fala curtíssima): transcreve tudo.
+      // The VAD saw no speech at all (whisper, very short speech): transcribe everything.
       if (s.segments === 0 && s.buffer.samples >= RATE * 0.3) {
         const all = s.buffer.slice(0, s.buffer.samples)
         void enqueue(s, async () => {
@@ -553,7 +553,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       s.provisional = ''
       s.lastView = ['', '']
       publish(s)
-      if (timedOut) throw new Error(`a transcrição não terminou em ${STOP_TIMEOUT_MS / 1000} s`)
+      if (timedOut) throw new Error(`the transcription did not finish in ${STOP_TIMEOUT_MS / 1000} s`)
       return { text: s.confirmed.filter(Boolean).join(' '), audioMs: samplesToMs(s.buffer.samples), segments: s.timed }
     },
 

@@ -1,7 +1,7 @@
 import type { CatalogModel } from '@shared/chat'
 import type { ModelInput, VariantMap, VariantPayload } from './types'
 
-/** Converte um modelo do catálogo models.dev no input interno do módulo. */
+/** Converts a model from the models.dev catalog into the module's internal input. */
 export function toModelInput(
   providerId: string,
   npm: string | undefined,
@@ -22,9 +22,9 @@ export function toModelInput(
 }
 
 /**
- * Geração de níveis de reasoning (variants) por provedor. Primeiro vale o que
- * o catálogo declara para o modelo naquele provedor (catalogVariants); sem
- * isso, as regras por nome do modelo e por SDK (ruleVariants).
+ * Generation of reasoning levels (variants) per provider. What the catalog
+ * declares for the model on that provider wins first (catalogVariants); without
+ * that, the rules by model name and by SDK (ruleVariants).
  */
 
 const WIDELY_SUPPORTED_EFFORTS = ['low', 'medium', 'high']
@@ -37,20 +37,20 @@ const OPENAI_GPT5_CHAT_EFFORTS = ['medium']
 const OPENAI_GPT5_CODEX_XHIGH_EFFORTS = [...WIDELY_SUPPORTED_EFFORTS, 'xhigh']
 const OPENAI_GPT5_CODEX_3_PLUS_EFFORTS = ['none', ...OPENAI_GPT5_CODEX_XHIGH_EFFORTS]
 
-// A OpenAI lançou o tier `none` de reasoning_effort nesta data (Responses API).
-// Modelos anteriores retornam 400 com `reasoning_effort: "none"`, então só
-// expomos o tier para modelos novos o suficiente.
+// OpenAI released the `none` tier of reasoning_effort on this date (Responses API).
+// Earlier models return 400 with `reasoning_effort: "none"`, so we only
+// expose the tier for models new enough.
 const OPENAI_NONE_EFFORT_RELEASE_DATE = '2025-11-13'
 
-// Mesma lógica para o tier `xhigh`.
+// Same logic for the `xhigh` tier.
 const OPENAI_XHIGH_EFFORT_RELEASE_DATE = '2025-12-04'
 
-// Necessário para reasoning multi-turno stateless (store: false).
+// Required for stateless multi-turn reasoning (store: false).
 const INCLUDE_ENCRYPTED_REASONING = ['reasoning.encrypted_content']
 
-// Casa membros da família gpt-5 nos formatos de id encontrados:
+// Matches members of the gpt-5 family in the id formats found:
 //   "gpt-5", "gpt-5-nano", "gpt-5.4", "openai/gpt-5.4-codex".
-// Ancorado em início-de-string ou "/" para não casar "gpt-50" ou "gpt-5o".
+// Anchored at start-of-string or "/" so it does not match "gpt-50" or "gpt-5o".
 const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
 const GPT5_VERSION_RE = /(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/
 const GPT5_PRO_RE = /(?:^|\/)gpt-5[.-]?pro(?:[.-]|$)/
@@ -81,7 +81,7 @@ function gpt5ChatReasoningEfforts(apiId: string) {
   return gpt5Version(apiId) === undefined ? [] : OPENAI_GPT5_CHAT_EFFORTS
 }
 
-// Tiers de reasoning_effort que um modelo OpenAI expõe, do mais fraco ao mais forte.
+// reasoning_effort tiers an OpenAI model exposes, from the weakest to the strongest.
 function openaiReasoningEfforts(apiId: string, releaseDate: string) {
   const id = apiId.toLowerCase()
   if (id.includes('deep-research')) return ['medium']
@@ -90,7 +90,7 @@ function openaiReasoningEfforts(apiId: string, releaseDate: string) {
   if (GPT5_PRO_RE.test(id)) return OPENAI_GPT5_PRO_EFFORTS
   const codexEfforts = gpt5CodexReasoningEfforts(id)
   if (codexEfforts) return codexEfforts
-  // GPT-5.1 trocou o `minimal` do GPT-5 por `none`; GPT-5.2+ aceita `xhigh`.
+  // GPT-5.1 swapped GPT-5's `minimal` for `none`; GPT-5.2+ accepts `xhigh`.
   const versionedEfforts = versionedGpt5ReasoningEfforts(id)
   if (versionedEfforts) return versionedEfforts
   const efforts = [...WIDELY_SUPPORTED_EFFORTS]
@@ -109,9 +109,9 @@ function openaiCompatibleReasoningEfforts(apiId: string) {
 }
 
 function anthropicOpus47OrLater(apiId: string) {
-  // Casa "opus-4.7" (Anthropic/Bedrock/Vertex) e "claude-4.7-opus" (invertido).
-  // Versões limitadas a 1-2 dígitos para não confundir sufixos de data
-  // ("claude-opus-4-20250514") com número de versão.
+  // Matches "opus-4.7" (Anthropic/Bedrock/Vertex) and "claude-4.7-opus" (inverted).
+  // Versions limited to 1-2 digits so date suffixes
+  // ("claude-opus-4-20250514") are not confused with a version number.
   const version = /opus-(\d{1,2})[.-](\d{1,2})(?:[.@-]|$)|claude-(\d{1,2})[.-](\d{1,2})-opus(?:[.@-]|$)/i.exec(apiId)
   if (!version) return false
   const major = Number(version[1] ?? version[3])
@@ -139,8 +139,8 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   return null
 }
 
-// Modelos adaptive mais novos usam display "omitted" por padrão, retornando
-// blocos de thinking vazios — forçamos "summarized" para preservar resumos.
+// Newer adaptive models use the "omitted" display by default, returning
+// empty thinking blocks — we force "summarized" to preserve summaries.
 function anthropicOmitsThinking(apiId: string) {
   return anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes('fable-5')
 }
@@ -149,21 +149,21 @@ function anthropicOpus45(apiId: string) {
   return ['opus-4-5', 'opus-4.5'].some((v) => apiId.includes(v))
 }
 
-/** Kimi por qualquer caminho: id do provedor, id do modelo ou a URL da Moonshot. */
+/** Kimi by any path: provider id, model id or the Moonshot URL. */
 export function isKimiFamily(model: ModelInput) {
   if ([model.providerId, model.apiId].some((id) => /kimi|moonshot/i.test(id))) return true
   const url = model.apiUrl?.toLowerCase() ?? ''
   return ['api.kimi.com', 'api.moonshot.ai', 'api.moonshot.cn', 'api.moonshotai.cn'].some((host) => url.includes(host))
 }
 
-/** GLM-5.2 é o primeiro GLM com níveis de esforço — os anteriores só pensam. */
+/** GLM-5.2 is the first GLM with effort levels — the earlier ones only think. */
 function isGlm52(model: ModelInput) {
   return [model.modelId, model.apiId].some((id) => /glm-5[.p-]2/i.test(id))
 }
 
 const isAnthropicSdk = (npm: string) => npm === '@ai-sdk/anthropic' || npm === '@ai-sdk/google-vertex/anthropic'
 
-/** Teto de tokens de saída usado no orçamento de reasoning. */
+/** Output token cap used in the reasoning budget. */
 const OUTPUT_TOKEN_MAX = 32_000
 
 function anthropicEffortPayload(model: ModelInput, effort: string): VariantPayload | undefined {
@@ -171,7 +171,7 @@ function anthropicEffortPayload(model: ModelInput, effort: string): VariantPaylo
     const output = model.limit.output || OUTPUT_TOKEN_MAX
     return { thinking: { type: 'enabled', budgetTokens: Math.min(16_000, Math.floor(output / 2 - 1)) }, effort }
   }
-  // Kimi omite o texto do thinking adaptativo sem display "summarized".
+  // Kimi omits the adaptive thinking text without the "summarized" display.
   if (isKimiFamily(model)) return { thinking: { type: 'adaptive', display: 'summarized' }, effort }
   if (!anthropicAdaptiveEfforts(model.apiId)) return undefined
   return {
@@ -181,8 +181,8 @@ function anthropicEffortPayload(model: ModelInput, effort: string): VariantPaylo
 }
 
 /**
- * Payload de um nível de esforço declarado pelo catálogo, no formato que o SDK
- * do provedor lê. `undefined` = esse SDK não aceita níveis (o nível some).
+ * Payload of an effort level declared by the catalog, in the format the provider's
+ * SDK reads. `undefined` = that SDK does not accept levels (the level disappears).
  */
 function effortPayload(model: ModelInput, effort: string): VariantPayload | undefined {
   switch (model.npm) {
@@ -225,12 +225,12 @@ function effortPayload(model: ModelInput, effort: string): VariantPayload | unde
     case '@ai-sdk/vercel':
       return undefined
     default:
-      // Adaptador openai-compatible e os demais que leem `reasoningEffort`.
+      // openai-compatible adapter and the others that read `reasoningEffort`.
       return { reasoningEffort: effort }
   }
 }
 
-/** Payload de um orçamento de tokens de reasoning, por SDK. */
+/** Payload of a reasoning token budget, per SDK. */
 function budgetPayload(model: ModelInput, budget: number): VariantPayload | undefined {
   switch (model.npm) {
     case '@openrouter/ai-sdk-provider':
@@ -253,9 +253,9 @@ function budgetPayload(model: ModelInput, budget: number): VariantPayload | unde
 }
 
 /**
- * Liga/desliga declarado pelo catálogo. Só existe onde o SDK tem um campo
- * conhecido para isso; nos demais (inclusive o adaptador openai-compatible)
- * não há campo comum entre gateways, e o modelo cai nas regras por nome.
+ * On/off declared by the catalog. It only exists where the SDK has a known
+ * field for it; in the others (including the openai-compatible adapter)
+ * there is no field common across gateways, and the model falls back to the rules by name.
  */
 function toggleVariants(model: ModelInput): VariantMap {
   if (model.npm === '@ai-sdk/alibaba') return { none: { enableThinking: false }, high: { enableThinking: true } }
@@ -282,12 +282,12 @@ const nonEmpty = (variants: VariantMap): VariantMap | undefined =>
   Object.keys(variants).length > 0 ? variants : undefined
 
 /**
- * Níveis que o models.dev declara para o modelo NESTE provedor. O mesmo
- * modelo aceita níveis diferentes em cada gateway (o DeepSeek V4.1 Flash é
- * low/high/max num e none…max na DeepInfra), e a lista fixa por família
- * errava — oferecia "medium" onde não existe.
+ * Levels that models.dev declares for the model on THIS provider. The same
+ * model accepts different levels on each gateway (DeepSeek V4.1 Flash is
+ * low/high/max on one and none…max on DeepInfra), and the fixed list per family
+ * got it wrong — it offered "medium" where none exists.
  *
- * `undefined` = o catálogo não resolve, e valem as regras por nome do modelo.
+ * `undefined` = the catalog does not resolve it, and the rules by model name apply.
  */
 function catalogVariants(model: ModelInput): VariantMap | undefined {
   const options = model.reasoningOptions
@@ -340,7 +340,7 @@ function anthropicVariants(model: ModelInput): VariantMap {
 
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
-  // Gemma só liga/desliga: "minimal" desliga e "high" liga.
+  // Gemma is on/off only: "minimal" turns it off and "high" turns it on.
   if (id.includes('gemma')) return ['minimal', 'high']
   if (!id.includes('gemini-3')) return ['low', 'high']
   if (id.includes('flash-image')) return ['minimal', 'high']
@@ -357,7 +357,7 @@ function googleThinkingBudgetMax(apiId: string) {
 
 function googleVariants(model: ModelInput): VariantMap {
   const id = model.apiId.toLowerCase()
-  // Gemini 2.5 controla por budget de tokens; Gemini 3+ por thinkingLevel.
+  // Gemini 2.5 controls it by token budget; Gemini 3+ by thinkingLevel.
   if (id.includes('2.5')) {
     return {
       high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
@@ -396,9 +396,9 @@ function openAiCompatibleVariants(model: ModelInput): VariantMap {
 }
 
 /**
- * Modelos que sempre pensam (ou cujo nível não é controlável via API) — o
- * toggle de thinking fica travado e não há variant picker. O GLM-5.2 sai da
- * regra: é o primeiro GLM com níveis de esforço.
+ * Models that always think (or whose level is not controllable via the API) — the
+ * thinking toggle stays locked and there is no variant picker. GLM-5.2 is out of the
+ * rule: it is the first GLM with effort levels.
  */
 export function isAlwaysOnModel(modelId: string, apiId: string): boolean {
   const id = modelId.toLowerCase()
@@ -420,15 +420,15 @@ export function isAlwaysOnModel(modelId: string, apiId: string): boolean {
 }
 
 /**
- * Regras por nome do modelo, para quando o catálogo não declara os níveis.
- * Os casos especiais vêm antes da lista de "sempre pensa": alguns desses
- * modelos têm, sim, um controle conhecido.
+ * Rules by model name, for when the catalog does not declare the levels.
+ * The special cases come before the "always thinks" list: some of those
+ * models do have a known control.
  */
 function ruleVariants(model: ModelInput): VariantMap {
   const id = model.modelId.toLowerCase()
   const api = model.apiId.toLowerCase()
 
-  // MiniMax M3: liga/desliga de verdade. NVIDIA e Lilac servem por template de chat.
+  // MiniMax M3: a real on/off. NVIDIA and Lilac serve it through a chat template.
   if (api.includes('minimax-m3') && ['@ai-sdk/anthropic', '@ai-sdk/openai-compatible'].includes(model.npm)) {
     if (['nvidia', 'lilac'].includes(model.providerId)) {
       return {
@@ -440,7 +440,7 @@ function ruleVariants(model: ModelInput): VariantMap {
   }
 
   if (isGlm52(model)) {
-    // No OpenRouter, xhigh é o "max" nativo do GLM-5.2.
+    // On OpenRouter, xhigh is GLM-5.2's native "max".
     if (model.npm === '@openrouter/ai-sdk-provider') {
       return { high: { reasoning: { effort: 'high' } }, xhigh: { reasoning: { effort: 'xhigh' } } }
     }
@@ -450,7 +450,7 @@ function ruleVariants(model: ModelInput): VariantMap {
     if (model.npm === '@ai-sdk/anthropic') return { high: { effort: 'high' }, max: { effort: 'max' } }
   }
 
-  // Kimi pelos transportes compatíveis com a Anthropic: esforço adaptativo.
+  // Kimi through the transports compatible with Anthropic: adaptive effort.
   if (isKimiFamily(model) && isAnthropicSdk(model.npm)) {
     return Object.fromEntries(
       ['low', 'medium', 'high', 'xhigh', 'max'].map((effort) => [
@@ -462,7 +462,7 @@ function ruleVariants(model: ModelInput): VariantMap {
 
   if (isAlwaysOnModel(model.modelId, model.apiId)) return {}
 
-  // xAI: só o grok-3-mini expõe controle de esforço.
+  // xAI: only grok-3-mini exposes effort control.
   // https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
   if (id.includes('grok')) {
     if (!id.includes('grok-3-mini')) return {}
@@ -490,29 +490,29 @@ function ruleVariants(model: ModelInput): VariantMap {
         ).map((effort) => [effort, { reasoning: { effort } }]),
       )
     default:
-      // Provedores sem SDK dedicado caem no adaptador openai-compatible.
+      // Providers with no dedicated SDK fall into the openai-compatible adapter.
       return openAiCompatibleVariants(model)
   }
 }
 
-/** Gera o mapa de variants (id → providerOptions sem namespace) de um modelo. */
+/** Generates a model's variants map (id → providerOptions without namespace). */
 export function generateVariants(model: ModelInput): VariantMap {
   if (!model.reasoning) return {}
   return catalogVariants(model) ?? ruleVariants(model)
 }
 
 const VARIANT_LABELS: Record<string, string> = {
-  none: 'Nenhum',
-  minimal: 'Mínimo',
-  low: 'Baixo',
-  medium: 'Médio',
-  high: 'Alto',
-  xhigh: 'Muito alto',
-  max: 'Máximo',
-  thinking: 'Ligado',
+  none: 'None',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Very high',
+  max: 'Max',
+  thinking: 'On',
 }
 
-/** Label de exibição para um id de variant (fallback: capitaliza o id). */
+/** Display label for a variant id (fallback: capitalizes the id). */
 export function variantLabel(id: string): string {
   return VARIANT_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1)
 }

@@ -1,31 +1,30 @@
 /**
- * OAuth 2.1 para servidores MCP HTTP (Streamable HTTP).
+ * OAuth 2.1 for MCP HTTP servers (Streamable HTTP).
  *
- * Implementa o OAuthClientProvider do SDK (@modelcontextprotocol/sdk):
- * registro dinâmico de cliente (RFC 7591) *ou* credenciais pré-registradas,
- * PKCE (RFC 7636) e authorization code com redirect loopback em
- * http://127.0.0.1:<porta>/callback.
+ * Implements the SDK's OAuthClientProvider (@modelcontextprotocol/sdk): dynamic client
+ * registration (RFC 7591) *or* pre-registered credentials, PKCE (RFC 7636) and
+ * authorization code with a loopback redirect at http://127.0.0.1:<port>/callback.
  *
- * Fluxo:
- * 1. O transport HTTP recebe 401 do servidor, chama redirectToAuthorization()
- *    e lança UnauthorizedError; o provider grava um "pending flow" por URL.
- * 2. No fluxo interativo (botão Autorizar) o navegador abre via
- *    shell.openExternal; no fluxo automático (startup/reconnect) nada abre —
- *    o connect sinaliza estado "unauthorized" para a UI.
- * 3. O redirect do navegador cai no servidor HTTP local (/callback), que
- *    roteia o code pelo parâmetro state e resolve o pending flow.
- * 4. O connect chama transport.finishAuth(code) e reconecta num transport novo.
+ * Flow:
+ * 1. The HTTP transport receives a 401 from the server, calls redirectToAuthorization()
+ *    and throws UnauthorizedError; the provider stores a "pending flow" per URL.
+ * 2. In the interactive flow (Authorize button) the browser opens via
+ *    shell.openExternal; in the automatic flow (startup/reconnect) nothing opens —
+ *    connect signals the "unauthorized" state to the UI.
+ * 3. The browser redirect lands on the local HTTP server (/callback), which routes the
+ *    code through the state parameter and resolves the pending flow.
+ * 4. connect calls transport.finishAuth(code) and reconnects on a new transport.
  *
- * Tokens, client info, code verifier e discovery ficam persistidos em
- * orbit-data/mcp-oauth.json (por URL do servidor), permitindo reuso e
- * refresh automático entre sessões. Se a porta do loopback mudar entre
- * execuções (porta ocupada), o client info antigo é invalidado e um novo
- * registro dinâmico acontece na próxima autorização.
+ * Tokens, client info, code verifier and discovery stay persisted in
+ * orbit-data/mcp-oauth.json (per server URL), allowing reuse and automatic refresh
+ * between sessions. If the loopback port changes between runs (port taken), the old
+ * client info is invalidated and a new dynamic registration happens on the next
+ * authorization.
  *
- * Nem todo servidor aceita registro dinâmico: alguns (o Figma, por exemplo)
- * respondem 403 ao /register de clientes fora de uma allowlist. Para esses,
- * a config do servidor aceita clientId/clientSecret de um app OAuth já
- * criado no provedor — nesse caso o registro é pulado por completo.
+ * Not every server accepts dynamic registration: some (Figma, for instance) answer 403
+ * to /register from clients outside an allowlist. For those, the server config accepts
+ * clientId/clientSecret of an OAuth app already created in the provider — in that case
+ * the registration is skipped entirely.
  */
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
@@ -44,12 +43,12 @@ import type {
 import type { McpOAuthConfig } from '@shared/mcp'
 import { dataDir } from '../storage'
 
-/** Tempo máximo para o usuário concluir a autorização no navegador. */
+/** Maximum time for the user to complete the authorization in the browser. */
 const AUTH_TIMEOUT_MS = 5 * 60_000
-/** Portas candidatas para o loopback (a primeira livre vence; a salva tem prioridade). */
+/** Candidate ports for the loopback (the first free one wins; the saved one has priority). */
 const LOOPBACK_CANDIDATES = [38371, 39457, 40501, 42123]
 const CALLBACK_PATH = '/callback'
-/** client_name enviado no registro dinâmico quando a config não define outro. */
+/** client_name sent in the dynamic registration when the config does not define another one. */
 const DEFAULT_CLIENT_NAME = 'Orbit'
 
 interface OAuthStoreClient {
@@ -57,9 +56,9 @@ interface OAuthStoreClient {
   clientInformation?: OAuthClientInformationMixed
   tokens?: OAuthTokens
   discoveryState?: OAuthDiscoveryState
-  /** PKCE verifier do fluxo em andamento (sobrevive a um reload do main). */
+  /** PKCE verifier of the flow in progress (survives a reload of main). */
   codeVerifier?: string
-  /** state do fluxo em andamento (o AS do Figma exige state). */
+  /** state of the flow in progress (Figma's AS requires state). */
   state?: string
 }
 
@@ -78,7 +77,7 @@ interface PendingFlow {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Persistência (orbit-data/mcp-oauth.json)                            */
+/*  Persistence (orbit-data/mcp-oauth.json)                             */
 /* ------------------------------------------------------------------ */
 
 let store: OAuthStoreFile | null = null
@@ -105,21 +104,21 @@ function persistStore(): void {
     .mkdir(dataDir(), { recursive: true })
     .then(() => fsp.writeFile(storePath(), JSON.stringify(store, null, 2), 'utf8'))
     .catch(() => {
-      // falha de persistência não derruba o fluxo — só perde a sessão no restart
+      // a persistence failure does not take the flow down — it only loses the session on restart
     })
 }
 
 /* ------------------------------------------------------------------ */
-/*  Servidor loopback (http://127.0.0.1:<porta>/callback)               */
+/*  Loopback server (http://127.0.0.1:<port>/callback)                  */
 /* ------------------------------------------------------------------ */
 
 let loopbackServer: http.Server | null = null
 let loopbackPort = 0
 
-/** pending flows por URL do servidor MCP (um por servidor, o novo substitui o anterior). */
+/** pending flows by MCP server URL (one per server, the new one replaces the previous). */
 const pendingFlows = new Map<string, PendingFlow>()
 
-/** Servidores cujo próximo fluxo OAuth deve abrir o navegador. */
+/** Servers whose next OAuth flow must open the browser. */
 const interactiveServers = new Set<string>()
 
 const HTML_OK =
@@ -156,8 +155,8 @@ function handleCallback(req: http.IncomingMessage, res: http.ServerResponse): vo
   const code = url.searchParams.get('code')
   const error = url.searchParams.get('error')
   const description = url.searchParams.get('error_description')
-  // Com state, casa o callback com o servidor certo; sem ele (servidores que
-  // não ecoam state) só dá para assumir quando existe um único fluxo aberto.
+  // With state, it matches the callback to the right server; without it (servers that do
+  // not echo state) all one can do is assume when there is a single flow open.
   const flow = state ? findFlow(state) : singleFlow()
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
@@ -169,13 +168,13 @@ function handleCallback(req: http.IncomingMessage, res: http.ServerResponse): vo
   pendingFlows.delete(flow.serverUrl)
   clearTimeout(flow.timer)
   if (error) {
-    flow.reject(new Error(`Autorização recusada: ${description || error}`))
+    flow.reject(new Error(`Authorization refused: ${description || error}`))
     res.end(HTML_ERROR)
   } else if (code) {
     flow.resolve(code)
     res.end(HTML_OK)
   } else {
-    flow.reject(new Error('Resposta OAuth sem code'))
+    flow.reject(new Error('OAuth response with no code'))
     res.end(HTML_ERROR)
   }
 }
@@ -188,7 +187,7 @@ function bindLoopback(port: number): Promise<number> {
       try {
         server.close()
       } catch {
-        // nunca chegou a escutar
+        // never got to listen
       }
       reject(err as Error)
     })
@@ -206,10 +205,10 @@ function callbackUrl(port: number): string {
 }
 
 /**
- * Garante o servidor loopback rodando e devolve a porta usada. Tenta a porta
- * salva primeiro (para manter registros OAuth válidos entre sessões), depois
- * candidatas fixas e, por fim, uma efêmera. Se a porta mudar, o client
- * information antigo é descartado (redirect_uri não bate mais).
+ * Guarantees the loopback server is running and returns the port in use. It tries the
+ * saved port first (to keep OAuth registrations valid between sessions), then fixed
+ * candidates and, finally, an ephemeral one. If the port changes, the old client
+ * information is discarded (the redirect_uri no longer matches).
  */
 export async function ensureOAuthLoopback(): Promise<number> {
   if (loopbackServer) return loopbackPort
@@ -236,7 +235,7 @@ export async function ensureOAuthLoopback(): Promise<number> {
       lastErr = err as Error
     }
   }
-  throw lastErr ?? new Error('impossível abrir o loopback OAuth')
+  throw lastErr ?? new Error('cannot open the OAuth loopback')
 }
 
 /* ------------------------------------------------------------------ */
@@ -244,7 +243,7 @@ export async function ensureOAuthLoopback(): Promise<number> {
 /* ------------------------------------------------------------------ */
 
 class OAuthProvider implements OAuthClientProvider {
-  /** Config OAuth do mcp-config.json (client pré-registrado, nome, escopo). */
+  /** OAuth config from mcp-config.json (pre-registered client, name, scope). */
   options: McpOAuthConfig = {}
 
   constructor(
@@ -264,17 +263,17 @@ class OAuthProvider implements OAuthClientProvider {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       ...(scope ? { scope } : {}),
-      // token_endpoint_auth_method fica de fora de propósito: o servidor de
-      // autorização decide no registro (RFC 7591) e o SDK (selectClientAuthMethod)
-      // usa o método devolvido ou o melhor suportado — fixar "none" quebra
-      // servidores que só aceitam client_secret_basic/post (ex.: o AS do Figma).
+      // token_endpoint_auth_method stays out on purpose: the authorization server decides at
+      // registration (RFC 7591) and the SDK (selectClientAuthMethod) uses the returned method
+      // or the best supported one — pinning "none" breaks servers that only accept
+      // client_secret_basic/post (e.g. Figma's AS).
     }
   }
 
   /**
-   * Credenciais da config têm prioridade: com um client_id de app já
-   * registrado, o SDK pula o registro dinâmico (que alguns provedores
-   * bloqueiam com 403).
+   * Credentials from the config have priority: with a client_id of an app already
+   * registered, the SDK skips the dynamic registration (which some providers block with
+   * 403).
    */
   clientInformation(): OAuthClientInformationMixed | undefined {
     const clientId = this.options.clientId?.trim()
@@ -308,14 +307,14 @@ class OAuthProvider implements OAuthClientProvider {
 
   codeVerifier(): string {
     if (!this.client.codeVerifier) {
-      throw new Error('Fluxo OAuth sem code verifier — autorize novamente')
+      throw new Error('OAuth flow with no code verifier — authorize again')
     }
     return this.client.codeVerifier
   }
 
   /**
-   * state do authorization request. Além do CSRF, é o que casa o callback
-   * com o servidor certo — e alguns AS o exigem (o do Figma anuncia
+   * state of the authorization request. Besides CSRF, it is what matches the callback to
+   * the right server — and some ASs require it (Figma's announces
    * `require_state_parameter: true`).
    */
   state(): string {
@@ -327,7 +326,7 @@ class OAuthProvider implements OAuthClientProvider {
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     const interactive = interactiveServers.has(this.serverUrl)
-    if (!interactive) return // fluxo automático: UI mostra "Autorizar" em vez de abrir o navegador
+    if (!interactive) return // automatic flow: the UI shows "Authorize" instead of opening the browser
     const state =
       authorizationUrl.searchParams.get('state') ?? this.client.state ?? `orb-${randomUUID()}`
     this.cancelPending()
@@ -343,18 +342,18 @@ class OAuthProvider implements OAuthClientProvider {
       flow.resolve = resolve
       flow.reject = reject
     })
-    // Quando o timeout dispara pode não haver mais ninguém esperando (o
-    // connect já desistiu); sem este catch a rejeição vira unhandled.
+    // When the timeout fires there may be nobody waiting anymore (connect already gave
+    // up); without this catch the rejection becomes unhandled.
     flow.promise.catch(() => {})
     flow.timer = setTimeout(() => {
       pendingFlows.delete(this.serverUrl)
-      flow.reject(new Error('Autorização não concluída no navegador (tempo esgotado)'))
+      flow.reject(new Error('Authorization not completed in the browser (timed out)'))
     }, AUTH_TIMEOUT_MS)
     pendingFlows.set(this.serverUrl, flow)
     try {
       await shell.openExternal(authorizationUrl.toString())
     } catch {
-      // sem browser não dá para autorizar; o timeout resolve o fluxo
+      // without a browser there is no way to authorize; the timeout settles the flow
     }
   }
 
@@ -403,9 +402,9 @@ class OAuthProvider implements OAuthClientProvider {
 const providers = new Map<string, OAuthProvider>()
 
 /**
- * Provider (cacheado por URL) que o transport HTTP usa para autenticar.
- * `options` vem da config do servidor e é reaplicada a cada chamada — editar
- * o servidor na UI passa a valer já na próxima conexão.
+ * Provider (cached by URL) that the HTTP transport uses to authenticate. `options`
+ * comes from the server config and is reapplied on every call — editing the server in
+ * the UI starts to apply on the next connection already.
  */
 export async function getOAuthProvider(
   serverUrl: string,
@@ -428,20 +427,20 @@ export async function getOAuthProvider(
 }
 
 /**
- * redirect_uri que o Orbit usa no fluxo — o usuário precisa cadastrá-lo no
- * app OAuth criado no provedor. Sobe o loopback para saber a porta real.
+ * redirect_uri that Orbit uses in the flow — the user has to register it in the OAuth
+ * app created in the provider. It starts the loopback to find out the real port.
  */
 export async function oauthRedirectUrl(): Promise<string> {
   return callbackUrl(await ensureOAuthLoopback())
 }
 
-/** true quando já existe token OAuth salvo para o servidor (autorizado alguma vez). */
+/** true when there is already a saved OAuth token for the server (authorized at some point). */
 export async function hasOAuthTokens(serverUrl: string): Promise<boolean> {
   const file = await loadStore()
   return Boolean(file.clients[serverUrl]?.tokens?.access_token)
 }
 
-/** Esquece tokens/registro do servidor (reautorização do zero). */
+/** Forgets the server's tokens/registration (reauthorization from scratch). */
 export async function forgetOAuth(serverUrl: string): Promise<void> {
   const file = await loadStore()
   const stored = file.clients[serverUrl]
@@ -454,15 +453,15 @@ export async function forgetOAuth(serverUrl: string): Promise<void> {
   persistStore()
 }
 
-/** Marca o próximo fluxo do servidor como interativo (abre o navegador). */
+/** Marks the server's next flow as interactive (opens the browser). */
 export function setOAuthInteractive(serverUrl: string, interactive: boolean): void {
   if (interactive) interactiveServers.add(serverUrl)
   else interactiveServers.delete(serverUrl)
 }
 
 /**
- * Aguarda o code do fluxo pendente do servidor. Resolve null quando o fluxo
- * não foi iniciado (não-interativo) ou foi cancelado; rejeita em timeout/erro.
+ * Waits for the code of the server's pending flow. It resolves null when the flow was
+ * not started (non-interactive) or was cancelled; it rejects on timeout/error.
  */
 export async function awaitPendingAuth(serverUrl: string): Promise<string | null> {
   const flow = pendingFlows.get(serverUrl)
@@ -470,26 +469,26 @@ export async function awaitPendingAuth(serverUrl: string): Promise<string | null
   return flow.promise
 }
 
-/** Cancela o fluxo pendente do servidor (disconnect/reconnect). */
+/** Cancels the server's pending flow (disconnect/reconnect). */
 export function cancelPendingAuth(serverUrl: string): void {
   pendingFlows.get(serverUrl)?.resolve(null)
   pendingFlows.delete(serverUrl)
 }
 
 /**
- * Traduz erros crus do fluxo OAuth em algo acionável na UI.
+ * Translates raw errors of the OAuth flow into something actionable in the UI.
  *
- * O caso mais comum é o servidor recusar o registro dinâmico (RFC 7591):
- * provedores como o Figma só aceitam /register de clientes de uma allowlist
- * e devolvem `403 Forbidden` em texto puro, que o SDK repassa como
- * "Invalid OAuth error response ... Raw body: Forbidden". A mensagem aqui
- * diz o que fazer: cadastrar um client_id/client_secret próprio.
+ * The most common case is the server refusing the dynamic registration (RFC 7591):
+ * providers like Figma only accept /register from clients of an allowlist and return
+ * `403 Forbidden` in plain text, which the SDK passes on as "Invalid OAuth error
+ * response ... Raw body: Forbidden". The message here says what to do: register your
+ * own client_id/client_secret.
  */
 export function describeOAuthError(err: unknown, hasStaticClient: boolean): string | undefined {
   const message = err instanceof Error ? err.message : String(err ?? '')
   if (!message) return undefined
   if (/does not support dynamic client registration/i.test(message)) {
-    return 'O servidor de autorização não oferece registro dinâmico de clientes. Informe o Client ID/Client Secret de um app OAuth já criado nas opções OAuth deste servidor (botão Editar).'
+    return 'The authorization server does not offer dynamic client registration. Provide the Client ID/Client Secret of an OAuth app already created in the OAuth options of this server (Edit button).'
   }
   if (
     !hasStaticClient &&
@@ -497,12 +496,12 @@ export function describeOAuthError(err: unknown, hasStaticClient: boolean): stri
     /HTTP (401|403)/.test(message)
   ) {
     const status = message.match(/HTTP (401|403)/)?.[1] ?? '403'
-    return `O servidor recusou o registro dinâmico de cliente OAuth (HTTP ${status}) — ele só aceita clientes pré-cadastrados. Crie um app OAuth no provedor e informe o Client ID/Client Secret nas opções OAuth deste servidor (botão Editar).`
+    return `The server refused the dynamic OAuth client registration (HTTP ${status}) — it only accepts pre-registered clients. Create an OAuth app with the provider and provide the Client ID/Client Secret in the OAuth options of this server (Edit button).`
   }
   return undefined
 }
 
-/** Fecha o loopback no shutdown (senão o event loop segura o processo). */
+/** Closes the loopback on shutdown (otherwise the event loop holds the process). */
 export function closeOAuthLoopback(): void {
   for (const flow of pendingFlows.values()) {
     clearTimeout(flow.timer)

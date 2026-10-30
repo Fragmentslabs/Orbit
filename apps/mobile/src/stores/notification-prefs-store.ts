@@ -4,11 +4,11 @@ import { Storage } from '~/lib/storage'
 const STORAGE_KEY = 'orbit_notification_prefs'
 
 export interface NotificationPrefs {
-  /** Desktop faz pergunta/pede permissão */
+  /** The desktop asks a question/requests permission */
   pendingAsk: boolean
-  /** Nova mensagem do assistente (sessão inativa) */
+  /** New assistant message (inactive session) */
   newMessage: boolean
-  /** Erro no chat */
+  /** Error in the chat */
   chatError: boolean
 }
 
@@ -41,7 +41,7 @@ export const useNotificationPrefsStore = create<NotificationPrefsStore>((set, ge
         set({ prefs: { ...DEFAULTS, ...parsed } })
       }
     } catch {
-      // Corrompido ou ausente — usa defaults
+      // Corrupted or missing — uses the defaults
     }
   },
 }))

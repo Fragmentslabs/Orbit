@@ -3,23 +3,23 @@ import type { ElementHandle } from './registry'
 import type { AxNode, Frame, TreeSnapshot } from './types'
 
 /**
- * Árvore AX → texto indentado com um índice por linha. É o contrato com o
- * modelo: cada linha diz o que o elemento é, o que dá para fazer com ele e
- * onde ele está NA IMAGEM (o frame vai no espaço do screenshot, o mesmo das
- * coordenadas x/y). Grupos sem nada a dizer não ganham linha — os filhos sobem
- * de nível —, porque a árvore do AX é cheia de caixas vazias que só gastam token.
+ * AX tree → indented text with one index per line. It is the contract with the
+ * model: each line says what the element is, what can be done with it and where it
+ * is IN THE IMAGE (the frame goes in the screenshot space, the same as the x/y
+ * coordinates). Groups with nothing to say get no line — the children come up a
+ * level —, because the AX tree is full of empty boxes that only spend tokens.
  */
 
 const TRANSPARENT_ROLES = new Set(['AXGroup', 'AXUnknown', 'AXLayoutArea', 'AXSplitGroup', 'AXLayoutItem'])
 const QUIET_ACTIONS = new Set(['AXScrollToVisible', 'AXShowDefaultUI', 'AXShowAlternateUI'])
 
-/** Subpapéis que não dizem nada além do papel. */
+/** Subroles that say nothing beyond the role. */
 const PLAIN_SUBROLES = new Set(['AXStandardWindow', 'AXUnknown', 'AXContentList', 'AXTextAttachment'])
 
 /**
- * ControlType da UIA (Windows) → papel do AX. O host manda o nome cru da UIA e
- * a tradução mora aqui: o resto do módulo, o prompt e o modelo falam um
- * vocabulário só. Papéis do macOS começam com "AX" e passam direto.
+ * UIA ControlType (Windows) → AX role. The host sends the raw UIA name and the
+ * translation lives here: the rest of the module, the prompt and the model speak a
+ * single vocabulary. macOS roles start with "AX" and pass through.
  */
 const UIA_ROLES: Record<string, string> = {
   AppBar: 'AXToolbar',
@@ -66,10 +66,10 @@ const UIA_ROLES: Record<string, string> = {
 }
 
 /**
- * Papel no vocabulário do AX. `Document` é a página no Chromium/Edge e também
- * a área de texto do Bloco de Notas do Windows 11: o host marca o editável com
- * subrole "editable", que vira área de texto — "web area" no Bloco de Notas
- * confundiria o modelo.
+ * Role in the AX vocabulary. `Document` is the page in Chromium/Edge and also the
+ * text area of Windows 11 Notepad: the host marks the editable one with the subrole
+ * "editable", which becomes a text area — "web area" in Notepad would confuse the
+ * model.
  */
 export function normalizeRole(node: Pick<AxNode, 'role' | 'subrole' | 'url'>): string {
   if (node.role.startsWith('AX')) return node.role
@@ -77,7 +77,7 @@ export function normalizeRole(node: Pick<AxNode, 'role' | 'subrole' | 'url'>): s
   return UIA_ROLES[node.role] ?? 'AXUnknown'
 }
 
-/** O nó no vocabulário do AX (papel traduzido, sem o subrole da UIA). */
+/** The node in the AX vocabulary (translated role, without the UIA subrole). */
 export function normalizeNode(node: AxNode): AxNode {
   if (node.role.startsWith('AX')) return node
   return { ...node, role: normalizeRole(node), subrole: null }
@@ -114,37 +114,37 @@ function meaningful(node: AxNode): boolean {
 
 export interface FormattedTree {
   lines: string[]
-  /** O índice do elemento de cada linha (lines[i] ↔ indices[i]) — com índices estáveis, não é a posição */
+  /** The element index of each line (lines[i] ↔ indices[i]) — with stable indices, it is not the position */
   indices: number[]
   handles: Map<number, ElementHandle>
-  /** Identidade do elemento → índice: a próxima observação da mesma janela reaproveita */
+  /** Element identity → index: the next observation of the same window reuses it */
   keys: Map<string, number>
-  /** Índice → a linha sem recuo nem índice: é ela que o diff compara */
+  /** Index → the line without indent or index: it is what the diff compares */
   bodies: Map<number, string>
   focusedIndex: number | null
-  /** URL da área web visível (navegadores) */
+  /** URL of the visible web area (browsers) */
   url: string | null
 }
 
 /**
- * Identidade de um elemento entre duas observações da mesma janela: papel,
- * caminho e título. O valor fica de fora (um campo digitado é o mesmo campo);
- * o título entra porque, depois de a tela mudar, outro botão pode ocupar o
- * mesmo caminho — reaproveitar o índice ali faria um passo planejado contra o
- * botão antigo clicar no novo.
+ * Identity of an element between two observations of the same window: role, path
+ * and title. The value stays out (a typed field is the same field); the title comes
+ * in because, after the screen changes, another button may take the same path —
+ * reusing the index there would make a step planned against the old button click the
+ * new one.
  */
 function elementKey(node: AxNode): string {
   return `${node.role}|${node.path.join('.')}|${node.title ?? ''}`
 }
 
 /**
- * `previous`: as chaves da observação anterior da MESMA janela. Quem continua
- * na tela mantém o índice (o modelo pode seguir usando o que já leu, e o diff
- * mostra só o que mudou); quem é novo ganha um índice acima de todos os antigos.
+ * `previous`: the keys of the previous observation of the SAME window. Whoever stays
+ * on screen keeps the index (the model can keep using what it already read, and the
+ * diff shows only what changed); whoever is new gets an index above all the old ones.
  */
 export function formatTree(tree: TreeSnapshot, geometry: ShotGeometry, previous?: Map<string, number>): FormattedTree {
   const children = new Map<number, AxNode[]>()
-  // O papel cru fica para a ação conferir a identidade no vocabulário do host.
+  // The raw role stays for the action to check the identity in the host's vocabulary.
   const native = new Map(tree.nodes.map((n) => [n.id, n.role]))
   const nodes = tree.nodes.map(normalizeNode)
   for (const node of nodes) {

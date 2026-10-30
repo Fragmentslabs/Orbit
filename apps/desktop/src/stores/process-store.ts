@@ -6,10 +6,10 @@ import type { ProcessInfo } from "@/src/lib/ipc"
 interface ProcessStore {
   processes: ProcessInfo[]
   /**
-   * Escopo global: TODOS os processos, de todos os chats, cada um com o seu dono
-   * (sessionId). Campo separado de `processes` porque o store é compartilhado —
-   * a aba de browser/processo também chama fetch(sessão), e uma lista única seria
-   * sobrescrita no meio do poll do rodapé, que é justamente quem pede "todos".
+   * Global scope: ALL processes, from all chats, each with its owner
+   * (sessionId). A field separate from `processes` because the store is shared —
+   * the browser/process tab also calls fetch(session), and a single list would be
+   * overwritten in the middle of the footer's poll, which is exactly who asks for "all".
    */
   allProcesses: ProcessInfo[]
   fetch: (sessionId?: string) => Promise<void>
@@ -22,18 +22,18 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
   allProcesses: [],
 
   /**
-   * Os processos de UMA sessão.
+   * The processes of ONE session.
    *
-   * Sem sessão não existe "todos": quem chama sem escopo quer a lista da própria
-   * conversa, e a conversa ainda não existe (chat novo). O main, sem filtro,
-   * devolve os processos de TODO mundo — foi assim que o dev server de um chat
-   * de código apareceu no rodapé de um chat comum. Quem quer a lista de todos
-   * pede pelo nome: fetchAll().
+   * Without a session there is no "all": whoever calls without a scope wants the list of their own
+   * conversation, and the conversation does not exist yet (new chat). Main, without a filter,
+   * returns everyone's processes — that is how a code chat's dev server
+   * showed up in the footer of a regular chat. Whoever wants the list of all
+   * asks by name: fetchAll().
    */
   fetch: async (sessionId?: string) => {
     if (!sessionId) {
-      // Limpa o que ficou de outro chat. Condicional de propósito: um set() a
-      // cada poll (3s) com um array novo re-renderizaria o painel sem motivo.
+      // Clears what was left from another chat. Conditional on purpose: a set() on
+      // every poll (3s) with a new array would re-render the panel for no reason.
       if (get().processes.length > 0) set({ processes: [] })
       return
     }
@@ -42,9 +42,9 @@ export const useProcessStore = create<ProcessStore>((set, get) => ({
   },
 
   /**
-   * TODOS os processos, de todos os chats, sem filtro — é o modo "todos os
-   * chats" do rodapé, que marca a origem de cada linha. Pedir a lista sem filtro
-   * aqui é intencional: a UI mostra tudo de propósito e diz de quem é cada um.
+   * ALL processes, from all chats, without a filter — it is the footer's "all
+   * chats" mode, which marks the origin of each row. Asking for the list without a filter
+   * here is intentional: the UI shows everything on purpose and says whose each one is.
    */
   fetchAll: async () => {
     const allProcesses = await processApi.list()

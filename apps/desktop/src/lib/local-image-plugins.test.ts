@@ -4,17 +4,17 @@ import { defaultRehypePlugins } from 'streamdown'
 import { localImageRehypePlugins } from './local-image-plugins'
 
 /**
- * Este módulo remenda o pipeline do streamdown por dentro, então ele depende
- * do formato que a biblioteca publica. Se uma atualização mudar esse formato,
- * a figura local volta a sumir — e em silêncio, que é o pior jeito.
+ * This module patches the streamdown pipeline from the inside, so it depends
+ * on the format the library publishes. If an update changes that format,
+ * the local figure vanishes again — and in silence, which is the worst way.
  *
- * Estes testes existem para que a mudança apareça aqui, e não na tela do
- * usuário meses depois.
+ * These tests exist so that the change shows up here, and not on the
+ * user's screen months later.
  */
 
 type Schema = { protocols?: Record<string, string[]> }
 
-/** O esquema do sanitize, seja dos defaults ou do nosso pipeline. */
+/** The sanitize scheme, whether from the defaults or from our pipeline. */
 function schemaOf(plugin: unknown): Schema {
   expect(Array.isArray(plugin)).toBe(true)
   return (plugin as [unknown, Schema])[1]
@@ -22,19 +22,19 @@ function schemaOf(plugin: unknown): Schema {
 
 const SANITIZE_INDEX = Object.keys(defaultRehypePlugins).indexOf('sanitize')
 
-describe('pipeline do preview local', () => {
-  it('a entrada do sanitize continua sendo [plugin, esquema]', () => {
+describe('local preview pipeline', () => {
+  it("sanitize input is still [plugin, scheme]", () => {
     const sanitize = defaultRehypePlugins.sanitize as [unknown, Schema]
 
     expect(typeof sanitize[0]).toBe('function')
     expect(schemaOf(sanitize).protocols?.src).toBeDefined()
   })
 
-  it('o padrão do streamdown NÃO aceita data: em src — é o que quebrava', () => {
+  it("streamdown default does NOT accept data: in src — that is what was breaking", () => {
     expect(schemaOf(defaultRehypePlugins.sanitize).protocols?.src).not.toContain('data')
   })
 
-  it('o nosso aceita, sem perder os protocolos que já existiam', () => {
+  it('ours accepts it, without losing the protocols that already existed', () => {
     const original = schemaOf(defaultRehypePlugins.sanitize)
     const patched = schemaOf(localImageRehypePlugins[SANITIZE_INDEX])
 
@@ -44,12 +44,12 @@ describe('pipeline do preview local', () => {
     }
   })
 
-  it('mantém todas as etapas do streamdown, na ordem, antes da nossa', () => {
+  it('keeps every streamdown step, in order, before ours', () => {
     const names = Object.keys(defaultRehypePlugins)
 
-    // As deles primeiro; a legenda entra depois, com o texto já na forma final.
+    // Theirs first; the caption comes in afterwards, with the text already in its final form.
     expect(localImageRehypePlugins.length).toBe(names.length + 1)
-    // raw e harden passam adiante como vieram — só o sanitize é remendado.
+    // raw and harden pass through as they came — only sanitize is patched.
     names.forEach((name, i) => {
       if (name === 'sanitize') return
       expect(localImageRehypePlugins[i]).toBe(defaultRehypePlugins[name])

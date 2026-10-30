@@ -14,13 +14,13 @@ import {
 import { resolveSafePath, type ToolContext } from './context'
 
 /**
- * Navegação de código pelo índice de símbolos (code-index): achar onde algo
- * está, ver um arquivo sem os corpos e saber quem usa o quê. Existe para
- * trocar a rodada grep → read → read por uma chamada que já devolve o trecho
- * certo com arquivo:linha — menos tool calls, menos tokens.
+ * Code navigation through the symbol index (code-index): finding where something
+ * is, seeing a file without the bodies and knowing who uses what. It exists to
+ * replace the grep → read → read round with a call that already returns the right
+ * excerpt with file:line — fewer tool calls, fewer tokens.
  */
 
-/** A pasta (principal ou anexada) que contém o caminho; sem caminho, a principal. */
+/** The folder (main or attached) that contains the path; with no path, the main one. */
 function rootFor(ctx: ToolContext, target?: string): { root: string; rel?: string } {
   if (!target) return { root: ctx.directory }
   const abs = resolveSafePath(ctx, target)
@@ -105,16 +105,16 @@ export function createCodeTools(ctx: ToolContext) {
 }
 
 /**
- * Chamado pelo edit/write depois de gravar: re-indexa o arquivo e, se uma
- * assinatura usada em outro arquivo mudou, devolve o aviso. Só age com o
- * índice já quente — o edit nunca paga a primeira construção.
+ * Called by edit/write after writing: re-indexes the file and, if a
+ * signature used in another file changed, returns the warning. It only acts with the
+ * index already warm — edit never pays for the first build.
  */
 export async function afterEditNote(ctx: ToolContext, file: string): Promise<string> {
   try {
     const { root, rel } = rootFor(ctx, file)
     const index = peekCodeIndex(root)
     if (!index || !rel) {
-      // Aquece em segundo plano para as próximas consultas.
+      // Warms up in the background for the next queries.
       if (!index) void getCodeIndex(root).refresh().catch(() => {})
       return ''
     }

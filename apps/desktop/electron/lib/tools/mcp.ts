@@ -3,14 +3,14 @@ import { z } from 'zod'
 import { listMcpStatus } from '../mcp'
 
 /**
- * Tools de conexão MCP (mcp_connect / mcp_update / mcp_servers).
+ * MCP connection tools (mcp_connect / mcp_update / mcp_servers).
  *
- * Elas NÃO gravam nada: apenas PROPÕEM. A conexão só é criada ou alterada
- * quando o usuário aceita no card que aparece na conversa — é o card que
- * chama mcp:save / mcp:auth. É por isso que elas podem ser tratadas como
- * nativas, sem pedir permissão: uma proposta não muda o estado do app, e o
- * ato de conectar (que dá ao agente acesso a ferramentas novas) continua
- * sendo uma decisão explícita de quem usa.
+ * They write NOTHING: they only PROPOSE. The connection is only created or changed
+ * when the user accepts in the card that appears in the conversation — it is the card that
+ * calls mcp:save / mcp:auth. That is why they can be treated as
+ * native, without asking permission: a proposal does not change the app's state, and the
+ * act of connecting (which gives the agent access to new tools) remains
+ * an explicit decision of whoever uses it.
  */
 
 const oauthSchema = z
@@ -25,7 +25,7 @@ const oauthSchema = z
   .optional()
   .describe('Only for providers that refuse dynamic registration (e.g.: Figma answers 403 to /register)')
 
-/** Campos comuns a criar e editar uma conexão. */
+/** Fields common to creating and editing a connection. */
 const connectionFields = {
   type: z
     .enum(['http', 'stdio'])
@@ -41,7 +41,7 @@ const connectionFields = {
   oauth: oauthSchema,
 }
 
-/** Falha de validação devolvida ao modelo — ele consegue corrigir e repetir. */
+/** Validation failure returned to the model — it can correct it and retry. */
 function invalid(message: string): string {
   return `Connection not proposed: ${message}`
 }
@@ -52,8 +52,8 @@ function describeEntry(input: { name: string; type: string; url?: string; comman
 }
 
 /**
- * A proposta aparece como card na conversa; nada é gravado até o usuário
- * aceitar ali. O texto final orienta o modelo a parar e esperar.
+ * The proposal appears as a card in the conversation; nothing is written until the user
+ * accepts there. The final text guides the model to stop and wait.
  */
 function proposedText(entry: string, extra?: string): string {
   return (
@@ -110,16 +110,16 @@ export function createMcpUpdateTool() {
       if (!existing) {
         return invalid(`there is no connection named "${input.name}". Use mcp_servers to see the existing ones.`)
       }
-      // O que vale é a config RESULTANTE: o que não vem no pedido continua
-      // como está (o card faz a mesma mescla sobre a entrada atual).
+      // What counts is the RESULTING config: what does not come in the request stays
+      // as it is (the card does the same merge over the current input).
       const type = input.type ?? existing.config.type
       const url = input.url ?? existing.config.url
       const command = input.command ?? existing.config.command
       const target = type === 'http' ? url : command
       if (type === 'http' && !url?.trim()) return invalid('type=http requires "url".')
       if (type === 'stdio' && !command?.trim()) return invalid('type=stdio requires "command".')
-      // `type` é estrutural (diz como ler o resto), não uma alteração: uma
-      // chamada só com ele não muda nada e seria uma proposta vazia.
+      // `type` is structural (it says how to read the rest), not a change: a
+      // call with only it changes nothing and would be an empty proposal.
       const changes = Object.keys(input).filter(
         (key) => key !== 'name' && key !== 'reason' && key !== 'type',
       )
@@ -152,7 +152,7 @@ export function createMcpServersTool() {
   })
 }
 
-/** As três tools de conexão MCP, como um conjunto só (chat e código). */
+/** The three MCP connection tools, as a single set (chat and code). */
 export function createMcpTools(): ToolSet {
   return {
     mcp_connect: createMcpConnectTool(),

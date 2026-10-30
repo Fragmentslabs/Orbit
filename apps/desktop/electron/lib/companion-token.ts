@@ -1,20 +1,20 @@
 /**
- * Tokens assinados para os arquivos que o app mobile baixa por HTTP.
+ * Signed tokens for the files the mobile app downloads over HTTP.
  *
- * O celular não tem os schemes do Electron (`orbit-media://`, `orbit-audio://`,
- * `orbit-video://`, `orbit-artifact://`, `orbit-motion://`…), então tudo o que
- * ele precisa ver vira uma URL do servidor do companion. E como `<Image>`,
- * `<video>` e o WebView não mandam o header `Authorization` de forma confiável,
- * a autorização vai no CAMINHO da URL — não na query: uma peça de motion
- * referencia `base.css`, `clip.mp4` e afins por caminho relativo, e um token na
- * query não acompanharia esses pedidos (o relativo resolve contra o caminho, e
- * sim contra a query do documento). Com o token como um SEGMENTO do caminho,
- * `/api/file/motion/mv_x/<token>/base.css` funciona sem reescrever nada dentro
- * da peça.
+ * The phone does not have Electron's schemes (`orbit-media://`, `orbit-audio://`,
+ * `orbit-video://`, `orbit-artifact://`, `orbit-motion://`…), so everything it
+ * needs to see becomes a URL of the companion's server. And since `<Image>`,
+ * `<video>` and the WebView do not reliably send the `Authorization` header,
+ * the authorization goes in the URL's PATH — not in the query: a motion piece
+ * references `base.css`, `clip.mp4` and the like by relative path, and a token in the
+ * query would not accompany those requests (the relative one resolves against the path, and
+ * not against the document's query). With the token as a SEGMENT of the path,
+ * `/api/file/motion/mv_x/<token>/base.css` works without rewriting anything inside
+ * the piece.
  *
- * Módulo separado do servidor para o segredo e a assinatura terem um dono só:
- * quem assina (companion-server, ao reescrever as parts) e quem valida (o
- * servidor HTTP) precisam concordar exatamente.
+ * A module separate from the server so the secret and the signature have a single owner:
+ * whoever signs (companion-server, when rewriting the parts) and whoever validates (the
+ * HTTP server) have to agree exactly.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -23,16 +23,16 @@ import path from 'node:path'
 import { app } from 'electron'
 
 /**
- * 24h: longo o bastante para o cache do app sobreviver a scroll, re-render e
- * reabrir a conversa sem refetch de token; curto o bastante para uma URL
- * vazada não valer para sempre.
+ * 24h: long enough for the app's cache to survive scrolling, re-rendering and
+ * reopening the conversation without a token refetch; short enough for a leaked
+ * URL not to count forever.
  */
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
- * Segredo persistido em orbit-data/media-secret — tokens assinados sobrevivem
- * a restarts do desktop (senão toda imagem já entregue ao mobile viraria 401
- * ao reiniciar o app). Leitura síncrona: precisa estar pronto antes do 1º token.
+ * Secret persisted in orbit-data/media-secret — signed tokens survive
+ * desktop restarts (otherwise every image already delivered to the mobile would become 401
+ * when the app restarts). Synchronous read: it has to be ready before the first token.
  */
 function loadSecret(): string {
   const file = path.join(app.getPath('userData'), 'orbit-data', 'media-secret')
@@ -40,14 +40,14 @@ function loadSecret(): string {
     const existing = fsSync.readFileSync(file, 'utf8').trim()
     if (existing.length === 64) return existing
   } catch {
-    /* ainda não existe — gera abaixo */
+    /* does not exist yet — generates it below */
   }
   const secret = randomBytes(32).toString('hex')
   try {
     fsSync.mkdirSync(path.dirname(file), { recursive: true })
     fsSync.writeFileSync(file, secret, { mode: 0o600 })
   } catch {
-    console.warn('[CompanionToken] Não foi possível persistir o segredo — tokens não sobrevivem a restart')
+    console.warn('[CompanionToken] could not persist the secret — tokens do not survive a restart')
   }
   return secret
 }
@@ -55,9 +55,9 @@ function loadSecret(): string {
 const secret = loadSecret()
 
 /**
- * Cada escopo tem a sua raiz e o seu resolvedor no desktop (ver
- * companion-assets.ts). O token vale para o par escopo+id: um token de
- * `video/vid_x` não abre `artifact/art_y.html`.
+ * Each scope has its root and its resolver on the desktop (see
+ * companion-assets.ts). The token counts for the scope+id pair: a
+ * `video/vid_x` token does not open `artifact/art_y.html`.
  */
 export type AssetScope =
   | 'media'
@@ -67,8 +67,8 @@ export type AssetScope =
   | 'motion'
   | 'design'
   | 'slides'
-  /** Um arquivo da biblioteca de fontes (`<hash>.woff2`): o `orbit-font://` não
-   *  existe no celular, e é ele que o `<style>` do `font_use` referencia. */
+  /** A file of the font library (`<hash>.woff2`): `orbit-font://` does not
+   *  exist on the phone, and it is what the `<style>` of `font_use` references. */
   | 'font'
 
 const SCOPES: readonly AssetScope[] = [
@@ -87,12 +87,12 @@ export function isAssetScope(value: string): value is AssetScope {
 }
 
 /**
- * `media` mantém a assinatura histórica (só o id, sem escopo).
+ * `media` keeps the historical signature (only the id, without a scope).
  *
- * Não é preguiça: esse formato já foi entregue a apps conectados e o segredo
- * sobrevive a restart, então mudá-lo invalidaria toda imagem já em tela até a
- * próxima sincronização de mensagens — um bug que só apareceria no celular de
- * quem já estava conectado. Os escopos novos nascem com o formato correto.
+ * It is not laziness: that format was already delivered to connected apps and the secret
+ * survives a restart, so changing it would invalidate every image already on screen until the
+ * next message sync — a bug that would only show up on the phone of someone
+ * already connected. The new scopes are born with the correct format.
  */
 function signPayload(scope: AssetScope, id: string, exp: number): string {
   const payload = scope === 'media' ? `${id}:${exp}` : `${scope}:${id}:${exp}`

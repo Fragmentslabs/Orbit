@@ -9,40 +9,40 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useMessageReply } from "@/src/stores/message-reply"
 
 /**
- * Selecionar um trecho de uma mensagem e responder só ele.
+ * Select an excerpt of a message and reply only to it.
  *
- * Mesmo gesto do QuoteSelection dos visualizadores de documento (selecionou,
- * aparece o botão), com uma diferença de fundo: lá o trecho vira ANEXO do
- * documento; aqui ele vira resposta, e entra no texto enviado. Por isso o
- * botão daqui não escolhe página nem linha — escolhe a mensagem.
+ * The same gesture as the QuoteSelection of the document viewers (once selected,
+ * the button appears), with one deep difference: there the excerpt becomes an ATTACHMENT of the
+ * document; here it becomes a reply, and enters the sent text. That is why the
+ * button here does not choose page or line — it chooses the message.
  *
- * Precisa estar montado dentro do <Conversation> para ler o elemento de
- * rolagem do contexto, e é ele que delimita a área válida: sem essa checagem,
- * uma seleção no visualizador de arquivo (com o chat aberto ao lado) ofereceria
- * responder uma mensagem que não tem nada a ver com o que foi marcado.
+ * It needs to be mounted inside the <Conversation> to read the scroll element
+ * of the context, and it is that one that delimits the valid area: without that check,
+ * a selection in the file viewer (with the chat open alongside) would offer
+ * to reply to a message that has nothing to do with what was marked.
  *
- * O botão vai em portal com posição fixa porque a caixa da seleção vem em
- * coordenadas de viewport: dentro do contêiner ele seria cortado pelo overflow
- * da conversa, que é justamente onde o texto rola.
+ * The button goes in a portal with a fixed position because the selection box comes in
+ * viewport coordinates: inside the container it would be cut by the overflow
+ * of the conversation, which is exactly where the text scrolls.
  *
- * Com o TTS ligado aparece um segundo botão, que lê SÓ o trecho marcado. As
- * regras são as do botão de fala da mensagem inteira (`SpeakAction`): some com o
- * TTS desligado nas preferências e, sem o modelo baixado, também não aparece —
- * aqui não há espaço para o atalho que leva às Preferências, e um botão que só
- * falha é pior que um botão ausente.
+ * With TTS on a second button appears, which reads ONLY the marked excerpt. The
+ * rules are those of the speak button of the whole message (`SpeakAction`): it disappears with
+ * TTS off in the preferences and, without the model downloaded, it does not appear either —
+ * here there is no room for the shortcut that leads to Preferences, and a button that only
+ * fails is worse than a missing button.
  */
 export function MessageReplySelection({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
   const { scrollRef } = useStickToBottomContext()
   const setReply = useMessageReply((s) => s.setReply)
   const [pending, setPending] = useState<{ x: number; y: number; quote: MessageReplyQuote } | null>(null)
-  // O tipo compartilhado pode ainda não trazer o bloco `voice` (outro worker):
-  // lê defensivamente do store, com os padrões do app.
+  // The shared type may not carry the `voice` block yet (another worker):
+  // it reads defensively from the store, with the app defaults.
   const voice = useAppSettings((s) => (s.settings as unknown as { voice?: unknown }).voice)
   const prefs = useMemo(() => readTtsPrefs(voice), [voice])
   const engine = useMemo(() => readTtsEngine(voice), [voice])
   const { ready, known } = useTtsStatus(prefs.enabled, engine)
-  // `known: false` = ninguém respondeu (main antigo ou sem motor): não bloqueia.
+  // `known: false` = nobody answered (old main process or no engine): it does not block.
   const speakEnabled = prefs.enabled && (!known || ready)
   const { speak, stop, speaking } = useSpeak()
 
@@ -58,10 +58,10 @@ export function MessageReplySelection({ sessionId }: { sessionId?: string }) {
       setPending(null)
       return
     }
-    // Papel lido do DOM: a seleção pode estar em qualquer parte da mensagem
-    // (texto, markdown, bloco de código), e o ancestral mais próximo com o
-    // atributo diz de qual mensagem ela é. Seleção que atravessa duas
-    // mensagens cai no contêiner, sem o atributo, e não oferece nada.
+    // Role read from the DOM: the selection may be in any part of the message
+    // (text, markdown, code block), and the closest ancestor with the
+    // attribute says which message it belongs to. A selection that crosses two
+    // messages falls into the container, without the attribute, and offers nothing.
     const node = range.commonAncestorContainer
     const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
     const role = element?.closest("[data-msg-role]")?.getAttribute("data-msg-role")
@@ -79,11 +79,11 @@ export function MessageReplySelection({ sessionId }: { sessionId?: string }) {
   }, [scrollRef])
 
   useEffect(() => {
-    // O botão nasce quando a seleção TERMINA (mouseup/keyup), não a cada
-    // mexida do cursor: durante o arrasto ele ficaria pulando junto.
+    // The button is born when the selection ENDS (mouseup/keyup), not on every
+    // cursor move: during the drag it would be jumping along.
     document.addEventListener("mouseup", capture)
     document.addEventListener("keyup", capture)
-    // ...e some assim que a seleção se desfaz.
+    // ...and it disappears as soon as the selection comes undone.
     const onSelectionChange = () => {
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed) setPending(null)
@@ -106,9 +106,9 @@ export function MessageReplySelection({ sessionId }: { sessionId?: string }) {
       {speakEnabled && (
         <button
           type="button"
-          // Sem o preventDefault o clique desfaz a seleção e o botão some no
-          // meio da fala — com ele o menu fica onde está e o mesmo trecho pode
-          // ser interrompido logo em seguida.
+          // Without the preventDefault the click undoes the selection and the button disappears in
+          // the middle of the speech — with it the menu stays where it is and the same excerpt can
+          // be interrupted right after.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             if (speaking) stop()

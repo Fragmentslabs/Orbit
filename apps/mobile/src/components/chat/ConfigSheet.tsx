@@ -36,7 +36,7 @@ interface Props {
   onOrchestraToggle: () => void
   loop: boolean
   onLoopToggle: () => void
-  /** Orquestração é exclusiva do modo code */
+  /** Orchestration is exclusive to code mode */
   mode?: "chat" | "code"
   workerModelLabel: string | null
   onConfigureWorkers: () => void
@@ -230,8 +230,8 @@ export function ConfigSheet({
             </View>
           )}
 
-          {/* Subagentes, Orquestração, Visão e Loop ficam no botão "+" (AttachmentSheet) —
-              o gear mantém permissões, thinking/reasoning e branch */}
+          {/* Subagents, Orchestration, Vision and Loop stay in the "+" button (AttachmentSheet) —
+              the gear keeps permissions, thinking/reasoning and branch */}
 
         </ScrollView>
       </Animated.View>

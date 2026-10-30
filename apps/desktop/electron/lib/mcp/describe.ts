@@ -7,18 +7,18 @@ import { getAppSettings } from '../app-settings'
 import { resolveAuxModel } from '../aux-model'
 
 /**
- * Descrições reescritas das tools de servidor MCP, sob demanda.
+ * Rewritten descriptions of MCP server tools, on demand.
  *
- * O padrão Orbit de descrição é uma linha, ≤140 caracteres, verbo imperativo,
- * dizendo o que a tool RESOLVE. Servidor de terceiro raramente escreve assim:
- * vem parágrafo, tabela markdown e às vezes preâmbulo com instrução embutida.
- * Reescrever custa tokens, então nunca acontece sozinho — só quando o usuário
- * aperta o botão do servidor, e o resultado fica gravado com a impressão
- * digital da lista de tools (mudou a lista, o botão volta a aparecer).
+ * Orbit's pattern for a description is one line, ≤140 characters, imperative verb,
+ * saying what the tool RESOLVES. A third-party server rarely writes like that: a
+ * paragraph comes, a markdown table and sometimes a preamble with an embedded
+ * instruction. Rewriting costs tokens, so it never happens on its own — only when the
+ * user presses the server's button, and the result is stored with the fingerprint of
+ * the tool list (the list changed, the button shows up again).
  */
 
 interface Entry {
-  /** Impressão digital da lista de tools no momento da otimização. */
+  /** Fingerprint of the tool list at the moment of the optimization. */
   hash: string
   at: string
   modelId: string
@@ -43,7 +43,7 @@ function load(): Store {
   return cache
 }
 
-/** djb2: só precisa detectar mudança na lista, não resistir a ataque. */
+/** djb2: it only needs to detect a change in the list, not to resist an attack. */
 function fingerprint(tools: { name: string; description?: string }[]): string {
   let hash = 5381
   for (const t of [...tools].sort((a, b) => a.name.localeCompare(b.name))) {
@@ -53,7 +53,7 @@ function fingerprint(tools: { name: string; description?: string }[]): string {
   return (hash >>> 0).toString(36)
 }
 
-/** Descrições otimizadas VÁLIDAS para a lista atual (ou null se não houver). */
+/** Optimized descriptions VALID for the current list (or null if there are none). */
 export function optimizedFor(
   serverName: string,
   tools: { name: string; description?: string }[],
@@ -63,7 +63,7 @@ export function optimizedFor(
   return entry.descriptions
 }
 
-/** O que o card do servidor mostra sobre a otimização. */
+/** What the server's card shows about the optimization. */
 export function descriptionsState(
   serverName: string,
   tools: { name: string; description?: string }[],
@@ -126,9 +126,9 @@ Reply with JSON only, mapping the exact tool identifier to the line:
 {"tool_name": "line", "another_tool": "line"}`
 
 /**
- * Reescreve as descrições de um servidor com o modelo auxiliar das Preferências.
- * Sem modelo auxiliar escolhido, não gasta nada e devolve NoAuxModelError —
- * o card mostra o convite para configurar, em vez de usar um modelo qualquer.
+ * Rewrites the descriptions of a server with the auxiliary model from Preferences.
+ * With no auxiliary model chosen, it costs nothing and returns NoAuxModelError — the
+ * card shows the invitation to configure it, instead of using some random model.
  */
 export async function optimizeServerDescriptions(
   serverName: string,
@@ -157,7 +157,7 @@ export async function optimizeServerDescriptions(
     ...(aux.providerOptions ? { providerOptions: aux.providerOptions } : {}),
   })
 
-  // Só o que existe no servidor sobrevive: o modelo pode inventar nome de tool.
+  // Only what exists on the server survives: the model may invent a tool name.
   const parsed = parseJson(text)
   const descriptions: Record<string, string> = {}
   for (const t of picked) {

@@ -3,26 +3,26 @@ import path from 'node:path'
 import type { PieceKind } from '../session/media-journal'
 
 /**
- * Onde uma PEÇA mora: módulo próprio porque caminho de peça é preciso nos dois
- * lados — nas tools (`piece-common`) e na importação de projeto
- * (`video/motion-project`), que não tem por que arrastar media, diário e as
- * outras peças só para saber o nome de uma pasta.
+ * Where a PIECE lives: its own module because a piece path is needed on both
+ * sides — in the tools (`piece-common`) and in the project import
+ * (`video/motion-project`), which has no reason to drag media, journal and the
+ * other pieces along just to know the name of a folder.
  */
 
 const SAFE_SESSION = /^[A-Za-z0-9_-]{1,80}$/
 
-/** Pasta de todas as peças de um tipo — a raiz que a exclusão pode limpar. */
+/** Folder of all pieces of a type — the root that deletion can clean. */
 export function piecesRoot(kind: PieceKind): string {
   return path.join(app.getPath('userData'), 'orbit-data', kind)
 }
 
-/** Pasta das peças de um tipo nesta conversa. */
+/** Folder of the pieces of a type in this conversation. */
 export function piecesDir(kind: PieceKind, sessionId: string): string {
   if (!SAFE_SESSION.test(sessionId)) throw new Error(`invalid session id: ${sessionId}`)
   return path.join(piecesRoot(kind), sessionId)
 }
 
-/** "Intro do Orbit!" → "intro-do-orbit". O nome vira pasta. Puro. */
+/** "Orbit intro!" → "orbit-intro". The name becomes a folder. Pure. */
 export function pieceSlug(name: string, fallback: string): string {
   const slug = name
     .normalize('NFD')

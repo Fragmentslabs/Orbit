@@ -19,15 +19,15 @@ import {
 } from './piece-common'
 
 /**
- * Slides — o deck mora no armazenamento do Orbit
- * (`orbit-data/slides/<sessão>/<nome>/index.html`), nos DOIS modos, criado e
- * editado por NOME com as tools daqui.
+ * Slides — the deck lives in Orbit's storage
+ * (`orbit-data/slides/<session>/<name>/index.html`), in BOTH modes, created and
+ * edited by NAME with the tools from here.
  *
- * Duas portas de escrita no mesmo deck: `slides` (o conteúdo de cada slide na
- * própria chamada, e o main monta o arquivo com o tema da casa — a ergonomia do
- * create_artifact) e `html` (o documento inteiro, para quem quer o próprio CSS).
- * Depois disso, slides_edit troca trechos exatos sem reenviar o deck. Toda
- * escrita passa pelo diário do turno: o revert da mensagem a desfaz.
+ * Two write doors into the same deck: `slides` (the content of each slide in the
+ * call itself, and main assembles the file with the house theme — the ergonomics of
+ * create_artifact) and `html` (the whole document, for whoever wants their own CSS).
+ * After that, slides_edit swaps exact excerpts without resending the deck. Every
+ * write goes through the turn's journal: the message's revert undoes it.
  */
 
 const SLIDE = z.object({
@@ -65,7 +65,7 @@ const ID = z
 export function createSlidesTools(scope: PieceToolScope): ToolSet {
   const root = slidesPiecesDir(scope.sessionId)
 
-  /** Alvo por `name` (deck desta conversa) OU por `id` (global). */
+  /** Target by `name` (this conversation's deck) OR by `id` (global). */
   const resolveDeck = async (input: { name?: string; id?: string }) => {
     if (input.id) {
       const reg = await getSlides(input.id)
@@ -88,7 +88,7 @@ export function createSlidesTools(scope: PieceToolScope): ToolSet {
     }
   }
 
-  /** Toda escrita no deck: sob o lock da pasta e com a pasta no diário. */
+  /** Every write to the deck: under the folder's lock and with the folder in the journal. */
   const writing = <T>(deck: Deck, fn: () => Promise<T>) =>
     withAssetLock(`slides:${deck.folder}`, async () => {
       await journalPiece('slides', deck.folder, { entry: deck.entry, root: deck.root, sessionId: scope.sessionId })
@@ -102,8 +102,8 @@ export function createSlidesTools(scope: PieceToolScope): ToolSet {
       root: deck.root,
       sessionId: scope.sessionId,
       label: `deck "${deck.name}", ${verb}`,
-      // Reescrito ou editado: a capa antiga mostraria um slide que talvez nem
-      // exista mais.
+      // Rewritten or edited: the old cover would show a slide that may not even
+      // exist anymore.
       refreshCover,
       nextStep:
         'To change it, use slides_edit with exact replacements (slides_read first when unsure of the text) — never resend the whole deck for a small change. The tab reloads live, at the same slide.',

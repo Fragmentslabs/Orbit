@@ -5,25 +5,25 @@ import { useVoiceCall } from "@/src/hooks/use-voice-call"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 
-/** Quanto o aviso de erro fica à vista depois de a chamada cair. */
+/** How long the error notice stays in view after the call drops. */
 const ERROR_VISIBLE_MS = 6000
 
 type VoiceCallSubmit = (text: string) => boolean
 
 export interface VoiceCallHost {
   call: ReturnType<typeof useVoiceCall>
-  /** Sessão dona da chamada; null só enquanto não há chamada. */
+  /** Session that owns the call; null only while there is no call. */
   callSessionId: string | null
-  /** Workspace em que a chamada nasceu — o "abrir chamada" volta para ele. */
+  /** Workspace in which the call was born — the "open call" goes back to it. */
   callMode: WorkspaceMode | null
   callSessionTitle?: string
-  /** Abre a chamada na conversa em que ela nasceu (e volta para o chat). */
+  /** Opens the call in the conversation in which it was born (and goes back to the chat). */
   openCall: () => void
-  /** Começa uma chamada PRESA a esta sessão (o composer já a criou se era chat novo). */
+  /** Starts a call TIED to this session (the composer already created it if it was a new chat). */
   start: (sessionId: string, mode: WorkspaceMode, submit: VoiceCallSubmit) => void
-  /** O composer da sessão da chamada registra o submit mais recente (pastas,
-   *  modos e fila mudam durante a conversa). Chamadas de qualquer OUTRA sessão
-   *  são ignoradas aqui — o destinatário da fala nunca muda. */
+  /** The composer of the call session registers the most recent submit (folders,
+   *  modes and queue change during the conversation). Calls from any OTHER session
+   *  are ignored here — the recipient of the speech never changes. */
   registerSubmit: (sessionId: string | undefined, submit: VoiceCallSubmit) => void
 }
 
@@ -36,11 +36,11 @@ export function useVoiceCallHost(): VoiceCallHost {
 }
 
 /**
- * A chamada vive AQUI, uma vez para a janela principal — não dentro do
- * composer. O composer só a mostra quando a conversa aberta é a dona dela.
- * Trocar de chat não muda a sessão da chamada: a fala, a resposta e o TTS
- * continuam presos a `callSessionId`, e o card flutuante/sidebar acessam o
- * mesmo estado de qualquer tela.
+ * The call lives HERE, once for the main window — not inside the
+ * composer. The composer only shows it when the open conversation is its owner.
+ * Switching chat does not change the session of the call: the speech, the answer and the TTS
+ * stay tied to `callSessionId`, and the floating card/sidebar access the
+ * same state from any screen.
  */
 export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const { setMode, setView } = useWorkspace()
@@ -48,16 +48,16 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
   const [callSessionId, setCallSessionId] = useState<string | null>(null)
   const [callMode, setCallMode] = useState<WorkspaceMode | null>(null)
-  // Espelho síncrono do dono da chamada: o `registerSubmit` confere por ele, e
-  // o pai renderiza antes dos filhos — o ref já está atualizado quando o
-  // composer da sessão dona monta.
+  // Synchronous mirror of the call owner: `registerSubmit` checks through it, and
+  // the parent renders before the children — the ref is already updated when the
+  // composer of the owner session mounts.
   const callSessionIdRef = useRef<string | null>(null)
   callSessionIdRef.current = callSessionId
 
-  // O submit JAMAIS pode variar com o chat aberto: começa preso à sessão da
-  // chamada (o composer passa uma função já amarrada nela) e só é atualizado
-  // pelo composer DESSA sessão quando ele está montado. Era por aqui que a
-  // fala caía no chat visível quando a chamada tinha nascido num chat novo.
+  // The submit can NEVER vary with the open chat: it starts tied to the session of the
+  // call (the composer passes a function already bound to it) and is only updated
+  // by the composer of THAT session when it is mounted. It was through here that the
+  // speech fell into the visible chat when the call had been born in a new chat.
   const submitRef = useRef<VoiceCallSubmit | null>(null)
   const submitToCall = useCallback((text: string) => submitRef.current?.(text) ?? false, [])
 
@@ -66,8 +66,8 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
   const activeRef = useRef(call.active)
   activeRef.current = call.active
-  // Trava síncrona: dois cliques (ou dois composers) não podem trocar a sessão
-  // da chamada antes de o React re-renderizar `call.active`.
+  // Synchronous lock: two clicks (or two composers) cannot swap the session
+  // of the call before React re-renders `call.active`.
   const startingRef = useRef(false)
 
   const start = useCallback(
@@ -86,17 +86,17 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     if (!call.active) startingRef.current = false
   }, [call.active])
 
-  // Quem registra é o composer do chat ABERTO — mas só vale se ele for o dono
-  // da chamada. Sem esta guarda, abrir outro chat (ou o painel lateral) poderia
-  // reapontar a fala para a conversa visível, que é exatamente o bug que o
-  // `callSessionId` existe para impedir.
+  // What registers is the composer of the OPEN chat — but it only counts if it is the owner
+  // of the call. Without this guard, opening another chat (or the side panel) could
+  // re-point the speech to the visible conversation, which is exactly the bug the
+  // `callSessionId` exists to prevent.
   const registerSubmit = useCallback((sessionId: string | undefined, submit: VoiceCallSubmit) => {
     if (sessionId == null || sessionId !== callSessionIdRef.current) return
     submitRef.current = submit
   }, [])
 
-  // A sidebar lê por este store (não pelo contexto): assim as linhas de
-  // conversa não re-renderizam a cada tique da legenda.
+  // The sidebar reads through this store (not through the context): that way the conversation
+  // rows do not re-render on every caption tick.
   useEffect(() => {
     useVoiceActivity.getState().setCallSessionId(callSessionId)
   }, [callSessionId])

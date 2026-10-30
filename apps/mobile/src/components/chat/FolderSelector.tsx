@@ -81,9 +81,9 @@ export function FolderSelector({ folders, onFoldersChange, disabled }: FolderSel
         </Text>
       </Pressable>
 
-      {/* Com pasta extra, as chips + o "+" quebravam a linha e o X de uma chip
-          encostava no "+" da seguinte. Vira um botao so, que abre a lista —
-          mesma saida do desktop em tela estreita (CompactWorkspaceSelector). */}
+      {/* With an extra folder, the chips + the "+" wrapped the line and the X of one chip
+          touched the "+" of the next one. It becomes a single button, which opens the list —
+          the same way out as the desktop on a narrow screen (CompactWorkspaceSelector). */}
       {extras.length > 0 ? (
         <Pressable
           onPress={() => setExtrasOpen(true)}
@@ -120,8 +120,8 @@ export function FolderSelector({ folders, onFoldersChange, disabled }: FolderSel
 }
 
 /**
- * Pastas extras da sessao. Existe para o seletor caber numa linha so: com
- * duas ou mais, as chips quebravam e o X de remover encostava no "+".
+ * Extra folders of the session. It exists so the selector fits on a single line: with
+ * two or more, the chips wrapped and the remove X touched the "+".
  */
 function ExtraFoldersSheet({
   visible,
@@ -223,9 +223,9 @@ function DirBrowserModal({
 
   useEffect(() => {
     if (visible) {
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
       void browse()
       void loadRecentFolders().then(setRecent)

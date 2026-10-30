@@ -1,16 +1,16 @@
 /**
- * ```mermaid no markdown do chat: desenha, e degrada para o código quando não há
- * o que desenhar. O desenho em si (a lib dentro do WebView) não roda no jsdom —
- * o que se garante aqui é a decisão de qual dos dois aparece, que é onde o
- * usuário perde ou não o diagrama.
+ * ```mermaid in the chat markdown: it draws, and degrades to the code when there is
+ * nothing to draw. The drawing itself (the lib inside the WebView) does not run in jsdom —
+ * what is guaranteed here is the decision of which of the two shows up, which is where the
+ * user loses or does not lose the diagram.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 
 import { AssistantMarkdown } from '~/components/chat/AssistantMarkdown'
 
-// O bundle real são 3,4 MB lidos via expo-asset, que não existe no jsdom. A
-// leitura é o único ponto trocado: o resto do componente roda de verdade.
+// The real bundle is 3.4 MB read through expo-asset, which does not exist in jsdom. The
+// read is the only point replaced: the rest of the component really runs.
 vi.mock('~/lib/mermaid-source', () => ({
   loadMermaidSource: () => Promise.resolve('window.mermaid = {};'),
 }))
@@ -19,13 +19,13 @@ const FENCE = '```mermaid\ngraph TD\n  A-->B\n```'
 
 afterEach(cleanup)
 
-describe('mermaid no markdown', () => {
-  it('cerca fechada vira um host de diagrama', async () => {
+describe('mermaid in markdown', () => {
+  it('a closed fence becomes a diagram host', async () => {
     render(<AssistantMarkdown text={FENCE} />)
     expect(await screen.findByTestId('piece-view')).toBeTruthy()
   })
 
-  it('cerca aberta no stream continua sendo o código-fonte', () => {
+  it('an open fence in the stream is still the source code', () => {
     const { container } = render(
       <AssistantMarkdown text={'```mermaid\ngraph TD\n  A-->B'} streaming />,
     )
@@ -33,18 +33,18 @@ describe('mermaid no markdown', () => {
     expect(container.textContent).toContain('graph TD')
   })
 
-  it('fence vazio não vira diagrama', () => {
+  it('an empty fence does not become a diagram', () => {
     render(<AssistantMarkdown text={'```mermaid\n\n```'} />)
     expect(screen.queryByTestId('piece-view')).toBeNull()
   })
 
-  it('outra linguagem não é afetada', () => {
+  it('another language is not affected', () => {
     const { container } = render(<AssistantMarkdown text={'```ts\nconst a = 1\n```'} />)
     expect(screen.queryByTestId('piece-view')).toBeNull()
     expect(container.textContent).toContain('const a = 1')
   })
 
-  it('tolera sufixo depois da linguagem', async () => {
+  it('tolerates a suffix after the language', async () => {
     render(<AssistantMarkdown text={'```mermaid title="Fluxo"\ngraph TD\n  A-->B\n```'} />)
     expect(await screen.findByTestId('piece-view')).toBeTruthy()
   })

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { McpServerStatus } from '@shared/mcp'
 
 /**
- * As tools de conexão MCP só PROPÕEM: nada é gravado por elas — quem grava é
- * o card na conversa. Estes testes fixam o contrato que o modelo lê (mensagens
- * de erro que ele consegue corrigir) e a garantia de que não há escrita.
+ * The MCP connection tools only PROPOSE: nothing is written by them — what writes is
+ * the card in the conversation. These tests pin the contract the model reads (error
+ * messages it can correct) and the guarantee that there is no write.
  */
 
 const { status } = vi.hoisted(() => ({ status: vi.fn<() => McpServerStatus[]>() }))
@@ -21,7 +21,7 @@ function server(over: Partial<McpServerStatus> = {}): McpServerStatus {
   }
 }
 
-/** Chama o execute da tool direto (o SDK é quem valida o zod antes, num turno real). */
+/** Calls the tool's execute directly (the SDK is what validates the zod before, in a real turn). */
 async function call(toolDef: unknown, input: Record<string, unknown>): Promise<string> {
   const execute = (toolDef as { execute: (i: Record<string, unknown>, o: unknown) => Promise<string> }).execute
   return execute(input, {})
@@ -33,28 +33,28 @@ beforeEach(() => {
 })
 
 describe('mcp_connect', () => {
-  it('exige url quando o tipo é http', async () => {
+  it('requires url when the type is http', async () => {
     const out = await call(createMcpConnectTool(), { name: 'notion', type: 'http' })
     expect(out).toContain('requires "url"')
   })
 
-  it('exige command quando o tipo é stdio', async () => {
+  it('requires command when the type is stdio', async () => {
     const out = await call(createMcpConnectTool(), { name: 'local', type: 'stdio' })
     expect(out).toContain('requires "command"')
   })
 
-  it('não sobrescreve uma conexão existente: manda usar mcp_update', async () => {
+  it('does not overwrite an existing connection: tells you to use mcp_update', async () => {
     status.mockReturnValue([server()])
     const out = await call(createMcpConnectTool(), {
       name: 'figma',
       type: 'http',
-      url: 'https://outro.exemplo/mcp',
+      url: 'https://other.example/mcp',
     })
     expect(out).toContain('already exists')
     expect(out).toContain('mcp_update')
   })
 
-  it('propõe sem gravar nada e manda esperar o card', async () => {
+  it('proposes without writing anything and tells you to wait for the card', async () => {
     const out = await call(createMcpConnectTool(), {
       name: 'notion',
       type: 'http',
@@ -67,25 +67,25 @@ describe('mcp_connect', () => {
 })
 
 describe('mcp_update', () => {
-  it('recusa um nome que não existe', async () => {
+  it('refuses a name that does not exist', async () => {
     const out = await call(createMcpUpdateTool(), { name: 'inexistente', type: 'http', url: 'https://x/mcp' })
     expect(out).toContain('no connection named')
     expect(out).toContain('mcp_servers')
   })
 
-  it('recusa quando nenhum campo muda', async () => {
+  it('refuses when no field changes', async () => {
     status.mockReturnValue([server()])
     const out = await call(createMcpUpdateTool(), { name: 'figma', type: 'http' })
     expect(out).toContain('no field to change')
   })
 
-  it('propõe a troca de um header (o caso do token expirado)', async () => {
+  it('proposes swapping a header (the expired token case)', async () => {
     status.mockReturnValue([server({ state: 'error', error: '401 Unauthorized' })])
     const out = await call(createMcpUpdateTool(), {
       name: 'figma',
       type: 'http',
-      headers: { Authorization: 'Bearer novo' },
-      reason: 'token expirado',
+      headers: { Authorization: 'Bearer new' },
+      reason: 'token expired',
     })
     expect(out).toContain('proposed')
     expect(out).toContain('figma')
@@ -94,11 +94,11 @@ describe('mcp_update', () => {
 })
 
 describe('mcp_servers', () => {
-  it('diz quando não há nenhum', async () => {
+  it('says when there is none', async () => {
     expect(await call(createMcpServersTool(), {})).toContain('No MCP servers')
   })
 
-  it('traz estado, erro, oauth e tools', async () => {
+  it('brings status, error, oauth and tools', async () => {
     status.mockReturnValue([
       server({
         state: 'unauthorized',

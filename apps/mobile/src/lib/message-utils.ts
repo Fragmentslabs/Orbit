@@ -1,10 +1,10 @@
 /**
- * Utilitários de mensagem — port de apps/desktop/src/lib/message-utils.ts
- * (subset usado pelos componentes de conversa do companion).
+ * Message utilities — port of apps/desktop/src/lib/message-utils.ts
+ * (subset used by the companion conversation components).
  */
 import type { ChatMessage, MessagePart, ToolPart } from '@orbit/shared'
 
-/** Ferramentas que tocam a web — alimentam chain-of-thought e fontes. */
+/** Tools that touch the web — feed chain-of-thought and sources. */
 export const WEB_TOOLS = new Set(['websearch', 'webfetch', 'browser_open', 'browser_links'])
 
 export interface WebSource {
@@ -19,9 +19,9 @@ export function messageText(message: ChatMessage): string {
     .join('\n')
 }
 
-/** Só o que a pessoa digitou — omite text parts com source "attachment"
- * (texto extraído de PDF/planilha/DOCX/skill pelo desktop). Espelha
- * apps/desktop/src/lib/message-utils.ts. */
+/** Only what the person typed — omits text parts with source "attachment"
+ *  (text extracted from PDF/spreadsheet/DOCX/skill by the desktop). Mirrors
+ *  apps/desktop/src/lib/message-utils.ts. */
 export function visibleMessageText(message: ChatMessage): string {
   return message.parts
     .filter((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text' && p.source !== 'attachment')
@@ -37,7 +37,7 @@ export function hostnameOf(url: string): string {
   }
 }
 
-/** Extrai pares Title/URL da saída textual do websearch (formato Exa). */
+/** Extracts Title/URL pairs from the textual output of the websearch (Exa format). */
 export function parseSearchResults(output: string): WebSource[] {
   const sources: WebSource[] = []
   let title: string | null = null
@@ -71,7 +71,7 @@ function sourceOfToolPart(part: ToolPart): WebSource[] {
   }
 }
 
-/** Fontes consultadas na mensagem (deduplicadas por URL, na ordem de uso). */
+/** Sources consulted in the message (deduplicated by URL, in order of use). */
 export function extractSources(message: ChatMessage): WebSource[] {
   const seen = new Map<string, WebSource>()
   for (const part of message.parts) {

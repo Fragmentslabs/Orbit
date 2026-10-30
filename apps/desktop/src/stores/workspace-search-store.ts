@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { WsMatchOptions } from "@/src/lib/ipc";
 
-/** Substituição no buffer do arquivo aberto, publicada pela aba de arquivos. */
+/** Replacement in the open file's buffer, published by the files tab. */
 export type ReplaceInOpenFile = (
   query: string,
   replacement: string,
@@ -10,23 +10,23 @@ export type ReplaceInOpenFile = (
 ) => number;
 
 /**
- * O que a aba de arquivos publica quando há um editor de texto em foco: qual
- * arquivo é (para a paleta saber se pode oferecer "neste arquivo") e como
- * substituir no buffer dele.
+ * What the files tab publishes when there is a text editor in focus: which
+ * file it is (so the palette knows whether it can offer "in this file") and how
+ * to replace in its buffer.
  */
 export interface ReplaceRegistry {
   path: string;
   run: ReplaceInOpenFile;
 }
 
-/** Pedido de abrir um arquivo, feito pela paleta e atendido pelo painel. */
+/** Request to open a file, made by the palette and served by the panel. */
 export interface PendingFile {
   path: string;
   line?: number;
   nonce: number;
 }
 
-/** Gravação em disco feita por fora — o visualizador usa para recarregar. */
+/** Write to disk made from outside — the viewer uses it to reload. */
 export interface ReplacedNotice {
   paths: string[];
   nonce: number;
@@ -48,13 +48,13 @@ let fileNonce = 0;
 let replacedNonce = 0;
 
 /**
- * Estado da busca do espaço (⌘P) — que agora vive no App, e não numa aba.
+ * State of the workspace search (⌘P) — which now lives in the App, and not in a tab.
  *
- * O atalho é global porque a paleta existe para trazer o que NÃO está à vista:
- * amarrá-la à aba de arquivos faria o ⌘P não responder justamente quando ele é
- * mais útil. Como o destino (o visualizador) continua dentro do painel, o
- * pedido atravessa por aqui, com um contador — o mesmo idioma do `pendingDiff`
- * do painel: quem consome compara o nonce e atende uma vez só.
+ * The shortcut is global because the palette exists to bring what is NOT in sight:
+ * tying it to the files tab would make ⌘P not respond exactly when it is
+ * most useful. Since the destination (the viewer) is still inside the panel, the
+ * request crosses through here, with a counter — the same idiom as the panel's
+ * `pendingDiff`: whoever consumes compares the nonce and serves it once.
  */
 export const useWorkspaceSearchStore = create<WorkspaceSearchState>((set) => ({
   open: false,
@@ -63,7 +63,7 @@ export const useWorkspaceSearchStore = create<WorkspaceSearchState>((set) => ({
   pending: null,
   requestFile: (path, line) => {
     fileNonce += 1;
-    // Fecha a paleta junto: escolher um resultado é a resposta, não um passo.
+    // Closes the palette along with it: choosing a result is the answer, not a step.
     set({ pending: { path, line, nonce: fileNonce }, open: false });
   },
   replaceInOpenFile: null,

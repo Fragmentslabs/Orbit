@@ -1,19 +1,19 @@
 /**
- * Aplica `className` aos ícones do lucide-react-native no NativeWind v5.
+ * Applies `className` to the lucide-react-native icons on NativeWind v5.
  *
- * O resolver do react-native-css (globalClassNamePolyfill) só troca os
- * imports de `react-native` e `react-native-safe-area-context` pelas versões
- * "styled". O lucide não entra nessa lista, então `className` em ícones seria
- * ignorado no runtime nativo (a cor/tamanho só funcionavam na web).
+ * The react-native-css resolver (globalClassNamePolyfill) only swaps the
+ * `react-native` and `react-native-safe-area-context` imports for the
+ * "styled" versions. lucide is not in that list, so `className` on icons would be
+ * ignored in the native runtime (the color/size only worked on the web).
  *
- * Aqui cada ícone é embrulhado com `styled()` mapeando className→style e
- * movendo style.color/opacity para as props que o react-native-svg entende
- * (mesmo mapeamento do antigo cssInterop da v4). O metro.config.js redireciona
- * os imports de 'lucide-react-native' feitos pelo app para este arquivo, então
- * os locais de uso continuam iguais (`import { Monitor } from 'lucide-react-native'`).
+ * Here each icon is wrapped with `styled()` mapping className→style and
+ * moving style.color/opacity to the props react-native-svg understands
+ * (same mapping as the old cssInterop of v4). metro.config.js redirects
+ * the 'lucide-react-native' imports made by the app to this file, so
+ * the use sites stay the same (`import { Monitor } from 'lucide-react-native'`).
  *
- * CommonJS de propósito: exports dinâmicos por nome funcionam com o interop de
- * import nomeado do babel/metro.
+ * CommonJS on purpose: dynamic exports by name work with the named import
+ * interop of babel/metro.
  */
 const Lucide = require("lucide-react-native");
 const { styled } = require("react-native-css");
@@ -34,7 +34,7 @@ const mapping = {
   },
 };
 
-// Aliases (Zap / ZapIcon / LucideZap) apontam pro mesmo ref — embrulha 1x.
+// Aliases (Zap / ZapIcon / LucideZap) point to the same ref — wrap it once.
 const cache = new Map();
 
 Object.defineProperty(module.exports, "__esModule", { value: true });

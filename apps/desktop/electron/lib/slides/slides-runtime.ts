@@ -1,50 +1,50 @@
 /**
- * Runtime de navegação dos decks de slides — o ÚNICO lugar onde o palco vive.
+ * Navigation runtime of the slide decks — the ONLY place where the stage lives.
  *
- * O deck é UM arquivo HTML (`index.html` com um `<section class="slide">` por
- * slide) e não tem JavaScript próprio. Quem monta o palco, escala o 16:9 e
- * obedece ao teclado é este script, servido pelo scheme `orbit-slides://` como
- * primeiro script do `<head>`.
+ * The deck is ONE HTML file (`index.html` with one `<section class="slide">` per
+ * slide) and has no JavaScript of its own. The one that assembles the stage, scales the 16:9 and
+ * obeys the keyboard is this script, served by the `orbit-slides://` scheme as the
+ * first script of the `<head>`.
  *
- * Por que um runtime injetado, e não o deck cuidando de si: assim o deck é
- * CONTEÚDO (o agente escreve um HTML e pronto, como um artifact), enquanto
- * navegação, escala, miniaturas, notas e impressão são do app — a mesma
- * separação que o motion faz entre composição e player. Um deck escrito à mão
- * abre igual, e um deck antigo ganha os recursos novos sem ser reescrito.
+ * Why an injected runtime, and not the deck taking care of itself: this way the deck is
+ * CONTENT (the agent writes an HTML and that is it, like an artifact), while
+ * navigation, scaling, thumbnails, notes and printing belong to the app — the same
+ * separation motion makes between composition and player. A hand-written deck
+ * opens the same, and an old deck gains the new features without being rewritten.
  *
- * Como o script é o PRIMEIRO do <head>, ele roda antes de o <body> existir:
- * tudo o que toca no documento acontece dentro de `start()`, chamado no
- * DOMContentLoaded (a mesma cautela do design-runtime). Sem isso o deck
- * encontraria zero slides e o palco nasceria vazio.
+ * Since the script is the FIRST of the <head>, it runs before the <body> exists:
+ * everything that touches the document happens inside `start()`, called on
+ * DOMContentLoaded (the same caution as design-runtime). Without that the deck
+ * would find zero slides and the stage would be born empty.
  *
- * O iframe roda em `sandbox="allow-scripts"` SEM `allow-same-origin` (origem
- * opaca): o painel não alcança o DOM do deck. A conversa é por postMessage com
+ * The iframe runs in `sandbox="allow-scripts"` WITHOUT `allow-same-origin` (opaque
+ * origin): the panel cannot reach the deck's DOM. The conversation is over postMessage with
  * `source: "orbit-slides"`:
  *
- *   deck → painel: ready (total, tamanho, títulos e notas), change (índice),
- *                  error, request-fullscreen
- *   painel → deck: go(index), next, prev
+ *   deck → panel: ready (total, size, titles and notes), change (index),
+ *                 error, request-fullscreen
+ *   panel → deck: go(index), next, prev
  *
- * O texto é uma string de propósito: ele roda NA página, não no main. As funções
- * puras de parsing do deck (slides-deck.ts) aplicam as MESMAS regras de título e
- * nota, e os testes as cobrem.
+ * The text is a string on purpose: it runs IN the page, not in the main. The pure
+ * parsing functions of the deck (slides-deck.ts) apply the SAME title and
+ * note rules, and the tests cover them.
  */
 
-/** Marca das mensagens da ponte (host ⇄ iframe). */
+/** Mark of the bridge messages (host ⇄ iframe). */
 export const SLIDES_SOURCE = 'orbit-slides'
 
-/** Caminho reservado que serve o script do runtime pela pasta do deck. */
+/** Reserved path that serves the runtime script from the deck folder. */
 export const SLIDES_RUNTIME_PATH = '/__orbit_slides_runtime.js'
 
 const RUNTIME_MARK = 'data-orbit-slides-runtime'
 
-/** Palco padrão de um slide (16:9). O deck pode declarar outro no <meta>. */
+/** Default stage of a slide (16:9). The deck may declare another one in the <meta>. */
 export const SLIDES_WIDTH = 1280
 export const SLIDES_HEIGHT = 720
 
 /**
- * O script do runtime. Sem template literals lá dentro de propósito: o arquivo
- * inteiro é uma string, e `$` + `{` no meio dela quebraria a montagem.
+ * The runtime script. No template literals in there on purpose: the whole file
+ * is a string, and `$` + `{` in the middle of it would break the assembly.
  */
 export const SLIDES_RUNTIME = `(() => {
   if (window.__orbitSlidesReady) return
@@ -60,8 +60,8 @@ export const SLIDES_RUNTIME = `(() => {
   }
 
   function start() {
-    // O tamanho do palco pode vir do próprio deck: <meta name="orbit-slides"
-    // content="width=1920,height=1080">. Sem meta, 1280x720 (16:9).
+    // The stage size can come from the deck itself: <meta name="orbit-slides"
+    // content="width=1920,height=1080">. Without the meta, 1280x720 (16:9).
     let width = ${SLIDES_WIDTH}
     let height = ${SLIDES_HEIGHT}
     const meta = document.querySelector('meta[name="orbit-slides"]')
@@ -81,8 +81,8 @@ export const SLIDES_RUNTIME = `(() => {
     const sections = []
     const all = document.querySelectorAll('.slide')
     for (const el of all) {
-      // Só os slides de TOPO do deck: um .slide dentro de outro (uma capa que
-      // repete o padrão) não vira uma parada da apresentação.
+      // Only the TOP-level slides of the deck: a .slide inside another (a cover that
+      // repeats the pattern) does not become a stop of the presentation.
       if (el.closest('.orbit-slides-stage')) continue
       sections.push(el)
     }
@@ -92,7 +92,7 @@ export const SLIDES_RUNTIME = `(() => {
       return
     }
 
-    // ------------------------------------------------------------ estrutura
+    // ------------------------------------------------------------ structure
     const root = document.createElement('div')
     root.id = 'orbit-slides-root'
     const viewport = document.createElement('div')
@@ -115,8 +115,8 @@ export const SLIDES_RUNTIME = `(() => {
     document.head.appendChild(style)
     document.body.appendChild(root)
 
-    // Impressão/PDF: todos os slides empilhados, um por página, sem escala e
-    // sem interface — é o mesmo documento, lido de cima para baixo.
+    // Printing/PDF: all the slides stacked, one per page, without scale and
+    // without the interface — it is the same document, read from top to bottom.
     if (PRINT) {
       const printStyle = document.createElement('style')
       printStyle.setAttribute('data-orbit-slides-print', '')
@@ -127,9 +127,9 @@ export const SLIDES_RUNTIME = `(() => {
         '.orbit-slides-viewport{position:static;display:block;overflow:visible}',
         '.orbit-slides-stage{transform:none !important;left:auto !important;top:auto !important;width:auto !important;height:auto !important}',
         '.orbit-slides-stage>.orbit-slide{position:relative !important;inset:auto !important;visibility:visible !important;opacity:1 !important;pointer-events:auto !important;width:' + width + 'px;height:' + height + 'px;break-after:page;page-break-after:always}',
-        // A quebra forçada depois do ÚLTIMO slide gera uma página em branco no
-        // fim do PDF: o Chromium respeita o break-after mesmo quando não há
-        // mais nada para paginar.
+        // The forced break after the LAST slide generates a blank page at
+        // the end of the PDF: Chromium respects the break-after even when there is
+        // nothing else left to paginate.
         '.orbit-slides-stage>.orbit-slide:last-child{break-after:auto;page-break-after:auto}',
       ].join('\\n')
       document.head.appendChild(printStyle)
@@ -138,13 +138,13 @@ export const SLIDES_RUNTIME = `(() => {
     for (let i = 0; i < sections.length; i++) {
       const el = sections[i]
       el.classList.add('orbit-slide')
-      // O deck pode desenhar o próprio número com [data-index] (o tema da casa
-      // usa isto no canto do slide).
+      // The deck can draw its own number with [data-index] (the house theme
+      // uses it in the corner of the slide).
       el.setAttribute('data-index', String(i + 1))
       stage.appendChild(el)
     }
 
-    // --------------------------------------------------------------- estado
+    // --------------------------------------------------------------- state
     let index = 0
 
     const text = (el) => (el && el.textContent ? el.textContent.replace(/\\s+/g, ' ').trim() : '')
@@ -156,8 +156,8 @@ export const SLIDES_RUNTIME = `(() => {
       return text(heading) || 'Slide ' + (i + 1)
     }
 
-    // Notas: <aside class="notes"> vale pelo TEXTO; data-notes preenchido vale
-    // pelo VALOR do atributo (a mesma regra de slides-deck.ts, no main).
+    // Notes: <aside class="notes"> counts by the TEXT; a filled data-notes counts
+    // by the VALUE of the attribute (the same rule as slides-deck.ts, in the main).
     const notesOf = (el) => {
       const holder = el.querySelector('aside.notes, [data-notes]')
       if (!holder) return ''
@@ -187,19 +187,19 @@ export const SLIDES_RUNTIME = `(() => {
       const vw = viewport.clientWidth || window.innerWidth
       const vh = viewport.clientHeight || window.innerHeight
       const scale = Math.min(vw / width, vh / height)
-      // translate ANTES do scale: o palco pode ser MAIOR que a janela (um
-      // painel estreito), e um item maior que o container não fica centralizado
-      // por grid/flex — ele vaza para a direita. Ancorado em 50%/50% com
-      // translate(-50%,-50%) o centro do slide é o centro do palco, sempre.
+      // translate BEFORE the scale: the stage can be BIGGER than the window (a
+      // narrow panel), and an item bigger than the container does not get centered
+      // by grid/flex — it leaks to the right. Anchored at 50%/50% with
+      // translate(-50%,-50%) the center of the slide is the center of the stage, always.
       stage.style.transform = 'translate(-50%, -50%) scale(' + scale + ')'
     }
 
-    // -------------------------------------------------------------- eventos
+    // -------------------------------------------------------------- events
     window.addEventListener('resize', fit)
-    // O palco vive dentro de um iframe cujo tamanho é decidido pelo painel:
-    // nem toda mudança de layout chega como evento "resize" na janela do
-    // iframe (um painel que abre uma barra lateral, por exemplo). O observer
-    // garante que a escala acompanha o tamanho REAL do palco.
+    // The stage lives inside an iframe whose size is decided by the panel:
+    // not every layout change arrives as a "resize" event on the window of the
+    // iframe (a panel that opens a sidebar, for example). The observer
+    // guarantees that the scale follows the REAL size of the stage.
     if (typeof ResizeObserver === 'function') {
       try {
         new ResizeObserver(() => fit()).observe(viewport)
@@ -217,7 +217,7 @@ export const SLIDES_RUNTIME = `(() => {
     window.addEventListener('keydown', (event) => {
       const target = event.target
       const tag = target && target.tagName ? String(target.tagName).toLowerCase() : ''
-      // Um campo dentro do slide continua sendo um campo: setas e espaço são dele.
+      // A field inside the slide is still a field: the arrows and the space are its own.
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || (target && target.isContentEditable)) return
       const key = event.key
       if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown' || key === ' ' || key === 'Enter') {
@@ -233,14 +233,14 @@ export const SLIDES_RUNTIME = `(() => {
         event.preventDefault()
         go(sections.length - 1)
       } else if (key === 'f' || key === 'F') {
-        // Tela cheia é da JANELA do app, não do iframe: o host decide.
+        // Fullscreen belongs to the APP WINDOW, not to the iframe: the host decides.
         event.preventDefault()
         post({ type: 'request-fullscreen' })
       }
     })
 
-    // Clique avança (apresentar é clicar), menos em cima de algo clicável — um
-    // link ou botão dentro do slide pertence ao slide.
+    // A click advances (presenting is clicking), except on top of something clickable — a
+    // link or button inside the slide belongs to the slide.
     viewport.addEventListener('click', (event) => {
       const target = event.target
       if (!target || !target.closest) return
@@ -273,14 +273,14 @@ export const SLIDES_RUNTIME = `(() => {
     post({ type: 'ready', total: sections.length, width, height, slides, print: PRINT })
   }
 
-  // O script é o primeiro do <head>: o documento ainda está sendo lido.
+  // The script is the first one of the <head>: the document is still being read.
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start)
   else start()
 })()`
 
 /**
- * Põe o runtime como primeiro script do `<head>` (idempotente). Sem `<head>`,
- * cria um; sem `<html>`, o script vai na frente do documento.
+ * Puts the runtime as the first script of the `<head>` (idempotent). Without a `<head>`,
+ * it creates one; without an `<html>`, the script goes in front of the document.
  */
 export function injectSlidesRuntime(html: string): string {
   if (html.includes(RUNTIME_MARK)) return html

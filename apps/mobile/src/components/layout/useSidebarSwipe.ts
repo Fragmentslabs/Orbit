@@ -3,36 +3,36 @@ import { PanResponder } from 'react-native'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { DRAWER_WIDTH, animateDrawer, setDrawerOffset } from './sidebar-anim'
 
-/** Faixa a partir da borda esquerda que reconhece o swipe de abertura. */
+/** Band from the left edge that recognizes the opening swipe. */
 const EDGE_WIDTH = 28
 
-/** Deslocamento mínimo antes de assumir o toque de um filho. */
+/** Minimum displacement before taking the touch from a child. */
 const MOVE_THRESHOLD = 8
 
-/** O gesto só é horizontal se dx dominar dy — deixa o scroll vertical passar. */
+/** The gesture is only horizontal if dx dominates dy — lets the vertical scroll through. */
 const HORIZONTAL_RATIO = 1.5
 
-/** Fração da largura do drawer que decide abrir/fechar ao soltar. */
+/** Fraction of the drawer width that decides open/close on release. */
 const SETTLE_RATIO = 0.4
 
-/** Velocidade (px/ms) que decide abrir/fechar independente da distância. */
+/** Velocity (px/ms) that decides open/close regardless of the distance. */
 const FLING_VELOCITY = 0.35
 
-/** Posição do drawer quando o arraste começou. Só existe um gesto por vez,
- *  então viver no módulo evita ler ref durante o render. */
+/** Drawer position when the drag started. There is only one gesture at a
+ *  time, so living in the module avoids reading a ref during render. */
 let startOffset = 0
 
 /**
- * Swipe para a direita a partir da borda esquerda abre o sidebar; com ele
- * aberto, swipe para a esquerda fecha. O drawer acompanha o dedo.
+ * Swipe to the right from the left edge opens the sidebar; with it
+ * open, a swipe to the left closes it. The drawer follows the finger.
  *
- * Os handlers devem ser espalhados na View que envolve conteúdo + sidebar:
- * a captura acontece na fase de captura do responder, então listas e botões
- * continuam recebendo toques normalmente.
+ * The handlers should be spread on the View that wraps content + sidebar:
+ * the capture happens in the responder capture phase, so lists and buttons
+ * keep receiving touches normally.
  */
 export function useSidebarSwipe(enabled = true) {
-  // Criado uma vez; o estado atual vem do store via getState() dentro dos
-  // handlers, então não há closure obsoleta nem ref lida durante o render.
+  // Created once; the current state comes from the store via getState() inside the
+  // handlers, so there is no stale closure and no ref read during render.
   const [responder] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponderCapture: (_evt, g) => {
@@ -54,7 +54,7 @@ export function useSidebarSwipe(enabled = true) {
 
         const store = useWorkspaceStore.getState()
         if (shouldOpen === store.sidebarOpen) {
-          // Estado não muda: o efeito do Sidebar não roda, anima aqui.
+          // State does not change: the Sidebar effect does not run, animate here.
           animateDrawer(shouldOpen)
         } else if (shouldOpen) {
           store.openSidebar()

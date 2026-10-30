@@ -11,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button"
 
 /**
- * Caixa de confirmação construída sobre o Dialog do projeto.
- * Uso controlado: passe open/onOpenChange e o callback de confirmação.
+ * Confirmation box built on top of the project's Dialog.
+ * Controlled usage: pass open/onOpenChange and the confirmation callback.
  */
 export function ConfirmDialog({
   open,

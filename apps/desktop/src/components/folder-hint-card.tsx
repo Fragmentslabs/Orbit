@@ -4,11 +4,11 @@ import { FolderPlus, X } from "lucide-react"
 import { pickFolder } from "@/src/components/folder-selector"
 
 /**
- * Card de aviso exibido acima do input quando o usuário tenta enviar sem
- * nenhuma pasta associada no modo código — o mesmo idioma do
- * ProviderHintCard: o envio não fica desabilitado em silêncio, o clique é
- * interceptado (o texto é preservado) e o card diz o motivo com o atalho que
- * resolve. Some sozinho quando uma pasta é escolhida.
+ * Warning card shown above the input when the user tries to send with
+ * no folder attached in code mode — the same language as the
+ * ProviderHintCard: sending does not stay silently disabled, the click is
+ * intercepted (the text is preserved) and the card says the reason with the shortcut that
+ * solves it. It goes away by itself when a folder is chosen.
  */
 export function FolderHintCard({ visible, onPick, onDismiss }: {
   visible: boolean

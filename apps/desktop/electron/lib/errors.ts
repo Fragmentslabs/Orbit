@@ -2,21 +2,21 @@ import type { MessageErrorKind } from '@shared/chat'
 import { ProviderResolutionError } from './provider-errors'
 
 /**
- * Converte um valor lançado em texto legível. O SDK de AI e os gateways
- * (OpenRouter, NVIDIA, etc.) às vezes lançam objetos aninhados que não são
- * instâncias de Error — sem esse tratamento, `String(obj)` renderizaria
- * "[object Object]" no card de erro.
+ * Converts a thrown value into readable text. The AI SDK and the gateways
+ * (OpenRouter, NVIDIA, etc.) sometimes throw nested objects that are not
+ * Error instances — without this handling, `String(obj)` would render
+ * "[object Object]" in the error card.
  *
- * Nunca lança: roda dentro de blocos catch, e uma exceção aqui derrubaria o
- * próprio tratamento de erro (a sessão ficaria sem status e sem mensagem).
+ * It never throws: it runs inside catch blocks, and an exception here would take down the
+ * error handling itself (the session would stay without status and without a message).
  */
 export function errorToText(value: unknown, depth = 0): string {
   try {
     if (value instanceof Error) return value.message
     if (typeof value === 'string') return value
     if (typeof value === 'object' && value !== null) {
-      // Guarda contra cadeias `{error:{error:{...}}}` cíclicas
-      if (depth > 10) return '[erro aninhado profundo demais]'
+      // Guard against cyclic `{error:{error:{...}}}` chains
+      if (depth > 10) return '[error nested too deep]'
       const obj = value as { error?: unknown; message?: unknown }
       const inner = obj.error ?? obj.message
       if (inner != null && inner !== value) return errorToText(inner, depth + 1)
@@ -24,19 +24,19 @@ export function errorToText(value: unknown, depth = 0): string {
     }
     return String(value)
   } catch {
-    return '[erro não serializável]'
+    return '[error not serializable]'
   }
 }
 
 /**
- * Moderação de conteúdo do provedor. O bloqueio acontece no servidor do
- * provedor, antes de a resposta chegar aqui — não há flag no request que
- * desligue isso, então o único caminho é trocar de modelo.
+ * Provider content moderation. The block happens on the provider's server,
+ * before the answer gets here — there is no flag in the request that
+ * turns it off, so the only path is switching models.
  *
- * Alibaba/DashScope (Qwen, servido também por gateways como o OpenCode Zen) é
- * de longe o caso mais comum: a inspeção roda sobre a SAÍDA do modelo e dá
- * falso-positivo com frequência quando há imagem no contexto (prints de UI com
- * muito texto são um gatilho conhecido).
+ * Alibaba/DashScope (Qwen, also served by gateways like OpenCode Zen) is
+ * by far the most common case: the inspection runs over the model's OUTPUT and gives
+ * false positives frequently when there is an image in the context (screenshots of UI with
+ * a lot of text are a known trigger).
  */
 const MODERATION_PATTERNS = [
   /data_inspection_failed/i,
@@ -51,7 +51,7 @@ const MODERATION_PATTERNS = [
   /SAFETY_?BLOCK/i,
 ]
 
-/** Modelo inexistente/indisponível no provedor — trocar de modelo resolve. */
+/** Model nonexistent/unavailable at the provider — switching models solves it. */
 const MODEL_UNAVAILABLE_PATTERNS = [
   /\bis not supported\b/i,
   /model_not_found/i,
@@ -61,26 +61,26 @@ const MODEL_UNAVAILABLE_PATTERNS = [
 ]
 
 /**
- * Recusa do gateway do OpenCode por falta do header de sessão. A requisição não
- * chegou a ser roteada e nenhum token foi consumido — é indisponibilidade do
- * caminho até o modelo, não do request: cai em `network` (recuperável) para que
- * a rotação de modelos siga adiante. O `providerFetch` já repete uma vez com um
- * id de sessão novo antes disso, então chegar aqui significa que a repetição
- * também falhou.
+ * Refusal by the OpenCode gateway for lack of the session header. The request did not
+ * even get routed and no token was consumed — it is unavailability of the
+ * path to the model, not of the request: it falls into `network` (recoverable) so that
+ * the model rotation moves on. `providerFetch` already retries once with a
+ * new session id before this, so getting here means that the retry
+ * failed too.
  */
 const SESSION_ROUTING_PATTERNS = [/missing x-opencode-session/i]
 
 /**
- * Contexto estourado: a requisição foi montada maior do que a janela do modelo.
- * NÃO é rotacionável — trocar de modelo manda o mesmo payload gigante para
- * outro endpoint e falha igual (quando não pior, num modelo de janela menor).
- * O que resolve é encolher o que vai no request: compactar a conversa ou
- * começar outra.
+ * Context overflow: the request was assembled larger than the model's window.
+ * It is NOT rotatable — switching models sends the same giant payload to
+ * another endpoint and fails the same (if not worse, on a model with a smaller window).
+ * What solves it is shrinking what goes in the request: compacting the conversation or
+ * starting another one.
  *
- * Antes de existir esse kind, essas falhas caíam em `rate-limit` (ver
- * `matchable`) e a UI pedia para "aguardar um pouco ou trocar de modelo" —
- * conselho que nunca ia funcionar, e a rotação ainda queimava a sequência
- * inteira de modelos repetindo o mesmo request.
+ * Before this kind existed, these failures fell into `rate-limit` (see
+ * `matchable`) and the UI asked to "wait a bit or switch models" —
+ * advice that was never going to work, and the rotation still burned the whole
+ * sequence of models repeating the same request.
  */
 const CONTEXT_LENGTH_PATTERNS = [
   /context_length_exceeded/i,
@@ -96,10 +96,10 @@ const CONTEXT_LENGTH_PATTERNS = [
 ]
 
 /**
- * Excesso de TOOLS no request. O Groq recusa acima de 128 e derruba a chamada
- * inteira; a mensagem costuma conter a palavra "limit" e cairia em rate-limit,
- * que é rotacionável e manda trocar de modelo — conselho errado, porque o teto
- * é do endpoint. Precisa vir ANTES de rate-limit.
+ * Too many TOOLS in the request. Groq refuses above 128 and takes the whole call
+ * down; the message usually contains the word "limit" and would fall into rate-limit,
+ * which is rotatable and tells you to switch models — wrong advice, because the ceiling
+ * is the endpoint's. It has to come BEFORE rate-limit.
  */
 const TOOL_LIMIT_PATTERNS = [
   /too many tools/i,
@@ -110,10 +110,10 @@ const TOOL_LIMIT_PATTERNS = [
 ]
 
 /**
- * Limite de uso/requisições do provedor ou gateway. Cobre o 429 clássico
- * (OpenAI/Anthropic/OpenRouter: `statusCode`/`code` 429), o Zen do OpenCode
- * (`FreeUsageLimitError` — teto de uso gratuito por conta, janela rolante) e
- * mensagens de quota dos demais gateways (Groq, orama, NVIDIA...).
+ * Usage/request limit of the provider or gateway. It covers the classic 429
+ * (OpenAI/Anthropic/OpenRouter: `statusCode`/`code` 429), OpenCode's Zen
+ * (`FreeUsageLimitError` — free usage ceiling per account, rolling window) and
+ * quota messages from the other gateways (Groq, orama, NVIDIA...).
  */
 const RATE_LIMIT_PATTERNS = [
   /\b429\b/,
@@ -123,9 +123,9 @@ const RATE_LIMIT_PATTERNS = [
   /freeusage/i,
   /free ?usage ?limit/i,
   /quota (exceeded|exhausted|reached)/i,
-  // O 429 de cota da OpenAI inverte a ordem ("You exceeded your current
-  // quota") e o code vem como insufficient_quota — nenhum dos dois casava
-  // com o padrão acima, que exige o verbo logo depois de "quota".
+  // OpenAI's quota 429 inverts the order ("You exceeded your current
+  // quota") and the code comes as insufficient_quota — neither matched
+  // the pattern above, which requires the verb right after "quota".
   /insufficient_quota/i,
   /(exceed|exhaust)\w*\s+(your\s+)?(current\s+)?quota/i,
   /usage limit/i,
@@ -135,10 +135,10 @@ const RATE_LIMIT_PATTERNS = [
 ]
 
 /**
- * Rede/indisponibilidade do endpoint. Cobre códigos do undici/fetch nativo
- * (`ECONNREFUSED`, `ENOTFOUND`, `UND_ERR_CONNECT_TIMEOUT`...), `fetch failed`
- * do SDK da Vercel, e HTTP 5xx (OpenAI `server_error`, Anthropic
- * `overloaded_error` em 529, gateways em 502/503/504).
+ * Network/endpoint unavailability. It covers native undici/fetch codes
+ * (`ECONNREFUSED`, `ENOTFOUND`, `UND_ERR_CONNECT_TIMEOUT`...), the Vercel SDK's
+ * `fetch failed`, and HTTP 5xx (OpenAI `server_error`, Anthropic
+ * `overloaded_error` on 529, gateways on 502/503/504).
  */
 const NETWORK_PATTERNS = [
   /ECONNREFUSED/i,
@@ -163,9 +163,9 @@ const NETWORK_PATTERNS = [
 ]
 
 /**
- * Erro de configuração de provedor, mesmo reembrulhado. Instâncias de módulos
- * distintos (bundle duplicado) escapam do `instanceof`, então o `name` — fixado
- * no construtor — é o segundo critério.
+ * Provider configuration error, even when re-wrapped. Instances from distinct modules
+ * (duplicated bundle) escape `instanceof`, so `name` — fixed
+ * in the constructor — is the second criterion.
  */
 function isProviderConfigError(value: unknown): boolean {
   return (
@@ -176,16 +176,16 @@ function isProviderConfigError(value: unknown): boolean {
 
 export interface ClassifiedError {
   kind: MessageErrorKind
-  /** Texto cru do provedor, preservado para diagnóstico no card de erro. */
+  /** Provider's raw text, preserved for diagnosis in the error card. */
   detail: string
 }
 
 /**
- * Texto usado só para casar os padrões acima. Não dá para classificar pelo
- * `detail`: `errorToText` desce até a mensagem mais interna e descarta campos
- * irmãos — e vários provedores mandam o motivo em `code`/`type`, não na
- * mensagem (ex: `{ error: { code: 'content_filter', message: 'The response was
- * filtered' } }`). Aqui serializamos a estrutura inteira.
+ * Text used only to match the patterns above. It is not possible to classify by
+ * `detail`: `errorToText` goes down to the innermost message and discards sibling
+ * fields — and several providers send the reason in `code`/`type`, not in the
+ * message (e.g. `{ error: { code: 'content_filter', message: 'The response was
+ * filtered' } }`). Here we serialize the whole structure.
  */
 function matchable(value: unknown): string {
   const text = errorToText(value)
@@ -194,19 +194,19 @@ function matchable(value: unknown): string {
   let serialized = ''
   try {
     serialized = JSON.stringify(value, (key, val) => {
-      // Headers de resposta ficam DE FORA. O APICallError do SDK guarda
-      // `responseHeaders`, e praticamente todo provedor compatível com a
-      // OpenAI devolve `x-ratelimit-*` em TODA resposta, inclusive nas que
-      // deram certo. Serializá-los fazia o padrão /rate[ _-]?limit/ casar em
-      // qualquer falha daqueles provedores: um erro de contexto estourado
-      // chegava ao usuário como "o provedor atingiu o limite de uso". O motivo
-      // real vem do corpo (`responseBody`, `code`, `type`) e do `statusCode`,
-      // que continuam aqui.
+      // Response headers are LEFT OUT. The SDK's APICallError keeps
+      // `responseHeaders`, and practically every OpenAI-compatible provider
+      // returns `x-ratelimit-*` on EVERY response, including the ones that
+      // succeeded. Serializing them made the /rate[ _-]?limit/ pattern match on
+      // any failure of those providers: a context overflow error
+      // reached the user as "the provider hit the usage limit". The reason
+      // real one comes from the body (`responseBody`, `code`, `type`) and from `statusCode`,
+      // which stay here.
       if (key === 'responseHeaders') return undefined
-      // O corpo da REQUISIÇÃO também fica de fora: é o prompt inteiro
-      // (conversa, system, descrição das ferramentas), escrito por nós e pelo
-      // usuário, não pelo provedor. Um "is not supported" em qualquer mensagem
-      // fazia uma falha de DNS virar "o provedor não serve este modelo".
+      // The REQUEST body is also left out: it is the whole prompt
+      // (conversation, system, tool descriptions), written by us and by the
+      // user, not by the provider. An "is not supported" in any message
+      // made a DNS failure become "the provider does not serve this model".
       if (key === 'requestBodyValues') return undefined
       if (typeof val === 'object' && val !== null) {
         if (seen.has(val)) return undefined
@@ -215,32 +215,32 @@ function matchable(value: unknown): string {
       return val
     })
   } catch {
-    // objetos exóticos (getters que lançam, BigInt) — o texto já basta
+    // exotic objects (getters that throw, BigInt) — the text is enough
   }
-  // Error tem propriedades não-enumeráveis: JSON.stringify(new Error(x)) === '{}'
+  // Error has non-enumerable properties: JSON.stringify(new Error(x)) === '{}'
   return serialized && serialized !== '{}' ? `${text}\n${serialized}` : text
 }
 
 /**
- * Classifica a falha de um turno para a UI decidir o que oferecer. O texto cru
- * nunca é descartado: a mensagem amigável é montada no renderer (i18n) a partir
- * do `kind`, e o `detail` fica visível para diagnóstico.
+ * Classifies a turn's failure so the UI can decide what to offer. The raw text
+ * is never discarded: the friendly message is assembled in the renderer (i18n) from
+ * the `kind`, and the `detail` stays visible for diagnosis.
  */
 export function classifyProviderError(value: unknown): ClassifiedError {
   const detail = errorToText(value)
-  // Falha de CONFIGURAÇÃO (provedor/SDK desconhecido, chave ausente) antes de
-  // qualquer padrão: o texto é nosso, não do provedor — e um id de provider com
-  // "429" no meio casaria com rate-limit.
+  // CONFIGURATION failure (unknown provider/SDK, missing key) before
+  // any pattern: the text is ours, not the provider's — and a provider id with
+  // a "429" in the middle would match rate-limit.
   if (isProviderConfigError(value)) return { kind: 'provider-config', detail }
   let haystack = detail
   try {
     haystack = matchable(value)
   } catch {
-    // classificar é best-effort — nunca pode derrubar o catch que nos chamou
+    // classifying is best-effort — it can never bring down the catch that called us
   }
-  // Contexto estourado vem antes de tudo: a mensagem do provedor é inequívoca,
-  // e deixá-la cair em qualquer kind rotacionável faz o engine repetir um
-  // request que não tem como dar certo.
+  // Context overflow comes before everything: the provider's message is unambiguous,
+  // and letting it fall into any rotatable kind makes the engine repeat a
+  // request that cannot possibly work.
   if (CONTEXT_LENGTH_PATTERNS.some((re) => re.test(haystack))) {
     return { kind: 'context-length', detail }
   }
@@ -249,17 +249,17 @@ export function classifyProviderError(value: unknown): ClassifiedError {
     return { kind: 'model-unavailable', detail }
   }
   if (SESSION_ROUTING_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
-  // Excesso de tools antes de rate-limit: a mensagem traz "limit" e cairia no
-  // kind rotacionável, que manda trocar de modelo — e o teto é do endpoint.
+  // Too many tools before rate-limit: the message brings "limit" and would fall into the
+  // rotatable kind, which tells you to switch models — and the ceiling is the endpoint's.
   if (TOOL_LIMIT_PATTERNS.some((re) => re.test(haystack))) return { kind: 'tool-limit', detail }
   if (RATE_LIMIT_PATTERNS.some((re) => re.test(haystack))) return { kind: 'rate-limit', detail }
   if (NETWORK_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
   return { kind: 'unknown', detail }
 }
 
-/** Kinds que a rotação de modelos contorna automaticamente (trocar de modelo
- *  resolve). Auth (401/403) e abort manual ficam de fora de propósito, e
- *  `context-length` também: o payload é o mesmo em qualquer modelo. */
+/** Kinds that the model rotation works around automatically (switching models
+ *  solves it). Auth (401/403) and manual abort are left out on purpose, and so
+ *  is `context-length`: the payload is the same on any model. */
 const RECOVERABLE_ERROR_KINDS: ReadonlySet<MessageErrorKind> = new Set([
   'moderation',
   'model-unavailable',
@@ -271,10 +271,10 @@ export function isRecoverableErrorKind(kind: MessageErrorKind): boolean {
   return RECOVERABLE_ERROR_KINDS.has(kind)
 }
 
-/** Kinds que passam sozinhos com o tempo, no MESMO modelo — os únicos em que
- *  vale repetir o turno depois de uma espera (SendMessageOptions.retries).
- *  Moderação e modelo indisponível ficam de fora: são recuperáveis pela
- *  rotação, mas repetir o mesmo pedido ao mesmo modelo falha igual. */
+/** Kinds that pass on their own with time, on the SAME model — the only ones in which
+ *  it is worth repeating the turn after a wait (SendMessageOptions.retries).
+ *  Moderation and model unavailable are left out: they are recoverable through the
+ *  rotation, but repeating the same request to the same model fails the same way. */
 const TRANSIENT_ERROR_KINDS: ReadonlySet<MessageErrorKind> = new Set(['rate-limit', 'network'])
 
 export function isTransientErrorKind(kind: MessageErrorKind): boolean {

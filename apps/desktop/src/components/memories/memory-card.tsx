@@ -25,14 +25,14 @@ import { CATEGORY_LABEL, KIND_BADGE, KIND_COLOR, KIND_LABEL, canPromote } from "
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Quantos vínculos o card mostra antes de remeter ao painel de edição. */
+/** How many links the card shows before referring to the editing panel. */
 const MAX_RELATED_IN_CARD = 3
 
 function formatDate(ts: number, locale: string) {
   return new Date(ts).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" })
 }
 
-/** Rascunho por memória — preserva edições ao navegar entre nós conectados. */
+/** Draft per memory — it preserves edits when navigating between connected nodes. */
 interface Draft {
   text: string
   tags: string
@@ -52,12 +52,12 @@ function isDirty(draft: Draft, memory: Memory): boolean {
 }
 
 /**
- * Painel de edição. Além dos campos, espelha os metadados do card (tipo,
- * categoria, projeto, peso, usos, datas) e lista os nós conectados — clicar
- * num deles passa a editar aquele nó, sem fechar o diálogo.
+ * Editing panel. Besides the fields, it mirrors the card metadata (type,
+ * category, project, weight, uses, dates) and lists the connected nodes — clicking
+ * one of them starts editing that node, without closing the dialog.
  *
- * As edições ficam num rascunho por id, então navegar de um nó para outro e
- * voltar não perde o que foi digitado.
+ * The edits stay in a draft per id, so navigating from one node to another and
+ * back does not lose what was typed.
  */
 function EditDialog({ memory, open, onOpenChange }: {
   memory: Memory
@@ -70,7 +70,7 @@ function EditDialog({ memory, open, onOpenChange }: {
 
   const [currentId, setCurrentId] = useState(memory.id)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
-  /** Nós visitados a partir do original — alimenta o botão de voltar. */
+  /** Nodes visited from the original one — it feeds the back button. */
   const [trail, setTrail] = useState<string[]>([])
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
@@ -80,7 +80,7 @@ function EditDialog({ memory, open, onOpenChange }: {
     .map((id) => byId.get(id))
     .filter((m): m is Memory => m != null)
 
-  // Reabrir sempre parte da memória do card, com os rascunhos zerados.
+  // Reopening always starts from the card memory, with the drafts cleared.
   useEffect(() => {
     if (open) {
       setCurrentId(memory.id)
@@ -108,7 +108,7 @@ function EditDialog({ memory, open, onOpenChange }: {
     })
   }
 
-  /** Grava todos os rascunhos alterados, não só o nó em foco. */
+  /** Saves all the changed drafts, not only the focused node. */
   const saveAll = () => {
     const pending = { ...drafts, [currentId]: draft }
     for (const [id, entry] of Object.entries(pending)) {
@@ -130,8 +130,8 @@ function EditDialog({ memory, open, onOpenChange }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Sem max-w o Popup assume w-full e ocupa a janela inteira — os demais
-          diálogos do app definem a própria largura pelo mesmo motivo. */}
+      {/* Without max-w the Popup takes w-full and fills the whole window — the other
+          dialogs of the app define their own width for the same reason. */}
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 pr-6">
@@ -153,8 +153,8 @@ function EditDialog({ memory, open, onOpenChange }: {
         </DialogHeader>
 
         <div className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto pr-1">
-          {/* Mesmos metadados do card, para não precisar fechar o diálogo
-              e voltar à lista só para conferir tipo, peso ou uso. */}
+          {/* Same metadata as the card, so as not to have to close the dialog
+              and go back to the list only to check type, weight or use. */}
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary" className={cn("px-1.5 py-0 text-[10px]", KIND_BADGE[current.kind])}>
               {t(`memories.kinds.${current.kind}`, { defaultValue: KIND_LABEL[current.kind] })}
@@ -166,7 +166,7 @@ function EditDialog({ memory, open, onOpenChange }: {
             )}
             {scopeOf(current) === "both" && (
               <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
-                {t("memories.scopes.both", { defaultValue: "ambos" })}
+                {t("memories.scopes.both", { defaultValue: "both" })}
               </Badge>
             )}
             {(current.projectName ?? current.originProjectName) && (
@@ -320,13 +320,13 @@ function DocDialog({ memory, open, onOpenChange }: {
 
 function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }: {
   memory: Memory
-  /** Memórias em relatedIds (backlinks) já resolvidas pelo pai */
+  /** Memories in relatedIds (backlinks) already resolved by the parent */
   related: Memory[]
-  /** Realce de card em foco no painel lateral */
+  /** Highlight of the card focused in the side panel */
   selected?: boolean
   /**
-   * Clique no corpo do card — abre o detalhe. Recebe o id para o pai poder
-   * passar um callback estável (o memo abaixo depende disso).
+   * Click on the body of the card — it opens the detail. It receives the id so the parent can
+   * pass a stable callback (the memo below depends on that).
    */
   onSelect?: (id: string) => void
   onSelectRelated?: (id: string) => void
@@ -344,8 +344,8 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
 
   const originSession = memory.sessionId ? sessions.find((s) => s.id === memory.sessionId) : undefined
 
-  // Os mais estruturais primeiro (nós de área do /init), depois por peso — se
-  // só cabem alguns, que sejam os que mais dizem sobre a vizinhança do nó.
+  // The most structural first (/init area nodes), then by weight — if
+  // only a few fit, let them be the ones that say the most about the node's neighborhood.
   const visibleRelated = useMemo(
     () =>
       [...related]
@@ -364,10 +364,10 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
       )}
       onClick={(e) => {
         if (!onSelect) return
-        // Botões e campos tratam o próprio clique; os diálogos são portais, e
-        // no React o evento sobe pela árvore de componentes, não pelo DOM —
-        // sem esta guarda, clicar num relacionado dentro do diálogo era
-        // sobrescrito pela seleção do próprio card.
+        // Buttons and fields handle their own click; the dialogs are portals, and
+        // in React the event goes up through the component tree, not through the DOM —
+        // without this guard, clicking a related one inside the dialog was
+        // overwritten by the card's own selection.
         if ((e.target as HTMLElement).closest('button, a, input, textarea, [data-slot="dialog-content"]')) {
           return
         }
@@ -438,7 +438,7 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
         )}
         {scopeOf(memory) === "both" && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
-            {t("memories.scopes.both", { defaultValue: "ambos" })}
+            {t("memories.scopes.both", { defaultValue: "both" })}
           </Badge>
         )}
         {memory.kind === "project" && memory.projectName && (
@@ -477,9 +477,9 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <Link2 className="size-3" /> {t("memories.connected")} ({related.length})
           </span>
-          {/* Limita a QUANTIDADE, não a altura: espremer doze vínculos numa
-              caixa rolável de 80px deixava o texto ilegível. O excedente abre
-              no painel de edição, que lista todos e navega entre eles. */}
+          {/* It limits the AMOUNT, not the height: squeezing twelve links into an
+              80px scrollable box left the text illegible. The excess opens
+              in the editing panel, which lists all of them and navigates between them. */}
           {visibleRelated.map((r) => (
             <button
               key={r.id}
@@ -502,9 +502,9 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
         </div>
       )}
 
-      {/* Montados só quando abertos. O EditDialog assina o índice inteiro e
-          monta um Map de todas as memórias; mantendo um por card, cada seleção
-          reconstruía esse Map centenas de vezes e travava a lista. */}
+      {/* Mounted only when open. The EditDialog subscribes to the whole index and
+          builds a Map of all the memories; keeping one per card, every selection
+          rebuilt that Map hundreds of times and froze the list. */}
       {confirmDelete && (
         <ConfirmDialog
           open
@@ -525,8 +525,8 @@ function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }
 }
 
 /**
- * Memoizado: selecionar uma memória mudava `selectedId` e re-renderizava a
- * lista inteira. Depende de `related` e dos callbacks serem estáveis — a view
- * memoiza os dois.
+ * Memoized: selecting a memory changed `selectedId` and re-rendered the
+ * whole list. It depends on `related` and the callbacks being stable — the view
+ * memoizes both.
  */
 export const MemoryCard = memo(MemoryCardImpl)

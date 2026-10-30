@@ -8,30 +8,30 @@ import { interleavedReasoningField, normalizeMessages } from './reasoning'
 import { hoistToolImages } from './tool-images'
 
 /**
- * O que todo tool loop faz antes de cada passo — o agente principal
- * (chat-engine), os subagentes, o orquestrador, o /init, o computer_task e a
- * esteira. Não passam pelo runChat porque ele é um turno de conversa inteiro
- * (persiste mensagens, emite eventos de tela, tira snapshot, compacta); o que
- * eles compartilham é só isto:
+ * What every tool loop does before each step — the main agent (chat-engine),
+ * the subagents, the orchestrator, /init, computer_task and the pipeline. They
+ * do not go through runChat because that is a whole chat turn (it persists
+ * messages, emits screen events, takes a snapshot, compacts); what they share
+ * is only this:
  *
- * 1. Corte do acúmulo do turno (context-budget.ts), com memória entre os
- *    passos para o prefixo ficar estável entre os cortes.
- * 2. Normalização de reasoning: o SDK reconstrói as mensagens entre steps e
- *    pode descartar o reasoning_content vazio de uma chamada de tool (DeepSeek
- *    exige o campo de volta em TODAS as mensagens de assistente, senão 400).
- *    Sem o campo interleaved ela ainda sanitiza mensagens de tool, evitando o
- *    crash do conversor openai-compatible em parts malformadas.
- * 3. Marcas de cache da Anthropic (prompt-cache.ts), quando o modelo fala esse
- *    protocolo.
+ * 1. Cutting the turn's accumulation (context-budget.ts), remembering between
+ *    steps so the prefix stays stable across cuts.
+ * 2. Reasoning normalization: the SDK rebuilds the messages between steps and
+ *    may drop the empty reasoning_content of a tool call (DeepSeek requires the
+ *    field back in EVERY assistant message, otherwise a 400). Without the
+ *    interleaved field it still sanitizes tool messages, avoiding the
+ *    openai-compatible converter crash on malformed parts.
+ * 3. Anthropic cache marks (prompt-cache.ts), when the model speaks that
+ *    protocol.
  *
- * Chamada de um passo só (título, visão, revisão, mensagem de commit) fica de
- * fora de propósito: não há passo seguinte para reler o cache, e a escrita
- * nele custa 25% a mais que o input normal.
+ * Single-step calls (title, vision, review, commit message) are left out on
+ * purpose: there is no next step to re-read the cache, and writing to it costs
+ * 25% more than the normal input.
  */
 export interface StepPreparer {
-  /** As mensagens prontas para o passo — a MESMA referência quando nada mudou. */
+  /** The messages ready for the step — the SAME reference when nothing changed. */
   prepare(messages: ModelMessage[]): ModelMessage[]
-  /** Resultados de tool descartados até aqui neste loop */
+  /** Tool results discarded so far in this loop */
   readonly dropped: number
   readonly budget: number
   readonly workingBudget: number
@@ -62,8 +62,8 @@ export function createStepPreparer(
   }
 }
 
-/** O preparador já no formato do `prepareStep` do SDK. Um por chamada de
- *  streamText/generateText: a memória do corte é do loop, não do processo. */
+/** The preparer already in the SDK's `prepareStep` format. One per call to
+ *  streamText/generateText: the cut's memory belongs to the loop, not the process. */
 export function agentPrepareStep(
   provider: CatalogProvider | undefined,
   modelId: string,
@@ -71,9 +71,9 @@ export function agentPrepareStep(
 ): ({ messages }: { messages: ModelMessage[] }) => { messages?: ModelMessage[] } | Record<string, never> {
   const preparer = createStepPreparer(provider, modelId, options)
   return ({ messages }) => {
-    // Imagem de tool (screenshot do subagente de Computer Use) vira mensagem
-    // de usuário — no openai-compatible ela chegaria como base64 em texto. O
-    // chat principal faz o mesmo no próprio prepareStep (ver tool-images.ts).
+    // A tool image (Computer Use subagent screenshot) becomes a user
+    // message — in openai-compatible it would arrive as base64 in text. The
+    // main chat does the same in its own prepareStep (see tool-images.ts).
     const prepared = hoistToolImages(preparer.prepare(messages)).messages
     return prepared === messages ? {} : { messages: prepared }
   }

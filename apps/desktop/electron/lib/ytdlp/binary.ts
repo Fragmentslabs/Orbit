@@ -7,25 +7,25 @@ import path from 'node:path'
 import { addBundledToolDir, userShellEnv } from '../shell-env'
 
 /**
- * O yt-dlp que as tools de download usam.
+ * The yt-dlp that the download tools use.
  *
- * O binário NÃO viaja com o app, e isso é decisão, não preguiça: o yt-dlp
- * muda toda semana para acompanhar os sites, e um binário empacotado num
- * release envelhece no disco do usuário sem ele perceber. A procura segue a
- * ideia do ffmpeg (video/ffmpeg.ts), com uma fonte a mais:
+ * The binary does NOT travel with the app, and that is a decision, not laziness:
+ * yt-dlp changes every week to keep up with the sites, and a binary packaged in a
+ * release ages on the user's disk without them noticing. The search follows the
+ * ffmpeg idea (video/ffmpeg.ts), with one more source:
  *
- *   1. ORBIT_YTDLP_PATH — um caminho explícito (arquivo ou pasta), para quem
- *      testa ou empacota por fora;
- *   2. a cópia gerenciada pelo Orbit (userData/orbit-data/bin), baixada pelo
- *      ytdlp_install do release oficial;
- *   3. o que vier com o app (resources/ytdlp), se um dia for empacotado como
- *      SEMENTE de uma instalação offline;
- *   4. o PATH do usuário (brew, pipx, ~/.local/bin).
+ *   1. ORBIT_YTDLP_PATH — an explicit path (file or folder), for whoever tests or
+ *      packages from outside;
+ *   2. the copy managed by Orbit (userData/orbit-data/bin), downloaded by
+ *      ytdlp_install from the official release;
+ *   3. whatever ships with the app (resources/ytdlp), if one day it is packaged as
+ *      a SEED of an offline installation;
+ *   4. the user's PATH (brew, pipx, ~/.local/bin).
  *
- * A cópia gerenciada vem antes da semente e do PATH de propósito: é a única
- * que o próprio app consegue manter atualizada (um yt-dlp de brew/pip recusa
- * `-U` e só atualiza pelo gerenciador dele), e é para ela que o refreshYtdlp
- * empurra uma semente empacotada e desatualizada.
+ * The managed copy comes before the seed and the PATH on purpose: it is the only
+ * one the app itself can keep up to date (a yt-dlp from brew/pip refuses `-U` and
+ * only updates through its own manager), and it is into it that refreshYtdlp pushes
+ * a packaged seed that is out of date.
  */
 
 const EXE = process.platform === 'win32' ? '.exe' : ''
@@ -38,7 +38,7 @@ export interface YtdlpPaths {
   source: YtdlpSource
 }
 
-/** Nome do arquivo oficial do release para a plataforma — universal no macOS. */
+/** Name of the official release file for the platform — universal on macOS. */
 export function assetName(platform: NodeJS.Platform = process.platform, arch: string = process.arch): string | null {
   if (platform === 'darwin') return 'yt-dlp_macos'
   if (platform === 'win32') {
@@ -54,7 +54,7 @@ export function assetName(platform: NodeJS.Platform = process.platform, arch: st
   return null
 }
 
-/** Pasta da cópia gerenciada pelo app (a que o ytdlp_install escreve). */
+/** Folder of the copy managed by the app (the one ytdlp_install writes). */
 export function managedDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'bin')
 }
@@ -99,7 +99,7 @@ function findInPath(name: string): string | null {
     try {
       if (fs.statSync(candidate).isFile()) return candidate
     } catch {
-      // segue procurando
+      // keeps looking
     }
   }
   return null
@@ -107,7 +107,7 @@ function findInPath(name: string): string | null {
 
 let cached: YtdlpPaths | null | undefined
 
-/** Esquece a procura em cache — depois de instalar/atualizar o binário. */
+/** Forgets the cached search — after installing/updating the binary. */
 export function invalidateYtdlpCache(): void {
   cached = undefined
 }
@@ -132,8 +132,8 @@ export function resolveYtdlp(): YtdlpPaths | null {
 }
 
 /**
- * Chamado na partida: a cópia que o app já baixou entra no PATH dos shells do
- * agente, para o `bash` achar `yt-dlp` como acha o ffmpeg.
+ * Called at startup: the copy the app already downloaded enters the PATH of the
+ * agent's shells, so `bash` finds `yt-dlp` the way it finds ffmpeg.
  */
 export function registerYtdlpOnPath(): void {
   const found = resolveYtdlp()
@@ -158,9 +158,9 @@ let versionCache: { bin: string; version: string | null; at: number } | null = n
 const VERSION_TTL = 10 * 60 * 1000
 
 /**
- * Versão do binário (a primeira execução de um binário PyInstaller é lenta).
- * Cacheada porque o `ytdlp_info` pede a versão em toda chamada; `fresh` é para
- * quem acabou de instalar/atualizar e precisa do valor novo.
+ * Version of the binary (the first run of a PyInstaller binary is slow). Cached
+ * because `ytdlp_info` asks for the version on every call; `fresh` is for whoever
+ * just installed/updated and needs the new value.
  */
 export function ytdlpVersion(bin: string, opts: { fresh?: boolean } = {}): Promise<string | null> {
   if (!opts.fresh && versionCache && versionCache.bin === bin && Date.now() - versionCache.at < VERSION_TTL) {
@@ -175,7 +175,7 @@ export function ytdlpVersion(bin: string, opts: { fresh?: boolean } = {}): Promi
   })
 }
 
-/** Dias desde a data que o yt-dlp usa como versão (`2026.10.24`). */
+/** Days since the date yt-dlp uses as version (`2026.10.24`). */
 export function versionAgeDays(version: string | null): number | null {
   const parsed = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(version ?? '')
   if (!parsed) return null
@@ -184,7 +184,7 @@ export function versionAgeDays(version: string | null): number | null {
   return Number.isFinite(days) ? Math.max(0, days) : null
 }
 
-/** Linha que o `ytdlp_info` devolve junto do conteúdo: qual binário respondeu. */
+/** Line that `ytdlp_info` returns along with the content: which binary answered. */
 export function describeBinary(found: YtdlpPaths, version: string | null): string {
   const where =
     found.source === 'managed'
@@ -203,14 +203,14 @@ export interface YtdlpRefreshResult {
   updated: boolean
   from: string | null
   to: string | null
-  /** Por que não deu para atualizar (quando `updated` é false). */
+  /** Why it could not be updated (when `updated` is false). */
   reason?: string
 }
 
 let lastRefreshAt = 0
 const REFRESH_THROTTLE_MS = 15 * 60 * 1000
 
-/** Roda um comando do binário sem se importar com o resultado (o `-U`). */
+/** Runs a binary command without caring about the result (the `-U`). */
 function runQuiet(bin: string, args: string[], signal?: AbortSignal): Promise<string> {
   return new Promise((resolve) => {
     execFile(
@@ -226,17 +226,18 @@ function runQuiet(bin: string, args: string[], signal?: AbortSignal): Promise<st
 }
 
 /**
- * Tenta trazer o yt-dlp para o release atual — sem tocar no que é do usuário.
+ * Tries to bring yt-dlp to the current release — without touching what belongs to
+ * the user.
  *
- * Quem decide chamar é o `runYtdlp`, quando uma execução falha com erro de
- * extractor (o sintoma clássico de binário velho). O throttle existe para uma
- * sequência de falhas (playlist, site fora do ar) não virar uma sequência de
- * downloads de 35 MB.
+ * runYtdlp is the one that decides to call it, when an execution fails with an
+ * extractor error (the classic symptom of an old binary). The throttle exists so that
+ * a sequence of failures (playlist, site down) does not become a sequence of 35 MB
+ * downloads.
  *
- * - cópia gerenciada (ou semente empacotada): baixa o release de agora;
- * - cópia do PATH: só o binário standalone aceita `-U`; brew/pip respondem
- *   que quem atualiza é o gerenciador deles, e isso volta como `reason`;
- * - ORBIT_YTDLP_PATH: caminho explícito, não se mexe.
+ * - managed copy (or packaged seed): downloads the current release;
+ * - copy from the PATH: only the standalone binary accepts `-U`; brew/pip answer that
+ *   their manager is the one that updates, and that comes back as `reason`;
+ * - ORBIT_YTDLP_PATH: explicit path, it is not touched.
  */
 export async function refreshYtdlp(opts: { signal?: AbortSignal; force?: boolean } = {}): Promise<YtdlpRefreshResult> {
   const found = resolveYtdlp()
@@ -276,14 +277,14 @@ export interface YtdlpInstallResult {
 }
 
 /**
- * Baixa (ou atualiza) o binário oficial do yt-dlp para a pasta do app.
+ * Downloads (or updates) the official yt-dlp binary into the app folder.
  *
- * O download é verificado contra o SHA2-256SUMS do MESMO release; se esse
- * arquivo não vier, a instalação continua (é HTTPS do GitHub) mas o resultado
- * diz que o checksum não foi conferido — o chamador repassa isso.
+ * The download is verified against the SHA2-256SUMS of the SAME release; if that file
+ * does not come, the installation goes on (it is HTTPS from GitHub) but the result
+ * says the checksum was not checked — the caller passes that on.
  *
- * Não roda no build do Mac App Store: o sandbox não permite executar um
- * binário baixado, e a falha precisa ser explícita em vez de um EPERM seco.
+ * It does not run in the Mac App Store build: the sandbox does not allow running a
+ * downloaded binary, and the failure has to be explicit instead of a bare EPERM.
  */
 export async function installYtdlp(opts: { signal?: AbortSignal } = {}): Promise<YtdlpInstallResult> {
   if (process.mas) {
@@ -333,8 +334,8 @@ export async function installYtdlp(opts: { signal?: AbortSignal } = {}): Promise
         }
       }
     } catch (error) {
-      // Checksum divergente é falha de segurança: não instala. Já a
-      // indisponibilidade do arquivo de somas só deixa o resultado honesto.
+      // A diverging checksum is a security failure: it does not install. The
+      // unavailability of the sums file only keeps the result honest.
       if (error instanceof Error && /checksum/.test(error.message)) throw error
     }
 
@@ -347,8 +348,8 @@ export async function installYtdlp(opts: { signal?: AbortSignal } = {}): Promise
 
   invalidateYtdlpCache()
   addBundledToolDir(dir)
-  // O caminho gerenciado é sempre o mesmo: sem esquecer o cache, a versão
-  // devolvida seria a do binário ANTERIOR que acabou de ser substituído.
+  // The managed path is always the same: without forgetting the cache, the version
+  // returned would be that of the PREVIOUS binary that was just replaced.
   const version = await ytdlpVersion(target, { fresh: true })
   if (!version) throw new Error(`yt-dlp was downloaded to ${target} but does not run — try again, or install it with brew/pipx`)
   return { bin: target, version, asset, checksum }

@@ -1,30 +1,30 @@
-# Slides no painel
+# Slides in the panel
 
-Uma aba `slides` no painel direito onde o agente escreve um deck e a pessoa
-apresenta: palco 16:9, teclado, lista de slides no rodapé, notas do apresentador
-e tela cheia. O mesmo deck também renderiza INLINE na conversa, como um
-artefato, com as saídas para a sidebar e para a tela cheia. É a terceira aba do
-mesmo molde — Design (`canvas.json` + artboards) e Motion (composição + player)
-—, com um contrato de autoria mais barato que os dois.
+A `slides` tab in the right panel where the agent writes a deck and the person
+presents it: 16:9 stage, keyboard, slide list in the footer, speaker notes
+and fullscreen. The same deck also renders INLINE in the conversation, as an
+artifact, with the exits to the sidebar and to fullscreen. It is the third tab of
+the same mold — Design (`canvas.json` + artboards) and Motion (composition + player)
+— with a cheaper authoring contract than both.
 
 ## Status
 
-**Implementado**, com download em PDF e item próprio na galeria (Mídia). O deck
-é **um arquivo** (`index.html` com um `<section class="slide">` por slide), o
-app injeta o runtime de navegação e o agente tem duas portas de escrita.
+**Implemented**, with PDF download and its own item in the gallery (Media). The deck
+is **one file** (`index.html` with one `<section class="slide">` per slide), the
+app injects the navigation runtime and the agent has two writing doors.
 
-## Por que um arquivo, e não um canvas
+## Why one file, and not a canvas
 
-O Design custa caro para dirigir: `canvas.json` + um `.html` por artboard +
-coordenadas `x/y/w/h` inventadas. Para um deck de cinco telas são ~7 chamadas de
-tool até o usuário ver a primeira. Slide não precisa de editor visual — ninguém
-arrasta um bullet point —, então o contrato pode ser o de um artifact: **o
-conteúdo inteiro numa chamada**.
+Design is expensive to drive: `canvas.json` + one `.html` per artboard +
+invented `x/y/w/h` coordinates. For a five-screen deck that is ~7 tool calls
+before the user sees the first one. A slide does not need a visual editor — nobody
+drags a bullet point — so the contract can be the one of an artifact: **the
+whole content in one call**.
 
-Isso não tira o valor do Design: ele continua sendo o lugar de ajustar posição.
-Slide é narrativa, e narrativa se escreve, não se arrasta.
+That does not take away Design's value: it remains the place to adjust position.
+A slide is narrative, and narrative is written, not dragged.
 
-## O contrato do deck
+## The deck contract
 
 ```html
 <!doctype html>
@@ -32,189 +32,189 @@ Slide é narrativa, e narrativa se escreve, não se arrasta.
 <head>
   <meta charset="utf-8">
   <meta name="orbit-slides" content="width=1280,height=720">
-  <title>Meu deck</title>
-  <style>/* o CSS do deck */</style>
+  <title>My deck</title>
+  <style>/* the deck's CSS */</style>
 </head>
 <body>
-  <section class="slide" data-title="Capa">
+  <section class="slide" data-title="Cover">
     <h1>Orbit</h1>
-    <aside class="notes">o que DIZER neste slide</aside>
+    <aside class="notes">what to SAY on this slide</aside>
   </section>
-  <section class="slide"><h2>Segundo</h2></section>
+  <section class="slide"><h2>Second</h2></section>
 </body>
 </html>
 ```
 
-- **Um `<section class="slide">` por slide**, na ordem do documento. Seção
-  aninhada pertence ao slide que a contém.
-- **`data-title`** nomeia o slide na lista da aba; sem ele vale o primeiro
-  `h1/h2/h3`, e sem heading o rótulo é "Slide N".
-- **Notas**: `<aside class="notes">texto</aside>` (vale o texto do elemento) ou
-  `data-notes="texto"` (vale o valor do atributo). Não aparecem no palco.
-- **`<meta name="orbit-slides">`** declara o palco; o padrão é 1280×720.
-- **Sem JavaScript no deck.** Navegação, escala, lista, notas e tela cheia são
-  do app — é o que faz o deck ser conteúdo e continuar abrindo depois de
-  qualquer mudança na aba.
-- **`?print=1`** na URL serve o mesmo deck empilhado, um slide por página — a
-  base do export em PDF, que ainda não existe na interface.
+- **One `<section class="slide">` per slide**, in document order. A nested section
+  belongs to the slide that contains it.
+- **`data-title`** names the slide in the tab's list; without it the first
+  `h1/h2/h3` counts, and without a heading the label is "Slide N".
+- **Notes**: `<aside class="notes">text</aside>` (the element's text counts) or
+  `data-notes="text"` (the attribute's value counts). They do not show up on the stage.
+- **`<meta name="orbit-slides">`** declares the stage; the default is 1280×720.
+- **No JavaScript in the deck.** Navigation, scaling, list, notes and fullscreen are
+  the app's — that is what makes the deck content and keeps it opening after
+  any change in the tab.
+- **`?print=1`** in the URL serves the same deck stacked, one slide per page — the
+  basis of the PDF export, which does not exist in the interface yet.
 
-## As tools (as mesmas nos dois modos)
+## The tools (the same in both modes)
 
-O deck é uma peça do Orbit: mora em `orbit-data/slides/<sessão>/<slug>/`, no
-chat e no código, e é endereçado pelo título (ou pelo id `sld_…`, de qualquer
-conversa). O repositório do usuário só recebe o deck quando ele pede
+The deck is an Orbit piece: it lives in `orbit-data/slides/<session>/<slug>/`, in
+chat and in code, and is addressed by its title (or by the `sld_…` id, from any
+conversation). The user's repository only receives the deck when they ask for it
 (`piece_export`).
 
-| tool | o que faz |
+| tool | what it does |
 | --- | --- |
-| `slides_write({ title, slides[] })` | cria ou substitui o deck com o tema da casa |
-| `slides_write({ title, html })` | o mesmo, com o documento inteiro (tema próprio) |
-| `slides_edit({ name, edits[] })` | trocas exatas no HTML do deck — sem reenviar tudo |
-| `slides_read({ name })` | o HTML atual |
-| `slides_preview({ name })` | reabre a aba (e relata o deck) sem escrever |
-| `slides_asset({ name, ref \| path })` | copia um anexo (ou, no código, um arquivo do projeto) para a pasta do deck |
-| `slides_delete({ name })` | apaga a pasta, o item da galeria e a aba |
+| `slides_write({ title, slides[] })` | creates or replaces the deck with the house theme |
+| `slides_write({ title, html })` | the same, with the whole document (own theme) |
+| `slides_edit({ name, edits[] })` | exact replacements in the deck's HTML — without resending everything |
+| `slides_read({ name })` | the current HTML |
+| `slides_preview({ name })` | reopens the tab (and reports the deck) without writing |
+| `slides_asset({ name, ref \| path })` | copies an attachment (or, in code, a project file) into the deck folder |
+| `slides_delete({ name })` | deletes the folder, the gallery item and the tab |
 
-`slides_write` com `slides` monta o documento com o tema da casa (fundo escuro,
-acento dourado, tipografia grande) e classes de apoio — `.cover`, `.section`,
+`slides_write` with `slides` builds the document with the house theme (dark
+background, golden accent, large typography) and support classes — `.cover`, `.section`,
 `.kicker`, `.lead`, `.grid.cols-2/3/4`, `.card`, `.stat`, `.quote`, `.pill`.
-É o caminho rápido: uma chamada, sem `write` intermediário.
+It is the fast path: one call, with no intermediate `write`.
 
-Toda escrita passa pelo diário de mídia do turno (`session/media-journal.ts`):
-o revert da mensagem devolve o deck ao estado de antes — ou o apaga, se o turno
-o criou — e o unrevert o traz de volta.
+Every write goes through the turn's media journal (`session/media-journal.ts`):
+the message's revert brings the deck back to its previous state — or deletes it, if
+the turn created it — and the unrevert brings it back.
 
-Todas as que escrevem ou abrem devolvem o mesmo relatório: quantos slides, o título de cada um e quais
-têm notas — lido do arquivo no main, sem janela offscreen (o deck é HTML
-estático, ao contrário do motion).
+All the ones that write or open return the same report: how many slides, the title of each one and which ones
+have notes — read from the file in main, with no offscreen window (the deck is static
+HTML, unlike motion).
 
-## Arquitetura
+## Architecture
 
 ```
 electron/lib/slides/
-  slides-runtime.ts   o script injetado no <head>: palco, escala, teclado, ponte
-  slides-store.ts     registro id → pasta/entrada, scheme orbit-slides://, watcher
-  slides-open.ts      registra, abre a aba e relata o deck
-  slides-gallery.ts   a capa (o slide 1) e o registro na galeria
-  slides-deck.ts      leitura do HTML (títulos, notas, contagem) — puro
-  deck-template.ts    o molde do slides_write (tema + montagem) — puro
+  slides-runtime.ts   the script injected in <head>: stage, scale, keyboard, bridge
+  slides-store.ts     id → folder/entry registry, orbit-slides:// scheme, watcher
+  slides-open.ts      registers, opens the tab and reports the deck
+  slides-gallery.ts   the cover (slide 1) and the gallery registration
+  slides-deck.ts      HTML reading (titles, notes, count) — pure
+  deck-template.ts    the slides_write mold (theme + assembly) — pure
 electron/lib/tools/
-  slides.ts           slides_write/edit/read/preview/asset/delete (os dois modos)
-  piece-common.ts     o que as três peças dividem: pastas, diário, asset, exclusão
+  slides.ts           slides_write/edit/read/preview/asset/delete (both modes)
+  piece-common.ts     what the three pieces share: folders, journal, asset, deletion
 src/components/
-  slides-tab.tsx      a aba: palco, lista de slides, notas e transporte
-  slides/use-slides-deck.ts  a ponte e o índice — o MESMO nas duas superfícies
-  ai/slides-part.tsx  o deck inline na conversa (como o artefato)
+  slides-tab.tsx      the tab: stage, slide list, notes and transport
+  slides/use-slides-deck.ts  the bridge and the index — the SAME on both surfaces
+  ai/slides-part.tsx  the inline deck in the conversation (like the artifact)
 ```
 
-O scheme `orbit-slides://<id>/<caminho>` serve a pasta registrada (nada fora
-dela) e injeta o runtime no HTML; `?raw` devolve o fonte como está no disco.
-O watcher (`slides:changed`) recarrega o palco quando o arquivo muda, voltando
-ao mesmo slide — o mesmo ciclo do motion/design.
+The `orbit-slides://<id>/<path>` scheme serves the registered folder (nothing outside
+it) and injects the runtime into the HTML; `?raw` returns the source as it is on disk.
+The watcher (`slides:changed`) reloads the stage when the file changes, going back
+to the same slide — the same cycle as motion/design.
 
-A ponte é postMessage com `source: "orbit-slides"` (iframe `sandbox="allow-scripts"`,
-sem `allow-same-origin`):
+The bridge is postMessage with `source: "orbit-slides"` (iframe `sandbox="allow-scripts"`,
+without `allow-same-origin`):
 
-- deck → app: `ready` (total, palco, títulos, notas), `change` (índice),
+- deck → app: `ready` (total, stage, titles, notes), `change` (index),
   `error`, `request-fullscreen`
 - app → deck: `go(index)`, `next`, `prev`
 
-## Onde o deck aparece
+## Where the deck shows up
 
-Duas superfícies, um comportamento só (`use-slides-deck.ts`): a **aba** do
-painel e o **card na conversa**. Cada uma monta o seu iframe e guarda o seu
-índice; o filtro `event.source === iframe.contentWindow` é o que impede um palco
-de reagir ao `change` do outro.
+Two surfaces, a single behavior (`use-slides-deck.ts`): the panel's **tab** and the
+**card in the conversation**. Each one mounts its own iframe and keeps its own
+index; the `event.source === iframe.contentWindow` filter is what stops one stage
+from reacting to the other's `change`.
 
-- **Aba** — o palco ocupa a largura toda e a lista mora no RODAPÉ, em pé, com
-  altura limitada e rolagem na vertical; ela rola sozinha até o slide atual. Uma
-  coluna de 208px à direita comia justamente a largura de que o 16:9 precisa num
-  painel estreito — no rodapé a lista só custa altura, e só enquanto aberta.
-- **Chat** — o deck renderiza inline, como o artefato. `slides:resolve`
-  registra e devolve `id` + entrada SEM abrir aba (é o que alimenta o iframe);
-  do cabeçalho saem as duas saídas: **abrir na sidebar** (`slides:open`) e
-  **tela cheia** (um Dialog com palco próprio, que herda o slide em que o card
-  estava).
-- **Prévia e tela cheia têm pontes separadas** de propósito: fechar o diálogo
-  não reinicia o card, e avançar na tela cheia não mexe no preview.
+- **Tab** — the stage takes the whole width and the list lives in the FOOTER, upright, with
+  limited height and vertical scrolling; it scrolls by itself to the current slide. A
+  208px column on the right ate exactly the width 16:9 needs in a narrow
+  panel — in the footer the list only costs height, and only while open.
+- **Chat** — the deck renders inline, like the artifact. `slides:resolve`
+  registers and returns `id` + entry WITHOUT opening a tab (it is what feeds the iframe);
+  from the header come the two exits: **open in the sidebar** (`slides:open`) and
+  **fullscreen** (a Dialog with its own stage, which inherits the slide the card
+  was on).
+- **Preview and fullscreen have separate bridges** on purpose: closing the dialog
+  does not restart the card, and advancing in fullscreen does not touch the preview.
 
-## Armadilhas que o teste pegou
+## Pitfalls the test caught
 
-1. **O runtime é o primeiro script do `<head>`** — roda antes de existir
-   `<body>`. Sem esperar o `DOMContentLoaded`, `querySelectorAll('.slide')`
-   devolve vazio e o palco nasce em branco. Tudo o que toca no documento vive
-   dentro de `start()`.
-2. **O palco é maior que a janela de um painel estreito.** Grid/flex não
-   centralizam um item maior que o container (ele vaza para a direita): o palco
-   é ancorado em `left/top: 50%` e centralizado com `translate(-50%,-50%)`
-   antes do `scale`.
-3. **`resize` não basta.** O iframe é redimensionado pelo painel, e nem toda
-   mudança de layout chega como evento na janela dele — daí o `ResizeObserver`
-   no viewport.
-4. **A string do runtime não pode ter template literal.** Uma crase dentro do
-   script fecha a string do módulo. Há um teste que compila o texto com
+1. **The runtime is the first script of the `<head>`** — it runs before `<body>`
+   exists. Without waiting for `DOMContentLoaded`, `querySelectorAll('.slide')`
+   returns empty and the stage is born blank. Everything that touches the document lives
+   inside `start()`.
+2. **The stage is bigger than the window of a narrow panel.** Grid/flex do not
+   center an item bigger than the container (it leaks to the right): the stage
+   is anchored at `left/top: 50%` and centered with `translate(-50%,-50%)`
+   before the `scale`.
+3. **`resize` is not enough.** The iframe is resized by the panel, and not every
+   layout change arrives as an event in its window — hence the `ResizeObserver`
+   in the viewport.
+4. **The runtime string cannot have a template literal.** A backtick inside the
+   script closes the module's string. There is a test that compiles the text with
    `new Function`.
 
-## Baixar em PDF
+## Downloading as PDF
 
-O PDF é a **impressão do próprio `index.html`** — não existe um segundo formato.
-O runtime tem um modo `?print=1` que empilha os slides (um por página, `@page`
-com o tamanho do palco), e o main abre uma janela oculta e chama o `printToPDF`
-do Chromium. Mesmo caminho do documento (`media.ts:renderPdf`), sem biblioteca de
-geração de PDF no projeto.
+The PDF is the **print of `index.html` itself** — there is no second format.
+The runtime has a `?print=1` mode that stacks the slides (one per page, `@page`
+with the stage's size), and main opens a hidden window and calls Chromium's
+`printToPDF`. Same path as the document (`media.ts:renderPdf`), with no PDF
+generation library in the project.
 
-Botão de download no cabeçalho da aba → `slides:export` → `renderSlidesPdf`
-(`electron/lib/slides/slides-export.ts`) → diálogo de salvar. Cancelar não é
-erro. O nome sugerido é o título do deck.
+Download button in the tab's header → `slides:export` → `renderSlidesPdf`
+(`electron/lib/slides/slides-export.ts`) → save dialog. Cancelling is not an
+error. The suggested name is the deck's title.
 
-### A unidade do `pageSize` mente
+### The `pageSize` unit lies
 
-A tabela de tipos do Electron diz que um `pageSize` custom é um `Size` em
-**microns**. Na 44.3.0 (macOS) não é: o valor é lido como **polegadas**, e
-multiplicado por 72. Verificado imprimindo de verdade:
+Electron's type table says a custom `pageSize` is a `Size` in
+**microns**. In 44.3.0 (macOS) it is not: the value is read as **inches**, and
+multiplied by 72. Verified by printing for real:
 
-| Valor passado | O que sai |
+| Value passed | What comes out |
 |---|---|
-| `{ width: 338667, height: 190500 }` (microns) | falha: `Printing failed` |
-| `{ width: 595, height: 842 }` | página de 595×842 **polegadas** (MediaBox 60624×42840) |
-| `{ width: 1280/96, height: 720/96 }` | **MediaBox `[0 0 960 540]`** — 16:9 exato, sem margem |
+| `{ width: 338667, height: 190500 }` (microns) | fails: `Printing failed` |
+| `{ width: 595, height: 842 }` | 595×842 **inches** page (MediaBox 60624×42840) |
+| `{ width: 1280/96, height: 720/96 }` | **MediaBox `[0 0 960 540]`** — exact 16:9, no margin |
 
-Um tamanho grande demais também estoura um limite de 16 bits da caixa:
-960×540 polegadas = 69120 pt > 65535 pt — daí o "Printing failed" em vez de uma
-página gigante.
+A size too large also blows a 16-bit limit of the box:
+960×540 inches = 69120 pt > 65535 pt — hence the "Printing failed" instead of a
+gigantic page.
 
-Como a documentação promete uma unidade e a implementação usa outra, o export
-**mede o PDF que saiu** (pdf-lib) e, se a página não for o tamanho pedido, refaz
-na outra unidade. Um Electron futuro que conserte a unidade não devolve um deck
-de 0,35 mm: cai no retry. `slides-export.test.ts` fixa os dois mundos.
+Since the documentation promises one unit and the implementation uses another, the export
+**measures the PDF that came out** (pdf-lib) and, if the page is not the requested size, redoes it
+in the other unit. A future Electron that fixes the unit will not return a deck
+of 0.35 mm: it falls into the retry. `slides-export.test.ts` pins both worlds.
 
-## Na galeria (Mídia)
+## In the gallery (Media)
 
-O deck entra como um tipo próprio (`kind: "slides"`), com a capa tirada do
-**primeiro slide** — e ela sai barata: o deck é servido com o runtime injetado,
-que monta o palco e já mostra o slide 1; fotografar uma janela offscreen do
-tamanho declarado no meta dá a capa exata, **sem seek nem medição de camada**.
+The deck enters as a type of its own (`kind: "slides"`), with the cover taken from the
+**first slide** — and it comes out cheap: the deck is served with the injected runtime,
+which mounts the stage and already shows slide 1; photographing an offscreen window of the
+size declared in the meta gives the exact cover, **with no seek and no layer measurement**.
 
-- `slides-gallery.ts` tem o `registerSlidesCover` e o hook de exclusão; quem
-  chama o registro é o `slides_open`, depois de confirmar que o deck TEM slides
-  (capa de palco vazio não serve).
-- `slides_write` e `slides_edit` mudam o deck, então a capa é refeita a cada
-  escrita (`refreshCover`); o `slides_preview` só a captura quando o item
-  ainda não existe.
-- Excluir na galeria apaga a pasta do deck, com as travas de
-  `deleteSlidesDeck`: a pasta tem de existir, conter a entrada do deck e estar
-  DENTRO da raiz do chat ou do projeto que a registrou — **nunca ser o projeto**.
-  Os PDFs já baixados ficam.
-- O clique no tile reabre a aba Slides (o mesmo `slides:open` do card do chat).
+- `slides-gallery.ts` has `registerSlidesCover` and the deletion hook; whoever
+  calls the registration is `slides_open`, after confirming that the deck HAS slides
+  (a cover of an empty stage is no good).
+- `slides_write` and `slides_edit` change the deck, so the cover is redone on every
+  write (`refreshCover`); `slides_preview` only captures it when the item
+  does not exist yet.
+- Deleting in the gallery deletes the deck folder, with the locks of
+  `deleteSlidesDeck`: the folder has to exist, contain the deck entry and be
+  INSIDE the root of the chat or of the project that registered it — **never be the project**.
+  The PDFs already downloaded stay.
+- Clicking the tile reopens the Slides tab (the same `slides:open` as the chat card).
 
-O arquivo da capa é `dck_<id>.png` em `artifactsDir()`, como `dsn_`/`mot_`; o
-prefixo é diferente do `sld_` do deck de propósito, para não misturar os dois
-espaços de nome na hora de depurar.
+The cover file is `dck_<id>.png` in `artifactsDir()`, like `dsn_`/`mot_`; the
+prefix is different from the deck's `sld_` on purpose, to avoid mixing the two
+name spaces when debugging.
 
-## O que ainda não tem
+## What is still missing
 
-- Miniaturas de verdade na lista (a galeria já tem capa): o iframe é opaco,
-  então cada miniatura exigiria uma captura por slide. Hoje a lista mostra
-  título + número, que é o que se procura ao navegar.
-- Janela do apresentador (notas + próximo slide + cronômetro numa segunda tela).
-- Transições entre slides.
+- Real thumbnails in the list (the gallery already has a cover): the iframe is opaque,
+  so each thumbnail would require one capture per slide. Today the list shows
+  title + number, which is what you look for when navigating.
+- Presenter window (notes + next slide + timer on a second screen).
+- Transitions between slides.

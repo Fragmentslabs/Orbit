@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareMechanisms,
+  parseQueries,
   scoreMechanism,
   scoreNoMemory,
   type ReviewQueryJson,
@@ -12,115 +13,189 @@ function queries(): ReviewQueryJson[] {
   return [
     {
       id: 'q1',
-      esperado: 'recuperar',
+      expected: 'retrieve',
       lexical: { top5: [hit(1, 'm1'), hit(2, 'm2'), hit(3, 'm3'), hit(4, 'm4'), hit(5, 'm5')] },
-      hibrido: { top5: [] },
-      memorias: {
-        m1: { classificacao: 'relevant' },
-        m2: { classificacao: 'irrelevant' },
-        m3: { classificacao: 'inconclusive' },
-        m4: { classificacao: '' },
-        m5: { classificacao: 'irrelevant' },
+      hybrid: { top5: [] },
+      memories: {
+        m1: { classification: 'relevant' },
+        m2: { classification: 'irrelevant' },
+        m3: { classification: 'inconclusive' },
+        m4: { classification: '' },
+        m5: { classification: 'irrelevant' },
       },
     },
     {
       id: 'q2',
-      esperado: 'recuperar',
+      expected: 'retrieve',
       lexical: { top5: [] },
-      hibrido: { top5: [hit(1, 'm6'), hit(2, 'm7'), hit(3, 'm10')] },
-      memorias: {
-        m6: { classificacao: 'irrelevant' },
-        m7: { classificacao: 'relevant' },
-        m10: { classificacao: 'inconclusive' },
+      hybrid: { top5: [hit(1, 'm6'), hit(2, 'm7'), hit(3, 'm10')] },
+      memories: {
+        m6: { classification: 'irrelevant' },
+        m7: { classification: 'relevant' },
+        m10: { classification: 'inconclusive' },
       },
     },
     {
       id: 'q3',
-      esperado: 'nenhuma',
+      expected: 'none',
       lexical: { top5: [hit(1, 'm8')] },
-      hibrido: { top5: [hit(1, 'm9')] },
-      memorias: {
-        m8: { classificacao: 'irrelevant' },
-        m9: { classificacao: 'relevant' },
+      hybrid: { top5: [hit(1, 'm9')] },
+      memories: {
+        m8: { classification: 'irrelevant' },
+        m9: { classification: 'relevant' },
       },
     },
   ]
 }
 
-describe('métricas da avaliação por JSON', () => {
-  it('exclui inconclusivo e não julgado do denominador de P@5', () => {
+describe('metrics of the JSON review', () => {
+  it('excludes inconclusive and unjudged from the P@5 denominator', () => {
     const s = scoreMechanism(queries(), 'lexical')
-    // q1: julgados = m1 (relevant), m2 e m5 (irrelevant) → 3; relevantes = 1.
-    expect(s.consultas).toBe(2)
-    expect(s.avaliadas).toBe(1)
+    // q1: judged = m1 (relevant), m2 and m5 (irrelevant) → 3; relevant = 1.
+    expect(s.queries).toBe(2)
+    expect(s.scored).toBe(1)
     expect(s.p5).toBeCloseTo(1 / 3, 6)
-    expect(s.relevantes).toBe(1)
-    expect(s.irrelevantes).toBe(2)
-    expect(s.inconclusivos).toBe(1)
-    expect(s.semJulgamento).toBe(1)
+    expect(s.relevant).toBe(1)
+    expect(s.irrelevant).toBe(2)
+    expect(s.inconclusive).toBe(1)
+    expect(s.unjudged).toBe(1)
   })
 
-  it('calcula MRR pela posição do primeiro relevant', () => {
-    // q1: relevant na posição 1 → 1. q2 só existe no híbrido.
+  it('computes MRR from the position of the first relevant', () => {
+    // q1: relevant at position 1 → 1. q2 only exists in the hybrid.
     expect(scoreMechanism(queries(), 'lexical').mrr).toBeCloseTo(1, 6)
-    // q2: relevant na posição 2 → 1/2.
-    expect(scoreMechanism(queries(), 'hibrido').mrr).toBeCloseTo(0.5, 6)
-    expect(scoreMechanism(queries(), 'hibrido').p5).toBeCloseTo(1 / 2, 6)
+    // q2: relevant at position 2 → 1/2.
+    expect(scoreMechanism(queries(), 'hybrid').mrr).toBeCloseTo(0.5, 6)
+    expect(scoreMechanism(queries(), 'hybrid').p5).toBeCloseTo(1 / 2, 6)
   })
 
-  it('consulta sem julgamento não entra na média', () => {
+  it('a query with no judgment does not enter the average', () => {
     const s = scoreMechanism(queries(), 'lexical')
-    // q2 não tem nada julgado no lexical: base é só q1.
-    expect(s.avaliadas).toBe(1)
+    // q2 has nothing judged in the lexical: the basis is q1 alone.
+    expect(s.scored).toBe(1)
   })
 
-  it('consultas sem memória ficam fora de P@5 e MRR', () => {
-    const s = scoreMechanism(queries(), 'hibrido')
-    expect(s.consultas).toBe(2) // não conta q3
+  it('queries with no memory stay out of P@5 and MRR', () => {
+    const s = scoreMechanism(queries(), 'hybrid')
+    expect(s.queries).toBe(2) // does not count q3
     expect(s.p5).toBeCloseTo(0.5, 6)
   })
 
-  it('mede candidato indevido nas consultas sem memória', () => {
+  it('measures the undue candidate in the queries with no memory', () => {
     const lex = scoreNoMemory(queries(), 'lexical')
-    expect(lex.consultas).toBe(1)
-    expect(lex.retornou).toBe(1)
-    expect(lex.marcouRelevante).toBe(0)
+    expect(lex.queries).toBe(1)
+    expect(lex.returned).toBe(1)
+    expect(lex.markedRelevant).toBe(0)
 
-    const hyb = scoreNoMemory(queries(), 'hibrido')
-    expect(hyb.retornou).toBe(1)
-    expect(hyb.marcouRelevante).toBe(1)
-    expect(hyb.conflitos).toEqual(['q3'])
+    const hyb = scoreNoMemory(queries(), 'hybrid')
+    expect(hyb.returned).toBe(1)
+    expect(hyb.markedRelevant).toBe(1)
+    expect(hyb.conflicts).toEqual(['q3'])
   })
 
-  it('compara os dois mecanismos só nas consultas com resposta esperada', () => {
+  it('compares the two mechanisms only on the queries with an expected answer', () => {
     const c = compareMechanisms(queries())
-    expect(c.soLexical).toEqual(['q1'])
-    expect(c.soHibrido).toEqual(['q2'])
-    expect(c.ambos).toEqual([])
-    expect(c.nenhum).toEqual([])
-    expect(c.soLexical.length + c.soHibrido.length + c.ambos.length + c.nenhum.length).toBe(2)
+    expect(c.lexicalOnly).toEqual(['q1'])
+    expect(c.hybridOnly).toEqual(['q2'])
+    expect(c.both).toEqual([])
+    expect(c.neither).toEqual([])
+    expect(c.lexicalOnly.length + c.hybridOnly.length + c.both.length + c.neither.length).toBe(2)
   })
 
-  it('sem julgamento nenhum, não divide por zero', () => {
-    const vazio: ReviewQueryJson[] = [{ id: 'q', esperado: 'recuperar', lexical: { top5: [hit(1, 'm')] } }]
-    const s = scoreMechanism(vazio, 'lexical')
-    expect(s.avaliadas).toBe(0)
+  it('with no judgment at all, it does not divide by zero', () => {
+    const empty: ReviewQueryJson[] = [{ id: 'q', expected: 'retrieve', lexical: { top5: [hit(1, 'm')] } }]
+    const s = scoreMechanism(empty, 'lexical')
+    expect(s.scored).toBe(0)
     expect(s.p5).toBe(0)
     expect(s.mrr).toBe(0)
-    expect(s.semJulgamento).toBe(1)
+    expect(s.unjudged).toBe(1)
   })
 
-  it('classificação desconhecida é tratada como não julgada', () => {
+  it('an unknown classification is treated as unjudged', () => {
     const q: ReviewQueryJson[] = [
       {
         id: 'q',
-        esperado: 'recuperar',
+        expected: 'retrieve',
         lexical: { top5: [hit(1, 'm1')] },
-        memorias: { m1: { classificacao: 'talvez' } },
+        memories: { m1: { classification: 'maybe' } },
       },
     ]
     const s = scoreMechanism(q, 'lexical')
-    expect(s.avaliadas).toBe(0)
-    expect(s.semJulgamento).toBe(1)
+    expect(s.scored).toBe(0)
+    expect(s.unjudged).toBe(1)
+  })
+})
+
+describe('reading the legacy label file', () => {
+  // A file exported before the schema was translated: Portuguese keys and values.
+  const legacy = {
+    consultas: [
+      {
+        id: 'q1',
+        tipo: 'decisao',
+        esperado: 'recuperar',
+        lexical: { top5: [{ rank: 1, id: 'm1' }] },
+        hibrido: { top5: [{ rank: 1, id: 'm2' }, { rank: 2, id: 'm3', cobertura: 0.4 }] },
+        memorias: {
+          m1: { texto: 'memória', classificacao: 'irrelevant' },
+          m2: { texto: 'outra', classificacao: 'relevant', obs: 'answers it' },
+          m3: { texto: 'terceira', classificacao: '' },
+        },
+      },
+      {
+        id: 'q2',
+        esperado: 'nenhuma',
+        lexical: { top5: [{ rank: 1, id: 'm4' }] },
+        memorias: { m4: { classificacao: 'relevant' } },
+      },
+    ],
+  }
+
+  it('normalizes the keys and the legacy expectation values', () => {
+    const parsed = parseQueries(legacy)
+    expect(parsed).toHaveLength(2)
+    expect(parsed[0].expected).toBe('retrieve')
+    expect(parsed[1].expected).toBe('none')
+    expect(parsed[0].type).toBe('decisao')
+    expect(parsed[0].hybrid?.top5?.[1].id).toBe('m3')
+    expect(parsed[0].hybrid?.top5?.[1].coverage).toBe(0.4)
+    expect(parsed[0].memories?.m2).toEqual({ text: 'outra', classification: 'relevant', notes: 'answers it' })
+  })
+
+  it('scores a legacy file exactly like the same file in the new format', () => {
+    const legacyScores = {
+      lexical: scoreMechanism(parseQueries(legacy), 'lexical'),
+      hybrid: scoreMechanism(parseQueries(legacy), 'hybrid'),
+      noMemory: scoreNoMemory(parseQueries(legacy), 'lexical'),
+    }
+    const translated = {
+      queries: [
+        {
+          id: 'q1',
+          type: 'decisao',
+          expected: 'retrieve',
+          lexical: { top5: [{ rank: 1, id: 'm1' }] },
+          hybrid: { top5: [{ rank: 1, id: 'm2' }, { rank: 2, id: 'm3', coverage: 0.4 }] },
+          memories: {
+            m1: { text: 'memória', classification: 'irrelevant' },
+            m2: { text: 'outra', classification: 'relevant', notes: 'answers it' },
+            m3: { text: 'terceira', classification: '' },
+          },
+        },
+        {
+          id: 'q2',
+          expected: 'none',
+          lexical: { top5: [{ rank: 1, id: 'm4' }] },
+          memories: { m4: { classification: 'relevant' } },
+        },
+      ],
+    }
+    expect(legacyScores.hybrid).toEqual(scoreMechanism(parseQueries(translated), 'hybrid'))
+    expect(legacyScores.lexical).toEqual(scoreMechanism(parseQueries(translated), 'lexical'))
+    expect(legacyScores.noMemory).toEqual(scoreNoMemory(parseQueries(translated), 'lexical'))
+    // And the numbers are the expected ones: q1 hybrid → m2 relevant at 1, m3 unjudged.
+    expect(legacyScores.hybrid.mrr).toBeCloseTo(1, 6)
+    expect(legacyScores.hybrid.p5).toBeCloseTo(1, 6)
+    expect(legacyScores.noMemory.conflicts).toEqual(['q2'])
   })
 })

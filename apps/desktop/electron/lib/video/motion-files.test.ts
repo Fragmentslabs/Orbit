@@ -4,12 +4,12 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * O card da peça precisa saber três coisas de cada arquivo: que ele existe, se
- * a composição o CITA (usado) ou não (descartado), e de qual mídia do chat ele
- * veio — é essa última que transforma um player solto numa linha do card.
+ * The piece card needs to know three things about each file: that it exists, whether
+ * the composition CITES it (used) or not (discarded), and from which chat media it
+ * came — the last one is what turns a loose player into a line of the card.
  *
- * O "usado" é derivado do texto da composição de propósito: quando o agente
- * troca a narração no `audio.json`, o arquivo antigo vira descartado sozinho.
+ * "Used" is derived from the composition's text on purpose: when the agent
+ * swaps the narration in `audio.json`, the old file becomes discarded by itself.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-motion-files-${process.pid}`)
@@ -40,7 +40,7 @@ beforeAll(async () => {
   await fsp.writeFile(path.join(folder, 'audio.json'), JSON.stringify({ tracks: [{ src: 'narracao.wav' }] }))
   await fsp.writeFile(path.join(folder, 'clipe.mp4'), Buffer.alloc(64))
   await fsp.writeFile(path.join(folder, 'narracao.wav'), Buffer.alloc(32))
-  // A antiga: o `audio.json` não fala dela.
+  // The old one: `audio.json` does not speak of it.
   await fsp.writeFile(path.join(folder, 'narracao-2.wav'), Buffer.alloc(16))
   await fsp.writeFile(path.join(folder, 'fonts', 'inter.woff2'), Buffer.alloc(8))
   await fsp.writeFile(path.join(folder, '.DS_Store'), 'x')
@@ -52,19 +52,19 @@ afterAll(async () => {
 })
 
 describe('listMotionBundles', () => {
-  it('lista a pasta da peça, sem os arquivos internos, com usado/descartado', async () => {
+  it('lists the piece folder, without the internal files, with used/unused', async () => {
     const [bundle] = await files.listMotionBundles(SESSION)
     expect(bundle.name).toBe('intro')
     const byName = Object.fromEntries(bundle.files.map((file) => [file.name, file]))
-    // index.html é a peça, audio.json é manifesto: nenhum dos dois é item da lista.
+    // index.html is the piece, audio.json is a manifest: neither one is an item of the list.
     expect(byName['index.html']).toBeUndefined()
     expect(byName['audio.json']).toBeUndefined()
     expect(byName['.DS_Store']).toBeUndefined()
     expect(byName['clipe.mp4'].used).toBe(true)
     expect(byName['narracao.wav'].used).toBe(true)
-    // Citada só no HTML, por caminho relativo.
+    // Cited only in the HTML, by relative path.
     expect(byName['fonts/inter.woff2'].used).toBe(true)
-    // A narração que a composição não cita: continua na pasta, etiquetada.
+    // The narration the composition does not cite: it stays in the folder, labelled.
     expect(byName['narracao-2.wav'].used).toBe(false)
     expect(bundle.discarded).toBe(1)
     expect(bundle.totalBytes).toBe(64 + 32 + 16 + 8)
@@ -73,7 +73,7 @@ describe('listMotionBundles', () => {
     expect(bundle.files.find((file) => file.name === 'fonts/inter.woff2')?.kind).toBe('font')
   })
 
-  it('a composição muda → o estado do arquivo muda junto, sem ninguém marcar nada', async () => {
+  it('the composition changes → the file state changes with it, with nobody marking anything', async () => {
     const audioFile = path.join(folder, 'audio.json')
     const before = await fsp.readFile(audioFile, 'utf8')
     await fsp.writeFile(audioFile, JSON.stringify({ tracks: [{ src: 'narracao-2.wav' }] }))
@@ -87,11 +87,11 @@ describe('listMotionBundles', () => {
     }
   })
 
-  it('sem peça registrada na sessão, nenhum card', async () => {
+  it('with no piece registered in the session, no card', async () => {
     expect(await files.listMotionBundles('outra-sessao')).toEqual([])
   })
 
-  it('a origem de cada arquivo vira chave do chat', async () => {
+  it('the origin of each file becomes the chat key', async () => {
     const id = store.motionIdFor(folder, path.join(folder, 'index.html'))
     await files.recordMotionFile(
       { id, folder, sessionId: SESSION },
@@ -106,10 +106,10 @@ describe('listMotionBundles', () => {
     expect(bundle.keys).toContain('/tmp/projeto/clipe.mp4')
   })
 
-  it('registrar de novo o mesmo arquivo não duplica a origem nem apaga a anterior', async () => {
+  it('registering the same file again does not duplicate the origin nor erase the previous one', async () => {
     const id = store.motionIdFor(folder, path.join(folder, 'index.html'))
-    // A narração regravada que caiu no mesmo nome: as duas mensagens da
-    // conversa continuam apontando para o arquivo.
+    // The re-recorded narration that landed on the same name: both messages of the
+    // conversation keep pointing at the file.
     await files.recordMotionFile({ id, folder, sessionId: SESSION }, { name: 'narracao.wav', ref: 'aud_def.wav' })
     await files.recordMotionFile({ id, folder, sessionId: SESSION }, { name: 'narracao.wav', ref: 'aud_def.wav' })
     const [bundle] = await files.listMotionBundles(SESSION)
@@ -118,7 +118,7 @@ describe('listMotionBundles', () => {
     expect(bundle.keys.filter((key) => key === 'aud_def.wav')).toHaveLength(1)
   })
 
-  it('peça apagada leva a origem junto (a pasta reaberta é uma peça nova)', async () => {
+  it('a deleted piece takes the origin with it (the reopened folder is a new piece)', async () => {
     const id = store.motionIdFor(folder, path.join(folder, 'index.html'))
     await store.unregisterMotion(id)
     const rebuilt = await store.registerMotion(folder, path.join(folder, 'index.html'), { root, sessionId: SESSION })
@@ -129,28 +129,28 @@ describe('listMotionBundles', () => {
 })
 
 describe('mentionsFile', () => {
-  it('o arquivo tem que aparecer como arquivo, não como pedaço de outra palavra', () => {
+  it('the file must show up as a file, not as part of another word', () => {
     expect(files.mentionsFile('<img src="foto.png">', 'foto.png')).toBe(true)
     expect(files.mentionsFile('url(./foto.png)', 'foto.png')).toBe(true)
     expect(files.mentionsFile('{"src":"foto.png"}', 'foto.png')).toBe(true)
-    // Outro arquivo que TERMINA com o nome não cita o nome.
+    // Another file that ENDS with the name does not cite the name.
     expect(files.mentionsFile('src="minha-foto.png"', 'foto.png')).toBe(false)
     expect(files.mentionsFile('src="foto.png.bak"', 'foto.png')).toBe(false)
   })
 
-  it('caminho com subpasta vale pelo caminho inteiro ou pelo nome solto', () => {
+  it('a path with a subfolder counts by the whole path or by the loose name', () => {
     expect(files.mentionsFile('src="fonts/inter.woff2"', 'fonts/inter.woff2')).toBe(true)
     expect(files.mentionsFile('src="inter.woff2"', 'fonts/inter.woff2')).toBe(true)
     expect(files.mentionsFile('src="fonts/outra.woff2"', 'fonts/inter.woff2')).toBe(false)
   })
 
-  it('nome com espaço vale também na forma que viaja numa URL', () => {
+  it('a name with a space also counts in the form that travels in a URL', () => {
     expect(files.mentionsFile('src="minha%20narracao.wav"', 'minha narracao.wav')).toBe(true)
   })
 })
 
 describe('pieceFileName', () => {
-  it('só aceita caminho dentro da pasta', () => {
+  it('only accepts a path inside the folder', () => {
     expect(files.pieceFileName('/a/b', '/a/b/c/d.wav')).toBe('c/d.wav')
     expect(files.pieceFileName('/a/b', '/a/b')).toBeNull()
     expect(files.pieceFileName('/a/b', '/a/c/d.wav')).toBeNull()

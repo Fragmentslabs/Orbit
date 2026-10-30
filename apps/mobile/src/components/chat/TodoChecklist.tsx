@@ -8,9 +8,9 @@ import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
 
 /**
- * Checklist viva da tool todowrite (paridade com a todo-list do desktop).
- * A última chamada da mensagem é a lista atual; chamadas anteriores (stale)
- * viram uma linha discreta com o contador.
+ * Live checklist of the todowrite tool (parity with the desktop todo-list).
+ * The last call of the message is the current list; earlier calls (stale)
+ * become a discreet line with the counter.
  */
 
 interface TodoItem {

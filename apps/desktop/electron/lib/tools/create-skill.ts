@@ -4,9 +4,9 @@ import { notifySkillsChanged } from '../skills'
 import { proposeSkill } from '../skills/pending'
 
 /**
- * Tool create_skill: o agente PROPÕE uma skill (com scripts opcionais). A
- * proposta fica em staging e aparece como card "Adicionar skill" na conversa —
- * só entra em uso quando o usuário aprova no card.
+ * create_skill tool: the agent PROPOSES a skill (with optional scripts). The
+ * proposal goes to staging and appears as an "Add skill" card in the conversation —
+ * it only comes into use when the user approves it in the card.
  */
 export function createSkillTool() {
   return tool({
@@ -42,7 +42,7 @@ export function createSkillTool() {
           ? ` with ${proposal.files.length} auxiliary file(s): ${proposal.files.join(', ')}`
           : ''
         return (
-          `Skill @${proposal.slug} proposta${extras}. ` +
+          `Skill @${proposal.slug} proposed${extras}. ` +
           'An "Add skill" card appeared in the conversation — the skill is only used once the user approves it. ' +
           'Now explain, in 2-4 sentences, what the skill does and how to use it.'
         )

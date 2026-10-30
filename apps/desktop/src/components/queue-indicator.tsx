@@ -30,8 +30,8 @@ function formatSchedule(ts: number, locale: string, t: TFunction): string {
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
-  // Id do item copiado por último — troca o ícone pra check por um instante.
-  // Um só vale porque copiar é instantâneo; não precisa ser um Set.
+  // Id of the last copied item — it swaps the icon for a check for an instant.
+  // One is enough because copying is instantaneous; it does not need to be a Set.
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const queues = useMessageQueueStore((s) => s.queues)
   const editing = useMessageQueueStore((s) => s.editing)
@@ -40,7 +40,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const sendNow = useMessageQueueStore((s) => s.sendNow)
   const startEdit = useMessageQueueStore((s) => s.startEdit)
   const cancelEdit = useMessageQueueStore((s) => s.cancelEdit)
-  // Turno anterior falhou: a fila não sai sozinha (ver processQueue) — sem
+  // The previous turn failed: the queue does not go on by itself (see processQueue) — without
   // avisar, pareceria travada.
   const paused = useSessionStore((s) => (sessionId ? s.status[sessionId] === "error" : false))
   if (!sessionId) return null
@@ -85,8 +85,8 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                   <ListPlus className="size-3.5 shrink-0 text-muted-foreground" />
                 )}
                 <span className="line-clamp-1 text-muted-foreground">
-                  {/* Mensagem só de anexo não tem texto: o nome do arquivo é o
-                      que identifica o item na fila. */}
+                  {/* A message with only an attachment has no text: the file name is
+                      what identifies the item in the queue. */}
                   {msg.text || msg.files?.[0]?.filename || t("queue.attachmentOnly")}
                 </span>
               </span>
@@ -94,8 +94,8 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 <span className="text-[10px] text-muted-foreground/60">
                   {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t("queue.badge")}
                 </span>
-                {/* O primeiro da fila é o próximo a sair: o botão não teria o
-                    que fazer nele. */}
+                {/* The first of the queue is the next to leave: the button would have
+                    nothing to do on it. */}
                 {index > 0 && (
                   <Hint label={t("queue.sendFirst")}>
                     <button
@@ -123,15 +123,15 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                   <button
                     type="button"
                     onClick={() => {
-                      // Era ESTE item que estava em edição: o lápis cancela (o
-                      // texto do input fica onde está — nunca apagamos o que a
-                      // pessoa escreveu).
+                      // It was THIS item that was being edited: the pencil cancels (the
+                      // input text stays where it is — we never erase what the
+                      // person wrote).
                       if (editingId === msg.id) {
                         cancelEdit(sessionId)
                         return
                       }
-                      // O texto do item vai para o input principal; o Enter grava
-                      // de volta aqui, sem mudar a ordem da fila.
+                      // The text of the item goes to the main input; Enter saves
+                      // back here, without changing the queue order.
                       startEdit(sessionId, msg.id)
                     }}
 
@@ -172,9 +172,9 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           ))}
         </div>
       </CollapsibleContent>
-      {/* Aviso do modo edição: fica fora do conteúdo recolhível, então continua
-          visível com a lista fechada — sem ele o Enter gravaria na fila sem a
-          pessoa perceber. */}
+      {/* Edit mode notice: it stays outside the collapsible content, so it remains
+          visible with the list closed — without it Enter would save into the queue without the
+          person noticing. */}
       {editingId && (
         <div className="mx-1 mb-1 flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary">
           <PencilIcon className="size-3" />

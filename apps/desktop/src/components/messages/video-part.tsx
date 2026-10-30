@@ -10,9 +10,9 @@ function formatDuration(ms?: number): string | null {
 }
 
 /**
- * Vídeo que o agente renderizou ou mostrou (video_render, motion_render,
- * show_video). O arquivo continua no projeto; o orbit-video:// serve com
- * Range, então o <video> busca posição sem baixar tudo.
+ * Video the agent rendered or showed (video_render, motion_render,
+ * show_video). The file stays in the project; orbit-video:// serves with
+ * Range, so the <video> seeks without downloading everything.
  */
 export function VideoPartView({ part }: { part: { src: string; title?: string; durationMs?: number; path?: string } }) {
   const { t } = useTranslation()

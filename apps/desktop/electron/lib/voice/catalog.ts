@@ -1,20 +1,20 @@
 /**
- * Catálogo dos modelos de ditado (STT).
+ * Catalog of the dictation models (STT).
  *
- * É a fonte do `STT_MODELS` (a lista que `manifest.ts` junta à do TTS e que o
- * downloader do núcleo consome): `bytes` é o tamanho EXATO do arquivo na origem
- * e `url` é o arquivo direto — o downloader do núcleo deriva o nome do arquivo
- * do último segmento da URL e só considera o modelo instalado quando o tamanho
- * bate byte a byte. Por isso os números aqui não são estimativas: foram medidos
- * com `curl -I` nas URLs (content-length / `x-linked-size`, e o `x-linked-etag`
- * do HuggingFace é o sha256 conferido pelo downloader).
+ * It is the source of `STT_MODELS` (the list `manifest.ts` joins with the TTS one and that the
+ * core downloader consumes): `bytes` is the EXACT size of the file at the origin
+ * and `url` is the file directly — the core downloader derives the file name
+ * from the last segment of the URL and only considers the model installed when the size
+ * matches byte for byte. That is why the numbers here are not estimates: they were measured
+ * with `curl -I` on the URLs (content-length / `x-linked-size`, and HuggingFace's
+ * `x-linked-etag` is the sha256 checked by the downloader).
  *
- * Nada disto vai no repo nem no build: cada modelo é baixado sob demanda para
+ * None of this goes into the repo or the build: each model is downloaded on demand to
  * `<userData>/voice/models/<id>/`.
  *
- * O Parakeet é o único caso de PACOTE: a origem publica um `.tar.bz2` com os
- * quatro arquivos int8, e a extração (que o downloader do núcleo não faz para
- * STT) acontece no primeiro uso, dentro do próprio motor — ver `parakeet.ts`.
+ * Parakeet is the only PACKAGE case: the origin publishes a `.tar.bz2` with the
+ * four int8 files, and the extraction (which the core downloader does not do for
+ * STT) happens on first use, inside the engine itself — see `parakeet.ts`.
  */
 
 export type SttEngineKind = 'whisper' | 'parakeet'
@@ -23,39 +23,39 @@ export interface SttModelDef {
   id: string
   label: string
   engine: SttEngineKind
-  /** Tamanho exato do download, em bytes. */
+  /** Exact download size, in bytes. */
   bytes: number
-  /** Arquivo direto na origem (para o Parakeet, o pacote .tar.bz2). */
+  /** File directly at the origin (for Parakeet, the .tar.bz2 package). */
   url: string
-  /** sha256 publicado pela origem (LFS do HuggingFace); ausente = não verificado. */
+  /** sha256 published by the origin (HuggingFace LFS); absent = not verified. */
   sha256?: string
-  /** Idiomas que a UI pode oferecer ("auto" = o motor detecta sozinho). */
+  /** Languages the UI can offer ("auto" = the engine detects it by itself). */
   langs: string[]
-  /** Perfil de uso, em uma linha (compõe o rótulo da UI). */
+  /** Usage profile, in one line (it makes up the UI label). */
   note: string
-  /** Precisa extrair o pacote antes de usar (Parakeet). */
+  /** Needs the package extracted before use (Parakeet). */
   archive?: boolean
 }
 
 const HF_WHISPER = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/'
 const SHERPA_ASR = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'
 
-/** Diretório/arquivo do pacote do Parakeet no release do sherpa-onnx. */
+/** Directory/file of the Parakeet package in the sherpa-onnx release. */
 export const PARAKEET_DIR = 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8'
-/** Subpasta onde os arquivos extraídos ficam (dentro de `<models>/<id>/`). */
+/** Subfolder where the extracted files live (inside `<models>/<id>/`). */
 export const PARAKEET_EXTRACT_DIR = 'model'
-/** Arquivos que provam que o Parakeet foi extraído por inteiro. */
+/** Files that prove Parakeet was fully extracted. */
 export const PARAKEET_FILES = ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx', 'tokens.txt']
 
-/** VAD Silero (fatia o áudio do Parakeet) — arquivo solto, compartilhado. */
+/** Silero VAD (slices Parakeet's audio) — a standalone, shared file. */
 export const SILERO_VAD_FILE = 'silero_vad.onnx'
 export const SILERO_VAD_URL = `${SHERPA_ASR}${SILERO_VAD_FILE}`
 export const SILERO_VAD_BYTES = 643854
 
-/** Idiomas do Parakeet v3 (25 línguas europeias; ele detecta sozinho). */
+/** Parakeet v3 languages (25 European languages; it detects by itself). */
 const PARAKEET_LANGS = ['pt', 'auto', 'en', 'es', 'fr', 'de', 'it']
 
-/** Idiomas oferecidos para os modelos multilíngues do whisper. */
+/** Languages offered for the whisper multilingual models. */
 const WHISPER_LANGS = ['pt', 'auto', 'en', 'es', 'fr', 'de', 'it', 'ja', 'zh']
 
 export const STT_MODEL_DEFS: SttModelDef[] = [
@@ -122,9 +122,9 @@ export const STT_MODEL_DEFS: SttModelDef[] = [
 ]
 
 /**
- * Whisper que cabe na máquina: o small (boa precisão em pt-BR, ~0,5 GB) e,
- * abaixo de 7 GB de RAM, o base. É a regra da recomendação (`hardware.ts`) e do
- * "Automático" do motor (`whisper.ts`) — uma só, para os dois não divergirem.
+ * Whisper that fits the machine: the small one (good accuracy in pt-BR, ~0.5 GB) and,
+ * below 7 GB of RAM, the base one. It is the rule of the recommendation (`hardware.ts`) and of the
+ * engine's "Automatic" (`whisper.ts`) — a single one, so the two do not diverge.
  */
 export function preferredWhisperModelId(totalMemGb: number): string {
   return totalMemGb >= 7 ? 'whisper-small' : 'whisper-base'
@@ -139,7 +139,7 @@ export function modelsForEngine(engine: SttEngineKind): SttModelDef[] {
   return STT_MODEL_DEFS.filter((m) => m.engine === engine)
 }
 
-/** Nome do arquivo baixado: o último segmento da URL (mesma regra do downloader). */
+/** Name of the downloaded file: the last segment of the URL (same rule as the downloader). */
 export function fileNameOf(def: SttModelDef): string {
   const tail = decodeURIComponent(def.url.split('?')[0].split('/').filter(Boolean).pop() ?? '')
   return tail && tail.includes('.') ? tail : `${def.id}.bin`

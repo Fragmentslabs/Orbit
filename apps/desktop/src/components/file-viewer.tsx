@@ -1,17 +1,17 @@
 "use client";
 
 /**
- * O painel esquerdo da aba de pastas: mostra UM arquivo.
+ * The left panel of the folders tab: it shows ONE file.
  *
- * Ele é dono do estado daquilo que exibe — conteúdo, rascunho, conflito, modo
- * de markdown e a lente (conteúdo ou diff). O que vem de fora é só a referência
- * do arquivo (`file`) e o contexto do workspace; o que sai é o aviso de que há
- * rascunho não salvo, que quem troca de arquivo precisa consultar antes.
+ * It owns the state of what it displays — content, draft, conflict, markdown
+ * mode and the lens (content or diff). What comes from outside is only the file
+ * reference (`file`) and the workspace context; what goes out is the notice that there is an
+ * unsaved draft, which whoever switches files needs to consult beforehand.
  *
- * Antes disto, o mesmo estado estava espalhado pelo componente da aba, com
- * `viewedFile` e `diffMode`/`diffPatch` como estados paralelos descrevendo a
- * mesma tela — trocar de lente era mexer em três estados de fora. Aqui o alvo
- * do visualizador é um só (`file`), e a lente é um atributo dele.
+ * Before this, the same state was spread across the tab component, with
+ * `viewedFile` and `diffMode`/`diffPatch` as parallel states describing the
+ * same screen — switching lens meant touching three states from outside. Here the target
+ * of the viewer is a single one (`file`), and the lens is an attribute of it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -77,54 +77,54 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Salvamento automático: preferência do painel, como as demais. */
+/** Automatic saving: a panel preference, like the others. */
 const AUTO_SAVE_KEY = "orbit-files-auto-save";
-/** Espera depois da última tecla antes do save automático. */
+/** Wait after the last key before the automatic save. */
 const AUTO_SAVE_DEBOUNCE_MS = 1000;
 
 export interface FileViewerProps {
-  /** O arquivo em foco; `null` mostra o convite para escolher um na árvore. */
+  /** The focused file; `null` shows the invitation to pick one in the tree. */
   file: ViewedFile | null;
-  /** Raiz do repo — base dos breadcrumbs e das leituras do git. */
+  /** Repo root — basis of the breadcrumbs and of the git reads. */
   repoRoot?: string;
-  /** Pastas do workspace: allowlist do save e raiz do eslint. */
+  /** Workspace folders: allowlist of the save and eslint root. */
   roots: string[];
-  /** Avisa o pai que o rascunho passou a existir ou sumiu. Precisa ser estável. */
+  /** Tells the parent that the draft came into existence or disappeared. It needs to be stable. */
   onDirtyChange: (dirty: boolean) => void;
-  /** A lente sobre o arquivo: o conteúdo em si ou o diff dele. */
+  /** The lens over the file: the content itself or its diff. */
   lens: ViewerLens;
-  /** Troca de lente — os dois botões flutuantes do canto inferior direito. */
+  /** Lens switch — the two floating buttons of the bottom right corner. */
   onLensChange: (lens: ViewerLens) => void;
-  /** Alterna a visibilidade do navegador de arquivos (botão do cabeçalho). */
+  /** Toggles the visibility of the file browser (header button). */
   onToggleBrowser: () => void;
   /**
-   * Entrega ao pai a função que substitui no buffer aberto — e `null` quando
-   * não há editor (lente de diff, imagem, arquivo fechado). Passar pelo
-   * editor, e não pelo disco, é o que preserva rascunho não salvo.
+   * Hands the parent the function that replaces in the open buffer — and `null` when
+   * there is no editor (diff lens, image, closed file). Going through the
+   * editor, and not through the disk, is what preserves an unsaved draft.
    */
   onRegisterReplaceInFile?: (
     fn:
       | ((query: string, replacement: string, options: SearchReplaceOptions) => number)
       | null,
   ) => void;
-  /** Linha para onde rolar assim que o arquivo terminar de carregar. */
+  /** Line to scroll to as soon as the file finishes loading. */
   revealLine?: { line: number; nonce: number };
   /**
-   * A consulta da busca do índice, para grifar as ocorrências dentro do
-   * arquivo aberto. Vazio limpa. O painel da direita deixa de ser só uma
-   * lista: ele aponta no texto o que está listando.
+   * The query of the index search, to mark the occurrences inside the
+   * open file. Empty clears it. The panel on the right stops being just a
+   * list: it points in the text at what it is listing.
    */
   searchHighlight?: { query: string; options: SearchReplaceOptions } | null;
   /**
-   * Cresce quando o arquivo mudou EM DISCO por fora do editor — é o que a
-   * substituição em massa faz. O rascunho manda: com edição pendente o
-   * recarregamento não acontece, para não apagar o que ainda não foi salvo.
+   * It grows when the file changed ON DISK from outside the editor — which is what the
+   * mass replacement does. The draft rules: with a pending edit the
+   * reload does not happen, so as not to erase what has not been saved yet.
    */
   reloadToken?: number;
 }
 
 /**
- * Modo diff do visualizador: realça com a linguagem e só pinta o fundo.
+ * Diff mode of the viewer: it highlights with the language and only paints the background.
  */
 function DiffCodeView({ patch, filePath }: { patch: string; filePath: string }) {
   const { t } = useTranslation();
@@ -166,12 +166,12 @@ export function FileViewer({
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(file != null);
-  /** mtime de quando o arquivo foi aberto — referência do save contra
-   *  escrita concorrente (agente, outro editor). */
+  /** mtime from when the file was opened — reference of the save against a
+   *  concurrent write (agent, another editor). */
   const [mtime, setMtime] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  /** Motivo pelo qual o último save ou a última escrita do agente não passou. */
+  /** Reason why the last save or the last agent write did not go through. */
   const [conflict, setConflict] = useState<
     null | { kind: "stale" } | { kind: "agent" } | { kind: "failed"; message: string }
   >(null);
@@ -180,33 +180,33 @@ export function FileViewer({
   );
   const [copied, setCopied] = useState(false);
   const [mdMode, setMdMode] = useState<"source" | "preview">("preview");
-  /** Cmd+F: a barra de busca do arquivo aberto. */
+  /** Cmd+F: the search bar of the open file. */
   const [findOpen, setFindOpen] = useState(false);
-  /** Patch da lente de diff — o único dado que ela carrega do git. */
+  /** Patch of the diff lens — the only data it carries from git. */
   const [patch, setPatch] = useState<string | null>(null);
-  // Abrir direto no diff (é o que a lista de alterações pede) já nasce
-  // carregando: sem isso o painel pisca vazio antes de o patch chegar.
+  // Opening straight in the diff (which is what the changes list asks for) is born
+  // loading: without that the panel blinks empty before the patch arrives.
   const [patchLoading, setPatchLoading] = useState(
     file != null && lens === "diff",
   );
   const [patchError, setPatchError] = useState<string | null>(null);
-  /** Figuras do Markdown aberto, resolvidas contra a pasta DELE. */
+  /** Figures of the open Markdown, resolved against ITS folder. */
   const [previewImages, setPreviewImages] = useState<Record<string, string>>({});
 
   const editorRef = useRef<CodeEditorHandle>(null);
   const autoSaveTimer = useRef<number>();
   const copyTimeoutRef = useRef<number>();
-  /** Espelho de "há rascunho": efeitos que não podem depender do estado leem daqui. */
+  /** Mirror of "there is a draft": effects that cannot depend on the state read from here. */
   const dirtyNow = useRef(false);
   dirtyNow.current = dirty;
-  /** Último token de reload já aplicado — separa "abriu outro arquivo" de
-   *  "o mesmo arquivo mudou no disco". */
+  /** Last reload token already applied — it separates "opened another file" from
+   *  "the same file changed on disk". */
   const appliedReload = useRef(reloadToken);
 
   /**
-   * `repoRoot`, `t` e `onDirtyChange` entram por ref dentro dos efeitos: são
-   * contexto, não o alvo do visualizador. Como dependência, trocar de idioma ou
-   * de pasta raiz recarregaria o arquivo por cima de um rascunho em edição.
+   * `repoRoot`, `t` and `onDirtyChange` enter by ref inside the effects: they are
+   * context, not the target of the viewer. As a dependency, switching language or
+   * root folder would reload the file over a draft being edited.
    */
   const repoRootRef = useRef(repoRoot);
   repoRootRef.current = repoRoot;
@@ -215,7 +215,7 @@ export function FileViewer({
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
 
-  /** Trocar de arquivo joga fora tudo o que era do anterior. */
+  /** Switching file throws away everything that belonged to the previous one. */
   const resetEditorState = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -230,16 +230,16 @@ export function FileViewer({
     setPreviewImages({});
   }, []);
 
-  // Sair de cena (troca de aba) leva o rascunho junto — o pai não pode
-  // continuar achando que há algo a descartar depois disso.
+  // Leaving the scene (tab switch) takes the draft along — the parent cannot
+  // keep thinking there is something to discard after that.
   useEffect(() => () => onDirtyChangeRef.current(false), []);
 
   useEffect(() => {
     if (!file) return;
     const externalReload = appliedReload.current !== reloadToken;
     appliedReload.current = reloadToken;
-    // Escrita por fora (substituição em massa) com rascunho pendente: o texto
-    // na tela ganha, senão recarregar apagaria o que ainda não foi salvo.
+    // Write from outside (mass replacement) with a pending draft: the text
+    // on screen wins, otherwise reloading would erase what has not been saved yet.
     if (externalReload && dirtyNow.current) return;
     let cancelled = false;
     resetEditorState();
@@ -289,8 +289,8 @@ export function FileViewer({
       }
 
       if (file.deleted) {
-        // Arquivo excluído no working tree: o modo padrão mostra o conteúdo
-        // no HEAD (o arquivo não existe mais em disco).
+        // File deleted in the working tree: the default mode shows the content
+        // at HEAD (the file does not exist on disk anymore).
         if (root && file.relPath) {
           const result = (await window.ipcRenderer.invoke(
             "git:showFile",
@@ -329,24 +329,24 @@ export function FileViewer({
   }, [file, resetEditorState, reloadToken]);
 
   /**
-   * Rolar até a linha pedida pela busca do índice. Espera o conteúdo: com o
-   * editor ainda vazio o documento não tem a linha para onde ir.
+   * Scrolls to the line asked for by the index search. It waits for the content: with the
+   * editor still empty the document has no line to go to.
    */
   useEffect(() => {
     if (!revealLine || content == null) return;
     editorRef.current?.scrollToLine(revealLine.line);
   }, [revealLine, content]);
 
-  // Trocar de arquivo fecha a barra: a consulta de um não vale no outro, e
-  // deixá-la aberta com "0/0" pareceria um arquivo sem a palavra procurada.
+  // Switching file closes the bar: one's query does not count in the other, and
+  // leaving it open with "0/0" would look like a file without the searched word.
   useEffect(() => {
     setFindOpen(false);
   }, [file?.path]);
 
   /**
-   * O grifo da busca acompanha a consulta, e precisa ser reaplicado quando o
-   * conteúdo chega — o editor nasce vazio a cada arquivo, e um grifo aplicado
-   * antes disso não teria texto onde cair.
+   * The search mark follows the query, and needs to be re-applied when the
+   * content arrives — the editor is born empty on every file, and a mark applied
+   * before that would have no text to fall on.
    */
   useEffect(() => {
     if (content == null) return;
@@ -360,11 +360,11 @@ export function FileViewer({
   const isImage = file ? isImageFile(file.path) : false;
 
   /**
-   * Figuras do Markdown aberto, resolvidas contra a pasta DELE.
+   * Figures of the open Markdown, resolved against ITS folder.
    *
-   * O preview roda na origem do app, então um `./imagens/x.png` não resolve
-   * contra o arquivo e a imagem aparecia quebrada. Quem sabe a pasta é o main,
-   * que devolve cada caminho como data URL.
+   * The preview runs on the app origin, so a `./images/x.png` does not resolve
+   * against the file and the image appeared broken. The one that knows the folder is the main process,
+   * which returns each path as a data URL.
    */
   useEffect(() => {
     if (!content || !file || !isMarkdownFile || mdMode !== "preview") {
@@ -376,8 +376,8 @@ export function FileViewer({
       setPreviewImages({});
       return;
     }
-    // No arquivo de commit o caminho é relativo ao repositório; juntar com "/"
-    // basta, porque o main resolve com path.resolve.
+    // In the commit file the path is relative to the repository; joining with "/"
+    // is enough, because the main process resolves it with path.resolve.
     const base =
       file.kind === "live" ? file.path : `${file.repoPath}/${file.path}`;
     let cancelled = false;
@@ -387,7 +387,7 @@ export function FileViewer({
         if (!cancelled) setPreviewImages(map as Record<string, string>);
       })
       .catch(() => {
-        // figura é enfeite: falhar aqui não pode derrubar a leitura do texto
+        // a figure is decoration: failing here cannot take down the reading of the text
       });
     return () => {
       cancelled = true;
@@ -399,7 +399,7 @@ export function FileViewer({
     [content, previewImages],
   );
 
-  /** O galho que renderiza o CodeEditor — quem rola é ele, não o pai. */
+  /** The branch that renders the CodeEditor — the one that scrolls is it, not the parent. */
   const showsEditor =
     !loading &&
     lens === "content" &&
@@ -409,17 +409,17 @@ export function FileViewer({
     !(isMarkdownFile && mdMode === "preview");
 
   /**
-   * ⌘F com o foco FORA do editor — na árvore, logo depois de abrir o arquivo —
-   * não chega ao keymap do CodeMirror, e é exatamente aí que a tecla é
-   * apertada. Aqui ela é capturada na janela; com o foco no editor, o keymap
-   * dele já marcou `defaultPrevented` e este handler se cala.
+   * ⌘F with the focus OUTSIDE the editor — in the tree, right after opening the file —
+   * does not reach the CodeMirror keymap, and that is exactly where the key is
+   * pressed. Here it is captured on the window; with the focus in the editor, its
+   * keymap has already marked `defaultPrevented` and this handler keeps quiet.
    */
   useEffect(() => {
     function onFind(event: KeyboardEvent) {
       if (event.defaultPrevented || !showsEditor) return;
       if (!(event.ctrlKey || event.metaKey) || event.shiftKey) return;
       if (event.code !== "KeyF") return;
-      // Campo de texto fora do editor (composer, busca do painel) manda em si.
+      // A text field outside the editor (composer, panel search) rules over itself.
       const target = event.target as HTMLElement | null;
       if (
         target?.closest("input, textarea, [contenteditable='true']") &&
@@ -435,8 +435,8 @@ export function FileViewer({
   }, [showsEditor]);
 
   /**
-   * Só arquivo do working tree é editável: o de um commit é histórico, e o
-   * excluído não existe mais em disco.
+   * Only a working tree file is editable: the one of a commit is history, and the
+   * deleted one does not exist on disk anymore.
    */
   const canEdit =
     file?.kind === "live" &&
@@ -459,14 +459,14 @@ export function FileViewer({
       if (result.ok) {
         setConflict(null);
         setMtime(result.mtimeMs);
-        // Vira a nova base do editor: o buffer passa a espelhar o disco e o
-        // indicador de rascunho apaga.
+        // It becomes the new basis of the editor: the buffer starts mirroring the disk and the
+        // draft indicator goes off.
         setContent(next);
         return;
       }
       if (result.reason === "stale") {
-        // Alguém escreveu no meio. Não sobrescreve nada: mostra o aviso e
-        // deixa a pessoa escolher entre recarregar e insistir.
+        // Someone wrote in the middle. It overwrites nothing: it shows the notice and
+        // lets the person choose between reloading and insisting.
         setConflict({ kind: "stale" });
         return;
       }
@@ -481,7 +481,7 @@ export function FileViewer({
     [file, roots, mtime, t],
   );
 
-  /** Descarta o rascunho e traz o que está em disco. */
+  /** Discards the draft and brings what is on disk. */
   const reloadFromDisk = useCallback(async () => {
     if (!file || file.kind !== "live") return;
     const result = (await window.ipcRenderer.invoke(
@@ -495,7 +495,7 @@ export function FileViewer({
     }
   }, [file]);
 
-  /** Grava por cima, aceitando perder o que mudou em disco. */
+  /** Writes over it, accepting the loss of what changed on disk. */
   const overwrite = useCallback(async () => {
     const next = editorRef.current?.getContent();
     if (next == null || !file || file.kind !== "live") return;
@@ -513,7 +513,7 @@ export function FileViewer({
     }
   }, [file, roots]);
 
-  /** Relê só o mtime, sem tocar no buffer — o conteúdo já foi fundido. */
+  /** Re-reads only the mtime, without touching the buffer — the content has already been merged. */
   const reloadMtime = useCallback(async (filePath: string) => {
     const result = (await window.ipcRenderer.invoke(
       "fs:readFile",
@@ -523,14 +523,14 @@ export function FileViewer({
   }, []);
 
   /**
-   * Escrita do agente no arquivo aberto.
+   * Agent write in the open file.
    *
-   * O evento `part` do chat já traz o input da tool, então dá para fundir a
-   * alteração no buffer em vez de recarregar por cima — cursor, seleção,
-   * scroll, undo e o rascunho em outras partes do arquivo sobrevivem.
+   * The chat `part` event already brings the tool input, so it is possible to merge the
+   * change into the buffer instead of reloading over it — cursor, selection,
+   * scroll, undo and the draft in other parts of the file survive.
    *
-   * `bash` é ponto cego conhecido: escreve arquivo e não diz qual. Para esses
-   * casos o que protege é a checagem de mtime no save.
+   * `bash` is a known blind spot: it writes a file and does not say which. For those
+   * cases what protects is the mtime check on save.
    */
   useEffect(() => {
     const current = file;
@@ -538,12 +538,12 @@ export function FileViewer({
     const open = current.path.replace(/\\/g, "/");
     return chatApi.onEvent((event) => {
       if (event.type !== "part" || event.part.type !== "tool") return;
-      // Só depois de gravado: 'running' ainda não escreveu em disco, e fundir
-      // ali deixaria o buffer adiantado em relação ao arquivo.
+      // Only after written: 'running' has not written to disk yet, and merging
+      // there would leave the buffer ahead of the file.
       if (event.part.state !== "done") return;
       const parsed = agentWriteFromTool(event.part.tool, event.part.input);
       if (!parsed) return;
-      // O caminho da tool pode vir relativo à pasta de trabalho.
+      // The tool path may come relative to the working folder.
       const target = parsed.filePath.replace(/\\/g, "/");
       if (open !== target && !open.endsWith(`/${target}`)) return;
       const outcome = editorRef.current?.applyAgentWrite(parsed.write);
@@ -552,19 +552,19 @@ export function FileViewer({
         setConflict({ kind: "agent" });
         return;
       }
-      // O disco mudou: sem renovar o mtime, o próximo save seria recusado por
-      // desatualizado mesmo já tendo incorporado a alteração do agente.
+      // The disk changed: without renewing the mtime, the next save would be refused as
+      // outdated even though the agent change had already been incorporated.
       void reloadMtime(current.path);
       if (outcome.wasClean) setContent(outcome.content);
     });
   }, [file, reloadMtime]);
 
   /**
-   * O rascunho do editor sobe para quem troca de arquivo.
+   * The editor draft goes up to whoever switches files.
    *
-   * O aviso `dirty` é do visualizador (é ele que mostra o ponto ao lado do
-   * caminho), mas quem decide se pode jogar o buffer fora é a aba. Sem esta
-   * ponte, a troca de arquivo descartaria o texto sem perguntar nada.
+   * The `dirty` notice is the viewer's (it is what shows the dot next to the
+   * path), but the one that decides whether the buffer can be thrown away is the tab. Without this
+   * bridge, the file switch would discard the text without asking anything.
    */
   const handleEditorDirty = useCallback(
     (next: boolean) => {
@@ -574,7 +574,7 @@ export function FileViewer({
     [onDirtyChange],
   );
 
-  /** Digitação no editor — só serve ao salvamento automático. */
+  /** Typing in the editor — it only serves the automatic saving. */
   const handleEditorChange = useCallback(
     (next: string) => {
       window.clearTimeout(autoSaveTimer.current);
@@ -586,8 +586,8 @@ export function FileViewer({
     [autoSave, canEdit, saveFile],
   );
 
-  // Trocar de arquivo com save automático pendente gravaria o texto de um
-  // arquivo dentro do outro.
+  // Switching file with an automatic save pending would write the text of one
+  // file inside the other.
   useEffect(() => {
     return () => window.clearTimeout(autoSaveTimer.current);
   }, [file]);
@@ -621,8 +621,8 @@ export function FileViewer({
   }, [file]);
 
   /**
-   * Busca o patch da lente de diff, conforme a origem — working tree contra o
-   * HEAD, ou o arquivo dentro de um commit.
+   * Fetches the patch of the diff lens, according to the origin — working tree against
+   * HEAD, or the file inside a commit.
    */
   const loadPatch = useCallback(async (target: ViewedFile) => {
     const tr = tRef.current;
@@ -653,9 +653,9 @@ export function FileViewer({
   }, []);
 
   /**
-   * O patch acompanha a lente: entrar no diff carrega, voltar ao conteúdo
-   * descarta. Assim a próxima entrada busca de novo, em vez de mostrar um diff
-   * que pode ter ficado velho desde a última vez.
+   * The patch follows the lens: entering the diff loads it, going back to the content
+   * discards it. That way the next entry fetches again, instead of showing a diff
+   * that may have gone stale since the last time.
    */
   useEffect(() => {
     if (!file) return;
@@ -668,8 +668,8 @@ export function FileViewer({
   }, [file, lens, loadPatch]);
 
   /**
-   * Troca de lente. A escolha é do pai — é ele que decide com que lente um
-   * arquivo abre —, então aqui só se guarda enquanto arquivo ou patch carregam.
+   * Lens switch. The choice is the parent's — it is what decides with what lens a
+   * file opens —, so here it is only kept while the file or the patch loads.
    */
   const selectLens = useCallback(
     (next: ViewerLens) => {
@@ -682,9 +682,9 @@ export function FileViewer({
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), []);
 
   /**
-   * Publica a substituição no buffer para quem está fora: a busca do painel
-   * direito troca o texto sem tocar no disco. Sem editor (lente de diff,
-   * imagem, nenhum arquivo) o registro vira `null` e a UI desabilita o botão.
+   * Publishes the replacement in the buffer for whoever is outside: the search of the right
+   * panel swaps the text without touching the disk. Without an editor (diff lens,
+   * image, no file) the registry becomes `null` and the UI disables the button.
    */
   useEffect(() => {
     if (!onRegisterReplaceInFile) return;
@@ -902,17 +902,17 @@ export function FileViewer({
               )}
             </div>
           )}
-          {/* A barra fica FORA do scroller: o editor rola por dentro dele, e
-              uma busca que rola junto com o código sai da tela justo quando
-              você está procurando. */}
+          {/* The bar stays OUTSIDE the scroller: the editor scrolls inside it, and
+              a search that scrolls along with the code leaves the screen right when
+              you are searching. */}
           {findOpen && showsEditor && (
             <FileFindBar editor={editorRef} onClose={() => setFindOpen(false)} />
           )}
           <ArtifactContent
             className={cn(
               "min-h-0 min-w-0 flex-1 p-0",
-              // O editor rola por dentro (e só materializa as linhas
-              // visíveis); os outros modos continuam rolando no pai.
+              // The editor scrolls inside (and only materializes the
+              // visible lines); the other modes keep scrolling in the parent.
               showsEditor ? "overflow-hidden" : "overflow-auto",
             )}
           >
@@ -941,8 +941,8 @@ export function FileViewer({
             ) : content != null ? (
               isMarkdownFile && mdMode === "preview" ? (
                 <div className="min-w-0 px-4 py-4 text-sm text-foreground">
-                  {/* O pipeline padrão descarta `src` em data URL, que é
-                      o que a figura local vira depois de resolvida. */}
+                  {/* The default pipeline discards `src` in data URL, which is
+                      what the local figure becomes after being resolved. */}
                   <MessageResponse rehypePlugins={localImageRehypePlugins}>
                     {previewMarkdown}
                   </MessageResponse>

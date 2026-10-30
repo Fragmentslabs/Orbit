@@ -29,9 +29,9 @@ export function ChatMessageSearchBar({ messages, onJumpToMessage }: Props) {
     return messages.filter((m) => !m.summary && normalizeText(messageText(m)).includes(q))
   }, [messages, query])
 
-  // Volta ao primeiro resultado quando a busca muda — ajustado no render, que
-  // é o padrão do React para estado derivado de prop/estado, em vez de um
-  // efeito que provoca um segundo render com o índice antigo.
+  // Goes back to the first result when the search changes — adjusted during render, which
+  // is the React pattern for state derived from prop/state, instead of an
+  // effect that causes a second render with the old index.
   const [lastQuery, setLastQuery] = useState(query)
   if (query !== lastQuery) {
     setLastQuery(query)

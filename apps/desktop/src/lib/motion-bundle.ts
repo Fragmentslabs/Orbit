@@ -2,25 +2,25 @@ import type { ChatMessage, MessagePart } from "@shared/chat"
 import { motionBundleKey, type MotionBundle } from "@shared/media"
 
 /**
- * O que fazer com as mídias de uma mensagem quando elas são de uma PEÇA.
+ * What to do with the media of a message when they belong to a PIECE.
  *
- * Enquanto o agente constrói uma composição, cada áudio e cada imagem que ele
- * gera vira um player solto na conversa — inclusive o que depois foi trocado.
- * A peça tem um card só, e os players dela passam a ser LINHAS desse card. Este
- * módulo é a conta, pura e testável: dada a mensagem, as peças da conversa e
- * onde cada card mora, dizer qual parte vira card, qual some e qual continua
- * sendo o player de sempre.
+ * While the agent builds a composition, every audio and every image it
+ * generates becomes a loose player in the conversation — including the one that was later replaced.
+ * The piece has a single card, and its players become LINES of that card. This
+ * module is the arithmetic, pure and testable: given the message, the pieces of the conversation and
+ * where each card lives, say which part becomes a card, which disappears and which remains
+ * the usual player.
  *
- * Nada é gravado na mensagem: a ligação sai do ARQUIVO — a peça guardou de qual
- * `aud_…`/`img_…` cada arquivo dela veio (ver motion-files no main), e a part
- * carrega o mesmo id na URL. Assim uma conversa antiga, gravada antes disto
- * existir, já aparece agrupada.
+ * Nothing is written into the message: the link comes from the FILE — the piece kept which
+ * `aud_…`/`img_…` each of its files came from (see motion-files in main), and the part
+ * carries the same id in the URL. That way an old conversation, recorded before this
+ * existed, already shows up grouped.
  */
 
 export interface MotionBundleIndexes {
-  /** Chave de mídia (`aud_x.wav`, o caminho de um vídeo) → peça dona. */
+  /** Media key (`aud_x.wav`, the path of a video) → owning piece. */
   byKey: Map<string, MotionBundle>
-  /** motionId → id da mensagem onde o card aparece (a primeira com mídia dela). */
+  /** motionId → id of the message where the card appears (the first one with media of it). */
   anchors: Record<string, string>
 }
 
@@ -33,15 +33,15 @@ export function indexMotionBundles(
   const byKey = new Map<string, MotionBundle>()
   for (const bundle of bundles) {
     for (const key of bundle.keys) {
-      // A primeira peça que reivindica a chave é a dona: um mesmo arquivo
-      // copiado para duas peças aparece no card daquela em que ele nasceu.
+      // The first piece that claims the key owns it: the same file
+      // copied into two pieces appears in the card of the one where it was born.
       if (!byKey.has(key)) byKey.set(key, bundle)
     }
   }
   return { byKey, anchors }
 }
 
-/** A peça a que esta mídia pertence — ou `null` se ela não é de peça nenhuma. */
+/** The piece this media belongs to — or `null` if it belongs to no piece. */
 export function bundleOfPart(
   part: MessagePart,
   byKey: Map<string, MotionBundle>,
@@ -52,8 +52,8 @@ export function bundleOfPart(
     return key ? byKey.get(key) ?? null : null
   }
   if (part.type === "video") {
-    // Vídeo tem duas identidades: a URL do registro e o caminho no disco (é o
-    // que um render feito no projeto deixa na part).
+    // Video has two identities: the registry URL and the path on disk (it is what
+    // a render made in the project leaves in the part).
     for (const value of [part.src, part.path ?? ""]) {
       const key = value ? motionBundleKey(value) : null
       const hit = key ? byKey.get(key) : null
@@ -64,20 +64,20 @@ export function bundleOfPart(
 }
 
 export interface MotionBundlePlan {
-  /** Partes que não desenham nada: viraram o card ou já estão nele. */
+  /** Parts that draw nothing: they became the card or are already in it. */
   hidden: Set<string>
-  /** Parte que dá lugar ao card → peça. */
+  /** Part that gives way to the card → piece. */
   cards: Map<string, MotionBundle>
 }
 
 export const NO_PLAN: MotionBundlePlan = { hidden: new Set(), cards: new Map() }
 
 /**
- * Uma mensagem, uma peça, UM card — o da mensagem onde a peça apareceu pela
- * primeira vez. As mídias dela nas mensagens seguintes somem: a peça é a mesma,
- * e o card já está na conversa mais acima, atualizado (é ele que mostra o
- * arquivo novo). Sem isto, regravar uma narração deixaria um card novo a cada
- * tentativa, que é justamente o que o card veio acabar.
+ * One message, one piece, ONE card — the one of the message where the piece appeared for the
+ * first time. Its media in the following messages disappear: the piece is the same,
+ * and the card is already further up in the conversation, updated (it is what shows the
+ * new file). Without this, re-recording a narration would leave a new card on every
+ * attempt, which is exactly what the card came to end.
  */
 export function planMotionBundles(
   parts: MessagePart[],
@@ -87,16 +87,16 @@ export function planMotionBundles(
   if (!indexes.byKey.size) return NO_PLAN
   const hidden = new Set<string>()
   const cards = new Map<string, MotionBundle>()
-  // `cards` é indexado pela PARTE, então a peça que já ganhou o card precisa de
-  // um conjunto próprio — senão as duas primeiras mídias da mesma peça viram
-  // dois cards.
+  // `cards` is indexed by PART, so the piece that already got the card needs its
+  // own set — otherwise the first two media of the same piece become
+  // two cards.
   const claimed = new Set<string>()
   for (const part of parts) {
     const bundle = bundleOfPart(part, indexes.byKey)
     if (!bundle) continue
-    // Peça ainda sem endereço (a lista acabou de chegar, o cálculo da âncora
-    // vem no efeito seguinte): NADA é recolhido. Esconder a mídia para
-    // reapresentá-la como card um quadro depois seria um piscar na tela.
+    // Piece with no address yet (the list just arrived, the anchor calculation
+    // comes in the next effect): NOTHING is collected. Hiding the media to
+    // present it as a card one frame later would be a blink on screen.
     const anchor = indexes.anchors[bundle.motionId]
     if (!anchor) continue
     if (anchor === messageId && !claimed.has(bundle.motionId)) {
@@ -110,9 +110,9 @@ export function planMotionBundles(
 }
 
 /**
- * Onde o card de cada peça mora: a PRIMEIRA mensagem da conversa que tem mídia
- * dela. É o que mantém "um card por peça" mesmo com mídia chegando em turnos
- * diferentes — o card original é que fica com a peça.
+ * Where the card of each piece lives: the FIRST message of the conversation that has media
+ * of it. It is what keeps "one card per piece" even with media arriving in different
+ * turns — the original card is the one that keeps the piece.
  */
 export function motionBundleAnchors(
   messages: ChatMessage[],

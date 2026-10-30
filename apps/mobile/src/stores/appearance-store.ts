@@ -10,10 +10,10 @@ import { useThemeStore, type ThemePreference } from './theme-store'
 const MODES_IN_ROW_KEY = 'orbit_modes_in_row'
 const PERSONA_VISIBLE_KEY = 'orbit_persona_visible'
 
-/** Modos que podem aparecer como toggles na barra inferior do input.
- *  "thinking" não está na lista: para modelos com reasoning ele é sempre
- *  ativo e o nível (ou o desligar, quando suportado) é controlado pelo
- *  seletor de reasoning — não é um modo. */
+/** Modes that can show up as toggles in the bottom bar of the input.
+ *  "thinking" is not in the list: for models with reasoning it is always
+ *  active and the level (or turning it off, when supported) is controlled by
+ *  the reasoning picker — it is not a mode. */
 export const MODE_IDS = [
   'search',
   'browser',
@@ -26,9 +26,9 @@ export const MODE_IDS = [
   'vision',
 ] as const
 export type ModeId = (typeof MODE_IDS)[number]
-/** "brain" fica fora da barra por padrão: o modo Memória também vem
- *  desativado por padrão nas preferências (model-mode-prefs) — só entra na
- *  barra se o usuário ativá-lo aqui ou no menu "+". */
+/** "brain" stays out of the bar by default: the Memory mode also comes
+ *  disabled by default in the preferences (model-mode-prefs) — it only enters the
+ *  bar if the user enables it here or in the "+" menu. */
 export const DEFAULT_MODES_IN_ROW: ModeId[] = [
   'search',
   'browser',
@@ -41,13 +41,13 @@ export const DEFAULT_MODES_IN_ROW: ModeId[] = [
 ]
 
 interface AppearanceState {
-  /** Modos visíveis como toggles na barra inferior (o menu "+" mostra todos) */
+  /** Modes visible as toggles in the bottom bar (the "+" menu shows all of them) */
   modesInRow: ModeId[]
   setModesInRow: (modes: ModeId[]) => Promise<void>
-  /** Onde a persona aparece — ver PersonaVisibility no @orbit/shared. */
+  /** Where the persona shows up — see PersonaVisibility in @orbit/shared. */
   personaVisibility: PersonaVisibility
   setPersonaVisibility: (visibility: PersonaVisibility) => Promise<void>
-  /** Define tema e persiste (delega ao theme-store). */
+  /** Sets the theme and persists it (delegates to theme-store). */
   setTheme: (pref: ThemePreference) => void
 }
 
@@ -70,7 +70,7 @@ export const useAppearanceStore = create<AppearanceState>((set) => ({
   },
 }))
 
-/** Carrega preferência persistida (chamar no root). */
+/** Loads the persisted preference (call in the root). */
 export async function hydrateModesInRow(): Promise<ModeId[]> {
   try {
     const raw = await Storage.getItem(MODES_IN_ROW_KEY)
@@ -85,8 +85,8 @@ export async function hydrateModesInRow(): Promise<ModeId[]> {
   return DEFAULT_MODES_IN_ROW
 }
 
-/** A chave é a mesma de quando isto era um booleano: personaVisibilityFrom
- *  entende o "false" de quem já tinha desligado e o mantém desligado. */
+/** The key is the same as when this was a boolean: personaVisibilityFrom
+ *  understands the "false" of whoever had already turned it off and keeps it off. */
 export async function hydratePersonaVisibility(): Promise<PersonaVisibility> {
   try {
     return personaVisibilityFrom(await Storage.getItem(PERSONA_VISIBLE_KEY))

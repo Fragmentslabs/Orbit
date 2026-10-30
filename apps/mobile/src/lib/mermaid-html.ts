@@ -1,42 +1,44 @@
 /**
- * O documento HTML que desenha um diagrama mermaid dentro do WebView.
+ * The HTML document that draws a mermaid diagram inside the WebView.
  *
- * Fica fora do componente de propósito: é aqui que mora a única parte com
- * risco de verdade — o texto do diagrama é escrito dentro de um `<script>`, e
- * um `</script>` no meio dele encerraria o bloco e transformaria o resto em
- * HTML executável. Por isso o texto entra sempre por `JSON.stringify` com `<`
- * escapado, e essa é a parte que o teste cobre.
+ * It lives outside the component on purpose: this is where the only part with
+ * real risk lives — the diagram text is written inside a `<script>`, and
+ * a `</script>` in the middle of it would end the block and turn the rest into
+ * executable HTML. That is why the text always enters via `JSON.stringify` with `<`
+ * escaped, and that is the part the test covers.
  *
- * A lib chega por parâmetro, já lida do asset do app (`loadMermaidSource`), e
- * vai embutida no documento: o WebView não enxerga o bundle JS do React Native,
- * e buscar de CDN deixaria o desenho dependente de internet — que este app não
- * deveria exigir, já que ele fala com o desktop na LAN. O preço é um documento
- * de ~3,4 MB por diagrama; o componente só monta um quando há diagrama.
+ * The lib arrives as a parameter, already read from the app asset (`loadMermaidSource`), and
+ * goes embedded in the document: the WebView cannot see the JS bundle of React Native,
+ * and fetching from a CDN would leave the drawing dependent on the internet — which this app should
+ * not require, since it talks to the desktop on the LAN. The price is a document
+ * of ~3.4 MB per diagram; the component only mounts one when there is a diagram.
  */
 
 export interface MermaidHtmlOptions {
-  /** Tema do app — o diagrama acompanha claro/escuro em vez de ficar branco. */
+  /** App theme — the diagram follows light/dark instead of staying white. */
   dark: boolean
-  /** O código da lib, de `loadMermaidSource()`. Vazio = não desenha. */
+  /** The lib code, from `loadMermaidSource()`. Empty = does not draw. */
   lib: string
+  /** Message shown on the page when the drawing fails (already translated). */
+  failMessage?: string
 }
 
 /**
- * JSON seguro para dentro de um `<script>`.
+ * JSON safe to go inside a `<script>`.
  *
- * `JSON.stringify` já resolve aspas e barras; falta o `<`, que é o que permite
- * a sequência `</script>`. `\u003c` é JSON válido e o parser do navegador
- * devolve o mesmo caractere, então o diagrama chega intacto.
+ * `JSON.stringify` already handles quotes and backslashes; what is missing is `<`, which is what allows
+ * the `</script>` sequence. `\u003c` is valid JSON and the browser parser
+ * returns the same character, so the diagram arrives intact.
  */
 function jsonForScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c')
 }
 
 /**
- * O mesmo problema, do outro lado: a lib é JS e não pode ser JSON-escapada (o
- * `\u003c` fora de string quebraria o código). Aqui só a sequência que fecha a
- * tag precisa sair: `<\/script` continua sendo a mesma string dentro de um
- * literal de JS — e dentro de uma regex `\/` também é uma barra.
+ * The same problem, on the other side: the lib is JS and cannot be JSON-escaped (the
+ * `\u003c` outside a string would break the code). Here only the sequence that closes the
+ * tag needs to go: `<\/script` is still the same string inside a
+ * JS literal — and inside a regex `\/` is also a slash.
  */
 function escapeScriptEnd(source: string): string {
   return source.replace(/<\/script/gi, '<\\/script')
@@ -79,9 +81,9 @@ export function buildMermaidHtml(code: string, options: MermaidHtmlOptions): str
 
   var source = ${jsonForScript(code)};
 
-  // Lib ausente = o asset não foi lido ou não parseou. O RN troca o diagrama
-  // pelo código-fonte, que é o que já acontecia antes deste componente existir.
-  if (!window.mermaid) { fail('mermaid não carregou'); return; }
+  // Missing lib = the asset was not read or did not parse. RN swaps the diagram
+  // for the source code, which is what already happened before this component existed.
+  if (!window.mermaid) { fail(${jsonForScript(options.failMessage ?? '')}); return; }
 
   window.mermaid.initialize({
     startOnLoad: false,
@@ -92,14 +94,14 @@ export function buildMermaidHtml(code: string, options: MermaidHtmlOptions): str
 
   window.mermaid.render('orbit-diagram', source).then(function (result) {
     document.getElementById('d').innerHTML = result.svg;
-    // A altura só existe depois do layout: um \`sequenceDiagram\` é bem mais
-    // alto que um \`graph TD\` de duas caixas, e o host precisa acompanhar.
+    // The height only exists after the layout: a \`sequenceDiagram\` is far taller
+    // than a \`graph TD\` with two boxes, and the host has to follow.
     requestAnimationFrame(function () {
       var height = document.getElementById('d').getBoundingClientRect().height;
       send({ type: 'height', height: Math.ceil(height) });
     });
   }).catch(function (error) {
-    fail((error && error.message) || 'diagrama inválido');
+    fail((error && error.message) || ${jsonForScript(options.failMessage ?? '')});
   });
 })();
 </script>

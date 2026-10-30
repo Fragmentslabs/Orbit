@@ -2,8 +2,8 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { motionVideoAudioTracks, videoFileIn, type MotionVideoFact } from './motion-video-audio'
 
-// path.resolve, e nao join: o modulo resolve a pasta antes de compor o
-// caminho, e no Windows isso poe a unidade na frente (\tmp -> C:\tmp).
+// path.resolve, and not join: the module resolves the folder before composing the
+// path, and on Windows that puts the drive in front (\tmp -> C:\tmp).
 const folder = path.resolve('/tmp', 'piece')
 const fact = (over: Partial<MotionVideoFact> = {}): MotionVideoFact => ({
   src: 'orbit-motion://mv_abc/clip.mp4',
@@ -17,15 +17,15 @@ const fact = (over: Partial<MotionVideoFact> = {}): MotionVideoFact => ({
 const yes = async () => true
 
 describe('videoFileIn', () => {
-  it('lê a URL do scheme e o caminho relativo, decodificando', () => {
+  it('reads the scheme URL and the relative path, decoding', () => {
     expect(videoFileIn(folder, 'orbit-motion://mv_abc/clip.mp4')).toBe(path.join(folder, 'clip.mp4'))
     expect(videoFileIn(folder, 'orbit-motion://mv_abc/sub%20dir/a%20b.mp4?r=3')).toBe(path.join(folder, 'sub dir', 'a b.mp4'))
     expect(videoFileIn(folder, 'media/clip.mp4#t=2')).toBe(path.join(folder, 'media', 'clip.mp4'))
   })
 
-  it('recusa o que está fora da pasta ou não é do scheme', () => {
+  it('refuses what is outside the folder or not from the scheme', () => {
     expect(videoFileIn(folder, '../outro/clip.mp4')).toBeNull()
-    // O parser de URL já colapsa os `..`: o que sobra cai DENTRO da pasta, nunca fora.
+    // The URL parser already collapses the `..`: what is left falls INSIDE the folder, never outside.
     expect(videoFileIn(folder, 'orbit-motion://mv_abc/../../etc/passwd')).toBe(path.join(folder, 'etc', 'passwd'))
     expect(videoFileIn(folder, 'https://cdn.example.com/clip.mp4')).toBeNull()
     expect(videoFileIn(folder, '')).toBeNull()
@@ -34,7 +34,7 @@ describe('videoFileIn', () => {
 })
 
 describe('motionVideoAudioTracks', () => {
-  it('um vídeo com som vira uma faixa do plano, no tempo dele', async () => {
+  it('a video with sound becomes a track of the plan, at its own time', async () => {
     const [track] = await motionVideoAudioTracks(folder, [fact({ start: 2, in: 5, end: 9, gain: -6 })], yes)
     expect(track).toMatchObject({
       file: path.join(folder, 'clip.mp4'),
@@ -50,18 +50,18 @@ describe('motionVideoAudioTracks', () => {
     expect(track).not.toHaveProperty('loop')
   })
 
-  it('o padrão não traz recorte nenhum — é a faixa inteira desde o zero', async () => {
+  it('the default brings no trim at all — it is the whole track from zero', async () => {
     const [track] = await motionVideoAudioTracks(folder, [fact()], yes)
     expect(track).toMatchObject({ start: 0 })
     expect(track).not.toHaveProperty('end')
     expect(track).not.toHaveProperty('offset')
   })
 
-  it('vídeo calado não soa: atributo muted ou data-audio="false"', async () => {
+  it('a muted video makes no sound: muted attribute or data-audio="false"', async () => {
     expect(await motionVideoAudioTracks(folder, [fact({ muted: true })], yes)).toEqual([])
   })
 
-  it('sem faixa de áudio no arquivo, ou ffprobe que falha, não gera nada nem derruba', async () => {
+  it('with no audio stream in the file, or a failing ffprobe, it generates nothing and breaks nothing', async () => {
     expect(await motionVideoAudioTracks(folder, [fact()], async () => false)).toEqual([])
     expect(
       await motionVideoAudioTracks(folder, [fact()], async () => {
@@ -70,24 +70,24 @@ describe('motionVideoAudioTracks', () => {
     ).toEqual([])
   })
 
-  it('fora da pasta ou de outro lugar fica de fora', async () => {
+  it('outside the folder or from another place stays out', async () => {
     const facts = [fact({ src: '../x.mp4' }), fact({ src: 'https://a/b.mp4' })]
     expect(await motionVideoAudioTracks(folder, facts, yes)).toEqual([])
   })
 
-  it('o mesmo arquivo com o mesmo recorte soa uma vez; recortes diferentes soam cada um', async () => {
+  it('the same file with the same trim sounds once; different trims each sound', async () => {
     const tracks = await motionVideoAudioTracks(folder, [fact(), fact(), fact({ start: 4 })], yes)
     expect(tracks.map((t) => t.start)).toEqual([0, 4])
   })
 
-  it('loop é repassado e end antes do start é ignorado', async () => {
+  it('loop is passed through and end before start is ignored', async () => {
     const [looped] = await motionVideoAudioTracks(folder, [fact({ loop: true })], yes)
     expect(looped.loop).toBe(true)
     const [bad] = await motionVideoAudioTracks(folder, [fact({ start: 5, end: 2 })], yes)
     expect(bad).not.toHaveProperty('end')
   })
 
-  it('sem retrato nenhum não há faixa', async () => {
+  it('with no snapshot at all there is no track', async () => {
     expect(await motionVideoAudioTracks(folder, undefined, yes)).toEqual([])
   })
 })

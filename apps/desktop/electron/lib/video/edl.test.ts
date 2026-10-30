@@ -15,7 +15,7 @@ import {
 
 const w = (text: string, startMs: number, endMs: number): TimedWord => ({ text, startMs, endMs })
 
-// "hello world . this is a test" com um silêncio de 1,2 s no meio.
+// "hello world . this is a test" with a 1.2 s silence in the middle.
 const WORDS: TimedWord[] = [
   w('Hello', 500, 900),
   w('world.', 950, 1400),
@@ -36,9 +36,9 @@ describe('snapRanges', () => {
 
   it('adds air around the cut without eating into the neighbouring words', () => {
     const { ranges } = snapRanges([{ source: 'A', start: 2.6, end: 2.95 }], { A: WORDS }, { padMs: 200 })
-    // Antes: silêncio desde 1400 → pode recuar os 200 ms inteiros.
+    // Before: silence since 1400 → it can pull back the full 200 ms.
     expect(ranges[0].startMs).toBe(2400)
-    // Depois: "a" começa em 3000 → a folga para ali.
+    // After: "a" starts at 3000 → the air stops there.
     expect(ranges[0].endMs).toBe(3000)
   })
 
@@ -77,18 +77,18 @@ describe('outputWords + chunkWords', () => {
     )
     const out = outputWords(ranges, { A: WORDS })
     expect(out.map((x) => x.text)).toEqual(['This', 'is', 'a', 'test.', 'Hello', 'world.'])
-    // "This" abre a saída (o trecho começa em 2.5 s, a palavra em 2.6 s).
+    // "This" opens the output (the range starts at 2.5 s, the word at 2.6 s).
     expect(out[0].startMs).toBe(100)
-    // "Hello" vem depois do primeiro trecho inteiro (1200 ms).
+    // "Hello" comes after the whole first range (1200 ms).
     expect(out[4].startMs).toBe(1200 + 100)
   })
 
   it('chunks by size, breaks on sentence ends and long pauses, and closes tiny gaps', () => {
     const cues = chunkWords(WORDS, 2, true)
     expect(cues.map((c) => c.text)).toEqual(['HELLO WORLD.', 'THIS IS', 'A TEST.'])
-    // 2950 → 3000: 50 ms de buraco entre "THIS IS" e "A TEST." vira contínuo.
+    // 2950 → 3000: the 50 ms hole between "THIS IS" and "A TEST." becomes continuous.
     expect(cues[1].endMs).toBe(cues[2].startMs)
-    // O silêncio de 1,2 s fica: a legenda não segura o texto por cima dele.
+    // The 1.2 s silence stays: the subtitle does not hold the text over it.
     expect(cues[0].endMs).toBe(1400)
   })
 })
@@ -99,7 +99,7 @@ describe('buildAss', () => {
     expect(ass).toContain('PlayResX: 1080')
     expect(ass).toContain('PlayResY: 1920')
     expect(ass).toContain('Dialogue: 0,0:00:01.23,0:01:05.00,Default,,0,0,0,,A \\{B\\}')
-    // Bold (-1) e alinhamento embaixo-centro (2).
+    // Bold (-1) and bottom-center alignment (2).
     expect(ass).toMatch(/Style: Default,Arial,\d+,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,.*,2,\d+,\d+,\d+,1/)
   })
 })

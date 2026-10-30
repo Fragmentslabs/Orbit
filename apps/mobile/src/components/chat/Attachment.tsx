@@ -57,9 +57,9 @@ export function MessageAttachment({ file }: { file: FilePart }) {
           <Image source={file.url} style={s.image} contentFit="cover" />
         </Pressable>
         {/*
-          A lista mostra o thumbnail (leve, ja veio na mensagem); ampliar pega
-          o original da galeria. O desktop reescreve o mediaUrl para um HTTP
-          assinado antes de enviar — aqui ele chega pronto para carregar.
+          The list shows the thumbnail (light, it already came in the message); enlarging takes
+          the original from the gallery. The desktop rewrites the mediaUrl to a signed
+          HTTP before sending — here it arrives ready to load.
         */}
         {(file.mediaUrl || file.url) && (
           <ImageLightbox
@@ -73,8 +73,8 @@ export function MessageAttachment({ file }: { file: FilePart }) {
     )
   }
 
-  // Chip sem url (conteúdo já extraído como texto, ex.: PDF/planilha/DOCX) —
-  // não há arquivo original pra abrir, então não simula um toque que faz nada.
+  // Chip without url (content already extracted as text, e.g. PDF/spreadsheet/DOCX) —
+  // there is no original file to open, so it does not simulate a touch that does nothing.
   if (!file.url) {
     return (
       <View style={[s.fileChip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>

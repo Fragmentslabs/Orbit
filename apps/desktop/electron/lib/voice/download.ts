@@ -7,21 +7,21 @@ import type { VoiceDownloadProgress, VoiceModelInfo } from "@shared/voice"
 import { TTS_ASSETS, isTtsModel, modelInfo, ttsAssetUrl } from "./manifest"
 
 /**
- * Download dos modelos de voz, com progresso, cancelamento e RETOMADA.
+ * Download of the voice models, with progress, cancellation and RESUMPTION.
  *
- * Nada de modelo no build: os arquivos vão para
- * `<userData>/voice/models/<id>/` e só o download usa rede. O arquivo em
- * trânsito é `<nome>.part`; ele é mantido quando o download é cancelado ou a
- * rede cai, e a próxima tentativa continua de onde parou (Range). Por isso um
- * pacote de 401 MB no fio lento não precisa recomeçar do zero.
+ * No model in the build: the files go to
+ * `<userData>/voice/models/<id>/` and only the download uses the network. The file in
+ * transit is `<name>.part`; it is kept when the download is cancelled or the
+ * network drops, and the next attempt continues from where it stopped (Range). That is why a
+ * 401 MB package on a slow link does not have to start over from scratch.
  *
- * A retomada é por ARQUIVO (`vector_estimator.onnx`, `vocoder.onnx`, …) e,
- * dentro do arquivo, por bytes: os dois níveis usam o mesmo mecanismo.
+ * Resumption is per FILE (`vector_estimator.onnx`, `vocoder.onnx`, …) and,
+ * within the file, per byte: both levels use the same mechanism.
  */
 
 export type VoiceProgressListener = (progress: VoiceDownloadProgress) => void
 
-/** Emissões no máximo a cada X ms — um chunk por evento inundaria o IPC. */
+/** Emissions at most every X ms — one chunk per event would flood the IPC. */
 const EMIT_INTERVAL_MS = 100
 
 interface Job {
@@ -29,10 +29,10 @@ interface Job {
   cancelled: boolean
 }
 
-/** Um arquivo esperado de um modelo, já resolvido em caminho absoluto. */
+/** An expected file of a model, already resolved to an absolute path. */
 interface ExpectedFile {
   url: string
-  /** Caminho final (fora do `.part`). */
+  /** Final path (outside the `.part`). */
   path: string
   bytes: number
   sha256?: string
@@ -41,26 +41,26 @@ interface ExpectedFile {
 const jobs = new Map<string, Job>()
 const lastProgress = new Map<string, VoiceDownloadProgress>()
 
-/** Raiz dos modelos de voz: `<userData>/voice/models`. */
+/** Root of the voice models: `<userData>/voice/models`. */
 export function modelsRoot(): string {
   return path.join(app.getPath("userData"), "voice", "models")
 }
 
-/** Pasta de um modelo — é ela que `voice:remove-model` apaga inteira. */
+/** Folder of a model — it is the one `voice:remove-model` deletes entirely. */
 export function modelDir(modelId: string): string {
   return path.join(modelsRoot(), modelId)
 }
 
 /**
- * Nome do arquivo de um modelo de STT: o último segmento da URL. Os modelos de
- * STT (outro worker) são um arquivo por modelo; o TTS é o único caso de pacote.
+ * File name of an STT model: the last segment of the URL. The STT models
+ * (another worker) are one file per model; the TTS is the only package case.
  */
 function sttFileName(model: VoiceModelInfo): string {
   const tail = decodeURIComponent(model.url.split("?")[0].split("/").filter(Boolean).pop() ?? "")
   return tail && tail.includes(".") ? tail : `${model.id}.bin`
 }
 
-/** Os arquivos que um modelo precisa ter no disco para estar instalado. */
+/** The files a model must have on disk to be installed. */
 function expectedFiles(model: VoiceModelInfo): ExpectedFile[] {
   const dir = modelDir(model.id)
   if (isTtsModel(model.id)) {
@@ -71,8 +71,8 @@ function expectedFiles(model: VoiceModelInfo): ExpectedFile[] {
       sha256: file.sha256,
     }))
   }
-  // Um arquivo por modelo de STT; o sha256, quando o catálogo o publica, é
-  // conferido no fim como nos .onnx do TTS (é um download grande, vale a pena).
+  // One file per STT model; the sha256, when the catalog publishes it, is
+  // checked at the end as with the TTS .onnx files (it is a large download, it is worth it).
   return [{ url: model.url, path: path.join(dir, sttFileName(model)), bytes: model.bytes, sha256: model.sha256 }]
 }
 
@@ -84,7 +84,7 @@ function sizeOf(file: string): number {
   }
 }
 
-/** Progresso conhecido de um modelo (o último emitido; null se nunca houve). */
+/** Known progress of a model (the last one emitted; null if there never was one). */
 export function progressOf(modelId: string): VoiceDownloadProgress | null {
   return lastProgress.get(modelId) ?? null
 }
@@ -94,15 +94,15 @@ export function isDownloading(modelId: string): boolean {
 }
 
 /**
- * Os BYTES do modelo estão completos no disco? Checa a PRESENÇA e o TAMANHO de
- * cada arquivo — o tamanho pega o caso comum (download interrompido com `.part`
- * sobrando, arquivo truncado por disco cheio) sem reler 400 MB a cada consulta
- * de status. A integridade por sha256 é verificada no fim do download.
+ * Are the model's BYTES complete on disk? It checks the PRESENCE and the SIZE of
+ * each file — the size catches the common case (interrupted download with a `.part`
+ * left over, file truncated by a full disk) without re-reading 400 MB on every status
+ * query. Integrity via sha256 is verified at the end of the download.
  *
- * ATENÇÃO: isto é "baixado", não "pronto para usar". O `.tar.bz2` do Parakeet
- * fica baixado e continua inutilizável até ser extraído (e o VAD Silero baixar)
- * — quem responde "dá para usar?" é o `voice:status` (ver `./status.ts`), que
- * consulta o MOTOR. Nunca use esta função para pintar um selo de "instalado".
+ * WARNING: this is "downloaded", not "ready to use". Parakeet's `.tar.bz2`
+ * stays downloaded and remains unusable until it is extracted (and the Silero VAD is downloaded)
+ * — whoever answers "can it be used?" is `voice:status` (see `./status.ts`), which
+ * queries the ENGINE. Never use this function to paint an "installed" badge.
  */
 export async function isModelDownloaded(modelId: string): Promise<boolean> {
   const model = modelInfo(modelId)
@@ -114,7 +114,7 @@ export async function isModelDownloaded(modelId: string): Promise<boolean> {
   return files.length > 0
 }
 
-/** Bytes já no disco, contando os `.part` (é o `received` do progresso). */
+/** Bytes already on disk, counting the `.part` files (it is the progress `received`). */
 async function bytesOnDisk(files: ExpectedFile[]): Promise<number> {
   let total = 0
   for (const file of files) {
@@ -129,7 +129,7 @@ function emit(listener: VoiceProgressListener, progress: VoiceDownloadProgress):
   listener(progress)
 }
 
-/** sha256 do arquivo, lido em pedaços (não carrega 256 MB na memória). */
+/** sha256 of the file, read in chunks (it does not load 256 MB into memory). */
 async function sha256Of(file: string): Promise<string> {
   const hash = createHash("sha256")
   const handle = await fsp.open(file, "r")
@@ -149,29 +149,29 @@ async function sha256Of(file: string): Promise<string> {
 }
 
 /**
- * Confere o tamanho, o sha256 (quando a origem publica um) e promove o `.part`
- * ao nome final. Um arquivo já do tamanho certo nunca é baixado de novo.
+ * Checks the size, the sha256 (when the origin publishes one) and promotes the `.part`
+ * to the final name. A file already of the right size is never downloaded again.
  */
-async function finalizar(dest: string, file: ExpectedFile): Promise<void> {
+async function finalize(dest: string, file: ExpectedFile): Promise<void> {
   const finalSize = sizeOf(dest)
   if (finalSize !== file.bytes) {
-    throw new Error(`download incompleto em ${path.basename(file.path)} (${finalSize} de ${file.bytes} bytes)`)
+    throw new Error(`incomplete download at ${path.basename(file.path)} (${finalSize} of ${file.bytes} bytes)`)
   }
   if (file.sha256) {
     const digest = await sha256Of(dest)
     if (digest !== file.sha256) {
-      // Arquivo corrompido: apaga o parcial para a próxima tentativa recomeçar.
+      // Corrupted file: delete the partial so the next attempt can start over.
       await fsp.rm(dest, { force: true })
-      throw new Error(`arquivo corrompido: ${path.basename(file.path)} (sha256 não confere)`)
+      throw new Error(`corrupted file: ${path.basename(file.path)} (sha256 mismatch)`)
     }
   }
   await fsp.rename(dest, file.path)
 }
 
 /**
- * Baixa um arquivo para `dest` com retomada. O `Range` pede só o que falta do
- * `.part`; a escrita é serializada (uma escrita por pedaço lido), então não há
- * buffer intermediário de 256 MB na memória.
+ * Downloads a file to `dest` with resumption. The `Range` asks only for what is missing from the
+ * `.part`; the write is serialised (one write per chunk read), so there is no
+ * 256 MB intermediate buffer in memory.
  */
 async function fetchToFile(
   file: ExpectedFile,
@@ -180,19 +180,19 @@ async function fetchToFile(
 ): Promise<void> {
   const dest = file.path + ".part"
   await fsp.mkdir(path.dirname(dest), { recursive: true })
-  // Arquivo já baixado numa tentativa anterior (sem o `.part`): nada a fazer.
+  // File already downloaded in a previous attempt (without the `.part`): nothing to do.
   if (sizeOf(file.path) === file.bytes) return
   let have = sizeOf(dest)
   if (have > file.bytes) {
-    // Sobra maior que o esperado (origem mudou de tamanho): recomeça.
+    // Leftover larger than expected (the origin changed size): start over.
     await fsp.rm(dest, { force: true })
     have = 0
   }
-  // `.part` do tamanho certo: o processo morreu entre a última escrita e o
-  // rename. Confere e finaliza sem pedir nada à origem (com Range isso viraria
-  // um 416 e o arquivo completo se perderia).
+  // `.part` of the right size: the process died between the last write and the
+  // rename. Checks and finishes without asking the origin for anything (with Range that would become
+  // a 416 and the complete file would be lost).
   if (have === file.bytes) {
-    await finalizar(dest, file)
+    await finalize(dest, file)
     return
   }
 
@@ -200,17 +200,17 @@ async function fetchToFile(
     headers: have > 0 ? { Range: `bytes=${have}-` } : {},
     signal: job.controller.signal,
   })
-  if (!res.ok) throw new Error(`origem respondeu ${res.status} para ${file.url}`)
-  // 200 com Range pedido = a origem ignorou o Range: o corpo é o arquivo todo.
+  if (!res.ok) throw new Error(`origin answered ${res.status} for ${file.url}`)
+  // 200 with Range requested = the origin ignored the Range: the body is the whole file.
   const append = have > 0 && res.status === 206
   if (!append && have > 0) have = 0
-  if (!res.body) throw new Error(`resposta sem corpo para ${file.url}`)
+  if (!res.body) throw new Error(`response with no body for ${file.url}`)
 
   const handle = await fsp.open(dest, append ? "a" : "w")
   const reader = res.body.getReader()
   try {
     for (;;) {
-      if (job.cancelled) throw new Error("cancelado")
+      if (job.cancelled) throw new Error("cancelled")
       const { done, value } = await reader.read()
       if (done) break
       if (!value?.byteLength) continue
@@ -219,23 +219,23 @@ async function fetchToFile(
       onBytes(value.byteLength)
     }
   } catch (err) {
-    if (job.cancelled || job.controller.signal.aborted) throw new Error("cancelado")
+    if (job.cancelled || job.controller.signal.aborted) throw new Error("cancelled")
     throw err
   } finally {
-    // O leitor não é solto aqui de propósito: num abort ele fica com a leitura
-    // pendente e `releaseLock` lançaria — o corpo da resposta morre com o fetch.
+    // The reader is not released here on purpose: on an abort it is left with a pending
+    // read and `releaseLock` would throw — the response body dies with the fetch.
     await handle.close()
   }
 
-  if (job.cancelled) throw new Error("cancelado")
-  await finalizar(dest, file)
+  if (job.cancelled) throw new Error("cancelled")
+  await finalize(dest, file)
 }
 
 /**
- * Baixa um modelo inteiro (TTS = 16 arquivos; STT = 1). Idempotente: o que já
- * está completo é pulado, então chamar de novo retoma o que faltou. Se já
- * houver um download do mesmo modelo em curso, não faz nada — quem decide é o
- * `started` devolvido por `startDownload`.
+ * Downloads a whole model (TTS = 16 files; STT = 1). Idempotent: what is already
+ * complete is skipped, so calling it again resumes what was missing. If there already
+ * is a download of the same model in progress, it does nothing — the decision belongs to the
+ * `started` returned by `startDownload`.
  */
 export async function downloadModel(modelId: string, listener: VoiceProgressListener): Promise<void> {
   const model = modelInfo(modelId)
@@ -251,47 +251,47 @@ export async function downloadModel(modelId: string, listener: VoiceProgressList
   let lastEmit = 0
   emit(listener, { modelId, received, total, done: false })
 
-  const progresso = (done: boolean, error?: string) => {
+  const progress = (done: boolean, error?: string) => {
     lastEmit = Date.now()
     emit(listener, { modelId, received, total, done, error })
   }
 
   try {
     for (const file of files) {
-      if (job.cancelled) throw new Error("cancelado")
+      if (job.cancelled) throw new Error("cancelled")
       if (sizeOf(file.path) === file.bytes) continue
       await fetchToFile(file, job, (delta) => {
         received += delta
-        if (Date.now() - lastEmit >= EMIT_INTERVAL_MS) progresso(false)
+        if (Date.now() - lastEmit >= EMIT_INTERVAL_MS) progress(false)
       })
-      // Fim de cada arquivo: um progresso certo, sem esperar o throttle.
-      progresso(false)
+      // End of each file: an exact progress, without waiting for the throttle.
+      progress(false)
     }
-    progresso(true)
+    progress(true)
   } catch (err) {
-    const cancelado = job.cancelled || job.controller.signal.aborted || (err as Error).message === "cancelado"
-    // Cancelamento não é erro: o parcial fica no disco para a retomada e o
-    // evento final só fecha a barra (a UI pediu para parar, ela sabe disso).
-    if (cancelado) progresso(true)
-    else progresso(true, (err as Error).message ?? String(err))
+    const wasCancelled = job.cancelled || job.controller.signal.aborted || (err as Error).message === "cancelled"
+    // Cancellation is not an error: the partial stays on disk for the resumption and the
+    // final event just closes the bar (the UI asked to stop, it knows that).
+    if (wasCancelled) progress(true)
+    else progress(true, (err as Error).message ?? String(err))
   } finally {
     jobs.delete(modelId)
   }
 }
 
 /**
- * Inicia o download sem bloquear o IPC. Devolve `started: false` quando já
- * havia um download do mesmo modelo em curso.
+ * Starts the download without blocking the IPC. Returns `started: false` when there already
+ * was a download of the same model in progress.
  */
 export function startDownload(modelId: string, listener: VoiceProgressListener): { started: boolean } {
   if (jobs.has(modelId)) return { started: false }
   void downloadModel(modelId, listener).catch(() => {
-    // o erro já foi pela progresso(done, error); aqui só evita unhandled
+    // the error already went through progress(done, error); here it only avoids an unhandled
   })
   return { started: true }
 }
 
-/** Pede o cancelamento: o `.part` fica no disco e o download retoma depois. */
+/** Requests cancellation: the `.part` stays on disk and the download resumes later. */
 export function cancelDownload(modelId: string): void {
   const job = jobs.get(modelId)
   if (!job) return
@@ -299,7 +299,7 @@ export function cancelDownload(modelId: string): void {
   job.controller.abort()
 }
 
-/** Apaga o modelo (cancela o download em curso antes). */
+/** Deletes the model (cancelling the download in progress first). */
 export async function removeModel(modelId: string): Promise<void> {
   cancelDownload(modelId)
   await fsp.rm(modelDir(modelId), { recursive: true, force: true })
@@ -307,8 +307,8 @@ export async function removeModel(modelId: string): Promise<void> {
 }
 
 /**
- * Quanto do modelo já está no disco, em bytes — usado pelo `voice:status`
- * (para o progresso de um download parcial) e pelo aviso da UI.
+ * How much of the model is already on disk, in bytes — used by `voice:status`
+ * (for the progress of a partial download) and by the UI notice.
  */
 export async function receivedBytes(modelId: string): Promise<number> {
   const model = modelInfo(modelId)

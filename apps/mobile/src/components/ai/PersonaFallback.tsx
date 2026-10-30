@@ -9,8 +9,8 @@ interface Props {
 }
 
 export function PersonaFallback({ state, size }: Props) {
-  // Tema do app (não o do SO) — igual ao RivePersona, senão o fallback fica
-  // branco quando o usuário escolhe claro com o sistema em escuro.
+  // Theme of the app (not the OS one) — same as RivePersona, otherwise the fallback turns
+  // white when the user picks light with the system in dark.
   const isLight = useThemeStore((s) => s.resolved) === 'light'
   const [pulse] = useState(() => new Animated.Value(1))
   const [glow] = useState(() => new Animated.Value(0.4))
@@ -59,7 +59,7 @@ export function PersonaFallback({ state, size }: Props) {
   const ring = size * 0.62
   const border = Math.max(2, size * 0.02)
 
-  // Desktop light: invert(1) brightness(0.85) → mapeamos branco para cinza-azulado escuro
+  // Desktop light: invert(1) brightness(0.85) → we map white to a dark blue-gray
   // Desktop dark: keep white with glow
   const shadowC = isLight ? '#3c4155' : '#ffffff'
   const glowBg = isLight ? `rgba(60,65,85,0.06)` : 'rgba(255,255,255,0.06)'

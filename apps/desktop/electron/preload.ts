@@ -3,8 +3,8 @@ import type { IpcRendererEvent } from 'electron'
 
 contextBridge.exposeInMainWorld('platform', process.platform)
 
-// Caminho real de arquivos/pastas soltos por drag & drop (File.path foi
-// removido no Electron 32 — esta é a forma oficial de obter o path).
+// Real path of files/folders dropped by drag & drop (File.path was removed in
+// Electron 32 — this is the official way to obtain the path).
 contextBridge.exposeInMainWorld('getPathForFile', (file: File) => webUtils.getPathForFile(file))
 
 contextBridge.exposeInMainWorld('ipcRenderer', {

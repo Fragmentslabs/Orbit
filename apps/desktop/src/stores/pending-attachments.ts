@@ -1,13 +1,13 @@
 import { create } from "zustand"
 
 /**
- * Imagens anexadas no input de mensagens (ainda não enviadas). O estado dos
- * anexos vive no PromptInputProvider, local a cada input — o VisionHintCard,
- * renderizado fora dele, precisa saber se há uma imagem pendente para avisar
- * o usuário ANTES do envio, não depois.
+ * Images attached in the message input (not sent yet). The attachment state
+ * lives in the PromptInputProvider, local to each input — the VisionHintCard,
+ * rendered outside it, needs to know whether there is a pending image to warn
+ * the user BEFORE the send, not after.
  */
 interface PendingAttachmentsState {
-  /** Chave = sessionId (ou "draft"/draftKey para chat novo) → tem imagem pendente */
+  /** Key = sessionId (or "draft"/draftKey for a new chat) → there is a pending image */
   imagesByKey: Record<string, boolean>
   setPendingImages: (key: string, hasImage: boolean) => void
 }

@@ -2,11 +2,11 @@ import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 
 /**
- * Config própria (e não a do vite.config.ts) porque os testes rodam em Node,
- * sem o plugin do Electron nem o do React: carregar aquele config aqui
- * arrastaria o build inteiro do app para dentro da suíte.
+ * Its own config (and not the one from vite.config.ts) because the tests run in Node,
+ * without the Electron plugin and without the React one: loading that config here
+ * would drag the whole app build into the suite.
  *
- * Os aliases são os mesmos de lá — os módulos testados importam `@shared/*`.
+ * The aliases are the same as there — the modules under test import `@shared/*`.
  */
 const root = path.resolve(__dirname, '../..')
 
@@ -22,11 +22,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['electron/**/*.test.ts', 'lib/**/*.test.ts', 'src/**/*.test.ts'],
-    // A suíte mexe com git e disco de verdade (worktrees, repositórios
-    // temporários, merges). Os 5s padrão do vitest são curtos demais quando o
-    // arquivo roda em paralelo com os outros e a máquina satura: o teste estoura
-    // no meio e ainda deixa um processo do git segurando a pasta temporária, que
-    // então falha com EPERM no afterEach.
+    // The suite deals with real git and disk (worktrees, temporary
+    // repositories, merges). The default 5s of vitest are too short when the
+    // file runs in parallel with the others and the machine saturates: the test blows up
+    // in the middle and still leaves a git process holding the temporary folder, which
+    // then fails with EPERM in the afterEach.
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },

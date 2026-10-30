@@ -28,7 +28,7 @@ interface RiveModule {
   default: ComponentType<Record<string, unknown>>
   Fit: Record<string, string>
   AutoBind: (value: boolean) => { type: string; value: boolean }
-  /** Retorna [refCallback, ref] — o ref só fica não-nulo após o load nativo. */
+  /** Returns [refCallback, ref] — the ref only becomes non-null after the native load. */
   useRive: () => [(node: RiveRefLike | null) => void, RiveRefLike | null]
   useRiveColor: (
     ref: RiveRefLike | null,
@@ -39,10 +39,10 @@ interface RiveModule {
 let riveModule: RiveModule | null = null
 if (!isExpoGo) {
   try {
-    // Carregamento condicional de módulo opcional: import estático não
-    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-    // build sem o nativo) e é justamente por isso que o require está
-    // dentro do try/if.
+    // Conditional loading of an optional module: a static import does not
+    // work here (the module may not exist at runtime — Expo Go, web,
+    // build without the native part) and that is exactly why the require is
+    // inside the try/if.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     riveModule = require('rive-react-native') as RiveModule
   } catch {
@@ -53,7 +53,7 @@ if (!isExpoGo) {
 const BOOL_INPUTS: PersonaState[] = ['listening', 'thinking', 'speaking', 'asleep']
 const COLOR_PROPERTY = 'color'
 
-/** Mesmas cores do desktop/web (Persona.web.tsx). */
+/** Same colors as the desktop/web (Persona.web.tsx). */
 const LIGHT_RGB = [60, 65, 85] as const
 const DARK_RGB = [255, 255, 255] as const
 
@@ -61,10 +61,10 @@ const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
   const rive = riveModule!
   const Rive = rive.default
 
-  // `riveRef` só é preenchido quando o nativo emite `RiveReactNativeLoaded`, ou
-  // seja, quando a ViewModel já está vinculada e as propriedades existem. Antes
-  // disso qualquer setColor/setInputState é silenciosamente perdido — era o que
-  // deixava a persona branca (invisível) no tema claro.
+  // `riveRef` is only filled when the native side emits `RiveReactNativeLoaded`, that
+  // is, when the ViewModel is already bound and the properties exist. Before
+  // that any setColor/setInputState is silently lost — that was what
+  // left the persona white (invisible) in the light theme.
   const [setRiveRef, riveRef] = rive.useRive()
   const [, setColor] = rive.useRiveColor(riveRef, COLOR_PROPERTY)
   const isLight = useThemeStore((s) => s.resolved) === 'light'
@@ -84,14 +84,14 @@ const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
         try {
           riveRef.setInputState(PERSONA_STATE_MACHINE, input, state === input)
         } catch {
-          // input pode não existir na state machine do asset
+          // the input may not exist in the asset's state machine
         }
       }
     }
     apply()
-    // No Android os inputs do state machine podem ficar prontos alguns frames
-    // depois do evento de load do nativo — reaplica para o estado não se perder
-    // (era o que deixava o persona preso em 'asleep' na tela inicial).
+    // On Android the state machine inputs may become ready a few frames
+    // after the native load event — reapply so the state is not lost
+    // (that was what kept the persona stuck in 'asleep' on the initial screen).
     const retry = setTimeout(apply, 200)
     return () => {
       cancelled = true
@@ -106,8 +106,8 @@ const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
       stateMachineName={PERSONA_STATE_MACHINE}
       autoplay
       fit={rive.Fit.Contain}
-      // Equivalente nativo do `useDefault: true` usado no desktop/web: vincula a
-      // instância padrão da ViewModel, sem a qual a propriedade `color` não existe.
+      // Native equivalent of `useDefault: true` used on desktop/web: binds the
+      // default instance of the ViewModel, without which the `color` property does not exist.
       dataBinding={rive.AutoBind(true)}
       onError={(error: unknown) => {
         if (__DEV__) {

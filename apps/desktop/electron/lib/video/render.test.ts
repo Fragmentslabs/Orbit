@@ -5,8 +5,8 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Render de ponta a ponta com o ffmpeg de verdade (o que `npm run ffmpeg:fetch`
- * baixa). Sem ele na máquina, a suíte pula — o resto dos testes de vídeo é puro.
+ * End-to-end render with the real ffmpeg (what `npm run ffmpeg:fetch`
+ * downloads). Without it on the machine, the suite skips — the rest of the video tests are pure.
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -50,11 +50,11 @@ describe.skipIf(!hasFfmpeg)('renderEdl (real ffmpeg)', () => {
 
   beforeAll(async () => {
     await fsp.mkdir(path.dirname(a), { recursive: true })
-    // A: 1280x720 30 fps com tom; B: 640x480 25 fps SEM áudio (testa o silêncio gerado).
+    // A: 1280x720 30 fps with tone; B: 640x480 25 fps WITHOUT audio (tests the generated silence).
     await runFfmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=4', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', a])
     await runFfmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'smptebars=size=640x480:rate=25:duration=3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', b])
     await runFfmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'color=c=red@0.6:size=200x80,format=rgba', '-frames:v', '1', logo])
-    // Transcrição em cache para A: as legendas e o encaixe saem dela.
+    // Cached transcription for A: the subtitles and the snap come from it.
     const stat = await fsp.stat(a)
     await fsp.mkdir(path.join(work, 'footage', 'edit', 'transcripts'), { recursive: true })
     await fsp.writeFile(
@@ -95,7 +95,7 @@ describe.skipIf(!hasFfmpeg)('renderEdl (real ffmpeg)', () => {
       { editDir: path.join(work, 'footage', 'edit'), outName: 'final.mp4', preview: false },
     )
 
-    // A1 encaixou nas palavras (0.5 dentro de "one" → 0.4; 1.5 já fora, + folga até 1.58).
+    // A1 snapped to the words (0.5 inside "one" → 0.4; 1.5 already outside, + air up to 1.58).
     expect(result.snapNotes.some((n) => n.range === 0 && n.edge === 'start')).toBe(true)
     expect(result.ranges[0].startMs).toBe(320)
     expect(result.cutsMs).toHaveLength(2)
@@ -109,7 +109,7 @@ describe.skipIf(!hasFfmpeg)('renderEdl (real ffmpeg)', () => {
     expect(probe.video[0].fps).toBe(30)
     expect(probe.audio).toHaveLength(1)
     expect(Math.abs(probe.durationMs - result.durationMs)).toBeLessThan(120)
-    // A pasta de trabalho temporária some.
+    // The temporary working folder goes away.
     const left = await fsp.readdir(path.join(work, 'footage', 'edit'))
     expect(left.some((f) => f.startsWith('.render-'))).toBe(false)
   }, 120_000)

@@ -8,50 +8,50 @@ import { SLIDES_HEIGHT, SLIDES_WIDTH } from './slides-runtime'
 import { getSlides } from './slides-store'
 
 /**
- * O PDF de um deck é a IMPRESSÃO do próprio `index.html`.
+ * A deck's PDF is the PRINT of its own `index.html`.
  *
- * Não existe um segundo formato: quem manda no layout é o arquivo, e o runtime
- * já sabe imprimir (o modo `?print=1` empilha os slides, um por página, com
- * `@page` do tamanho do palco). Aqui só se abre a janela oculta e se chama o
- * Chromium — o mesmo caminho do documento (media.ts:renderPdf), sem nenhuma
- * biblioteca de geração de PDF no projeto.
+ * There is no second format: the file rules the layout, and the runtime already
+ * knows how to print (the `?print=1` mode stacks the slides, one per page, with a
+ * `@page` the size of the stage). Here we only open the hidden window and call
+ * Chromium — the same path as the document (media.ts:renderPdf), with no
+ * PDF-generation library in the project.
  *
- * A sessão é a DEFAULT de propósito: é nela que o `orbit-slides://` foi
- * registrado (registerSlidesProtocol). Uma partição nova exigiria registrar o
- * handler outra vez, como o renderPdf do documento faz com o artifact.
+ * The session is the DEFAULT one on purpose: it is in it that `orbit-slides://` was
+ * registered (registerSlidesProtocol). A new partition would require registering
+ * the handler again, as renderPdf of the document does with the artifact.
  *
- * == O tamanho da página, e a unidade que mente ==
+ * == The page size, and the unit that lies ==
  *
- * A tabela de tipos do Electron diz que um `pageSize` custom é um `Size` em
- * MICRONS. Na 44.3.0 (macOS) não é: o valor é lido como POLEGADAS. Passar
- * 338667x190500 "microns" não gera um erro claro — o printToPDF falha com
- * "Printing failed"; e 595x842 sai como uma folha de 595x842 POLEGADAS
- * (MediaBox 60624x42840), porque o valor é multiplicado por 72.
+ * Electron's type table says a custom `pageSize` is a `Size` in MICRONS. In
+ * 44.3.0 (macOS) it is not: the value is read as INCHES. Passing
+ * 338667x190500 "microns" does not produce a clear error — printToPDF fails with
+ * "Printing failed"; and 595x842 comes out as a sheet of 595x842 INCHES
+ * (MediaBox 60624x42840), because the value is multiplied by 72.
  *
- * Verificado imprimindo de verdade: 1280/96 x 720/96 polegadas dá exatamente
- * MediaBox [0 0 960 540] — 13,33x7,5 in, 16:9, sem margem.
+ * Verified by really printing: 1280/96 x 720/96 inches gives exactly
+ * MediaBox [0 0 960 540] — 13.33x7.5 in, 16:9, no margin.
  *
- * Como a documentação promete microns e a implementação usa polegadas, o
- * tamanho IMPRESSO é conferido com o próprio PDF, e há uma segunda tentativa
- * na outra unidade. Um Electron futuro que conserte a unidade não devolve um
- * deck de 0,35 mm — cai no retry. (Um tamanho grande demais também estoura um
- * limite de 16 bits da caixa: 960x540 polegadas = 69120 pt > 65535 pt.)
+ * Since the documentation promises microns and the implementation uses inches, the
+ * PRINTED size is checked against the PDF itself, and there is a second attempt in
+ * the other unit. A future Electron that fixes the unit does not return a deck of
+ * 0.35 mm — it falls into the retry. (A size that is too large also blows a 16-bit
+ * limit of the box: 960x540 inches = 69120 pt > 65535 pt.)
  */
 
-/** Uma janela do Chromium por PDF: se o load travar, desiste em vez de vazar. */
+/** One Chromium window per PDF: if the load hangs, give up instead of leaking. */
 const PRINT_TIMEOUT_MS = 15_000
 
-/** Microns por pixel CSS (96 dpi) — a unidade que a documentação promete. */
+/** Microns per CSS pixel (96 dpi) — the unit the documentation promises. */
 export const MICRONS_PER_PX = (25.4 * 1000) / 96
 
-/** Pontos por pixel CSS: o palco em px, na unidade em que o PDF mede páginas. */
+/** Points per CSS pixel: the stage in px, in the unit the PDF measures pages in. */
 export const POINTS_PER_PX = 72 / 96
 
 export function micronsFor(px: number): number {
   return Math.round(px * MICRONS_PER_PX)
 }
 
-/** O palco em polegadas — a unidade que o Electron deste repo realmente lê. */
+/** The stage in inches — the unit this repo's Electron actually reads. */
 export function inchesFor(px: number): number {
   return px / 96
 }
@@ -69,12 +69,12 @@ function micronsOf(size: DeckSize): PageSize {
   return { width: micronsFor(size.width), height: micronsFor(size.height) }
 }
 
-/** O tamanho que a página DEVE ter, em pontos: o que o deck pediu. */
+/** The size the page MUST have, in points: what the deck asked for. */
 function expectedPoints(size: DeckSize): PageSize {
   return { width: size.width * POINTS_PER_PX, height: size.height * POINTS_PER_PX }
 }
 
-/** Tamanho real da primeira página do PDF impresso (null se não der para ler). */
+/** Real size of the first page of the printed PDF (null if it cannot be read). */
 async function measurePage(pdf: Buffer): Promise<PageSize | null> {
   try {
     const doc = await PDFDocument.load(pdf, { updateMetadata: false, ignoreEncryption: true })
@@ -87,7 +87,7 @@ async function measurePage(pdf: Buffer): Promise<PageSize | null> {
   }
 }
 
-/** Meio ponto de folga: arredondamento de ponto flutuante, não erro de unidade. */
+/** Half a point of slack: floating point rounding, not a unit error. */
 function isExpectedSize(measured: PageSize, expected: PageSize): boolean {
   return Math.abs(measured.width - expected.width) <= 0.5 && Math.abs(measured.height - expected.height) <= 0.5
 }
@@ -97,8 +97,8 @@ async function printDeck(win: BrowserWindow, pageSize: PageSize): Promise<Buffer
     return await win.webContents.printToPDF({
       printBackground: true,
       pageSize,
-      // Zero: a margem já é o padding do slide, e somar as duas encolheria o
-      // conteúdo dentro da página.
+      // Zero: the margin already is the slide padding, and adding both would shrink the
+      // content inside the page.
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
     })
   } catch {
@@ -107,8 +107,8 @@ async function printDeck(win: BrowserWindow, pageSize: PageSize): Promise<Buffer
 }
 
 /**
- * Imprime o deck. `null` quando o deck saiu do registro, o arquivo não abre ou
- * nenhuma das unidades produziu a página certa — quem chama decide a mensagem.
+ * Prints the deck. `null` when the deck left the registry, the file does not open
+ * or none of the units produced the right page — the caller decides the message.
  */
 export async function renderSlidesPdf(id: string): Promise<Buffer | null> {
   const deck = await getSlides(id)
@@ -116,8 +116,8 @@ export async function renderSlidesPdf(id: string): Promise<Buffer | null> {
 
   let size: DeckSize = { width: SLIDES_WIDTH, height: SLIDES_HEIGHT }
   try {
-    // O tamanho vem do deck, não de uma constante: um deck 4:3 ou 1920x1080
-    // sairia cortado (ou com faixa branca) numa página 16:9 fixa.
+    // The size comes from the deck, not from a constant: a 4:3 or 1920x1080 deck
+    // would come out cropped (or with a white band) on a fixed 16:9 page.
     size = parseDeckSize(await fsp.readFile(deck.entry, 'utf8'), size)
   } catch {
     return null
@@ -142,9 +142,9 @@ export async function renderSlidesPdf(id: string): Promise<Buffer | null> {
     ])
     if (target.isDestroyed()) return null
 
-    // O runtime já espera as fontes para montar o palco; na impressão a espera
-    // é a mesma, do lado de fora — imprimir antes disso sai com a fonte de
-    // fallback métrica diferente e o texto reflui.
+    // The runtime already waits for the fonts to build the stage; when printing the wait
+    // is the same, from the outside — printing before that comes out with the
+    // fallback font of a different metric and the text reflows.
     await target.webContents
       .executeJavaScript('document.fonts.ready.then(() => true)')
       .catch(() => {})
@@ -154,11 +154,11 @@ export async function renderSlidesPdf(id: string): Promise<Buffer | null> {
     const first = await printDeck(target, inchesOf(size))
     if (first) {
       const measured = await measurePage(first)
-      // Sem conseguir medir, confia: o PDF existe, e recusá-lo seria pior.
+      // Unable to measure it, trust it: the PDF exists, and refusing it would be worse.
       if (!measured || isExpectedSize(measured, expected)) return first
     }
 
-    // A página saiu de outro tamanho: a unidade mudou (ver o bloco acima).
+    // The page came out at another size: the unit changed (see the block above).
     const second = await printDeck(target, micronsOf(size))
     if (second) {
       const measured = await measurePage(second)

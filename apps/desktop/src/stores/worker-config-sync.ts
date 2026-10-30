@@ -3,12 +3,12 @@ import { workerConfigApi } from "@/src/lib/ipc"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 /**
- * Config dos modos delegados (modelo + thinking dos workers de subagentes e
- * orquestração, e modelo do modo Visão) com os companions. Diferente dos modos
- * por chat, isto é global: o celular espelha o desktop.
+ * Settings of the delegated modes (model + thinking of the subagent and
+ * orchestration workers, and the Vision mode model) shared with the companions.
+ * Unlike the per-chat modes, this is global: the phone mirrors the desktop.
  *
- * O renderer é a fonte da verdade (a config vive no localStorage dele), empurra
- * a cada mudança e aplica o que vier do celular.
+ * The renderer is the source of truth (the config lives in its localStorage),
+ * pushes on every change and applies whatever comes from the phone.
  */
 
 function snapshot(): WorkerConfigSnapshot {
@@ -23,8 +23,8 @@ function snapshot(): WorkerConfigSnapshot {
   }
 }
 
-// O provider-store muda por muito mais que esta config (catálogo, provedores):
-// sem comparar, cada fetch viraria um broadcast à toa para todos os celulares.
+// The provider-store changes for much more than this config (catalog, providers):
+// without comparing, every fetch would become a pointless broadcast to all the phones.
 let lastPushed = ""
 
 function push() {
@@ -44,7 +44,7 @@ if (typeof window !== "undefined" && window.ipcRenderer) {
     store.setWorkerModel(config.workerModel ?? null)
     store.setWorkerReasoning(config.workerReasoning ?? null)
     store.setVisionModel(config.visionModel ?? null)
-    // Ausente = o celular não conhece o campo: mantém o que está.
+    // Absent = the phone does not know the field: keep what is there.
     if ("orchestratorModel" in config) store.setOrchestratorModel(config.orchestratorModel ?? null)
     if ("orchestratorReasoning" in config) store.setOrchestratorReasoning(config.orchestratorReasoning ?? null)
     if (config.orchestration) store.setOrchestrationSettings(config.orchestration)

@@ -1,7 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
-// Efeito de import: inicializa o i18n e aplica o idioma salvo antes do primeiro
-// render (o painel tem poucas palavras, mas elas não podem sair no idioma errado).
+// Import effect: initializes i18n and applies the saved language before the first
+// render (the panel has few words, but they cannot come out in the wrong language).
 import "./i18n"
 import "./stores/locale-store"
 import "./index.css"
@@ -10,15 +10,15 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { ErrorBoundary } from "./components/error-boundary"
 import { OverlayApp } from "./components/overlay/overlay-app"
 
-// O ThemeProvider é o que faz o painel SEGUIR o tema do app: ele aplica a
-// mesma classe do index.html e entrega o tema à persona — sem ele a persona
-// caía no "system" do contexto padrão e podia sair branca sobre um painel
-// branco (o inverso do que a tela inicial faz).
+// The ThemeProvider is what makes the panel FOLLOW the app theme: it applies the
+// same class as index.html and hands the theme to the persona — without it the persona
+// fell into the default context's "system" and could come out white over a white
+// panel (the inverse of what the start screen does).
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-      {/* O Markdown da resposta traz tooltips (copiar código) — no app eles
-          vivem neste provider, em volta da árvore inteira. */}
+      {/* The answer's Markdown brings tooltips (copy code) — in the app they
+          live in this provider, around the whole tree. */}
       <TooltipProvider>
         <ErrorBoundary
           label="overlay"

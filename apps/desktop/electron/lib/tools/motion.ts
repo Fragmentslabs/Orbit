@@ -28,34 +28,34 @@ import {
 } from './piece-common'
 
 /**
- * Motion — a composição HTML que a aba Motion toca ao vivo (linha do tempo,
- * uma faixa por camada) e que o render transforma em vídeo.
+ * Motion — the HTML composition the Motion tab plays live (timeline,
+ * one track per layer) and that the render turns into video.
  *
- * Nos DOIS modos é a mesma coisa: a composição mora no armazenamento do Orbit
- * (`orbit-data/motion/<sessão>/<nome>/index.html`), criada e editada por NOME
- * com as tools daqui. No modo código ela NÃO é uma pasta do projeto: o que vem
- * do projeto (uma filmagem, um gsap.min.js) entra pelo motion_asset({ path }),
- * e o vídeo só vai para o projeto quando o usuário pede (motion_render com
- * `output`, ou piece_export). Assim toda escrita passa pelo diário do turno e o
- * revert da mensagem a desfaz.
+ * In BOTH modes it is the same thing: the composition lives in Orbit's storage
+ * (`orbit-data/motion/<session>/<name>/index.html`), created and edited by NAME
+ * with the tools from here. In code mode it is NOT a project folder: what comes
+ * from the project (footage, a gsap.min.js) comes in through motion_asset({ path }),
+ * and the video only goes to the project when the user asks (motion_render with
+ * `output`, or piece_export). That way every write goes through the turn's journal and the
+ * message's revert undoes it.
  */
 
-/** Pasta das composições desta conversa. */
+/** Folder of this conversation's compositions. */
 export function motionPiecesDir(sessionId: string): string {
   return piecesDir('motion', sessionId)
 }
 
-/** "Intro do Orbit!" → "intro-do-orbit". Puro. */
+/** "Orbit intro!" → "orbit-intro". Pure. */
 export function motionSlug(name: string): string {
   return pieceSlug(name, 'motion')
 }
 
 /**
- * HTML mínimo com o meta orbit-motion válido — o palco da aba carrega de
- * imediato (1920x1080 escuro, vazio) enquanto o modelo ainda está transmitindo
- * a composição de verdade. Não é "carga boa": o report() final mede a peça
- * real e a escrita progressiva dispara o watcher (motion:changed) que recarrega
- * a aba no mesmo instante em que o arquivo é gravado.
+ * Minimal HTML with a valid orbit-motion meta — the tab's stage loads
+ * immediately (1920x1080 dark, empty) while the model is still transmitting
+ * the real composition. It is not a "good load": the final report() measures the real
+ * piece and the progressive writing fires the watcher (motion:changed) that reloads
+ * the tab at the very instant the file is written.
  */
 const MOTION_PLACEHOLDER = `<!doctype html>
 <html>
@@ -65,14 +65,14 @@ const MOTION_PLACEHOLDER = `<!doctype html>
 `
 
 /**
- * Abre a aba Motion ANTES da tool terminar: o chat-engine chama isto assim que
- * o nome da composição aparece no input streaming — enquanto o modelo ainda
- * está transmitindo o HTML. Registra a composição (religa o watcher) e manda o
- * painel abrir a aba; com `placeholder` (motion_write) grava um index.html
- * mínimo antes, para o palco ter o que carregar até o HTML de verdade chegar
- * (o watcher recarrega a aba no instante da gravação). `placeholder: false`
- * (motion_edit) não cria nada: a peça já existe, e se não existir é erro do
- * modelo — não há palco para abrir.
+ * Opens the Motion tab BEFORE the tool finishes: chat-engine calls this as soon as
+ * the composition name appears in the streaming input — while the model is still
+ * transmitting the HTML. It registers the composition (re-attaches the watcher) and tells the
+ * panel to open the tab; with `placeholder` (motion_write) it writes a minimal
+ * index.html first, so the stage has something to load until the real HTML arrives
+ * (the watcher reloads the tab at the instant of the write). `placeholder: false`
+ * (motion_edit) creates nothing: the piece already exists, and if it does not it is the
+ * model's error — there is no stage to open.
  */
 export async function openMotionLive(
   sessionId: string,
@@ -87,7 +87,7 @@ export async function openMotionLive(
   } catch {
     if (opts.placeholder === false) return
     await withAssetLock(`motion:${folder}`, async () => {
-      // O placeholder já é uma escrita do turno: a pasta entra no diário antes.
+      // The placeholder is already a write of the turn: the folder goes into the journal first.
       await journalPiece('motion', folder, { entry: file, root, sessionId })
       await fsp.mkdir(folder, { recursive: true })
       await writeFileAtomic(file, MOTION_PLACEHOLDER)
@@ -104,9 +104,9 @@ const NAME = z
   .describe('Name of the composition in this conversation (e.g. "orbit-intro") — the same name addresses it in every motion tool')
 
 /**
- * Endereço GLOBAL por id (mv_…), o mesmo que aparece na nota de anexo. Dá para
- * ler/editar uma composição de qualquer conversa sem conhecer o nome dela. Todo
- * write carrega a leitura sob lock, então dois chats no mesmo id não se atropelam.
+ * GLOBAL address by id (mv_…), the same one that appears in the attachment note. It allows
+ * reading/editing a composition from any conversation without knowing its name. Every
+ * write carries the read under lock, so two chats on the same id do not run over each other.
  */
 const ID = z
   .string()
@@ -114,7 +114,7 @@ const ID = z
   .optional()
   .describe('Motion id (mv_…) of an existing composition — the "motion id" from an attachment note or a chat card. Use it to reach a composition from any conversation; omit when addressing by name in this one')
 
-/** Limite da imagem que vai ao modelo (o mesmo do panel_screenshot). */
+/** Limit of the image that goes to the model (the same as panel_screenshot's). */
 const MAX_MODEL_IMAGE_BYTES = 300_000
 const frameStash = new Map<string, { base64: string }>()
 
@@ -122,9 +122,9 @@ export function createMotionTools(
   scope: PieceToolScope & {
     modelVision?: boolean
     canRender: boolean
-    /** Idioma da pessoa: o título do documento entregue pelo `transcribe` é para ela. */
+    /** The person's language: the title of the document delivered by `transcribe` is for them. */
     language?: string
-    /** "Fala em texto" nas Preferências: desligado, a edição não ganha o `transcribe`. */
+    /** "Speech to text" in Preferences: off, the edit does not get `transcribe`. */
     sttEnabled?: boolean
   },
 ): ToolSet {
@@ -133,8 +133,8 @@ export function createMotionTools(
   const project = scope.project ?? null
 
   /**
-   * Alvo por `name` (composição desta conversa) OU por `id` (global). Puro até o
-   * `getMotion` — a autorização é só "existe"; não há checagem de dono.
+   * Target by `name` (this conversation's composition) OR by `id` (global). Pure up to
+   * `getMotion` — the authorization is only "it exists"; there is no owner check.
    */
   const resolveTarget = async (input: { name?: string; id?: string }) => {
     if (input.id) {
@@ -174,14 +174,14 @@ export function createMotionTools(
         'Keep refining with motion_edit (exact text replacements) — the tab reloads live at the same frame, so tell the user what you changed and let them watch. Check yourself with motion_frame. Render only if the user asks for the video file (they also have a Render button in the tab).',
       fixHint: 'fix it with motion_edit or motion_write (the tab reloads by itself) and read this result again.',
     })
-    // Num worker não há aba: quem mostra a peça é a sessão principal, e ela só
-    // a alcança pelo id (o nome é desta conversa).
+    // In a worker there is no tab: what shows the piece is the main session, and it only
+    // reaches it by id (the name belongs to this conversation).
     return canShow
       ? text
       : `${text}\nMotion id: ${motionIdFor(target.folder, target.file)} — report it, so the main session can show the piece with motion_preview({ id }).`
   }
 
-  /** Toda escrita na composição: sob o lock da pasta e com a pasta no diário. */
+  /** Every write to the composition: under the folder's lock and with the folder in the journal. */
   const writing = <T>(target: Target, fn: () => Promise<T>) =>
     withAssetLock(`motion:${target.folder}`, async () => {
       await journalPiece('motion', target.folder, { entry: target.file, root: target.root, sessionId: scope.sessionId })
@@ -238,8 +238,8 @@ export function createMotionTools(
         const target = await resolveTarget({ name, id })
         const existed = await writing(target, async () => {
           await fsp.mkdir(target.folder, { recursive: true })
-          // O placeholder da abertura ao vivo (openMotionLive) não conta como
-          // existente: "replaced" só quando o agente substitui uma peça escrita.
+          // The placeholder from the live opening (openMotionLive) does not count as
+          // existing: "replaced" only when the agent replaces a written piece.
           let existed = false
           try {
             existed = (await fsp.readFile(target.file, 'utf8')) !== MOTION_PLACEHOLDER
@@ -264,8 +264,8 @@ export function createMotionTools(
       }),
       execute: async ({ name, id, edits }) => {
         const target = await resolveTarget({ name, id })
-        // Leitura e escrita sob o mesmo lock: se outro chat gravou no meio, os
-        // oldText não casam e o edit falha em vez de sobrescrever.
+        // Reading and writing under the same lock: if another chat wrote in the middle, the
+        // oldText do not match and the edit fails instead of overwriting.
         await writing(target, async () => {
           let source: string
           try {
@@ -291,16 +291,16 @@ export function createMotionTools(
       }),
       execute: async ({ ref, path: source, filename, name, id }) => {
         const target = await resolveTarget({ name, id })
-        // A origem é resolvida ANTES de importar: o `id` que sai daqui
-        // (`aud_x.wav`, `img_x.png`) é a mesma identidade que a mídia tem no
-        // chat, e é ela — não o texto que o agente passou — que faz o player
-        // solto virar uma linha do card da peça.
+        // The source is resolved BEFORE importing: the `id` that comes out of here
+        // (`aud_x.wav`, `img_x.png`) is the same identity the media has in the
+        // chat, and it is what — not the text the agent passed — turns the loose
+        // player into a line of the piece's card.
         const origin = ref ? await resolveAttachmentRef(ref).catch(() => null) : null
         const imported = await writing(target, () => importIntoPiece(target.folder, { ref, path: source, filename }, project))
-        // A origem do arquivo fica registrada na peça: é o que faz o player
-        // solto no chat virar uma linha do card da composição em vez de mais um
-        // card na conversa. O id é derivado da pasta + entrada (`motionIdFor`),
-        // então vale mesmo antes de a composição existir de verdade.
+        // The file's source stays recorded in the piece: it is what turns the loose
+        // player in the chat into a line of the composition's card instead of one more
+        // card in the conversation. The id is derived from the folder + input (`motionIdFor`),
+        // so it holds even before the composition really exists.
         await recordMotionFile(
           { id: motionIdFor(target.folder, target.file), folder: target.folder, sessionId: scope.sessionId },
           {
@@ -348,8 +348,8 @@ export function createMotionTools(
           sessionId: scope.sessionId,
           signal: abortSignal,
         })
-        // A folha fica FORA da pasta da composição: aquela pasta é observada para
-        // a recarga ao vivo, e um arquivo novo ali recarregaria a aba.
+        // The sheet stays OUTSIDE the composition's folder: that folder is watched for
+        // the live reload, and a new file there would reload the tab.
         const sheetFile = path.join(root, '.frames', sheetFileName(result.name))
         await fsp.mkdir(path.dirname(sheetFile), { recursive: true })
         await fsp.writeFile(sheetFile, result.image)
@@ -415,8 +415,8 @@ export function createMotionTools(
         if ((output || audio) && !project) throw new Error('`output` and `audio` need a working folder (code mode)')
         const exported = output ? resolveWritePath(project!, output) : null
         const ext = format ?? 'mp4'
-        // A saída mora ao lado das composições da conversa, FORA da pasta da peça
-        // (que é observada pela recarga ao vivo).
+        // The output lives next to the conversation's compositions, OUTSIDE the piece's folder
+        // (which is watched for the live reload).
         const out = path.join(root, 'renders', `${target.name}.${ext}`)
         await fsp.mkdir(path.dirname(out), { recursive: true })
         const result = await renderMotion({
@@ -442,7 +442,7 @@ export function createMotionTools(
         ]
           .filter(Boolean)
           .join('\n')
-        // O vídeo é do app: entra na galeria, onde a pessoa vê e exclui.
+        // The video belongs to the app: it enters the gallery, where the person sees and deletes it.
         const { entry } = await addVideoToGallery({ file: out, name: path.basename(out), sessionId: scope.sessionId, source: 'chat' })
         if (!canShow || !showIt) return { message }
         return { message, videoUrl: entry.videoUrl, title: path.basename(out), durationMs: result.duration * 1000, path: out }
@@ -450,9 +450,9 @@ export function createMotionTools(
     })
   }
 
-  // Sem pasta de trabalho, a edição de vídeo (EDL) lê os ANEXOS pela referência
-  // e grava no armazenamento da conversa — no código essas tools vêm da pasta
-  // (createVideoTools com o ctx do projeto, em tools/index.ts).
+  // With no working folder, video editing (EDL) reads the ATTACHMENTS by reference
+  // and writes to the conversation's storage — in code those tools come from the folder
+  // (createVideoTools with the project's ctx, in tools/index.ts).
   if (!project) {
     const chatCtx: ToolContext = {
       sessionId: scope.sessionId,
@@ -466,7 +466,7 @@ export function createMotionTools(
       canShow,
       readOnly: Boolean(scope.readOnly),
       language: scope.language,
-      // O mesmo interruptor do modo código: sem "Fala em texto" não há motor.
+      // The same switch as code mode: without "Speech to text" there is no engine.
       sttEnabled: scope.sttEnabled,
       chat: { outputDir: 'renders' },
     })

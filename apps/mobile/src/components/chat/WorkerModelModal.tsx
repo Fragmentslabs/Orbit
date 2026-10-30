@@ -15,13 +15,13 @@ interface WorkerModelModalProps {
 }
 
 /**
- * Configuração do modelo dos workers (subagentes/orquestração) — espelho
- * do modal do desktop: escolhe um modelo do catálogo ou "usar o mesmo
- * modelo do chat" (limpa a configuração).
+ * Model configuration of the workers (subagents/orchestration) — mirror
+ * of the desktop modal: picks a model from the catalog or "use the same
+ * model as the chat" (clears the configuration).
  */
 export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
-  // Fechado não monta nada. Antes o componente vivia junto do PromptInput e
-  // recalculava o catálogo a cada render dele, mesmo com o modal fora da tela.
+  // Closed, it mounts nothing. Before, the component lived next to PromptInput and
+  // recalculated the catalog on every render of it, even with the modal off screen.
   if (!visible) return null
   return <WorkerModelSheet onClose={onClose} />
 }
@@ -38,9 +38,9 @@ function WorkerModelSheet({ onClose }: { onClose: () => void }) {
     0.08,
   )
 
-  // Pelos setters do store, não por setState + Storage na mão: são eles que
-  // persistem E empurram a config para o desktop (worker-config:set). Escrever
-  // direto no store deixava a escolha só neste aparelho.
+  // Through the store setters, not through setState + Storage by hand: they are what
+  // persists AND pushes the config to the desktop (worker-config:set). Writing
+  // straight into the store left the choice only on this device.
   const setWorkerModel = useSettingsStore((s) => s.setWorkerModel)
   const setWorkerReasoning = useSettingsStore((s) => s.setWorkerReasoning)
 
@@ -86,7 +86,7 @@ function WorkerModelSheet({ onClose }: { onClose: () => void }) {
             {t('workerModelModal.description')}
           </Text>
 
-          {/* Usar o modelo do chat */}
+          {/* Use the chat model */}
           <Pressable
             onPress={() => {
               void setWorkerModel(null)
@@ -99,7 +99,7 @@ function WorkerModelSheet({ onClose }: { onClose: () => void }) {
             {!workerModel && <Check size={16} color={tokens.primary} />}
           </Pressable>
 
-          {/* Busca */}
+          {/* Search */}
           <View style={[s.searchRow, { backgroundColor: tokens.border }]}>
             <Search size={16} color={tokens.mutedForeground} />
             <TextInput
@@ -119,7 +119,7 @@ function WorkerModelSheet({ onClose }: { onClose: () => void }) {
             onSelect={handleSelect}
             emptyLabel={t('workerModelModal.noModels')}
             header={
-              /* Config de thinking rola junto com a lista, como antes */
+              /* Thinking config scrolls along with the list, as before */
               workerModel && supportsReasoning ? (
                 <View style={[s.thinkingCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
                   <View style={s.thinkingRow}>

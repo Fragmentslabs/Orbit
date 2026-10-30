@@ -10,8 +10,8 @@ interface OpenWithStatus {
 }
 
 /**
- * Integrações com o sistema operacional. Hoje só o "Abrir com Orbit" do
- * Explorer (Windows) — registrado em HKCU, sem necessidade de admin.
+ * Integrations with the operating system. Today only the Explorer's "Open with
+ * Orbit" (Windows) — registered in HKCU, with no need for admin.
  */
 export function SystemPanel() {
   const { t } = useTranslation()

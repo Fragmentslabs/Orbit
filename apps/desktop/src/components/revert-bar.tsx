@@ -10,18 +10,18 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Barra exibida acima do input enquanto um revert está ativo:
- * - Modo código: resumo dos arquivos alterados desfeitos + "Desfazer" (unrevert).
- * - Modo código sem snapshot: aviso de que a conversa foi truncada, mas os
- *   arquivos não puderam ser desfeitos (filesRestored === false).
- * - Modo chat: indica que a conversa foi truncada até o ponto revertido.
- * - Nos dois modos: o que foi desfeito fora do repositório — peças (motion,
- *   design, slides) e itens da galeria —, e o que foi PRESERVADO por ter
- *   mudado depois (outra conversa, edição no painel, arquivo externo).
- * Pode ser fechada com o X (não desfaz o revert, só esconde a barra).
+ * Bar shown above the input while a revert is active:
+ * - Code mode: summary of the changed files that were undone + "Undo" (unrevert).
+ * - Code mode without a snapshot: warning that the conversation was truncated, but the
+ *   files could not be undone (filesRestored === false).
+ * - Chat mode: it indicates that the conversation was truncated up to the reverted point.
+ * - In both modes: what was undone outside the repository — pieces (motion,
+ *   design, slides) and gallery items —, and what was PRESERVED for having
+ *   changed afterwards (another conversation, panel edit, external file).
+ * It can be closed with the X (it does not undo the revert, it only hides the bar).
  *
- * Depois de um unrevert com conflitos, a mesma barra mostra o aviso
- * transitório do que ficou intacto.
+ * After an unrevert with conflicts, the same bar shows the transient
+ * notice of what stayed intact.
  */
 export function RevertBar({ session }: { session: SessionInfo }) {
   const { t } = useTranslation()
@@ -34,8 +34,8 @@ export function RevertBar({ session }: { session: SessionInfo }) {
   const [dismissed, setDismissed] = useState(false)
   const revert = session.revert
 
-  // Unrevert com conflitos: não há mais revert ativo, mas o que ficou intacto
-  // precisa ser dito — senão a pessoa acha que tudo voltou.
+  // Unrevert with conflicts: there is no active revert anymore, but what stayed intact
+  // needs to be said — otherwise the person thinks everything came back.
   if (!revert) {
     if (!notice) return null
     const kept = notice.files.length + (notice.media?.conflicts ?? 0)
@@ -74,11 +74,11 @@ export function RevertBar({ session }: { session: SessionInfo }) {
 
   const isCode = Boolean(revert.files || revert.diff)
   const count = revert.files?.length ?? 0
-  // Modo código sem snapshot: o truncamento aconteceu, mas o filesystem não
-  // pôde ser restaurado — aviso explícito em vez de tratar como revert de chat.
-  // 'capture-failed' (restore falhou) tem mensagem própria vs. 'no-snapshot'
-  // (snapshot indisponível para a mensagem) e 'no-end-snapshot' (o turno pode
-  // ter escrito, mas o estado final não foi registrado).
+  // Code mode without a snapshot: the truncation happened, but the filesystem could not
+  // be restored — an explicit warning instead of treating it as a chat revert.
+  // 'capture-failed' (restore failed) has its own message vs. 'no-snapshot'
+  // (snapshot unavailable for the message) and 'no-end-snapshot' (the turn may
+  // have written, but the final state was not recorded).
   const filesNotRestored = Boolean(session.directory) && revert.filesRestored === false
   const label = filesNotRestored
     ? revert.reason === "capture-failed"
@@ -94,8 +94,8 @@ export function RevertBar({ session }: { session: SessionInfo }) {
           : t("revert.filesRevertedMany", { n: count })
       : t("revert.conversationReverted")
 
-  // Mídia: peças e galeria moram no armazenamento do app e têm diário próprio,
-  // nos dois modos (ver session/media-revert.ts).
+  // Media: pieces and gallery live in the app storage and have their own journal,
+  // in both modes (see session/media-revert.ts).
   const media = revert.media
   const mediaFailed = media?.restored === false
   const mediaParts = [
@@ -108,7 +108,7 @@ export function RevertBar({ session }: { session: SessionInfo }) {
       ? t("revert.mediaReverted", { what: mediaParts.join(", ") })
       : null
 
-  // O que mudou depois do turno e ficou intacto.
+  // What changed after the turn and stayed intact.
   const filesKept = revert.conflicts ?? []
   const mediaKept = media?.conflicts ?? 0
   const keptParts = [
@@ -124,8 +124,8 @@ export function RevertBar({ session }: { session: SessionInfo }) {
       : null,
   ].filter(Boolean)
   const keptLabel = keptParts.length > 0 ? keptParts.join(", ") : null
-  // Mudou durante o turno, mas não pelas ferramentas de escrita do Orbit (bash,
-  // MCP, algo de fora): não foi revertido — a pessoa decide.
+  // Changed during the turn, but not by the Orbit write tools (bash,
+  // MCP, something from outside): it was not reverted — the person decides.
   const uncertain = revert.uncertain ?? []
   const uncertainLabel =
     uncertain.length === 0

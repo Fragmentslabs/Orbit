@@ -1,33 +1,33 @@
 import { normalizeFolderName, type SessionInfo } from "@shared/chat"
 
 /**
- * Revalidação das pastas de trabalho.
+ * Revalidation of the working folders.
  *
- * O caminho de uma pasta é guardado como STRING — no diretório da sessão, no
- * mapa diretório → pasta e na lista de pastas do workspace. Renomear, mover ou
- * apagar a pasta no Finder não avisa ninguém: as três referências continuam
- * apontando para o vazio, e o Orbit só descobre no dia em que tenta usá-las.
+ * A folder path is stored as a STRING — in the session directory, in the
+ * directory → folder map and in the workspace folder list. Renaming, moving or
+ * deleting the folder in Finder warns nobody: the three references keep
+ * pointing into the void, and Orbit only finds out on the day it tries to use them.
  *
- * Aqui mora a parte que decide O QUE sumiu e O QUE fazer com cada referência
- * quando a pessoa relocaliza a pasta. Pura de propósito: é fechada por teste,
- * sem Electron e sem store.
+ * Here lives the part that decides WHAT disappeared and WHAT to do with each reference
+ * when the person relocates the folder. Pure on purpose: it is closed off by tests,
+ * without Electron and without a store.
  */
 
-/** Uma pasta referenciada que não existe mais em disco. */
+/** A referenced folder that no longer exists on disk. */
 export interface MissingFolder {
-  /** O caminho exatamente como está guardado — é a chave do religamento. */
+  /** The path exactly as it is stored — it is the key of the reconnection. */
   path: string
-  /** Nome curto para a UI (o último segmento do caminho). */
+  /** Short name for the UI (the last segment of the path). */
   name: string
 }
 
-/** Último segmento do caminho ("/a/b/meu-app" → "meu-app"). */
+/** Last segment of the path ("/a/b/my-app" → "my-app"). */
 export function folderBaseName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/").filter(Boolean)
   return parts[parts.length - 1] ?? path
 }
 
-/** Os caminhos de pasta de uma sessão, o principal primeiro. */
+/** The folder paths of a session, the main one first. */
 export function sessionFolderPaths(
   session: Pick<SessionInfo, "directory" | "extraDirectories">,
 ): string[] {
@@ -37,8 +37,8 @@ export function sessionFolderPaths(
 }
 
 /**
- * Todos os caminhos referenciados — pelas pastas do workspace e pelas sessões —
- * sem repetição e na ordem em que aparecem.
+ * All the referenced paths — from the workspace folders and from the sessions —
+ * without repetition and in the order they appear.
  */
 export function collectFolderPaths(
   workspaceFolders: string[],
@@ -55,11 +55,11 @@ export function collectFolderPaths(
 }
 
 /**
- * Os caminhos que não existem mais, na ordem de `paths`.
+ * The paths that no longer exist, in the order of `paths`.
  *
- * Só `false` conta: um caminho que nem foi checado (o main não respondeu, a
- * lista mudou no meio) é dúvida, e dúvida não vira alerta — senão o aviso
- * nasce mentindo.
+ * Only `false` counts: a path that was not even checked (main did not answer, the
+ * list changed midway) is a doubt, and a doubt does not become an alert — otherwise the notice
+ * is born lying.
  */
 export function missingFolders(paths: string[], existing: Record<string, boolean>): MissingFolder[] {
   return paths
@@ -68,10 +68,10 @@ export function missingFolders(paths: string[], existing: Record<string, boolean
 }
 
 /**
- * Religar uma sessão de `oldPath` para `newPath`: o diretório principal e as
- * pastas extras, na posição em que estavam. `null` quando a sessão não
- * referencia o caminho — é o que mantém a operação cirúrgica, sem tocar em
- * quem não tem nada a ver.
+ * Reconnects a session from `oldPath` to `newPath`: the main directory and the
+ * extra folders, in the position they were in. `null` when the session does not
+ * reference the path — it is what keeps the operation surgical, without touching
+ * whoever has nothing to do with it.
  */
 export function relocateSessionFolders(
   session: Pick<SessionInfo, "directory" | "extraDirectories">,
@@ -91,9 +91,9 @@ export function relocateSessionFolders(
 }
 
 /**
- * Move a entrada do mapa automático para o caminho novo. Se o destino já tem
- * pasta (a pessoa já trabalhou por lá), a entrada antiga sai sem sobrescrever:
- * trocar o dono do caminho novo seria pior do que perder a pista antiga.
+ * Moves the automatic map entry to the new path. If the destination already has a
+ * folder (the person already worked from there), the old entry leaves without overwriting:
+ * switching the owner of the new path would be worse than losing the old hint.
  */
 export function relocateAutoFolderEntry(
   map: Record<string, string>,
@@ -109,10 +109,10 @@ export function relocateAutoFolderEntry(
 }
 
 /**
- * A memória de workspace da pasta (`FolderInfo.workspace`) acompanha o projeto
- * relocalizado, na posição em que o caminho estava. `null` quando ela não
- * referencia o caminho — igual ao `relocateSessionFolders`, para a operação
- * tocar só em quem tem a ver.
+ * The folder's workspace memory (`FolderInfo.workspace`) follows the relocated
+ * project, in the position where the path was. `null` when it does not
+ * reference the path — same as `relocateSessionFolders`, so the operation
+ * touches only whoever has to do with it.
  */
 export function relocateFolderWorkspace(
   workspace: string[] | undefined,
@@ -124,10 +124,10 @@ export function relocateFolderWorkspace(
 }
 
 /**
- * O nome da pasta na sidebar acompanha o projeto: se ele ainda é o derivado do
- * caminho antigo ("meu-app" → "Meu App"), deixá-lo como está faz a pasta mentir
- * sobre o que há dentro depois de relocalizada. Nome editado à mão é decisão da
- * pessoa e não se toca — por isso a comparação, e não a atribuição direta.
+ * The folder name in the sidebar follows the project: if it is still the one derived from the
+ * old path ("my-app" → "My App"), leaving it as it is makes the folder lie
+ * about what is inside after being relocated. A name edited by hand is the person's
+ * decision and is not touched — that is why there is a comparison, and not a direct assignment.
  */
 export function relocatedFolderName(
   currentName: string,

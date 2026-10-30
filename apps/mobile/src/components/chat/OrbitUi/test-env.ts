@@ -1,12 +1,12 @@
 /**
- * Ambiente dos testes de componente do app mobile.
+ * Environment for the mobile app component tests.
  *
- * Os módulos nativos (expo-*, ícones, svg) não existem no Node e alguns deles
- * chegam até aqui com sintaxe Flow, que o esbuild não lê. Trocá-los por stubs é
- * o que permite renderizar o componente REAL no jsdom — o que se testa é o
- * componente, não a ponte nativa.
+ * The native modules (expo-*, icons, svg) do not exist in Node and some of them
+ * arrive here with Flow syntax, which esbuild does not read. Swapping them for stubs is
+ * what allows rendering the REAL component in jsdom — what is tested is the
+ * component, not the native bridge.
  *
- * Carregado por `setupFiles` (ver vitest.config.ts).
+ * Loaded by `setupFiles` (see vitest.config.ts).
  */
 import { vi } from 'vitest'
 
@@ -27,10 +27,10 @@ vi.mock('expo-router', () => ({
 }))
 
 /**
- * Ícones: cada nome usado pelos componentes de chat vira um componente vazio.
- * A lista é explícita de propósito — um Proxy devolvendo stub para qualquer
- * nome também responde ao `then` que o loader consulta, e o teste fica
- * esperando uma promessa que nunca resolve.
+ * Icons: every name used by the chat components becomes an empty component.
+ * The list is explicit on purpose — a Proxy returning a stub for any
+ * name also answers to the `then` the loader queries, and the test ends up
+ * waiting for a promise that never resolves.
  */
 vi.mock('lucide-react-native', () => {
   const names = [
@@ -70,24 +70,24 @@ vi.mock('lucide-react-native', () => {
   return icons
 })
 
-/** SVG: o desenho não é o que se verifica; o bloco é. */
+/** SVG: the drawing is not what is verified; the block is. */
 vi.mock('react-native-svg', () => {
   const Shape = () => null
   return { __esModule: true, default: Shape, Circle: Shape, Path: Shape, Polyline: Shape, Text: Shape }
 })
 
 /**
- * Global do runtime do RN. O `expo` lê `__DEV__` no runtime de inverno, que
- * entra pela dependência de módulos como `expo-image` — sem isto o módulo
- * estoura no import, antes de qualquer teste rodar.
+ * Global of the RN runtime. `expo` reads `__DEV__` in the interop runtime, which
+ * comes in through the module dependency like `expo-image` — without this the module
+ * blows up on import, before any test runs.
  */
 const runtimeGlobals = globalThis as typeof globalThis & { __DEV__?: boolean }
 runtimeGlobals.__DEV__ = true
 
-/** Imagem de poster: o carregamento não é o que se verifica. */
+/** Poster image: loading is not what is verified. */
 vi.mock('expo-image', () => ({ Image: () => null }))
 
-/** Insets de área segura: no jsdom não há provider, e o hook nativo lançaria. */
+/** Safe area insets: in jsdom there is no provider, and the native hook would throw. */
 vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
   SafeAreaProvider: ({ children }: { children: unknown }) => children,
@@ -95,10 +95,10 @@ vi.mock('react-native-safe-area-context', () => ({
 }))
 
 /**
- * Asset e sistema de arquivos: o carregador do bundle do mermaid é o único
- * consumidor que os testes alcançam hoje. Sem arquivo ele devolve null, e o
- * diagrama cai no código-fonte — que é o comportamento esperado fora do
- * aparelho. Sem estes stubs o import puxa o runtime nativo do expo e estoura.
+ * Asset and file system: the loader of the mermaid bundle is the only
+ * consumer the tests reach today. Without a file it returns null, and the
+ * diagram falls back to the source code — which is the expected behavior off
+ * the device. Without these stubs the import pulls the native expo runtime and blows up.
  */
 vi.mock('expo-asset', () => ({
   Asset: {

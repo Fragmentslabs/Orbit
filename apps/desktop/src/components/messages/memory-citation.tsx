@@ -10,23 +10,23 @@ import { CATEGORY_LABEL, KIND_BADGE, KIND_LABEL } from "@/src/components/memorie
 import { useMemoryById } from "@/src/hooks/use-memory"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 
-/** Rótulo curto o bastante para caber no meio de uma frase. */
+/** Label short enough to fit in the middle of a sentence. */
 function shortLabel(text: string, max = 40): string {
   const clean = text.replace(/\s+/g, " ").trim()
   return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean
 }
 
 /**
- * Citação de memória na conversa: `[idioma do usuário](#orbit-memory/mem_xxx)`.
+ * Memory citation in the conversation: `[user language](#orbit-memory/mem_xxx)`.
  *
- * Chip no meio da frase (mesma linguagem da citação de documento), hover card
- * com o resumo, clique abre a memória no painel lateral — a conversa continua
- * visível ao lado. O id cru nunca aparece como texto: quando o modelo escreve
- * `mem_xxx` solto, linkifyMemoryIds o converte no mesmo chip.
+ * A chip in the middle of the sentence (same language as the document citation), a hover card
+ * with the summary, a click opens the memory in the side panel — the conversation stays
+ * visible alongside. The raw id never appears as text: when the model writes
+ * a loose `mem_xxx`, linkifyMemoryIds converts it into the same chip.
  *
- * A memória é resolvida pelo índice do store; um id que não existe (memória
- * excluída, ou link inventado pelo modelo) não vira clique morto: o chip
- * aparece esmaecido e o cartão diz que não encontrou.
+ * The memory is resolved through the store index; an id that does not exist (deleted
+ * memory, or a link invented by the model) does not become a dead click: the chip
+ * appears dimmed and the card says it did not find it.
  */
 export function MemoryCitation({ memoryId, label, sessionId }: {
   memoryId: string
@@ -37,8 +37,8 @@ export function MemoryCitation({ memoryId, label, sessionId }: {
   const memory = useMemoryById(memoryId)
   const openMemoryTab = usePanelStore((s) => s.openMemoryTab)
 
-  // O texto do link manda (foi escrito para aquela frase); quando ele é só o
-  // id — o caso do linkify — vale o título da memória.
+  // The link text rules (it was written for that sentence); when it is only the
+  // id — the linkify case — the memory title counts.
   const bareId = label.trim() === memoryId
   const title = bareId
     ? memory?.title?.trim() || (memory ? shortLabel(memory.text) : memoryId)
@@ -56,8 +56,8 @@ export function MemoryCitation({ memoryId, label, sessionId }: {
             type="button"
             onClick={open}
             className={cn(
-              // font-sans: o chip também aparece dentro do output monoespaçado
-              // de uma ferramenta, onde herdaria a fonte do <pre>.
+              // font-sans: the chip also appears inside the monospaced output
+              // of a tool, where it would inherit the <pre> font.
               "mx-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded px-1.5 align-baseline font-sans text-[0.7rem] font-medium",
               memory
                 ? "bg-primary/10 text-primary hover:bg-primary/20"
@@ -116,8 +116,8 @@ export function MemoryCitation({ memoryId, label, sessionId }: {
 }
 
 /**
- * Texto CRU (saída de ferramenta) com os ids de memória virando chip. A divisão
- * mora em citations.ts — aqui só o desenho.
+ * RAW text (tool output) with the memory ids becoming chips. The splitting
+ * lives in citations.ts — here only the drawing.
  */
 export function MemoryIdText({ text, sessionId }: { text: string; sessionId?: string }) {
   const parts = useMemo(() => splitMemoryIds(text), [text])

@@ -1,79 +1,79 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const respostas = vi.hoisted(() => [] as Array<[string, unknown]>)
-const sessoes = vi.hoisted(() => ({
+const replies = vi.hoisted(() => [] as Array<[string, unknown]>)
+const sessions = vi.hoisted(() => ({
   pendingAsks: {} as Record<string, Array<Record<string, unknown>>>,
 }))
 vi.mock("@/src/lib/ipc", () => ({
-  chatApi: { askReply: (id: string, valor: unknown) => respostas.push([id, valor]) },
+  chatApi: { askReply: (id: string, value: unknown) => replies.push([id, value]) },
 }))
-vi.mock("@/src/stores/session-store", () => ({ useSessionStore: { getState: () => sessoes } }))
+vi.mock("@/src/stores/session-store", () => ({ useSessionStore: { getState: () => sessions } }))
 
-const armazenado: Record<string, string> = {}
+const stored: Record<string, string> = {}
 vi.stubGlobal("localStorage", {
-  getItem: (k: string) => armazenado[k] ?? null,
+  getItem: (k: string) => stored[k] ?? null,
   setItem: (k: string, v: string) => {
-    armazenado[k] = v
+    stored[k] = v
   },
 })
 
 const { usePermissionPrefs, permissionFor } = await import("./permission-prefs")
 
 beforeEach(() => {
-  respostas.length = 0
-  armazenado["orbit-permission-mode"] = "ask"
-  armazenado["orbit-session-permission"] = "{}"
+  replies.length = 0
+  stored["orbit-permission-mode"] = "ask"
+  stored["orbit-session-permission"] = "{}"
   usePermissionPrefs.setState({ defaultMode: "ask", modes: {} })
-  sessoes.pendingAsks = {
-    s_tela: [
+  sessions.pendingAsks = {
+    s_screen: [
       { requestId: "p1", kind: "permission", claim: { tool: "bash", title: "x" } },
       { requestId: "p2", kind: "permission", claim: { tool: "worktree_remove", title: "y", alwaysAsk: true } },
       { requestId: "q1", kind: "question", questions: [] },
     ],
-    s_outro: [{ requestId: "p3", kind: "permission", claim: { tool: "bash", title: "z" } }],
+    s_other: [{ requestId: "p3", kind: "permission", claim: { tool: "bash", title: "z" } }],
   }
 })
 
-describe("autonomia por chat", () => {
-  it("mudar num chat NÃO muda o outro nem o padrão", () => {
+describe("autonomy per chat", () => {
+  it("changing it in one chat does NOT change the other or the default", () => {
     usePermissionPrefs.getState().setMode("s_a", "full")
     expect(permissionFor("s_a")).toBe("full")
     expect(permissionFor("s_b")).toBe("ask")
     expect(usePermissionPrefs.getState().defaultMode).toBe("ask")
   })
 
-  it("chat novo (draft) vira o padrão do próximo chat novo", () => {
+  it("a new chat (draft) becomes the default for the next new chat", () => {
     usePermissionPrefs.getState().setMode(null, "approve")
     expect(permissionFor(null)).toBe("approve")
     expect(usePermissionPrefs.getState().defaultMode).toBe("approve")
   })
 
-  it("o adopt leva a escolha do rascunho para a sessão criada", () => {
+  it("adopt carries the draft's choice to the created session", () => {
     usePermissionPrefs.getState().setMode(null, "full")
     usePermissionPrefs.getState().adopt("s_nova")
     expect(permissionFor("s_nova")).toBe("full")
-    // O rascunho some: o próximo chat novo já nasce no padrão (que a escolha
-    // no chat novo atualizou, como acontece com o modelo).
+    // The draft disappears: the next new chat is already born in the default (which the choice
+    // in the current new chat updated, as happens with the model).
     expect(usePermissionPrefs.getState().modes.draft).toBeUndefined()
     expect(permissionFor(null)).toBe("full")
   })
 })
 
-describe("mudar o nível pela tela", () => {
-  it("para Irrestrito aprova os pedidos de permissão abertos DAQUELE chat", () => {
-    usePermissionPrefs.getState().setMode("s_tela", "full")
-    expect(respostas).toEqual([["p1", "allow"]])
+describe("changing the level from the screen", () => {
+  it("for Unrestricted it approves the open permission requests of THAT chat", () => {
+    usePermissionPrefs.getState().setMode("s_screen", "full")
+    expect(replies).toEqual([["p1", "allow"]])
   })
 
-  it("para Ask ou Aprovar não responde nada", () => {
-    usePermissionPrefs.getState().setMode("s_tela", "approve")
-    expect(respostas).toEqual([])
+  it("for Ask or Approve it answers nothing", () => {
+    usePermissionPrefs.getState().setMode("s_screen", "approve")
+    expect(replies).toEqual([])
   })
 
-  it("troca vinda do celular só muda o nível do chat, sem liberar pedidos", () => {
-    usePermissionPrefs.getState().applyRemoteMode("s_outro", "full")
-    expect(permissionFor("s_outro")).toBe("full")
-    expect(permissionFor("s_tela")).toBe("ask")
-    expect(respostas).toEqual([])
+  it("a change coming from the phone only changes the chat's level, without releasing requests", () => {
+    usePermissionPrefs.getState().applyRemoteMode("s_other", "full")
+    expect(permissionFor("s_other")).toBe("full")
+    expect(permissionFor("s_screen")).toBe("ask")
+    expect(replies).toEqual([])
   })
 })

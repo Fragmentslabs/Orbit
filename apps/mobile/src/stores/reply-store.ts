@@ -2,12 +2,12 @@ import { create } from 'zustand'
 import { messageReplyPrefix, type MessageReplyQuote } from '@orbit/shared'
 
 /**
- * Mensagem marcada como resposta, esperando o envio (espelho do desktop).
+ * Message marked as a reply, waiting for the send (mirror of the desktop).
  *
- * O trecho citado entra no TEXTO enviado — ver formatMessageReply, no shared:
- * o mesmo formato nos dois aparelhos, senão a citação de um vira texto cru na
- * bolha do outro. É por chat, como o rascunho; chat novo usa a chave "draft"
- * até o primeiro envio, quando o session-store chama adopt().
+ * The quoted excerpt enters the SENT TEXT — see formatMessageReply, in shared:
+ * the same format on both devices, otherwise the quote from one becomes raw text in the
+ * bubble of the other. It is per chat, like the draft; a new chat uses the "draft" key
+ * until the first send, when the session-store calls adopt().
  */
 
 const DRAFT_KEY = 'draft'
@@ -44,7 +44,7 @@ export const useReply = create<ReplyState>((set, get) => ({
   },
 }))
 
-/** Texto do envio com a citação na frente, consumindo a resposta pendente. */
+/** Send text with the quote in front, consuming the pending reply. */
 export function withReplyPrefix(key: string | null | undefined, text: string): string {
   const reply = useReply.getState().replies[keyOf(key)]
   if (!reply) return text

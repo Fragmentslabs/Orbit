@@ -22,8 +22,8 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 const PERMISSION_MODES: PermissionMode[] = ["ask", "approve", "full"]
 
-/** Submenu controlado por hover, com atraso de 100ms ao sair — mesmo padrão
- *  do botão de tema no dropdown de conta da sidebar. */
+/** Submenu controlled by hover, with a 100ms delay on leaving — the same pattern
+ *  as the theme button in the sidebar account dropdown. */
 function useHoverSubmenu() {
   const [open, setOpen] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>()
@@ -38,12 +38,12 @@ function useHoverSubmenu() {
 }
 
 /**
- * Menu de configurações rápidas do input: modo do agente (permissão, só modo
- * code), nível de thinking e modelo — as opções abrem como submenus ao passar
- * o hover, e o item de modelo abre o diálogo de seleção. Aparece ao lado do
- * botão "+" apenas em containers estreitos (`@xl:hidden` no trigger) — onde
- * os seletores individuais (ReasoningPicker, ModelPicker) saem da linha e o
- * botão de enviar estouraria o input.
+ * Quick settings menu of the input: agent mode (permission, code mode only),
+ * thinking level and model — the options open as submenus on hover,
+ * and the model item opens the selection dialog. It appears next to the
+ * "+" button only in narrow containers (`@xl:hidden` on the trigger) — where
+ * the individual selectors (ReasoningPicker, ModelPicker) leave the row and the
+ * send button would overflow the input.
  */
 export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: string; showPermission?: boolean }) {
   const { t } = useTranslation()
@@ -53,13 +53,13 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  // Thinking e autonomia POR CHAT — o menu edita só a conversa aberta.
+  // Thinking and autonomy PER CHAT — the menu edits only the open conversation.
   const { enabled, variantId, update } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
 
   const variants = model?.variants ?? []
-  // Modelos reasoningAlwaysOn não podem desligar: o valor exibido é sempre um nível.
+  // reasoningAlwaysOn models cannot turn it off: the displayed value is always a level.
   const canDisable = !model?.reasoningAlwaysOn
   const thinkingValue = !canDisable || enabled ? variantId ?? variants[0]?.id ?? "off" : "off"
   const activeVariant = variants.find((v) => v.id === thinkingValue)
@@ -128,8 +128,8 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
           )}
           <DropdownMenuItem
             onClick={() => {
-              // Aguarda o menu fechar (animação ~100ms) antes de abrir o diálogo
-              // de modelo, para evitar conflito de foco com o input autofocus.
+              // Waits for the menu to close (animation ~100ms) before opening the
+              // model dialog, to avoid a focus conflict with the autofocus input.
               setTimeout(() => setModelOpen(true), 120)
             }}
           >

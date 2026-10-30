@@ -1,45 +1,45 @@
 /**
- * Slides no celular — o deck paginado, um slide por tela.
+ * Slides on the phone — the paginated deck, one slide per screen.
  *
- * COMO UM DECK É MONTADO (lido em `apps/desktop/electron/lib/slides`):
+ * HOW A DECK IS ASSEMBLED (read in `apps/desktop/electron/lib/slides`):
  *
- * - `deck-template.ts` escreve N `<section class="slide">` em sequência no
- *   `<body>`: no FONTE os slides ficam **empilhados**, um embaixo do outro, e o
- *   documento não tem navegação nenhuma.
- * - `slides-runtime.ts` é quem monta o palco: recolhe as seções, joga todas
- *   dentro de `.orbit-slides-stage` e as deixa **sobrepostas**
- *   (`position:absolute`, uma `.is-current` visível por vez), escala 1280×720
- *   (ou o que o `<meta name="orbit-slides">` declarar) para caber na janela e
- *   obedece teclado, clique e `postMessage`. Quem pagina é o APP, nunca o
- *   documento.
+ * - `deck-template.ts` writes N `<section class="slide">` in sequence in the
+ *   `<body>`: in the SOURCE the slides are **stacked**, one under the other, and the
+ *   document has no navigation at all.
+ * - `slides-runtime.ts` is what builds the stage: it collects the sections, throws them all
+ *   inside `.orbit-slides-stage` and leaves them **overlaid**
+ *   (`position:absolute`, one `.is-current` visible at a time), scaled 1280×720
+ *   (or whatever `<meta name="orbit-slides">` declares) to fit the window, and
+ *   obeys keyboard, click and `postMessage`. Whoever paginates is the APP, never the
+ *   document.
  *
- * O CAMINHO DO CELULAR NÃO TEM ESSE RUNTIME. `companion-assets.ts` serve o
- * arquivo do disco como está (só as URLs de fonte são reescritas); o runtime
- * existe só dentro do protocolo `orbit-slides://` do Electron
- * (`slides-store.ts`). O WebView recebe, portanto, o deck EMPILHADO e sem
- * escala: numa tela de 390 pontos, seções desenhadas para 1280 ficam
- * espremidas, e não há como andar entre elas.
+ * THE PHONE PATH DOES NOT HAVE THAT RUNTIME. `companion-assets.ts` serves the
+ * file from disk as it is (only the font URLs are rewritten); the runtime
+ * exists only inside the Electron `orbit-slides://` protocol
+ * (`slides-store.ts`). The WebView therefore receives the STACKED deck without
+ * scaling: on a 390-point screen, sections drawn for 1280 are squeezed,
+ * and there is no way to walk between them.
  *
- * É o caso (2) da pergunta de sempre: sem palco, os slides não são páginas
- * roláveis, são camadas que o app precisa virar. Por isso este viewer faz o
- * que o desktop faz, com as duas metades que o app tem:
+ * It is case (2) of the usual question: without a stage, the slides are not scrollable
+ * pages, they are layers the app needs to flip. That is why this viewer does
+ * what the desktop does, with the two halves the app has:
  *
- * - o PALCO entra por injeção (`onReady` → `injectJavaScript`, o canal que o
- *   `PieceView` expõe justamente para "seek, paging"): o `src={piece.url}`
- *   continua sendo o documento do deck — assets relativos, token na pasta e
- *   CSP ficam intactos —, e o script recolhe as seções, esconde o empilhado e
- *   monta as camadas no mesmo bloco síncrono, sem piscar;
- * - a NAVEGAÇÃO é do app: as setas laterais e o contador são RN, e mandam
- *   `window.orbitSlides.go(n)` pelo mesmo `inject`. O swipe fica dentro do
- *   documento, que é o único lugar que recebe o toque por cima do WebView.
+ * - the STAGE comes in by injection (`onReady` → `injectJavaScript`, the channel that
+ *   `PieceView` exposes precisely for "seek, paging"): the `src={piece.url}`
+ *   remains the deck document — relative assets, token in the folder and
+ *   CSP stay intact —, and the script collects the sections, hides the stacked ones and
+ *   builds the layers in the same synchronous block, without blinking;
+ * - the NAVIGATION belongs to the app: the side arrows and the counter are RN, and they send
+ *   `window.orbitSlides.go(n)` through the same `inject`. The swipe stays inside the
+ *   document, which is the only place that receives the touch over the WebView.
  *
- * O documento devolve o índice por `onMessage` (`ready`/`change`/`empty`), que
- * é o que mantém contador e setas em sincronia com o slide que está na tela.
+ * The document reports the index back through `onMessage` (`ready`/`change`/`empty`), which
+ * is what keeps the counter and arrows in sync with the slide on screen.
  *
- * A API do palco (`window.orbitSlides.go/next/prev`, `data-index`,
- * `.is-current`) é a mesma do runtime do desktop de propósito: um dia o
- * `companion-assets` injeta o runtime de verdade e este script vira só o
- * fallback do celular.
+ * The stage API (`window.orbitSlides.go/next/prev`, `data-index`,
+ * `.is-current`) is the same as the desktop runtime on purpose: one day
+ * `companion-assets` will inject the real runtime and this script becomes only the
+ * phone fallback.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -62,31 +62,31 @@ import { PieceView } from '../../PieceView'
 
 import type { PieceViewerProps } from './index'
 
-/** Marca das mensagens da ponte, a mesma do runtime do desktop (`SLIDES_SOURCE`). */
+/** Mark of the bridge messages, the same one as the desktop runtime (`SLIDES_SOURCE`). */
 export const SLIDES_SOURCE = 'orbit-slides'
 
 /**
- * Alturas fixas do que não é nosso: a barra do `PieceViewer` (h-8 do botão +
- * py-2.5 + a borda) e o que o `PieceView` põe em volta do WebView (a barra do
- * título, a margem `mt-2` e as bordas). Somadas ao inset do topo, é o que sobra
- * de corpo para o deck.
+ * Fixed heights of what is not ours: the bar of `PieceViewer` (h-8 of the button +
+ * py-2.5 + the border) and what `PieceView` puts around the WebView (the
+ * title bar, the `mt-2` margin and the borders). Added to the top inset, it is what is left
+ * of body for the deck.
  */
 const VIEWER_HEADER_HEIGHT = 53
 const PIECE_CHROME_HEIGHT = 45
 
-/** Lado do botão da seta: o alvo de toque confortável (44pt) + `hitSlop`. */
+/** Side of the arrow button: the comfortable touch target (44pt) + `hitSlop`. */
 const ARROW_SIZE = 44
 
 type DeckStatus = 'loading' | 'ready' | 'error' | 'empty'
 
-/** O que o documento do deck conta para o app. */
+/** What the deck document tells the app. */
 export interface SlidesMessage {
   type: 'ready' | 'change' | 'empty'
   index?: number
   total?: number
 }
 
-/** A mensagem do deck, ou `null` quando não é nossa (ou não é JSON). */
+/** The message of the deck, or `null` when it is not ours (or is not JSON). */
 export function readSlidesMessage(data: string): SlidesMessage | null {
   let parsed: unknown
   try {
@@ -111,9 +111,9 @@ export function readSlidesMessage(data: string): SlidesMessage | null {
 }
 
 /**
- * A geometria do palco. Só descreve camada e escala — cor de deck continua
- * sendo do deck; o que é do app aqui é a moldura em volta do 16:9
- * (`--orbit-bg`, preenchido pelo tema).
+ * The geometry of the stage. It only describes the layer and the scale — the deck color
+ * keeps belonging to the deck; what is the app's here is the frame around the 16:9
+ * (`--orbit-bg`, filled by the theme).
  */
 const STAGE_CSS = `
 html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--orbit-bg)}
@@ -125,15 +125,15 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--orbit-
 `.trim()
 
 /**
- * O palco injetado no documento do deck — a metade que falta no celular.
+ * The stage injected into the deck document — the half that is missing on the phone.
  *
- * Roda no `onLoadEnd` do WebView, com o documento já lido (por isso não há
- * `DOMContentLoaded` aqui), e é idempotente: um retry remonta o WebView, mas
- * dois injects na mesma página não podem montar dois palcos.
+ * It runs in the `onLoadEnd` of the WebView, with the document already read (that is why there is no
+ * `DOMContentLoaded` here), and it is idempotent: a retry remounts the WebView, but
+ * two injects into the same page cannot build two stages.
  *
- * Sem template literals lá dentro de propósito: este texto é uma string TS, e
- * um `${` no meio dela quebraria a montagem (a mesma cautela de
- * `slides-runtime.ts`). `__ORBIT_SLIDES_CONFIG__` é trocado em `deckStageSource`.
+ * No template literals in there on purpose: this text is a TS string, and
+ * a `${` in the middle of it would break the assembly (the same caution as
+ * `slides-runtime.ts`). `__ORBIT_SLIDES_CONFIG__` is replaced in `deckStageSource`.
  */
 const STAGE_RUNTIME = `(function () {
   if (window.__orbitSlidesMobile) return
@@ -172,8 +172,8 @@ const STAGE_RUNTIME = `(function () {
     }
   }
 
-  // Só as seções de TOPO: um .slide dentro de outro (uma capa que repete o
-  // padrão) não é uma parada da apresentação.
+  // Only the TOP-level sections: a .slide inside another (a cover that repeats
+  // the pattern) is not a stop of the presentation.
   var nodes = document.querySelectorAll('.slide')
   var sections = []
   for (var i = 0; i < nodes.length; i++) {
@@ -184,8 +184,8 @@ const STAGE_RUNTIME = `(function () {
     return
   }
 
-  // Nada de piscar o deck empilhado: esconde, monta o palco e mostra tudo no
-  // MESMO bloco síncrono, então o navegador não pinta no meio.
+  // No blinking of the stacked deck: hide, build the stage and show everything in the
+  // SAME synchronous block, so the browser does not paint in the middle.
   document.documentElement.style.visibility = 'hidden'
 
   var style = document.createElement('style')
@@ -204,8 +204,8 @@ const STAGE_RUNTIME = `(function () {
   for (var s = 0; s < sections.length; s++) {
     var section = sections[s]
     section.classList.add('orbit-slide')
-    // O deck pode desenhar o próprio número com [data-index] (o tema da casa
-    // usa isto no canto do slide).
+    // The deck can draw its own number with [data-index] (the house theme
+    // uses it in the corner of the slide).
     section.setAttribute('data-index', String(s + 1))
     stage.appendChild(section)
   }
@@ -232,14 +232,14 @@ const STAGE_RUNTIME = `(function () {
     var vh = window.innerHeight || 1
     var scale = Math.min(vw / width, vh / height)
     stage.style.transform = 'translate(-50%, -50%) scale(' + scale + ')'
-    // translate ANTES do scale: o palco pode ser maior que a janela, e um item
-    // maior que o container não fica centralizado — ele vaza para a direita.
+    // translate BEFORE the scale: the stage can be bigger than the window, and an item
+    // bigger than the container does not get centered — it leaks to the right.
     stage.style.transformOrigin = 'center center'
   }
 
-  // Swipe horizontal: o palco ocupa a tela toda, então ele é o alvo natural (e
-  // é o único caminho de toque que o WebView deixa para o documento). O limite
-  // de 40px e a razão contra o eixo Y separam swipe de rolagem de um toque.
+  // Horizontal swipe: the stage fills the whole screen, so it is the natural target (and
+  // it is the only touch path the WebView leaves to the document). The 40px
+  // limit and the ratio against the Y axis separate a swipe from a scroll and from a tap.
   var startX = 0
   var startY = 0
   var startAt = 0
@@ -260,8 +260,8 @@ const STAGE_RUNTIME = `(function () {
     go(index + (dx < 0 ? 1 : -1))
   }, { passive: true })
 
-  // A API que o app chama por injectJavaScript — os mesmos nomes do runtime
-  // do desktop, para o dia em que ele for injetado no servidor.
+  // The API the app calls through injectJavaScript — the same names as the desktop
+  // runtime, for the day it is injected on the server.
   window.orbitSlides = {
     version: 1,
     get index() { return index },
@@ -281,18 +281,18 @@ const STAGE_RUNTIME = `(function () {
 })()`
 
 /**
- * O que é injetado no WebView: o CSS do palco (com a cor do app) e o script,
- * numa chamada só. Puro e testável.
+ * What is injected into the WebView: the CSS of the stage (with the app color) and the script,
+ * in a single call. Pure and testable.
  */
 export function deckStageSource(background: string): string {
   const css = `:root{--orbit-bg:${background}}${STAGE_CSS}`
-  // `</script>` não aparece aqui (é `injectJavaScript`, não um `<script>`), mas
-  // o `<` do CSS viraria ruído no JSON: escapar mantém o texto opaco.
+  // `</script>` does not appear here (it is `injectJavaScript`, not a `<script>`), but
+  // the `<` of the CSS would become noise in the JSON: escaping keeps the text opaque.
   const config = JSON.stringify({ css }).replace(/</g, '\\u003c')
   return STAGE_RUNTIME.replace('__ORBIT_SLIDES_CONFIG__', config)
 }
 
-/** Seta lateral sobreposta ao deck. `disabled` nas pontas: não há para onde ir. */
+/** Side arrow overlaid on the deck. `disabled` at the ends: there is nowhere to go. */
 function SlideArrow({
   side,
   label,
@@ -346,21 +346,21 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
   const [index, setIndex] = useState(0)
   const [total, setTotal] = useState(0)
 
-  // O `inject` do WebView que acabou de carregar. Ref, não estado: mandar um
-  // comando para o deck não deve renderizar nada.
+  // The `inject` of the WebView that has just loaded. A ref, not state: sending a
+  // command to the deck must not render anything.
   const inject = useRef<((js: string) => void) | null>(null)
 
-  // O fundo do palco vem por ref, não por closure: o React Compiler não consegue
-  // preservar um `useCallback` que fecha sobre um valor derivado de
-  // `getThemeTokens(...)`, e o callback precisa continuar o mesmo a cada carga.
-  // O ref só é lido na hora do carregamento (nunca no render).
+  // The background of the stage comes by ref, not by closure: the React Compiler cannot
+  // preserve a `useCallback` that closes over a value derived from
+  // `getThemeTokens(...)`, and the callback needs to stay the same on every load.
+  // The ref is only read at load time (never during render).
   const backgroundRef = useRef(background)
   useEffect(() => {
     backgroundRef.current = background
   }, [background])
 
-  // Todo carregamento passa por aqui — inclusive o de "tentar de novo", que
-  // remonta o WebView e portanto perde o palco da página anterior.
+  // Every load goes through here — including the one of "try again", which
+  // remounts the WebView and therefore loses the stage of the previous page.
   const handleReady = useCallback((send: (js: string) => void) => {
     inject.current = send
     send(deckStageSource(backgroundRef.current))
@@ -379,13 +379,13 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
   }, [])
 
   const goTo = useCallback((target: number) => {
-    // O palco é de quem carregou; sem ele (página ainda carregando, inject não
-    // chegou) a seta não pode prometer um slide que não vai aparecer.
+    // The stage belongs to whoever loaded it; without it (page still loading, inject not
+    // arrived) the arrow cannot promise a slide that will not show up.
     inject.current?.(`window.orbitSlides && window.orbitSlides.go(${target})`)
   }, [])
 
-  // Corpo do deck: o que sobra da tela depois do cabeçalho do `PieceViewer` e
-  // da moldura do `PieceView` (que não é nossa e não dá para esconder).
+  // Body of the deck: what is left of the screen after the header of `PieceViewer` and
+  // the frame of `PieceView` (which is not ours and cannot be hidden).
   const bodyHeight = Math.max(
     240,
     windowHeight - insets.top - VIEWER_HEADER_HEIGHT - PIECE_CHROME_HEIGHT,
@@ -397,14 +397,11 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
       ? t('pieces.slides.counter', {
           index: index + 1,
           count: total,
-          // A chave ainda não existe nos locales: o padrão é o próprio formato,
-          // e no dia em que ela nascer o texto passa a vir traduzido.
-          defaultValue: '{{index}} / {{count}}',
         })
       : null
 
-  // Deck vazio (nenhum `.slide` no documento): o palco não tem o que montar e o
-  // WebView sai de cena — um deck que não é deck não é uma tela em branco.
+  // Empty deck (no `.slide` in the document): the stage has nothing to build and the
+  // WebView leaves the scene — a deck that is not a deck is not a blank screen.
   if (status === 'empty') {
     return (
       <View style={styles.center} testID="slides-empty">
@@ -423,8 +420,8 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
     <View className="flex-1" style={styles.stage}>
       <PieceView
         src={piece.url}
-        // Enquanto o total é desconhecido a barra fica sem texto: repetir o
-        // título aqui seria dizer duas vezes o que o cabeçalho já diz.
+        // While the total is unknown the bar stays without text: repeating the
+        // title here would say twice what the header already says.
         title={total > 0 ? t('pieces.meta.slides', { count: total }) : ''}
         poster={piece.cover}
         revision={0}
@@ -439,7 +436,7 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
         <>
           <SlideArrow
             side="previous"
-            label={t('pieces.slides.previous', { defaultValue: 'Slide anterior' })}
+            label={t('pieces.slides.previous')}
             color={tokens.foreground}
             background={withAlpha(tokens.background, 0.74)}
             border={tokens.border}
@@ -448,7 +445,7 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
           />
           <SlideArrow
             side="next"
-            label={t('pieces.slides.next', { defaultValue: 'Próximo slide' })}
+            label={t('pieces.slides.next')}
             color={tokens.foreground}
             background={withAlpha(tokens.background, 0.74)}
             border={tokens.border}
@@ -459,8 +456,8 @@ export function SlidesViewer({ piece }: PieceViewerProps) {
       ) : null}
 
       {counter ? (
-        // Sobre o deck, no rodapé: ponteiro desligado, senão o contador come o
-        // toque que era do swipe.
+        // Over the deck, in the footer: pointer events off, otherwise the counter eats the
+        // touch that belonged to the swipe.
         <View pointerEvents="none" style={styles.counterRow}>
           <View
             style={[
@@ -498,8 +495,8 @@ const styles = StyleSheet.create({
   },
   arrowLeft: { left: 6 },
   arrowRight: { right: 6 },
-  // Nas pontas a seta continua visível (dá para ver que existe um lado), mas
-  // apagada e sem toque.
+  // At the ends the arrow stays visible (you can see that a side exists), but
+  // faded and without touch.
   arrowDisabled: { opacity: 0.28 },
   counterRow: {
     position: 'absolute',

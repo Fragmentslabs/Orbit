@@ -1,14 +1,14 @@
 /**
- * O viewer de design no celular.
+ * The design viewer on the phone.
  *
- * O que se garante aqui é o que decide se a pessoa vê a peça: o `canvas.json`
- * (que NÃO é HTML) virando lista de telas, cada artboard endereçada a partir da
- * URL assinada da peça, a navegação (setas, contador, chips de tela) e os
- * estados que antes viravam tile quebrado — canvas vazio, erro de rede/token e
- * uma tela que falha enquanto as outras abrem.
+ * What is guaranteed here is what decides whether the person sees the piece: the `canvas.json`
+ * (which is NOT HTML) becoming a list of screens, each artboard addressed from the
+ * signed URL of the piece, the navigation (arrows, counter, screen chips) and the
+ * states that used to become a broken tile — empty canvas, network/token error and
+ * one screen that fails while the others open.
  *
- * O desenho da artboard (o WebView de verdade) não roda no jsdom: o stub abaixo
- * só guarda as props, que é como se interroga qual arquivo foi pedido.
+ * The drawing of the artboard (the real WebView) does not run in jsdom: the stub below
+ * only stores the props, which is how one interrogates which file was requested.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,8 +19,8 @@ import { DesignViewer, artboardUrl, parseDesignCanvas, screenLabel } from './des
 
 const { webviews } = vi.hoisted(() => ({ webviews: [] as Record<string, unknown>[] }))
 
-// WebView: cada render registra as props recebidas (src, onHttpError…). O alias
-// global do vitest só devolve uma View inerte e não serve para disparar erro.
+// WebView: each render records the props received (src, onHttpError…). The
+// global alias of vitest only returns an inert View and is no use to fire an error.
 vi.mock('react-native-webview', async () => {
   const React = await import('react')
   const { View } = await import('react-native')
@@ -32,7 +32,7 @@ vi.mock('react-native-webview', async () => {
   }
 })
 
-// Ícones: o mock global do test-env não conhece `ChevronLeft`, usado pelas setas.
+// Icons: the global mock of test-env does not know `ChevronLeft`, used by the arrows.
 vi.mock('lucide-react-native', async () => {
   const React = await import('react')
   const Icon = () => React.createElement('i')
@@ -47,7 +47,7 @@ vi.mock('lucide-react-native', async () => {
   }
 })
 
-// Rótulos: as chaves em vez do bundle, para o teste não depender do idioma.
+// Labels: the keys instead of the bundle, so the test does not depend on the language.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }),
 }))
@@ -56,7 +56,7 @@ vi.mock('~/stores/theme-store', () => ({
   useThemeStore: (selector: (state: { resolved: string }) => unknown) => selector({ resolved: 'dark' }),
 }))
 
-const CANVAS_URL = 'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/tela/canvas.json'
+const CANVAS_URL = 'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/screen/canvas.json'
 
 const PIECE: PieceRef = {
   kind: 'design',
@@ -77,7 +77,7 @@ const THREE = canvas(
   {
     'Home.html': { title: 'Home', x: 0, y: 0, w: 390, h: 844 },
     'Pricing.html': { x: 430, y: 0, w: 390, h: 844 },
-    'Signup.html': { title: 'Cadastro', x: 860, y: 0, w: 390, h: 844 },
+    'Signup.html': { title: 'Signup form', x: 860, y: 0, w: 390, h: 844 },
   },
 )
 
@@ -92,7 +92,7 @@ function stubFetch(...responses: { ok?: boolean; status?: number; json?: () => P
 
 const lastWebView = () => webviews[webviews.length - 1]
 
-/** O arquivo que o host pediu — o `PieceView` entrega a URL em `source.uri`. */
+/** The file the host requested — `PieceView` delivers the URL in `source.uri`. */
 const currentUri = () => (lastWebView().source as { uri?: string }).uri ?? ''
 
 const counter = () => screen.getByTestId('design-counter').textContent?.replace(/\s+/g, ' ')
@@ -107,22 +107,22 @@ afterEach(() => {
 })
 
 describe('parseDesignCanvas', () => {
-  it('lê as telas na ordem do índice', () => {
+  it('reads the screens in index order', () => {
     expect(parseDesignCanvas(THREE)).toEqual([
       { file: 'Home.html', title: 'Home' },
       { file: 'Pricing.html', title: undefined },
-      { file: 'Signup.html', title: 'Cadastro' },
+      { file: 'Signup.html', title: 'Signup form' },
     ])
   })
 
-  it('ignora o que está no order sem artboard, e não repete', () => {
+  it('ignores what is in the order without an artboard, and does not repeat', () => {
     const screens = parseDesignCanvas(
-      canvas(['Home.html', 'Home.html', 'Fantasma.html'], { 'Home.html': { x: 0, y: 0 } }),
+      canvas(['Home.html', 'Home.html', 'Ghost.html'], { 'Home.html': { x: 0, y: 0 } }),
     )
     expect(screens).toEqual([{ file: 'Home.html', title: undefined }])
   })
 
-  it('artboard fora do order continua sendo tela, na ordem de leitura do canvas', () => {
+  it('an artboard outside the order is still a screen, in the canvas reading order', () => {
     const screens = parseDesignCanvas(
       canvas(['Z.html'], {
         'Z.html': { x: 900, y: 0 },
@@ -133,7 +133,7 @@ describe('parseDesignCanvas', () => {
     expect(screens.map((s) => s.file)).toEqual(['Z.html', 'A.html', 'B.html'])
   })
 
-  it('canvas vazio, sem order ou sem boards não é uma lista de telas', () => {
+  it('an empty canvas, without order or without boards, is not a screen list', () => {
     expect(parseDesignCanvas(canvas([], {}))).toEqual([])
     expect(parseDesignCanvas({ v: 1 })).toEqual([])
     expect(parseDesignCanvas({ boards: {} })).toEqual([])
@@ -141,47 +141,47 @@ describe('parseDesignCanvas', () => {
     expect(parseDesignCanvas('canvas.json')).toEqual([])
   })
 
-  it('nome de arquivo que escapa da pasta não vira tela', () => {
-    expect(parseDesignCanvas(canvas(['../Outro.html', 'Ok.html'], { '../Outro.html': {}, 'Ok.html': {} }))).toEqual([
+  it('a file name that escapes the folder does not become a screen', () => {
+    expect(parseDesignCanvas(canvas(['../Other.html', 'Ok.html'], { '../Other.html': {}, 'Ok.html': {} }))).toEqual([
       { file: 'Ok.html', title: undefined },
     ])
   })
 })
 
 describe('artboardUrl', () => {
-  it('troca o canvas.json pelo arquivo da tela, mantendo o token', () => {
+  it('swaps the canvas.json for the screen file, keeping the token', () => {
     expect(artboardUrl(CANVAS_URL, 'Pricing.html')).toBe(
-      'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/tela/Pricing.html',
+      'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/screen/Pricing.html',
     )
   })
 
-  it('codifica o nome e preserva subpasta', () => {
-    expect(artboardUrl(CANVAS_URL, 'sub/Preços.html')).toBe(
-      'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/tela/sub/Pre%C3%A7os.html',
+  it('encodes the name and preserves the subfolder', () => {
+    expect(artboardUrl(CANVAS_URL, 'sub/Café.html')).toBe(
+      'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/screen/sub/Caf%C3%A9.html',
     )
   })
 
-  it('ignora query e hash da URL da peça', () => {
+  it('ignores the query and hash of the piece URL', () => {
     expect(artboardUrl(`${CANVAS_URL}?r=1700000000`, 'Home.html')).toBe(
-      'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/tela/Home.html',
+      'http://127.0.0.1:47821/api/file/design/dsg_abc123/tok-sign/screen/Home.html',
     )
   })
 
-  it('sem canvas.json no fim, o arquivo entra na pasta em vez de comer o token', () => {
+  it('without canvas.json at the end, the file goes into the folder instead of eating the token', () => {
     expect(artboardUrl('http://host/api/file/design/dsg_abc/tok', 'Home.html')).toBe(
       'http://host/api/file/design/dsg_abc/tok/Home.html',
     )
   })
 
-  it('URL sem pasta não endereça nada', () => {
+  it('a URL without a folder addresses nothing', () => {
     expect(artboardUrl('canvas.json', 'Home.html')).toBeNull()
     expect(artboardUrl(CANVAS_URL, '')).toBeNull()
   })
 })
 
 describe('screenLabel', () => {
-  it('usa o título do índice e, sem ele, o nome do arquivo', () => {
-    expect(screenLabel({ file: 'Home.html', title: 'Início' })).toBe('Início')
+  it('uses the index title and, without it, the file name', () => {
+    expect(screenLabel({ file: 'Home.html', title: 'Start' })).toBe('Start')
     expect(screenLabel({ file: 'sub/Pricing.html' })).toBe('Pricing')
     expect(screenLabel({ file: 'Signup.htm' })).toBe('Signup')
     expect(screenLabel({ file: 'Signup.html', title: '   ' })).toBe('Signup')
@@ -189,7 +189,7 @@ describe('screenLabel', () => {
 })
 
 describe('DesignViewer', () => {
-  it('busca o canvas e abre a primeira tela', async () => {
+  it('fetches the canvas and opens the first screen', async () => {
     const fetchMock = stubFetch({})
 
     render(<DesignViewer piece={PIECE} />)
@@ -199,16 +199,16 @@ describe('DesignViewer', () => {
     await waitFor(() => expect(counter()).toBe('1 / 3'))
     expect(fetchMock).toHaveBeenCalledWith(CANVAS_URL, expect.anything())
     expect(currentUri()).toBe(`${CANVAS_URL.slice(0, -'canvas.json'.length)}Home.html`)
-    // A tela aberta é a que a barra do host anuncia.
+    // The open screen is the one the host bar announces.
     expect(lastWebView().accessibilityLabel).toBe('Home')
   })
 
-  it('as setas andam uma tela por vez e param nas pontas', async () => {
+  it('the arrows walk one screen at a time and stop at the ends', async () => {
     stubFetch({})
     render(<DesignViewer piece={PIECE} />)
     await waitFor(() => expect(counter()).toBe('1 / 3'))
 
-    // No começo não há para onde voltar: a seta não muda nada.
+    // At the beginning there is nowhere to go back to: the arrow changes nothing.
     fireEvent.click(screen.getByTestId('design-prev'))
     expect(counter()).toBe('1 / 3')
 
@@ -220,7 +220,7 @@ describe('DesignViewer', () => {
     expect(counter()).toBe('3 / 3')
     expect(currentUri()).toContain('/Signup.html')
 
-    // Na última, a próxima não passa do fim.
+    // On the last one, the next does not go past the end.
     fireEvent.click(screen.getByTestId('design-next'))
     expect(counter()).toBe('3 / 3')
     expect(currentUri()).toContain('/Signup.html')
@@ -230,7 +230,7 @@ describe('DesignViewer', () => {
     expect(currentUri()).toContain('/Pricing.html')
   })
 
-  it('a tira de telas pula direto para a tela escolhida', async () => {
+  it('the screen strip jumps straight to the chosen screen', async () => {
     stubFetch({})
     render(<DesignViewer piece={PIECE} />)
     await waitFor(() => expect(counter()).toBe('1 / 3'))
@@ -244,7 +244,7 @@ describe('DesignViewer', () => {
     expect(currentUri()).toContain('/Home.html')
   })
 
-  it('uma tela por vez: o WebView da anterior é desmontado', async () => {
+  it('one screen at a time: the previous WebView is unmounted', async () => {
     stubFetch({})
     render(<DesignViewer piece={PIECE} />)
     await waitFor(() => expect(counter()).toBe('1 / 3'))
@@ -255,15 +255,15 @@ describe('DesignViewer', () => {
     expect(currentUri()).toContain('/Pricing.html')
   })
 
-  it('erro ao buscar o canvas: caixa de erro e "tentar de novo" que refaz a busca', async () => {
-    // Token vencido/desktop fora: a primeira busca falha, a segunda (o retry)
-    // acha o índice.
+  it('a canvas fetch error: error box and a "try again" that refetches', async () => {
+    // Expired token/desktop off: the first fetch fails, the second one (the retry)
+    // finds the index.
     const fetchMock = stubFetch({ ok: false, status: 401 }, {})
     render(<DesignViewer piece={PIECE} />)
 
     expect(await screen.findByTestId('design-error')).toBeTruthy()
     expect(screen.getByText('HTTP 401')).toBeTruthy()
-    // Nada de WebView apontando para o JSON.
+    // No WebView pointing at the JSON.
     expect(webviews).toHaveLength(0)
 
     fireEvent.click(screen.getByTestId('design-retry'))
@@ -271,7 +271,7 @@ describe('DesignViewer', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('JSON malformado cai no erro, não em tela vazia nem quebrada', async () => {
+  it('malformed JSON falls back to the error, not to an empty or broken screen', async () => {
     stubFetch({
       json: async () => {
         throw new SyntaxError('Unexpected token < in JSON')
@@ -284,7 +284,7 @@ describe('DesignViewer', () => {
     expect(screen.queryByTestId('piece-view')).toBeNull()
   })
 
-  it('canvas sem telas mostra o estado vazio, sem WebView', async () => {
+  it('a canvas without screens shows the empty state, with no WebView', async () => {
     stubFetch({ json: async () => canvas([], {}) })
     render(<DesignViewer piece={PIECE} />)
 
@@ -294,13 +294,13 @@ describe('DesignViewer', () => {
     expect(screen.queryByTestId('design-screens')).toBeNull()
   })
 
-  it('uma tela que falha não derruba as outras nem a navegação', async () => {
+  it('a screen that fails takes neither the others nor the navigation down', async () => {
     stubFetch({})
     render(<DesignViewer piece={PIECE} />)
     await waitFor(() => expect(counter()).toBe('1 / 3'))
 
-    // A resposta HTTP da primeira artboard falhou: o host mostra o erro, e o
-    // erro fica daquela tela.
+    // The HTTP response of the first artboard failed: the host shows the error, and the
+    // error belongs to that screen.
     act(() => {
       ;(lastWebView().onHttpError as (event: unknown) => void)({ nativeEvent: { statusCode: 404 } })
     })
@@ -312,13 +312,13 @@ describe('DesignViewer', () => {
     expect(currentUri()).toContain('/Pricing.html')
     expect(screen.queryByText('parts.preview.error')).toBeNull()
 
-    // E a que falhou continua na tira, para voltar depois (o host tem o retry).
+    // And the one that failed stays in the strip, to come back later (the host has the retry).
     fireEvent.click(screen.getByTestId('design-screen-0'))
     expect(counter()).toBe('1 / 3')
     expect(currentUri()).toContain('/Home.html')
   })
 
-  it('desmontar no meio da busca não estoura', async () => {
+  it('unmounting in the middle of the fetch does not blow up', async () => {
     stubFetch({})
     const view = render(<DesignViewer piece={PIECE} />)
     view.unmount()

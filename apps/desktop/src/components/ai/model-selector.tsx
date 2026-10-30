@@ -43,16 +43,16 @@ export const ModelSelectorContent = ({
     <DialogContent
       className={cn(
         "p-0 sm:max-w-sm",
-        // O dialog é `p-0` com título `sr-only`, então a primeira linha
-        // visível é a barra de busca — e o botão de fechar (absoluto,
-        // `top-2 right-2`, size-6) era desenhado POR CIMA do campo. Aqui o
-        // wrapper do input abre espaço à direita (36px = 8px do botão +
-        // 24px de largura + 4px de respiro) para os dois ficarem lado a
-        // lado. No vertical, o campo vai de 8px a 40px (p-1 do Command +
-        // p-1 do wrapper + `h-8` do InputGroup), centrado em 24px. O
-        // `top-2` do dialog deixava o botão em 8..32 (centro em 20px) —
-        // 4px acima do campo; `top-3` o coloca em 12..36, no mesmo eixo
-        // central do campo.
+        // The dialog is `p-0` with an `sr-only` title, so the first visible
+        // line is the search bar — and the close button (absolute,
+        // `top-2 right-2`, size-6) was drawn OVER the field. Here the
+        // input wrapper leaves room on the right (36px = 8px of the button +
+        // 24px of width + 4px of breathing room) so the two stay side by
+        // side. Vertically, the field goes from 8px to 40px (p-1 of Command +
+        // p-1 of the wrapper + `h-8` of InputGroup), centered at 24px. The
+        // dialog's `top-2` left the button at 8..32 (center at 20px) —
+        // 4px above the field; `top-3` puts it at 12..36, on the same central
+        // axis of the field.
         "[&_[data-slot=command-input-wrapper]]:pr-9",
         "[&_[data-slot=dialog-close]]:top-3",
         className,
@@ -77,9 +77,9 @@ export const ModelSelectorInput = ({ className, ...props }: ModelSelectorInputPr
 
 export type ModelSelectorListProps = ComponentProps<typeof CommandList>
 
-// O wrapper da busca não tem padding embaixo (`pb-0`); quem dava o respiro
-// era o cabeçalho do primeiro grupo. Um item solto no topo ("O mesmo da
-// conversa", "Nenhum") encostava no campo — o espaço fica na lista.
+// The search wrapper has no padding at the bottom (`pb-0`); what gave the breathing room
+// was the header of the first group. A loose item at the top ("Same as the
+// conversation", "None") touched the field — the space goes in the list.
 export const ModelSelectorList = ({ className, ...props }: ModelSelectorListProps) => (
   <CommandList className={cn("pt-2", className)} {...props} />
 )
@@ -166,9 +166,9 @@ export type ModelSelectorLogoProps = Omit<ComponentProps<"img">, "src" | "alt"> 
     | "scaleway"
     | "amazon-bedrock"
     | "cerebras"
-    // Mantém o autocomplete dos literais acima sem fechar a união: qualquer
-    // provider novo do catálogo continua válido. `Record<never, never>` é o
-    // equivalente de `{}` que não cai no ban-types.
+    // Keeps the autocomplete of the literals above without closing the union: any
+    // new provider of the catalog stays valid. `Record<never, never>` is the
+    // equivalent of `{}` that does not fall into ban-types.
     | (string & Record<never, never>)
 }
 

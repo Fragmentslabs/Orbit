@@ -10,10 +10,10 @@ import { chatApi } from "@/src/lib/ipc"
 import { Button } from "@/components/ui/button"
 import type { TokenUsage } from "@shared/chat"
 
-// Usa o usage do último step (chamada real mais recente) quando disponível —
-// é o tamanho real do contexto atual. `input`/`output` no topo do TokenUsage
-// somam todos os steps do turno (inflado por idas-e-vindas de tool) e só
-// servem de fallback para mensagens persistidas antes desse campo existir.
+// Uses the usage of the last step (most recent real call) when available —
+// it is the real size of the current context. `input`/`output` at the top of TokenUsage
+// add up all the steps of the turn (inflated by tool round-trips) and only
+// serve as a fallback for messages persisted before this field existed.
 function sumTokens(u: TokenUsage): number {
   if (u.lastStep) return (u.lastStep.input ?? 0) + (u.lastStep.output ?? 0)
   return (u.input ?? 0) + (u.output ?? 0)
@@ -26,8 +26,8 @@ const NO_MSGS: import("@shared/chat").ChatMessage[] = []
 
 export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
-  // Compactar com o turno rodando não acontece (o main recusa): o resumo seria
-  // feito de uma cópia velha do histórico e se perderia no fim do turno.
+  // Compacting with the turn running does not happen (the main process refuses): the summary would be
+  // made from an old copy of the history and would be lost at the end of the turn.
   const status = useSessionStatus(sessionId)
   const turnRunning = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
@@ -49,20 +49,20 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
     return { lastTokens: found, compacted: lastSummary >= 0 }
   }, [messages])
 
-  // O valor ao vivo (a cada passo do turno em andamento, ou o tamanho do que
-  // o provedor acabou de recusar) vale mais que o `tokens` da última resposta
-  // concluída — esse só chega no fim e deixava o medidor parado num turno
-  // longo, mostrando 23% enquanto o request real passava de 900k.
+  // The live value (on every step of the turn in progress, or the size of what
+  // the provider has just refused) is worth more than the `tokens` of the last finished
+  // reply — that one only arrives at the end and left the meter stuck in a long
+  // turn, showing 23% while the real request went past 900k.
   const used = live ? live.input + live.output : lastTokens ? sumTokens(lastTokens) : 0
   if (used === 0 && !limit) return null
 
-  // Idem sumTokens: prioriza o último step (contexto real atual) sobre o
+  // Same for sumTokens: it prioritizes the last step (real current context) over the
   // total do turno.
   const displayInput = live ? live.input : (lastTokens?.lastStep?.input ?? lastTokens?.input ?? 0)
   const displayOutput = live ? live.output : (lastTokens?.lastStep?.output ?? lastTokens?.output ?? 0)
   const showBreakdown = Boolean(live || lastTokens)
-  // Cache da chamada atual: quanto da entrada acima veio do cache do provedor
-  // e quanto foi gravado nele. A estimativa pré-envio não tem esse dado.
+  // Cache of the current call: how much of the input above came from the provider cache
+  // and how much was written into it. The pre-send estimate does not have that data.
   const cacheRead = live ? live.cacheRead : lastTokens?.lastStep?.cacheRead
   const cacheWrite = live ? live.cacheWrite : lastTokens?.lastStep?.cacheWrite
 
@@ -72,11 +72,11 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
       <span className="tabular-nums">{formatTokens(value)}</span>
     </div>
   )
-  // Entrada = sem cache + lido do cache + gravado no cache. Os três somam o
-  // total, então a divisão vai como sub-linhas (a de custo é diferente entre si).
+  // Input = no cache + read from cache + written to cache. The three add up to the
+  // total, so the split goes as sub-lines (the cost one is different from them).
   const hasCache = (cacheRead ?? 0) + (cacheWrite ?? 0) > 0
   const noCache = Math.max(0, displayInput - (cacheRead ?? 0) - (cacheWrite ?? 0))
-  // Raciocínio é parte da saída DESTE passo: só o do passo bate com o output mostrado.
+  // Reasoning is part of the output of THIS step: only the step's one matches the output shown.
   const stepReasoning = live ? undefined : lastTokens?.lastStep?.reasoning
   const breakdown = (
     <div className="space-y-1 text-[10px] text-muted-foreground">

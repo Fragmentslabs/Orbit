@@ -14,31 +14,31 @@ import {
 import type { MotionTransitionInfo } from './motion-transitions'
 
 /**
- * A parte do lint que toca o DISCO: ler o HTML de entrada e os scripts locais,
- * e responder se um arquivo referenciado existe ao lado da composição. As regras
- * em si são puras (motion-lint.ts); aqui só se junta o que elas precisam.
+ * The part of the lint that touches the DISK: reads the entry HTML and the local scripts,
+ * and answers whether a referenced file exists next to the composition. The rules
+ * themselves are pure (motion-lint.ts); here only what they need is gathered.
  *
- * Best-effort por inteiro: um lint que falha NUNCA derruba o preview nem o render
- * — o pior caso é o relatório sair sem esta seção.
+ * Best-effort all the way: a lint that fails NEVER takes down the preview nor the render
+ * — the worst case is the report coming out without this section.
  */
 
-/** Um HTML de composição maior que isso não é código escrito à mão. */
+/** A composition HTML larger than this is not hand-written code. */
 const MAX_ENTRY_BYTES = 1_500_000
-/** Script maior que isso é biblioteca, mesmo sem `.min` no nome. */
+/** A script larger than this is a library, even without `.min` in the name. */
 const MAX_SCRIPT_BYTES = 300_000
 
 export interface MotionLintInput {
-  /** Arquivo de entrada da composição (absoluto). */
+  /** Entry file of the composition (absolute). */
   entry: string
-  /** Pasta servida pelo scheme: o que fica fora dela o preview nunca alcança. */
+  /** Folder served by the scheme: what is outside it the preview never reaches. */
   folder: string
-  /** O que o runtime anunciou, quando a composição já foi carregada. */
+  /** What the runtime announced, when the composition has already been loaded. */
   runtime?: { fps: number; durationInFrames: number; transitions: MotionTransitionInfo[] }
-  /** As faixas do manifest de áudio, quando resolvidas. */
+  /** The tracks of the audio manifest, when resolved. */
   audio?: MotionAudioPlan | null
 }
 
-/** Referência relativa → o que há por trás dela dentro da pasta. */
+/** Relative reference → what lies behind it inside the folder. */
 export async function assetStatusIn(folder: string, ref: string): Promise<AssetStatus> {
   let rel = ref.split(/[?#]/)[0]
   try {
@@ -56,7 +56,7 @@ export async function assetStatusIn(folder: string, ref: string): Promise<AssetS
   return stat ? 'ok' : 'missing'
 }
 
-/** Os scripts AUTORAIS da pasta: relativos, existentes, pequenos e sem `.min`. */
+/** The AUTHORED scripts of the folder: relative, existing, small and without `.min`. */
 async function localScripts(html: string, folder: string): Promise<LintSource[]> {
   const out: LintSource[] = []
   for (const ref of localScriptRefs(html)) {
@@ -78,7 +78,7 @@ export async function lintMotionComposition(input: MotionLintInput): Promise<Lin
     const html = await fsp.readFile(input.entry, 'utf8')
     const scripts = await localScripts(html, input.folder)
 
-    // O lint puro é síncrono: o disco é consultado ANTES, uma vez por referência.
+    // The pure lint is synchronous: the disk is consulted BEFORE, once per reference.
     const status = new Map<string, AssetStatus>()
     for (const { ref } of collectAssetRefs(html)) {
       if (!status.has(ref)) status.set(ref, await assetStatusIn(input.folder, ref))

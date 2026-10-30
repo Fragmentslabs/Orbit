@@ -10,11 +10,11 @@ import { useThemeStore } from '~/stores/theme-store'
 
 interface AssistantMarkdownProps {
   text: string
-  /** Durante streaming: parse leve, code block sem highlight, caret no fim. */
+  /** During streaming: light parse, code block without highlight, caret at the end. */
   streaming?: boolean
-  /** Texto secundário (ex.: reasoning) em cor muted e headings menores. */
+  /** Secondary text (e.g. reasoning) in muted color and smaller headings. */
   muted?: boolean
-  /** Tamanho do corpo (padrão 14). */
+  /** Body size (default 14). */
   size?: number
 }
 
@@ -42,17 +42,17 @@ type Block =
   | { type: 'hr' }
   | { type: 'blockquote'; segments: InlineSegment[] }
   | { type: 'table'; headers: InlineSegment[][]; rows: InlineSegment[][][] }
-  /** Blocos do fence orbit-ui (stats, chart, inputs, nav…), já parseados. */
+  /** Blocks of the orbit-ui fence (stats, chart, inputs, nav…), already parsed. */
   | { type: 'orbit-ui'; blocks: OrbitUiBlock[]; pending?: boolean }
 
-/** Fecha fences/ênfases incompletas para o parse não quebrar no meio do stream. */
+/** Closes incomplete fences/emphasis so the parse does not break in the middle of the stream. */
 function stabilizeMarkdown(text: string): string {
   let out = text
   const fenceMatches = out.match(/^```/gm)
   if (fenceMatches && fenceMatches.length % 2 === 1) {
     out += '\n```'
   }
-  // Pares ímpares de ** ou * no trecho fora de code fences — evita itálico “preso”
+  // Odd pairs of ** or * in the stretch outside code fences — avoids a "stuck" italic
   const withoutFences = out.replace(/```[\s\S]*?```/g, '')
   const boldCount = (withoutFences.match(/\*\*/g) ?? []).length
   if (boldCount % 2 === 1) out += '**'
@@ -60,10 +60,10 @@ function stabilizeMarkdown(text: string): string {
 }
 
 function parseInline(text: string): InlineSegment[] {
-  // A alternativa do id de memória vem POR ÚLTIMO: o link `[…](#orbit-memory/…)`
-  // precisa ser reconhecido quando o parser chega no "[" — antes do "mem_".
-  // Código inline já é consumido pela alternativa anterior, então um `mem_xxx`
-  // citado como exemplo continua texto.
+  // The memory id alternative comes LAST: the link `[…](#orbit-memory/…)`
+  // needs to be recognized when the parser reaches the "[" — before the "mem_".
+  // Inline code is already consumed by the previous alternative, so a `mem_xxx`
+  // cited as an example stays text.
   const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))|(#?(mem_[a-z0-9]{6,})\b)/g
   const segments: InlineSegment[] = []
   let lastIndex = 0
@@ -101,32 +101,32 @@ const TABLE_ROW_RE = /^\|(.+)\|$/
 const TABLE_SEP_RE = /^\|[-:\s|]+\|$/
 
 function listDepth(indent: string): number {
-  // 2 espaços ou 1 tab = 1 nível
+  // 2 spaces or 1 tab = 1 level
   const spaces = indent.replace(/\t/g, '  ').length
   return Math.floor(spaces / 2)
 }
 
 /**
- * ```mermaid — tolerando sufixo (`mermaid title="Fluxo"`), porque o modelo às
- * vezes escreve assim e um diagrama que não desenha por causa de um espaço é
- * um diagrama perdido.
+ * ```mermaid — tolerating a suffix (`mermaid title="Fluxo"`), because the model
+ * sometimes writes it like that and a diagram that does not draw because of a space is
+ * a lost diagram.
  */
 function isMermaidFence(language: string): boolean {
   return language.trim().toLowerCase().split(/\s+/)[0] === 'mermaid'
 }
 
 /**
- * Lê um fence ```orbit-ui com o MESMO parser do desktop (`parseOrbitUi`, do
- * shared) e devolve os blocos prontos para o `OrbitUiBlocks`, que desenha cada
- * tipo como componente do chat — o `nav` inclusive, com o mesmo NavCard de
- * antes.
+ * Reads an ```orbit-ui fence with the SAME parser as the desktop (`parseOrbitUi`, from
+ * shared) and returns the blocks ready for `OrbitUiBlocks`, which draws each
+ * type as a chat component — the `nav` included, with the same NavCard as
+ * before.
  *
- * Tudo vai num grupo só porque as entradas do fence compartilham um escopo: um
- * `{capital}` citado no fim precisa ver o slider que apareceu no começo, mesmo
- * que exista um cartão no meio.
+ * Everything goes in a single group because the inputs of the fence share one scope: a
+ * `{capital}` cited at the end needs to see the slider that appeared at the beginning, even
+ * with a card in the middle.
  *
- * Linha completa e válida vira bloco; inválida (ou ainda chegando no stream) é
- * descartada pelo parser — a mensagem nunca quebra por causa de um JSON torto.
+ * A complete and valid line becomes a block; an invalid one (or one still arriving in the stream) is
+ * discarded by the parser — the message never breaks because of a crooked JSON.
  */
 function parseOrbitFence(codeLines: string[], incomplete: boolean): Block | null {
   const { blocks, pending } = parseOrbitUi(codeLines.join('\n'), incomplete)
@@ -192,9 +192,9 @@ function parseMarkdown(text: string): Block[] {
         codeLines.push(lines[i])
         i++
       }
-      // orbit-ui: os blocos viram componentes do chat (ver OrbitUiBlocks). Um
-      // fence que não parseia NADA — JSON inválido, tipo desconhecido — continua
-      // caindo no code block, que é onde o autor consegue ver o que mandou.
+      // orbit-ui: the blocks become chat components (see OrbitUiBlocks). A
+      // fence that parses NOTHING — invalid JSON, unknown type — keeps
+      // falling into the code block, which is where the author can see what they sent.
       if (language === 'orbit-ui') {
         const ui = parseOrbitFence(codeLines, !closed)
         if (ui) {
@@ -218,11 +218,11 @@ function parseMarkdown(text: string): Block[] {
       while (i < lines.length) {
         const m = lines[i].match(LIST_RE)
         if (!m) {
-          // Continuação indentada de item (sem bullet) — anexa ao último
+          // Indented continuation of an item (no bullet) — attaches to the last one
           if (items.length > 0 && /^\s{2,}\S/.test(lines[i]) && lines[i].trim() !== '') {
             const last = items[items.length - 1]
-            // O segmento de memória não tem texto: devolve o id, para a linha
-            // continuar citando a mesma memória depois do reparse.
+            // The memory segment has no text: it returns the id, so the line
+            // keeps citing the same memory after the reparse.
             const plain = last.segments
               .map((s) => (s.type === 'memory' ? s.id : s.text))
               .join('')
@@ -341,8 +341,8 @@ const InlineText = memo(function InlineText({
               </Text>
             )
           case 'link': {
-            // Citação de memória chega como link `#orbit-memory/mem_xxx` — o
-            // contrato é o mesmo do desktop, só a apresentação muda.
+            // Memory citation arrives as a `#orbit-memory/mem_xxx` link — the
+            // contract is the same as the desktop, only the presentation changes.
             const memoryId = parseMemoryHref(seg.url)
             if (memoryId) {
               return <MemoryChip key={i} memoryId={memoryId} label={seg.text} size={size} />
@@ -436,9 +436,9 @@ function AssistantMarkdownInner({ text, streaming = false, muted = false, size =
               />
             )
           case 'codeblock':
-            // ```mermaid vira diagrama desenhado. O que não desenha — meio
-            // caminho no stream, sem rede para a lib, sintaxe inválida —
-            // continua caindo no CodeBlock, que é onde o autor vê o que mandou.
+            // ```mermaid becomes a drawn diagram. What does not draw — halfway
+            // through the stream, no network for the lib, invalid syntax —
+            // keeps falling into the CodeBlock, which is where the author sees what they sent.
             if (isMermaidFence(block.language)) {
               return (
                 <MermaidBlock

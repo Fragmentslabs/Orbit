@@ -17,19 +17,19 @@ export interface ReviewResult {
   status: 'done' | 'needs_more' | 'replan'
   reason: string
   followUpPrompt?: string
-  /** Se replan, sugestão de nova abordagem */
+  /** If replan, suggest a new approach */
   newApproach?: string
 }
 
-/** Abort controllers do loop por sessão (separados dos do runChat). */
+/** Abort controllers of the loop per session (separate from runChat's). */
 const loopControllers = new Map<string, AbortController>()
 
-/** Aborta o loop de uma sessão — chamado junto com abortChat(). */
+/** Aborts a session's loop — called together with abortChat(). */
 export function abortLoop(sessionId: string) {
   loopControllers.get(sessionId)?.abort()
 }
 
-/** Sessões com loop ativo (entre iterações do runChat, durante a revisão). */
+/** Sessions with an active loop (between iterations of runChat, during the review). */
 export function getLoopRunningSessionIds(): string[] {
   return [...loopControllers.keys()]
 }
@@ -39,7 +39,7 @@ async function loadMessages(sessionId: string): Promise<ChatMessage[]> {
 }
 
 /**
- * Revisa o resultado da última iteração e decide se o objetivo foi atingido.
+ * Reviews the result of the last iteration and decides whether the goal was reached.
  */
 export async function reviewIteration(
   originalInput: string,
@@ -86,11 +86,11 @@ export async function reviewIteration(
     return (toolCall as unknown as { args: ReviewResult }).args
   }
 
-  return { status: 'done', reason: result.text?.trim() || 'Revisão concluída.' }
+  return { status: 'done', reason: result.text?.trim() || 'Review complete.' }
 }
 
 /**
- * Executa runChat em loop: executa → revisa → itera até done ou limite.
+ * Runs runChat in a loop: run → review → iterate until done or the limit.
  */
 export async function runChatWithLoop(
   win: BrowserWindow,
@@ -108,8 +108,8 @@ async function runLoop(
   let iteration = 0
   let currentInput = { ...input }
 
-  // Loop-level abort: abortar o runChat da iteração atual não encerra o loop —
-  // ele seguiria para a próxima iteração mesmo com o usuário tentando parar.
+  // Loop-level abort: aborting the current iteration's runChat does not end the loop —
+  // it would go on to the next iteration even with the user trying to stop.
   const controller = new AbortController()
   loopControllers.set(input.sessionId, controller)
   try {
@@ -136,17 +136,17 @@ async function runLoop(
       iteration++
       if (iteration >= config.maxIterations) break
 
-      // A instrução da próxima iteração NÃO é gravada aqui: quem grava a
-      // mensagem do usuário é o runChat, com o input.text que recebe. Gravar
-      // dos dois lados produzia DUAS mensagens por iteração — a com o prefixo
-      // "[Loop N/M]" e, logo abaixo, o follow-up sozinho.
+      // The next iteration's instruction is NOT written here: whoever writes the
+      // user message is runChat, with the input.text it receives. Writing
+      // on both sides produced TWO messages per iteration — the one with the
+      // "[Loop N/M]" prefix and, right below, the follow-up alone.
       currentInput = {
         ...currentInput,
         text:
           review.status === 'replan'
-            // Replan: a abordagem atual não resolve — reformula e recomeça.
-            ? `[Replan ${iteration}/${config.maxIterations}] ${review.reason}\n\nNova abordagem: ${review.newApproach ?? 'Reformule a estratégia de execução.'}`
-            : `[Loop ${iteration}/${config.maxIterations}] ${review.reason}\n\n${review.followUpPrompt ?? 'Continue o trabalho.'}`,
+            // Replan: the current approach does not solve it — reformulate and start over.
+            ? `[Replan ${iteration}/${config.maxIterations}] ${review.reason}\n\nNew approach: ${review.newApproach ?? 'Rework the execution strategy.'}`
+            : `[Loop ${iteration}/${config.maxIterations}] ${review.reason}\n\n${review.followUpPrompt ?? 'Continue the work.'}`,
       }
     }
   } finally {

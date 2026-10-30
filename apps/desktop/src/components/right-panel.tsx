@@ -42,30 +42,30 @@ interface TabMeta {
 }
 
 /**
- * Os tipos de aba que o usuário pode abrir vazios, pelo seletor.
+ * The tab types the user can open empty, through the selector.
  *
- * "artifact" nunca entra: uma aba de artefato só existe apontando para um
- * artefato (abre pelo card na conversa ou pela galeria), nunca vazia — e
- * "source" (singular, o visualizador de uma fonte citada) pelo mesmo motivo.
+ * "artifact" never enters: an artifact tab only exists pointing at an
+ * artifact (it opens through the card in the conversation or through the gallery), never empty — and
+ * "source" (singular, the viewer of a cited source) for the same reason.
  *
- * O modo código tem tudo; o chat tem o subconjunto que faz sentido sem pasta
- * de trabalho. "sources" está nos dois: no código o repositório é o corpus
- * dos ARQUIVOS — `read` e `grep` já abrem PDF, DOCX e planilha de lá — mas
- * site e texto colado não estão no repositório e são justamente o material
- * que não dá para commitar. O agente já recebe as tools de documento e a
- * instrução sobre `srcN` no modo código (electron/lib/tools/index.ts e
- * prompts.ts): era só a aba que faltava para o usuário poder declarar fonte.
+ * Code mode has everything; chat has the subset that makes sense without a working
+ * folder. "sources" is in both: in code the repository is the corpus
+ * of the FILES — `read` and `grep` already open PDF, DOCX and spreadsheet from there — but
+ * site and pasted text are not in the repository and are precisely the material
+ * that cannot be committed. The agent already receives the document tools and the
+ * instruction about `srcN` in code mode (electron/lib/tools/index.ts and
+ * prompts.ts): it was only the tab that was missing for the user to be able to declare a source.
  */
 function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
-  // "process" também nunca entra: uma aba de processo só existe acompanhando um
-  // processo que já está rodando (abre pelo card no rodapé do selector).
+  // "process" also never enters: a process tab only exists following a
+  // process that is already running (it opens through the card in the selector footer).
   //
-  // "diff" saiu junto: ela só existe apontando para UMA mensagem do chat ou UMA
-  // task da esteira. As mudanças ATUAIS se leem na aba de pastas (Alterações), e
-  // o diff de um turno é contexto da conversa — não uma aba que se abre vazia.
-  // "motion" e "design" também não: o preview existe para UMA peça registrada e
-  // nasce do evento que o agente dispara ao registrá-la (motion_preview /
-  // design_write), nunca vazio — como o artefato.
+  // "diff" left with them: it only exists pointing at ONE chat message or ONE
+  // pipeline task. The CURRENT changes are read in the folders tab (Changes),
+  // and the diff of a turn is conversation context — not a tab that opens empty.
+  // "motion" and "design" neither: the preview exists for ONE registered piece and
+  // is born from the event the agent fires when registering it (motion_preview /
+  // design_write), never empty — like the artifact.
   if (
     type === "artifact" ||
     type === "source" ||
@@ -75,14 +75,14 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
     type === "motion" ||
     type === "design" ||
     type === "slides" ||
-    // "memory" também só existe apontando para uma memória — nasce do clique
-    // na citação, dentro da conversa.
+    // "memory" also only exists pointing at a memory — it is born from the click
+    // on the citation, inside the conversation.
     type === "memory"
   )
     return false
   if (mode === "code") return true
-  // "browser" entra no chat: o browser não depende de pasta de trabalho (o modo
-  // "browser" do input já vale nos dois modos, e a lista de servidores vem da sessão).
+  // "browser" enters chat: the browser does not depend on a working folder (the
+  // input's "browser" mode already counts in both modes, and the server list comes from the session).
   return type === "chat" || type === "media" || type === "sources" || type === "browser"
 }
 
@@ -109,14 +109,14 @@ function useTabMeta(): Record<TabType, TabMeta> {
 
 function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
   const { t } = useTranslation()
-  // As pastas da aba nascem como as da tela (o chat novo começaria igual ao do
-  // painel principal), mas mudam só aqui: o rascunho de uma aba não é uma
-  // associação de pasta do chat que está aberto na janela.
-  const { folders: foldersDaTela } = useWorkspace()
-  const [folders, setFolders] = useState<string[]>(foldersDaTela)
+  // The folders of the tab are born like the screen's (the new chat would start the same as the
+  // main panel's), but they change only here: the draft of a tab is not a
+  // folder association of the chat that is open in the window.
+  const { folders: screenFolders } = useWorkspace()
+  const [folders, setFolders] = useState<string[]>(screenFolders)
   const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
     if (folders.length > 0) {
-      // Espelha o painel principal: novo chat com pasta vira sessão de código
+      // Mirrors the main panel: a new chat with a folder becomes a code session
       const [directory, ...extraDirectories] = folders
       const newSession = await useSessionStore.getState().createSession("code", { setActive: false, directory, extraDirectories })
       onCreated(newSession.id)
@@ -144,7 +144,7 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
   )
 }
 
-/** Header de um chat aberto em aba: nome + pasta + branch, como o header do painel principal */
+/** Header of a chat opened in a tab: name + folder + branch, like the main panel header */
 function ChatTabHeader({ sessionId }: { sessionId?: string }) {
   const session = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined))
   const setSessionDirectories = useSessionStore((s) => s.setSessionDirectories)
@@ -168,18 +168,18 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
 
   const isCode = session.mode === "code" && !!session.directory
 
-  // A associação é da sessão da aba — o workspace é o da janela principal e
-  // não pode passar a apontar para as pastas daqui.
+  // The association belongs to the tab session — the workspace is the main window's and
+  // cannot start pointing at the folders from here.
   const handleFoldersChange = (next: string[]) => {
     setSessionDirectories(session.id, next[0], next.slice(1))
   }
 
   return (
-    // z-20: o `@container` cria stacking context (layout containment), então
-    // sem ele o dropdown de pastas fica preso abaixo do degrade do topo do chat.
-    // `bg-sidebar` + `shrink-0`: a conversa aqui não tem véu, e sem fundo
-    // próprio o que passasse por baixo do header (mensagem rolando, card)
-    // aparecia atrás do título e do chip de pasta.
+    // z-20: `@container` creates a stacking context (layout containment), so
+    // without it the folders dropdown stays trapped below the gradient at the top of the chat.
+    // `bg-sidebar` + `shrink-0`: the conversation here has no veil, and without its own
+    // background what passed under the header (message scrolling, card)
+    // appeared behind the title and the folder chip.
     <div className="@container relative z-20 flex min-w-0 shrink-0 items-center gap-2 bg-sidebar px-1 pb-2">
       <Truncate text={session.title}>
         <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
@@ -245,10 +245,10 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
           <BrowserTab
             initialUrl={tab.url}
             sessionId={tab.sessionId ?? sessionId}
-            // Chave do webview no pool (webview-session.ts). Uma por aba e por
-            // chat: cada aba tem sua própria página, e voltar ao chat retoma a
-            // URL de onde parou. Sempre definida — é o pool que trata console,
-            // navegação e modo seleção.
+            // Key of the webview in the pool (webview-session.ts). One per tab and per
+            // chat: each tab has its own page, and going back to the chat resumes the
+            // URL from where it stopped. Always defined — it is the pool that handles console,
+            // navigation and selection mode.
             persistKey={`${sessionId ?? "__orphan__"}:${tab.id}`}
             onUrlChange={(url) => onUpdateTab(tab.id, { url })}
           />
@@ -260,7 +260,7 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
           <DiffTab
             sessionId={tab.sessionId}
             messageId={tab.messageId}
-            esteiraId={tab.esteiraId}
+            pipelineId={tab.pipelineId}
             taskId={tab.taskId}
           />
         </div>
@@ -373,13 +373,13 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   const allProcesses = useProcessStore((s) => s.allProcesses)
   const fetchAllProcesses = useProcessStore((s) => s.fetchAll)
   const killProcess = useProcessStore((s) => s.kill)
-  // Balde de abas da sessão ativa (ou o órfão, no chat novo ainda sem sessão):
-  // a aba de processo aberta aqui precisa cair no mesmo balde que o resto.
+  // Bucket of tabs of the active session (or the orphan one, in the new chat still without a session):
+  // the process tab opened here needs to fall into the same bucket as the rest.
   const bucketKey = activeId ?? ORPHAN_KEY
 
-  // Escopo do rodapé: só esta conversa (padrão) ou todos os chats. Fica no
-  // localStorage porque o seletor desmonta ao abrir uma aba — sem isso o modo
-  // voltaria ao padrão a cada navegação.
+  // Scope of the footer: only this conversation (default) or all chats. It stays in
+  // localStorage because the selector unmounts when a tab opens — without that the mode
+  // would go back to the default on every navigation.
   const [scope, setScope] = useState<"chat" | "all">(() =>
     localStorage.getItem("orbit.panel.processScope") === "all" ? "all" : "chat",
   )
@@ -388,16 +388,16 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
     localStorage.setItem("orbit.panel.processScope", next)
   }, [])
 
-  // Só os processos DESTA conversa, tirados da lista GLOBAL — é a mesma lista
-  // que o main devolveria filtrada por sessão. Filtrar na hora de desenhar
-  // garante que o modo "este chat" não mostre processo de outro chat mesmo que
-  // outro consumidor do store troque a lista.
+  // Only the processes of THIS conversation, taken from the GLOBAL list — it is the same list
+  // the main process would return filtered by session. Filtering at draw time
+  // guarantees that the "this chat" mode does not show a process of another chat even if
+  // another consumer of the store swaps the list.
   const ownProcesses = useMemo(
     () => (activeId ? allProcesses.filter((p) => p.sessionId === activeId) : []),
     [allProcesses, activeId],
   )
 
-  // No modo global, os desta conversa em cima; os de outros chats depois.
+  // In global mode, the ones of this conversation on top; the ones of other chats after.
   const visibleProcesses = useMemo(() => {
     if (scope === "chat") return ownProcesses
     return [...allProcesses].sort(
@@ -413,10 +413,10 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
     [mode, tabMeta],
   )
 
-  // O rodapé busca a lista GLOBAL (sem filtro) de propósito: o modo "este chat"
-  // é filtrado logo acima, e é essa mesma lista que sustenta o "todos os chats".
-  // Buscar sem filtro era o que o store evitava; agora é explícito (fetchAll) e
-  // cada linha diz se é deste chat ou de outro.
+  // The footer fetches the GLOBAL list (unfiltered) on purpose: the "this chat" mode
+  // is filtered right above, and it is that same list that supports the "all chats" one.
+  // Fetching unfiltered was what the store avoided; now it is explicit (fetchAll) and
+  // each row says whether it belongs to this chat or to another.
   useEffect(() => {
     fetchAllProcesses()
     const interval = setInterval(fetchAllProcesses, 3_000)
@@ -432,8 +432,8 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
           availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2 @3xl:grid-cols-3",
         )}>
           {availableTabs.map(([type, { icon: Icon, label, description }]) => {
-            // Pastas seguem o repositório selecionado no workspace: sem chat
-            // ativo ainda é possível abrir (novo chat), desde que haja projeto.
+            // Folders follow the repository selected in the workspace: with no active
+            // chat it is still possible to open (new chat), as long as there is a project.
             const isDisabled = folders.length === 0 && type === "folders"
             return (
               <button
@@ -578,8 +578,8 @@ export function RightPanel() {
   const tabsBySession = usePanelStore((s) => s.tabsBySession)
   const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
   const sessionKey = activeSessionId ?? ORPHAN_KEY
-  // `?? []` cria um array novo a cada render: memoizado, os callbacks e
-  // efeitos abaixo param de se recriar junto.
+  // `?? []` creates a new array on every render: memoized, the callbacks and
+  // effects below stop recreating along with it.
   const tabs = useMemo(() => tabsBySession[sessionKey] ?? [], [tabsBySession, sessionKey])
   const activeTabId = activeTabBySession[sessionKey] ?? null
   const addTabToStore = usePanelStore((s) => s.addTab)
@@ -587,7 +587,7 @@ export function RightPanel() {
   const setActiveTabInStore = usePanelStore((s) => s.setActiveTab)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
-  /** Último pedido da paleta já atendido — o nonce evita repetir a abertura. */
+  /** Last palette request already served — the nonce avoids repeating the opening. */
   const handledFileRequest = useRef(0)
   const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
   const dndContext = useDndContext()
@@ -596,7 +596,7 @@ export function RightPanel() {
   const selectorOpen = usePanelStore((s) => s.selectorOpen)
   const setSelectorOpen = usePanelStore((s) => s.setSelectorOpen)
 
-  // Esc volta para a aba ativa; sem abas, o selector continua na tela de todo jeito.
+  // Esc goes back to the active tab; with no tabs, the selector stays on screen anyway.
   useEffect(() => {
     if (!selectorOpen) return
     const onKey = (e: KeyboardEvent) => {
@@ -607,11 +607,11 @@ export function RightPanel() {
   }, [selectorOpen, setSelectorOpen])
 
   /**
-   * Número da próxima aba numerada ("Terminal", "Terminal 2", "Terminal 3"…):
-   * POR CHAT (conta só as abas abertas desta sessão, não um contador global) e
-   * preenchendo lacunas — se a "Terminal 1" foi fechada, a próxima volta a ser
-   * a 1 em vez de pular para 4, 5… (o id único global continua vindo de
-   * nextTabId(); o número aqui é apenas o rótulo visível).
+   * Number of the next numbered tab ("Terminal", "Terminal 2", "Terminal 3"…):
+   * PER CHAT (it counts only the tabs open in this session, not a global counter) and
+   * filling gaps — if "Terminal 1" was closed, the next one becomes 1
+   * again instead of jumping to 4, 5… (the unique global id keeps coming from
+   * nextTabId(); the number here is only the visible label).
    */
   const nextTabNumber = useCallback(
     (type: TabType): number => {
@@ -630,11 +630,11 @@ export function RightPanel() {
   )
 
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
-    // Pastas seguem o repositório selecionado no workspace: só ficam
-    // bloqueadas quando não há projeto selecionado (mesmo sem chat ativo).
+    // Folders follow the repository selected in the workspace: they only stay
+    // blocked when there is no project selected (even with no active chat).
     if (type === "folders" && folders.length === 0) return
 
-    // Escolheu uma aba: o selector sai de cena e a aba aberta assume.
+    // A tab was chosen: the selector leaves the scene and the open tab takes over.
     setSelectorOpen(false)
 
     if (sessionId) {
@@ -671,10 +671,10 @@ export function RightPanel() {
   }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
 
   /**
-   * A paleta (⌘P) pediu um arquivo. Aqui só se prepara o LUGAR: abrir o painel,
-   * garantir uma aba de arquivos e ativá-la. O arquivo em si quem abre é a
-   * FoldersTab, que escuta o mesmo pedido — este efeito não sabe lidar com o
-   * visualizador, e não precisa.
+   * The palette (⌘P) asked for a file. Here one only prepares the PLACE: opening the panel,
+   * ensuring a files tab and activating it. The file itself is opened by the
+   * FoldersTab, which listens to the same request — this effect does not know how to deal with the
+   * viewer, and does not need to.
    */
   useEffect(() => {
     if (!pendingFile || handledFileRequest.current === pendingFile.nonce) return
@@ -693,8 +693,8 @@ export function RightPanel() {
       useTerminalStore.getState().killTerminal(id)
     }
     if (tab?.type === "browser") {
-      // Fechou a aba: destrói o webview do pool e desregistra no main (senão a
-      // página continuaria viva no host oculto e o agente navegaria um browser órfão).
+      // The tab was closed: it destroys the webview of the pool and unregisters it in the main process (otherwise the
+      // page would stay alive in the hidden host and the agent would navigate an orphan browser).
       destroyWebview(`${activeSessionId ?? "__orphan__"}:${id}`)
     }
     removeTabFromStore(sk, id)
@@ -702,9 +702,9 @@ export function RightPanel() {
 
   const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
     const sk = activeSessionId ?? "__orphan__"
-    // Lê do store em vez do closure: did-navigate pode chegar depois de outras
-    // mudanças de abas — com o closure, o map sobre uma lista antiga descartaria
-    // abas adicionadas entretanto.
+    // It reads from the store instead of the closure: did-navigate may arrive after other
+    // tab changes — with the closure, the map over an old list would discard
+    // tabs added in the meantime.
     const current = usePanelStore.getState().tabsBySession[sk] ?? []
     usePanelStore.getState().setTabsForSession(
       sk,
@@ -713,12 +713,12 @@ export function RightPanel() {
     )
   }, [activeSessionId])
 
-  // O browser do agente NÃO abre o painel sozinho: o evento 'ensure' cria o
-  // webview no host oculto (App.tsx) e a aba no store (ensureAgentBrowserTab).
-  // Aqui o painel só mostra a aba quando o usuário abre — clicando no
-  // indicador "testando…" (openAgentBrowser) ou no toggle manual.
+  // The agent browser does NOT open the panel by itself: the 'ensure' event creates the
+  // webview in the hidden host (App.tsx) and the tab in the store (ensureAgentBrowserTab).
+  // Here the panel only shows the tab when the user opens it — clicking the
+  // "testing…" indicator (openAgentBrowser) or the manual toggle.
 
-  // "Enviar para chat lateral" vindo do input: abre aba de chat
+  // "Send to side chat" coming from the input: it opens a chat tab
   const pendingChatTab = usePanelStore((s) => s.pendingChatTab)
   const pendingChatTabSession = usePanelStore((s) => s.pendingChatTabSession)
   const pendingChatTabTitle = usePanelStore((s) => s.pendingChatTabTitle)
@@ -732,56 +732,56 @@ export function RightPanel() {
       setActiveTabInStore(activeSessionId, id)
       usePanelStore.setState({ pendingChatTab: 0, pendingChatTabSession: undefined, pendingChatTabTitle: undefined })
     }
-    // Reage ao PEDIDO (pendingChatTab), lendo as abas do momento. `tabs` como
-    // dep faria o efeito rodar de novo pela aba que ele mesmo acabou de criar.
+    // Reacts to the REQUEST (pendingChatTab), reading the tabs of the moment. `tabs` as a
+    // dep would make the effect run again because of the tab it just created itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle, activeSessionId])
 
-  // Diff solicitado pelo chat: abre aba Diff
+  // Diff requested by the chat: it opens a Diff tab
   const pendingDiff = usePanelStore((s) => s.pendingDiff)
   const pendingDiffSessionId = usePanelStore((s) => s.pendingDiffSessionId)
   const pendingDiffMessageId = usePanelStore((s) => s.pendingDiffMessageId)
-  const pendingDiffEsteiraId = usePanelStore((s) => s.pendingDiffEsteiraId)
+  const pendingDiffPipelineId = usePanelStore((s) => s.pendingDiffPipelineId)
   const pendingDiffTaskId = usePanelStore((s) => s.pendingDiffTaskId)
   const pendingDiffTitle = usePanelStore((s) => s.pendingDiffTitle)
   useEffect(() => {
     if (pendingDiff === 0) return
-    // A esteira não tem sessão de chat: as abas dela ficam na chave órfã, que
-    // é a mesma usada quando nenhum chat está ativo.
-    const daEsteira = !!(pendingDiffEsteiraId && pendingDiffTaskId)
-    const chave = daEsteira ? activeSessionId ?? "__orphan__" : activeSessionId
-    if (!chave) return
-    if (!daEsteira && !(pendingDiffSessionId && pendingDiffMessageId)) return
+    // The pipeline has no chat session: its tabs live under the orphan key, the
+    // same one used when no chat is active.
+    const fromPipeline = !!(pendingDiffPipelineId && pendingDiffTaskId)
+    const key = fromPipeline ? activeSessionId ?? "__orphan__" : activeSessionId
+    if (!key) return
+    if (!fromPipeline && !(pendingDiffSessionId && pendingDiffMessageId)) return
 
-    const id = daEsteira
+    const id = fromPipeline
       ? `diff-task-${pendingDiffTaskId}`
       : `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`
-    const atuais = usePanelStore.getState().tabsBySession[chave] ?? []
-    if (!atuais.some((t) => t.id === id)) {
-      addTabToStore(chave, {
+    const currentTabs = usePanelStore.getState().tabsBySession[key] ?? []
+    if (!currentTabs.some((t) => t.id === id)) {
+      addTabToStore(key, {
         id,
         type: "diff",
         title: pendingDiffTitle ?? "Diff",
         sessionId: pendingDiffSessionId,
         messageId: pendingDiffMessageId,
-        esteiraId: pendingDiffEsteiraId,
+        pipelineId: pendingDiffPipelineId,
         taskId: pendingDiffTaskId,
       })
     }
-    setActiveTabInStore(chave, id)
+    setActiveTabInStore(key, id)
     usePanelStore.setState({
       pendingDiff: 0,
       pendingDiffSessionId: undefined,
       pendingDiffMessageId: undefined,
-      pendingDiffEsteiraId: undefined,
+      pendingDiffPipelineId: undefined,
       pendingDiffTaskId: undefined,
       pendingDiffTitle: undefined,
     })
-    // Idem: o gatilho é o pedido de diff, não a lista de abas.
+    // Same: the trigger is the diff request, not the tab list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffEsteiraId, pendingDiffTaskId, pendingDiffTitle, activeSessionId])
+  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffPipelineId, pendingDiffTaskId, pendingDiffTitle, activeSessionId])
 
-  // Workers da orquestração em execução abrem tabs automaticamente
+  // Running orchestration workers open tabs automatically
   useEffect(() => {
     if (!activeSessionId) return
     for (const session of sessions) {
@@ -799,8 +799,8 @@ export function RightPanel() {
         if (!currentActive) setActiveTabInStore(activeSessionId, id)
       }
     }
-    // Abre aba para worker que entrou em execução; `tabs` é lido no momento
-    // (o guard `exists` evita duplicar) e como dep re-dispararia a si mesmo.
+    // Opens a tab for a worker that started running; `tabs` is read at the moment
+    // (the `exists` guard avoids duplicating) and as a dep it would re-fire itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, statusMap, activeSessionId])
 
@@ -830,18 +830,18 @@ export function RightPanel() {
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
             const { icon: Icon } = tabMeta[tab.type]
-            // A aba em modo apresentação é a MESMA aba de Design (designPlay),
-            // mas o que ela faz ali é rodar o protótipo — daí o Play, no lugar
-            // do ícone de canvas, para as duas não se confundirem na fila.
-            // Conversa no painel é conversa, não worker: balões aninhados, o
-            // mesmo ícone que identifica um subchat na sidebar.
+            // The tab in presentation mode is the SAME Design tab (designPlay),
+            // but what it does there is run the prototype — hence the Play, in place of
+            // the canvas icon, so the two are not confused in the row.
+            // A conversation in the panel is a conversation, not a worker: nested bubbles, the
+            // same icon that identifies a sub-chat in the sidebar.
             const TabIcon = tab.type === "chat" && tab.sessionId ? MessagesSquare : tab.type === "design" && tab.designPlay ? Play : Icon
-            // Os três indicadores falam da CONVERSA — está respondendo, deu
-            // erro, chegou mensagem — e só a aba de chat mostra uma conversa.
-            // Várias outras carregam um sessionId por serem daquele chat (a
-            // aba Fontes, o visualizador de documento, o diff), e sem este
-            // recorte todas elas giravam junto com o turno: o PDF que a pessoa
-            // está lendo não fica "carregando" porque o agente está escrevendo.
+            // The three indicators speak of the CONVERSATION — it is answering, it gave
+            // an error, a message arrived — and only the chat tab shows a conversation.
+            // Several others carry a sessionId for being of that chat (the
+            // Sources tab, the document viewer, the diff), and without this
+            // narrowing all of them spun along with the turn: the PDF the person
+            // is reading does not stay "loading" because the agent is writing.
             const isChatTab = tab.type === "chat" && !!tab.sessionId
             const tabStatus = isChatTab ? statusMap[tab.sessionId!] : undefined
             const isWorking = tabStatus === "submitted" || tabStatus === "streaming"
@@ -890,9 +890,9 @@ export function RightPanel() {
               </div>
             )
           })}
-          {/* O "+" abre a tela inicial do painel (grade de abas + processos em
-              background) em vez de um dropdown: uma aba nova vira uma escolha
-              informada, e o rodapé de processos fica sempre alcançável. */}
+          {/* The "+" opens the start screen of the panel (grid of tabs + background
+              processes) instead of a dropdown: a new tab becomes an informed
+              choice, and the processes footer stays always reachable. */}
           <Hint label={t("panel.selector.title")}>
             <button
               type="button"
@@ -912,11 +912,11 @@ export function RightPanel() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {activeTab && !selectorOpen ? (
-          // key força remount ao trocar de aba: sem ela, o React reusa a mesma
-          // instância para abas do mesmo tipo (browser↔browser) e elas passam a
-          // compartilhar estado/histórico — era o "contexto compartilhado" e a
-          // alternância que não funcionava. Com persistKey, o remount apenas
-          // reanexa o webview daquela aba vindo do pool.
+          // key forces a remount on tab switch: without it, React reuses the same
+          // instance for tabs of the same type (browser↔browser) and they start
+          // sharing state/history — it was the "shared context" and the
+          // switching that did not work. With persistKey, the remount only
+          // re-attaches the webview of that tab coming from the pool.
           <TabContent key={activeTab.id} tab={activeTab} sessionId={activeSessionId ?? undefined} onUpdateTab={updateTab} />
         ) : (
           <SelectorScreen

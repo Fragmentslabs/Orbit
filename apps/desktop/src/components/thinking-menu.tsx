@@ -14,9 +14,9 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import type { DefaultModel } from "@/src/stores/model-mode-prefs"
 
 /**
- * Nível de raciocínio de um modelo das Preferências: botão só com ícone, ao
- * lado do seletor, que abre os níveis que o modelo oferece. Desabilitado
- * quando o modelo não pensa (ou nenhum está escolhido).
+ * Reasoning level of a Preferences model: icon-only button, next
+ * to the selector, which opens the levels the model offers. Disabled
+ * when the model does not think (or none is chosen).
  */
 export function ThinkingMenu({
   model: selected,
@@ -25,14 +25,14 @@ export function ThinkingMenu({
 }: {
   model: DefaultModel | null
   value: ReasoningConfig | null
-  /** null = raciocínio desligado */
+  /** null = reasoning off */
   onChange: (next: ReasoningConfig | null) => void
 }) {
   const { t } = useTranslation()
   const model = useProviderStore((s) => (selected ? s.catalog[selected.providerId]?.models[selected.modelId] : undefined))
 
   const variants = model?.variants ?? []
-  // Modelo que pensa mas não tem níveis: só liga/desliga.
+  // A model that thinks but has no levels: it only turns on/off.
   const options = variants.length > 0 ? variants.map((v) => v.id) : ["on"]
   const current = value?.enabled ? (value.variantId ?? "on") : "off"
   const disabled = !model?.reasoning
@@ -55,7 +55,7 @@ export function ThinkingMenu({
             onChange(next === "off" ? null : { enabled: true, variantId: next === "on" ? undefined : String(next) })
           }}
         >
-          {/* Dentro do grupo: no Base UI o rótulo fora de um Menu.Group derruba a tela ao abrir. */}
+          {/* Inside the group: in Base UI the label outside a Menu.Group takes the screen down on opening. */}
           <DropdownMenuLabel className="text-xs text-muted-foreground">{t("preferences.thinkingLevel")}</DropdownMenuLabel>
           {!model?.reasoningAlwaysOn && (
             <DropdownMenuRadioItem value="off">{t("reasoning.off")}</DropdownMenuRadioItem>
@@ -74,8 +74,8 @@ export function ThinkingMenu({
 }
 
 /**
- * Nível guardado POR MODELO — o mesmo que o seletor de raciocínio do chat lê e
- * grava. Escolher aqui o nível do modelo padrão faz o chat novo já começar nele.
+ * Level stored PER MODEL — the same one the chat reasoning selector reads and
+ * writes. Choosing the level of the default model here makes the new chat start on it.
  */
 export function ModelThinkingMenu({ model }: { model: DefaultModel | null }) {
   const { enabled, variantId, update } = useReasoningPrefs(model?.providerId, model?.modelId)
@@ -83,7 +83,7 @@ export function ModelThinkingMenu({ model }: { model: DefaultModel | null }) {
     <ThinkingMenu
       model={model}
       value={enabled ? { enabled, variantId } : null}
-      // Desligar guarda o nível: religar pelo chat volta ao que estava.
+      // Turning it off keeps the level: turning it back on through the chat goes back to what it was.
       onChange={(next) => update(next ? { enabled: true, variantId: next.variantId } : { enabled: false, variantId })}
     />
   )

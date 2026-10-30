@@ -5,37 +5,37 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 /**
- * Rasteriza páginas de PDF em imagem.
+ * Rasterizes PDF pages into images.
  *
- * É o que torna um PDF DIGITALIZADO legível: sem camada de texto, extrair
- * caracteres devolve string vazia e a única forma de ler é o modelo OLHAR a
- * página. Serve também para conferir layout e para miniatura.
+ * It is what makes a SCANNED PDF readable: without a text layer, extracting
+ * characters returns an empty string and the only way to read is for the model to LOOK at the
+ * page. It also serves to check the layout and for a thumbnail.
  *
- * Roda numa JANELA OCULTA, e não no processo main, por uma razão medida: o
- * pdfjs no main quebra com `DataCloneError: Cannot transfer object of
- * unsupported type` assim que o PDF tem imagem embutida — o worker falso dele
- * tenta transferir objetos de canvas nativo que o structuredClone do Node não
- * clona. Justamente o caso do PDF digitalizado, que é o principal. No renderer
- * o Chromium é um navegador de verdade e o pdfjs funciona sem contorção.
+ * It runs in a HIDDEN WINDOW, and not in the main process, for a measured reason: pdfjs
+ * in the main breaks with `DataCloneError: Cannot transfer object of
+ * unsupported type` as soon as the PDF has an embedded image — its fake worker
+ * tries to transfer native canvas objects that Node's structuredClone does not
+ * clone. Precisely the case of a scanned PDF, which is the main one. In the renderer
+ * Chromium is a real browser and pdfjs works without contortion.
  *
- * Nenhum binário externo: nada de LibreOffice, Poppler ou Ghostscript
- * instalados na máquina do usuário.
+ * No external binary: no LibreOffice, Poppler or Ghostscript
+ * installed on the user's machine.
  */
 
 const _require = createRequire(import.meta.url)
 
-/** Teto de páginas por chamada — rasterizar é caro e cada imagem custa
- *  contexto do modelo. */
+/** Page ceiling per call — rasterizing is expensive and each image costs
+ *  the model's context. */
 export const MAX_RASTER_PAGES = 5
 const LOAD_TIMEOUT_MS = 30_000
 
 /**
- * Um item de texto da página, em FRAÇÃO das dimensões dela (0 a 1).
+ * One text item of the page, as a FRACTION of its dimensions (0 to 1).
  *
- * Normalizado de propósito: é o que permite trocar o zoom sem reprocessar
- * nada — a mesma lista serve para qualquer escala. E é a partir daqui que o
- * renderer desenha o destaque e a camada de seleção, sem precisar pedir ao
- * main a cada letra digitada na busca.
+ * Normalized on purpose: it is what allows changing the zoom without reprocessing
+ * anything — the same list serves for any scale. And it is from here that the
+ * renderer draws the highlight and the selection layer, without having to ask the
+ * main for every letter typed in the search.
  */
 export interface PdfTextItem {
   x: number
@@ -45,10 +45,10 @@ export interface PdfTextItem {
   text: string
 }
 
-/** Entrada do sumário do PDF, já achatada com o nível de indentação. */
+/** Entry of the PDF outline, already flattened with the indentation level. */
 export interface PdfOutlineItem {
   title: string
-  /** null quando o destino não resolve para uma página. */
+  /** null when the destination does not resolve to a page. */
   page: number | null
   level: number
 }
@@ -58,16 +58,16 @@ interface RasterizedPage {
   png: Buffer
   width: number
   height: number
-  /** O texto da página com a posição de cada pedaço. */
+  /** The page's text with the position of each piece. */
   items: PdfTextItem[]
 }
 
-/** Fonte do pdfjs, lida uma vez por processo (são ~3MB entre lib e worker). */
+/** Source of pdfjs, read once per process (~3MB between lib and worker). */
 let sourcesPromise: Promise<{ lib: string; worker: string }> | null = null
 
 function pdfjsDir(): string {
-  // resolve pelo pacote, e não por um caminho relativo montado à mão: num app
-  // empacotado o node_modules pode estar dentro do asar.
+  // resolved by the package, and not by a relative path assembled by hand: in a
+  // packaged app node_modules may be inside the asar.
   const entry = _require.resolve('pdfjs-dist/legacy/build/pdf.mjs')
   return path.dirname(entry)
 }
@@ -90,49 +90,49 @@ async function loadSources(): Promise<{ lib: string; worker: string }> {
 }
 
 /**
- * Caminho que o visualizador embutido aceita abrir.
+ * Path that the embedded viewer accepts opening.
  *
- * O Chromium decide pela EXTENSÃO o que fazer com um file://. O original de
- * uma fonte é guardado como `<id>.bin`, e com essa extensão ele BAIXA o
- * arquivo em vez de abrir o visualizador — era o "salvar um .bin" no lugar do
- * diálogo de impressão. Medido: o mesmo conteúdo como `.pdf` carrega com
- * contentType application/pdf; como `.bin` dispara will-download.
+ * Chromium decides by the EXTENSION what to do with a file://. The original of
+ * a source is stored as `<id>.bin`, and with that extension it DOWNLOADS the
+ * file instead of opening the viewer — that was the "save a .bin" instead of the
+ * print dialog. Measured: the same content as `.pdf` loads with
+ * contentType application/pdf; as `.bin` it triggers will-download.
  *
- * Separado para poder ser testado sem abrir diálogo de impressão nenhum.
+ * Split out so it can be tested without opening any print dialog.
  */
 export async function printablePath(
   filePath: string,
 ): Promise<{ path: string; cleanup: () => void }> {
   if (filePath.toLowerCase().endsWith('.pdf')) return { path: filePath, cleanup: () => {} }
-  const copia = path.join(
+  const copy = path.join(
     app.getPath('temp'),
     `orbit-print-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.pdf`,
   )
-  await fsp.copyFile(filePath, copia)
+  await fsp.copyFile(filePath, copy)
   return {
-    path: copia,
-    // Só depois que o diálogo resolve: apagar antes tiraria o arquivo debaixo
-    // do próprio visualizador que vai gerar as páginas.
-    cleanup: () => void fsp.rm(copia, { force: true }).catch(() => {}),
+    path: copy,
+    // Only after the dialog resolves: deleting before would take the file out from under
+    // the very viewer that is going to generate the pages.
+    cleanup: () => void fsp.rm(copy, { force: true }).catch(() => {}),
   }
 }
 
-/** Rede de segurança: janela de impressão abandonada não fica para sempre. */
+/** Safety net: an abandoned print window does not stay forever. */
 const PRINT_WINDOW_TTL_MS = 10 * 60_000
-/** Teto da espera pela primeira pintura antes de abrir o diálogo. */
+/** Ceiling of the wait for the first paint before opening the dialog. */
 const FIRST_PAINT_TIMEOUT_MS = 3000
 
 /**
- * Espera a janela PINTAR de fato.
+ * Waits for the window to actually PAINT.
  *
- * `ready-to-show` não serve aqui: ele dispara quando a página está pronta
- * (medido: 107ms), mas o visualizador de PDF é um plugin e desenha depois —
- * capturar nesse instante devolve um retângulo liso. Era por isso que a
- * janela de impressão ficava cinza: o diálogo, modal, abria antes do primeiro
- * quadro e congelava a janela naquele estado.
+ * `ready-to-show` does not serve here: it fires when the page is ready
+ * (measured: 107ms), but the PDF viewer is a plugin and draws later —
+ * capturing at that instant returns a flat rectangle. That is why the
+ * print window stayed gray: the dialog, modal, opened before the first
+ * frame and froze the window in that state.
  *
- * Então em vez de cravar um número de milissegundos, mede-se o que interessa:
- * captura até a imagem deixar de ser lisa. Medido ~277ms num PDF comum.
+ * So instead of nailing down a number of milliseconds, it measures what matters:
+ * it captures until the image stops being flat. Measured ~277ms on a common PDF.
  */
 async function waitForFirstPaint(win: BrowserWindow): Promise<boolean> {
   const started = Date.now()
@@ -143,64 +143,64 @@ async function waitForFirstPaint(win: BrowserWindow): Promise<boolean> {
       const bitmap = (await win.capturePage()).toBitmap()
       const counts = new Map<number, number>()
       for (let i = 0; i < bitmap.length; i += 4) {
-        // Cor grosseira (4 bits por canal): antialiasing não conta como
-        // conteúdo, mas texto e moldura contam.
+        // Coarse color (4 bits per channel): antialiasing does not count as
+        // content, but text and frames do.
         const key = (bitmap[i + 2] >> 4) * 256 + (bitmap[i + 1] >> 4) * 16 + (bitmap[i] >> 4)
         counts.set(key, (counts.get(key) ?? 0) + 1)
       }
       const total = bitmap.length / 4
       if (total > 0 && (total - Math.max(...counts.values(), 0)) / total > 0.05) return true
     } catch {
-      // Nada composto ainda (UnknownVizError) — continua esperando.
+      // Nothing composited yet (UnknownVizError) — keeps waiting.
     }
   }
   return false
 }
 
 /**
- * Abre o diálogo de impressão do sistema para um arquivo.
+ * Opens the system print dialog for a file.
  *
- * O documento é carregado numa janela com o visualizador embutido: é o
- * Chromium que sabe paginar um PDF para papel, e refazer isso a partir das
- * imagens que desenhamos daria um resultado pior justamente onde ele precisa
- * ser fiel.
+ * The document is loaded in a window with the embedded viewer: it is
+ * Chromium that knows how to page a PDF for paper, and redoing that from the
+ * images we draw would give a worse result precisely where it has to
+ * be faithful.
  *
- * Duas decisões vieram de o botão ficar girando para sempre:
+ * Two decisions came from the button spinning forever:
  *
- * 1. A janela é VISÍVEL. Com `show: false` o diálogo não tem onde se ancorar e
- *    fica esperando uma interação que ninguém consegue fazer. Medido: com
- *    `silent: true` (sem diálogo) o callback volta em ~1s mesmo oculta, então
- *    o que travava era o diálogo, não a impressão.
- * 2. A função retorna quando o diálogo ABRE, não quando a impressão termina.
- *    Esperar o fim é esperar o usuário — e era isso que mantinha a UI
- *    carregando. O resultado do trabalho quem reporta é o próprio diálogo.
+ * 1. The window is VISIBLE. With `show: false` the dialog has nowhere to anchor and
+ *    stays waiting for an interaction nobody can perform. Measured: with
+ *    `silent: true` (no dialog) the callback returns in ~1s even hidden, so
+ *    what was stuck was the dialog, not the print.
+ * 2. The function returns when the dialog OPENS, not when the print ends.
+ *    Waiting for the end is waiting for the user — and that is what kept the UI
+ *    loading. Whoever reports the work's result is the dialog itself.
  */
 export async function printFile(
   filePath: string,
   title?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  let alvo: { path: string; cleanup: () => void }
+  let printable: { path: string; cleanup: () => void }
   try {
-    alvo = await printablePath(filePath)
+    printable = await printablePath(filePath)
   } catch (err) {
-    return { ok: false, error: `Não foi possível preparar o arquivo: ${(err as Error).message}` }
+    return { ok: false, error: `Could not prepare the file: ${(err as Error).message}` }
   }
 
   const win = new BrowserWindow({
-    // Começa oculta e aparece depois de carregar, para não piscar em branco.
+    // It starts hidden and appears after loading, so as not to blink white.
     show: false,
     width: 720,
     height: 860,
-    // Filha da janela do app: fica por cima dela, some junto e não vira uma
-    // segunda entrada solta na barra de tarefas.
+    // Child of the app window: it stays above it, disappears with it and does not become a
+    // second loose entry in the taskbar.
     parent: BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0],
     title: title || path.basename(filePath),
-    // Sem a barra de menu do Electron: esta janela existe só para hospedar o
-    // diálogo, e um menu Arquivo/Editar/Exibir ali não leva a lugar nenhum.
+    // Without Electron's menu bar: this window exists only to host the
+    // dialog, and a File/Edit/View menu there leads nowhere.
     autoHideMenuBar: true,
     webPreferences: {
-      // plugins: liga o visualizador de PDF embutido, sem o qual a janela
-      // baixaria o arquivo em vez de renderizá-lo.
+      // plugins: it turns on the embedded PDF viewer, without which the window
+      // would download the file instead of rendering it.
       plugins: true,
       partition: `doc-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       nodeIntegration: false,
@@ -208,49 +208,49 @@ export async function printFile(
     },
   })
 
-  let encerrada = false
-  const encerrar = () => {
-    if (encerrada) return
-    encerrada = true
-    alvo.cleanup()
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
+    printable.cleanup()
     if (!win.isDestroyed()) win.destroy()
   }
 
-  // O visualizador de PDF renomeia a janela com o nome do ARQUIVO, que aqui é
-  // a cópia temporária (`orbit-print-mu23….pdf`). Segurar o título mantém na
-  // tela o nome do documento que o usuário mandou imprimir.
+  // The PDF viewer renames the window with the name of the FILE, which here is
+  // the temporary copy (`orbit-print-mu23….pdf`). Holding the title keeps on
+  // screen the name of the document the user asked to print.
   win.setMenuBarVisibility(false)
   win.on('page-title-updated', (event) => event.preventDefault())
 
   try {
-    await win.loadURL(pathToFileURL(alvo.path).toString())
+    await win.loadURL(pathToFileURL(printable.path).toString())
   } catch (err) {
-    encerrar()
+    finish()
     return { ok: false, error: (err as Error).message }
   }
 
   win.show()
-  // Fechar a janela no meio é desistir de imprimir — e precisa limpar igual.
+  // Closing the window midway is giving up on printing — and it has to clean up the same way.
   win.on('closed', () => {
-    encerrada = true
-    alvo.cleanup()
+    finished = true
+    printable.cleanup()
   })
 
-  // O diálogo é modal: abri-lo antes do primeiro quadro deixa a janela cinza
-  // atrás dele até o fim. Se a pintura não vier no teto, imprime assim mesmo —
-  // uma prévia feia é melhor que não imprimir.
+  // The dialog is modal: opening it before the first frame leaves the window gray
+  // behind it until the end. If the paint does not come within the ceiling, it prints anyway —
+  // an ugly preview is better than not printing.
   await waitForFirstPaint(win)
-  if (win.isDestroyed()) return { ok: false, error: 'A janela de impressão foi fechada.' }
+  if (win.isDestroyed()) return { ok: false, error: 'The print window was closed.' }
 
-  win.webContents.print({ silent: false }, () => encerrar())
-  setTimeout(encerrar, PRINT_WINDOW_TTL_MS)
+  win.webContents.print({ silent: false }, () => finish())
+  setTimeout(finish, PRINT_WINDOW_TTL_MS)
 
   return { ok: true }
 }
 
 /**
- * Renderiza as páginas pedidas. `pages` é 1-indexado; páginas fora do
- * documento são ignoradas em silêncio (quem chama compara com `total`).
+ * Renders the requested pages. `pages` is 1-indexed; pages outside the
+ * document are ignored silently (whoever calls compares with `total`).
  */
 export async function rasterizePdf(
   bytes: Buffer,
@@ -268,8 +268,8 @@ export async function rasterizePdf(
       height: 300,
       paintWhenInitiallyHidden: true,
       webPreferences: {
-        // Partição efêmera: o PDF é conteúdo do usuário, não divide storage
-        // com nada do app.
+        // Ephemeral partition: the PDF is the user's content, it does not share storage
+        // with anything in the app.
         partition: `pdf-raster-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         nodeIntegration: false,
         contextIsolation: true,
@@ -279,9 +279,9 @@ export async function rasterizePdf(
     const target = win
     await target.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<body></body>'))
 
-    // O PDF e o pdfjs entram como texto no script avaliado. Passar por
-    // executeJavaScript evita ter que servir arquivo por protocolo ou copiar
-    // o pdfjs para dentro do build.
+    // The PDF and pdfjs enter as text in the evaluated script. Going through
+    // executeJavaScript avoids having to serve a file by protocol or copy
+    // pdfjs into the build.
     const script = `
       (async () => {
         const libUrl = URL.createObjectURL(new Blob([${JSON.stringify(lib)}], { type: 'text/javascript' }))
@@ -294,30 +294,30 @@ export async function rasterizePdf(
         const doc = await pdfjs.getDocument({ data }).promise
         const wantText = ${JSON.stringify(Boolean(options.includeText))}
 
-        /** Itens de texto da página, em fração das dimensões dela. */
+        /** Text items of the page, as a fraction of its dimensions. */
         const readItems = (items, viewport) => {
           const out = []
           for (const item of items) {
-            const texto = item.str ?? ''
-            if (!texto) continue
+            const text = item.str ?? ''
+            if (!text) continue
             const tx = pdfjs.Util.transform(viewport.transform, item.transform)
-            const alturaGlifo = Math.hypot(tx[2], tx[3]) || (item.height ?? 0) * ${scale}
+            const glyphHeight = Math.hypot(tx[2], tx[3]) || (item.height ?? 0) * ${scale}
             out.push({
               x: tx[4] / viewport.width,
-              y: (tx[5] - alturaGlifo) / viewport.height,
+              y: (tx[5] - glyphHeight) / viewport.height,
               width: ((item.width ?? 0) * ${scale}) / viewport.width,
-              height: alturaGlifo / viewport.height,
-              text: texto,
+              height: glyphHeight / viewport.height,
+              text: text,
             })
             if (out.length > 4000) break
           }
           return out
         }
 
-        /** Sumário do PDF, achatado com o nível de cada entrada. */
+        /** Summary of the PDF, flattened with the level of each entry. */
         const readOutline = async () => {
-          const raiz = await doc.getOutline()
-          if (!raiz || raiz.length === 0) return []
+          const outline = await doc.getOutline()
+          if (!outline || outline.length === 0) return []
           const out = []
           const walk = async (items, level) => {
             for (const item of items) {
@@ -328,14 +328,14 @@ export async function rasterizePdf(
                   pageNumber = (await doc.getPageIndex(dest[0])) + 1
                 }
               } catch {
-                // destino exótico: a entrada ainda vale como título
+                // exotic destination: the entry still counts as a title
               }
               out.push({ title: String(item.title ?? '').trim(), page: pageNumber, level })
               if (item.items && item.items.length > 0 && level < 3) await walk(item.items, level + 1)
               if (out.length > 500) return
             }
           }
-          await walk(raiz, 0)
+          await walk(outline, 0)
           return out
         }
 
@@ -380,7 +380,7 @@ export async function rasterizePdf(
       }>,
       new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), LOAD_TIMEOUT_MS)),
     ])
-    if (outcome === TIMED_OUT) throw new Error('tempo esgotado ao renderizar o PDF')
+    if (outcome === TIMED_OUT) throw new Error('timed out while rendering the PDF')
 
     return {
       total: outcome.total,

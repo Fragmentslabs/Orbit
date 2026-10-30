@@ -17,7 +17,7 @@ import { hasActiveFilters, useModelsStore, type ContextFilter } from "@/src/stor
 import { availabilityLabel, CAPABILITY_LABELS, MODALITY_LABELS, PRICE_LABELS, SPEED_LABELS } from "./meta"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Linha de filtros da aba Models — dropdowns multi-seleção por dimensão. */
+/** Filter row of the Models tab — multi-select dropdowns per dimension. */
 
 function FilterDropdown({ label, count, children }: {
   label: string
@@ -90,7 +90,7 @@ export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
   const setContext = useModelsStore((s) => s.setContext)
   const clearFilters = useModelsStore((s) => s.clearFilters)
 
-  // Providers e disponibilidade derivados do dataset, ordenados por nº de modelos
+  // Providers and availability derived from the dataset, ordered by number of models
   const providerOptions = useMemo(() => {
     const counts = new Map<string, { name: string; count: number }>()
     for (const m of models) {
@@ -115,8 +115,8 @@ export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
       .map(([value, count]) => ({ value, label: availabilityLabel(value), hint: String(count) }))
   }, [models])
 
-  // Contagens por opção — deixam claro quando uma dimensão está sem dados
-  // (ex: Speed sem a chave da Artificial Analysis)
+  // Counts per option — they make clear when a dimension has no data
+  // (e.g. Speed without the Artificial Analysis key)
   const counts = useMemo(() => {
     const capability = new Map<string, number>()
     const modality = new Map<string, number>()

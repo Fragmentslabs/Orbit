@@ -1,14 +1,14 @@
 /**
- * Vídeo produzido pelo agente (video_render, motion_render, show_video): player
- * inline 16:9 com os controles nativos.
+ * Video produced by the agent (video_render, motion_render, show_video): inline
+ * 16:9 player with the native controls.
  *
- * O `src` chega pronto do desktop (URL http absoluta com token no caminho) e o
- * servidor responde com `Range`, então buscar posição funciona — sem isso um
- * player não é um player. Nada de URL montada aqui.
+ * The `src` arrives ready from the desktop (absolute http URL with the token in the path) and the
+ * server answers with `Range`, so seeking works — without that a
+ * player is not a player. No URL assembled here.
  *
- * O poster é o `thumb` da part, exibido por cima do player enquanto o vídeo não
- * está pronto. Vídeo de motion/design costuma ser curto e leve, mas o primeiro
- * quadro ainda demora: sem o poster a bolha abriria um retângulo preto.
+ * The poster is the `thumb` of the part, displayed over the player while the video is not
+ * ready. Video from motion/design is usually short and light, but the first
+ * frame still takes a while: without the poster the bubble would open a black rectangle.
  */
 import { useEffect } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
@@ -24,24 +24,24 @@ import { UnavailablePart } from './UnavailablePart'
 function VideoPlayerCard({ part, src }: { part: VideoPart; src: string }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  // O tipo compartilhado do vídeo não declara `thumb`, mas o desktop anexa a
-  // miniatura quando ela existe (mesmo contrato do artefato). Lido de forma
-  // defensiva: ausente é o caso normal, não um erro.
+  // The shared type of the video does not declare `thumb`, but the desktop attaches the
+  // thumbnail when it exists (same contract as the artifact). Read defensively:
+  // absent is the normal case, not an error.
   const poster = (part as VideoPart & { thumb?: string }).thumb
   const player = useVideoPlayer({ uri: src })
   const { status, error } = useEvent(player, 'statusChange', { status: player.status })
-  // Falha derivada do evento do player, sem espelho em estado: o status já é a
-  // fonte da verdade, e o card de erro tem de aparecer no mesmo render em que o
-  // player desiste (não um frame depois).
+  // Failure derived from the player event, without a mirror in state: the status is already the
+  // source of truth, and the error card has to appear in the same render in which the
+  // player gives up (not a frame later).
   const failed = status === 'error' || Boolean(error)
 
-  // Sair da tela não pode deixar o vídeo tocando (nem o áudio dele).
+  // Leaving the screen cannot leave the video playing (nor its audio).
   useEffect(() => {
     return () => {
       try {
         player.pause()
       } catch {
-        // Player já liberado pelo hook.
+        // Player already released by the hook.
       }
     }
   }, [player])
@@ -72,7 +72,7 @@ function VideoPlayerCard({ part, src }: { part: VideoPart; src: string }) {
           style={StyleSheet.absoluteFill}
           nativeControls
           contentFit="contain"
-          // Tela cheia é dos controles nativos — o botão do player basta.
+          // Fullscreen belongs to the native controls — the player button is enough.
           fullscreenOptions={{ enable: true }}
           allowsPictureInPicture={false}
           accessibilityLabel={part.title}
@@ -111,8 +111,8 @@ export function VideoPartView({ part }: { part: VideoPart }) {
 const fill = { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } as const
 
 const styles = StyleSheet.create({
-  // 16:9 fixo: o player não pode mudar de altura quando o vídeo carrega (a
-  // lista daria um salto embaixo do dedo).
+  // Fixed 16:9: the player cannot change height when the video loads (the
+  // list would jump under the finger).
   stage: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
   poster: fill,
   scrim: {

@@ -1,15 +1,15 @@
 /**
- * Captura do ditado: entrega o áudio do microfone como PCM 16 bits, 16 kHz,
- * mono, para a thread principal — em blocos de 1024 quadros (~64 ms).
+ * Dictation capture: delivers the microphone audio as PCM 16-bit, 16 kHz,
+ * mono, to the main thread — in blocks of 1024 frames (~64 ms).
  *
- * O worklet só converte e repassa; quem agrupa os blocos em pedaços de ~128 ms
- * e fala com o motor é o hook `use-dictation`, que é quem sabe quando a fala
- * começou e terminou. Ao soltar o botão o hook pede `flush` pelo port para o
- * resto do bloco sair na hora (sem isso a última sílaba podia ficar no buffer).
+ * The worklet only converts and forwards; the one that groups the blocks into ~128 ms
+ * pieces and talks to the engine is the `use-dictation` hook, which is the one that knows when the speech
+ * started and ended. On releasing the button the hook asks for a `flush` through the port so the
+ * rest of the block goes out right away (without that the last syllable could stay in the buffer).
  *
- * Roda no AudioWorklet, não no DOM: `AudioWorkletProcessor` e
- * `registerProcessor` são globais de lá; `sampleRate` (do escopo do worklet)
- * não está na lista do ESLint e é declarado abaixo.
+ * It runs in the AudioWorklet, not in the DOM: `AudioWorkletProcessor` and
+ * `registerProcessor` are globals from there; `sampleRate` (from the worklet scope)
+ * is not in the ESLint list and is declared below.
  */
 /* global sampleRate */
 
@@ -27,14 +27,14 @@ class OrbitPcmCapture extends AudioWorkletProcessor {
 
   process(inputs) {
     const channel = inputs[0]?.[0]
-    // Ainda sem faixa ligada: segue vivo até o áudio chegar.
+    // No track connected yet: it stays alive until the audio arrives.
     if (!channel) return true
     for (let i = 0; i < channel.length; i++) {
       this.buffer[this.filled++] = channel[i]
       if (this.filled === BLOCK_FRAMES) this.flush()
     }
-    // true = continua processando: a captura só acaba quando a faixa é solta e
-    // o AudioContext fecha — o hook faz as duas coisas sempre.
+    // true = keeps processing: the capture only ends when the track is released and
+    // the AudioContext closes — the hook always does both.
     return true
   }
 
@@ -44,12 +44,12 @@ class OrbitPcmCapture extends AudioWorkletProcessor {
     const pcm = new Int16Array(frames)
     for (let i = 0; i < frames; i++) {
       const sample = Math.max(-1, Math.min(1, this.buffer[i]))
-      // -32768..32767: o lado positivo satura em 0x7fff, o negativo aproveita o
-      // valor extra do complemento de dois (o mesmo mapeamento do WAV PCM16).
+      // -32768..32767: the positive side saturates at 0x7fff, the negative takes the
+      // extra value of the two's complement (the same mapping as WAV PCM16).
       pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
     }
     this.filled = 0
-    // O buffer vai transferido: sem cópia por bloco, sem lixo acumulado.
+    // The buffer goes transferred: no copy per block, no accumulating garbage.
     this.port.postMessage({ pcm, sampleRate }, [pcm.buffer])
   }
 }

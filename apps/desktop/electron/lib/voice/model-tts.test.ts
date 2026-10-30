@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Catalog } from '@shared/chat'
 
 /**
- * A rota de fala pelo MODELO é a metade não-local da prioridade de áudio: ela
- * não depende de pesos no disco, mas depende de um provedor configurado com um
- * modelo que saiba falar. O que se fecha aqui é a DECISÃO (quem está
- * configurado, quem sabe falar) e o contrato dos pedaços — PCM16 24 kHz, o
- * mesmo do motor local, para o renderer não precisar saber de onde veio.
+ * The speech route through the MODEL is the non-local half of the audio priority: it
+ * does not depend on weights on disk, but it does depend on a configured provider with a
+ * model that knows how to speak. What is closed here is the DECISION (who is
+ * configured, who knows how to speak) and the chunk contract — PCM16 24 kHz, the
+ * same as the local engine, so the renderer does not need to know where it came from.
  *
- * Nada aqui toca a nuvem: o `fetch` é um dublê e o catálogo, um retrato fixo.
+ * Nothing here touches the cloud: `fetch` is a stub and the catalog is a fixed snapshot.
  */
 
 const estado = vi.hoisted(() => ({
@@ -20,7 +20,7 @@ vi.mock('./manifest', () => ({ TTS_SAMPLE_RATE: 24000 }))
 vi.mock('../catalog', () => ({ getMergedCatalog: async () => estado.catalog }))
 vi.mock('../auth', () => ({
   listCredentialProviders: async () => estado.configured,
-  resolveApiKey: async () => 'sk-teste',
+  resolveApiKey: async () => 'sk-test',
 }))
 
 const { mapSpeechVoice, modelTtsStatus, pickSpeechRoute, speakWithModel } = await import('./model-tts')
@@ -47,11 +47,11 @@ afterEach(() => {
 })
 
 describe('pickSpeechRoute', () => {
-  it('sem provedor no catálogo, não há rota', () => {
+  it('with no provider in the catalog there is no route', () => {
     expect(pickSpeechRoute({}, new Set())).toBeNull()
   })
 
-  it('provedor sem chave configurada não conta', () => {
+  it('a provider with no configured key does not count', () => {
     const catalog = catalogOf('openai', {
       ...OPENAI,
       models: { 'gpt-4o': { id: 'gpt-4o', modalities: { input: ['text'], output: ['text'] } } },
@@ -59,7 +59,7 @@ describe('pickSpeechRoute', () => {
     expect(pickSpeechRoute(catalog, new Set(), {})).toBeNull()
   })
 
-  it('provedor com chave e modelo de saída de áudio vira a rota', () => {
+  it('a provider with a key and an audio-output model becomes the route', () => {
     const catalog = catalogOf('acme', {
       id: 'acme',
       name: 'Acme',
@@ -74,45 +74,45 @@ describe('pickSpeechRoute', () => {
     })
   })
 
-  it('chave por variável de ambiente também configura o provedor', () => {
+  it('a key from an environment variable also configures the provider', () => {
     const catalog = catalogOf('openai', OPENAI)
-    // Sem modelo de fala no catálogo, vale o conhecido do provedor.
-    expect(pickSpeechRoute(catalog, new Set(), { OPENAI_API_KEY: 'sk-teste' })).toMatchObject({
+    // With no speech model in the catalog, the provider's known one applies.
+    expect(pickSpeechRoute(catalog, new Set(), { OPENAI_API_KEY: 'sk-test' })).toMatchObject({
       providerId: 'openai',
       modelId: 'gpt-4o-mini-tts',
     })
   })
 
-  it('provedor sem URL base não serve: não há onde chamar', () => {
+  it('a provider with no base URL does not serve: there is nowhere to call', () => {
     const catalog = catalogOf('local', { id: 'local', name: 'Local', env: [], models: {} })
     expect(pickSpeechRoute(catalog, new Set(['local']), {})).toBeNull()
   })
 })
 
 describe('mapSpeechVoice', () => {
-  it('traduz as vozes F#/M# para as da API quando o provedor é a OpenAI', () => {
+  it('translates the F#/M# voices to the API ones when the provider is OpenAI', () => {
     expect(mapSpeechVoice('F2', 'openai')).toBe('shimmer')
     expect(mapSpeechVoice('M1', 'openai')).toBe('onyx')
   })
 
-  it('provedor desconhecido recebe o id original (a falha cai no motor local)', () => {
+  it('an unknown provider gets the original id (the failure falls back to the local engine)', () => {
     expect(mapSpeechVoice('F4', 'acme')).toBe('F4')
   })
 
-  it('voz inválida cai numa voz padrão em vez de derrubar a chamada', () => {
+  it('an invalid voice falls back to a default voice instead of breaking the call', () => {
     expect(mapSpeechVoice(undefined, 'openai')).toBe('nova')
     expect(mapSpeechVoice('zz', 'openai')).toBe('nova')
   })
 })
 
 describe('modelTtsStatus', () => {
-  it('sem catálogo/provedor, indisponível com motivo', async () => {
+  it('with no catalog/provider, unavailable with a reason', async () => {
     const status = await modelTtsStatus()
     expect(status.available).toBe(false)
     expect(status.reason?.length).toBeGreaterThan(0)
   })
 
-  it('com provedor configurado e modelo de fala, disponível com o alvo', async () => {
+  it('with a configured provider and speech model, available with the target', async () => {
     estado.catalog = catalogOf('openai', OPENAI)
     estado.configured = ['openai']
     expect(await modelTtsStatus()).toEqual({ available: true, providerId: 'openai', modelId: 'gpt-4o-mini-tts' })
@@ -120,10 +120,10 @@ describe('modelTtsStatus', () => {
 })
 
 describe('speakWithModel', () => {
-  it('entrega o PCM em pedaços no contrato do motor (24 kHz)', async () => {
+  it('delivers the PCM in chunks under the engine contract (24 kHz)', async () => {
     estado.catalog = catalogOf('openai', OPENAI)
     estado.configured = ['openai']
-    const pcm = Buffer.alloc(8192 * 2 + 100) // dois pedaços cheios + uma sobra
+    const pcm = Buffer.alloc(8192 * 2 + 100) // two full chunks + a remainder
     const calls: { url: string; body: Record<string, unknown> }[] = []
     vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
       calls.push({ url, body: JSON.parse(String(init.body)) })
@@ -141,7 +141,7 @@ describe('speakWithModel', () => {
     expect(result.audioMs).toBeGreaterThan(0)
   })
 
-  it('resposta infeliz do provedor vira erro (o pipeline cai no local)', async () => {
+  it('an unhappy provider response becomes an error (the pipeline falls back to local)', async () => {
     estado.catalog = catalogOf('openai', OPENAI)
     estado.configured = ['openai']
     vi.stubGlobal('fetch', async () => new Response('modelo desconhecido', { status: 404 }))
@@ -149,10 +149,10 @@ describe('speakWithModel', () => {
     await expect(speakWithModel('olá', {}, () => {})).rejects.toThrow(/404/)
   })
 
-  it('sem provedor de fala, nem chega a chamar a rede', async () => {
+  it('with no speech provider, it does not even reach the network', async () => {
     const fetchStub = vi.fn()
     vi.stubGlobal('fetch', fetchStub)
-    await expect(speakWithModel('olá', {}, () => {})).rejects.toThrow(/provedor/)
+    await expect(speakWithModel('olá', {}, () => {})).rejects.toThrow(/provider/)
     expect(fetchStub).not.toHaveBeenCalled()
   })
 })

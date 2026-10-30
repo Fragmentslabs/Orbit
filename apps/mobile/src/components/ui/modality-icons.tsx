@@ -1,8 +1,8 @@
 import { FileText, Image as ImageIcon, Mic, Video } from 'lucide-react-native'
 
 /**
- * Ícones das modalidades de entrada não-texto (image/audio/video/pdf).
- * "text" é omitido — todo modelo aceita texto.
+ * Icons of the non-text input modalities (image/audio/video/pdf).
+ * "text" is omitted — every model accepts text.
  */
 
 const ICONS = {

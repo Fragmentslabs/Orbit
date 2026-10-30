@@ -1,13 +1,13 @@
 import type { Memory, MemoryKind, ProjectArea, ProjectCategory } from '@orbit/shared'
 import i18n from '~/i18n'
 
-/** Rótulos e cores por tipo de memória — espelho do meta.ts do desktop. */
+/** Labels and colors per memory type — mirror of the desktop meta.ts. */
 
 export function kindLabel(kind: MemoryKind): string {
   return i18n.t(`memoryMeta.kind.${kind}`)
 }
 
-/** Cor sólida por kind (badges e nós do grafo) */
+/** Solid color per kind (badges and graph nodes) */
 export const KIND_COLOR: Record<MemoryKind, string> = {
   core: '#3b82f6',
   seasonal: '#f59e0b',
@@ -19,14 +19,14 @@ export function categoryLabel(category: ProjectCategory): string {
   return i18n.t(`memoryMeta.category.${category}`)
 }
 
-/** Ícone Lucide por categoria (usado nos badges de memórias sem área). */
+/** Lucide icon per category (used in the badges of memories without an area). */
 export const CATEGORY_ICON: Partial<Record<ProjectCategory, string>> = {
   database: 'Database',
   learning: 'GraduationCap',
   standard: 'BookText',
 }
 
-/** Ícone Lucide por área de conhecimento (usado no grafo de memórias). */
+/** Lucide icon per knowledge area (used in the memory graph). */
 export const AREA_ICON: Record<ProjectArea, string> = {
   overview: 'BrainCircuit',
   business: 'Briefcase',

@@ -10,10 +10,10 @@ import { shotView } from './shots'
 import { ComputerError, type ComputerDriver } from './types'
 
 /**
- * Fachada do Computer Use. Há driver para o macOS e para o Windows (ver
- * docs/computer-use-windows.md) e fica desligada na Mac App Store: o sandbox de
- * lá bloqueia acessibilidade e injeção de eventos, e anunciar uma tool que não
- * funciona é pior do que não ter.
+ * Facade of Computer Use. There is a driver for macOS and one for Windows (see
+ * docs/computer-use-windows.md) and it is turned off in the Mac App Store: the sandbox
+ * there blocks accessibility and event injection, and announcing a tool that does not
+ * work is worse than not having it.
  */
 
 export { computerRegistry }
@@ -40,7 +40,7 @@ export function getComputerDriver(): ComputerDriver {
   return driver
 }
 
-/** Troca o driver (testes). */
+/** Swaps the driver (tests). */
 export function setComputerDriver(next: ComputerDriver | null): void {
   driver = next
   if (next) setComputerRestoreHandler((pids) => next.restore(pids))
@@ -49,11 +49,11 @@ export function setComputerDriver(next: ComputerDriver | null): void {
 const run = promisify(execFile)
 
 /**
- * O app que o macOS trata como dono das permissões deste processo. O TCC
- * atribui ao processo responsável: aberto pelo Finder, é o próprio app; aberto
- * por um shell (`npm run dev`), é o app do terminal que lançou — e aí liberar o
- * "Electron" em Ajustes não adianta (visto na Fase 0: o Orbit em dev era do
- * Terminal). Sobe pelos pais até o primeiro bundle .app.
+ * The app macOS treats as the owner of this process's permissions. TCC assigns it to
+ * the responsible process: opened by Finder, it is the app itself; opened by a shell
+ * (`npm run dev`), it is the terminal app that launched it — and then granting
+ * "Electron" in Settings does not help (seen in Phase 0: Orbit in dev belonged to
+ * Terminal). It climbs through the parents up to the first .app bundle.
  */
 export async function responsibleApp(): Promise<string | null> {
   let pid = process.ppid
@@ -81,8 +81,8 @@ export async function computerStatus(): Promise<ComputerStatus> {
   }
   if (!support.available) return base
   if (process.platform === 'win32') {
-    // Sem TCC: "accessibility" diz se o host de UI Automation sobe, e as notas
-    // dizem o que mais limita (PowerShell restrito, Orbit sem administrador).
+    // Without TCC: "accessibility" says whether the UI Automation host starts, and the notes
+    // say what else limits it (restricted PowerShell, Orbit without administrator).
     base.screen = 'granted'
     try {
       const perms = await getComputerDriver().perms()
@@ -108,38 +108,38 @@ export async function computerStatus(): Promise<ComputerStatus> {
   return base
 }
 
-/** Pede a permissão de Acessibilidade (o macOS abre o próprio diálogo). */
+/** Asks for the Accessibility permission (macOS opens its own dialog). */
 export function requestAccessibility(): boolean {
   if (!isComputerAvailable()) return false
-  // O Windows não tem permissão a pedir (o UIA não pede autorização).
+  // Windows has no permission to ask for (UIA does not ask for authorization).
   if (process.platform === 'win32') return true
   return systemPreferences.isTrustedAccessibilityClient(true)
 }
 
 /**
- * Pede a Gravação de Tela. O macOS só lista o app em Ajustes depois que ele
- * tenta capturar — e, em dev, o "Electron" da lista precisa ser o binário
- * deste projeto (Fase 0: liberar o Electron de outro projeto não vale). Pedir
- * as fontes de captura cria a entrada certa; depois abre o painel.
+ * Asks for Screen Recording. macOS only lists the app in Settings after it tries to
+ * capture — and, in dev, the "Electron" in the list has to be this project's binary
+ * (Phase 0: granting the Electron of another project does not count). Asking for the
+ * capture sources creates the right entry; then it opens the panel.
  */
 export async function requestScreenRecording(): Promise<{ granted: boolean }> {
   if (!isComputerAvailable()) return { granted: false }
-  // 1) O pedido oficial (diálogo do sistema, em nome do Orbit); 2) o
-  // desktopCapturer, que em algumas versões é o que põe o app na lista.
+  // 1) The official request (system dialog, on behalf of Orbit); 2) the
+  // desktopCapturer, which in some versions is what puts the app in the list.
   const asked = await getComputerDriver().requestScreen().catch(() => ({ before: false, granted: false }))
   if (asked.granted) return { granted: true }
   await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }).catch(() => undefined)
-  // Sem a permissão, abre o painel: o macOS pode NÃO ter posto o Orbit na
-  // lista (visto no build não notarizado) — aí só o "+" resolve, e as
-  // Preferências explicam isso.
+  // Without the permission, it opens the panel: macOS may NOT have put Orbit in the
+  // list (seen in the non-notarized build) — then only the "+" solves it, and the
+  // Preferences explain that.
   await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture').catch(() => undefined)
   return { granted: false }
 }
 
 /**
- * "Testar" das Preferências: uma chamada real à bridge, não só a leitura da
- * flag. É o que prova que a permissão concedida ao Orbit vale para o processo
- * filho que faz o trabalho.
+ * "Test" of the Preferences: a real call to the bridge, not just reading the flag. It
+ * is what proves that the permission granted to Orbit holds for the child process
+ * that does the work.
  */
 export async function testComputer(): Promise<ComputerTestResult> {
   const started = Date.now()
@@ -147,7 +147,7 @@ export async function testComputer(): Promise<ComputerTestResult> {
     const d = getComputerDriver()
     const perms = await d.perms()
     if (!perms.accessibility) {
-      // No Windows o motivo está nas notas do host (PowerShell restrito etc.).
+      // On Windows the reason is in the host notes (restricted PowerShell etc.).
       return { ok: false, ms: Date.now() - started, message: (process.platform === 'win32' && perms.notes?.[0]) || 'axDenied' }
     }
     const snapshot = await d.apps()
@@ -164,9 +164,9 @@ export async function testComputer(): Promise<ComputerTestResult> {
 }
 
 /**
- * Traz para a frente o app que a miniatura da conversa mostra — o botão do
- * popover do chip. Só um app que o agente já observou nesta máquina (a
- * denylist já passou por ele); nada a ver com agir nele.
+ * Brings to the front the app the conversation thumbnail shows — the button of the
+ * chip's popover. Only an app the agent has already observed on this machine (the
+ * denylist has already been through it); nothing to do with acting on it.
  */
 export async function focusShotApp(sessionId: string): Promise<boolean> {
   const shot = shotView(sessionId)

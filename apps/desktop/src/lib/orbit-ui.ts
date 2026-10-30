@@ -1,8 +1,8 @@
 /**
- * Re-export do contrato dos blocos `orbit-ui`, que agora mora no shared para o
- * app mobile desenhar os mesmos componentes (o schema é o mesmo nos dois).
+ * Re-export of the `orbit-ui` blocks' contract, which now lives in shared so that the
+ * mobile app draws the same components (the schema is the same in both).
  *
- * O arquivo fica aqui para não mexer nos importadores (`@/src/lib/orbit-ui`):
- * o caminho público do desktop continua o mesmo.
+ * The file stays here so as not to touch the importers (`@/src/lib/orbit-ui`):
+ * the desktop's public path remains the same.
  */
 export * from "@shared/orbit-ui"

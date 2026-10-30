@@ -94,9 +94,9 @@ export default function AppearanceScreen() {
 
         <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.personaSection')}</Text>
 
-        {/* Três estados, e não um interruptor: a persona da saudação e a que
-            fica no topo do chat custam coisas diferentes, e quem desliga
-            costuma querer só a segunda fora do caminho. */}
+        {/* Three states, not a switch: the persona of the greeting and the one
+            at the top of the chat cost different things, and whoever turns it off
+            usually wants only the second one out of the way. */}
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, gap: 8 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Smile size={20} color={tokens.mutedForeground} />
@@ -111,8 +111,8 @@ export default function AppearanceScreen() {
             }}
             onValueChange={(opt) => opt && void setPersonaVisibility(opt.value as PersonaVisibility)}
           >
-            {/* Altura automática e a etiqueta podendo encolher: os rótulos
-                são frases, e com a altura fixa a segunda linha era cortada. */}
+            {/* Automatic height and the label allowed to shrink: the labels are
+                sentences, and with a fixed height the second line was cut off. */}
             <SelectTrigger className="h-auto min-h-10 py-2">
               <SelectValue
                 className="flex-1 pr-2 text-sm text-foreground"

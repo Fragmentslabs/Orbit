@@ -12,15 +12,15 @@ interface RenamePromptProps {
   onSubmit: (value: string) => void
 }
 
-/** Modal simples de renomear (conversa ou pasta) — reutilizado no header do chat e na sidebar. */
+/** Simple rename modal (conversation or folder) — reused in the chat header and in the sidebar. */
 export function RenamePrompt({ visible, title, initialValue, onClose, onSubmit }: RenamePromptProps) {
   const { t } = useTranslation()
   const [value, setValue] = useState(initialValue)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  // Ajuste durante o render (padrão oficial do React para "resetar estado
-  // quando uma prop muda") em vez de setState em efeito: sem o commit extra
-  // do efeito, o input já nasce com o valor certo na primeira pintura.
+  // Adjustment during render (official React pattern for "resetting state
+  // when a prop changes") instead of setState in an effect: without the extra
+  // effect commit, the input is already born with the right value on the first paint.
   const [wasVisible, setWasVisible] = useState(visible)
   if (visible !== wasVisible) {
     setWasVisible(visible)

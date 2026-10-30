@@ -16,30 +16,30 @@ import {
 } from './document-pages'
 
 /**
- * Camada de texto dos documentos (PDF, DOCX, planilhas) — extração e cache.
- * As decisões de paginação ficam no document-pages.ts (puro e testado).
+ * Text layer of documents (PDF, DOCX, spreadsheets) — extraction and cache.
+ * The pagination decisions stay in document-pages.ts (pure and tested).
  *
- * Antes desta camada, documento só existia como ANEXO: o texto inteiro era
- * extraído e colado na mensagem, e o toModelMessages o reenviava a cada turno
- * — um PDF de 300 páginas ocupava a janela de contexto para sempre. E no modo
- * código o agente era simplesmente cego: `read` faz readFile(file, 'utf8'), o
- * que num PDF devolve binário, e `grep` pula qualquer arquivo com \0.
+ * Before this layer, a document only existed as an ATTACHMENT: the whole text was
+ * extracted and pasted into the message, and toModelMessages resent it on every turn
+ * — a 300-page PDF took up the context window forever. And in code
+ * mode the agent was simply blind: `read` does readFile(file, 'utf8'), which
+ * on a PDF returns binary, and `grep` skips any file with \0.
  *
- * A saída é sempre PAGINADA. Página é a unidade de leitura porque é a unidade
- * que o usuário e o documento já usam ("está na página 40"), e é o que permite
- * ler um trecho sem carregar o resto:
+ * The output is always PAGINATED. A page is the unit of reading because it is the unit
+ * that the user and the document already use ("it is on page 40"), and it is what allows
+ * reading a stretch without loading the rest:
  *
- *   - PDF    → páginas reais (pdf-parse devolve pages[])
- *   - XLSX   → uma página por aba, e a aba grande quebrada em faixas de
- *              linhas (com o cabeçalho repetido em cada faixa)
- *   - DOCX   → páginas sintéticas por tamanho (o formato não guarda paginação)
+ *   - PDF    → real pages (pdf-parse returns pages[])
+ *   - XLSX   → one page per sheet, and the large sheet broken into row
+ *              ranges (with the header repeated in each range)
+ *   - DOCX   → synthetic pages by size (the format does not store pagination)
  */
 
 /**
- * Linhas por página numa planilha. "Página = aba" só funciona enquanto a aba
- * cabe: uma aba de 100 mil linhas precisa ser paginada por dentro, senão o
- * fim dela fica inalcançável — foi assim que a primeira versão truncava em
- * 2000 linhas sem NENHUM offset capaz de chegar no resto.
+ * Rows per page in a spreadsheet. "Page = sheet" only works while the sheet
+ * fits: a sheet of 100 thousand rows has to be paginated internally, otherwise the
+ * end of it becomes unreachable — that is how the first version truncated at
+ * 2000 rows without ANY offset able to reach the rest.
  */
 const ROWS_PER_PAGE = 400
 
@@ -63,13 +63,13 @@ function csvCell(value: unknown): string {
 }
 
 /**
- * Páginas de uma planilha: começa pela aba (a divisão que a planilha já tem,
- * e que deixa o agente pedir "a aba de custos" sem carregar as outras) e
- * quebra a aba em faixas de linhas quando ela é grande.
+ * Pages of a spreadsheet: it starts with the sheet (the division the spreadsheet already has,
+ * and which lets the agent ask for "the costs sheet" without loading the others) and
+ * breaks the sheet into row ranges when it is large.
  *
- * A primeira linha é repetida no topo de cada faixa: sem o cabeçalho, uma
- * faixa do meio vira uma lista de valores sem nome de coluna — o agente leria
- * "1240,BRL,pendente" sem saber o que é cada campo.
+ * The first row is repeated at the top of each range: without the header, a
+ * middle range becomes a list of values with no column names — the agent would read
+ * "1240,BRL,pending" without knowing what each field is.
  */
 function extractSpreadsheetPages(bytes: Buffer): DocumentPage[] {
   const workbook = XLSX.read(bytes, { type: 'buffer' })
@@ -89,13 +89,13 @@ function extractSpreadsheetPages(bytes: Buffer): DocumentPage[] {
       continue
     }
 
-    // Aba grande: faixas de linhas, cada uma uma página própria.
+    // Large sheet: row ranges, each one a page of its own.
     for (let start = 1; start < rows.length; start += ROWS_PER_PAGE) {
       const slice = rows.slice(start, start + ROWS_PER_PAGE)
       const last = Math.min(start + ROWS_PER_PAGE - 1, rows.length - 1)
       pages.push({
         num: pages.length + 1,
-        label: `${name}, linhas ${start}-${last} de ${rows.length - 1}`,
+        label: `${name}, rows ${start}-${last} of ${rows.length - 1}`,
         text: [header, ...slice.map(asCsv)].join('\n'),
       })
     }
@@ -107,7 +107,7 @@ function extractSpreadsheetPages(bytes: Buffer): DocumentPage[] {
 async function extractFresh(bytes: Buffer, kind: DocumentKind): Promise<ExtractedDocument> {
   if (kind === 'pdf') return capPages(await extractPdfPages(bytes), kind)
   if (kind === 'spreadsheet') return capPages(extractSpreadsheetPages(bytes), kind)
-  // Trecho colado e pagina baixada ja chegam como texto: so paginar.
+  // Pasted stretch and downloaded page already arrive as text: just paginate.
   if (kind === 'text' || kind === 'web') {
     return capPages(paginateText(bytes.toString('utf8').trim()), kind)
   }
@@ -116,18 +116,18 @@ async function extractFresh(bytes: Buffer, kind: DocumentKind): Promise<Extracte
 }
 
 /**
- * Extrai com cache em disco. Extrair é caro — segundos num PDF grande — e o
- * agente relê o mesmo arquivo várias vezes no mesmo turno (grep localiza,
- * read confirma, read continua).
+ * Extracts with an on-disk cache. Extracting is expensive — seconds on a large PDF — and the
+ * agent re-reads the same file several times in the same turn (grep locates,
+ * read confirms, read continues).
  *
- * A chave é o HASH DO CONTEÚDO, não o caminho: arquivo renomeado ou movido
- * reaproveita o cache, e arquivo editado o invalida sozinho — sem depender de
- * mtime, que muda em checkout e não muda em edição preservando timestamp.
+ * The key is the CONTENT HASH, not the path: a renamed or moved file
+ * reuses the cache, and an edited file invalidates it on its own — without depending on
+ * mtime, which changes on checkout and does not change on an edit that preserves the timestamp.
  */
 export async function extractDocument(bytes: Buffer, kind: DocumentKind): Promise<ExtractedDocument> {
-  // O tipo entra na chave junto com o conteudo: desde que `text` existe, os
-  // mesmos bytes podem ser lidos de duas formas, e o cache de uma serviria
-  // paginacao errada para a outra.
+  // The type enters the key along with the content: since `text` exists, the
+  // same bytes may be read in two ways, and the cache of one would serve the
+  // wrong pagination to the other.
   const hash = createHash('sha256').update(kind).update(bytes).digest('hex').slice(0, 32)
   const file = path.join(cacheDir(), `${hash}.json`)
 
@@ -135,7 +135,7 @@ export async function extractDocument(bytes: Buffer, kind: DocumentKind): Promis
     const cached = JSON.parse(await fsp.readFile(file, 'utf8')) as ExtractedDocument
     if (Array.isArray(cached.pages)) return cached
   } catch {
-    // sem cache (ou corrompido) — extrai de novo
+    // no cache (or corrupted) — extracts again
   }
 
   const extracted = await extractFresh(bytes, kind)
@@ -143,28 +143,28 @@ export async function extractDocument(bytes: Buffer, kind: DocumentKind): Promis
     await fsp.mkdir(cacheDir(), { recursive: true })
     await fsp.writeFile(file, JSON.stringify(extracted), 'utf8')
   } catch {
-    // cache é otimização: falhar ao gravar não invalida o resultado
+    // the cache is an optimization: failing to write does not invalidate the result
   }
   return extracted
 }
 
-/** Extrai um documento do disco (modo código: arquivo dentro do repositório). */
+/** Extracts a document from disk (code mode: a file inside the repository). */
 export async function extractDocumentFile(filePath: string): Promise<ExtractedDocument> {
   const kind = documentKindOf(filePath)
-  if (!kind) throw new Error(`Não é um documento suportado: ${path.basename(filePath)}`)
+  if (!kind) throw new Error(`Not a supported document: ${path.basename(filePath)}`)
   return extractDocument(await fsp.readFile(filePath), kind)
 }
 
 /**
- * Linhas TIPADAS de uma aba, para a consulta (sheet_query).
+ * TYPED rows of a sheet, for the query (sheet_query).
  *
- * Usa `raw: true`, ao contrário da extração de texto: ali o objetivo é o
- * modelo LER, e `raw: false` entrega o valor já formatado como a planilha o
- * exibe; aqui o objetivo é CALCULAR, e número precisa chegar como number —
- * somar a partir do texto formatado reintroduziria o parse de locale
- * ("1.234,56") que é onde mora o erro silencioso.
+ * It uses `raw: true`, unlike the text extraction: there the goal is for the
+ * model to READ, and `raw: false` delivers the value already formatted as the spreadsheet
+ * displays it; here the goal is to COMPUTE, and a number has to arrive as a number —
+ * summing from formatted text would reintroduce the locale parse
+ * ("1.234,56") which is where the silent error lives.
  *
- * `sheet` ausente = primeira aba, que é o caso da planilha de aba única.
+ * `sheet` absent = first sheet, which is the case of the single-sheet spreadsheet.
  */
 export function readSheetRows(
   bytes: Buffer,
@@ -172,14 +172,14 @@ export function readSheetRows(
 ): { rows: CellValue[][]; sheetName: string; sheetNames: string[] } {
   const workbook = XLSX.read(bytes, { type: 'buffer', cellDates: true })
   const sheetNames = workbook.SheetNames
-  if (sheetNames.length === 0) throw new Error('A planilha não tem nenhuma aba.')
+  if (sheetNames.length === 0) throw new Error('The spreadsheet has no sheet.')
 
   const wanted = sheet?.trim().toLowerCase()
   const sheetName = wanted
     ? sheetNames.find((n) => n.toLowerCase() === wanted) ?? ''
     : sheetNames[0]
   if (!sheetName) {
-    throw new Error(`Aba não encontrada: "${sheet}". Abas disponíveis: ${sheetNames.join(', ')}`)
+    throw new Error(`Sheet not found: "${sheet}". Available sheets: ${sheetNames.join(', ')}`)
   }
 
   const rows = XLSX.utils.sheet_to_json<CellValue[]>(workbook.Sheets[sheetName], {

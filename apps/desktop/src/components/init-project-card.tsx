@@ -7,10 +7,10 @@ import { subscribeInitEvents, useInitStore } from "@/src/stores/init-store"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
- * Card de boas-vindas do modo código: aparece quando a pasta aberta é um
- * projeto novo (nenhum chat anterior a referencia como diretório principal e
- * não há memórias de init). Clicável — cria uma nova sessão que envia /init.
- * A partir daí o progresso é acompanhado na conversa, não no card.
+ * Welcome card of code mode: it appears when the open folder is a
+ * new project (no previous chat references it as the main directory and
+ * there are no init memories). Clickable — it creates a new session that sends /init.
+ * From then on the progress is followed in the conversation, not in the card.
  */
 
 export function InitProjectCard({ directory, sessionId }: {

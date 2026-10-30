@@ -11,29 +11,29 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Artefato HTML na resposta do assistente (tool create_artifact): a página
- * renderiza AQUI, no fluxo da conversa.
+ * HTML artifact in the assistant reply (tool create_artifact): the page
+ * renders HERE, in the flow of the conversation.
  *
- * O conteúdo é escrito pelo modelo — que pode ter lido a web no mesmo turno —
- * então roda num iframe `sandbox="allow-scripts"` SEM `allow-same-origin`: o
- * documento fica em origem opaca, sem acesso ao window do Orbit, sem cookies
- * e sem storage. Script roda (um dashboard sem JS não serve pra nada), mas
- * confinado. Essa combinação é intencional: `allow-scripts` +
- * `allow-same-origin` juntos permitiriam ao artefato remover o próprio
+ * The content is written by the model — which may have read the web in the same turn —
+ * so it runs in an iframe `sandbox="allow-scripts"` WITHOUT `allow-same-origin`: the
+ * document stays in an opaque origin, with no access to the Orbit window, no cookies
+ * and no storage. Script runs (a dashboard without JS is good for nothing), but
+ * confined. This combination is intentional: `allow-scripts` +
+ * `allow-same-origin` together would let the artifact remove its own
  * sandbox.
  *
- * É essa origem opaca que explica por que a barra de rolagem NÃO pode vir do
- * ScrollArea do app: o componente só estiliza o que ele mesmo rola, e daqui não
- * se alcança o DOM de dentro do iframe. Quem resolve isso é o main, injetando o
- * estilo no HTML servido (ver ARTIFACT_CHROME em electron/lib/media.ts).
+ * It is that opaque origin that explains why the scrollbar CANNOT come from the
+ * app's ScrollArea: the component only styles what it scrolls itself, and from here
+ * one cannot reach the DOM inside the iframe. What solves it is the main process, injecting the
+ * style into the served HTML (see ARTIFACT_CHROME in electron/lib/media.ts).
  */
 
 /**
- * Altura do preview como fração da JANELA, não em pixels fixos: 420px fixos
- * ficavam apertados para um dashboard, e a mesma altura pesa diferente num
- * notebook e num monitor grande. A fração mantém a presença relativa
- * constante — alto o bastante para o artefato fazer sentido, baixo o bastante
- * para a conversa continuar visível em volta.
+ * Preview height as a fraction of the WINDOW, not in fixed pixels: fixed 420px
+ * felt cramped for a dashboard, and the same height weighs differently on a
+ * laptop and on a large monitor. The fraction keeps the relative presence
+ * constant — tall enough for the artifact to make sense, low enough
+ * for the conversation to remain visible around it.
  */
 const PREVIEW_VIEWPORT_RATIO = 0.6
 const MIN_PREVIEW_HEIGHT = 420
@@ -41,23 +41,23 @@ const MIN_PREVIEW_HEIGHT = 420
 const SANDBOX = "allow-scripts allow-popups allow-forms allow-modals"
 
 /**
- * Zoom da tela cheia. O iframe é elemento NOSSO (ao contrário do scroll de
- * dentro dele), então dá para escalar de fora. `transform: scale` com o tamanho
- * INVERTIDO (width/height = 100/z) encolhe o viewport interno do iframe, e o
- * artefato reflui como no zoom do navegador; só `scale` escalaria o raster e o
- * texto sairia borrado.
+ * Fullscreen zoom. The iframe is OUR element (unlike the scroll from
+ * inside it), so it can be scaled from the outside. `transform: scale` with the size
+ * INVERTED (width/height = 100/z) shrinks the iframe's internal viewport, and the
+ * artifact reflows as in the browser zoom; only `scale` would scale the raster and the
+ * text would come out blurry.
  *
- * `webFrame.setZoomFactor` não serve aqui: é por webContents, e o iframe divide
- * o renderer com o app — zoomsaria a interface inteira do Orbit.
+ * `webFrame.setZoomFactor` is no use here: it is per webContents, and the iframe shares
+ * the renderer with the app — it would zoom the whole Orbit interface.
  */
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 3
 const ZOOM_STEP = 0.25
 /**
- * Zoom ao abrir a tela cheia. Em 100% o artefato (dashboard, página) já enche o
- * diálogo e parece grande demais; 75% cabe com folga e ainda lê bem. Múltiplo
- * do passo, para o +/− continuar caindo em 50/75/100/125… O "100%" do botão
- * volta para ESTE valor — é o ponto de partida da janela, não o tamanho real.
+ * Zoom when opening fullscreen. At 100% the artifact (dashboard, page) already fills the
+ * dialog and looks too big; 75% fits with room to spare and still reads well. A multiple
+ * of the step, so the +/− keeps landing on 50/75/100/125… The button's "100%"
+ * goes back to THIS value — it is the starting point of the window, not the real size.
  */
 const ZOOM_DEFAULT = 0.75
 
@@ -74,13 +74,13 @@ function ArtifactFrame({
   title: string
   className?: string
   style?: React.CSSProperties
-  /** Muda para forçar o remount do iframe (revisão nova ou "recarregar"). */
+  /** Changes to force the iframe remount (new revision or "reload"). */
   nonce: string
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null)
 
-  // Espelha o tema do app dentro do iframe (ver ARTIFACT_CHROME em media.ts):
-  // o documento é de origem opaca e não enxerga as classes do pai.
+  // Mirrors the app theme inside the iframe (see ARTIFACT_CHROME in media.ts):
+  // the document is of an opaque origin and does not see the parent's classes.
   const sendTheme = useCallback(() => {
     const theme = document.documentElement.classList.contains("dark") ? "dark" : "light"
     frameRef.current?.contentWindow?.postMessage({ type: "orbit:theme", theme }, "*")
@@ -99,8 +99,8 @@ function ArtifactFrame({
       src={src}
       title={title}
       sandbox={SANDBOX}
-      // O artefato não deve poder pedir câmera/microfone/geolocalização —
-      // nada no caso de uso justifica, e o sandbox sozinho não cobre isso.
+      // The artifact must not be able to ask for camera/microphone/geolocation —
+      // nothing in the use case justifies it, and the sandbox alone does not cover that.
       allow=""
       referrerPolicy="no-referrer"
       onLoad={sendTheme}
@@ -111,13 +111,13 @@ function ArtifactFrame({
 }
 
 /**
- * Cabeçalho compartilhado das três superfícies do artefato (card na conversa,
- * aba do painel, tela cheia).
+ * Shared header of the artifact's three surfaces (card in the conversation,
+ * panel tab, fullscreen).
  *
- * O que o deixava "marcado" era a faixa cinza (bg-muted/50) somada à borda
- * cheia; aqui o fundo fica o do próprio card e sobra só um fio de separação. O
- * título desce para `text-muted-foreground` — continua legível e para de
- * competir com o conteúdo, que é o que o usuário veio ver.
+ * What made it look "marked" was the gray strip (bg-muted/50) added to the
+ * full border; here the background is the card's own and only a hairline of separation remains. The
+ * title drops to `text-muted-foreground` — it stays legible and stops
+ * competing with the content, which is what the user came to see.
  */
 function ArtifactToolbar({
   title,
@@ -158,8 +158,8 @@ export function ArtifactPartView({
   sessionId,
 }: {
   part: ArtifactPart
-  /** Ausente em contextos sem sessão (histórico avulso): o botão de abrir no
-   *  painel some, já que as abas são por sessão. */
+  /** Absent in contexts without a session (standalone history): the open-in-panel
+   *  button disappears, since the tabs are per session. */
   sessionId?: string
 }) {
   const { t } = useTranslation()
@@ -180,10 +180,10 @@ export function ArtifactPartView({
     Math.round(viewportHeight * PREVIEW_VIEWPORT_RATIO),
   )
 
-  // Recarrega quando o agente reescreve ESTE artefato. A `part` de uma
-  // mensagem antiga guarda a revisão de quando ela foi criada e nunca muda —
-  // sem o aviso do main, o card de cima continuaria mostrando a versão velha
-  // do mesmo arquivo que o card de baixo já mostra atualizado.
+  // Reloads when the agent rewrites THIS artifact. The `part` of an
+  // old message keeps the revision from when it was created and never changes —
+  // without the notice from the main process, the top card would keep showing the old version
+  // of the same file that the bottom card already shows updated.
   useEffect(
     () =>
       artifactApi.onUpdated(({ artifactId }) => {
@@ -192,8 +192,8 @@ export function ArtifactPartView({
     [part.artifactId],
   )
 
-  // O arquivo é reescrito no lugar pelo update_artifact, então a URL sozinha
-  // não distingue as revisões — sem isto o iframe serviria a versão antiga.
+  // The file is rewritten in place by update_artifact, so the URL alone
+  // does not distinguish the revisions — without this the iframe would serve the old version.
   const src = useMemo(
     () => `${part.src}?rev=${part.revision ?? 1}&r=${reloads}`,
     [part.src, part.revision, reloads],
@@ -218,8 +218,8 @@ export function ArtifactPartView({
           }
           actions={
             <>
-              {/* Ordem igual à do card de documento: baixar, recarregar, painel,
-                  tela cheia — o mesmo gesto na mesma posição nos dois cards. */}
+              {/* Same order as the document card: download, reload, panel,
+                  fullscreen — the same gesture in the same position on both cards. */}
               <IconAction icon={Download} label={t("artifacts.export")} onClick={onExport} />
               <IconAction
                 icon={RotateCw}
@@ -251,18 +251,18 @@ export function ArtifactPartView({
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
         {/*
-          flex-col, e não o grid padrão do DialogContent: com altura fixa, as
-          linhas implícitas do grid são ESTICADAS (align-content normal vira
-          stretch), e a linha do título ficava com metade do diálogo — a faixa
-          vazia no topo, com o conteúdo empurrado para baixo. Mesmo padrão do
+          flex-col, and not DialogContent's default grid: with a fixed height, the
+          implicit grid rows are STRETCHED (normal align-content becomes
+          stretch), and the title row got half the dialog — the empty
+          strip at the top, with the content pushed down. Same pattern as
           plan-dialog.
         */}
         <DialogContent className="flex h-[88vh] max-w-[92vw] flex-col gap-0 p-0">
           <DialogTitle className="shrink-0 border-b border-border/60 px-4 py-2 pr-12 text-sm font-medium">
             {part.title}
           </DialogTitle>
-          {/* O zoom vive só aqui: no card o preview é uma fração da janela e
-              não há espaço para o artefato crescer sem empurrar a conversa. */}
+          {/* The zoom lives only here: in the card the preview is a fraction of the window and
+              there is no room for the artifact to grow without pushing the conversation. */}
           <ArtifactStage src={src} title={part.title} nonce={`${nonce}:full`} />
         </DialogContent>
       </Dialog>
@@ -271,19 +271,19 @@ export function ArtifactPartView({
 }
 
 /**
- * Palco do artefato em tela cheia: aplica o zoom e ancora a barra de controles.
+ * Stage of the artifact in fullscreen: applies the zoom and anchors the control bar.
  *
- * Monta junto com o diálogo (o Dialog não mantém o conteúdo quando fechado),
- * então o zoom volta ao padrão a cada abertura — que é o que se espera de uma
- * janela recém-aberta.
+ * Mounts together with the dialog (the Dialog does not keep its content when closed),
+ * so the zoom returns to the default on every opening — which is what one expects from a
+ * freshly opened window.
  */
 function ArtifactStage({ src, title, nonce }: { src: string; title: string; nonce: string }) {
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   const stageRef = useRef<HTMLDivElement | null>(null)
 
-  // Ctrl+roda. O listener é nativo porque `preventDefault` num handler passivo
-  // (como o do React) é ignorado, e aí o Chromium aplicaria o zoom da JANELA em
-  // vez do artefato.
+  // Ctrl+wheel. The listener is native because `preventDefault` in a passive handler
+  // (like React's) is ignored, and then Chromium would apply the WINDOW zoom to
+  // the artifact instead.
   useEffect(() => {
     const el = stageRef.current
     if (!el) return
@@ -296,7 +296,7 @@ function ArtifactStage({ src, title, nonce }: { src: string; title: string; nonc
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // Ctrl + / − / 0, o mesmo atalho de qualquer visualizador.
+  // Ctrl + / − / 0, the same shortcut as any viewer.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey && !e.metaKey) return
@@ -334,7 +334,7 @@ function ArtifactStage({ src, title, nonce }: { src: string; title: string; nonc
   )
 }
 
-/** Controles flutuantes de zoom — discreto sobre o conteúdo, sem barra fixa. */
+/** Floating zoom controls — discreet over the content, no fixed bar. */
 function ZoomBar({ zoom, onChange }: { zoom: number; onChange: (z: number) => void }) {
   const { t } = useTranslation()
   return (
@@ -375,9 +375,9 @@ function IconAction({
   onClick: () => void
   disabled?: boolean
   /**
-   * Ligado AGORA (a lista aberta, as notas à mostra). Um ícone só um tom mais
-   * claro lia como hover; com fundo, o estado é evidente de relance e o botão
-   * fica igual ao ToggleButton do inspetor de design.
+   * ON RIGHT NOW (the list open, the notes showing). An icon just one shade
+   * lighter read as hover; with a background, the state is evident at a glance and the button
+   * matches the ToggleButton of the design inspector.
    */
   active?: boolean
 }) {

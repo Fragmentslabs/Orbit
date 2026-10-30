@@ -16,14 +16,14 @@ import { authApi } from "@/src/lib/ipc"
 import { useModelsStore } from "@/src/stores/models-store"
 
 /**
- * Conexão com a Artificial Analysis: sem a chave (gratuita) não há dados de
- * velocidade (tokens/s, TTFT) nem benchmarks crus — só os índices que o
- * OpenRouter embute. A chave vai para o auth.json ("artificialanalysis").
+ * Connection with Artificial Analysis: without the (free) key there is no speed
+ * data (tokens/s, TTFT) nor raw benchmarks — only the indexes that
+ * OpenRouter embeds. The key goes to auth.json ("artificialanalysis").
  */
 
-// A antiga /api-access saiu do ar (404). A página viva do "Free Artificial
-// Analysis Data API" — que é onde a chave gratuita é obtida e onde o endpoint
-// que consumimos (api/v2/data/llms/models) está documentado — é a de docs.
+// The old /api-access went down (404). The live page of the "Free Artificial
+// Analysis Data API" — which is where the free key is obtained and where the endpoint
+// we consume (api/v2/data/llms/models) is documented — is the docs one.
 const AA_KEYS_URL = "https://artificialanalysis.ai/documentation#authentication"
 
 export function AAKeyButton() {

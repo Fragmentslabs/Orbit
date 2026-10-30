@@ -3,12 +3,12 @@ import type { WorkerModelConfig } from '@shared/chat'
 import { resolveModel } from './providers'
 
 /**
- * Visão delegada: descreve uma imagem (data URL) com um modelo de visão e
- * devolve o texto — o modelo principal (sem visão) recebe a descrição no
- * lugar da imagem, sem custo de imagem no contexto principal.
+ * Delegated vision: describes an image (data URL) with a vision model and
+ * returns the text — the main model (without vision) receives the description in
+ * place of the image, with no image cost in the main context.
  *
- * Falha de qualquer tipo → null (o chamador decide o fallback; nunca derruba
- * o turno). Timeout de 60s para não segurar o tool call.
+ * Failure of any kind → null (the caller decides the fallback; it never brings
+ * the turn down). 60s timeout so as not to hold the tool call.
  */
 
 const DESCRIBE_PROMPT = (language?: string, focus?: string) =>
@@ -21,7 +21,7 @@ export async function describeImage(opts: {
   model: WorkerModelConfig
   imageDataUrl: string
   language?: string
-  /** Texto da mensagem do usuário — a descrição prioriza o que ele perguntou. */
+  /** Text of the user's message — the description prioritizes what they asked. */
   focus?: string
 }): Promise<string | null> {
   try {
@@ -32,9 +32,9 @@ export async function describeImage(opts: {
         {
           role: 'user',
           content: [
-            // Parte `file` com mediaType: o tipo `image` foi depreciado no
-            // ai-sdk. O mime sai do próprio data URL, que é como a imagem
-            // chega aqui.
+            // `file` part with mediaType: the `image` type was deprecated in the
+            // ai-sdk. The mime comes from the data URL itself, which is how the image
+            // arrives here.
             {
               type: 'file',
               data: opts.imageDataUrl,
@@ -48,28 +48,28 @@ export async function describeImage(opts: {
     })
     const trimmed = text.trim()
     if (!trimmed) return null
-    // Descrição compacta o suficiente para não inchar o contexto principal
+    // Description compact enough not to bloat the main context
     return trimmed.length > 4000 ? trimmed.slice(0, 4000) : trimmed
   } catch (err) {
-    console.error('[vision] describeImage falhou:', err)
+    console.error('[vision] describeImage failed:', err)
     return null
   }
 }
 
-/** Imagem anexada à mensagem atual, disponível para a tool describe_image. */
+/** Image attached to the current message, available to the describe_image tool. */
 export interface TurnImage {
   url: string
   filename?: string
-  /** Id do TextPart placeholder na mensagem do usuário — a descrição é persistida nele */
+  /** Id of the placeholder TextPart in the user message — the description is persisted in it */
   partId?: string
-  /** A primeira descrição já foi persistida no placeholder? (as seguintes são anexadas) */
+  /** Has the first description already been persisted in the placeholder? (the following ones are appended) */
   persisted?: boolean
 }
 
 /**
- * Registry por sessão das imagens do turno em andamento (modo Visão): a tool
- * describe_image lê daqui sob demanda e o runChat limpa no finally. Uma sessão
- * roda um turno por vez, então a chave é o sessionId.
+ * Per-session registry of the in-progress turn's images (Vision mode): the
+ * describe_image tool reads from here on demand and runChat clears it in the finally. One session
+ * runs one turn at a time, so the key is the sessionId.
  */
 const turnImages = new Map<string, TurnImage[]>()
 

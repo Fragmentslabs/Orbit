@@ -1,11 +1,11 @@
 /**
- * Descoberta de Orbit Desktop na rede.
+ * Orbit Desktop discovery on the network.
  *
- * Sonda o endpoint público GET /api/ping (porta HTTP 3848) nos candidatos:
- *  - localhost / hostname da página (web rodando na mesma máquina)
- *  - hosts das conexões recentes
+ * Probes the public GET /api/ping endpoint (HTTP port 3848) on the candidates:
+ *  - localhost / page hostname (web running on the same machine)
+ *  - hosts of the recent connections
  *
- * O endpoint não exige auth e responde { app: 'orbit', name, wsPort }.
+ * The endpoint requires no auth and answers { app: 'orbit', name, wsPort }.
  */
 import { useEffect, useState } from 'react'
 import { Platform } from 'react-native'
@@ -16,14 +16,14 @@ const PROBE_TIMEOUT_MS = 2000
 
 export interface DiscoveredDesktop {
   host: string
-  /** Porta WS informada pelo desktop (3847). */
+  /** WS port reported by the desktop (3847). */
   wsPort: number
-  /** Hostname da máquina rodando o Orbit Desktop. */
+  /** Hostname of the machine running Orbit Desktop. */
   name?: string
   /**
-   * PIN atual — só vem preenchido se o desktop estiver em "modo de
-   * pareamento" (modal "Conectar App" aberto). Permite conectar com um
-   * toque; se ausente, a UI cai de volta para o fluxo manual com PIN.
+   * Current PIN — only filled in when the desktop is in "pairing
+   * mode" (the "Connect App" modal open). It allows connecting with a
+   * single tap; if absent, the UI falls back to the manual flow with a PIN.
    */
   pin?: string
 }
@@ -59,8 +59,8 @@ export function useDesktopDiscovery() {
     }
     for (const rc of recent) candidates.add(rc.host)
 
-    // Sem candidatos o Promise.all([]) resolve imediatamente e cai em 'none'.
-    // setState apenas no .then (assíncrono) para não causar cascading render.
+    // With no candidates the Promise.all([]) resolves immediately and falls back to 'none'.
+    // setState only in the .then (asynchronous) to avoid a cascading render.
     void Promise.all([...candidates].map(probe)).then((results) => {
       if (cancelled) return
       const hit = results.find((r): r is DiscoveredDesktop => r !== null)

@@ -1,7 +1,7 @@
 /**
- * Harness do benchmark de recuperação: tipos da fixture, métricas e avaliação.
- * Puro (sem ONNX): recebe vetores já calculados, então roda em teste com um
- * embedder de brinquedo e no CLI com o Bekko de verdade.
+ * Retrieval benchmark harness: fixture types, metrics and evaluation.
+ * Pure (no ONNX): it receives vectors already computed, so it runs in a test with a
+ * toy embedder and in the CLI with the real Bekko.
  */
 import type { Memory } from '@shared/memory'
 import { Bm25Index, buildRetrievalText, lexicalDocOf } from '@shared/memory-retrieval'
@@ -31,9 +31,9 @@ export type Expect = 'inject' | 'pointer' | 'none'
 export interface BenchCase {
   id: string
   /**
-   * `dev` = ajuste; `eval` = avaliação da fixture principal; `blocked` =
-   * conjunto novo, criado depois do desenho fechado e nunca usado para
-   * escolher parâmetro (ver policy.ts).
+   * `dev` = tuning; `eval` = evaluation on the main fixture; `blocked` =
+   * a new set, created after the design was frozen and never used to
+   * choose a parameter (see policy.ts).
    */
   split: 'dev' | 'eval' | 'blocked'
   lang: string
@@ -42,7 +42,7 @@ export interface BenchCase {
   relevant: string[]
   expect: Expect
   reason: string
-  /** Só em diálogos */
+  /** Only in dialogs */
   context?: Array<{ role: 'user' | 'assistant'; text: string }>
   rewrite?: string
 }
@@ -62,9 +62,9 @@ export function toMemory(m: FixtureMemory, variant: 'old' | 'det' | 'full'): Mem
 }
 
 /**
- * Representação indexada. "old" = o que a medição anterior embutia (texto +
- * linha de tags); "det" = enriquecimento só determinístico (sem LLM);
- * "full" = com título/entidades/conceitos que o LLM gravador preencheria.
+ * Indexed representation. "old" = what the previous measurement embedded (text +
+ * tags line); "det" = deterministic-only enrichment (no LLM);
+ * "full" = with title/entities/concepts the writing LLM would fill in.
  */
 export function indexText(m: FixtureMemory, variant: 'old' | 'det' | 'full'): string {
   if (variant === 'old') return `${m.text}${m.tags.length ? `\nTags: ${m.tags.join(', ')}` : ''}`
@@ -82,7 +82,7 @@ export function lexicalIndex(memories: FixtureMemory[], variant: 'old' | 'det' |
 }
 
 // ---------------------------------------------------------------------------
-// Métricas
+// Metrics
 // ---------------------------------------------------------------------------
 
 export function rankOfFirstRelevant(order: string[], relevant: string[]): number {
@@ -104,7 +104,7 @@ export function rankMetrics(ranks: number[]): RankMetrics {
   return { n, hit1: frac(1), hit3: frac(3), hit5: frac(5), mrr: n ? ranks.reduce((s, r) => s + (r === Infinity ? 0 : 1 / r), 0) / n : 0 }
 }
 
-/** AUC: P(cosseno da memória certa de uma consulta > maior cosseno de uma consulta negativa). */
+/** AUC: P(cosine of the right memory of a query > highest cosine of a negative query). */
 export function auc(pos: number[], neg: number[]): number {
   if (!pos.length || !neg.length) return NaN
   let s = 0
@@ -112,7 +112,7 @@ export function auc(pos: number[], neg: number[]): number {
   return s / (pos.length * neg.length)
 }
 
-/** Intervalo de Wilson 95% para uma proporção. */
+/** 95% Wilson interval for a proportion. */
 export function wilson(k: number, n: number): [number, number] {
   if (!n) return [0, 0]
   const z = 1.96
@@ -124,7 +124,7 @@ export function wilson(k: number, n: number): [number, number] {
 }
 
 // ---------------------------------------------------------------------------
-// Avaliação
+// Evaluation
 // ---------------------------------------------------------------------------
 
 export interface VectorStore {
@@ -135,7 +135,7 @@ export interface VectorStore {
 export interface QueryInput {
   case: BenchCase
   vec: Float32Array | null
-  /** Texto usado na busca lexical */
+  /** Text used in the lexical search */
   lexical: string
 }
 
@@ -159,32 +159,32 @@ export function runCase(
 }
 
 export interface SelectionMetrics {
-  /** Consultas que precisam de memória */
+  /** Queries that need memory */
   positives: number
-  /** Consultas sem necessidade de memória */
+  /** Queries that need no memory */
   negatives: number
-  /** Memórias relevantes (de consultas expect=inject) injetadas / total relevante */
+  /** Relevant memories (from expect=inject queries) injected / total relevant */
   relevantInjected: number
   relevantTotal: number
-  /** Consultas expect=inject em que ao menos uma relevante foi injetada */
+  /** expect=inject queries in which at least one relevant memory was injected */
   injectCasesHit: number
   injectCases: number
-  /** Consultas expect=pointer: ponteiro útil / injeção (aceitável) / nada */
+  /** expect=pointer queries: useful pointer / injection (acceptable) / nothing */
   pointerCasesPointer: number
   pointerCasesInjected: number
   pointerCases: number
-  /** Relevantes de expect=inject que ficaram só como ponteiro */
+  /** Relevant items of expect=inject that stayed only as a pointer */
   injectCasesDemoted: number
-  /** Memórias injetadas que NÃO são relevantes (qualquer consulta) */
+  /** Injected memories that are NOT relevant (any query) */
   falsePositives: number
   injectedTotal: number
-  /** Consultas expect=none com qualquer injeção / com qualquer ponteiro */
+  /** expect=none queries with any injection / with any pointer */
   negWithInjection: number
   negWithPointer: number
   negClean: number
-  /** Ponteiros não relevantes entre os emitidos em consultas positivas */
+  /** Non-relevant pointers among those emitted on positive queries */
   junkPointers: number
-  /** Totais de tokens estimados (chars/4) do que seria injetado */
+  /** Estimated token totals (chars/4) of what would be injected */
   pointerTotal: number
 }
 

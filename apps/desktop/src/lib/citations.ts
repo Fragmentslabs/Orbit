@@ -1,11 +1,11 @@
 /**
- * Citação de documento na resposta: `#orbit-source/<docId>/p<pagina>L<linha>`.
+ * Document citation in the answer: `#orbit-source/<docId>/p<page>L<line>`.
  *
- * O par gerador/leitor vive em dois processos — o main monta o endereço
- * (document-pages.ts) e o renderer o interpreta aqui. Separado do componente
- * para poder ser testado sem React, porque a quebra desse contrato é
- * silenciosa: um endereço que não casa vira link comum, que não abre nada e
- * não avisa.
+ * The generator/reader pair lives in two processes — main builds the address
+ * (document-pages.ts) and the renderer interprets it here. Separated from the component
+ * so it can be tested without React, because breaking this contract is
+ * silent: an address that does not match becomes a common link, which opens nothing and
+ * warns nothing.
  */
 
 import { parseMemoryHref } from "@shared/memory-citation"
@@ -31,17 +31,17 @@ export function parseSourceHref(href: string): SourceRef | null {
 }
 
 /**
- * Converte a citação no formato antigo (`orbit-source://…`) para o atual.
+ * Converts the citation in the old format (`orbit-source://…`) to the current one.
  *
- * O formato antigo era um esquema próprio, e o markdown da resposta passa por
- * rehype-sanitize + rehype-harden: o sanitizador apaga o href de todo
- * protocolo fora de http/https/mailto/tel, e o harden então marca o link sem
- * endereço como "[blocked]". Era isso que aparecia na conversa.
+ * The old format was a scheme of its own, and the answer's markdown goes through
+ * rehype-sanitize + rehype-harden: the sanitizer strips the href of every
+ * protocol outside http/https/mailto/tel, and harden then marks the link without
+ * an address as "[blocked]". That is what used to show up in the conversation.
  *
- * As respostas já gravadas guardam o texto como foi escrito, então trocar o
- * formato só conserta as próximas — esta reescrita, feita na hora de
- * renderizar, é o que devolve o clique às mensagens antigas sem reescrever o
- * histórico em disco.
+ * The answers already saved keep the text as it was written, so changing the
+ * format only fixes the next ones — this rewrite, done at
+ * render time, is what gives the click back to the old messages without rewriting the
+ * history on disk.
  */
 export function rescueLegacyCitations(markdown: string): string {
   return markdown.includes('](orbit-source://')
@@ -50,17 +50,17 @@ export function rescueLegacyCitations(markdown: string): string {
 }
 
 /**
- * Citação de memória na resposta: `#orbit-memory/mem_xxx`.
+ * Memory citation in the answer: `#orbit-memory/mem_xxx`.
  *
- * Mesma ideia da citação de documento, com uma diferença de alcance: a memória
- * é do PROJETO (ou do usuário), não de um arquivo anexado — então não há
- * página nem linha para apontar, só o registro. Quem resolve o id em texto,
- * tipo e vínculos é o store do renderer.
+ * Same idea as the document citation, with a difference in reach: the memory
+ * belongs to the PROJECT (or the user), not to an attached file — so there is no
+ * page or line to point at, only the record. The one that resolves the id into text,
+ * type and links is the renderer store.
  */
 export { MEMORY_HREF, parseMemoryHref, splitMemoryIds } from "@shared/memory-citation"
 export type { MemoryIdPart } from "@shared/memory-citation"
 
-/** Texto de link que é só um número: [1], 1, [23]. */
+/** Link text that is only a number: [1], 1, [23]. */
 const CITATION_TEXT = /^\[?\d{1,3}\]?$/
 const WEB_HREF = /^https?:\/\//i
 
@@ -73,21 +73,21 @@ export type MarkdownLinkKind =
   | { kind: "link" }
 
 /**
- * O que um link do Markdown do assistente É, decidido num lugar só.
+ * What a link in the assistant's Markdown IS, decided in a single place.
  *
- * Mora aqui, e não dentro do componente, porque foi ESTA decisão que derrubou
- * uma conversa inteira: todo link cujo texto era um número ia para o cartão de
- * citação da web, que monta uma URL a partir do href. Numa análise de código
- * o modelo escreveu "[1](#orbit-source/src?/p1)" — uma citação de documento
- * com id inventado — e o `new URL` desse href lançou durante a renderização.
+ * It lives here, and not inside the component, because it was THIS decision that took
+ * down a whole conversation: every link whose text was a number went to the web
+ * citation card, which builds a URL from the href. In a code analysis
+ * the model wrote "[1](#orbit-source/src?/p1)" — a document citation
+ * with an invented id — and the `new URL` of that href threw during rendering.
  *
- * - source: citação de documento válida, abre a fonte no painel;
- * - broken-source: tem o formato de citação de documento mas não aponta para
- *   nada — vira texto, porque como link seria um clique morto;
- * - memory: citação de memória válida, vira chip com cartão de resumo;
- * - broken-memory: mesmo caso da broken-source, para `#orbit-memory/`;
- * - web-citation: número apontando para a web, ganha o cartão;
- * - link: todo o resto, inclusive "[1](src/app.ts)" e "[2](#secao)".
+ * - source: valid document citation, opens the source in the panel;
+ * - broken-source: has the shape of a document citation but does not point
+ *   anywhere — becomes text, because as a link it would be a dead click;
+ * - memory: valid memory citation, becomes a chip with a summary card;
+ * - broken-memory: same case as broken-source, for `#orbit-memory/`;
+ * - web-citation: a number pointing to the web, gets the card;
+ * - link: everything else, including "[1](src/app.ts)" and "[2](#section)".
  */
 export function classifyMarkdownLink(href: string | undefined, text: string): MarkdownLinkKind {
   if (!href) return { kind: "link" }
@@ -102,29 +102,29 @@ export function classifyMarkdownLink(href: string | undefined, text: string): Ma
 }
 
 /**
- * Trechos que NÃO podem ser reescritos pelo linkify: bloco de código, código
- * inline, link/imagem já montado e href de memória solto. Sem isso, um
- * `mem_xxx` citado dentro de um code block viraria chip no meio do código — e
- * um `#orbit-memory/mem_xxx` já escrito por extenso sairia duplicado.
+ * Stretches that must NOT be rewritten by linkify: code block, inline code,
+ * link/image already built and loose memory href. Without this, a
+ * `mem_xxx` cited inside a code block would become a chip in the middle of the code — and
+ * a `#orbit-memory/mem_xxx` already written out in full would come out duplicated.
  */
 const PROTECTED_SPAN = /```[\s\S]*?```|`[^`\n]*`|!?\[[^\]]*\]\([^)]*\)|<https?:\/\/[^>\s]+>|#orbit-memory\/mem_[a-z0-9]+/gi
 
 /**
- * Id de memória solto no texto — o que o modelo escreve quando esquece o
- * formato. O `#` opcional existe porque a saída das tools lista as memórias
- * como `#mem_xxx`: sem consumi-lo, o chip nasceria com um "#" órfão na frente.
- * O caractere anterior entra no match para não casar no meio de outra palavra.
+ * Memory id loose in the text — what the model writes when it forgets the
+ * format. The optional `#` exists because the tools' output lists the memories
+ * as `#mem_xxx`: without consuming it, the chip would be born with an orphan "#" in front.
+ * The previous character enters the match so it does not match in the middle of another word.
  */
 const BARE_MEMORY_ID = /(^|[^\w#])#?(mem_[a-z0-9]{6,})\b/gi
 
 /**
- * Converte ids de memória escritos crus em links para o chip.
+ * Converts memory ids written raw into links for the chip.
  *
- * O modelo às vezes cita pelo id ("salvei em mem_abc123") em vez do formato de
- * link. Reescrever aqui faz a conversa funcionar sem depender de o modelo
- * lembrar a sintaxe — e conserta de graça as respostas já gravadas, que
- * guardam o texto como foi escrito. Id desconhecido não quebra nada: o chip
- * cai no estado "não encontrada" em vez de virar um clique morto.
+ * The model sometimes cites by id ("saved in mem_abc123") instead of the link
+ * format. Rewriting here makes the conversation work without depending on the model
+ * remembering the syntax — and fixes the answers already saved for free, which
+ * keep the text as it was written. An unknown id breaks nothing: the chip
+ * falls into the "not found" state instead of becoming a dead click.
  */
 export function linkifyMemoryIds(markdown: string): string {
   if (!/mem_[a-z0-9]{6,}/i.test(markdown)) return markdown

@@ -9,25 +9,25 @@ import { forgetShots } from './shots'
 import { ComputerError } from './types'
 
 /**
- * Estado vivo do controle do computador: quem está controlando o quê, o
- * indicador sempre visível, o atalho de pânico e a devolução das flags de
- * acessibilidade ligadas nos apps. Tudo isto nasce com a primeira ação e
- * morre com o fim do turno (ou o Parar) — o atalho global não fica preso à toa.
+ * Live state of the computer control: who is controlling what, the always-visible
+ * indicator, the panic shortcut and the giving back of the accessibility flags turned
+ * on in the apps. All of this is born with the first action and dies with the end of
+ * the turn (or Stop) — the global shortcut does not stay hooked for nothing.
  */
 
 /**
- * Rede de segurança: sem nenhuma ação por este tempo, o controle é dado como
- * encerrado mesmo sem o fim do turno. Não é o fim normal — esse é o fim do
- * turno (chat-engine) ou o Parar. Com 20 s, o agente pensando entre uma ação e
- * outra perdia a faixa e o atalho de pânico no meio do turno, e o ⌘⇧. não
- * parava nada (relatado no teste no app).
+ * Safety net: with no action for this long, the control is considered finished even
+ * without the end of the turn. It is not the normal ending — that is the end of the
+ * turn (chat-engine) or Stop. At 20 s, the agent thinking between one action and the
+ * next lost the band and the panic shortcut in the middle of the turn, and ⌘⇧. stopped
+ * nothing (reported in the test on the app).
  */
 const IDLE_MS = 5 * 60_000
 /**
- * macOS: ⌘⇧. é o anunciado na faixa; ⌘⇧Esc é a reserva, para quem procura "Esc".
- * Windows: só Ctrl+Shift+. — Ctrl+Shift+Esc abre o Gerenciador de Tarefas (o
- * sistema não deixa registrar) e Win+. é o painel de emojis, então o atalho
- * não colide com nenhum do sistema.
+ * macOS: ⌘⇧. is the one announced in the band; ⌘⇧Esc is the reserve, for whoever looks
+ * for "Esc". Windows: Ctrl+Shift+. only — Ctrl+Shift+Esc opens Task Manager (the
+ * system does not let it be registered) and Win+. is the emoji panel, so the shortcut
+ * does not collide with any system one.
  */
 export const PANIC_SHORTCUTS = process.platform === 'win32' ? ['Control+Shift+.'] : ['CommandOrControl+Shift+.', 'CommandOrControl+Shift+Escape']
 
@@ -37,7 +37,7 @@ interface Live {
 }
 
 const live = new Map<string, Live>()
-/** pid → sessões que ligaram a flag de acessibilidade nele */
+/** pid → sessions that turned the accessibility flag on in it */
 const enhanced = new Map<number, Set<string>>()
 
 let overlay: BrowserWindow | null = null
@@ -46,7 +46,7 @@ let shortcutOn = false
 let stopHandler: ((sessionId: string) => void) | null = null
 let restoreHandler: ((pids: number[]) => Promise<void>) | null = null
 
-/** Quem para o turno (abortSession) — injetado pelo main para não criar ciclo de import. */
+/** Who stops the turn (abortSession) — injected by the main process to avoid an import cycle. */
 export function setComputerStopHandler(handler: (sessionId: string) => void): void {
   stopHandler = handler
 }
@@ -55,14 +55,14 @@ export function setComputerRestoreHandler(handler: (pids: number[]) => Promise<v
   restoreHandler = handler
 }
 
-// Vai também para a janela dos painéis (ela mostra o app sendo controlado).
+// It also goes to the panels window (it shows the app being controlled).
 function broadcast(event: ComputerEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win !== overlay && !win.isDestroyed()) win.webContents.send('computer:event', event)
   }
 }
 
-/** A miniatura da conversa mudou (screenshot novo ou alvo da ação). */
+/** The conversation thumbnail changed (new screenshot or action target). */
 export function noteShotChanged(sessionId: string): void {
   broadcast({ type: 'shot', sessionId, at: Date.now() })
 }
@@ -71,7 +71,7 @@ export function getComputerActivity(): ComputerActivity[] {
   return [...live.values()].map((l) => l.activity)
 }
 
-/** O app já está com a flag de acessibilidade ligada (por qualquer sessão)? */
+/** Does the app already have the accessibility flag on (by any session)? */
 export function isEnhanced(pid: number): boolean {
   return enhanced.has(pid)
 }
@@ -83,10 +83,10 @@ export function noteEnhanced(sessionId: string, pid: number): void {
 }
 
 /**
- * Conversas do painel do atalho (⇧⌘espaço). Quem iniciou o controle é dono da
- * interface: controlando por ele, o próprio painel mostra o status, a
- * miniatura e as aprovações — os painéis flutuantes das bordas (feitos para o
- * chat da janela principal) ficariam em cima dele contando a mesma coisa.
+ * Conversations of the shortcut panel (⇧⌘space). Whoever started the control owns the
+ * interface: controlling through it, the panel itself shows the status, the thumbnail
+ * and the approvals — the floating edge panels (made for the main window chat) would
+ * sit on top of it telling the same thing.
  */
 const overlaySessions = new Set<string>()
 
@@ -95,10 +95,11 @@ export function markOverlaySession(sessionId: string): void {
 }
 
 /**
- * Uma conversa controla por vez. Duas agindo juntas — o chat numa tarefa e o
- * atalho em outra — clicavam uma por cima da outra, e cada uma lia a mudança
- * da outra como resultado da própria ação. A segunda recebe um erro claro e
- * decide com a pessoa (esperar ou parar a outra); a primeira nem fica sabendo.
+ * One conversation controls at a time. Two acting together — the chat on one task and
+ * the shortcut on another — clicked on top of each other, and each read the other's
+ * change as the result of its own action. The second one gets a clear error and
+ * decides with the person (wait or stop the other); the first one does not even find
+ * out.
  */
 export function assertCanControl(sessionId: string): void {
   for (const [id, other] of live) {
@@ -111,7 +112,7 @@ export function assertCanControl(sessionId: string): void {
   }
 }
 
-/** Registra atividade: liga indicador e atalho na primeira, renova o prazo nas seguintes. */
+/** Records activity: turns on the indicator and the shortcut on the first one, renews the deadline on the following ones. */
 export function noteActivity(sessionId: string, app: string, action: string | null): void {
   const now = Date.now()
   const current = live.get(sessionId)
@@ -131,9 +132,10 @@ export function noteActivity(sessionId: string, app: string, action: string | nu
 }
 
 /**
- * Devolve as flags de acessibilidade que esta sessão ligou nos apps — sem
- * encerrar o controle. A leitura da janela pelo atalho liga a árvore de um app
- * Chromium/Electron só pelo tempo de ler, e não há atividade para fechá-la.
+ * Gives back the accessibility flags this session turned on in the apps — without
+ * ending the control. The window reading by the shortcut turns on the tree of a
+ * Chromium/Electron app only for the duration of the reading, and there is no activity
+ * to close it.
  */
 export function releaseEnhanced(sessionId: string): void {
   const pids: number[] = []
@@ -147,14 +149,14 @@ export function releaseEnhanced(sessionId: string): void {
   if (pids.length && restoreHandler) void restoreHandler(pids)
 }
 
-/** Encerra o controle de uma sessão (ocioso, Parar ou fim do turno). */
+/** Ends the control of a session (idle, Stop or end of turn). */
 export function endActivity(sessionId: string): void {
   const current = live.get(sessionId)
   if (current) clearTimeout(current.timer)
   live.delete(sessionId)
-  // O screenshot só vive enquanto o controle dura: a memória não guarda imagem velha.
+  // The screenshot only lives while the control lasts: memory does not keep an old image.
   forgetShots(sessionId)
-  // Gravação que o agente não parou: monta e guarda na galeria.
+  // A recording the agent did not stop: build it and store it in the gallery.
   void finishOrphanRecording(sessionId)
   releaseEnhanced(sessionId)
   if (current) broadcast({ type: 'idle', sessionId })
@@ -164,13 +166,13 @@ export function endActivity(sessionId: string): void {
     setComputerPanelsSession(null)
   } else {
     showOverlay()
-    // Os painéis seguem a sessão que agiu por último entre as que restam.
+    // The panels follow the session that acted last among the remaining ones.
     const latest = [...live.values()].sort((a, b) => b.activity.lastAt - a.activity.lastAt)[0]
     setComputerPanelsSession(overlaySessions.has(latest.activity.sessionId) ? null : latest.activity.sessionId)
   }
 }
 
-/** Parar: aborta o turno (o abort mata a bridge em andamento) e encerra o controle. */
+/** Stop: aborts the turn (the abort kills the bridge in progress) and ends the control. */
 export function stopComputer(sessionId?: string): void {
   const targets = sessionId ? [sessionId] : [...live.keys()]
   for (const id of targets) {
@@ -188,8 +190,8 @@ function ensureShortcut(): void {
     } catch {
       ok = false
     }
-    // Outro app pode já ter o atalho: sem log, o pânico falharia em silêncio.
-    if (!ok) console.warn(`[computer] atalho de parar não registrado: ${accelerator}`)
+    // Another app may already own the shortcut: without a log, the panic would fail silently.
+    if (!ok) console.warn(`[computer] stop shortcut not registered: ${accelerator}`)
     shortcutOn = shortcutOn || ok
   }
 }
@@ -200,17 +202,17 @@ function releaseShortcut(): void {
   shortcutOn = false
 }
 
-/** Link do botão Parar da faixa: o main intercepta a navegação (a página é um data: sem preload). */
+/** Link of the Stop button of the band: the main process intercepts the navigation (the page is a data: one without preload). */
 const STOP_URL = 'orbit-computer://stop'
-/** Respiro em volta da faixa para o anel amarelo e a sombra caberem na janela. */
+/** Breathing room around the band so the yellow ring and the shadow fit in the window. */
 const OVERLAY_PAD_X = 12
 const OVERLAY_HEIGHT = 52
 
 function overlayHtml(text: string, stop: string, shortcut: string): string {
   const esc = (value: string) => value.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] ?? c)
-  // Amarelo primário do Orbit (--primary do tema escuro). O body ocupa a
-  // janela toda: com a altura do conteúdo, o overflow:hidden dele cortava o
-  // anel numa linha reta rente à base da faixa.
+  // Orbit primary yellow (--primary of the dark theme). The body fills the
+  // whole window: at content height, its overflow:hidden cut the
+  // ring in a straight line flush with the base of the band.
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:transparent;overflow:hidden;font:600 12px -apple-system,system-ui,sans-serif;-webkit-user-select:none;cursor:default}
 body{padding-top:8px;box-sizing:border-box}
@@ -227,16 +229,16 @@ kbd{font:600 10px -apple-system,system-ui,sans-serif;opacity:.7}
 }
 
 /**
- * Faixa no topo da tela enquanto o agente controla o computador, com o botão
- * Parar. Painel não ativador e sem foco: clicar em Parar não traz o Orbit para
- * a frente nem rouba o teclado do app que o agente está usando. A janela
- * encolhe até o tamanho da faixa, para não bloquear cliques ao redor. Nunca
- * aparece no screenshot — a captura é da janela alvo, não da tela.
+ * Band at the top of the screen while the agent controls the computer, with the Stop
+ * button. Non-activating panel and without focus: clicking Stop does not bring Orbit to
+ * the front nor steal the keyboard from the app the agent is using. The window shrinks
+ * to the size of the band, so it does not block clicks around it. It never shows up in
+ * the screenshot — the capture is of the target window, not of the screen.
  */
 function showOverlay(): void {
   const apps = [...new Set([...live.values()].map((l) => l.activity.app))].join(', ')
-  // No ponteiro global o agente usa o mouse REAL: a faixa avisa para a pessoa
-  // não disputar o cursor (a mistura aparecia na gravação).
+  // In the global pointer the agent uses the REAL mouse: the band warns the person
+  // not to fight for the cursor (the mix showed up in the recording).
   const text = tNow(getAppSettings().computer.pointer === 'global' ? 'computer.overlayGlobal' : 'computer.overlay', { apps })
   if (!overlay || overlay.isDestroyed()) {
     const area = screen.getPrimaryDisplay().workArea
@@ -260,7 +262,7 @@ function showOverlay(): void {
     })
     overlay.setAlwaysOnTop(true, 'screen-saver')
     floatAboveFullScreen(overlay)
-    // O botão é um link: a navegação nunca acontece, vira o Parar.
+    // The button is a link: the navigation never happens, it becomes the Stop.
     overlay.webContents.on('will-navigate', (event, url) => {
       event.preventDefault()
       if (url.startsWith(STOP_URL)) stopComputer()
@@ -271,7 +273,7 @@ function showOverlay(): void {
       overlayText = null
     })
   }
-  // Recarregar a cada ação faria a faixa piscar: só quando o texto muda.
+  // Reloading on every action would make the band blink: only when the text changes.
   if (text === overlayText) return
   overlayText = text
   const target = overlay
@@ -284,7 +286,7 @@ function showOverlay(): void {
     .catch(() => undefined)
 }
 
-/** Ajusta a janela à largura da faixa, centralizada no topo da tela. */
+/** Fits the window to the width of the band, centered at the top of the screen. */
 async function fitOverlay(target: BrowserWindow): Promise<void> {
   if (target.isDestroyed()) return
   const width = (await target.webContents
@@ -302,7 +304,7 @@ function hideOverlay(): void {
   overlayText = null
 }
 
-/** Encerramento do app: devolve as flags, solta o atalho e fecha o indicador. */
+/** App shutdown: gives the flags back, releases the shortcut and closes the indicator. */
 export async function disposeComputerSessions(): Promise<void> {
   for (const l of live.values()) clearTimeout(l.timer)
   live.clear()

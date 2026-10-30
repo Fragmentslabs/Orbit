@@ -63,8 +63,8 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
       if (hdrs.length > 0) {
         config.headers = Object.fromEntries(hdrs.map((h) => [h.key.trim(), h.value]))
       }
-      // As credenciais OAuth só são editáveis no desktop (é lá que o fluxo
-      // roda); salvar daqui não pode descartá-las.
+      // The OAuth credentials are only editable on the desktop (that is where the flow
+      // runs); saving from here cannot discard them.
       if (edit?.oauth) config.oauth = edit.oauth
     } else {
       if (!command.trim()) return Alert.alert(t('mcpServerFormModal.commandRequiredTitle'), t('mcpServerFormModal.commandRequiredBody'))

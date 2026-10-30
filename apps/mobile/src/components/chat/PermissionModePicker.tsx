@@ -1,6 +1,6 @@
 /**
- * Seletor do modo de permissões (modo código) — espelho do
- * permission-mode-picker do desktop: Perguntar / Autonomia / Irrestrito.
+ * Selector of the permission mode (code mode) — mirror of the
+ * desktop permission-mode-picker: Ask / Autonomy / Unrestricted.
  */
 import { useState } from 'react'
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native'

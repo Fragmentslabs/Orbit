@@ -1,24 +1,24 @@
 import type { Element, ElementContent, Root, RootContent } from "hast"
 
 /**
- * A figura sozinha vira `<figure>` com `<figcaption>`, usando o `alt` como
- * legenda.
+ * A lone figure becomes a `<figure>` with a `<figcaption>`, using the `alt` as
+ * the caption.
  *
- * Isto DIVERGE do Markdown padrão de propósito: `alt` é texto alternativo, não
- * legenda, e nenhum renderizador comum (GitHub, Obsidian, VS Code) o exibe. A
- * troca vale porque a pré-visualização de arquivo é um leitor de documentação,
- * onde a captura de tela quase sempre precisa de um rótulo — e é por isso que
- * ela não vale para a conversa, onde o `alt` vem do modelo.
+ * This DIVERGES from standard Markdown on purpose: `alt` is alternative text, not
+ * a caption, and no common renderer (GitHub, Obsidian, VS Code) displays it. The
+ * switch is worth it because the file preview is a documentation reader,
+ * where a screenshot almost always needs a label — and that is why
+ * it is not worth it in the conversation, where the `alt` comes from the model.
  *
- * A legenda é `aria-hidden`: ela repete o `alt`, que o leitor de tela já
- * anuncia. Sem isso, o mesmo texto seria lido duas vezes.
+ * The caption is `aria-hidden`: it repeats the `alt`, which the screen reader already
+ * announces. Without that, the same text would be read twice.
  */
 
-/** Extensão de imagem no fim do texto — sinal de que o alt é um nome de
- *  arquivo, não uma descrição. */
+/** Image extension at the end of the text — a sign that the alt is a file
+ *  name, not a description. */
 const LOOKS_LIKE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
 
-/** Caixa, acento e separador fora: sobra o que interessa para comparar. */
+/** Case, accents and separator out: what is left is what matters for comparing. */
 function slug(text: string): string {
   return text
     .toLowerCase()
@@ -27,7 +27,7 @@ function slug(text: string): string {
     .replace(/[^a-z0-9]+/g, "")
 }
 
-/** Último segmento do src, sem extensão e sem query. */
+/** Last segment of the src, without extension and without query. */
 function fileStem(src: string | undefined): string {
   if (!src) return ""
   const clean = src.split(/[?#]/)[0]
@@ -36,12 +36,12 @@ function fileStem(src: string | undefined): string {
 }
 
 /**
- * O alt foi escrito para ser LIDO, ou é só um preenchimento?
+ * Was the alt written to be READ, or is it just filler?
  *
- * Sem lista de palavras de nenhum idioma: um alt genérico ("image", "figura 2")
- * é o que repete o nome do arquivo, então quem decide é a comparação com o
- * próprio `src` — regra que vale em qualquer língua. Um nome de arquivo com
- * extensão também não vira legenda.
+ * No word list of any language: a generic alt ("image", "figure 2")
+ * is what repeats the file name, so what decides is the comparison with the
+ * `src` itself — a rule that works in any language. A file name with
+ * an extension does not become a caption either.
  */
 export function isCaptionWorthy(alt: string, src?: string): boolean {
   const text = alt.trim()
@@ -60,7 +60,7 @@ function isImage(node: ElementContent): node is Element {
   return node.type === "element" && node.tagName === "img"
 }
 
-/** A figura e a legenda, no lugar do parágrafo que só tinha a imagem. */
+/** The figure and the caption, in the place of the paragraph that only had the image. */
 function toFigure(img: Element, caption: string): Element {
   return {
     type: "element",
@@ -71,7 +71,7 @@ function toFigure(img: Element, caption: string): Element {
       {
         type: "element",
         tagName: "figcaption",
-        // Repete o alt, que o leitor de tela já anuncia.
+        // Repeats the alt, which the screen reader already announces.
         properties: { ariaHidden: "true" },
         children: [{ type: "text", value: caption }],
       },
@@ -84,9 +84,9 @@ function convert(node: Root | Element): void {
     if (child.type !== "element") return child
     convert(child)
     if (child.tagName !== "p") return child
-    // Só a imagem SOZINHA vira figura: uma no meio de um texto é ilustração
-    // inline, e uma fileira delas (os selos de um README) não são três
-    // figuras com três legendas.
+    // Only a LONE image becomes a figure: one in the middle of a text is an inline
+    // illustration, and a row of them (the badges of a README) are not three
+    // figures with three captions.
     const meaningful = child.children.filter((c) => !isBlankText(c))
     if (meaningful.length !== 1 || !isImage(meaningful[0])) return child
     const img = meaningful[0]
@@ -97,10 +97,10 @@ function convert(node: Root | Element): void {
 }
 
 /**
- * Roda no FIM do pipeline, depois do sanitize e do harden: os elementos que
- * criamos são nossos e não precisam passar pelo sanitizador, e a imagem já
- * chegou aqui na forma final (a bloqueada virou outra coisa e não é mais uma
- * `img`, então não ganha legenda).
+ * Runs at the END of the pipeline, after sanitize and harden: the elements we
+ * create are ours and do not need to go through the sanitizer, and the image has already
+ * arrived here in its final form (the blocked one became something else and is no longer an
+ * `img`, so it gets no caption).
  */
 export function rehypeFigureCaption() {
   return (tree: Root): void => convert(tree)

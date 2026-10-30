@@ -5,11 +5,11 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
- * Links clicados no app com "Abrir links no navegador integrado" ligado: o
- * main manda a URL para cá porque só o renderer sabe qual conversa está
- * aberta — o link vira uma aba nova do navegador no painel DELA. Sem conversa
- * aberta (outra tela, chat novo), não há painel onde abrir, e o link vai para
- * o navegador do sistema.
+ * Links clicked in the app with "Open links in the built-in browser" on: the
+ * main process sends the URL over here because only the renderer knows which conversation is
+ * open — the link becomes a new browser tab in ITS panel. With no conversation
+ * open (another screen, new chat), there is no panel to open it in, and the link goes to
+ * the system browser.
  */
 export function LinkRouter() {
   const { mode, view } = useWorkspace()

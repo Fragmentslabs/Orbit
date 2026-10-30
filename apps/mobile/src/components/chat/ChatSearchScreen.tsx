@@ -44,9 +44,9 @@ export function ChatSearchScreen() {
   useEffect(() => {
     const q = query.trim()
     if (!q) {
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
       setLoading(false)

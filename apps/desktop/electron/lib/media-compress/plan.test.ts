@@ -12,7 +12,7 @@ import {
   videoBitrateForTarget,
 } from './plan'
 
-/** Probe mínimo: o que o plano lê de verdade. */
+/** Minimal probe: what the plan really reads. */
 function probe(over: Partial<MediaProbe> = {}): MediaProbe {
   const base: MediaProbe = {
     file: '/tmp/in.mp4',
@@ -27,20 +27,20 @@ function probe(over: Partial<MediaProbe> = {}): MediaProbe {
 }
 
 describe('qualityToCrf', () => {
-  it('vai de quase sem perda a bem comprimido', () => {
+  it('goes from almost lossless to well compressed', () => {
     expect(qualityToCrf(100, 'h264')).toBe(18)
     expect(qualityToCrf(75, 'h264')).toBe(25)
     expect(qualityToCrf(50, 'h264')).toBe(32)
   })
 
-  it('nunca sai da faixa do encoder', () => {
+  it('never leaves the encoder range', () => {
     expect(qualityToCrf(0, 'h264')).toBe(46)
     expect(qualityToCrf(200, 'h264')).toBe(18)
     expect(qualityToCrf(1, 'h264')).toBeLessThanOrEqual(51)
   })
 
-  it('compensa a escala de cada codec', () => {
-    // Para a MESMA qualidade percebida, x265/vp9/av1 aceitam CRF mais alto.
+  it('compensates the scale of each codec', () => {
+    // For the SAME perceived quality, x265/vp9/av1 accept a higher CRF.
     expect(qualityToCrf(75, 'hevc')).toBe(qualityToCrf(75, 'h264') + 5)
     expect(qualityToCrf(75, 'vp9')).toBe(qualityToCrf(75, 'h264') + 8)
     expect(qualityToCrf(75, 'av1')).toBe(qualityToCrf(75, 'h264') + 10)
@@ -49,31 +49,31 @@ describe('qualityToCrf', () => {
 })
 
 describe('qualityToAudioBitrate', () => {
-  it('opus entrega o mesmo com menos bits', () => {
+  it('opus delivers the same with fewer bits', () => {
     expect(qualityToAudioBitrate(75, 'aac')).toBe(192)
     expect(qualityToAudioBitrate(75, 'mp3')).toBe(192)
     expect(qualityToAudioBitrate(75, 'opus')).toBe(128)
   })
 
-  it('decresce com a qualidade', () => {
+  it('decreases with quality', () => {
     const values = [100, 80, 60, 40, 20, 5].map((q) => qualityToAudioBitrate(q, 'aac'))
     for (let i = 1; i < values.length; i++) expect(values[i]).toBeLessThanOrEqual(values[i - 1])
   })
 })
 
 describe('resolveCodecs', () => {
-  it('usa o padrão do contêiner quando não há override', () => {
+  it('uses the container default when there is no override', () => {
     expect(resolveCodecs('mp4')).toMatchObject({ kind: 'video', videoCodec: 'h264', audioCodec: 'aac' })
     expect(resolveCodecs('webm')).toMatchObject({ kind: 'video', videoCodec: 'vp9', audioCodec: 'opus' })
     expect(resolveCodecs('m4a')).toMatchObject({ kind: 'audio', videoCodec: null, audioCodec: 'aac' })
   })
 
-  it('aceita o codec válido para o contêiner', () => {
+  it('accepts the codec valid for the container', () => {
     expect(resolveCodecs('mp4', 'hevc').videoCodec).toBe('hevc')
     expect(resolveCodecs('mkv', 'vp9').videoCodec).toBe('vp9')
   })
 
-  it('recusa combinação impossível dizendo o caminho certo', () => {
+  it('refuses an impossible combination saying the right path', () => {
     expect(() => resolveCodecs('mp4', 'vp9')).toThrow(/use webm/)
     expect(() => resolveCodecs('m4a', 'mp3')).toThrow(/use mp3/)
     expect(() => resolveCodecs('webm', 'h264')).toThrow(/webm carries video/)
@@ -81,45 +81,45 @@ describe('resolveCodecs', () => {
 })
 
 describe('defaultContainer', () => {
-  it('mantém a família de origem quando ela já é comprimida', () => {
+  it('keeps the source family when it is already compressed', () => {
     expect(defaultContainer(probe({ video: [], display: undefined, audio: [{ index: 0, codec: 'mp3', sampleRate: 44100, channels: 2 }] }), 'audio')).toBe('mp3')
     expect(defaultContainer(probe({ video: [], display: undefined, audio: [{ index: 0, codec: 'opus', sampleRate: 48000, channels: 2 }] }), 'audio')).toBe('opus')
   })
 
-  it('manda WAV/FLAC para m4a e WebM para WebM', () => {
+  it('sends WAV/FLAC to m4a and WebM to WebM', () => {
     expect(defaultContainer(probe({ video: [], display: undefined, audio: [{ index: 0, codec: 'pcm_s16le', sampleRate: 44100, channels: 2 }] }), 'audio')).toBe('m4a')
     expect(defaultContainer(probe({ format: 'matroska,webm' }), 'video')).toBe('webm')
     expect(defaultContainer(probe(), 'video')).toBe('mp4')
   })
 })
 
-describe('orçamento de bits', () => {
-  it('desconta a folga do contêiner e o áudio', () => {
-    // 10 MB em 60 s: 1293 kbps no total; menos 128 de áudio e 6 de folga.
+describe('bit budget', () => {
+  it('deducts the container overhead and the audio', () => {
+    // 10 MB in 60 s: 1293 kbps in total; minus 128 for audio and 6 of slack.
     expect(videoBitrateForTarget({ maxBytes: 10_000_000, durationMs: 60_000, audioKbps: 128 })).toBe(1159)
   })
 
-  it('não infla acima do bitrate de origem', () => {
+  it('does not inflate above the source bitrate', () => {
     expect(videoBitrateForTarget({ maxBytes: 100_000_000, durationMs: 60_000, audioKbps: 128, sourceKbps: 900 })).toBe(900)
   })
 
-  it('respeita o piso praticável e avisa no plano', () => {
+  it('respects the workable floor and warns in the plan', () => {
     const plan = buildPlan({ probe: probe(), target: { maxBytes: 200_000 } })
     expect(plan.bitrate).toBe(60)
     expect(plan.notes.join(' ')).toMatch(/tight/)
   })
 
-  it('recusa duração desconhecida', () => {
+  it('refuses an unknown duration', () => {
     expect(() => totalBudgetKbps(1_000_000, 0)).toThrow(/duration/)
   })
 
-  it('corrige o bitrate na proporção do estouro', () => {
+  it('corrects the bitrate in proportion to the overshoot', () => {
     expect(nextVideoBitrate(1000, 12_000_000, 10_000_000)).toBe(800)
     expect(nextVideoBitrate(80, 4_000_000, 50_000)).toBe(60)
   })
 
-  it('extrai áudio dentro do orçamento', () => {
-    // 5 MB em 5 min: 129 kbps.
+  it('extracts audio within the budget', () => {
+    // 5 MB in 5 min: 129 kbps.
     expect(audioBitrateForTarget(5_000_000, 300_000, 'aac')).toBe(127)
     expect(audioBitrateForTarget(20_000, 300_000, 'aac')).toBe(64)
     expect(audioBitrateForTarget(50_000_000, 60_000, 'opus')).toBe(256)
@@ -127,27 +127,27 @@ describe('orçamento de bits', () => {
 })
 
 describe('buildPlan', () => {
-  it('alvo em bytes vira bitrate, não CRF', () => {
+  it('a byte target becomes a bitrate, not CRF', () => {
     const plan = buildPlan({ probe: probe(), target: { maxBytes: 10_000_000 } })
     expect(plan.crf).toBeNull()
     expect(plan.bitrate).toBeGreaterThan(900)
     expect(plan.audioBitrate).toBe(192)
   })
 
-  it('qualidade vira CRF e bitrate fica nulo', () => {
+  it('quality becomes CRF and bitrate stays null', () => {
     const plan = buildPlan({ probe: probe(), target: { quality: 60 } })
     expect(plan.crf).toBe(qualityToCrf(60, 'h264'))
     expect(plan.bitrate).toBeNull()
   })
 
-  it('áudio não come o orçamento num alvo apertado', () => {
+  it('audio does not eat the budget on a tight target', () => {
     const plan = buildPlan({ probe: probe({ durationMs: 30_000 }), target: { maxBytes: 400_000 } })
-    // 400 KB em 30 s = 103 kbps no total.
+    // 400 KB in 30 s = 103 kbps in total.
     expect(plan.audioBitrate).toBe(64)
     expect(plan.notes.join(' ')).toMatch(/audio lowered/)
   })
 
-  it('só reduz altura e fps, nunca aumenta', () => {
+  it('only reduces height and fps, never increases', () => {
     const plan = buildPlan({ probe: probe(), target: { quality: 70, height: 720, fps: 24 } })
     expect(plan.height).toBe(720)
     expect(plan.fps).toBe(24)
@@ -158,11 +158,11 @@ describe('buildPlan', () => {
     expect(up.notes.join(' ')).toMatch(/ignored/)
   })
 
-  it('arredonda a altura para par (o x264 exige)', () => {
+  it('rounds the height to even (x264 requires it)', () => {
     expect(buildPlan({ probe: probe(), target: { quality: 70, height: 721 } }).height).toBe(720)
   })
 
-  it('10 bits em h264 avisa e cai para 8 bits; em hevc mantém', () => {
+  it('10 bits on h264 warns and falls back to 8 bits; on hevc it keeps them', () => {
     const tenBit = probe({
       video: [{ index: 0, codec: 'hevc', width: 3840, height: 2160, fps: 30, rotation: 0, pixFmt: 'yuv420p10le' }],
       display: { width: 3840, height: 2160 },
@@ -175,26 +175,26 @@ describe('buildPlan', () => {
     expect(hevc.pixFmt).toBe('yuv420p10le')
   })
 
-  it('contêiner de áudio sobre um vídeo extrai a faixa', () => {
+  it('an audio container on a video extracts the track', () => {
     const plan = buildPlan({ probe: probe(), target: { quality: 80 }, container: 'mp3' })
     expect(plan.kind).toBe('audio')
     expect(plan.audioBitrate).toBe(192)
     expect(plan.notes.join(' ')).toMatch(/audio only/)
   })
 
-  it('sem áudio na origem, o plano não inventa faixa', () => {
+  it('with no audio in the source, the plan does not invent a track', () => {
     const plan = buildPlan({ probe: probe({ audio: [] }), target: { quality: 70 } })
     expect(plan.stripAudio).toBe(true)
     expect(plan.audioBitrate).toBe(0)
   })
 
-  it('stripAudio explícito zera a faixa', () => {
+  it('an explicit stripAudio zeroes the track', () => {
     const plan = buildPlan({ probe: probe(), target: { quality: 70 }, stripAudio: true })
     expect(plan.stripAudio).toBe(true)
     expect(plan.audioBitrate).toBe(0)
   })
 
-  it('recusa vídeo sem stream de vídeo e áudio sem stream de áudio', () => {
+  it('refuses a video with no video stream and audio with no audio stream', () => {
     expect(() => buildPlan({ probe: probe({ video: [], display: undefined }), target: { quality: 70 }, container: 'mp4' })).toThrow(
       /no video stream/,
     )
@@ -203,7 +203,7 @@ describe('buildPlan', () => {
     )
   })
 
-  it('preset pedido chega ao plano', () => {
+  it('the requested preset reaches the plan', () => {
     expect(buildPlan({ probe: probe(), target: { quality: 70 }, preset: 'fast' }).preset).toBe('fast')
     expect(buildPlan({ probe: probe(), target: { quality: 70 } }).preset).toBe('balanced')
   })

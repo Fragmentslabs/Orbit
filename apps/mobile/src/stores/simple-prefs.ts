@@ -3,12 +3,12 @@ import { Storage } from '~/lib/storage'
 import { pushModeSelect } from '~/lib/mode-sync'
 
 /**
- * Preferência do modo Simples (resposta em texto puro): desativado por padrão
- * em todo chat; o usuário pode ligar por chat. Só as ativações são persistidas
- * (Storage) — ausência de override = desativado.
+ * Simple mode preference (answer in plain text): disabled by default
+ * in every chat; the user can turn it on per chat. Only the activations are persisted
+ * (Storage) — no override = disabled.
  *
- * Chats novos (sem sessão) usam a chave "draft"; quando a sessão é criada no
- * primeiro envio, o session-store chama adopt() para transferir o override.
+ * New chats (without a session) use the "draft" key; when the session is created on the
+ * first send, the session-store calls adopt() to transfer the override.
  */
 
 const STORAGE_KEY = 'orbit_simple_prefs'
@@ -21,7 +21,7 @@ interface SimplePrefsState {
   hydrated: boolean
   hydrate: () => Promise<void>
   setEnabled: (sessionId: string | null | undefined, value: boolean) => void
-  /** Aplica o mapa vindo do desktop (sem devolver o toggle para lá). */
+  /** Applies the map coming from the desktop (without sending the toggle back there). */
   applySync: (overrides: Overrides) => void
   adopt: (sessionId: string) => void
   clear: (sessionId: string) => void
@@ -42,7 +42,7 @@ export const useSimplePrefs = create<SimplePrefsState>((set, get) => ({
         }
       }
     } catch {
-      // prefs corrompidas — volta ao default (desativado)
+      // corrupted prefs — goes back to the default (disabled)
     }
     set({ hydrated: true })
   },

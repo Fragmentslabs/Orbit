@@ -4,10 +4,10 @@ import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Diário de mídia por turno e o revert que o aplica: peças (aqui, um canvas de
- * design — motion e slides passam pelo mesmo journalPiece) e a galeria
- * (artefatos, imagens). Cada turno roda dentro do escopo que o chat-engine abre;
- * o revert desfaz do turno escolhido até o fim, e o unrevert devolve tudo.
+ * Media journal per turn, and the revert that applies it: pieces (here, a design
+ * canvas — motion and slides go through the same journalPiece) and the gallery
+ * (artifacts, images). Each turn runs inside the scope the chat-engine opens;
+ * the revert undoes from the chosen turn to the end, and the unrevert gives everything back.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-media-journal-${process.pid}`)
@@ -32,14 +32,14 @@ type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const run = (tools: Record<string, unknown>, name: string, input: unknown) =>
   (tools[name] as { execute: Exec }).execute(input, { toolCallId: 'call1', messages: [], abortSignal: undefined }) as Promise<string>
 
-/** Um turno do agente: o escopo que o chat-engine abre em volta do runChatTurn. */
+/** A turn of the agent: the scope the chat-engine opens around runChatTurn. */
 function turn(sessionId: string, messageId: string, fn: () => Promise<void>): Promise<void> {
   return runWithMediaJournal(sessionId, async () => {
     bindMediaJournal(messageId)
     try {
       await fn()
     } finally {
-      // O estado FINAL (o que o revert compara) é gravado aqui.
+      // The FINAL state (what the revert compares) is written here.
       await closeMediaJournal()
     }
   })
@@ -52,7 +52,7 @@ afterAll(async () => {
 })
 
 describe('mergeJournals', () => {
-  it('o primeiro turno que tocou um caminho ou uma entrada é o que vale', () => {
+  it('the first turn that touched a path or an entry is the one that counts', () => {
     const merged = mergeJournals([
       { dir: '/j/m1', records: [{ type: 'media', id: 'a.png', before: null }, { type: 'path', path: '/d/piece', backup: 'b1' }] },
       {
@@ -60,7 +60,7 @@ describe('mergeJournals', () => {
         records: [
           { type: 'media', id: 'a.png', before: { id: 'a.png' } as never },
           { type: 'path', path: '/d/piece', backup: 'b0' },
-          // Dentro de uma pasta já registrada por um turno anterior: coberto por ela.
+          // Inside a folder already registered by a previous turn: covered by it.
           { type: 'path', path: '/d/piece/x.html', backup: 'b3' },
           { type: 'path', path: '/d/other.png', backup: null },
         ],
@@ -74,7 +74,7 @@ describe('mergeJournals', () => {
   })
 })
 
-describe('revert de mídia', () => {
+describe('media revert', () => {
   const sessionId = 'sess1'
   const tools = createDesignTools({ sessionId })
   const folder = path.join(designPiecesDir(sessionId), 'landing')
@@ -82,21 +82,21 @@ describe('revert de mídia', () => {
   let createdArtifact = ''
   let foreignArtifact = ''
 
-  it('fora de um turno nada é registrado', async () => {
-    await run(tools, 'design_write', { name: 'Rascunho', boards: [board('<p>fora</p>')] })
+  it('outside a turn nothing is recorded', async () => {
+    await run(tools, 'design_write', { name: 'Rascunho', boards: [board('<p>outside</p>')] })
     expect(await readMediaJournal(sessionId, 'msg0')).toBeNull()
   })
 
-  it('cada turno guarda o estado ANTES da primeira escrita', async () => {
+  it('each turn keeps the state BEFORE the first write', async () => {
     await turn(sessionId, 'msg1', async () => {
       await run(tools, 'design_write', { name: 'Landing', boards: [board('<p>A</p>')] })
     })
     await turn(sessionId, 'msg2', async () => {
       await run(tools, 'design_edit', { name: 'Landing', file: 'Main.html', edits: [{ oldText: '<p>A</p>', newText: '<p>B</p>' }] })
-      createdArtifact = (await media.saveArtifact('<p>novo</p>', { title: 'Novo', sessionId })).id
+      createdArtifact = (await media.saveArtifact('<p>new</p>', { title: 'New', sessionId })).id
     })
-    // Outro chat grava na galeria depois: o revert deste não pode levar junto.
-    foreignArtifact = (await media.saveArtifact('<p>de outro chat</p>', { title: 'Outro', sessionId: 'outro' })).id
+    // Another chat writes to the gallery afterwards: the revert of this one cannot take it along.
+    foreignArtifact = (await media.saveArtifact('<p>from another chat</p>', { title: 'Other', sessionId: 'other' })).id
 
     const first = await readMediaJournal(sessionId, 'msg1')
     expect(first?.records).toEqual([expect.objectContaining({ type: 'path', path: folder, backup: null })])
@@ -109,7 +109,7 @@ describe('revert de mídia', () => {
     )
   })
 
-  it('reverter o segundo turno volta o canvas e tira só o artefato dele', async () => {
+  it('reverting the second turn restores the canvas and removes only its artifact', async () => {
     const summary = await revertMedia(sessionId, ['msg2'])
     expect(summary).toEqual({ restored: true, pieces: 1, items: 1, conflicts: 0 })
     expect(await fsp.readFile(boardFile, 'utf8')).toBe('<p>A</p>')
@@ -118,36 +118,36 @@ describe('revert de mídia', () => {
     expect(await media.getMediaEntry(foreignArtifact)).not.toBeNull()
   })
 
-  it('o unrevert devolve o que o revert desfez', async () => {
+  it('the unrevert gives back what the revert undid', async () => {
     await unrevertMedia(sessionId)
     expect(await fsp.readFile(boardFile, 'utf8')).toBe('<p>B</p>')
     const restored = await media.getMediaEntry(createdArtifact)
     expect(restored).not.toBeNull()
-    expect(await fsp.readFile(restored!.path, 'utf8')).toBe('<p>novo</p>')
+    expect(await fsp.readFile(restored!.path, 'utf8')).toBe('<p>new</p>')
   })
 
-  it('reverter desde o primeiro turno apaga a peça criada nele e a tira do registro', async () => {
+  it('reverting from the first turn deletes the piece created in it and unregisters it', async () => {
     const summary = await revertMedia(sessionId, ['msg1', 'msg2'])
     expect(summary?.restored).toBe(true)
     await expect(fsp.stat(folder)).rejects.toThrow()
     expect(await getDesign(designIdFor(folder))).toBeUndefined()
-    // A peça feita fora de um turno não é do agente: fica.
-    expect(await fsp.readFile(path.join(designPiecesDir(sessionId), 'rascunho', 'Main.html'), 'utf8')).toBe('<p>fora</p>')
+    // The piece made outside a turn is not the agent's: it stays.
+    expect(await fsp.readFile(path.join(designPiecesDir(sessionId), 'rascunho', 'Main.html'), 'utf8')).toBe('<p>outside</p>')
   })
 
-  it('confirmar o revert (nova mensagem) descarta os diários dos turnos e o redo', async () => {
+  it('confirming the revert (new message) drops the turn journals and the redo', async () => {
     await discardMediaRevert(sessionId, ['msg1', 'msg2'])
     expect(await readMediaJournal(sessionId, 'msg1')).toBeNull()
     expect(await readMediaJournal(sessionId, 'msg2')).toBeNull()
-    await unrevertMedia(sessionId) // sem redo: não faz nada
+    await unrevertMedia(sessionId) // no redo: does nothing
     await expect(fsp.stat(folder)).rejects.toThrow()
   })
 })
 
-describe('revert de mídia — galeria', () => {
+describe('media revert — gallery', () => {
   const sessionId = 'sess2'
 
-  it('um artefato reescrito no turno volta ao texto e à revisão de antes', async () => {
+  it('an artifact rewritten in the turn goes back to the previous text and revision', async () => {
     const ref = await media.saveArtifact('<p>v1</p>', { title: 'Doc', sessionId })
     await turn(sessionId, 'msg1', async () => {
       await media.updateArtifact(ref.id, '<p>v2</p>')
@@ -160,7 +160,7 @@ describe('revert de mídia — galeria', () => {
     expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>v1</p>')
   })
 
-  it('uma imagem excluída no turno volta à galeria, com o arquivo', async () => {
+  it('an image deleted in the turn returns to the gallery, with the file', async () => {
     const id = media.mediaIdFromUrl(await media.saveMedia(Buffer.from('fake-png'), 'png', { source: 'chat', sessionId }))!
     const file = (await media.getMediaEntry(id))!.path
     await turn(sessionId, 'msg2', async () => {
@@ -174,20 +174,20 @@ describe('revert de mídia — galeria', () => {
     expect(await fsp.readFile(file, 'utf8')).toBe('fake-png')
   })
 
-  it('turnos que não tocaram em mídia não produzem resumo', async () => {
+  it('turns that did not touch media produce no summary', async () => {
     expect(await revertMedia(sessionId, ['msg-sem-midia'])).toBeUndefined()
   })
 })
 
-describe('revert de mídia — conflitos', () => {
-  it('artefato criado no turno e editado por outra conversa depois: preservado', async () => {
+describe('media revert — conflicts', () => {
+  it('artifact created in the turn and edited by another conversation later: preserved', async () => {
     const sessionId = 'sess-conflito-a'
     let id = ''
     await turn(sessionId, 'msg1', async () => {
       id = (await media.saveArtifact('<p>v1</p>', { title: 'Compartilhado', sessionId })).id
     })
-    // Outra conversa edita o MESMO artefato depois do turno.
-    await media.updateArtifact(id, '<p>outra conversa</p>')
+    // Another conversation edits the SAME artifact afterwards.
+    await media.updateArtifact(id, '<p>another conversation</p>')
 
     const summary = await revertMedia(sessionId, ['msg1'])
 
@@ -200,10 +200,10 @@ describe('revert de mídia — conflitos', () => {
     })
     const entry = await media.getMediaEntry(id)
     expect(entry?.revision).toBe(2)
-    expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>outra conversa</p>')
+    expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>another conversation</p>')
   })
 
-  it('peça editada à mão no painel depois do turno: pasta e capa preservadas', async () => {
+  it('piece edited by hand in the panel after the turn: folder and cover preserved', async () => {
     const sessionId = 'sess-conflito-b'
     const tools = createDesignTools({ sessionId })
     const folder = path.join(designPiecesDir(sessionId), 'manual')
@@ -211,16 +211,16 @@ describe('revert de mídia — conflitos', () => {
       await run(tools, 'design_write', { name: 'Manual', boards: [board('<p>do turno</p>')] })
     })
     const file = path.join(folder, 'Main.html')
-    // A pessoa edita no painel, fora de um turno — não entra no diário.
-    await fsp.writeFile(file, '<p>editado à mão</p>', 'utf8')
+    // The person edits in the panel, outside a turn — it does not enter the journal.
+    await fsp.writeFile(file, '<p>edited by hand</p>', 'utf8')
 
     const summary = await revertMedia(sessionId, ['msg1'])
 
     expect(summary).toMatchObject({ restored: true, pieces: 0, conflicts: 1 })
-    expect(await fsp.readFile(file, 'utf8')).toBe('<p>editado à mão</p>')
+    expect(await fsp.readFile(file, 'utf8')).toBe('<p>edited by hand</p>')
   })
 
-  it('unrevert: o que mudou entre o revert e o desfazer é preservado', async () => {
+  it('unrevert: what changed between the revert and the undo is preserved', async () => {
     const sessionId = 'sess-conflito-c'
     const ref = await media.saveArtifact('<p>v1</p>', { title: 'Doc', sessionId })
     await turn(sessionId, 'msg1', async () => {
@@ -231,26 +231,26 @@ describe('revert de mídia — conflitos', () => {
     expect(first?.conflicts).toBe(0)
     expect((await media.getMediaEntry(ref.id))?.revision ?? 1).toBe(1)
 
-    // Outra conversa mexe DEPOIS do revert, antes do unrevert.
+    // Another conversation touches it AFTER the revert, before the unrevert.
     await media.updateArtifact(ref.id, '<p>v3</p>')
     const undone = await unrevertMedia(sessionId)
 
     expect(undone?.conflicts).toBe(1)
     const entry = await media.getMediaEntry(ref.id)
-    // O revert devolveu a revisão para 1; a edição externa seguinte vira 2.
+    // The revert took the revision back to 1; the next external edit becomes 2.
     expect(entry?.revision).toBe(2)
     expect(await fsp.readFile(entry!.path, 'utf8')).toBe('<p>v3</p>')
   })
 })
 
-describe('revalidação logo antes de aplicar', () => {
-  it('restorePaths deixa intacto o caminho que mudou depois da decisão', async () => {
+describe('revalidation right before applying', () => {
+  it('restorePaths leaves intact the path that changed after the decision', async () => {
     const dir = path.join(userData, 'revalida')
     await fsp.mkdir(dir, { recursive: true })
     const alvo = path.join(dir, 'a.txt')
     const backup = path.join(dir, 'a.backup')
     await fsp.writeFile(alvo, 'mudou no meio', 'utf8')
-    await fsp.writeFile(backup, 'antes', 'utf8')
+    await fsp.writeFile(backup, 'before', 'utf8')
 
     const skipped = await restorePaths(
       [{ type: 'path', path: alvo, backupFile: backup }],
@@ -261,12 +261,12 @@ describe('revalidação logo antes de aplicar', () => {
     expect(await fsp.readFile(alvo, 'utf8')).toBe('mudou no meio')
   })
 
-  it('restoreMediaEntries recusa a entrada que outra conversa gravou no meio', async () => {
+  it('restoreMediaEntries refuses the entry another conversation wrote in between', async () => {
     const created = await media.saveArtifact('<p>v1</p>', { title: 'Corrida', sessionId: 'sess-corrida' })
-    const antes = await media.getMediaEntry(created.id)
+    const previous = await media.getMediaEntry(created.id)
     await media.updateArtifact(created.id, '<p>v2</p>')
 
-    const skipped = await media.restoreMediaEntries([{ id: created.id, before: antes }], () => false)
+    const skipped = await media.restoreMediaEntries([{ id: created.id, before: previous }], () => false)
 
     expect([...skipped]).toEqual([created.id])
     expect((await media.getMediaEntry(created.id))?.revision).toBe(2)

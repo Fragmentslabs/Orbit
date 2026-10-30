@@ -8,6 +8,7 @@ import {
   BookIcon,
 } from "lucide-react";
 import type { ComponentProps } from "react";
+import { useTranslation } from "react-i18next";
 import { createContext, memo, useContext, useMemo } from "react";
 import {
   Collapsible,
@@ -74,6 +75,7 @@ export type SourcesTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
 export const SourcesTrigger = memo(
   ({ className, count, children, ...props }: SourcesTriggerProps) => {
     const { isOpen, setIsOpen } = useSources();
+    const { t } = useTranslation();
 
     return (
       <Collapsible onOpenChange={setIsOpen} open={isOpen}>
@@ -86,9 +88,7 @@ export const SourcesTrigger = memo(
         >
           {children ?? (
             <>
-              <p className="font-medium">
-                {count} {count === 1 ? "fonte consultada" : "fontes consultadas"}
-              </p>
+              <p className="font-medium">{t("sources.consulted", { count })}</p>
               {isOpen ? (
                 <ChevronDownIcon className="size-4 transition-transform" />
               ) : (

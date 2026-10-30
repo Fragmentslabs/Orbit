@@ -4,22 +4,22 @@ import path from 'node:path'
 import { readJson, writeJson } from './storage'
 
 /**
- * O "Salvar como…" de toda mídia que sai do Orbit.
+ * The "Save as…" of every media that leaves Orbit.
  *
- * Antes cada export abria onde calhava: o render da aba caía dentro da pasta
- * interna da composição, o PDF do deck no diretório de trabalho do processo, e
- * os demais dependiam da memória do diálogo do sistema — que no macOS existe e
- * no Windows não. Aqui a regra é uma só: começa na última pasta em que a pessoa
- * salvou alguma coisa e, na primeira vez (ou se aquela pasta sumiu), na pasta de
- * Downloads do sistema.
+ * Before, each export opened wherever it happened to: the tab's render landed inside the
+ * composition's internal folder, the deck's PDF in the process's working directory, and
+ * the rest depended on the system dialog's memory — which on macOS exists and
+ * on Windows does not. Here the rule is a single one: it starts in the last folder in which the person
+ * saved something and, the first time (or if that folder is gone), in the system's
+ * Downloads folder.
  *
- * A escolha é lembrada para o app inteiro, e não por tipo de arquivo: quem
- * organiza os vídeos em ~/Desktop/videos quer o PDF do deck no mesmo lugar.
+ * The choice is remembered for the whole app, and not per file type: whoever
+ * organizes videos in ~/Desktop/videos wants the deck's PDF in the same place.
  */
 
 const STORAGE_KEY = 'export-dir'
 
-/** Última pasta escolhida — devolvida só enquanto continuar existindo. */
+/** Last chosen folder — returned only while it still exists. */
 async function rememberedDir(): Promise<string | null> {
   const stored = await readJson<{ dir?: string }>(STORAGE_KEY).catch(() => null)
   const dir = stored?.dir
@@ -31,7 +31,7 @@ async function rememberedDir(): Promise<string | null> {
   }
 }
 
-/** Onde o próximo diálogo abre. */
+/** Where the next dialog opens. */
 export async function exportDir(): Promise<string> {
   const remembered = await rememberedDir()
   if (remembered) return remembered
@@ -43,9 +43,9 @@ export async function exportDir(): Promise<string> {
 }
 
 /**
- * Nome de arquivo seguro: sem separador de caminho, sem nome vazio e sem
- * exagero de comprimento. O nome em si vem do chamador — é o nome da MÍDIA no
- * Orbit, nunca um "render" ou "arquivo" genérico.
+ * Safe file name: no path separator, no empty name and no
+ * exaggerated length. The name itself comes from the caller — it is the MEDIA's name in
+ * Orbit, never a generic "render" or "file".
  */
 function safeFileName(name: string): string {
   const cleaned = name
@@ -53,13 +53,13 @@ function safeFileName(name: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120)
-  return cleaned && cleaned !== '.' && cleaned !== '..' ? cleaned : 'arquivo'
+  return cleaned && cleaned !== '.' && cleaned !== '..' ? cleaned : 'file'
 }
 
 /**
- * Abre o diálogo de salvar e devolve o caminho escolhido, ou `null` se a pessoa
- * cancelou (cancelar não é erro em nenhum chamador). A pasta escolhida passa a
- * ser a de partida dos próximos exports.
+ * Opens the save dialog and returns the chosen path, or `null` if the person
+ * canceled (canceling is not an error in any caller). The chosen folder becomes the
+ * starting point of the next exports.
  */
 export async function saveExport(
   window: BrowserWindow | null,
@@ -74,7 +74,7 @@ export async function saveExport(
     ? await dialog.showSaveDialog(window, options)
     : await dialog.showSaveDialog(options)
   if (result.canceled || !result.filePath) return null
-  // Lembrar DEPOIS de salvar: é a pasta em que a pessoa realmente guardou.
+  // Remember AFTER saving: it is the folder in which the person actually stored it.
   await writeJson(STORAGE_KEY, { dir: path.dirname(result.filePath) }).catch(() => {})
   return result.filePath
 }

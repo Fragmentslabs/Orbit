@@ -10,8 +10,8 @@ import { useThemeStore } from '~/stores/theme-store'
 interface AskCardProps {
   ask: PendingAsk
   onReply: (value: unknown) => void
-  /** Ajuste de fora: dentro da lista da conversa a margem lateral da barra
-   *  fixa virava recuo duplo (o conteúdo da lista já tem paddingHorizontal). */
+  /** Adjustment from outside: inside the conversation list the side margin of the fixed
+   *  bar became a double indent (the list content already has paddingHorizontal). */
   style?: StyleProp<ViewStyle>
 }
 
@@ -66,11 +66,11 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
     padding: 12,
   }
 
-  // ─── Sugestão de subchat ──────────────────────────────────────────────
-  // O agente sugere levar um assunto para outra conversa; quem decide é o
-  // usuário. "Novo chat" abre uma conversa anexada que já começa a trabalhar.
+  // ─── Subchat suggestion ───────────────────────────────────────────────
+  // The agent suggests taking a subject to another conversation; whoever decides is the
+  // user. "New chat" opens an attached conversation that starts working right away.
   if (ask.kind === 'subchat') {
-    const titulo = ask.subchat?.title ?? ''
+    const title = ask.subchat?.title ?? ''
     const brief = ask.subchat?.brief ?? ''
     return (
       <View style={[cardBg, style]}>
@@ -78,7 +78,7 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
           <MessagesSquare size={16} color={tokens.primary} style={{ marginTop: 2 }} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ color: tokens.mutedForeground, fontSize: 12 }}>{t('chatScreen.subchatAsk')}</Text>
-            <Text style={{ color: tokens.foreground, fontWeight: '600', marginTop: 2 }}>{titulo}</Text>
+            <Text style={{ color: tokens.foreground, fontWeight: '600', marginTop: 2 }}>{title}</Text>
             <Text numberOfLines={3} style={{ color: tokens.mutedForeground, fontSize: 12, marginTop: 2 }}>
               {brief}
             </Text>
@@ -162,7 +162,7 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
           </Text>
         )}
 
-        {/* Actions row: Negar | Permitir esta vez [˅] — a seta abre só as permissões duradouras */}
+        {/* Actions row: Deny | Allow this time [˅] — the arrow opens only the durable permissions */}
         <View style={{ flexDirection: 'row', gap: 8, position: 'relative' }}>
           <Pressable
             onPress={() => reply('deny')}
@@ -258,22 +258,22 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
               : [...current, opt],
           }
         }
-        // Tocar de novo desmarca, como no desktop: é assim que se volta a
-        // responder só com o texto.
+        // Tapping again unchecks, as on the desktop: that is how one goes back to
+        // answering with the text only.
         return { ...prev, [q.id]: current.includes(opt) ? [] : [opt] }
       })
     }
 
-    // A tool question espera answers como string[] alinhado por indice com as
-    // perguntas (ela interpola direto no retorno para o agente). Enviar objetos
-    // aqui virava "[object Object]" no lado do modelo: o card fechava e a
-    // resposta do usuario se perdia. Mesmo formato do card do desktop:
-    // opcoes marcadas e, em outra linha, o texto livre como observacao.
+    // The tool question expects answers as a string[] aligned by index with the
+    // questions (it interpolates straight into the return for the agent). Sending objects
+    // here became "[object Object]" on the model side: the card closed and the
+    // user answer was lost. Same format as the desktop card:
+    // checked options and, on another line, the free text as an observation.
     const answerOf = (qq: (typeof questions)[number]) =>
       formatAskAnswer([...(selectedOptions[qq.id] ?? [])], textAnswers[qq.id], t('askCard.noteLabel'))
 
-    // O campo diz o que o texto vai ser: com opcao marcada e uma observacao
-    // SOBRE ela; sem nenhuma, e a propria resposta.
+    // The field says what the text is going to be: with an option checked it is an observation
+    // ABOUT it; without any, it is the answer itself.
     const freePlaceholder =
       selected.length === 0
         ? t('askCard.otherAnswerPlaceholder')
@@ -414,7 +414,7 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
           }}
         />
 
-        {/* Action buttons: Dispensar | Avançar/Responder */}
+        {/* Action buttons: Dismiss | Next/Answer */}
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
             onPress={() => reply({ rejected: true })}

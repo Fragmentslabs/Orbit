@@ -1,28 +1,28 @@
 import type { ChatMessage, MessagePart, TextPart } from "@shared/chat"
 
 /**
- * Peças puras do modo chamada (conversa por voz). Vivem fora do hook para
- * serem testadas sem DOM, microfone ou IPC.
+ * Pure pieces of call mode (voice conversation). They live outside the hook so they
+ * can be tested without a DOM, microphone or IPC.
  */
 
 /**
- * Nível (0..1, ver `pcmLevel`) a partir do qual um bloco do microfone conta como
- * fala: ~-34 dB. Ruído de sala fica bem abaixo; voz normal, bem acima.
+ * Level (0..1, see `pcmLevel`) from which a microphone block counts as
+ * speech: ~-34 dB. Room noise stays well below; normal voice, well above.
  */
 export const SPEECH_LEVEL = 0.35
 
 /**
- * Já falando, basta este nível (~-41 dB) para a fala CONTINUAR: fim de sílaba,
- * voz que baixa no fim da frase e a respiração entre frases não contam como
- * silêncio. Histerese: começar exige mais do que continuar.
+ * Already speaking, this level (~-41 dB) is enough for the speech to CONTINUE: the end of a
+ * syllable, a voice that drops at the end of the sentence and the breathing between sentences
+ * do not count as silence. Hysteresis: starting requires more than continuing.
  */
 export const SPEECH_CONTINUE_LEVEL = 0.2
 
 /**
- * O bloco é fala? Antes da primeira palavra vale o limiar alto; depois, o baixo
- * — mas nunca abaixo do ruído da sala (`noise`, medido antes de a pessoa
- * falar) com folga: num ambiente com ventilador o limiar baixo puro nunca
- * deixaria a vez terminar.
+ * Is the block speech? Before the first word the high threshold applies; after it, the low
+ * one — but never below the room noise (`noise`, measured before the person
+ * speaks) with a margin: in an environment with a fan, the pure low threshold would never
+ * let the turn end.
  */
 export function isSpeech(level: number, speaking: boolean, noise = 0): boolean {
   if (!speaking) return level >= SPEECH_LEVEL
@@ -30,57 +30,57 @@ export function isSpeech(level: number, speaking: boolean, noise = 0): boolean {
   return level >= floor
 }
 
-/** Média móvel do ruído de fundo, alimentada só com o silêncio antes da fala. */
+/** Moving average of the background noise, fed only with the silence before the speech. */
 export function trackNoise(noise: number, level: number): number {
   return noise === 0 ? level : noise * 0.9 + level * 0.1
 }
 
 /**
- * A vez da pessoa acabou? Só depois de ela ter falado algo (silêncio antes da
- * primeira palavra não encerra nada) e de um silêncio contínuo de `silenceMs`.
+ * Is the person's turn over? Only after they have said something (silence before the
+ * first word ends nothing) and after a continuous silence of `silenceMs`.
  */
 export function turnEnded(state: { heardSpeech: boolean; lastSpeechAt: number; now: number; silenceMs: number }): boolean {
   return state.heardSpeech && state.now - state.lastSpeechAt >= state.silenceMs
 }
 
-/** O que a chamada fala de uma resposta (ver `callSpeech`). */
+/** What the call speaks of an answer (see `callSpeech`). */
 export interface CallSpeech {
-  /** Prosa ANTES da primeira ferramenta: falada enquanto chega. */
+  /** Prose BEFORE the first tool: spoken as it arrives. */
   lead: string
-  /** A resposta já chamou alguma ferramenta. */
+  /** The answer has already called some tool. */
   hasTool: boolean
-  /** Com ferramentas: a prosa depois da última delas — a resposta final. */
+  /** With tools: the prose after the last one of them — the final answer. */
   final: string | null
 }
 
 const isProse = (part: MessagePart): part is TextPart => part.type === "text" && part.source === undefined
-/** Texto e raciocínio não quebram um bloco; ferramenta, agente, imagem etc. quebram. */
+/** Text and reasoning do not break a block; a tool, an agent, an image etc. break it. */
 const isTextish = (part: MessagePart) => part.type === "text" || part.type === "reasoning"
 
 /**
- * Raciocínio que vazou no texto (`<think>…</think>`, de gateways que não o
- * separam). Uma tag ainda aberta — o raciocínio no meio do streaming — leva
- * junto tudo o que vem depois dela.
+ * Reasoning that leaked into the text (` thinking…</think>`, from gateways that do not
+ * separate it). A tag still open — the reasoning in the middle of the streaming — takes
+ * everything that comes after it along.
  */
 export function stripThinking(text: string): string {
   return text.replace(/<think(?:ing)?>[\s\S]*?(<\/think(?:ing)?>|$)/gi, "")
 }
 
 /**
- * Política de fala da chamada. Falar TODA a prosa de uma resposta com
- * ferramentas lia em voz alta a narração que o modelo escreve entre uma
- * ferramenta e outra ("deixa eu ver X… agora Y…", às vezes o próprio
- * raciocínio) — na tela ela fica recolhida em "N ações", na voz não. Então:
+ * Speech policy of the call. Speaking ALL the prose of an answer with
+ * tools read out loud the narration the model writes between one
+ * tool and another ("let me check X… now Y…", sometimes the reasoning
+ * itself) — on screen it stays collapsed under "N actions", in the voice it does not. So:
  *
- *   - sem ferramentas: a resposta é o próprio `lead`, falado em streaming;
- *   - com ferramentas: do `lead` só a frase de espera ("deixa eu pesquisar")
- *     já falada; a narração do meio, nunca; e o `final` (prosa depois da última
- *     ferramenta) quando o turno termina.
+ *   - without tools: the answer is the `lead` itself, spoken in streaming;
+ *   - with tools: from the `lead` only the waiting sentence ("let me search")
+ *     already spoken; the narration in the middle, never; and the `final` (prose after the last
+ *     tool) when the turn ends.
  *
- * Textos do engine (com `source`) não existem para a fala, como na tela.
+ * Engine texts (with `source`) do not exist for the speech, as on screen.
  */
 export function callSpeech(message: ChatMessage): CallSpeech {
-  // Resumo da compactação: contexto para o modelo, nunca fala.
+  // Compaction summary: context for the model, never speech.
   if (message.role !== "assistant" || message.summary) return { lead: "", hasTool: false, final: null }
   const parts = message.parts.filter((part) => !(part.type === "text" && part.source !== undefined))
   let i = 0
@@ -99,22 +99,22 @@ export function callSpeech(message: ChatMessage): CallSpeech {
       .map((part) => part.text)
       .join(""),
   ).trim()
-  // O `lead` terminou numa ferramenta: a quebra fecha a última frase dele.
+  // The `lead` ended on a tool: the break closes its last sentence.
   return { lead: `${stripThinking(lead)}\n`, hasTool, final: tail || null }
 }
 
 /**
- * O que ainda dá para FALAR de uma resposta que chega aos pedaços: do ponto já
- * falado (`from`) até o fim da última frase completa. Com a resposta terminada
- * (`final`), vai tudo o que restou. `next` é o novo ponto já falado.
+ * What can still be SPOKEN of an answer that arrives in pieces: from the point already
+ * spoken (`from`) to the end of the last complete sentence. With the answer finished
+ * (`final`), everything that is left goes. `next` is the new point already spoken.
  *
- * Falar frase a frase é o que deixa a chamada em tempo real: a primeira frase
- * já toca enquanto o modelo escreve as seguintes.
+ * Speaking sentence by sentence is what keeps the call in real time: the first sentence
+ * already plays while the model writes the following ones.
  */
 export function takeSpeakable(text: string, from: number, final: boolean): { chunk: string; next: number } {
   const rest = text.slice(from)
   if (final) return { chunk: rest.trim(), next: text.length }
-  // Fim de frase: pontuação seguida de espaço/quebra, ou uma quebra de linha.
+  // End of sentence: punctuation followed by a space/newline, or a line break.
   const boundary = /[.!?…;:](?=\s)|\n/g
   let end = -1
   for (let match = boundary.exec(rest); match; match = boundary.exec(rest)) end = match.index + match[0].length
@@ -123,9 +123,9 @@ export function takeSpeakable(text: string, from: number, final: boolean): { chu
 }
 
 /**
- * O começo de `text` que já foi dito, cortado em limite de palavra: a legenda
- * do modo chamada cresce junto com o áudio sem cortar uma palavra ao meio.
- * `fraction` é 0..1 do que já tocou.
+ * The beginning of `text` that has already been said, cut at a word boundary: the subtitle
+ * of call mode grows along with the audio without cutting a word in half.
+ * `fraction` is 0..1 of what has played.
  */
 export function spokenPrefix(text: string, fraction: number): string {
   if (!text) return ""
@@ -133,17 +133,17 @@ export function spokenPrefix(text: string, fraction: number): string {
   if (!Number.isFinite(fraction) || fraction <= 0) return ""
   const cut = Math.ceil(text.length * fraction)
   if (cut >= text.length) return text
-  // O primeiro espaço depois do corte: a palavra que começou só entra quando
-  // estiver inteira (ou quando for a última).
+  // The first space after the cut: the word that started only comes in when
+  // it is whole (or when it is the last one).
   const rest = text.slice(cut)
   const gap = rest.search(/\s/)
   return gap === -1 ? text : text.slice(0, cut + gap)
 }
 
 /**
- * Fatia de `text` que cabe ao pedaço `index` de `total`. É o caminho de quem
- * manda só o áudio fatiado, sem o texto do pedaço (a rota do modelo): divide
- * por palavras para as fatias não se sobreporem nem deixarem buraco.
+ * Slice of `text` that belongs to chunk `index` of `total`. It is the path for whoever
+ * sends only the sliced audio, without the chunk text (the model route): it divides
+ * by words so the slices neither overlap nor leave a hole.
  */
 export function speechPieceText(text: string, index: number, total: number): string {
   const words = text.trim().split(/\s+/).filter(Boolean)
@@ -154,24 +154,24 @@ export function speechPieceText(text: string, index: number, total: number): str
   return words.slice(start, Math.max(start, end)).join(" ")
 }
 
-/** Uma linha de legenda e o trecho que ela cobre no texto normalizado. */
+/** A subtitle line and the stretch it covers in the normalized text. */
 export interface CaptionLine {
   text: string
-  /** Índice do primeiro caractere da linha no texto normalizado. */
+  /** Index of the first character of the line in the normalized text. */
   start: number
-  /** Índice logo depois do último caractere da linha. */
+  /** Index right after the last character of the line. */
   end: number
 }
 
-/** Espaços, quebras e tabulações em um espaço só — a medida da legenda. */
+/** Spaces, line breaks and tabs into a single space — the subtitle's measure. */
 export function normalizeSpeech(text: string): string {
   return text.replace(/\s+/g, " ").trim()
 }
 
 /**
- * Corta a fala em linhas de legenda curtas (até `maxChars`), sempre em limite
- * de palavra: o painel da chamada mostra duas — a que está sendo dita e a
- * próxima —, então cada linha precisa caber em uma linha visual.
+ * Cuts the speech into short subtitle lines (up to `maxChars`), always at a word
+ * boundary: the call panel shows two — the one being said and the
+ * next one —, so each line has to fit in one visual line.
  */
 export function captionLines(text: string, maxChars = 48): CaptionLine[] {
   const normalized = normalizeSpeech(text)
@@ -193,9 +193,9 @@ export function captionLines(text: string, maxChars = 48): CaptionLine[] {
 }
 
 /**
- * Índice da linha que está sendo dita para uma posição (em caracteres) no
- * texto normalizado. Posições no espaço entre duas linhas continuam na
- * anterior; a próxima só assume quando a primeira letra dela começa.
+ * Index of the line being said for a position (in characters) in the
+ * normalized text. Positions in the space between two lines stay on the
+ * previous one; the next one only takes over when its first letter begins.
  */
 export function captionIndexAt(lines: CaptionLine[], position: number): number {
   let index = 0
@@ -204,9 +204,9 @@ export function captionIndexAt(lines: CaptionLine[], position: number): number {
 }
 
 /**
- * A chamada pertence a este composer? Só o id decide: a chamada sempre nasce
- * com uma sessão de verdade (o composer cria uma antes de ligar quando está num
- * chat novo), então não existe mais "dono pendente" sem id.
+ * Does the call belong to this composer? Only the id decides: the call always starts
+ * with a real session (the composer creates one before connecting when it is in a
+ * new chat), so there is no longer a "pending owner" without an id.
  */
 export function isCallOwner({
   callSessionId,
@@ -219,23 +219,23 @@ export function isCallOwner({
 }
 
 /**
- * Markdown → texto que soa bem em voz alta. O prompt da chamada já pede texto
- * puro; isto é a rede para o que escapar (um negrito, um link, um bloco de código).
+ * Markdown → text that sounds good out loud. The call prompt already asks for plain
+ * text; this is the net for what escapes (a bold, a link, a code block).
  */
 export function speechText(markdown: string): string {
   return (
     markdown
-      // Bloco de código não se lê em voz alta.
+      // A code block is not read out loud.
       .replace(/```[\s\S]*?(```|$)/g, " ")
       .replace(/`([^`]*)`/g, "$1")
-      // [texto](url) → texto; URL solta some.
+      // [text](url) → text; a loose URL disappears.
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/https?:\/\/\S+/g, "")
-      // Marcadores de título, citação, lista e tabela.
+      // Heading, quote, list and table markers.
       .replace(/^\s{0,3}(#{1,6}|>)\s*/gm, "")
       .replace(/^\s*([-*+]|\d+[.)])\s+/gm, "")
       .replace(/\|/g, " ")
-      // Ênfase.
+      // Emphasis.
       .replace(/(\*\*|__|\*|_|~~)(?=\S)([^*_~]+?)\1/g, "$2")
       .replace(/[ \t]+/g, " ")
       .replace(/\s*\n\s*/g, "\n")

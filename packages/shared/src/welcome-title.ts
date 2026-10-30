@@ -1,35 +1,35 @@
 /**
- * Título da tela inicial ("Pronto para começar?").
+ * Title of the start screen ("Ready to get started?").
  *
- * A frase muda a cada abertura do app: o sorteio usa uma semente de escopo de
- * módulo, avaliada uma vez por processo. Navegar entre chat e código, trocar de
- * pasta ou reabrir uma conversa não troca o texto debaixo do usuário.
+ * The sentence changes on every opening of the app: the draw uses a module-scope
+ * seed, evaluated once per process. Navigating between chat and code, switching
+ * folders or reopening a conversation does not swap the text under the user.
  *
- * A escolha depende do MODO e do NOME aprendido:
- * - chat: convite e conversa; com nome, cumprimenta ("Olá, Ana.").
- * - código: construção e ponto de partida ("O que vamos construir hoje?").
+ * The choice depends on the MODE and on the learned NAME:
+ * - chat: invitation and conversation; with a name, it greets ("Hello, Ana.").
+ * - code: building and starting point ("What shall we build today?").
  *
- * Sem nome, as variantes com nome não entram no sorteio — nada de "Olá, .".
- * As frases são curtas de propósito: o título é `whitespace-nowrap` na tela, e
- * frase comprida estoura a coluna em vez de quebrar linha.
+ * Without a name, the variants with a name do not enter the draw — no "Hello, .".
+ * The sentences are short on purpose: the title is `whitespace-nowrap` on the screen, and
+ * a long sentence overflows the column instead of breaking the line.
  *
- * Vive no shared para o app mobile usar a mesma regra e para o sorteio ser
- * testável sem Electron.
+ * It lives in shared so the mobile app uses the same rule and so the draw is
+ * testable without Electron.
  */
 
 export type WelcomeTitleMode = 'chat' | 'code'
 
 export interface WelcomeTitleInput {
   mode: WelcomeTitleMode
-  /** Nome aprendido na conversa ou digitado nas Preferências. */
+  /** Name learned in the conversation or typed in the Preferences. */
   userName?: string | null
-  /** Hora local (0–23), para "Bom dia/Boa tarde/Boa noite". Default: agora. */
+  /** Local hour (0–23), for "Good morning/Good afternoon/Good evening". Default: now. */
   hour?: number
-  /** 0..1. Só os testes passam; em produção vale a semente da abertura. */
+  /** 0..1. Only the tests pass it; in production the seed of the opening applies. */
   seed?: number
 }
 
-/** Convite e conversa, sem nome. */
+/** Invitation and conversation, without a name. */
 const CHAT_PLAIN = [
   'chat.empty.startTitle',
   'chat.empty.titleHelloCasual',
@@ -37,7 +37,7 @@ const CHAT_PLAIN = [
   'chat.empty.titleWhatShallWeDo',
 ] as const
 
-/** Chat com nome: a saudação é a primeira impressão. A da hora entra no meio. */
+/** Chat with a name: the greeting is the first impression. The time-based one comes in the middle. */
 const CHAT_NAMED = [
   'chat.empty.hello',
   'chat.empty.titleGoodToSee',
@@ -45,7 +45,7 @@ const CHAT_NAMED = [
   'chat.empty.titleReadyName',
 ] as const
 
-/** Código sem nome: construção e ponto de partida. */
+/** Code without a name: building and starting point. */
 const CODE_PLAIN = [
   'chat.empty.startTitle',
   'chat.empty.titleWhatToBuild',
@@ -56,8 +56,8 @@ const CODE_PLAIN = [
 ] as const
 
 /**
- * Código com nome: as mesmas ideias, sem o "hoje" — o nome come espaço e o
- * título não quebra linha.
+ * Code with a name: the same ideas, without the "today" — the name takes space and the
+ * title does not break the line.
  */
 const CODE_NAMED = [
   'chat.empty.titleWhatToBuildName',
@@ -71,15 +71,15 @@ const DAY_GREETINGS = [
   'chat.empty.titleEvening',
 ] as const
 
-/** Todas as chaves que o sorteio pode devolver (o teste de i18n usa esta lista). */
+/** All the keys the draw can return (the i18n test uses this list). */
 export const WELCOME_TITLE_KEYS: readonly string[] = [
   ...new Set<string>([...CHAT_PLAIN, ...CHAT_NAMED, ...CODE_PLAIN, ...CODE_NAMED, ...DAY_GREETINGS]),
 ]
 
-/** Semente da abertura: sorteada uma vez, quando o módulo carrega. */
+/** Seed of the opening: drawn once, when the module loads. */
 const LAUNCH_SEED = Math.random()
 
-/** "Bom dia" até meio-dia, "Boa tarde" até as 18h, "Boa noite" no resto. */
+/** "Good morning" until noon, "Good afternoon" until 6 pm, "Good evening" for the rest. */
 function dayGreetingKey(hour: number): string {
   if (hour >= 5 && hour < 12) return DAY_GREETINGS[0]
   if (hour >= 12 && hour < 18) return DAY_GREETINGS[1]
@@ -90,15 +90,15 @@ function chatNamedPool(hour: number): readonly string[] {
   return [CHAT_NAMED[0], dayGreetingKey(hour), ...CHAT_NAMED.slice(1)]
 }
 
-/** Índice uniforme em [0, length), tolerante a seed fora de faixa. */
+/** Uniform index in [0, length), tolerant to a seed out of range. */
 function indexFor(seed: number, length: number): number {
   const safe = Number.isFinite(seed) ? Math.min(Math.max(seed, 0), 0.999999) : 0
   return Math.floor(safe * length)
 }
 
 /**
- * Devolve a CHAVE de i18n do título — quem chama resolve com `t(key, { name })`.
- * Assim a tradução fica onde as outras ficam, e o sorteio não depende do idioma.
+ * Returns the i18n KEY of the title — the caller resolves it with `t(key, { name })`.
+ * That way the translation stays where the others are, and the draw does not depend on the language.
  */
 export function pickWelcomeTitle({ mode, userName, hour, seed }: WelcomeTitleInput): string {
   const hasName = Boolean(userName?.trim())

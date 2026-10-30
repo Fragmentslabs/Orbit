@@ -1,35 +1,35 @@
 #!/usr/bin/env node
 /**
- * Prepara o `whisper-server` (whisper.cpp) que o motor Whisper do ditado sobe
- * como processo auxiliar (ver electron/lib/voice/whisper.ts).
+ * Prepares the `whisper-server` (whisper.cpp) that the Whisper dictation engine starts
+ * as a helper process (see electron/lib/voice/whisper.ts).
  *
  *   node scripts/build-whisper-server.mjs [--arch arm64|x64] [--force] [--soft]
  *
- * Saída: resources/whisper/<platform>-<arch>/whisper-server — é de lá que o dev
- * lê, e é essa pasta que o electron-builder copia para `Resources/whisper` do
+ * Output: resources/whisper/<platform>-<arch>/whisper-server — it is from there that dev
+ * reads, and it is this folder that electron-builder copies to `Resources/whisper` of the
  * app (extraResources).
  *
- * O `npm run dev` chama com `--soft` (predev), igual ao ffmpeg: o servidor sobe
- * junto na primeira vez e depois o carimbo faz a chamada custar nada. No modo
- * soft uma falha (sem rede, sem compilador) só avisa — o dev abre igual, com o
- * motor whisper indisponível e o motivo na tela de voz. No build é fatal.
+ * `npm run dev` calls it with `--soft` (predev), like ffmpeg: the server comes up
+ * along on the first time and afterwards the stamp makes the call cost nothing. In
+ * soft mode a failure (no network, no compiler) only warns — dev opens anyway, with the
+ * whisper engine unavailable and the reason on the voice screen. In the build it is fatal.
  *
- * No Windows NÃO compila: baixa o binário oficial do release do whisper.cpp (o
- * build `bNNNN` do mesmo commit da tag — a tag vX.Y.Z sai sem anexos), que vem
- * com as DLLs do ggml ao lado (o backend de CPU é escolhido em runtime, pelo
- * conjunto de instruções da máquina). Junto vão as DLLs do runtime do Visual
- * C++ desta máquina (deploy local ao app, permitido pela licença do
- * redistribuível): sem elas o servidor não abre num Windows sem o VC++.
- * ORBIT_WHISPER_COMPILE=1 força a compilação também no Windows.
+ * On Windows it does NOT compile: it downloads the official binary from the whisper.cpp release (the
+ * `bNNNN` build of the same commit as the tag — the vX.Y.Z tag comes out without attachments), which comes
+ * with the ggml DLLs next to it (the CPU backend is chosen at runtime, by the
+ * instruction set of the machine). Along with them go the Visual C++ runtime DLLs of this machine
+ * (local deployment to the app, allowed by the redistributable license): without them the
+ * server does not open on a Windows without VC++.
+ * ORBIT_WHISPER_COMPILE=1 forces compilation on Windows too.
  *
- * No macOS e no Linux compila: build ESTÁTICO e com o shader do Metal embutido —
- * um executável só, sem dylib ao lado nem `.metal` para achar em runtime — é o
- * que deixa empacotar sem mexer em rpath. `GGML_NATIVE=OFF` para o binário rodar
- * em qualquer máquina da mesma arquitetura, não só na que compilou
- * (ORBIT_WHISPER_NATIVE=1 desfaz).
+ * On macOS and Linux it compiles: STATIC build and with the Metal shader embedded —
+ * a single executable, without a dylib next to it or a `.metal` to find at runtime — is
+ * what allows packaging without touching rpath. `GGML_NATIVE=OFF` so the binary runs
+ * on any machine of the same architecture, not only on the one that compiled it
+ * (ORBIT_WHISPER_NATIVE=1 undoes it).
  *
- * Nada global: sem cmake no PATH ele vai para um venv em .whisper-build/.venv
- * (a mesma receita do vozlab). Já pronto na mesma versão, não refaz nada.
+ * Nothing global: without cmake in the PATH it goes to a venv in .whisper-build/.venv
+ * (the same recipe as vozlab). Already ready in the same version, it redoes nothing.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -41,13 +41,13 @@ import { fileURLToPath } from 'node:url'
 
 const TAG = process.env.WHISPER_TAG || 'v1.9.5'
 const REPO = 'https://github.com/ggml-org/whisper.cpp.git'
-/** Build do release no mesmo commit da TAG (é ele que leva os binários). */
+/** Release build at the same commit as the TAG (it is the one that carries the binaries). */
 const PREBUILT_BUILD = process.env.WHISPER_PREBUILT_BUILD || 'b5454'
 const PREBUILT = {
   'win32-x64': 'whisper-bin-x64.zip',
   'win32-arm64': 'whisper-bin-win-cpu-arm64.zip',
 }
-/** Runtime do Visual C++ que o whisper-server.exe importa. */
+/** Visual C++ runtime that whisper-server.exe imports. */
 const VC_RUNTIME = ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll']
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -73,7 +73,7 @@ const prebuiltName = process.env.ORBIT_WHISPER_COMPILE === '1' ? null : PREBUILT
 const prebuiltUrl = prebuiltName
   ? `https://github.com/ggml-org/whisper.cpp/releases/download/${PREBUILT_BUILD}/${prebuiltName}`
   : null
-// O carimbo diz DE ONDE veio: trocar entre compilado e pré-compilado refaz.
+// The stamp says WHERE it came from: switching between compiled and pre-built redoes it.
 const signature = prebuiltUrl ? `${TAG} ${prebuiltUrl}` : TAG
 
 const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: 'inherit', ...opts })
@@ -87,11 +87,11 @@ const has = (cmd) => {
 }
 
 if (!force && fs.existsSync(out) && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8').trim() === signature) {
-  console.log(`» whisper-server ${TAG} (${platform}-${arch}) já pronto: ${path.relative(root, out)}`)
+  console.log(`» whisper-server ${TAG} (${platform}-${arch}) already built: ${path.relative(root, out)}`)
   process.exit(0)
 }
 
-/** Primeiro arquivo com esse nome dentro da pasta (o zip aninha em Release/). */
+/** First file with that name inside the folder (the zip nests it in Release/). */
 function findFile(dir, name) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
@@ -105,48 +105,48 @@ function findFile(dir, name) {
   return null
 }
 
-/** Binário oficial do release: o servidor e as DLLs do ggml/whisper ao lado. */
+/** Official binary from the release: the server and the ggml/whisper DLLs next to it. */
 async function fetchPrebuilt() {
   const tmp = path.join(work, `prebuilt-${platform}-${arch}`)
   fs.rmSync(tmp, { recursive: true, force: true })
   fs.mkdirSync(tmp, { recursive: true })
   const archive = path.join(tmp, prebuiltName)
-  console.log(`» baixando ${prebuiltUrl}`)
+  console.log(`» downloading ${prebuiltUrl}`)
   const res = await fetch(prebuiltUrl, { redirect: 'follow' })
-  if (!res.ok || !res.body) throw new Error(`download falhou (${res.status}): ${prebuiltUrl}`)
+  if (!res.ok || !res.body) throw new Error(`download failed (${res.status}): ${prebuiltUrl}`)
   await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(archive))
-  // O tar do Git Bash (GNU) vem antes no PATH e não abre zip; o do sistema abre.
+  // The tar from Git Bash (GNU) comes first in the PATH and does not open zip; the system one does.
   const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32')
   execFileSync(path.join(system32, 'tar.exe'), ['-xf', archive, '-C', tmp], { stdio: 'inherit' })
   const found = findFile(tmp, exe)
-  if (!found) throw new Error(`${prebuiltName} não trouxe ${exe}`)
+  if (!found) throw new Error(`${prebuiltName} did not bring ${exe}`)
   const from = path.dirname(found)
 
-  // Pasta limpa: DLL de outra versão sobrando ao lado confundiria o loader. O
-  // resto do zip (cli, bench, parakeet, SDL…) não interessa ao app.
+  // Clean folder: a DLL from another version left next to it would confuse the loader. The
+  // rest of the zip (cli, bench, parakeet, SDL…) does not interest the app.
   fs.rmSync(outDir, { recursive: true, force: true })
   fs.mkdirSync(outDir, { recursive: true })
   const keep = (name) => name === exe || name === 'whisper.dll' || /^ggml.*\.dll$/i.test(name)
   for (const name of fs.readdirSync(from).filter(keep)) fs.copyFileSync(path.join(from, name), path.join(outDir, name))
-  // Runtime do VC++ só da MESMA arquitetura desta máquina (o System32 é o nativo).
+  // VC++ runtime only from the SAME architecture as this machine (System32 is the native one).
   if (arch === process.arch) {
     for (const name of VC_RUNTIME) {
       const dll = path.join(system32, name)
       if (fs.existsSync(dll)) fs.copyFileSync(dll, path.join(outDir, name))
-      else console.warn(`» aviso: ${name} não está em ${system32} — o app vai depender do VC++ instalado`)
+      else console.warn(`» warning: ${name} is not in ${system32} — the app will depend on the installed VC++`)
     }
   }
   fs.rmSync(tmp, { recursive: true, force: true })
 
   if (arch === process.arch) {
-    // O uso sai no stderr; o que importa é o binário abrir com as DLLs ao lado.
+    // The usage goes out on stderr; what matters is the binary opening with the DLLs next to it.
     const help = spawnSync(out, ['--help'], { encoding: 'utf8', timeout: 20_000 })
     if (!/usage/i.test(`${help.stdout}${help.stderr}`)) {
-      throw new Error(`o whisper-server baixado não abriu (${help.error?.message ?? `código ${help.status}`})`)
+      throw new Error(`the downloaded whisper-server did not open (${help.error?.message ?? `code ${help.status}`})`)
     }
   }
   fs.writeFileSync(stamp, `${signature}\n`)
-  console.log(`» pronto: ${path.relative(root, out)} (whisper.cpp ${TAG}, ${PREBUILT_BUILD})`)
+  console.log(`» ready: ${path.relative(root, out)} (whisper.cpp ${TAG}, ${PREBUILT_BUILD})`)
 }
 
 function compile() {
@@ -155,7 +155,7 @@ function compile() {
     const venv = path.join(work, '.venv')
     cmake = path.join(venv, platform === 'win32' ? 'Scripts/cmake.exe' : 'bin/cmake')
     if (!fs.existsSync(cmake)) {
-      console.log('» cmake local (venv em .whisper-build/.venv)')
+      console.log('» local cmake (venv in .whisper-build/.venv)')
       run('python3', ['-m', 'venv', venv])
       run(path.join(venv, platform === 'win32' ? 'Scripts/pip' : 'bin/pip'), ['install', '-q', 'cmake'])
     }
@@ -169,7 +169,7 @@ function compile() {
     }
   }
   if (currentTag() !== TAG) {
-    console.log(`» baixando whisper.cpp ${TAG}`)
+    console.log(`» downloading whisper.cpp ${TAG}`)
     fs.rmSync(src, { recursive: true, force: true })
     run('git', ['clone', '-q', '--depth', '1', '--branch', TAG, REPO, src])
   }
@@ -187,35 +187,35 @@ function compile() {
       '-DGGML_METAL=ON',
       '-DGGML_METAL_EMBED_LIBRARY=ON',
       `-DCMAKE_OSX_ARCHITECTURES=${arch === 'x64' ? 'x86_64' : 'arm64'}`,
-      // Mesmo piso do app (electron-builder.json5 → mac.minimumSystemVersion).
+      // Same floor as the app (electron-builder.json5 → mac.minimumSystemVersion).
       '-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0',
     )
   }
 
-  console.log(`» compilando whisper-server ${TAG} (${platform}-${arch}, estático)`)
+  console.log(`» compiling whisper-server ${TAG} (${platform}-${arch}, static)`)
   run(cmake, ['-S', src, '-B', build, ...flags])
   run(cmake, ['--build', build, '--config', 'Release', '--target', 'whisper-server', '-j', String(os.availableParallelism?.() ?? os.cpus().length)])
 
   const candidates = [path.join(build, 'bin', exe), path.join(build, 'bin', 'Release', exe)]
   const built = candidates.find((file) => fs.existsSync(file))
-  if (!built) throw new Error(`whisper-server não apareceu em ${candidates.join(' nem em ')}`)
+  if (!built) throw new Error(`whisper-server did not show up in ${candidates.join(' nor in ')}`)
 
   fs.mkdirSync(outDir, { recursive: true })
   fs.copyFileSync(built, out)
   fs.chmodSync(out, 0o755)
   fs.writeFileSync(stamp, `${signature}\n`)
 
-  // Um @rpath sobrando quebraria o binário dentro do .app (as dylibs não vão junto).
+  // A leftover @rpath would break the binary inside the .app (the dylibs do not go along).
   if (platform === 'darwin') {
     const libs = execFileSync('otool', ['-L', out], { encoding: 'utf8' })
-    if (libs.includes('@rpath')) throw new Error(`o whisper-server saiu dependendo de dylibs:\n${libs}`)
+    if (libs.includes('@rpath')) throw new Error(`whisper-server came out depending on dylibs:\n${libs}`)
   }
 
-  console.log(`» pronto: ${path.relative(root, out)}`)
+  console.log(`» ready: ${path.relative(root, out)}`)
 }
 
-// Sem process.exit no caminho de erro: no Windows, sair no meio de um fetch que
-// falhou derruba o Node numa assertion da libuv (ver fetch-ffmpeg.mjs).
+// Without process.exit on the error path: on Windows, exiting in the middle of a fetch that
+// failed takes Node down in a libuv assertion (see fetch-ffmpeg.mjs).
 try {
   fs.mkdirSync(work, { recursive: true })
   if (prebuiltUrl) await fetchPrebuilt()
@@ -223,7 +223,7 @@ try {
 } catch (err) {
   if (soft) {
     console.warn(`» whisper-server: ${err?.message ?? err}`)
-    console.warn('» seguindo sem whisper-server — o motor whisper do ditado fica indisponível até `npm run whisper:build` dar certo')
+    console.warn('» going on without whisper-server — the dictation whisper engine stays unavailable until `npm run whisper:build` succeeds')
   } else {
     console.error(err)
     process.exitCode = 1

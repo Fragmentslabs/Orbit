@@ -1,32 +1,32 @@
 /**
- * Fracta: integração oficial (bancos de dados via MCP).
- * O estado cruza duas pontas — o app Fracta rodando na máquina e o servidor
- * MCP "Fracta" registrado e conectado no Orbit.
+ * Fracta: official integration (databases via MCP).
+ * The state crosses two ends — the Fracta app running on the machine and the MCP
+ * server "Fracta" registered and connected in Orbit.
  */
 
 export type FractaState =
-  /** Sem mcp.json na pasta de dados do Fracta: o Fracta nunca rodou nesta máquina */
+  /** Without mcp.json in the Fracta data folder: Fracta never ran on this machine */
   | 'not-installed'
-  /** mcp.json existe, mas o backend do Fracta não responde (app fechado) */
+  /** mcp.json exists, but the Fracta backend does not answer (app closed) */
   | 'stopped'
-  /** Servidor MCP desligado em Fracta → Configurações → Agentes (MCP) */
+  /** MCP server off in Fracta → Settings → Agents (MCP) */
   | 'disabled'
-  /** Fracta no ar, mas ainda sem servidor MCP registrado no Orbit */
+  /** Fracta up, but still without an MCP server registered in Orbit */
   | 'installed'
-  /** Registrado no Orbit, porém a conexão MCP falhou (token novo, porta trocada...) */
+  /** Registered in Orbit, but the MCP connection failed (new token, changed port...) */
   | 'error'
-  /** Conectado: as tools estão no toolset do agente */
+  /** Connected: the tools are in the agent's toolset */
   | 'connected'
 
 export interface FractaStatus {
   state: FractaState
-  /** Existe entrada "Fracta" no mcp-config.json do Orbit */
+  /** There is a "Fracta" entry in Orbit's mcp-config.json */
   linked: boolean
-  /** Credencial salva diverge da publicada pelo Fracta (token gerado de novo / porta trocada) */
+  /** Saved credential differs from the one published by Fracta (token generated again / port changed) */
   tokenStale: boolean
   mcpUrl?: string
-  /** Quantidade de ferramentas expostas quando conectado */
+  /** Number of tools exposed when connected */
   toolCount: number
-  /** Erro da conexão MCP, ou um código da própria integração (fracta-not-running...) */
+  /** MCP connection error, or a code of the integration itself (fracta-not-running...) */
   error?: string
 }

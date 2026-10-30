@@ -6,10 +6,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 const { __resetWorkspaceLocks, withWorkspaceLock, workspaceLockPending } = await import('./workspace-lock')
 
 /**
- * Duas conversas na MESMA pasta não podem rodar turnos ao mesmo tempo: o
- * snapshot de uma sairia no meio da escrita da outra, e o revert de uma
- * levaria junto o trabalho da outra. A fila é por pasta — projetos diferentes
- * seguem em paralelo.
+ * Two conversations in the SAME folder cannot run turns at the same time: the
+ * snapshot of one would land in the middle of the other's write, and the revert of one
+ * would take the other's work with it. The queue is per folder — different projects
+ * go on in parallel.
  */
 let tmp: string
 let a: string
@@ -38,15 +38,15 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 describe('withWorkspaceLock', () => {
-  it('serializa dois turnos da mesma pasta, na ordem de chegada', async () => {
+  it('serializes two turns of the same folder, in arrival order', async () => {
     const order: string[] = []
     const gate = deferred()
-    const primeiro = withWorkspaceLock(a, async () => {
+    const first = withWorkspaceLock(a, async () => {
       order.push('a-entrou')
       await gate.promise
       order.push('a-saiu')
     })
-    const segundo = withWorkspaceLock(a, async () => {
+    const second = withWorkspaceLock(a, async () => {
       order.push('b-entrou')
       order.push('b-saiu')
     })
@@ -55,72 +55,72 @@ describe('withWorkspaceLock', () => {
     expect(order).toEqual(['a-entrou'])
 
     gate.resolve()
-    await Promise.all([primeiro, segundo])
+    await Promise.all([first, second])
     expect(order).toEqual(['a-entrou', 'a-saiu', 'b-entrou', 'b-saiu'])
   })
 
-  it('pastas diferentes rodam em paralelo', async () => {
+  it('different folders run in parallel', async () => {
     const order: string[] = []
     const gate = deferred()
-    const um = withWorkspaceLock(a, async () => {
+    const one = withWorkspaceLock(a, async () => {
       order.push('a-entrou')
       await gate.promise
     })
-    const dois = withWorkspaceLock(b, async () => {
+    const two = withWorkspaceLock(b, async () => {
       order.push('b-entrou')
     })
 
     await new Promise((resolve) => setTimeout(resolve, 25))
     expect(order.sort()).toEqual(['a-entrou', 'b-entrou'])
     gate.resolve()
-    await Promise.all([um, dois])
+    await Promise.all([one, two])
   })
 
-  it('é reentrante no mesmo contexto (revert que chama outra operação travada)', async () => {
+  it('is reentrant in the same context (a revert that calls another locked operation)', async () => {
     const result = await withWorkspaceLock(a, async () =>
       withWorkspaceLock(a, async () => 'ok'),
     )
     expect(result).toBe('ok')
   })
 
-  it('uma falha não trava a fila da pasta', async () => {
+  it('a failure does not jam the folder queue', async () => {
     await expect(
       withWorkspaceLock(a, async () => {
-        throw new Error('falhou')
+        throw new Error('failed')
       }),
-    ).rejects.toThrow('falhou')
-    await expect(withWorkspaceLock(a, async () => 'seguinte')).resolves.toBe('seguinte')
+    ).rejects.toThrow('failed')
+    await expect(withWorkspaceLock(a, async () => 'next')).resolves.toBe('next')
   })
 
-  it('symlink/realpath: o mesmo projeto com caminhos diferentes é a mesma fila', async () => {
+  it('symlink/realpath: the same project with different paths is the same queue', async () => {
     const link = path.join(tmp, 'atalho-a')
     await fs.symlink(a, link)
     const gate = deferred()
     const order: string[] = []
-    const um = withWorkspaceLock(a, async () => {
+    const one = withWorkspaceLock(a, async () => {
       order.push('real')
       await gate.promise
     })
-    const dois = withWorkspaceLock(link, async () => {
+    const two = withWorkspaceLock(link, async () => {
       order.push('atalho')
     })
     await new Promise((resolve) => setTimeout(resolve, 25))
     expect(order).toEqual(['real'])
     gate.resolve()
-    await Promise.all([um, dois])
+    await Promise.all([one, two])
     expect(order).toEqual(['real', 'atalho'])
     await fs.rm(link, { force: true })
   })
 
-  it('workspaceLockPending usa a mesma chave da fila (realpath)', async () => {
+  it('workspaceLockPending uses the same key as the queue (realpath)', async () => {
     const link = path.join(tmp, 'atalho-pendente')
     await fs.symlink(a, link)
     const gate = deferred()
-    const segurando = withWorkspaceLock(a, () => gate.promise)
+    const holding = withWorkspaceLock(a, () => gate.promise)
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(await workspaceLockPending(link)).toBe(true)
     gate.resolve()
-    await segurando
+    await holding
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(await workspaceLockPending(link)).toBe(false)
     await fs.rm(link, { force: true })

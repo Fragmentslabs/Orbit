@@ -2,16 +2,16 @@ import sharp from 'sharp'
 import { probeMedia, runFfmpeg, type MediaProbe } from './ffmpeg'
 
 /**
- * O que o agente lê (e o que a bolha mostra) de um vídeo anexado.
+ * What the agent reads (and what the bubble shows) about an attached video.
  *
- * A nota é de propósito curta: nome, referência e uma linha de metadados. O
- * vídeo em si não entra no contexto — o agente decide, pela necessidade do
- * pedido, se vale transcrever, olhar um trecho ou levar o arquivo para uma
- * peça. Um depoimento de 30 minutos custa as mesmas ~80 palavras que um clipe
- * de 3 segundos.
+ * The note is deliberately short: name, reference and one line of metadata. The
+ * video itself does not enter the context — the agent decides, from what the
+ * request needs, whether it is worth transcribing, looking at a stretch or
+ * bringing the file into a piece. A 30-minute testimony costs the same ~80 words
+ * as a 3-second clip.
  */
 
-/** Uma linha com o que o `ffprobe` diz do arquivo; vazia se não foi possível sondar. */
+/** One line with what `ffprobe` says about the file; empty when probing was not possible. */
 export function describeVideoFacts(probe: MediaProbe | null): string {
   if (!probe) return 'Could not read the file (it may be corrupt or an unsupported codec).'
   const v = probe.video[0]
@@ -25,13 +25,13 @@ export function describeVideoFacts(probe: MediaProbe | null): string {
   return parts.join(', ')
 }
 
-/** A nota do anexo, em inglês como as demais notas que o agente recebe. */
+/** The attachment note, in English like the other notes the agent receives. */
 export function videoAttachmentNote(input: {
   filename: string
   id: string
   file: string
   probe: MediaProbe | null
-  /** O anexo foi recusado (grande demais, ilegível): a nota diz por quê. */
+  /** The attachment was refused (too large, unreadable): the note says why. */
   problem?: string
 }): string {
   const head = `[Video attached: ${input.filename || 'unnamed'} — ref ${input.id}]`
@@ -49,7 +49,7 @@ export function videoAttachmentNote(input: {
   ].join('\n')
 }
 
-/** Sonda o arquivo sem nunca falhar: `null` quando o ffprobe não o entende. */
+/** Probes the file without ever failing: `null` when ffprobe cannot read it. */
 export async function probeVideoAttachment(file: string): Promise<MediaProbe | null> {
   try {
     return await probeMedia(file)
@@ -59,9 +59,9 @@ export async function probeVideoAttachment(file: string): Promise<MediaProbe | n
 }
 
 /**
- * Um quadro do vídeo como imagem PNG (até 480 px de largura): é a capa do item na
- * galeria. Não é o quadro 0, que costuma ser preto: um pouco adiante, sem passar
- * do meio. `undefined` quando o ffmpeg não consegue ler o arquivo.
+ * A frame of the video as a PNG image (up to 480 px wide): it is the item's cover
+ * in the gallery. Not frame 0, which is usually black: a little further in, not
+ * past the middle. `undefined` when ffmpeg cannot read the file.
  */
 export async function videoPosterPng(file: string, durationMs: number): Promise<Buffer | undefined> {
   try {
@@ -77,7 +77,7 @@ export async function videoPosterPng(file: string, durationMs: number): Promise<
   }
 }
 
-/** A capa em miniatura (WebP, até 320 px) para a bolha do chat, como data URL. */
+/** The cover as a small thumbnail (WebP, up to 320 px) for the chat bubble, as a data URL. */
 export async function posterDataUrl(png: Buffer): Promise<string | undefined> {
   try {
     const out = await sharp(png).resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true }).webp({ quality: 70 }).toBuffer()
@@ -88,10 +88,10 @@ export async function posterDataUrl(png: Buffer): Promise<string | undefined> {
 }
 
 /**
- * A referência de uma imagem ou GIF guardados, para o agente poder usá-los como
- * material (motion_asset). Uma linha: a imagem em si segue o caminho de sempre
- * (visão nativa, ou describe_image no modo Visão). Vazia quando a imagem não foi
- * guardada.
+ * The reference of a stored image or GIF, so the agent can use them as
+ * material (motion_asset). One line: the image itself follows the usual path
+ * (native vision, or describe_image in Vision mode). Empty when the image was
+ * not stored.
  */
 export function imageRefLine(mediaUrl: string | undefined, filename: string, mime: string): string {
   const id = mediaUrl ? mediaUrl.replace(/^orbit-media:\/\//, '') : ''

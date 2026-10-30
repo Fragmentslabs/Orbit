@@ -9,20 +9,20 @@ import { computerActionSummary, describeAction, isComputerTool } from "@/src/lib
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * As ferramentas de um turno, recolhidas numa linha só.
+ * The tools of a turn, collapsed into a single line.
  *
- * O modo código sempre fez isso: enquanto trabalha, a lista fica aberta e se
- * acompanha o que está acontecendo; quando a resposta chega, tudo se fecha em
- * "27 ações realizadas" e o que fica na conversa é a RESPOSTA. No chat cada
- * chamada virava um card que ficava ali para sempre, e reler a conversa era
- * rolar por cima da escada que levou até ela.
+ * Code mode always did this: while it works, the list stays open and one
+ * follows what is happening; when the answer arrives, everything folds into
+ * "27 actions performed" and what remains in the conversation is the ANSWER. In chat each
+ * call became a card that stayed there forever, and re-reading the conversation meant
+ * scrolling over the staircase that led to it.
  *
- * Isto aqui é o pedaço comum dos dois. O modo código tem o seu próprio grupo
- * por cima deste (com o diff e o resumo de testes, que só existem lá); o chat
- * usa este direto.
+ * This here is the common piece of both. Code mode has its own group
+ * on top of this one (with the diff and the test summary, which only exist there); chat
+ * uses this one directly.
  */
 
-/** Quantas ferramentas aparecem sem pedir "mostrar todas". */
+/** How many tools appear without asking for "show all". */
 const MAX_VISIBLE = 6
 
 function useActionLabels(): Record<string, string> {
@@ -44,7 +44,7 @@ function useActionLabels(): Record<string, string> {
   }
 }
 
-/** O argumento que identifica a chamada: caminho, busca, url, comando. */
+/** The argument that identifies the call: path, query, url, command. */
 export function toolChip(part: ToolPart): string | undefined {
   const input = part.input ?? {}
   const candidate =
@@ -54,15 +54,15 @@ export function toolChip(part: ToolPart): string | undefined {
   return isPath ? candidate.split(/[\\/]/).pop() : candidate
 }
 
-/** Saída completa no detalhe expandido — o teto evita colar a árvore inteira de um app no chat. */
+/** Full output in the expanded detail — the ceiling avoids pasting an app's whole tree into the chat. */
 const MAX_DETAIL = 4000
 
 export function ToolActionItem({ part }: { part: ToolPart }) {
   const { t } = useTranslation()
   const [showOutput, setShowOutput] = useState(false)
   const actionLabels = useActionLabels()
-  // Computer Use: a frase do que o agente fez ("Clicar no elemento 12 ·
-  // TextEdit") e, embaixo, o que aconteceu — no lugar de "cu_computer" cru.
+  // Computer Use: the sentence of what the agent did ("Click element 12 ·
+  // TextEdit") and, below it, what happened — instead of a raw "cu_computer".
   const computer = isComputerTool(part.tool)
   const label = computer ? describeAction(part, t) : actionLabels[part.tool] ?? part.tool
   const chip = computer ? undefined : toolChip(part)
@@ -84,7 +84,7 @@ export function ToolActionItem({ part }: { part: ToolPart }) {
         {part.state === "running" ? <Shimmer>{label}</Shimmer> : <span>{label}</span>}
         {chip && (
           <TaskItemFile>
-            {/* title = comando/caminho completo no hover (o truncate corta em ~256px) */}
+            {/* title = full command/path on hover (truncate cuts at ~256px) */}
             
               <Truncate>
                   <span className="max-w-64 truncate font-mono" title={chip}>
@@ -112,9 +112,9 @@ export function ToolActionItem({ part }: { part: ToolPart }) {
 }
 
 /**
- * Abre sozinho enquanto trabalha e fecha sozinho um segundo depois de
- * terminar. O atraso é de propósito: fechar no mesmo instante em que o último
- * resultado aparece é a diferença entre "acompanhei" e "piscou".
+ * Opens by itself while it works and closes by itself one second after
+ * finishing. The delay is on purpose: closing at the very instant the last
+ * result appears is the difference between "I followed it" and "it blinked".
  */
 export function ActionsGroup({
   parts,
@@ -123,7 +123,7 @@ export function ActionsGroup({
 }: {
   parts: ToolPart[]
   className?: string
-  /** Modo detalhado: cada ação listada, sem acordeon nem "mostrar mais". */
+  /** Detailed mode: every action listed, no accordion and no "show more". */
   flat?: boolean
 }) {
   const { t } = useTranslation()

@@ -5,27 +5,27 @@ import { useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 
 /**
- * Sincronização dos modos ativos POR CHAT com os companions (mobile), no mesmo
- * desenho do session-model-prefs: o renderer é a fonte da verdade (os modos
- * vivem no localStorage dele), empurra o mapa inteiro para o main a cada
- * mudança e aplica os toggles que chegam do celular.
+ * Sync of the active modes PER CHAT with the companions (mobile), in the same
+ * design as session-model-prefs: the renderer is the source of truth (the modes
+ * live in its localStorage), pushes the whole map to main on every
+ * change and applies the toggles that come from the phone.
  *
- * Os modos do mode-overrides viajam junto de 'simple' e 'brain', que têm store
- * próprio — o mapa é achatado em modo → (sessionId → ativo). Só entra o que os
- * companions conhecem (`ChatModeKey`), que é o que cabe no payload.
+ * The mode-overrides modes travel along with 'simple' and 'brain', which have their own
+ * store — the map is flattened into mode → (sessionId → active). Only what the
+ * companions know goes in (`ChatModeKey`), which is what fits in the payload.
  */
 
-/** O rascunho é por aparelho: "draft" aqui é um chat novo diferente do "draft"
- *  do celular, então essa chave fica fora do que vai para os companions. */
+/** The draft is per device: "draft" here is a new chat different from the phone's
+ *  "draft", so that key stays out of what goes to the companions. */
 const DRAFT_KEY = "draft"
 
 function withoutDraft(bySession: Record<string, boolean>): Record<string, boolean> {
   return Object.fromEntries(Object.entries(bySession).filter(([key]) => key !== DRAFT_KEY))
 }
 
-/** Só os modos que os companions conhecem (`ChatModeKey`) — é o que cabe no
- *  payload compartilhado. "computer" fica de fora de propósito: o celular não
- *  liga o controle do computador de quem está diante dele. */
+/** Only the modes the companions know (`ChatModeKey`) — it is what fits in the
+ *  shared payload. "computer" stays out on purpose: the phone does not
+ *  turn on the computer control of whoever is in front of it. */
 const MODE_OVERRIDE_KEYS: Exclude<OverridableMode, "computer">[] = [
   "search",
   "browser",
@@ -44,8 +44,8 @@ function snapshot(): SessionModeOverrides {
     const shared = withoutDraft(bySession)
     if (Object.keys(shared).length > 0) map[mode] = shared
   }
-  // simple guarda só as ativações; brain, só as desativações — os defaults
-  // opostos de cada um ficam implícitos na ausência da chave, dos dois lados.
+  // simple keeps only the activations; brain, only the deactivations — the opposite
+  // defaults of each stay implicit in the absence of the key, on both sides.
   const simple = useSimplePrefs.getState().overrides
   const simpleEntries = Object.entries(simple).filter(
     ([key, value]) => key !== DRAFT_KEY && value !== undefined,
@@ -62,7 +62,7 @@ function push() {
   sessionModesApi.sync(snapshot())
 }
 
-/** Aplica um toggle vindo de um companion no store certo. */
+/** Applies a toggle coming from a companion in the right store. */
 function applyRemote(mode: ChatModeKey, sessionId: string | null, value: boolean) {
   if (mode === "simple") {
     useSimplePrefs.getState().setEnabled(sessionId, value)
@@ -76,8 +76,8 @@ function applyRemote(mode: ChatModeKey, sessionId: string | null, value: boolean
 }
 
 if (typeof window !== "undefined" && window.ipcRenderer) {
-  // Estado inicial: depois de um reload do renderer o cache do main precisa
-  // ser repopulado, senão o mobile conecta e recebe um mapa vazio.
+  // Initial state: after a renderer reload the main cache has to
+  // be repopulated, otherwise the mobile connects and receives an empty map.
   push()
   useModeOverrides.subscribe(push)
   useSimplePrefs.subscribe(push)

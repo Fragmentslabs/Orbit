@@ -6,8 +6,8 @@ import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useReply } from '~/stores/reply-store'
 
-/** Rótulo de quem escreveu a mensagem respondida — o texto gravado traz o
- *  papel (`[assistant]`), e a tradução sai daqui. */
+/** Label of whoever wrote the replied message — the stored text carries the
+ *  role (`[assistant]`), and the translation comes from here. */
 export function useReplyLabel() {
   const { t } = useTranslation()
   return (role: MessageReplyQuote['role']) =>
@@ -15,11 +15,11 @@ export function useReplyLabel() {
 }
 
 /**
- * Citação da mensagem respondida, acima do campo de texto (como no WhatsApp).
+ * Quote of the replied message, above the text field (as in WhatsApp).
  *
- * Fica no compositor porque é ele que diz o que vai sair: sem a barra, o texto
- * enviado ganharia uma citação que ninguém viu sendo escolhida. O X desfaz a
- * resposta sem mexer no texto digitado.
+ * It lives in the composer because the composer is what says what is going to leave: without the bar, the text
+ * sent would gain a quote nobody saw being chosen. The X undoes the
+ * reply without touching the typed text.
  */
 export function ReplyBar({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()

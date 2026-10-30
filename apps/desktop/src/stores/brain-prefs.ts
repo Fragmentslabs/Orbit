@@ -1,18 +1,18 @@
 import { create } from "zustand"
 
 /**
- * Preferência do modo Brain (memória persistente): ativo por padrão em todo
- * chat, nos dois modos; o usuário pode desativar por chat. Só as desativações
- * são persistidas (localStorage) — ausência de override = ativo.
+ * Brain mode preference (persistent memory): on by default in every
+ * chat, in both modes; the user can turn it off per chat. Only the opt-outs
+ * are persisted (localStorage) — no override = on.
  *
- * Chats novos (sem sessão) usam a chave "draft"; quando a sessão é criada no
- * primeiro envio, o session-store chama adopt() para transferir o override.
+ * New chats (without a session) use the "draft" key; when the session is created on
+ * the first send, the session-store calls adopt() to transfer the override.
  *
- * Preferências GERAIS (não por sessão):
- * - chatContext / codeContext: injeção de contexto no prompt
- *   "off" = desligado
- *   "all" = ligado em todos chats
- *   "memory" = ligado só em chats com modo memória ativo
+ * GENERAL preferences (not per session):
+ * - chatContext / codeContext: context injection in the prompt
+ *   "off" = off
+ *   "all" = on in all chats
+ *   "memory" = on only in chats with memory mode on
  */
 
 export type BrainContextMode = "off" | "all" | "memory"
@@ -27,7 +27,7 @@ function load(): Record<string, boolean> {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch {
-    // prefs corrompidas — volta ao default (tudo ativo)
+    // corrupted prefs — back to the default (everything on)
   }
   return {}
 }
@@ -56,7 +56,7 @@ interface BrainPrefsState {
   setEnabled: (sessionId: string | null | undefined, enabled: boolean) => void
   setChatContext: (mode: BrainContextMode) => void
   setCodeContext: (mode: BrainContextMode) => void
-  /** Transfere o override do rascunho para a sessão recém-criada */
+  /** Transfers the draft's override to the newly created session */
   adopt: (sessionId: string) => void
 }
 
@@ -94,7 +94,7 @@ export function useBrainEnabled(sessionId?: string | null, fallback = true): boo
   return useBrainPrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? fallback)
 }
 
-/** Leitura fora de componentes React (callbacks de envio) */
+/** Read outside React components (send callbacks) */
 export function brainEnabledFor(sessionId?: string | null, fallback = true): boolean {
   return useBrainPrefs.getState().overrides[sessionId ?? DRAFT_KEY] ?? fallback
 }

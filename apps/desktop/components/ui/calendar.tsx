@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
 /**
- * Calendar sobre react-day-picker v10, seguindo o padrão shadcn. Adaptado ao
- * visual compacto do app (células size-7, textos menores). As classes de
- * seleção/estado caem no `<td>` do dia; o botão fica dentro preenchendo a
- * célula.
+ * Calendar on top of react-day-picker v10, following the shadcn pattern. Adapted to the
+ * compact look of the app (size-7 cells, smaller texts). The selection/state
+ * classes land on the `<td>` of the day; the button stays inside filling the
+ * cell.
  */
 function Calendar({
   className,

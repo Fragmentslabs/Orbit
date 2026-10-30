@@ -3,14 +3,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
-/** O handler que o módulo registrou: `protocol.handle` é mockado, mas guarda
- *  quem chegou — é por aqui que os testes chamam o scheme de verdade. */
+/** The handler the module registered: `protocol.handle` is mocked, but it keeps
+ *  whoever arrived — it is through here that the tests call the scheme for real. */
 const registered = vi.hoisted(() => ({
   handlers: new Map<string, (request: Request) => Promise<Response>>(),
 }))
 
-// O módulo toca em `app`/`protocol` (é do main). O índice cai numa pasta
-// temporária e nenhum protocolo real é registrado.
+// The module touches `app`/`protocol` (it is from the main). The index falls in a temporary
+// folder and no real protocol is registered.
 vi.mock('electron', async () => {
   const nodePath = await import('node:path')
   const nodeOs = await import('node:os')
@@ -50,7 +50,7 @@ describe('resolveMotionFile', () => {
   it('resolves a file inside the composition folder', () => {
     expect(resolveMotionFile(folder, '/title.html')).toBe(path.resolve(folder, 'title.html'))
     expect(resolveMotionFile(folder, '/assets/gsap.min.js')).toBe(path.resolve(folder, 'assets', 'gsap.min.js'))
-    // O pathname chega percent-encoded.
+    // The pathname arrives percent-encoded.
     expect(resolveMotionFile(folder, '/assets/fonte%20bold.woff2')).toBe(path.resolve(folder, 'assets', 'fonte bold.woff2'))
   })
 
@@ -85,8 +85,8 @@ describe('isMotionSourceChange', () => {
   })
 })
 
-describe('motionIdForName — a peça da conversa, endereçada por nome', () => {
-  it('encontra pela pasta que leva o slug do nome, dentro da sessão', async () => {
+describe('motionIdForName — the conversation piece, addressed by name', () => {
+  it('finds it by the folder that carries the name slug, inside the session', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'orbit-motion-chat-'))
     const folder = path.join(root, 'intro-do-orbit')
     await mkdir(folder, { recursive: true })
@@ -96,10 +96,10 @@ describe('motionIdForName — a peça da conversa, endereçada por nome', () => 
 
     expect(await motionIdForName('chat-a', 'intro-do-orbit')).toBe(id)
     expect(await motionIdForName('chat-a', 'INTRO-DO-ORBIT')).toBe(id)
-    // O mesmo nome em outra conversa é OUTRA peça: sem a sessão na chave, o card
-    // de uma conversa abriria a composição da outra.
+    // The same name in another conversation is ANOTHER piece: without the session in the key, the
+    // card of one conversation would open the other's composition.
     expect(await motionIdForName('chat-b', 'intro-do-orbit')).toBeNull()
-    expect(await motionIdForName('chat-a', 'outra')).toBeNull()
+    expect(await motionIdForName('chat-a', 'other')).toBeNull()
     expect(await motionIdForName('chat-a', '   ')).toBeNull()
 
     await unregisterMotion(id)
@@ -107,8 +107,8 @@ describe('motionIdForName — a peça da conversa, endereçada por nome', () => 
   })
 })
 
-describe('motionIdForPath — o caminho que a tool recebeu', () => {
-  it('casa pelo fim do caminho quando ele vem relativo à pasta da sessão', async () => {
+describe('motionIdForPath — the path the tool received', () => {
+  it('matches by the end of the path when it comes relative to the session folder', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'orbit-motion-rel-'))
     const folder = path.join(root, 'edit', 'animations', 'orbit-apresentacao')
     await mkdir(folder, { recursive: true })
@@ -116,15 +116,15 @@ describe('motionIdForPath — o caminho que a tool recebeu', () => {
     await writeFile(file, '<head></head>')
     const { id } = await registerMotion(folder, file, { sessionId: 'chat-a' })
 
-    // Absoluto: exato, como sempre.
+    // Absolute: exact, as always.
     expect(await motionIdForPath(file)).toBe(id)
     expect(await motionIdForPath(folder)).toBe(id)
-    // Relativo à pasta da sessão — o que o agente realmente passa à tool, e que
-    // o main não tem como resolver (não conhece a pasta da sessão).
+    // Relative to the session's folder — what the agent really passes to the tool, and which
+    // the main has no way of resolving (it does not know the session's folder).
     expect(await motionIdForPath('edit/animations/orbit-apresentacao/index.html')).toBe(id)
     expect(await motionIdForPath('edit/animations/orbit-apresentacao')).toBe(id)
-    // Um pedaço sem pasta nenhuma não identifica peça: nada de casar por nome
-    // solto no meio de um caminho maior.
+    // A piece with no folder at all does not identify a piece: no matching by bare
+    // name in the middle of a larger path.
     expect(await motionIdForPath('presentacao')).toBeNull()
 
     await unregisterMotion(id)
@@ -148,8 +148,8 @@ describe('registro', () => {
     expect(entry?.entry).toBe(path.resolve(folder, 'title.html'))
     expect(entry?.root).toBe(path.resolve(os.tmpdir()))
 
-    // Mesma pasta + mesma sessão: reaproveita o id — inclusive quando só o
-    // caminho da entrada é passado (o painel não sabe da pasta).
+    // Same folder + same session: reuses the id — including when only the
+    // entry path is passed (the panel does not know the folder).
     const again = await registerMotion(folder, path.join(folder, 'title.html'), { root: os.tmpdir() })
     expect(again.id).toBe(id)
     const onlyEntry = await registerMotion(path.join(folder, 'title.html'), undefined, { root: os.tmpdir() })
@@ -162,9 +162,9 @@ describe('registro', () => {
   })
 
   it('keeps the SAME id across sessions and only reports `created` the first time', async () => {
-    // Era o 404 da aba: o render registrava a mesma composição, recebia o id do
-    // preview e o liberava no fim. Agora o id vem da pasta + entrada, e quem não
-    // criou o registro fica sabendo (created: false) para não liberá-lo.
+    // This was the tab's 404: the render registered the same composition, received the preview's
+    // id and released it at the end. Now the id comes from folder + entry, and whoever did not
+    // create the record learns it (created: false) so as not to release it.
     const folder = await mkdtemp(path.join(os.tmpdir(), 'orbit-motion-comp-'))
     const file = path.join(folder, 'index.html')
     await writeFile(file, '<head></head>')
@@ -189,31 +189,31 @@ describe('registro', () => {
 })
 
 describe('protocolo', () => {
-  /** Uma composição registrada e o handler do scheme já na mão. */
+  /** A registered composition and the scheme handler already at hand. */
   async function serve(files: Record<string, string | Buffer>) {
     const folder = await mkdtemp(path.join(os.tmpdir(), 'orbit-motion-comp-'))
     for (const [name, content] of Object.entries(files)) await writeFile(path.join(folder, name), content)
     const { id } = await registerMotion(folder, path.join(folder, 'index.html'), { root: os.tmpdir() })
     registerMotionProtocol()
     const handler = registered.handlers.get('orbit-motion')
-    if (!handler) throw new Error('o scheme orbit-motion não foi registrado')
+    if (!handler) throw new Error('the orbit-motion scheme was not registered')
     return { folder, handler, url: (file: string) => `orbit-motion://${id}/${file}` }
   }
 
-  it('serve o áudio da peça com faixa — é o que deixa o preview reposicionar', async () => {
+  it('serves the piece audio with a track — it is what lets the preview seek', async () => {
     const bytes = Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     const { folder, handler, url } = await serve({ 'index.html': '<head></head>', 'voz.wav': bytes })
 
     const whole = await handler(new Request(url('voz.wav')))
     expect(whole.status).toBe(200)
-    // Sem este cabeçalho o Chromium trata o áudio como NÃO-buscável: o som toca
-    // na minutagem certa, mas `currentTime` vira sugestão e pausar no meio
-    // recomeça o arquivo do zero.
+    // Without this header Chromium treats the audio as NOT seekable: the sound plays
+    // at the right minute, but `currentTime` becomes a suggestion and pausing in the middle
+    // restarts the file from zero.
     expect(whole.headers.get('accept-ranges')).toBe('bytes')
     expect(whole.headers.get('content-length')).toBe('10')
     expect(new Uint8Array(await whole.arrayBuffer())).toEqual(new Uint8Array(bytes))
 
-    // A faixa do seek: só o pedaço, com 206 e o intervalo declarado.
+    // The seek range: only the piece, with 206 and the declared range.
     const piece = await handler(new Request(url('voz.wav'), { headers: { range: 'bytes=2-5' } }))
     expect(piece.status).toBe(206)
     expect(piece.headers.get('content-range')).toBe('bytes 2-5/10')
@@ -221,8 +221,8 @@ describe('protocolo', () => {
     expect(piece.headers.get('content-length')).toBe('4')
     expect(new Uint8Array(await piece.arrayBuffer())).toEqual(new Uint8Array([2, 3, 4, 5]))
 
-    // Aberta (`bytes=4-`) e sufixo (`bytes=-3`): é como um player pergunta a
-    // duração de um formato sem cabeçalho.
+    // Open (`bytes=4-`) and suffix (`bytes=-3`): it is how a player asks for the
+    // duration of a format without a header.
     const open = await handler(new Request(url('voz.wav'), { headers: { range: 'bytes=4-' } }))
     expect(new Uint8Array(await open.arrayBuffer())).toEqual(new Uint8Array([4, 5, 6, 7, 8, 9]))
     const suffix = await handler(new Request(url('voz.wav'), { headers: { range: 'bytes=-3' } }))
@@ -235,35 +235,35 @@ describe('protocolo', () => {
     await rm(folder, { recursive: true, force: true })
   })
 
-  it('com o runtime injetado, o HTML deixa de ser o arquivo — e faixa não se aplica', async () => {
+  it('with the runtime injected, the HTML is no longer the file — and a track does not apply', async () => {
     const { folder, handler, url } = await serve({ 'index.html': '<html><head></head></html>' })
 
     const res = await handler(new Request(url('index.html'), { headers: { range: 'bytes=0-4' } }))
     expect(res.status).toBe(200)
-    // O runtime entra como <script src> no <head> — o marcador é o que prova a
-    // injeção (e é o que a faixa do HTML não pode deslocar).
+    // The runtime enters as <script src> in the <head> — the marker is what proves the
+    // injection (and it is what the HTML range cannot shift).
     expect(await res.text()).toContain('data-orbit-motion-runtime')
 
     await rm(folder, { recursive: true, force: true })
   })
 
-  it('mídia sai sem `no-store`; o código da composição continua sem cache', async () => {
+  it('media goes out without `no-store`; the composition code stays uncached', async () => {
     const { folder, handler, url } = await serve({
       'index.html': '<head></head>',
       'voz.wav': Buffer.from([1, 2, 3, 4]),
       'app.js': 'export const a = 1',
     })
 
-    // O <audio> precisa poder guardar o que já baixou: sem isso ele refaz o
-    // pedido a cada reposicionamento, descarta o buffer, e o som picota em vez
-    // de tocar. É o que o video/store.ts e o audio-store.ts sempre fizeram.
+    // <audio> needs to be able to keep what it already downloaded: without that it redoes the
+    // request at every repositioning, discards the buffer, and the sound stutters instead
+    // of playing. It is what video/store.ts and audio-store.ts have always done.
     const media = await handler(new Request(url('voz.wav')))
     expect(media.status).toBe(200)
     expect(media.headers.get('cache-control')).toBeNull()
     expect(media.headers.get('accept-ranges')).toBe('bytes')
 
-    // O JS é pedido pela MESMA URL a cada recarga — cache aqui serviria a versão
-    // antiga, e a edição ao vivo não apareceria.
+    // The JS is requested by the SAME URL at every reload — cache here would serve the old
+    // version, and the live edit would not show up.
     const code = await handler(new Request(url('app.js')))
     expect(code.headers.get('cache-control')).toBe('no-store')
 
@@ -290,7 +290,7 @@ describe('deleteMotionComposition', () => {
     return entry
   }
 
-  it('apaga a pasta da composição inteira (com o que foi copiado para ela) e tira do registro', async () => {
+  it('deletes the whole composition folder (with what was copied into it) and unregisters it', async () => {
     const root = await project()
     const folder = path.join(root, 'edit', 'animations', 'intro')
     const entry = await composition(folder)
@@ -304,12 +304,12 @@ describe('deleteMotionComposition', () => {
     expect(result).toEqual({ removedFolder: true })
     expect(await exists(folder)).toBe(false)
     expect(await getMotion(id)).toBeUndefined()
-    // O que o usuário renderizou fica fora da pasta da composição e não é tocado.
+    // What the user rendered stays outside the composition's folder and is not touched.
     expect(await readdir(renders)).toEqual(['intro.mp4'])
     await rm(root, { recursive: true, force: true })
   })
 
-  it('uma composição que É o projeto (index.html na raiz) sai do registro, mas a pasta fica', async () => {
+  it('a composition that IS the project (index.html at the root) leaves the registry, but the folder stays', async () => {
     const root = await project()
     const entry = await composition(root)
     await writeFile(path.join(root, 'package.json'), '{}')
@@ -324,7 +324,7 @@ describe('deleteMotionComposition', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('a pasta do modo chat é do Orbit: apaga mesmo sem pasta de trabalho registrada', async () => {
+  it('the chat-mode folder belongs to Orbit: it deletes even with no work folder registered', async () => {
     const folder = path.join(tempRoot, 'orbit-data', 'motion', 'sess1', 'minha-peca')
     const entry = await composition(folder)
     const { id } = await registerMotion(folder, entry)
@@ -333,7 +333,7 @@ describe('deleteMotionComposition', () => {
     expect(await exists(folder)).toBe(false)
   })
 
-  it('fora de qualquer lugar que o app pode limpar, a pasta fica', async () => {
+  it('outside any place the app may clean, the folder stays', async () => {
     const root = await project()
     const elsewhere = await project()
     const entry = await composition(elsewhere)
@@ -348,22 +348,22 @@ describe('deleteMotionComposition', () => {
     await rm(elsewhere, { recursive: true, force: true })
   })
 
-  it('sem composição de verdade na pasta (entrada sumiu), nada é apagado', async () => {
+  it('with no real composition in the folder (entry gone), nothing is deleted', async () => {
     const root = await project()
     const folder = path.join(root, 'edit', 'animations', 'vazia')
     const entry = await composition(folder)
     const { id } = await registerMotion(folder, entry, { root })
     await rm(entry)
-    await writeFile(path.join(folder, 'notas-do-usuario.txt'), 'importante')
+    await writeFile(path.join(folder, 'user-notes.txt'), 'importante')
 
     const result = await deleteMotionComposition(id)
 
     expect(result.keptBecause).toMatch(/entry/)
-    expect(await exists(path.join(folder, 'notas-do-usuario.txt'))).toBe(true)
+    expect(await exists(path.join(folder, 'user-notes.txt'))).toBe(true)
     await rm(root, { recursive: true, force: true })
   })
 
-  it('id desconhecido não faz nada', async () => {
+  it('an unknown id does nothing', async () => {
     expect(await deleteMotionComposition('mv_000000000000dead')).toEqual({ removedFolder: false, keptBecause: 'not registered' })
   })
 })

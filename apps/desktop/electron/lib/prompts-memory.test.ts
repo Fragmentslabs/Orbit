@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SendMessageInput } from '@shared/chat'
 
 /**
- * As memórias no system prompt ao longo de uma conversa.
+ * Memories in the system prompt throughout a conversation.
  *
- * O system prompt é remontado a cada turno e não fica no histórico. Quando o
- * conteúdo das memórias só entrava na primeira troca, o segundo turno em diante
- * rodava sem o mapa do projeto — o agente "esquecia" o que o /init gravou logo
- * depois da primeira resposta.
+ * The system prompt is reassembled on every turn and does not stay in the history. When the
+ * memories' content only entered the first exchange, the second turn onward
+ * ran without the project map — the agent "forgot" what /init had written right
+ * after the first answer.
  */
 
 const loadPromptContext = vi.fn()
@@ -16,7 +16,7 @@ vi.mock('./memory/service', () => ({ loadPromptContext: (...args: unknown[]) => 
 vi.mock('./skills', () => ({ loadSkills: async () => [] }))
 vi.mock('./mcp', () => ({ listMcpToolDescriptions: () => [] }))
 vi.mock('./past-chats', () => ({ buildPastChatsContext: async () => '', detectPastChatsIntent: () => false }))
-// Subchats leem o storage (app.getPath), que não existe fora do Electron.
+// Subchats read the storage (app.getPath), which does not exist outside Electron.
 vi.mock('./subchats', () => ({ listSubchats: async () => [], formatSubchatsBlock: () => '' }))
 vi.mock('./app-settings', async () => {
   const { DEFAULT_APP_SETTINGS } = await import('@shared/app-settings')
@@ -26,7 +26,7 @@ vi.mock('./app-settings', async () => {
 const { buildSystemPrompt, promptMemoryIds } = await import('./prompts')
 
 const map = {
-  root: { id: 'mem_root', text: 'App: loja com front e back.', hasDoc: true, children: 2 },
+  root: { id: 'mem_root', text: 'App: store with front end and back end.', hasDoc: true, children: 2 },
   children: [{ id: 'mem_front', text: 'Frontend: React + Vite.', hasDoc: true, children: 3 }],
   omitted: 3,
 }
@@ -34,7 +34,7 @@ const map = {
 function turn(sessionId: string): SendMessageInput {
   return {
     sessionId,
-    text: 'ajusta o login',
+    text: 'adjusts the login',
     providerId: 'p',
     modelId: 'm',
     mode: 'code',
@@ -48,8 +48,8 @@ beforeEach(() => {
   loadPromptContext.mockResolvedValue({ core: [], seasonal: [], promotable: [], general: [], learning: [], project: [], projectName: 'app', map })
 })
 
-describe('memórias no system prompt', () => {
-  it('o mapa do projeto continua no segundo turno da mesma conversa', async () => {
+describe('memories in the system prompt', () => {
+  it('the project map stays in the second turn of the same conversation', async () => {
     const first = await buildSystemPrompt(turn('s1'))
     const second = await buildSystemPrompt(turn('s1'))
     expect(first).toContain('Project memory map of "app"')
@@ -57,7 +57,7 @@ describe('memórias no system prompt', () => {
     expect(second).toContain('#mem_front Frontend: React + Vite.')
   })
 
-  it('é calculado uma vez por conversa e fica estável entre os turnos', async () => {
+  it('is computed once per conversation and stays stable between turns', async () => {
     const first = await buildSystemPrompt(turn('s2'))
     loadPromptContext.mockResolvedValue({ core: [], seasonal: [], promotable: [], general: [], learning: [], project: [], map: undefined })
     const second = await buildSystemPrompt(turn('s2'))
@@ -65,7 +65,7 @@ describe('memórias no system prompt', () => {
     expect(second).toBe(first)
   })
 
-  it('sazonal que se repete entra como pergunta ao usuário, não como regra', async () => {
+  it('a repeating seasonal one enters as a question to the user, not as a rule', async () => {
     loadPromptContext.mockResolvedValue({
       core: [],
       seasonal: [],
@@ -73,27 +73,27 @@ describe('memórias no system prompt', () => {
       learning: [],
       project: [],
       promotable: [
-        { id: 'mem_rep', kind: 'seasonal', text: 'sempre rodar o build antes de terminar', tags: [], hits: 3, weight: 0.5, createdAt: 0, relatedIds: [], hasDoc: false },
+        { id: 'mem_rep', kind: 'seasonal', text: 'always run the build before finishing', tags: [], hits: 3, weight: 0.5, createdAt: 0, relatedIds: [], hasDoc: false },
       ],
     })
     const prompt = await buildSystemPrompt(turn('s5'))
     expect(prompt).toContain('REPEATING MEMORIES')
-    expect(prompt).toContain('sempre rodar o build antes de terminar')
-    // A regra só nasce depois do "sim": o prompt manda perguntar, não promover.
+    expect(prompt).toContain('always run the build before finishing')
+    // The rule is only born after the "yes": the prompt says to ask, not to promote.
     expect(prompt).toContain('Ask the user ONCE')
   })
 
-  it('outra conversa calcula o próprio', async () => {
+  it('another conversation computes its own', async () => {
     await buildSystemPrompt(turn('s3'))
     await buildSystemPrompt(turn('s4'))
     expect(loadPromptContext).toHaveBeenCalledTimes(2)
   })
 
-  it('registra os ids do bloco, para a sugestão do turno não repetir', async () => {
+  it('records the ids of the block, so the turn suggestion does not repeat', async () => {
     const core = {
       id: 'mem_core',
       kind: 'core' as const,
-      text: 'Prefere respostas curtas',
+      text: 'Prefers short answers',
       tags: [],
       hits: 0,
       weight: 1,
@@ -110,16 +110,16 @@ describe('memórias no system prompt', () => {
       project: [],
     })
     await buildSystemPrompt(turn('s6'))
-    // Mesma chave que o chat-engine usa ao chamar retrieveForTurn.
+    // Same key the chat-engine uses when calling retrieveForTurn.
     expect(promptMemoryIds('s6', 'code', '/work/app')).toEqual(['mem_core'])
   })
 
-  it('diz que o acervo tem mais do que o bloco', async () => {
+  it('says the collection has more than the block', async () => {
     const prompt = await buildSystemPrompt(turn('s7'))
     expect(prompt).toContain('The archive holds more')
   })
 
-  it('mostra há quanto tempo a sazonal existe', async () => {
+  it('shows how long the seasonal one has existed', async () => {
     loadPromptContext.mockResolvedValue({
       core: [],
       general: [],
@@ -130,7 +130,7 @@ describe('memórias no system prompt', () => {
         {
           id: 'mem_saz',
           kind: 'seasonal' as const,
-          text: 'Montando a landing do app',
+          text: 'Building the app landing page',
           tags: [],
           hits: 0,
           weight: 0.5,

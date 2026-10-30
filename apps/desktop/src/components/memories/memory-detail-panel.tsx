@@ -12,20 +12,20 @@ import { MemoryCard } from "./memory-card"
 import { Hint } from "@/components/ui/hint"
 
 /**
- * Painel lateral da memória selecionada — compartilhado pelas abas Lista e
- * Grafo, para que clicar num card e clicar num nó levem ao mesmo lugar.
+ * Side panel of the selected memory — shared by the List and
+ * Graph tabs, so that clicking a card and clicking a node lead to the same place.
  *
- * O card fica fixo no topo e o conteúdo ocupa o resto da altura: o documento
- * markdown anexado quando existe, senão o texto completo da memória (o card o
- * corta em duas linhas, então aqui é onde ele aparece por inteiro).
+ * The card stays fixed at the top and the content takes the rest of the height: the attached
+ * markdown document when it exists, otherwise the full text of the memory (the card
+ * cuts it into two lines, so here is where it appears whole).
  */
 export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose, className }: {
   memory: Memory
   related: Memory[]
   onSelectRelated: (id: string) => void
-  /** Fechar a visão. Ausente = não há o que fechar (aba do painel: a aba tem seu X). */
+  /** Close the view. Absent = there is nothing to close (panel tab: the tab has its own X). */
   onClose?: () => void
-  /** Largura/ocupação — a aba do painel usa a largura toda em vez dos w-96 fixos. */
+  /** Width/occupancy — the panel tab uses the whole width instead of the fixed w-96. */
   className?: string
 }) {
   const { t } = useTranslation()
@@ -41,8 +41,8 @@ export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose, c
     let active = true
     setLoadingDoc(true)
     void openDoc(memory.id).then((content) => {
-      // A memória pode ter trocado enquanto o doc carregava — sem esta guarda,
-      // uma resposta atrasada sobrescreveria o conteúdo da memória atual.
+      // The memory may have changed while the doc was loading — without this guard,
+      // a delayed response would overwrite the content of the current memory.
       if (!active) return
       setDoc(content)
       setLoadingDoc(false)
@@ -54,8 +54,8 @@ export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose, c
 
   return (
     <aside className={cn("flex shrink-0 flex-col gap-2 overflow-hidden", className ?? "w-96")}>
-      {/* O fechar fica na própria linha: ao lado do card ele roubava largura e
-          deixava o card mais estreito que a caixa do documento abaixo. */}
+      {/* The close stays on its own row: next to the card it stole width and
+          left the card narrower than the document box below. */}
       {onClose && (
         <div className="flex justify-end">
           <Hint label={t("common.close")}>
@@ -80,8 +80,8 @@ export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose, c
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {memory.hasDoc && loadingDoc ? (
-            // O doc vem do disco por IPC: skeleton em vez de um texto de espera,
-            // para o painel não piscar entre dois layouts diferentes.
+            // The doc comes from the disk over IPC: a skeleton instead of a waiting text,
+            // so the panel does not blink between two different layouts.
             <div className="flex flex-col gap-2" aria-label={t("memories.loadingDoc")}>
               <Skeleton className="h-5 w-2/5" />
               <Skeleton className="h-3 w-full" />

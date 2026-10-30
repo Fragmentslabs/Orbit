@@ -8,8 +8,8 @@ import orbitLogo from "@/src/assets/logo.png"
 
 export function AboutPanel() {
   const { t } = useTranslation()
-  // A versão vive no main (app.getVersion) — é a mesma dos artefatos do
-  // electron-builder e a que o mobile mostra na sua tela Sobre.
+  // The version lives in the main process (app.getVersion) — it is the same as the artifacts from
+  // electron-builder and the one the mobile app shows on its About screen.
   const [version, setVersion] = useState("")
   useEffect(() => {
     void windowApi.version().then(setVersion)

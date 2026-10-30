@@ -5,28 +5,29 @@ import { resolveFfmpeg } from '../video/ffmpeg'
 import { refreshYtdlp, requireYtdlp, type YtdlpRefreshResult } from './binary'
 
 /**
- * Execução do yt-dlp: os argumentos que as tools montam e o spawn que os roda.
+ * Execution of yt-dlp: the arguments the tools build and the spawn that runs them.
  *
- * Duas regras que valem para tudo aqui:
+ * Two rules that apply to everything here:
  *
- *  - `--ignore-config`: o resultado não pode depender do
- *    ~/.config/yt-dlp/config do usuário (um `-o` ou `--exec` lá dentro
- *    mudaria o comportamento da tool sem ninguém ver). Quem precisa de cookie
- *    ou de outra opção pede pela tool.
- *  - `--ffmpeg-location`: o ffmpeg que vem com o app é o que separa o vídeo
- *    do áudio e extrai a faixa de áudio. Sem apontar para ele, o yt-dlp
- *    procuraria um ffmpeg no PATH que pode não existir.
+ *  - `--ignore-config`: the result cannot depend on the user's
+ *    ~/.config/yt-dlp/config (an `-o` or `--exec` in there would change the
+ *    behavior of the tool without anyone seeing it). Whoever needs a cookie or
+ *    another option asks for it through the tool.
+ *  - `--ffmpeg-location`: the ffmpeg that ships with the app is the one that
+ *    separates the video from the audio and extracts the audio track. Without
+ *    pointing at it, yt-dlp would look for an ffmpeg on the PATH that may not
+ *    exist.
  */
 
 export interface YtdlpRunResult {
   code: number
   stdout: string
   stderr: string
-  /** O que aconteceu quando o erro parecia binário velho (ver looksStale). */
+  /** What happened when the error looked like an old binary (see looksStale). */
   refresh?: YtdlpRefreshResult
 }
 
-/** Teto do stdout: um `-J` de playlist gigante não pode virar memória do app. */
+/** stdout ceiling: a `-J` of a giant playlist cannot become app memory. */
 const MAX_STDOUT = 64 * 1024 * 1024
 
 export function baseYtdlpArgs(): string[] {
@@ -37,13 +38,13 @@ export function baseYtdlpArgs(): string[] {
 }
 
 /**
- * Erros que costumam ser sinônimo de binário velho: a extração do player
- * mudou, a assinatura (nsig) mudou, ou o site passou a exigir a versão nova do
- * desafio. São os que o release seguinte conserta.
+ * Errors that usually mean an old binary: the player extraction changed, the
+ * signature (nsig) changed, or the site started requiring the new version of the
+ * challenge. Those are the ones the next release fixes.
  *
- * Ficam de fora os que atualização nenhuma resolve — vídeo privado, removido,
- * bloqueio regional, 429 de rate limit, formato inexistente. Baixar 35 MB para
- * falhar igual é pior que devolver o erro original.
+ * The ones no update solves stay out — private video, removed, regional block, 429
+ * rate limit, nonexistent format. Downloading 35 MB to fail the same way is worse
+ * than returning the original error.
  */
 const STALE_PATTERNS = [
   /unable to extract/i,
@@ -65,18 +66,18 @@ export function looksStale(res: { stdout: string; stderr: string }): boolean {
 export interface YtdlpRunOptions {
   signal?: AbortSignal
   cwd?: string
-  /** Default: true — um erro com cara de binário velho atualiza e repete uma vez. */
+  /** Default: true — an error that looks like an old binary updates and repeats once. */
   retryOnStale?: boolean
 }
 
 /**
- * Roda o yt-dlp e devolve o resultado CRU — código de saída incluído, sem
- * lançar por código diferente de zero: um erro no meio de uma playlist ainda
- * deixa arquivos prontos, e quem decide o que fazer é a tool.
+ * Runs yt-dlp and returns the RAW result — exit code included, without throwing on a
+ * non-zero code: an error in the middle of a playlist still leaves finished files,
+ * and the tool is the one that decides what to do.
  *
- * Se a falha tem cara de extractor velho, atualiza o binário e repete UMA vez.
- * O retry não esconde o erro: o resultado carrega o que aconteceu na
- * atualização, e é isso que a mensagem final conta (ytdlpError).
+ * If the failure looks like an old extractor, it updates the binary and repeats
+ * ONCE. The retry does not hide the error: the result carries what happened in the
+ * update, and that is what the final message tells (ytdlpError).
  */
 export async function runYtdlp(args: string[], opts: YtdlpRunOptions = {}): Promise<YtdlpRunResult> {
   const first = await runYtdlpOnce(args, opts)
@@ -132,7 +133,7 @@ function runYtdlpOnce(args: string[], opts: YtdlpRunOptions = {}): Promise<Ytdlp
   })
 }
 
-/** As linhas de erro do yt-dlp, que é onde ele diz o que de fato aconteceu. */
+/** The error lines of yt-dlp, which is where it says what actually happened. */
 export function ytdlpError(res: YtdlpRunResult): string {
   const lines = res.stderr
     .split(/\r?\n/)
@@ -142,8 +143,8 @@ export function ytdlpError(res: YtdlpRunResult): string {
   const text = (errors.length ? errors.slice(-8) : lines.slice(-6)).join('\n') || `yt-dlp exited with code ${res.code}`
   if (!res.refresh) return text
 
-  // O erro parecia binário velho. Dizer o que foi feito evita que o agente peça
-  // ao usuário uma atualização que já aconteceu (ou que não é possível).
+  // The error looked like an old binary. Saying what was done keeps the agent from asking
+  // the user for an update that already happened (or that is not possible).
   const note = res.refresh.updated
     ? `yt-dlp was updated (${res.refresh.from ?? '?'} → ${res.refresh.to ?? '?'}) and the command failed again — this is not a stale binary.`
     : `yt-dlp was not updated: ${res.refresh.reason ?? 'no reason given'}.`
@@ -151,7 +152,7 @@ export function ytdlpError(res: YtdlpRunResult): string {
 }
 
 // ---------------------------------------------------------------------------
-// Argumentos (puros — testados sem rodar nada)
+// Arguments (pure — tested without running anything)
 // ---------------------------------------------------------------------------
 
 export type VideoQuality = 'best' | '2160' | '1440' | '1080' | '720' | '480' | '360'
@@ -161,26 +162,26 @@ export type CookieBrowser = 'chrome' | 'safari' | 'firefox' | 'edge' | 'brave' |
 export interface DownloadPlan {
   url: string
   kind: 'video' | 'audio'
-  /** Só para vídeo. */
+  /** Video only. */
   quality?: VideoQuality
-  /** Só para áudio: o contêiner final (best mantém o original). */
+  /** Audio only: the final container (best keeps the original). */
   audioFormat?: AudioFormat
   playlist?: boolean
   playlistItems?: string
   maxBytes?: number
   cookiesFromBrowser?: CookieBrowser
-  /** Caminho completo do template de saída (já dentro da pasta temporária). */
+  /** Full path of the output template (already inside the temporary folder). */
   output: string
 }
 
 /**
- * Seletor de formato do vídeo.
+ * Video format selector.
  *
- * `-f` faz duas coisas que `-S` sozinho não faz: impõe o TETO de resolução
- * (`res:1080` só ordena) e prefere vídeo mp4 + áudio m4a. Essa preferência não
- * é capricho: com o áudio opus/webm o yt-dlp é obrigado a mesclar em mkv, que o
- * player da resposta não abre. `-S` desempata pela resolução pedida e prefere
- * h264 — o codec que toca em qualquer aparelho.
+ * `-f` does two things `-S` alone does not: it enforces the resolution CEILING
+ * (`res:1080` only sorts) and prefers mp4 video + m4a audio. That preference is
+ * not a whim: with opus/webm audio yt-dlp is forced to merge into mkv, which the
+ * response player does not open. `-S` breaks the tie by the requested resolution
+ * and prefers h264 — the codec that plays on any device.
  */
 export function videoFormatArgs(quality: VideoQuality = '1080'): string[] {
   if (quality === 'best') return ['-f', 'bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b', '-S', 'res,vcodec:h264']
@@ -204,8 +205,8 @@ export function buildDownloadArgs(plan: DownloadPlan): string[] {
 
   if (plan.kind === 'audio') {
     args.push('-f', 'ba/b', '-x', '--audio-format', plan.audioFormat ?? 'best', '--embed-metadata')
-    // Qualidade só existe para os formatos reencodados; no `best` não há o que
-    // regular e a opção é ignorada.
+    // Quality only exists for the re-encoded formats; in `best` there is nothing
+    // to tune and the option is ignored.
     if ((plan.audioFormat ?? 'best') !== 'best') args.push('--audio-quality', '0')
     return args
   }
@@ -213,15 +214,15 @@ export function buildDownloadArgs(plan: DownloadPlan): string[] {
   return args
 }
 
-/** Template de nome: título legível + id, para dois vídeos homônimos não colidirem. */
+/** Name template: readable title + id, so two videos with the same name do not collide. */
 export function nameTemplate(playlist: boolean): string {
   return playlist ? '%(playlist_index)03d - %(title).100B [%(id)s].%(ext)s' : '%(title).120B [%(id)s].%(ext)s'
 }
 
 export function infoArgs(input: { url: string; playlist?: boolean; cookiesFromBrowser?: CookieBrowser }): string[] {
   const args = ['-J', input.url]
-  // `--flat-playlist` conta e lista sem abrir cada item (uma playlist de 500
-  // vídeos responderia em minutos se abrisse um por um).
+  // `--flat-playlist` counts and lists without opening each item (a playlist of 500
+  // videos would take minutes if it opened them one by one).
   args.push(input.playlist ? '--yes-playlist' : '--no-playlist')
   if (input.playlist) args.push('--flat-playlist', '--playlist-end', '50')
   if (input.cookiesFromBrowser) args.push('--cookies-from-browser', input.cookiesFromBrowser)
@@ -229,10 +230,10 @@ export function infoArgs(input: { url: string; playlist?: boolean; cookiesFromBr
 }
 
 /**
- * Os idiomas como o site os escreveu, sem curinga. O `.*` que pegaria pt-BR e
- * pt-PT de uma vez é uma armadilha: o YouTube oferece dezenas de traduções
- * automáticas e o yt-dlp tenta baixar TODAS — lento, e o servidor responde 429.
- * Quem decide a variante exata é o matchLanguage, a partir do JSON do info.
+ * The languages as the site wrote them, without a wildcard. The `.*` that would catch
+ * pt-BR and pt-PT at once is a trap: YouTube offers dozens of automatic translations
+ * and yt-dlp tries to download ALL of them — slow, and the server answers 429.
+ * matchLanguage is the one that decides the exact variant, from the info JSON.
  */
 export function subtitleLangPattern(languages: string[]): string {
   const seen = new Set<string>()
@@ -261,7 +262,7 @@ export function subtitleArgs(input: {
     '--write-auto-subs',
     '--sub-langs',
     subtitleLangPattern(input.languages),
-    // json3 traz palavra por palavra (YouTube); vtt/srt atendem o resto.
+    // json3 brings word by word (YouTube); vtt/srt serve the rest.
     '--sub-format',
     'json3/vtt/srt/srv/best',
     '-o',

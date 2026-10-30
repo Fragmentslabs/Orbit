@@ -1,20 +1,20 @@
 /**
- * Ditado por voz (STT) no processo MAIN — a fachada pública.
+ * Voice dictation (STT) in the MAIN process — the public facade.
  *
- * Dois motores, ambos locais e sem nuvem:
- *   - **parakeet**: sherpa-onnx (addon N-API, roda no Electron sem rebuild), CPU,
- *     VAD Silero fatiando o áudio para o texto ao vivo — o candidato de Windows e
- *     Linux (ver `parakeet.ts`);
- *   - **whisper**: whisper.cpp como PROCESSO AUXILIAR `whisper-server`, modelos
- *     ggml baixados sob demanda, decodificação greedy explícita (ver `whisper.ts`).
+ * Two engines, both local and cloudless:
+ *   - **parakeet**: sherpa-onnx (N-API addon, runs in Electron without a rebuild), CPU,
+ *     Silero VAD slicing the audio for live text — the Windows and
+ *     Linux candidate (see `parakeet.ts`);
+ *   - **whisper**: whisper.cpp as a HELPER PROCESS `whisper-server`, ggml models
+ *     downloaded on demand, explicit greedy decoding (see `whisper.ts`).
  *
- * O renderer manda áudio a 16 kHz mono PCM16; os dois motores trabalham a 16 kHz,
- * então no caminho comum NADA é reamostrado. `StreamResampler` só entra se a taxa
- * vier diferente — caso o motor venha a exigir outra taxa.
+ * The renderer sends audio at 16 kHz mono PCM16; both engines work at 16 kHz,
+ * so on the common path NOTHING is resampled. `StreamResampler` only comes in if the rate
+ * arrives different — should the engine ever require another rate.
  *
- * `STT_MODELS` é também a fonte do catálogo do núcleo (`manifest.ts` junta esta
- * lista à do TTS), por isso cada entrada segue `VoiceModelInfo` à risca: `bytes`
- * é o tamanho exato do download e `url` aponta o arquivo direto.
+ * `STT_MODELS` is also the source of the core's catalog (`manifest.ts` joins this
+ * list with the TTS one), which is why each entry follows `VoiceModelInfo` to the letter: `bytes`
+ * is the exact download size and `url` points at the file directly.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -28,9 +28,9 @@ import { pcm16ToFloat32, samplesToMs, STT_SAMPLE_RATE, StreamResampler } from '.
 import type { SttEngine, SttHandle, SttSegment } from './engine'
 
 /**
- * Catálogo declarativo dos modelos de ditado: id, motor, rótulo, bytes, URL e
- * idiomas. Nada é baixado aqui — o download é sob demanda (`download.ts`) e o
- * estado de instalação sai em `sttEngineStatus()`.
+ * Declarative catalog of the dictation models: id, engine, label, bytes, URL and
+ * languages. Nothing is downloaded here — the download is on demand (`download.ts`) and
+ * the installation state comes out of `sttEngineStatus()`.
  */
 export const STT_MODELS: VoiceModelInfo[] = STT_MODEL_DEFS.map((m) => ({
   id: m.id,
@@ -50,9 +50,9 @@ const ENGINES: Record<VoiceEngineId, SttEngine> = {
 }
 
 /**
- * O modelo está UTILIZÁVEL pelo motor agora — é a resposta que o `voice:status`
- * publica como `installed`. Para o Parakeet é o pacote EXTRAÍDO com o VAD
- * Silero presente; para o whisper é o arquivo completo (não há extração).
+ * The model is USABLE by the engine right now — it is the answer `voice:status`
+ * publishes as `installed`. For Parakeet it is the EXTRACTED package with the
+ * Silero VAD present; for whisper it is the complete file (there is no extraction).
  */
 export function sttModelInstalled(modelId: string): boolean {
   const def = getSttModel(modelId)
@@ -62,10 +62,10 @@ export function sttModelInstalled(modelId: string): boolean {
 }
 
 /**
- * Deixa um modelo já baixado pronto para uso (extrai o pacote quando for o
- * caso). Idempotente: um modelo pronto resolve na hora, sem tocar no arquivo.
- * O download do núcleo chama isto logo ao terminar; o motor também chama no
- * primeiro uso, então a extração nunca depende de um caminho só.
+ * Makes an already downloaded model ready for use (extracts the package when
+ * that is the case). Idempotent: a ready model resolves at once, without touching the file.
+ * The core's download calls this as soon as it finishes; the engine also calls it on
+ * first use, so extraction never depends on a single path.
  */
 export async function prepareSttModel(modelId: string): Promise<void> {
   const def = getSttModel(modelId)
@@ -73,47 +73,47 @@ export async function prepareSttModel(modelId: string): Promise<void> {
 }
 
 /**
- * Aquece um motor de ditado em SEGUNDO PLANO — a primeira sessão do usuário não
- * paga o carregamento do modelo (no Parakeet, centenas de MB no ONNX Runtime).
+ * Warms up a dictation engine IN THE BACKGROUND — the user's first session does not
+ * pay for loading the model (in Parakeet, hundreds of MB in the ONNX Runtime).
  *
- * Nunca rejeita: o erro, se houver, aparece no `status()` do motor. Idempotente,
- * então pode ser disparado sem cuidado — o botão de microfone chama sempre que
- * aparece e o fim de um download chama por conta própria.
+ * It never rejects: the error, if any, shows up in the engine's `status()`. Idempotent,
+ * so it can be fired carelessly — the microphone button calls it every time it
+ * shows up and the end of a download calls it on its own.
  */
 export async function warmSttModel(modelId?: string | null, engine?: string, threads?: number): Promise<void> {
   if (!sttPreloadEnabled()) return
   const def = modelId ? getSttModel(modelId) : null
-  // Um id que não é de ditado (um modelo de fala, por exemplo) não aquece nada.
+  // An id that is not a dictation one (a speech model, for instance) warms nothing up.
   if (modelId && !def) return
   const engineId = (def?.engine ?? engine) as VoiceEngineId | undefined
-  const alvo = engineId ? ENGINES[engineId] : undefined
-  await alvo?.warm?.(modelId ?? null, threads)
-  agendarLiberacao()
+  const impl = engineId ? ENGINES[engineId] : undefined
+  await impl?.warm?.(modelId ?? null, threads)
+  scheduleRelease()
 }
 
 /**
- * O pré-carregamento está ligado? Sem ele ninguém aquece por antecipação: o
- * primeiro ditado é que paga o carregamento (a troca é RAM por espera, e quem
- * decide é o usuário). Vem das configurações do main, não do payload.
+ * Is preloading on? Without it nobody warms up ahead of time: the
+ * first dictation is what pays for the loading (the trade is RAM for waiting, and the
+ * user decides). It comes from the main's settings, not from the payload.
  */
 export function sttPreloadEnabled(): boolean {
   const settings = getAppSettings() as { voice?: { stt?: { preload?: unknown; enabled?: unknown } } } | null
-  // Ditado desligado também não pré-carrega: nenhum chamador (o botão, o fim
-  // de um download) deve prender o modelo na memória de quem desligou a voz.
+  // Dictation turned off also does not preload: no caller (the button, the end
+  // of a download) should pin the model in the memory of whoever turned voice off.
   return settings?.voice?.stt?.preload !== false && settings?.voice?.stt?.enabled !== false
 }
 
-/** Quanto tempo sem ditado antes de soltar o modelo que o `warm` carregou. */
+/** How long without dictation before releasing the model `warm` loaded. */
 const IDLE_RELEASE_MS = 5 * 60_000
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
- * Solta AGORA o que os motores carregaram, sem esperar o ciclo ocioso. É o que a
- * troca da preferência de pré-carregamento dispara: desligar o preload devolve a
- * RAM na hora, em vez de daqui a cinco minutos.
+ * Releases NOW what the engines loaded, without waiting for the idle cycle. It is what
+ * toggling the preload preference fires: turning preload off gives the
+ * RAM back right away, instead of in five minutes.
  *
- * Com sessão aberta o modelo está em uso: não o solta no meio dela, adia.
+ * With an open session the model is in use: it does not release it mid-session, it postpones.
  */
 export function releaseSttModels(): void {
   if (idleTimer) {
@@ -121,24 +121,24 @@ export function releaseSttModels(): void {
     idleTimer = null
   }
   if (sessions.size > 0) {
-    agendarLiberacao()
+    scheduleRelease()
     return
   }
   for (const engine of Object.values(ENGINES)) {
     try {
       engine.release?.()
     } catch {
-      // soltar é melhor-esforço: nunca derruba o main
+      // releasing is best-effort: it never takes the main down
     }
   }
 }
 
 /**
- * Marca atividade do ditado e (re)agenda a liberação: passado o tempo ocioso sem
- * sessão aberta, o que foi carregado é solto — no Parakeet são centenas de MB
- * residentes. Uma sessão em curso adia a liberação.
+ * Marks dictation activity and (re)schedules the release: after the idle time with no
+ * open session, what was loaded is released — in Parakeet that is hundreds of MB
+ * resident. A session in progress postpones the release.
  */
-function agendarLiberacao(): void {
+function scheduleRelease(): void {
   if (idleTimer) clearTimeout(idleTimer)
   idleTimer = setTimeout(() => {
     idleTimer = null
@@ -147,23 +147,23 @@ function agendarLiberacao(): void {
   idleTimer.unref?.()
 }
 
-/** Estado de cada motor para a UI montar os seletores e o botão de baixar. */
+/** State of each engine so the UI can build the selectors and the download button. */
 export async function sttEngineStatus(): Promise<VoiceEngineStatus[]> {
   const statuses = await Promise.all([parakeetEngine.status(), whisperEngine.status()])
   return statuses.map((s) => ({
     engine: s.engine,
     installed: s.installed,
     available: s.available,
-    // "Baixado" é o arquivo no disco (para o Parakeet, o próprio .tar.bz2): o
-    // motor pode estar sem extrair o pacote — e a UI precisa saber disso para
-    // não chamar de "não baixado" o que já está lá.
+    // "Downloaded" is the file on disk (for Parakeet, the .tar.bz2 itself): the
+    // engine may not have extracted the package — and the UI needs to know that so it
+    // does not call "not downloaded" what is already there.
     downloaded: STT_MODEL_DEFS.some((m) => m.engine === s.engine && fileComplete(m)),
     reason: s.reason,
     autoModelId: s.engine === 'whisper' ? whisperAutoModelId() : ENGINES[s.engine].defaultModelId,
   }))
 }
 
-/** Sessão de ditado aberta (o motor e o áudio vivem no main). */
+/** Open dictation session (the engine and the audio live in the main). */
 export interface SttSession {
   id: string
 }
@@ -172,7 +172,7 @@ interface ActiveSession {
   id: string
   engineId: VoiceEngineId
   handle: SttHandle
-  /** Reamostrador só quando a taxa de entrada difere de 16 kHz. */
+  /** Resampler only when the input rate differs from 16 kHz. */
   resampler: StreamResampler | null
   inputSamples: number
   inputRate: number
@@ -181,24 +181,24 @@ interface ActiveSession {
 
 const sessions = new Map<string, ActiveSession>()
 
-/** Forma da entrada do start (a API pública a declara inline). */
+/** Shape of the start input (the public API declares it inline). */
 interface StartSttInput {
   engine: VoiceEngineId
   modelId?: string | null
   language?: string
-  /** Taxa do áudio que o renderer vai mandar (16 kHz na captura padrão). */
+  /** Rate of the audio the renderer will send (16 kHz on the default capture). */
   sampleRate: number
   threads?: number
-  /** Pedir texto ao vivo enquanto a fala acontece. */
+  /** Ask for live text while the speech happens. */
   live: boolean
-  /** Pedir os trechos com tempo (transcrição de arquivo); 'words' = por palavra. */
+  /** Ask for the segments with timing (file transcription); 'words' = per word. */
   timestamps?: boolean | 'words'
 }
 
 /**
- * Abre uma sessão de ditado. Só resolve quando o modelo está carregado e pronto
- * (o Parakeet extrai o pacote e aquece o ONNX Runtime; o whisper espera o
- * `/health` do servidor): erro de preparo sai aqui, não no meio da fala.
+ * Opens a dictation session. It only resolves when the model is loaded and ready
+ * (Parakeet extracts the package and warms the ONNX Runtime; whisper waits for the
+ * server's `/health`): a preparation error comes out here, not in the middle of the speech.
  */
 export async function startSttSession(
   input: StartSttInput,
@@ -212,7 +212,7 @@ export async function startSttSession(
     try {
       onPartial(text)
     } catch {
-      // o callback é do chamador; um erro nele não pode derrubar o motor
+      // the callback belongs to the caller; an error in it cannot take the engine down
     }
   }
 
@@ -237,16 +237,16 @@ export async function startSttSession(
     inputRate: rate,
     startedAt: Date.now(),
   })
-  // Sessão aberta é atividade: o modelo não pode ser solto enquanto ela dura.
-  agendarLiberacao()
+  // An open session is activity: the model cannot be released while it lasts.
+  scheduleRelease()
   return { id }
 }
 
 /**
- * Áudio da captura: PCM16LE mono na taxa declarada no start.
+ * Capture audio: PCM16LE mono at the rate declared in start.
  *
- * É `void` de propósito — o caminho do áudio é quente e não pode esperar; uma
- * sessão já encerrada simplesmente descarta o pedaço.
+ * It is `void` on purpose — the audio path is hot and cannot wait; a
+ * session already closed simply discards the chunk.
  */
 export function pushSttAudio(id: string, pcm: Buffer): void {
   const s = sessions.get(id)
@@ -256,17 +256,17 @@ export function pushSttAudio(id: string, pcm: Buffer): void {
   s.handle.pushAudio(s.resampler ? s.resampler.push(floats) : floats)
 }
 
-/** Fecha a sessão e devolve o texto final, a duração do áudio e o tempo gasto. */
+/** Closes the session and returns the final text, the audio duration and the time spent. */
 export async function stopSttSession(
   id: string,
 ): Promise<{ text: string; audioMs: number; ms: number; segments?: SttSegment[] }> {
   const s = sessions.get(id)
-  if (!s) throw new Error(`sessão de ditado inexistente: ${id}`)
+  if (!s) throw new Error(`dictation session does not exist: ${id}`)
   sessions.delete(id)
   const t0 = Date.now()
   const result = await s.handle.stop()
-  // Fim de sessão é atividade: a contagem da liberação ociosa recomeça daqui.
-  agendarLiberacao()
+  // The end of a session is activity: the idle-release count restarts here.
+  scheduleRelease()
   return {
     text: result.text,
     audioMs: samplesToMs(s.inputSamples, s.inputRate),
@@ -275,11 +275,11 @@ export async function stopSttSession(
   }
 }
 
-/** Aborta a sessão sem transcrever (o usuário apertou Esc, a janela fechou…). */
+/** Aborts the session without transcribing (the user pressed Esc, the window closed…). */
 export async function cancelSttSession(id: string): Promise<void> {
   const s = sessions.get(id)
   if (!s) return
   sessions.delete(id)
   await s.handle.cancel()
-  agendarLiberacao()
+  scheduleRelease()
 }

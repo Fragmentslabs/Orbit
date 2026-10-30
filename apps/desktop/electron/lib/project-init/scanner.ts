@@ -4,12 +4,12 @@ import path from 'node:path'
 import { isDocumentPath } from '../document-pages'
 
 /**
- * Scanner determinístico do /init: varre a estrutura do projeto e os arquivos
- * de configuração para identificar stack, frameworks, ferramentas, testes e
- * infraestrutura — sem LLM. O resultado alimenta a geração de memórias.
+ * Deterministic scanner of /init: walks the project structure and the config
+ * files to identify stack, frameworks, tools, tests and
+ * infrastructure — no LLM. The result feeds the generation of memories.
  */
 
-/** Subprojeto detectado em subdiretório (monorepo, front+back, etc.) */
+/** Subproject detected in a subdirectory (monorepo, front+back, etc.) */
 export interface Subproject {
   name: string
   directory: string
@@ -26,27 +26,27 @@ export interface ProjectScan {
   tools: string[]
   tests: string[]
   infra: string[]
-  /** Sinais de UI (frameworks/CSS) — decide se a área design é investigada */
+  /** UI signals (frameworks/CSS) — decides whether the design area is investigated */
   ui: string[]
-  /** Sinais de auth/crypto/secrets — decide se a área security é investigada */
+  /** auth/crypto/secrets signals — decides whether the security area is investigated */
   security: string[]
   scripts: Record<string, string>
-  /** Árvore rasa de diretórios (2 níveis) */
+  /** Shallow directory tree (2 levels) */
   structure: string[]
   readmeExcerpt?: string
-  /** Trechos de arquivos de config relevantes para o gerador */
+  /** Excerpts of config files relevant to the generator */
   configExcerpts: { file: string; content: string }[]
-  /** Subprojetos detectados em subdiretórios (monorepo, front+back, etc.) */
+  /** Subprojects detected in subdirectories (monorepo, front+back, etc.) */
   subprojects: Subproject[]
-  /** Arquivos de documentação encontrados (*.md em docs/, especificações, etc.) */
+  /** Documentation files found (*.md under docs/, specs, etc.) */
   docs: string[]
   /**
-   * Documentos binários do repositório (PDF/DOCX/planilha) — spec, contrato,
-   * requisitos, modelo de dados em planilha. Ficam separados dos `docs`
-   * porque exigem leitura paginada (read/grep entram neles pela camada de
-   * documents.ts); listá-los junto sugeriria que são texto simples. */
+   * Binary documents of the repository (PDF/DOCX/spreadsheet) — spec, contract,
+   * requirements, data model in a spreadsheet. They are kept apart from `docs`
+   * because they need paged reading (read/grep reach them through the
+   * documents.ts layer); listing them together would suggest they are plain text. */
   binaryDocs: string[]
-  /** Arquivos de schema/modelo de dados (*.sql, *.prisma, etc.) */
+  /** Schema/data model files (*.sql, *.prisma, etc.) */
   schemas: string[]
 }
 
@@ -57,7 +57,7 @@ const IGNORED_DIRS = new Set([
 
 const MAX_EXCERPT = 4000
 
-/** dependência → rótulo (stack/framework/tool/test/infra/ui/security) */
+/** dependency → label (stack/framework/tool/test/infra/ui/security) */
 const DEP_SIGNALS: { dep: RegExp; label: string; kind: 'stack' | 'framework' | 'tool' | 'test' | 'ui' | 'security' }[] = [
   { dep: /^(next-auth|@auth\/|@clerk\/|passport|jsonwebtoken|jose$|bcrypt|argon2|@supabase\/)/, label: 'Auth/crypto', kind: 'security' },
   { dep: /^(styled-components|@emotion\/|@mui\/|@chakra-ui\/|@radix-ui\/|@base-ui\/|antd$|shadcn)/, label: 'UI library', kind: 'ui' },
@@ -87,7 +87,7 @@ const DEP_SIGNALS: { dep: RegExp; label: string; kind: 'stack' | 'framework' | '
   { dep: /^cypress$/, label: 'Cypress', kind: 'test' },
 ]
 
-/** arquivo presente → rótulo */
+/** file present → label */
 const FILE_SIGNALS: { file: string; label: string; kind: 'stack' | 'tool' | 'test' | 'infra' }[] = [
   { file: 'Cargo.toml', label: 'Rust', kind: 'stack' },
   { file: 'go.mod', label: 'Go', kind: 'stack' },
@@ -106,7 +106,7 @@ const FILE_SIGNALS: { file: string; label: string; kind: 'stack' | 'tool' | 'tes
   { file: 'pytest.ini', label: 'pytest', kind: 'test' },
 ]
 
-/** Configs cujos conteúdos ajudam o gerador (limitados a MAX_EXCERPT) */
+/** Configs whose contents help the generator (limited to MAX_EXCERPT) */
 const EXCERPT_FILES = [
   'package.json', 'tsconfig.json', 'Cargo.toml', 'pyproject.toml', 'go.mod',
   'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', '.env.example',
@@ -194,12 +194,12 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
           if (signal.dep.test(dep)) push(signal.kind, signal.label)
         }
       }
-      // Frameworks de UI também são sinal de design
+      // UI frameworks are also a design signal
       for (const uiDep of ['react', 'vue', 'svelte', 'tailwindcss']) {
         if (deps.includes(uiDep)) push('ui', uiDep)
       }
     } catch {
-      // package.json inválido — segue só com os sinais de arquivo
+      // invalid package.json — carry on with the file signals only
     }
   }
 
@@ -216,7 +216,7 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
     (async () => {
       const envExample = await readIfExists(directory, '.env.example')
       if (envExample && /secret|token|key|auth|password/i.test(envExample)) {
-        push('security', 'Variáveis sensíveis (.env)')
+        push('security', 'Sensitive variables (.env)')
       }
     })(),
     (async () => {
@@ -227,7 +227,7 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
       const content = await readIfExists(directory, file)
       if (content) scan.configExcerpts.push({ file, content: content.slice(0, MAX_EXCERPT) })
     }),
-    // ── Scan de subprojetos em subdiretórios ──────────────────────────
+    // ── Scan of subprojects in subdirectories ─────────────────────────
     (async () => {
       const subdirs = await fs.readdir(directory, { withFileTypes: true }).catch(() => [] as Dirent[])
       const projectDirs = subdirs.filter(
@@ -259,7 +259,7 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
                   }
                 }
               }
-            } catch { /* segue */ }
+            } catch { /* carry on */ }
           } else if (subGoMod) {
             sp.stack.push('Go')
           } else if (subCargo) {
@@ -269,7 +269,7 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
         }
       }
     })(),
-    // ── Coleta de documentação e schemas ────────────────────────────
+    // ── Collection of docs and schemas ──────────────────────────────
     (async () => {
       const collectDocs = async (dir: string, prefix: string, depth: number) => {
         if (depth > 2) return
@@ -285,9 +285,9 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
             if (ext === '.md' || (e.name.endsWith('.md') && e.name !== 'README.md')) {
               if (scan.docs.length < 20) scan.docs.push(rel)
             } else if (isDocumentPath(e.name)) {
-              // Spec em PDF, requisitos em DOCX, modelo de dados em planilha:
-              // fazem parte do projeto tanto quanto um .md, e antes da camada
-              // de documentos o /init não tinha como nem saber que existiam.
+              // Spec in a PDF, requirements in a DOCX, data model in a spreadsheet:
+              // they are as much part of the project as a .md file, and before the
+              // documents layer /init had no way of even knowing they existed.
               if (scan.binaryDocs.length < 20) scan.binaryDocs.push(rel)
             } else if (ext === '.sql' || ext === '.prisma' || e.name.endsWith('.prisma')) {
               if (scan.schemas.length < 10) scan.schemas.push(rel)
@@ -302,35 +302,35 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
   return scan
 }
 
-/** Resumo textual do scan — vira o prompt do gerador de memórias. */
+/** Textual summary of the scan — becomes the prompt of the memory generator. */
 export function describeScan(scan: ProjectScan): string {
   const section = (title: string, body: string) => (body.trim() ? `## ${title}\n${body}\n` : '')
   const subprojectsBlock = scan.subprojects.length > 0
     ? scan.subprojects.map((sp) =>
-        `- **${sp.name}** (${sp.directory}): ${[...sp.stack, ...sp.frameworks].join(', ') || 'não identificado'}` +
+        `- **${sp.name}** (${sp.directory}): ${[...sp.stack, ...sp.frameworks].join(', ') || 'unidentified'}` +
         (Object.keys(sp.scripts).length > 0 ? `\n  Scripts: ${Object.keys(sp.scripts).map((s) => `\`${s}\``).join(', ')}` : ''),
       ).join('\n')
     : ''
   return [
-    `# Projeto: ${scan.name}\nDiretório: ${scan.directory}`,
+    `# Projeto: ${scan.name}\nDirectory: ${scan.directory}`,
     section('Stack', scan.stack.join(', ')),
     section('Frameworks', scan.frameworks.join(', ')),
-    section('Ferramentas', scan.tools.join(', ')),
+    section('Tools', scan.tools.join(', ')),
     section('Testes', scan.tests.join(', ')),
     section('Infraestrutura', scan.infra.join(', ')),
     section('Scripts', Object.entries(scan.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')),
     section('Estrutura', '```\n' + scan.structure.join('\n') + '\n```'),
     section('Subprojetos detectados', subprojectsBlock),
-    section('Documentação encontrada', scan.docs.map((d) => `- ${d}`).join('\n')),
+    section('Documentation found', scan.docs.map((d) => `- ${d}`).join('\n')),
     section(
       'Documentos do projeto (PDF/DOCX/planilha)',
       scan.binaryDocs.length > 0
-        ? `${scan.binaryDocs.map((d) => `- ${d}`).join('\n')}\n\nLeia com \`read\` (devolve página a página) e localize trechos com \`grep\` (reporta \`arquivo:p12\`). Não tente lê-los como texto simples.`
+        ? `${scan.binaryDocs.map((d) => `- ${d}`).join('\n')}\n\nRead with \`read\` (returns page by page) and locate passages with \`grep\` (reports \`file:p12\`). Do not try to read them as plain textples.`
         : '',
     ),
     section('Schemas de banco', scan.schemas.map((s) => `- ${s}`).join('\n')),
     scan.readmeExcerpt ? section('README (trecho)', scan.readmeExcerpt) : '',
-    ...scan.configExcerpts.map((c) => section(`Arquivo: ${c.file}`, '```\n' + c.content + '\n```')),
+    ...scan.configExcerpts.map((c) => section(`File: ${c.file}`, '```\n' + c.content + '\n```')),
   ]
     .filter(Boolean)
     .join('\n')

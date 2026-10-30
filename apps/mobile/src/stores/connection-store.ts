@@ -18,38 +18,38 @@ const STORAGE_KEY_DEVICE = 'orbit_conn_device'
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 interface ConnectionStore {
-  /** Estado da conexão WebSocket. */
+  /** State of the WebSocket connection. */
   connection: ConnectionState
-  /** Configuração atual (host/port/pin). */
+  /** Current configuration (host/port/pin). */
   config: ConnectionConfig | null
-  /** Instância do cliente WebSocket (singleton). */
+  /** Instance of the WebSocket client (singleton). */
   wsClient: CompanionWebSocket
-  /** Instância do cliente HTTP (singleton). */
+  /** Instance of the HTTP client (singleton). */
   http: CompanionHttp | null
-  /** Uptime do desktop em segundos. */
+  /** Uptime of the desktop in seconds. */
   desktopUptime: number
-  /** Número de sessões ativas no desktop. */
+  /** Number of active sessions on the desktop. */
   desktopActiveSessions: number
 
-  /** Conecta ao desktop com a config fornecida. */
+  /** Connects to the desktop with the given config. */
   connect: (config: ConnectionConfig) => void
-  /** Desconecta e limpa estado (ação explícita do usuário — esquece a config salva). */
+  /** Disconnects and clears the state (explicit user action — forgets the saved config). */
   disconnect: () => void
-  /** Fecha o socket sem esquecer a config salva (cleanup de unmount/dev reload). */
+  /** Closes the socket without forgetting the saved config (unmount/dev reload cleanup). */
   shutdown: () => void
-  /** Atualiza config (reconecta). */
+  /** Updates the config (reconnects). */
   updateConfig: (config: ConnectionConfig) => void
-  /** Salva config no SecureStore para reconexão futura. */
+  /** Saves the config in SecureStore for a future reconnection. */
   saveConfig: (config: ConnectionConfig) => Promise<void>
-  /** true enquanto loadConfig() está rodando. */
+  /** true while loadConfig() is running. */
   loadingConfig: boolean
-  /** Carrega config do SecureStore. Retorna null se não houver. */
+  /** Loads the config from SecureStore. Returns null when there is none. */
   loadConfig: () => Promise<ConnectionConfig | null>
-  /** Limpa config salva. */
+  /** Clears the saved config. */
   clearSavedConfig: () => Promise<void>
-  /** Registra handler para mudança de estado WS. */
+  /** Registers a handler for a WS state change. */
   onConnectionChange: (handler: (state: ConnectionState) => void) => () => void
-  /** Registra handler para eventos WS. */
+  /** Registers a handler for WS events. */
   onEvent: (eventType: string, handler: (event: any) => void) => () => void
 }
 
@@ -69,17 +69,17 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   connect: (config) => {
     set({ config, connection: { status: 'connecting' } })
 
-    // Cria/ atualiza o HTTP client
+    // Creates/updates the HTTP client
     const http = new CompanionHttp(config)
     set({ http })
 
-    // Conecta o WS — o handshake + auth são tratados internamente
+    // Connects the WS — the handshake + auth are handled internally
     wsClient.connect(config)
 
-    // Salva config para reconexão futura
+    // Saves the config for a future reconnection
     void get().saveConfig(config)
 
-    // Quando o WS autenticar, atualiza o token do HTTP client e salva
+    // When the WS authenticates, it updates the token of the HTTP client and saves it
     const unsub = wsClient.onStateChange((state) => {
       if (state.status === 'connected' && state.deviceToken) {
         http.setToken(state.deviceToken)
@@ -102,9 +102,9 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   },
 
   shutdown: () => {
-    // Apenas fecha o socket — mantém a config salva para reconexão automática.
-    // Necessário porque o cleanup do useEffect roda em dev (double-invoke /
-    // fast refresh) e não pode apagar as credenciais.
+    // Only closes the socket — keeps the saved config for automatic reconnection.
+    // Necessary because the cleanup of useEffect runs in dev (double-invoke /
+    // fast refresh) and cannot erase the credentials.
     wsClient.disconnect()
     set({ connection: { status: 'disconnected' } })
   },
@@ -153,8 +153,8 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
       const token = await Storage.getItem(STORAGE_KEY_TOKEN)
       const deviceName = await Storage.getItem(STORAGE_KEY_DEVICE)
 
-      // Com token persistente o PIN é dispensável (ele expira em 5 min de
-      // qualquer forma — só serviu para o primeiro pareamento).
+      // With a persistent token the PIN is dispensable (it expires in 5 min
+      // anyway — it only served the first pairing).
       if (!host || !port || (!pin && !token)) return null
 
       return {

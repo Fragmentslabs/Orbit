@@ -1,16 +1,16 @@
 /**
- * Casamento e substituição do lado do renderer.
+ * Matching and replacement on the renderer side.
  *
- * É o irmão pequeno do motor do main (`electron/lib/workspace-search.ts`), e
- * existe por um motivo só: o buffer do editor não passa pelo main. Substituir
- * no arquivo aberto tem que usar EXATAMENTE as mesmas regras da lista de
- * ocorrências — palavra inteira, caixa e preservação de formato —, senão a
- * prévia mostra uma coisa e a tecla aplica outra.
+ * It is the small sibling of main's engine (`electron/lib/workspace-search.ts`), and
+ * it exists for one reason only: the editor buffer does not go through main. Replacing
+ * in the open file has to use EXACTLY the same rules as the occurrence list —
+ * whole word, case and format preservation —, otherwise the preview shows one thing
+ * and the key applies another.
  */
 
 import type { WsMatchOptions } from "@/src/lib/ipc";
 
-/** `\b` não separa em `snake_case`; as fronteiras vão explícitas. */
+/** `\b` does not separate in `snake_case`; the boundaries are explicit. */
 export function buildMatcher(
   query: string,
   options: WsMatchOptions,
@@ -28,7 +28,7 @@ export function buildMatcher(
   }
 }
 
-/** A substituição no formato do texto que ela está trocando. */
+/** The replacement in the format of the text it is swapping. */
 export function applyCase(matched: string, replacement: string): string {
   if (replacement === "" || matched === "") return replacement;
   const upper = matched.toUpperCase();
@@ -43,7 +43,7 @@ export function applyCase(matched: string, replacement: string): string {
   return replacement;
 }
 
-/** Troca no texto inteiro e devolve quantas ocorrências caíram. */
+/** Replaces in the whole text and returns how many occurrences were hit. */
 export function replaceInText(
   text: string,
   query: string,
@@ -61,8 +61,8 @@ export function replaceInText(
 }
 
 /**
- * A linha como ela ficaria depois da substituição, trocando só a ocorrência
- * que está sendo mostrada — a prévia responde "este trecho vira o quê?".
+ * The line as it would look after the replacement, swapping only the occurrence
+ * being shown — the preview answers "what does this stretch become?".
  */
 export function previewLine(
   line: string,

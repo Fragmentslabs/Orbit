@@ -4,40 +4,40 @@ import { isEngineText, lastTextRunStart } from "@shared/chat-text"
 import type { ChatMessage, FilePart, MessagePart, ReasoningPart, ToolPart } from "@shared/chat"
 
 /**
- * Caminho real, no disco, de cada anexo cujo conteúdo NÃO deve atravessar a
- * memória do renderer (vídeos). Registrado quando o arquivo é adicionado ao
- * input — é a única hora em que o `File` ainda existe — e consumido na
- * conversão para data URL logo abaixo.
+ * Real path, on disk, of each attachment whose content must NOT cross the
+ * renderer memory (videos). Registered when the file is added to the
+ * input — it is the only time the `File` still exists — and consumed in the
+ * conversion to data URL right below.
  */
 const attachmentPaths = new Map<string, string>()
 
-/** Um vídeo é pesado demais para virar data URL: passa por caminho quando há um. */
+/** A video is too heavy to become a data URL: it goes through a path when there is one. */
 export function isLargeMediaType(mediaType: string | undefined, filename?: string): boolean {
   return !!mediaType?.startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(filename ?? "")
 }
 
-/** O maior vídeo que ainda se aceita SEM caminho (colado da área de transferência). */
+/** The largest video still accepted WITHOUT a path (pasted from the clipboard). */
 export const MAX_PASTED_VIDEO_BYTES = 150 * 1024 * 1024
 
-/** `/home/a b/c.mp4` → `file:///home/a%20b/c.mp4` (e `C:\x\y.mp4` → `file:///C:/x/y.mp4`). */
+/** `/home/a b/c.mp4` → `file:///home/a%20b/c.mp4` (and `C:\x\y.mp4` → `file:///C:/x/y.mp4`). */
 export function pathToFileUrl(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/")
   const withRoot = normalized.startsWith("/") ? normalized : `/${normalized}`
   return `file://${encodeURI(withRoot).replace(/[?#]/g, (c) => (c === "?" ? "%3F" : "%23"))}`
 }
 
-/** Guarda o caminho de um arquivo do disco para o blob URL dele (ver acima). */
+/** Stores the path of a file on disk for its blob URL (see above). */
 export function rememberAttachmentPath(blobUrl: string, filePath: string): void {
   if (filePath) attachmentPaths.set(blobUrl, filePath)
 }
 
-/** Converte blob URLs dos anexos do input em data URLs estáveis. O input
- * trabalha com blob URLs (URL.createObjectURL) e os REVOGA ao limpar — a fila
- * e o agendamento guardam a mensagem para enviar depois, então precisam da
- * data URL (blob URL revogado vira anexo morto). O envio imediato também usa
- * este caminho (handleSubmit do PromptInput), pela mesma razão: clear() roda
- * antes do submit. Vídeos de arquivo seguem outro caminho: viram um `file://`
- * para o main copiar do disco, em vez de gigabytes de base64 no renderer. */
+/** Converts the input attachments' blob URLs into stable data URLs. The input
+ * works with blob URLs (URL.createObjectURL) and REVOKES them when clearing — the queue
+ * and the scheduling keep the message to send later, so they need the
+ * data URL (a revoked blob URL becomes a dead attachment). The immediate send also uses
+ * this path (PromptInput's handleSubmit), for the same reason: clear() runs
+ * before submit. Videos from a file take another path: they become a `file://`
+ * for main to copy from disk, instead of gigabytes of base64 in the renderer. */
 export async function blobUrlsToDataUrls<T extends { url?: string; mediaType?: string; filename?: string }>(
   files: T[],
 ): Promise<T[]> {
@@ -65,13 +65,13 @@ export async function blobUrlsToDataUrls<T extends { url?: string; mediaType?: s
   )
 }
 
-/** Ferramentas que tocam a web — alimentam chain-of-thought e fontes. */
+/** Tools that touch the web — they feed chain-of-thought and sources. */
 export const WEB_TOOLS = new Set(["websearch", "webfetch", "browser_open", "browser_links"])
 
-// `isEngineText`/`lastTextRunStart` moram no shared (@shared/chat-text): o main
-// (preview da notificação nativa) e o renderer (bolha, resumo falado) precisam
-// da MESMA noção de "resposta final" — e o banner já divergiu dela, anunciando
-// a narração do turno. Reexportados para os consumidores daqui não mudarem.
+// `isEngineText`/`lastTextRunStart` live in shared (@shared/chat-text): main
+// (native notification preview) and the renderer (bubble, spoken summary) need
+// the SAME notion of "final answer" — and the banner already diverged from it, announcing
+// the turn's narration. Re-exported so the consumers here do not have to change.
 export { isEngineText, lastTextRunStart }
 
 export interface WebSource {
@@ -79,9 +79,9 @@ export interface WebSource {
   title: string
 }
 
-/** Texto completo da mensagem (todas as text parts, incluindo o que foi
- * extraído de anexos). Usado quando o consumidor precisa do conteúdo real —
- * ex.: reenviar em um retry, já que o retry não reanexa o arquivo original. */
+/** Full text of the message (all text parts, including what was
+ * extracted from attachments). Used when the consumer needs the real content —
+ * e.g.: resend on a retry, since the retry does not re-attach the original file. */
 export function messageText(message: ChatMessage): string {
   return message.parts
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
@@ -89,11 +89,11 @@ export function messageText(message: ChatMessage): string {
     .join("\n")
 }
 
-/** Só o que a pessoa digitou — omite as text parts com source "attachment"
- * (texto extraído de PDF/planilha/DOCX/skill). Use para exibir a bolha do
- * usuário, copiar a mensagem ou preview no nav: o conteúdo extraído já
- * aparece como chip de anexo, não precisa poluir a bolha com o texto inteiro
- * do arquivo — o modelo continua recebendo tudo via messageText/partText. */
+/** Only what the person typed — skips the text parts with source "attachment"
+ * (text extracted from PDF/spreadsheet/DOCX/skill). Use it to display the
+ * user bubble, copy the message or preview in the nav: the extracted content already
+ * appears as an attachment chip, there is no need to pollute the bubble with the whole
+ * text of the file — the model still receives everything via messageText/partText. */
 export function visibleMessageText(message: ChatMessage): string {
   return message.parts
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text" && p.source !== "attachment")
@@ -101,26 +101,26 @@ export function visibleMessageText(message: ChatMessage): string {
     .join("\n")
 }
 
-/** Só o corpo da mensagem: sem a citação da mensagem respondida, que a bolha
- *  desenha em destaque. Para previews (navegador de mensagens), onde o trecho
- *  citado só empurraria o texto da pessoa para fora do lugar. */
+/** Only the message body: without the quoted message of the reply, which the bubble
+ *  draws highlighted. For previews (message navigator), where the quoted
+ *  excerpt would only push the person's text out of place. */
 export function messageBody(message: ChatMessage): string {
   return parseMessageReply(visibleMessageText(message)).body
 }
 
 /**
- * Texto que a LEITURA EM VOZ ALTA fala: a resposta final da mensagem, e só ela
- * (só assistente, só prosa do modelo, só o último bloco de texto — sem o JSON
- * do orbit-ui nem o código do diagrama).
+ * Text that READING OUT LOUD speaks: the final answer of the message, and only it
+ * (assistant only, model prose only, last text block only — without the orbit-ui JSON
+ * or the diagram code).
  *
- * A regra passou a morar no shared (`@shared/chat-text`): o celular lê a mesma
- * resposta pelo `/api/voice/speak`, e duas cópias divergiriam. Reexportado
- * daqui porque a UI do desktop inteira já importa deste módulo.
+ * The rule now lives in shared (`@shared/chat-text`): the phone reads the same
+ * answer through `/api/voice/speak`, and two copies would diverge. Re-exported
+ * from here because the whole desktop UI already imports from this module.
  */
 export { speakableText } from "@shared/chat-text"
 
-/** Anexo do composer como o conversor precisa vê-lo — o mínimo comum entre o
- *  PromptInputFile, o QueueAttachment e o que volta de um revert. */
+/** Composer attachment as the converter needs to see it — the least common denominator between
+ *  PromptInputFile, QueueAttachment and what comes back from a revert. */
 export interface AttachmentLike {
   mediaType?: string
   filename?: string
@@ -129,10 +129,10 @@ export interface AttachmentLike {
   sourceId?: string
 }
 
-/** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts.
- *  `mediaId` marca o anexo que é uma referência à galeria — nesse caso `url` é
- *  só o preview e o main não copia nada (ver FilePart.mediaId). `sourceId` é o
- *  mesmo para uma FONTE da conversa: `url` vazio e o conteúdo já guardado. */
+/** Converts PromptInput attachments (FileUIPart, url already a data URL) into FileParts.
+ *  `mediaId` marks the attachment that is a gallery reference — in that case `url` is
+ *  only the preview and main copies nothing (see FilePart.mediaId). `sourceId` is the
+ *  same for a conversation SOURCE: empty `url` and the content already stored. */
 export function toFileParts(files: AttachmentLike[]): FilePart[] {
   return files
     .filter((f): f is AttachmentLike => Boolean(f.url) || Boolean(f.mediaId) || Boolean(f.sourceId))
@@ -155,7 +155,7 @@ export function hostnameOf(url: string): string {
   }
 }
 
-/** Extrai pares Title/URL da saída textual do websearch (formato Exa). */
+/** Extracts Title/URL pairs from the websearch textual output (Exa format). */
 export function parseSearchResults(output: string): WebSource[] {
   const sources: WebSource[] = []
   let title: string | null = null
@@ -181,7 +181,7 @@ function sourceOfToolPart(part: ToolPart): WebSource[] {
     case "browser_open": {
       const url = typeof part.input?.url === "string" ? part.input.url : undefined
       if (!url) return []
-      // browser_open retorna "# Título\nURL: ..." na primeira linha
+      // browser_open returns "# Title\nURL: ..." on the first line
       const heading = part.output?.match(/^#\s+(.+)$/m)?.[1]?.trim()
       return [{ url, title: heading || hostnameOf(url) }]
     }
@@ -190,7 +190,7 @@ function sourceOfToolPart(part: ToolPart): WebSource[] {
   }
 }
 
-/** Fontes consultadas na mensagem (deduplicadas por URL, na ordem de uso). */
+/** Sources consulted in the message (deduplicated by URL, in order of use). */
 export function extractSources(message: ChatMessage): WebSource[] {
   const seen = new Map<string, WebSource>()
   for (const part of message.parts) {
@@ -226,7 +226,7 @@ function parseDurationMs(output: string): number | undefined {
   return undefined
 }
 
-/** Extrai o resumo de execução de testes de saídas jest/vitest/pytest. */
+/** Extracts the test run summary from jest/vitest/pytest output. */
 export function parseTestSummary(output: string): TestSummary | null {
   const duration = parseDurationMs(output)
 
@@ -271,17 +271,17 @@ export function parseTestSummary(output: string): TestSummary | null {
 }
 
 /**
- * Ordena as partes da resposta para o modo de visualização escolhido.
+ * Orders the parts of the answer for the chosen view mode.
  *
- * - `summary`: o raciocínio de todos os passos vira um bloco só, no topo, e as
- *   ações que ele separava se juntam num acordeon só. É a leitura de antes:
- *   pensou → resposta → resumo das ações. A narração intermediária ("pensando
- *   alto": o texto anterior ao último bloco) sai da leitura e a resposta final
- *   toma o lugar do primeiro trecho dela — que é como a mensagem ficava antes,
- *   quando o texto final sobrescrevia o primeiro e só ele aparecia. O que a
- *   pessoa não vê aqui continua inteiro em `steps`/`detailed`.
- * - `steps` e `detailed`: cada parte no lugar em que aconteceu; o que muda
- *   entre os dois é só se os blocos vêm recolhidos ou abertos.
+ * - `summary`: the reasoning of all steps becomes a single block, at the top, and the
+ *   actions it separated come together in a single accordion. It is the reading from before:
+ *   thought → answer → summary of the actions. The intermediate narration ("thinking
+ *   out loud": the text before the last block) leaves the reading and the final answer
+ *   takes the place of its first stretch — which is how the message looked before,
+ *   when the final text overwrote the first one and only it appeared. What the
+ *   person does not see here remains whole in `steps`/`detailed`.
+ * - `steps` and `detailed`: each part in the place where it happened; what changes
+ *   between the two is only whether the blocks come collapsed or open.
  */
 export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): MessagePart[] {
   if (mode !== "summary") return parts
@@ -298,9 +298,9 @@ export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): Messag
         }
       : null
 
-  // Só o texto escrito pelo modelo sem source (a prosa) conta como narração ou
-  // resposta: o texto do engine ('nudge'/'todo'/'internal') e o da visão ficam
-  // onde estão, com o tratamento que já têm na UI.
+  // Only the text written by the model without a source (the prose) counts as narration or
+  // answer: the engine text ('nudge'/'todo'/'internal') and the vision text stay
+  // where they are, with the treatment they already have in the UI.
   const isProse = (part: MessagePart) => part.type === "text" && part.source === undefined
   const lastRunStart = lastTextRunStart(
     parts.map((part) => ({ kind: "part", part })),
@@ -311,7 +311,7 @@ export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): Messag
   let narrationAt = -1
   parts.forEach((part, index) => {
     if (part.type === "reasoning") return
-    // Narração intermediária: fora do resumo (o modo passo a passo mostra)
+    // Intermediate narration: out of the summary (the step-by-step mode shows it)
     if (isProse(part) && index < lastRunStart) {
       if (narrationAt === -1) narrationAt = rest.length
       return
@@ -319,11 +319,11 @@ export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): Messag
     rest.push(part)
   })
 
-  // Sem raciocínio para subir e sem narração para tirar, nada muda
+  // With no reasoning to move up and no narration to remove, nothing changes
   if (!merged && narrationAt === -1) return parts
 
-  // Sem narração a resposta já está no lugar dela; com narração, sobe para onde
-  // o primeiro trecho narrado estava
+  // Without narration the answer is already in its place; with narration, it moves up to where
+  // the first narrated stretch was
   const ordered =
     narrationAt === -1
       ? rest

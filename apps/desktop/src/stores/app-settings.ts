@@ -3,9 +3,9 @@ import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
 import { appSettingsApi } from "@/src/lib/ipc"
 
 /**
- * Configurações gerais do app (Preferências → Geral e Navegador). O renderer é
- * a fonte da verdade: guarda no localStorage e empurra uma cópia ao main a cada
- * mudança — é ela que o engine, o arquivamento automático e o navegador leem.
+ * General app settings (Preferences → General and Browser). The renderer is
+ * the source of truth: it keeps them in localStorage and pushes a copy to main on every
+ * change — it is that copy the engine, the automatic archiving and the browser read.
  */
 
 const STORAGE_KEY = "orbit-app-settings"
@@ -38,19 +38,19 @@ export const useAppSettings = create<AppSettingsState>((set, get) => ({
   },
 }))
 
-/** Atalho para ler uma configuração (reativo). */
+/** Shortcut to read a setting (reactive). */
 export function useSetting<K extends keyof AppSettings>(key: K): AppSettings[K] {
   return useAppSettings((s) => s.settings[key])
 }
 
-// Na abertura o main pode estar com a cópia de uma versão anterior — ou nenhuma.
+// On startup main may hold the copy from an earlier version — or none.
 if (typeof window !== "undefined" && window.ipcRenderer) {
   appSettingsApi.sync(useAppSettings.getState().settings)
 
-  // O main também escreve: a tool `set_user_name` do agente grava o nome no
-  // mesmo campo da Preferência. Aplicamos no store e no localStorage SEM
-  // reenviar ao main — o eco do que o renderer mandou chega idêntico e é
-  // ignorado pela comparação.
+  // Main also writes: the agent's `set_user_name` tool writes the name into the
+  // same field as the Preference. We apply it in the store and in localStorage WITHOUT
+  // sending it back to main — the echo of what the renderer sent arrives identical and is
+  // ignored by the comparison.
   appSettingsApi.onChange((settings) => {
     const current = useAppSettings.getState().settings
     if (JSON.stringify(current) === JSON.stringify(settings)) return

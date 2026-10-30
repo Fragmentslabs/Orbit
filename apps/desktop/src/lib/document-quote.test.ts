@@ -4,10 +4,10 @@ import type { DocumentQuote, MotionQuote } from "@/src/stores/panel-store"
 import { locateLines, quoteChipLabel, quoteLocationLabel, quotesToFileParts } from "./document-quote"
 
 /**
- * O formato é contrato entre três lugares: os dois compositores, que
- * serializam, e o engine, que desserializa num `if` só. Se a coordenada sair
- * errada daqui, a citação leva a pessoa para a linha errada do documento — e
- * com cara de certeza, que é o pior jeito de errar.
+ * The format is a contract between three places: the two composers, which
+ * serialize, and the engine, which deserializes in a single `if`. If the coordinate comes out
+ * wrong from here, the citation takes the person to the wrong line of the document — and
+ * with a look of certainty, which is the worst way to be wrong.
  */
 
 const base: DocumentQuote = {
@@ -19,25 +19,25 @@ const base: DocumentQuote = {
 }
 
 describe("quoteLocationLabel", () => {
-  it("dá o intervalo quando o trecho passa de uma linha", () => {
+  it("gives the range when the excerpt spans more than one line", () => {
     expect(quoteLocationLabel({ ...base, page: 3, fromLine: 10, toLine: 14 })).toBe(" p3L10-14")
   })
 
-  it("omite o fim quando começa e termina na mesma linha", () => {
+  it("omits the end when it starts and ends on the same line", () => {
     expect(quoteLocationLabel({ ...base, page: 3, fromLine: 10, toLine: 10 })).toBe(" p3L10")
   })
 
-  it("fica só na página quando não há linha", () => {
+  it("stays on the page alone when there is no line", () => {
     expect(quoteLocationLabel({ ...base, page: 3 })).toBe(" p3")
   })
 
-  it("não inventa coordenada para documento sem página", () => {
+  it("does not invent a coordinate for a document with no page", () => {
     expect(quoteLocationLabel(base)).toBe("")
   })
 })
 
 describe("quotesToFileParts", () => {
-  it("leva o trecho e a coordenada no payload, e o rótulo no nome", () => {
+  it("carries the excerpt and the coordinate in the payload, and the label in the name", () => {
     const [part] = quotesToFileParts([{ ...base, page: 3, fromLine: 10, toLine: 14 }])
     expect(part.mime).toBe(DOCUMENT_QUOTE_MIME)
     expect(part.filename).toBe("contrato.pdf p3L10-14")
@@ -54,7 +54,7 @@ describe("quotesToFileParts", () => {
     })
   })
 
-  it("um documento sem página vai só com o texto", () => {
+  it("a document with no page goes with the text only", () => {
     const [part] = quotesToFileParts([base])
     const payload = JSON.parse(decodeURIComponent(part.url.split(",")[1]))
     expect(part.filename).toBe("contrato.pdf")
@@ -68,24 +68,24 @@ const instante: MotionQuote = {
   kind: "motion",
   file: "res/cartela/index.html",
   name: "Cartela de abertura",
-  // 2,30 s a 30 fps = quadro 69. É o caso que o usuário confere no app: o
-  // playhead parado no 2,30 s tem de chegar no chat como 00:02:09.
+  // 2.30 s at 30 fps = frame 69. It is the case the user checks in the app: the
+  // playhead stopped at 2.30 s has to reach the chat as 00:02:09.
   frame: 69,
   fps: 30,
 }
 
 describe("quoteChipLabel", () => {
-  it("o instante vira `Motion · arquivo @ mm:ss:ff`", () => {
+  it("the instant becomes `Motion · file @ mm:ss:ff`", () => {
     expect(quoteChipLabel(instante)).toBe("Motion · index.html @ 00:02:09")
   })
 
-  it("o trecho de documento continua com a coordenada", () => {
+  it("the document excerpt keeps its coordinate", () => {
     expect(quoteChipLabel({ ...base, page: 3, fromLine: 10, toLine: 14 })).toBe("contrato.pdf p3L10-14")
   })
 })
 
-describe("quotesToFileParts de um instante de motion", () => {
-  it("leva arquivo, quadro e fps — e nenhuma chave de página/linha", () => {
+describe("quotesToFileParts of a motion instant", () => {
+  it("carries file, frame and fps — and no page/line key", () => {
     const [part] = quotesToFileParts([instante])
     expect(part.mime).toBe(DOCUMENT_QUOTE_MIME)
     expect(part.filename).toBe("Motion · index.html @ 00:02:09")
@@ -98,8 +98,8 @@ describe("quotesToFileParts de um instante de motion", () => {
       frame: 69,
       fps: 30,
     })
-    // A citação de motion não tem página nem linha: a chave ausente é o
-    // contrato, e uma chave vazia aqui viraria campo órfão no texto do modelo.
+    // The motion citation has no page or line: the missing key is the
+    // contract, and an empty key here would become an orphan field in the model text.
     expect("page" in payload).toBe(false)
     expect("fromLine" in payload).toBe(false)
     expect("toLine" in payload).toBe(false)
@@ -115,7 +115,7 @@ describe("formatMotionQuoteText", () => {
     fps: 30,
   }
 
-  it("anexo completo: arquivo, quadro, fps e os segundos com vírgula", () => {
+  it("full attachment: file, frame, fps and the seconds with a comma", () => {
     expect(formatMotionQuoteText(payload, "deixe o título maior")).toBe(
       [
         "[Motion composition — Cartela de abertura]",
@@ -127,77 +127,77 @@ describe("formatMotionQuoteText", () => {
     )
   })
 
-  it("com o usuário sem escrever nada, o texto termina limpo", () => {
-    // Sem texto não entra o `---` nem sobra linha vazia no fim: o anexo sai
-    // inteiro e sem separador órfão.
-    const semTexto = formatMotionQuoteText(payload, "")
-    expect(semTexto).toBe(formatMotionQuoteText(payload, undefined))
-    expect(semTexto.endsWith("(00:02:09)")).toBe(true)
-    expect(semTexto).not.toContain("---")
-    expect(semTexto.trim()).toBe(semTexto)
+  it("with the user writing nothing, the text ends clean", () => {
+    // Without text the `---` does not go in and no empty line is left at the end: the attachment comes out
+    // whole and without an orphan separator.
+    const withoutText = formatMotionQuoteText(payload, "")
+    expect(withoutText).toBe(formatMotionQuoteText(payload, undefined))
+    expect(withoutText.endsWith("(00:02:09)")).toBe(true)
+    expect(withoutText).not.toContain("---")
+    expect(withoutText.trim()).toBe(withoutText)
   })
 
-  it("com caminho, camada e o que está em cena: o endereço completo e o elemento apontado", () => {
-    const texto = formatMotionQuoteText(
+  it("with path, layer and what is on stage: the full address and the pointed element", () => {
+    const text = formatMotionQuoteText(
       { ...payload, path: "C:/proj/res/cartela/index.html", layer: "title", onScreen: ["bg", "title"] },
       "entra rápido demais",
     )
-    expect(texto).toContain("File: C:/proj/res/cartela/index.html")
-    expect(texto).toContain("Selected layer: title")
-    expect(texto).toContain("On screen at this frame: bg, title")
-    // A nota do usuário continua por último, depois do separador.
-    expect(texto.endsWith("---\nentra rápido demais")).toBe(true)
+    expect(text).toContain("File: C:/proj/res/cartela/index.html")
+    expect(text).toContain("Selected layer: title")
+    expect(text).toContain("On screen at this frame: bg, title")
+    // The user note stays last, after the separator.
+    expect(text.endsWith("---\nentra rápido demais")).toBe(true)
   })
 
-  it("com uma faixa de som em foco, o agente lê som — não uma camada", () => {
-    // O som da peça toca FORA do palco (ver motion-audio.ts): chamá-lo de camada
-    // mandaria o agente procurar no DOM um elemento com o nome da trilha, e não
-    // existe nenhum. São campos distintos de propósito.
-    const texto = formatMotionQuoteText({ ...payload, audio: "Cama roxa (cartão 3)" }, "abaixa essa cama")
-    expect(texto).toContain("Selected audio track: Cama roxa (cartão 3)")
-    expect(texto).not.toContain("Selected layer")
+  it("with an audio track in focus, the agent reads sound — not a layer", () => {
+    // The piece's sound plays OUTSIDE the stage (see motion-audio.ts): calling it a layer
+    // would send the agent looking in the DOM for an element with the track name, and there
+    // is none. They are distinct fields on purpose.
+    const text = formatMotionQuoteText({ ...payload, audio: "Cama roxa (cartão 3)" }, "abaixa essa cama")
+    expect(text).toContain("Selected audio track: Cama roxa (cartão 3)")
+    expect(text).not.toContain("Selected layer")
   })
 
-  it("não sobra campo de página/linha no texto do modelo", () => {
-    const texto = formatMotionQuoteText(payload, "aumente o contraste")
-    expect(texto).not.toMatch(/\b(page|line|página|linha)\b/i)
-    expect(texto).not.toContain("undefined")
-    expect(texto).not.toContain("null")
+  it("no page/line field is left in the model's text", () => {
+    const text = formatMotionQuoteText(payload, "aumente o contraste")
+    expect(text).not.toMatch(/\b(page|line|página|linha)\b/i)
+    expect(text).not.toContain("undefined")
+    expect(text).not.toContain("null")
   })
 })
 
 describe("locateLines", () => {
-  const pagina = [
+  const page = [
     "CLÁUSULA QUARTA — DA VIGÊNCIA",
     "O prazo de vigência do presente contrato",
     "é de 12 (doze) meses, contados da assinatura.",
     "Parágrafo único: a renovação é automática.",
   ]
 
-  it("acha o trecho e devolve a linha", () => {
-    expect(locateLines(pagina, "é de 12 (doze) meses")).toEqual({ fromLine: 3, toLine: undefined })
+  it("finds the excerpt and returns the line", () => {
+    expect(locateLines(page, "é de 12 (doze) meses")).toEqual({ fromLine: 3, toLine: undefined })
   })
 
-  it("devolve o intervalo quando o trecho atravessa linhas", () => {
-    // É o caso normal no PDF: a frase que a pessoa grifa raramente cabe numa
-    // linha só do texto extraído.
-    expect(locateLines(pagina, "do presente contrato é de 12")).toEqual({ fromLine: 2, toLine: 3 })
+  it("returns the range when the excerpt crosses lines", () => {
+    // It is the normal case in a PDF: the sentence the person highlights rarely fits in a
+    // single line of the extracted text.
+    expect(locateLines(page, "do presente contrato é de 12")).toEqual({ fromLine: 2, toLine: 3 })
   })
 
-  it("ignora as diferenças de espaço entre o desenho e o texto", () => {
-    // Na camada do PDF a frase chega partida em pedaços de glifo, e os espaços
-    // entre eles não são confiáveis.
-    expect(locateLines(pagina, "ren  ovação   é auto mática")).toEqual({
+  it("ignores the spacing differences between the drawing and the text", () => {
+    // In the PDF layer the sentence arrives split into glyph pieces, and the spaces
+    // between them are not reliable.
+    expect(locateLines(page, "ren  ovação   é auto mática")).toEqual({
       fromLine: 4,
       toLine: undefined,
     })
   })
 
-  it("devolve null quando o trecho não está na página", () => {
-    expect(locateLines(pagina, "rescisão antecipada")).toBeNull()
+  it("returns null when the excerpt is not on the page", () => {
+    expect(locateLines(page, "rescisão antecipada")).toBeNull()
   })
 
-  it("não tenta adivinhar com uma letra só", () => {
-    expect(locateLines(pagina, "a")).toBeNull()
+  it("does not try to guess with a single letter", () => {
+    expect(locateLines(page, "a")).toBeNull()
   })
 })

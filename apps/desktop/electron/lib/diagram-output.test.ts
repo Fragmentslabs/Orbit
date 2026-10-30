@@ -12,11 +12,11 @@ import {
 } from './document-render'
 
 /**
- * Um bloco ```mermaid tem dois destinos: desenhado (SVG no HTML/PDF, PNG no
- * .docx) quando o main conseguiu renderizar, e bloco de código quando não
- * conseguiu. O desenho em si precisa de DOM e fica fora daqui; o que se testa
- * é o encaixe — que o diagrama entra onde deve e que o .docx continua um
- * pacote válido com a imagem dentro.
+ * A ```mermaid block has two destinations: drawn (SVG in the HTML/PDF, PNG in
+ * the .docx) when the main managed to render it, and a code block when it did
+ * not. The drawing itself needs a DOM and stays out of here; what is tested
+ * is the fit — that the diagram enters where it should and that the .docx stays a
+ * valid package with the image inside.
  */
 
 const SOURCE = 'flowchart LR\n  A --> B'
@@ -32,38 +32,38 @@ const drawn: DiagramLookup = (source) => (source === SOURCE ? fake : undefined)
 const failed: DiagramLookup = () => undefined
 
 describe('mermaidSourcesOf', () => {
-  it('pega só os blocos mermaid, com a fonte aparada', () => {
+  it('takes only the mermaid blocks, with the source trimmed', () => {
     const blocks = parseMarkdown(`${MD}\n\n\`\`\`ts\nconst x = 1\n\`\`\``)
     expect(mermaidSourcesOf(blocks)).toEqual([SOURCE])
   })
 
-  it('bloco mermaid vazio não vai para o renderizador', () => {
+  it('an empty mermaid block does not go to the renderer', () => {
     expect(mermaidSourcesOf(parseMarkdown('```mermaid\n```'))).toEqual([])
   })
 })
 
-describe('HTML (prévia e PDF)', () => {
-  it('embute o SVG no lugar do bloco', () => {
+describe('HTML (preview and PDF)', () => {
+  it('embeds the SVG in place of the block', () => {
     const html = renderHtml(parseMarkdown(MD), 'Fluxo', undefined, drawn)
     expect(html).toContain('<figure class="diagram">')
     expect(html).toContain(fake.svg)
     expect(html).not.toContain('flowchart LR')
   })
 
-  it('diagrama que não desenhou volta a ser código, sem sumir', () => {
+  it('a diagram that did not render becomes code again, without disappearing', () => {
     const html = renderHtml(parseMarkdown(MD), 'Fluxo', undefined, failed)
     expect(html).not.toContain('class="diagram"')
     expect(html).toContain('flowchart LR')
   })
 
-  it('quebra de página pendente vai para o diagrama', () => {
-    const blocks = parseMarkdown(`Antes\n\n\\pagebreak\n\n\`\`\`mermaid\n${SOURCE}\n\`\`\``)
+  it('a pending page break goes to the diagram', () => {
+    const blocks = parseMarkdown(`Before\n\n\\pagebreak\n\n\`\`\`mermaid\n${SOURCE}\n\`\`\``)
     expect(renderHtml(blocks, 'x', undefined, drawn)).toContain('class="diagram page-break"')
   })
 })
 
 describe('OOXML', () => {
-  it('diagrama registrado vira imagem inline centralizada', () => {
+  it('a registered diagram becomes an inline centered image', () => {
     const xml = renderOoxmlBody(parseMarkdown(MD), undefined, (s) =>
       s === SOURCE ? { rId: 'rId3', width: 400, height: 200 } : undefined,
     )
@@ -73,7 +73,7 @@ describe('OOXML', () => {
     expect(xml).not.toContain('flowchart LR')
   })
 
-  it('diagrama largo encolhe para a coluna, mantendo a proporção', () => {
+  it('a wide diagram shrinks to the column, keeping the proportion', () => {
     const xml = renderOoxmlBody(parseMarkdown(MD), { columns: 2 }, () => ({
       rId: 'rId3',
       width: 2000,
@@ -84,13 +84,13 @@ describe('OOXML', () => {
     expect(cx / cy).toBeCloseTo(2, 2)
   })
 
-  it('sem imagem, o bloco sai como código', () => {
+  it('without an image, the block comes out as code', () => {
     expect(renderOoxmlBody(parseMarkdown(MD))).toContain('flowchart LR')
   })
 })
 
 describe('buildDocx', () => {
-  it('põe o PNG no pacote, com relacionamento e content type', async () => {
+  it('puts the PNG in the package, with relationship and content type', async () => {
     const zip = await JSZip.loadAsync(await buildDocx(parseMarkdown(MD), 'Fluxo', undefined, drawn))
     const png = await zip.file('word/media/diagram1.png')!.async('nodebuffer')
     expect(png.equals(fake.png)).toBe(true)
@@ -108,7 +108,7 @@ describe('buildDocx', () => {
     expect(doc).toContain('r:embed="rId3"')
   })
 
-  it('a mesma fonte repetida entra uma vez só no pacote', async () => {
+  it('the same source repeated goes in only once in the package', async () => {
     const zip = await JSZip.loadAsync(
       await buildDocx(parseMarkdown(`${MD}\n\n${MD}`), 'x', undefined, drawn),
     )
@@ -116,7 +116,7 @@ describe('buildDocx', () => {
       'word/media/diagram1.png',
     ])
     const doc = await zip.file('word/document.xml')!.async('string')
-    // Cada ocorrência é um desenho próprio (docPr id único), a imagem é a mesma.
+    // Each occurrence is its own drawing (unique docPr id), the image is the same.
     expect(doc.match(/r:embed="rId3"/g)).toHaveLength(2)
     expect(doc).toContain('<wp:docPr id="2"')
   })

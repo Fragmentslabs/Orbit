@@ -29,42 +29,42 @@ import { MOTION_SPEC } from './motion-runtime'
 import type { MotionTransitionInfo } from './motion-transitions'
 
 /**
- * Motion a partir de HTML: o Orbit já é um Chromium, então uma composição
- * HTML/CSS/GSAP vira vídeo aqui mesmo — sem baixar Chrome headless, sem
- * Remotion (que é source-available e pago para empresas) e sem rede.
+ * Motion from HTML: Orbit is already a Chromium, so an
+ * HTML/CSS/GSAP composition becomes video right here — without downloading headless Chrome, without
+ * Remotion (which is source-available and paid for companies) and without network.
  *
- * Determinístico: o tempo NÃO corre sozinho. Para cada quadro o runtime pausa
- * tudo e posiciona no instante t, espera o paint e captura. Assim um quadro
- * lento não vira salto no vídeo, e renderizar duas vezes dá o mesmo arquivo (no
- * caminho sequencial, `bands: 1`; ver a nota sobre faixas paralelas abaixo). O
- * que a composição pode usar para ser "seekável":
- *   - `window.orbitMotion = { seek(t) }` (t em segundos; pode devolver Promise)
- *     — o caminho explícito, para canvas/three.js/qualquer coisa;
- *   - `window.orbitTimeline` (uma timeline GSAP) ou, sem ela, a timeline
- *     global do GSAP;
- *   - animações CSS e Web Animations (document.getAnimations());
- *   - <video> da página (currentTime + espera do "seeked").
- * O que NÃO é seekável (requestAnimationFrame com relógio próprio, setTimeout)
- * sai congelado — a skill de vídeo explica isso ao agente.
+ * Deterministic: time does NOT run by itself. For each frame the runtime pauses
+ * everything and positions at instant t, waits for the paint and captures. That way a
+ * slow frame does not become a jump in the video, and rendering twice gives the same file (in the
+ * sequential path, `bands: 1`; see the note about parallel tracks below). What
+ * the composition may use to be "seekable":
+ *   - `window.orbitMotion = { seek(t) }` (t in seconds; may return a Promise)
+ *     — the explicit path, for canvas/three.js/anything;
+ *   - `window.orbitTimeline` (a GSAP timeline) or, without it, the
+ *     GSAP global timeline;
+ *   - CSS animations and Web Animations (document.getAnimations());
+ *   - the page's <video> (currentTime + waiting for "seeked").
+ * What is NOT seekable (requestAnimationFrame with its own clock, setTimeout)
+ * comes out frozen — the video skill explains that to the agent.
  *
- * Duas decisões de desempenho, cada uma com sua armadilha:
+ * Two performance decisions, each with its own pitfall:
  *
- *  1. A composição é carregada pelo scheme `orbit-motion://` — o MESMO caminho
- *     do preview — e não por `file://`. O protocolo injeta o runtime como
- *     PRIMEIRO script do `<head>`, então `delayRender()` chamado no parse é
- *     capturado aqui igual ao preview; com o runtime injetado DEPOIS do load
- *     (o caminho antigo) essa composição funcionava no preview e saía em branco
- *     no render.
- *  2. O quadro vai para o ffmpeg CRU (`nativeImage.toBitmap()`, BGRA), sem PNG:
- *     um encode no Chromium e um decode no ffmpeg por quadro a menos. Os
- *     cuidados (tamanho constante, HiDPI, alfa pré-multiplicado) estão em
- *     motion-render-args.ts, onde são puros e testados.
+ *  1. The composition is loaded through the `orbit-motion://` scheme — the SAME path
+ *     as the preview — and not through `file://`. The protocol injects the runtime as the
+ *     FIRST script of the `<head>`, so a `delayRender()` called during the parse is
+ *     captured here just like in the preview; with the runtime injected AFTER the load
+ *     (the old path) that composition worked in the preview and came out blank
+ *     in the render.
+ *  2. The frame goes to ffmpeg RAW (`nativeImage.toBitmap()`, BGRA), without PNG:
+ *     one encode in Chromium and one decode in ffmpeg per frame less. The
+ *     care (constant size, HiDPI, premultiplied alpha) is in
+ *     motion-render-args.ts, where it is pure and tested.
  *
- * FAIXAS PARALELAS: [0, N) é dividido em K faixas, cada uma numa janela
- * offscreen própria, e os segmentos são concatenados com `-c copy` (o mesmo do
- * render de EDL). Isso NÃO promete saída byte-idêntica à sequencial: cada faixa
- * começa o próprio GOP, então os keyframes caem em pontos diferentes. O
- * caminho sequencial (`bands: 1`) é o determinístico de sempre.
+ * PARALLEL TRACKS: [0, N) is split into K tracks, each in its own offscreen
+ * window, and the segments are concatenated with `-c copy` (the same as the
+ * EDL render). This does NOT promise output byte-identical to the sequential one: each track
+ * starts its own GOP, so the keyframes fall at different points. The
+ * sequential path (`bands: 1`) is the always-deterministic one.
  */
 
 export interface MotionSpec {
@@ -77,63 +77,63 @@ export interface MotionSpec {
 export interface MotionOptions extends MotionSpec {
   file: string
   output: string
-  /** Fundo transparente: .mov (ProRes 4444) ou .webm (VP9 com alfa). */
+  /** Transparent background: .mov (ProRes 4444) or .webm (VP9 with alpha). */
   transparent?: boolean
-  /** Formato do encoder. Sem ele, sai da extensão do arquivo + transparência. */
+  /** Encoder format. Without it, comes from the file extension + transparency. */
   format?: MotionFormat
-  /** Id de uma composição JÁ registrada (é o que o IPC passa): não registra de novo. */
+  /** Id of an ALREADY registered composition (it is what the IPC passes): does not register it again. */
   id?: string
-  /** Pasta de trabalho e sessão que registram a composição (ver motion-store). */
+  /** Working folder and session that register the composition (see motion-store). */
   root?: string
   sessionId?: string
   /**
-   * Faixas paralelas. `1` é o caminho sequencial, quadro a quadro — o
-   * determinístico. Sem ele: min(4, max(1, núcleos/2)).
+   * Parallel tracks. `1` is the sequential path, frame by frame — the
+   * deterministic one. Without it: min(4, max(1, cores/2)).
    */
   bands?: number
-  /** Peso do arquivo (CRF/preset); sem ele, o `balanced` de sempre. */
+  /** File weight (CRF/preset); without it, the usual `balanced`. */
   quality?: MotionQuality
   /**
-   * Entregar também a trilha sozinha, em WAV, ao lado do vídeo. Só faz sentido
-   * quando a peça tem som — sem faixas, o render não cria arquivo nenhum.
+   * Also deliver the track alone, in WAV, next to the video. It only makes sense
+   * when the piece has sound — without tracks, the render creates no file at all.
    */
   separateAudio?: boolean
-  /** Chamado a cada quadro CAPTURADO (não na ordem: é a contagem que subiu). */
+  /** Called at every CAPTURED frame (not in order: it is the count that went up). */
   onProgress?: (frame: number, total: number) => void
   signal?: AbortSignal
   /**
-   * Áudio da peça, muxado numa passada FINAL — a captura pega quadros, não som.
-   * Sem ele, a pasta da composição é consultada pelo nome convencional
-   * (`audio.mp3`, `audio.wav`…): é isso que faz o botão Render da aba e a tool
-   * chegarem ao mesmo arquivo. O comprimento é o da composição.
+   * The piece's audio, muxed on a FINAL pass — the capture takes frames, not sound.
+   * Without it, the composition's folder is consulted by the conventional name
+   * (`audio.mp3`, `audio.wav`…): that is what makes the tab's Render button and the tool
+   * reach the same file. The length is the composition's.
    */
   audio?: string
 }
 
 /**
- * Tempos do render, em milissegundos por quadro (média dos quadros capturados).
- * Contrato congelado com a tool `motion_render`, que imprime estes nomes.
+ * Render timings, in milliseconds per frame (average of the captured frames).
+ * Frozen contract with the `motion_render` tool, which prints these names.
  */
 export interface MotionMetrics {
-  /** Quadros renderizados. */
+  /** Rendered frames. */
   frames: number
-  /** Tempo de parede do render inteiro — com K faixas é menor que frames × msPerFrame. */
+  /** Wall time of the whole render — with K tracks it is smaller than frames × msPerFrame. */
   totalMs: number
-  /** Custo médio de UM quadro (a soma dos três baldes), independente de K. */
+  /** Average cost of ONE frame (the sum of the three buckets), independent of K. */
   msPerFrame: number
-  /** Média do seek + paint (window.orbitMotion.seek, que espera o quadro sair). */
+  /** Average of seek + paint (window.orbitMotion.seek, which waits for the frame to come out). */
   seekPaint: number
-  /** Média do capturePage + toBitmap + a desmultiplicação do alfa. */
+  /** Average of capturePage + toBitmap + the alpha unpremultiplication. */
   capture: number
-  /** Média da escrita no stdin do ffmpeg (encode + IO, com a contrapressão). */
+  /** Average of the write to ffmpeg's stdin (encode + IO, with backpressure). */
   encodeWrite: number
 }
 
 export interface MotionResult {
   output: string
-  /** Áudio muxado (explícito ou o da pasta da composição); ausente quando mudo. */
+  /** Muxed audio (explicit or the composition folder's); absent when mute. */
   audio?: string
-  /** WAV da trilha, quando `separateAudio` foi pedido e a peça tem som. */
+  /** WAV of the track, when `separateAudio` was requested and the piece has sound. */
   audioPath?: string
   width: number
   height: number
@@ -146,7 +146,7 @@ export interface MotionResult {
 
 const MAX_SECONDS = 180
 
-/** `<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=6">` → spec (puro). */
+/** `<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=6">` → spec (pure). */
 export function parseMotionMeta(content: string | null | undefined): MotionSpec {
   const spec: MotionSpec = {}
   for (const pair of (content ?? '').split(/[,;]/)) {
@@ -158,7 +158,7 @@ export function parseMotionMeta(content: string | null | undefined): MotionSpec 
   return spec
 }
 
-/** Foto do estado da composição publicada pelo runtime (ver MOTION_SPEC). */
+/** Snapshot of the composition state published by the runtime (see MOTION_SPEC). */
 interface MotionPageSpec {
   meta: string | null
   width?: number
@@ -177,7 +177,7 @@ interface CapturedFrame {
   height: number
 }
 
-/** Baldes por quadro, somados entre as faixas. */
+/** Buckets per frame, summed across the tracks. */
 interface Counters {
   done: number
   seekPaint: number
@@ -186,16 +186,16 @@ interface Counters {
 }
 
 /**
- * O registro das composições (motion-store) importa ESTE módulo para o render
- * por IPC; importá-lo de volta no topo fecharia um ciclo de módulos. A
- * importação dinâmica resolve no primeiro render e o módulo fica em cache — não
- * custa nada por quadro.
+ * The composition registry (motion-store) imports THIS module for the IPC
+ * render; importing it back at the top would close a module cycle. The
+ * dynamic import resolves it on the first render and the module stays cached — it
+ * costs nothing per frame.
  */
 async function motionRegistry() {
   return import('./motion-store')
 }
 
-/** Milissegundos com duas casas: o número vai direto para o relatório da tool. */
+/** Milliseconds with two decimals: the number goes straight into the tool's report. */
 function ms(value: number): number {
   return Math.round(value * 100) / 100
 }
@@ -215,35 +215,35 @@ function createRenderWindow(width: number, height: number, transparent: boolean)
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // SEM `partition` de propósito: o handler do scheme `orbit-motion://` está
-      // registrado na sessão default (protocol.handle em motion-store) e uma
-      // partition própria NÃO herda esse handle — a composição responderia 404
-      // e o quadro sairia em branco. As faixas também compartilham a sessão.
+      // NO `partition` on purpose: the `orbit-motion://` scheme handler is
+      // registered in the default session (protocol.handle in motion-store) and an own
+      // partition does NOT inherit that handle — the composition would answer 404
+      // and the frame would come out blank. The tracks also share the session.
     },
   })
-  // A composição é uma página de vídeo, não um navegador: nada de sair dela.
+  // The composition is a video page, not a browser: no leaving it.
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   return win
 }
 
 /**
- * Carrega a composição pelo scheme — o runtime já entrou como PRIMEIRO script do
- * `<head>`. Se ele não estiver lá (a entrada respondeu 404, o runtime não
- * rodou), a foto da página vem nula e é aqui que a gente para, em vez de
- * capturar quadros em branco.
+ * Loads the composition through the scheme — the runtime already entered as the FIRST script of
+ * the `<head>`. If it is not there (the entry answered 404, the runtime did not
+ * run), the page snapshot comes back null and it is here that we stop, instead of
+ * capturing blank frames.
  */
 async function loadComposition(win: BrowserWindow, url: string): Promise<MotionPageSpec> {
   await win.loadURL(url)
-  // Depois das fontes: os failedFonts do runtime são lidos logo abaixo e o
-  // handler dele rodou antes deste await.
+  // After the fonts: the runtime's failedFonts are read right below and its
+  // handler ran before this await.
   await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)', true)
   const page = (await win.webContents.executeJavaScript(MOTION_SPEC, true)) as MotionPageSpec | null
   if (!page) throw new Error(`motion runtime did not load in the render window (${url})`)
   return page
 }
 
-/** Seek num quadro: o runtime espera o paint (double rAF) antes de resolver. */
+/** Seek to a frame: the runtime waits for the paint (double rAF) before resolving. */
 async function seekFrame(contents: WebContents, frame: number, counters?: Counters): Promise<void> {
   const started = performance.now()
   await contents.executeJavaScript(`window.orbitMotion.seek(${frame})`, true)
@@ -251,8 +251,8 @@ async function seekFrame(contents: WebContents, frame: number, counters?: Counte
 }
 
 /**
- * O bitmap cru da janela (BGRA, pré-multiplicado) — sem passar por PNG. No
- * caminho com alfa ele sai daqui com a cor reta (unpremultiplyBgra).
+ * The raw bitmap of the window (BGRA, premultiplied) — without going through PNG. In the
+ * alpha path it comes out of here with straight color (unpremultiplyBgra).
  */
 async function captureBitmap(
   contents: WebContents,
@@ -262,10 +262,10 @@ async function captureBitmap(
 ): Promise<CapturedFrame> {
   const started = performance.now()
   let image = await capturePageReliably(contents)
-  // Numa tela com escala fracionária (125%, 150%) cada janela arredonda o
-  // tamanho da captura do seu jeito — 1603×902 numa faixa, 1602×903 na outra —
-  // e o rawvideo exige o MESMO tamanho em todo quadro. O que vier fora do
-  // tamanho sondado é trazido para ele (o scale do ffmpeg leva ao tamanho final).
+  // On a screen with a fractional scale (125%, 150%) each window rounds the
+  // capture size its own way — 1603×902 in one track, 1602×903 in the other —
+  // and rawvideo demands the SAME size in every frame. Whatever comes outside the
+  // probed size is brought to it (ffmpeg's scale leads to the final size).
   if (expected) {
     const got = image.getSize()
     if (got.width !== expected.width || got.height !== expected.height) {
@@ -274,8 +274,8 @@ async function captureBitmap(
   }
   const size = image.getSize()
   const buffer = image.toBitmap()
-  // O alfa do Chromium vem PRÉ-multiplicado: virar cor reta AQUI é o "antes da
-  // conversão de formato" — ver unpremultiplyBgra (o filtro do ffmpeg não dá conta).
+  // Chromium's alpha comes PREMULTIPLIED: becoming straight color HERE is the "before the
+  // format conversion" — see unpremultiplyBgra (the ffmpeg filter does not handle it).
   if (alpha) unpremultiplyBgra(buffer)
   if (counters) counters.capture += performance.now() - started
   return { buffer, width: size.width, height: size.height }
@@ -283,28 +283,28 @@ async function captureBitmap(
 
 interface BandOptions {
   win: BrowserWindow
-  /** Faixa de quadros, `[start, end)`. */
+  /** Frame range, `[start, end)`. */
   start: number
   end: number
   total: number
-  /** Arquivo desta faixa (é o próprio output quando há uma faixa só). */
+  /** File of this track (it is the output itself when there is a single track). */
   target: string
   width: number
   height: number
   fps: number
   format: MotionFormat
   quality?: MotionQuality
-  /** Tamanho do quadro cru, fixado na sondagem — o `-s` do stdin. */
+  /** Raw frame size, fixed at the probe — the stdin's `-s`. */
   captureWidth: number
   captureHeight: number
-  /** Quadro 0 já capturado na sondagem: a primeira faixa não captura de novo. */
+  /** Frame 0 already captured at the probe: the first track does not capture it again. */
   probe?: CapturedFrame
   counters: Counters
   onProgress?: (frame: number, total: number) => void
   signal?: AbortSignal
 }
 
-/** Uma faixa: uma janela offscreen, um ffmpeg, um segmento. */
+/** One track: one offscreen window, one ffmpeg, one segment. */
 async function renderBand(o: BandOptions): Promise<void> {
   const input = new PassThrough()
   const encoding = runFfmpeg(
@@ -320,7 +320,7 @@ async function renderBand(o: BandOptions): Promise<void> {
     }),
     { stdin: input, signal: o.signal },
   )
-  // Se o ffmpeg cair no meio, para de capturar.
+  // If ffmpeg dies halfway, stop capturing.
   let failed: unknown = null
   encoding.catch((err) => {
     failed = err
@@ -331,8 +331,8 @@ async function renderBand(o: BandOptions): Promise<void> {
       if (o.signal?.aborted) throw new Error('cancelled')
       let captured: CapturedFrame
       if (o.probe && frame === o.start) {
-        // O quadro 0 veio da sondagem (que já fez o seek e a captura dele):
-        // reaproveitado, ele não custa um segundo seek.
+        // Frame 0 came from the probe (which already did its seek and capture):
+        // reused, it does not cost a second seek.
         captured = o.probe
       } else {
         await seekFrame(o.win.webContents, frame, o.counters)
@@ -341,7 +341,7 @@ async function renderBand(o: BandOptions): Promise<void> {
           height: o.captureHeight,
         })
       }
-      // Um quadro de tamanho diferente desalinharia o stdin inteiro em silêncio.
+      // A frame of a different size would misalign the whole stdin, silently.
       assertFrameBytes(captured.buffer.length, o.captureWidth, o.captureHeight, frame)
       const started = performance.now()
       if (!input.write(captured.buffer)) await new Promise<void>((r) => input.once('drain', () => r()))
@@ -361,12 +361,12 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
   const startedAt = performance.now()
   const warnings: string[] = []
   const registry = await motionRegistry()
-  // O render carrega a composição pelo scheme, e o scheme só serve o que está
-  // no registro. A tool só tem o caminho do arquivo: registra aqui e libera no
-  // finally. O IPC já passa o id de uma composição registrada.
+  // The render loads the composition through the scheme, and the scheme only serves what is
+  // in the registry. The tool only has the file path: it registers here and releases it in the
+  // finally. The IPC already passes the id of a registered composition.
   let id = opts.id
   let url: string | null = null
-  /** Id que ESTE render registrou — e só ele é liberado no fim. */
+  /** Id that THIS render registered — and only it is released at the end. */
   let registeredId: string | null = null
   if (id) {
     url = await registry.registeredMotionUrl(id)
@@ -374,8 +374,8 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     const registration = await registry.registerMotion(opts.file, undefined, { root: opts.root, sessionId: opts.sessionId })
     id = registration.id
     url = registration.url
-    // A composição já estava registrada (o preview aberto na aba): o id é o
-    // MESMO, e liberá-lo no fim derrubava a aba num 404 "not found".
+    // The composition was already registered (the preview open in the tab): the id is the
+    // SAME, and releasing it at the end knocked the tab into a 404 "not found".
     if (registration.created) registeredId = id
   }
   if (!id || !url) throw new Error(`unknown motion composition: ${opts.id ?? opts.file}`)
@@ -389,8 +389,8 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
   opts.signal?.addEventListener('abort', onAbort, { once: true })
 
   try {
-    // Depois do registro: qualquer erro daqui para baixo passa pelo finally (que
-    // libera a composição) — inclusive um formato inválido na tool.
+    // After registration: any error from here down goes through the finally (which
+    // releases the composition) — including an invalid format in the tool.
     const format = opts.format ?? motionFormatFor(opts.output, Boolean(opts.transparent))
     const alpha = isAlphaFormat(format)
     const primary = createRenderWindow(opts.width ?? 1920, opts.height ?? 1080, alpha)
@@ -411,31 +411,31 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       warnings.push(`fonts failed to load (the text fell back to another font): ${[...new Set(page.failedFonts)].join(', ')}`)
     }
     primary.setContentSize(width, height)
-    // O tempo anda em QUADROS: o fps EFETIVO (que pode ter vindo das opções, e
-    // não da página) tem que entrar no runtime, senão o seek converte o quadro
-    // com o fps da composição e a animação anda na velocidade errada.
+    // Time runs in FRAMES: the EFFECTIVE fps (which may have come from the options, and
+    // not from the page) has to enter the runtime, otherwise the seek converts the frame
+    // with the composition's fps and the animation runs at the wrong speed.
     await primary.webContents.executeJavaScript(`window.orbitMotion.fps = ${fps}`, true)
 
     const total = Math.max(1, Math.round(duration * fps))
-    // SONDAGEM: um quadro ANTES de subir o ffmpeg. O rawvideo exige tamanho
-    // constante e a captura pode vir na escala da tela (HiDPI, ou um zoom do
-    // documento): é este quadro que fixa o `-s` do stdin e, quando for o caso,
-    // o scale que traz o vídeo de volta ao tamanho final.
+    // PROBE: one frame BEFORE starting ffmpeg. Rawvideo demands a
+    // constant size and the capture may come at the screen scale (HiDPI, or a document
+    // zoom): it is this frame that fixes the stdin's `-s` and, when it is the case,
+    // the scale that brings the video back to the final size.
     await seekFrame(primary.webContents, 0)
     const probe = await captureBitmap(primary.webContents, undefined, alpha)
     const bands = splitBands(total, bandCount(opts.bands, os.cpus().length))
-    // Áudio da peça — quem escolhe as faixas é o motion-audio (caminho explícito,
-    // o manifest da pasta, ou o nome convencional). A MESMA resolução alimenta as
-    // faixas que a aba desenha e toca, então o som do preview e o do arquivo final
-    // são necessariamente os mesmos arquivos, nos mesmos instantes.
+    // The piece's audio — whoever chooses the tracks is motion-audio (explicit path,
+    // the folder's manifest, or the conventional name). The SAME resolution feeds the
+    // tracks the tab draws and plays, so the preview's sound and the final file's
+    // are necessarily the same files, at the same instants.
     const folder = path.dirname(path.resolve(opts.file))
-    // O som dos <video> da página entra como faixas: o runtime os silencia, e sem
-    // isto a fala de um depoimento sumia do arquivo final.
+    // The sound of the page's <video>s enters as tracks: the runtime mutes them, and without
+    // this the speech of a testimony vanished from the final file.
     const videoTracks = await motionVideoAudioTracks(folder, page.videos)
     const { tracks, master } = await motionAudioPlan(folder, opts.audio, videoTracks)
-    // O lint do que dá para ver ANTES de pagar o render: um relógio de parede ou
-    // um sorteio fariam o arquivo sair diferente do que o usuário viu na aba.
-    // Informação, nunca bloqueio — vai junto dos avisos do resultado.
+    // The lint of what can be seen BEFORE paying for the render: a wall clock or
+    // a random draw would make the file come out different from what the user saw in the tab.
+    // Information, never a block — it goes along with the result's warnings.
     const lint = await lintMotionComposition({
       entry: path.resolve(opts.file),
       folder: path.dirname(path.resolve(opts.file)),
@@ -447,10 +447,10 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     }
     let videoOut = opts.output
     if (bands.length > 1 || tracks.length > 0) {
-      // Pasta de trabalho ao lado da saída, limpa no finally — como o render de EDL.
+      // Working folder next to the output, cleaned in the finally — like the EDL render.
       work = await fsp.mkdtemp(path.join(path.dirname(opts.output), '.motion-'))
-      // Com áudio, o vídeo sai primeiro num temporário: quem escreve o arquivo
-      // pedido é a passada final, que só então junta e mistura o som.
+      // With audio, the video first comes out into a temporary: whoever writes the requested
+      // file is the final pass, which only then joins and mixes the sound.
       if (tracks.length > 0) videoOut = path.join(work, `video${path.extname(opts.output) || '.mp4'}`)
     }
     const segments: string[] = []
@@ -459,7 +459,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       bands.map(async (band, index) => {
         let win = primary
         if (index > 0) {
-          // Cada faixa tem a PRÓPRIA janela: a captura de uma não espera a outra.
+          // Each track has its OWN window: the capture of one does not wait for the other.
           win = createRenderWindow(width, height, alpha)
           windows.push(win)
           await loadComposition(win, url)
@@ -490,8 +490,8 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     )
 
     if (work) {
-      // Concatenação sem segunda perda (`-c copy`), como o render de EDL: os
-      // segmentos já saíram com os mesmos parâmetros de encoder.
+      // Concatenation without a second loss (`-c copy`), like the EDL render: the
+      // segments already came out with the same encoder parameters.
       await fsp.writeFile(path.join(work, 'list.txt'), concatList(segments))
       await runFfmpeg(concatFfmpegArgs({ listFile: 'list.txt', output: path.resolve(videoOut), format }), {
         cwd: work,
@@ -499,14 +499,14 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       })
     }
 
-    // Áudio: passada FINAL, com o vídeo NÃO re-encodado (`-c:v copy`). O
-    // comprimento é o da composição — a faixa que passa do fim é cortada nele, e a
-    // que acaba antes deixa o resto para as outras. O que não couber vira AVISO (é
-    // o que se lê para saber se a voz coube na peça), nunca erro.
+    // Audio: FINAL pass, with the video NOT re-encoded (`-c:v copy`). The
+    // length is the composition's — the track that goes past the end is cut at it, and the
+    // one that ends earlier leaves the rest to the others. What does not fit becomes a WARNING (it is
+    // what one reads to know whether the voice fit the piece), never an error.
     if (tracks.length > 0) {
-      // Cada faixa é medida antes de misturar: só com o número na mão dá para
-      // DIZER que uma passou do fim (e foi cortada) ou que acabou antes (e deixou
-      // silêncio) — que é o que o agente precisa ler no resultado.
+      // Each track is measured before mixing: only with the number in hand can one
+      // SAY that one went past the end (and was cut) or that it ended earlier (and left
+      // silence) — which is what the agent needs to read in the result.
       for (const track of tracks) {
         const probed = await probeMedia(track.file).catch(() => null)
         const secs = probed ? probed.durationMs / 1000 : 0
@@ -522,9 +522,9 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
           )
         }
       }
-      // O caso simples (uma faixa, a peça inteira, sem processamento) tem caminho
-      // próprio: um `-i` a mais, sem grafo de filtros. O grafo só se paga quando
-      // há o que misturar.
+      // The simple case (one track, the whole piece, no processing) has its own
+      // path: one more `-i`, no filter graph. The graph only pays off when
+      // there is something to mix.
       const only = tracks.length === 1 ? tracks[0] : null
       const args =
         only && isPlainAudioMix(tracks, master)
@@ -546,10 +546,10 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       await runFfmpeg(args, { signal: opts.signal })
     }
 
-    // "Áudio separado": extraído do ARQUIVO FINAL, para sair exatamente o som que
-    // está no vídeo (mesma mixagem, mesmo corte, mesmo acabamento) — só o áudio é
-    // codificado, a imagem não é tocada. Sem faixas, não há o que extrair: é
-    // aviso, não erro (a pessoa pediu áudio de uma peça muda).
+    // "Separate audio": extracted from the FINAL FILE, so exactly the sound that
+    // is in the video comes out (same mixing, same cut, same finishing) — only the audio is
+    // encoded, the picture is not touched. Without tracks, there is nothing to extract: it is
+    // a warning, not an error (the person asked for audio of a mute piece).
     let audioPath: string | undefined
     if (opts.separateAudio) {
       if (tracks.length === 0) {
@@ -576,7 +576,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     opts.signal?.removeEventListener('abort', onAbort)
     for (const win of windows) if (!win.isDestroyed()) win.destroy()
     if (work) await fsp.rm(work, { recursive: true, force: true }).catch(() => {})
-    // Só libera o que ESTE render registrou: o id do IPC é de quem pediu.
+    // Only releases what THIS render registered: the IPC's id belongs to whoever asked.
     if (registeredId) await registry.unregisterMotion(registeredId).catch(() => {})
   }
 }

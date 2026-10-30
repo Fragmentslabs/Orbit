@@ -4,17 +4,17 @@ import { fontFaceCss, listFonts, type OrbitFont } from '../fonts/store'
 import { catalog, ensureFont, searchCatalog } from '../fonts/source'
 
 /**
- * Fontes externas: buscar no catálogo aberto (Fontsource) e INSTALAR na
- * biblioteca do Orbit.
+ * External fonts: searching the open catalog (Fontsource) and INSTALLING into
+ * Orbit's library.
  *
- * Instalar aqui não pede permissão e não escreve nada no computador: o arquivo
- * fica em `orbit-data/fonts` e o scheme `orbit-font://` o entrega ao artboard,
- * à composição de motion e à própria janela do app. É o equivalente a "usar uma
- * fonte" num app de design — o `font-family` pelo NOME passa a renderizar.
+ * Installing here does not ask permission and writes nothing to the computer: the file
+ * stays in `orbit-data/fonts` and the `orbit-font://` scheme delivers it to the artboard,
+ * to the motion composition and to the app's own window. It is the equivalent of "using a
+ * font" in a design app — the `font-family` by NAME starts rendering.
  *
- * Nada é copiado para o projeto do usuário: o design referencia a família como
- * qualquer fonte do sistema, e a composição de motion recebe só o bloco
- * `@font-face` (a URL do scheme é local e imutável).
+ * Nothing is copied into the user's project: the design references the family like
+ * any system font, and the motion composition receives only the `@font-face`
+ * block (the scheme URL is local and immutable).
  */
 
 function line(font: OrbitFont): string {
@@ -24,7 +24,7 @@ function line(font: OrbitFont): string {
   return `${font.family} (id: ${font.id}) — ${kind}${license} · subsets: ${subsets}`
 }
 
-/** O bloco pronto para colar numa composição de motion. */
+/** The block ready to paste into a motion composition. */
 function motionBlock(font: OrbitFont): string {
   return `<style>\n${fontFaceCss([font])}\n</style>`
 }

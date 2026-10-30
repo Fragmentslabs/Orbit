@@ -9,11 +9,11 @@ import { useThemeStore } from '~/stores/theme-store'
 import type { McpServerConfig, McpServerStatus, ToolPart } from '@orbit/shared'
 
 /**
- * Card da proposta de conexão MCP (tools mcp_connect / mcp_update) — espelha o
- * McpProposalCard do desktop: nada foi gravado quando a tool rodou; a conexão
- * só vai para a config no "Conectar". O estado vem do status real dos
- * servidores: não salvo -> Conectar; salvo sem token -> Autorizar (o login
- * abre no navegador do desktop); conectado -> check.
+ * Card of the MCP connection proposal (tools mcp_connect / mcp_update) — mirrors the
+ * desktop McpProposalCard: nothing was written when the tool ran; the connection
+ * only goes into the config on "Connect". The state comes from the real status of the
+ * servers: not saved -> Connect; saved without token -> Authorize (the login
+ * opens in the desktop browser); connected -> check.
  */
 
 const DISMISSED_KEY = 'orbit_mcp_proposals_dismissed'
@@ -29,7 +29,7 @@ interface ProposalInput {
   oauth?: { clientId?: string; clientSecret?: string; scope?: string }
   enabled?: boolean
   permissionMode?: 'ask' | 'approve' | 'full'
-  /** Só do mcp_update: por que a conexão está sendo alterada. */
+  /** Only from mcp_update: why the connection is being changed. */
   reason?: string
 }
 
@@ -42,7 +42,7 @@ function mask(value: string): string {
   return value.length <= 8 ? '••••' : `${value.slice(0, 4)}••••${value.slice(-2)}`
 }
 
-/** Cabeçalhos e client_secret não podem aparecer inteiros no card. */
+/** Headers and client_secret cannot appear in full in the card. */
 function secretsOf(input: ProposalInput): { key: string; value: string }[] {
   const out: { key: string; value: string }[] = []
   for (const [key, value] of Object.entries(input.headers ?? {})) {
@@ -52,7 +52,7 @@ function secretsOf(input: ProposalInput): { key: string; value: string }[] {
   return out
 }
 
-/** Config final: alteração parte da entrada atual (só os campos enviados mudam). */
+/** Final config: the change starts from the current entry (only the fields sent change). */
 function toConfig(input: ProposalInput, current?: McpServerConfig): McpServerConfig {
   const { reason: _reason, ...changes } = input
   return { ...(current ?? {}), ...changes, name: input.name } as McpServerConfig
@@ -78,8 +78,8 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
       .catch(() => {})
   }, [])
 
-  // A proposta nasce durante a execução da tool; quando ela termina, o status
-  // real é relido — é ele que diz se já está salvo, se falta autorizar, etc.
+  // The proposal is born during the execution of the tool; when it ends, the real
+  // status is read back — it is what says whether it is already saved, whether authorization is missing, etc.
   useEffect(() => {
     if (part.state === 'done') void fetchMcpStatus()
   }, [part.state, fetchMcpStatus])
@@ -119,7 +119,7 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
     }
   }
 
-  /** Grava a conexão proposta (criando ou alterando) — só aqui, no toque. */
+  /** Saves the proposed connection (creating or changing) — only here, on tap. */
   async function connect(): Promise<void> {
     await fetchMcpStatus()
     const existing = useToolsStore.getState().mcpServers.map((sv) => sv.config)

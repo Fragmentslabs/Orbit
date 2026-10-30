@@ -10,34 +10,34 @@ const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 
 interface MessageQueueState {
   queues: Record<string, QueuedMessage[]>
-  /** sessionId → id do item que o input principal está editando agora */
+  /** sessionId → id of the item the main input is editing right now */
   editing: Record<string, string>
   initialized: boolean
 
   initialize: () => Promise<void>
   enqueue: (sessionId: string, msg: QueuedMessage) => void
-  /** Põe um item novo na FRENTE da fila (o celular recebeu "sessão ocupada"
-   *  ao enviar: a mensagem era para sair agora, então fura a fila). */
+  /** Puts a new item at the FRONT of the queue (the phone got "session busy"
+   *  when sending: the message was meant to go out now, so it jumps the queue). */
   enqueueFront: (sessionId: string, msg: QueuedMessage) => void
   dequeue: (sessionId: string) => QueuedMessage | undefined
   peek: (sessionId: string) => QueuedMessage | undefined
   remove: (sessionId: string, msgId: string) => void
-  /** Põe o item na FRENTE da fila (o próximo a sair), sem mexer nos outros */
+  /** Puts the item at the FRONT of the queue (the next to go out), without touching the others */
   moveToFront: (sessionId: string, msgId: string) => void
-  /** Grava o texto no item SEM mudar a posição dele na fila */
+  /** Writes the text into the item WITHOUT changing its position in the queue */
   update: (sessionId: string, msgId: string, text: string) => void
-  /** O input principal entrou em modo edição de um item da fila */
+  /** The main input entered editing mode for a queue item */
   startEdit: (sessionId: string, msgId: string) => void
-  /** Sai do modo edição (o texto do input fica onde está — nunca apagamos o que a pessoa escreveu) */
+  /** Leaves editing mode (the input text stays where it is — we never erase what the person wrote) */
   cancelEdit: (sessionId: string) => void
   hasPending: (sessionId: string) => boolean
-  /** Retorna o número de mensagens na fila (não agendadas) */
+  /** Returns the number of messages in the queue (not scheduled) */
   queueSize: (sessionId: string) => number
-  /** Processa a fila: se a sessão está idle, envia a próxima mensagem */
+  /** Processes the queue: if the session is idle, sends the next message */
   processQueue: (sessionId: string) => void
-  /** Envia um item agora, fora da ordem — a saída da fila pausada por erro */
+  /** Sends an item now, out of order — the exit from a queue paused by an error */
   sendNow: (sessionId: string, msgId: string) => void
-  /** Enfileira para envio imediato assim que o agente ficar idle */
+  /** Enqueues for immediate send as soon as the agent is idle */
   enqueueForSend: (
     sessionId: string,
     text: string,
@@ -45,7 +45,7 @@ interface MessageQueueState {
     mode: SessionMode,
     extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
   ) => void
-  /** Enfileira para envio agendado */
+  /** Enqueues for scheduled send */
   enqueueScheduled: (
     sessionId: string,
     text: string,
@@ -54,14 +54,14 @@ interface MessageQueueState {
     scheduledAt: number,
     extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
   ) => void
-  /** Handler chamado pelo session-store quando status → idle ou error */
+  /** Handler called by the session-store when status → idle or error */
   onSessionIdle: (sessionId: string) => void
 }
 
-/** A fila inteira vai para o disco — não só as agendadas: ela é a fila de
- *  todos os aparelhos, e fechar o desktop não pode apagar o que a pessoa
- *  deixou esperando (no celular ou aqui). Ao reabrir, os itens saem quando a
- *  sessão estiver livre, pelo agendador. */
+/** The whole queue goes to disk — not only the scheduled ones: it is the queue of
+ *  every device, and closing the desktop cannot erase what the person
+ *  left waiting (on the phone or here). On reopening, the items go out when the
+ *  session is free, through the scheduler. */
 function persist(queues: Record<string, QueuedMessage[]>) {
   const all: Record<string, QueuedMessage[]> = {}
   for (const [sid, msgs] of Object.entries(queues)) {
@@ -77,10 +77,10 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
 
   initialize: async () => {
     const data = (await storage.read<Record<string, QueuedMessage[]>>(QUEUE_STORAGE_KEY)) ?? {}
-    // O que entrou enquanto o disco era lido (ex.: o celular entregando o que
-    // escreveu offline logo na abertura) vai depois do que já estava salvo —
-    // e o resultado é regravado, porque o persist desse item já tinha
-    // sobrescrito o arquivo só com ele.
+    // What came in while the disk was being read (e.g.: the phone delivering what
+    // it wrote offline right at startup) goes after what was already saved —
+    // and the result is written again, because the persist of that item had already
+    // overwritten the file with only itself.
     const queues: Record<string, QueuedMessage[]> = { ...data }
     for (const [sid, msgs] of Object.entries(get().queues)) {
       const saved = queues[sid] ?? []
@@ -120,9 +120,9 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       if (cleaned[key].length === 0) delete cleaned[key]
     }
     persist(cleaned)
-    // O item saiu da fila (enviado ou descartado): se era ele que o input
-    // estava editando, o modo edição acabou — senão o próximo Enter gravaria
-    // numa mensagem que não existe mais.
+    // The item left the queue (sent or discarded): if it was the one the input
+    // was editing, editing mode is over — otherwise the next Enter would write
+    // into a message that no longer exists.
     const editing = { ...state.editing }
     if (editing[sessionId] === head.id) delete editing[sessionId]
     set({ queues: cleaned, editing })
@@ -158,8 +158,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       if (!current || current.length < 2 || current[0].id === msgId) return state
       const target = current.find((m) => m.id === msgId)
       if (!target) return state
-      // Só a posição muda: a mensagem leva consigo modo, opções, anexos e
-      // agendamento, e as outras mantêm a ordem entre si.
+      // Only the position changes: the message takes mode, options, attachments and
+      // scheduling with it, and the others keep the order among themselves.
       const next = {
         ...state.queues,
         [sessionId]: [target, ...current.filter((m) => m.id !== msgId)],
@@ -174,8 +174,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       const current = state.queues[sessionId]
       if (!current) return state
       let found = false
-      // `map` (e não reenfileirar): o item fica EXATAMENTE onde estava — só o
-      // texto muda. O resto (modo, opções, agendamento, anexos) é preservado.
+      // `map` (and not re-enqueue): the item stays EXACTLY where it was — only the
+      // text changes. The rest (mode, options, scheduling, attachments) is preserved.
       const next = current.map((m) => {
         if (m.id !== msgId) return m
         found = true
@@ -191,8 +191,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   startEdit: (sessionId, msgId) => {
     const msg = get().queues[sessionId]?.find((m) => m.id === msgId)
     if (!msg) return
-    // O texto vai para o input principal (bridge do rascunho); o Enter depois
-    // grava de volta NESTE item, sem mexer na ordem.
+    // The text goes to the main input (draft bridge); Enter afterwards
+    // writes it back into THIS item, without touching the order.
     useDraftInput.getState().setDraft(sessionId, msg.text)
     set((state) => ({ editing: { ...state.editing, [sessionId]: msgId } }))
   },
@@ -226,16 +226,16 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const next = current[0]
     if (next.scheduledAt && next.scheduledAt > Date.now()) return
 
-    // Só sai com a sessão livre. `error` NÃO conta: o turno anterior falhou, e
-    // a mensagem da fila quase sempre depende da resposta que não veio — a
-    // fila fica pausada até um turno terminar bem (ou a pessoa usar sendNow).
+    // It only leaves with the session free. `error` does NOT count: the previous turn failed, and
+    // the queue message almost always depends on the answer that did not come — the
+    // queue stays paused until a turn ends well (or the person uses sendNow).
     const status = useSessionStore.getState().status[sessionId]
     if (status && status !== "idle") return
 
-    // O status do renderer não basta: o loop emite idle ao fim de cada
-    // iteração e segue rodando, e o idle do fim do turno sai um instante antes
-    // de o main liberar a sessão. Um envio nessa hora abortava o turno no
-    // meio — quem diz se a sessão está livre é o main.
+    // The renderer status is not enough: the loop emits idle at the end of each
+    // iteration and keeps running, and the turn-end idle comes out an instant before
+    // main frees the session. A send at that moment aborted the turn in
+    // the middle — whoever says whether the session is free is main.
     if (checking.has(sessionId)) return
     checking.add(sessionId)
     void chatApi
@@ -247,7 +247,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
           scheduleRecheck(sessionId)
           return
         }
-        // Reconfere depois do await: a fila ou o status podem ter mudado.
+        // Re-checks after the await: the queue or the status may have changed.
         const head = get().queues[sessionId]?.[0]
         if (!head || (head.scheduledAt && head.scheduledAt > Date.now())) return
         const now = useSessionStore.getState().status[sessionId]
@@ -298,22 +298,22 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   },
 
   onSessionIdle: (sessionId) => {
-    // Erro pausa a fila (ver processQueue). Não há reenvio daqui: a mensagem
-    // da fila já sai com `retries`, e o engine repete o MESMO turno em
-    // segundo plano — reenviar daqui duplicava a mensagem no chat a cada
-    // tentativa.
+    // An error pauses the queue (see processQueue). There is no resend from here: the queue
+    // message already goes out with `retries`, and the engine repeats the SAME turn in
+    // the background — resending from here duplicated the message in the chat on every
+    // attempt.
     if (useSessionStore.getState().status[sessionId] === "error") return
     get().processQueue(sessionId)
   },
 }))
 
-/** Sessões com a checagem de "rodando no main" em voo — evita dois envios. */
+/** Sessions with the "running in main" check in flight — avoids two sends. */
 const checking = new Set<string>()
 const recheckTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const BUSY_RECHECK_MS = 2_500
 
-/** Sessão ainda rodando no main: tenta de novo em instantes, enquanto ela
- *  rodar (o idle que destravaria a fila pode já ter passado). */
+/** Session still running in main: tries again shortly, while it
+ *  runs (the idle that would release the queue may already have passed). */
 function scheduleRecheck(sessionId: string) {
   if (recheckTimers.has(sessionId)) return
   recheckTimers.set(
@@ -325,8 +325,8 @@ function scheduleRecheck(sessionId: string) {
   )
 }
 
-/** A pessoa não está olhando quando um item da fila sai: falha transitória
- *  ganha rodadas extras no engine, dentro do mesmo turno (quantas: Preferências). */
+/** The person is not watching when a queue item goes out: a transient failure
+ *  gets extra rounds in the engine, within the same turn (how many: Preferences). */
 function send(sessionId: string, msg: QueuedMessage) {
   void useSessionStore.getState().sendMessage(msg.mode, msg.text, {
     options: { ...msg.options, retries: useAppSettings.getState().settings.transientRetries },

@@ -11,20 +11,20 @@ import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
- * SVG: vetorizar, criar, inspecionar, recolorir e rasterizar.
+ * SVG: vectorize, create, inspect, recolor and rasterize.
  *
- * Separado das tools de imagem porque a natureza é outra. Editar um PNG é
- * reprocessar pixel; editar um SVG é reescrever texto — e é essa diferença que
- * dá o valor. Trocar a cor de um logo em SVG devolve o MESMO logo, em qualquer
- * tamanho; a mesma troca num PNG devolve uma aproximação do que já estava lá.
+ * Separate from the image tools because the nature is different. Editing a PNG is
+ * reprocessing pixels; editing an SVG is rewriting text — and that difference is
+ * what gives it value. Changing the color of an SVG logo returns the SAME logo, at any
+ * size; the same change on a PNG returns an approximation of what was already there.
  *
- * Os dois caminhos de conversão moram aqui, porque é onde são pedidos: SVG →
- * PNG ("me dá o ícone em 512") pelo sharp, e PNG → SVG pelo vectorize.ts, que
- * é escrito à mão justamente porque o sharp lê SVG mas não escreve.
+ * Both conversion paths live here, because this is where they are requested: SVG →
+ * PNG ("give me the icon at 512") through sharp, and PNG → SVG through vectorize.ts, which
+ * is hand-written precisely because sharp reads SVG but does not write it.
  */
 
 export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null) {
-  /** Carrega o markup por galeria ou por caminho na pasta de trabalho. */
+  /** Loads the markup by gallery or by a path in the working folder. */
   const load = async (ref: string): Promise<{ markup: string; name: string } | string> => {
     const mediaId = mediaIdFromUrl(ref)
     if (mediaId) {
@@ -46,7 +46,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
     }
   }
 
-  /** Entrega: sempre um arquivo NOVO na galeria; no projeto só com savePath. */
+  /** Delivery: always a NEW file in the gallery; in the project only with savePath. */
   const deliver = async (
     markup: string,
     name: string,
@@ -71,7 +71,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
     return { mediaUrl, savedTo }
   }
 
-  /** Carrega uma imagem RASTER da galeria — a entrada da vetorização. */
+  /** Loads a RASTER image from the gallery — the input of the vectorization. */
   const loadRaster = async (ref: string): Promise<{ bytes: Buffer; name: string } | string> => {
     const id = mediaIdFromUrl(ref)
     if (id) {
@@ -122,7 +122,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
           return `${src.name}: nothing was traced — the image has no flat-colour region that can become a shape.`
         }
         const base = src.name.replace(/\.[^.]+$/, '')
-        const { mediaUrl, savedTo } = await deliver(out.svg, `${base} (vetor)`, savePath)
+        const { mediaUrl, savedTo } = await deliver(out.svg, `${base} (vector)`, savePath)
         return {
           mediaUrl,
           alt: alt ?? '',
@@ -156,7 +156,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
         if (!info.viewBox) {
           return 'Missing viewBox: without it the SVG does not scale, which is the whole point of the format. Retry including viewBox.'
         }
-        const { mediaUrl, savedTo } = await deliver(markup, title || 'ícone', savePath)
+        const { mediaUrl, savedTo } = await deliver(markup, title || 'icon', savePath)
         return {
           mediaUrl,
           alt: title ?? '',
@@ -237,8 +237,8 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
         const base = src.name.replace(/\.svg$/i, '')
 
         if (rasterize) {
-          // O sharp lê SVG e desenha na resolução pedida — é o que entrega um
-          // favicon nítido a partir do mesmo arquivo, sem nada de upscale.
+          // sharp reads SVG and draws at the requested resolution — that is what delivers a
+          // sharp favicon from the same file, with no upscale at all.
           const pipeline = sharp(Buffer.from(markup, 'utf8'))
           if (width || height) pipeline.resize({ width, height, fit: 'contain', background: '#00000000' })
           const bytes = await (rasterize === 'webp' ? pipeline.webp() : pipeline.png()).toBuffer()
@@ -255,7 +255,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
           }
         }
 
-        const { mediaUrl, savedTo } = await deliver(markup, `${base} (editado)`, savePath)
+        const { mediaUrl, savedTo } = await deliver(markup, `${base} (edited)`, savePath)
         return {
           mediaUrl,
           alt: alt ?? '',

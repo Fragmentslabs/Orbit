@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { createBridgeRunner, type BridgeSpawn } from './runner'
 
 /**
- * O runner é o que impede a bridge de travar o turno: timeout, abort e saída
- * ilegível viram ComputerError — nunca uma exceção crua do child_process.
+ * The runner is what keeps the bridge from hanging the turn: timeout, abort and
+ * unreadable exit become ComputerError — never a raw child_process exception.
  */
 
 function fakeSpawn(behavior: { stdout?: string; delayMs?: number; neverExit?: boolean }) {
@@ -35,27 +35,27 @@ function fakeSpawn(behavior: { stdout?: string; delayMs?: number; neverExit?: bo
 const base = async () => ['-l', 'JavaScript', '/tmp/bridge.js']
 
 describe('createBridgeRunner', () => {
-  it('manda op + args como JSON no último argumento e devolve o result', async () => {
+  it('sends op + args as JSON in the last argument and returns the result', async () => {
     const fake = fakeSpawn({ stdout: JSON.stringify({ ok: true, result: { accessibility: true } }) })
     const run = createBridgeRunner('osascript', base, fake.spawn)
     await expect(run('perms', { a: 1 }, { timeoutMs: 1000 })).resolves.toEqual({ accessibility: true })
     expect(JSON.parse(fake.calls[0].at(-1)!)).toEqual({ op: 'perms', args: { a: 1 } })
   })
 
-  it('erro da bridge vira ComputerError com o código dela', async () => {
+  it('a bridge error becomes ComputerError with its code', async () => {
     const fake = fakeSpawn({ stdout: JSON.stringify({ ok: false, error: { code: 'axDenied', message: 'no' } }) })
     const run = createBridgeRunner('osascript', base, fake.spawn)
     await expect(run('tree', {}, { timeoutMs: 1000 })).rejects.toMatchObject({ code: 'axDenied' })
   })
 
-  it('timeout mata o processo e explica', async () => {
+  it('a timeout kills the process and explains', async () => {
     const fake = fakeSpawn({ neverExit: true })
     const run = createBridgeRunner('osascript', base, fake.spawn)
     await expect(run('tree', {}, { timeoutMs: 30 })).rejects.toMatchObject({ code: 'timeout' })
     expect(fake.killed).toContain('SIGKILL')
   })
 
-  it('abort no meio mata o processo', async () => {
+  it('abort midway kills the process', async () => {
     const fake = fakeSpawn({ neverExit: true })
     const run = createBridgeRunner('osascript', base, fake.spawn)
     const controller = new AbortController()
@@ -65,7 +65,7 @@ describe('createBridgeRunner', () => {
     expect(fake.killed).toContain('SIGKILL')
   })
 
-  it('já abortado nem sobe o processo', async () => {
+  it('already aborted, it does not even start the process', async () => {
     const fake = fakeSpawn({})
     const run = createBridgeRunner('osascript', base, fake.spawn)
     const controller = new AbortController()
@@ -74,7 +74,7 @@ describe('createBridgeRunner', () => {
     expect(fake.calls).toHaveLength(0)
   })
 
-  it('saída vazia ou ilegível é erro acionável', async () => {
+  it('empty or unreadable output is an actionable error', async () => {
     const empty = createBridgeRunner('osascript', base, fakeSpawn({ stdout: '' }).spawn)
     await expect(empty('apps', {}, { timeoutMs: 1000 })).rejects.toMatchObject({ code: 'bridgeError' })
     const junk = createBridgeRunner('osascript', base, fakeSpawn({ stdout: 'execution error: boom' }).spawn)

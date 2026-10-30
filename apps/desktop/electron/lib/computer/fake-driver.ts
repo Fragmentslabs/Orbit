@@ -1,9 +1,9 @@
 import type { AppsSnapshot, AxNode, BridgeAction, ComputerDriver, ElementResult, TreeSnapshot } from './types'
 
 /**
- * Driver de mentira para os testes: um TextEdit com uma janela, um campo de
- * texto, um botão "Salvar" e um campo de senha. Registra as ações recebidas
- * — os testes conferem o que teria sido enviado ao sistema, sem tocar nele.
+ * Fake driver for the tests: a TextEdit with a window, a text field, a "Save" button
+ * and a password field. It records the actions received — the tests check what would
+ * have been sent to the system, without touching it.
  */
 
 export const FAKE_PID = 4711
@@ -33,7 +33,7 @@ export function fakeTree(): TreeSnapshot {
   return {
     nodes: [
       node({ id: 0, parent: -1, depth: 0, path: [], role: 'AXWindow', subrole: 'AXStandardWindow', title: 'Sem título', frame: [100, 50, 1000, 800] }),
-      // Grupo vazio: não ganha linha, os filhos sobem de nível.
+      // Empty group: it gets no line, the children come up a level.
       node({ id: 1, parent: 0, depth: 1, path: [0], role: 'AXGroup' }),
       node({ id: 2, parent: 1, depth: 2, path: [0, 0], role: 'AXTextArea', value: 'Olá', frame: [100, 100, 1000, 600], focused: true }),
       node({ id: 3, parent: 1, depth: 2, path: [0, 1], role: 'AXButton', title: 'Salvar', frame: [1000, 750, 80, 30], actions: ['AXPress'] }),
@@ -50,24 +50,24 @@ export function fakeTree(): TreeSnapshot {
 
 export interface FakeDriver extends ComputerDriver {
   actions: BridgeAction[]
-  /** Resposta da próxima ação de elemento */
+  /** Response of the next element action */
   elementResult: ElementResult
-  /** Resposta do hit-test (clique por coordenada no modo dirigido) */
+  /** Hit-test response (click by coordinate in directed mode) */
   hitResult: ElementResult
-  /** Resposta da rolagem pelo AX */
+  /** Response of the AX scroll */
   scrollResult: ElementResult
-  /** Seleção devolvida depois de arrastar/clique duplo */
+  /** Selection returned after dragging/double click */
   selection: ElementResult['selection']
-  /** A árvore muda depois de uma ação? (para o "nada mudou") */
+  /** Does the tree change after an action? (for the "nothing changed") */
   changeAfterAction: boolean
-  /** Mexe na árvore depois de N ações (um diálogo que abre, um botão que some) */
+  /** Changes the tree after N actions (a dialog that opens, a button that goes away) */
   mutate?: (tree: TreeSnapshot, acted: number) => void
   restored: number[][]
 }
 
 export interface FakeDriverOptions {
   platform?: NodeJS.Platform
-  /** Liga o clique por mensagem de janela (capabilities.messageMouse); o driver real do Windows deixa desligado */
+  /** Turns on the click through a window message (capabilities.messageMouse); the real Windows driver leaves it off */
   messageMouse?: boolean
 }
 
@@ -95,7 +95,7 @@ export function createFakeDriver(png: Buffer, options: FakeDriverOptions = {}): 
     }),
     tree: async () => {
       const tree = fakeTree()
-      // No Windows o host manda a identidade da observação em cada nó.
+      // On Windows the host sends the identity of the observation in every node.
       if (platform === 'win32') for (const n of tree.nodes) n.ref = `r:1:${n.id}`
       if (driver.changeAfterAction && acted > 0) tree.nodes[2].value = `Olá ${acted}`
       driver.mutate?.(tree, acted)

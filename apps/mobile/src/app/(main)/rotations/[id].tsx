@@ -13,12 +13,12 @@ import { useModelRotationStore, MAX_ROTATION_SLOTS } from '~/stores/model-rotati
 import type { SelectedModel } from '~/stores/session-model-prefs'
 
 /**
- * Editor de uma rotação (espelho do painel de detalhe do modal do desktop):
- * nome, slots 1..N com o modelo de cada um, e excluir no rodapé.
+ * Editor of one rotation (mirror of the desktop modal detail panel):
+ * name, slots 1..N with the model of each one, and delete in the footer.
  *
- * Reordenar: no desktop é drag-and-drop; aqui são setas ↑/↓ por linha —
- * arrastar dentro de um ScrollView no celular briga com o scroll, e a lista
- * tem no máximo 4 itens.
+ * Reordering: on the desktop it is drag-and-drop; here it is ↑/↓ arrows per line —
+ * dragging inside a ScrollView on the phone fights the scroll, and the list
+ * has 4 items at most.
  */
 export default function RotationEditorScreen() {
   const { t } = useTranslation()
@@ -35,7 +35,7 @@ export default function RotationEditorScreen() {
 
   const [name, setName] = useState(rotation?.name ?? '')
   const [nameError, setNameError] = useState<string | null>(null)
-  /** Índice do slot com o seletor de modelo aberto (null = fechado). */
+  /** Index of the slot with the model picker open (null = closed). */
   const [pickerSlot, setPickerSlot] = useState<number | null>(null)
 
   const models = useMemo(() => rotation?.models ?? [], [rotation])
@@ -93,7 +93,7 @@ export default function RotationEditorScreen() {
 
   const addSlot = () => {
     if (models.length >= MAX_ROTATION_SLOTS) return
-    // Slot vazio: o picker abre já apontando para ele.
+    // Empty slot: the picker opens already pointing at it.
     updateModels(rotation.id, [...models, { providerId: '', modelId: '' }])
     setPickerSlot(models.length)
   }
@@ -246,9 +246,9 @@ export default function RotationEditorScreen() {
         </Pressable>
       </ScrollView>
 
-      {/* Seletor controlado: a escolha é do slot, não do chat — por isso
-          `selected`/`onSelect` (o modo controlado também esconde recentes e
-          as próprias rotações, evitando rotação dentro de rotação). */}
+      {/* Controlled picker: the choice belongs to the slot, not to the chat — hence
+          `selected`/`onSelect` (the controlled mode also hides recents and
+          the rotations themselves, avoiding a rotation inside a rotation). */}
       {pickerSlot !== null && (
         <ModelPickerModal
           visible

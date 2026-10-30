@@ -3,16 +3,16 @@ import { EditorView } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
 
 /**
- * Tema do CodeMirror do painel de arquivos.
+ * CodeMirror theme of the file panel.
  *
- * As cores são as do github-dark / github-light — as MESMAS que o
- * `highlightLines` ([code-highlighter.ts]) pede ao shiki para o visualizador de
- * diff. O painel usa dois destacadores (Lezer aqui, TextMate lá) e eles só não
- * brigam na tela porque bebem da mesma paleta; trocar um valor aqui sem trocar
- * o tema do shiki faz o mesmo arquivo mudar de cor entre editar e ver o diff.
+ * The colors are github-dark / github-light — the SAME ones that
+ * `highlightLines` ([code-highlighter.ts]) asks shiki for in the diff
+ * viewer. The panel uses two highlighters (Lezer here, TextMate there) and they only
+ * avoid clashing on screen because they drink from the same palette; changing a value here without changing
+ * the shiki theme makes the same file change color between editing and viewing the diff.
  *
- * Os scopes do TextMate não mapeiam 1:1 nas tags do Lezer. A correspondência
- * abaixo é por INTENÇÃO (o que a cor significa no github), não por nome.
+ * The TextMate scopes do not map 1:1 onto the Lezer tags. The mapping
+ * below is by INTENT (what the color means on github), not by name.
  */
 
 interface Palette {
@@ -32,7 +32,7 @@ interface Palette {
   foreground: string
 }
 
-/** github-dark, extraído de @shikijs/themes. */
+/** github-dark, extracted from @shikijs/themes. */
 const DARK: Palette = {
   comment: "#6a737d",
   constant: "#79b8ff",
@@ -50,7 +50,7 @@ const DARK: Palette = {
   foreground: "#e1e4e8",
 }
 
-/** github-light, extraído de @shikijs/themes. */
+/** github-light, extracted from @shikijs/themes. */
 const LIGHT: Palette = {
   comment: "#6a737d",
   constant: "#005cc5",
@@ -71,20 +71,20 @@ const LIGHT: Palette = {
 function highlightStyle(p: Palette): HighlightStyle {
   return HighlightStyle.define([
     { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: p.comment },
-    // No github, palavra-chave e modificador de armazenamento dividem a cor —
-    // `storage`/`storage.type` apontam para o mesmo valor de `keyword`.
+    // On github, keyword and storage modifier share the color —
+    // `storage`/`storage.type` point to the same value as `keyword`.
     { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword, t.definitionKeyword], color: p.keyword },
     { tag: [t.string, t.special(t.string), t.docString], color: p.string },
     { tag: [t.regexp, t.escape], color: p.regexp },
-    // `constant` no github cobre número, booleano, null e membro de enum.
+    // `constant` on github covers number, boolean, null and enum member.
     { tag: [t.number, t.bool, t.null, t.atom, t.constant(t.name)], color: p.constant },
-    // `entity`/`entity.name`: função, classe, tipo — tudo que NOMEIA algo.
+    // `entity`/`entity.name`: function, class, type — everything that NAMES something.
     { tag: [t.function(t.variableName), t.function(t.propertyName), t.definition(t.function(t.variableName))], color: p.entity },
     { tag: [t.typeName, t.className, t.namespace, t.macroName], color: p.entity },
-    // `support.*` (globais da linguagem/biblioteca) usa a cor de constante.
+    // `support.*` (language/library globals) uses the constant color.
     { tag: [t.standard(t.variableName), t.special(t.variableName)], color: p.constant },
-    // `variable` puro é laranja no github; `variable.other` volta ao texto
-    // normal. A tag genérica do Lezer corresponde ao segundo caso.
+    // plain `variable` is orange on github; `variable.other` goes back to normal
+    // text. The generic Lezer tag corresponds to the second case.
     { tag: [t.variableName, t.propertyName, t.attributeValue], color: p.foreground },
     { tag: [t.definition(t.variableName), t.attributeName], color: p.variable },
     { tag: [t.tagName, t.angleBracket], color: p.tag },
@@ -105,9 +105,9 @@ export const darkHighlightStyle = highlightStyle(DARK)
 export const lightHighlightStyle = highlightStyle(LIGHT)
 
 /**
- * Cromo do editor. Tudo que não é token sai das CSS vars do app, para o painel
- * continuar acompanhando o tema — inclusive os temas customizados, que mexem
- * nas vars e não nos hex acima.
+ * Editor chrome. Everything that is not a token comes from the app's CSS vars, so the panel
+ * keeps following the theme — including the custom themes, which change
+ * the vars and not the hex values above.
  */
 export function editorChrome(dark: boolean) {
   const palette = dark ? DARK : LIGHT
@@ -153,18 +153,18 @@ export function editorChrome(dark: boolean) {
       ".cm-searchMatch.cm-searchMatch-selected": {
         backgroundColor: "color-mix(in oklab, var(--primary) 40%, transparent)",
       },
-      // O grifo da busca do painel usa decoração própria (`findMatches`, no
-      // code-editor), mas pinta igual ao do Cmd+F: para quem lê o arquivo, é a
-      // mesma pergunta — "onde está isso aqui".
+      // The panel search highlight uses its own decoration (`findMatches`, in
+      // code-editor), but paints like the Cmd+F one: for whoever reads the file, it is the
+      // same question — "where is this thing in here".
       ".cm-findMatch": {
         backgroundColor: "color-mix(in oklab, var(--primary) 22%, transparent)",
         boxShadow: "0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent)",
         borderRadius: "2px",
       },
-      // Diagnósticos. O tema padrão do @codemirror/lint fixa fundo branco no
-      // balão, o que fica ilegível no escuro — aqui tudo sai das vars do app.
-      // O padrão do pacote é uma imagem SVG de onda embutida; `text-decoration`
-      // acompanha o tamanho da fonte e fica mais nítido no zoom.
+      // Diagnostics. The @codemirror/lint default theme hardcodes a white background in
+      // the tooltip, which is unreadable in the dark — here everything comes from the app vars.
+      // The package default is an embedded SVG wave image; `text-decoration`
+      // follows the font size and stays sharper when zoomed.
       ".cm-lintRange": { backgroundImage: "none" },
       ".cm-lintRange-error": {
         textDecoration: "underline wavy",
@@ -201,9 +201,9 @@ export function editorChrome(dark: boolean) {
       ".cm-lint-marker-error": { color: palette.invalid },
       ".cm-lint-marker-warning": { color: palette.variable },
       ".cm-gutter-lint": { width: "0.75rem" },
-      // A busca do arquivo (Cmd+F). O painel do CodeMirror vem com a cara dele
-      // — inputs e botões de navegador —, então aqui ele veste os tokens do
-      // app: mesma altura de campo do resto da UI, mesma borda, mesmo fundo.
+      // The file search (Cmd+F). The CodeMirror panel comes with its own look
+      // — browser inputs and buttons —, so here it wears the app
+      // tokens: same field height as the rest of the UI, same border, same background.
       ".cm-panels": {
         backgroundColor: "var(--card)",
         color: "var(--card-foreground)",
@@ -261,9 +261,9 @@ export function editorChrome(dark: boolean) {
         color: "var(--muted-foreground)",
         fontSize: "10.5px",
       },
-      // O CodeMirror separa busca de substituição com <br>: no flex isso vira
-      // uma linha nova, que é o comportamento desejado — só não pode sobrar
-      // um espaço em branco no fim da primeira.
+      // CodeMirror separates search from replace with <br>: in flex that becomes
+      // a new line, which is the desired behavior — it just cannot leave
+      // a blank space at the end of the first one.
       ".cm-panel.cm-search br": { flexBasis: "100%", height: "0" },
     },
     { dark },

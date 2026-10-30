@@ -44,16 +44,16 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
     setDevicesOpen(false)
     fetchStatus()
     pollingRef.current = setInterval(fetchStatus, 3000)
-    // Modo de pareamento: enquanto o modal está aberto, o PIN atual fica
-    // disponível via /api/ping para o app conectar com um toque ao achar
-    // o desktop na rede (o PIN já é exibido em texto aqui mesmo).
+    // Pairing mode: while the modal is open, the current PIN stays
+    // available via /api/ping so the app can connect with one tap when it finds
+    // the desktop on the network (the PIN is already shown as text right here).
     void companionApi.setPairingMode(true)
     return () => {
       clearInterval(pollingRef.current)
       void companionApi.setPairingMode(false)
     }
-    // Só a abertura reinicia o polling; fetchStatus é recriado a cada render
-    // e entraria num ciclo de limpar/recriar o interval.
+    // Only the opening restarts the polling; fetchStatus is recreated on every render
+    // and would enter a loop of clearing/recreating the interval.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -67,9 +67,9 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
     })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(null))
-    // `status.pin` entra nas deps de propósito: o PIN é regerado a cada 5
-    // minutos (PIN_TTL_MS) e sem isto o QR continuaria oferecendo o antigo,
-    // divergindo do PIN em texto logo abaixo dele.
+    // `status.pin` goes into the deps on purpose: the PIN is regenerated every 5
+    // minutes (PIN_TTL_MS) and without this the QR would keep offering the old one,
+    // diverging from the PIN in text right below it.
   }, [status?.ip, status?.port, status?.running, status?.pin])
 
   const running = status?.running ?? false
@@ -90,7 +90,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
           <DialogDescription>{t("connectApp.description")}</DialogDescription>
         </DialogHeader>
 
-        {/* Abas: QR Code | Manual */}
+        {/* Tabs: QR Code | Manual */}
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
           <button
             type="button"
@@ -170,7 +170,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
             </>
           )}
 
-          {/* Dispositivos conectados (acordeão — oculto quando não há nenhum) */}
+          {/* Connected devices (accordion — hidden when there is none) */}
           {deviceCount > 0 ? (
             <div className="w-full">
               <button
@@ -205,7 +205,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
             </div>
           ) : null}
 
-          {/* Não tem o app? — link discreto para o smart link /mobile (baixa no celular) */}
+          {/* Don't have the app? — discreet link to the smart link /mobile (download on the phone) */}
           <p className="text-xs text-muted-foreground">
             {t("connectApp.noAppTitle")}{" "}
             <a

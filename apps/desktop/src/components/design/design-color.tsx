@@ -6,18 +6,18 @@ import { Hint } from "@/components/ui/hint"
 import { hexToRgb, hsvToHex, rgbToHsv, toHex, type Hsv } from "./design-protocol"
 
 /**
- * Seletor de cor do inspetor — no lugar do `<input type="color">` do sistema.
+ * Color picker of the inspector — in place of the system `<input type="color">`.
  *
- * O nativo abre uma janela do SO, fora do tema do app, e não sabe o que é a
- * paleta da tela. Aqui a cor é escolhida na própria janela: a área de
- * saturação/valor com o cursor, a faixa de matiz, o hex e o conta-gotas (o
- * EyeDropper do Chromium, quando existe).
+ * The native one opens an OS window, outside the app theme, and does not know what the
+ * screen palette is. Here the color is chosen in the window itself: the
+ * saturation/value area with the cursor, the hue strip, the hex and the eyedropper (the
+ * Chromium EyeDropper, when it exists).
  *
- * A escolha é confirmada UMA vez, no fim do arraste: cada passo de escrita
- * seria uma escrita no arquivo (e um passo de desfazer) por pixel.
+ * The choice is confirmed ONCE, at the end of the drag: every write step
+ * would be a write to the file (and an undo step) per pixel.
  */
 
-/** O cursor da área de saturação/valor: um anel na cor escolhida. */
+/** The cursor of the saturation/value area: a ring in the chosen color. */
 function Cursor({ left, top }: { left: number; top: number }) {
   return (
     <span
@@ -27,7 +27,7 @@ function Cursor({ left, top }: { left: number; top: number }) {
   )
 }
 
-/** Faixa do matiz: o arco-íris com o cursor na cor escolhida. */
+/** Hue strip: the rainbow with the cursor in the chosen color. */
 const HUE_BG = "linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)"
 
 export function ColorPicker({
@@ -35,9 +35,9 @@ export function ColorPicker({
   computed,
   onCommit,
 }: {
-  /** O valor no `style` do elemento (o que o painel edita). */
+  /** The value in the element's `style` (what the panel edits). */
   value: string
-  /** O valor computado — o ponto de partida quando não há valor no `style`. */
+  /** The computed value — the starting point when there is no value in the `style`. */
   computed: string
   onCommit: (value: string) => void
 }) {
@@ -52,7 +52,7 @@ export function ColorPicker({
   const hex = toHex(shown)
   const transparent = !shown || hex === null
 
-  /** O valor canônico do estado atual (o hex do HSV). */
+  /** The canonical value of the current state (the HSV hex). */
   const current = hsvToHex(hsv)
 
   const setHue = (h: number) => {
@@ -79,7 +79,7 @@ export function ColorPicker({
     setSaturationValue(s, v)
   }
 
-  /** Arraste com o ponteiro preso: a cor anda com o mouse, sem passar pela tecla. */
+  /** Drag with the pointer captured: the color moves with the mouse, without going through the key. */
   const drag = (event: ReactPointerEvent, el: HTMLElement, kind: "sv" | "hue") => {
     el.setPointerCapture(event.pointerId)
     fromPointer(event, el, kind)
@@ -90,7 +90,7 @@ export function ColorPicker({
     onCommit(hsvToHex(hsv))
   }
 
-  /** O conta-gotas do Chromium: a cor de qualquer pixel da tela. */
+  /** Chromium's eyedropper: the color of any pixel on the screen. */
   const pickWithEye = async () => {
     const eye = (window as unknown as { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper
     if (!eye) return
@@ -103,11 +103,11 @@ export function ColorPicker({
       setHexDraft(result.sRGBHex)
       onCommit(result.sRGBHex)
     } catch {
-      // O usuário cancelou a seleção.
+      // The user cancelled the selection.
     }
   }
 
-  /** O hex digitado: entra só quando é um hex de verdade. */
+  /** The typed hex: it only enters when it is a real hex. */
   const applyHexDraft = (next: string) => {
     setHexDraft(next)
     const rgb = hexToRgb(next)
@@ -119,8 +119,8 @@ export function ColorPicker({
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        // Ao abrir, o valor pode ter mudado (o grupo, o estilo): o seletor
-        // nasce do que está valendo agora.
+        // On opening, the value may have changed (the group, the style): the picker
+        // is born from what is in effect now.
         if (next) {
           const start = toHex(value || computed) ?? "#000000"
           setHexDraft(start)
@@ -128,8 +128,8 @@ export function ColorPicker({
         }
       }}
     >
-      {/* A amostra É o gatilho: a cor que o elemento tem (ou o xadrez, quando
-          não tem cor nenhuma). 12px, como o lead dos outros campos. */}
+      {/* The swatch IS the trigger: the color the element has (or the checkerboard, when
+          it has no color at all). 12px, like the lead of the other fields. */}
       <PopoverTrigger
         title={t("design.props.colorPicker")}
         aria-label={t("design.props.colorPicker")}
@@ -142,8 +142,8 @@ export function ColorPicker({
       />
       <PopoverContent align="start" side="bottom" className="w-60 p-2">
         <div className="flex flex-col gap-2">
-          {/* Saturação e valor: o matiz embaixo, o branco à esquerda e o
-              preto embaixo. */}
+          {/* Saturation and value: the hue underneath, white on the left and
+              black at the bottom. */}
           <div
             ref={squareRef}
             onPointerDown={(e) => drag(e, e.currentTarget, "sv")}

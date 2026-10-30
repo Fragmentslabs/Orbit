@@ -1,8 +1,8 @@
 /**
- * Leitura do JSON do yt-dlp (`-J`): o que o agente precisa saber ANTES de
- * baixar — título, duração, resoluções disponíveis, idiomas de legenda,
- * capítulos e tamanho de playlist. É o que evita baixar 4K quando 720 resolve
- * e o que diz se a transcrição pode sair das legendas em vez do áudio.
+ * Reading of the yt-dlp JSON (`-J`): what the agent needs to know BEFORE
+ * downloading — title, duration, available resolutions, subtitle languages, chapters
+ * and playlist size. It is what avoids downloading 4K when 720 will do and what says
+ * whether the transcription can come from the subtitles instead of the audio.
  */
 
 export interface YtdlpFormat {
@@ -76,7 +76,7 @@ export function parseInfo(stdout: string): YtdlpInfo {
   }
 }
 
-/** 7:05 / 1:02:09 — a forma como o usuário lê uma duração (0 s é "0:00", não "?"). */
+/** 7:05 / 1:02:09 — the way the user reads a duration (0 s is "0:00", not "?"). */
 export function durationText(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return '?'
   const total = Math.max(0, Math.round(Number(seconds)))
@@ -103,7 +103,7 @@ function dateText(uploadDate: string | undefined): string | null {
   return `${uploadDate.slice(0, 4)}-${uploadDate.slice(4, 6)}-${uploadDate.slice(6, 8)}`
 }
 
-/** Resoluções de vídeo disponíveis, da menor para a maior (sem repetir). */
+/** Available video resolutions, from the smallest to the largest (without repeating). */
 export function videoHeights(formats: YtdlpFormat[] | undefined): number[] {
   const heights = (formats ?? [])
     .filter((f) => f.vcodec && f.vcodec !== 'none' && typeof f.height === 'number' && f.height > 0)
@@ -111,7 +111,7 @@ export function videoHeights(formats: YtdlpFormat[] | undefined): number[] {
   return [...new Set(heights)].sort((a, b) => a - b)
 }
 
-/** O maior bitrate de áudio disponível (kbps) — o teto que o arquivo terá. */
+/** The highest available audio bitrate (kbps) — the ceiling the file will have. */
 export function bestAudioKbps(formats: YtdlpFormat[] | undefined): number | null {
   const rates = (formats ?? [])
     .filter((f) => f.acodec && f.acodec !== 'none' && typeof f.abr === 'number' && f.abr > 0)

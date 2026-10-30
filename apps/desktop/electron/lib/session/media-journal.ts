@@ -8,51 +8,51 @@ import type { MediaEntry } from '@shared/media'
 import { writeFileAtomic } from '../asset-lock'
 
 /**
- * Diário de mídia por TURNO — o que torna desfazível tudo o que o agente
- * produziu fora do repositório: peças (motion, design, slides), artefatos,
- * documentos, imagens, áudios e vídeos da galeria.
+ * Media journal per TURN — what makes undoable everything the agent
+ * produced outside the repository: pieces (motion, design, slides), artifacts,
+ * documents, images, audio and videos in the gallery.
  *
- * O snapshot do modo código (snapshot/index.ts) fotografa a pasta de trabalho
- * inteira no começo do turno. Aqui isso seria caro (a galeria tem vídeos) e não
- * existiria no chat. Então o registro é PREGUIÇOSO: na primeira vez que um
- * turno vai mexer num caminho ou numa entrada da galeria, guarda-se como ela
- * estava ANTES — uma cópia (clone no APFS, quase de graça) ou "não existia".
- * O que o turno não toca não custa nada.
+ * The snapshot of code mode (snapshot/index.ts) photographs the whole working
+ * folder at the start of the turn. Here that would be expensive (the gallery holds videos) and would not
+ * exist in chat. So the recording is LAZY: the first time a
+ * turn is about to touch a path or a gallery entry, it is stored as it was
+ * BEFORE — a copy (an APFS clone, almost free) or "did not exist".
+ * What the turn does not touch costs nothing.
  *
- * O escopo é um AsyncLocalStorage aberto pelo chat-engine em volta do turno:
- * as tools, o streaming que abre a aba ao vivo e o que eles disparam herdam o
- * escopo sem receber nada por parâmetro. O que roda FORA de um turno (a pessoa
- * editando no painel, excluindo na galeria) não é registrado — não é do agente.
+ * The scope is an AsyncLocalStorage opened by the chat-engine around the turn:
+ * the tools, the streaming that opens the live tab and whatever they trigger inherit
+ * the scope without receiving anything by parameter. What runs OUTSIDE a turn (the person
+ * editing in the panel, deleting in the gallery) is not recorded — it is not the agent's.
  *
- * Cada mensagem de assistente tem o seu diário em disco
- * (`userData/media-journal/<sessão>/<mensagem>/`), gravado a cada registro:
- * um crash no meio do turno não perde o estado anterior do que já foi tocado.
+ * Each assistant message has its own journal on disk
+ * (`userData/media-journal/<session>/<message>/`), written on every record:
+ * a crash in the middle of the turn does not lose the previous state of what was already touched.
  */
 
 export type PieceKind = 'motion' | 'design' | 'slides'
 
-/** A peça dona de uma pasta registrada — o revert a re-registra ou a tira do registro. */
+/** The piece that owns a registered folder — the revert re-registers it or removes it from the record. */
 export interface PieceRef {
   kind: PieceKind
   id: string
   folder: string
-  /** Entrada dentro da pasta (motion/slides). */
+  /** Entry inside the folder (motion/slides). */
   entry?: string
   root?: string
   sessionId?: string
 }
 
 /**
- * Estado de um caminho (arquivo, pasta ou symlink) num instante.
+ * State of a path (file, folder or symlink) at an instant.
  *
- * O diário guarda o estado ANTES (`backup`/`before`) e o DEPOIS (`after`).
- * No revert, o atual é comparado com o depois: só desfaz o que ainda está
- * como o turno deixou. Se outra conversa (ou a pessoa, no painel) mexeu
- * depois, o caminho é preservado e vira conflito.
+ * The journal stores the state BEFORE (`backup`/`before`) and AFTER (`after`).
+ * On revert, the current one is compared with the after: it only undoes what is still
+ * as the turn left it. If another conversation (or the person, in the panel) touched it
+ * afterwards, the path is preserved and becomes a conflict.
  */
 export interface PathState {
   exists: boolean
-  /** sha256 do conteúdo (arquivo), da árvore (pasta) ou do alvo (symlink). */
+  /** sha256 of the content (file), of the tree (folder) or of the target (symlink). */
   hash: string | null
   kind?: 'file' | 'dir' | 'symlink'
 }
@@ -78,9 +78,9 @@ async function hashFile(file: string): Promise<string> {
 }
 
 /**
- * Hash determinístico de um caminho — conteúdo, nomes e tipos, em ordem.
- * Pastas entram recursivamente; symlinks entram pelo TEXTO do alvo (sem
- * seguir, senão um link quebrado derrubaria a comparação).
+ * Deterministic hash of a path — content, names and types, in order.
+ * Folders come in recursively; symlinks come in by the TEXT of the target (without
+ * following it, otherwise a broken link would bring the comparison down).
  */
 export async function hashPath(target: string): Promise<PathState> {
   const st = await fsp.lstat(target).catch(() => null)
@@ -111,23 +111,23 @@ export type JournalRecord =
   | {
       type: 'path'
       path: string
-      /** Nome da cópia dentro de `files/` — null quando o caminho não existia. */
+      /** Name of the copy inside `files/` — null when the path did not exist. */
       backup: string | null
       piece?: PieceRef
-      /** Entrada da galeria dona deste arquivo (artefato/documento). */
+      /** Gallery entry that owns this file (artifact/document). */
       owner?: string
-      /** Estado do caminho DEPOIS do turno; ausente em diários antigos/crash. */
+      /** State of the path AFTER the turn; absent in old journals/crash. */
       after?: PathState
     }
   | {
       type: 'media'
       id: string
       before: MediaEntry | null
-      /** A entrada DEPOIS do turno (o que o turno gravou). */
+      /** The entry AFTER the turn (what the turn wrote). */
       after?: MediaEntry | null
     }
 
-/** Registro pronto para aplicar: a cópia já resolvida para o caminho absoluto. */
+/** Record ready to apply: the copy already resolved to the absolute path. */
 export type RestoreRecord =
   | {
       type: 'path'
@@ -145,14 +145,14 @@ interface Scope {
   closed: boolean
   keys: Set<string>
   records: JournalRecord[]
-  /** Fila serial do escopo: dois registros da mesma chave nunca correm juntos. */
+  /** Serial queue of the scope: two records of the same key never run together. */
   chain: Promise<unknown>
 }
 
 const storage = new AsyncLocalStorage<Scope>()
 const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,80}$/
 const MANIFEST = 'journal.json'
-/** Pasta do redo (unrevert) de uma sessão — fora do padrão de id de mensagem. */
+/** Redo folder (unrevert) of a session — outside the message id pattern. */
 export const REDO_DIR = '_redo'
 
 export function journalRoot(): string {
@@ -169,15 +169,15 @@ function messageJournalDir(sessionId: string, messageId: string): string {
   return path.join(sessionJournalDir(sessionId), messageId)
 }
 
-/** Abre o escopo do turno em volta de `fn`. A mensagem entra depois (bindMediaJournal). */
+/** Opens the turn scope around `fn`. The message comes in later (bindMediaJournal). */
 export function runWithMediaJournal<T>(sessionId: string, fn: () => T): T {
   if (!SAFE_SEGMENT.test(sessionId)) return fn()
   return storage.run({ sessionId, closed: false, keys: new Set(), records: [], chain: Promise.resolve() }, fn)
 }
 
 /**
- * Liga o escopo à mensagem de assistente do turno. Antes disso nada é
- * registrado: o diário mora na mensagem, e sem ela o revert não o acharia.
+ * Binds the scope to the assistant message of the turn. Before that nothing is
+ * recorded: the journal lives in the message, and without it the revert would not find it.
  */
 export function bindMediaJournal(messageId: string): void {
   const scope = storage.getStore()
@@ -186,15 +186,15 @@ export function bindMediaJournal(messageId: string): void {
 }
 
 /**
- * Fecha o escopo e grava o estado FINAL de cada caminho registrado.
+ * Closes the scope and writes the FINAL state of each recorded path.
  *
- * `closed` é marcado ANTES do trabalho assíncrono: o que ainda rodar herdando
- * o escopo (a capa da galeria tirada em segundo plano) já não é do turno e não
- * entra no diário. O `after` é o que permite o revert comparar "o worktree
- * ainda está como o turno deixou?" — sem ele, um turno antigo/crashado vira
- * conflito, nunca uma restauração às cegas.
+ * `closed` is set BEFORE the asynchronous work: whatever still runs inheriting
+ * the scope (the gallery cover taken in the background) is no longer the turn's and does not
+ * enter the journal. The `after` is what lets the revert compare "is the worktree
+ * still as the turn left it?" — without it, an old/crashed turn becomes a
+ * conflict, never a blind restore.
  *
- * Nunca lança: o fim do turno não pode depender do diário.
+ * Never throws: the end of the turn cannot depend on the journal.
  */
 export async function closeMediaJournal(): Promise<void> {
   const scope = storage.getStore()
@@ -209,13 +209,13 @@ export async function closeMediaJournal(): Promise<void> {
       try {
         record.after = await hashPath(record.path)
       } catch (err) {
-        // Sem estado final, o revert trata o caminho como conflito.
-        console.error('[media-journal] hash final falhou:', record.path, err)
+        // Without a final state, the revert treats the path as a conflict.
+        console.error('[media-journal] final hash failed:', record.path, err)
       }
     }
     await persistScope(s)
   } catch (err) {
-    console.error('[media-journal] fechar o diário falhou:', err)
+    console.error('[media-journal] closing the journal failed:', err)
   }
 }
 
@@ -229,15 +229,15 @@ export function mediaJournalActive(): boolean {
   return activeScope() !== null
 }
 
-/** `child` dentro de `parent` (ou igual)? */
+/** `child` inside `parent` (or equal)? */
 function isInside(parent: string, child: string): boolean {
   const rel = path.relative(path.resolve(parent), path.resolve(child))
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
 /**
- * Só o armazenamento do app entra no diário. A pasta de trabalho do modo código
- * tem o snapshot dela, e uma cópia do repositório aqui seria cara e duplicada.
+ * Only the app storage enters the journal. The working folder of code mode
+ * has its own snapshot, and a copy of the repository here would be expensive and duplicated.
  */
 function isJournaledPath(target: string): boolean {
   const userData = app.getPath('userData')
@@ -245,9 +245,9 @@ function isJournaledPath(target: string): boolean {
 }
 
 /**
- * Copia um arquivo ou uma pasta inteira. COPYFILE_FICLONE: no APFS é um clone
- * (as cópias dividem os blocos até alguém escrever), e em outros sistemas cai
- * para a cópia comum.
+ * Copies a file or a whole folder. COPYFILE_FICLONE: on APFS it is a clone
+ * (the copies share the blocks until someone writes), and on other systems it falls
+ * back to a regular copy.
  */
 export async function cloneInto(source: string, target: string): Promise<void> {
   const stat = await fsp.lstat(source)
@@ -273,19 +273,19 @@ async function persistScope(scope: Scope & { messageId: string }): Promise<void>
   await writeFileAtomic(path.join(dir, MANIFEST), JSON.stringify({ v: 2, records: scope.records }))
 }
 
-/** Enfileira no escopo — e uma falha do diário nunca derruba a tool que escrevia. */
+/** Queues on the scope — and a journal failure never brings down the tool that was writing. */
 function enqueue(scope: Scope & { messageId: string }, op: () => Promise<void>): Promise<void> {
   const run = scope.chain.then(op).catch((err) => {
-    console.error('[media-journal] registro falhou:', err)
+    console.error('[media-journal] record failed:', err)
   })
   scope.chain = run
   return run
 }
 
 /**
- * Guarda o estado de `target` (arquivo ou pasta) ANTES da primeira mudança dele
- * neste turno. Chame logo antes de escrever, apagar ou substituir — dentro do
- * mesmo lock da escrita, para ninguém mudar o caminho entre a cópia e ela.
+ * Stores the state of `target` (file or folder) BEFORE its first change
+ * in this turn. Call it right before writing, deleting or replacing — inside the
+ * same write lock, so that nobody changes the path between the copy and it.
  */
 export async function journalPath(target: string, piece?: PieceRef, owner?: string): Promise<void> {
   const scope = activeScope()
@@ -295,7 +295,7 @@ export async function journalPath(target: string, piece?: PieceRef, owner?: stri
   const key = `path:${resolved}`
   await enqueue(scope, async () => {
     if (scope.keys.has(key)) return
-    // Uma pasta já registrada INTEIRA cobre o que estiver dentro dela.
+    // A folder already registered WHOLE covers whatever is inside it.
     for (const record of scope.records) {
       if (record.type === 'path' && isInside(record.path, resolved)) return
     }
@@ -311,7 +311,7 @@ export async function journalPath(target: string, piece?: PieceRef, owner?: stri
   })
 }
 
-/** Igualdade de duas entradas da galeria — a ordem das chaves não conta. */
+/** Equality of two gallery entries — the order of the keys does not count. */
 function sameEntry(a: MediaEntry | undefined, b: MediaEntry | undefined): boolean {
   if (!a || !b) return a === b
   const keys = new Set([...Object.keys(a), ...Object.keys(b)])
@@ -324,10 +324,10 @@ function sameEntry(a: MediaEntry | undefined, b: MediaEntry | undefined): boolea
 }
 
 /**
- * Chamado por quem grava o índice da galeria, com o índice de antes e o de
- * depois: cada entrada criada, alterada ou removida guarda o estado anterior —
- * entrada por entrada, para o revert nunca restaurar o índice em bloco (o que
- * apagaria o que outro chat gravou no meio).
+ * Called by whoever writes the gallery index, with the index from before and the one from
+ * after: every entry created, changed or removed stores the previous state —
+ * entry by entry, so the revert never restores the index as a block (which
+ * would delete what another chat wrote in the middle).
  */
 export async function journalMediaIndex(previous: MediaEntry[], next: MediaEntry[]): Promise<void> {
   const scope = activeScope()
@@ -349,8 +349,8 @@ export async function journalMediaIndex(previous: MediaEntry[], next: MediaEntry
           record.type === 'media' && record.id === item.id,
       )
       if (existing) {
-        // O turno mexeu na mesma entrada de novo: o `before` continua sendo o
-        // da PRIMEIRA mudança, e o `after` passa a ser o estado final do turno.
+        // The turn touched the same entry again: the `before` stays the one from the
+        // FIRST change, and the `after` becomes the final state of the turn.
         existing.after = item.after
         dirty = true
         continue
@@ -377,22 +377,22 @@ async function readManifest(dir: string): Promise<LoadedJournal | null> {
   }
 }
 
-/** O diário de uma mensagem de assistente, se o turno tocou em alguma mídia. */
+/** The journal of an assistant message, if the turn touched any media. */
 export async function readMediaJournal(sessionId: string, messageId: string): Promise<LoadedJournal | null> {
   if (!SAFE_SEGMENT.test(messageId)) return null
   return readManifest(messageJournalDir(sessionId, messageId))
 }
 
-/** O redo guardado pelo último revert da sessão. */
+/** The redo stored by the last revert of the session. */
 export async function readRedoJournal(sessionId: string): Promise<LoadedJournal | null> {
   return readManifest(path.join(sessionJournalDir(sessionId), REDO_DIR))
 }
 
 /**
- * Junta os diários de vários turnos (em ordem cronológica) num só: o revert
- * desfaz do turno escolhido até o fim, e o estado a restaurar de cada caminho
- * ou entrada é o do PRIMEIRO turno que o tocou. Uma pasta registrada inteira
- * cobre os caminhos de dentro dela registrados por turnos posteriores. Puro.
+ * Joins the journals of several turns (in chronological order) into one: the revert
+ * undoes from the chosen turn to the end, and the state to restore for each path
+ * or entry is the one from the FIRST turn that touched it. A folder registered whole
+ * covers the paths inside it registered by later turns. Pure.
  */
 export function mergeJournals(journals: LoadedJournal[]): RestoreRecord[] {
   const out: RestoreRecord[] = []
@@ -404,9 +404,9 @@ export function mergeJournals(journals: LoadedJournal[]): RestoreRecord[] {
         const key = `media:${record.id}`
         const existing = byKey.get(key)
         if (existing && existing.type === 'media') {
-          // O `before` é o do PRIMEIRO turno; o `after` é o do ÚLTIMO que mexeu
-          // — é esse estado que o worktree tem agora e que o revert vai
-          // comparar.
+          // The `before` is the one from the FIRST turn; the `after` is the one from the LAST that touched
+          // it — that is the state the worktree has now and that the revert will
+          // compare.
           existing.after = record.after
           continue
         }
@@ -440,8 +440,8 @@ export function mergeJournals(journals: LoadedJournal[]): RestoreRecord[] {
 }
 
 /**
- * Grava um diário pronto (o redo do revert): captura o estado ATUAL de cada
- * registro em `dir`, que é recriado do zero.
+ * Writes a ready journal (the redo of the revert): captures the CURRENT state of each
+ * record in `dir`, which is recreated from scratch.
  */
 export async function captureJournal(
   dir: string,
@@ -467,9 +467,9 @@ export async function captureJournal(
 }
 
 /**
- * Preenche o `after` de um diário já gravado — usado no redo do revert, depois
- * de aplicar: o estado final é o que o unrevert vai exigir encontrar para
- * poder desfazer sem apagar mudanças mais novas.
+ * Fills in the `after` of a journal already written — used in the redo of the revert, after
+ * applying: the final state is what the unrevert will require to find so that it
+ * can undo without deleting newer changes.
  */
 export async function finalizeJournal(
   dir: string,
@@ -486,7 +486,7 @@ export async function finalizeJournal(
     try {
       records.push({ ...record, after: await hashPath(record.path) })
     } catch (err) {
-      console.error('[media-journal] hash final do redo falhou:', record.path, err)
+      console.error('[media-journal] redo final hash failed:', record.path, err)
       records.push(record)
     }
   }
@@ -494,16 +494,16 @@ export async function finalizeJournal(
 }
 
 /**
- * Devolve cada caminho ao estado do registro: apaga o que existe agora e, se
- * havia algo antes, põe a cópia de volta. Só dentro do armazenamento do app.
+ * Takes each path back to the state of the record: deletes what exists now and, if there
+ * was something before, puts the copy back. Only inside the app storage.
  *
- * A pasta vem antes do que está dentro dela: um arquivo registrado num turno e
- * a pasta dele num turno seguinte voltam os dois — a pasta ao estado do segundo
- * turno, e o arquivo, por cima, ao do primeiro.
+ * The folder comes before what is inside it: a file registered in one turn and
+ * its folder in a later turn both come back — the folder to the state of the second
+ * turn, and the file, on top of that, to the one of the first.
  */
 export async function restorePaths(
   records: RestoreRecord[],
-  /** Revalida o caminho logo antes de trocar (quem decidiu leu antes). Recusado, fica como está. */
+  /** Revalidates the path right before swapping (whoever decided read earlier). Refused, it stays as it is. */
   stillSafe?: (record: Extract<RestoreRecord, { type: 'path' }>) => Promise<boolean>,
 ): Promise<RestoreRecord[]> {
   const skipped: RestoreRecord[] = []
@@ -522,7 +522,7 @@ export async function restorePaths(
   return skipped
 }
 
-/** Apaga diários: os das mensagens dadas, ou (sem lista) todos da sessão. */
+/** Deletes journals: the ones of the given messages, or (with no list) all of the session. */
 export async function deleteMediaJournals(sessionId: string, messageIds?: string[]): Promise<void> {
   if (!SAFE_SEGMENT.test(sessionId)) return
   if (!messageIds) {
@@ -540,9 +540,9 @@ export async function deleteRedoJournal(sessionId: string): Promise<void> {
 }
 
 /**
- * Limpeza de partida: diários mais velhos que `maxAgeMs` saem, e os de
- * conversas que não existem mais saem inteiros. Desfazer um turno de meses
- * atrás não é o caso de uso, e o diário guarda cópias.
+ * Startup cleanup: journals older than `maxAgeMs` go away, and the ones of
+ * conversations that no longer exist go away entirely. Undoing a turn from months
+ * ago is not the use case, and the journal holds copies.
  */
 export async function pruneMediaJournals(
   maxAgeMs: number,

@@ -1,11 +1,11 @@
 /**
- * Conjunto de consultas compartilhado pelas medições de documento.
+ * Query set shared by the document measurements.
  *
- * Existe para que o ganho lexical (doc-index.test.ts) e o ganho dos vetores
- * (doc-vectors.test.ts) sejam medidos nas MESMAS consultas — números de
- * experimentos diferentes não se comparam.
+ * It exists so the lexical gain (doc-index.test.ts) and the vector gain
+ * (doc-vectors.test.ts) are measured on the SAME queries — numbers from
+ * different experiments are not comparable.
  *
- * NADA aqui imprime texto: o conteúdo só circula em memória.
+ * NOTHING here prints text: the content only circulates in memory.
  */
 import { tokenize, type Memory } from '@shared/memory'
 
@@ -35,9 +35,9 @@ export function sentences(text: string): string[] {
 }
 
 /**
- * Oração do documento que quase não compartilha termo com o texto da memória
- * (no máximo 25%). Determinística: pega a do meio das elegíveis, para não
- * viesar sempre para a primeira linha do `.md`.
+ * Sentence from the document that barely shares any term with the memory text
+ * (at most 25%). Deterministic: it takes the middle one among the eligible, so it does not
+ * always bias towards the first line of the `.md`.
  */
 export function docQuery(doc: string, memoryText: string): string | null {
   const own = new Set(longTokens(memoryText))
@@ -51,7 +51,7 @@ export function docQuery(doc: string, memoryText: string): string | null {
   return eligible[Math.floor(eligible.length / 2)]
 }
 
-/** Oração do texto da memória — a consulta que já funcionava antes da mudança. */
+/** Sentence from the memory text — the query that already worked before the change. */
 export function textQuery(memory: Memory): string | null {
   const first = sentences(memory.text)[0]
   if (first) return first
@@ -59,7 +59,7 @@ export function textQuery(memory: Memory): string | null {
   return plain.length >= 20 ? plain.slice(0, 160) : null
 }
 
-/** As duas bases, construídas do mesmo jeito em todos os experimentos. */
+/** The two sets, built the same way in every experiment. */
 export function buildProbes(
   pool: Memory[],
   docs: Map<string, string>,

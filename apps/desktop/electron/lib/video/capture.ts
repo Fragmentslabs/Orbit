@@ -1,14 +1,14 @@
 import type { NativeImage, WebContents } from 'electron'
 
 /**
- * `capturePage` de uma janela offscreen FALHA às vezes com `UnknownVizError`:
- * o mesmo quadro, na mesma janela, captura, falha e captura de novo em três
- * chamadas seguidas (medido no Electron 44, Windows). Sem tratar, uma olhada do
- * motion_frame quebrava ao acaso — e um render de 500 quadros quebrava quase
- * certo, no meio.
+ * `capturePage` on an offscreen window SOMETIMES FAILS with `UnknownVizError`:
+ * the same frame, in the same window, captures, fails and captures again in three
+ * calls in a row (measured on Electron 44, Windows). Untreated, a look from
+ * motion_frame broke at random — and a render of 500 frames broke almost
+ * for sure, halfway through.
  *
- * Aqui a captura pede um quadro novo (`invalidate`) e tenta de novo, com uma
- * espera curta e crescente. Uma falha que persiste nas tentativas é real e sobe.
+ * Here the capture asks for a fresh frame (`invalidate`) and retries, with a
+ * short, growing wait. A failure that persists across attempts is real and is raised.
  */
 export async function capturePageReliably(contents: WebContents, attempts = 5): Promise<NativeImage> {
   let last: unknown = null

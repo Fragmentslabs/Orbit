@@ -10,15 +10,15 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Hint } from "@/components/ui/hint"
 
 /**
- * Diagrama Mermaid direto na conversa: sem moldura, sem fundo próprio, com as
- * cores do tema do Orbit.
+ * Mermaid diagram straight in the conversation: no frame, no background of its own, with the
+ * colors of the Orbit theme.
  *
- * Substitui o bloco padrão do streamdown (que vem com caixa, borda e barra de
- * ferramentas) registrando-se como renderer da linguagem `mermaid`.
+ * It replaces the default streamdown block (which comes with a box, border and toolbar)
+ * by registering itself as the renderer for the `mermaid` language.
  *
- * O Mermaid não entende `oklch()` nem `var()` — os tokens do app são oklch —,
- * então cada cor é resolvida para rgb por um canvas antes de entrar em
- * `themeVariables`. O diagrama é redesenhado quando o tema claro/escuro troca.
+ * Mermaid understands neither `oklch()` nor `var()` — the app tokens are oklch —,
+ * so every color is resolved to rgb by a canvas before entering
+ * `themeVariables`. The diagram is redrawn when the light/dark theme switches.
  */
 
 const TOKENS = [
@@ -132,7 +132,7 @@ function buildConfig() {
   }
 }
 
-/** "dark" | "light", reagindo à troca de tema do app. */
+/** "dark" | "light", reacting to the app theme switch. */
 function useColorScheme() {
   const read = () => (document.documentElement.classList.contains("dark") ? "dark" : "light")
   const [scheme, setScheme] = useState(read)
@@ -146,7 +146,7 @@ function useColorScheme() {
 
 type Rendered = { svg: string } | { error: string }
 
-/** Diagramas pesam; o mermaid só é baixado quando o primeiro aparece. */
+/** Diagrams are heavy; mermaid is only downloaded when the first one appears. */
 async function renderMermaid(id: string, source: string): Promise<Rendered> {
   const { default: mermaid } = await import("mermaid")
   try {
@@ -155,7 +155,7 @@ async function renderMermaid(id: string, source: string): Promise<Rendered> {
     const { svg } = await mermaid.render(id, source)
     return { svg }
   } catch (error) {
-    // O mermaid deixa um nó de erro solto no <body> quando o desenho falha.
+    // Mermaid leaves a stray error node in the <body> when the drawing fails.
     document.getElementById(`d${id}`)?.remove()
     return { error: error instanceof Error ? error.message : String(error) }
   }
@@ -164,7 +164,7 @@ async function renderMermaid(id: string, source: string): Promise<Rendered> {
 const SVG_BOX =
   "[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full [&_svg]:overflow-visible"
 
-/** Na tela cheia o desenho cabe na janela: a altura limita e a largura acompanha. */
+/** In fullscreen the drawing fits the window: the height limits and the width follows. */
 const FIT_BOX = "[&_svg]:max-h-[calc(85vh-5rem)] [&_svg]:w-auto"
 
 export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete }: CustomRendererProps) {
@@ -179,8 +179,8 @@ export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete 
 
   useEffect(() => {
     let cancelled = false
-    // Enquanto o fence ainda chega, espera um respiro: cada token novo mudaria
-    // o código e dispararia um desenho (e a maioria dos prefixos nem é válida).
+    // While the fence is still arriving, wait a beat: every new token would change
+    // the code and trigger a drawing (and most prefixes are not even valid).
     const timer = setTimeout(
       async () => {
         const result = await renderMermaid(`orbit-mmd-${uid}-${Date.now().toString(36)}`, code)
@@ -213,8 +213,8 @@ export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete 
     })
   }
 
-  // Fence ainda aberto e sem desenho válido: mantém o último bom (se houver) em
-  // vez de piscar erro a cada prefixo inválido.
+  // Fence still open and with no valid drawing: keep the last good one (if any) in
+  // stead of blinking an error on every invalid prefix.
   if (!svg) {
     if (error && !isIncomplete) {
       return (
@@ -264,11 +264,11 @@ export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete 
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         {/*
-          O scroll mora no filho, não no DialogContent: o botão de fechar é
-          irmão do conteúdo e posicionado em relação ao diálogo, então só fica
-          parado se quem rola for OUTRA caixa. E o diagrama é encolhido para
-          caber inteiro na altura da janela (FIT_BOX), então na maioria das
-          vezes nem há o que rolar.
+          The scroll lives in the child, not in DialogContent: the close button is
+          a sibling of the content and positioned relative to the dialog, so it only stays
+          put if whoever scrolls is ANOTHER box. And the diagram is shrunk to
+          fit entirely in the window height (FIT_BOX), so most of the
+          time there is not even anything to scroll.
         */}
         <DialogContent className="flex max-h-[85vh] w-[min(88vw,64rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
           <DialogTitle className="sr-only">{t("mermaid.expand")}</DialogTitle>

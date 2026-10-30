@@ -1,9 +1,9 @@
 /**
- * Cliente WebSocket para comunicação com o Orbit Desktop.
+ * WebSocket client for communication with Orbit Desktop.
  *
- * Encapsula: autenticação via PIN, request/response com correlação de ID,
- * subscrição a eventos, heartbeat, reconexão com backoff exponencial
- * e queue de requests durante desconexão.
+ * Encapsulates: authentication via PIN, request/response with ID correlation,
+ * event subscription, heartbeat, reconnection with exponential backoff
+ * and queue of requests during disconnection.
  */
 
 import {
@@ -25,13 +25,13 @@ type StateChangeHandler = (state: ConnectionState) => void
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const HEARTBEAT_INTERVAL = 15_000
-/** Sem nenhuma mensagem do desktop por este tempo depois de um ping, o socket
- *  é dado como morto. No celular isso é comum: o iOS suspende o app em segundo
- *  plano, a rede troca de Wi-Fi, e o socket volta com readyState OPEN mas sem
- *  ninguém do outro lado — a UI dizia "conectado" e tudo que se mandava sumia. */
+/** With no message from the desktop at all for this time after a ping, the socket
+ *  is taken as dead. On the phone this is common: iOS suspends the app in the
+ *  background, the network switches Wi-Fi, and the socket comes back with readyState OPEN but without
+ *  anyone on the other side — the UI said "connected" and everything sent vanished. */
 const PONG_TIMEOUT = 8_000
-/** Ao voltar do segundo plano a checagem precisa ser rápida: a pessoa já está
- *  com o dedo no botão de enviar. */
+/** Coming back from the background the check has to be quick: the person is already
+ *  with a finger on the send button. */
 const ALIVE_CHECK_TIMEOUT = 4_000
 const RECONNECT_BASE_DELAY = 1_000
 const RECONNECT_MAX_DELAY = 30_000
@@ -39,9 +39,9 @@ const RECONNECT_MAX_ATTEMPTS = 5
 const REQUEST_TIMEOUT = 15_000
 
 /**
- * Normaliza o `reason` do auth:error. O desktop pode ser mais novo que o app e
- * mandar um motivo que este cliente ainda não conhece — nesse caso vira
- * 'unknown' (com o valor cru preservado em `error` para diagnóstico).
+ * Normalizes the `reason` of auth:error. The desktop may be newer than the app and
+ * send a reason this client does not know yet — in that case it becomes
+ * 'unknown' (with the raw value preserved in `error` for diagnostics).
  */
 function authErrorReason(reason: unknown): ConnectionErrorReason {
   return reason === 'invalid_pin' || reason === 'already_paired' || reason === 'rate_limited'
@@ -72,15 +72,15 @@ export class CompanionWebSocket {
   private reconnectAttempt = 0
   private shouldReconnect = false
   private lastPing = 0
-  /** Última vez que QUALQUER mensagem chegou do desktop (pong, resposta, evento). */
+  /** Last time ANY message arrived from the desktop (pong, response, event). */
   private lastInbound = 0
   private pongTimer: ReturnType<typeof setTimeout> | null = null
-  /** disconnect() explícito: o checkAlive não pode ressuscitar a conexão. */
+  /** Explicit disconnect(): checkAlive cannot resurrect the connection. */
   private closedByUser = false
 
   // ─── Public API ──────────────────────────────────────────────────────────
 
-  /** Conecta ao desktop. */
+  /** Connects to the desktop. */
   connect(config: ConnectionConfig): void {
     this.config = config
     this.shouldReconnect = true
@@ -88,10 +88,10 @@ export class CompanionWebSocket {
     this.reconnectAttempt = 0
     this.setState({ reconnectAttempt: 0 })
 
-    // Se já existe um socket (reconexão sem disconnect() explícito — ex.: a
-    // tela de conexão chamando connect() de novo), fecha o anterior ANTES de
-    // abrir outro. Sem isso cada connect() vazava uma conexão no servidor,
-    // que acumulava o mesmo device N vezes na lista de conectados.
+    // If a socket already exists (reconnection without an explicit disconnect() — e.g. the
+    // connection screen calling connect() again), close the previous one BEFORE
+    // opening another. Without this every connect() leaked a connection on the server,
+    // which accumulated the same device N times in the connected list.
     if (this.ws) {
       const old = this.ws
       this.ws = null
@@ -109,7 +109,7 @@ export class CompanionWebSocket {
     this.open()
   }
 
-  /** Fecha a conexão (sem reconexão). */
+  /** Closes the connection (without reconnection). */
   disconnect(): void {
     this.shouldReconnect = false
     this.closedByUser = true
@@ -117,17 +117,17 @@ export class CompanionWebSocket {
     this.setState({ status: 'disconnected' })
   }
 
-  /** Envia um request e espera a resposta correlacionada. */
+  /** Sends a request and waits for the correlated response. */
   send(request: CompanionRequest): Promise<ApiResponse> {
     return new Promise((resolve, reject) => {
       const id = newMessageId()
       const msg: WsMessage = { id, payload: request }
 
       if (this.state.status !== 'connected') {
-        // Queue para enviar ao reconectar — com prazo. Sem ele a promise
-        // ficava pendurada até a próxima conexão, e um "criar chat" + "enviar"
-        // de minutos atrás disparava de repente, criando conversa e mandando
-        // mensagem quando a pessoa já estava em outro chat.
+        // Queue to send upon reconnecting — with a deadline. Without it the promise
+        // stayed hanging until the next connection, and a "create chat" + "send"
+        // from minutes before fired suddenly, creating a conversation and sending
+        // a message when the person was already in another chat.
         const entry = {
           msg,
           resolve,
@@ -145,7 +145,7 @@ export class CompanionWebSocket {
     })
   }
 
-  /** Subscreve a um tipo de evento do servidor. */
+  /** Subscribes to an event type from the server. */
   subscribe(eventType: string, handler: EventHandler): () => void {
     if (!this.eventHandlers.has(eventType)) {
       this.eventHandlers.set(eventType, new Set())
@@ -157,7 +157,7 @@ export class CompanionWebSocket {
     }
   }
 
-  /** Escuta mudanças de estado da conexão. */
+  /** Listens for connection state changes. */
   onStateChange(handler: StateChangeHandler): () => void {
     this.stateHandlers.add(handler)
     return () => {
@@ -166,10 +166,10 @@ export class CompanionWebSocket {
   }
 
   /**
-   * Confere se o socket ainda tem alguém do outro lado — chamar quando o app
-   * volta ao primeiro plano. Conectado: manda um ping e, sem resposta em
-   * poucos segundos, derruba e reconecta. Desistiu de reconectar (esgotou as
-   * tentativas enquanto o app estava parado): recomeça do zero.
+   * Checks whether the socket still has someone on the other side — call it when the app
+   * comes back to the foreground. Connected: sends a ping and, without an answer in
+   * a few seconds, drops it and reconnects. Gave up reconnecting (exhausted the
+   * attempts while the app was idle): starts over from scratch.
    */
   checkAlive(): void {
     if (!this.config || this.closedByUser) return
@@ -185,12 +185,12 @@ export class CompanionWebSocket {
     }
   }
 
-  /** Estado atual da conexão. */
+  /** Current state of the connection. */
   getState(): Readonly<ConnectionState> {
     return this.state
   }
 
-  // ─── Internals ──────────────────────────────────────────────────────────
+  // Stores the token in the current config — reconnections (backoff) already use the token
 
   private open(): void {
     if (!this.config) return
@@ -226,7 +226,7 @@ export class CompanionWebSocket {
     }
 
     this.ws.onerror = () => {
-      // onclose will fire after onerror
+      // Unknown reason: keep the raw value for diagnostics (it is not
     }
   }
 
@@ -244,7 +244,7 @@ export class CompanionWebSocket {
     const id = newMessageId()
     const msg: WsMessage = { id, payload: authRequest }
 
-    // Auth não usa sendWithCorrelation — tratamos direto
+    // displayable — the UI translates through errorReason).
     this.ws?.send(JSON.stringify(msg))
   }
 
@@ -259,10 +259,10 @@ export class CompanionWebSocket {
     this.lastInbound = Date.now()
     const { payload } = msg
 
-    // Auth responses
+    // Heartbeat pong — updates latency
     if (payload.type === 'auth:ok') {
       const ok = payload as AuthOkResponse
-      // Guarda o token na config atual — reconexões (backoff) já usam token
+      // Stores the token in the current config — reconnections (backoff) already use the token
       if (ok.deviceToken && this.config) {
         this.config = { ...this.config, token: ok.deviceToken }
       }
@@ -282,8 +282,8 @@ export class CompanionWebSocket {
       this.setState({
         status: 'disconnected',
         errorReason: reason,
-        // Motivo desconhecido: guarda o valor cru para diagnóstico (não é
-        // exibível — a UI traduz pelo errorReason).
+        // Unknown reason: keep the raw value for diagnostics (it is not
+        // displayable — the UI translates through errorReason).
         error: reason === 'unknown' ? String(payload.reason) : undefined,
       })
       this.shouldReconnect = false
@@ -291,7 +291,7 @@ export class CompanionWebSocket {
       return
     }
 
-    // Heartbeat pong — atualiza latência
+    // Heartbeat pong — updates latency
     if ((payload as { type: string }).type === 'pong') {
       const now = Date.now()
       this.setState({ lastActivity: now, latency: now - this.lastPing })
@@ -355,8 +355,8 @@ export class CompanionWebSocket {
     this.heartbeatTimer = setInterval(() => this.ping(PONG_TIMEOUT), HEARTBEAT_INTERVAL)
   }
 
-  /** Manda um ping e espera QUALQUER mensagem do desktop dentro do prazo
-   *  (pong, resposta ou evento — tudo prova que o socket está vivo). */
+  /** Sends a ping and waits for ANY message from the desktop within the deadline
+   *  (pong, response or event — everything proves the socket is alive). */
   private ping(timeout: number): void {
     if (this.pongTimer) return
     const ws = this.ws
@@ -378,8 +378,8 @@ export class CompanionWebSocket {
     }, timeout)
   }
 
-  /** Socket sem resposta: fecha (rejeitando o que estava pendente, em vez de
-   *  deixar cada request morrer sozinho no timeout) e reconecta. */
+  /** Socket without an answer: closes it (rejecting what was pending, instead of
+   *  letting each request die on its own timeout) and reconnects. */
   private dropDeadSocket(): void {
     if (!this.shouldReconnect) return
     this.cleanup()
@@ -404,8 +404,8 @@ export class CompanionWebSocket {
 
     if (this.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
       this.shouldReconnect = false
-      // Só o código: o texto (traduzido, com o número de tentativas
-      // interpolado) é montado pelo app.
+      // Only the code: the text (translated, with the attempt count
+      // interpolated) is built by the app.
       this.setState({
         status: 'disconnected',
         errorReason: 'connect_failed',

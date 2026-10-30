@@ -4,10 +4,10 @@ import { motionRefOf } from "./motion-part-ref"
 import { slidesRefOf } from "./slides-part-ref"
 
 /**
- * As tools de peça (motion, design, slides) que deixam CARD na conversa — o
- * mesmo conjunto no chat e no código, porque as tools são as mesmas nos dois
- * modos. Fechar a aba do painel não pode tirar a peça de vista: o card é a
- * porta de volta. Ler, copiar asset, olhar quadros e excluir não deixam card.
+ * The piece tools (motion, design, slides) that leave a CARD in the conversation — the
+ * same set in chat and in code, because the tools are the same in both
+ * modes. Closing the panel tab cannot take the piece out of sight: the card is the
+ * way back. Reading, copying an asset, looking at frames and deleting leave no card.
  */
 export const MOTION_CARD_TOOLS = new Set(["motion_write", "motion_edit", "motion_preview"])
 export const DESIGN_CARD_TOOLS = new Set(["design_write", "design_edit", "design_preview"])
@@ -18,11 +18,11 @@ export function isPieceCardTool(tool: string): boolean {
 }
 
 /**
- * Identidade da peça por trás de um card, para a mensagem mostrar UM card por
- * peça: o design é escrito uma tela por chamada, e seis `design_write` na mesma
- * resposta davam seis cards do mesmo canvas, enchendo a conversa com o mesmo
- * botão. O que as chamadas têm em comum é a PEÇA — o id (dsg_…) quando o
- * histórico o traz, senão o caminho ou o nome que a tool endereçou.
+ * Identity of the piece behind a card, so the message shows ONE card per
+ * piece: the design is written one screen per call, and six `design_write` in the same
+ * answer gave six cards of the same canvas, filling the conversation with the same
+ * button. What the calls have in common is the PIECE — the id (dsg_…) when the
+ * history brings it, otherwise the path or the name the tool addressed.
  */
 export function pieceCardKeyOf(part: MessagePart): string | null {
   if (part.type !== "tool" || !isPieceCardTool(part.tool)) return null
@@ -43,14 +43,14 @@ export function pieceCardKeyOf(part: MessagePart): string | null {
 }
 
 /**
- * Guarda o card de uma peça na mensagem — UM por peça. `design_write` roda uma
- * tela por chamada, e cada uma empilhava outro card do mesmo canvas: a conversa
- * ficava com quatro botões para o mesmo lugar. O card do PRIMEIRO lugar fica, e
- * passa a mostrar a chamada NOVA, que é a que sabe o estado final da peça
- * ("4 telas" em vez de "1 tela"); as seguintes não acrescentam nada.
+ * Keeps a piece's card in the message — ONE per piece. `design_write` runs one
+ * screen per call, and each one stacked another card of the same canvas: the conversation
+ * ended up with four buttons to the same place. The card of the FIRST place stays, and
+ * starts showing the NEW call, which is the one that knows the piece's final state
+ * ("4 screens" instead of "1 screen"); the following ones add nothing.
  *
- * Devolve o segmento quando ele é novo — quem chama decide onde ele entra —, e
- * `null` quando a peça já tinha card ali.
+ * Returns the segment when it is new — whoever calls decides where it goes —, and
+ * `null` when the piece already had a card there.
  */
 export function landPieceCard<S extends { part: MessagePart }>(
   cards: Map<string, S>,

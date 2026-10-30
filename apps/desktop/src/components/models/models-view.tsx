@@ -16,9 +16,9 @@ import { ModelsTable } from "./models-table"
 import { Hint } from "@/components/ui/hint"
 
 /**
- * Aba Models: exploração do catálogo unificado (OpenRouter + Artificial
- * Analysis + models.dev) com busca, filtros, rankings Best For, comparação
- * e painel de detalhe.
+ * Models tab: exploration of the unified catalog (OpenRouter + Artificial
+ * Analysis + models.dev) with search, filters, Best For rankings, comparison
+ * and detail panel.
  */
 
 export function ModelsView() {
@@ -79,7 +79,7 @@ export function ModelsView() {
 
       <ModelFiltersRow models={models} />
 
-      {/* Orbit Intelligence — some quando o usuário está buscando/filtrando */}
+      {/* Orbit Intelligence — it disappears when the user is searching/filtering */}
       {!exploring && (
         <div>
           <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

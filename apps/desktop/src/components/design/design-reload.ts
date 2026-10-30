@@ -1,30 +1,30 @@
 /**
- * O que recarregar quando o watcher avisa que a pasta do canvas mudou.
+ * What to reload when the watcher warns that the canvas folder changed.
  *
- * O main manda a LISTA de arquivos que mudaram (ver design-store.ts) — é o que
- * permite recarregar só o artboard que o agente gravou, em vez de remontar
- * todos os iframes a cada gravação. Este módulo é a tradução dessa lista para
- * as duas abas que a recebem (o editor e a apresentação), puro e testável.
+ * The main process sends the LIST of files that changed (see design-store.ts) — it is what
+ * allows reloading only the artboard the agent wrote, instead of remounting
+ * all the iframes on every write. This module is the translation of that list to
+ * the two tabs that receive it (the editor and the presentation), pure and testable.
  */
 
 const isBoardFile = (file: string) => /\.html?$/i.test(file)
 const isIndexFile = (file: string) => file.toLowerCase().endsWith('canvas.json')
 
 export interface DesignReloadPlan {
-  /** O `canvas.json` pode ter mudado: re-ler o índice (telas novas, removidas,
-   *  movidas). */
+  /** `canvas.json` may have changed: re-read the index (new screens, removed ones,
+   *  moved ones). */
   index: boolean
-  /** Artboards que mudaram de fato, com o nome que está no canvas.json. */
+  /** Artboards that actually changed, with the name that is in canvas.json. */
   boards: string[]
-  /** Mudança fora dos artboards (CSS, imagem, fonte da pasta): qualquer tela
-   *  pode ter mudado de aparência, então todas recarregam. */
+  /** Change outside the artboards (CSS, image, folder font): any screen
+   *  may have changed appearance, so all of them reload. */
   all: boolean
 }
 
 /**
- * Sem lista — plataforma em que o `fs.watch` não informa o nome, ou um evento
- * que ele não soube descrever — não dá para ser cirúrgico: recarrega tudo, como
- * era antes do watcher mandar os nomes.
+ * With no list — a platform where `fs.watch` does not report the name, or an event
+ * it could not describe — there is no way to be surgical: it reloads everything, as
+ * it was before the watcher sent the names.
  */
 export function planDesignReload(files: string[] | undefined): DesignReloadPlan {
   const list = files ?? []

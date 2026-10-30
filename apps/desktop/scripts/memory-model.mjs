@@ -1,12 +1,12 @@
 /**
- * Baixa o modelo de embeddings da memória para a pasta do app.
+ * Downloads the memory embedding model to the app folder.
  *
- *   npm run memory:model            # baixa o Bekko a8m (130 MB)
- *   npm run memory:model -- --dev   # baixa no cache de desenvolvimento (sem app)
+ *   npm run memory:model            # downloads Bekko a8m (130 MB)
+ *   npm run memory:model -- --dev   # downloads to the development cache (without app)
  *
- * O app procura primeiro em `<userData>/memory/models/<id>` e, quando não acha,
- * no cache de desenvolvimento `<repo>/apps/desktop/.cache/memory-embed/<id>`.
- * Sem o modelo, a recuperação de memória funciona só no modo lexical.
+ * The app looks first in `<userData>/memory/models/<id>` and, when it does not find it,
+ * in the development cache `<repo>/apps/desktop/.cache/memory-embed/<id>`.
+ * Without the model, the memory retrieval works only in lexical mode.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -32,7 +32,7 @@ const dir = dev ? path.join(here, '..', '.cache', 'memory-embed', ID) : path.joi
 async function download(file) {
   const target = path.join(dir, file)
   if (fs.existsSync(target)) {
-    console.log(`= ${file} (já existe)`)
+    console.log(`= ${file} (already there)`)
     return
   }
   fs.mkdirSync(path.dirname(target), { recursive: true })
@@ -61,6 +61,6 @@ async function download(file) {
   process.stdout.write('\r  ok                        \n')
 }
 
-console.log(`modelo ${ID} → ${dir}`)
+console.log(`model ${ID} → ${dir}`)
 for (const file of FILES) await download(file)
-console.log('pronto.')
+console.log('done.')

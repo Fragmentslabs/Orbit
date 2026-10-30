@@ -1,17 +1,17 @@
 import type { ArtifactPart, ChatMessage, ToolPart } from '@shared/chat'
 
 /**
- * toModelMessages/textOf (compaction) só reenviam TextParts — ToolParts
- * (incluindo cada chamada de todowrite) nunca voltam ao modelo em turnos
- * futuros. Isso apaga o estado da TODO entre turnos: ao dizer "continue", o
- * modelo não vê mais sua própria lista e frequentemente recria uma do zero.
- * Este módulo extrai esse estado como texto pra sobreviver ao corte.
+ * toModelMessages/textOf (compaction) only resend TextParts — ToolParts
+ * (including every todowrite call) never come back to the model in future
+ * turns. That erases the TODO state between turns: on saying "continue", the
+ * model no longer sees its own list and often recreates one from scratch.
+ * This module extracts that state as text so it survives the cut.
  *
- * Os artefatos HTML sofrem do mesmo corte pelo mesmo motivo: o `artifactId`
- * volta no RESULTADO da tool, que só existe dentro do turno que a chamou.
- * Sem a anotação, "muda a cor do gráfico" no turno seguinte chega a um modelo
- * que não sabe mais o id do que ele mesmo desenhou — e ele cria um segundo
- * artefato em vez de atualizar o primeiro.
+ * HTML artifacts suffer from the same cut for the same reason: the `artifactId`
+ * comes back in the tool's RESULT, which only exists inside the turn that called it.
+ * Without the note, "change the chart's color" in the next turn reaches a model
+ * that no longer knows the id of what it itself drew — and it creates a second
+ * artifact instead of updating the first.
  */
 
 interface TodoItem {
@@ -33,10 +33,10 @@ function formatTodoState(items: TodoItem[]): string {
 }
 
 /**
- * Artefatos que a resposta materializou. Uma part por chamada de
- * create_artifact/update_artifact — o mesmo id pode aparecer duas vezes se o
- * agente criou e já corrigiu no mesmo turno, então a lista é deduplicada pelo
- * id, ficando com a ÚLTIMA revisão vista.
+ * Artifacts that the answer materialized. One part per
+ * create_artifact/update_artifact call — the same id may show up twice if the
+ * agent created and already fixed it in the same turn, so the list is deduplicated by
+ * id, keeping the LAST revision seen.
  */
 function artifactRefs(message: ChatMessage): ArtifactPart[] {
   const byId = new Map<string, ArtifactPart>()
@@ -47,9 +47,9 @@ function artifactRefs(message: ChatMessage): ArtifactPart[] {
 }
 
 /**
- * Uma ÚNICA linha, prefixada com [SYSTEM: e sem nenhum "]" interno: é o que
- * faz o stripEngineMarkers conseguir removê-la caso o modelo passe a imitá-la
- * no texto visível (ENGINE_MARKER_LINE casa linha inteira, sem "]" no meio).
+ * A SINGLE line, prefixed with [SYSTEM: and with no internal "]": it is what
+ * makes stripEngineMarkers able to remove it if the model starts imitating it
+ * in the visible text (ENGINE_MARKER_LINE matches the whole line, without "]" in the middle).
  */
 function formatArtifacts(refs: ArtifactPart[]): string | null {
   if (refs.length === 0) return null
@@ -59,20 +59,20 @@ function formatArtifacts(refs: ArtifactPart[]): string | null {
   return `[SYSTEM: HTML artifacts rendered in this response — ${list}. If the user asks for a CHANGE to one of them, call update_artifact with that exact id and the full new HTML; do NOT call create_artifact again, which would leave a duplicate in the conversation and in the gallery.]`
 }
 
-/** Quantos arquivos citar no registro antes de resumir (contexto é caro). */
+/** How many files to cite in the record before summarizing (context is expensive). */
 const LEDGER_FILE_LIMIT = 12
 
 /**
- * Registro verificado do turno: o que o engine MEDIU comparando os snapshots
- * do filesystem, não o que o agente disse ter feito.
+ * Verified record of the turn: what the engine MEASURED comparing the filesystem
+ * snapshots, not what the agent said it did.
  *
- * É a peça que fecha o buraco descrito no topo deste arquivo: como ToolParts
- * não voltam ao modelo, o histórico de um chat longo guarda só a narrativa do
- * agente sobre o próprio trabalho. Uma frase como "implementei X" fica
- * indistinguível de ter implementado de fato, e nos turnos seguintes o modelo
- * a trata como fato consumado ("como já implementei X, falta só Y").
- * Colando o veredito medido ao lado da narrativa, a alegação falsa passa a
- * chegar sempre acompanhada do desmentido.
+ * It is the piece that closes the hole described at the top of this file: since ToolParts
+ * do not come back to the model, a long chat's history keeps only the agent's
+ * narrative about its own work. A sentence like "I implemented X" becomes
+ * indistinguishable from having actually implemented it, and in the following turns the model
+ * treats it as established fact ("since I already implemented X, only Y is left").
+ * Pasting the measured verdict next to the narrative, the false claim starts to
+ * arrive always accompanied by the rebuttal.
  */
 function formatChangeLedger(message: ChatMessage): string | null {
   const verified = message.snapshot?.verified
@@ -91,25 +91,25 @@ function formatChangeLedger(message: ChatMessage): string | null {
 }
 
 /**
- * Marcadores internos que o engine anexa ao contexto e que NUNCA podem
- * aparecer na resposta visível: registro verificado e avisos [SYSTEM: ...].
- * Só casam quando ocupam a linha inteira — menção em prosa ("a linha
- * [Verified record: ...] serve para...") continua intacta.
+ * Internal markers that the engine attaches to the context and that can NEVER
+ * show up in the visible answer: verified record and [SYSTEM: ...] warnings.
+ * They only match when they occupy the whole line — a mention in prose ("the line
+ * [Verified record: ...] serves to...") stays intact.
  */
 const ENGINE_MARKER_LINE = /^\s*\[(?:Verified record|SYSTEM):[^\]]*\]\s*$/
 const CODE_FENCE = /^\s*(?:```|~~~)/
 
 /**
- * Rede de segurança contra o vazamento dos marcadores na resposta visível.
+ * Safety net against the markers leaking into the visible answer.
  *
- * O modelo recebe essas linhas no contexto e, num histórico longo, passa a
- * tratá-las como parte do próprio formato de resposta — reproduzindo
- * "[Verified record: ...]" no fim do texto que o usuário lê. O prompt já
- * proíbe copiá-las (VERIFIED_RECORD_INSTRUCTION) e engineAnnotations já não
- * as cola dentro do turno do assistente; isto é a garantia final.
+ * The model receives these lines in the context and, in a long history, starts
+ * treating them as part of its own answer format — reproducing
+ * "[Verified record: ...]" at the end of the text the user reads. The prompt already
+ * forbids copying them (VERIFIED_RECORD_INSTRUCTION) and engineAnnotations no longer
+ * pastes them inside the assistant's turn; this is the final guarantee.
  *
- * Linhas dentro de bloco de código são preservadas: este repositório
- * discute os próprios marcadores no código e nos docs.
+ * Lines inside a code block are preserved: this repository
+ * discusses the markers themselves in the code and in the docs.
  */
 export function stripEngineMarkers(text: string): string {
   if (!text.includes('[Verified record:') && !text.includes('[SYSTEM:')) return text
@@ -125,11 +125,11 @@ export function stripEngineMarkers(text: string): string {
 }
 
 /**
- * Anotações do engine sobre um turno: estado da TODO, registro verificado de
- * arquivos e avisos de truncamento/lembrete. É bookkeeping SOBRE a mensagem,
- * não conteúdo dela — quem envia ao modelo decide onde encaixar (ver
- * toModelMessages: vai na mensagem de usuário seguinte, nunca dentro do
- * texto do assistente).
+ * The engine's notes about a turn: TODO state, verified record of
+ * files and truncation/reminder warnings. It is bookkeeping ABOUT the message,
+ * not its content — whoever sends it to the model decides where to fit it (see
+ * toModelMessages: it goes in the following user message, never inside the
+ * assistant's text).
  */
 export function engineAnnotations(message: ChatMessage): string {
   const parts: string[] = []
@@ -143,9 +143,9 @@ export function engineAnnotations(message: ChatMessage): string {
   const artifacts = formatArtifacts(artifactRefs(message))
   if (artifacts) parts.push(artifacts)
 
-  // Item marcado "completed" é asserção do modelo, não medição. Num turno em
-  // que nada foi escrito, a checklist vira a "prova" mais convincente do
-  // histórico — a anotação impede que ela seja lida como tal.
+  // An item marked "completed" is the model's assertion, not a measurement. In a turn in
+  // which nothing was written, the checklist becomes the most convincing "proof" in
+  // the history — the note keeps it from being read as such.
   if (message.snapshot?.verified === 'unchanged' && items?.some((i) => i.status === 'completed')) {
     parts.push(
       '[SYSTEM: the TODO items above were marked "completed" by you, but no file changed in this turn. Marking an item done is a claim, not evidence — if the work still has to be written to disk, treat those items as pending.]',
@@ -158,9 +158,9 @@ export function engineAnnotations(message: ChatMessage): string {
     )
   }
 
-  // Lembrete persistente de TODO não fechada (item em in_progress ao final
-  // do turno): reemitido a cada turno seguinte até o modelo resolver o
-  // estado — cobra o fechamento mesmo quando o usuário manda "continue".
+  // Persistent reminder of an unclosed TODO (item in in_progress at the end
+  // of the turn): re-emitted on every following turn until the model settles the
+  // state — it demands the closing even when the user says "continue".
   if (message.todoReminder) {
     parts.push(
       '[SYSTEM: the previous reply ended with TODO items still marked as "in_progress" — the checklist was never finalized. If those tasks are actually done, send the todo list again marking them as "completed" (the card in the UI still shows a spinner). If they are genuinely still in progress, say so explicitly before continuing.]',
@@ -170,8 +170,8 @@ export function engineAnnotations(message: ChatMessage): string {
   return parts.filter((p) => p.trim()).join('\n\n')
 }
 
-/** Texto de uma mensagem pra resumir na compactação: narração + as anotações
- * do engine sobre o turno (TODO, registro verificado, avisos). */
+/** Text of a message to summarize in compaction: narration + the engine's notes
+ * about the turn (TODO, verified record, warnings). */
 export function messageContextText(message: ChatMessage, text: string): string {
   return [text, engineAnnotations(message)].filter((p) => p.trim()).join('\n\n')
 }

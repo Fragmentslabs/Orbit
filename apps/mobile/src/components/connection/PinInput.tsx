@@ -62,7 +62,7 @@ export function PinInput({ onComplete, disabled, error }: PinInputProps) {
             maxLength={PIN_LENGTH}
             value={digit}
             onChangeText={(text) => {
-              // Mais de um caractere = colagem do PIN inteiro num campo só.
+              // More than one character = paste of the whole PIN into a single field.
               if (text.length > 1) handlePaste(text)
               else handleChange(text, i)
             }}

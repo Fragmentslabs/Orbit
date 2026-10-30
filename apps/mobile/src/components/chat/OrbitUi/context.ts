@@ -3,19 +3,19 @@ import { INPUT_TYPES, interpolate, type OrbitUiBlock, type Scope, type Value } f
 import { useSessionStore } from '~/stores/session-store'
 
 /**
- * Estado compartilhado por todos os blocos de UM fence `orbit-ui`.
+ * State shared by all the blocks of ONE `orbit-ui` fence.
  *
- * O valor de cada entrada (slider, select…) vive aqui, não no componente: é o
- * que permite um texto da mensagem citar `{capital}` e um gráfico recalcular a
- * curva enquanto o dedo arrasta. O estado é só de tela — reabrir a conversa
- * devolve os valores iniciais, igual ao desktop.
+ * The value of each input (slider, select…) lives here, not in the component: it is
+ * what allows a text of the message to cite `{capital}` and a chart to recompute the
+ * curve while the finger drags. The state is screen-only — reopening the conversation
+ * gives back the initial values, same as the desktop.
  */
 export type UiState = {
   scope: Scope
-  /** Locale da formatação monetária/números (o idioma do app). */
+  /** Locale for the currency/number formatting (the app language). */
   locale: string
   setValue: (id: string, value: Value) => void
-  /** Manda o texto como mensagem do usuário; false quando não havia sessão. */
+  /** Sends the text as a user message; false when there was no session. */
   send: (text: string) => boolean
 }
 
@@ -28,7 +28,7 @@ export const UiContext = createContext<UiState>({
 
 export const useUi = () => useContext(UiContext)
 
-/** Texto do bloco com os `{expr}` resolvidos contra o estado atual. */
+/** Text of the block with the `{expr}` resolved against the current state. */
 export function useText() {
   const { scope, locale } = useUi()
   return (text: string | undefined) => (text ? interpolate(text, scope, locale) : '')
@@ -36,7 +36,7 @@ export function useText() {
 
 export const isInputBlock = (block: OrbitUiBlock) => (INPUT_TYPES as readonly string[]).includes(block.type)
 
-/** Valores iniciais declarados pelos próprios blocos de entrada. */
+/** Initial values declared by the input blocks themselves. */
 export function defaultsOf(blocks: OrbitUiBlock[]): Scope {
   const out: Scope = {}
   for (const block of blocks) {
@@ -64,12 +64,12 @@ export function defaultsOf(blocks: OrbitUiBlock[]): Scope {
 }
 
 /**
- * Fala com a sessão aberta.
+ * Talks to the open session.
  *
- * O `sendMessage` do store já resolve o caminho difícil: sem conexão a
- * mensagem entra na fila offline, e se o desktop estiver no meio de um turno a
- * engine recusa com SESSION_BUSY — que o store converte em item na frente da
- * fila compartilhada. Ou seja: daqui sai só "manda este texto".
+ * The `sendMessage` of the store already handles the hard path: without a connection
+ * the message goes into the offline queue, and if the desktop is in the middle of a turn
+ * the engine refuses with SESSION_BUSY — which the store turns into an item at the front of the
+ * shared queue. In other words: from here only "send this text" comes out.
  */
 export function sendToActiveSession(text: string): boolean {
   const store = useSessionStore.getState()

@@ -3,23 +3,23 @@ import { messageQueueApi } from "@/src/lib/ipc"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 
 /**
- * Fila de mensagens compartilhada com os companions (mobile), no desenho dos
- * outros *-sync: o renderer é a fonte da verdade — é ele quem envia o próximo
- * item quando a sessão fica livre —, empurra a fila inteira para o main a cada
- * mudança e aplica as operações feitas no celular. Assim existe uma fila só por
- * chat: o que entra pelo celular aparece aqui, e vice-versa.
+ * Message queue shared with the companions (mobile), in the design of the
+ * other *-sync modules: the renderer is the source of truth — it is what sends the next
+ * item when the session becomes free —, pushes the whole queue to main on every
+ * change and applies the operations made on the phone. That way there is a single queue per
+ * chat: what comes in through the phone shows up here, and vice versa.
  */
 
 function applyRemote(op: MessageQueueOp) {
   const queue = useMessageQueueStore.getState()
   switch (op.op) {
     case "enqueue":
-      // O celular reentrega o outbox se a resposta se perder: o mesmo id não
-      // vira mensagem duplicada.
+      // The phone redelivers the outbox if the response is lost: the same id does not
+      // become a duplicated message.
       if (queue.queues[op.sessionId]?.some((m) => m.id === op.msg.id)) break
       if (op.front) queue.enqueueFront(op.sessionId, op.msg)
       else queue.enqueue(op.sessionId, op.msg)
-      // A sessão pode já estar livre: sem isto o item esperaria o agendador.
+      // The session may already be free: without this the item would wait for the scheduler.
       queue.processQueue(op.sessionId)
       break
     case "remove":
@@ -38,8 +38,8 @@ function applyRemote(op: MessageQueueOp) {
 }
 
 if (typeof window !== "undefined" && window.ipcRenderer) {
-  // Estado inicial: depois de um reload do renderer o cache do main precisa
-  // ser repopulado, senão o celular conecta e vê a fila vazia.
+  // Initial state: after a renderer reload the main cache has to
+  // be repopulated, otherwise the phone connects and sees an empty queue.
   messageQueueApi.sync(useMessageQueueStore.getState().queues)
   useMessageQueueStore.subscribe((state, prev) => {
     if (state.queues !== prev.queues) messageQueueApi.sync(state.queues)

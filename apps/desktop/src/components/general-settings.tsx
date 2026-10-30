@@ -9,7 +9,7 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { ThinkingMenu } from "@/src/components/thinking-menu"
 import { windowApi } from "@/src/lib/ipc"
 
-/** Raciocínio do modelo auxiliar: o mesmo botão dos outros modelos das Preferências. */
+/** Reasoning of the auxiliary model: the same button as the other models of Preferences. */
 function AuxThinkingMenu() {
   const auxModel = useAppSettings((s) => s.settings.auxModel)
   const auxReasoning = useAppSettings((s) => s.settings.auxReasoning)
@@ -18,9 +18,9 @@ function AuxThinkingMenu() {
 }
 
 /**
- * Nome com que o Orbit chama o usuário. O agente aprende na conversa; este
- * campo é a saída para corrigir ou apagar. Grava ao sair do campo (ou Enter),
- * não a cada tecla — não há motivo para empurrar 40 mudanças ao main.
+ * Name with which Orbit calls the user. The agent learns it in the conversation; this
+ * field is the way out to correct or erase it. It saves on leaving the field (or Enter),
+ * not on every key — there is no reason to push 40 changes to the main process.
  */
 function UserNameField() {
   const { t } = useTranslation()
@@ -28,7 +28,7 @@ function UserNameField() {
   const update = useAppSettings((s) => s.update)
   const [draft, setDraft] = useState(userName ?? "")
 
-  // O agente pode aprender o nome com esta tela aberta.
+  // The agent may learn the name with this screen open.
   useEffect(() => setDraft(userName ?? ""), [userName])
 
   return (
@@ -54,7 +54,7 @@ function UserNameField() {
 }
 
 const COUNT_OPTIONS = [0, 1, 2, 3, 5] as const
-/** Limite de compactações antes de oferecer um chat novo (0 = desligado). */
+/** Compaction limit before offering a new chat (0 = off). */
 const COMPACT_SUGGEST_OPTIONS = [0, 1, 2, 3, 4] as const
 
 export function GeneralSettings() {
@@ -77,8 +77,8 @@ export function GeneralSettings() {
           label={t("preferences.general.auxModel")}
           value={settings.auxModel}
           nullLabel={t("preferences.general.auxModelNone")}
-          // Outro modelo, outros níveis: o raciocínio volta a desligado em vez
-          // de herdar um nível que talvez nem exista nele.
+          // Another model, other levels: the reasoning goes back to off instead
+          // of inheriting a level that may not even exist in it.
           onChange={(auxModel) => update({ auxModel, auxReasoning: null })}
           action={<AuxThinkingMenu />}
         />
@@ -217,8 +217,8 @@ export function GeneralSettings() {
         />
       </SettingRow>
 
-      {/* No macOS não há bandeja — fechar já deixa o app vivo no Dock —, então
-          a preferência não teria o que governar lá. */}
+      {/* On macOS there is no tray — closing already leaves the app alive in the Dock —, so
+          the preference would have nothing to rule there. */}
       {!isMac && (
         <SettingRow
           icon={Minimize2}

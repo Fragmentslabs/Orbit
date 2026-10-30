@@ -1,12 +1,12 @@
 /**
- * AskBroker: registro único de perguntas pendentes do main para a UI.
- * Serve os dois recursos que aguardam resposta humana — pedidos de permissão
- * (toolApproval) e a tool question. O requester emite o ChatEvent do pedido,
- * aguarda aqui, e emite "ask:done" ao terminar (resposta OU rejeição).
+ * AskBroker: single registry of pending questions from the main to the UI.
+ * It serves both resources that wait for a human answer — permission requests
+ * (toolApproval) and the question tool. The requester emits the request's ChatEvent,
+ * waits here, and emits "ask:done" when it ends (answer OR rejection).
  */
 
 export class AskRejectedError extends Error {
-  constructor(reason = 'pedido cancelado') {
+  constructor(reason = 'request cancelled') {
     super(reason)
     this.name = 'AskRejectedError'
   }
@@ -25,13 +25,13 @@ export function newRequestId(): string {
 }
 
 /**
- * Registra um pedido e aguarda a resposta da UI (via reply). O signal da
- * sessão rejeita no abort — o requester traduz em negação/dispensa.
+ * Registers a request and waits for the UI's answer (via reply). The session's
+ * signal rejects on abort — the requester translates it into a denial/dismissal.
  */
 export function ask<T>(sessionId: string, requestId: string, signal?: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new AskRejectedError('sessão abortada'))
+      reject(new AskRejectedError('session aborted'))
       return
     }
     pending.set(requestId, { sessionId, resolve: resolve as (v: unknown) => void, reject })
@@ -41,7 +41,7 @@ export function ask<T>(sessionId: string, requestId: string, signal?: AbortSigna
         const entry = pending.get(requestId)
         if (entry) {
           pending.delete(requestId)
-          entry.reject(new AskRejectedError('sessão abortada'))
+          entry.reject(new AskRejectedError('session aborted'))
         }
       },
       { once: true },
@@ -49,7 +49,7 @@ export function ask<T>(sessionId: string, requestId: string, signal?: AbortSigna
   })
 }
 
-/** Resolvido pelo IPC chat:askReply. Retorna false se o pedido já não existe. */
+/** Resolved by the chat:askReply IPC. Returns false if the request no longer exists. */
 export function reply(requestId: string, value: unknown): boolean {
   const entry = pending.get(requestId)
   if (!entry) return false
@@ -58,8 +58,8 @@ export function reply(requestId: string, value: unknown): boolean {
   return true
 }
 
-/** Rejeita todos os pedidos pendentes de uma sessão (abort/erro/delete). */
-export function rejectSession(sessionId: string, reason = 'sessão encerrada'): void {
+/** Rejects every pending request of a session (abort/error/delete). */
+export function rejectSession(sessionId: string, reason = 'session closed'): void {
   for (const [requestId, entry] of pending) {
     if (entry.sessionId !== sessionId) continue
     pending.delete(requestId)

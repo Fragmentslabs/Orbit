@@ -13,38 +13,38 @@ import {
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
-/** Espelha os detalhes crus do main (electron/lib/github-repo.ts). */
-type GitCredDetalhe = {
-  modo: "exit" | "spawn" | "timeout"
-  codigo: number | null
-  saida: string
+/** Mirrors the raw details of the main process (electron/lib/github-repo.ts). */
+type GitCredDetail = {
+  mode: "exit" | "spawn" | "timeout"
+  code: number | null
+  output: string
 }
 
-type GhCredDetalhe = {
-  estado: "missing" | "other"
-  saida: string
+type GhCredDetail = {
+  status: "missing" | "other"
+  output: string
 }
 
-/** Espelha CreateRepoResult do main (electron/lib/github-repo.ts). */
+/** Mirrors CreateRepoResult from the main (electron/lib/github-repo.ts). */
 type CreateRepoResult =
   | { ok: true; url: string; fullName: string; pushed: boolean }
   | {
       ok: false
       kind: "noCredential"
       hint: "ghMissing" | "ghOther"
-      detalhe: { git: GitCredDetalhe; gh: GhCredDetalhe }
+      detail: { git: GitCredDetail; gh: GhCredDetail }
     }
   | { ok: false; kind: "auth" | "nameTaken" | "invalidName" | "noCommits" | "other"; message: string }
 
-/** Mesma regra do main — validar aqui evita uma ida à API para nada. */
+/** Same rule as the main process — validating here avoids a pointless trip to the API. */
 function isValidRepoName(name: string): boolean {
   return /^[A-Za-z0-9._-]{1,100}$/.test(name) && name !== "." && name !== ".."
 }
 
 /**
- * Comando de instalação do GitHub CLI por sistema — mesmo comando do guia
- * oficial (cli.github.com). Plataformas fora do mapa caem na linha de link,
- * que aponta o guia; `gh auth login` é comum a todas.
+ * GitHub CLI installation command per system — the same command as the official
+ * guide (cli.github.com). Platforms outside the map fall into the link line,
+ * which points to the guide; `gh auth login` is common to all of them.
  */
 const INSTALL_CMD: Partial<Record<NodeJS.Platform, string>> = {
   darwin: "brew install gh",
@@ -53,180 +53,180 @@ const INSTALL_CMD: Partial<Record<NodeJS.Platform, string>> = {
 }
 
 /**
- * Aberto quando o "enviar" falha por não haver remote: explica a situação e
- * oferece criar o repositório no GitHub ali mesmo.
+ * Opened when "send" fails for lack of a remote: it explains the situation and
+ * offers to create the repository on GitHub right there.
  *
- * O token não é pedido nem colado — vem do credential helper do git ou do
- * GitHub CLI. Se não houver credencial, o erro instrui a instalar/autenticar
- * o `gh` (a mensagem varia conforme ele existe na máquina, pelo hint do main),
- * com o comando certo para o sistema e um botão de copiar; o detalhe técnico
- * do helper do git fica na última linha.
+ * The token is neither requested nor pasted — it comes from the git credential helper or from the
+ * GitHub CLI. If there is no credential, the error instructs how to install/authenticate
+ * `gh` (the message varies according to whether it exists on the machine, through the main process hint),
+ * with the right command for the system and a copy button; the technical detail
+ * of the git helper stays in the last line.
  */
 export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated }: {
   repoPath: string
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Chamado após criar — o pai recarrega a lista de commits e o estado do git. */
+  /** Called after creating — the parent reloads the commit list and the git state. */
   onCreated: (result: Extract<CreateRepoResult, { ok: true }>) => void
 }) {
   const { t } = useTranslation()
-  const [nome, setNome] = useState("")
-  const [privado, setPrivado] = useState(true)
-  const [criando, setCriando] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
-  /** Sem credencial: guarda o hint do main e os detalhes crus (traduzidos na renderização). */
+  const [name, setName] = useState("")
+  const [isPrivate, setIsPrivate] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  /** No credential: keeps the main process hint and the raw details (translated at render time). */
   const [noCred, setNoCred] = useState<{
     hint: "ghMissing" | "ghOther"
-    detalhe: { git: GitCredDetalhe; gh: GhCredDetalhe }
+    detail: { git: GitCredDetail; gh: GhCredDetail }
   } | null>(null)
-  const [copiado, setCopiado] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    // Sugere o nome da pasta, que é o que o usuário quase sempre quer.
+    // Suggests the folder name, which is what the user almost always wants.
     const base = repoPath.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? ""
-    setNome(base.replace(/[^A-Za-z0-9._-]/g, "-"))
-    setPrivado(true)
-    setErro(null)
+    setName(base.replace(/[^A-Za-z0-9._-]/g, "-"))
+    setIsPrivate(true)
+    setError(null)
     setNoCred(null)
-    setCopiado(false)
-    setCriando(false)
+    setCopied(false)
+    setCreating(false)
   }, [open, repoPath])
 
-  const nomeValido = isValidRepoName(nome.trim())
+  const validName = isValidRepoName(name.trim())
 
-  const criar = async () => {
-    if (!nomeValido || criando) return
-    setCriando(true)
-    setErro(null)
+  const create = async () => {
+    if (!validName || creating) return
+    setCreating(true)
+    setError(null)
     setNoCred(null)
     const result = (await window.ipcRenderer.invoke(
       "git:createRemoteRepo",
       repoPath,
-      nome.trim(),
-      privado,
+      name.trim(),
+      isPrivate,
     )) as CreateRepoResult
-    setCriando(false)
+    setCreating(false)
     if (result.ok) {
       onCreated(result)
       onOpenChange(false)
       return
     }
-    // Sem credencial não há token a digitar: a instrução é instalar/autenticar
-    // o GitHub CLI (a mensagem varia se o gh existe na máquina, pelo hint do
-    // main), com o comando certo para o sistema e o detalhe técnico à parte.
+    // With no credential there is no token to type: the instruction is to install/authenticate
+    // the GitHub CLI (the message varies if gh exists on the machine, through the main
+    // process hint), with the right command for the system and the technical detail apart.
     if (result.kind === "noCredential") {
-      setNoCred({ hint: result.hint, detalhe: result.detalhe })
+      setNoCred({ hint: result.hint, detail: result.detail })
       return
     }
     if (result.kind === "auth") {
-      setErro(`${t("createRepo.erro.auth")}\n${result.message}`)
+      setError(`${t("createRepo.error.auth")}\n${result.message}`)
       return
     }
-    const conhecido = ["nameTaken", "invalidName", "noCommits"]
-    setErro(
-      conhecido.includes(result.kind)
-        ? t(`createRepo.erro.${result.kind}`)
-        : `${t("createRepo.erro.other")}\n${result.message}`,
+    const known = ["nameTaken", "invalidName", "noCommits"]
+    setError(
+      known.includes(result.kind)
+        ? t(`createRepo.error.${result.kind}`)
+        : `${t("createRepo.error.other")}\n${result.message}`,
     )
   }
 
-  /** Comandos que desbloqueiam a criação, num passo único. */
-  const linhasComando: string[] = []
+  /** Commands that unblock the creation, in a single step. */
+  const commandLines: string[] = []
   if (noCred?.hint === "ghMissing") {
-    const instalar = INSTALL_CMD[window.platform]
-    linhasComando.push(...(instalar ? [instalar, "gh auth login"] : ["gh auth login"]))
+    const install = INSTALL_CMD[window.platform]
+    commandLines.push(...(install ? [install, "gh auth login"] : ["gh auth login"]))
   } else if (noCred) {
-    linhasComando.push("gh auth login")
+    commandLines.push("gh auth login")
   }
 
   /**
-   * Monta o detalhe técnico no idioma da UI. As saídas cruas das ferramentas
-   * (stderr do git, stderr do gh) são mostradas sem tradução — só a moldura
-   * ("git saiu com N", "gh não encontrado…") é localizada.
+   * Builds the technical detail in the UI language. The raw outputs of the tools
+   * (git stderr, gh stderr) are shown without translation — only the frame
+   * ("git exited with N", "gh not found…") is localized.
    */
-  const montarDetalhe = () => {
+  const buildDetail = () => {
     if (!noCred) return ""
-    const gitChave = ({
-      exit: "createRepo.erro.detalheGitExit",
-      spawn: "createRepo.erro.detalheGitSpawn",
-      timeout: "createRepo.erro.detalheGitTimeout",
-    } as const)[noCred.detalhe.git.modo]
-    const partes: string[] = []
-    const gitBase = t(gitChave, { codigo: noCred.detalhe.git.codigo ?? 0 })
-    partes.push(noCred.detalhe.git.saida ? `${gitBase}: ${noCred.detalhe.git.saida}` : gitBase)
-    if (noCred.detalhe.gh.estado === "missing") {
-      partes.push(t("createRepo.erro.detalheGhAusente"))
+    const gitKey = ({
+      exit: "createRepo.error.detailGitExit",
+      spawn: "createRepo.error.detailGitSpawn",
+      timeout: "createRepo.error.detailGitTimeout",
+    } as const)[noCred.detail.git.mode]
+    const parts: string[] = []
+    const gitBase = t(gitKey, { code: noCred.detail.git.code ?? 0 })
+    parts.push(noCred.detail.git.output ? `${gitBase}: ${noCred.detail.git.output}` : gitBase)
+    if (noCred.detail.gh.status === "missing") {
+      parts.push(t("createRepo.error.detailGhMissing"))
     } else {
-      partes.push(
-        noCred.detalhe.gh.saida
-          ? `${t("createRepo.erro.detalheGhFalhou")}: ${noCred.detalhe.gh.saida}`
-          : t("createRepo.erro.detalheGhSemToken"),
+      parts.push(
+        noCred.detail.gh.output
+          ? `${t("createRepo.error.detailGhFailed")}: ${noCred.detail.gh.output}`
+          : t("createRepo.error.detailGhNoToken"),
       )
     }
-    return partes.join("; ")
+    return parts.join("; ")
   }
 
-  const copiarComandos = async () => {
-    await navigator.clipboard.writeText(linhasComando.join(" && "))
-    setCopiado(true)
-    setTimeout(() => setCopiado(false), 2000)
+  const copyCommands = async () => {
+    await navigator.clipboard.writeText(commandLines.join(" && "))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !criando && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !creating && onOpenChange(v)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 pr-6">
             <CloudUploadIcon className="size-4" />
-            {t("createRepo.titulo")}
+            {t("createRepo.title")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          <p className="text-xs text-muted-foreground">{t("createRepo.descricao")}</p>
+          <p className="text-xs text-muted-foreground">{t("createRepo.description")}</p>
 
           <div>
-            <p className="mb-1 text-xs font-medium">{t("createRepo.nomeLabel")}</p>
+            <p className="mb-1 text-xs font-medium">{t("createRepo.nameLabel")}</p>
             <Input
               autoFocus
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void criar()
+                if (e.key === "Enter") void create()
               }}
-              placeholder={t("createRepo.nomePlaceholder")}
-              disabled={criando}
+              placeholder={t("createRepo.namePlaceholder")}
+              disabled={creating}
             />
-            {nome.trim() !== "" && !nomeValido && (
-              <p className="mt-1 text-[11px] text-destructive">{t("createRepo.nomeInvalido")}</p>
+            {name.trim() !== "" && !validName && (
+              <p className="mt-1 text-[11px] text-destructive">{t("createRepo.invalidName")}</p>
             )}
           </div>
 
-          {/* Privado por padrão: criar um repositório público sem querer expõe
-              o código, e o caminho de volta é manual. */}
+          {/* Private by default: creating a public repository by accident exposes
+              the code, and the way back is manual. */}
           <div className="flex gap-1.5">
-            {([true, false] as const).map((valor) => (
+            {([true, false] as const).map((option) => (
               <button
-                key={String(valor)}
+                key={String(option)}
                 type="button"
-                disabled={criando}
-                onClick={() => setPrivado(valor)}
+                disabled={creating}
+                onClick={() => setIsPrivate(option)}
                 className={cn(
                   "flex flex-1 items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs transition-colors",
-                  privado === valor ? "border-primary bg-primary/10" : "hover:bg-accent",
+                  isPrivate === option ? "border-primary bg-primary/10" : "hover:bg-accent",
                 )}
               >
-                {valor ? <LockIcon className="size-3" /> : <GlobeIcon className="size-3" />}
-                {t(valor ? "createRepo.privado" : "createRepo.publico")}
+                {option ? <LockIcon className="size-3" /> : <GlobeIcon className="size-3" />}
+                {t(option ? "createRepo.private" : "createRepo.public")}
               </button>
             ))}
           </div>
 
-          {erro && (
+          {error && (
             <p className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] whitespace-pre-line text-destructive">
               <AlertCircleIcon className="mt-px size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1">{erro}</span>
+              <span className="min-w-0 flex-1">{error}</span>
             </p>
           )}
 
@@ -237,8 +237,8 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
                 <span className="min-w-0 flex-1">
                   {t(
                     noCred.hint === "ghMissing"
-                      ? "createRepo.erro.noCredentialGhMissing"
-                      : "createRepo.erro.noCredential",
+                      ? "createRepo.error.noCredentialGhMissing"
+                      : "createRepo.error.noCredential",
                   )}
                 </span>
               </div>
@@ -246,21 +246,21 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
                 <div className="mb-1 flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
                     <TerminalIcon className="size-3" />
-                    {t("createRepo.comandos.rotulo")}
+                    {t("createRepo.commands.label")}
                   </span>
                   <button
                     type="button"
-                    onClick={() => void copiarComandos()}
+                    onClick={() => void copyCommands()}
                     className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    {copiado ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-                    {copiado ? t("createRepo.comandos.copiado") : t("createRepo.comandos.copiar")}
+                    {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+                    {copied ? t("createRepo.commands.copied") : t("createRepo.commands.copy")}
                   </button>
                 </div>
-                {linhasComando.map((linha) => (
-                  <div key={linha} className="px-1 py-0.5 font-mono text-[11px] leading-relaxed">
+                {commandLines.map((line) => (
+                  <div key={line} className="px-1 py-0.5 font-mono text-[11px] leading-relaxed">
                     <span className="text-muted-foreground select-none">$ </span>
-                    {linha}
+                    {line}
                   </div>
                 ))}
                 <div className="mt-1 px-1">
@@ -270,26 +270,26 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
                     target="_blank"
                     className="text-[10px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground"
                   >
-                    {t("createRepo.comandos.outros")}
+                    {t("createRepo.commands.others")}
                   </a>
                 </div>
               </div>
               <p className="border-t border-border px-2 py-1.5 text-[10px] text-muted-foreground">
-                {t("createRepo.erro.detalhe")}: {montarDetalhe()}
+                {t("createRepo.error.detail")}: {buildDetail()}
               </p>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" disabled={criando} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={creating} onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
           <Button
-            disabled={!nomeValido || criando}
-            onClick={() => void criar()}
+            disabled={!validName || creating}
+            onClick={() => void create()}
           >
-            {criando ? t("createRepo.criando") : t("createRepo.criar")}
+            {creating ? t("createRepo.creating") : t("createRepo.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

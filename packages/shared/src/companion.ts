@@ -1,39 +1,39 @@
 /**
- * Protocolo compartilhado entre o servidor WebSocket do Orbit desktop
- * e o app companion (mobile/web). Define tipos de mensagem, eventos
- * e o handshake de autenticação.
+ * Protocol shared between the Orbit desktop WebSocket server
+ * and the companion app (mobile/web). Defines message types, events
+ * and the authentication handshake.
  */
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage, OrchestrationSettings } from './chat'
 import type { VoiceEngineId, VoiceEngineStatus } from './voice'
 import type { AnalyticsRange } from './analytics'
-import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
+import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
 import type {
-  Esteira,
-  EsteiraEvent,
-  FaseTemplate,
-  NovaEsteiraInput,
-  NovaTaskInput,
-  Projeto,
+  NewPipelineInput,
+  NewTaskInput,
+  PhaseTemplate,
+  Pipeline,
+  PipelineEvent,
+  Project,
   Task,
-} from './esteira'
+} from './pipeline'
 
 // ─── Handshake ───────────────────────────────────────────────────────────────
 
-/** PIN gerado no desktop para pareamento (6 dígitos). */
+/** PIN generated on the desktop for pairing (6 digits). */
 export type PairingPin = string
 
-/** Motivo de rejeição na autenticação. */
+/** Reason for rejection at authentication. */
 export type AuthRejectReason = 'invalid_pin' | 'already_paired' | 'rate_limited'
 
 // ─── Client → Server (Requests) ──────────────────────────────────────────────
 
 export interface AuthRequest {
   type: 'auth'
-  /** PIN de pareamento — obrigatório apenas no primeiro pareamento. */
+  /** Pairing PIN — required only on the first pairing. */
   pin?: PairingPin
-  /** Token de dispositivo persistente, emitido no auth:ok do primeiro
-   *  pareamento. Permite reconectar sem PIN (que expira em 5 min). */
+  /** Persistent device token, issued in the auth:ok of the first
+   *  pairing. It allows reconnecting without a PIN (which expires in 5 min). */
   token?: string
   deviceName?: string
 }
@@ -48,31 +48,33 @@ export interface SearchSessionsRequest {
 }
 
 /**
- * Estado da sessao que nao vem nas mensagens: plano de orquestracao, review de
- * plano e pedidos pendentes (permissao/pergunta). O mobile so conhecia os tres
- * pelos eventos ao vivo, entao ao reabrir a conversa — ou ao parear depois que
- * o card ja tinha sido emitido — os cards sumiam mesmo com o pedido pendente.
+ * Session state that does not come with the messages: orchestration plan, plan
+ * review and pending requests (permission/question). The phone knew the three of
+ * them only from the live events, so reopening the conversation — or pairing
+ * after the card had already been emitted — made the cards vanish even with the
+ * request still pending.
  */
 export interface GetSessionStateRequest {
   type: 'session:state'
   sessionId: string
 }
 
-/** Pedido pendente como o desktop persiste: AskItem + agrupamento de lote. */
+/** Pending request as the desktop persists it: AskItem + batch grouping. */
 export type PendingAskState = AskItem & { batchId?: string }
 
 export interface SessionStateResponse {
   planReview?: PlanReview
   plan?: OrchestrationPlan
-  /** Lista autoritativa dos pedidos pendentes da sessao (vazia = nenhum). */
+  /** Authoritative list of the session's pending requests (empty = none). */
   pendingAsks?: PendingAskState[]
 }
 
 /**
- * Sessoes com engine rodando no desktop (chat, loop, orquestracao). O mobile so
- * sabia disso pelos eventos de status ao vivo: conectar no meio de uma execucao
- * mostrava a conversa parada, e reconectar depois dela terminar deixava o
- * spinner preso. Espelha o IPC 'chat:running' que o renderer usa apos reload.
+ * Sessions with an engine running on the desktop (chat, loop, orchestration).
+ * The phone knew that only from the live status events: connecting in the middle
+ * of a run showed the conversation stopped, and reconnecting after it finished
+ * left the spinner stuck. Mirrors the 'chat:running' IPC the renderer uses after
+ * a reload.
  */
 export interface GetRunningSessionsRequest {
   type: 'sessions:running'
@@ -82,7 +84,7 @@ export interface GetMessagesRequest {
   type: 'messages:get'
   sessionId: string
   limit?: number
-  /** Número de mensagens mais recentes já carregadas; usado para paginação para cima. */
+  /** Number of most recent messages already loaded; used for paging upwards. */
   offset?: number
 }
 
@@ -92,20 +94,20 @@ export interface SendMessageRequest {
   text: string
   providerId?: string
   modelId?: string
-  /** Modos do input (pesquisa, browser, thinking, simples, brain…). */
+  /** Input modes (search, browser, thinking, simple, brain…). */
   options?: SendMessageOptions
-  /** Arquivos anexados à mensagem do usuário */
+  /** Files attached to the user's message */
   files?: FilePart[]
-  /** Modelo dos workers (subagentes/orquestração), configurado no app. */
+  /** Workers' model (subagents/orchestration), configured in the app. */
   workerModel?: WorkerModelConfig
-  /** Modelo de visão delegado (modo Visão), configurado no app. */
+  /** Delegated vision model (Vision mode), configured in the app. */
   visionModel?: WorkerModelConfig
-  /** Pasta principal (modo código) — persiste na sessão ao enviar. */
+  /** Main folder (code mode) — persists in the session when sending. */
   directory?: string
-  /** Pastas adicionais (modo código). */
+  /** Additional folders (code mode). */
   extraDirectories?: string[]
-  /** Configuração do modo loop. Mesma forma que o SendMessageInput da engine —
-   *  sem ela o desktop caía no padrão, ignorando o que foi configurado no app. */
+  /** Loop mode configuration. Same shape as the engine's SendMessageInput —
+   *  without it the desktop fell back to the default, ignoring what was configured in the app. */
   loopConfig?: { maxIterations: number }
 }
 
@@ -134,13 +136,13 @@ export interface SelectModelRequest {
   type: 'models:select'
   providerId: string
   modelId: string
-  /** Sessão alvo da escolha — ausente/null = chat novo (draft + default global). */
+  /** Target session of the choice — absent/null = new chat (draft + global default). */
   sessionId?: string | null
 }
 
-/** Modos ativáveis por chat que o desktop e os companions compartilham. Os
- *  seis primeiros vivem no mode-overrides; 'simple' e 'brain' têm store
- *  próprio em cada app, mas viajam no mesmo mapa. */
+/** Modes switchable per chat that the desktop and the companions share. The
+ *  first six live in the mode-overrides; 'simple' and 'brain' have their own
+ *  store in each app, but travel in the same map. */
 export type ChatModeKey =
   | 'search'
   | 'browser'
@@ -151,69 +153,69 @@ export type ChatModeKey =
   | 'simple'
   | 'brain'
 
-/** modo → (sessionId → ativo). A chave 'draft' é o chat ainda sem sessão. */
+/** mode → (sessionId → active). The 'draft' key is the chat still without a session. */
 export type SessionModeOverrides = Partial<Record<ChatModeKey, Record<string, boolean>>>
 
 export interface SelectSessionModeRequest {
   type: 'modes:select'
   mode: ChatModeKey
   value: boolean
-  /** Sessão alvo — ausente/null = chat novo (draft). */
+  /** Target session — absent/null = new chat (draft). */
   sessionId?: string | null
 }
 
-/** Modelo por chat empurrado pelo desktop aos companions. Estava sendo emitido
- *  e consumido sem tipo dos dois lados (`as any`), então uma mudança no formato
- *  passaria despercebida. */
+/** Model per chat pushed by the desktop to the companions. It was being emitted
+ *  and consumed without a type on both sides (`as any`), so a change in the format
+ *  would go unnoticed. */
 export interface SessionModelChangeEvent {
   type: 'session:model-change'
   overrides: Record<string, { providerId: string; modelId: string }>
 }
 
-/** Rotação escolhida para um chat, feita num companion. Espelho do
- *  `models:select`: as rotações vivem no renderer do desktop (localStorage),
- *  então a escolha do celular é aplicada lá e volta a todos pelo broadcast.
- *  `rotationId` null desfaz (o chat volta ao modelo). */
+/** Rotation chosen for a chat, made in a companion. Mirror of
+ *  `models:select`: the rotations live in the desktop renderer (localStorage),
+ *  so the phone's choice is applied there and comes back to everyone through the broadcast.
+ *  A null `rotationId` undoes it (the chat goes back to the model). */
 export interface SelectRotationRequest {
   type: 'rotation:select'
   rotationId: string | null
-  /** Sessão alvo — ausente/null = chat novo (draft). */
+  /** Target session — absent/null = new chat (draft). */
   sessionId?: string | null
 }
 
-/** CRUD de rotações feito num companion: manda a lista inteira, como o
- *  `prefs:set`. O renderer do desktop persiste e devolve pelo broadcast —
- *  evita um verbo por operação e mantém uma única fonte da verdade. */
+/** CRUD of rotations made in a companion: it sends the whole list, like
+ *  `prefs:set`. The desktop renderer persists it and answers through the broadcast —
+ *  it avoids one verb per operation and keeps a single source of truth. */
 export interface SetRotationsRequest {
   type: 'rotation:set'
   rotations: ModelRotation[]
 }
 
-/** Estado completo da rotação (lista + escolha por chat) empurrado pelo
- *  desktop aos companions, no mesmo formato que o main recebe do renderer. */
+/** Complete state of the rotation (list + choice per chat) pushed by the
+ *  desktop to the companions, in the same format the main receives from the renderer. */
 export interface RotationChangeEvent {
   type: 'rotation:change'
   config: RotationConfig
 }
 
-/** Mapa completo de modos por chat empurrado pelo desktop aos companions. */
+/** Complete map of modes per chat pushed by the desktop to the companions. */
 export interface SessionModeChangeEvent {
   type: 'session:mode-change'
   overrides: SessionModeOverrides
 }
 
-/** Preferência de reasoning de um modelo (toggle + variante escolhida). */
+/** Reasoning preference of a model (toggle + chosen variant). */
 export interface ModelReasoningPref {
   enabled: boolean
   variantId?: string
 }
 
-/** Thinking por modelo (chave `providerId/modelId`) — mesmo mapa que os dois
- *  apps guardam em localStorage/AsyncStorage como `orbit-reasoning-prefs`. */
+/** Thinking per model (key `providerId/modelId`) — the same map the two
+ *  apps keep in localStorage/AsyncStorage as `orbit-reasoning-prefs`. */
 export type ReasoningPrefsMap = Record<string, ModelReasoningPref>
 
-/** Toggle de thinking feito num companion — o renderer do desktop é a fonte da
- *  verdade (persiste e devolve o mapa inteiro a todos pelo broadcast). */
+/** Thinking toggle made in a companion — the desktop renderer is the source of
+ *  truth (it persists and sends the whole map back to everyone through the broadcast). */
 export interface SelectReasoningRequest {
   type: 'reasoning:select'
   providerId: string
@@ -221,22 +223,22 @@ export interface SelectReasoningRequest {
   pref: ModelReasoningPref
 }
 
-/** Mapa completo de thinking por modelo empurrado pelo desktop aos companions. */
+/** Complete map of thinking per model pushed by the desktop to the companions. */
 export interface ReasoningPrefsChangeEvent {
   type: 'reasoning:change'
   prefs: ReasoningPrefsMap
 }
 
-// ─── Preferências POR CHAT (thinking e permissão) ────────────────────────────
-// Mesmo desenho do modelo e dos modos por chat: chave 'draft' é o chat ainda
-// sem sessão (e não viaja entre aparelhos). O renderer do desktop é a fonte da
-// verdade — os mapas vivem no localStorage dele —, empurra o snapshot a cada
-// mudança e aplica o que chega dos companions.
+// ─── Preferences PER CHAT (thinking and permission) ──────────────────────────
+// Same design as the model and the modes per chat: the 'draft' key is the chat still
+// without a session (and it does not travel between devices). The desktop renderer is the
+// source of truth — the maps live in its localStorage —, pushes the snapshot on every
+// change and applies what arrives from the companions.
 
-/** sessionId → preferência de thinking daquele chat. */
+/** sessionId → thinking preference of that chat. */
 export type SessionReasoningMap = Record<string, ModelReasoningPref>
 
-/** sessionId → nível de autonomia (ask/approve/full) daquele chat. */
+/** sessionId → autonomy level (ask/approve/full) of that chat. */
 export type SessionPermissionMap = Record<string, PermissionMode>
 
 export interface SessionPrefsSnapshot {
@@ -244,33 +246,33 @@ export interface SessionPrefsSnapshot {
   permission: SessionPermissionMap
 }
 
-/** Preferência de UM chat mudada num companion. O renderer aplica no store
- *  certo e devolve o snapshot inteiro pelo 'session:prefs-change'. */
+/** Preference of ONE chat changed in a companion. The renderer applies it in the right
+ *  store and sends the whole snapshot back through 'session:prefs-change'. */
 export interface SelectSessionPrefsRequest {
   type: 'session:prefs-select'
-  /** Sessão alvo — ausente/null = chat novo (draft). */
+  /** Target session — absent/null = new chat (draft). */
   sessionId?: string | null
   reasoning?: ModelReasoningPref
   permission?: PermissionMode
 }
 
-/** Snapshot das preferências por chat empurrado pelo desktop. */
+/** Snapshot of the preferences per chat pushed by the desktop. */
 export interface SessionPrefsChangeEvent {
   type: 'session:prefs-change'
   prefs: SessionPrefsSnapshot
 }
 
-// ─── Fila de mensagens compartilhada ─────────────────────────────────────────
-// A fila mora no renderer do desktop — é ele quem envia o próximo item quando
-// a sessão fica livre, então só existe UMA fila por chat, vista e editada
-// igual pelo desktop e pelo celular. O celular só guarda localmente o que
-// escreveu sem conexão, e entrega aqui ao reconectar.
+// ─── Shared message queue ────────────────────────────────────────────────────
+// The queue lives in the desktop renderer — it is what sends the next item when
+// the session becomes free, so there is only ONE queue per chat, seen and edited
+// the same way by the desktop and by the phone. The phone only stores locally what
+// it wrote without connection, and delivers it here when it reconnects.
 
-/** sessionId → itens da fila, na ordem de saída. */
+/** sessionId → items of the queue, in the order of sending. */
 export type MessageQueueSnapshot = Record<string, QueuedMessage[]>
 
-/** Operação na fila feita por um companion; o desktop aplica e devolve a fila
- *  inteira a todos pelo 'queue:change'. */
+/** Queue operation made by a companion; the desktop applies it and sends the whole
+ *  queue back to everyone through 'queue:change'. */
 export type MessageQueueOp =
   | { op: 'enqueue'; sessionId: string; msg: QueuedMessage; front?: boolean }
   | { op: 'remove'; sessionId: string; msgId: string }
@@ -287,27 +289,27 @@ export interface MessageQueueOpRequest {
   op: MessageQueueOp
 }
 
-/** Fila inteira empurrada pelo desktop a cada mudança. Os anexos viajam sem o
- *  conteúdo (`url` vazio): uma foto em data URL ia junto a cada tecla. */
+/** Whole queue pushed by the desktop on every change. Attachments travel without the
+ *  content (empty `url`): a photo in data URL went along on every keystroke. */
 export interface MessageQueueChangeEvent {
   type: 'queue:change'
   queues: MessageQueueSnapshot
 }
 
-/** Configuração global dos modos delegados: o modelo (e o thinking) dos
- *  workers de subagentes/orquestração e o modelo do modo Visão. Diferente dos
- *  modos, isto não é por chat — vale para o app inteiro. */
+/** Global configuration of the delegated modes: the model (and the thinking)
+ *  of the subagent/orchestration workers and the Vision mode model. Unlike the
+ *  modes, this is not per chat — it applies to the whole app. */
 export interface WorkerConfigSnapshot {
   workerModel: WorkerModelConfig | null
   workerReasoning: ReasoningConfig | null
   visionModel: WorkerModelConfig | null
   /**
-   * Condutor da orquestra (planejamento e síntese). Opcional: um app que ainda
-   * não conhece o campo não o envia, e ausente = manter o que está.
+   * Conductor of the orchestra (planning and synthesis). Optional: an app that
+   * does not know the field yet does not send it, and absent = keep what is there.
    */
   orchestratorModel?: WorkerModelConfig | null
   orchestratorReasoning?: ReasoningConfig | null
-  /** Comportamento do orquestrador. Ausente = manter o que está. */
+  /** Orchestrator behavior. Absent = keep what is there. */
   orchestration?: OrchestrationSettings
 }
 
@@ -321,8 +323,8 @@ export interface WorkerConfigChangeEvent {
   config: WorkerConfigSnapshot
 }
 
-/** Modos ligados por padrão num chat novo, por modo do app. Mesma forma nos
- *  dois apps (ActiveModeDefaults de cada model-mode-prefs). */
+/** Modes on by default in a new chat, per app mode. Same shape in both
+ *  apps (ActiveModeDefaults of each model-mode-prefs). */
 export interface ChatModeDefaults {
   simple: boolean
   brain: boolean
@@ -336,11 +338,11 @@ export interface ChatModeDefaults {
 }
 
 /**
- * Preferencias do app que valem nos dois lados: defaults de modo por tipo de
- * chat, modo de permissao e criacao automatica de pastas. Antes cada app
- * guardava as suas (o /api/preferences do companion era um armazem paralelo que
- * ninguem no desktop lia), entao mudar no celular nao mudava nada no desktop.
- * O desktop e a fonte da verdade: elas vivem no renderer, e o celular espelha.
+ * App preferences that are worth on both sides: mode defaults per type of
+ * chat, permission mode and automatic folder creation. Before, each app
+ * kept its own (the companion's /api/preferences was a parallel store that
+ * nobody in the desktop read), so changing it on the phone changed nothing on the desktop.
+ * The desktop is the source of truth: they live in the renderer, and the phone mirrors.
  */
 export interface AppPreferences {
   chatModes: ChatModeDefaults
@@ -369,7 +371,7 @@ export interface GetCatalogRequest {
 
 export interface GetAnalyticsRequest {
   type: 'analytics:summary'
-  /** Presets ou intervalo customizado (type: 'custom', from/to em ms). */
+  /** Presets or a custom interval (type: 'custom', from/to in ms). */
   range?: AnalyticsRange
 }
 
@@ -434,8 +436,8 @@ export interface PinFolderRequest {
   pinned: boolean
 }
 
-/** Arquiva/desarquiva a pasta. Os chats dela acompanham o estado — mesma
- *  cascata do toggleFolderArchive do desktop. */
+/** Archives/unarchives the folder. Its chats follow the state — the same
+ *  cascade as the desktop's toggleFolderArchive. */
 export interface ArchiveFolderRequest {
   type: 'folders:archive'
   folderId: string
@@ -447,15 +449,15 @@ export interface DeleteFolderRequest {
   folderId: string
 }
 
-/** Reorganiza a sidebar: mescla pastas duplicadas do mesmo projeto e recolhe
- *  chats de código soltos para a pasta do projeto. Roda no renderer do
- *  desktop (o mapa de pastas automáticas mora no localStorage dele), então o
- *  companion-server só repassa o pedido. */
+/** Reorganizes the sidebar: merges duplicate folders of the same project and collects
+ *  loose code chats into the project folder. It runs in the desktop
+ *  renderer (the map of automatic folders lives in its localStorage), so the
+ *  companion-server only forwards the request. */
 export interface OrganizeSidebarRequest {
   type: 'sidebar:organize'
 }
 
-// ─── Memórias (Brain) ────────────────────────────────────────────────────────
+// ─── Memories (Brain) ────────────────────────────────────────────────────────
 
 export interface ListMemoriesRequest {
   type: 'memory:list'
@@ -477,31 +479,31 @@ export interface PromoteMemoryRequest {
   id: string
 }
 
-/** Busca o documento .md anexado de uma memória (hasDoc). */
+/** Fetches the .md document attached to a memory (hasDoc). */
 export interface GetMemoryDocRequest {
   type: 'memory:doc'
   id: string
 }
 
-/** Lista subdiretórios de um caminho do DESKTOP (seletor de pastas do app). */
+/** Lists subdirectories of a path of the DESKTOP (folder picker of the app). */
 export interface ListDirsRequest {
   type: 'fs:list-dirs'
-  /** Caminho absoluto no desktop — ausente = home do usuário. */
+  /** Absolute path on the desktop — absent = the user's home. */
   path?: string
 }
 
 export interface ListDirsResponse {
-  /** Caminho listado (resolvido). */
+  /** Listed path (resolved). */
   path: string
-  /** Diretório pai, ou null se já é a raiz. */
+  /** Parent directory, or null if it is already the root. */
   parent: string | null
-  /** Subdiretórios visíveis (sem ocultos). */
+  /** Visible subdirectories (no hidden ones). */
   dirs: { name: string; path: string }[]
 }
 
-// --- Git (branch da pasta de trabalho) ---------------------------------------
+// --- Git (branch of the working folder) -------------------------------------
 
-/** Branches locais da pasta de trabalho + a atual. */
+/** Local branches of the working folder + the current one. */
 export interface ListBranchesRequest {
   type: 'git:branches'
   directory: string
@@ -512,8 +514,8 @@ export interface BranchesResponse {
   current: string
 }
 
-/** Troca a branch. Falha (com a mensagem do git) se houver mudanca pendente
- *  que o checkout sobrescreveria — o mesmo comportamento do desktop. */
+/** Switches the branch. It fails (with the git message) if there is a pending change
+ *  that the checkout would overwrite — the same behavior as the desktop. */
 export interface CheckoutBranchRequest {
   type: 'git:checkout'
   directory: string
@@ -531,143 +533,143 @@ export interface UnrevertSessionRequest {
   sessionId: string
 }
 
-/** Reverte também os arquivos de autor incerto do revert ativo. */
+/** Also reverts the files of uncertain author of the active revert. */
 export interface RevertUncertainSessionRequest {
   type: 'sessions:revertUncertain'
   sessionId: string
 }
 
-// ─── Rotinas ─────────────────────────────────────────────────────────────────
+// ─── Routines ────────────────────────────────────────────────────────────────
 
-export interface ListRotinasRequest {
-  type: 'rotinas:list'
+export interface ListRoutinesRequest {
+  type: 'routines:list'
 }
 
-export interface CreateRotinaRequest {
-  type: 'rotinas:create'
-  input: NovaRotinaInput
+export interface CreateRoutineRequest {
+  type: 'routines:create'
+  input: NewRoutineInput
 }
 
-export interface UpdateRotinaRequest {
-  type: 'rotinas:update'
+export interface UpdateRoutineRequest {
+  type: 'routines:update'
   id: string
-  patch: Partial<Rotina>
+  patch: Partial<Routine>
 }
 
-export interface DeleteRotinaRequest {
-  type: 'rotinas:delete'
-  id: string
-}
-
-/** "Executar agora" — mesma execução do scheduler, sem mexer na agenda. */
-export interface RunRotinaRequest {
-  type: 'rotinas:run'
+export interface DeleteRoutineRequest {
+  type: 'routines:delete'
   id: string
 }
 
-/** Descarta métricas de execuções cujo chat não existe mais. */
-export interface PruneRotinasRequest {
-  type: 'rotinas:prune-runs'
+/** "Run now" — the same execution the scheduler does, without touching the schedule. */
+export interface RunRoutineRequest {
+  type: 'routines:run'
+  id: string
+}
+
+/** Drops the metrics of runs whose chat no longer exists. */
+export interface PruneRoutinesRequest {
+  type: 'routines:prune-runs'
   sessionIds: string[]
 }
 
-export interface GenerateRotinaRequest {
-  type: 'rotinas:generate'
-  descricao: string
-  modelo: RotinaModelo
-  pastas: string[]
-  idioma?: string
-  modo?: 'chat' | 'code'
-  visionDisponivel?: boolean
+export interface GenerateRoutineRequest {
+  type: 'routines:generate'
+  description: string
+  model: RoutineModel
+  folders: string[]
+  language?: string
+  mode?: 'chat' | 'code'
+  visionAvailable?: boolean
 }
 
-// ─── Esteira ─────────────────────────────────────────────────────────────────
+// ─── Pipeline ────────────────────────────────────────────────────────────────
 
-/** Snapshot completo para o app abrir a tela de esteira numa tacada só. */
-export interface ListEsteiraRequest {
-  type: 'esteira:list'
+/** Full snapshot so the app can open the pipeline screen in one shot. */
+export interface ListPipelineRequest {
+  type: 'pipeline:list'
 }
 
-export interface CreateEsteiraRequest {
-  type: 'esteira:create'
-  input: NovaEsteiraInput
+export interface CreatePipelineRequest {
+  type: 'pipeline:create'
+  input: NewPipelineInput
 }
 
-export interface UpdateEsteiraRequest {
-  type: 'esteira:update'
+export interface UpdatePipelineRequest {
+  type: 'pipeline:update'
   id: string
-  patch: Partial<Esteira>
+  patch: Partial<Pipeline>
 }
 
-export interface DeleteEsteiraRequest {
-  type: 'esteira:delete'
+export interface DeletePipelineRequest {
+  type: 'pipeline:delete'
   id: string
 }
 
-/** Cria um projeto (dono das pastas) — o fluxo "nova esteira" cria os dois. */
-export interface CreateEsteiraProjetoRequest {
-  type: 'esteira:create-projeto'
-  nome: string
-  pastas: string[]
+/** Creates a project (owner of the folders) — the "new pipeline" flow creates both. */
+export interface CreatePipelineProjectRequest {
+  type: 'pipeline:create-project'
+  name: string
+  folders: string[]
 }
 
-export interface UpdateEsteiraProjetoRequest {
-  type: 'esteira:update-projeto'
+export interface UpdatePipelineProjectRequest {
+  type: 'pipeline:update-project'
   id: string
-  patch: Partial<Pick<Projeto, 'nome' | 'pastas'>>
+  patch: Partial<Pick<Project, 'name' | 'folders'>>
 }
 
-export interface CreateEsteiraTaskRequest {
-  type: 'esteira:create-task'
-  input: NovaTaskInput
+export interface CreatePipelineTaskRequest {
+  type: 'pipeline:create-task'
+  input: NewTaskInput
 }
 
-export interface UpdateEsteiraTaskRequest {
-  type: 'esteira:update-task'
-  esteiraId: string
+export interface UpdatePipelineTaskRequest {
+  type: 'pipeline:update-task'
+  pipelineId: string
   taskId: string
-  patch: Partial<Pick<Task, 'titulo' | 'descricao' | 'dependeDe' | 'anotacoes'>>
+  patch: Partial<Pick<Task, 'title' | 'description' | 'dependsOn' | 'notes'>>
 }
 
-export interface DeleteEsteiraTaskRequest {
-  type: 'esteira:delete-task'
-  esteiraId: string
-  taskId: string
-}
-
-/** Inicia a task na fase indicada — `fase > 0` = início manual por drag (D8). */
-export interface StartEsteiraTaskRequest {
-  type: 'esteira:start-task'
-  esteiraId: string
-  taskId: string
-  fase?: number
-}
-
-export interface PauseEsteiraTaskRequest {
-  type: 'esteira:pause-task'
-  esteiraId: string
+export interface DeletePipelineTaskRequest {
+  type: 'pipeline:delete-task'
+  pipelineId: string
   taskId: string
 }
 
-export interface ResumeEsteiraTaskRequest {
-  type: 'esteira:resume-task'
-  esteiraId: string
+/** Starts the task at the given phase — `phase > 0` = manual start by drag (D8). */
+export interface StartPipelineTaskRequest {
+  type: 'pipeline:start-task'
+  pipelineId: string
+  taskId: string
+  phase?: number
+}
+
+export interface PausePipelineTaskRequest {
+  type: 'pipeline:pause-task'
+  pipelineId: string
   taskId: string
 }
 
-export interface ToggleEsteiraFilaRequest {
-  type: 'esteira:toggle-fila'
-  esteiraId: string
-  ligar: boolean
+export interface ResumePipelineTaskRequest {
+  type: 'pipeline:resume-task'
+  pipelineId: string
+  taskId: string
 }
 
-/** "Salvar como padrão" do editor de fase — grava/sobrescreve o template. */
-export interface SaveEsteiraTemplateRequest {
-  type: 'esteira:save-template'
-  template: FaseTemplate
+export interface TogglePipelineQueueRequest {
+  type: 'pipeline:toggle-queue'
+  pipelineId: string
+  enabled: boolean
 }
 
-// ─── Plan Review (Modo Plano) ─────────────────────────────────────────────────
+/** "Save as default" of the phase editor — writes/overwrites the template. */
+export interface SavePipelineTemplateRequest {
+  type: 'pipeline:save-template'
+  template: PhaseTemplate
+}
+
+// ─── Plan Review (Plan mode) ──────────────────────────────────────────────────
 
 export interface ReadPlanFileRequest {
   type: 'plan:read-file'
@@ -758,27 +760,27 @@ export type CompanionRequest =
   | DeleteMemoryRequest
   | PromoteMemoryRequest
   | GetMemoryDocRequest
-  | ListRotinasRequest
-  | CreateRotinaRequest
-  | UpdateRotinaRequest
-  | DeleteRotinaRequest
-  | RunRotinaRequest
-  | PruneRotinasRequest
-  | GenerateRotinaRequest
-  | ListEsteiraRequest
-  | CreateEsteiraRequest
-  | UpdateEsteiraRequest
-  | DeleteEsteiraRequest
-  | CreateEsteiraProjetoRequest
-  | UpdateEsteiraProjetoRequest
-  | CreateEsteiraTaskRequest
-  | UpdateEsteiraTaskRequest
-  | DeleteEsteiraTaskRequest
-  | StartEsteiraTaskRequest
-  | PauseEsteiraTaskRequest
-  | ResumeEsteiraTaskRequest
-  | ToggleEsteiraFilaRequest
-  | SaveEsteiraTemplateRequest
+  | ListRoutinesRequest
+  | CreateRoutineRequest
+  | UpdateRoutineRequest
+  | DeleteRoutineRequest
+  | RunRoutineRequest
+  | PruneRoutinesRequest
+  | GenerateRoutineRequest
+  | ListPipelineRequest
+  | CreatePipelineRequest
+  | UpdatePipelineRequest
+  | DeletePipelineRequest
+  | CreatePipelineProjectRequest
+  | UpdatePipelineProjectRequest
+  | CreatePipelineTaskRequest
+  | UpdatePipelineTaskRequest
+  | DeletePipelineTaskRequest
+  | StartPipelineTaskRequest
+  | PausePipelineTaskRequest
+  | ResumePipelineTaskRequest
+  | TogglePipelineQueueRequest
+  | SavePipelineTemplateRequest
   | RevertSessionRequest
   | UnrevertSessionRequest
   | RevertUncertainSessionRequest
@@ -797,8 +799,8 @@ export interface AuthOkResponse {
   type: 'auth:ok'
   deviceName: string
   serverVersion: string
-  /** Token persistente do dispositivo — o app guarda e usa nas próximas
-   *  conexões no lugar do PIN. */
+  /** Persistent token of the device — the app keeps it and uses it on the next
+   *  connections instead of the PIN. */
   deviceToken?: string
 }
 
@@ -809,48 +811,48 @@ export interface AuthErrorResponse {
 
 export interface ApiResponse {
   type: 'api:response'
-  /** ID da requisição (para correlacionar request ↔ response) */
+  /** Request ID (to correlate request ↔ response) */
   requestId: string
   ok: boolean
   data?: unknown
   error?: string
 }
 
-/** Evento de chat retransmitido do desktop (espelhos dos ChatEvent). */
+/** Chat event relayed from the desktop (mirrors of ChatEvent). */
 export interface ChatEventMessage {
   type: 'chat:event'
-  event: unknown // ChatEvent do shared/chat.ts
+  event: unknown // ChatEvent from shared/chat.ts
 }
 
-/** Evento de rotina retransmitido do desktop (espelhos dos RotinaEvent). */
-export interface RotinaEventMessage {
-  type: 'rotinas:event'
-  event: RotinaEvent
+/** Routine event relayed from the desktop (mirrors of the RoutineEvent). */
+export interface RoutineEventMessage {
+  type: 'routines:event'
+  event: RoutineEvent
 }
 
-/** Evento de esteira retransmitido do desktop (espelhos dos EsteiraEvent):
- *  tasks concluindo, fases avançando, progresso/pensamento/tools ao vivo. */
-export interface EsteiraEventMessage {
-  type: 'esteira:event'
-  event: EsteiraEvent
+/** Pipeline event relayed from the desktop (mirrors of the PipelineEvent):
+ *  tasks finishing, phases advancing, progress/thinking/tools live. */
+export interface PipelineEventMessage {
+  type: 'pipeline:event'
+  event: PipelineEvent
 }
 
-/** Notificação de nova permissão/question pendente. */
+/** Notification of a new pending permission/question. */
 export interface PendingAskNotification {
   type: 'notify:pending-ask'
   sessionId: string
   requestId: string
   kind: 'permission' | 'question'
   /**
-   * Texto do pedido (claim ou primeira pergunta). Vazio quando o item não traz
-   * texto próprio — nesse caso o app mobile aplica o fallback traduzido dele,
-   * que é o idioma do celular (o desktop traduz o dele, ver lib/i18n.ts).
+   * Text of the request (claim or first question). Empty when the item does not bring its own
+   * text — in that case the mobile app applies its translated fallback,
+   * which is the language of the phone (the desktop translates its own, see lib/i18n.ts).
    */
   title: string
   questions?: unknown[]
 }
 
-/** Notificação de nova mensagem do assistente. */
+/** Notification of a new assistant message. */
 export interface NewMessageNotification {
   type: 'notify:new-message'
   sessionId: string
@@ -858,7 +860,7 @@ export interface NewMessageNotification {
   messagePreview: string
 }
 
-/** Status do desktop (online, sessões ativas, etc). */
+/** Desktop status (online, active sessions, etc). */
 export interface StatusUpdate {
   type: 'status:update'
   online: boolean
@@ -872,8 +874,8 @@ export type CompanionEvent =
   | AuthErrorResponse
   | ApiResponse
   | ChatEventMessage
-  | RotinaEventMessage
-  | EsteiraEventMessage
+  | RoutineEventMessage
+  | PipelineEventMessage
   | PendingAskNotification
   | NewMessageNotification
   | SessionModelChangeEvent
@@ -886,73 +888,73 @@ export type CompanionEvent =
   | MessageQueueChangeEvent
   | StatusUpdate
 
-// ─── Voz (STT) ───────────────────────────────────────────────────────────────
-// Ditado do app companion: o celular grava, converte para PCM16 mono e manda o
-// base64 pela rota REST POST /api/voice/transcribe; a transcrição roda no
-// desktop, com motor local (ver docs/voz.md). Nada de áudio sai para a nuvem.
+// ─── Voice (STT) ─────────────────────────────────────────────────────────────
+// Dictation of the companion app: the phone records, converts to mono PCM16 and sends the
+// base64 through the REST route POST /api/voice/transcribe; the transcription runs on
+// the desktop, with a local engine (see docs/voice.md). No audio leaves for the cloud.
 
-/** Corpo do POST /api/voice/transcribe. */
+/** Body of POST /api/voice/transcribe. */
 export interface VoiceTranscribeRequest {
-  /** Áudio PCM16 com sinal, little-endian, em base64. */
+  /** PCM16 audio with sign, little-endian, in base64. */
   pcm: string
-  /** Taxa de amostragem do PCM, em Hz (o app grava a 16 kHz). */
+  /** Sample rate of the PCM, in Hz (the app records at 16 kHz). */
   sampleRate: number
-  /** Motor de transcrição; ausente = o padrão do desktop. */
+  /** Transcription engine; absent = the desktop default. */
   engine?: VoiceEngineId
   modelId?: string | null
-  /** Idioma esperado (ex.: 'pt'); ausente = detecção automática. */
+  /** Expected language (e.g. 'pt'); absent = automatic detection. */
   language?: string
 }
 
-/** Resposta do POST /api/voice/transcribe. */
+/** Response of POST /api/voice/transcribe. */
 export interface VoiceTranscribeResponse {
-  /** Texto reconhecido (string vazia quando ninguém falou). */
+  /** Recognized text (empty string when nobody spoke). */
   text: string
-  /** Duração do áudio recebido, em milissegundos. */
+  /** Duration of the received audio, in milliseconds. */
   audioMs: number
-  /** Tempo gasto na transcrição, em milissegundos. */
+  /** Time spent in the transcription, in milliseconds. */
   ms: number
 }
 
 /**
- * Corpo do POST /api/voice/speak — leitura em voz alta a partir do celular.
+ * Body of POST /api/voice/speak — reading aloud from the phone.
  *
- * O aparelho não roda motor de voz: manda o TEXTO e recebe a URL de um WAV
- * sintetizado no desktop, servido pelo escopo `audio` com token no caminho (a
- * mesma rota que o player já usa para os áudios do agente).
+ * The device does not run a voice engine: it sends the TEXT and receives the URL of a WAV
+ * synthesized on the desktop, served by the `audio` scope with a token in the path (the
+ * same route the player already uses for the agent's audio).
  */
 export interface VoiceSpeakRequest {
-  /** Texto a falar. Vazio é 400. */
+  /** Text to speak. Empty is 400. */
   text: string
-  /** Voz M1–M5 / F1–F5; ausente = a voz das preferências do desktop. */
+  /** Voice M1–M5 / F1–F5; absent = the voice from the desktop preferences. */
   voice?: string
-  /** Idioma (`pt`, `en`, …) ou `auto`; ausente = o das preferências. */
+  /** Language (`pt`, `en`, …) or `auto`; absent = the one from the preferences. */
   lang?: string
-  /** Fator de velocidade 0,5–2; ausente = o das preferências. */
+  /** Speed factor 0.5–2; absent = the one from the preferences. */
   speed?: number
 }
 
-/** Resposta do POST /api/voice/speak. */
+/** Response of POST /api/voice/speak. */
 export interface VoiceSpeakResponse {
-  /** Id do WAV no acervo de áudio (`aud_….wav`). */
+  /** Id of the WAV in the audio collection (`aud_….wav`). */
   id: string
-  /** URL absoluta e assinada — o player abre direto, com Range. */
+  /** Absolute and signed URL — the player opens it directly, with Range. */
   url: string
-  /** Duração do áudio, em milissegundos. */
+  /** Duration of the audio, in milliseconds. */
   durationMs: number
   /**
-   * Já estava sintetizado (mesmo texto, mesma voz): a resposta veio do cache do
-   * desktop e não houve síntese nova. Útil para diagnóstico, não para a UI.
+   * It was already synthesized (same text, same voice): the response came from the desktop
+   * cache and there was no new synthesis. Useful for diagnosis, not for the UI.
    */
   cached: boolean
 }
 
 /**
- * Por que o POST /api/voice/speak recusou.
+ * Why POST /api/voice/speak refused.
  *
- * O desktop manda o CÓDIGO, não a frase: a mensagem que a pessoa lê é escrita
- * por quem sabe em que idioma ela está lendo — o app. Uma frase pronta aqui
- * chegaria em português na tela de quem usa o celular em inglês.
+ * The desktop sends the CODE, not the sentence: the message the person reads is written
+ * by whoever knows which language they are reading in — the app. A ready sentence here
+ * would arrive in Portuguese on the screen of someone using the phone in English.
  */
 export type VoiceSpeakErrorCode =
   | 'tts_disabled'
@@ -963,37 +965,37 @@ export type VoiceSpeakErrorCode =
   | 'invalid_lang'
   | 'invalid_speed'
 
-/** Corpo de erro do POST /api/voice/speak. */
+/** Error body of POST /api/voice/speak. */
 export interface VoiceSpeakErrorResponse {
-  /** Código estável, traduzido pelo app. Nunca é uma frase. */
+  /** Stable code, translated by the app. It is never a sentence. */
   error: VoiceSpeakErrorCode
   /**
-   * Detalhe técnico do motor (do fundo da pilha), para log. Pode vir no idioma
-   * do desktop e NÃO deve ir para a tela.
+   * Technical detail of the engine (from the bottom of the stack), for the log. It may come in the
+   * desktop's language and must NOT go to the screen.
    */
   detail?: string
 }
 
 /**
- * Resposta do GET /api/voice/status.
+ * Response of GET /api/voice/status.
  *
- * `engines` é o mesmo retrato que a tela de voz do desktop usa
- * (`VoiceEngineStatus`, de @shared/voice): o app mostra o motivo quando o
- * ditado não está pronto (motor sem binário, modelo não baixado).
+ * `engines` is the same portrait the voice screen of the desktop uses
+ * (`VoiceEngineStatus`, from @shared/voice): the app shows the reason when
+ * dictation is not ready (engine without a binary, model not downloaded).
  */
 export interface VoiceStatusResponse {
-  /** Há pelo menos um motor apto a transcrever agora. */
+  /** There is at least one engine able to transcribe now. */
   ready: boolean
   engines: VoiceEngineStatus[]
 }
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────
 
-/** Mensagem envelopada no WebSocket (todas as mensagens passam por este envelope). */
+/** Message wrapped in the WebSocket (all messages go through this envelope). */
 export interface WsMessage {
-  /** ID único da mensagem (para request/response matching). */
+  /** Unique ID of the message (for request/response matching). */
   id: string
-  /** Payload: request do client ou response/event do server. */
+  /** Payload: request from the client or response/event from the server. */
   payload: CompanionRequest | CompanionEvent
 }
 
@@ -1001,10 +1003,10 @@ export interface WsMessage {
 
 let _msgId = 0
 /**
- * `error` do `messages:send` quando a sessão ainda está rodando no desktop.
- * Um envio novo numa sessão em execução ABORTA o turno atual (é assim que a
- * engine troca de turno), então o desktop recusa e o app devolve a mensagem à
- * fila até a sessão ficar livre.
+ * `error` of `messages:send` when the session is still running on the desktop.
+ * A new send in a running session ABORTS the current turn (that is how the
+ * engine switches turns), so the desktop refuses and the app gives the message back to the
+ * queue until the session becomes free.
  */
 export const SESSION_BUSY_ERROR = 'session_busy'
 

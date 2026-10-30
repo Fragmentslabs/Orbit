@@ -3,26 +3,26 @@ import * as memoryService from '../memory/service'
 import { commitOrder, memoryText, subprojectOf, type Draft, type ExistingTree } from './draft'
 
 export interface CommitContext {
-  /** Pasta raiz do projeto — define o projectId de tudo que é gravado. */
+  /** Project root folder — it defines the projectId of everything that is written. */
   rootDirectory: string
   existing: ExistingTree
 }
 
 export interface CommitResult {
-  /** Algo foi gravado. */
+  /** Something was written. */
   saved: boolean
   created: number
   updated: number
   retired: number
   learnings: number
-  /** Títulos dos nós gravados, na ordem da árvore. */
+  /** Titles of the nodes written, in tree order. */
   titles: string[]
 }
 
 /**
- * Grava o rascunho do /init: nós de cima para baixo (cada filho já encontra o
- * id do pai), depois as ligações transversais, os aprendizados e as
- * aposentadorias.
+ * Writes the /init draft: nodes top to bottom (each child already finds the
+ * parent id), then the cross links, the learnings and the
+ * retirements.
  */
 export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<CommitResult> {
   const ids = new Map<string, string>()
@@ -31,9 +31,9 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
   let created = 0
   let updated = 0
 
-  // Profundidade de cada nó existente ANTES de gravar: é o que diz, entre os
-  // vizinhos de um nó, qual era o pai (as ligações são bidirecionais e as
-  // duas pontas marcam "parent", então o tipo sozinho não dá a direção).
+  // Depth of each existing node BEFORE writing: that is what tells, among the
+  // neighbors of a node, which one was the parent (the links are bidirectional and
+  // both ends mark "parent", so the type alone does not give the direction).
   const depthBefore = new Map(
     (await memoryService.tree(projectIdOf(ctx.rootDirectory))).map((n) => [n.id, n.depth]),
   )
@@ -41,8 +41,8 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
   for (const node of commitOrder(draft)) {
     const isRoot = node.parent === null
     const parentId = node.parent ? resolve(node.parent) : undefined
-    // Pendurado num nó que já existia (re-init): herda a pasta dele, que o
-    // rascunho não conhece.
+    // Hanging off a node that already existed (re-init): it inherits that node's folder,
+    // which the draft does not know about.
     const inheritedSubproject =
       node.parent && !draft.nodes.has(node.parent)
         ? (await memoryService.getFull(node.parent))?.memory.subproject
@@ -58,8 +58,8 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
         tags,
         weight,
         category: node.category,
-        // Nó de área do /init antigo ("Arquitetura") reaproveitado com outro
-        // título: sem limpar a área, o grafo continuaria rotulando pela área.
+        // Area node of the old /init ("Arquitetura") reused with another
+        // title: without clearing the area, the graph would keep labeling by the area.
         area: isRoot ? 'overview' : null,
         subproject,
         document: node.document,
@@ -67,9 +67,9 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
       if (revised) {
         id = revised.id
         updated++
-        // Mudou de pai: a ligação com o pai antigo sai. Sem isto, um nó movido
-        // de debaixo da raiz para debaixo do "Frontend" continuaria ligado à
-        // raiz e apareceria no primeiro nível do mapa, como antes.
+        // Parent changed: the link to the old parent is dropped. Without this, a node moved
+        // from under the root to under "Frontend" would stay linked to
+        // the root and would show up at the first level of the map, as before.
         const depth = depthBefore.get(revised.id)
         if (parentId && depth != null) {
           for (const neighbor of revised.relatedIds) {
@@ -122,14 +122,14 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
       text: learning.text,
       tags: learning.tags,
       weight: 0.55,
-      // Vale em qualquer projeto, mas registrar onde nasceu ancora o nó perto
-      // da árvore de origem no canvas.
+      // It is valid in any project, but recording where it was born anchors the node near
+      // the tree it came from on the canvas.
       directory: ctx.rootDirectory,
     })
   }
 
-  // Aposentar um nó pode deixar vizinhos sem nenhuma ligação com a árvore:
-  // eles são reatados à raiz em vez de virarem órfãos invisíveis.
+  // Retiring a node can leave neighbors with no link at all to the tree:
+  // they are reattached to the root instead of becoming invisible orphans.
   const draftRoot = [...draft.nodes.values()].find((n) => n.parent === null)
   const rootId = draftRoot ? ids.get(draftRoot.key) : ctx.existing.rootId
   const neighbors = new Set<string>()

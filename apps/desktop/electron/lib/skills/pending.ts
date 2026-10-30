@@ -6,17 +6,17 @@ import { globalSkillsDir } from './index'
 import { parseSkill, sanitizeSlug, serializeSkill } from './parser'
 
 /**
- * Propostas de skill do agente (tool create_skill): ficam em staging
- * (orbit-data/skills-pending/<slug>/) até o usuário clicar "Adicionar skill"
- * no card da conversa. Aprovar move para a pasta de skills (bundle quando há
- * arquivos auxiliares, arquivo .skill plano quando é só o manifesto).
+ * Agent skill proposals (create_skill tool): they stay in staging
+ * (orbit-data/skills-pending/<slug>/) until the user clicks "Add skill"
+ * on the conversation card. Approving moves them to the skills folder (bundle
+ * when there are auxiliary files, a flat .skill file when it is only the manifest).
  */
 
 function pendingDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'skills-pending')
 }
 
-/** Arquivos (não diretórios) de uma proposta, relativos e sem o manifesto. */
+/** Files (not directories) of a proposal, relative and without the manifest. */
 async function listProposalFiles(dir: string): Promise<string[]> {
   const entries = await fsp.readdir(dir, { recursive: true, withFileTypes: true })
   return entries
@@ -25,12 +25,12 @@ async function listProposalFiles(dir: string): Promise<string[]> {
     .filter((f) => f !== 'skill.md')
 }
 
-/** Impede path traversal nos arquivos auxiliares da proposta. */
+/** Prevents path traversal in the auxiliary files of the proposal. */
 function safeRelative(base: string, relative: string): string {
   const resolved = path.resolve(base, relative)
   const rel = path.relative(base, resolved)
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new Error(`caminho de arquivo inválido na skill: ${relative}`)
+    throw new Error(`invalid file path in the skill: ${relative}`)
   }
   return resolved
 }
@@ -45,7 +45,7 @@ export interface ProposeSkillInput {
 
 export async function proposeSkill(input: ProposeSkillInput): Promise<SkillProposal> {
   const slug = sanitizeSlug(input.slug || input.name)
-  if (!slug) throw new Error('slug inválido')
+  if (!slug) throw new Error('invalid slug')
   const dir = path.join(pendingDir(), slug)
   await fsp.rm(dir, { recursive: true, force: true })
   await fsp.mkdir(dir, { recursive: true })
@@ -92,13 +92,13 @@ export async function listPendingSkills(): Promise<SkillProposal[]> {
         files,
       })
     } catch {
-      // proposta corrompida — ignora
+      // corrupted proposal — ignore
     }
   }
   return proposals
 }
 
-/** Move a proposta aprovada para a pasta de skills (o watcher avisa o renderer). */
+/** Moves the approved proposal to the skills folder (the watcher tells the renderer). */
 export async function approvePendingSkill(slug: string): Promise<boolean> {
   const safeSlug = sanitizeSlug(slug)
   const dir = path.join(pendingDir(), safeSlug)
@@ -114,10 +114,10 @@ export async function approvePendingSkill(slug: string): Promise<boolean> {
   await fsp.mkdir(skillsDir, { recursive: true })
 
   if (extras.length === 0) {
-    // Só manifesto → arquivo .skill plano (formato padrão das skills simples)
+    // Manifest only → flat .skill file (default format of simple skills)
     await fsp.writeFile(path.join(skillsDir, `${safeSlug}.skill`), raw, 'utf8')
   } else {
-    // Bundle com scripts → move a pasta inteira
+    // Bundle with scripts → move the whole folder
     const target = path.join(skillsDir, safeSlug)
     await fsp.rm(target, { recursive: true, force: true })
     await fsp.cp(dir, target, { recursive: true })

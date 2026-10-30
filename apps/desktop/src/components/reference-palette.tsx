@@ -8,15 +8,15 @@ import { useReferenceCommands, commandMatches, type SlashCommand } from "@/src/l
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Paleta "@" — REFERÊNCIAS: tudo que entra no contexto do pedido.
+ * The "@" palette — REFERENCES: everything that enters the context of the request.
  *
- * A "/" é de comandos e modos (o que se executa); a "@" é de referências (o que
- * se anexa): skills, servidores MCP e arquivos da pasta do projeto. Antes as
- * skills e o MCP apareciam na "/" com "@" na frente e a "@" abria só os
- * arquivos — o mesmo prefixo apontando para listas diferentes.
+ * The "/" is for commands and modes (what is executed); the "@" is for references (what
+ * is attached): skills, MCP servers and files of the project folder. Before,
+ * skills and MCP appeared in the "/" with "@" in front and the "@" opened only the
+ * files — the same prefix pointing to different lists.
  *
- * A paleta fecha assim que há espaço depois do "@": o texto já é uma
- * referência completa ("@web_recon ").
+ * The palette closes as soon as there is a space after the "@": the text already is a
+ * complete reference ("@web_recon ").
  */
 
 const MAX_FILES = 2000
@@ -33,7 +33,7 @@ function fileMatches(filePath: string, query: string): boolean {
 
 export function ReferencePalette({ directory, servers, children, className }: {
   directory?: string
-  /** Recorte de servidores MCP desta conversa (`undefined` = todos). */
+  /** Narrowing of MCP servers of this conversation (`undefined` = all). */
   servers?: string[] | null
   children: ReactNode
   className?: string
@@ -81,8 +81,8 @@ export function ReferencePalette({ directory, servers, children, className }: {
     return list
   }, [commands, files, query])
 
-  // Seções: skills, MCP e arquivos — a ordem das referências é a mesma em
-  // que elas aparecem no texto (@skill, @mcp:nome, arquivo anexado).
+  // Sections: skills, MCP and files — the order of the references is the same in
+  // which they appear in the text (@skill, @mcp:name, attached file).
   const sections = useMemo(() => {
     const skills = items.filter((i) => i.kind === "command" && i.command.group === "Skills")
     const mcp = items.filter((i) => i.kind === "command" && i.command.group === "MCP")
@@ -168,7 +168,7 @@ export function ReferencePalette({ directory, servers, children, className }: {
                       )}
                       onMouseEnter={() => setHighlight(index)}
                       onMouseDown={(e) => {
-                        // mousedown para não roubar o foco do textarea
+                        // mousedown so as not to steal the focus from the textarea
                         e.preventDefault()
                         void select(item)
                       }}

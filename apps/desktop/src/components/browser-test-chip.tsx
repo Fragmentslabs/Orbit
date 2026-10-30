@@ -7,12 +7,12 @@ import { AGENT_BROWSER_FRESH_MS, usePanelStore } from "@/src/stores/panel-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Indicador "testando…" do browser do agente: aparece na conversa enquanto o
- * agente do chat está usando o browser (em segundo plano, com o painel
- * fechado). Clique abre o browser do agente no painel lateral.
+ * "testing…" indicator of the agent browser: it appears in the conversation while the
+ * chat agent is using the browser (in the background, with the panel
+ * closed). A click opens the agent browser in the side panel.
  */
 
-/** URL curta para exibir: host + caminho (sem protocolo/query), truncada. */
+/** Short URL to display: host + path (no protocol/query), truncated. */
 function shortUrl(url: string): string {
   if (!url) return ""
   try {
@@ -28,7 +28,7 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
   const entry = usePanelStore((s) => (sessionId ? s.agentBrowser[sessionId] : undefined))
   const [, setTick] = useState(0)
 
-  // Tic a cada 2s para o indicador sumir sozinho quando a atividade expira.
+  // Tick every 2s so the indicator disappears by itself when the activity expires.
   useEffect(() => {
     if (!entry) return
     const timer = setInterval(() => setTick((v) => v + 1), 2_000)
@@ -38,8 +38,8 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
   if (!sessionId || !entry) return null
   if (Date.now() - entry.at > AGENT_BROWSER_FRESH_MS) return null
 
-  // No compact o texto pode estar escondido (header estreito): o title carrega
-  // o estado junto, senão sobra um globo sem explicação.
+  // In compact the text may be hidden (narrow header): the title carries
+  // the state along, otherwise a globe is left with no explanation.
   const label = compact
     ? [`${t("chat.browser.testing")} — ${t("chat.browser.viewAgentBrowser")}`, entry.url].filter(Boolean).join(" — ")
     : t("chat.browser.viewAgentBrowser")
@@ -55,8 +55,8 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
       )}
     >
       <GlobeIcon className="size-3.5 shrink-0" />
-      {/* Header estreito (sidebar + painel abertos): só o globo, com o texto
-          no title. O @lg mede o container do header, não o viewport. */}
+      {/* Narrow header (sidebar + panel open): only the globe, with the text
+          in the title. @lg measures the header container, not the viewport. */}
       <Shimmer className={cn(compact && "hidden @lg:inline-block")}>{t("chat.browser.testing")}</Shimmer>
       {!compact && entry.url && 
         <Truncate>

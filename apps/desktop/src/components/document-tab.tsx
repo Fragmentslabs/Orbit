@@ -11,26 +11,26 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * O documento vivo, aberto ao lado da conversa: lê-se em Markdown renderizado
- * e edita-se no mesmo lugar, enquanto o agente continua escrevendo nele.
+ * The living document, opened next to the conversation: it is read in rendered Markdown
+ * and edited in the same place, while the agent keeps writing into it.
  *
- * Aqui o fonte é o Markdown, e não o HTML de preview que o card da conversa
- * mostra num iframe — é o que torna a edição possível. O card continua sendo
- * um retrato: assim que esta aba grava, ele recebe o aviso e recarrega.
+ * Here the source is the Markdown, and not the preview HTML that the conversation card
+ * shows in an iframe — that is what makes the editing possible. The card remains
+ * a snapshot: as soon as this tab writes, it gets the notice and reloads.
  *
- * Quem foi PEDIDO como arquivo (PDF, Word) não chega aqui: aquele abre no
- * visualizador de documento, com sumário, zoom e impressão, que é o que se
- * quer de um arquivo pronto.
+ * Whoever was REQUESTED as a file (PDF, Word) does not arrive here: that one opens in the
+ * document viewer, with a table of contents, zoom and printing, which is what one
+ * wants from a finished file.
  *
- * DUAS MÃOS NO MESMO ARQUIVO. O agente reescreve o documento inteiro a cada
- * update_document, então gravar sem saber da versão do outro apaga trabalho —
- * nos dois sentidos. Por isso toda gravação leva a revisão de que partiu: se o
- * documento andou, ela é RECUSADA e quem decide é o usuário, aqui no aviso, em
- * vez de o último a gravar vencer em silêncio.
+ * TWO HANDS ON THE SAME FILE. The agent rewrites the whole document on every
+ * update_document, so writing without knowing the other one's version erases work —
+ * in both directions. That is why every write carries the revision it started from: if the
+ * document moved on, it is REFUSED and the user is who decides, here in the notice, in
+ * stead of the last one to write winning in silence.
  */
 
-/** Pausa da digitação que dispara a gravação. Curta o bastante para o card da
- *  conversa acompanhar, longa o bastante para não gravar a cada tecla. */
+/** Typing pause that triggers the write. Short enough for the conversation
+ *  card to follow, long enough not to write on every key. */
 const AUTOSAVE_MS = 1200
 
 export function DocumentTab({
@@ -40,34 +40,34 @@ export function DocumentTab({
 }: {
   documentId?: string
   title: string
-  /** Escopo das Fontes: promover é sempre para a conversa em que se está. */
+  /** Sources scope: promoting is always to the conversation one is in. */
   sessionId?: string
 }) {
   const { t } = useTranslation()
   const [markdown, setMarkdown] = useState<string | null>(null)
-  /** O documento em páginas: o `\pagebreak` é instrução, não texto. */
-  const paginas = useMemo(() => splitOnPageBreaks(markdown ?? ""), [markdown])
-  /** Área de leitura — é dela que sai a seleção citável. */
+  /** The document in pages: the `\pagebreak` is an instruction, not text. */
+  const pages = useMemo(() => splitOnPageBreaks(markdown ?? ""), [markdown])
+  /** Reading area — it is from it that the quotable selection comes. */
   const readRef = useRef<HTMLDivElement>(null)
   const [missing, setMissing] = useState(false)
   const [mode, setMode] = useState<"edit" | "preview">("preview")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** A revisão que está em disco quando o agente escreveu por cima do que
-   *  estamos editando. Não-nula = o aviso está de pé e nada é gravado até o
-   *  usuário escolher. */
+  /** The revision that is on disk when the agent wrote over what
+   *  we are editing. Non-null = the notice is standing and nothing is written until the
+   *  user chooses. */
   const [conflict, setConflict] = useState<number | null>(null)
 
-  /** O que está em disco — é a comparação que diz se há algo por gravar. */
+  /** What is on disk — it is the comparison that says whether there is something to write. */
   const savedRef = useRef<string | null>(null)
-  /** A revisão de que o texto atual partiu. Vai em toda gravação. */
+  /** The revision the current text started from. It goes in every write. */
   const baseRef = useRef<number | null>(null)
   const timerRef = useRef<number | undefined>(undefined)
-  /** Gravações em voo: o aviso que elas disparam volta para cá, e não pode ser
-   *  lido como "alguém mexeu no documento". */
+  /** Writes in flight: the notice they fire comes back here, and cannot be
+   *  read as "someone touched the document". */
   const savingRef = useRef(0)
-  /** O texto mais recente. A gravação de saída não pode depender do estado: o
-   *  cleanup do efeito o enxergaria congelado no valor de quando montou. */
+  /** The most recent text. The write on exit cannot depend on the state: the
+   *  effect cleanup would see it frozen at the value from when it mounted. */
   const latestRef = useRef<string | null>(null)
   latestRef.current = markdown
   const conflictRef = useRef<number | null>(null)
@@ -94,8 +94,8 @@ export function DocumentTab({
   const save = useCallback(async () => {
     const text = latestRef.current
     if (!documentId || text === null || text === savedRef.current) return
-    // Conflito conhecido: insistir só colheria a mesma recusa. O texto continua
-    // aqui, inteiro, até o usuário dizer o que fazer com ele.
+    // Known conflict: insisting would only harvest the same refusal. The text stays
+    // here, whole, until the user says what to do with it.
     if (conflictRef.current !== null) return
     window.clearTimeout(timerRef.current)
     savingRef.current += 1
@@ -126,8 +126,8 @@ export function DocumentTab({
     [save],
   )
 
-  // Sair da aba (ou do chat) não pode engolir o que estava na pausa da
-  // digitação: o que ainda não foi gravado vai agora.
+  // Leaving the tab (or the chat) cannot swallow what was in the typing
+  // pause: what has not been written yet goes now.
   useEffect(
     () => () => {
       window.clearTimeout(timerRef.current)
@@ -136,16 +136,16 @@ export function DocumentTab({
     [save],
   )
 
-  // O agente escrevendo no MESMO documento. O aviso carrega o id do preview
-  // (.html); o documento é o .md irmão.
+  // The agent writing in the SAME document. The notice carries the id of the preview
+  // (.html); the document is the sibling .md.
   useEffect(() => {
     if (!documentId) return
     return artifactApi.onUpdated((payload) => {
       if (payload.artifactId.replace(/\.html$/, "") !== documentId.replace(/\.md$/, "")) return
       if (savingRef.current > 0 || payload.revision === baseRef.current) return
-      // Recarregar por cima de uma edição não gravada apagaria o que o usuário
-      // acabou de escrever. Com o texto limpo, a versão nova entra sozinha;
-      // com texto sujo, quem decide é ele.
+      // Reloading over an unsaved edit would erase what the user
+      // has just written. With the text clean, the new version enters by itself;
+      // with dirty text, they are the one who decides.
       if (latestRef.current !== savedRef.current) {
         conflictRef.current = payload.revision
         setConflict(payload.revision)
@@ -155,9 +155,9 @@ export function DocumentTab({
     })
   }, [documentId, load])
 
-  /** "Manter o meu": adota a revisão do disco como base e grava por cima — um
-   *  descarte DELIBERADO da versão do agente, e não o acaso de quem gravou por
-   *  último. */
+  /** "Keep mine": adopts the disk revision as the basis and writes over it — a
+   *  DELIBERATE discard of the agent's version, and not the chance of whoever wrote
+   *  last. */
   const keepMine = useCallback(() => {
     baseRef.current = conflictRef.current
     conflictRef.current = null
@@ -189,8 +189,8 @@ export function DocumentTab({
           <span className="shrink-0 text-[10px] text-muted-foreground">{status}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {/* Gravam antes de agir: o arquivo e a fonte saem do que está EM
-              DISCO, e o que ficou na pausa da digitação sairia de fora. */}
+          {/* They write before acting: the file and the source come from what is ON
+              DISK, and what stayed in the typing pause would be left out. */}
           {sessionId && (
             <DocumentSourceBadge
               documentId={documentId}
@@ -222,9 +222,9 @@ export function DocumentTab({
             <Hint label={t("folders.previewMode")}>
               <button
                 type="button"
-                // Voltar para a leitura grava antes: o card na conversa mostra o
-                // que está em disco, e ficar atrás do que se acabou de escrever
-                // pareceria que a edição se perdeu.
+                // Going back to reading writes first: the card in the conversation shows
+                // what is on disk, and lagging behind what was just written
+                // would look like the edit was lost.
                 onClick={() => {
                   void save()
                   setMode("preview")
@@ -291,8 +291,8 @@ export function DocumentTab({
           ref={readRef}
           className="min-h-0 min-w-0 flex-1 overflow-auto px-4 py-4 text-sm text-foreground"
         >
-          {/* Sem resolve: o documento vivo não tem página nem linha — o
-              trecho citado é o texto, e é só isso que o chip carrega. */}
+          {/* Without resolve: the living document has neither page nor line — the
+              quoted excerpt is the text, and that is all the chip carries. */}
           {documentId && (
             <QuoteSelection
               containerRef={readRef}
@@ -302,9 +302,9 @@ export function DocumentTab({
               readAloud
             />
           )}
-          {/* O `\pagebreak` é instrução do renderizador, não conteúdo: aqui ele
-              aparece como a separação entre as páginas, igual ao PDF e ao .docx. */}
-          {paginas.map((pagina, i) => (
+          {/* The `\pagebreak` is a renderer instruction, not content: here it
+              appears as the separation between the pages, like in the PDF and the .docx. */}
+          {pages.map((page, i) => (
             <Fragment key={i}>
               {i > 0 && (
                 <div className="my-5 flex items-center gap-3" aria-hidden>
@@ -315,7 +315,7 @@ export function DocumentTab({
                   <span className="h-px flex-1 bg-border" />
                 </div>
               )}
-              <MessageResponse>{pagina}</MessageResponse>
+              <MessageResponse>{page}</MessageResponse>
             </Fragment>
           ))}
         </div>

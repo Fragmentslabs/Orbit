@@ -1,25 +1,25 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 /**
- * Escopo da conversa atual para a resolução de provedores.
+ * Scope of the current conversation for provider resolution.
  *
- * Alguns provedores exigem um identificador estável da conversa em todas as
- * requisições (ex: o header `x-opencode-session` do OpenCode Go). O
- * `resolveModel` é chamado em dezenas de pontos — turno de chat, orquestrador,
- * esteira, ferramentas aninhadas (visão, question, workers) — e a maioria deles
- * não recebe o sessionId por parâmetro. Em vez de propagar o id por toda a
- * árvore de chamadas, os pontos de entrada de cada fluxo abrem este escopo e o
- * `resolveModel` o lê de dentro, inclusive nas chamadas aninhadas.
+ * Some providers require a stable identifier of the conversation in all the
+ * requests (e.g. OpenCode Go's `x-opencode-session` header). The
+ * `resolveModel` is called from dozens of places — chat turn, orchestrator,
+ * pipeline, nested tools (vision, question, workers) — and most of them
+ * do not receive the sessionId as a parameter. Instead of propagating the id through the whole
+ * call tree, each flow's entry points open this scope and
+ * `resolveModel` reads it from inside, including in the nested calls.
  */
 const storage = new AsyncLocalStorage<string>()
 
-/** Executa `fn` com `sessionId` como conversa corrente (no-op se indefinido). */
+/** Runs `fn` with `sessionId` as the current conversation (no-op if undefined). */
 export function withProviderSession<T>(sessionId: string | undefined, fn: () => T): T {
   if (!sessionId) return fn()
   return storage.run(sessionId, fn)
 }
 
-/** Id da conversa corrente, se houver um escopo aberto. */
+/** Id of the current conversation, if a scope is open. */
 export function currentProviderSession(): string | undefined {
   return storage.getStore()
 }

@@ -12,10 +12,10 @@ import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart } from "@shared/chat"
 
 /**
- * Card de aviso: o usuário anexou uma imagem (pendente no input OU já enviada)
- * e o modelo atual não tem visão e o modo Visão não está configurado — a
- * imagem não chega ao modelo. Oferece o atalho para abrir a configuração do
- * modo Visão. Descartável por sessão (uma nova imagem anexada reexibe o aviso).
+ * Warning card: the user attached an image (pending in the input OR already sent)
+ * and the current model has no vision and Vision mode is not configured — the
+ * image does not reach the model. It offers the shortcut to open the Vision
+ * mode settings. Dismissible per session (a new attached image shows the notice again).
  */
 export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
@@ -29,10 +29,10 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
-  // Imagem anexada no input, ainda não enviada (sync feito pelo PendingAttachmentSync)
+  // Image attached in the input, not sent yet (sync done by PendingAttachmentSync)
   const hasPendingImage = usePendingAttachmentsStore((s) => !!s.imagesByKey[sessionId ?? "draft"])
 
-  // Só avalia a sessão ativa do modo (cards do painel lateral não mostram o aviso)
+  // It only evaluates the active session of the mode (side panel cards do not show the notice)
   const isActive = !sessionId || sessionId === activeSessionId
   const modelVision = selected ? modelSupportsVision(catalog[selected.providerId], selected.modelId) : true
 
@@ -42,7 +42,7 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
       )
     : undefined
 
-  // Aviso descartado só vale para a imagem atual: anexar uma nova reexibe o card
+  // A dismissed notice only counts for the current image: attaching a new one shows the card again
   useEffect(() => {
     if (hasPendingImage) setDismissed(false)
   }, [hasPendingImage])

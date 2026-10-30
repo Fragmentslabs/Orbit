@@ -77,10 +77,10 @@ function saveRecentFolders(folders: string[]) {
   localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
 }
 
-// Aviso da primeira vez (workers): o modal de configuração só abre na 1ª
-// ativação do modo agente sem worker configurado. "Usar o modelo principal"
-// é uma configuração válida (fallback para o modelo do chat) — depois do
-// aviso, não reabre mais, nem em chat novo (persistido).
+// First-time notice (workers): the settings modal only opens on the 1st
+// activation of agent mode with no worker configured. "Use the main model"
+// is a valid setting (fallback to the chat model) — after the
+// notice, it does not open again, not even in a new chat (persisted).
 const WORKER_CONFIG_PROMPTED_KEY = "orbit-worker-config-prompted"
 
 function workerConfigPrompted() {
@@ -96,29 +96,29 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   status?: ChatStatus
   onStop?: () => void
   hasMessages?: boolean
-  /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
+  /** Active session — the Brain toggle is per chat (undefined = new chat) */
   sessionId?: string
-  /** Sem provedor configurado e o usuário tentou enviar — quem renderiza o card decide como reagir */
+  /** No provider configured and the user tried to send — whoever renders the card decides how to react */
   onProviderBlocked?: () => void
-  /** Mostra o seletor de pastas/repositórios acima do input (some em visões como a tela cheia do browser) */
+  /** Shows the folders/repositories selector above the input (it goes away in views like the browser fullscreen) */
   showFolders?: boolean
-  /** Pastas do chat quando NÃO são as do workspace (aba do painel: as da própria sessão) */
+  /** Folders of the chat when they are NOT the workspace ones (panel tab: the ones of its own session) */
   folders?: string[]
   onFoldersChange?: (folders: string[]) => void
 }) {
   const { t } = useTranslation()
-  // Chave da mensagem respondida: o chat de código não tem rascunho por
-  // painel, então é a sessão (ou "draft" no chat novo).
+  // Key of the replied message: the code chat has no draft per
+  // panel, so it is the session (or "draft" in the new chat).
   const replyKey = sessionId ?? "draft"
-  // ↑/↓ trazem de volta os textos já enviados nesta sessão.
+  // ↑/↓ bring back the texts already sent in this session.
   const navigateHistory = useInputHistory(sessionId, replyKey)
   const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
   const plan = useModeActive("plan", sessionId, codeActiveModes.plan)
   const search = useModeActive("search", sessionId, codeActiveModes.search)
   const subagents = useModeActive("subagents", sessionId, codeActiveModes.subagents)
-  // Worker (subchat de uma orquestracao) nunca orquestra: seria recursao, e o
-  // engine ja bloqueia isso do lado do main (allowDelegation/orchestrate). O
-  // toggle some da UI para o estado nao mentir sobre o que vai acontecer.
+  // A worker (subchat of an orchestration) never orchestrates: that would be
+  // recursion, and the engine already blocks it on the main side
+  // (allowDelegation/orchestrate). The toggle leaves the UI so the state does not lie.
   const isWorker = useSessionStore(
     (s) => s.sessions.find((x) => x.id === sessionId)?.orchestration?.role === "worker",
   )
@@ -127,63 +127,63 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const setModeActive = useModeOverrides((s) => s.setMode)
   const [loop, setLoop] = useState(false)
   const { mode } = useWorkspace()
-  // Orquestração é exclusiva do modo code, e nunca dentro de um worker
+  // Orchestration is exclusive to code mode, and never inside a worker
   useEffect(() => {
     if (mode === "chat" || isWorker) setModeActive("orchestra", sessionId, false)
   }, [mode, isWorker, sessionId, setModeActive])
   const [configKind, setConfigKind] = useState<DelegationConfigKind | null>(null)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
-  // O menu "+" é controlado para poder FECHAR quando a engrenagem abre um dos
-  // modais de configuração: o popup do menu vive em z-[999], acima dos modais
-  // (z-[80]) de propósito, e a engrenagem corta a propagação do clique — sem
-  // fechar na mão, ele fica aberto por cima do formulário.
+  // The "+" menu is controlled so it can CLOSE when the gear opens one of the
+  // settings modals: the menu popup lives at z-[999], above the modals
+  // (z-[80]) on purpose, and the gear stops the click propagation — without
+  // closing it by hand, it stays open over the form.
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const simple = useSimpleMode(sessionId, codeActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId, codeActiveModes.brain)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useCodeContext()
-  // Autonomia POR CHAT: o seletor muda só esta conversa.
+  // Autonomy PER CHAT: the selector changes only this conversation.
   const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = useCallback(
     (id: PermissionMode) => usePermissionPrefs.getState().setMode(sessionId, id),
     [sessionId],
   )
   const { folders: foldersDoWorkspace, setFolders: setFoldersDoWorkspace } = useWorkspace()
-  // Uma aba do painel passa as pastas da própria sessão; no resto, o workspace
-  // é a fonte (é ele que o envio grava na sessão).
+  // A panel tab passes the folders of its own session; in the rest, the workspace
+  // is the source (it is what the send writes to the session).
   const folders = foldersProp ?? foldersDoWorkspace
   const setFolders = onFoldersChangeProp ?? setFoldersDoWorkspace
-  // Sem pasta o modo código não tem onde trabalhar. O Enviar NÃO é
-  // desabilitado por isso: o submit é interceptado (o texto é preservado) e o
-  // card abaixo do seletor diz o motivo, com o atalho que resolve.
+  // Without a folder code mode has nowhere to work. Send is NOT
+  // disabled because of that: the submit is intercepted (the text is preserved) and the
+  // card below the selector says the reason, with the shortcut that solves it.
   const noFolder = folders.length === 0
   const [folderHintVisible, setFolderHintVisible] = useState(false)
-  // O card é sobre a falta de pasta: some sozinho quando uma é associada.
+  // The card is about the missing folder: it goes away by itself when one is attached.
   useEffect(() => {
     if (!noFolder) setFolderHintVisible(false)
   }, [noFolder])
 
-  // Skills de projeto (.orbit/skills) acompanham a pasta principal ativa
+  // Project skills (.orbit/skills) follow the active main folder
   useEffect(() => {
     void useSkillsStore.getState().refresh(folders[0])
   }, [folders])
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  // Thinking POR CHAT: sem escolha nesta conversa, vale o nível do modelo.
+  // Thinking PER CHAT: with no choice in this conversation, the model level applies.
   const { enabled, variantId: savedVariant, update } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   const suggestion = usePromptSuggestion(sessionId)
-  // Nível salvo que este modelo não oferece (ex: "medium" onde só há
-  // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
+  // A saved level this model does not offer (e.g. "medium" where there is only
+  // low/high/max) becomes the nearest neighbor — the same one the engine sends.
   const variantId = closestVariant(model?.variants?.map((v) => v.id) ?? [], savedVariant) ?? savedVariant
-  // Thinking: o chip das preferências define o default; reasoning do modelo e
-  // modelos com reasoningAlwaysOn continuam valendo como antes
+  // Thinking: the preferences chip defines the default; the model's reasoning and
+  // models with reasoningAlwaysOn keep applying as before
   const thinking = codeActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
-  // Pré-configuração (sem provedor): o envio é bloqueado via onSubmitCapture —
-  // em CAPTURE, antes do handleSubmit do PromptInput limpar o input — para o
-  // texto do usuário não se perder; onProviderBlocked mostra o card explicativo
+  // Pre-configuration (no provider): sending is blocked via onSubmitCapture —
+  // in CAPTURE, before PromptInput's handleSubmit clears the input — so the
+  // user's text is not lost; onProviderBlocked shows the explanatory card
   const noProvider = useNoProviderConnected()
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
@@ -197,12 +197,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const computer = useComputerMode(sessionId)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
-  // Servidores MCP: controle FIXO no rodapé, não um modo — ele recorta quais
-  // servidores esta conversa enxerga (as tools em si não têm liga/desliga).
+  // MCP servers: a FIXED control in the footer, not a mode — it narrows which
+  // servers this conversation sees (the tools themselves have no on/off).
   const toolsServers = useToolsServers(sessionId)
   const workerModel = useProviderStore((s) => s.workerModel)
-  // Aviso da primeira vez: só abre na 1ª ativação do modo agente sem worker
-  // configurado; depois disso o toggle só liga/desliga (padrão = modelo principal)
+  // First-time notice: it only opens on the 1st activation of agent mode with no worker
+  // configured; after that the toggle only turns on/off (default = main model)
   const maybePromptWorkerConfig = useCallback((kind: DelegationConfigKind) => {
     if (workerModel || workerConfigPrompted()) return
     markWorkerConfigPrompted()
@@ -219,12 +219,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     permissionMode,
-    // Modo vindo do seletor: trocar no meio da resposta vale na hora.
+    // Mode coming from the selector: switching in the middle of the reply counts right away.
     followGlobalPermission: true,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra && mode === "code" ? {} : undefined,
-    // Na orquestra o Loop não vale (quem revisa é o orquestrador)
+    // In the orchestra Loop does not apply (the reviewer is the orchestrator)
     loop: orchestra && mode === "code" ? undefined : loop,
     toolsServers: toolsServers ?? undefined,
     computer: computer.active || undefined,
@@ -234,10 +234,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     const [directory, ...extraDirectories] = folders
     return { directory, extraDirectories }
   }, [folders])
-  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. O
-   *  estado de ocupado é lido do store no instante da fala — a chamada pode
-   *  estar rodando com o composer do dono desmontado, então nada aqui pode
-   *  depender do chat que estiver aberto. */
+  /** The call's turn already tied to ONE session: it never uses the active session. The
+   *  busy state is read from the store at the instant of the utterance — the call may
+   *  be running with the owner's composer unmounted, so nothing here can
+   *  depend on the chat that happens to be open. */
   const submitVoiceTo = useCallback(
     (targetSessionId: string, text: string): boolean => {
       if (noProvider) {
@@ -258,12 +258,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     },
     [noProvider, onProviderBlocked, getDirs, buildOptions, enqueueForSend, sendMessage],
   )
-  /** O submit da chamada DESTE composer, preso à sessão dele. */
+  /** The call submit of THIS composer, tied to its session. */
   const submitVoiceToSession = useCallback(
     (text: string): boolean => (sessionId ? submitVoiceTo(sessionId, text) : false),
     [sessionId, submitVoiceTo],
   )
-  /** Chat de código novo: cria a sessão dona da chamada antes de ligar. */
+  /** New code chat: creates the session that owns the call before dialing. */
   const createCallSession = useCallback(async () => {
     if (folders.length === 0) return undefined
     const { directory, extraDirectories } = getDirs()
@@ -280,8 +280,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     submit: submitVoiceToSession,
     createCallSession,
   })
-  // Mesmo contrato do input do chat: o composer da chamada registra o submit
-  // atual, mas a chamada continua presa à sessão em que nasceu.
+  // Same contract as the chat input: the call composer registers the current
+  // submit, but the call stays tied to the session it was born in.
   const registerVoiceSubmit = voiceCall.registerSubmit
   useEffect(() => {
     if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoiceToSession)
@@ -301,8 +301,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       label: t("input.modes.vision.label"),
       active: vision,
       onChange: (v: boolean) => {
-        // Primeira ativação sem modelo configurado → abre a configuração;
-        // depois disso o toggle só liga/desliga (a configuração fica guardada)
+        // First activation with no model configured → opens the settings;
+        // after that the toggle only turns on/off (the settings stay stored)
         if (v && !visionModel) setVisionConfigOpen(true)
         else setModeActive("vision", sessionId, v)
       },
@@ -311,16 +311,16 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         setVisionConfigOpen(true)
       },
     },
-    // Computador: só aparece com o interruptor das Preferências ligado.
+    // Computer: only appears with the Preferences switch on.
     ...(computer.visible
       ? [{ icon: Monitor, label: t("input.modes.computer.label"), active: computer.active, onChange: (v: boolean) => setModeActive("computer", sessionId, v) }]
       : []),
   ], [search, plan, simple, brain, vision, visionModel, computer.visible, computer.active, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
-    // Editando um item da fila (lápis na fila): o Enter grava a edição no
-    // MESMO item — a ordem da fila não muda — em vez de enfileirar outra.
-    // Com o input vazio o Enter cancela a edição e o fluxo normal segue.
+    // Editing a queue item (pencil in the queue): Enter saves the edit in the
+    // SAME item — the queue order does not change — instead of queueing another.
+    // With the input empty Enter cancels the edit and the normal flow goes on.
     const editingId = sessionId ? useMessageQueueStore.getState().editing[sessionId] : undefined
     const rawText = message.text?.trim()
     if (editingId && sessionId) {
@@ -366,10 +366,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     text = resolveText(text)
     saveRecentFolders(folders)
     const [directory, ...extraDirectories] = folders
-    // Elementos selecionados no browser do painel (modo seleção): viram
-    // anexos (chip/badge na bolha da mensagem, como PDFs). O detalhe
-    // (selector/html/texto) vai serializado no data URL do MIME marcador e o
-    // engine o converte em texto para o modelo — a bolha mostra só o chip.
+    // Elements selected in the panel browser (selection mode): they become
+    // attachments (chip/badge in the message bubble, like PDFs). The detail
+    // (selector/html/text) goes serialized in the data URL of the marker MIME and the
+    // engine converts it into text for the model — the bubble shows only the chip.
     const currentSelections = selections
     if (currentSelections.length > 0) {
       files.push(
@@ -399,10 +399,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       files.push(...quotesToFileParts(quotes))
       usePanelStore.getState().clearQuotes()
     }
-    // A mensagem foi enviada: o rascunho da sessão (se existia de uma troca
-    // anterior) não pode mais voltar ao input ao reabrir o chat.
+    // The message was sent: the session draft (if it existed from a previous
+    // switch) can no longer come back to the input when reopening the chat.
     if (sessionId) clearInputDraft(sessionId)
-    // A citação é prependada DEPOIS do comando "/" ser resolvido (ver chat-input)
+    // The quote is prepended AFTER the "/" command is resolved (see chat-input)
     return onSubmit(
       withReplyPrefix(replyKey, text),
       buildOptions(),
@@ -421,21 +421,21 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       id: `perm-${id}`,
       label: t("codeInput.slash.permissionLabel", { label }),
       description,
-      keywords: ["permissao", "autonomia", id],
-      group: "Modos",
+      keywords: ["permission", "autonomy", id],
+      group: "Modes",
       active: permissionMode === id,
       run: toggle(() => setPermissionMode(id)),
     })
     return [
-      { id: "pesquisa", label: t("input.modes.search.label"), description: t("codeInput.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
-      { id: "plano", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setModeActive("plan", sessionId, !plan)) },
-      { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
-      { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
-      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => {
+      { id: "search", label: t("input.modes.search.label"), description: t("codeInput.slash.searchDescription"), keywords: ["web", "search"], group: "Modes" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
+      { id: "plan", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "reading"], group: "Modes" as const, active: plan, run: toggle(() => setModeActive("plan", sessionId, !plan)) },
+      { id: "plain", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["plain", "text"], group: "Modes" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
+      { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memory", "brain"], group: "Modes" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegate"], group: "Modes" as const, active: subagents, run: toggle(() => {
         setModeActive("subagents", sessionId, !subagents)
         if (!subagents) maybePromptWorkerConfig("subagents")
       }) },
-      ...(mode === "code" && !isWorker ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
+      ...(mode === "code" && !isWorker ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plan"], group: "Modes" as const, active: orchestra, run: toggle(() => {
         setModeActive("orchestra", sessionId, !orchestra)
         if (!orchestra) {
           setLoop(false)
@@ -445,24 +445,24 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
       permission("full", t("codeInput.slash.permFull"), t("codeInput.slash.permFullDescription")),
-      // Loop: na orquestra quem revisa é o orquestrador — o item aparece, mas
-      // desabilitado (mesma regra do chip na linha do input).
-      { id: "loop", label: t("codeInput.modes.loop.label"), description: orchestra ? t("delegation.loopOffInOrchestra") : t("codeInput.modes.loop.description"), keywords: ["loop", "iterar", "revisao"], group: "Modos" as const, active: loop && !orchestra, disabled: orchestra, run: toggle(() => setLoop((v) => !v)) },
-      // Visão: primeira ativação sem modelo configurado abre a configuração.
-      { id: "vision", label: t("input.modes.vision.label"), description: t("input.modes.vision.description"), keywords: ["visao", "imagem", "vision"], group: "Modos" as const, active: vision, run: toggle(() => {
+      // Loop: in the orchestra the reviewer is the orchestrator — the item shows
+      // up but disabled (same rule as the chip on the input row).
+      { id: "loop", label: t("codeInput.modes.loop.label"), description: orchestra ? t("delegation.loopOffInOrchestra") : t("codeInput.modes.loop.description"), keywords: ["loop", "iterate", "review"], group: "Modes" as const, active: loop && !orchestra, disabled: orchestra, run: toggle(() => setLoop((v) => !v)) },
+      // Vision: first activation with no model configured opens the settings.
+      { id: "vision", label: t("input.modes.vision.label"), description: t("input.modes.vision.description"), keywords: ["vision", "image"], group: "Modes" as const, active: vision, run: toggle(() => {
         if (!vision && !visionModel) setVisionConfigOpen(true)
         else setModeActive("vision", sessionId, !vision)
       }) },
       ...actionCommands,
-      { id: "nova-sessao", label: t("codeInput.slash.newSession"), description: t("codeInput.slash.newSessionDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
-      // Regra da paleta: o que ESCREVE texto no input aparece com o texto
-      // literal (o que será enviado); o que só age na UI (modos, nova sessão,
-      // settings) aparece com rótulo em prosa. Assim "/init" e "/document" são
-      // iguais ao que o usuário digita, e nada mente sobre o que vai ser
-      // enviado. As REFERÊNCIAS (skills, MCP, arquivos) ficam na paleta "@".
-      { id: "create-skill", label: "/create-skill", description: t("codeInput.slash.createSkillDescription"), keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
-      { id: "document", label: "/document", description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
-      { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
+      { id: "new-session", label: t("codeInput.slash.newSession"), description: t("codeInput.slash.newSessionDescription"), keywords: ["clear", "reset", "new"], group: "Actions" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
+      // Palette rule: what WRITES text into the input appears with the literal
+      // text (what will be sent); what only acts on the UI (modes, new session,
+      // settings) appears with a prose label. Thus "/init" and "/document" are
+      // the same as what the user types, and nothing lies about what is going to be
+      // sent. The REFERENCES (skills, MCP, files) stay in the "@" palette.
+      { id: "create-skill", label: "/create-skill", description: t("codeInput.slash.createSkillDescription"), keywords: ["skill", "create", "learn"], group: "Actions" as const, run: ({ setText }) => setText("/create-skill ") },
+      { id: "document", label: "/document", description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentation", "screenshot"], group: "Actions" as const, run: ({ setText }) => setText("/document ") },
+      { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Actions" as const, run: toggle(() => openSettings()) },
     ]
   }, [search, plan, simple, brain, subagents, orchestra, isWorker, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, mode, openSettings, maybePromptWorkerConfig, loop, vision, visionModel, setVisionConfigOpen, t])
 
@@ -490,8 +490,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         <PromptInputAttachments className="!w-auto !p-0 mb-2" leading={<ReplyBar replyKey={replyKey} />}>
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
-        {/* Trechos citados do visualizador de documento e instantes apontados
-            na aba Motion */}
+        {/* Excerpts quoted from the document viewer and instants pointed at
+            in the Motion tab */}
         {quotes.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
             {quotes.map((q) => (
@@ -521,7 +521,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             ))}
           </div>
         )}
-        {/* Elementos selecionados no browser do painel (modo seleção) */}
+        {/* Elements selected in the panel browser (selection mode) */}
         {selections.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
             {selections.map((sel) => (
@@ -549,11 +549,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         <PromptInput
           multiple
           onSubmitCapture={(e) => {
-            // Em CAPTURE, antes de o handleSubmit do PromptInput limpar o
-            // input: o texto do usuário fica onde está e o card diz o motivo,
-            // em vez de o clique morrer em silêncio (sem provedor ou sem
-            // pasta). O card do provedor tem precedência — sem ele nada mais
-            // funcionaria de qualquer forma.
+            // In CAPTURE, before PromptInput's handleSubmit clears the
+            // input: the user's text stays where it is and the card says the reason,
+            // instead of the click dying in silence (no provider or no
+            // folder). The provider card has precedence — without it nothing else
+            // would work anyway.
             if (noProvider) {
               e.preventDefault()
               e.stopPropagation()
@@ -570,12 +570,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
           <PromptInputBody>
-            {/* O microfone é ancorado na LINHA do textarea, e não no topo da
-                caixa — a mesma posição do input do chat. */}
+            {/* The microphone is anchored to the LINE of the textarea, and not to the top of the
+                box — the same position as the chat input. */}
             <div className="relative w-full">
-              {/* Canto SUPERIOR direito, no nível da primeira linha do texto —
-                  a mesma posição do input do chat: absoluto para não empurrar o
-                  conteúdo, com a folga à direita reservada no próprio textarea
+              {/* TOP right corner, at the level of the first line of the text —
+                  the same position as the chat input: absolute so it does not push the
+                  content, with the slack on the right reserved in the textarea itself
                   (pr-10). */}
               <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
                 <VoiceCallPanel control={voiceCall} />
@@ -606,7 +606,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       setModeActive("subagents", sessionId, v)
                       if (v) {
                         setModeActive("orchestra", sessionId, false)
-                        // Aviso da primeira vez (só na 1ª ativação sem worker)
+                        // First-time notice (only on the 1st activation with no worker)
                         maybePromptWorkerConfig("subagents")
                       }
                     }}
@@ -615,14 +615,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       if (v) {
                         setModeActive("subagents", sessionId, false)
                         setLoop(false)
-                        // Aviso da primeira vez (só na 1ª ativação sem worker)
+                        // First-time notice (only on the 1st activation with no worker)
                         maybePromptWorkerConfig("orchestra")
                       }
                     }}
                     onLoopChange={setLoop}
                     onOpenConfig={(kind) => {
-                      // Fecha o "+" antes de abrir o modal (ver comentário do
-                      // estado): o popup do menu cobriria o formulário.
+                      // Closes the "+" before opening the modal (see the comment of the
+                      // state): the menu popup would cover the form.
                       setAddMenuOpen(false)
                       setConfigKind(kind)
                     }}
@@ -659,11 +659,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 emptySlotAlways={voiceCall.call.active && voiceCall.isCallSession}
                 busy={busy}
                 cancelling={status === "cancelling"}
-                // Sem pasta o Enviar continua ativo de propósito (o submit é
-                // interceptado e o card explica). O chevron NÃO fica
-                // desabilitado — é a mesma peça visual do Enviar e ficaria com
-                // duas opacidades; ele também acende o card, em vez de abrir um
-                // menu de ações que agendariam sem diretório.
+                // Without a folder Send stays active on purpose (the submit is
+                // intercepted and the card explains). The chevron does NOT stay
+                // disabled — it is the same visual piece as Send and would end up with
+                // two opacities; it also lights up the card, instead of opening an
+                // actions menu that would schedule without a directory.
                 onOptionsBlocked={noFolder ? () => setFolderHintVisible(true) : undefined}
                 onStop={() => onStop?.()}
                 onQueue={(text, files) => {
@@ -684,7 +684,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 }}
                 onSendToSidePanel={async (text, files) => {
                   const { directory, extraDirectories } = getDirs()
-                  // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
+                  // New chat in the same folder as the current session (if it is in one)
                   const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
                   const newSession = await createSession(mode, { setActive: false, directory, extraDirectories, folderId: current?.folderId ?? null })
                   await sendMessage(mode, withReplyPrefix(replyKey, text), { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories, files: toFileParts(files ?? []) })
@@ -747,7 +747,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 setModeActive("subagents", sessionId, next)
                 if (next) {
                   setModeActive("orchestra", sessionId, false)
-                  // Aviso da primeira vez (só na 1ª ativação sem worker)
+                  // First-time notice (only on the 1st activation with no worker)
                   maybePromptWorkerConfig("subagents")
                 }
               }}
@@ -767,7 +767,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 if (next) {
                   setModeActive("subagents", sessionId, false)
                   setLoop(false)
-                  // Aviso da primeira vez (só na 1ª ativação sem worker)
+                  // First-time notice (only on the 1st activation with no worker)
                   maybePromptWorkerConfig("orchestra")
                 }
               }}
@@ -802,8 +802,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
-          {/* Computador: na barra só se ligado em Aparência (padrão: oculto) e
-              com o interruptor das Preferências → Computador ligado. */}
+          {/* Computer: in the bar only if enabled in Appearance (default: hidden) and
+              with the Preferences → Computer switch on. */}
           {computer.visible && modesInRow.includes("computer") && (
             <ModeToggle
               icon={Monitor}

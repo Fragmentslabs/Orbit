@@ -15,45 +15,46 @@ import { readJson } from '../storage'
 import { toAiTools, toModelMessages, toStopReason } from './sampling-messages'
 
 /**
- * SAMPLING — o "MCP inverso".
+ * SAMPLING — the "reverse MCP".
  *
- * Num servidor MCP comum o fluxo é: o Orbit (cliente) chama as ferramentas do
- * app. Aqui é o contrário: o APP (servidor) pede `sampling/createMessage` e o
- * Orbit — que tem o modelo e as credenciais — responde. O app ganha IA sem
- * gerir API key nenhuma.
+ * In a common MCP server the flow is: Orbit (client) calls the app's tools. Here it is
+ * the opposite: the APP (server) asks for `sampling/createMessage` and Orbit — which has
+ * the model and the credentials — answers. The app gains AI without managing any API
+ * key.
  *
- * O pedido pode trazer `tools`: as funções do PRÓPRIO app, com `inputSchema`.
- * Nesse caso o modelo não devolve texto solto — devolve `tool_use` com os
- * argumentos já preenchidos dentro do schema, e **quem executa é o app**. É
- * isso que torna o resultado padronizado: o parâmetro é validado pelo schema
- * declarado pela aplicação, e a execução nunca sai do controle dela.
+ * The request may bring `tools`: the functions of the app ITSELF, with `inputSchema`. In
+ * that case the model does not return loose text — it returns `tool_use` with the
+ * arguments already filled in inside the schema, and **whoever executes is the app**.
+ * That is what makes the result standardized: the parameter is validated by the schema
+ * declared by the application, and execution never leaves its control.
  *
- * Dois limites deliberados:
- * - os tokens de saída são limitados (o app está gastando a conta do usuário);
- * - o handler NÃO executa nada: sem `execute` nas tools, o modelo apenas
- *   escolhe e preenche. O ciclo (resultado → nova tentativa) é do app, que
- *   manda o `tool_result` no pedido seguinte.
+ * Two deliberate limits:
+ * - the output tokens are limited (the app is spending the user's account);
+ * - the handler does NOT execute anything: without `execute` on the tools, the model
+ *   only chooses and fills in. The cycle (result → another attempt) belongs to the app,
+ *   which sends the `tool_result` in the next request.
  *
- * A tradução das mensagens vive em sampling-messages.ts, que é pura e testada.
+ * The translation of the messages lives in sampling-messages.ts, which is pure and
+ * tested.
  */
 
-/** Teto de saída por pedido de app — acima disso é o app pedindo demais. */
+/** Output ceiling per app request — above that the app is asking too much. */
 const SAMPLING_MAX_TOKENS = 4096
 const DEFAULT_MAX_TOKENS = 1024
 
-/** Modelo de reserva quando ainda não há modelo selecionado em disco. */
+/** Fallback model when there is no model selected on disk yet. */
 const FALLBACK_MODEL = { providerId: 'openai', modelId: 'gpt-4o' }
 
 /**
- * O que o Orbit declara ao conectar: sem estas capabilities um servidor que
- * mandasse `sampling/createMessage` receberia "method not found" — um client
- * MCP comum só FALA com o servidor, nunca responde a ele.
+ * What Orbit declares when connecting: without these capabilities a server that sent
+ * `sampling/createMessage` would get "method not found" — a common MCP client only
+ * TALKS to the server, it never answers it.
  */
 export function samplingCapabilities() {
   return { sampling: { tools: {} } }
 }
 
-/** O modelo do pedido: o auxiliar das Preferências, senão o selecionado. */
+/** The request's model: the auxiliary one from Preferences, otherwise the selected one. */
 async function samplingModel() {
   const stored = await readJson<{ providerId?: string; modelId?: string }>(StorageKeys.selectedModel)
   const conversation =
@@ -69,11 +70,11 @@ async function samplingModel() {
 }
 
 /**
- * Responde um `sampling/createMessage`.
+ * Answers a `sampling/createMessage`.
  *
- * Devolve `tool_use` (o app executa e, se o resultado não servir, manda o
- * `tool_result` no pedido seguinte para o modelo corrigir) ou texto, quando o
- * pedido não trouxe ferramentas.
+ * Returns `tool_use` (the app executes and, if the result does not serve, sends the
+ * `tool_result` in the next request for the model to correct it) or text, when the
+ * request brought no tools.
  */
 async function handleSampling(
   serverName: string,
@@ -88,7 +89,7 @@ async function handleSampling(
   const hasTools = Boolean(tools?.length)
 
   console.log(
-    `[mcp:sampling] ${serverName} pediu uma resposta — ${messages.length} mensagem(ns), ` +
+    `[mcp:sampling] ${serverName} asked for a response — ${messages.length} message(s), ` +
       `${tools?.length ?? 0} tool(s), maxTokens=${maxOutputTokens}`,
   )
 
@@ -112,7 +113,7 @@ async function handleSampling(
         : {}),
     })
 
-    // Blocos de SAMPLING (não ContentBlock): é esta união que tem `tool_use`.
+    // SAMPLING blocks (not ContentBlock): it is this union that has `tool_use`.
     const blocks: SamplingMessageContentBlock[] = []
     if (result.text) blocks.push({ type: 'text', text: result.text })
     for (const call of result.toolCalls ?? []) {
@@ -125,10 +126,10 @@ async function handleSampling(
     }
     const usedTools = blocks.some((block) => block.type === 'tool_use')
 
-    // Duas formas de resposta, e o schema é diferente em cada uma: só a
-    // variante COM tools aceita um ARRAY de blocos (é ela que carrega
-    // `tool_use`). Sem tools, o MCP espera UM bloco — devolver array ali é
-    // recusado na validação, do lado do app.
+    // Two shapes of answer, and the schema is different in each one: only the variant WITH
+    // tools accepts an ARRAY of blocks (it is the one that carries `tool_use`). Without
+    // tools, MCP expects ONE block — returning an array there is refused in validation, on
+    // the app's side.
     if (hasTools) {
       return {
         model: model.name,
@@ -145,16 +146,16 @@ async function handleSampling(
       stopReason: toStopReason(result.finishReason, false),
     } satisfies CreateMessageResult
   } catch (err) {
-    // O erro sobe como erro JSON-RPC do pedido: o app precisa saber que não
-    // houve resposta (chave ausente, modelo indisponível) em vez de receber um
-    // texto vazio que passaria por resposta do modelo.
+    // The error goes up as a JSON-RPC error of the request: the app has to know that there
+    // was no answer (missing key, model unavailable) instead of receiving an empty text
+    // that would pass for a model response.
     const message = err instanceof Error ? err.message : String(err)
-    console.warn(`[mcp:sampling] falha ao responder ${serverName}:`, message)
-    throw new Error(`Orbit não conseguiu responder à amostragem: ${message}`)
+    console.warn(`[mcp:sampling] failed to answer ${serverName}:`, message)
+    throw new Error(`Orbit could not answer the sampling request: ${message}`)
   }
 }
 
-/** Liga o handler de sampling no client de um servidor. */
+/** Attaches the sampling handler to a server's client. */
 export function attachSamplingHandler(client: Client, serverName: string): void {
   client.setRequestHandler(CreateMessageRequestSchema, (request) =>
     handleSampling(serverName, request as CreateMessageRequest),

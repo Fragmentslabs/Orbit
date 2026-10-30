@@ -5,23 +5,23 @@ import { usePanelStore } from "@/src/stores/panel-store"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * Selo "+N -N" do turno: as linhas que as ferramentas somaram e tiraram do
- * working tree, com o diff aberto no painel ao clicar.
+ * "+N -N" badge of the turn: the lines the tools added and removed from the
+ * working tree, with the diff opened in the panel on click.
  *
- * Ele mora no RODAPÉ da mensagem (canto direito, na linha de copiar/falar/
- * gastos), e não no cabeçalho do acordeon de ações: o acordeon se recolhe
- * sozinho quando o turno termina, e o balanço do que mudou é justamente o que
- * se procura no FIM da mensagem. O modo detalhado também não perde o selo.
+ * It lives in the FOOTER of the message (right corner, in the copy/speak/
+ * usage row), and not in the header of the actions accordion: the accordion collapses
+ * by itself when the turn ends, and the balance of what changed is exactly what
+ * one looks for at the END of the message. Detailed mode does not lose the badge either.
  */
 
-/** O turno mexeu em arquivo? `bash` também altera o working tree, mas o selo
- *  promete o diff das edições — sem nenhuma, ele não tem o que abrir. */
+/** Did the turn touch a file? `bash` also changes the working tree, but the badge
+ *  promises the diff of the edits — with none, it has nothing to open. */
 function wroteFiles(parts: MessagePart[]): boolean {
   return parts.some((p) => p.type === "tool" && (p.tool === "write" || p.tool === "edit"))
 }
 
-/** Linhas somadas/removidas no patch unificado do snapshot (os cabeçalhos
- *  "+++"/"---" não contam). */
+/** Lines added/removed in the unified patch of the snapshot (the "+++"/"---"
+ *  headers do not count). */
 function diffCountsOf(patch?: string): { added: number; removed: number } | null {
   if (!patch) return null
   let added = 0
@@ -35,9 +35,9 @@ function diffCountsOf(patch?: string): { added: number; removed: number } | null
 }
 
 export function DiffBadge({ patch, parts, sessionId, messageId }: {
-  /** Patch unificado do snapshot do turno (message.snapshot.patch). */
+  /** Unified patch of the turn snapshot (message.snapshot.patch). */
   patch?: string
-  /** Partes do turno — é delas que sai "houve edição de arquivo". */
+  /** Parts of the turn — it is from them that "there was a file edit" comes. */
   parts: MessagePart[]
   sessionId?: string
   messageId?: string

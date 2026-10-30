@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import * as Clipboard from 'expo-clipboard'
 import { Check, Copy } from 'lucide-react-native'
 import {
@@ -14,11 +15,12 @@ import { useThemeStore } from '~/stores/theme-store'
 interface CodeBlockProps {
   code: string
   language?: string
-  /** Sem highlight (stream / fence incompleto) — mais barato na JS thread. */
+  /** No highlight (stream / incomplete fence) — cheaper on the JS thread. */
   streaming?: boolean
 }
 
 export function CodeBlock({ code, language, streaming = false }: CodeBlockProps) {
+  const { t } = useTranslation()
   const resolved = useThemeStore((s) => s.resolved)
   const tokens = getThemeTokens(resolved)
   const [copied, setCopied] = useState(false)
@@ -67,7 +69,7 @@ export function CodeBlock({ code, language, streaming = false }: CodeBlockProps)
             <Copy size={12} color={tokens.mutedForeground} />
           )}
           <Text className="text-[11px]" style={{ color: tokens.mutedForeground }}>
-            {copied ? 'Copiado' : 'Copiar'}
+            {copied ? t('codeBlock.copied') : t('codeBlock.copy')}
           </Text>
         </Pressable>
       </View>

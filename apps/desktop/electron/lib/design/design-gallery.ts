@@ -7,10 +7,10 @@ import { readDesignCanvas } from './design-canvas'
 import { deleteDesignCanvas, getDesign } from './design-store'
 
 /**
- * A CAPA de um canvas de design, e o registro dele na galeria — espelha
- * video/motion-gallery.ts. A miniatura é o PRIMEIRO artboard (`order[0]`),
- * fotografado numa janela offscreen no próprio tamanho dele; sem seek nem
- * medição de camada, porque o artboard é estático.
+ * The COVER of a design canvas, and its record in the gallery — mirrors
+ * video/motion-gallery.ts. The thumbnail is the FIRST artboard (`order[0]`),
+ * photographed in an offscreen window at its own size; no seek and no layer
+ * measurement, because the artboard is static.
  */
 
 const COVER_WIDTH = 640
@@ -36,7 +36,7 @@ async function captureCover(id: string, folder: string): Promise<CoverShot | nul
     height,
     frame: false,
     useContentSize: true,
-    // Sem isto o Chromium não pinta uma janela nunca exibida.
+    // Without this Chromium does not paint a window that was never shown.
     paintWhenInitiallyHidden: true,
     webPreferences: {
       offscreen: true,
@@ -53,7 +53,7 @@ async function captureCover(id: string, folder: string): Promise<CoverShot | nul
     const url = `${DESIGN_SCHEME}://${id}/${file.split('/').map(encodeURIComponent).join('/')}`
     await Promise.race([win.loadURL(url).catch(() => {}), new Promise((resolve) => setTimeout(resolve, LOAD_TIMEOUT_MS))])
     await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)', true).catch(() => {})
-    // Um instante para o Chromium terminar de pintar.
+    // A moment for Chromium to finish painting.
     await new Promise((resolve) => setTimeout(resolve, 200))
     const image = await win.webContents.capturePage()
     const png = image.toPNG()
@@ -66,13 +66,13 @@ async function captureCover(id: string, folder: string): Promise<CoverShot | nul
   }
 }
 
-/** Piso entre duas capturas do MESMO canvas: uma rajada de edições não pode
- *  abrir uma janela offscreen por chamada. */
+/** Floor between two captures of the SAME canvas: a burst of edits must not
+ *  open an offscreen window per call. */
 const MIN_REFRESH_MS = 10_000
 
 interface CoverJob {
   running: boolean
-  /** O canvas mudou de novo enquanto a foto era tirada: refaz ao terminar. */
+  /** The canvas changed again while the shot was being taken: redo it when done. */
   again: boolean
   lastAt: number
   opts: { title?: string; sessionId?: string }
@@ -81,14 +81,14 @@ interface CoverJob {
 const coverJobs = new Map<string, CoverJob>()
 
 /**
- * Põe (ou atualiza) a capa do canvas na galeria SEM segurar quem chamou.
+ * Puts (or updates) the canvas cover in the gallery WITHOUT holding up the caller.
  *
- * Capturar custa abrir uma janela offscreen, carregar o artboard, esperar as
- * fontes e o sharp redimensionar — 0,4–2 s (até 15 s no pior caso) que estavam
- * no fim do design_write/design_edit, atrasando o resultado da tool. Aqui a
- * captura vira trabalho de fundo: a tool responde na hora e o tile aparece um
- * instante depois. É idempotente (o item é o `designId`, não o momento) e uma
- * rajada de edições vira uma captura só — a última vence.
+ * Capturing costs opening an offscreen window, loading the artboard, waiting for
+ * the fonts and for sharp to resize — 0.4–2 s (up to 15 s in the worst case) that
+ * used to sit at the end of design_write/design_edit, delaying the tool result.
+ * Here the capture becomes background work: the tool answers right away and the
+ * tile shows up a moment later. It is idempotent (the item is the `designId`, not
+ * the moment) and a burst of edits becomes a single capture — the last one wins.
  */
 export function refreshDesignCover(id: string, opts: { title?: string; sessionId?: string } = {}): void {
   const job = coverJobs.get(id) ?? { running: false, again: false, lastAt: 0, opts: {} }
@@ -118,12 +118,12 @@ async function shoot(job: CoverJob, id: string): Promise<void> {
       })
     }
   } catch {
-    // A capa é acessório: nenhuma falha aqui pode aparecer em outro lugar.
+    // The cover is an accessory: no failure here can surface anywhere else.
   } finally {
     job.running = false
     job.lastAt = Date.now()
-    // O job FICA no mapa: é o `lastAt` dele que segura a próxima captura do
-    // mesmo canvas (um por canvas, barato).
+    // The job STAYS in the map: it is its `lastAt` that holds back the next capture of
+    // the same canvas (one per canvas, cheap).
     if (job.again) {
       job.again = false
       void shoot(job, id)
@@ -131,8 +131,8 @@ async function shoot(job: CoverJob, id: string): Promise<void> {
   }
 }
 
-// Excluir o canvas na galeria apaga o de verdade (a pasta, o registro e o
-// watcher) — excluir é liberar espaço, não só a capa.
+// Deleting the canvas in the gallery deletes the real thing (the folder, the record
+// and the watcher) — deleting frees space, it is not just the cover.
 setMediaDeleteHook('design', async (entry) => {
   if (entry.designId) await deleteDesignCanvas(entry.designId)
 })

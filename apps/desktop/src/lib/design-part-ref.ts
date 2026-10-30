@@ -1,16 +1,16 @@
 import type { ToolPart } from "@shared/chat"
 
 /**
- * Referência de um canvas de design a partir da tool part (design_write /
- * design_edit / design_preview) — espelha motion-part-ref.ts. Os dois modos
- * endereçam o canvas de jeitos diferentes: o caminho da pasta do projeto
- * (design_preview, modo código) ou o nome do canvas da conversa (design_write
- * /design_edit, modo chat) — com fallback para o nome que a própria tool
- * relatou no texto (`Design "..."`), necessário quando o segmento vem de um
- * histórico antigo sem o input completo.
+ * Reference of a design canvas from the tool part (design_write /
+ * design_edit / design_preview) — mirrors motion-part-ref.ts. The two modes
+ * address the canvas in different ways: the project folder path
+ * (design_preview, code mode) or the conversation's canvas name (design_write
+ * /design_edit, chat mode) — with a fallback to the name the tool itself
+ * reported in the text (`Design "..."`), needed when the segment comes from an old
+ * history without the complete input.
  */
 export interface DesignPartRef {
-  /** Canvas endereçado pelo id (dsg_…) — de qualquer conversa. */
+  /** Canvas addressed by the id (dsg_…) — from any conversation. */
   id?: string
   path?: string
   name?: string
@@ -18,14 +18,14 @@ export interface DesignPartRef {
   boards?: number
 }
 
-/** Extrai o nome do canvas do relatório da tool (ver openDesignAndReport). */
+/** Extracts the canvas name from the tool report (see openDesignAndReport). */
 export function designNameInReport(output: string | undefined): string | null {
   if (!output) return null
   const match = /Design "([^"]+)"/.exec(output)
   return match ? match[1] : null
 }
 
-/** Quantos artboards o relatório diz que o canvas tem. */
+/** How many artboards the report says the canvas has. */
 export function designBoardsInReport(output: string | undefined): number | null {
   if (!output) return null
   const match = /with (\d+) artboards?/.exec(output)

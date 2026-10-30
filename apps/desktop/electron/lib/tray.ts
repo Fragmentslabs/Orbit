@@ -3,29 +3,29 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 /**
- * Ícone na bandeja do sistema.
+ * Icon in the system tray.
  *
- * Existe para o app poder FICAR VIVO sem janela: com "fechar para a bandeja"
- * ligado, o X esconde o Orbit (que continua servindo os apps conectados por
- * MCP) e só a bandeja o traz de volta. Sem bandeja, esconder seria perder o app.
+ * It exists so the app can STAY ALIVE without a window: with "close to tray"
+ * on, the X hides Orbit (which keeps serving the apps connected over
+ * MCP) and only the tray brings it back. Without a tray, hiding would be losing the app.
  *
- * Só o Windows e o Linux a têm: no macOS o X fecha a janela e o app segue vivo
- * no Dock, que já é o caminho de volta — o main nem chega a criá-la lá. Os
- * ramos `darwin` abaixo ficam como o que ela exigiria para voltar ao Mac.
+ * Only Windows and Linux have it: on macOS the X closes the window and the app stays alive
+ * in the Dock, which is already the way back — the main does not even create it there. The
+ * `darwin` branches below stay as what it would need to come back to the Mac.
  *
- * Tema: o menu é NATIVO, então quem o desenha segue o `nativeTheme.themeSource`
- * — é o main que o ajusta a partir do tema do app (canal `theme:sync`), e é por
- * isso que `refreshTray` é chamado quando o tema troca. No Linux o menu é
- * desenhado pelo próprio desktop environment e segue o tema DO SISTEMA: não há
- * como o app sobrepor isso.
+ * Theme: the menu is NATIVE, so whoever draws it follows `nativeTheme.themeSource`
+ * — it is the main that adjusts it from the app's theme (channel `theme:sync`), and that is why
+ * `refreshTray` is called when the theme changes. On Linux the menu is
+ * drawn by the desktop environment itself and follows the SYSTEM's theme: there is no
+ * way for the app to override that.
  */
 
 export interface TrayLabels {
-  /** Clique esquerdo / item "Abrir". */
+  /** Left click / "Open" item. */
   open: string
-  /** Item que encerra o app de verdade. */
+  /** Item that really quits the app. */
   quit: string
-  /** Tooltip do ícone. */
+  /** Icon tooltip. */
   tooltip: string
 }
 
@@ -38,14 +38,14 @@ let tray: Tray | null = null
 let currentLabels: TrayLabels | null = null
 
 /**
- * Ícone da bandeja. O tamanho importa: o Windows pede 16px (e escala em tela
- * HiDPI), o menu bar do macOS usa 18, e o appindicator do Linux ~22 — um único
- * PNG grande não serve, daí o resize.
+ * Tray icon. The size matters: Windows asks for 16px (and scales on a HiDPI
+ * screen), the macOS menu bar uses 18, and Linux's appindicator ~22 — a single
+ * large PNG does not do, hence the resize.
  *
- * A ordem das fontes não é arbitrária: `public/tray.png` vale nos DOIS mundos
- * (em dev é public/, e no app empacotado é dist/, que é o que o builder leva
- * junto). A pasta `build/` só existe em dev — um tray.png lá é atalho de
- * desenvolvimento, não chega no app instalado.
+ * The order of the sources is not arbitrary: `public/tray.png` counts in BOTH worlds
+ * (in dev it is public/, and in the packaged app it is dist/, which is what the builder takes
+ * along). The `build/` folder only exists in dev — a tray.png there is a
+ * development shortcut, it does not reach the installed app.
  */
 function trayIconPath(): string {
   const candidates = [
@@ -80,9 +80,9 @@ export function hasTray(): boolean {
 }
 
 /**
- * Cria a bandeja (idempotente). Devolve null quando não há ícone utilizável —
- * nesse caso o main NÃO deve esconder a janela no fechar, senão o app ficaria
- * sem janela e sem bandeja, inalcançável.
+ * Creates the tray (idempotent). Returns null when there is no usable icon —
+ * in that case the main must NOT hide the window on close, otherwise the app would be left
+ * without a window and without a tray, unreachable.
  */
 export function createTray(labels: TrayLabels, handlers: TrayHandlers): Tray | null {
   currentLabels = labels
@@ -92,34 +92,34 @@ export function createTray(labels: TrayLabels, handlers: TrayHandlers): Tray | n
   }
   const icon = trayIcon()
   if (icon.isEmpty()) {
-    console.warn('[tray] nenhum ícone utilizável em build/ ou no VITE_PUBLIC — sem bandeja')
+    console.warn('[tray] no usable icon in build/ or VITE_PUBLIC — no tray')
     return null
   }
   try {
     tray = new Tray(icon)
   } catch (err) {
-    console.warn('[tray] não foi possível criar a bandeja:', err)
+    console.warn('[tray] could not create the tray:', err)
     tray = null
     return null
   }
   tray.setToolTip(labels.tooltip)
   if (process.platform === 'darwin') {
-    // No macOS o setContextMenu sequestra o clique esquerdo (o menu abriria em
-    // qualquer clique); para "esquerdo abre, direito mostra opções" o menu é
-    // levantado na mão, no botão direito.
+    // On macOS setContextMenu hijacks the left click (the menu would open on
+    // any click); for "left opens, right shows options" the menu is
+    // raised by hand, on the right button.
     tray.on('click', () => handlers.onOpen())
     tray.on('right-click', () => tray?.popUpContextMenu(buildMenu(labels, handlers)))
   } else {
-    // Windows/Linux: o menu do botão direito é registrado de uma vez. No
-    // Linux alguns desktops (appindicator) ignoram o clique esquerdo — o menu
-    // continua sendo o caminho para abrir.
+    // Windows/Linux: the right-button menu is registered at once. On
+    // Linux some desktops (appindicator) ignore the left click — the menu
+    // remains the way to open.
     tray.setContextMenu(buildMenu(labels, handlers))
     tray.on('click', () => handlers.onOpen())
   }
   return tray
 }
 
-/** Reaplica rótulos (troca de idioma) e o menu (troca de tema). */
+/** Reapplies labels (language change) and the menu (theme change). */
 export function refreshTray(labels: TrayLabels, handlers: TrayHandlers): void {
   currentLabels = labels
   if (!hasTray()) return
@@ -127,7 +127,7 @@ export function refreshTray(labels: TrayLabels, handlers: TrayHandlers): void {
   if (process.platform !== 'darwin') tray?.setContextMenu(buildMenu(labels, handlers))
 }
 
-/** Rótulos em uso — para quem precisa reconstruir o menu sem os ter à mão. */
+/** Labels in use — for whoever needs to rebuild the menu without having them at hand. */
 export function trayLabels(): TrayLabels | null {
   return currentLabels
 }

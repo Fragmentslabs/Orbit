@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react"
 
 export type WorkspaceMode = "chat" | "code"
 
-export type WorkspaceView = "chat" | "memories" | "models" | "esteira" | "rotinas" | "tools" | "analytics"
+export type WorkspaceView = "chat" | "memories" | "models" | "pipeline" | "routines" | "tools" | "analytics"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -14,7 +14,7 @@ function loadDefaultMode(): WorkspaceMode {
       if (parsed === "chat" || parsed === "code") return parsed
     }
   } catch {
-    // localStorage indisponível ou JSON corrompido — cai no padrão
+    // localStorage unavailable or corrupted JSON — falls back to the default
   }
   return "chat"
 }
@@ -24,7 +24,7 @@ function loadInitialFolders(): string[] {
     const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
     if (stored) return JSON.parse(stored)
   } catch {
-    // idem: lista de pastas corrompida recomeça vazia
+    // same: a corrupted folder list starts over empty
   }
   return []
 }
@@ -45,20 +45,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [view, setView] = useState<WorkspaceView>("chat")
   const [folders, setFolders] = useState<string[]>(loadInitialFolders)
 
-  // Persiste pastas no localStorage sempre que mudam
+  // Persists folders in localStorage whenever they change
   useEffect(() => {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
   }, [folders])
 
-  // Trocar de modo sempre volta para a view de chat e persiste o modo: na
-  // próxima abertura do app, abre no mesmo modo (chat ou código).
+  // Switching modes always goes back to the chat view and persists the mode: on the
+  // next opening of the app, it opens in the same mode (chat or code).
   const setMode = (next: WorkspaceMode) => {
     setModeState(next)
     setView("chat")
     try {
       localStorage.setItem("orbit-default-mode", JSON.stringify(next))
     } catch {
-      // quota cheia ou modo privativo: o modo vale só nesta sessão
+      // full quota or private mode: the mode is only worth in this session
     }
   }
 

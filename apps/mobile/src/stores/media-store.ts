@@ -3,12 +3,12 @@ import type { MediaEntry, MediaUsage } from '@orbit/shared'
 import { useConnectionStore } from './connection-store'
 
 /**
- * Registry de mídia no desktop (orbit-data/media) lido via HTTP do companion.
+ * Media registry on the desktop (orbit-data/media) read over HTTP from the companion.
  *
- * A galeria do mobile não tem acesso ao filesystem do desktop — as entradas
- * vêm do endpoint /api/media com `url` já assinada (token na query) pronta para
- * o <Image> nativo. O escopo por modo (chat vs código) é aplicado na tela,
- * usando as sessões locais, igual ao desktop.
+ * The mobile gallery has no access to the desktop filesystem — the entries
+ * come from the /api/media endpoint with a `url` already signed (token in the query) ready for
+ * the native <Image>. The scope per mode (chat vs code) is applied on the screen,
+ * using the local sessions, just like the desktop.
  */
 
 interface MediaState {
@@ -17,11 +17,11 @@ interface MediaState {
   loading: boolean
   refreshing: boolean
 
-  /** Busca a lista e o uso do registry no desktop. */
+  /** Fetches the list and the usage of the registry on the desktop. */
   refresh: () => Promise<void>
-  /** Remove várias imagens (seleção em lote) e recarrega. */
+  /** Removes several images (batch selection) and reloads. */
   remove: (ids: string[]) => Promise<void>
-  /** Remove uma imagem e recarrega. */
+  /** Removes one image and reloads. */
   removeOne: (id: string) => Promise<void>
 }
 
@@ -48,7 +48,7 @@ export const useMediaStore = create<MediaState>((set, get) => ({
         usage: usage.ok && usage.data ? usage.data : get().usage,
       })
     } catch {
-      // melhor-esforço — mantém o que já estava na tela
+      // best effort — keeps what was already on screen
     } finally {
       set({ loading: false, refreshing: false })
     }

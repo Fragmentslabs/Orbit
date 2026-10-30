@@ -37,8 +37,8 @@ function TooltipContent({
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   > & {
-    /** Classe extra no Positioner — para elevar o z-index acima de overlays
-     *  (ex.: browser em tela cheia, que fica em z-[70]). */
+    /** Extra class on the Positioner — to raise the z-index above overlays
+     *  (e.g. full-screen browser, which stays at z-[70]). */
     positionerClassName?: string
   }) {
   return (

@@ -2,18 +2,18 @@ import type { LanguageModelUsage } from 'ai'
 import type { TokenUsage } from '@shared/chat'
 
 /**
- * Conversão do usage aninhado do ai-sdk v7 para o TokenUsage persistido nas
- * mensagens, com custo em USD a partir dos preços do catálogo (por 1M tokens).
+ * Conversion of the ai-sdk v7 nested usage into the TokenUsage persisted in the
+ * messages, with cost in USD from the catalog's prices (per 1M tokens).
  */
 
 export interface ModelCost {
   input: number
   output: number
-  /** Leitura do cache, por 1M tokens (models.dev). */
+  /** Cache read, per 1M tokens (models.dev). */
   cache_read?: number
-  /** Gravação no cache, por 1M tokens (models.dev). */
+  /** Cache write, per 1M tokens (models.dev). */
   cache_write?: number
-  /** Preços por faixa de contexto: quando a chamada passa do tamanho, vale a faixa. */
+  /** Prices per context tier: when the call goes past the size, the tier applies. */
   tiers?: ModelCostTier[]
 }
 
@@ -22,10 +22,10 @@ export interface ModelCostTier extends Omit<ModelCost, 'tiers'> {
 }
 
 /**
- * Preço que vale para uma chamada. O models.dev traz faixas por tamanho de
- * contexto (ex.: acima de 200k tokens o preço muda): quando a entrada da
- * chamada passa do tamanho de uma faixa, vale a de maior tamanho que ela
- * ultrapassa. Senão, o preço base.
+ * Price that applies to a call. models.dev brings tiers by context size
+ * (e.g. above 200k tokens the price changes): when the call's input goes
+ * past a tier's size, the one of the largest size it exceeds applies.
+ * Otherwise, the base price.
  */
 export function rateFor(cost: ModelCost, promptTokens: number): ModelCost {
   let rate: ModelCost = cost
@@ -41,10 +41,10 @@ export function rateFor(cost: ModelCost, promptTokens: number): ModelCost {
 }
 
 /**
- * Custo em USD de UMA chamada ao modelo. Cada parte da entrada é cobrada no seu
- * preço: sem cache, lida do cache e gravada no cache (o provedor soma as três
- * em `inputTokens`). Modelo sem preço de cache cai no preço de entrada, o que
- * nunca subestima o custo.
+ * Cost in USD of ONE call to the model. Each part of the input is charged at its own
+ * price: uncached, read from the cache and written to the cache (the provider adds the three
+ * in `inputTokens`). A model without a cache price falls back to the input price, which
+ * never underestimates the cost.
  */
 export function costOfUsage(usage: LanguageModelUsage, cost: ModelCost): number {
   const input = usage.inputTokens ?? 0
@@ -61,18 +61,18 @@ export function costOfUsage(usage: LanguageModelUsage, cost: ModelCost): number 
   ) / 1_000_000
 }
 
-/** Usage de um único step (ex.: evento 'finish-step' do fullStream) — usado
- * como proxy do tamanho real do contexto atual, ao contrário do usage total
- * do turno (soma de todos os steps, inflado por idas-e-vindas de tool). */
+/** Usage of a single step (e.g. the 'finish-step' event of fullStream) — used
+ * as a proxy for the real size of the current context, unlike the turn's total
+ * usage (sum of all steps, inflated by tool round-trips). */
 export function toStepUsage(usage: LanguageModelUsage): NonNullable<TokenUsage['lastStep']> {
   return {
     input: usage.inputTokens ?? 0,
     output: usage.outputTokens ?? 0,
-    // Parte da entrada desta chamada que veio do cache / foi gravada nele —
-    // é o que diz se o contexto atual está sendo reaproveitado entre passos.
+    // Part of this call's input that came from the cache / was written to it —
+    // it is what says whether the current context is being reused between steps.
     cacheRead: usage.inputTokenDetails?.cacheReadTokens ?? 0,
     cacheWrite: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
-    // Raciocínio é parte da saída deste passo (vem junto no total de output).
+    // Reasoning is part of this step's output (it comes along in the output total).
     reasoning: usage.outputTokenDetails?.reasoningTokens ?? 0,
   }
 }

@@ -53,11 +53,11 @@ function useResolvedTheme(): "light" | "dark" {
   return theme === "system" ? (systemDark ? "dark" : "light") : theme
 }
 
-/* Quando o wasm do Rive aborta, o módulo morre para a página inteira: toda
- * chamada seguinte aborta de novo, inclusive o `rive.bounds` que o useRive lê
- * DURANTE o render. Sem contenção esse throw desmonta a árvore do React e o
- * app fica preto. Por isso a falha é global: marcada uma vez, todas as
- * personas somem até alguém pedir nova tentativa (retryPersona). */
+/* When the Rive wasm aborts, the module dies for the whole page: every
+ * following call aborts again, including the `rive.bounds` that useRive reads
+ * DURING render. Without containment that throw unmounts the React tree and the
+ * app goes black. That is why the failure is global: once marked, all the
+ * personas disappear until someone asks for a new attempt (retryPersona). */
 const MAX_RETRIES = 3
 
 let riveStatus = { broken: false, generation: 0 }
@@ -78,11 +78,11 @@ function subscribeRiveStatus(listener: () => void) {
   return () => riveStatusListeners.delete(listener)
 }
 
-/* O RuntimeLoader guarda o módulo wasm num campo estático e todo Rive novo o
- * pega por awaitInstance(). Zerado o cache, a próxima instância sobe um wasm
- * novo, com memória limpa. Só é seguro com nenhuma persona montada — e com a
- * falha marcada todas já estão no fallback. Limitado para um wasm que aborta
- * sempre não virar um ciclo de recarga a cada troca de chat. */
+/* RuntimeLoader keeps the wasm module in a static field and every new Rive
+ * gets it through awaitInstance(). With the cache cleared, the next instance brings up a
+ * new wasm, with clean memory. It is only safe with no persona mounted — and with the
+ * failure marked all of them are already in the fallback. Rate-limited so a wasm that always aborts
+ * does not become a reload cycle on every chat switch. */
 export function retryPersona() {
   if (!riveStatus.broken || retries >= MAX_RETRIES) return
   retries += 1
@@ -92,8 +92,8 @@ export function retryPersona() {
   setRiveStatus({ broken: false, generation: riveStatus.generation + 1 })
 }
 
-// Aborts fora do render (loop de animação, microtask do bind) não passam pelo
-// boundary; o stack do RuntimeError aponta para o rive.wasm.
+// Aborts outside render (animation loop, microtask of the bind) do not go through the
+// boundary; the RuntimeError stack points at rive.wasm.
 function isRiveAbort(error: unknown) {
   return error instanceof Error && (error.stack ?? "").includes("rive.wasm")
 }
@@ -104,9 +104,9 @@ window.addEventListener("unhandledrejection", (e) => {
   if (isRiveAbort(e.reason)) markRiveBroken()
 })
 
-/* Fica montado mesmo depois da falha: ao trocar o Rive pelo fallback, a
- * limpeza do useRive chama o wasm morto e lança de novo — e esse erro precisa
- * de um boundary ainda montado para não subir até a raiz. */
+/* Stays mounted even after the failure: when swapping Rive for the fallback, the
+ * useRive cleanup calls the dead wasm and throws again — and that error needs
+ * a boundary still mounted so it does not go up to the root. */
 class PersonaBoundary extends Component<
   { fallback: ReactNode; children: ReactNode },
   { failed: boolean }
@@ -118,7 +118,7 @@ class PersonaBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("[persona] Rive falhou, usando fallback", error, info.componentStack)
+    console.error("[persona] Rive failed, using fallback", error, info.componentStack)
     markRiveBroken()
   }
 
@@ -129,11 +129,11 @@ class PersonaBoundary extends Component<
 
 export const Persona: FC<PersonaProps> = memo((props) => {
   const { broken, generation } = useSyncExternalStore(subscribeRiveStatus, () => riveStatus)
-  // Sem Rive a persona some: fica só o espaço dela, para o layout não pular.
+  // Without Rive the persona disappears: only its space remains, so the layout does not jump.
   const fallback = <div aria-hidden className={cn("size-32 shrink-0", props.className)} />
 
   return (
-    // A key zera o boundary a cada nova tentativa
+    // The key resets the boundary on every new attempt
     <PersonaBoundary key={generation} fallback={fallback}>
       {broken ? fallback : <RivePersona {...props} />}
     </PersonaBoundary>

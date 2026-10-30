@@ -3,13 +3,13 @@ import { Storage } from '~/lib/storage'
 import { pushModeSelect } from '~/lib/mode-sync'
 
 /**
- * Preferência do modo Brain (memória persistente): o valor efetivo é
- * `override ?? default` — o default fica ativo para novos usuários
- * vem do model-mode-prefs; só os overrides por chat são persistidos aqui
- * (Storage) — ausência de override = segue o default.
+ * Brain mode preference (persistent memory): the effective value is
+ * `override ?? default` — the default, active for new users,
+ * comes from model-mode-prefs; only the per-chat overrides are persisted here
+ * (Storage) — no override = follows the default.
  *
- * Chats novos (sem sessão) usam a chave "draft"; quando a sessão é criada no
- * primeiro envio, o session-store chama adopt() para transferir o override.
+ * New chats (without a session) use the "draft" key; when the session is created on the
+ * first send, the session-store calls adopt() to transfer the override.
  */
 
 const STORAGE_KEY = 'orbit_brain_prefs'
@@ -22,9 +22,9 @@ interface BrainPrefsState {
   hydrated: boolean
   hydrate: () => Promise<void>
   setEnabled: (sessionId: string | null | undefined, enabled: boolean) => void
-  /** Aplica o mapa vindo do desktop (sem devolver o toggle para lá). */
+  /** Applies the map coming from the desktop (without sending the toggle back there). */
   applySync: (overrides: Overrides) => void
-  /** Transfere o override do rascunho para a sessão recém-criada */
+  /** Transfers the draft override to the newly created session */
   adopt: (sessionId: string) => void
 }
 
@@ -43,7 +43,7 @@ export const useBrainPrefs = create<BrainPrefsState>((set, get) => ({
         }
       }
     } catch {
-      // prefs corrompidas — volta ao default (vem do model-mode-prefs)
+      // corrupted prefs — goes back to the default (comes from model-mode-prefs)
     }
     set({ hydrated: true })
   },
@@ -79,7 +79,7 @@ export function useBrainEnabled(sessionId?: string | null, fallback = true): boo
   return useBrainPrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? fallback)
 }
 
-/** Leitura fora de componentes React (callbacks de envio) */
+/** Read outside React components (send callbacks) */
 export function brainEnabledFor(sessionId?: string | null, fallback = true): boolean {
   return useBrainPrefs.getState().overrides[sessionId ?? DRAFT_KEY] ?? fallback
 }

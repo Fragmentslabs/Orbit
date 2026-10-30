@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const maquina = { memGb: 16, cpus: 8, arch: 'arm64' }
+const machine = { memGb: 16, cpus: 8, arch: 'arm64' }
 
 vi.mock('node:os', async (importOriginal) => {
   const real = await importOriginal<typeof import('node:os')>()
   const os = {
     ...real,
-    arch: () => maquina.arch,
-    totalmem: () => maquina.memGb * 1024 ** 3,
-    cpus: () => Array.from({ length: maquina.cpus }, () => real.cpus()[0]),
+    arch: () => machine.arch,
+    totalmem: () => machine.memGb * 1024 ** 3,
+    cpus: () => Array.from({ length: machine.cpus }, () => real.cpus()[0]),
   }
   return { ...os, default: os }
 })
@@ -16,47 +16,47 @@ vi.mock('node:os', async (importOriginal) => {
 const { detectMachine, machineTier, scoreMachine } = await import('./machine')
 
 beforeEach(() => {
-  maquina.memGb = 16
-  maquina.cpus = 8
-  maquina.arch = 'arm64'
+  machine.memGb = 16
+  machine.cpus = 8
+  machine.arch = 'arm64'
 })
 
 describe('scoreMachine', () => {
-  it('um Apple Silicon de 8 núcleos e 16 GB passa de largo do degrau forte', () => {
+  it('an 8-core, 16 GB Apple Silicon clears the strong tier with room to spare', () => {
     const score = scoreMachine({ cpus: 8, totalMemGb: 15.3, platform: 'darwin', arch: 'arm64' })
     expect(machineTier(score)).toBe('strong')
   })
 
-  it('o mesmo Apple Silicon com 8 GB fica no equilibrado, não no forte', () => {
+  it('the same Apple Silicon with 8 GB stays in the balanced tier, not the strong one', () => {
     const score = scoreMachine({ cpus: 8, totalMemGb: 8, platform: 'darwin', arch: 'arm64' })
     expect(machineTier(score)).toBe('balanced')
   })
 
-  it('um x64 antigo de 4 núcleos e 8 GB é fraco', () => {
+  it('an old 4-core, 8 GB x64 is weak', () => {
     const score = scoreMachine({ cpus: 4, totalMemGb: 8, platform: 'win32', arch: 'x64' })
     expect(machineTier(score)).toBe('weak')
   })
 
-  it('máquina de 32 GB e 12 núcleos no Windows é forte sem precisar do bônus da Apple', () => {
+  it('a 32 GB, 12-core machine on Windows is strong without needing the Apple bonus', () => {
     const score = scoreMachine({ cpus: 12, totalMemGb: 32, platform: 'win32', arch: 'x64' })
     expect(machineTier(score)).toBe('strong')
   })
 
-  it('nunca pontua negativo, nem com 1 núcleo e 2 GB', () => {
+  it('never scores negative, not even with 1 core and 2 GB', () => {
     const score = scoreMachine({ cpus: 1, totalMemGb: 2, platform: 'linux', arch: 'x64' })
     expect(score).toBe(0)
     expect(machineTier(score)).toBe('weak')
   })
 
-  it('os 4 primeiros núcleos não contam — só a folga acima deles', () => {
-    const quatro = scoreMachine({ cpus: 4, totalMemGb: 32, platform: 'linux', arch: 'x64' })
-    const oito = scoreMachine({ cpus: 8, totalMemGb: 32, platform: 'linux', arch: 'x64' })
-    expect(oito - quatro).toBe(4)
+  it('the first 4 cores do not count — only the slack above them', () => {
+    const four = scoreMachine({ cpus: 4, totalMemGb: 32, platform: 'linux', arch: 'x64' })
+    const eight = scoreMachine({ cpus: 8, totalMemGb: 32, platform: 'linux', arch: 'x64' })
+    expect(eight - four).toBe(4)
   })
 })
 
 describe('detectMachine', () => {
-  it('lê núcleos, RAM e arch do sistema e fecha o tier', () => {
+  it('reads cores, RAM and arch from the system and settles the tier', () => {
     const info = detectMachine()
     expect(info.cpus).toBe(8)
     expect(info.totalMemGb).toBe(16)
@@ -67,13 +67,13 @@ describe('detectMachine', () => {
     expect(info.tier).toBe(machineTier(info.score))
   })
 
-  it('arredonda a RAM a uma casa, como a voz já fazia', () => {
-    maquina.memGb = 15.34
+  it('rounds RAM to one decimal, as the voice already did', () => {
+    machine.memGb = 15.34
     expect(detectMachine().totalMemGb).toBe(15.3)
   })
 
-  it('máquina de 1 núcleo não vira zero núcleos', () => {
-    maquina.cpus = 1
+  it('a 1-core machine does not become zero cores', () => {
+    machine.cpus = 1
     expect(detectMachine().cpus).toBe(1)
   })
 })

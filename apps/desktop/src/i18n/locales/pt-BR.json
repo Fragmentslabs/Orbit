@@ -157,7 +157,9 @@
         "mcp": "MCP",
         "memory": "Memória",
         "modes": "Modos"
-      }
+      },
+      "mcpServer_one": "Usar as ferramentas deste servidor MCP ({{count}} ferramenta)",
+      "mcpServer_other": "Usar as ferramentas deste servidor MCP ({{count}} ferramentas)"
     },
     "quickSettings": "Configurações rápidas",
     "quickSettingsModel": "Modelo",
@@ -213,7 +215,8 @@
       "newSessionDescription": "Começa uma sessão de código em branco",
       "createSkillDescription": "Pede ao Orbit para criar uma skill (com scripts, se precisar)",
       "documentAppDescription": "Navega pelo app no painel, tira screenshots e documenta em docs/"
-    }
+    },
+    "syntaxError": "Erro de sintaxe"
   },
   "reasoning": {
     "placeholder": "Nível",
@@ -1035,7 +1038,12 @@
     "earlierMessages_other": "Mostrar {{count}} mensagens anteriores",
     "pendingAsk_one": "{{count}} pergunta pendente",
     "pendingAsk_other": "{{count}} perguntas pendentes",
-    "noModelSelected": "Nenhum modelo selecionado. Configure um provedor em Configurações."
+    "noModelSelected": "Nenhum modelo selecionado. Configure um provedor em Configurações.",
+    "newChatTitle": "Nova conversa",
+    "newCodeSessionTitle": "Nova sessão de código",
+    "citationPage": "p. {{page}}",
+    "citationLine": "p. {{page}}, linha {{from}}",
+    "citationLineRange": "p. {{page}}, linhas {{from}}-{{to}}"
   },
   "usage": {
     "inputIn": "{{count}} de entrada",
@@ -1185,8 +1193,8 @@
     "downloadLink": "Instale agora"
   },
   "branch": {
-    "emUsoTitulo": "O branch {{branch}} está aberto em outro worktree",
-    "emUsoDescricao": "O git não deixa o mesmo branch em duas cópias de trabalho ao mesmo tempo. Para trabalhar nele, troque este chat para aquele worktree pelo seletor de worktree, ou feche-o lá.",
+    "inUseTitle": "O branch {{branch}} está aberto em outro worktree",
+    "inUseDescription": "O git não deixa o mesmo branch em duas cópias de trabalho ao mesmo tempo. Para trabalhar nele, troque este chat para aquele worktree pelo seletor de worktree, ou feche-o lá.",
     "previous": "Ramo anterior",
     "next": "Próximo ramo",
     "page": "{{current}} de {{total}}",
@@ -1291,7 +1299,7 @@
   },
   "visionConfig": {
     "title": "Modo Visão",
-    "explainer": "Com o modo ativo, imagens e screenshots (ver: true) são descritas pelo modelo de visão abaixo — mesmo que seu modelo principal tenha visão nativa, a imagem não entra no contexto, apenas a descrição. Sem seleção, o comportamento volta ao nativo: modelos com visão recebem a imagem, modelos sem visão não a veem.",
+    "explainer": "Com o modo ativo, imagens e screenshots (see: true) são descritas pelo modelo de visão abaixo — mesmo que seu modelo principal tenha visão nativa, a imagem não entra no contexto, apenas a descrição. Sem seleção, o comportamento volta ao nativo: modelos com visão recebem a imagem, modelos sem visão não a veem.",
     "visionModel": "Modelo de visão",
     "disabled": "Desligado — modo visão desativado",
     "noSelectionHint": "Apenas modelos que aceitam imagem são listados. Sem seleção, o comportamento é nativo: modelos com visão recebem a imagem; modelos sem visão não a veem.",
@@ -1339,20 +1347,20 @@
     "done": "Concluir",
     "behavior": {
       "title": "Comportamento do orquestrador",
-      "orquestrar": "Só orquestrar",
-      "orquestrarHint": "Divide, roda os workers e escreve a resposta final. Sem revisão.",
-      "acompanhar": "Acompanhar",
-      "acompanharHint": "Revisa cada worker assim que termina, pede ajustes enquanto os outros trabalham, cria workers extras se faltar algo e revisa a integração no fim.",
-      "rigoroso": "Rigoroso",
-      "rigorosoHint": "Acompanhar + só aceita o trabalho de um worker depois de rodar as verificações do projeto (typecheck, testes, lint). Mais lento.",
-      "ajustes": "Ajustes por worker",
-      "ajustesHint": "Quantas vezes o orquestrador pode mandar um worker refazer algo. É o que mais pesa no custo: cada ajuste é um turno inteiro do worker.",
-      "menos": "Menos ajustes",
-      "mais": "Mais ajustes",
+      "orchestrate": "Só orquestrar",
+      "orchestrateHint": "Divide, roda os workers e escreve a resposta final. Sem revisão.",
+      "follow": "Acompanhar",
+      "followHint": "Revisa cada worker assim que termina, pede ajustes enquanto os outros trabalham, cria workers extras se faltar algo e revisa a integração no fim.",
+      "strict": "Rigoroso",
+      "strictHint": "Acompanhar + só aceita o trabalho de um worker depois de rodar as verificações do projeto (typecheck, testes, lint). Mais lento.",
+      "adjustments": "Ajustes por worker",
+      "adjustmentsHint": "Quantas vezes o orquestrador pode mandar um worker refazer algo. É o que mais pesa no custo: cada ajuste é um turno inteiro do worker.",
+      "less": "Menos ajustes",
+      "more": "Mais ajustes",
       "worktrees": "Isolar workers em worktrees",
       "worktreesHint": "Cada worker trabalha num branch e numa cópia próprios, e o orquestrador junta tudo no fim. Evita um worker mexer no arquivo do outro; só em repositório git.",
-      "aprovarTarefaUnica": "Aprovar sozinho plano de uma tarefa",
-      "aprovarTarefaUnicaHint": "Quando o plano tem um worker só, ele começa direto, sem esperar você aprovar o card."
+      "approveSingleTask": "Aprovar sozinho plano de uma tarefa",
+      "approveSingleTaskHint": "Quando o plano tem um worker só, ele começa direto, sem esperar você aprovar o card."
     }
   },
   "orchestration": {
@@ -1371,8 +1379,8 @@
     "approveRun": "Aprovar e executar",
     "approveRunWithCount_one": "Aprovar e executar ({{count}})",
     "approveRunWithCount_other": "Aprovar e executar ({{count}})",
-    "dependsOn": "Depois de: {{tarefas}}",
-    "ownsFiles": "Arquivos: {{arquivos}}"
+    "dependsOn": "Depois de: {{tasks}}",
+    "ownsFiles": "Arquivos: {{files}}"
   },
   "planDialog": {
     "doneCount": "({{checked}}/{{total}} concluídas)",
@@ -1432,7 +1440,7 @@
     "add": "Adicionar skill",
     "discarded": "Proposta dispensada."
   },
-  "rotinaProposal": {
+  "routineProposal": {
     "building": "Preparando a rotina…",
     "created": "Rotina criada — aparece no painel Rotinas.",
     "discard": "Descartar",
@@ -1454,18 +1462,18 @@
     "failed": "Falha na conexão: {{error}}"
   },
   "taskProgress": {
-    "juntarDeNovo": "Juntar de novo",
+    "rejoin": "Juntar de novo",
     "title": "Tarefas",
     "inProgress": "{{title}} em andamento",
     "errors": "{{title}} com erros",
     "done": "{{title}} concluídas",
-    "ajustes": "Ajustes: {{usados}}/{{teto}}",
+    "adjustments": "Ajustes: {{used}}/{{cap}}",
     "extra": "extra",
-    "fase": {
-      "fila": "na fila",
-      "revisao": "em revisão",
-      "ajuste": "ajuste {{n}}",
-      "falhou": "falhou"
+    "phase": {
+      "queue": "na fila",
+      "review": "em revisão",
+      "adjustment": "ajuste {{n}}",
+      "failed": "falhou"
     }
   },
   "diff": {
@@ -1535,21 +1543,22 @@
       "too-large": "O conteúdo passou do tamanho máximo.",
       "failed": "Não foi possível salvar."
     },
-    "discardPrompt": "Você tem alterações não salvas neste arquivo. Descartar?"
+    "discardPrompt": "Você tem alterações não salvas neste arquivo. Descartar?",
+    "editMode": "Editar arquivo"
   },
   "createRepo": {
-    "titulo": "Este projeto ainda não tem repositório remoto",
-    "descricao": "Não há um remote configurado, então não há para onde enviar os commits. Dá para criar um repositório no GitHub agora — usando a mesma credencial que o seu git já utiliza.",
-    "nomeLabel": "Nome do repositório",
-    "nomePlaceholder": "meu-projeto",
-    "nomeInvalido": "Use apenas letras, números, ponto, hífen e underline.",
-    "privado": "Privado",
-    "publico": "Público",
-    "criar": "Criar e enviar",
-    "criando": "Criando…",
-    "sucesso": "Repositório {{repo}} criado e commits enviados.",
-    "criadoSemPush": "Repositório {{repo}} criado, mas o envio falhou. O remote já está configurado — tente enviar novamente.",
-    "erro": {
+    "title": "Este projeto ainda não tem repositório remoto",
+    "description": "Não há um remote configurado, então não há para onde enviar os commits. Dá para criar um repositório no GitHub agora — usando a mesma credencial que o seu git já utiliza.",
+    "nameLabel": "Nome do repositório",
+    "namePlaceholder": "meu-projeto",
+    "invalidName": "Use apenas letras, números, ponto, hífen e underline.",
+    "private": "Privado",
+    "public": "Público",
+    "create": "Criar e enviar",
+    "creating": "Criando…",
+    "success": "Repositório {{repo}} criado e commits enviados.",
+    "createdWithoutPush": "Repositório {{repo}} criado, mas o envio falhou. O remote já está configurado — tente enviar novamente.",
+    "error": {
       "noCredential": "O GitHub CLI está instalado, mas não está autenticado — autentique com o comando abaixo. É um passo único: as próximas criações não pedirão nada.",
       "noCredentialGhMissing": "Não há credencial HTTPS do GitHub nesta máquina — esperado se o seu git autentica por SSH: o push funciona pelas chaves, mas a API que cria o repositório exige um token, e chave SSH não vira token. O GitHub CLI resolve isso de vez: instale e autentique com os comandos abaixo. É um passo único — as próximas criações não pedirão nada.",
       "auth": "O token do GitHub foi recusado ou não tem permissão para criar repositórios. Atualize a autenticação (`gh auth login` ou as credenciais HTTPS do seu git) e verifique se o escopo \"repo\" está incluído. Detalhe:",
@@ -1557,19 +1566,19 @@
       "invalidName": "O GitHub recusou esse nome. Use apenas letras, números, ponto, hífen e underline.",
       "noCommits": "Esta pasta ainda não tem nenhum commit. Faça o primeiro commit antes de publicar.",
       "other": "Não foi possível criar o repositório:",
-      "detalhe": "Detalhe",
-      "detalheGitExit": "sem credencial HTTPS para github.com (git saiu com {{codigo}})",
-      "detalheGitSpawn": "não foi possível executar \"git credential fill\"",
-      "detalheGitTimeout": "o helper de credencial do git não respondeu em 20s",
-      "detalheGhAusente": "gh não encontrado no PATH",
-      "detalheGhFalhou": "o gh falhou",
-      "detalheGhSemToken": "o gh não forneceu um token"
+      "detail": "Detalhe",
+      "detailGitExit": "sem credencial HTTPS para github.com (git saiu com {{code}})",
+      "detailGitSpawn": "não foi possível executar \"git credential fill\"",
+      "detailGitTimeout": "o helper de credencial do git não respondeu em 20s",
+      "detailGhMissing": "gh não encontrado no PATH",
+      "detailGhFailed": "o gh falhou",
+      "detailGhNoToken": "o gh não forneceu um token"
     },
-    "comandos": {
-      "rotulo": "Terminal",
-      "copiar": "Copiar",
-      "copiado": "Copiado!",
-      "outros": "Outros sistemas e distribuições — veja cli.github.com"
+    "commands": {
+      "label": "Terminal",
+      "copy": "Copiar",
+      "copied": "Copiado!",
+      "others": "Outros sistemas e distribuições — veja cli.github.com"
     }
   },
   "mcp": {
@@ -1641,11 +1650,11 @@
       "toolsAvailable_one": "{{count}} ferramenta disponível",
       "toolsAvailable_other": "{{count}} ferramentas disponíveis",
       "enabledHint": "Liga ou desliga este servidor em todas as conversas",
-    "optimize": "Otimizar",
-    "optimizeHint": "Reescreve as descrições das tools com o modelo auxiliar",
-    "optimizeAgain": "Otimizar de novo — a lista de tools mudou",
-    "optimized": "Otimizado · {{count}}",
-    "optimizeNoAux": "Configure o modelo auxiliar em Preferências para otimizar",
+      "optimize": "Otimizar",
+      "optimizeHint": "Reescreve as descrições das tools com o modelo auxiliar",
+      "optimizeAgain": "Otimizar de novo — a lista de tools mudou",
+      "optimized": "Otimizado · {{count}}",
+      "optimizeNoAux": "Configure o modelo auxiliar em Preferências para otimizar",
       "reconnect": "Reconectar",
       "edit": "Editar",
       "remove": "Remover",
@@ -2114,11 +2123,11 @@
         "description": "Exclui de vez as conversas arquivadas há um tempo, contado a partir do dia em que foram arquivadas. Conversas fixadas ficam de fora."
       },
       "compact": {
+        "50": "Aos 50% do contexto",
+        "75": "Aos 75% do contexto",
         "title": "Compactação automática",
         "description": "Resume o início da conversa quando o contexto enche, para ela continuar cabendo no modelo.",
-        "auto": "Perto do limite",
-        "75": "Aos 75% do contexto",
-        "50": "Aos 50% do contexto"
+        "auto": "Perto do limite"
       },
       "compactSuggest": {
         "title": "Sugerir continuar em outro chat",
@@ -2156,7 +2165,8 @@
     "remove": "Remover",
     "edit": "Editar",
     "dismiss": "Dispensar",
-    "addFolder": "Adicionar pasta"
+    "addFolder": "Adicionar pasta",
+    "reorder": "Reordenar"
   },
   "appearance": {
     "title": "Aparência",
@@ -2337,7 +2347,8 @@
       "motion": "Peça",
       "video": "Vídeo",
       "design": "Design",
-      "slides": "Apresentação"
+      "slides": "Apresentação",
+      "gif": "GIF"
     },
     "period": {
       "all": "Qualquer data",
@@ -2374,279 +2385,279 @@
   "worktreeSettings": {
     "title": "Pasta dos worktrees",
     "description": "Onde ficam os worktrees que o Orbit cria para chats e tasks da esteira.",
-    "padrao": "Dados do Orbit",
-    "projeto": "Dentro do projeto",
-    "personalizada": "Pasta escolhida",
-    "dicaPadrao": "Fora de qualquer projeto, na pasta de dados do Orbit: não aparece nas buscas nem no editor. Vale para worktrees novos.",
-    "dicaProjeto": "Em .orbit/worktrees dentro de cada repositório, visível no editor. O Orbit tira a pasta do git sozinho (.git/info/exclude); ferramentas que varrem o projeto inteiro sem respeitar o git podem enxergá-la. Vale para worktrees novos.",
-    "dicaPersonalizada": "Numa pasta sua, fora de projetos. Vale para worktrees novos; os existentes continuam onde estão.",
-    "escolher": "Escolher…",
-    "naoExiste": "A pasta não existe mais (disco desconectado?). Os worktrees novos voltam a ser criados quando ela estiver disponível.",
-    "dentroDeRepositorio": "A pasta está dentro de um repositório git: os worktrees apareceriam no status e nas buscas dele.",
-    "outroDisco": "A pasta está em outro disco que a sua pasta pessoal: as dependências (node_modules) não podem ser clonadas sem ocupar espaço e serão vinculadas às do projeto — o agente não poderá instalar pacotes no worktree.",
-    "recusadaRepositorio": "{{pasta}} está dentro de um repositório git. Escolha uma pasta fora de projetos — ou use \"Dentro do projeto\", que tira os worktrees do git sozinho."
+    "default": "Dados do Orbit",
+    "project": "Dentro do projeto",
+    "custom": "Pasta escolhida",
+    "hintDefault": "Fora de qualquer projeto, na pasta de dados do Orbit: não aparece nas buscas nem no editor. Vale para worktrees novos.",
+    "hintProject": "Em .orbit/worktrees dentro de cada repositório, visível no editor. O Orbit tira a pasta do git sozinho (.git/info/exclude); ferramentas que varrem o projeto inteiro sem respeitar o git podem enxergá-la. Vale para worktrees novos.",
+    "hintCustom": "Numa pasta sua, fora de projetos. Vale para worktrees novos; os existentes continuam onde estão.",
+    "choose": "Escolher…",
+    "doesNotExist": "A pasta não existe mais (disco desconectado?). Os worktrees novos voltam a ser criados quando ela estiver disponível.",
+    "insideRepository": "A pasta está dentro de um repositório git: os worktrees apareceriam no status e nas buscas dele.",
+    "otherDrive": "A pasta está em outro disco que a sua pasta pessoal: as dependências (node_modules) não podem ser clonadas sem ocupar espaço e serão vinculadas às do projeto — o agente não poderá instalar pacotes no worktree.",
+    "rejectedRepository": "{{folder}} está dentro de um repositório git. Escolha uma pasta fora de projetos — ou use \"Dentro do projeto\", que tira os worktrees do git sozinho."
   },
-  "excluirChat": {
-    "worktree": "Este chat trabalhava no worktree {{nome}} ({{branch}}).",
-    "removerWorktree": "Remover o worktree também",
-    "descartar": "Entendo que isso será perdido",
-    "perdas": "Será perdido: {{itens}}."
+  "deleteChat": {
+    "worktree": "Este chat trabalhava no worktree {{name}} ({{branch}}).",
+    "removeWorktree": "Remover o worktree também",
+    "discard": "Entendo que isso será perdido",
+    "losses": "Será perdido: {{items}}."
   },
   "worktree": {
-    "titulo": "Worktree",
-    "principal": "Principal",
-    "tituloAtual": "Worktree deste chat: {{nome}}",
-    "novo": "Novo worktree…",
+    "title": "Worktree",
+    "main": "Principal",
+    "currentTitle": "Worktree deste chat: {{name}}",
+    "new": "Novo worktree…",
     "detached": "sem branch ({{head}})",
-    "alteracoes_one": "{{count}} alteração",
-    "alteracoes_other": "{{count}} alterações",
-    "aFrente_one": "{{count}} commit à frente",
-    "aFrente_other": "{{count}} commits à frente",
-    "daEsteira": "esteira",
-    "externo": "criado fora do Orbit",
-    "ausente": "pasta não existe mais",
-    "remover": "Remover worktree",
-    "criarTitulo": "Novo worktree",
-    "criarDescricao": "Uma cópia de trabalho separada do repositório, num branch próprio. O que este chat fizer lá não mexe no principal nem nos outros chats.",
-    "nome": "Nome",
-    "nomePlaceholder": "Ex.: refatorar-login",
-    "nomeDica": "Vira o nome da pasta e o branch orbit/<nome>.",
+    "changes_one": "{{count}} alteração",
+    "changes_other": "{{count}} alterações",
+    "ahead_one": "{{count}} commit à frente",
+    "ahead_other": "{{count}} commits à frente",
+    "pipelineName": "esteira",
+    "external": "criado fora do Orbit",
+    "missing": "pasta não existe mais",
+    "remove": "Remover worktree",
+    "createTitle": "Novo worktree",
+    "createDescription": "Uma cópia de trabalho separada do repositório, num branch próprio. O que este chat fizer lá não mexe no principal nem nos outros chats.",
+    "name": "Nome",
+    "namePlaceholder": "Ex.: refatorar-login",
+    "nameHint": "Vira o nome da pasta e o branch orbit/<nome>.",
     "base": "A partir de",
-    "baseAtual": "Branch atual ({{branch}})",
-    "baseRemoto": "Remoto atualizado ({{remoto}})",
-    "trocarParaEle": "Trocar este chat para ele",
-    "preparando": "Preparando o worktree — copiar as dependências pode levar alguns segundos…",
-    "criar": "Criar",
-    "removerTitulo": "Remover o worktree “{{nome}}”?",
-    "removerDescricao": "A pasta do worktree é apagada e processos rodando nela são encerrados.",
-    "removerAlteracoes_one": "Há {{count}} arquivo com alterações não commitadas — ele será perdido.",
-    "removerAlteracoes_other": "Há {{count}} arquivos com alterações não commitadas — eles serão perdidos.",
-    "removerExterno": "Este worktree foi criado fora do Orbit ({{caminho}}). Confira se nenhuma outra ferramenta o usa.",
-    "apagarBranch": "Apagar também o branch {{branch}}",
-    "apagarBranchAviso_one": "{{count}} commit que só existe nele será perdido.",
-    "apagarBranchAviso_other": "{{count}} commits que só existem nele serão perdidos."
+    "currentBase": "Branch atual ({{branch}})",
+    "remoteBase": "Remoto atualizado ({{remote}})",
+    "switchToIt": "Trocar este chat para ele",
+    "preparing": "Preparando o worktree — copiar as dependências pode levar alguns segundos…",
+    "create": "Criar",
+    "removeTitle": "Remover o worktree “{{name}}”?",
+    "removeDescription": "A pasta do worktree é apagada e processos rodando nela são encerrados.",
+    "removeChanges_one": "Há {{count}} arquivo com alterações não commitadas — ele será perdido.",
+    "removeChanges_other": "Há {{count}} arquivos com alterações não commitadas — eles serão perdidos.",
+    "removeExternal": "Este worktree foi criado fora do Orbit ({{path}}). Confira se nenhuma outra ferramenta o usa.",
+    "deleteBranch": "Apagar também o branch {{branch}}",
+    "deleteBranchWarning_one": "{{count}} commit que só existe nele será perdido.",
+    "deleteBranchWarning_other": "{{count}} commits que só existem nele serão perdidos."
   },
-  "esteira": {
-    "titulo": "Esteira",
-    "carregando": "Carregando board...",
-    "vazioTitulo": "Nenhum board ainda",
-    "vazioSubtitulo": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
-    "novaEsteira": "Nova esteira",
-    "criar": "Criar",
-    "nomeEsteira": "Nome da esteira",
-    "nomeExemplo": "ex.: Features",
-    "pastas": "Pastas",
-    "pastasDica": "Pastas de trabalho, como no chat",
-    "modeloPadrao": "Modelo padrão",
-    "modeloDica": "Modelo inicial de todas as fases, com o nível de raciocínio ao lado. Para dar a uma fase um modelo próprio, use o lápis dela.",
-    "fases": "Fases",
-    "fasesDica": "Copiadas dos templates do sistema — editar a esteira não altera o mestre",
-    "pendentes": "Pendentes",
-    "concluidas": "Concluídas",
-    "emAndamento": "Em andamento",
-    "falhas": "Falhas",
+  "pipeline": {
+    "title": "Esteira",
+    "loading": "Carregando board...",
+    "emptyTitle": "Nenhum board ainda",
+    "emptySubtitle": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
+    "newPipeline": "Nova esteira",
+    "create": "Criar",
+    "pipelineName": "Nome da esteira",
+    "nameExample": "ex.: Features",
+    "folders": "Pastas",
+    "foldersHint": "Pastas de trabalho, como no chat",
+    "defaultModel": "Modelo padrão",
+    "modelHint": "Modelo inicial de todas as fases, com o nível de raciocínio ao lado. Para dar a uma fase um modelo próprio, use o lápis dela.",
+    "phases": "Fases",
+    "phasesHint": "Copiadas dos templates do sistema — editar a esteira não altera o mestre",
+    "pendingPlural": "Pendentes",
+    "completedPlural": "Concluídas",
+    "inProgress": "Em andamento",
+    "failures": "Falhas",
     "commits": "Commits",
-    "tempoTotal": "Tempo total",
-    "iniciar": "Iniciar",
-    "pausar": "Pausar",
-    "retomar": "Retomar",
-    "pausada": "Pausada",
-    "erro": "Erro",
-    "pushFalhou": "Push falhou",
-    "pausadaPorErro": "Task pausada após falhar na fase",
-    "filaLigada": "Fila automática ligada",
-    "filaDesligada": "Fila automática desligada",
-    "filaDica": "Executa as tasks pendentes uma por vez, respeitando dependências",
-    "removerEsteira": "Excluir esteira",
-    "confirmarRemocao": "Excluir a esteira \"{{nome}}\" e suas tasks?",
-    "descricao": "Descrição",
-    "semAnotacao": "Esta fase ainda não rodou.",
-    "executando": "Executando…",
-    "iniciando": "Iniciando a fase…",
-    "comandosControlados": "Comandos registrados",
-    "criadaEm": "Criada em",
-    "concluidaEm": "Concluída em",
-    "tempoTrabalho": "Tempo de trabalho",
+    "totalTime": "Tempo total",
+    "start": "Iniciar",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "paused": "Pausada",
+    "error": "Erro",
+    "pushFailed": "Push falhou",
+    "pausedByError": "Task pausada após falhar na fase",
+    "queueOn": "Fila automática ligada",
+    "queueOff": "Fila automática desligada",
+    "queueHint": "Executa as tasks pendentes uma por vez, respeitando dependências",
+    "removePipeline": "Excluir esteira",
+    "confirmRemoval": "Excluir a esteira \"{{name}}\" e suas tasks?",
+    "description": "Descrição",
+    "noNote": "Esta fase ainda não rodou.",
+    "running": "Executando…",
+    "starting": "Iniciando a fase…",
+    "controlledCommands": "Comandos registrados",
+    "createdAt": "Criada em",
+    "completedAt": "Concluída em",
+    "workTime": "Tempo de trabalho",
     "tokens": "Tokens",
-    "custo": "Custo",
-    "dependenciasTitulo": "Dependências",
-    "semDependencias": "Nenhuma",
-    "aguardando": "aguarda {{titulo}}",
-    "aguardandoTitulo": "Bloqueada pela dependência \"{{titulo}}\"",
-    "proxima": "Próxima",
-    "browserEmUso": "Navegador em uso por esta task — clique para abrir",
-    "adicionarDependencia": "adicionar dependência",
-    "dependencias_one": "{{count}} dependência",
-    "dependencias_other": "{{count}} dependências",
-    "excluirTask": "Excluir task",
-    "confirmarExclusaoTask": "Excluir a task \"{{titulo}}\"?",
-    "exclusaoTaskDescricao": "Essa ação não pode ser desfeita — a task e as anotações das fases serão perdidas.",
-    "exclusaoTaskDescricaoWorktree": "Essa ação não pode ser desfeita — a task, as anotações e o worktree dela serão apagados, com o que não foi commitado. O branch {{branch}} continua no repositório.",
-    "worktreePorTask": "Isolar cada task em um worktree",
-    "worktreePorTaskDica": "Cada task trabalha num branch e numa cópia próprios, então dá para rodar várias ao mesmo tempo sem uma mexer na outra. Parte do branch atual (alterações não commitadas ficam de fora) e vale para tasks que ainda não começaram.",
+    "cost": "Custo",
+    "dependenciesTitle": "Dependências",
+    "noDependencies": "Nenhuma",
+    "waiting": "aguarda {{title}}",
+    "waitingTitle": "Bloqueada pela dependência \"{{title}}\"",
+    "next": "Próxima",
+    "browserInUse": "Navegador em uso por esta task — clique para abrir",
+    "addDependency": "adicionar dependência",
+    "dependencies_one": "{{count}} dependência",
+    "dependencies_other": "{{count}} dependências",
+    "deleteTask": "Excluir task",
+    "confirmTaskDeletion": "Excluir a task \"{{title}}\"?",
+    "taskDeletionDescription": "Essa ação não pode ser desfeita — a task e as anotações das fases serão perdidas.",
+    "taskDeletionDescriptionWorktree": "Essa ação não pode ser desfeita — a task, as anotações e o worktree dela serão apagados, com o que não foi commitado. O branch {{branch}} continua no repositório.",
+    "worktreePerTask": "Isolar cada task em um worktree",
+    "worktreePerTaskHint": "Cada task trabalha num branch e numa cópia próprios, então dá para rodar várias ao mesmo tempo sem uma mexer na outra. Parte do branch atual (alterações não commitadas ficam de fora) e vale para tasks que ainda não começaram.",
     "worktreeBase": "Criado a partir de {{base}}",
-    "abrirWorktree": "Abrir pasta",
-    "dependenciasVinculadas": "node_modules vinculados ao repositório principal",
+    "openWorktree": "Abrir pasta",
+    "linkedDependencies": "node_modules vinculados ao repositório principal",
     "status": {
-      "pendente": "Pendente",
-      "em_progresso": "Em execução",
-      "pausada": "Pausada",
-      "concluida": "Concluída"
+      "pending": "Pendente",
+      "in_progress": "Em execução",
+      "paused": "Pausada",
+      "completed": "Concluída"
     },
-    "subtitulo": "Esteiras que executam tasks fase a fase, sem chats",
-    "criarPrimeira": "Criar a primeira esteira",
-    "repositorioPrincipal": "Repositório principal",
-    "voltar": "Voltar para a lista",
-    "adicionarTarefa": "Adicionar tarefa",
-    "tasksResumo": "{{concluidas}}/{{total}} tasks",
-    "adicionarFase": "Adicionar fase",
-    "criarFase": "Criar minha própria fase",
-    "editarFase": "Editar fase",
-    "novaFase": "Nova fase",
-    "faseNome": "Nome",
-    "faseDescricao": "Descrição",
-    "faseDescricaoDica": "Uma linha — aparece na lista da esteira",
-    "faseTipo": "Papel",
-    "faseTipoDica": "Define o que a fase faz (e o que ela deixa para as próximas), independentemente do nome",
-    "fasePrompt": "Prompt",
-    "fasePromptDica": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
-    "faseCapacidades": "Capacidades",
-    "salvarNestaEsteira": "Salvar nesta esteira",
-    "maisOpcoesSalvar": "Mais opções de salvar",
-    "salvarNaOriginal": "Salvar na fase original",
-    "salvarComoNovaFase": "Criar nova fase e salvar",
-    "faseModelo": "Modelo da fase",
-    "usarPadrao": "Usar padrão",
-    "seguePadrao": "Segue o modelo padrão da esteira. Escolha outro para esta fase ter o seu.",
-    "padrao": "padrão",
-    "opcoesFase": "Opções da fase",
-    "excluirFase": "Excluir fase",
-    "excluirFaseTitulo": "Excluir fase?",
-    "excluirFaseConfirmar": "A fase \"{{nome}}\" deixa de aparecer em \"Adicionar fase\". Esteiras que já a usam não mudam.",
-    "capacidade": {
-      "leitura": "Leitura",
+    "subtitle": "Esteiras que executam tasks fase a fase, sem chats",
+    "createFirst": "Criar a primeira esteira",
+    "mainRepository": "Repositório principal",
+    "back": "Voltar para a lista",
+    "addTask": "Adicionar tarefa",
+    "tasksSummary": "{{completed}}/{{total}} tasks",
+    "addPhase": "Adicionar fase",
+    "createPhase": "Criar minha própria fase",
+    "editPhase": "Editar fase",
+    "newPhase": "Nova fase",
+    "phaseName": "Nome",
+    "phaseDescription": "Descrição",
+    "phaseDescriptionHint": "Uma linha — aparece na lista da esteira",
+    "phaseKind": "Papel",
+    "phaseKindHint": "Define o que a fase faz (e o que ela deixa para as próximas), independentemente do nome",
+    "phasePrompt": "Prompt",
+    "phasePromptHint": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
+    "phaseCapabilities": "Capacidades",
+    "saveInThisPipeline": "Salvar nesta esteira",
+    "moreSaveOptions": "Mais opções de salvar",
+    "saveToOriginal": "Salvar na fase original",
+    "saveAsNewPhase": "Criar nova fase e salvar",
+    "phaseModel": "Modelo da fase",
+    "useDefault": "Usar padrão",
+    "followsDefault": "Segue o modelo padrão da esteira. Escolha outro para esta fase ter o seu.",
+    "default": "padrão",
+    "phaseOptions": "Opções da fase",
+    "deletePhase": "Excluir fase",
+    "deletePhaseTitle": "Excluir fase?",
+    "deletePhaseConfirm": "A fase \"{{name}}\" deixa de aparecer em \"Adicionar fase\". Esteiras que já a usam não mudam.",
+    "capability": {
+      "read": "Leitura",
       "edit": "Edição",
       "shell": "Shell",
       "browser": "Browser",
-      "memoria": "Memória"
+      "memory": "Memória"
     },
-    "tipo": {
-      "desenvolvimento": "Desenvolvimento",
-      "validacao": "Validação",
-      "seguranca": "Segurança",
-      "revisao": "Revisão de código",
+    "kind": {
+      "development": "Desenvolvimento",
+      "validation": "Validação",
+      "security": "Segurança",
+      "review": "Revisão de código",
       "infra": "Infra",
-      "generico": "Genérica"
+      "generic": "Genérica"
     },
-    "arquivosAlterados_one": "{{count}} arquivo alterado",
-    "arquivosAlterados_other": "{{count}} arquivos alterados",
-    "devolver": "Devolver",
-    "devolverTitulo": "Devolver “{{titulo}}”",
-    "devolverDica": "A task volta para a esteira na rodada {{rodada}}, trabalhando em cima do que já fez. Seu comentário tem prioridade sobre a descrição original.",
-    "devolverComentario": "O que precisa mudar",
-    "devolverPlaceholder": "Ex.: Errou no cálculo do frete — tem que considerar o peso cubado. E o botão deve ficar desabilitado enquanto calcula.",
-    "devolverFase": "Recomeçar a partir de",
-    "devolverDependentes_one": "{{titulos}} depende desta task e já rodou com a versão anterior.",
-    "devolverDependentes_other": "{{count}} tasks dependem desta e já rodaram com a versão anterior: {{titulos}}.",
-    "rodada": "Rodada {{rodada}}",
-    "rodadaCurta": "R{{rodada}}",
-    "rodadaTitulo": "Rodada {{rodada}}: a task foi devolvida para revisão",
-    "comentarioRevisao": "Comentário da revisão",
-    "retomarComInstrucao": "Retomar com instrução",
-    "retomarInstrucaoTitulo": "Retomar “{{titulo}}”",
-    "retomarInstrucaoDica": "A fase “{{fase}}” roda de novo seguindo sua instrução. As próximas fases também a recebem, como contexto.",
-    "retomarInstrucaoPlaceholder": "Ex.: Os testes rodam com npm run test:unit, não npm test. Ou: não mexa no schema do banco, só na API.",
-    "instrucaoAoRetomar": "Instrução ao retomar",
-    "naoRodouNaRodada": "Esta fase não rodou nesta rodada: ela recomeçou numa fase posterior. O trabalho dela está na rodada anterior.",
-    "fase": {
-      "desenvolvimento": {
-        "nome": "Desenvolvimento",
-        "descricao": "Implementa a task seguindo as convenções do projeto"
+    "changedFiles_one": "{{count}} arquivo alterado",
+    "changedFiles_other": "{{count}} arquivos alterados",
+    "return": "Devolver",
+    "returnTitle": "Devolver “{{title}}”",
+    "returnHint": "A task volta para a esteira na rodada {{round}}, trabalhando em cima do que já fez. Seu comentário tem prioridade sobre a descrição original.",
+    "returnComment": "O que precisa mudar",
+    "returnPlaceholder": "Ex.: Errou no cálculo do frete — tem que considerar o peso cubado. E o botão deve ficar desabilitado enquanto calcula.",
+    "returnPhase": "Recomeçar a partir de",
+    "returnDependents_one": "{{titles}} depende desta task e já rodou com a versão anterior.",
+    "returnDependents_other": "{{count}} tasks dependem desta e já rodaram com a versão anterior: {{titles}}.",
+    "round": "Rodada {{round}}",
+    "roundShort": "R{{round}}",
+    "roundTitle": "Rodada {{round}}: a task foi devolvida para revisão",
+    "reviewComment": "Comentário da revisão",
+    "resumeWithInstruction": "Retomar com instrução",
+    "resumeInstructionTitle": "Retomar “{{title}}”",
+    "resumeInstructionHint": "A fase “{{phase}}” roda de novo seguindo sua instrução. As próximas fases também a recebem, como contexto.",
+    "resumeInstructionPlaceholder": "Ex.: Os testes rodam com npm run test:unit, não npm test. Ou: não mexa no schema do banco, só na API.",
+    "resumeInstruction": "Instrução ao retomar",
+    "didNotRunInRound": "Esta fase não rodou nesta rodada: ela recomeçou numa fase posterior. O trabalho dela está na rodada anterior.",
+    "phase": {
+      "development": {
+        "name": "Desenvolvimento",
+        "description": "Implementa a task seguindo as convenções do projeto"
       },
-      "validacao": {
-        "nome": "Validação",
-        "descricao": "Valida a implementação: build, testes e revisão do diff"
+      "validation": {
+        "name": "Validação",
+        "description": "Valida a implementação: build, testes e revisão do diff"
       },
-      "seguranca": {
-        "nome": "Segurança",
-        "descricao": "Auditoria de dependências, segredos e permissões"
+      "security": {
+        "name": "Segurança",
+        "description": "Auditoria de dependências, segredos e permissões"
       },
-      "revisao": {
-        "nome": "Revisão de código",
-        "descricao": "Code review de qualidade e estilo"
+      "review": {
+        "name": "Revisão de código",
+        "description": "Code review de qualidade e estilo"
       },
       "infra": {
-        "nome": "Infra",
-        "descricao": "Checklist de deploy e ambiente"
+        "name": "Infra",
+        "description": "Checklist de deploy e ambiente"
       }
     },
     "push": "Fazer push ao finalizar",
     "prints": "Capturar prints do resultado",
-    "editarEsteira": "Editar esteira",
-    "salvar": "Salvar",
-    "novaTask": "Nova task",
-    "criarTask": "Criar task",
-    "taskTitulo": "Título",
-    "taskTituloExemplo": "ex.: Corrigir login no mobile",
-    "taskDescricao": "Descrição",
-    "taskDescricaoDica": "O briefing completo que as fases recebem — a task roda sem chat, então o que não estiver aqui não chega ao agente.",
-    "taskDependencias": "Depende de",
-    "taskDependenciasDica": "Esta task só inicia depois que as selecionadas concluírem.",
-    "selecioneDependencias": "Nenhuma — inicia livremente",
-    "semTasksParaDependencia": "Ainda não há outra task nesta esteira",
-    "buscarTask": "Buscar task...",
-    "nenhumaTask": "Nenhuma task encontrada",
+    "editPipeline": "Editar esteira",
+    "save": "Salvar",
+    "newTask": "Nova task",
+    "createTask": "Criar task",
+    "taskTitle": "Título",
+    "taskTitleExample": "ex.: Corrigir login no mobile",
+    "taskDescription": "Descrição",
+    "taskDescriptionHint": "O briefing completo que as fases recebem — a task roda sem chat, então o que não estiver aqui não chega ao agente.",
+    "taskDependencies": "Depende de",
+    "taskDependenciesHint": "Esta task só inicia depois que as selecionadas concluírem.",
+    "selectDependencies": "Nenhuma — inicia livremente",
+    "noTasksForDependency": "Ainda não há outra task nesta esteira",
+    "searchTask": "Buscar task...",
+    "noTasks": "Nenhuma task encontrada",
     "commit": "Criar commit ao finalizar",
-    "commitPromptTitulo": "Mensagem do commit final",
-    "commitPromptDica": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases, os arquivos alterados e o último commit do repositório — o mesmo contexto que uma fase recebe. Vazio usa o padrão: o que a task pedir sobre o commit; sem isso, o estilo do último commit; sem histórico, as preferências da memória; e por fim Conventional Commits (header + body de tópicos resumidos).",
-    "commitPromptVazio": "Vazio = prompt padrão (pedido da task → último commit → memória → Conventional Commits).",
-    "commitFalhou": "Commit final falhou"
+    "commitPromptTitle": "Mensagem do commit final",
+    "commitPromptHint": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases, os arquivos alterados e o último commit do repositório — o mesmo contexto que uma fase recebe. Vazio usa o padrão: o que a task pedir sobre o commit; sem isso, o estilo do último commit; sem histórico, as preferências da memória; e por fim Conventional Commits (header + body de tópicos resumidos).",
+    "commitPromptEmpty": "Vazio = prompt padrão (pedido da task → último commit → memória → Conventional Commits).",
+    "commitFailed": "Commit final falhou"
   },
-  "rotinas": {
-    "titulo": "Rotinas",
-    "subtitulo": "Sessões que voltam sozinhas: o agente roda o mesmo prompt na hora marcada.",
-    "carregando": "Carregando rotinas…",
-    "abas": {
-      "criar": "Criar",
-      "minhas": "Minhas rotinas"
+  "routines": {
+    "title": "Rotinas",
+    "subtitle": "Sessões que voltam sozinhas: o agente roda o mesmo prompt na hora marcada.",
+    "loading": "Carregando rotinas…",
+    "tabs": {
+      "create": "Criar",
+      "my": "Minhas rotinas"
     },
-    "criar": {
-      "descreverDica": "Descreva em texto corrido. O modelo transforma isso em título, prompt, agenda e modos — você revisa tudo na etapa seguinte.",
+    "create": {
+      "describeHint": "Descreva em texto corrido. O modelo transforma isso em título, prompt, agenda e modos — você revisa tudo na etapa seguinte.",
       "placeholder": "Ex.: todo dia às 9h, revise os commits do dia anterior neste repositório e escreva um resumo do que mudou, com os riscos que você encontrar.\n\nOu: toda segunda, analise o projeto e crie tasks de melhoria no modo pipeline (a esteira do Orbit).",
-      "modelo": "Modelo",
-      "gerar": "Gerar",
-      "gerando": "Gerando…",
-      "semModelo": "Escolha um modelo para gerar a rotina.",
-      "titulo": "Nova rotina",
+      "model": "Modelo",
+      "generate": "Gerar",
+      "generating": "Gerando…",
+      "noModel": "Escolha um modelo para gerar a rotina.",
+      "title": "Nova rotina",
       "placeholderChat": "Ex.: todo dia às 8h, monte um briefing matinal com as notícias de tecnologia do dia e um resumo das minhas memórias recentes.",
-      "modoChatDica": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
+      "modeChatHint": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
     },
-    "revisar": {
-      "titulo": "Revisar rotina",
-      "subtitulo": "O agente sugeriu — confirme ou ajuste antes de criar.",
-      "voltar": "Voltar",
-      "campoTitulo": "Título",
-      "campoPrompt": "Prompt da rotina",
-      "campoPromptDica": "É o que o agente recebe a cada execução. Precisa ser autocontido: não há ninguém para responder perguntas.",
-      "agenda": "Quando executar",
-      "modos": "Modos",
-      "modosDica": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
-      "sugerido": "sugerido",
-      "pastas": "Pastas de trabalho",
-      "pastasDica": "Escolhidas nesta etapa — a rotina sempre roda nelas.",
-      "semPastas": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
-      "criar": "Criar rotina"
+    "review": {
+      "title": "Revisar rotina",
+      "subtitle": "O agente sugeriu — confirme ou ajuste antes de criar.",
+      "back": "Voltar",
+      "titleField": "Título",
+      "promptField": "Prompt da rotina",
+      "promptFieldHint": "É o que o agente recebe a cada execução. Precisa ser autocontido: não há ninguém para responder perguntas.",
+      "schedule": "Quando executar",
+      "modes": "Modos",
+      "modesHint": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
+      "suggested": "sugerido",
+      "folders": "Pastas de trabalho",
+      "foldersHint": "Escolhidas nesta etapa — a rotina sempre roda nelas.",
+      "noFolders": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
+      "create": "Criar rotina"
     },
-    "agenda": {
-      "modo": {
-        "diario": "Todo dia",
-        "semanal": "Dias da semana",
-        "intervalo": "A cada N dias",
-        "horas": "A cada N horas",
-        "unico": "Uma vez"
+    "schedule": {
+      "mode": {
+        "daily": "Todo dia",
+        "weekly": "Dias da semana",
+        "intervalDays": "A cada N dias",
+        "intervalHours": "A cada N horas",
+        "once": "Uma vez"
       },
-      "horario": "às",
-      "dia": {
+      "time": "às",
+      "day": {
         "0": "D",
         "1": "S",
         "2": "T",
@@ -2655,19 +2666,19 @@
         "5": "S",
         "6": "S"
       },
-      "uteis": "Seg a Sex",
-      "fimDeSemana": "Fim de semana",
-      "aCada": "A cada",
-      "dias": "dias",
-      "horas": "horas",
+      "workdays": "Seg a Sex",
+      "weekend": "Fim de semana",
+      "every": "A cada",
+      "days": "dias",
+      "hours": "horas",
       "em": "em",
-      "umaVezDica": "Depois de rodar, a rotina se desativa sozinha.",
-      "resumoHoras": "A cada {{horas}} horas",
-      "resumoUnico": "Uma vez em {{data}} às {{horario}}",
-      "resumoDiario": "Todo dia às {{horario}}",
-      "resumoDias": "{{dias}} às {{horario}}",
-      "resumoIntervalo": "A cada {{dias}} dias às {{horario}}",
-      "diaAbrev": {
+      "onceHint": "Depois de rodar, a rotina se desativa sozinha.",
+      "summaryHours": "A cada {{hours}} horas",
+      "summarySingle": "Uma vez em {{date}} às {{time}}",
+      "summaryDaily": "Todo dia às {{time}}",
+      "summaryDays": "{{days}} às {{time}}",
+      "summaryInterval": "A cada {{days}} dias às {{time}}",
+      "dayAbbr": {
         "0": "Dom",
         "1": "Seg",
         "2": "Ter",
@@ -2676,82 +2687,82 @@
         "5": "Sex",
         "6": "Sáb"
       },
-      "resumoUteis": "Seg a Sex às {{horario}}",
-      "resumoFimDeSemana": "Fim de semana às {{horario}}"
+      "summaryWorkdays": "Seg a Sex às {{time}}",
+      "summaryWeekend": "Fim de semana às {{time}}"
     },
     "background": {
-      "titulo": "Rodar em segundo plano",
-      "dica": "O app reabre sozinho se você sair — as rotinas disparam mesmo sem ninguém abrir o Orbit."
+      "title": "Rodar em segundo plano",
+      "hint": "O app reabre sozinho se você sair — as rotinas disparam mesmo sem ninguém abrir o Orbit."
     },
-    "modos": {
+    "modes": {
       "loop": {
-        "nome": "Loop",
-        "descricao": "O agente revisa o próprio trabalho e itera até concluir."
+        "name": "Loop",
+        "description": "O agente revisa o próprio trabalho e itera até concluir."
       },
       "subagents": {
-        "nome": "Subagentes",
-        "descricao": "Pode delegar investigações paralelas a workers efêmeros."
+        "name": "Subagentes",
+        "description": "Pode delegar investigações paralelas a workers efêmeros."
       },
       "orchestrate": {
-        "nome": "Orquestra",
-        "descricao": "Divide em plano de tarefas e workers. Implica loop e subagentes."
+        "name": "Orquestra",
+        "description": "Divide em plano de tarefas e workers. Implica loop e subagentes."
       },
       "brain": {
-        "nome": "Memória",
-        "descricao": "Memória persistente — é o que faz a rotina lembrar das execuções anteriores."
+        "name": "Memória",
+        "description": "Memória persistente — é o que faz a rotina lembrar das execuções anteriores."
       },
       "browser": {
-        "nome": "Browser",
-        "descricao": "Abre e inspeciona páginas no navegador do painel."
+        "name": "Browser",
+        "description": "Abre e inspeciona páginas no navegador do painel."
       },
       "plan": {
-        "nome": "Modo Plano",
-        "descricao": "Só planeja, sem executar. A rotina fica esperando aprovação."
+        "name": "Modo Plano",
+        "description": "Só planeja, sem executar. A rotina fica esperando aprovação."
       },
       "simple": {
-        "nome": "Simples",
-        "descricao": "Resposta direta em texto puro, sem formatação."
+        "name": "Simples",
+        "description": "Resposta direta em texto puro, sem formatação."
       },
-      "permissaoAviso": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução.",
+      "permissionWarning": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução.",
       "search": {
-        "nome": "Pesquisa",
-        "descricao": "Pesquisa aprofundada na web com ferramentas de busca."
+        "name": "Pesquisa",
+        "description": "Pesquisa aprofundada na web com ferramentas de busca."
       },
       "vision": {
-        "nome": "Visão",
-        "descricao": "Imagens e screenshots são descritas pelo modelo de visão configurado."
+        "name": "Visão",
+        "description": "Imagens e screenshots são descritas pelo modelo de visão configurado."
       }
     },
-    "lista": {
-      "vazioTitulo": "Nenhuma rotina ainda",
-      "vazioSubtitulo": "Uma rotina é uma sessão que volta sozinha — um relatório diário, uma varredura semanal, uma verificação depois do deploy.",
-      "criarPrimeira": "Criar a primeira rotina",
-      "ativa": "Ativa",
-      "pausada": "Pausada",
-      "proxima": "Próxima: {{quando}}",
-      "executarAgora": "Executar agora",
-      "editar": "Editar",
-      "salvar": "Salvar",
-      "excluir": "Excluir",
-      "excluirTitulo": "Excluir rotina",
-      "excluirDescricao": "\"{{titulo}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer.",
-      "nova": "Nova rotina",
-      "vazioSubtituloChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias."
+    "list": {
+      "emptyTitle": "Nenhuma rotina ainda",
+      "emptySubtitle": "Uma rotina é uma sessão que volta sozinha — um relatório diário, uma varredura semanal, uma verificação depois do deploy.",
+      "createFirst": "Criar a primeira rotina",
+      "active": "Ativa",
+      "paused": "Pausada",
+      "next": "Próxima: {{when}}",
+      "runNow": "Executar agora",
+      "edit": "Editar",
+      "save": "Salvar",
+      "delete": "Excluir",
+      "deleteTitle": "Excluir rotina",
+      "deleteDescription": "\"{{title}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer.",
+      "new": "Nova rotina",
+      "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias."
     },
     "runs": {
-      "titulo": "Sessões",
-      "vazio": "Ainda não rodou nenhuma vez.",
-      "abrirChat": "Abrir sessão",
-      "rodando": "Rodando…",
+      "title": "Sessões",
+      "empty": "Ainda não rodou nenhuma vez.",
+      "openChat": "Abrir sessão",
+      "running": "Rodando…",
       "ok": "Concluída",
-      "erro": "Falhou",
-      "tokens": "{{valor}} tokens"
+      "error": "Falhou",
+      "tokens": "{{value}} tokens"
     },
-    "modo": {
+    "mode": {
       "chat": "Modo chat",
       "code": "Modo código"
     },
-    "subtituloChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat.",
+    "subtitleChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat.",
     "timePlaceholder": "HH:MM"
   },
   "queue": {
@@ -2770,7 +2781,8 @@
     "now": "Agora",
     "inSeconds": "Em segundos",
     "inMinutes": "Em {{count}}min",
-    "inHours": "Em {{count}}h"
+    "inHours": "Em {{count}}h",
+    "toggleSection": "Alternar seção"
   },
   "conversation": {
     "emptyTitle": "Nenhuma mensagem ainda",
@@ -3104,7 +3116,10 @@
     "draftHint": "Traga o material antes de perguntar: o que você anexar aqui passa a ser da conversa assim que você enviar a primeira mensagem.",
     "quoteInChat": "Citar no chat",
     "speak": "Ler trecho",
-    "docxUnavailable": "Não foi possível mostrar o documento como ele é. O modo Texto continua mostrando o conteúdo."
+    "docxUnavailable": "Não foi possível mostrar o documento como ele é. O modo Texto continua mostrando o conteúdo.",
+    "removeMaterial": "Remover material",
+    "consulted_one": "{{count}} fonte consultada",
+    "consulted_other": "{{count}} fontes consultadas"
   },
   "reply": {
     "action": "Responder",
@@ -3433,7 +3448,7 @@
       "elevated": "Apps abertos como administrador não podem ser controlados pelo Orbit; o UAC e a tela de bloqueio também não."
     },
     "unavailable": {
-      "mas": "Indisponível na versão da Mac App Store: o sandbox da loja bloqueia acessibilidade e envio de eventos. Use a versão do site.",
+      "but": "Indisponível na versão da Mac App Store: o sandbox da loja bloqueia acessibilidade e envio de eventos. Use a versão do site.",
       "platform": "Por enquanto, disponível só no macOS e no Windows."
     },
     "model": {

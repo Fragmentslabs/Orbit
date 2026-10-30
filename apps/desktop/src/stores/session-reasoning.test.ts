@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const armazenado: Record<string, string> = {}
+const stored: Record<string, string> = {}
 vi.stubGlobal("localStorage", {
-  getItem: (k: string) => armazenado[k] ?? null,
+  getItem: (k: string) => stored[k] ?? null,
   setItem: (k: string, v: string) => {
-    armazenado[k] = v
+    stored[k] = v
   },
 })
 
@@ -12,37 +12,37 @@ const { useSessionReasoning, sessionReasoningFor } = await import("./session-rea
 const { useReasoningPrefsStore } = await import("./reasoning-prefs")
 
 beforeEach(() => {
-  armazenado["orbit-session-reasoning"] = "{}"
+  stored["orbit-session-reasoning"] = "{}"
   useSessionReasoning.setState({ overrides: {} })
   useReasoningPrefsStore.setState({ prefs: {} } as never)
 })
 
-describe("thinking por chat", () => {
-  it("mudar num chat NÃO muda o outro", () => {
+describe("thinking per chat", () => {
+  it("changing it in one chat does NOT change the other", () => {
     useSessionReasoning.getState().setPref("s_a", { enabled: true, variantId: "high" })
     expect(sessionReasoningFor("s_a", "anthropic", "opus")).toEqual({ enabled: true, variantId: "high" })
     expect(sessionReasoningFor("s_b", "anthropic", "opus")).toBeUndefined()
   })
 
-  it("sem escolha no chat, vale o nível do modelo (Preferências)", () => {
+  it("with no choice in the chat, the model's level applies (Preferences)", () => {
     useReasoningPrefsStore.setState({ prefs: { "anthropic/opus": { enabled: true, variantId: "low" } } } as never)
     expect(sessionReasoningFor("s_sem_escolha", "anthropic", "opus")).toEqual({ enabled: true, variantId: "low" })
   })
 
-  it("depois que o chat escolhe, mexer no default do modelo não o move", () => {
+  it("once the chat chooses, changing the model default does not move it", () => {
     useSessionReasoning.getState().setPref("s_a", { enabled: false })
     useReasoningPrefsStore.setState({ prefs: { "anthropic/opus": { enabled: true, variantId: "max" } } } as never)
     expect(sessionReasoningFor("s_a", "anthropic", "opus")).toEqual({ enabled: false })
   })
 
-  it("o adopt leva a escolha do rascunho para a sessão criada", () => {
+  it("adopt carries the draft's choice to the created session", () => {
     useSessionReasoning.getState().setPref(null, { enabled: true, variantId: "medium" })
     useSessionReasoning.getState().adopt("s_nova", { enabled: false })
     expect(useSessionReasoning.getState().overrides.s_nova).toEqual({ enabled: true, variantId: "medium" })
     expect(useSessionReasoning.getState().overrides.draft).toBeUndefined()
   })
 
-  it("adopt sem escolha no rascunho fixa o nível em vigor", () => {
+  it("adopt with no draft choice pins the level in force", () => {
     useSessionReasoning.getState().adopt("s_nova", { enabled: true, variantId: "high" })
     expect(useSessionReasoning.getState().overrides.s_nova).toEqual({ enabled: true, variantId: "high" })
   })

@@ -44,8 +44,8 @@ export default function SettingsScreen() {
   const loading = useSettingsStore((s) => s.loading)
 
   const [refreshing, setRefreshing] = useState(false)
-  // Sem literal de reserva: um numero fixo aqui envelhece a cada release e
-  // passaria a mentir. Faltando o expo config, a UI simplesmente omite.
+  // No literal fallback: a fixed number here goes stale on every release and
+  // would start lying. Missing the expo config, the UI simply omits it.
   const appVersion = Constants.expoConfig?.version ?? ''
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 16, paddingBottom: 48 }}>
-        {/* ── Navegação ─────────────────────────────────────────────── */}
+        {/* ── Navigation ────────────────────────────────────────────── */}
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <Row
             icon={KeyRound}
@@ -154,7 +154,7 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* ── Conexão ───────────────────────────────────────────────── */}
+        {/* ── Connection ─────────────────────────────────────────────── */}
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, marginTop: 16 }]}>
           <Row icon={Wifi} label={t('settings.connection.status')} value={connection.status === 'connected' ? t('settings.connection.connected') : t('settings.connection.disconnected')} />
           <RowDivider />
@@ -163,7 +163,7 @@ export default function SettingsScreen() {
           <Row icon={LogOut} label={t('settings.connection.disconnect')} destructive onPress={handleDisconnect} />
         </View>
 
-        {/* ── Versão ────────────────────────────────────────────────── */}
+        {/* ── Version ───────────────────────────────────────────────── */}
         {appVersion ? (
           <View style={s.footer}>
             <Text style={[s.footerText, { color: tokens.mutedForeground }]}>{t('settings.footer', { version: appVersion })}</Text>

@@ -2,18 +2,18 @@ import { createRequire } from 'node:module'
 import mammoth from 'mammoth'
 
 /**
- * Cabeçalho e rodapé de um .docx, em HTML.
+ * Header and footer of a .docx, in HTML.
  *
- * O mammoth converte só o corpo: `word/header*.xml` e `word/footer*.xml` não
- * entram no HTML, então o painel mostrava o documento sem os dois mesmo quando
- * o arquivo (e o PDF dele) os tinha — foi o caso de um relatório cujo
- * cabeçalho era um timbre em imagem.
+ * mammoth converts only the body: `word/header*.xml` and `word/footer*.xml` do not
+ * enter the HTML, so the panel showed the document without the two even when
+ * the file (and its PDF) had them — it was the case of a report whose
+ * header was a letterhead image.
  *
- * Em vez de reinterpretar o XML, cada parte vira um .docx mínimo cujo CORPO é o
- * conteúdo dela, e o mammoth converte esse arquivo como converte qualquer
- * outro. As relações da parte (as imagens do timbre) viram as relações do
- * documento sintético, e os caminhos `media/...` continuam valendo porque
- * ambas ficam em `word/`.
+ * Instead of reinterpreting the XML, each part becomes a minimal .docx whose BODY is its
+ * content, and mammoth converts that file as it converts any
+ * other. The part's relationships (the letterhead images) become the relationships of the
+ * synthetic document, and the `media/...` paths keep holding because
+ * both stay in `word/`.
  */
 
 const _require = createRequire(import.meta.url)
@@ -25,13 +25,13 @@ export interface HeadFoot {
 
 const NS_REL = 'http://schemas.openxmlformats.org/package/2006/relationships'
 
-/** Valor de um atributo numa tag, qualquer que seja a ordem dos atributos. */
+/** Value of an attribute in a tag, whatever the order of the attributes. */
 function attr(tag: string, name: string): string | null {
   const m = new RegExp(`\\s${name}\\s*=\\s*"([^"]*)"`).exec(tag)
   return m ? m[1] : null
 }
 
-/** Caminho da parte `default` (header ou footer) da primeira seção que a tem. */
+/** Path of the `default` part (header or footer) of the first section that has it. */
 function partTarget(documentXml: string, rels: string, kind: 'header' | 'footer'): string | null {
   const refs = documentXml.match(new RegExp(`<w:${kind}Reference\\b[^>]*>`, 'g')) ?? []
   const ref = refs.find((tag) => attr(tag, 'w:type') === 'default')
@@ -60,7 +60,7 @@ async function partToHtml(
   const close = xml.lastIndexOf(`</w:${root}>`)
   if (!open || close < 0) return ''
   const inner = xml.slice(open.index + open[0].length, close)
-  // Parte vazia (só parágrafo em branco) não ganha caixa no painel.
+  // Empty part (only a blank paragraph) does not get a box in the panel.
   if (!/<w:t[\s>]/.test(inner) && !/<a:blip\b|<v:imagedata\b/.test(inner)) return ''
 
   const relsPath = partPath.replace(/([^/]+)$/, '_rels/$1.rels')
@@ -78,7 +78,7 @@ async function partToHtml(
   return value
 }
 
-/** Cabeçalho e rodapé padrão do documento; '' quando não há (ou estão vazios). */
+/** Default header and footer of the document; '' when there are none (or they are empty). */
 export async function docxHeadFoot(buffer: Buffer): Promise<HeadFoot> {
   const none: HeadFoot = { header: '', footer: '' }
   try {
@@ -95,12 +95,12 @@ export async function docxHeadFoot(buffer: Buffer): Promise<HeadFoot> {
       footer: foot ? await partToHtml(JSZip, buffer, resolvePart(foot), 'ftr') : '',
     }
   } catch {
-    // Cabeçalho que não converte não pode derrubar o documento: o corpo vale.
+    // A header that does not convert cannot bring the document down: the body counts.
     return none
   }
 }
 
-/** O corpo com o cabeçalho antes e o rodapé depois, quando existem. */
+/** The body with the header before and the footer after, when they exist. */
 export function withHeadFoot(body: string, { header, footer }: HeadFoot): string {
   return (
     (header ? `<header data-docx-part="header">${header}</header>` : '') +

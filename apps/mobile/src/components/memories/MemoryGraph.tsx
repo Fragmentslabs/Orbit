@@ -1,26 +1,26 @@
-/* eslint-disable react-hooks/refs -- os acessos apontados estão dentro de
- * worklets do Reanimated ('worklet'), que executam na thread de UI, fora do
- * ciclo de render do React. Mesmo caso do ImageLightbox: a regra é
- * conservadora com callbacks entregues a bibliotecas de gesto. */
+/* eslint-disable react-hooks/refs -- the flagged accesses are inside
+ * Reanimated worklets ('worklet'), which run on the UI thread, outside the
+ * React render cycle. Same case as ImageLightbox: the rule is
+ * conservative with callbacks handed to gesture libraries. */
 /**
- * Grafo de memórias — porte do memory-graph do desktop. O layout vem de
- * @orbit/shared (createMemoryGraphJob), então as duas plataformas desenham
- * exatamente as mesmas posições: a raiz do projeto no centro e os ramos
- * crescendo para todos os lados, com espaço mínimo garantido entre os rótulos.
- * É uma vista única e contínua — projetos ocupam regiões distintas do canvas,
- * sem moldura separando um do outro; quem isola um projeto é o filtro.
+ * Memory graph — port of the desktop memory-graph. The layout comes from
+ * @orbit/shared (createMemoryGraphJob), so both platforms draw
+ * exactly the same positions: the project root in the center and the branches
+ * growing in every direction, with a minimum gap guaranteed between the labels.
+ * It is a single, continuous view — projects occupy distinct regions of the canvas,
+ * with no frame separating one from another; what isolates a project is the filter.
  *
- * O frame não passa pelo React nem pela thread de JS:
+ * The frame goes through neither React nor the JS thread:
  *
- * 1. A cena inteira é gravada num SkPicture (ver graph-picture) quando o
- *    CONTEÚDO muda — layout novo, nível de zoom, busca. Desenhar virou
- *    reproduzir uma lista de comandos na GPU.
- * 2. Pan e pinch escrevem em shared values, e a transform do <Group> lê delas
- *    direto na thread de UI.
+ * 1. The whole scene is recorded into a SkPicture (see graph-picture) when the
+ *    CONTENT changes — new layout, zoom level, search. Drawing became
+ *    replaying a list of commands on the GPU.
+ * 2. Pan and pinch write to shared values, and the transform of the <Group> reads from them
+ *    straight on the UI thread.
  *
- * Antes disto a cena era SVG: cada círculo, traço e rótulo era uma view nativa,
- * e mudar a transform obrigava o motor a redesenhar tudo em CPU. Algumas
- * centenas de nós já engasgavam o arraste.
+ * Before this the scene was SVG: every circle, stroke and label was a native view,
+ * and changing the transform forced the engine to redraw everything on the CPU. A few
+ * hundred nodes already choked the drag.
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native'
@@ -40,33 +40,33 @@ import { useTranslation } from 'react-i18next'
 import type { Memory } from '@orbit/shared'
 import { KIND_COLOR, kindLabel } from './meta'
 import { useGraphLayout } from './use-graph-layout'
-import { construirIndice, idsQueCasam } from './graph-index'
-import type { IndiceGrafo, NoDesenho, Regiao } from './graph-index'
-import { corSkia, gravarCena } from './graph-picture'
-import type { Fontes } from './graph-picture'
+import { buildGraphIndex, matchingIds } from './graph-index'
+import type { GraphIndex, NodeShape, Region } from './graph-index'
+import { toSkiaColor, recordScene } from './graph-picture'
+import type { Fonts } from './graph-picture'
 import { MemoryCard } from './MemoryCard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-/** Piso do zoom — baixo o bastante para um grafo grande caber inteiro. */
+/** Zoom floor — low enough for a large graph to fit entirely. */
 const ZOOM_MIN = 0.04
 const ZOOM_MAX = 3
 
-// Níveis de detalhe. Cada faixa tira o que, naquele zoom, é pixel sujo: o
-// rótulo (o mais caro de desenhar), depois o anel de recente, depois as arestas
-// que não são da árvore. No fundo do poço o grafo vira um ponto por bloco.
-const ZOOM_ROTULOS = 0.32
-const ZOOM_ANEIS = 0.18
-const ZOOM_NOS = 0.08
+// Levels of detail. Each range drops what, at that zoom, is dirty pixels: the
+// label (the most expensive to draw), then the recency ring, then the edges
+// that are not from the tree. At the bottom the graph becomes one dot per block.
+const ZOOM_LABELS = 0.32
+const ZOOM_RINGS = 0.18
+const ZOOM_NODES = 0.08
 
-/** Folga de toque em volta do círculo do nó, em pixels de tela. */
-const TOQUE_FOLGA = 14
-/** Quanto o duplo toque aproxima de uma vez. */
-const DUPLO_TOQUE_FATOR = 2.5
-/** Espera do toque simples pelo duplo. O padrão do RNGH é 500 ms — meio
- *  segundo até o card abrir era tempo demais para um toque em nó. */
-const DUPLO_TOQUE_ESPERA = 180
-const DUPLO_TOQUE_MS = 200
+/** Touch slack around the node circle, in screen pixels. */
+const TOUCH_SLOP = 14
+/** How much the double tap zooms in at once. */
+const DOUBLE_TAP_FACTOR = 2.5
+/** Wait of the single tap for the double. The RNGH default is 500 ms — half a
+ *  second until the card opened was too long for a tap on a node. */
+const DOUBLE_TAP_DELAY = 180
+const DOUBLE_TAP_MS = 200
 
 interface Transform {
   x: number
@@ -75,30 +75,30 @@ interface Transform {
 }
 
 /**
- * Faixa em que a translação de um eixo pode parar depois da inércia. Sem ela um
- * arremesso jogava o grafo para fora da tela e não havia como trazê-lo de volta
- * a não ser pelo "Centralizar".
+ * Range in which the translation of an axis may stop after the inertia. Without it a
+ * throw tossed the graph off the screen and there was no way to bring it back
+ * except through "Center".
  */
-function limitesEixo(
-  minMundo: number,
-  maxMundo: number,
-  escala: number,
-  tela: number,
+function axisRange(
+  minWorld: number,
+  maxWorld: number,
+  scale: number,
+  viewSize: number,
 ): [number, number] {
   'worklet'
-  const margem = Math.min(tela * 0.4, 160)
-  const lo = margem - maxMundo * escala
-  const hi = tela - margem - minMundo * escala
+  const margin = Math.min(viewSize * 0.4, 160)
+  const lo = margin - maxWorld * scale
+  const hi = viewSize - margin - minWorld * scale
   if (lo <= hi) return [lo, hi]
-  // Conteúdo menor que a tela: não há faixa, então prende no meio.
-  const meio = (lo + hi) / 2
-  return [meio, meio]
+  // Content smaller than the screen: there is no range, so it locks in the middle.
+  const middle = (lo + hi) / 2
+  return [middle, middle]
 }
 
-const FAMILIA = Platform.select({ ios: 'Helvetica', default: 'sans-serif' })
+const FAMILY = Platform.select({ ios: 'Helvetica', default: 'sans-serif' })
 
 export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
-  /** Memórias visíveis (filtro de modo/projeto — a busca só destaca) */
+  /** Visible memories (mode/project filter — the search only highlights) */
   pool: Memory[]
   allById: Map<string, Memory>
   query: string
@@ -107,113 +107,113 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
 }) {
   const { t } = useTranslation()
   const [size, setSize] = useState({ w: 0, h: 0 })
-  /** A cena só aparece depois do primeiro enquadramento: antes dele o zoom
-   *  ainda é 1 e o grafo seria desenhado gigante por um frame. */
-  const [pronto, setPronto] = useState(false)
+  /** The scene only appears after the first framing: before it the zoom
+   *  is still 1 and the graph would be drawn gigantic for one frame. */
+  const [ready, setReady] = useState(false)
   /**
-   * Nível de detalhe. Regravar a cena é o único trabalho pesado que sobrou,
-   * então ele só muda quando o zoom cruza uma faixa — e não nos milhares de
-   * valores intermediários por onde a pinça passa.
+   * Level of detail. Re-recording the scene is the only heavy work left,
+   * so it only changes when the zoom crosses a range — and not on the thousands of
+   * intermediate values the pinch goes through.
    */
-  const [nivel, setNivel] = useState(3)
+  const [level, setLevel] = useState(3)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  // ─── Transform: vive na thread de UI ───────────────────────────────────
+  // ─── Transform: lives on the UI thread ─────────────────────────────────
   const tx = useSharedValue(0)
   const ty = useSharedValue(0)
   const k = useSharedValue(1)
-  const larguraSV = useSharedValue(0)
-  const alturaSV = useSharedValue(0)
-  /** Caixa do conteúdo inteiro — limita a inércia do arraste. */
-  const limitesSV = useSharedValue<Regiao | null>(null)
-  /** Zoom do último enquadramento — referência do duplo toque. */
-  const escalaFitSV = useSharedValue(1)
+  const widthSV = useSharedValue(0)
+  const heightSV = useSharedValue(0)
+  /** Box of the whole content — limits the inertia of the drag. */
+  const boundsSV = useSharedValue<Region | null>(null)
+  /** Zoom of the last framing — reference of the double tap. */
+  const fitScaleSV = useSharedValue(1)
 
-  // A transform do canvas inteiro, lida pelo Skia na própria thread de UI.
+  // The transform of the whole canvas, read by Skia on the UI thread itself.
   const transformSV = useDerivedValue(() => [
     { translateX: tx.get() },
     { translateY: ty.get() },
     { scale: k.get() },
   ])
 
-  // O layout é pesado e vem em fatias (ver useGraphLayout); `now` chega junto
-  // dele de propósito: solto no corpo seria um valor novo a cada frame.
+  // The layout is heavy and comes in slices (see useGraphLayout); `now` arrives with
+  // it on purpose: loose in the body it would be a new value on every frame.
   const { layout, now, progress, building } = useGraphLayout(pool)
 
-  const corTexto = useMemo(() => corSkia(tokens.foreground), [tokens.foreground])
-  const corPrimaria = useMemo(() => corSkia(tokens.primary), [tokens.primary])
+  const textColor = useMemo(() => toSkiaColor(tokens.foreground), [tokens.foreground])
+  const primaryColor = useMemo(() => toSkiaColor(tokens.primary), [tokens.primary])
 
-  // Tudo que a cena precisa por nó, calculado uma vez por layout.
-  const indice = useMemo(
-    () => construirIndice(layout, now, corPrimaria),
-    [layout, now, corPrimaria],
+  // Everything the scene needs per node, computed once per layout.
+  const index = useMemo(
+    () => buildGraphIndex(layout, now, primaryColor),
+    [layout, now, primaryColor],
   )
 
-  // A busca percorre o texto inteiro de cada memória. Adiada, ela deixa de
-  // acontecer a cada tecla digitada — e o resultado é um Set consultado por id
-  // na gravação, em vez de uma normalização por nó por render.
-  const queryAdiada = useDeferredValue(query)
-  const casam = useMemo(() => idsQueCasam(pool, queryAdiada), [pool, queryAdiada])
+  // The search walks the whole text of each memory. Delayed, it stops
+  // happening on every keystroke — and the result is a Set queried by id
+  // at recording time, instead of one normalization per node per render.
+  const deferredQuery = useDeferredValue(query)
+  const matches = useMemo(() => matchingIds(pool, deferredQuery), [pool, deferredQuery])
 
-  const fontes: Fontes = useMemo(
+  const fonts: Fonts = useMemo(
     () => ({
-      fato: matchFont({ fontFamily: FAMILIA, fontSize: 10 }),
-      area: matchFont({ fontFamily: FAMILIA, fontSize: 11, fontWeight: '600' }),
-      raiz: matchFont({ fontFamily: FAMILIA, fontSize: 13, fontWeight: 'bold' }),
+      body: matchFont({ fontFamily: FAMILY, fontSize: 10 }),
+      area: matchFont({ fontFamily: FAMILY, fontSize: 11, fontWeight: '600' }),
+      root: matchFont({ fontFamily: FAMILY, fontSize: 13, fontWeight: 'bold' }),
     }),
     [],
   )
 
-  /** Ligado no primeiro gesto: a partir daí a câmera é do usuário. */
-  const interagiu = useRef(false)
-  const marcarInteracao = useCallback(() => {
-    interagiu.current = true
+  /** Turned on at the first gesture: from then on the camera belongs to the user. */
+  const interacted = useRef(false)
+  const markInteraction = useCallback(() => {
+    interacted.current = true
   }, [])
 
-  const aplicar = useCallback(
-    (destino: Transform) => {
+  const apply = useCallback(
+    (target: Transform) => {
       cancelAnimation(tx)
       cancelAnimation(ty)
-      tx.set(destino.x)
-      ty.set(destino.y)
-      k.set(destino.k)
+      tx.set(target.x)
+      ty.set(target.y)
+      k.set(target.k)
     },
     [tx, ty, k],
   )
 
-  /** Reenquadra o conteúdo no container. */
+  /** Reframes the content in the container. */
   const fitView = useCallback(
     (w = size.w, h = size.h) => {
-      if (!w || !h || indice.total === 0) return
-      const limites = indice.limites
-      limitesSV.set(limites)
+      if (!w || !h || index.total === 0) return
+      const bounds = index.bounds
+      boundsSV.set(bounds)
       const pad = 80
-      const minX = limites.minX - pad
-      const maxX = limites.maxX + pad
-      const minY = limites.minY - pad
-      const maxY = limites.maxY + pad
-      // Grafos grandes ficam bem abaixo do piso do pinch — sem o clamp,
-      // "centralizar" levava a um zoom do qual o gesto não conseguia voltar.
-      const escala = Math.max(ZOOM_MIN, Math.min(w / (maxX - minX), h / (maxY - minY), 1.4))
-      escalaFitSV.set(escala)
-      aplicar({
-        k: escala,
-        x: w / 2 - ((minX + maxX) / 2) * escala,
-        y: h / 2 - ((minY + maxY) / 2) * escala,
+      const minX = bounds.minX - pad
+      const maxX = bounds.maxX + pad
+      const minY = bounds.minY - pad
+      const maxY = bounds.maxY + pad
+      // Large graphs sit well below the pinch floor — without the clamp,
+      // "center" led to a zoom the gesture could not come back from.
+      const scale = Math.max(ZOOM_MIN, Math.min(w / (maxX - minX), h / (maxY - minY), 1.4))
+      fitScaleSV.set(scale)
+      apply({
+        k: scale,
+        x: w / 2 - ((minX + maxX) / 2) * scale,
+        y: h / 2 - ((minY + maxY) / 2) * scale,
       })
-      setPronto(true)
-      setNivel(escala >= ZOOM_ROTULOS ? 3 : escala >= ZOOM_ANEIS ? 2 : escala >= ZOOM_NOS ? 1 : 0)
+      setReady(true)
+      setLevel(scale >= ZOOM_LABELS ? 3 : scale >= ZOOM_RINGS ? 2 : scale >= ZOOM_NODES ? 1 : 0)
     },
-    [indice, size, aplicar, limitesSV, escalaFitSV],
+    [index, size, apply, boundsSV, fitScaleSV],
   )
 
-  // ─── Gestos ────────────────────────────────────────────────────────────
-  // Tudo em worklet: nenhum destes callbacks acorda a thread de JS.
+  // ─── Gestures ──────────────────────────────────────────────────────────
+  // All in worklets: none of these callbacks wakes the JS thread.
   //
-  // Pan e pinch têm bases separadas e não se sobrepõem: o pan só aceita um
-  // dedo, e o pinch cuida do zoom E do arraste de dois dedos (o foco andando já
-  // move o conteúdo). Quando os dois dividiam uma base, cada `onStart`
-  // sobrescrevia a do outro e o zoom ia, voltava e ia de novo.
+  // Pan and pinch have separate bases and do not overlap: the pan only accepts one
+  // finger, and the pinch handles the zoom AND the two-finger drag (the focus moving already
+  // moves the content). When the two shared one base, each `onStart`
+  // overwrote the other's and the zoom went, came back and went again.
   const panBaseX = useSharedValue(0)
   const panBaseY = useSharedValue(0)
   const panGesture = useMemo(
@@ -226,32 +226,32 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
           cancelAnimation(ty)
           panBaseX.set(tx.get())
           panBaseY.set(ty.get())
-          runOnJS(marcarInteracao)()
+          runOnJS(markInteraction)()
         })
         .onUpdate((e) => {
           'worklet'
-          // Arraste é coisa de um dedo só. O `maxPointers(1)` já reprova o
-          // gesto quando um segundo dedo encosta, mas a checagem aqui é de
-          // graça e não depende desse detalhe do RNGH.
+          // Dragging is a one-finger thing. `maxPointers(1)` already rejects the
+          // gesture when a second finger touches, but the check here is free
+          // and does not depend on that RNGH detail.
           if (e.numberOfPointers !== 1) return
           tx.set(panBaseX.get() + e.translationX)
           ty.set(panBaseY.get() + e.translationY)
         })
         .onEnd((e) => {
           'worklet'
-          // Inércia: o conteúdo continua no embalo e freia sozinho, preso à
-          // faixa em que ainda sobra grafo na tela.
-          const limites = limitesSV.get()
-          if (!limites) return
-          const [loX, hiX] = limitesEixo(limites.minX, limites.maxX, k.get(), larguraSV.get())
-          const [loY, hiY] = limitesEixo(limites.minY, limites.maxY, k.get(), alturaSV.get())
+          // Inertia: the content keeps gliding and brakes on its own, held to the
+          // range in which there is still graph left on screen.
+          const bounds = boundsSV.get()
+          if (!bounds) return
+          const [loX, hiX] = axisRange(bounds.minX, bounds.maxX, k.get(), widthSV.get())
+          const [loY, hiY] = axisRange(bounds.minY, bounds.maxY, k.get(), heightSV.get())
           tx.set(withDecay({ velocity: e.velocityX, clamp: [loX, hiX], rubberBandEffect: true }))
           ty.set(withDecay({ velocity: e.velocityY, clamp: [loY, hiY], rubberBandEffect: true }))
         }),
-    [tx, ty, k, panBaseX, panBaseY, limitesSV, larguraSV, alturaSV, marcarInteracao],
+    [tx, ty, k, panBaseX, panBaseY, boundsSV, widthSV, heightSV, markInteraction],
   )
 
-  /** Ponto do CONTEÚDO que estava sob os dedos quando a pinça começou. */
+  /** Point of the CONTENT that was under the fingers when the pinch started. */
   const pinchBaseK = useSharedValue(1)
   const pinchFocoX = useSharedValue(0)
   const pinchFocoY = useSharedValue(0)
@@ -262,55 +262,55 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
           'worklet'
           cancelAnimation(tx)
           cancelAnimation(ty)
-          runOnJS(marcarInteracao)()
+          runOnJS(markInteraction)()
           pinchBaseK.set(k.get())
           pinchFocoX.set((e.focalX - tx.get()) / k.get())
           pinchFocoY.set((e.focalY - ty.get()) / k.get())
         })
         .onUpdate((e) => {
           'worklet'
-          // Ao soltar a pinça um dedo sai antes do outro, e o foco — que é o
-          // ponto médio entre eles — colapsa em cima do que ficou. Esse update
-          // é um salto, não um gesto: aplicá-lo puxava o canvas na direção do
-          // dedo restante em vez de parar no zoom onde a pinça terminou.
+          // On releasing the pinch one finger leaves before the other, and the focus — which is the
+          // midpoint between them — collapses onto what is left. That update
+          // is a jump, not a gesture: applying it pulled the canvas toward the
+          // remaining finger instead of stopping at the zoom where the pinch ended.
           if (e.numberOfPointers < 2) return
-          const escala = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchBaseK.get() * e.scale))
-          // O ponto de ancoragem é fixo desde o início do gesto. Recalculá-lo a
-          // cada frame a partir do foco ATUAL contra a base ANTIGA fazia a
-          // âncora escorregar junto com os dedos.
-          k.set(escala)
-          tx.set(e.focalX - pinchFocoX.get() * escala)
-          ty.set(e.focalY - pinchFocoY.get() * escala)
+          const scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchBaseK.get() * e.scale))
+          // The anchor point is fixed from the start of the gesture. Recomputing it
+          // every frame from the CURRENT focus against the OLD base made the
+          // anchor slide along with the fingers.
+          k.set(scale)
+          tx.set(e.focalX - pinchFocoX.get() * scale)
+          ty.set(e.focalY - pinchFocoY.get() * scale)
         }),
-    [tx, ty, k, pinchBaseK, pinchFocoX, pinchFocoY, marcarInteracao],
+    [tx, ty, k, pinchBaseK, pinchFocoX, pinchFocoY, markInteraction],
   )
 
-  // Toque: um handler só, com acerto por distância. Com a cena gravada num
-  // picture não há mais view por nó para receber o dedo — e não fazia sentido
-  // haver: eram milhares de alvos de toque só para descobrir um círculo.
-  const indiceRef = useRef<IndiceGrafo>(indice)
+  // Tap: a single handler, with hit testing by distance. With the scene recorded into a
+  // picture there is no longer a view per node to receive the finger — and it made no sense to
+  // have one: it was thousands of touch targets just to find one circle.
+  const indexRef = useRef<GraphIndex>(index)
   useEffect(() => {
-    indiceRef.current = indice
-  }, [indice])
-  /** No modo resumido não há nó desenhado para acertar. */
-  const resumidoRef = useRef(false)
-  const tocar = useCallback(
-    (wx: number, wy: number, escala: number) => {
-      if (resumidoRef.current) return
-      const folga = TOQUE_FOLGA / escala
-      let melhor: NoDesenho | null = null
-      let melhorDist = Infinity
-      for (const no of indiceRef.current.nos) {
-        const dx = no.x - wx
-        const dy = no.y - wy
+    indexRef.current = index
+  }, [index])
+  /** In the summarized mode there is no node drawn to hit. */
+  const collapsedRef = useRef(false)
+  const handleTap = useCallback(
+    (wx: number, wy: number, scale: number) => {
+      if (collapsedRef.current) return
+      const slop = TOUCH_SLOP / scale
+      let best: NodeShape | null = null
+      let bestDist = Infinity
+      for (const node of indexRef.current.nodes) {
+        const dx = node.x - wx
+        const dy = node.y - wy
         const dist = Math.sqrt(dx * dx + dy * dy)
-        if (dist <= no.r + folga && dist < melhorDist) {
-          melhorDist = dist
-          melhor = no
+        if (dist <= node.r + slop && dist < bestDist) {
+          bestDist = dist
+          best = node
         }
       }
-      if (!melhor) return
-      const id = melhor.id
+      if (!best) return
+      const id = best.id
       onSelect(id === selectedId ? null : id)
     },
     [onSelect, selectedId],
@@ -319,103 +319,103 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
     () =>
       Gesture.Tap()
         .maxDistance(12)
-        .onEnd((e, sucesso) => {
+        .onEnd((e, success) => {
           'worklet'
-          // O onEnd também chega quando o toque virou arraste e o gesto falhou.
-          if (!sucesso) return
-          runOnJS(tocar)((e.x - tx.get()) / k.get(), (e.y - ty.get()) / k.get(), k.get())
+          // onEnd also arrives when the touch became a drag and the gesture failed.
+          if (!success) return
+          runOnJS(handleTap)((e.x - tx.get()) / k.get(), (e.y - ty.get()) / k.get(), k.get())
         }),
-    [tocar, tx, ty, k],
+    [handleTap, tx, ty, k],
   )
 
-  // Duplo toque: aproxima ancorado no ponto tocado e, já aproximado, volta para
-  // a vista inteira. Com o piso do zoom em 4% da escala, chegar perto só na
-  // pinça exigia vários gestos seguidos.
-  const duploToque = useMemo(
+  // Double tap: zooms in anchored on the tapped point and, once zoomed in, goes back to
+  // the whole view. With the zoom floor at 4% of the scale, getting close only with the
+  // pinch took several gestures in a row.
+  const doubleTap = useMemo(
     () =>
       Gesture.Tap()
         .numberOfTaps(2)
         .maxDistance(24)
-        .maxDelay(DUPLO_TOQUE_ESPERA)
-        .onEnd((e, sucesso) => {
+        .maxDelay(DOUBLE_TAP_DELAY)
+        .onEnd((e, success) => {
           'worklet'
-          if (!sucesso) return
-          runOnJS(marcarInteracao)()
-          const atual = k.get()
-          const volta = atual > escalaFitSV.get() * 1.5
-          const alvo = volta ? escalaFitSV.get() : Math.min(ZOOM_MAX, atual * DUPLO_TOQUE_FATOR)
-          // Ponto do conteúdo sob o dedo: é ele que fica parado enquanto o
-          // zoom anda.
-          const mx = (e.x - tx.get()) / atual
-          const my = (e.y - ty.get()) / atual
-          k.set(withTiming(alvo, { duration: DUPLO_TOQUE_MS }))
-          tx.set(withTiming(e.x - mx * alvo, { duration: DUPLO_TOQUE_MS }))
-          ty.set(withTiming(e.y - my * alvo, { duration: DUPLO_TOQUE_MS }))
+          if (!success) return
+          runOnJS(markInteraction)()
+          const current = k.get()
+          const back = current > fitScaleSV.get() * 1.5
+          const target = back ? fitScaleSV.get() : Math.min(ZOOM_MAX, current * DOUBLE_TAP_FACTOR)
+          // Point of the content under the finger: it is what stays still while the
+          // zoom moves.
+          const mx = (e.x - tx.get()) / current
+          const my = (e.y - ty.get()) / current
+          k.set(withTiming(target, { duration: DOUBLE_TAP_MS }))
+          tx.set(withTiming(e.x - mx * target, { duration: DOUBLE_TAP_MS }))
+          ty.set(withTiming(e.y - my * target, { duration: DOUBLE_TAP_MS }))
         }),
-    [tx, ty, k, escalaFitSV, marcarInteracao],
+    [tx, ty, k, fitScaleSV, markInteraction],
   )
 
-  // Exclusive: o toque simples só vale depois que o duplo falhou, senão o
-  // primeiro toque de um duplo já abriria o card.
+  // Exclusive: the single tap only counts after the double failed, otherwise the
+  // first tap of a double would already open the card.
   const composed = useMemo(
-    () => Gesture.Simultaneous(panGesture, pinchGesture, Gesture.Exclusive(duploToque, tapGesture)),
-    [panGesture, pinchGesture, duploToque, tapGesture],
+    () => Gesture.Simultaneous(panGesture, pinchGesture, Gesture.Exclusive(doubleTap, tapGesture)),
+    [panGesture, pinchGesture, doubleTap, tapGesture],
   )
 
   /**
-   * Enquadramento: uma vez quando o grafo aparece e uma vez quando o layout
-   * fica pronto — não a cada prévia.
+   * Framing: once when the graph appears and once when the layout
+   * becomes ready — not on every preview.
    *
-   * O layout em fatias publica uma prévia por vez; reenquadrar a cada uma
-   * fazia a câmera pular junto com os nós se assentando, que era metade da
-   * sensação de "ele fica reorganizando".
+   * The sliced layout publishes one preview at a time; reframing on each one
+   * made the camera jump along with the nodes settling, which was half of the
+   * feeling of "it keeps reorganizing".
    */
-  const enquadrou = useRef<'nao' | 'previa' | 'final'>('nao')
+  const framed = useRef<'never' | 'preview' | 'final'>('never')
   useEffect(() => {
-    if (!size.w || !size.h || indice.total === 0) return
-    const alvo = building ? 'previa' : 'final'
-    if (enquadrou.current === alvo || enquadrou.current === 'final') return
-    // Quem já arrastou ou deu zoom mandou na câmera: o enquadramento final não
-    // passa por cima disso.
-    if (alvo === 'final' && interagiu.current && enquadrou.current !== 'nao') {
-      enquadrou.current = 'final'
+    if (!size.w || !size.h || index.total === 0) return
+    const target = building ? 'preview' : 'final'
+    if (framed.current === target || framed.current === 'final') return
+    // Whoever already dragged or zoomed has taken over the camera: the final framing does
+    // not override that.
+    if (target === 'final' && interacted.current && framed.current !== 'never') {
+      framed.current = 'final'
       return
     }
-    enquadrou.current = alvo
+    framed.current = target
     fitView(size.w, size.h)
-  }, [indice, size, building, fitView])
+  }, [index, size, building, fitView])
 
-  // ─── Nível de detalhe ──────────────────────────────────────────────────
+  // ─── Level of detail ───────────────────────────────────────────────────
   useAnimatedReaction(
     () => {
-      const escala = k.get()
-      return escala >= ZOOM_ROTULOS ? 3 : escala >= ZOOM_ANEIS ? 2 : escala >= ZOOM_NOS ? 1 : 0
+      const scale = k.get()
+      return scale >= ZOOM_LABELS ? 3 : scale >= ZOOM_RINGS ? 2 : scale >= ZOOM_NODES ? 1 : 0
     },
-    (agora, antes) => {
+    (currentLevel, previousLevel) => {
       'worklet'
-      if (agora !== antes) runOnJS(setNivel)(agora)
+      if (currentLevel !== previousLevel) runOnJS(setLevel)(currentLevel)
     },
   )
 
   useEffect(() => {
-    resumidoRef.current = nivel === 0
-  }, [nivel])
+    collapsedRef.current = level === 0
+  }, [level])
 
-  // A cena gravada. É aqui que mora o custo — e ele só é pago quando o layout,
-  // o zoom de detalhe, a busca ou o tema mudam.
+  // The recorded scene. This is where the cost lives — and it is only paid when the layout,
+  // the level of detail, the search or the theme change.
   const picture = useMemo(
-    () => gravarCena(indice, { nivel, casam, fontes, corTexto }),
-    [indice, nivel, casam, fontes, corTexto],
+    () => recordScene(index, { level, matches, fonts, textColor }),
+    [index, level, matches, fonts, textColor],
   )
 
-  const selecionado = useMemo(
-    () => (selectedId ? indice.nos.find((n) => n.id === selectedId) : undefined),
-    [indice, selectedId],
+  const selectedShape = useMemo(
+    () => (selectedId ? index.nodes.find((n) => n.id === selectedId) : undefined),
+    [index, selectedId],
   )
 
   const selected = selectedId ? allById.get(selectedId) : undefined
-  // Guardado como elemento: com um nó selecionado, o card seria remontado a
-  // cada render (o array `related` sozinho já era uma prop nova por render).
+  // Stored as an element: with a node selected, the card would be remounted on
+  // every render (the `related` array alone was already a new prop per render).
   const selectedCard = useMemo(
     () =>
       selected ? (
@@ -444,7 +444,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
 
   return (
     <View style={{ flex: 1, gap: 8 }}>
-      {/* Toolbar: centralizar + legenda */}
+      {/* Toolbar: center + legend */}
       <View style={s.toolbar}>
         <Pressable onPress={() => fitView()} style={[s.centerBtn, { borderColor: tokens.border }]}>
           <Crosshair size={13} color={tokens.foreground} />
@@ -467,33 +467,33 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
         style={[s.canvas, { borderColor: tokens.border, backgroundColor: tokens.card + '80' }]}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout
-          larguraSV.set(width)
-          alturaSV.set(height)
-          setSize((atual) => (atual.w === width && atual.h === height ? atual : { w: width, h: height }))
+          widthSV.set(width)
+          heightSV.set(height)
+          setSize((current) => (current.w === width && current.h === height ? current : { w: width, h: height }))
         }}
       >
         <GestureDetector gesture={composed}>
           <Canvas style={s.skia}>
             <Group transform={transformSV}>
-              {pronto && picture && <Picture picture={picture} />}
-              {/* Realce do selecionado fora do picture: é o que muda a toque de
-                  dedo, e regravar a cena inteira por causa dele seria absurdo. */}
-              {pronto && selecionado && (
+              {ready && picture && <Picture picture={picture} />}
+              {/* Highlight of the selected node outside the picture: it is what changes on a finger
+                  tap, and re-recording the whole scene because of it would be absurd. */}
+              {ready && selectedShape && (
                 <>
                   <Circle
-                    cx={selecionado.x}
-                    cy={selecionado.y}
-                    r={selecionado.r + 4}
-                    color={selecionado.cor}
+                    cx={selectedShape.x}
+                    cy={selectedShape.y}
+                    r={selectedShape.r + 4}
+                    color={selectedShape.color}
                     style="stroke"
                     strokeWidth={2.5}
                     opacity={0.9}
                   />
                   <Circle
-                    cx={selecionado.x}
-                    cy={selecionado.y}
-                    r={selecionado.r}
-                    color={selecionado.cor}
+                    cx={selectedShape.x}
+                    cy={selectedShape.y}
+                    r={selectedShape.r}
+                    color={selectedShape.color}
                     style="stroke"
                     strokeWidth={2.5}
                   />
@@ -503,15 +503,15 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
           </Canvas>
         </GestureDetector>
 
-        {/* Layout em construção. Com prévia no ar ele vira uma tarja discreta no
-            canto; sem prévia (grafo grande demais) ocupa o centro. */}
+        {/* Layout being built. With a preview on screen it becomes a discreet strip in the
+            corner; without a preview (graph too large) it takes the center. */}
         {building && !layout && (
           <View style={s.building}>
             <Text style={[s.buildingText, { color: tokens.mutedForeground }]}>
               {t('memoryGraph.building')}
             </Text>
-            <View style={[s.barra, { backgroundColor: tokens.muted }]}>
-              <View style={[s.barraCheia, { backgroundColor: tokens.primary, width: `${pct}%` }]} />
+            <View style={[s.track, { backgroundColor: tokens.muted }]}>
+              <View style={[s.trackFill, { backgroundColor: tokens.primary, width: `${pct}%` }]} />
             </View>
             <Text style={[s.buildingPct, { color: tokens.mutedForeground }]}>{pct}%</Text>
           </View>
@@ -524,7 +524,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
           </View>
         )}
 
-        {/* Card da memória selecionada — overlay inferior */}
+        {/* Card of the selected memory — bottom overlay */}
         {selectedCard}
       </View>
     </View>
@@ -563,8 +563,8 @@ const s = StyleSheet.create({
   },
   buildingText: { fontSize: 12 },
   buildingPct: { fontSize: 11, fontVariant: ['tabular-nums'] },
-  barra: { width: 160, height: 4, borderRadius: 2, overflow: 'hidden' },
-  barraCheia: { height: 4, borderRadius: 2 },
+  track: { width: 160, height: 4, borderRadius: 2, overflow: 'hidden' },
+  trackFill: { height: 4, borderRadius: 2 },
 
   chip: {
     position: 'absolute',

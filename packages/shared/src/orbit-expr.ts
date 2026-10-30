@@ -1,23 +1,23 @@
 /**
- * Avaliador de expressões dos blocos `orbit-ui` interativos.
+ * Expression evaluator of the interactive `orbit-ui` blocks.
  *
- * O modelo liga componentes por expressões (`capital*(1+juros/100)^anos`), e
- * quem as executa é ESTE arquivo — um parser próprio, sem `eval`, sem
- * `new Function` e sem acesso a nada além do que está no escopo e na lista de
- * funções abaixo. É o que permite um conteúdo escrito por um modelo (que pode
- * ter lido a web no mesmo turno) reagir a cliques sem ser código.
+ * The model connects components through expressions (`capital*(1+rate/100)^years`), and
+ * the one that executes them is THIS file — its own parser, without `eval`, without
+ * `new Function` and without access to anything beyond what is in the scope and in the list of
+ * functions below. It is what allows content written by a model (which may
+ * have read the web in the same turn) to react to clicks without being code.
  *
- * Gramática, da menor para a maior precedência:
- *   ||  &&  ==/!=  < <= > >=  + -  * / %  unário(- !)  ^  chamada/átomo
- * `^` é associativo à direita e mais forte que o unário (`-2^2` = -4).
- * Valores: número, texto ("a" ou 'a') e booleano (true/false, que viram 1/0 em
- * conta). Qualquer erro — sintaxe, variável que não existe, função desconhecida
- * — faz a avaliação devolver `undefined`; quem chama decide o que mostrar.
+ * Grammar, from the lowest to the highest precedence:
+ *   ||  &&  ==/!=  < <= > >=  + -  * / %  unary(- !)  ^  call/atom
+ * `^` is right-associative and stronger than the unary operator (`-2^2` = -4).
+ * Values: number, text ("a" or 'a') and boolean (true/false, which become 1/0 in
+ * arithmetic). Any error — syntax, variable that does not exist, unknown function
+ * — makes the evaluation return `undefined`; the caller decides what to show.
  *
- * Este módulo roda também no React Native: nada aqui toca `document`,
- * `navigator` ou qualquer API de tela. O locale da formatação entra por
- * parâmetro (`formatValue(…, locale)` / `interpolate(…, locale)`) e o padrão
- * pode ser trocado por quem hospeda (`setDefaultLocale`).
+ * This module also runs in React Native: nothing here touches `document`,
+ * `navigator` or any screen API. The locale of the formatting comes in as a
+ * parameter (`formatValue(…, locale)` / `interpolate(…, locale)`) and the default
+ * can be swapped by the host (`setDefaultLocale`).
  */
 
 export type Value = number | string | boolean
@@ -73,7 +73,7 @@ function tokenize(src: string): Token[] {
   return out
 }
 
-// ── Parser (descida recursiva) ─────────────────────────────────────────────
+// ── Parser (recursive descent) ──────────────────────────────────────────────
 
 const BINARY_LEVELS: string[][] = [["||"], ["&&"], ["==", "!="], ["<", "<=", ">", ">="], ["+", "-"], ["*", "/", "%"]]
 
@@ -117,7 +117,7 @@ function parse(tokens: Token[]): Node {
     const base = atom()
     if (isOp("^")) {
       pos++
-      // Expoente: aceita unário (2^-1) e é associativo à direita.
+      // Exponent: accepts unary (2^-1) and is right-associative.
       return { k: "bin", op: "^", a: base, b: unary() }
     }
     return base
@@ -156,7 +156,7 @@ function parse(tokens: Token[]): Node {
   return root
 }
 
-// ── Avaliação ──────────────────────────────────────────────────────────────
+// ── Evaluation ──────────────────────────────────────────────────────────────
 
 const CONSTANTS: Scope = { pi: Math.PI, e: Math.E, true: true, false: false }
 
@@ -168,10 +168,10 @@ const num = (v: Value): number => {
 
 const truthy = (v: Value): boolean => (typeof v === "string" ? v.length > 0 : Boolean(v))
 
-/** `Object.hasOwn` exige lib ES2022; o shared compila com ES2020. */
+/** `Object.hasOwn` requires lib ES2022; shared compiles with ES2020. */
 const has = (obj: object, key: string): boolean => Object.prototype.hasOwnProperty.call(obj, key)
 
-/** Prestação de um financiamento: pmt(taxa por período, períodos, valor presente). */
+/** Installment of a loan: pmt(rate per period, periods, present value). */
 const pmt = (rate: number, n: number, pv: number) =>
   rate === 0 ? pv / n : (pv * rate) / (1 - Math.pow(1 + rate, -n))
 
@@ -213,7 +213,7 @@ function run(node: Node, scope: Scope): Value {
       return node.op === "-" ? -num(v) : !truthy(v)
     }
     case "call": {
-      // `if` é preguiçoso: só o ramo escolhido é avaliado (permite guardar divisão por zero).
+      // `if` is lazy: only the chosen branch is evaluated (allows guarding division by zero).
       if (node.name === "if") {
         if (node.args.length !== 3) throw new ExprError("if args")
         return truthy(run(node.args[0], scope)) ? run(node.args[1], scope) : run(node.args[2], scope)
@@ -275,7 +275,7 @@ function compile(src: string): Node | null {
   return node
 }
 
-/** Avalia; `undefined` quando a expressão não é válida ou referencia o que não existe. */
+/** Evaluates; `undefined` when the expression is not valid or references something that does not exist. */
 export function evaluate(src: string, scope: Scope): Value | undefined {
   const node = compile(src.trim())
   if (!node) return undefined
@@ -287,8 +287,8 @@ export function evaluate(src: string, scope: Scope): Value | undefined {
 }
 
 /**
- * Número vindo do modelo: já é número, ou é uma expressão (com `=` opcional na
- * frente). NaN quando não resulta em número finito.
+ * Number coming from the model: it is already a number, or it is an expression (with an optional `=` in
+ * front). NaN when it does not result in a finite number.
  */
 export function evalNumber(v: number | string | undefined, scope: Scope): number {
   if (typeof v === "number") return v
@@ -298,7 +298,7 @@ export function evalNumber(v: number | string | undefined, scope: Scope): number
   return typeof result === "number" && Number.isFinite(result) ? result : NaN
 }
 
-/** Resultado de uma condição `showIf`. Expressão inválida NÃO esconde o bloco. */
+/** Result of a `showIf` condition. An invalid expression does NOT hide the block. */
 export function evalCondition(src: string | undefined, scope: Scope): boolean {
   if (!src) return true
   const result = evaluate(src.replace(/^\s*=/, ""), scope)
@@ -306,13 +306,13 @@ export function evalCondition(src: string | undefined, scope: Scope): boolean {
   return truthy(result)
 }
 
-// ── Texto com expressões ───────────────────────────────────────────────────
+// ── Text with expressions ───────────────────────────────────────────────────
 
 /**
- * Locale usado quando quem chama não passa um. O app é escrito em pt-BR, então
- * esse é o padrão; o desktop troca pelo da própria tela no boot
- * (apps/desktop/src/lib/orbit-expr.ts), que é o único lugar onde o `document`
- * existe — este módulo também roda no React Native.
+ * Locale used when the caller does not pass one. The product's language is pt-BR, so
+ * that is the default; the desktop swaps it for its own screen's on boot
+ * (apps/desktop/src/lib/orbit-expr.ts), which is the only place where `document`
+ * exists — this module also runs on React Native.
  */
 let defaultLocale = "pt-BR"
 
@@ -325,9 +325,9 @@ export function getDefaultLocale(): string {
 }
 
 /**
- * Formata o resultado de `{expr|fmt}`. fmt: 0-4 (casas decimais fixas),
- * `compact` (1,2 mil), `brl`, `usd`, `eur`, `pct` (número + %). Sem fmt:
- * até 2 casas, com separador de milhar. `locale` ausente usa o padrão do host.
+ * Formats the result of `{expr|fmt}`. fmt: 0-4 (fixed decimal places),
+ * `compact` (1.2k), `brl`, `usd`, `eur`, `pct` (number + %). No fmt:
+ * up to 2 decimals, with a thousands separator. A missing `locale` uses the host default.
  */
 export function formatValue(v: number, fmt?: string, locale?: string): string {
   if (!Number.isFinite(v)) return "—"
@@ -348,11 +348,11 @@ const SEGMENT = /\{([^{}]+)\}/g
 const FMT_SUFFIX = /\|(\d|compact|brl|usd|eur|pct)\s*$/
 
 /**
- * Fórmula escrita SEM chaves num campo que é só ela (`"=a*2"`, `"if(a,1,2)|brl"`,
- * `"pow(1+t,12)-1|pct"`). Modelos esquecem as chaves com frequência, e o
- * resultado era a fórmula impressa no lugar do valor. Só vale se a fórmula
- * começa com `=`, ou com uma chamada de função, ou termina em `|formato` — e
- * avalia: texto comum ("Pro", "capital inicial") continua texto.
+ * Formula written WITHOUT braces in a field that is only it (`"=a*2"`, `"if(a,1,2)|brl"`,
+ * `"pow(1+t,12)-1|pct"`). Models forget the braces often, and the
+ * result was the formula printed in place of the value. It only applies if the formula
+ * starts with `=`, or with a function call, or ends in `|format` — and
+ * evaluates: ordinary text ("Pro", "starting capital") stays text.
  */
 function bareExpression(text: string, scope: Scope, locale: string): string {
   const trimmed = text.trim()
@@ -366,9 +366,9 @@ function bareExpression(text: string, scope: Scope, locale: string): string {
 }
 
 /**
- * Substitui cada `{expr}` ou `{expr|fmt}` do texto pelo valor. Um trecho que
- * não avalia (variável inexistente, sintaxe) fica como estava: chaves num texto
- * comum não podem virar "—".
+ * Replaces each `{expr}` or `{expr|fmt}` in the text with the value. A snippet that
+ * does not evaluate (nonexistent variable, syntax) stays as it was: braces in ordinary text
+ * cannot turn into "—".
  */
 export function interpolate(text: string, scope: Scope, locale?: string): string {
   const loc = locale ?? defaultLocale
@@ -383,7 +383,7 @@ export function interpolate(text: string, scope: Scope, locale?: string): string
   })
 }
 
-/** Amostra `fn(x)` em `steps` pontos de `from` a `to` (inclusive). */
+/** Samples `fn(x)` at `steps` points from `from` to `to` (inclusive). */
 export function sampleFn(
   fn: string,
   from: number,

@@ -17,9 +17,9 @@ import type {
   SessionMode,
   TextPart,
 } from "@shared/chat"
-// normalizeFolderName/folderKey vivem no shared: o mobile agrupa chats por
-// projeto do mesmo jeito e precisa da MESMA regra de nome.
-import { folderKey, normalizeFolderName, parseMessageReply, StorageKeys } from "@shared/chat"
+// normalizeFolderName/folderKey live in shared: mobile groups chats by
+// project the same way and needs the SAME name rule.
+import { folderKey, normalizeFolderName, normalizeOrchestrationPlan, parseMessageReply, StorageKeys } from "@shared/chat"
 import { planArchivedCleanup, setArchivedState } from "@shared/archive"
 import { planAutoFolder } from "@/src/lib/auto-folder"
 import { firstSessionOfFolder, workspaceOfFolder } from "@/src/lib/folder-workspace"
@@ -49,57 +49,57 @@ import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { useModelRotationStore } from "@/src/stores/model-rotation-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useAppSettings } from "@/src/stores/app-settings"
-import { principalConhecido } from "@/src/stores/worktree-store"
+import { knownMain } from "@/src/stores/worktree-store"
 
 /**
- * Store de sessões/mensagens no padrão do opencode: sessões persistidas
- * localmente (via storage do main process), mensagens compostas por parts e
- * status de streaming por sessão dirigindo a UI (persona em "thinking" etc).
+ * Session/message store in the opencode pattern: sessions persisted
+ * locally (via the main process storage), messages made of parts and
+ * per-session streaming status driving the UI (persona in "thinking" etc).
  */
 
-/** Pedido pendente (permissão ou question) exibido como card acima do input.
- * batchId agrupa pedidos de workers emitidos em lote (card único, submit único). */
+/** Pending request (permission or question) shown as a card above the input.
+ * batchId groups worker requests emitted in a batch (single card, single submit). */
 export type PendingAskUI = AskItem & { batchId?: string }
 
 export interface SendConfig {
   options: SendMessageOptions
   directory?: string
   extraDirectories?: string[]
-  /** Envia para uma sessão específica (ex: worker no painel direito) em vez da ativa */
+  /** Sends to a specific session (e.g.: worker in the right panel) instead of the active one */
   sessionId?: string
-  /** Arquivos anexados à mensagem (data URLs) */
+  /** Files attached to the message (data URLs) */
   files?: FilePart[]
-  /** Id da resposta que falhou: o turno é REFEITO sobre a mesma mensagem do
-   *  usuário, em vez de enviar uma nova (ver SendMessageInput.retryOf). */
+  /** Id of the answer that failed: the turn is REDONE over the same user
+   *  message, instead of sending a new one (see SendMessageInput.retryOf). */
   retryOf?: string
 }
 
-/** Tamanho do contexto do turno em andamento (ver `liveContext`). */
+/** Size of the context of the turn in progress (see `liveContext`). */
 export interface LiveContext {
   input: number
   output: number
-  /** Medido no request antes do envio, não reportado pelo provedor. */
+  /** Measured in the request before sending, not reported by the provider. */
   estimated: boolean
-  /** Da entrada da última chamada: quanto veio do cache e quanto foi gravado nele. */
+  /** From the last call's input: how much came from the cache and how much was written into it. */
   cacheRead?: number
   cacheWrite?: number
 }
 
-/** Oferta de continuar num chat novo, emitida pelo engine ao fim do turno. */
+/** Offer to continue in a new chat, emitted by the engine at the end of the turn. */
 export interface CompactionSuggestion {
-  /** Resumos no histórico na hora da oferta (= compactações feitas). */
+  /** Summaries in the history at the moment of the offer (= compactions made). */
   summaries: number
-  /** A partir de quantos resumos o engine passou a sugerir. */
+  /** From how many summaries on the engine started suggesting it. */
   threshold: number
-  /** Dispensada para ESTA contagem; uma compactação nova libera de novo. */
+  /** Dismissed for THIS count; a new compaction frees it again. */
   dismissed: boolean
 }
 
-/** Aviso transitório do unrevert: o que ficou intacto por ter mudado depois. */
+/** Transient unrevert notice: what stayed intact for having changed afterwards. */
 export interface RevertNotice {
   sessionId: string
   files: string[]
-  /** Os arquivos não puderam ser devolvidos de jeito nenhum. */
+  /** The files could not be given back at all. */
   filesError?: 'no-after' | 'failed'
   media?: SessionMediaRevert
 }
@@ -111,36 +111,36 @@ interface SessionState {
   messages: Record<string, ChatMessage[]>
   status: Record<string, ChatStatus>
   errors: Record<string, string | undefined>
-  /** Fallback em andamento (rotação de modelos): tentativa atual/total por
-   *  sessão — a UI mostra "tentando fallback X/Y" no lugar de "Pensando…" */
+  /** Fallback in progress (model rotation): current/total attempt per
+   *  session — the UI shows "trying fallback X/Y" instead of "Thinking…" */
   fallback: Record<string, RotationFallbackInfo | undefined>
-  /** Contexto ao vivo do turno em andamento (evento `context`): o medidor o
-   *  prefere ao `tokens` da última resposta, que só chega no fim. Fica após uma
-   *  falha — é o tamanho do que o provedor recusou — e sai quando uma resposta
-   *  termina com `tokens` (aí o número persistido já é o mesmo) ou o histórico
-   *  é substituído (compactação). Só memória: não sobrevive a reiniciar. */
+  /** Live context of the turn in progress (`context` event): the meter
+   *  prefers it over the last answer's `tokens`, which only arrives at the end. It stays after a
+   *  failure — it is the size of what the provider refused — and leaves when an answer
+   *  ends with `tokens` (then the persisted number is already the same) or the history
+   *  is replaced (compaction). Memory only: does not survive a restart. */
   liveContext: Record<string, LiveContext | undefined>
-  /** Próxima mensagem sugerida por sessão (Preferências → Sugestões de prompt).
-   *  Some quando a pessoa envia qualquer coisa — só vale para a última resposta. */
+  /** Next message suggested per session (Settings → Prompt suggestions).
+   *  It disappears when the person sends anything — it only counts for the last answer. */
   suggestions: Record<string, string | undefined>
   clearSuggestion: (sessionId: string) => void
   activeIds: Record<SessionMode, string | null>
-  /** Pasta a atribuir à próxima sessão criada pelo fluxo de novo chat.
-   *  O "+" da pasta não cria sessão no clique — só ao enviar a 1ª mensagem. */
+  /** Folder to assign to the next session created by the new chat flow.
+   *  The folder's "+" does not create a session on click — only on sending the 1st message. */
   pendingFolderId: string | null
-  /** Contagem de mensagens não lidas por sessão. */
+  /** Count of unread messages per session. */
   unreadCounts: Record<string, number>
-  /** Planos de orquestração por sessão orquestradora */
+  /** Orchestration plans per orchestrator session */
   orchestration: Record<string, OrchestrationPlan>
-  /** Revisão de planos (modo plano): propostos ou em implementação */
+  /** Plan review (plan mode): proposed or in implementation */
   planReviews: Record<string, PlanReview>
-  /** Sessões que enviaram mensagem em plan mode e aguardam o fim do streaming para criar a review */
+  /** Sessions that sent a message in plan mode and await the end of the streaming to create the review */
   _planReviewOutbox: Record<string, true>
-  /** Pedidos de permissão/question aguardando resposta, por sessão */
+  /** Permission/question requests awaiting an answer, per session */
   pendingAsks: Record<string, PendingAskUI[]>
-  /** Oferta de continuar num chat novo (contexto perto do limite), por sessão.
-   *  `dismissed` vale para ESTA contagem de resumos: uma compactação nova
-   *  (que muda a contagem) libera o card de novo. */
+  /** Offer to continue in a new chat (context near the limit), per session.
+   *  `dismissed` counts for THIS summary count: a new compaction
+   *  (which changes the count) frees the card again. */
   compactionSuggestion: Record<string, CompactionSuggestion>
 
   initialize: () => Promise<void>
@@ -152,12 +152,12 @@ interface SessionState {
   reviewPlanReview: (sessionId: string, feedback: string) => void
   dismissPlanReview: (sessionId: string) => void
   dismissOrchestration: (sessionId: string) => void
-  /** Fecha a oferta de continuar num chat novo (não volta até a próxima
-   *  compactação, que muda a contagem de resumos). */
+  /** Closes the offer to continue in a new chat (does not come back until the next
+   *  compaction, which changes the summary count). */
   dismissCompactionSuggestion: (sessionId: string) => void
-  /** Cria o chat NOVO da oferta de contexto cheio: mesma pasta/modo/modelo do
-   *  pai, SEM `parentId` (é um chat de topo, não um subchat) e com o brief do
-   *  agente como resumo de abertura. */
+  /** Creates the NEW chat of the full context offer: same folder/mode/model as the
+   *  parent, WITHOUT `parentId` (it is a top-level chat, not a subchat) and with the agent's
+   *  brief as an opening summary. */
   createContinuationSession: (
     parentId: string,
     title: string,
@@ -172,50 +172,50 @@ interface SessionState {
   deleteSession: (id: string) => Promise<void>
   deleteSessions: (ids: string[]) => Promise<void>
   moveToFolder: (id: string, folderId: string | null) => void
-  /** Põe a sessão num lugar da sidebar de uma vez (arrastar e soltar): pasta,
-   *  fixado e arquivado mudam juntos, num único evento de sincronização. */
+  /** Puts the session in a sidebar place at once (drag and drop): folder,
+   *  pinned and archived change together, in a single synchronization event. */
   placeSession: (id: string, place: { folderId?: string | null; pinned?: boolean; archived?: boolean }) => void
-  /** Atualiza as pastas de trabalho de uma sessão de código */
+  /** Updates the working folders of a code session */
   setSessionDirectories: (id: string, directory: string | undefined, extraDirectories?: string[]) => void
-  /** Duplica a sessão (até messageId, se informado) com novos IDs */
+  /** Duplicates the session (up to messageId, if given) with new IDs */
   forkSession: (id: string, messageId?: string) => Promise<SessionInfo | null>
-  /** Restaura o filesystem para antes da mensagem (modo código) */
+  /** Restores the filesystem to before the message (code mode) */
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
-  /** Desfaz um revert ativo */
+  /** Undoes an active revert */
   unrevert: (sessionId: string) => Promise<void>
-  /** Reverte também os arquivos de autor incerto do revert ativo */
+  /** Also reverts the files of uncertain authorship of the active revert */
   revertUncertain: (sessionId: string) => Promise<void>
-  /** Resultado do último unrevert (conflitos preservados); só memória. */
+  /** Result of the last unrevert (preserved conflicts); memory only. */
   revertNotice: RevertNotice | null
   dismissRevertNotice: () => void
 
   createFolder: (mode: SessionMode, name: string, workspace?: string[]) => FolderInfo
   renameFolder: (id: string, name: string) => void
   toggleFolderPin: (id: string) => void
-  /** Arquiva/desarquiva a pasta e, junto, todos os chats que estão nela */
+  /** Archives/unarchives the folder and, along with it, every chat that is in it */
   toggleFolderArchive: (id: string) => void
-  /** Traz a pasta de volta à sidebar SEM desarquivar os chats antigos — é o
-   *  que a pasta automática faz quando se volta a trabalhar num projeto
-   *  arquivado. Os chats de antes continuam em "Arquivados", agrupados pela
-   *  pasta viva, que é um estado que a sidebar já sabe mostrar. */
+  /** Brings the folder back to the sidebar WITHOUT unarchiving the old chats — it is what
+   *  the automatic folder does when one goes back to working on an archived
+   *  project. The previous chats stay in "Archived", grouped by the
+   *  live folder, which is a state the sidebar already knows how to show. */
   reviveFolder: (id: string) => void
   deleteFolder: (id: string) => void
-  /** Reorganiza a sidebar: mescla pastas duplicadas do mesmo projeto e move os
-   *  chats soltos (modo código, com diretório) para a pasta do projeto —
-   *  corrige pastas duplicadas quando o mapa automático foi perdido. */
+  /** Reorganizes the sidebar: merges duplicate folders of the same project and moves the
+   *  loose chats (code mode, with a directory) into the project's folder —
+   *  fixes duplicate folders when the automatic map was lost. */
   organizeSidebar: () => void
-  /** Pastas de trabalho com que o chat novo do "+" de uma pasta deve nascer:
-   *  as do chat mais recente dela ou, com a pasta vazia, as do projeto que o
-   *  mapa automático ainda aponta. `undefined` = pasta sem projeto conhecido
-   *  (pasta criada à mão e nunca usada), e aí o workspace fica como está. */
+  /** Working folders the new chat from a folder's "+" should be born with:
+   *  those of its most recent chat or, with the folder empty, those of the project the
+   *  automatic map still points to. `undefined` = folder with no known project
+   *  (folder created by hand and never used), and then the workspace stays as it is. */
   folderWorkspace: (folderId: string) => string[] | undefined
 
-  /** A pasta mudou de lugar no disco: reaponta tudo que apontava para o
-   *  caminho antigo. As pastas do workspace vivem no WorkspaceProvider, então
-   *  quem as atualiza é quem chama. */
+  /** The folder moved on disk: it re-points everything that pointed to the
+   *  old path. The workspace folders live in the WorkspaceProvider, so
+   *  whoever updates them is whoever calls. */
   relocateFolder: (oldPath: string, newPath: string) => void
-  /** Desiste de uma pasta que não existe mais: as sessões que a usavam ficam
-   *  sem pasta de trabalho e a pista do mapa automático morre junto. */
+  /** Gives up on a folder that no longer exists: the sessions that used it are left
+   *  without a working folder and the automatic map's clue dies along. */
   forgetFolder: (path: string) => void
 
   sendMessage: (mode: SessionMode, text: string, config: SendConfig) => Promise<void>
@@ -237,26 +237,26 @@ function persistAutoFolderMap(map: Record<string, string>) {
   localStorage.setItem(AUTO_FOLDER_MAP_KEY, JSON.stringify(map))
 }
 
-/** Sessões cujas mensagens já foram carregadas do storage (ou criadas
- *  localmente). Independe do buffer `messages[]`: os handlers de evento
- *  (message/part) podem criar o buffer antes do load — ex.: reload com o
- *  agente em execução — e isso não pode impedir a carga do histórico
- *  persistido (o sinal de "carregada" não pode ser a chave definida). */
+/** Sessions whose messages have already been loaded from storage (or created
+ *  locally). Independent of the `messages[]` buffer: the event handlers
+ *  (message/part) may create the buffer before the load — e.g.: reload with the
+ *  agent running — and that cannot prevent loading the persisted
+ *  history (the "loaded" signal cannot be the key being defined). */
 const loadedMessages = new Set<string>()
 
 /**
- * Quantas conversas mantêm o histórico em memória. Sem teto, cada conversa
- * aberta desde o boot ficava inteira no renderer — com as saídas de tool,
- * leituras de arquivo e anexos — e a RAM só crescia. O main é quem grava o
- * histórico (chat-engine), então o renderer é só um espelho: soltar uma
- * conversa ociosa não perde nada, e reabri-la relê do disco (`ensureMessages`).
+ * How many conversations keep the history in memory. Without a cap, every conversation
+ * opened since boot stayed whole in the renderer — with the tool outputs,
+ * file reads and attachments — and the RAM only grew. Main is the one that writes the
+ * history (chat-engine), so the renderer is only a mirror: dropping an
+ * idle conversation loses nothing, and reopening it re-reads from disk (`ensureMessages`).
  */
 const MAX_CACHED_SESSIONS = 6
 
-/** Conversas na ordem em que foram exibidas (a mais recente no fim). */
+/** Conversations in the order they were displayed (the most recent at the end). */
 const recentSessions: string[] = []
 
-/** Marca a conversa como vista e devolve as que passaram do teto. */
+/** Marks the conversation as seen and returns the ones that went over the cap. */
 function touchRecent(sessionId: string): string[] {
   const at = recentSessions.indexOf(sessionId)
   if (at >= 0) recentSessions.splice(at, 1)
@@ -266,9 +266,9 @@ function touchRecent(sessionId: string): string[] {
     : []
 }
 
-/** Mescla o histórico persistido com o buffer de eventos (buffer é mais
- *  fresco por part — eventos pós-reload — mas pode não ter as parts emitidas
- *  antes do reload; o disco preenche as lacunas). */
+/** Merges the persisted history with the event buffer (the buffer is fresher
+ *  per part — post-reload events — but may not have the parts emitted
+ *  before the reload; the disk fills the gaps). */
 function mergeMessages(persisted: ChatMessage[], buffered: ChatMessage[] | undefined): ChatMessage[] {
   if (!buffered || buffered.length === 0) return persisted
   const byId = new Map(persisted.map((m) => [m.id, m]))
@@ -296,14 +296,14 @@ function persistFolders(folders: FolderInfo[]) {
 const ARCHIVED_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 /**
- * Exclusão automática de conversas arquivadas (Preferências → Geral).
+ * Automatic deletion of archived conversations (Settings → General).
  *
- * Roda aqui, e não no main como o arquivamento automático, porque a cascata de
- * exclusão (abort, mensagens, prefs, navegador do painel, fontes anexadas)
- * vive no `deleteSessions` — duplicá-la no main daria duas verdades sobre o
- * mesmo delete. Referências que sobrevivem à conversa são seguras: a memória
- * guarda o sessionId de origem só para o link "abrir conversa", que some
- * quando a sessão não existe; métricas de rotina órfãs são podadas.
+ * It runs here, and not in main like the automatic archiving, because the deletion
+ * cascade (abort, messages, prefs, panel browser, attached sources)
+ * lives in `deleteSessions` — duplicating it in main would give two truths about the
+ * same delete. References that survive the conversation are safe: the memory
+ * keeps the origin sessionId only for the "open conversation" link, which disappears
+ * when the session does not exist; orphan routine metrics are pruned.
  */
 async function runArchivedCleanup(get: () => SessionState, set: (fn: (state: SessionState) => Partial<SessionState>) => void) {
   const days = useAppSettings.getState().settings.deleteArchivedDays
@@ -313,8 +313,8 @@ async function runArchivedCleanup(get: () => SessionState, set: (fn: (state: Ses
   const { expired, undated } = planArchivedCleanup(get().sessions, days, now, running)
 
   if (undated.length > 0) {
-    // Arquivadas antes de archivedAt existir: o prazo começa agora. updatedAt
-    // fica como estava — datar não é atividade.
+    // Archived before archivedAt existed: the clock starts now. updatedAt
+    // stays as it was — dating is not activity.
     const ids = new Set(undated.map((s) => s.id))
     set((state) => ({
       sessions: state.sessions.map((s) => {
@@ -327,14 +327,14 @@ async function runArchivedCleanup(get: () => SessionState, set: (fn: (state: Ses
   }
   if (expired.length > 0) {
     await get().deleteSessions(expired.map((s) => s.id))
-    console.log(`[archived-cleanup] ${expired.length} conversa(s) arquivada(s) excluída(s)`)
+    console.log(`[archived-cleanup] ${expired.length} archived conversation(s) deleted`)
   }
 }
 
 function setupArchivedCleanup(get: () => SessionState, set: (fn: (state: SessionState) => Partial<SessionState>) => void) {
-  const run = () => void runArchivedCleanup(get, set).catch((err) => console.error("[archived-cleanup] falhou:", err))
+  const run = () => void runArchivedCleanup(get, set).catch((err) => console.error("[archived-cleanup] failed:", err))
   setInterval(run, ARCHIVED_CLEANUP_INTERVAL_MS)
-  // Ligar a opção (ou encurtar o prazo) vale na hora, não só na próxima rodada.
+  // Turning the option on (or shortening the period) counts right away, not only on the next run.
   useAppSettings.subscribe((next, prev) => {
     const days = next.settings.deleteArchivedDays
     if (days && days !== prev.settings.deleteArchivedDays) run()
@@ -352,13 +352,13 @@ function updateSessionIn(state: SessionState, id: string, patch: Partial<Session
   return { sessions }
 }
 
-/** Emite um ChatEvent para o main → outras janelas + companions (mobile).
- *  O store local já aplicou a mudança; o evento é só sincronização. */
+/** Emits a ChatEvent to main → other windows + companions (mobile).
+ *  The local store has already applied the change; the event is only synchronization. */
 function emitChatEvent(event: ChatEvent) {
   chatApi.emit(event)
 }
 
-/** Evento "session" com o objeto atualizado do store (pós-set). */
+/** "session" event with the store's updated object (post-set). */
 function emitSessionEvent(id: string) {
   const session = useSessionStore.getState().sessions.find((s) => s.id === id)
   if (session) emitChatEvent({ type: "session", sessionId: id, session })
@@ -398,9 +398,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     sessions.sort((a, b) => b.updatedAt - a.updatedAt)
 
     const folders = (await storage.read<FolderInfo[]>(StorageKeys.folders)) ?? []
-    // Merge em vez de substituição: uma sessão/pasta criada enquanto a carga
-    // estava em andamento (ex.: abertura via "Abrir com Orbit" na montagem)
-    // não pode ser perdida pelo set abaixo.
+    // Merge instead of replacement: a session/folder created while the load
+    // was in progress (e.g.: opening via "Open with Orbit" at mount)
+    // cannot be lost by the set below.
     set((state) => {
       const byId = new Map(state.sessions.map((s) => [s.id, s]))
       for (const s of sessions) byId.set(s.id, s)
@@ -410,31 +410,31 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return { sessions: mergedSessions, folders: [...folderById.values()] }
     })
 
-    // Pastas de antes da memória de workspace (ou cujo primeiro chat já foi
-    // apagado) ganham a dela nesta primeira carga: do chat MAIS ANTIGO que
-    // restar e, sem nenhum, do mapa automático — que ainda sabe a que projeto
-    // a pasta pertence. É o que faz o "+" de uma pasta vazia abrir certo.
-    const mapaDePastas = loadAutoFolderMap()
+    // Folders from before the workspace memory (or whose first chat has already been
+    // deleted) get theirs on this first load: from the OLDEST chat that
+    // is left and, with none, from the automatic map — which still knows which project
+    // the folder belongs to. It is what makes the "+" of an empty folder open correctly.
+    const folderMap = loadAutoFolderMap()
     for (const folder of get().folders) {
       if (folder.mode !== "code" || folder.workspace?.length) continue
-      const doMapa = Object.entries(mapaDePastas).find(([, id]) => id === folder.id)?.[0]
-      aprenderWorkspaceDaPasta(
+      const fromMap = Object.entries(folderMap).find(([, id]) => id === folder.id)?.[0]
+      learnFolderWorkspace(
         folder.id,
-        workspaceDaSessao(firstSessionOfFolder(folder.id, get().sessions)) ?? (doMapa ? [doMapa] : undefined),
+        workspaceOfSession(firstSessionOfFolder(folder.id, get().sessions)) ?? (fromMap ? [fromMap] : undefined),
       )
     }
 
     chatApi.onEvent((event) => applyChatEvent(event, set, get))
     setupArchivedCleanup(get, set)
 
-    // "Organizar" vindo do mobile: roda a mesma função da sidebar do desktop.
+    // "Organize" coming from mobile: runs the same function as the desktop sidebar.
     companionApi.onOrganizeSidebar(() => get().organizeSidebar())
 
-    // Após um reload do renderer, o main sabe quais sessões continuam rodando
-    // (o engine vive no main process) — re-emite o status para a UI voltar a
-    // mostrar spinner e botão de parar sem esperar o próximo evento do turno.
-    // `if (!status[id])` preserva um status que chegou entretanto (ex: idle
-    // do fim do turno entre o invoke e o set).
+    // After a renderer reload, main knows which sessions are still running
+    // (the engine lives in the main process) — it re-emits the status so the UI goes back to
+    // showing the spinner and the stop button without waiting for the next turn event.
+    // `if (!status[id])` preserves a status that arrived in the meantime (e.g.: idle
+    // from the end of the turn between the invoke and the set).
     void chatApi.running().then((running) => {
       if (running.length === 0) return
       set((state) => {
@@ -452,7 +452,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { setActive = true, ...rest } = partial ?? {}
     const session: SessionInfo = {
       id: nanoid(),
-      title: mode === "chat" ? "Nova conversa" : "Nova sessão de código",
+      title: mode === "chat" ? i18n.t("chat.newChatTitle") : i18n.t("chat.newCodeSessionTitle"),
       mode,
       pinned: false,
       archived: false,
@@ -462,9 +462,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       ...rest,
     }
 
-    // Chat num worktree entra na pasta da sidebar do repositório principal:
-    // é o mesmo projeto, só em outra cópia de trabalho.
-    const directory = partial?.directory ? principalConhecido(partial.directory) : undefined
+    // A chat in a worktree goes into the main repository's sidebar folder:
+    // it is the same project, only in another working copy.
+    const directory = partial?.directory ? knownMain(partial.directory) : undefined
     if (mode === "code" && directory && useModelModePrefs.getState().autoCreateFolders) {
       const autoFolderMap = loadAutoFolderMap()
       const plano = planAutoFolder({
@@ -475,11 +475,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       })
       const folderId = plano.folderId ?? get().createFolder(mode, plano.create ?? normalizeFolderName(directory)).id
 
-      // Voltar a trabalhar no projeto traz a pasta dele de volta — só a pasta.
-      // Os chats antigos continuam arquivados, e a sidebar já os mostra em
-      // "Arquivados" agrupados pela pasta viva. Sem desarquivar, a sessão nova
-      // entraria numa pasta arquivada e sumiria da sidebar (a pasta só lista os
-      // chats no MESMO estado dela): pior do que nascer solta.
+      // Going back to working on the project brings its folder back — only the folder.
+      // The old chats stay archived, and the sidebar already shows them in
+      // "Archived" grouped by the live folder. Without unarchiving, the new session
+      // would enter an archived folder and vanish from the sidebar (the folder only lists the
+      // chats in the SAME state as it): worse than being born loose.
       if (plano.revive) get().reviveFolder(folderId)
 
       if (autoFolderMap[directory] !== folderId) {
@@ -489,10 +489,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       session.folderId = folderId
     }
 
-    // A pasta aprende com ESTE chat a que workspace ela pertence. É a memória
-    // que sobrevive quando os chats dela forem apagados: o "+" de uma pasta
-    // vazia volta ao mesmo repositório em vez de herdar o da tela.
-    aprenderWorkspaceDaPasta(session.folderId, workspaceDaSessao(session))
+    // The folder learns from THIS chat which workspace it belongs to. It is the memory
+    // that survives when its chats are deleted: the "+" of an empty folder
+    // goes back to the same repository instead of inheriting the screen's.
+    learnFolderWorkspace(session.folderId, workspaceOfSession(session))
 
     await storage.write(StorageKeys.session(session.id), session)
     set((state) => ({
@@ -509,7 +509,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({
       activeIds: { ...state.activeIds, [mode]: id },
       unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,
-      // Navegar para outra sessão ou abrir um novo chat encerra o intent de pasta pendente
+      // Navigating to another session or opening a new chat ends the pending folder intent
       pendingFolderId: null,
     }))
     if (id) await get().ensureMessages(id)
@@ -518,9 +518,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
 
   ensureMessages: async (sessionId) => {
-    // Teto do histórico em memória: as conversas vistas há mais tempo soltam
-    // as mensagens — menos as abertas em algum modo, as com agente rodando e
-    // as com um plano para revisar (o fim do stream ainda lê o buffer).
+    // History cap in memory: the conversations seen longest ago release
+    // the messages — except the ones open in some mode, the ones with the agent running and
+    // the ones with a plan to review (the end of the stream still reads the buffer).
     const stale = touchRecent(sessionId)
     if (stale.length > 0) {
       const state = get()
@@ -545,16 +545,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         })
       }
     }
-    // Plano, review e pedidos pendentes carregam aqui, e nao no selectSession:
-    // o chat-view chama ensureMessages sempre que exibe uma sessao (inclusive
-    // na que ja estava ativa no boot, que nunca passa por selectSession). Preso
-    // ao selectSession, o card de plano nao voltava ao reabrir o app.
-    // As quatro leituras saem juntas: em sequência, o histórico (o que a tela
-    // espera) só começava a ser lido depois de três idas e voltas ao main.
+    // Plan, review and pending requests load here, and not in selectSession:
+    // chat-view calls ensureMessages whenever it displays a session (including
+    // the one that was already active at boot, which never goes through selectSession). Tied
+    // to selectSession, the plan card did not come back when reopening the app.
+    // The four reads go out together: in sequence, the history (what the screen
+    // waits for) only started being read after three round trips to main.
     const needsMessages = !loadedMessages.has(sessionId)
     const [plan, review, asks, persistedRaw] = await Promise.all([
+      // Legacy plans (Portuguese keys/phase values) are translated at the read edge.
       get().orchestration[sessionId] === undefined
-        ? storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+        ? storage.read<unknown>(StorageKeys.orchestration(sessionId)).then(normalizeOrchestrationPlan)
         : null,
       get().planReviews[sessionId] === undefined ? storage.read<PlanReview>(StorageKeys.planReview(sessionId)) : null,
       get().pendingAsks[sessionId] === undefined
@@ -562,9 +563,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         : null,
       needsMessages ? storage.read<ChatMessage[]>(StorageKeys.messages(sessionId)) : null,
     ])
-    // Dispensado não vira card de novo (o arquivo fica: é histórico do
-    // orquestrador), e plano novo grava por cima sem a marca. As checagens de
-    // undefined se repetem: um evento pode ter preenchido durante a leitura.
+    // A dismissed one does not become a card again (the file stays: it is the
+    // orchestrator's history), and a new plan overwrites it without the mark.
+    // The undefined checks repeat because an event may have filled it while reading.
     if (plan && !plan.dismissed && get().orchestration[sessionId] === undefined) {
       set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: plan } }))
     }
@@ -577,15 +578,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!needsMessages || loadedMessages.has(sessionId)) return
     const persisted = persistedRaw ?? []
     set((state) => {
-      // Eventos que chegaram antes do load (ex.: reload com agente rodando)
-      // não podem impedir a carga do histórico — mescla com o disco em vez
-      // de pular quando o buffer já existe.
+      // Events that arrived before the load (e.g.: reload with the agent running)
+      // cannot prevent loading the history — merge with the disk instead
+      // of skipping when the buffer already exists.
       const messages = mergeMessages(persisted, state.messages[sessionId])
       loadedMessages.add(sessionId)
-      // Reconciliação de status: se a última mensagem do assistente já tem
-      // tokens/error (fim do stream) e o status ficou preso em
-      // streaming/submitted (evento status: idle perdido durante um reload),
-      // destrava a UI.
+      // Status reconciliation: if the last assistant message already has
+      // tokens/error (end of the stream) and the status got stuck in
+      // streaming/submitted (status: idle event lost during a reload),
+      // it unlocks the UI.
       const status = state.status
       const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
       const finished =
@@ -612,20 +613,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     void chatApi.rejectPlan(sessionId)
   },
 
-  /** Fecha o card do plano concluído — em definitivo. A marca vai para o
-   *  ARQUIVO (o ensureMessages relê o plano ao abrir a sessão, então tirar só da
-   *  memória fazia o card voltar a cada reabertura), mas o plano NÃO é apagado:
-   *  tarefas, prompts e uso acumulado são histórico e contexto do orquestrador
-   *  se a conversa continuar. Um plano novo grava por cima sem a marca. */
+  /** Closes the finished plan's card — for good. The mark goes to the
+   *  FILE (ensureMessages re-reads the plan when the session opens, so removing
+   *  it from memory alone made the card come back on every reopen), but the plan
+   *  is NOT deleted: tasks, prompts and accumulated usage are the orchestrator's
+   *  history and context if the conversation goes on. A new plan overwrites it without the mark. */
   dismissOrchestration: (sessionId: string) => {
     set((state) => {
       const next = { ...state.orchestration }
       delete next[sessionId]
       return { orchestration: next }
     })
-    // Ler-marcar-gravar: só o campo `dismissed` muda, o resto do plano fica.
+    // Read-mark-write: only the `dismissed` field changes, the rest of the plan
+    // stays (and comes back in the current shape, legacy keys already translated).
     void (async () => {
-      const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+      const plan = normalizeOrchestrationPlan(await storage.read<unknown>(StorageKeys.orchestration(sessionId)))
       if (!plan || plan.dismissed) return
       await storage.write(StorageKeys.orchestration(sessionId), { ...plan, dismissed: true })
     })()
@@ -655,26 +657,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       pinned: false,
       archived: false,
       folderId: parent.folderId,
-      // Mesma pasta de trabalho: o chat novo continua o MESMO trabalho, e sem
-      // worktree pai e filho editam o mesmo checkout (por isso o brief diz o
-      // escopo do que está em jogo).
+      // Same working folder: the new chat continues the SAME work, and without a
+      // parent worktree, parent and child edit the same checkout (that is why the brief says the
+      // scope of what is at stake).
       directory: parent.directory,
       extraDirectories: parent.extraDirectories,
-      // SEM parentId: a oferta nasce do contexto cheio do pai e promete um
-      // chat NOVO. Anexado, ele aparecia indentado como subchat e ainda sumia
-      // junto com o pai ao arquivar/excluir (cascata).
+      // WITHOUT parentId: the offer is born from the parent's full context and promises a
+      // NEW chat. Attached, it showed up indented as a subchat and still vanished
+      // along with the parent on archiving/deleting (cascade).
       createdAt: now,
       updatedAt: now,
     }
-    // O brief é do AGENTE, não do usuário: entra como mensagem de resumo do
-    // sistema (summary: true), que é o formato que o modelo já lê como
-    // "resumo da conversa até aqui" e a UI mostra como card recolhível.
+    // The brief is the AGENT's, not the user's: it comes in as a system summary
+    // message (summary: true), which is the format the model already reads as
+    // "summary of the conversation so far" and the UI shows as a collapsible card.
     const seed: ChatMessage = {
       id: nanoid(),
       role: "assistant",
       summary: true,
-      // Não é compactação DESTA conversa: é o brief que abriu o chat. A UI
-      // rotula diferente (SummaryCard) para não parecer que já compactou.
+      // It is not a compaction of THIS conversation: it is the brief that opened the chat. The UI
+      // labels it differently (SummaryCard) so it does not look like it already compacted.
       continuation: true,
       parts: [{ id: nanoid(), type: "text", text: summaryText, state: "done" }],
       createdAt: now,
@@ -682,7 +684,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await storage.write(StorageKeys.session(child.id), child)
     await storage.write(StorageKeys.messages(child.id), [seed])
     set((state) => {
-      // A oferta cumpriu o papel: some da conversa do pai.
+      // The offer played its part: it disappears from the parent's conversation.
       const compactionSuggestion = { ...state.compactionSuggestion }
       delete compactionSuggestion[parentId]
       return {
@@ -693,14 +695,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
     loadedMessages.add(child.id)
     emitChatEvent({ type: "session", sessionId: child.id, session: child })
-    // Continua no MESMO modelo do pai: o chat novo troca o contexto, não a
-    // configuração. Sem isto ele caía no default global (outro provedor).
+    // It continues on the SAME model as the parent: the new chat swaps the context, not the
+    // configuration. Without this it fell into the global default (another provider).
     const parentModel = sessionModelFor(parentId)
     if (parentModel) {
       useSessionModelPrefs.getState().selectModel(child.id, parentModel.providerId, parentModel.modelId)
     }
-    // Thinking e autonomia também são do pai: o fork troca o contexto, não a
-    // configuração com que a conversa estava rodando.
+    // Thinking and autonomy are also the parent's: the fork swaps the context, not the
+    // configuration the conversation was running with.
     const parentReasoning = sessionReasoningFor(parentId, parentModel?.providerId, parentModel?.modelId)
     if (parentReasoning) useSessionReasoning.getState().setPref(child.id, parentReasoning)
     usePermissionPrefs.getState().applyRemoteMode(child.id, permissionFor(parentId))
@@ -714,8 +716,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
     emitChatEvent({ type: "plan:review", sessionId, review: updated })
-    // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
-    // deve gerar outro plano.
+    // Plan accepted → turns the plan mode toggle off: the next message must not
+    // generate another plan.
     useModeOverrides.getState().setMode("plan", sessionId, false)
     const session = get().sessions.find((s) => s.id === sessionId)
     const mode = session?.mode ?? "code"
@@ -789,9 +791,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   deleteSession: async (id) => {
-    // Cascata: deletar um orquestrador aborta e remove seus workers filhos.
-    // O abort do próprio id também é necessário — deletar sessão streamando
-    // deixava o stream rodando órfão no main.
+    // Cascade: deleting an orchestrator aborts and removes its child workers.
+    // Aborting the id itself is also necessary — deleting a streaming session
+    // left the stream running orphaned in main.
     const ids = [id, ...get().sessions.filter((s) => s.parentId === id).map((s) => s.id)]
     for (const sid of ids) {
       void chatApi.abort(sid)
@@ -799,7 +801,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       await storage.remove(StorageKeys.messages(sid))
       loadedMessages.delete(sid)
       void chatApi.closeBrowser(sid)
-      useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
+      useBrainPrefs.getState().setEnabled(sid, true) // clears the Brain override
       useSimplePrefs.getState().clear(sid)
       useSessionModelPrefs.getState().clear(sid)
       useSessionReasoning.getState().clear(sid)
@@ -807,9 +809,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
-      // Fontes anexadas: apaga o escopo proprio do chat. Quando ele estava
-      // numa pasta, o escopo e da pasta e o main nao o toca aqui — as fontes
-      // continuam valendo para os outros chats dela.
+      // Attached sources: deletes the chat's own scope. When it was
+      // in a folder, the scope belongs to the folder and main does not touch it here — the sources
+      // keep counting for the other chats of it.
       void docsApi.clearSession(sid)
       emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
@@ -836,9 +838,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   moveToFolder: (id, folderId) => {
     set((state) => updateSessionIn(state, id, { folderId }))
-    // Arrastar um chat de código para uma pasta vazia também associa a pasta ao
-    // projeto dele — a mesma memória que o chat criado pelo "+" deixaria.
-    aprenderWorkspaceDaPasta(folderId, workspaceDaSessao(get().sessions.find((s) => s.id === id)))
+    // Dragging a code chat into an empty folder also associates the folder with
+    // its project — the same memory the chat created by the "+" would leave.
+    learnFolderWorkspace(folderId, workspaceOfSession(get().sessions.find((s) => s.id === id)))
     emitSessionEvent(id)
   },
 
@@ -874,7 +876,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (idx >= 0) msgs = msgs.slice(0, idx + 1)
     }
 
-    // Título "Original (fork #n)": n = maior contador existente do mesmo original + 1
+    // Title "Original (fork #n)": n = highest existing counter of the same original + 1
     const baseTitle = source.title.replace(/ \(fork #\d+\)$/, "")
     const escaped = baseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     const counter = new RegExp(`^${escaped} \\(fork #(\\d+)\\)$`)
@@ -892,12 +894,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     }
-    // Fork é uma sessão independente: não herda vínculos de orquestração nem revert
+    // A fork is an independent session: it inherits no orchestration links nor revert
     delete fork.parentId
     delete fork.orchestration
     delete fork.revert
 
-    // Novos IDs de mensagens e parts (evita colisão de eventos entre sessões)
+    // New message and part IDs (avoids event collision between sessions)
     const cloned = msgs.map((m) => ({
       ...m,
       id: nanoid(),
@@ -913,9 +915,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     loadedMessages.add(fork.id)
     emitChatEvent({ type: "session", sessionId: fork.id, session: fork })
 
-    // Imagem/artefato/documento clonados apontam para o MESMO ativo da sessão
-    // original (nada é duplicado) — sem vincular o fork, o card continua
-    // visível na conversa dele mas some do filtro "Neste chat" da galeria.
+    // Cloned image/artifact/document point to the SAME asset of the session
+    // original (nothing is duplicated) — without linking the fork, the card stays
+    // visible in its conversation but vanishes from the gallery's "This chat" filter.
     const mediaImagePrefix = `${MEDIA_SCHEME}://`
     const mediaIds = cloned
       .flatMap((m) => m.parts)
@@ -935,7 +937,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const idSet = new Set<string>()
     for (const id of ids) {
       idSet.add(id)
-      // Inclui workers filhos em cascata
+      // Includes child workers in cascade
       for (const s of get().sessions) {
         if (s.parentId === id) idSet.add(s.id)
       }
@@ -985,9 +987,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       pinned: false,
       archived: false,
       createdAt: Date.now(),
-      // Projeto escolhido no diálogo: sem isto o "+" de uma pasta recém-criada
-      // só aprende o repositório quando o primeiro chat entra nela
-      // (aprenderWorkspaceDaPasta), e até lá herda o workspace da tela.
+      // Project chosen in the dialog: without this the "+" of a newly created folder
+      // only learns the repository when the first chat enters it
+      // (learnFolderWorkspace), and until then it inherits the screen's workspace.
       workspace: workspace?.length ? workspace : undefined,
     }
     set((state) => {
@@ -1025,8 +1027,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => {
       const folders = state.folders.map((f) => (f.id === id ? { ...f, archived } : f))
       persistFolders(folders)
-      // Os chats da pasta acompanham o estado dela; os que já estavam no
-      // estado destino não são tocados (nem re-emitidos)
+      // The folder's chats follow its state; the ones already in the
+      // target state are not touched (nor re-emitted)
       const sessions = state.sessions.map((s) => {
         if (s.folderId !== id || s.archived === archived) return s
         affected.push(s.id)
@@ -1050,23 +1052,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   deleteFolder: (id) => {
-    // Sessões afetadas ANTES do set (depois, folderId já estará null)
+    // Affected sessions BEFORE the set (afterwards, folderId will already be null)
     const affected = get().sessions.filter((s) => s.folderId === id).map((s) => s.id)
-    // As fontes da pasta morrem com ela: os chats voltam para a raiz e nenhum
-    // deles resolve mais para este escopo, então o que ficasse em disco seria
-    // lixo inalcançável.
+    // The folder's sources die with it: the chats go back to the root and none of
+    // them resolves to this scope anymore, so whatever stayed on disk would be
+    // unreachable garbage.
     void docsApi.clearFolder(id)
     set((state) => {
       const folders = state.folders.filter((f) => f.id !== id)
       persistFolders(folders)
-      // Sessões da pasta voltam para a raiz
+      // Sessions of the folder go back to the root
       const sessions = state.sessions.map((s) => {
         if (s.folderId !== id) return s
         const next = { ...s, folderId: null }
         persistSession(next)
         return next
       })
-      // Limpa entradas órfãs do mapa de pastas automáticas
+      // Clears orphan entries from the automatic folder map
       const autoFolderMap = loadAutoFolderMap()
       for (const [dir, fid] of Object.entries(autoFolderMap)) {
         if (fid === id) {
@@ -1083,8 +1085,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   folderWorkspace: (folderId) => {
     const folder = get().folders.find((f) => f.id === folderId)
     if (!folder) return undefined
-    // O mapa automático é a última pista de uma pasta VAZIA: os chats que
-    // davam o diretório a ela foram apagados, mas o projeto continua mapeado.
+    // The automatic map is the last clue of an EMPTY folder: the chats that
+    // gave it the directory were deleted, but the project stays mapped.
     return workspaceOfFolder({
       folder,
       sessions: get().sessions,
@@ -1095,7 +1097,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   organizeSidebar: () => {
     const { sessions, folders } = get()
 
-    // ——— 1) Pastas do mesmo projeto (mesmo modo e estado de arquivamento) → mescla ———
+    // ——— 1) Folders of the same project (same mode and archiving state) → merge ———
     const byKey = new Map<string, FolderInfo[]>()
     for (const f of folders) {
       const key = `${f.mode}|${f.archived}|${folderKey(f.name)}`
@@ -1103,7 +1105,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       list.push(f)
       byKey.set(key, list)
     }
-    // absorvida → canônica; canônica = pasta com mais chats (empate → mais antiga)
+    // absorbed → canonical; canonical = folder with more chats (tie → the oldest)
     const remap = new Map<string, string>()
     for (const list of byKey.values()) {
       if (list.length < 2) continue
@@ -1114,39 +1116,39 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     }
     if (remap.size > 0) {
-      // Reaponta entradas do mapa automático das pastas absorvidas
+      // Re-points entries of the automatic map of the absorbed folders
       const autoFolderMap = loadAutoFolderMap()
       for (const [dir, fid] of Object.entries(autoFolderMap)) {
         const target = remap.get(fid)
         if (target) autoFolderMap[dir] = target
       }
       persistAutoFolderMap(autoFolderMap)
-      // Aplicado ANTES da etapa 2: createFolder (abaixo) persiste `state.folders`
-      // e não pode re-incluir as pastas absorvidas.
+      // Applied BEFORE step 2: createFolder (below) persists `state.folders`
+      // and cannot re-include the absorbed folders.
       const foldersNext = folders.filter((f) => !remap.has(f.id))
       set({ folders: foldersNext })
       persistFolders(foldersNext)
       emitChatEvent({ type: "folders", folders: foldersNext })
     }
 
-    // ——— 2) Chats soltos (código, com diretório) → pasta do projeto ———
+    // ——— 2) Loose chats (code, with a directory) → the project's folder ———
     const { sessions: current, folders: currentFolders } = get()
     const folderById = new Map(currentFolders.map((f) => [f.id, f]))
     const autoFolderMap = loadAutoFolderMap()
     let mapDirty = false
     const moves = new Map<string, string>() // sessionId → folderId
-    // Sessões de pastas absorvidas passam para a canônica (camada 1)
+    // Sessions of absorbed folders move to the canonical one (layer 1)
     for (const s of current) {
       if (s.folderId && remap.has(s.folderId)) moves.set(s.id, remap.get(s.folderId)!)
     }
     const loose = current
       .filter((s) => s.mode === "code" && !s.folderId && !s.archived && !s.parentId && !s.routineId && !!s.directory)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-    // A mesma decisão da criação da sessão, pelo mesmo caminho: aqui ela
-    // conserta o passado (os chats que já nasceram soltos), e lá evita o
-    // próximo. Antes eram duas regras parecidas e não iguais — e a daqui, ao
-    // topar com a pasta arquivada do projeto, criava uma SEGUNDA pasta com o
-    // mesmo nome ao lado dela: a duplicata que este botão existe para desfazer.
+    // The same decision as the session creation, through the same path: here it
+    // fixes the past (the chats that were already born loose), and there it avoids the
+    // next one. Before, they were two similar and not equal rules — and the one here, on
+    // running into the project's archived folder, created a SECOND folder with the
+    // same name next to it: the duplicate this button exists to undo.
     for (const s of loose) {
       if (moves.has(s.id)) continue
       const directory = s.directory as string
@@ -1164,8 +1166,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       if (plano.revive) {
         get().reviveFolder(folderId)
-        const revivida = get().folders.find((f) => f.id === folderId)
-        if (revivida) folderById.set(folderId, revivida)
+        const revived = get().folders.find((f) => f.id === folderId)
+        if (revived) folderById.set(folderId, revived)
       }
       if (autoFolderMap[directory] !== folderId) {
         autoFolderMap[directory] = folderId
@@ -1188,10 +1190,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       for (const sid of moves.keys()) emitSessionEvent(sid)
     }
 
-    // Pasta que ganhou chats agora e nunca guardou o workspace: aprende com o
-    // MAIS ANTIGO deles — o primeiro a associá-la a um repositório.
+    // Folder that gained chats now and never stored the workspace: learns from the
+    // OLDEST of them — the first one to associate it with a repository.
     for (const folderId of new Set(moves.values())) {
-      aprenderWorkspaceDaPasta(folderId, workspaceDaSessao(firstSessionOfFolder(folderId, get().sessions)))
+      learnFolderWorkspace(folderId, workspaceOfSession(firstSessionOfFolder(folderId, get().sessions)))
     }
   },
 
@@ -1217,8 +1219,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const nextMap = relocateAutoFolderEntry(autoFolderMap, oldPath, newPath)
     if (nextMap) persistAutoFolderMap(nextMap)
 
-    // A memória de repositório acompanha a relocalização — em QUALQUER pasta
-    // que apontasse para o caminho antigo, não só na que o mapa conhece.
+    // The repository memory follows the relocation — in ANY folder
+    // that pointed to the old path, not only in the one the map knows.
     let folders: FolderInfo[] | null = null
     for (const f of get().folders) {
       const workspace = relocateFolderWorkspace(f.workspace, oldPath, newPath)
@@ -1231,8 +1233,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       emitChatEvent({ type: "folders", folders })
     }
 
-    // O nome da pasta acompanha o projeto — mas só quando ainda é o derivado do
-    // caminho antigo. Nome escolhido à mão não se toca.
+    // The folder name follows the project — but only when it is still the one derived from the
+    // old path. A name chosen by hand is not touched.
     const folder = folderId ? get().folders.find((f) => f.id === folderId) : undefined
     if (folder) {
       const name = relocatedFolderName(folder.name, oldPath, newPath)
@@ -1252,8 +1254,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         if (!discardsMain && !discardsExtra) return s
         affected.push(s.id)
         const next: SessionInfo = { ...s, updatedAt: Date.now() }
-        // Só a pasta que sumiu do disco sai: a principal quando é ela, e as
-        // extras as que restarem, na ordem em que estavam.
+        // Only the folder that vanished from disk leaves: the main one when it is that one, and the
+        // extras the ones that remain, in the order they were in.
         if (discardsMain) delete next.directory
         if (discardsExtra) next.extraDirectories = extras.filter((extra) => extra !== path)
         persistSession(next)
@@ -1271,8 +1273,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   sendMessage: async (mode, text, config) => {
     const provider = useProviderStore.getState()
-    // O modelo segue a sessão: override do chat (ou do draft de chat novo)
-    // > default global do provider.
+    // The model follows the session: chat override (or new chat draft)
+    // > provider global default.
     const targetSessionId = config.sessionId ?? get().activeIds[mode]
     const selected = sessionModelFor(targetSessionId) ?? provider.selectedModel
     if (!selected) {
@@ -1283,7 +1285,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (sessionId) get().clearSuggestion(sessionId)
     let session = get().sessions.find((s) => s.id === sessionId)
     if (!session) {
-      // A pasta pendente só vale se pertencer ao mesmo modo da sessão a criar
+      // The pending folder only counts if it belongs to the same mode as the session to create
       const pendingFolderId = get().pendingFolderId
       const pendingFolder = pendingFolderId
         ? get().folders.find((f) => f.id === pendingFolderId)
@@ -1295,35 +1297,35 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       })
       sessionId = session.id
       if (pendingFolderId) set({ pendingFolderId: null })
-      // O toggle Brain do chat novo (rascunho) passa a valer para esta sessão
+      // The new chat's Brain toggle (draft) starts counting for this session
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
       useModeOverrides.getState().adopt(sessionId)
       useSessionTools.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
-      // A mensagem respondida no chat novo (chave "draft") vira da sessão
+      // The message replied to in the new chat ("draft" key) becomes the session's
       useMessageReply.getState().adopt(sessionId)
-      // Fontes anexadas na aba ANTES de existir sessão. É aguardado, e não
-      // disparado em paralelo: o turno começa logo abaixo, e o agente precisa
-      // encontrar os documentos já no escopo da sessão quando chamar doc_list.
+      // Sources attached in the tab BEFORE a session exists. It is awaited, and not
+      // fired in parallel: the turn starts right below, and the agent has to
+      // find the documents already in the session scope when it calls doc_list.
       await docsApi.adoptDraft(sessionId)
-      // As abas do painel ficam guardadas por sessão; num chat novo elas vivem
-      // num balde órfão. Sem mudar de balde, a aba Fontes que o usuário acabou
-      // de usar sumiria da tela no instante em que ele mandasse a mensagem.
+      // The panel tabs are stored per session; in a new chat they live
+      // in an orphan bucket. Without changing buckets, the Sources tab the user just
+      // used would vanish from the screen the instant they sent the message.
       usePanelStore.getState().adoptOrphanTabs(sessionId)
-      // O modelo escolhido no chat novo (draft) passa a ser o da sessão; sem
-      // escolha explícita, fixa o modelo efetivamente usado (herdado do último
-      // chat), para o picker e o envio continuarem consistentes.
+      // The model chosen in the new chat (draft) becomes the session's; without an
+      // explicit choice, it pins the model actually used (inherited from the last
+      // chat), so the picker and the send stay consistent.
       useSessionModelPrefs.getState().adopt(sessionId, selected)
-      // Thinking e autonomia do chat novo também passam a ser da sessão: sem
-      // escolha no rascunho, fixa o nível em vigor (o do modelo / o padrão),
-      // para o chat não mudar quando o default for mexido depois.
+      // Thinking and autonomy of the new chat also become the session's: without a
+      // choice in the draft, it pins the level in force (the model's / the default),
+      // so the chat does not change when the default is touched later.
       useSessionReasoning.getState().adopt(
         sessionId,
         sessionReasoningFor(null, selected.providerId, selected.modelId),
       )
       usePermissionPrefs.getState().adopt(sessionId)
-      // A rotação escolhida no chat novo (draft) passa a valer para a sessão
+      // The rotation chosen in the new chat (draft) starts counting for the session
       useModelRotationStore.getState().adoptRotation(sessionId)
     } else if (mode === "code") {
       const dirChanged = config.directory && session.directory !== config.directory
@@ -1340,7 +1342,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     }
 
-    // Limpa plan review implementado/concluído e orquestração concluída
+    // Clears an implemented/finished plan review and a finished orchestration
     const planReview = get().planReviews[sessionId!]
     const isPlanMsg = config.options.plan || config.options.planReview
     if (!isPlanMsg && planReview && planReview.status !== "proposed") {
@@ -1351,41 +1353,41 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
     const orch = get().orchestration[sessionId!]
     if (orch && orch.status === "done") {
-      // Mesma porta do X do card: mensagem nova depois do plano concluído tira o
-      // card em definitivo — marcando no arquivo, sem apagar o plano (ver
+      // Same door as the card's X: a new message after the finished plan takes the
+      // card away for good — marking it in the file, without deleting the plan (see
       // dismissOrchestration).
       get().dismissOrchestration(sessionId!)
     }
 
-    // Se está enviando em plan mode, marca para criar a review quando o streaming terminar
+    // If it is sending in plan mode, mark it to create the review when the streaming ends
     if (config.options.plan) {
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId!]: true } }))
     }
 
-    // Subagents, orquestra e /init usam o modelo worker configurado. Sem
-    // configuração, workerModel fica undefined de propósito: o engine então cai
-    // em providerId/modelId, que são o modelo REAL desta sessão — é o que a UI
-    // promete ("sem seleção, os workers usam o mesmo modelo do chat principal").
-    // Havia aqui um `?? codeModel`, que trocava esse fallback pela preferência
-    // "Modelo padrão" — um modelo diferente, e que ninguém valida contra os
-    // provedores conectados; se estivesse obsoleto, os workers morriam com
-    // "Model is unavailable" enquanto a UI dizia estar usando o modelo principal.
+    // Subagents, orchestra and /init use the configured worker model. Without
+    // configuration, workerModel stays undefined on purpose: the engine then falls
+    // back to providerId/modelId, which are the REAL model of this session — it is what the UI
+    // promises ("with no selection, the workers use the same model as the main chat").
+    // There used to be a `?? codeModel` here, which swapped that fallback for the
+    // "Default model" preference — a different model, and one nobody validates against the
+    // connected providers; if it were obsolete, the workers died with
+    // "Model is unavailable" while the UI said it was using the main model.
     const needsWorker = config.options.subagents || config.options.orchestrate || config.options.initMode
     const worker = provider.workerModel
     const workerModel =
       needsWorker && worker
         ? { ...worker, reasoning: provider.workerReasoning ?? undefined }
         : undefined
-    // Quem conduz a orquestra (planejamento e síntese): o modelo de Preferências /
-    // "+" → Orquestra. Sem ele, o próprio modelo do chat — o mesmo contrato do worker.
+    // Who conducts the orchestra (planning and synthesis): the model from Preferences /
+    // "+" → Orchestra. Without it, the chat's own model — the same contract as the worker's.
     const conductor = provider.orchestratorModel
     const orchestratorModel =
       config.options.orchestrate && conductor
         ? { ...conductor, reasoning: provider.orchestratorReasoning ?? undefined }
         : undefined
 
-    // Modo Visão ativo = modelo configurado E modo ativo para esta sessão
-    // (toggle por chat com default nas preferências)
+    // Vision mode active = model configured AND mode active for this session
+    // (per-chat toggle with a default in the preferences)
     const visionPrefs = (session.mode ?? mode) === "code"
       ? useModelModePrefs.getState().codeActiveModes
       : useModelModePrefs.getState().chatActiveModes
@@ -1414,16 +1416,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   stopStreaming: (sessionId) => {
     void chatApi.abort(sessionId)
-    // Fase "cancelling": o abort foi pedido mas o main ainda não confirmou —
-    // o botão vira "Encerrando…" desabilitado em vez de sumir, e o status só
-    // volta a idle quando o engine emitir (ou o fallback abaixo confirmar que
-    // nada estava rodando).
+    // Phase "cancelling": the abort was requested but main has not confirmed yet —
+    // the button becomes a disabled "Stopping…" instead of vanishing, and the status only
+    // goes back to idle when the engine emits it (or the fallback below confirms that
+    // nothing was running).
     set((state) => ({
       status: { ...state.status, [sessionId]: "cancelling" as ChatStatus },
       errors: { ...state.errors, [sessionId]: undefined },
     }))
-    // Fallback: quando a geração já terminou, o abort é no-op e nenhum status
-    // volta — sem isto o status ficaria preso em cancelling para sempre.
+    // Fallback: when the generation has already ended, the abort is a no-op and no status
+    // comes back — without this the status would stay stuck in cancelling forever.
     window.setTimeout(() => {
       void chatApi.running().then((ids) => {
         if (ids.includes(sessionId)) return
@@ -1434,24 +1436,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }, 2500)
   },
 
-  // O main persiste e emite o evento "session" com o estado atualizado —
-  // aqui só espelha imediatamente para a barra de revert aparecer sem delay
+  // Main persists and emits the "session" event with the updated state —
+  // here it only mirrors immediately so the revert bar shows up without delay
   revertToMessage: async (sessionId, messageId) => {
     const revert = await sessionApi.revert(sessionId, messageId)
     if (!revert) return
-    // Um revert novo substitui o aviso do unrevert anterior.
+    // A new revert replaces the previous unrevert notice.
     set((state) => ({ ...updateSessionIn(state, sessionId, { revert }), revertNotice: null }))
-    // A mensagem revertida volta para o input, como se estivesse sendo editada.
-    // O texto sai de `discardedMessages` em vez de vir num campo próprio do
-    // SessionRevert: anexos são data URLs e duplicá-los dobraria o tamanho da
-    // sessão em disco.
+    // The reverted message goes back to the input, as if it were being edited.
+    // The text comes out of `discardedMessages` instead of arriving in a field of its own in
+    // SessionRevert: attachments are data URLs and duplicating them would double the size of
+    // the session on disk.
     const prompt = revert.discardedMessages?.find((m) => m.role === "user")
     if (prompt) {
       const files = prompt.parts.filter((p): p is FilePart => p.type === "file")
-      // A citação volta como resposta ARMADA (barra no compositor), e não como
-      // `> [assistant] …` dentro do campo de texto: no input o marcador
-      // apareceria cru, e o envio voltaria com a resposta marcada do mesmo
-      // jeito — só que por acidente, sem a pessoa ter escolhido.
+      // The citation comes back as an ARMED reply (bar in the composer), and not as
+      // `> [assistant] …` inside the text field: in the input the marker
+      // would show up raw, and the send would come back with the answer marked the same
+      // way — only by accident, without the person having chosen it.
       const { reply, body } = parseMessageReply(visibleMessageText(prompt))
       if (reply) useMessageReply.getState().setReply(sessionId, reply)
       useDraftInput.getState().setDraft(sessionId, body, files)
@@ -1462,8 +1464,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const result = await sessionApi.unrevert(sessionId)
     if (!result?.done) return
     set((state) => updateSessionIn(state, sessionId, { revert: undefined }))
-    // O que não pôde voltar (mudou entre o revert e agora) fica visível como
-    // aviso transitório — não silencioso.
+    // What could not come back (changed between the revert and now) stays visible as
+    // a transient notice — not silent.
     const kept = (result.files?.conflicts.length ?? 0) + (result.media?.conflicts ?? 0)
     if (kept > 0 || result.files?.error) {
       set({
@@ -1485,11 +1487,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
 type Setter = (fn: (state: SessionState) => Partial<SessionState>) => void
 
-// ─── Batching de deltas ──────────────────────────────────────────────────────
-// Agrupa part-deltas num frame (~33ms) para o stream parecer fluido sem um
-// re-render por token (espelho do mobile). O flush aplica tudo num único set
-// copiando só a lista da sessão afetada e atualizando só a mensagem/parte
-// afetada — as demais mensagens mantêm a referência e não re-renderizam.
+// ─── Delta batching ──────────────────────────────────────────────────────
+// Groups part-deltas into one frame (~33ms) so the stream looks fluid without one
+// re-render per token (mirror of mobile). The flush applies everything in a single set
+// copying only the affected session's list and updating only the affected
+// message/part — the other messages keep the reference and do not re-render.
 
 interface PendingDelta {
   sessionId: string
@@ -1514,7 +1516,7 @@ function flushDeltas(set: Setter) {
 
   set((state) => {
     const messages = { ...state.messages }
-    // Agrupa por sessão para copiar cada lista uma única vez
+    // Groups by session to copy each list only once
     const bySession = new Map<string, PendingDelta[]>()
     for (const d of pending) {
       const list = bySession.get(d.sessionId)
@@ -1526,7 +1528,7 @@ function flushDeltas(set: Setter) {
       if (!list) continue
       const next = list.slice()
       for (const delta of deltas) {
-        // Mensagem ativa costuma ser a última — busca do fim
+        // The active message is usually the last one — search from the end
         let msgIdx = -1
         for (let i = next.length - 1; i >= 0; i--) {
           if (next[i].id === delta.messageId) {
@@ -1552,11 +1554,11 @@ function flushDeltas(set: Setter) {
 }
 
 /**
- * Janela espelho (o painel flutuante do Computer Use): aplica os eventos do
- * chat ao estado em memória para mostrar a conversa ao vivo, mas nenhum efeito
- * colateral — quem grava em disco, mexe nas preferências e, sobretudo, dispara
- * a fila de mensagens quando a sessão fica ociosa é a janela principal. Duas
- * janelas fazendo isso mandariam a mesma mensagem da fila duas vezes.
+ * Mirror window (the Computer Use floating panel): applies the chat events to the
+ * in-memory state to show the conversation live, but with no side
+ * effect — the one that writes to disk, touches the preferences and, above all, fires
+ * the message queue when the session goes idle is the main window. Two
+ * windows doing that would send the same queued message twice.
  */
 let passiveMirror = false
 let mirrorStarted = false
@@ -1569,19 +1571,19 @@ export function startChatMirror(): void {
 }
 
 function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) {
-  // "folders" é o único evento sem sessionId (substituição completa da lista)
+  // "folders" is the only event without a sessionId (complete replacement of the list)
   const sessionId = "sessionId" in event ? event.sessionId : ""
 
-  // Eventos que tocam as mensagens diretamente precisam ver o texto já
-  // acumulado — descarrega os deltas pendentes antes de aplicá-los.
+  // Events that touch the messages directly need to see the already
+  // accumulated text — flush the pending deltas before applying them.
   if (event.type === "message" || event.type === "part" || event.type === "messages" || event.type === "status") {
     flushDeltas(set)
   }
 
   const persistPendingAsks = (sid: string) => {
-    // Sessão ainda não carregada (ex.: "ask:done" de um card que o main
-    // encerrou antes de a conversa ser aberta): o store não conhece a lista
-    // dela, e gravar aqui apagaria o arquivo que ainda guarda pedidos válidos.
+    // Session not loaded yet (e.g.: "ask:done" from a card that main
+    // closed before the conversation was opened): the store does not know its
+    // list, and writing here would wipe the file that still holds valid requests.
     const asks = get().pendingAsks[sid]
     if (!asks || passiveMirror) return
     void storage.write(StorageKeys.pendingAsks(sid), asks)
@@ -1592,8 +1594,8 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       set((state) => ({
         status: { ...state.status, [sessionId]: event.status },
         errors: { ...state.errors, [sessionId]: event.error },
-        // Fallback (rotação): guarda a tentativa em andamento; limpa quando o
-        // turno sai do estado de falha/fallback.
+        // Fallback (rotation): stores the attempt in progress; clears it when the
+        // turn leaves the failure/fallback state.
         fallback:
           event.status === "fallback" && event.fallback
             ? { ...state.fallback, [sessionId]: event.fallback }
@@ -1609,9 +1611,9 @@ case "message": {
         const next = idx >= 0 ? list.map((m, i) => (i === idx ? inbound : m)) : [...list, inbound]
 
         const isInbound = inbound.role === "assistant"
-        // Placeholder vazio que o engine emite antes do stream (e re-emite ao
-        // trocar anexos pós-preprocess) não conta como não-lida — a primeira
-        // part ou a mensagem final contam.
+        // Empty placeholder the engine emits before the stream (and re-emits when
+        // swapping attachments post-preprocess) does not count as unread — the first
+        // part or the final message count.
         const placeholder =
           isInbound &&
           inbound.parts.length === 0 &&
@@ -1623,9 +1625,9 @@ case "message": {
             ? { ...state.unreadCounts, [sessionId]: (state.unreadCounts[sessionId] ?? 0) + 1 }
             : state.unreadCounts
 
-        // Reconciliação de status: uma mensagem do assistente com tokens/error
-        // significa que a geração terminou. Se o evento `status: idle` se
-        // perdeu, isto destrava o input/stop e some com o "Pensando".
+        // Status reconciliation: an assistant message with tokens/error
+        // means the generation ended. If the `status: idle` event was
+        // lost, this unlocks the input/stop and clears the "Thinking".
         const finished =
           inbound.role === "assistant" && (inbound.tokens !== undefined || inbound.error !== undefined)
         const stuck =
@@ -1645,10 +1647,10 @@ case "message": {
         return { messages: { ...state.messages, [sessionId]: next }, unreadCounts, status, fallback, liveContext }
       })
 
-      // Um modelo só entra nos "recentes" quando foi de fato usado: a resposta
-      // final do agente (completedAt) chegou completa, com conteúdo real e sem
-      // erro. Se o 1º turno falhar (sem resposta), não conta como uso — e um
-      // turno posterior que responder, sim.
+      // A model only gets into "recents" when it was actually used: the agent's final
+      // answer (completedAt) arrived complete, with real content and without an
+      // error. If the 1st turn fails (no answer), it does not count as usage — and a
+      // later turn that answers does.
       if (
         !passiveMirror &&
         inbound.role === "assistant" &&
@@ -1662,11 +1664,11 @@ case "message": {
     }
 
     case "part":
-      // O evento traz o estado COMPLETO da part (o main mantém o texto
-      // acumulado), então qualquer delta ainda no buffer já está contido nele
-      // — aplicar os dois duplicaria o trecho. Descartar o buffer aqui também
-      // é o que permite ao main corrigir um texto já transmitido (ex.: o
-      // saneamento dos marcadores internos no 'text-end').
+      // The event brings the COMPLETE state of the part (main keeps the
+      // accumulated text), so any delta still in the buffer is already contained in it
+      // — applying both would duplicate the stretch. Discarding the buffer here also
+      // is what allows main to correct a text already transmitted (e.g.: the
+      // sanitizing of internal markers in 'text-end').
       deltaBuffer.delete(`${sessionId}:${event.messageId}:${event.part.id}`)
       set((state) => {
         const list = state.messages[sessionId] ?? []
@@ -1703,8 +1705,8 @@ case "message": {
     }
 
     case "messages":
-      // Substituição completa (ex: compactação inseriu um resumo no meio) —
-      // o evento traz a lista inteira, então a sessão já está carregada.
+      // Complete replacement (e.g.: compaction inserted a summary in the middle) —
+      // the event brings the whole list, so the session is already loaded.
       set((state) => ({
         messages: { ...state.messages, [sessionId]: event.messages },
         liveContext: { ...state.liveContext, [sessionId]: undefined },
@@ -1734,9 +1736,9 @@ case "message": {
     case "compaction:suggest":
       set((state) => {
         const previous = state.compactionSuggestion[sessionId]
-        // O engine reemite a cada fim de turno enquanto a condição valer. Se a
-        // pessoa já dispensou para ESTA contagem, o card não volta — uma
-        // compactação (que muda a contagem) é o que libera de novo.
+        // The engine re-emits it at every end of turn while the condition holds. If the
+        // person has already dismissed it for THIS count, the card does not come back — a
+        // compaction (which changes the count) is what frees it again.
         if (previous && previous.summaries === event.summaries && previous.dismissed) return state
         return {
           compactionSuggestion: {
@@ -1756,8 +1758,8 @@ case "message": {
         const sessions = state.sessions.map((s) => (s.id === sessionId ? { ...s, title: event.title } : s))
         return { sessions }
       })
-      // O agente nomeou o chat: espelha o novo título nas abas de chat do
-      // painel lateral que apontam para essa sessão.
+      // The agent named the chat: mirrors the new title into the side panel's chat
+      // tabs that point to that session.
       if (!passiveMirror) usePanelStore.getState().renameChatTabs(sessionId, event.title)
       break
 
@@ -1771,16 +1773,16 @@ case "message": {
       break
 
     case "session":
-      // Session criada/atualizada pelo main (workers da orquestração)
+      // Session created/updated by the main process (orchestration workers)
       set((state) => {
         const exists = state.sessions.some((s) => s.id === event.session.id)
         const sessions = exists
           ? state.sessions.map((s) => (s.id === event.session.id ? event.session : s))
           : [event.session, ...state.sessions]
-        // Workers nascem vazios e o main emite "session" antes de iniciar o
-        // runChat deles: inicializar o buffer aqui garante que os primeiros
-        // events de message/part não sejam perdidos (um ensureMessages tardio
-        // mescla com o disco em vez de sobrescrever).
+        // Workers are born empty and main emits "session" before starting their
+        // runChat: initializing the buffer here guarantees that the first
+        // message/part events are not lost (a late ensureMessages
+        // merges with the disk instead of overwriting).
         const messages =
           state.messages[event.session.id] === undefined
             ? { ...state.messages, [event.session.id]: [] }
@@ -1790,8 +1792,8 @@ case "message": {
       break
 
     case "session:deleted":
-      // Excluída no main (ferramenta do agente, app mobile): limpa também o que
-      // esta janela guarda por conversa.
+      // Deleted in main (agent tool, mobile app): also clears what
+      // this window keeps per conversation.
       loadedMessages.delete(sessionId)
       if (!passiveMirror) {
         useBrainPrefs.getState().setEnabled(sessionId, true)
@@ -1826,7 +1828,7 @@ case "message": {
       break
 
     case "notifications:open": {
-      // Clique numa notificação nativa → abre a sessão correspondente
+      // Click on a native notification → opens the corresponding session
       if (passiveMirror) break
       const session = get().sessions.find((s) => s.id === event.sessionId)
       if (session) void get().selectSession(session.mode, session.id)
@@ -1890,16 +1892,16 @@ case "message": {
       .join("\n")
   }
 
-  // Espelho: daqui para baixo só há efeitos (plano proposto, fila).
+  // Mirror: from here down there are only effects (proposed plan, queue).
   if (passiveMirror) return
 
-  // Quando o streaming termina ou dá erro, verifica planos e processa fila
+  // When the streaming ends or errors, it checks plans and processes the queue
   if (event.type === "status" && event.status === "idle") {
     const state = get()
     const sessions = [...state.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
     const patch: Partial<SessionState> = { sessions }
 
-    // Cria PlanReview se estava em plan mode
+    // Creates a PlanReview if it was in plan mode
     if (state._planReviewOutbox[sessionId] && !state.planReviews[sessionId]) {
       const msgs = state.messages[sessionId] ?? []
       const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant")
@@ -1911,8 +1913,8 @@ case "message": {
         }
         patch.planReviews = { ...state.planReviews, [sessionId]: review }
         void storage.write(StorageKeys.planReview(sessionId), review)
-        // O mobile so descobre o plano por este evento: sem ele o card de
-        // aceite nunca aparecia la, mesmo com o plano pronto na conversa.
+        // Mobile only learns about the plan through this event: without it the accept
+        // card never showed up there, even with the plan ready in the conversation.
         emitChatEvent({ type: "plan:review", sessionId, review })
       }
     }
@@ -1923,13 +1925,13 @@ case "message": {
     set(() => patch)
   }
 
-  // Processa a fila tanto em idle quanto em erro (para retry/skip)
+  // Processes the queue both in idle and in error (for retry/skip)
   if (event.type === "status" && (event.status === "idle" || event.status === "error")) {
     useMessageQueueStore.getState().onSessionIdle(sessionId)
   }
 }
 
-/** Sessão ativa do modo atual */
+/** Active session of the current mode */
 export function useActiveSession(mode: SessionMode) {
   return useSessionStore((state) => {
     const id = state.activeIds[mode]
@@ -1941,21 +1943,21 @@ export function useSessionStatus(sessionId: string | null | undefined): ChatStat
   return useSessionStore((state) => (sessionId ? state.status[sessionId] ?? "idle" : "idle"))
 }
 
-/** O workspace que a sessão ENSINA a uma pasta: o repositório principal — um
- *  chat aberto num worktree pertence à pasta do PROJETO, e é para o principal
- *  que o mapa automático aponta — mais as pastas extras. */
-function workspaceDaSessao(session: SessionInfo | undefined): string[] | undefined {
+/** The workspace the session TEACHES a folder: the main repository — a
+ *  chat opened in a worktree belongs to the PROJECT's folder, and it is to the main
+ *  one that the automatic map points — plus the extra folders. */
+function workspaceOfSession(session: SessionInfo | undefined): string[] | undefined {
   if (!session || session.mode !== "code" || !session.directory) return undefined
-  return [principalConhecido(session.directory), ...(session.extraDirectories ?? [])]
+  return [knownMain(session.directory), ...(session.extraDirectories ?? [])]
 }
 
 /**
- * A pasta guarda o workspace do PRIMEIRO chat que entrou nela e não troca mais.
- * Os chats dizem onde ela está sendo usada AGORA (e é o mais recente que o "+"
- * segue); esta memória é o que sobra quando todos eles forem apagados — sem
- * ela, o "+" de uma pasta vazia herdava o repositório do último chat da tela.
+ * The folder keeps the workspace of the FIRST chat that entered it and never swaps it again.
+ * The chats say where it is being used NOW (and it is the most recent one that the "+"
+ * follows); this memory is what is left when all of them are deleted — without
+ * it, the "+" of an empty folder inherited the repository of the last chat on the screen.
  */
-function aprenderWorkspaceDaPasta(
+function learnFolderWorkspace(
   folderId: string | null | undefined,
   workspace: string[] | undefined,
 ): void {

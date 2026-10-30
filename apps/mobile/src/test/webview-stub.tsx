@@ -1,15 +1,15 @@
 /**
- * `react-native-webview` para o jsdom.
+ * `react-native-webview` for jsdom.
  *
- * O pacote real é código Flow com módulo de plataforma nativa: o esbuild não
- * parseia (`Unexpected token 'typeof'`) e o Node não tem WebView de qualquer
- * forma. Aqui ele vira uma `View` inerte, sem props nativas, o suficiente para
- * os testes de markdown montarem — o bloco mermaid passou a fazer parte dessa
- * árvore, e o que se testa nele é a degradação para código, que acontece ANTES
- * de o WebView existir.
+ * The real package is Flow code with a native platform module: esbuild does not
+ * parse it (`Unexpected token 'typeof'`) and Node has no WebView anyway.
+ * Here it becomes an inert `View`, without native props, enough for the
+ * markdown tests to mount — the mermaid block became part of that
+ * tree, and what is tested in it is the degradation to code, which happens BEFORE
+ * the WebView exists.
  *
- * Só o runtime é substituído: os tipos continuam vindo do pacote real, então o
- * `type WebViewProps` de quem consome segue valendo no `tsc`.
+ * Only the runtime is replaced: the types still come from the real package, so the
+ * `type WebViewProps` of whoever consumes it still holds in `tsc`.
  */
 import { View, type StyleProp, type ViewStyle } from 'react-native'
 

@@ -7,23 +7,23 @@ import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 /**
- * Cartão de navegação — o espelho mobile do bloco `nav` do orbit-ui.
+ * Navigation card — the mobile mirror of the `nav` block of orbit-ui.
  *
- * O `destino` é um id do registro compartilhado (ui-destinations), e o rótulo
- * sai da chave de i18n que a própria tela usa, então renomear uma tela renomeia
- * o cartão. A tela que não existe no celular aparece explicada e inerte: um
- * botão que não abre nada é pior do que uma frase.
+ * The `target` is an id of the shared registry (ui-destinations), and the label
+ * comes from the i18n key the screen itself uses, so renaming a screen renames
+ * the card. A screen that does not exist on the phone shows up explained and inert: a
+ * button that opens nothing is worse than a sentence.
  *
- * Nada navega sozinho — o toque é o consentimento.
+ * Nothing navigates on its own — the touch is the consent.
  */
-export function NavCard({ destino, nota }: { destino: string; nota?: string }) {
+export function NavCard({ destination, note }: { destination: string; note?: string }) {
   const { t } = useTranslation()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const target = uiDestination(destino)
+  const target = uiDestination(destination)
 
-  // Id que o registro não conhece: silêncio, não um cartão vazio — a prosa da
-  // mensagem já disse onde fica.
+  // Id the registry does not know: silence, not an empty card — the prose of the
+  // message has already said where it is.
   if (!target) return null
 
   const screen = target.mobile
@@ -54,9 +54,9 @@ export function NavCard({ destino, nota }: { destino: string; nota?: string }) {
         <Text style={[s.title, { color: tokens.foreground }]} numberOfLines={1}>
           {t(screen.titleKey)}
         </Text>
-        {nota ? (
-          <Text style={[s.nota, { color: tokens.mutedForeground }]} numberOfLines={2}>
-            {nota}
+        {note ? (
+          <Text style={[s.note, { color: tokens.mutedForeground }]} numberOfLines={2}>
+            {note}
           </Text>
         ) : null}
       </View>
@@ -78,6 +78,6 @@ const s = StyleSheet.create({
   icon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: 2 },
   title: { fontSize: 14, fontWeight: '600' },
-  nota: { fontSize: 12, lineHeight: 16 },
+  note: { fontSize: 12, lineHeight: 16 },
   action: { fontSize: 12, fontWeight: '500' },
 })

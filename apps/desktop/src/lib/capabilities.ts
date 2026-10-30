@@ -1,14 +1,14 @@
 import type { MediaKind } from "@shared/media"
 
 /**
- * Catálogo do que o Orbit sabe fazer e que fica escondido atrás da conversa:
- * artefato clicável, documento, motion, edição de foto/vídeo, áudio gerado,
- * transcrição.
+ * Catalog of what Orbit knows how to do and that stays hidden behind the conversation:
+ * clickable artifact, document, motion, photo/video editing, generated audio,
+ * transcription.
  *
- * É a fonte única de três lugares — as sugestões da tela inicial, o painel
- * "O que o Orbit faz?" e a frase que preenche o composer. Por isso aqui só há
- * DADOS: os textos moram no i18n (`chat.start.items.<id>.label` / `.desc` /
- * `.example` / `.howTo`) e o desenho mora nos componentes.
+ * It is the single source of three places — the start screen suggestions, the
+ * "What does Orbit do?" panel and the sentence that fills the composer. That is why there is only
+ * DATA here: the texts live in i18n (`chat.start.items.<id>.label` / `.desc` /
+ * `.example` / `.howTo`) and the drawing lives in the components.
  */
 
 export type CapabilityId =
@@ -37,53 +37,53 @@ export type CapabilityGroup = "create" | "media" | "work"
 export type CapabilityMode = "chat" | "code"
 
 /**
- * Metade da voz que uma capacidade precisa. O gate é o mesmo do engine: em
- * `tools/index.ts` a tool só é registrada quando a metade está ligada — não é
- * um filtro de interface, é o agente que não a enxerga.
+ * Voice half a capability needs. The gate is the same as the engine's: in
+ * `tools/index.ts` the tool is only registered when the half is on — it is not
+ * an interface filter, it is the agent that does not see it.
  */
 export type VoiceFeature = "tts" | "stt"
 
 /**
- * Recurso que precisa estar ligado para a capacidade existir. A voz é o caso
- * que mais aparece (a tool nem é registrada), mas a gravação de vídeo depende
- * das ferramentas de navegador pelo mesmo motivo: sem elas não há
- * `browser_record` para executar o roteiro.
+ * Resource that must be on for the capability to exist. Voice is the case
+ * that shows up the most (the tool is not even registered), but video recording depends
+ * on the browser tools for the same reason: without them there is no
+ * `browser_record` to run the script.
  */
 export type CapabilityRequirement = VoiceFeature | "browser"
 
 export interface Capability {
   id: CapabilityId
   group: CapabilityGroup
-  /** Modos em que a capacidade é oferecida. */
+  /** Modes in which the capability is offered. */
   modes: readonly CapabilityMode[]
   /**
-   * O que ela deixa na galeria. É a única coisa que a regra "priorizar o que
-   * ele nunca produziu" consegue consultar: sem `produces`, a capacidade nunca
-   * é marcada como nova — e por isso nunca é preterida.
+   * What it leaves in the gallery. It is the only thing the rule "prioritize what
+   * it never produced" can query: without `produces`, the capability is never
+   * marked as new — and that is why it is never passed over.
    */
   produces?: MediaKind
   /**
-   * A linha tem uma frase de exemplo que preenche o composer? As que não têm
-   * (chamada de voz, ditado) se ativam no próprio input e aparecem no painel
-   * com "onde fica", em vez do botão de experimentar.
+   * Does the line have an example sentence that fills the composer? The ones that do not
+   * (voice call, dictation) are activated in the input itself and appear in the panel
+   * with "where it is", instead of the try button.
    */
   hasExample: boolean
   /**
-   * Recurso que precisa estar ligado para a capacidade existir de verdade.
-   * Desligado, a tela não promete o que o agente não pode fazer: o painel
-   * oferece o botão de ativar e as pills pulam a linha.
+   * Resource that must be on for the capability to really exist.
+   * Off, the screen does not promise what the agent cannot do: the panel
+   * offers the enable button and the pills skip the line.
    */
   requires?: CapabilityRequirement
 }
 
 /**
- * Ordem de leitura do painel. A rotação da tela inicial parte daqui e gira,
- * então mexer nesta lista muda também quais capacidades aparecem no dia.
+ * Reading order of the panel. The start screen rotation starts here and spins,
+ * so touching this list also changes which capabilities appear on the day.
  */
 export const CAPABILITY_GROUPS: readonly CapabilityGroup[] = ["create", "media", "work"]
 
 export const CAPABILITIES: readonly Capability[] = [
-  // Criar
+  // Create
   { id: "design", group: "create", modes: ["chat", "code"], hasExample: true },
   { id: "artifact", group: "create", modes: ["chat", "code"], produces: "artifact", hasExample: true },
   { id: "document", group: "create", modes: ["chat", "code"], produces: "document", hasExample: true },
@@ -92,11 +92,11 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: "motion", group: "create", modes: ["chat", "code"], produces: "motion", hasExample: true },
   { id: "vector", group: "create", modes: ["chat", "code"], hasExample: true },
 
-  // Mídia
+  // Media
   { id: "photo", group: "media", modes: ["chat", "code"], produces: "image", hasExample: true },
   { id: "video", group: "media", modes: ["chat", "code"], produces: "video", hasExample: true },
-  // Compressão entrega vídeo OU áudio, então não declara `produces`: o tipo
-  // depende do pedido, e mentir aqui faria a tela inicial contar errado.
+  // Compression delivers video OR audio, so it does not declare `produces`: the type
+  // depends on the request, and lying here would make the start screen count wrong.
   { id: "compress", group: "media", modes: ["chat", "code"], hasExample: true },
   {
     id: "record",
@@ -112,7 +112,7 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: "voice", group: "media", modes: ["chat", "code"], hasExample: false },
   { id: "dictation", group: "media", modes: ["chat", "code"], hasExample: false },
 
-  // Trabalho
+  // Work
   { id: "memory", group: "work", modes: ["chat", "code"], hasExample: true },
   { id: "routine", group: "work", modes: ["chat", "code"], hasExample: true },
   { id: "board", group: "work", modes: ["code"], hasExample: true },

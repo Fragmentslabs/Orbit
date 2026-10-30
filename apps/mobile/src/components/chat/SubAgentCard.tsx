@@ -10,7 +10,7 @@ export function SubAgentCard({ part }: { part: ToolPart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const task = typeof part.input?.task === 'string' ? part.input.task : t('subAgentCard.defaultTask')
-  // O resultado é texto para o modelo: o aviso de "sem pasta" e o vazio viram i18n.
+  // The result is text for the model: the "no folder" notice and the empty one become i18n.
   const result = part.output ? parseSubagentOutput(part.output) : null
 
   return (

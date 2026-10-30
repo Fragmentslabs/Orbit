@@ -1,38 +1,38 @@
 import type { ProjectCategory } from '@shared/memory'
 
 /**
- * Rascunho da árvore de memórias que o coordenador do /init monta antes de
- * gravar qualquer coisa.
+ * Draft of the memory tree that the /init coordinator assembles before
+ * writing anything.
  *
- * Nada vai para a memória enquanto a análise roda. O coordenador cria, edita,
- * remove e reorganiza nós aqui, revisa o conjunto e só então o /init grava
- * tudo de uma vez. É o que impede o resultado de ser uma pilha de achados
- * soltos: cada nó passou pela revisão de quem viu o projeto inteiro, e um
- * cancelamento no meio não deixa meia árvore para trás.
+ * Nothing goes to memory while the analysis runs. The coordinator creates, edits,
+ * removes and reorganizes nodes here, reviews the whole set and only then does /init write
+ * everything at once. That is what keeps the result from being a pile of loose
+ * findings: every node went through the review of whoever saw the whole project, and a
+ * cancellation in the middle does not leave half a tree behind.
  *
- * Módulo puro (sem I/O): as regras de forma da árvore são testáveis sozinhas.
+ * Pure module (no I/O): the shape rules of the tree are testable on their own.
  */
 
 export type DraftCategory = Exclude<ProjectCategory, 'learning'>
 
 export interface DraftNode {
-  /** Identificador escolhido pelo coordenador, único no rascunho ("front", "regras-pagamento"). */
+  /** Identifier picked by the coordinator, unique in the draft ("front", "regras-pagamento"). */
   key: string
   title: string
-  /** 1–3 frases que se sustentam sozinhas — é o que entra no prompt dos chats futuros. */
+  /** 1–3 sentences that stand on their own — this is what goes into the prompt of future chats. */
   summary: string
-  /** O detalhe (caminhos, comandos, regras, fluxos), aberto sob demanda com memory_open. */
+  /** The detail (paths, commands, rules, flows), opened on demand with memory_open. */
   document?: string
   category: DraftCategory
-  /** Key de outro nó do rascunho, id de memória existente, ou null na raiz. */
+  /** Key of another draft node, id of an existing memory, or null at the root. */
   parent: string | null
-  /** Ligações transversais: keys do rascunho ou ids existentes. */
+  /** Cross links: draft keys or existing ids. */
   related: string[]
-  /** Pasta (relativa à raiz) que este nó representa — marca o nó de um subprojeto. */
+  /** Folder (relative to the root) this node represents — marks the node of a subproject. */
   scope?: string
   tags: string[]
   weight?: number
-  /** Id de memória existente que este nó reescreve, em vez de criar outra. */
+  /** Id of an existing memory this node rewrites, instead of creating another one. */
   updates?: string
 }
 
@@ -44,11 +44,11 @@ export interface DraftLearning {
 export interface Draft {
   nodes: Map<string, DraftNode>
   learnings: DraftLearning[]
-  /** Memórias existentes que o coordenador decidiu aposentar, com o motivo. */
+  /** Existing memories the coordinator decided to retire, with the reason. */
   retired: Map<string, string>
 }
 
-/** O que já existe na memória do projeto quando o /init roda de novo. */
+/** What already exists in the project memory when /init runs again. */
 export interface ExistingTree {
   ids: Set<string>
   rootId?: string
@@ -66,7 +66,7 @@ function refExists(draft: Draft, existing: ExistingTree, ref: string): boolean {
   return draft.nodes.has(ref) || existing.ids.has(ref)
 }
 
-/** Ancestrais de um nó dentro do rascunho (para barrar ciclos). */
+/** Ancestors of a node inside the draft (to block cycles). */
 function ancestorsOf(draft: Draft, key: string): string[] {
   const chain: string[] = []
   let current = draft.nodes.get(key)?.parent ?? null
@@ -78,49 +78,49 @@ function ancestorsOf(draft: Draft, key: string): string[] {
 }
 
 /**
- * Cria ou substitui um nó. Devolve o erro como texto (vai de volta ao
- * coordenador, que corrige a chamada) ou null.
+ * Creates or replaces a node. Returns the error as text (it goes back to the
+ * coordinator, which fixes the call) or null.
  *
- * Os pais vêm antes dos filhos: o pai precisa já existir no rascunho ou na
- * memória. É o que obriga a árvore a nascer de cima para baixo, com a raiz
- * pensada antes dos detalhes.
+ * Parents come before children: the parent must already exist in the draft or in
+ * memory. That is what forces the tree to be born top-down, with the root
+ * thought out before the details.
  */
 export function upsertNode(draft: Draft, existing: ExistingTree, node: DraftNode): string | null {
-  if (!KEY_PATTERN.test(node.key)) return `key inválida "${node.key}": use letras, números, "-", "_", "/" ou "." (até 60).`
-  if (!node.title.trim()) return 'title vazio.'
+  if (!KEY_PATTERN.test(node.key)) return `invalid key "${node.key}": use letters, numbers, "-", "_", "/" or "." (up to 60).`
+  if (!node.title.trim()) return 'empty title.'
   const summary = node.summary.trim()
-  if (summary.length < SUMMARY_MIN) return `summary curto demais em "${node.key}": escreva algo que se sustente sozinho.`
+  if (summary.length < SUMMARY_MIN) return `summary too short in "${node.key}": write something that stands on its own.`
   if (summary.length > SUMMARY_MAX) {
-    return `summary de "${node.key}" tem ${summary.length} caracteres (máx. ${SUMMARY_MAX}). Deixe o resumo curto e mova o detalhe para document.`
+    return `the summary of "${node.key}" has ${summary.length} characters (max. ${SUMMARY_MAX}). Keep the summary short and move the detail to document.`
   }
 
   if (node.parent === null) {
     const otherRoot = [...draft.nodes.values()].find((n) => n.parent === null && n.key !== node.key)
-    if (otherRoot) return `já existe a raiz "${otherRoot.key}". Só há uma raiz: pendure este nó nela ou em outro nó.`
+    if (otherRoot) return `the root "${otherRoot.key}" already exists. There is only one root: hang this node on it or on another node.`
     if (existing.rootId && node.updates && node.updates !== existing.rootId) {
-      return `a raiz do projeto já existe (#${existing.rootId}): a raiz do rascunho só pode atualizar ela.`
+      return `the project root already exists (#${existing.rootId}): the draft root may only update it.`
     }
-    // Re-init: a raiz do rascunho É a raiz existente, reescrita. Criar outra
-    // deixaria o projeto com duas raízes e o mapa apontando para a velha.
+    // Re-init: the draft root IS the existing root, rewritten. Creating another
+    // one would leave the project with two roots and the map pointing at the old one.
     if (existing.rootId) node = { ...node, updates: existing.rootId }
   } else {
-    if (node.parent === node.key) return 'um nó não pode ser pai de si mesmo.'
+    if (node.parent === node.key) return 'a node cannot be its own parent.'
     if (!refExists(draft, existing, node.parent)) {
-      return `pai "${node.parent}" não existe. Crie o pai antes (de cima para baixo) ou use o id de uma memória existente.`
+      return `parent "${node.parent}" does not exist. Create the parent first (top-down) or use the id of an existing memory.`
     }
     if (draft.nodes.has(node.parent) && ancestorsOf(draft, node.parent).includes(node.key)) {
-      return `"${node.parent}" está abaixo de "${node.key}": isso criaria um ciclo.`
+      return `"${node.parent}" is below "${node.key}": that would create a cycle.`
     }
   }
 
   const unknown = node.related.filter((r) => r !== node.key && !refExists(draft, existing, r))
-  if (unknown.length) return `related desconhecido(s): ${unknown.join(', ')}.`
+  if (unknown.length) return `unknown related: ${unknown.join(', ')}.`
 
   if (node.updates) {
-    if (!existing.ids.has(node.updates)) return `updates "${node.updates}" não é uma memória existente deste projeto.`
+    if (!existing.ids.has(node.updates)) return `updates "${node.updates}" is not an existing memory of this project.`
     const taken = [...draft.nodes.values()].find((n) => n.updates === node.updates && n.key !== node.key)
-    if (taken) return `a memória #${node.updates} já é atualizada pelo nó "${taken.key}".`
-    if (draft.retired.has(node.updates)) return `#${node.updates} foi aposentada neste rascunho; desfaça antes de atualizá-la.`
+    if (taken) return `memory #${node.updates} is already updated by node "${taken.key}".`
+    if (draft.retired.has(node.updates)) return `#${node.updates} was retired in this draft; undo that before updating it.`
   }
 
   draft.nodes.set(node.key, {
@@ -134,58 +134,58 @@ export function upsertNode(draft: Draft, existing: ExistingTree, node: DraftNode
   return null
 }
 
-/** Remove um nó. Recusa se ele tem filhos: o coordenador decide para onde eles vão. */
+/** Removes a node. Refuses when it has children: the coordinator decides where they go. */
 export function removeNode(draft: Draft, key: string): string | null {
-  if (!draft.nodes.has(key)) return `"${key}" não está no rascunho.`
+  if (!draft.nodes.has(key)) return `"${key}" is not in the draft.`
   const children = [...draft.nodes.values()].filter((n) => n.parent === key).map((n) => n.key)
-  if (children.length) return `"${key}" tem filhos (${children.join(', ')}): mova-os ou remova-os antes.`
+  if (children.length) return `"${key}" has children (${children.join(', ')}): move or remove them first.`
   draft.nodes.delete(key)
   for (const n of draft.nodes.values()) n.related = n.related.filter((r) => r !== key)
   return null
 }
 
 export function retireExisting(draft: Draft, existing: ExistingTree, id: string, reason: string): string | null {
-  if (!existing.ids.has(id)) return `#${id} não é uma memória existente deste projeto.`
-  if (id === existing.rootId) return 'a raiz do projeto não pode ser aposentada; atualize-a.'
+  if (!existing.ids.has(id)) return `#${id} is not an existing memory of this project.`
+  if (id === existing.rootId) return 'the project root cannot be retired; update it.'
   const updater = [...draft.nodes.values()].find((n) => n.updates === id)
-  if (updater) return `#${id} é atualizada pelo nó "${updater.key}"; não dá para aposentá-la também.`
+  if (updater) return `#${id} is updated by node "${updater.key}"; it cannot be retired as well.`
   const child = [...draft.nodes.values()].find((n) => n.parent === id)
-  if (child) return `o nó "${child.key}" está pendurado em #${id}: mude o pai dele antes.`
+  if (child) return `node "${child.key}" hangs on #${id}: change its parent first.`
   draft.retired.set(id, reason.trim())
   return null
 }
 
 /**
- * Problemas que impedem gravar. Vazio = o rascunho está pronto.
- * Sem árvore existente, a raiz é obrigatória; com árvore, o rascunho pode só
- * acrescentar ou atualizar nós debaixo dela.
+ * Problems that prevent saving. Empty = the draft is ready.
+ * With no existing tree, the root is mandatory; with a tree, the draft may only
+ * add or update nodes under it.
  */
 export function validateDraft(draft: Draft, existing: ExistingTree): string[] {
   const issues: string[] = []
   const nodes = [...draft.nodes.values()]
   const roots = nodes.filter((n) => n.parent === null)
   if (!existing.rootId && roots.length === 0 && nodes.length > 0) {
-    issues.push('falta a raiz: um nó com parent null descrevendo o projeto.')
+    issues.push('missing the root: a node with parent null describing the project.')
   }
-  if (roots.length > 1) issues.push(`há ${roots.length} raízes; deve haver uma.`)
+  if (roots.length > 1) issues.push(`there are ${roots.length} roots; there must be one.`)
   for (const n of nodes) {
     if (n.parent !== null && !refExists(draft, existing, n.parent)) {
-      issues.push(`"${n.key}" aponta para o pai "${n.parent}", que não existe.`)
+      issues.push(`"${n.key}" points at parent "${n.parent}", which does not exist.`)
     }
-    if (n.parent !== null && n.parent === n.updates) issues.push(`"${n.key}" é pai de si mesmo via updates.`)
-    for (const r of n.related) if (!refExists(draft, existing, r)) issues.push(`"${n.key}" liga a "${r}", que não existe.`)
+    if (n.parent !== null && n.parent === n.updates) issues.push(`"${n.key}" is its own parent via updates.`)
+    for (const r of n.related) if (!refExists(draft, existing, r)) issues.push(`"${n.key}" links to "${r}", which does not exist.`)
   }
   const scopes = new Map<string, string>()
   for (const n of nodes) {
     if (!n.scope) continue
     const key = n.scope.toLowerCase()
-    if (scopes.has(key)) issues.push(`"${n.key}" e "${scopes.get(key)}" representam a mesma pasta "${n.scope}".`)
+    if (scopes.has(key)) issues.push(`"${n.key}" and "${scopes.get(key)}" represent the same folder "${n.scope}".`)
     scopes.set(key, n.key)
   }
   return issues
 }
 
-/** Ordem de gravação: pais antes dos filhos, para cada filho já ter o id do pai. */
+/** Write order: parents before children, so that each child already has the parent id. */
 export function commitOrder(draft: Draft): DraftNode[] {
   const ordered: DraftNode[] = []
   const placed = new Set<string>()
@@ -200,7 +200,7 @@ export function commitOrder(draft: Draft): DraftNode[] {
         pending.splice(i--, 1)
       }
     }
-    // Ciclo que escapou da validação: grava o resto como está em vez de travar.
+    // A cycle that escaped validation: write the rest as it is instead of hanging.
     if (pending.length === before) {
       ordered.push(...pending)
       break
@@ -209,7 +209,7 @@ export function commitOrder(draft: Draft): DraftNode[] {
   return ordered
 }
 
-/** Pasta do subprojeto de um nó: o scope dele ou do ancestral mais próximo que tenha um. */
+/** Subproject folder of a node: its own scope or the closest ancestor that has one. */
 export function subprojectOf(draft: Draft, key: string): string | undefined {
   let current: DraftNode | undefined = draft.nodes.get(key)
   const seen = new Set<string>()
@@ -221,42 +221,42 @@ export function subprojectOf(draft: Draft, key: string): string | undefined {
   return undefined
 }
 
-/** Texto curto gravado na memória: o título abre a linha, que é também o rótulo no grafo. */
+/** Short text written to memory: the title opens the line, which is also the label in the graph. */
 export function memoryText(node: DraftNode): string {
   return `${node.title}: ${node.summary}`
 }
 
-/** O rascunho como o coordenador o vê: a árvore indentada, com o que cada nó carrega. */
+/** The draft as the coordinator sees it: the indented tree, with what each node carries. */
 export function renderDraft(draft: Draft, existing: ExistingTree): string {
   const nodes = [...draft.nodes.values()]
-  if (nodes.length === 0 && draft.learnings.length === 0 && draft.retired.size === 0) return '(rascunho vazio)'
+  if (nodes.length === 0 && draft.learnings.length === 0 && draft.retired.size === 0) return '(empty draft)'
   const lines: string[] = []
   const visit = (parent: string | null, depth: number) => {
     for (const n of nodes.filter((x) => x.parent === parent)) {
       const marks = [
         n.category,
-        n.scope ? `pasta ${n.scope}` : '',
-        n.document ? `doc ${n.document.length} chars` : 'sem doc',
-        n.updates ? `atualiza #${n.updates}` : '',
-        n.related.length ? `liga ${n.related.join(', ')}` : '',
+        n.scope ? `folder ${n.scope}` : '',
+        n.document ? `doc ${n.document.length} chars` : 'no doc',
+        n.updates ? `updates #${n.updates}` : '',
+        n.related.length ? `links ${n.related.join(', ')}` : '',
       ].filter(Boolean)
       lines.push(`${'  '.repeat(depth)}- [${n.key}] ${n.title} (${marks.join('; ')}): ${n.summary}`)
       visit(n.key, depth + 1)
     }
   }
   visit(null, 0)
-  // Nós pendurados em memórias que já existiam (re-init): agrupados pelo pai.
+  // Nodes hanging off memories that already existed (re-init): grouped by parent.
   const underExisting = [...new Set(nodes.map((n) => n.parent).filter((p): p is string => !!p && existing.ids.has(p) && !draft.nodes.has(p)))]
   for (const id of underExisting) {
-    lines.push(`- (existente #${id})`)
+    lines.push(`- (existing #${id})`)
     visit(id, 1)
   }
   if (draft.learnings.length) {
-    lines.push('Aprendizados (fora da árvore, valem para outros projetos):')
+    lines.push('Learnings (outside the tree, valid for other projects):')
     for (const l of draft.learnings) lines.push(`  - ${l.text}`)
   }
   if (draft.retired.size) {
-    lines.push('Memórias existentes a aposentar:')
+    lines.push('Existing memories to retire:')
     for (const [id, reason] of draft.retired) lines.push(`  - #${id}: ${reason}`)
   }
   return lines.join('\n')

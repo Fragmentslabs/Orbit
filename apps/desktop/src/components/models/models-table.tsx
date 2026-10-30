@@ -11,7 +11,7 @@ import { formatContext, formatPrice, SPEED_LABELS } from "./meta"
 import { ModelCheckbox, ScoreBar } from "./shared"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Tabela de exploração de modelos — ordenável, com checkbox de comparação. */
+/** Model exploration table — sortable, with a comparison checkbox. */
 
 type SortKey = "name" | "coding" | "agentic" | "intelligence" | "speed" | "context" | "price"
 

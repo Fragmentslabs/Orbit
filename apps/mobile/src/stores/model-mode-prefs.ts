@@ -2,16 +2,16 @@ import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
 
 /**
- * Defaults configuráveis dos modos ativos, separados por modo chat/code —
- * espelho do model-mode-prefs do desktop. O valor efetivo de cada toggle é
- * `override ?? default`: o default vem daqui e o override (por chat) vem de
+ * Configurable defaults of the active modes, separated per chat/code mode —
+ * mirror of the desktop model-mode-prefs. The effective value of each toggle is
+ * `override ?? default`: the default comes from here and the override (per chat) comes from
  * mode-overrides / simple-prefs / brain-prefs.
  */
 
 const CHAT_ACTIVE_MODES_KEY = 'orbit_chat_active_modes'
 const CODE_ACTIVE_MODES_KEY = 'orbit_code_active_modes'
-// Chaves legadas do modo Visão global (settings-store) — usadas só na migração
-// para os defaults por modo; o modo virou per-chat (mode-overrides)
+// Legacy keys of the global Vision mode (settings-store) — used only in the migration
+// to the per-mode defaults; the mode became per-chat (mode-overrides)
 const LEGACY_VISION_ENABLED_KEY = 'orbit_vision_enabled'
 const LEGACY_VISION_MODEL_KEY = 'orbit_vision_model'
 
@@ -51,8 +51,8 @@ const DEFAULT_CODE_MODES: ActiveModeDefaults = {
   vision: false,
 }
 
-/** Migração do modo Visão: o flag global antigo vira o default dos dois modos.
- *  Sem flag, um modelo de visão configurado também contava como ativo. */
+/** Vision mode migration: the old global flag becomes the default of both modes.
+ *  Without the flag, a configured vision model also counted as active. */
 async function legacyVisionDefault(): Promise<boolean> {
   try {
     const raw = await Storage.getItem(LEGACY_VISION_ENABLED_KEY)
@@ -90,7 +90,7 @@ export const useModelModePrefs = create<ModelModePrefsState>((set, get) => ({
         chatStored = rawChat ? (JSON.parse(rawChat) as Partial<ActiveModeDefaults>) : null
         codeStored = rawCode ? (JSON.parse(rawCode) as Partial<ActiveModeDefaults>) : null
       } catch {
-        // prefs corrompidas → volta ao default
+        // corrupted prefs → goes back to the default
       }
       const apply = (
         stored: Partial<ActiveModeDefaults> | null,

@@ -17,20 +17,20 @@ import { useThemeStore } from '~/stores/theme-store'
 
 const DEFAULT_PORT = '3847'
 const SLIDE_DURATION = 250
-/** Altura máxima do drawer — recentes + formulário rolam internamente. */
+/** Maximum height of the drawer — recents + form scroll internally. */
 const MAX_SHEET_HEIGHT = 640
 
 interface ManualConnectSheetProps {
   visible: boolean
   onClose: () => void
-  /** Host/porta pré-preenchidos (ex.: QR escaneado sem PIN). */
+  /** Host/port pre-filled (e.g. QR scanned without a PIN). */
   prefill?: { host: string; port: number }
 }
 
 /**
- * Drawer de conexão manual (substitui o antigo card UrlAccordion).
- * Reúne as conexões recentes e o formulário IP/porta/PIN em um só lugar,
- * mantendo a tela principal limpa.
+ * Manual connection drawer (replaces the former UrlAccordion card).
+ * Brings together the recent connections and the IP/port/PIN form in one place,
+ * keeping the main screen clean.
  */
 export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectSheetProps) {
   const { t } = useTranslation()
@@ -51,10 +51,10 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
   const isConnecting = connection.status === 'connecting' || connection.status === 'authenticating'
   const errorMessage = connectionErrorMessage(connection, t)
 
-  // Altura do teclado — usada para limitar a altura do drawer quando o teclado
-  // abre (evita o cabeçalho sair da tela). O levantamento suave fica por conta
-  // do KeyboardAvoidingView do react-native-keyboard-controller (mesma
-  // convenção do ChatScreen).
+  // Keyboard height — used to limit the height of the drawer when the keyboard
+  // opens (keeps the header from leaving the screen). The smooth lift is up to
+  // the KeyboardAvoidingView of react-native-keyboard-controller (same
+  // convention as the ChatScreen).
   const [kbHeight, setKbHeight] = useState(0)
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
     ]).start()
   }, [visible, slideAnim, backdropAnim])
 
-  // Prefill chega enquanto o drawer abre (QR escaneado sem PIN) — preenche e foca o PIN.
+  // Prefill arrives while the drawer opens (QR scanned without a PIN) — fills it in and focuses the PIN.
   useEffect(() => {
     if (visible && prefill && prefill !== prevPrefillRef.current) {
       setIp(prefill.host)
@@ -111,7 +111,7 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
       doConnect(rc.host, rc.port, rc.pin ?? '', rc.token)
       return
     }
-    // Sem credencial salva — cai no formulário pré-preenchido.
+    // No saved credential — falls back to the pre-filled form.
     setIp(rc.host)
     setPort(String(rc.port))
     setTimeout(() => pinRefs.current[0]?.focus(), 350)
@@ -134,7 +134,7 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
     if (index < 5) {
       pinRefs.current[index + 1]?.focus()
     } else if (index === 5) {
-      // 6º dígito — submete automaticamente após um breve delay
+      // 6th digit — submits automatically after a brief delay
       const fullPin = pin.slice(0, 5).join('') + digit
       if (ip.trim().length > 0 && port.trim().length > 0 && fullPin.length === 6) {
         setTimeout(() => {

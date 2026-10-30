@@ -1,19 +1,19 @@
 /**
- * O quadrado padrão das ações da mensagem (copiar, ouvir, responder, reverter).
+ * The standard square of the message actions (copy, listen, reply, revert).
  *
- * 21×21 = ícone de 13 + 4 de respiro de cada lado. Existe porque o alinhamento
- * da barra não pode depender do tamanho intrínseco do que está dentro: o
- * indicador de atividade do estado "gerando" mede 20px, e com `padding` ele
- * esticava o botão (28×28), empurrando a linha inteira e tirando o ícone da
- * linha óptica dos outros.
+ * 21×21 = 13 icon + 4 of breathing room on each side. It exists because the alignment
+ * of the bar cannot depend on the intrinsic size of what is inside: the
+ * activity indicator of the "generating" state measures 20px, and with `padding` it
+ * stretched the button (28×28), pushing the whole row and taking the icon off the
+ * optical line of the others.
  *
- * Com caixa fixa e conteúdo centralizado, as quatro ações ficam no mesmo eixo
- * em QUALQUER estado — inclusive enquanto a voz é gerada.
+ * With a fixed box and centered content, the four actions stay on the same axis
+ * in ANY state — including while the voice is being generated.
  */
 import type { ReactNode } from 'react'
 import { Pressable } from 'react-native'
 
-/** Lado do quadrado. Um só número para todas as ações: é o que as alinha. */
+/** Side of the square. A single number for all the actions: it is what aligns them. */
 export const ICON_BUTTON_SIZE = 21
 
 interface IconButtonProps {

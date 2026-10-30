@@ -52,9 +52,9 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
   const [selectedDate, setSelectedDate] = useState(() => new Date(Date.now() + 30 * 60 * 1000))
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [customExpanded, setCustomExpanded] = useState(false)
-  // `preview` e `now` são derivados, não estado: preview é sempre o
-  // formatDateTime da selectedDate, e `now` é congelado na abertura da folha
-  // (ler o relógio no render torna o componente impuro).
+  // `preview` and `now` are derived, not state: preview is always the
+  // formatDateTime of the selectedDate, and `now` is frozen when the sheet opens
+  // (reading the clock during render makes the component impure).
   const [now, setNow] = useState(() => Date.now())
 
   const [pickerTarget, setPickerTarget] = useState<'date' | 'time' | null>(null)
@@ -74,11 +74,11 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     ]).start()
 
     if (visible) {
-      // Caso irredutível: a folha precisa semear a data a partir do RELÓGIO
-      // quando abre. Ler o relógio no render é impuro (react-hooks/purity), e
-      // a abertura só chega aqui como mudança de prop — não há handler onde
-      // fazer isso. O efeito é o lugar semanticamente certo para leitura
-      // impura; o setState que vem junto é o preço.
+      // Irreducible case: the sheet needs to seed the date from the CLOCK
+      // when it opens. Reading the clock during render is impure (react-hooks/purity), and
+      // the opening only arrives here as a prop change — there is no handler where
+      // to do it. The effect is the semantically right place for an impure
+      // read; the setState that comes with it is the price.
       const abertura = Date.now()
       /* eslint-disable react-hooks/set-state-in-effect */
       setNow(abertura)
@@ -87,8 +87,8 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     }
   }, [visible, slideAnim, backdropAnim])
 
-  // Estado inicial de cada abertura, ajustado no render: o efeito acima cuida
-  // só da animação, e assim a folha já entra com a data certa na 1ª pintura.
+  // Initial state of each opening, adjusted during render: the effect above takes care
+  // only of the animation, and so the sheet already comes in with the right date on the 1st paint.
   const [wasVisible, setWasVisible] = useState(visible)
   if (visible !== wasVisible) {
     setWasVisible(visible)
@@ -244,7 +244,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
         </View>
       </Animated.View>
 
-      {/* Mini-modal para picker de data */}
+      {/* Mini-modal for the date picker */}
       <Modal visible={pickerTarget === 'date'} transparent animationType="fade" onRequestClose={() => setPickerTarget(null)}>
         <View style={s.pickerOverlay}>
           <View style={[s.pickerModal, { backgroundColor: tokens.card }]}>
@@ -262,7 +262,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
         </View>
       </Modal>
 
-      {/* Mini-modal para picker de horário */}
+      {/* Mini-modal for the time picker */}
       <Modal visible={pickerTarget === 'time'} transparent animationType="fade" onRequestClose={() => setPickerTarget(null)}>
         <View style={s.pickerOverlay}>
           <View style={[s.pickerModal, { backgroundColor: tokens.card }]}>

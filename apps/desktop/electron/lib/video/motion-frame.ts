@@ -5,40 +5,40 @@ import { MOTION_SPEC } from './motion-runtime'
 import { prepareMotionPreview } from './motion-preview'
 
 /**
- * A olhada BARATA numa composição de motion: em vez de renderizar o clipe
- * inteiro para saber como ele está, captura só os instantes pedidos e devolve
- * uma folha de contato (webp) com o tempo e o número do quadro em cada célula.
+ * The CHEAP look at a motion composition: instead of rendering the whole
+ * clip to know how it is, it captures only the requested instants and returns
+ * a contact sheet (webp) with the time and the frame number in each cell.
  *
- * UMA janela offscreen serve a composição pelo scheme `orbit-motion://` (o mesmo
- * do preview) e dá seek em cada instante, na ordem pedida — sem ffmpeg e sem
- * vídeo: milissegundos, não segundos. É o degrau entre o preview (a aba do
- * painel, para o humano) e o render final.
+ * ONE offscreen window serves the composition through the `orbit-motion://` scheme (the same
+ * one as the preview) and seeks to each instant, in the requested order — no ffmpeg and no
+ * video: milliseconds, not seconds. It is the step between the preview (the panel's
+ * tab, for the human) and the final render.
  *
- * Irmão do motion-preview: a conversão tempo→quadro e a geometria da folha são
- * PURAS (testadas sem Electron); só `captureMotionFrames` toca na janela.
+ * Sibling of motion-preview: the time→frame conversion and the sheet geometry are
+ * PURE (tested without Electron); only `captureMotionFrames` touches the window.
  */
 
-/** Teto de instantes por folha: é uma olhada, não uma varredura do clipe. */
+/** Cap on instants per sheet: it is a look, not a scan of the clip. */
 export const MAX_FRAME_TIMES = 8
 
-/** Largura da folha (a mesma do video_timeline) e geometria das células. */
+/** Sheet width (the same as video_timeline) and cell geometry. */
 const SHEET_WIDTH = 1600
 const SHEET_PAD = 12
 const SHEET_GAP = 10
 const SHEET_HEADER = 26
-/** Faixa do rótulo, sobreposta no rodapé da célula. */
+/** Label band, overlaid on the cell's footer. */
 const LABEL_HEIGHT = 20
 
-// ----------------------------------------------------------- tempo → quadro
+// ----------------------------------------------------------- time → frame
 
 /**
- * Converte os instantes pedidos (em SEGUNDOS) em quadros INTEIROS, validando:
- * 1 a MAX_FRAME_TIMES instantes, cada um finito e > 0 e — quando a duração da
- * composição é conhecida — dentro dela. O arredondamento é o mesmo do runtime
- * (quadro mais próximo) e o resultado fica preso em [0, durationInFrames-1]:
- * pedir 4 s de um clipe de 4 s devolve o ÚLTIMO quadro, não um quadro que não
- * existe. Um instante além do fim é erro (com o máximo, para o agente se
- * corrigir).
+ * Converts the requested instants (in SECONDS) into WHOLE frames, validating:
+ * 1 to MAX_FRAME_TIMES instants, each one finite and > 0 and — when the composition's
+ * duration is known — inside it. The rounding is the same as the runtime's
+ * (nearest frame) and the result is clamped to [0, durationInFrames-1]:
+ * asking for 4 s of a 4 s clip returns the LAST frame, not a frame that does not
+ * exist. An instant beyond the end is an error (with the maximum, so the agent can
+ * correct itself).
  */
 export function framesFromTimes(times: number[], opts: { fps: number; durationInFrames?: number }): number[] {
   const { fps, durationInFrames } = opts
@@ -47,8 +47,8 @@ export function framesFromTimes(times: number[], opts: { fps: number; durationIn
   if (times.length > MAX_FRAME_TIMES) {
     throw new Error(`at most ${MAX_FRAME_TIMES} instants per sheet (got ${times.length})`)
   }
-  // A duração em segundos é durationInFrames / fps: um instante no fim exato do
-  // clipe é aceito e cai no último quadro.
+  // The duration in seconds is durationInFrames / fps: an instant at the exact end of the
+  // clip is accepted and falls on the last frame.
   const maxSeconds = durationInFrames && durationInFrames > 0 ? durationInFrames / fps : Infinity
   return times.map((seconds) => {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
@@ -64,11 +64,11 @@ export function framesFromTimes(times: number[], opts: { fps: number; durationIn
   })
 }
 
-// -------------------------------------------------------- geometria da folha
+// -------------------------------------------------------- sheet geometry
 
 /**
- * Colunas da grade: 1 instante ocupa a folha, 2 a 4 vão em duas colunas e 5 a 8
- * em quatro — a célula fica grande o bastante para julgar o quadro.
+ * Grid columns: 1 instant takes the sheet, 2 to 4 go in two columns and 5 to 8
+ * in four — the cell stays large enough to judge the frame.
  */
 export function sheetColumns(count: number): number {
   if (count <= 1) return 1
@@ -88,7 +88,7 @@ export interface SheetGeometry {
   header: number
 }
 
-/** Grade da folha: `count` células de `aspect` dentro de `width` px. Pura. */
+/** Sheet grid: `count` cells of `aspect` inside `width` px. Pure. */
 export function sheetLayout(input: { count: number; aspect?: number; width?: number; columns?: number }): SheetGeometry {
   const count = Math.max(1, Math.floor(input.count) || 1)
   const width = input.width ?? SHEET_WIDTH
@@ -110,7 +110,7 @@ export function sheetLayout(input: { count: number; aspect?: number; width?: num
   }
 }
 
-/** Retângulo da célula `index` (a imagem; o rótulo vai sobreposto no rodapé). */
+/** Rectangle of the cell at `index` (the image; the label is overlaid on the footer). */
 export function sheetCell(geometry: SheetGeometry, index: number): { x: number; y: number; width: number; height: number } {
   const column = index % geometry.columns
   const row = Math.floor(index / geometry.columns)
@@ -123,19 +123,19 @@ export function sheetCell(geometry: SheetGeometry, index: number): { x: number; 
 }
 
 /**
- * Rótulo da célula: o tempo *pedido* (não o do quadro arredondado — o agente
- * precisa reconhecer o instante que ele mesmo escolheu) e o quadro inteiro em
- * que ele caiu.
+ * Cell label: the *requested* time (not the rounded frame's — the agent
+ * needs to recognize the instant it chose itself) and the whole frame it
+ * fell on.
  */
 export function frameLabel(timeMs: number, frame: number): string {
   return `${(timeMs / 1000).toFixed(2)}s · f${frame}`
 }
 
 /**
- * Nome do arquivo da folha, a partir da pasta da composição: o que não é seguro
- * em nome de arquivo vira '-', separadores repetidos viram um só (nada de
- * "aaa---bbb") e o nome não pode começar nem terminar em ponto ou hífen — no
- * Windows isso criaria arquivo invisível ou inválido.
+ * File name of the sheet, from the composition's folder: what is not safe
+ * in a file name becomes '-', repeated separators become one (no
+ * "aaa---bbb") and the name cannot start or end with a dot or a hyphen — on
+ * Windows that would create an invisible or invalid file.
  */
 export function sheetFileName(name: string): string {
   const base = (name ?? '')
@@ -145,19 +145,19 @@ export function sheetFileName(name: string): string {
   return `${base || 'motion'}.webp`
 }
 
-// ------------------------------------------------------------ folha (canvas)
+// ------------------------------------------------------------ sheet (canvas)
 
 export interface FrameShot {
-  /** Quadro capturado na janela (PNG). */
+  /** Frame captured in the window (PNG). */
   png: Buffer
-  /** Instante pedido, em ms. */
+  /** Requested instant, in ms. */
   timeMs: number
-  /** Quadro inteiro capturado. */
+  /** Whole frame captured. */
   frame: number
 }
 
 export interface FrameSheet {
-  /** Nome da composição — vira o cabeçalho da folha. */
+  /** Composition name — it becomes the sheet's header. */
   title: string
   fps: number
   durationInFrames?: number
@@ -165,10 +165,10 @@ export interface FrameSheet {
 }
 
 /**
- * Monta a folha de contato (webp) com `@napi-rs/canvas` — a mesma biblioteca do
- * video_timeline. Uma célula por instante, na ordem pedida, com o tempo e o
- * quadro impressos nela; o cabeçalho diz de que composição e de que formato é a
- * folha.
+ * Assembles the contact sheet (webp) with `@napi-rs/canvas` — the same library as
+ * video_timeline. One cell per instant, in the requested order, with the time and the
+ * frame printed on it; the header says which composition and which format the
+ * sheet is.
  */
 export async function renderFrameSheet(sheet: FrameSheet): Promise<Buffer> {
   const { createCanvas, loadImage } = await import('@napi-rs/canvas')
@@ -202,9 +202,9 @@ export async function renderFrameSheet(sheet: FrameSheet): Promise<Buffer> {
   return canvas.encode('webp', 82)
 }
 
-// -------------------------------------------------------------- captura
+// -------------------------------------------------------------- capture
 
-/** Foto do estado da composição publicada pelo runtime (ver MOTION_SPEC). */
+/** Snapshot of the state of the composition published by the runtime (see MOTION_SPEC). */
 interface MotionPageSpec {
   width?: number
   height?: number
@@ -213,44 +213,44 @@ interface MotionPageSpec {
   failedFonts?: string[]
 }
 
-/** O runtime expõe o seek por accessor; sem ele, não há o que capturar. */
+/** The runtime exposes the seek through an accessor; without it, there is nothing to capture. */
 const BRIDGE_CHECK = '!!(window.orbitMotion && typeof window.orbitMotion.seek === "function")'
 
 export interface MotionFrameRequest {
-  /** Alvo já resolvido (absoluto): o .html de entrada ou a pasta dele. */
+  /** Target already resolved (absolute): the entry .html or its folder. */
   target: string
-  /** Instantes em SEGUNDOS, na ordem em que devem ser capturados. */
+  /** Instants in SECONDS, in the order they must be captured. */
   times: number[]
-  /** Pasta de trabalho que registra a composição e a sessão. */
+  /** Working folder that registers the composition and the session. */
   root?: string
   sessionId?: string
   signal?: AbortSignal
 }
 
 export interface MotionFrameResult {
-  /** Folha de contato (webp). */
+  /** Contact sheet (webp). */
   image: Buffer
-  /** Nome da composição (a pasta dela) — o cabeçalho da folha. */
+  /** Composition name (its folder) — the sheet's header. */
   name: string
-  /** Entrada servida e a URL do scheme de onde ela veio. */
+  /** Entry served and the scheme URL it came from. */
   file: string
   url: string
   fps: number
   durationInFrames: number
-  /** Tamanho capturado (o que a janela pintou), útil para julgar o enquadramento. */
+  /** Captured size (what the window painted), useful to judge the framing. */
   width: number
   height: number
-  /** Fontes que falharam (o texto caiu no fallback, em silêncio). */
+  /** Fonts that failed (the text fell back, silently). */
   failedFonts: string[]
-  /** Um por instante pedido, na MESMA ordem. */
+  /** One per requested instant, in the SAME order. */
   cells: { timeMs: number; frame: number }[]
 }
 
 /**
- * Captura os instantes pedidos numa única janela offscreen e devolve a folha.
- * O formato (fps, duração, tamanho) é o que a própria composição declarou — lido
- * do runtime, o mesmo que o render usa, então a folha mostra o que o render
- * produziria naqueles quadros.
+ * Captures the requested instants in a single offscreen window and returns the sheet.
+ * The format (fps, duration, size) is what the composition itself declared — read
+ * from the runtime, the same one the render uses, so the sheet shows what the render
+ * would produce on those frames.
  */
 export async function captureMotionFrames(req: MotionFrameRequest): Promise<MotionFrameResult> {
   const preview = await prepareMotionPreview(req.target, { root: req.root, sessionId: req.sessionId })
@@ -269,7 +269,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       nodeIntegration: false,
     },
   })
-  // A composição é uma página de vídeo, não um navegador: nada de sair dela.
+  // The composition is a video page, not a browser: nothing about leaving it.
   win.webContents.on('will-navigate', (e) => e.preventDefault())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   const onAbort = () => {
@@ -278,8 +278,8 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
   req.signal?.addEventListener('abort', onAbort, { once: true })
 
   try {
-    // O runtime entra como PRIMEIRO script do <head> — é o protocolo do scheme
-    // que serve a entrada (o mesmo caminho do preview).
+    // The runtime enters as the FIRST script of the <head> — it is the protocol of the scheme
+    // that serves the entry (the same path as the preview).
     await win.loadURL(preview.url)
     await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)', true)
     const spec = (await win.webContents.executeJavaScript(MOTION_SPEC, true)) as MotionPageSpec | null
@@ -291,8 +291,8 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
         'unknown duration: declare <meta name="orbit-motion" content="duration=…">, window.orbitMotion.durationInFrames or window.orbitTimeline',
       )
     }
-    // Sem o bridge o seek falharia lá dentro com um TypeError opaco: melhor dizer
-    // na hora por que a janela não serve para capturar.
+    // Without the bridge the seek would fail in there with an opaque TypeError: better to say
+    // right away why the window cannot be used to capture.
     if (!(await win.webContents.executeJavaScript(BRIDGE_CHECK, true))) {
       throw new Error('window.orbitMotion.seek(frame) is missing in the capture window — the runtime did not take over the composition')
     }
@@ -305,7 +305,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
     let height = Math.round(spec.height ?? 1080)
     for (let i = 0; i < frames.length; i++) {
       if (req.signal?.aborted) throw new Error('cancelled')
-      // Quadro inteiro, na ordem pedida: o runtime converte para segundos lá dentro.
+      // Whole frame, in the requested order: the runtime converts to seconds in there.
       await win.webContents.executeJavaScript(`window.orbitMotion.seek(${frames[i]})`, true)
       const image = await capturePageReliably(win.webContents)
       if (i === 0) {

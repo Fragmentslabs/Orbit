@@ -1,27 +1,27 @@
 /**
- * Recuperação de memórias: peças puras (sem I/O, sem Electron) compartilhadas
- * entre o main, o renderer e o benchmark.
+ * Memory retrieval: pure parts (no I/O, no Electron) shared
+ * between the main, the renderer and the benchmark.
  *
- *  - texto de índice enriquecido por memória (`buildRetrievalText`)
- *  - busca lexical BM25 sobre campos, com tokenização Unicode independente de
- *    idioma (sem stopwords nem stemming de um idioma só: o IDF já rebaixa o que
- *    aparece em todo lugar)
- *  - fusão de rankings por Reciprocal Rank Fusion
+ *  - index text enriched per memory (`buildRetrievalText`)
+ *  - BM25 lexical search over fields, with Unicode tokenization independent of
+ *    language (no stopwords or stemming for a single language: the IDF already lowers what
+ *    appears everywhere)
+ *  - fusion of rankings by Reciprocal Rank Fusion
  *
- * A busca semântica (embeddings) vive no main; aqui só existem as funções que
- * não dependem do modelo.
+ * The semantic search (embeddings) lives in the main; here there are only the functions that
+ * do not depend on the model.
  */
 
 import type { Memory } from "./memory"
 
 // ---------------------------------------------------------------------------
-// Texto e tokens
+// Text and tokens
 // ---------------------------------------------------------------------------
 
 /**
- * Minúsculas + NFKC + sem diacríticos, mas só em alfabetos que os dispensam
- * (latino, cirílico, grego): arrancar marcas de kana (dakuten) ou de devanágari
- * muda a palavra.
+ * Lowercase + NFKC + no diacritics, but only in alphabets that do without them
+ * (Latin, Cyrillic, Greek): stripping marks from kana (dakuten) or from Devanagari
+ * changes the word.
  */
 export function foldText(text: string): string {
   return text
@@ -32,14 +32,14 @@ export function foldText(text: string): string {
     .normalize("NFC")
 }
 
-/** Escritas sem espaço entre palavras: viram bigramas de caractere. */
+/** Scripts without spaces between words: they become character bigrams. */
 const UNSEGMENTED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]+/gu
 const WORD = /[\p{L}\p{N}\p{M}]+(?:[-_./][\p{L}\p{N}\p{M}]+)*/gu
 
 /**
- * Tokens de busca. Identificadores com número ("ATL-2291", "v2.3.1", "SF-88213")
- * entram inteiros E divididos; texto sem espaço (japonês, chinês, tailandês…)
- * entra como bigramas.
+ * Search tokens. Identifiers with a number ("ATL-2291", "v2.3.1", "SF-88213")
+ * enter whole AND split; text without spaces (Japanese, Chinese, Thai…)
+ * enters as bigrams.
  */
 export function lexTokens(text: string): string[] {
   const out: string[] = []
@@ -68,16 +68,16 @@ function pushPart(part: string, out: string[]) {
 }
 
 // ---------------------------------------------------------------------------
-// Campos derivados da memória (enriquecimento)
+// Fields derived from the memory (enrichment)
 // ---------------------------------------------------------------------------
 
 /**
- * Versão do esquema do texto de índice. Subir este número invalida os vetores
- * de todas as memórias (o indexador reprocessa em segundo plano).
+ * Version of the index text schema. Raising this number invalidates the vectors
+ * of all memories (the indexer reprocesses in the background).
  */
 export const INDEX_SCHEMA_VERSION = 1
 
-/** Teto do texto de índice — mantém o custo de embedding e de índice controlado. */
+/** Ceiling of the index text — keeps the embedding and index cost under control. */
 export const RETRIEVAL_TEXT_MAX_CHARS = 700
 
 type IndexSource = Pick<Memory, "text" | "tags"> &
@@ -85,7 +85,7 @@ type IndexSource = Pick<Memory, "text" | "tags"> &
 
 const clean = (s: string) => s.replace(/\s+/g, " ").trim()
 
-/** Título curto. O do LLM manda; sem ele, a primeira oração do texto. */
+/** Short title. The LLM one has priority; without it, the first sentence of the text. */
 export function deriveTitle(memory: IndexSource): string {
   if (memory.title?.trim()) return clean(memory.title)
   const first = clean(memory.text)
@@ -95,10 +95,10 @@ export function deriveTitle(memory: IndexSource): string {
 }
 
 /**
- * Entidades. As do LLM mandam; sem elas, uma heurística conservadora e sem
- * idioma específico: identificadores com dígito/hífen/ponto e sequências de
- * palavras Capitalizadas fora do início de frase. Não inventa nada: só devolve
- * trechos que já estão no texto.
+ * Entities. The ones from the LLM take precedence; without them, a conservative heuristic with no
+ * specific language: identifiers with a digit/hyphen/dot and sequences of
+ * Capitalized words outside the start of a sentence. It invents nothing: it only returns
+ * snippets that are already in the text.
  */
 export function deriveEntities(memory: IndexSource): string[] {
   if (memory.entities?.length) return unique(memory.entities.map(clean).filter(Boolean)).slice(0, 12)
@@ -116,7 +116,7 @@ export function deriveEntities(memory: IndexSource): string[] {
   return unique(found).slice(0, 12)
 }
 
-/** Palavras-chave: as do LLM, mais as tags. */
+/** Keywords: the LLM ones, plus the tags. */
 export function deriveKeywords(memory: IndexSource): string[] {
   return unique([...(memory.keywords ?? []), ...memory.tags].map(clean).filter(Boolean)).slice(0, 16)
 }
@@ -134,19 +134,19 @@ function unique(items: string[]): string[] {
 }
 
 /**
- * Representação consolidada para o embedding: título, conteúdo original,
- * entidades, palavras-chave e conceitos. Rótulos de idioma ficam de fora de
- * propósito (a memória pode estar em qualquer língua); o que não está na
- * memória não entra. O conteúdo original é sempre preservado por inteiro e os
- * extras são cortados primeiro quando passa do teto.
+ * Consolidated representation for the embedding: title, original content,
+ * entities, keywords and concepts. Language labels are left out on
+ * purpose (a memory can be in any language); what is not in the
+ * memory does not go in. The original content is always preserved in full and the
+ * extras are cut first when the ceiling is exceeded.
  */
 export function buildRetrievalText(memory: IndexSource, options: { extras?: boolean } = {}): string {
   const text = clean(memory.text)
   if (options.extras === false) return text
   const title = deriveTitle(memory)
-  // O corte do sufixo tem de vir ANTES de dobrar: o foldText passa por NFKC, e
-  // NFKC transforma "…" em "...". Comparando depois, o título derivado (que
-  // termina em "…") nunca era reconhecido como parte do texto.
+  // The suffix cut has to come BEFORE folding: foldText goes through NFKC, and
+  // NFKC turns "…" into "...". Comparing afterwards, the derived title (which
+  // ends in "…") was never recognized as part of the text.
   const head = title && foldText(text).includes(foldText(title.replace(/…$/, ""))) ? "" : title
   const extras: string[] = []
   const seen = new Set(lexTokens(`${head} ${text}`))
@@ -157,9 +157,9 @@ export function buildRetrievalText(memory: IndexSource, options: { extras?: bool
     for (const item of group) for (const t of lexTokens(item)) seen.add(t)
   }
   const parts = [memory.summary && memory.summary !== memory.text ? clean(memory.summary) : "", ...extras]
-  // O texto é o conteúdo e entra SEMPRE inteiro. O teto existe para o
-  // enriquecimento não diluir o vetor, nunca para cortar o fato: antes, um
-  // título que não coubesse junto do texto fazia o índice guardar só o título.
+  // The text is the content and ALWAYS enters in full. The ceiling exists so the
+  // enrichment does not dilute the vector, never to cut the fact: before, a
+  // title that did not fit along with the text made the index store only the title.
   let out = head ? `${head}. ${text}` : text
   for (const part of parts) {
     if (!part) continue
@@ -170,7 +170,7 @@ export function buildRetrievalText(memory: IndexSource, options: { extras?: bool
   return out
 }
 
-/** Hash FNV-1a (53 bits) — barato, estável, suficiente para invalidar vetores. */
+/** FNV-1a hash (53 bits) — cheap, stable, enough to invalidate vectors. */
 export function hashString(input: string): string {
   let h1 = 0xdeadbeef ^ 0
   let h2 = 0x41c6ce57 ^ 0
@@ -185,34 +185,34 @@ export function hashString(input: string): string {
 }
 
 /**
- * Assinatura do que alimenta o vetor de uma memória. Mudou conteúdo, campos de
- * enriquecimento, esquema, modelo ou dimensões ⇒ a assinatura muda ⇒ o vetor é
- * elegível para reindexação.
+ * Signature of what feeds a memory's vector. Content, enrichment fields,
+ * schema, model or dimensions changed ⇒ the signature changes ⇒ the vector is
+ * eligible for reindexing.
  */
 export function indexSignature(memory: IndexSource, model: { id: string; dim: number }): string {
   return hashString(`${INDEX_SCHEMA_VERSION}|${model.id}|${model.dim}|${buildRetrievalText(memory)}`)
 }
 
 // ---------------------------------------------------------------------------
-// BM25 sobre campos
+// BM25 over fields
 // ---------------------------------------------------------------------------
 
 export interface LexicalDoc {
   id: string
-  /** Conteúdo original + título (peso base) */
+  /** Original content + title (base weight) */
   text: string
-  /** Tags, palavras-chave e entidades (pesam mais) */
+  /** Tags, keywords and entities (weigh more) */
   boosted?: string
-  /** Conceitos e paráfrases (peso base) */
+  /** Concepts and paraphrases (base weight) */
   concepts?: string
-  /** Documento markdown anexado (peso base; é o que torna o .md encontrável) */
+  /** Attached markdown document (base weight; it is what makes the .md findable) */
   body?: string
 }
 
 export interface Bm25Options {
   k1?: number
   b?: number
-  /** Peso de cada campo na frequência do termo */
+  /** Weight of each field in the term frequency */
   weights?: { text?: number; boosted?: number; concepts?: number; body?: number }
 }
 
@@ -222,9 +222,9 @@ export interface ScoredId {
 }
 
 /**
- * Documento lexical de uma memória: o mesmo recorte para o índice e para os
- * testes. `doc` é o markdown anexado, quando existe — sem ele o documento é
- * idêntico ao de antes.
+ * Lexical document of a memory: the same cut for the index and for the
+ * tests. `doc` is the attached markdown, when it exists — without it the document is
+ * identical to the previous one.
  */
 export function lexicalDocOf(memory: Memory & Partial<IndexSource>, doc?: string | null): LexicalDoc {
   return {
@@ -278,8 +278,8 @@ export class Bm25Index {
   }
 
   /**
-   * Massa de IDF da consulta (termos desconhecidos contam como os mais raros):
-   * o denominador da "cobertura" — quanto do que se perguntou o documento tem.
+   * IDF mass of the query (unknown terms count as the rarest ones):
+   * the denominator of the "coverage" — how much of what was asked the document has.
    */
   queryMass(query: string): number {
     const n = this.ids.length
@@ -313,7 +313,7 @@ export class Bm25Index {
 }
 
 // ---------------------------------------------------------------------------
-// Fusão
+// Fusion
 // ---------------------------------------------------------------------------
 
 export interface RankedList {
@@ -322,9 +322,9 @@ export interface RankedList {
 }
 
 /**
- * Reciprocal Rank Fusion: score(id) = Σ peso / (k + posição). Opera só sobre
- * posições, então não mistura a escala do cosseno com a do BM25 — que não são
- * comparáveis. k=60 é o valor clássico (Cormack et al., 2009).
+ * Reciprocal Rank Fusion: score(id) = Σ weight / (k + position). It operates only on
+ * positions, so it does not mix the cosine scale with the BM25 one — which are not
+ * comparable. k=60 is the classic value (Cormack et al., 2009).
  */
 export function reciprocalRankFusion(lists: RankedList[], k = 60): ScoredId[] {
   const scores = new Map<string, number>()
@@ -340,7 +340,7 @@ export function reciprocalRankFusion(lists: RankedList[], k = 60): ScoredId[] {
 }
 
 // ---------------------------------------------------------------------------
-// Vetores
+// Vectors
 // ---------------------------------------------------------------------------
 
 export function dot(a: ArrayLike<number>, b: ArrayLike<number>): number {

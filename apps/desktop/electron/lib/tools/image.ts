@@ -9,16 +9,16 @@ import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
- * Ponte com o chat-engine.
+ * Bridge with chat-engine.
  *
- * `turnMediaUrls` é a lista viva (cresce a cada show_image/image_edit/svg_*)
- * das imagens inseridas NESTA resposta. `removeImageParts` tira a ImagePart
- * correspondente da conversa — da mensagem em andamento e do histórico já
- * gravado —, senão a imagem apagada ficaria quebrada no chat.
+ * `turnMediaUrls` is the live list (it grows on every show_image/image_edit/svg_*)
+ * of the images inserted in THIS response. `removeImageParts` takes the corresponding
+ * ImagePart out of the conversation — from the message in progress and from the history already
+ * written —, otherwise the deleted image would stay broken in the chat.
  *
- * `noteDerived` registra que uma imagem nasceu de outra. É com isso que o
- * runtime faz a limpeza no fim do turno SEM depender de o modelo lembrar de
- * pedir: quem só serviu de degrau para a imagem seguinte era rascunho.
+ * `noteDerived` records that one image was born from another. That is how the
+ * runtime does the cleanup at the end of the turn WITHOUT depending on the model
+ * remembering to ask: whatever only served as a step toward the next image was a draft.
  */
 export interface ImageToolHooks {
   turnMediaUrls: Set<string>
@@ -27,27 +27,27 @@ export interface ImageToolHooks {
 }
 
 /**
- * Edição de imagem sem modelo de geração.
+ * Image editing without a generation model.
  *
- * Redimensionar, recortar, comprimir, ajustar tom e tirar o fundo são trabalho
- * de pixel, não de invenção — e tratá-los como geração custaria caro, demoraria
- * e devolveria uma imagem PARECIDA em vez da mesma. Aqui a foto que entra é a
- * que sai, só que do tamanho e do jeito pedidos.
+ * Resizing, cropping, compressing, adjusting tone and removing the background are pixel
+ * work, not invention — and treating them as generation would cost a lot, take long
+ * and return a SIMILAR image instead of the same one. Here the photo that goes in is the
+ * one that comes out, only at the requested size and in the requested way.
  *
- * A saída é sempre um arquivo NOVO na galeria, pela mesma regra do pdf_ops e
- * do docx_edit: o usuário anexou uma imagem, não autorizou sobrescrevê-la.
- * Gravar na pasta de trabalho só com `savePath`, e só quando ele pedir.
+ * The output is always a NEW file in the gallery, by the same rule as pdf_ops and
+ * docx_edit: the user attached an image, they did not authorize overwriting it.
+ * Writing to the working folder only with `savePath`, and only when they ask.
  */
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'tiff', 'heic'])
 
 export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | null, hooks?: ImageToolHooks) {
   /**
-   * Resolve a imagem por galeria ou por caminho na pasta de trabalho.
+   * Resolves the image by gallery or by a path in the working folder.
    *
-   * A da galeria cobre o que o usuário anexou (todo anexo de imagem é
-   * registrado lá) e o que o próprio agente produziu antes — inclusive a saída
-   * desta tool, que é como se encadeiam duas edições.
+   * The gallery one covers what the user attached (every image attachment is
+   * registered there) and what the agent itself produced before — including the output
+   * of this tool, which is how two edits get chained.
    */
   const load = async (ref: string): Promise<{ bytes: Buffer; name: string; id?: string } | string> => {
     const mediaId = mediaIdFromUrl(ref)
@@ -240,8 +240,8 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         }
 
         const base = src.name.replace(/\.[^.]+$/, '')
-        // Uma imagem buscada na web leva o crédito dela: recortar ou escrever por cima
-        // é uma adaptação, e a licença (CC BY, CC BY-SA) continua exigindo o autor.
+        // An image fetched from the web carries its credit: cropping or writing over it
+        // is an adaptation, and the license (CC BY, CC BY-SA) still requires the author.
         const parentCredit = src.id ? (await getMediaEntry(src.id))?.credit : undefined
         const mediaUrl = await saveMedia(result.bytes, result.format === 'jpeg' ? 'jpg' : result.format, {
           source: 'chat',
@@ -250,8 +250,8 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           parentId: src.id,
           ...(parentCredit ? { credit: parentCredit } : {}),
         })
-        // Proveniência: é o que permite o runtime descartar os degraus no fim
-        // do turno e a galeria empilhar as versões em vez de espalhá-las.
+        // Provenance: it is what lets the runtime discard the steps at the end
+        // of the turn and the gallery stack the versions instead of scattering them.
         hooks?.noteDerived(mediaUrl, src.id ? `orbit-media://${src.id}` : null, keep === true)
 
         let savedTo: string | null = null
@@ -271,14 +271,14 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         ]
         if (result.backgroundRemoved !== undefined) {
           const percent = Math.round(result.backgroundRemoved * 100)
-          // O limiar usado vai junto porque é o ponto de partida da correção:
-          // sem ele, ajustar a tolerância seria adivinhar de novo do zero.
-          const limiar =
+          // The threshold used goes along because it is the starting point for the correction:
+          // without it, adjusting the tolerance would be guessing again from scratch.
+          const threshold =
             result.backgroundLimit === undefined
               ? ''
               : ` (threshold ${result.backgroundLimit.toFixed(0)} of 100)`
           notes.push(
-            `background ${result.backgroundColor} removed from ${percent}% of the image${limiar}${
+            `background ${result.backgroundColor} removed from ${percent}% of the image${threshold}${
               percent < 5
                 ? ' — almost nothing was removed: check the background colour or raise the tolerance'
                 : percent > 97
@@ -290,8 +290,8 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         if (result.compression) notes.push(`compression: ${result.compression}`)
         if (savedTo) notes.push(`saved to ${savedTo}`)
 
-        // Mesmo formato do show_image: o chat-engine transforma isto numa
-        // ImagePart, então o usuário VÊ o resultado em vez de ler sobre ele.
+        // Same format as show_image: chat-engine turns this into an
+        // ImagePart, so the user SEES the result instead of reading about it.
         return {
           mediaUrl,
           alt: alt ?? '',
@@ -319,10 +319,10 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
             notes.push(`${ref}: not found in the gallery`)
             continue
           }
-          // A proteção mora na ORIGEM, não no turno: o anexo do usuário é dele
-          // em qualquer momento, e uma imagem que o agente produziu continua
-          // sendo dele três turnos depois. Prender a limpeza ao turno atual
-          // era o que tornava impossível arrumar a bagunça já feita.
+          // The protection lives in the ORIGIN, not in the turn: the user's attachment belongs to them
+          // at any moment, and an image the agent produced is still
+          // theirs three turns later. Tying the cleanup to the current turn
+          // was what made it impossible to tidy up the mess already made.
           if (entry.source === 'user') {
             notes.push(`${ref}: user attachment — cannot be deleted`)
             continue

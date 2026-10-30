@@ -3,20 +3,20 @@ import { documentApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
- * Abre um documento do agente no painel — e decide em QUAL aba.
+ * Opens an agent document in the panel — and decides in WHICH tab.
  *
- * São dois objetos com a mesma origem e destinos diferentes: o documento vivo
- * em Markdown abre no canvas, onde se lê e se edita; o que foi PEDIDO como
- * arquivo ("faz um PDF disso") abre no visualizador de documento, com sumário,
- * localizar, zoom e imprimir, que é o que se espera de um arquivo pronto.
+ * There are two objects with the same origin and different destinations: the live document
+ * in Markdown opens in the canvas, where one reads and edits it; the one ASKED for as a
+ * file ("make a PDF of this") opens in the document viewer, with a table of contents,
+ * find, zoom and print, which is what one expects from a finished file.
  *
- * A decisão mora aqui, e não em cada botão, porque os dois pontos de entrada —
- * o card da conversa e a galeria — têm que concordar: o mesmo documento não
- * pode abrir de um jeito no chat e de outro na galeria.
+ * The decision lives here, and not in each button, because the two entry points —
+ * the conversation card and the gallery — have to agree: the same document cannot
+ * open one way in the chat and another in the gallery.
  *
- * E ela consulta o REGISTRO, em vez de ler a part da mensagem: a part é um
- * retrato do turno em que foi criada, e um documento que virou PDF depois
- * continuaria abrindo como Markdown pelo card antigo.
+ * And it consults the REGISTRY, instead of reading the part of the message: the part is a
+ * snapshot of the turn in which it was created, and a document that became a PDF later
+ * would keep opening as Markdown through the old card.
  */
 export async function openDocumentInPanel(
   sessionId: string,
@@ -25,8 +25,8 @@ export async function openDocumentInPanel(
 ): Promise<void> {
   const info = await documentApi.info(documentId)
   const store = usePanelStore.getState()
-  // Sem registro o documento sumiu: o visualizador é quem sabe dizer isso ao
-  // usuário, nomeando o id que não encontrou.
+  // Without a registry the document is gone: the viewer is the one that knows how to tell
+  // the user that, naming the id it did not find.
   if (!info || documentOpensAsFile(info)) {
     store.openSourceTab(sessionId, { docId: documentId, page: 1, title })
     return

@@ -9,19 +9,19 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Aba de um processo em background (bash_background / foreground promovido):
- * mostra o stdout/stderr ao vivo, permite encerrar e abrir no browser a URL
- * que o próprio comando anunciou (ex.: `npm run dev` → http://localhost:5173).
+ * Tab of a background process (bash_background / promoted foreground):
+ * it shows stdout/stderr live, allows terminating and opening in the browser the URL
+ * the command itself announced (e.g. `npm run dev` → http://localhost:5173).
  *
- * Substitui o antigo dialog de saída: como aba, a saída ganha o espaço todo do
- * painel, sobrevive à troca de abas do chat e o processo deixa de ser um card
- * solto no rodapé.
+ * It replaces the old output dialog: as a tab, the output gets the whole space of the
+ * panel, survives the chat tab switch and the process stops being a loose card
+ * in the footer.
  */
 export function ProcessTab({ pid, sessionId }: { pid: number; sessionId?: string }) {
   const { t } = useTranslation()
   const [output, setOutput] = useState("")
-  // O processo pode sumir da lista (encerrado pela lixeira, fim do comando):
-  // guardamos o último registro visto para o cabeçalho não ficar vazio.
+  // The process may disappear from the list (terminated by the trash, end of the command):
+  // we keep the last record seen so the header is not left empty.
   const [snapshot, setSnapshot] = useState<ProcessInfo | undefined>(undefined)
   const [pinned, setPinned] = useState(true)
   const preRef = useRef<HTMLPreElement>(null)
@@ -33,7 +33,7 @@ export function ProcessTab({ pid, sessionId }: { pid: number; sessionId?: string
     if (info) setSnapshot(info)
   }, [info])
 
-  // Mesma fonte do rodapé: mantém status e URLs anunciadas atualizados.
+  // Same source as the footer: it keeps the status and the announced URLs up to date.
   useEffect(() => {
     void fetchProcesses(sessionId)
     const interval = setInterval(() => void fetchProcesses(sessionId), 3_000)
@@ -54,8 +54,8 @@ export function ProcessTab({ pid, sessionId }: { pid: number; sessionId?: string
     }
   }, [pid, sessionId])
 
-  // Auto-scroll só enquanto o usuário está no fim: rolar para cima para ler um
-  // log não pode ser desfeito pelo próximo chunk.
+  // Auto-scroll only while the user is at the end: scrolling up to read a
+  // log cannot be undone by the next chunk.
   useEffect(() => {
     if (!pinned) return
     const el = preRef.current

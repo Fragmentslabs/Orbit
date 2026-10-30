@@ -33,14 +33,14 @@ function DropdownMenuContent({
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
-        // z acima de TUDO no app: o Positioner cria contexto de empilhamento
-        // com `isolate`, então o z do Popup interno (z-50) só vale DENTRO
-        // dele. Já subimos de z-50 → z-[90] (modais z-[80]) e ainda havia
-        // superfícies acima por posição: overlay de drag de pasta (z-[100],
-        // App.tsx) e o próprio conteúdo do painel quando o popup abre
-        // flipado/estendido sobre ele. z-[999] — o mesmo teto dos tooltips
-        // fixos (activity-heatmap) — garante o popup por cima de qualquer
-        // superfície DOM que o abriu.
+        // z above EVERYTHING in the app: the Positioner creates a stacking context
+        // with `isolate`, so the z of the inner Popup (z-50) is only worth INSIDE
+        // it. We already went from z-50 → z-[90] (modals z-[80]) and there were still
+        // surfaces above by position: folder drag overlay (z-[100],
+        // App.tsx) and the panel content itself when the popup opens
+        // flipped/extended over it. z-[999] — the same ceiling as the fixed
+        // tooltips (activity-heatmap) — guarantees the popup above any
+        // DOM surface that opened it.
         className="isolate z-[999] outline-none"
         align={align}
         alignOffset={alignOffset}

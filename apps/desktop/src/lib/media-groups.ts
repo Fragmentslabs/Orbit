@@ -1,29 +1,29 @@
 import type { MediaEntry } from "@shared/media"
 
 /**
- * Agrupamento da galeria: uma foto e suas versões são UM item.
+ * Gallery grouping: a photo and its versions are ONE item.
  *
- * O agrupamento é pela RAIZ da descendência, não pela ponta da cadeia. A
- * diferença aparece quando duas imagens saem da mesma base e nenhuma sucede a
- * outra — o agente entregando duas opções para escolher, ou um turno que
- * voltou ao original em vez de editar o último resultado. Pela ponta, isso
- * vira dois itens de uma edição só; pela raiz, continua sendo a mesma foto,
- * com uma versão a mais.
+ * The grouping is by the ROOT of the descent, not by the end of the chain. The
+ * difference shows up when two images come out of the same base and none succeeds the
+ * other — the agent delivering two options to choose from, or a turn that
+ * went back to the original instead of editing the last result. By the end, that
+ * becomes two items of a single edit; by the root, it is still the same photo,
+ * with one more version.
  *
- * Rascunho não chega aqui: o que serviu só de tentativa é descartado no fim da
- * resposta (ver electron/lib/image-drafts.ts). O que sobra são versões.
+ * A draft does not get here: what served only as an attempt is discarded at the end of the
+ * answer (see electron/lib/image-drafts.ts). What is left are versions.
  */
 
 export interface MediaGrouping {
-  /** Uma entrada por grupo — a mais recente dele —, na ordem de `visible`. */
+  /** One entry per group — the most recent one of it —, in the order of `visible`. */
   covers: MediaEntry[]
-  /** id da capa → versões do grupo, da mais antiga para a atual. Só grupos
-   *  com mais de uma imagem aparecem aqui. */
+  /** cover id → versions of the group, from the oldest to the current one. Only groups
+   *  with more than one image show up here. */
   versions: Map<string, MediaEntry[]>
 }
 
-/** Sobe até a origem. `all` (e não só o que está visível) porque um elo
- *  escondido por um filtro não pode partir o grupo em dois. */
+/** Goes up to the origin. `all` (and not only what is visible) because a link
+ *  hidden by a filter cannot split the group in two. */
 export function rootIdOf(entry: MediaEntry, byId: Map<string, MediaEntry>): string {
   const seen = new Set<string>()
   let current = entry
@@ -55,16 +55,16 @@ export function groupMediaByRoot(all: MediaEntry[], visible: MediaEntry[]): Medi
     if (ordered.length > 1) versions.set(cover.id, ordered)
   }
 
-  // Mantém a ordem de `visible` (a galeria entrega mais recente primeiro).
+  // Keeps the order of `visible` (the gallery delivers the most recent first).
   const covers = visible.filter((entry) => coverByRoot.get(rootIdOf(entry, byId)) === entry.id)
   return { covers, versions }
 }
 
 /**
- * Ids a apagar quando se apaga um ITEM da grade: o grupo inteiro, porque o
- * item É o grupo — deixar as versões para trás encheria o disco de imagens que
- * não aparecem em lugar nenhum. A foto que o usuário anexou fica: ela é a
- * origem, não uma versão produzida aqui.
+ * Ids to delete when an ITEM of the grid is deleted: the whole group, because the
+ * item IS the group — leaving the versions behind would fill the disk with images that
+ * show up nowhere. The photo the user attached stays: it is the
+ * origin, not a version produced here.
  */
 export function expandToGroups(ids: string[], all: MediaEntry[]): string[] {
   const byId = new Map(all.map((e) => [e.id, e]))

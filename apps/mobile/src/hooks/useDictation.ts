@@ -1,12 +1,12 @@
 /**
- * Ditado no app companion: grava no aparelho e manda o áudio para o desktop
- * transcrever (o celular não roda modelo de voz).
+ * Dictation in the companion app: records on the device and sends the audio to the desktop
+ * to transcribe (the phone does not run a voice model).
  *
- * O microfone vem do `AudioStream` do expo-audio, que entrega PCM cru — então
- * não há arquivo nem codec no caminho: pedimos int16, mono, 16 kHz e enviamos
- * os buffers direto em base64 para `POST /api/voice/transcribe`. Se o hardware
- * não entregar exatamente 16 kHz, usamos a taxa que veio em cada buffer e
- * informamos essa taxa ao desktop (ele reamostra).
+ * The microphone comes from the `AudioStream` of expo-audio, which delivers raw PCM — so
+ * there is no file and no codec in the path: we ask for int16, mono, 16 kHz and send
+ * the buffers straight as base64 to `POST /api/voice/transcribe`. If the hardware
+ * does not deliver exactly 16 kHz, we use the rate that came in each buffer and
+ * report that rate to the desktop (it resamples).
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioStream, requestRecordingPermissionsAsync, type AudioStreamBuffer } from 'expo-audio'
@@ -17,19 +17,19 @@ import i18n from '~/i18n'
 
 const TARGET_SAMPLE_RATE = 16000
 
-/** Abaixo disto é toque acidental no microfone, não fala — não vale transcrever. */
+/** Below this it is an accidental touch on the microphone, not speech — not worth transcribing. */
 const MIN_AUDIO_MS = 200
 
 export interface Dictation {
-  /** Gravando agora (o botão vira "parar"). */
+  /** Recording now (the button becomes "stop"). */
   recording: boolean
-  /** Enviando o áudio e esperando o texto do desktop. */
+  /** Sending the audio and waiting for the text from the desktop. */
   transcribing: boolean
-  /** Falha visível ao usuário (permissão, offline, motor de voz indisponível). */
+  /** Failure visible to the user (permission, offline, voice engine unavailable). */
   error: string | null
-  /** Começa a gravar; se já estiver gravando, para e transcreve. */
+  /** Starts recording; if already recording, stops and transcribes. */
   toggle: () => void
-  /** Limpa a mensagem de erro. */
+  /** Clears the error message. */
   clearError: () => void
 }
 
@@ -46,8 +46,8 @@ export function useDictation(onText: (text: string) => void, language?: string):
   const http = useConnectionStore((s) => s.http)
   const chunksRef = useRef<Uint8Array[]>([])
   const sampleRateRef = useRef(TARGET_SAMPLE_RATE)
-  // Um buffer que chega depois do stop (a captura para no meio de um pedaço)
-  // seria gravado no ditado SEGUINTE: o flag fecha a porta na hora de parar.
+  // A buffer that arrives after the stop (the capture stops in the middle of a chunk)
+  // would be written into the NEXT dictation: the flag closes the door at stop time.
   const capturingRef = useRef(false)
 
   const handleBuffer = useCallback((buffer: AudioStreamBuffer) => {
@@ -63,13 +63,13 @@ export function useDictation(onText: (text: string) => void, language?: string):
     onBuffer: handleBuffer,
   })
 
-  // Trocar de tela no meio da gravação não pode deixar o microfone aberto.
+  // Switching screens in the middle of the recording cannot leave the microphone open.
   useEffect(() => {
     return () => {
       try {
         stream?.stop()
       } catch {
-        /* já parado */
+        /* already stopped */
       }
     }
   }, [stream])
@@ -103,7 +103,7 @@ export function useDictation(onText: (text: string) => void, language?: string):
     try {
       stream?.stop()
     } catch {
-      /* já parado */
+      /* already stopped */
     }
     setRecording(false)
 
@@ -124,7 +124,7 @@ export function useDictation(onText: (text: string) => void, language?: string):
     try {
       const res = await http.transcribePcm(bytesToBase64(pcm), sampleRateRef.current, { language })
       if (!res.ok) {
-        // 503 do desktop (motor indisponível / modelo não baixado) traz o motivo.
+        // 503 from the desktop (engine unavailable / model not downloaded) carries the reason.
         setError(reasonFromHttpError(res.error) ?? i18n.t('promptInput.voice.failed'))
         return
       }

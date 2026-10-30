@@ -4,13 +4,13 @@ import { useProcessStore } from "@/src/stores/process-store"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * Servidores de desenvolvimento rodando no chat atual, na tela inicial do
- * browser do painel.
+ * Development servers running in the current chat, on the start screen of the
+ * panel browser.
  *
- * A URL não é adivinhada: sai do que o próprio comando anunciou no output
- * (`npm run dev` → "Local: http://localhost:5173"), extraído no main por
- * extractLocalUrls. Um clique chama `onSelect` com a URL — quem navega é o
- * dono do browser, sem este componente depender do contexto do WebPreview.
+ * The URL is not guessed: it comes from what the command itself announced in the output
+ * (`npm run dev` → "Local: http://localhost:5173"), extracted in the main process by
+ * extractLocalUrls. A click calls `onSelect` with the URL — whoever navigates is the
+ * owner of the browser, without this component depending on the WebPreview context.
  */
 export function RunningServers({ sessionId, onSelect }: { sessionId?: string; onSelect: (url: string) => void }) {
   const { t } = useTranslation()

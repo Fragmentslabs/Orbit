@@ -11,9 +11,9 @@ const KO_FI_URL = 'https://ko-fi.com/fragmentslabs'
 const WEBSITE_URL = 'https://fragmentslabs.com'
 const GITHUB_URL = 'https://github.com/fragmentslabs'
 
-/** Espelha o painel Sobre do desktop (mesmos textos e links). A versao vem do
- *  expo config, que o chore de release sobe junto com os package.json — e a
- *  mesma string que o desktop mostra pelo app.getVersion. */
+/** Mirrors the desktop About panel (same texts and links). The version comes from
+ *  the expo config, which the release chore bumps together with the package.json —
+ *  the same string the desktop shows through app.getVersion. */
 export default function AboutScreen() {
   const { t } = useTranslation()
   const router = useRouter()

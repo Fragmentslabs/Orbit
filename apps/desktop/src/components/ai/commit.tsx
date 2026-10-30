@@ -103,8 +103,8 @@ export type CommitTimestampProps = HTMLAttributes<HTMLTimeElement> & {
 
 export const CommitTimestamp = ({ date, className, children, ...props }: CommitTimestampProps) => {
   const locale = useLocaleStore((s) => s.activeLocale)
-  // Numérica de propósito: a linha do commit é estreita (hash · autor · data)
-  // e o mês por extenso não cabia.
+  // Numeric on purpose: the commit line is narrow (hash · author · date)
+  // and the spelled-out month did not fit.
   const formatted = formatDateTimeNumeric(date.getTime(), locale)
 
   return (

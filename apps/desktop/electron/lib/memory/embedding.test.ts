@@ -1,8 +1,8 @@
 /**
- * Índice de embeddings: invalidação por assinatura, descarte de índice de outro
- * modelo e reindexação. O worker de verdade não roda aqui (esterilizado) — o
- * objetivo é garantir que o índice nunca fique com vetor obsoleto nem derrube o
- * app quando o motor não está disponível.
+ * Embedding index: invalidation by signature, discarding an index from another
+ * model and reindexing. The real worker does not run here (sterilized) — the
+ * goal is to guarantee the index never keeps a stale vector nor takes the
+ * app down when the engine is unavailable.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -17,10 +17,10 @@ vi.mock('electron', () => ({
     getPath: (key: string) => (key === 'userData' ? userData : os.tmpdir()),
     getAppPath: () => path.resolve(__dirname, '../../..'),
   },
-  // Sem motor: qualquer tentativa de subir o worker falha de forma explícita.
+  // No engine: any attempt to start the worker fails explicitly.
   utilityProcess: {
     fork: () => {
-      throw new Error('worker não disponível no teste')
+      throw new Error('worker not available in the test')
     },
   },
 }))
@@ -51,37 +51,37 @@ afterEach(() => {
   fs.rmSync(userData, { recursive: true, force: true })
 })
 
-describe('índice persistido', () => {
-  it('começa vazio quando não há arquivo', async () => {
+describe('persisted index', () => {
+  it('starts empty when there is no file', async () => {
     const { loadIndex } = await import('./embedding')
     const index = await loadIndex()
     expect(index.items).toEqual({})
     expect(index.model).toBe('bekko-a8m')
   })
 
-  it('descarta o índice inteiro quando o modelo mudou', async () => {
+  it('discards the whole index when the model changed', async () => {
     write({ v: 1, model: 'outro-modelo', dim: 256, schema: 1, items: { a: { sig: 'x', vec: 'AA==' } } })
     const { loadIndex } = await import('./embedding')
     expect((await loadIndex()).items).toEqual({})
   })
 
-  it('descarta quando o esquema de índice mudou', async () => {
+  it('discards when the index schema changed', async () => {
     write({ v: 1, model: 'bekko-a8m', dim: 256, schema: 0, items: { a: { sig: 'x', vec: 'AA==' } } })
     const { loadIndex } = await import('./embedding')
     expect((await loadIndex()).items).toEqual({})
   })
 
-  it('índice corrompido não derruba: recomeça vazio', async () => {
+  it('a corrupted index does not crash it: it restarts empty', async () => {
     const file = path.join(userData, 'orbit-data', 'storage', 'memory', 'vectors.json')
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, '{ isso não é json')
+    fs.writeFileSync(file, '{ this is not json')
     const { loadIndex } = await import('./embedding')
     expect((await loadIndex()).items).toEqual({})
   })
 })
 
-describe('status e sincronização', () => {
-  it('conta como pendente toda memória sem vetor válido', async () => {
+describe('status and synchronization', () => {
+  it('counts every memory without a valid vector as pending', async () => {
     const { embeddingStatus } = await import('./embedding')
     const status = await embeddingStatus([memory('a', 'um'), memory('b', 'dois')])
     expect(status.pending).toBe(2)
@@ -89,7 +89,7 @@ describe('status e sincronização', () => {
     expect(status.model).toBe('bekko-a8m')
   })
 
-  it('remove do índice a memória que não existe mais', async () => {
+  it('removes from the index the memory that no longer exists', async () => {
     write({
       v: 1,
       model: 'bekko-a8m',
@@ -103,7 +103,7 @@ describe('status e sincronização', () => {
     expect((await loadIndex()).items).toEqual({})
   })
 
-  it('editar o texto torna o vetor pendente de novo', async () => {
+  it('editing the text makes the vector pending again', async () => {
     const { indexSignature } = await import('@shared/memory-retrieval')
     const { embeddingStatus } = await import('./embedding')
     const original = memory('a', 'texto original')
@@ -116,7 +116,7 @@ describe('status e sincronização', () => {
     expect(after.indexed).toBe(0)
   })
 
-  it('acrescentar enriquecimento também invalida o vetor', async () => {
+  it('adding enrichment also invalidates the vector', async () => {
     const { indexSignature } = await import('@shared/memory-retrieval')
     const { embeddingStatus } = await import('./embedding')
     const base = memory('a', 'mesmo texto')
@@ -127,7 +127,7 @@ describe('status e sincronização', () => {
     expect((await embeddingStatus([enriched])).pending).toBe(1)
   })
 
-  it('sem modelo instalado, a sincronização falha em silêncio', async () => {
+  it('without a model installed, synchronization fails silently', async () => {
     const { syncIndex } = await import('./embedding')
     const result = await syncIndex([memory('a', 'texto')])
     expect(result.failed).toBe(true)
@@ -136,19 +136,19 @@ describe('status e sincronização', () => {
 })
 
 /**
- * O modelo vai dentro do app (`extraResources` → `resources/memory-embed`).
- * A instalação nova precisa achá-lo ali, sem depender de download nem do cache
- * de desenvolvimento — que é o que existe hoje numa máquina que só instalou o
- * app e nunca rodou o repositório.
+ * The model ships inside the app (`extraResources` → `resources/memory-embed`).
+ * A fresh install has to find it there, without depending on a download or on the
+ * development cache — which is what exists today on a machine that only installed the
+ * app and never ran the repository.
  */
-describe('modelo que veio no pacote', () => {
+describe('model that came in the package', () => {
   let resources: string
   let root: string
 
   beforeEach(() => {
     resources = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-resources-'))
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-approot-'))
-    // Sem cache de dev nesta rodada: só o pacote pode responder.
+    // No dev cache in this run: only the bundle can answer.
     process.env.APP_ROOT = root
     Object.defineProperty(process, 'resourcesPath', { value: resources, configurable: true })
   })
@@ -167,13 +167,13 @@ describe('modelo que veio no pacote', () => {
     fs.writeFileSync(path.join(dir, 'tokenizer.bin'), 'x')
   }
 
-  it('acha o modelo empacotado', async () => {
+  it('finds the bundled model', async () => {
     putModel()
     const { modelInstalled } = await import('./embedding')
     expect(modelInstalled()).toBe(true)
   })
 
-  it('só o tokenizer.json também serve (o worker compila o .bin)', async () => {
+  it('only the tokenizer.json also works (the worker compiles the .bin)', async () => {
     const dir = path.join(resources, 'memory-embed', 'bekko-a8m')
     fs.mkdirSync(path.join(dir, 'onnx'), { recursive: true })
     fs.writeFileSync(path.join(dir, 'onnx', 'model.onnx'), 'x')
@@ -182,16 +182,16 @@ describe('modelo que veio no pacote', () => {
     expect(modelInstalled()).toBe(true)
   })
 
-  it('não inventa modelo quando o pacote veio sem ele', async () => {
+  it('does not invent a model when the package came without one', async () => {
     const { modelInstalled } = await import('./embedding')
     expect(modelInstalled()).toBe(false)
   })
 
-  it('não baixa quando o modelo já veio no pacote', async () => {
+  it('does not download when the model already came in the package', async () => {
     putModel()
     const { downloadModel } = await import('./embedding')
     expect(await downloadModel()).toBe(true)
-    // Nada foi escrito no userData — seria uma segunda cópia de 130 MB.
+    // Nothing was written in userData — it would be a second 130 MB copy.
     expect(fs.existsSync(path.join(userData, 'memory', 'models'))).toBe(false)
   })
 })

@@ -21,7 +21,7 @@ import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
-import { CustomRangeModal, rotuloPeriodo } from '~/components/usage/custom-range-modal'
+import { CustomRangeModal, rangeLabel } from '~/components/usage/custom-range-modal'
 import { BottomSheet } from '~/components/ui/bottom-sheet'
 
 type PresetRange = 'today' | '7d' | '30d' | 'total'
@@ -88,17 +88,17 @@ export default function UsageScreen() {
   )
 
   useEffect(() => {
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSummary(range)
   }, [range, fetchSummary])
 
   const topModels = [...(summary?.byModel ?? [])].sort((a, b) => b.tokens - a.tokens).slice(0, 8)
   const maxTokens = topModels[0]?.tokens ?? 1
-  // O resumo do companion já traz byProject; o desktop lê por projeto desde a
-  // tela de uso e aqui só faltava mostrar — os dados chegavam e eram jogados fora.
+  // The companion summary already brings byProject; the desktop reads it per project from the
+  // usage screen and here it was only missing to show it — the data arrived and was thrown away.
   const topProjects = [...(summary?.byProject ?? [])].sort((a, b) => b.hours - a.hours).slice(0, 8)
   const maxProjectHours = topProjects[0]?.hours ?? 1
 
@@ -138,16 +138,16 @@ export default function UsageScreen() {
             style={[s.rangeText, { color: rangeIsCustom ? tokens.foreground : tokens.mutedForeground }]}
             numberOfLines={1}
           >
-            {customRange ? rotuloPeriodo(customRange, i18n.language) : t('usageScreen.rangeCustom')}
+            {customRange ? rangeLabel(customRange, i18n.language) : t('usageScreen.rangeCustom')}
           </Text>
         </Pressable>
       </View>
 
       <CustomRangeModal
-        visivel={customModalOpen}
-        valorAtual={customRange}
-        onCancelar={() => setCustomModalOpen(false)}
-        onConfirmar={(next) => {
+        visible={customModalOpen}
+        currentValue={customRange}
+        onCancel={() => setCustomModalOpen(false)}
+        onConfirm={(next) => {
           setRange(next)
           setCustomModalOpen(false)
         }}
@@ -209,9 +209,9 @@ export default function UsageScreen() {
         </View>
 
         <BottomSheet
-          aberto={hoursInfoOpen}
-          aoFechar={() => setHoursInfoOpen(false)}
-          titulo={<Text style={[s.sheetTitle, { color: tokens.foreground }]}>{t('usageScreen.hoursByProjectInfoTitle')}</Text>}
+          open={hoursInfoOpen}
+          onClose={() => setHoursInfoOpen(false)}
+          title={<Text style={[s.sheetTitle, { color: tokens.foreground }]}>{t('usageScreen.hoursByProjectInfoTitle')}</Text>}
         >
           <Text style={[s.sheetBody, { color: tokens.mutedForeground }]}>{t('usageScreen.hoursByProjectInfo')}</Text>
         </BottomSheet>

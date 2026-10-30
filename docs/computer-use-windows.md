@@ -1,56 +1,56 @@
-# Computer Use no Windows
+# Computer Use on Windows
 
-Plano e estado do Computer Use do Orbit no Windows. O desenho do macOS (tools
-`cu_*`, observação numerada, registro, segurança, painéis e gravação) está em
-[computer-use.md](computer-use.md) e não muda: o Windows entra como **mais um
-driver** atrás do mesmo contrato `ComputerDriver`
+Plan and state of Orbit's Computer Use on Windows. The macOS design (tools
+`cu_*`, numbered observation, registry, security, panels and recording) is in
+[computer-use.md](computer-use.md) and does not change: Windows comes in as **one more
+driver** behind the same `ComputerDriver` contract
 (`apps/desktop/electron/lib/computer/types.ts`).
 
-> **Estado:** Stages 1 a 4 escritos. O que roda no Mac (TypeScript: contrato,
-> runner persistente, driver, gates de UI, segurança) está coberto por typecheck,
-> lint e vitest com driver falso. **O host (`windows.ps1`, `windows-host.cs`,
-> `windows-host-actions.cs`) nunca foi compilado nem executado**: esta máquina é
-> um Mac. Ele só passou por um parser de C# (sintaxe) e por um teste do probe
-> contra um host de mentira. **O primeiro `node scripts/cu-probe-win.mjs` num
-> Windows é também o primeiro `Add-Type`**: espere erros de compilação do C#
-> antes de qualquer número. Até o portão do Stage 0 passar, o Windows é
-> **experimental**: os números e o comportamento em segundo plano por tipo de app
-> são hipóteses.
+> **State:** Stages 1 to 4 written. What runs on the Mac (TypeScript: contract,
+> persistent runner, driver, UI gates, security) is covered by typecheck,
+> lint and vitest with a fake driver. **The host (`windows.ps1`, `windows-host.cs`,
+> `windows-host-actions.cs`) has never been compiled nor executed**: this machine is
+> a Mac. It only went through a C# parser (syntax) and through a test of the probe
+> against a fake host. **The first `node scripts/cu-probe-win.mjs` on a
+> Windows is also the first `Add-Type`**: expect C# compilation errors
+> before any number. Until the Stage 0 gate passes, Windows is
+> **experimental**: the numbers and the background behavior per app type
+> are hypotheses.
 
-### Como testar no Windows
+### How to test on Windows
 
-1. Instale as dependências e rode o app em dev (`npm run dev` em `apps/desktop`).
-   Em Preferências → Computador a aba aparece no Windows; o bloco "Windows" diz se
-   o host de UI Automation subiu (ou por que não: PowerShell restrito, etc.). O
-   botão "Testar" faz uma leitura real do app da frente.
-2. Ligue "Controlar o computador" e, na conversa, o modo Computador no compositor.
-3. Rode o probe com os apps abertos (ver o cabeçalho de
-   `apps/desktop/scripts/cu-probe-win.mjs`) e guarde o `cu-probe-win-report.json`.
+1. Install the dependencies and run the app in dev (`npm run dev` in `apps/desktop`).
+   In Preferences → Computer the tab shows up on Windows; the "Windows" block says whether
+   the UI Automation host came up (or why not: restricted PowerShell, etc.). The
+   "Test" button does a real read of the front app.
+2. Turn on "Control the computer" and, in the conversation, Computer mode in the composer.
+3. Run the probe with the apps open (see the header of
+   `apps/desktop/scripts/cu-probe-win.mjs`) and keep the `cu-probe-win-report.json`.
 
-## Referência e licença
+## Reference and license
 
-Usamos o runtime Windows do open-computer-use
-(`apps/OpenComputerUseWindows`, MIT) **só como leitura**: como eles resolveram
-DPI awareness, `EM_REPLACESEL`, mensagens de janela, a ordem de tentativas no
-clique e quais cenários os testes cobrem. O código aqui é nosso, com outro
-desenho:
+We use the Windows runtime of open-computer-use
+(`apps/OpenComputerUseWindows`, MIT) **only as reading**: how they solved
+DPI awareness, `EM_REPLACESEL`, window messages, the order of attempts in the
+click and which scenarios the tests cover. The code here is ours, with another
+design:
 
-| Ponto | open-computer-use | Orbit |
+| Point | open-computer-use | Orbit |
 |---|---|---|
-| Processo | um `powershell.exe` por operação (~1–2 s de `Add-Type` a cada vez) | **host persistente**: um processo, `Add-Type` uma vez, JSON por linha |
-| Lógica | funções PowerShell iterando a UIA | C# compilado pelo `Add-Type`; o PowerShell só inicia o laço |
-| Árvore | `Current.*` elemento a elemento | **`CacheRequest`** (um round-trip por nó expandido) |
-| Captura | `CopyFromScreen` (pega o que está por cima) | **`PrintWindow(PW_RENDERFULLCONTENT)`**; `CopyFromScreen` só se a janela não está coberta |
-| Retângulo | `GetWindowRect` (inclui a borda invisível de ~7 px) | **`DWMWA_EXTENDED_FRAME_BOUNDS`**, um só para apps, captura e frames |
-| Achar o elemento | varre a subárvore a cada clique | **`ref`** da observação (mapa no host), `path` como fallback |
-| `SetFocus` / abrir app | atrás de variável de ambiente | nunca `SetFocus`; abrir app é ação normal com aprovação |
-| Saída da captura | base64 no JSON | caminho de arquivo |
+| Process | one `powershell.exe` per operation (~1–2 s of `Add-Type` every time) | **persistent host**: one process, `Add-Type` once, JSON per line |
+| Logic | PowerShell functions iterating the UIA | C# compiled by `Add-Type`; PowerShell only starts the loop |
+| Tree | `Current.*` element by element | **`CacheRequest`** (one round-trip per expanded node) |
+| Capture | `CopyFromScreen` (grabs whatever is on top) | **`PrintWindow(PW_RENDERFULLCONTENT)`**; `CopyFromScreen` only if the window is not covered |
+| Rectangle | `GetWindowRect` (includes the ~7 px invisible border) | **`DWMWA_EXTENDED_FRAME_BOUNDS`**, a single one for apps, capture and frames |
+| Finding the element | scans the subtree on every click | the observation's **`ref`** (map in the host), `path` as fallback |
+| `SetFocus` / open app | behind an environment variable | never `SetFocus`; opening an app is a normal action with approval |
+| Capture output | base64 in the JSON | file path |
 
-Nenhum trecho foi copiado. Se algum dia um trecho ficar parecido o bastante
-para contar como derivado, o aviso de copyright MIT do projeto deles vai junto
-no arquivo.
+No snippet was copied. If someday a snippet becomes similar enough
+to count as derived, their project's MIT copyright notice goes along
+in the file.
 
-## Arquitetura
+## Architecture
 
 ```
 tools/computer.ts ── observe.ts / act.ts / format.ts / registry.ts / safety.ts
@@ -61,329 +61,328 @@ tools/computer.ts ── observe.ts / act.ts / format.ts / registry.ts / safety.
      bridges/macos.js (JXA)                   bridges/windows.ps1 (PowerShell + C#)
 ```
 
-### Host persistente (`bridges/windows.ps1`)
+### Persistent host (`bridges/windows.ps1`)
 
-- Roda em `powershell.exe` 5.1 (sempre presente no Windows 10/11; o
-  `System.Windows.Automation` gerenciado e o `JavaScriptSerializer` são do .NET
-  Framework, não do PowerShell 7).
-- Na partida: confere o `LanguageMode` (Constrained Language Mode bloqueia o
-  `Add-Type` — o host responde `unavailable` com o motivo a todo pedido), liga
-  `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` e compila o C# **uma
-  vez**.
-- Protocolo: uma linha JSON por pedido no stdin
-  (`{"id":7,"op":"tree","args":{…}}`), uma linha por resposta no stdout
-  (`{"id":7,"ok":true,"result":…}` ou `{"id":7,"ok":false,"error":{"code","message"}}`).
-  stdin e stdout são abertos como UTF-8 sem BOM — o PowerShell 5.1 usa a página
-  de código ANSI por padrão e corromperia texto não-ASCII digitado.
-- Estado no host: `ref → AutomationElement` por pid, trocado a cada árvore
-  daquele pid (contador de geração no `ref`), e o "alvo de texto" do `focus`
-  (ver Stage 3).
+- Runs on `powershell.exe` 5.1 (always present on Windows 10/11; the managed
+  `System.Windows.Automation` and the `JavaScriptSerializer` come from .NET
+  Framework, not from PowerShell 7).
+- At startup: checks the `LanguageMode` (Constrained Language Mode blocks
+  `Add-Type` — the host answers `unavailable` with the reason to every request), turns on
+  `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` and compiles the C# **once**.
+- Protocol: one JSON line per request on stdin
+  (`{"id":7,"op":"tree","args":{…}}`), one line per response on stdout
+  (`{"id":7,"ok":true,"result":…}` or `{"id":7,"ok":false,"error":{"code","message"}}`).
+  stdin and stdout are opened as UTF-8 without BOM — PowerShell 5.1 uses the ANSI code
+  page by default and would corrupt non-ASCII text typed.
+- State in the host: `ref → AutomationElement` per pid, swapped on every tree
+  of that pid (generation counter in the `ref`), and the `focus`'s "text target"
+  (see Stage 3).
 
 ### Runner (`runner.ts → createPersistentRunner`)
 
-Mesma assinatura do `createBridgeRunner`: `run(op, args, { timeoutMs, signal })`.
+Same signature as `createBridgeRunner`: `run(op, args, { timeoutMs, signal })`.
 
-- Sobe o host no primeiro uso (o primeiro pedido ganha um prazo extra para a
-  compilação do `Add-Type`).
-- Correlaciona respostas por `id`; o host é sequencial, os pedidos esperam na
-  fila do stdin.
-- Timeout ou abort de uma operação: **registra o desfecho antes do kill** (o
-  `close` provocado pelo kill não pode trocar "timeout" por "saiu sem
-  resposta"), mata o host e rejeita os outros pedidos pendentes com uma
-  mensagem de "host reiniciado". O próximo uso sobe um host novo.
-- Morte inesperada: rejeita tudo que está pendente com o fim do stderr.
+- Starts the host on first use (the first request gets an extra deadline for the
+  `Add-Type` compilation).
+- Correlates responses by `id`; the host is sequential, the requests wait in the
+  stdin queue.
+- Timeout or abort of an operation: **records the outcome before the kill** (the
+  `close` caused by the kill cannot turn "timeout" into "exited without an
+  answer"), kills the host and rejects the other pending requests with a
+  "host restarted" message. The next use starts a new host.
+- Unexpected death: rejects everything that is pending with the end of stderr.
 
-### Coordenadas e DPI
+### Coordinates and DPI
 
-O host é **per-monitor DPI aware v2**. Com isso, UIA (`BoundingRectangle`,
-`FromPoint`), `DwmGetWindowAttribute`, `PrintWindow`, `SendInput` e
-`ScreenToClient` falam **pixel físico** do desktop virtual. O `Frame` do
-contrato no Windows é pixel físico, e o screenshot já sai do tamanho do frame.
-Por isso `scaleFor` é **1** no win32 (`tools/computer.ts`): no Mac ele vale 2 no
-Retina porque o AX fala pontos e o screenshot pixels.
+The host is **per-monitor DPI aware v2**. With that, UIA (`BoundingRectangle`,
+`FromPoint`), `DwmGetWindowAttribute`, `PrintWindow`, `SendInput` and
+`ScreenToClient` speak the virtual desktop's **physical pixel**. The contract's `Frame`
+on Windows is physical pixel, and the screenshot already comes out at the frame's size.
+That is why `scaleFor` is **1** on win32 (`tools/computer.ts`): on the Mac it is 2 on
+Retina because AX speaks points and the screenshot pixels.
 
-O único lugar em que DIP entra é o Electron (`screen`, `BrowserWindow`): a
-faixa e os painéis usam a área útil do monitor em DIP, sem frame de janela-alvo.
-Se algum dia precisarmos desenhar sobre a janela-alvo, a conversão é
-`physicalToDip()` em `geometry.ts` (testada com 150%).
+The only place where DIP enters is Electron (`screen`, `BrowserWindow`): the
+bar and the panels use the monitor's usable area in DIP, without the target window's frame.
+If someday we need to draw over the target window, the conversion is
+`physicalToDip()` in `geometry.ts` (tested with 150%).
 
-### Identidade do elemento (`ref`)
+### Element identity (`ref`)
 
-`AxNode.ref?: string`. No Windows:
+`AxNode.ref?: string`. On Windows:
 
-- `r:<geração>:<RuntimeId em base64>` — resolve pelo mapa do host;
-- `k:<AutomationId>|<ControlType>|<Name>` — quando não há RuntimeId; resolve por
-  busca sob a janela.
+- `r:<generation>:<RuntimeId in base64>` — resolves through the host's map;
+- `k:<AutomationId>|<ControlType>|<Name>` — when there is no RuntimeId; resolves by
+  a search under the window.
 
-O `act.ts` manda `ref` quando existe e `path` (índices de filhos na Control View
-a partir da janela) como fallback. O host **sempre** confere a identidade
-(papel nativo e nome) do que achou: se não bate, devolve `staleIndex`; se o
-elemento morreu (`ElementNotAvailableException`) e o `path` também não serve,
-`staleRef`. Nunca clica no elemento errado. O macOS ignora `ref`.
+`act.ts` sends `ref` when it exists and `path` (child indices in the Control View
+from the window) as a fallback. The host **always** checks the identity
+(native role and name) of what it found: if it does not match, it returns `staleIndex`; if the
+element is dead (`ElementNotAvailableException`) and the `path` does not work either,
+`staleRef`. It never clicks the wrong element. macOS ignores `ref`.
 
-O handle guarda `nativeRole` (o papel como o host mandou) além do `role`
-normalizado: o host confere identidade no vocabulário dele.
+The handle keeps `nativeRole` (the role as the host sent it) besides the normalized
+`role`: the host checks identity in its own vocabulary.
 
-### Papéis
+### Roles
 
-A UIA fala `ControlType` (`Button`, `Edit`, `Document`…). O host manda o nome
-cru; `format.ts → normalizeRole()` traduz para o vocabulário do AX que o resto
-do módulo (e o prompt) já conhece:
+UIA speaks `ControlType` (`Button`, `Edit`, `Document`…). The host sends the raw
+name; `format.ts → normalizeRole()` translates it into the AX vocabulary that the rest
+of the module (and the prompt) already knows:
 
-| UIA | AX | Observação |
+| UIA | AX | Observation |
 |---|---|---|
-| `Document` | `AXWebArea` | com URL, ou somente leitura |
-| `Document` editável | `AXTextArea` | Bloco de Notas do Windows 11 é `Document` |
+| `Document` | `AXWebArea` | with a URL, or read-only |
+| editable `Document` | `AXTextArea` | Windows 11 Notepad is `Document` |
 | `Edit` | `AXTextField` | |
 | `Hyperlink` | `AXLink` | |
 | `Text` | `AXStaticText` | |
-| `Pane`, `Group`, `Custom`, `TitleBar` | `AXGroup` / `AXUnknown` | somem da árvore se não dizem nada |
+| `Pane`, `Group`, `Custom`, `TitleBar` | `AXGroup` / `AXUnknown` | disappear from the tree if they say nothing |
 | `Tab` / `TabItem` | `AXTabGroup` / `AXTab` | |
 | `Tree` / `TreeItem` | `AXOutline` / `AXTreeItem` | |
 | `ListItem`, `DataItem` | `AXListItem`, `AXRow` | |
-| demais | `AX<Nome>` equivalente | tabela completa em `format.ts` |
+| the rest | equivalent `AX<Name>` | full table in `format.ts` |
 
-Ações viram o vocabulário do AX também: `Invoke` e `Toggle → AXPress`,
-`SelectionItem → AXPick`, `ExpandCollapse → AXExpand/AXCollapse`. O `AXPress`
-tenta Invoke, depois Toggle, SelectionItem e ExpandCollapse. O estado do
-`Toggle` aparece como valor (`1`/`0`) e o de `SelectionItem` como `selected`.
+Actions also become the AX vocabulary: `Invoke` and `Toggle → AXPress`,
+`SelectionItem → AXPick`, `ExpandCollapse → AXExpand/AXCollapse`. `AXPress`
+tries Invoke, then Toggle, SelectionItem and ExpandCollapse. The `Toggle` state appears
+as a value (`1`/`0`) and the `SelectionItem` one as `selected`.
 
-### Teclas
+### Keys
 
-`keys.ts` é por plataforma. No Windows o combo é `{ code: VK, flags }` com flags
-`shift=1, ctrl=2, alt=4, win=8`. `cmd`/`command` viram **Ctrl** (o modelo manda
-`cmd+s` por hábito do Mac); `win`/`super`/`meta` viram a tecla Windows.
+`keys.ts` is per platform. On Windows the combo is `{ code: VK, flags }` with flags
+`shift=1, ctrl=2, alt=4, win=8`. `cmd`/`command` become **Ctrl** (the model sends
+`cmd+s` out of Mac habit); `win`/`super`/`meta` become the Windows key.
 
-### Erros novos
+### New errors
 
-| Código | Quando | O que o modelo ouve |
+| Code | When | What the model hears |
 |---|---|---|
-| `elevated` | o app roda como administrador (UIPI bloqueia mensagens e `SendInput` de um processo comum) | pedir para o usuário fazer, ou abrir o Orbit como administrador — nunca contornar |
-| `secureDesktop` | UAC, tela de bloqueio ou Ctrl+Alt+Del (a área de trabalho de entrada não é `Default`) | parar e pedir ao usuário |
-| `staleRef` | o elemento do `ref` não existe mais | observar de novo |
+| `elevated` | the app runs as administrator (UIPI blocks messages and `SendInput` from a regular process) | ask the user to do it, or open Orbit as administrator — never work around it |
+| `secureDesktop` | UAC, lock screen or Ctrl+Alt+Del (the input desktop is not `Default`) | stop and ask the user |
+| `staleRef` | the `ref`'s element no longer exists | observe again |
 
-## Tabela de operações
+## Operations table
 
-| op | Windows | macOS (referência) |
+| op | Windows | macOS (reference) |
 |---|---|---|
-| `perms` | `LanguageMode`, UIA carregada, nível de integridade do Orbit | TCC |
-| `apps` | `EnumWindows` (ordem z = frente→trás) + `DWMWA_CLOAKED` + `WS_EX_TOOLWINDOW` + dono; `ApplicationFrameHost` resolve para o processo da `CoreWindow` (UWP); nome por `FileDescription`, id por exe (ou AUMID) | `NSWorkspace` + `CGWindowList` |
-| `tree` | `CacheRequest` + filhos na Control View, BFS com `maxNodes`/`maxDepth`/prazo; `ref`, `secure` (`IsPassword`), URL pela barra de endereço do Chromium | AX BFS |
-| `capture` | `PrintWindow(PW_RENDERFULLCONTENT)` recortado ao frame do DWM; preto → `CopyFromScreen` só se a janela não estiver coberta; senão, sem imagem | `screencapture -l` |
-| `element` | `ref` → `path`; `press` (Invoke/Toggle/SelectionItem/ExpandCollapse, numa thread com prazo: Invoke que abre modal bloqueia), `setValue` (ValuePattern/RangeValue), `select` (TextPattern `FindText` + `Select`; Edit Win32 por `EM_SETSEL`), `focus` (no-op que só guarda o alvo de texto), `info` | AX |
-| `hit` | `AutomationElement.FromPoint`, conferindo que é do pid e da janela (coberta → nada, e o `act` cai para mensagem) | AX hit-test |
-| `focused` | `GetGUIThreadInfo(hwndFocus)` → UIA; também `ES_PASSWORD` no Edit | `AXFocusedUIElement` |
-| `selection` | `TextPattern.GetSelection` + `MoveEndpointByRange` para a `location` | `AXSelectedTextRange` |
-| `scrollAx` | `ScrollPattern` no ancestral sob o ponto (`SetScrollPercent` calculado pelo `ViewSize`) | barra de rolagem AX |
-| `mouse` | **só global**: `SendInput` com deslize do cursor. Sem mensagem de janela (decisão: ver "Decisão de entrada") | CGEvent |
-| `scroll` | dirigido: `ScrollPattern` (`scrollAx`); global: `SendInput` | CGEvent |
-| `drag` | só global (`SendInput`) | só global |
-| `keys` | só global: `SendInput` por VK e `KEYEVENTF_UNICODE` para texto. O texto no modo dirigido vai pelo `set_value`/`ValuePattern`, com `EM_REPLACESEL` só como fallback em Edit/RichEdit nativo | CGEvent por pid |
-| `openApp` | já aberto → traz para a frente; senão caminho, App Paths, atalho do Menu Iniciar ou `shell:AppsFolder` (UWP), esperando a janela | `open -a/-b` |
-| `restore` | no-op (não há flag a desligar) | `AXManualAccessibility` |
+| `perms` | `LanguageMode`, UIA loaded, Orbit's integrity level | TCC |
+| `apps` | `EnumWindows` (z-order = front→back) + `DWMWA_CLOAKED` + `WS_EX_TOOLWINDOW` + owner; `ApplicationFrameHost` resolves to the `CoreWindow`'s process (UWP); name by `FileDescription`, id by exe (or AUMID) | `NSWorkspace` + `CGWindowList` |
+| `tree` | `CacheRequest` + children in the Control View, BFS with `maxNodes`/`maxDepth`/deadline; `ref`, `secure` (`IsPassword`), URL from Chromium's address bar | AX BFS |
+| `capture` | `PrintWindow(PW_RENDERFULLCONTENT)` cropped to the DWM frame; black → `CopyFromScreen` only if the window is not covered; otherwise, no image | `screencapture -l` |
+| `element` | `ref` → `path`; `press` (Invoke/Toggle/SelectionItem/ExpandCollapse, on a thread with a deadline: an Invoke that opens a modal blocks), `setValue` (ValuePattern/RangeValue), `select` (TextPattern `FindText` + `Select`; Win32 Edit by `EM_SETSEL`), `focus` (a no-op that only stores the text target), `info` | AX |
+| `hit` | `AutomationElement.FromPoint`, checking that it belongs to the pid and the window (covered → nothing, and `act` falls back to a message) | AX hit-test |
+| `focused` | `GetGUIThreadInfo(hwndFocus)` → UIA; also `ES_PASSWORD` in the Edit | `AXFocusedUIElement` |
+| `selection` | `TextPattern.GetSelection` + `MoveEndpointByRange` to the `location` | `AXSelectedTextRange` |
+| `scrollAx` | `ScrollPattern` on the ancestor under the point (`SetScrollPercent` computed from `ViewSize`) | AX scroll bar |
+| `mouse` | **global only**: `SendInput` with a cursor slide. No window message (decision: see "Input decision") | CGEvent |
+| `scroll` | directed: `ScrollPattern` (`scrollAx`); global: `SendInput` | CGEvent |
+| `drag` | global only (`SendInput`) | global only |
+| `keys` | global only: `SendInput` per VK and `KEYEVENTF_UNICODE` for text. Text in directed mode goes through `set_value`/`ValuePattern`, with `EM_REPLACESEL` only as a fallback in a native Edit/RichEdit | CGEvent per pid |
+| `openApp` | already open → brings it to the front; otherwise path, App Paths, Start Menu shortcut or `shell:AppsFolder` (UWP), waiting for the window | `open -a/-b` |
+| `restore` | no-op (there is no flag to turn off) | `AXManualAccessibility` |
 
-Sem `SetFocus` em lugar nenhum: no Windows, focar um controle de outro app
-**ativa a janela** e rouba o teclado do usuário. Por isso `focus` vira um
-no-op de sucesso que só guarda o elemento como alvo da próxima digitação
-daquele pid (expira em 10 s).
+No `SetFocus` anywhere: on Windows, focusing another app's control
+**activates the window** and steals the user's keyboard. That is why `focus` becomes a
+successful no-op that only stores the element as the target of the next typing
+from that pid (expires in 10 s).
 
-### Decisão de entrada: o modo dirigido é só UI Automation
+### Input decision: directed mode is UI Automation only
 
-Mensagens de janela postadas (`PostMessage` de mouse e teclado) e o truque dos
-modificadores (`AttachThreadInput` + `SetKeyboardState`) falham sem avisar em
-Chromium, UWP e WPF e são o padrão que EDR marca como suspeito. Por isso, como
-no macOS (Fase 0), o modo dirigido vai **só pela UIA**:
+Posted window messages (`PostMessage` of mouse and keyboard) and the modifier
+trick (`AttachThreadInput` + `SetKeyboardState`) fail silently in
+Chromium, UWP and WPF and are the pattern EDR flags as suspicious. That is why, as
+on macOS (Stage 0), directed mode goes **only through UIA**:
 
-1. Elemento por índice: padrão de UIA (`press`: Invoke, Toggle, SelectionItem,
+1. Element by index: UIA pattern (`press`: Invoke, Toggle, SelectionItem,
    ExpandCollapse).
-2. Ponto: `hit` + padrão de UIA no elemento sob o ponto.
-3. Sem padrão: erro explicando que o modo dirigido só clica em controles, e
-   oferecendo o ponteiro global.
-4. Ponteiro global (opt-in nas Preferências): `SendInput`, que move o cursor
-   real e traz o app para a frente, com a faixa avisando.
+2. Point: `hit` + UIA pattern on the element under the point.
+3. No pattern: an error explaining that directed mode only clicks on controls, and
+   offering the global pointer.
+4. Global pointer (opt-in in Preferences): `SendInput`, which moves the real
+   cursor and brings the app to the front, with the bar warning.
 
-`capabilities().messageMouse` fica `false` no driver do Windows (o caminho
-genérico em `act.ts` continua coberto por teste, caso o Stage 0 mostre que vale
-ligar para algum tipo de app). O texto em segundo plano vai por `set_value`
-(ValuePattern) e, em campos Edit/RichEdit nativos sem ValuePattern, por
-`EM_REPLACESEL`. `focus` nunca usa `SetFocus`.
+`capabilities().messageMouse` stays `false` in the Windows driver (the generic path
+in `act.ts` remains covered by a test, in case Stage 0 shows it is worth
+turning on for some app type). Background text goes through `set_value`
+(ValuePattern) and, in native Edit/RichEdit fields without ValuePattern, through
+`EM_REPLACESEL`. `focus` never uses `SetFocus`.
 
 ## Stages
 
-### Stage 0 — medição (portão) ⏳ falta rodar num Windows
+### Stage 0 — measurement (gate) ⏳ still to be run on a Windows
 
-`node apps/desktop/scripts/cu-probe-win.mjs` (ver o cabeçalho do script). Ele
-sobe o mesmo host, abre os apps de teste e grava um relatório JSON + texto.
+`node apps/desktop/scripts/cu-probe-win.mjs` (see the script's header). It
+starts the same host, opens the test apps and writes a JSON + text report.
 
-**Latência**
+**Latency**
 
-| Medida | Meta |
+| Measurement | Target |
 |---|---|
-| Árvore do Chrome (~1500 nós), com `CacheRequest` | < 800 ms |
-| A mesma árvore sem `CacheRequest` (comparação) | registrar |
-| Captura do Chrome **coberto**: `PrintWindow` vs `CopyFromScreen` | < 150 ms, e a imagem é a do Chrome |
-| Clique (elemento por `ref`) | < 150 ms |
-| Partida do host (`Add-Type`) | registrar (paga uma vez) |
+| Chrome tree (~1500 nodes), with `CacheRequest` | < 800 ms |
+| The same tree without `CacheRequest` (comparison) | record |
+| Chrome capture **covered**: `PrintWindow` vs `CopyFromScreen` | < 150 ms, and the image is Chrome's |
+| Click (element by `ref`) | < 150 ms |
+| Host startup (`Add-Type`) | record (paid once) |
 
-**Entrada em segundo plano, por tipo de app** — o ponto que a análise original
-esquecia. No macOS a Fase 0 mostrou que mouse e rolagem por pid eram ignorados e
-o modo dirigido teve de ir todo pela acessibilidade. No Windows, Chromium, UWP
-e WPF podem ignorar mensagens de mouse sintéticas ou não levar `WM_CHAR` ao
-elemento com foco. Para cada app — **Bloco de Notas (Win32/RichEdit), Explorer,
-Chrome, um app Electron, Calculadora (UWP), um app WPF, Excel** — com a janela
-**atrás de outra** (o probe também mede as mensagens de janela como
-experimento, para decidir se `messageMouse` volta a ser ligado):
+**Background input, per app type** — the point the original analysis
+forgot. On macOS Stage 0 showed that mouse and scrolling by pid were ignored and
+directed mode had to go entirely through accessibility. On Windows, Chromium, UWP
+and WPF may ignore synthetic mouse messages or not deliver `WM_CHAR` to
+the focused element. For each app — **Notepad (Win32/RichEdit), Explorer,
+Chrome, an Electron app, Calculator (UWP), a WPF app, Excel** — with the window
+**behind another** (the probe also measures the window messages as an
+experiment, to decide whether `messageMouse` is turned back on):
 
-| Cenário | Como o probe confere |
+| Scenario | How the probe checks |
 |---|---|
-| clique por padrão UIA | o estado mudou (Toggle, valor, nova janela) |
-| clique por mensagem | idem |
-| `WM_CHAR` / `EM_REPLACESEL` / `ValuePattern` | releitura do valor |
-| tecla com modificador (`ctrl+a`) por `AttachThreadInput` | seleção lida pelo TextPattern |
-| rolagem por `ScrollPattern` e por `WM_MOUSEWHEEL` | `VerticalScrollPercent` mudou |
-| o app continuou atrás? | `GetForegroundWindow` não mudou |
+| click by UIA pattern | the state changed (Toggle, value, new window) |
+| click by message | the same |
+| `WM_CHAR` / `EM_REPLACESEL` / `ValuePattern` | re-reading the value |
+| key with modifier (`ctrl+a`) by `AttachThreadInput` | selection read by the TextPattern |
+| scrolling by `ScrollPattern` and by `WM_MOUSEWHEEL` | `VerticalScrollPercent` changed |
+| did the app stay behind? | `GetForegroundWindow` did not change |
 
-**Ambiente**
+**Environment**
 
-- PowerShell em Constrained Language Mode → o probe reporta e o host recusa com
-  mensagem clara.
-- App elevado (abrir um Bloco de Notas como administrador) → `elevated`.
-- DPI a 150% num segundo monitor → frame do DWM, `FromPoint` e captura batem
-  (o probe clica no centro de um botão no monitor de 150%).
-- `desktopCapturer` (Windows Graphics Capture) grava janela coberta? A borda
-  amarela aparece?
+- PowerShell in Constrained Language Mode → the probe reports it and the host refuses with a
+  clear message.
+- Elevated app (opening Notepad as administrator) → `elevated`.
+- DPI at 150% on a second monitor → the DWM frame, `FromPoint` and the capture match
+  (the probe clicks the center of a button on the 150% monitor).
+- `desktopCapturer` (Windows Graphics Capture) records a covered window? Does the yellow
+  border show up?
 
-**Critério de aceite:** todas as latências dentro da meta e uma decisão
-registrada por tipo de app: o que funciona em segundo plano, o que exige o
-ponteiro global, o que não funciona. Essa tabela vira código (listas por classe
-de janela no host) e texto no prompt.
+**Acceptance criterion:** all latencies within the target and one decision
+recorded per app type: what works in the background, what requires the
+global pointer, what does not work. That table becomes code (lists per window
+class in the host) and text in the prompt.
 
-### Stage 1 — contrato ✅
+### Stage 1 — contract ✅
 
-- `ref?: string` no `AxNode` e no `ElementHandle` (+ `nativeRole`); o `act.ts`
-  manda `ref` e `path`.
-- `window.id` opcional em `TreeRequest`/`element` (o `HWND`); o macOS ignora.
-- `keys.ts` por plataforma.
-- `capabilities()` honesto: `messageMouse` (mouse por mensagem chega ao app) —
-  `false` nos dois; o Stage 0 pode ligar no Windows por tipo de app.
-- `perms()` com `notes` (CLM, integridade).
-- `AppInfo.elevated`; erros `elevated`, `secureDesktop`, `staleRef`.
-- `normalizeRole()` no `format.ts`.
-- `scaleFor = 1` no win32.
+- `ref?: string` in `AxNode` and in `ElementHandle` (+ `nativeRole`); `act.ts`
+  sends `ref` and `path`.
+- optional `window.id` in `TreeRequest`/`element` (the `HWND`); macOS ignores it.
+- `keys.ts` per platform.
+- honest `capabilities()`: `messageMouse` (mouse by message reaches the app) —
+  `false` in both; Stage 0 can turn it on for Windows per app type.
+- `perms()` with `notes` (CLM, integrity).
+- `AppInfo.elevated`; errors `elevated`, `secureDesktop`, `staleRef`.
+- `normalizeRole()` in `format.ts`.
+- `scaleFor = 1` on win32.
 
-**Aceite:** macOS sem mudança de comportamento (suíte verde); testes de
-`normalizeRole`, `parseKeys('ctrl+s', 'win32')` e do `ref` no `act`.
+**Acceptance:** macOS with no behavior change (green suite); tests of
+`normalizeRole`, `parseKeys('ctrl+s', 'win32')` and of `ref` in `act`.
 
-### Stage 2 — driver e host ✅ (não compilado, não medido)
+### Stage 2 — driver and host ✅ (not compiled, not measured)
 
-- `bridges/windows.ps1` (inicia o host, UTF-8, Constrained Language Mode),
-  `windows-host.cs` (`perms`, `apps`, `tree`, `capture`) e
-  `windows-host-actions.cs` (as ações), compilados juntos pelo `Add-Type`;
-  `createPersistentRunner()`; `drivers/windows.ts`, que grava os três arquivos
-  numa pasta com o hash do conteúdo.
-- `apps`, `tree`, `capture` como na tabela.
+- `bridges/windows.ps1` (starts the host, UTF-8, Constrained Language Mode),
+  `windows-host.cs` (`perms`, `apps`, `tree`, `capture`) and
+  `windows-host-actions.cs` (the actions), compiled together by `Add-Type`;
+  `createPersistentRunner()`; `drivers/windows.ts`, which writes the three files
+  into a folder with the content hash.
+- `apps`, `tree`, `capture` as in the table.
 
-**Aceite no Mac:** testes do runner persistente com um processo falso
-(correlação por id, timeout que mata e volta, abort, morte do host, linhas
-partidas e UTF-8) e do parse do protocolo. **No Windows (Stage 0):** latências.
+**Acceptance on the Mac:** tests of the persistent runner with a fake process
+(correlation by id, a timeout that kills and comes back, abort, host death, split
+lines and UTF-8) and of the protocol parse. **On Windows (Stage 0):** latencies.
 
-### Stage 3 — ações ✅ (não compilado, não medido)
+### Stage 3 — actions ✅ (not compiled, not measured)
 
-Tudo da tabela de operações. O texto em segundo plano (`type` no modo dirigido)
-vai por `EM_REPLACESEL` em Edit/RichEdit nativo ou por ValuePattern, trocando a
-seleção (TextPattern) ou acrescentando ao fim; atalhos de teclado, mouse livre,
-arrastar e roda só no ponteiro global. O `openApp` só abre app de verdade (nunca
-executa a string recebida). **Aceite no Windows:** a tabela de entrada em segundo
-plano do Stage 0 preenchida.
+Everything from the operations table. Background text (`type` in directed mode)
+goes through `EM_REPLACESEL` in a native Edit/RichEdit or through ValuePattern, replacing the
+selection (TextPattern) or appending to the end; keyboard shortcuts, free mouse,
+drag and wheel only on the global pointer. `openApp` only opens a real app (never
+executes the string received). **Acceptance on Windows:** the Stage 0 background input
+table filled in.
 
-### Stage 4 — fiação ✅
+### Stage 4 — wiring ✅
 
-- `computerSupport()` por plataforma e factory de driver em `computer/index.ts`.
-- Gates de UI que exigiam darwin: `src/stores/computer-mode.ts`,
+- `computerSupport()` per platform and driver factory in `computer/index.ts`.
+- UI gates that required darwin: `src/stores/computer-mode.ts`,
   `src/components/appearance-panel.tsx`, `src/components/settings-dialog.tsx`;
-  o painel de Preferências mostra "o Windows não pede permissão" no lugar da
-  Acessibilidade/Gravação de Tela.
-- `safety.ts`: denylist por exe/AUMID (gerenciadores de senha, Segurança do
-  Windows, UAC `consent.exe`, Configurações, `CredentialUIBroker.exe`, tela de
-  bloqueio) e navegadores por exe.
-- `computerStatus` sem `systemPreferences` no Windows.
-- Prompt sem "macOS", com permissões e atalhos por plataforma
-  (`computerInstruction(platform)` em `prompts.ts`). **Pendente de commit:** esse
-  trecho e o teste dele (`prompts-computer.test.ts`) dependem do texto novo do
-  prompt do macOS (computer_task, cu_batch) que ainda não foi commitado pela
-  sessão dona dele; ficam na árvore de trabalho até lá.
-- O gate de aprovação avisa, no pedido, quando um navegador não tem site legível
-  (aprovar vale para todas as abas), e `bash` com PowerShell/UI Automation passa
-  pelo mesmo gate do `osascript`.
-- Faixa e painéis: `type: 'panel'` é só do macOS. No Windows, `focusable: false`
-  vira `WS_EX_NOACTIVATE` no Electron: clicar no Parar ou num painel **não**
-  traz o Orbit para a frente.
-- Atalho de pânico: **Ctrl+Shift+.** no Windows. Não colide com atalho do
-  sistema (Win+. é o painel de emoji; Ctrl+Shift sozinho troca o layout, mas com
-  `.` não). Enquanto o controle está ativo ele é global e "rouba" o atalho de
-  apps que o usam (VS Code: breadcrumbs; Word: aumentar fonte é Ctrl+Shift+>).
-  A reserva `Ctrl+Shift+Esc` **não** é registrada no Windows: é o Gerenciador
-  de Tarefas.
+  the Preferences panel shows "Windows does not ask for permission" in place of
+  Accessibility/Screen Recording.
+- `safety.ts`: denylist by exe/AUMID (password managers, Windows
+  Security, UAC `consent.exe`, Settings, `CredentialUIBroker.exe`, lock
+  screen) and browsers by exe.
+- `computerStatus` without `systemPreferences` on Windows.
+- Prompt without "macOS", with permissions and shortcuts per platform
+  (`computerInstruction(platform)` in `prompts.ts`). **Pending commit:** this
+  snippet and its test (`prompts-computer.test.ts`) depend on the new macOS
+  prompt text (computer_task, cu_batch) that has not been committed yet by the
+  session that owns it; they stay in the working tree until then.
+- The approval gate warns, in the request, when a browser has no readable site
+  (approving applies to all tabs), and `bash` with PowerShell/UI Automation goes
+  through the same gate as `osascript`.
+- Bar and panels: `type: 'panel'` is macOS only. On Windows, `focusable: false`
+  becomes `WS_EX_NOACTIVATE` in Electron: clicking Stop or a panel does **not**
+  bring Orbit to the front.
+- Panic shortcut: **Ctrl+Shift+.** on Windows. It does not collide with a
+  system shortcut (Win+. is the emoji panel; Ctrl+Shift alone switches the layout, but with
+  `.` it does not). While the control is active it is global and "steals" the shortcut from
+  apps that use it (VS Code: breadcrumbs; Word: increase font is Ctrl+Shift+>).
+  The `Ctrl+Shift+Esc` reserve is **not** registered on Windows: it is Task
+  Manager.
 
-## Riscos
+## Risks
 
-**Aprovação por site nos navegadores.** No macOS a URL vem da `AXWebArea`; a
-**UIA não tem URL**. O host lê a barra de endereço do Chromium (Chrome, Edge,
-Brave, Vivaldi, Opera: o `Edit` da barra, por `AutomationId`/nome, pelo
-`ValuePattern`) **só quando ela não está com foco** — com foco, o valor é o que
-está sendo digitado, não a página. Sem esquema (o Chrome esconde `https://`), o
-driver completa. Firefox não expõe isso de forma confiável. Quando não há URL, o
-Windows **degrada para aprovação por app**, e isso aparece:
+**Per-site approval in browsers.** On macOS the URL comes from `AXWebArea`;
+**UIA has no URL**. The host reads Chromium's address bar (Chrome, Edge,
+Brave, Vivaldi, Opera: the bar's `Edit`, by `AutomationId`/name, through
+`ValuePattern`) **only when it does not have focus** — with focus, the value is what
+is being typed, not the page. Without a scheme (Chrome hides `https://`), the
+driver completes it. Firefox does not expose this reliably. When there is no URL,
+Windows **degrades to per-app approval**, and that shows up:
 
-- no pedido de aprovação ("vale para TODAS as abas deste navegador");
-- no prompt (o agente avisa o usuário antes de trocar de site).
+- in the approval request ("applies to ALL tabs of this browser");
+- in the prompt (the agent warns the user before switching sites).
 
-**Entrada em segundo plano.** O modo dirigido vai só pela UI Automation (ver
-"Decisão de entrada"): clique por padrão, texto por `EM_REPLACESEL`/ValuePattern,
-rolagem por ScrollPattern. O que não tem padrão (clique em área livre, atalho de
-teclado, hover, arrastar, roda) exige o ponteiro global e traz o app para a
-frente. Risco: apps que expõem pouca UIA (Chromium sem a árvore ligada, jogos,
-apps desenhados à mão) ficam quase só no ponteiro global. As mensagens de janela
-(que Chromium, UWP e WPF provavelmente ignoram, e que o EDR enxerga como
-suspeitas) são medidas pelo probe como experimento, não usadas.
+**Background input.** Directed mode goes only through UI Automation (see
+"Input decision"): click by pattern, text by `EM_REPLACESEL`/ValuePattern,
+scrolling by ScrollPattern. What has no pattern (click on a free area, keyboard
+shortcut, hover, drag, wheel) requires the global pointer and brings the app to the
+front. Risk: apps that expose little UIA (Chromium without the tree on, games,
+hand-drawn apps) end up almost only on the global pointer. The window messages
+(which Chromium, UWP and WPF probably ignore, and which EDR sees as
+suspicious) are measured by the probe as an experiment, not used.
 
-**`PrintWindow` preto** em apps com aceleração de GPU (alguns jogos, players,
-Chromium com certas flags). Detectamos imagem toda preta e caímos para
-`CopyFromScreen` só se a janela está descoberta; senão a observação sai sem
-imagem e com o motivo — melhor que mostrar outra janela.
+**Black `PrintWindow`** in apps with GPU acceleration (some games, players,
+Chromium with certain flags). We detect an all-black image and fall back to
+`CopyFromScreen` only if the window is uncovered; otherwise the observation comes out without an
+image and with the reason — better than showing another window.
 
-**Gravação.** O `desktopCapturer` usa Windows Graphics Capture e deve pegar a
-janela coberta; o `id` da fonte é `window:<HWND>:0`, o mesmo número do nosso
-`WindowInfo.id`. O Windows desenha uma **borda amarela** em volta da janela
-capturada (no Windows 11 dá para tirar com `IsBorderRequired = false`, que o
-Electron não expõe). Confirmar no Stage 0.
+**Recording.** `desktopCapturer` uses Windows Graphics Capture and should grab the
+covered window; the source `id` is `window:<HWND>:0`, the same number as our
+`WindowInfo.id`. Windows draws a **yellow border** around the captured window
+(on Windows 11 it can be removed with `IsBorderRequired = false`, which
+Electron does not expose). To be confirmed in Stage 0.
 
-**UIA gerenciada.** `System.Windows.Automation` é mais lenta que a COM
-`IUIAutomation` e às vezes perde elementos de Chromium. Se o Stage 0 reprovar a
-árvore, o próximo passo é falar COM direto do C# (sem mudar o protocolo).
+**Managed UIA.** `System.Windows.Automation` is slower than the
+`IUIAutomation` COM and sometimes loses Chromium elements. If Stage 0 rejects the
+tree, the next step is talking COM directly from C# (without changing the protocol).
 
-**`Invoke` síncrono.** Um botão que abre diálogo modal pode prender o `Invoke`
-até o diálogo fechar; o host chama numa thread com prazo e devolve
+**Synchronous `Invoke`.** A button that opens a modal dialog can hold the `Invoke`
+until the dialog closes; the host calls it on a thread with a deadline and returns
 `unconfirmed`.
 
-**Antivírus/EDR.** PowerShell com `Add-Type`, `SendInput` e `PrintWindow` em
-outros processos parece comportamento de malware para alguns EDRs. Registrar no
-Stage 0 se o Defender reclama; a saída de longo prazo é um helper nativo
-assinado.
+**Antivirus/EDR.** PowerShell with `Add-Type`, `SendInput` and `PrintWindow` in
+other processes looks like malware behavior to some EDRs. Record in
+Stage 0 whether Defender complains; the long-term way out is a signed native
+helper.
 
-**UIPI e desktop seguro.** Não há como (nem se deve) agir em app elevado ou no
-UAC a partir de um processo comum: recusamos com mensagem clara (`elevated`,
-`secureDesktop`) e o `consent.exe` está na denylist.
+**UIPI and secure desktop.** There is no way to (nor should one) act on an elevated app or on
+UAC from a regular process: we refuse with a clear message (`elevated`,
+`secureDesktop`) and `consent.exe` is on the denylist.
 
-## Como validar
+## How to validate
 
-No Mac (o que roda hoje):
+On the Mac (what runs today):
 
 ```bash
 cd apps/desktop && npx tsc --noEmit && npm run lint && npx vitest run
 ```
 
-No Windows (Stage 0):
+On Windows (Stage 0):
 
 ```bash
 cd apps/desktop && node scripts/cu-probe-win.mjs --out cu-probe-report.json

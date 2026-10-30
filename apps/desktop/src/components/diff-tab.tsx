@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDownIcon } from "lucide-react";
 import type { ChatMessage } from "@shared/chat";
 import { useSessionStore } from "@/src/stores/session-store";
-import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store";
+import { EMPTY_TASKS, usePipelineStore } from "@/src/stores/pipeline-store";
 import { parsePatch, type FileDiff } from "@/lib/unified-diff";
 import { HighlightedDiffFile } from "@/src/components/diff-lines";
 import { cn } from "@/lib/utils";
@@ -54,30 +54,31 @@ function FileDiffSection({ file }: { file: FileDiff }) {
 }
 
 /**
- * Aba Diff: o patch de UMA mensagem do chat ou de UMA task da esteira.
+ * Diff tab: the patch of ONE chat message or of ONE pipeline task.
  *
- * As duas fontes existem porque a esteira não cria mensagens (D12) — o patch
- * dela é medido pelo engine e vive na própria task.
+ * Both sources exist because the pipeline does not create messages (D12) — its
+ * patch is measured by the engine and lives in the task itself.
  *
- * Ela não aparece no seletor de abas: sem contexto não há o que mostrar, e as
- * mudanças atuais se leem na aba de pastas (Alterações). Abre pelo selo "+N -N"
- * da mensagem e pelo card da task, já apontando para a sua origem.
+ * It does not show up in the tab picker: without context there is nothing to
+ * show, and the current changes are read in the folders tab (Changes). It opens
+ * from the message's "+N -N" badge and from the task card, already pointing at
+ * its origin.
  */
 export function DiffTab({
   sessionId,
   messageId,
-  esteiraId,
+  pipelineId,
   taskId,
 }: {
   sessionId?: string;
   messageId?: string;
-  esteiraId?: string;
+  pipelineId?: string;
   taskId?: string;
 }) {
   const { t } = useTranslation();
-  const daEsteira = !!(esteiraId && taskId);
-  const resolvedSessionId = daEsteira ? "" : (sessionId ?? "");
-  const resolvedMessageId = daEsteira ? "" : (messageId ?? "");
+  const fromPipeline = !!(pipelineId && taskId);
+  const resolvedSessionId = fromPipeline ? "" : (sessionId ?? "");
+  const resolvedMessageId = fromPipeline ? "" : (messageId ?? "");
 
   const messages = useSessionStore((s) => s.messages[resolvedSessionId]);
   const message: ChatMessage | undefined = useMemo(
@@ -85,20 +86,20 @@ export function DiffTab({
     [messages, resolvedMessageId],
   );
 
-  const task = useEsteiraStore((s) =>
-    esteiraId && taskId
-      ? (s.tasksPorEsteira[esteiraId] ?? SEM_TASKS).find((x) => x.id === taskId)
+  const task = usePipelineStore((s) =>
+    pipelineId && taskId
+      ? (s.tasksPerPipeline[pipelineId] ?? EMPTY_TASKS).find((x) => x.id === taskId)
       : undefined,
   );
 
-  const patch = daEsteira ? task?.diff?.patch : message?.snapshot?.patch;
-  const totalArquivos = daEsteira
-    ? task?.diff?.arquivos?.length
+  const patch = fromPipeline ? task?.diff?.patch : message?.snapshot?.patch;
+  const totalFiles = fromPipeline
+    ? task?.diff?.files?.length
     : message?.snapshot?.files?.length;
 
   const files = useMemo(() => (patch ? parsePatch(patch) : null), [patch]);
 
-  if (daEsteira ? !task : !message) {
+  if (fromPipeline ? !task : !message) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
         {t("diff.noChanges")}
@@ -121,7 +122,7 @@ export function DiffTab({
     <div className="flex h-full flex-col overflow-hidden">
       <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
         <span>
-          {t("diff.filesCount", { count: totalArquivos ?? files.length })}
+          {t("diff.filesCount", { count: totalFiles ?? files.length })}
         </span>
         {totalAdded > 0 && (
           <span className="text-emerald-500">+{totalAdded}</span>

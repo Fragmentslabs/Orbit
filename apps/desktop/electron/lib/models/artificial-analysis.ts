@@ -4,10 +4,10 @@ import { resolveApiKey } from '../auth'
 import { dataDir } from '../storage'
 
 /**
- * Fonte Artificial Analysis — índices de inteligência/coding/agentic,
- * benchmarks individuais (GPQA, HLE, SWE-Bench…) e métricas de velocidade
- * (tokens/s, TTFT). Requer chave de API gratuita, salva no auth.json sob o
- * id "artificialanalysis" (ou env ARTIFICIALANALYSIS_API_KEY).
+ * Artificial Analysis source — intelligence/coding/agentic indices,
+ * individual benchmarks (GPQA, HLE, SWE-Bench…) and speed metrics
+ * (tokens/s, TTFT). Requires a free API key, saved in auth.json under the
+ * id "artificialanalysis" (or the ARTIFICIALANALYSIS_API_KEY env).
  */
 
 const AA_MODELS_URL = 'https://artificialanalysis.ai/api/v2/data/llms/models'
@@ -21,7 +21,7 @@ export interface AAModel {
   slug: string
   release_date?: string
   model_creator?: { id?: string; name?: string; slug?: string }
-  /** Nomes de campo variam conforme a AA adiciona benchmarks — ler defensivamente */
+  /** Field names vary as AA adds benchmarks — read defensively */
   evaluations?: Record<string, number | null | undefined>
   pricing?: {
     price_1m_input_tokens?: number
@@ -68,7 +68,7 @@ async function fetchModels(): Promise<AAModel[] | null> {
   }
 }
 
-/** Retorna [] quando não há chave nem cache — a aba funciona só com o OpenRouter. */
+/** Returns [] when there is neither key nor cache — the tab still works with OpenRouter alone. */
 export async function getAAModels(force = false): Promise<AAModel[]> {
   if (!force) {
     const cache = await readCache()

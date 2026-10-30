@@ -1,42 +1,42 @@
 import sharp from 'sharp'
 
 /**
- * Miniatura de um documento da aba Fontes.
+ * Thumbnail of a document in the Sources tab.
  *
- * O ícone por tipo diz o FORMATO, e é a informação que menos importa quando a
- * lista cresce: cinco PDFs viram cinco ícones iguais. A miniatura diz QUAL
- * documento é — pela cara da primeira página, que é como a pessoa reconhece um
- * arquivo que ela mesma anexou.
+ * The per-type icon says the FORMAT, and that is the least important information when the
+ * list grows: five PDFs become five identical icons. The thumbnail says WHICH
+ * document it is — from the face of the first page, which is how the person recognizes a
+ * file they attached themselves.
  *
- * Dois caminhos, porque nem toda fonte tem página:
+ * Two paths, because not every source has a page:
  *
- * - PDF é a página 1 de verdade, renderizada pelo mesmo pdfjs do visualizador.
- * - O resto (DOCX, planilha, texto colado, site) não tem imagem nenhuma
- *   guardada — o que existe é o texto extraído. Então a miniatura DESENHA uma
- *   folha com as primeiras linhas, que é o que um gerenciador de arquivos faz
- *   e o que deixa dois textos colados distinguíveis um do outro.
+ * - PDF is real page 1, rendered by the same pdfjs as the viewer.
+ * - The rest (DOCX, spreadsheet, pasted text, site) has no image at all
+ *   stored — what exists is the extracted text. So the thumbnail DRAWS a
+ *   sheet with the first lines, which is what a file manager does
+ *   and what makes two pasted texts distinguishable from each other.
  *
- * Sem BrowserWindow no segundo caso: o SVG entra direto no sharp, que o
- * rasteriza. É por isso que o texto é desenhado aqui e não em HTML.
+ * No BrowserWindow in the second case: the SVG goes straight into sharp, which rasterizes
+ * it. That is why the text is drawn here and not in HTML.
  */
 
-/** Tamanho gravado — 2x do exibido, para não borrar em tela hidpi. */
+/** Stored size — 2x what is displayed, so as not to blur on a hidpi screen. */
 export const THUMB_WIDTH = 160
-/** Proporção ~1:1.3, a de uma folha A4 de pé. */
+/** ~1:1.3 proportion, that of an upright A4 sheet. */
 export const THUMB_HEIGHT = 208
 
-/** Linhas que cabem na folha desenhada, no tamanho de fonte abaixo. */
+/** Lines that fit on the drawn sheet, at the font size below. */
 const TEXT_LINES = 13
 const FONT_SIZE = 7.5
 const LINE_HEIGHT = 11
-/** Largura média de um caractere, para cortar a linha antes de vazar da folha. */
+/** Average width of a character, to cut the line before it leaks off the sheet. */
 const CHAR_WIDTH = 3.9
 const PADDING = 11
 
 /**
- * Cadeia de fontes com um representante de cada plataforma. Não é decoração:
- * se nenhuma resolver, o librsvg desenha a folha VAZIA em vez de dar erro — é
- * o caso que o `looksBlank` abaixo pega.
+ * Font chain with a representative from each platform. It is not decoration:
+ * if none resolves, librsvg draws the sheet EMPTY instead of erroring — it is
+ * the case `looksBlank` below catches.
  */
 const FONT_STACK = 'Segoe UI, DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif'
 
@@ -49,11 +49,11 @@ function escapeXml(text: string): string {
 }
 
 /**
- * As primeiras linhas úteis do texto.
+ * The first useful lines of the text.
  *
- * Linha em branco não vira linha da miniatura: num documento com espaçamento
- * duplo, metade da folha seria vazia. Linha comprida é cortada no que cabe —
- * quebrar em duas gastaria o espaço de outra linha de conteúdo.
+ * A blank line does not become a line of the thumbnail: in a double-spaced document,
+ * half the sheet would be empty. A long line is cut at what fits —
+ * breaking it in two would spend another content line's space.
  */
 function previewLines(text: string, max: number): string[] {
   const limit = Math.floor((THUMB_WIDTH - PADDING * 2) / CHAR_WIDTH)
@@ -67,7 +67,7 @@ function previewLines(text: string, max: number): string[] {
   return lines
 }
 
-/** A folha desenhada: fundo branco, um filete de borda e o texto. */
+/** The drawn sheet: white background, a thin border and the text. */
 function pageSvg(lines: string[]): string {
   const text = lines
     .map(
@@ -83,12 +83,12 @@ function pageSvg(lines: string[]): string {
 }
 
 /**
- * Mesma folha, com barras no lugar do texto.
+ * The same sheet, with bars in place of the text.
  *
- * É o plano B de quando nenhuma fonte resolveu: `<rect>` não depende de
- * fontconfig, então isto desenha em qualquer máquina. O comprimento de cada
- * barra acompanha o da linha real, o que ainda distingue um parágrafo denso de
- * uma lista curta.
+ * It is the plan B for when no font resolved: `<rect>` does not depend on
+ * fontconfig, so this draws on any machine. The length of each
+ * bar follows the real line's, which still distinguishes a dense paragraph from
+ * a short list.
  */
 function skeletonSvg(lines: string[]): string {
   const bars = lines
@@ -105,20 +105,20 @@ function skeletonSvg(lines: string[]): string {
 }
 
 /**
- * A folha saiu em branco?
+ * Did the sheet come out blank?
  *
- * Serve para um caso só, mas real: sem fonte instalada o librsvg não reclama —
- * ele devolve a folha limpa. Contar pixel escuro é o que separa "renderizou" de
- * "renderizou nada", e é barato numa imagem de 160x208.
+ * It serves a single case, but a real one: without an installed font librsvg does not complain —
+ * it returns the clean sheet. Counting dark pixels is what separates "rendered" from
+ * "rendered nothing", and it is cheap on a 160x208 image.
  *
- * Mede só o MIOLO, recortando a moldura: ela é desenhada com `<rect>` e sai
- * igual nos dois casos, então contá-la seria dar por renderizada uma folha em
- * que nenhuma letra apareceu.
+ * It measures only the MIDDLE, cropping the frame: that is drawn with `<rect>` and comes out
+ * the same in both cases, so counting it would take for rendered a sheet in
+ * which no letter appeared.
  *
- * E o corte é baixo de propósito. Um texto colado de duas linhas pinta pouco
- * mais de cem pixels no tamanho em que isto é desenhado; um corte calibrado
- * para "folha cheia" descartaria o texto curto, que é justamente o caso em que
- * a capa mais ajuda a distinguir uma fonte da outra.
+ * And the cut is low on purpose. A pasted text of two lines paints little
+ * more than a hundred pixels at the size this is drawn at; a cut calibrated
+ * for a "full sheet" would discard the short text, which is precisely the case in which
+ * the cover helps most to tell one source from another.
  */
 const BLANK_MARGIN = 3
 const INK_LEVEL = 200
@@ -151,10 +151,10 @@ async function toWebp(svg: string): Promise<Buffer> {
 }
 
 /**
- * Miniatura desenhada a partir do texto do documento.
+ * Thumbnail drawn from the document's text.
  *
- * Nunca lança: a miniatura é enfeite, e uma fonte sem miniatura continua
- * perfeitamente utilizável na lista (o ícone do tipo volta a aparecer).
+ * It never throws: the thumbnail is decoration, and a source without a thumbnail keeps
+ * being perfectly usable in the list (the type icon comes back).
  */
 export async function textThumb(text: string): Promise<Buffer | null> {
   const lines = previewLines(text, TEXT_LINES)
@@ -173,11 +173,11 @@ export async function textThumb(text: string): Promise<Buffer | null> {
 }
 
 /**
- * Miniatura da primeira página renderizada de um PDF.
+ * Thumbnail of the rendered first page of a PDF.
  *
- * `contain` sobre branco, e não `cover`: recortar a página para preencher o
- * quadro cortaria justamente o topo, que é onde está o título pelo qual a
- * pessoa reconhece o documento.
+ * `contain` over white, and not `cover`: cropping the page to fill the
+ * frame would cut precisely the top, which is where the title by which the
+ * person recognizes the document is.
  */
 export async function pageThumb(png: Buffer): Promise<Buffer | null> {
   try {

@@ -5,9 +5,9 @@ const { __resetWriteJournal, coveredBy, currentTurnWrites, detachFromTurn, recor
   await import('./write-journal')
 
 /**
- * Autoria das escritas na pasta: o revert desfaz o que as tools do turno
- * gravaram, e não o que outra conversa (ou algo de fora) mudou no mesmo
- * intervalo.
+ * Authorship of the writes in the folder: the revert undoes what the tools of the turn
+ * wrote, and not what another conversation (or something external) changed in the same
+ * interval.
  */
 const repo = path.resolve('/repo')
 
@@ -16,22 +16,22 @@ beforeEach(() => {
 })
 
 describe('write-journal', () => {
-  it('registra o que as tools do turno gravaram, relativo à pasta', async () => {
+  it('records what the turn tools wrote, relative to the folder', async () => {
     await runWithWriteScope(async () => {
       recordToolWrite(path.join(repo, 'src', 'a.ts'))
       recordToolWrite(path.join(repo, 'downloads'))
-      // Fora da pasta não entra.
-      recordToolWrite(path.resolve('/outro', 'b.ts'))
+      // Outside the folder does not count.
+      recordToolWrite(path.resolve('/other', 'b.ts'))
       expect(currentTurnWrites(repo)).toEqual({ authored: ['downloads', 'src/a.ts'], others: [] })
     })
   })
 
-  it('fora de um turno nada é registrado', () => {
+  it('outside a turn nothing is recorded', () => {
     recordToolWrite(path.join(repo, 'a.ts'))
     expect(currentTurnWrites(repo)).toBeNull()
   })
 
-  it('dois turnos em paralelo: o de um é "others" para o outro', async () => {
+  it('two parallel turns: the writes of one are "others" for the other', async () => {
     let releaseA!: () => void
     const gateA = new Promise<void>((resolve) => (releaseA = resolve))
     let writesA: ReturnType<typeof currentTurnWrites> = null
@@ -54,15 +54,15 @@ describe('write-journal', () => {
     expect(writesB).toEqual({ authored: ['de-b.ts'], others: ['de-a.ts'] })
   })
 
-  it('escrita de outro turno ANTES deste começar não conta como "others"', async () => {
-    await runWithWriteScope(async () => recordToolWrite(path.join(repo, 'velho.ts')))
+  it('a write from another turn BEFORE this one started does not count as "others"', async () => {
+    await runWithWriteScope(async () => recordToolWrite(path.join(repo, 'old.ts')))
     await new Promise((resolve) => setTimeout(resolve, 5))
     await runWithWriteScope(async () => {
       expect(currentTurnWrites(repo)).toEqual({ authored: [], others: [] })
     })
   })
 
-  it('turno aninhado e esperado (worker) conta para ele e para o pai', async () => {
+  it('a nested and awaited turn (worker) counts for it and for the parent', async () => {
     await runWithWriteScope(async () => {
       const filho = await runWithWriteScope(async () => {
         recordToolWrite(path.join(repo, 'do-worker.ts'))
@@ -73,14 +73,14 @@ describe('write-journal', () => {
     })
   })
 
-  it('detachFromTurn: o que roda fora do escopo não é do pai', async () => {
+  it('detachFromTurn: what runs outside the scope is not the parent one', async () => {
     await runWithWriteScope(async () => {
       await detachFromTurn(() => runWithWriteScope(async () => recordToolWrite(path.join(repo, 'subchat.ts'))))
       expect(currentTurnWrites(repo)).toEqual({ authored: [], others: ['subchat.ts'] })
     })
   })
 
-  it('coveredBy: pasta registrada cobre o que há dentro', () => {
+  it('coveredBy: a registered folder covers what is inside it', () => {
     expect(coveredBy('downloads/video.mp4', ['downloads'])).toBe(true)
     expect(coveredBy('downloads', ['downloads'])).toBe(true)
     expect(coveredBy('downloads-2/x', ['downloads'])).toBe(false)

@@ -1,6 +1,6 @@
 /**
- * Seleção para o contexto: candidatos (semântico/lexical/fusão) e a política de
- * dois níveis. Vetores sintéticos, sem modelo — o que se testa aqui é a regra.
+ * Selection for the context: candidates (semantic/lexical/fusion) and the two-level
+ * policy. Synthetic vectors, no model — what is tested here is the rule.
  */
 import { describe, expect, it } from 'vitest'
 import type { Memory } from '@shared/memory'
@@ -53,7 +53,7 @@ const cand = (id: string, cos: number | null, coverage = 0): Candidate => ({
 })
 
 describe('candidatos', () => {
-  it('modo semântico ordena por cosseno e ignora o léxico', () => {
+  it('semantic mode sorts by cosine and ignores the lexicon', () => {
     const vectors = new Map([
       ['a', unit(1, 0)],
       ['b', unit(0, 1)],
@@ -64,11 +64,11 @@ describe('candidatos', () => {
     )
     expect(out[0].id).toBe('a')
     expect(out[0].cos).toBeCloseTo(1, 5)
-    // "vinil" só existe em b, mas o modo semântico não consulta o BM25
+    // "vinil" only exists in b, but the semantic mode does not query BM25
     expect(out.find((c) => c.id === 'b')?.coverage).toBe(0)
   })
 
-  it('modo lexical funciona sem vetor nenhum (fallback do app)', () => {
+  it('lexical mode works with no vector at all (app fallback)', () => {
     const out = retrieveCandidates(
       { queryVec: null, lexicalQuery: 'vinil', vectors: new Map(), lexical },
       { ...DEFAULT_RETRIEVAL, mode: 'hybrid' },
@@ -77,7 +77,7 @@ describe('candidatos', () => {
     expect(out[0].cos).toBeNull()
   })
 
-  it('a fusão traz candidato que só uma das fontes achou', () => {
+  it('the fusion brings a candidate only one of the sources found', () => {
     const vectors = new Map([
       ['a', unit(1, 0)],
       ['b', unit(0, 1)],
@@ -91,7 +91,7 @@ describe('candidatos', () => {
     expect(out.map((c) => c.id)).toContain('c')
   })
 
-  it('cobertura fica em 0..1 mesmo quando o BM25 satura', () => {
+  it('coverage stays in 0..1 even when the BM25 saturates', () => {
     const out = retrieveCandidates(
       { queryVec: null, lexicalQuery: 'vinil jazz', vectors: new Map(), lexical },
       { ...DEFAULT_RETRIEVAL, mode: 'lexical' },
@@ -103,7 +103,7 @@ describe('candidatos', () => {
     expect(out[0].coverage).toBeCloseTo(1, 5)
   })
 
-  it('consulta vazia não inventa candidato', () => {
+  it('an empty query does not invent a candidate', () => {
     const out = retrieveCandidates(
       { queryVec: null, lexicalQuery: '   ', vectors: new Map(), lexical },
       DEFAULT_RETRIEVAL,
@@ -112,8 +112,8 @@ describe('candidatos', () => {
   })
 })
 
-describe('piso de ruído do acervo', () => {
-  it('guarda o maior cosseno de cada sonda, em ordem', () => {
+describe('corpus noise floor', () => {
+  it('keeps the highest cosine of each probe, in order', () => {
     const vectors = new Map([
       ['a', unit(1, 0)],
       ['b', unit(0, 1)],
@@ -122,21 +122,21 @@ describe('piso de ruído do acervo', () => {
     expect(floor.tops).toEqual([1, 1])
   })
 
-  it('quantil interpola e tolera lista vazia', () => {
+  it('the quantile interpolates and tolerates an empty list', () => {
     expect(quantile([], 1)).toBe(0)
     expect(quantile([0, 1], 0.5)).toBe(0.5)
     expect(quantile([0, 0.5, 1], 1)).toBe(1)
   })
 
-  it('acervo com ruído alto eleva o limiar de injeção', () => {
-    const quiet = selectForContext([cand('a', 0.45)], { tops: [0.1] }, { ...DEFAULT_SELECTION, threshold: 'acervo', injectDelta: 0.05 })
-    const noisy = selectForContext([cand('a', 0.45)], { tops: [0.42] }, { ...DEFAULT_SELECTION, threshold: 'acervo', injectDelta: 0.05 })
+  it('a corpus with high noise raises the injection threshold', () => {
+    const quiet = selectForContext([cand('a', 0.45)], { tops: [0.1] }, { ...DEFAULT_SELECTION, threshold: 'collection', injectDelta: 0.05 })
+    const noisy = selectForContext([cand('a', 0.45)], { tops: [0.42] }, { ...DEFAULT_SELECTION, threshold: 'collection', injectDelta: 0.05 })
     expect(quiet.inject.map((c) => c.id)).toEqual(['a'])
     expect(noisy.inject).toEqual([])
   })
 
-  it('as sondas de ruído não repetem as consultas do benchmark', async () => {
-    // o conjunto de calibração é escrito à parte de propósito
+  it('the noise probes do not repeat the benchmark queries', async () => {
+    // the calibration set is written separately on purpose
     const cases = (await import('./bench/cases.json', { with: { type: 'json' } })).default as {
       cases: unknown[][]
       columns: string[]
@@ -147,62 +147,62 @@ describe('piso de ruído do acervo', () => {
   })
 })
 
-describe('política de dois níveis', () => {
+describe('two-tier policy', () => {
   const absolute = (over: Partial<SelectionParams> = {}): SelectionParams => ({
     ...DEFAULT_SELECTION,
     threshold: 'absolute',
     ...over,
   })
 
-  it('confiança alta injeta o conteúdo', () => {
+  it('high confidence injects the content', () => {
     const sel = selectForContext([cand('a', 0.82)], undefined, absolute())
     expect(sel.inject.map((c) => c.id)).toEqual(['a'])
     expect(sel.pointers).toEqual([])
   })
 
-  it('confiança média vira ponteiro, não injeção', () => {
+  it('medium confidence becomes a pointer, not an injection', () => {
     const sel = selectForContext([cand('a', 0.55)], undefined, absolute())
     expect(sel.inject).toEqual([])
     expect(sel.pointers.map((c) => c.id)).toEqual(['a'])
   })
 
-  it('sem evidência não devolve nada', () => {
+  it('with no evidence it returns nothing', () => {
     const sel = selectForContext([cand('a', 0.2)], undefined, absolute())
     expect(sel.inject).toEqual([])
     expect(sel.pointers).toEqual([])
   })
 
-  it('primeiro lugar fraco não vira injeção só por estar em primeiro', () => {
+  it('a weak first place does not become an injection just for being first', () => {
     const sel = selectForContext([cand('a', 0.58), cand('b', 0.57)], undefined, absolute())
     expect(sel.inject).toEqual([])
   })
 
-  it('limita a quantidade de injeções e de ponteiros', () => {
+  it('limits the number of injections and pointers', () => {
     const many = ['a', 'b', 'c', 'd', 'e'].map((id) => cand(id, 0.9))
     const sel = selectForContext(many, undefined, absolute({ maxInject: 2, maxPointers: 1, gap: 1 }))
     expect(sel.inject).toHaveLength(2)
     expect(sel.pointers).toHaveLength(1)
   })
 
-  it('só injeta quem está perto do topo', () => {
+  it('only injects what is near the top', () => {
     const sel = selectForContext([cand('a', 0.9), cand('b', 0.65)], undefined, absolute({ gap: 0.08 }))
     expect(sel.inject.map((c) => c.id)).toEqual(['a'])
-    // 0.65 ainda é plausível: vira ponteiro
+    // 0.65 is still plausible: becomes a pointer
     expect(sel.pointers.map((c) => c.id)).toEqual(['b'])
   })
 
-  it('correspondência lexical forte sozinha vira ponteiro', () => {
+  it('a strong lexical match alone becomes a pointer', () => {
     const sel = selectForContext([cand('c', null, 1)], undefined, absolute({ lexPointerCoverage: 0.9 }))
     expect(sel.inject).toEqual([])
     expect(sel.pointers.map((c) => c.id)).toEqual(['c'])
   })
 
-  it('cosseno de ponteiro + cobertura lexical alta injeta', () => {
+  it('pointer cosine + high lexical coverage injects', () => {
     const sel = selectForContext([cand('c', 0.62, 1)], undefined, absolute({ lexInjectCoverage: 0.9 }))
     expect(sel.inject.map((c) => c.id)).toEqual(['c'])
   })
 
-  it('margem sobre o segundo candidato pode bloquear a injeção do topo', () => {
+  it('the margin over the second candidate can block the top injection', () => {
     const params = absolute({ minMargin: 0.2 })
     const tied = selectForContext([cand('a', 0.9), cand('b', 0.89)], undefined, params)
     const clear = selectForContext([cand('a', 0.9), cand('b', 0.5)], undefined, params)
@@ -211,14 +211,14 @@ describe('política de dois níveis', () => {
   })
 
   it('reporta os limiares efetivamente usados', () => {
-    const sel = selectForContext([cand('a', 0.9)], { tops: [0.3] }, { ...DEFAULT_SELECTION, threshold: 'acervo', injectDelta: 0.05, pointerDelta: 0 })
+    const sel = selectForContext([cand('a', 0.9)], { tops: [0.3] }, { ...DEFAULT_SELECTION, threshold: 'collection', injectDelta: 0.05, pointerDelta: 0 })
     expect(sel.thresholds.inject).toBeCloseTo(0.35, 5)
     expect(sel.thresholds.pointer).toBeCloseTo(0.3, 5)
   })
 })
 
 describe('custo da consulta', () => {
-  it('conta tokens para decidir se a busca lexical vale a pena', () => {
+  it('counts tokens to decide whether the lexical search is worth it', () => {
     expect(queryTokenCount('E quanto custaria?')).toBe(2)
     expect(queryTokenCount('')).toBe(0)
   })

@@ -10,17 +10,17 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Pastas que sumiram do disco.
+ * Folders that disappeared from the disk.
  *
- * O caminho é guardado como string, então renomear a pasta no Finder é
- * invisível para o Orbit até alguém tentar usá-la. Como o VS Code, a gente
- * confere na abertura e oferece a única saída que não perde trabalho:
- * relocalizar.
+ * The path is kept as a string, so renaming the folder in Finder is
+ * invisible to Orbit until someone tries to use it. Like VS Code, we
+ * check on opening and offer the only way out that does not lose work:
+ * relocating.
  *
- * A checagem compara os caminhos guardados com o disco AGORA — não vigia
- * renomes. É por isso que uma pasta renomeada antes disto existir aparece do
- * mesmo jeito, sem precisar de migração. O preço é não haver watcher: a lista é
- * conferida na abertura e quando ela muda.
+ * The check compares the stored paths with the disk NOW — it does not watch
+ * renames. That is why a folder renamed before this existed appears the
+ * same way, without needing a migration. The price is having no watcher: the list is
+ * checked on opening and when it changes.
  */
 export function MissingFoldersBanner() {
   const { t } = useTranslation()
@@ -32,8 +32,8 @@ export function MissingFoldersBanner() {
   const [dismissed, setDismissed] = useState(false)
 
   const paths = useMemo(() => collectFolderPaths(folders, sessions), [folders, sessions])
-  // A string é a identidade da lista: `sessions` troca de referência a cada
-  // mensagem, e sem isso a checagem iria ao main a cada token escrito.
+  // The string is the identity of the list: `sessions` changes reference on every
+  // message, and without it the check would go to the main process on every token written.
   const pathsKey = paths.join("\n")
 
   useEffect(() => {
@@ -49,8 +49,8 @@ export function MissingFoldersBanner() {
         if (!cancelled) setMissing(missingFolders(current, existing))
       })
       .catch(() => {
-        // Sem resposta do main a checagem não aconteceu. O silêncio é melhor do
-        // que um alerta que ninguém consegue confirmar.
+        // Without an answer from the main process the check did not happen. Silence is better than
+        // an alert nobody can confirm.
       })
     return () => {
       cancelled = true
@@ -61,8 +61,8 @@ export function MissingFoldersBanner() {
     async (path: string) => {
       const picked = await windowApi.selectFolder()
       if (!picked) return
-      // As pastas do workspace vivem fora do store: quem religa as duas pontas
-      // é aqui.
+      // The workspace folders live outside the store: what reconnects the two ends
+      // is here.
       if (folders.includes(path)) {
         setFolders(folders.map((folder) => (folder === path ? picked : folder)))
       }

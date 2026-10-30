@@ -2,35 +2,36 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import path from 'node:path'
 
 /**
- * Diário de ESCRITA das ferramentas do agente na pasta de trabalho.
+ * WRITE journal of the agent's tools in the working folder.
  *
- * O snapshot do modo código (snapshot/index.ts) diz O QUE mudou na pasta entre
- * o começo e o fim do turno, mas não QUEM mudou: outra conversa na mesma
- * pasta, um editor externo, um formatter ou um `npm run dev` caem no mesmo
- * diff. Atribuir por janela de tempo obrigava a serializar os turnos da pasta
- * inteira (e ainda assim não cobria o que roda fora do Orbit).
+ * The code-mode snapshot (snapshot/index.ts) says WHAT changed in the folder between
+ * the start and the end of the turn, but not WHO changed it: another conversation in the same
+ * folder, an external editor, a formatter or an `npm run dev` all fall into the same
+ * diff. Attributing by time window forced serializing the turns of the whole
+ * folder (and even then it did not cover what runs outside Orbit).
  *
- * Aqui cada ferramenta que grava na pasta (write, edit, imagem, pdf, docx…)
- * registra o caminho ANTES de gravar, pelo `resolveWritePath` das tools. O
- * revert usa isso como prova de autoria: o que está no diff e foi escrito
- * pelas ferramentas do turno é desfeito; o que está no diff e NÃO foi (bash,
- * MCP, algo de fora) aparece à parte, "autor incerto", e só é desfeito se a
- * pessoa pedir.
+ * Here every tool that writes to the folder (write, edit, image, pdf, docx…)
+ * records the path BEFORE writing, through the `resolveWritePath` of the tools. The
+ * revert uses that as proof of authorship: what is in the diff and was written
+ * by the turn's tools is undone; what is in the diff and was NOT (bash,
+ * MCP, something from outside) shows up apart, "uncertain author", and is only undone if the
+ * person asks for it.
  *
- * O escopo é um AsyncLocalStorage aberto em volta do turno — as tools herdam
- * sem receber nada por parâmetro, como no diário de mídia. Um turno ANINHADO e
- * esperado pelo pai (worker da orquestra) abre um escopo filho: o que ele grava
- * conta para ele e para o pai. O que é disparado em paralelo e vive além do
- * turno (subchat) sai do escopo com `detachFromTurn` — é outra conversa.
+ * The scope is an AsyncLocalStorage opened around the turn — the tools inherit it
+ * without receiving anything as a parameter, as in the media journal. A turn that
+ * is NESTED and awaited by the parent (orchestra worker) opens a child scope:
+ * what it records counts for it and for the parent. Whatever is fired in parallel
+ * and outlives the turn (subchat) leaves the scope with `detachFromTurn` — it is
+ * another conversation.
  *
- * Registrar a INTENÇÃO (antes de gravar) é suficiente: se a escrita falhar, o
- * caminho não muda e nem entra no diff.
+ * Recording the INTENTION (before writing) is enough: if the write fails, the
+ * path does not change and does not even enter the diff.
  */
 
 interface TurnScope {
   id: string
   startedAt: number
-  /** Caminhos absolutos (arquivo ou pasta inteira) gravados pelas tools. */
+  /** Absolute paths (file or whole folder) written by the tools. */
   paths: Set<string>
   parent?: TurnScope
 }
@@ -38,19 +39,19 @@ interface TurnScope {
 interface RecentWrite {
   path: string
   at: number
-  /** Ids do escopo que gravou e de todos os ancestrais. */
+  /** Ids of the scope that wrote and of all the ancestors. */
   owners: Set<string>
 }
 
 const storage = new AsyncLocalStorage<TurnScope>()
-/** Escritas recentes de TODOS os turnos — para saber o que é de outra conversa. */
+/** Recent writes of ALL turns — to know what belongs to another conversation. */
 const recent: RecentWrite[] = []
-/** Um turno longo de agente cabe folgado; o resto é só memória sem uso. */
+/** A long agent turn fits comfortably; the rest is just memory without use. */
 const RECENT_TTL_MS = 6 * 60 * 60 * 1000
 const RECENT_MAX = 20_000
 let counter = 0
 
-/** Abre o escopo de escrita do turno em volta de `fn` (filho do atual, se houver). */
+/** Opens the turn's write scope around `fn` (child of the current one, if any). */
 export function runWithWriteScope<T>(fn: () => T): T {
   const parent = storage.getStore()
   const scope: TurnScope = {
@@ -62,7 +63,7 @@ export function runWithWriteScope<T>(fn: () => T): T {
   return storage.run(scope, fn)
 }
 
-/** Roda `fn` fora do escopo do turno atual — para outra conversa disparada sem `await`. */
+/** Runs `fn` outside the current turn's scope — for another conversation fired without `await`. */
 export function detachFromTurn<T>(fn: () => T): T {
   return storage.exit(fn)
 }
@@ -76,8 +77,8 @@ function prune(now: number): void {
 }
 
 /**
- * A ferramenta vai gravar (ou apagar/substituir) `absPath` — arquivo ou pasta
- * inteira. Fora de um turno não faz nada.
+ * The tool is going to write (or delete/replace) `absPath` — a file or a whole
+ * folder. Outside a turn it does nothing.
  */
 export function recordToolWrite(absPath: string): void {
   const scope = storage.getStore()
@@ -93,7 +94,7 @@ export function recordToolWrite(absPath: string): void {
   prune(now)
 }
 
-/** Relativo a `directory`, com '/', ou null se estiver fora dela. */
+/** Relative to `directory`, with '/', or null if it is outside it. */
 function relativeTo(directory: string, abs: string): string | null {
   const rel = path.relative(path.resolve(directory), abs)
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null
@@ -101,16 +102,16 @@ function relativeTo(directory: string, abs: string): string | null {
 }
 
 export interface TurnWrites {
-  /** Caminhos (relativos, '/') gravados pelas tools deste turno. Pasta cobre o que há dentro. */
+  /** Paths (relative, '/') written by the tools of this turn. A folder covers what is inside. */
   authored: string[]
-  /** Caminhos gravados pelas tools de OUTROS turnos do Orbit durante este. */
+  /** Paths written by the tools of OTHER Orbit turns during this one. */
   others: string[]
 }
 
 /**
- * O que as tools gravaram em `directory` durante o turno atual, e o que as de
- * outros turnos gravaram no mesmo intervalo. Chamar no fim do turno, dentro
- * do escopo dele; fora de um escopo devolve null.
+ * What the tools wrote in `directory` during the current turn, and what those of
+ * other turns wrote in the same interval. Call it at the end of the turn, inside
+ * its scope; outside a scope it returns null.
  */
 export function currentTurnWrites(directory: string): TurnWrites | null {
   const scope = storage.getStore()
@@ -129,7 +130,7 @@ export function currentTurnWrites(directory: string): TurnWrites | null {
   return { authored: [...authored].sort(), others: [...others].sort() }
 }
 
-/** `rel` é um dos caminhos da lista, ou está dentro de uma pasta da lista? */
+/** Is `rel` one of the paths in the list, or inside a folder in the list? */
 export function coveredBy(rel: string, list: Iterable<string>): boolean {
   for (const entry of list) {
     if (rel === entry || rel.startsWith(`${entry}/`)) return true
@@ -137,7 +138,7 @@ export function coveredBy(rel: string, list: Iterable<string>): boolean {
   return false
 }
 
-/** Só para teste. */
+/** For testing only. */
 export function __resetWriteJournal(): void {
   recent.length = 0
 }

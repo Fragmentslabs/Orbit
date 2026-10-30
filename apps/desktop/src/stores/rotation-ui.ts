@@ -1,15 +1,15 @@
 import { create } from "zustand"
 
 /**
- * Estado global do RotationDialog: permite abrir de qualquer ponto da UI
- * (grupo do seletor de modelo, footer do seletor, botão da aba Models) com o
- * mesmo handoff determinístico do SettingsDialog — o modal é montado uma vez
- * na raiz do app (RotationDialogHost) e controlado por este store.
+ * Global state of the RotationDialog: it allows opening from any point of the UI
+ * (model selector group, selector footer, Models tab button) with the
+ * same deterministic handoff as the SettingsDialog — the modal is mounted once
+ * at the app root (RotationDialogHost) and controlled by this store.
  */
 
 interface RotationUiState {
   open: boolean
-  /** Rotação a editar ao abrir (undefined = cria nova se não existir) */
+  /** Rotation to edit on open (undefined = creates a new one if it does not exist) */
   rotationId: string | null
   openRotation: (rotationId?: string | null) => void
   setOpen: (open: boolean) => void

@@ -8,38 +8,39 @@ import { FONT_SCHEME } from '@shared/media'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 
 /**
- * Biblioteca de fontes do Orbit: `orbit-data/fonts` (índice + `files/`) e o
- * scheme `orbit-font://` que a serve.
+ * Orbit's font library: `orbit-data/fonts` (index + `files/`) and the `orbit-font://`
+ * scheme that serves it.
  *
- * O armazém é CONTENT-ADDRESSED (o nome do arquivo é o hash do conteúdo): baixar
- * a mesma família duas vezes, ou duas famílias que compartilham um subset, não
- * duplica byte nenhum. O índice guarda o que a UI e o agente precisam saber para
- * usar a fonte — família, licença, subsets e os arquivos com peso/estilo/range.
+ * The store is CONTENT-ADDRESSED (the file name is the hash of the content):
+ * downloading the same family twice, or two families that share a subset, does not
+ * duplicate a single byte. The index keeps what the UI and the agent need to know in
+ * order to use the font — family, license, subsets and the files with
+ * weight/style/range.
  *
- * Nada é copiado para o projeto: o artboard, a composição de motion e a janela
- * do app declaram o mesmo `@font-face` apontando para cá (o scheme manda CORS,
- * que é o que fonte em origem opaca exige). É o mesmo desenho do
+ * Nothing is copied into the project: the artboard, the motion composition and the
+ * app window declare the same `@font-face` pointing here (the scheme sends CORS,
+ * which is what a font on an opaque origin requires). It is the same design as
  * `orbit-design://`/`orbit-motion://`.
  */
 
 export interface FontFileRef {
-  /** Nome do arquivo em `files/` (hash do conteúdo + extensão). */
+  /** File name in `files/` (content hash + extension). */
   file: string
   subset: string
-  /** Peso CSS: `400` no estático, `100 900` na variável. */
+  /** CSS weight: `400` on the static one, `100 900` on the variable one. */
   weight: string
   style: 'normal' | 'italic'
-  /** `unicode-range` do subset, quando o pacote informa. */
+  /** `unicode-range` of the subset, when the package reports it. */
   unicodeRange?: string
 }
 
 export interface OrbitFont {
-  /** Slug do Fontsource (ex.: `inter`, `jetbrains-mono`). */
+  /** Fontsource slug (e.g. `inter`, `jetbrains-mono`). */
   id: string
   family: string
   category?: string
   license?: { type: string; url?: string; attribution?: string }
-  /** Variável: um arquivo cobre a faixa de pesos inteira. */
+  /** Variable: one file covers the whole weight range. */
   variable: boolean
   weights: string[]
   styles: string[]
@@ -75,7 +76,7 @@ function indexFile(): string {
 
 let cache: { mtimeMs: number; fonts: OrbitFont[] } | null = null
 
-/** O índice, reaproveitado enquanto o arquivo não muda no disco. */
+/** The index, reused while the file does not change on disk. */
 export async function listFonts(): Promise<OrbitFont[]> {
   const stat = await fsp.stat(indexFile()).catch(() => null)
   if (!stat) {
@@ -99,7 +100,7 @@ async function writeIndex(fonts: OrbitFont[]): Promise<void> {
   cache = null
 }
 
-/** Acha por slug ou por família (sem diferenciar maiúsculas). */
+/** Finds by slug or by family (case-insensitive). */
 export async function findFont(ref: string): Promise<OrbitFont | null> {
   const wanted = ref.trim().toLowerCase()
   if (!wanted) return null
@@ -111,7 +112,7 @@ export async function findFont(ref: string): Promise<OrbitFont | null> {
   )
 }
 
-/** Grava o arquivo no armazém e devolve o nome (hash) — o mesmo byte não entra duas vezes. */
+/** Writes the file into the store and returns the name (hash) — the same bytes do not enter twice. */
 export async function storeFontFile(buffer: Buffer, ext: string): Promise<string> {
   const name = `${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 32)}.${ext}`
   await fsp.mkdir(fontFilesDir(), { recursive: true })
@@ -124,7 +125,7 @@ export async function storeFontFile(buffer: Buffer, ext: string): Promise<string
   return name
 }
 
-/** Insere ou atualiza uma família no índice (id do Fontsource é a chave). */
+/** Inserts or updates a family in the index (the Fontsource id is the key). */
 export async function addFont(font: OrbitFont): Promise<OrbitFont> {
   return withAssetLock('fonts:index', async () => {
     const fonts = await listFonts()
@@ -142,19 +143,19 @@ export function fontUrl(file: string): string {
 }
 
 /**
- * Caminho de um arquivo da biblioteca a partir do NOME (`<hash>.<ext>`), com o
- * nome validado pelo mesmo `SAFE_FILE` do handler do scheme — `null` para
- * qualquer coisa que não tenha o formato que nós mesmos geramos (o `..` incluso).
+ * Path of a library file from the NAME (`<hash>.<ext>`), with the name validated by
+ * the same `SAFE_FILE` as the scheme handler — `null` for anything that does not have
+ * the format we ourselves generate (`..` included).
  *
- * Existe para quem serve o arquivo SEM passar pelo protocolo: no celular o
- * `orbit-font://` não resolve, então o servidor HTTP do companion busca o
- * caminho por aqui (ver companion-assets.ts) e transmite os bytes.
+ * It exists for whoever serves the file WITHOUT going through the protocol: on the
+ * phone `orbit-font://` does not resolve, so the companion's HTTP server looks the
+ * path up here (see companion-assets.ts) and streams the bytes.
  */
 export function resolveFontFile(name: string): string | null {
   return SAFE_FILE.test(name) ? path.join(fontFilesDir(), name) : null
 }
 
-/** O `@font-face` de cada arquivo da biblioteca — uma declaração só, usada em todo alvo. */
+/** The `@font-face` of each library file — a single declaration, used in every target. */
 export function fontFaceCss(fonts: OrbitFont[]): string {
   const blocks: string[] = []
   for (const font of fonts) {
@@ -169,13 +170,13 @@ export function fontFaceCss(fonts: OrbitFont[]): string {
   return blocks.join('\n')
 }
 
-/** O CSS de todas as fontes, montado uma vez por versão do índice: `listFonts`
- *  devolve o MESMO array enquanto o arquivo não muda, então a identidade dele é
- *  a chave. É chamado a cada artboard servido (ver design-store.ts), não a cada
- *  requisição. */
+/** The CSS of all the fonts, built once per version of the index: `listFonts`
+ *  returns the SAME array while the file does not change, so its identity is
+ *  the key. It is called for every artboard served (see design-store.ts), not on
+ *  every request. */
 let facesCache: { fonts: OrbitFont[]; css: string } | null = null
 
-/** Todas as fontes da biblioteca, prontas para injetar num documento. */
+/** All the fonts of the library, ready to inject into a document. */
 export async function allFontFacesCss(): Promise<string> {
   const fonts = await listFonts()
   if (facesCache && facesCache.fonts === fonts) return facesCache.css
@@ -185,11 +186,11 @@ export async function allFontFacesCss(): Promise<string> {
 }
 
 /**
- * O `@font-face` da família pedida, quando ela vem da biblioteca.
+ * The `@font-face` of the requested family, when it comes from the library.
  *
- * Vazio quando o nome não está instalado aqui - aí a fonte é do sistema (ou
- * inventada) e não há nada a declarar: o Chromium resolve pelo nome, como
- * sempre fez.
+ * Empty when the name is not installed here - then the font is from the system (or
+ * made up) and there is nothing to declare: Chromium resolves it by name, as it
+ * always did.
  */
 export async function fontFacesForFamily(family: string): Promise<string> {
   const wanted = family.trim().toLowerCase()
@@ -199,9 +200,9 @@ export async function fontFacesForFamily(family: string): Promise<string> {
   return match ? fontFaceCss([match]) : ''
 }
 
-// Os privilégios do scheme moram em registerSchemePrivileges (media.ts): o
-// Chromium só honra a ÚLTIMA chamada de registerSchemesAsPrivileged, então o app
-// tem uma lista única — uma segunda aqui apagaria design, motion e áudio.
+// The scheme privileges live in registerSchemePrivileges (media.ts): Chromium
+// only honors the LAST call to registerSchemesAsPrivileged, so the app has a
+// single list — a second one here would wipe design, motion and audio.
 
 export async function handleFontRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
@@ -221,7 +222,7 @@ export async function handleFontRequest(request: Request): Promise<Response> {
       ...headers,
       'Content-Type': type,
       'Content-Length': String(size),
-      // O nome é o hash do conteúdo: o arquivo nunca muda.
+      // The name is the hash of the content: the file never changes.
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   })

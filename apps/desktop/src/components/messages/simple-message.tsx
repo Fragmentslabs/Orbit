@@ -5,16 +5,16 @@ import { AssistantMarkdown, MessageError } from "@/src/components/messages/share
 import { useTranslation } from "react-i18next"
 
 /**
- * Mensagem do assistente em modo simples: só o texto (com markdown/code blocks),
- * sem reasoning nem tool views. Enquanto o modelo trabalha sem texto visível,
- * mostra um shimmer.
+ * Assistant message in simple mode: only the text (with markdown/code blocks),
+ * without reasoning or tool views. While the model works without visible text,
+ * it shows a shimmer.
  */
 export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry }: {
   message: ChatMessage
   sessionId?: string
   isLast: boolean
   isBusy: boolean
-  /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui "Pensando…" */
+  /** Label of the waiting state (e.g. "Trying fallback 2/3…") — it replaces "Thinking…" */
   busyLabel?: string
   onRetry?: () => void
 }) {
@@ -32,8 +32,8 @@ export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, bus
         <AssistantMarkdown key={part.id}>{(part as { type: "text"; text: string }).text}</AssistantMarkdown>
       ))}
       {message.error && (
-        // Só na última: o retry reexecuta o turno sobre a mensagem do usuário,
-        // e numa resposta antiga isso descartaria o que veio depois dela.
+        // Only in the last one: the retry reruns the turn over the user message,
+        // and in an old reply that would discard what came after it.
         <MessageError
           sessionId={sessionId}
           error={message.error}

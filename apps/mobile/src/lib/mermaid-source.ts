@@ -1,18 +1,18 @@
 /**
- * O bundle do mermaid, servido do próprio app.
+ * The mermaid bundle, served from the app itself.
  *
- * O diagrama é desenhado dentro de um WebView, que não enxerga o bundle JS do
- * React Native — alguma cópia da lib precisa chegar lá. Buscar de CDN deixaria
- * o desenho dependente de internet, e este app não deveria exigir internet: ele
- * fala com o desktop na LAN. Por isso o bundle vem vendorizado em
+ * The diagram is drawn inside a WebView, which cannot see the JS bundle of
+ * React Native — some copy of the lib has to get there. Fetching from a CDN would leave
+ * the drawing dependent on the internet, and this app should not require the internet: it
+ * talks to the desktop on the LAN. That is why the bundle is vendored in
  * `assets/mermaid/mermaid.min.txt` (mermaid@11.17.2).
  *
- * A extensão `.txt` não é capricho: `js` é extensão de código para o Metro, e
- * um `.js` de 3,4 MB seria transpilado e embarcado no bundle principal, pago no
- * start de todo mundo. Registrado como asset (`metro.config.js`), ele é apenas
- * copiado para o pacote e lido quando um diagrama aparece.
+ * The `.txt` extension is not a whim: `js` is a code extension for Metro, and
+ * a 3.4 MB `.js` would be transpiled and embedded in the main bundle, paid at the
+ * start of everyone. Registered as an asset (`metro.config.js`), it is only
+ * copied into the package and read when a diagram shows up.
  *
- * Para atualizar a versão:
+ * To update the version:
  *   cp node_modules/mermaid/dist/mermaid.min.js \
  *      apps/mobile/assets/mermaid/mermaid.min.txt
  */
@@ -24,9 +24,9 @@ import mermaidAsset from '../../assets/mermaid/mermaid.min.txt'
 let pending: Promise<string | null> | null = null
 
 /**
- * O código da lib, ou `null` quando o asset não pôde ser lido — e aí o chamador
- * cai no código-fonte do diagrama. Lido uma vez por sessão: são 3,4 MB, e o
- * mesmo texto serve para todos os diagramas.
+ * The lib code, or `null` when the asset could not be read — and then the caller
+ * falls back to the source code of the diagram. Read once per session: it is 3.4 MB, and the
+ * same text serves every diagram.
  */
 export function loadMermaidSource(): Promise<string | null> {
   pending ??= readAsset()
@@ -36,8 +36,8 @@ export function loadMermaidSource(): Promise<string | null> {
 async function readAsset(): Promise<string | null> {
   try {
     const asset = Asset.fromModule(mermaidAsset)
-    // Em dev o asset é servido pelo Metro; `downloadAsync` copia para o cache e
-    // preenche `localUri`. Em build de produção ele já está no pacote.
+    // In dev the asset is served by Metro; `downloadAsync` copies it to the cache and
+    // fills in `localUri`. In a production build it is already in the package.
     if (!asset.localUri) await asset.downloadAsync()
     if (!asset.localUri) return null
     return await FileSystem.readAsStringAsync(asset.localUri)

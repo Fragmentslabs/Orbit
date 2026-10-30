@@ -157,7 +157,9 @@
         "mcp": "MCP",
         "memory": "Memory",
         "modes": "Modes"
-      }
+      },
+      "mcpServer_one": "Use the tools of this MCP server ({{count}} tool)",
+      "mcpServer_other": "Use the tools of this MCP server ({{count}} tools)"
     },
     "quickSettings": "Quick settings",
     "quickSettingsModel": "Model",
@@ -213,7 +215,8 @@
       "newSessionDescription": "Starts a blank code session",
       "createSkillDescription": "Asks Orbit to create a skill (with scripts, if needed)",
       "documentAppDescription": "Navigates the app in the panel, takes screenshots, and documents it in docs/"
-    }
+    },
+    "syntaxError": "Syntax error"
   },
   "reasoning": {
     "placeholder": "Level",
@@ -1035,7 +1038,12 @@
     "earlierMessages_other": "Show {{count}} earlier messages",
     "pendingAsk_one": "{{count}} pending question",
     "pendingAsk_other": "{{count}} pending questions",
-    "noModelSelected": "No model selected. Set up a provider in Settings."
+    "noModelSelected": "No model selected. Set up a provider in Settings.",
+    "newChatTitle": "New chat",
+    "newCodeSessionTitle": "New code session",
+    "citationPage": "p. {{page}}",
+    "citationLine": "p. {{page}}, line {{from}}",
+    "citationLineRange": "p. {{page}}, lines {{from}}-{{to}}"
   },
   "usage": {
     "inputIn": "{{count}} in",
@@ -1179,14 +1187,14 @@
     "portWs": "WS port",
     "tabQr": "QR Code",
     "tabManual": "Manual",
-    "connectedDevices_one": "1 connected device",
+    "connectedDevices_one": "{{count}} connected device",
     "connectedDevices_other": "{{count}} connected devices",
     "noAppTitle": "Don't have the app?",
     "downloadLink": "Install now"
   },
   "branch": {
-    "emUsoTitulo": "The {{branch}} branch is open in another worktree",
-    "emUsoDescricao": "Git doesn't allow the same branch in two working copies at once. To work on it, switch this chat to that worktree with the worktree selector, or close it there.",
+    "inUseTitle": "The {{branch}} branch is open in another worktree",
+    "inUseDescription": "Git doesn't allow the same branch in two working copies at once. To work on it, switch this chat to that worktree with the worktree selector, or close it there.",
     "previous": "Previous branch",
     "next": "Next branch",
     "page": "{{current}} of {{total}}",
@@ -1291,7 +1299,7 @@
   },
   "visionConfig": {
     "title": "Vision mode",
-    "explainer": "When ON, images and screenshots (ver: true) are described by the vision model below — even if your main model has native vision, the image never enters the context, only the description. Without a selection, behavior falls back to native: vision models receive the image, non-vision models don't see it.",
+    "explainer": "When ON, images and screenshots (see: true) are described by the vision model below — even if your main model has native vision, the image never enters the context, only the description. Without a selection, behavior falls back to native: vision models receive the image, non-vision models don't see it.",
     "visionModel": "Vision model",
     "disabled": "Disabled — vision mode off",
     "noSelectionHint": "Only models that accept image input are listed. Without a selection, behavior is native: vision models receive the image; non-vision models don't see it.",
@@ -1339,20 +1347,20 @@
     "done": "Done",
     "behavior": {
       "title": "Orchestrator behavior",
-      "orquestrar": "Orchestrate only",
-      "orquestrarHint": "Splits the work, runs the workers and writes the final answer. No review.",
-      "acompanhar": "Follow along",
-      "acompanharHint": "Reviews each worker as soon as it finishes, asks for adjustments while the others keep working, creates extra workers if something is missing and reviews the integration at the end.",
-      "rigoroso": "Strict",
-      "rigorosoHint": "Follow along + only accepts a worker's work after running the project's checks (typecheck, tests, lint). Slower.",
-      "ajustes": "Adjustments per worker",
-      "ajustesHint": "How many times the orchestrator can send a worker back to redo something. This is what weighs most on cost: each adjustment is a full worker turn.",
-      "menos": "Fewer adjustments",
-      "mais": "More adjustments",
+      "orchestrate": "Orchestrate only",
+      "orchestrateHint": "Splits the work, runs the workers and writes the final answer. No review.",
+      "follow": "Follow along",
+      "followHint": "Reviews each worker as soon as it finishes, asks for adjustments while the others keep working, creates extra workers if something is missing and reviews the integration at the end.",
+      "strict": "Strict",
+      "strictHint": "Follow along + only accepts a worker's work after running the project's checks (typecheck, tests, lint). Slower.",
+      "adjustments": "Adjustments per worker",
+      "adjustmentsHint": "How many times the orchestrator can send a worker back to redo something. This is what weighs most on cost: each adjustment is a full worker turn.",
+      "less": "Fewer adjustments",
+      "more": "More adjustments",
       "worktrees": "Isolate workers in worktrees",
       "worktreesHint": "Each worker works on its own branch and copy, and the orchestrator merges everything at the end. Keeps workers from touching each other's files; git repositories only.",
-      "aprovarTarefaUnica": "Auto-approve single-task plans",
-      "aprovarTarefaUnicaHint": "When the plan has a single worker, it starts right away instead of waiting for you to approve the card."
+      "approveSingleTask": "Auto-approve single-task plans",
+      "approveSingleTaskHint": "When the plan has a single worker, it starts right away instead of waiting for you to approve the card."
     }
   },
   "orchestration": {
@@ -1371,8 +1379,8 @@
     "approveRun": "Approve and run",
     "approveRunWithCount_one": "Approve and run ({{count}})",
     "approveRunWithCount_other": "Approve and run ({{count}})",
-    "dependsOn": "After: {{tarefas}}",
-    "ownsFiles": "Files: {{arquivos}}"
+    "dependsOn": "After: {{tasks}}",
+    "ownsFiles": "Files: {{files}}"
   },
   "planDialog": {
     "doneCount": "({{checked}}/{{total}} done)",
@@ -1432,7 +1440,7 @@
     "add": "Add skill",
     "discarded": "Proposal discarded."
   },
-  "rotinaProposal": {
+  "routineProposal": {
     "building": "Preparing the routine…",
     "created": "Routine created — find it in the Routines panel.",
     "discard": "Discard",
@@ -1454,18 +1462,18 @@
     "failed": "Connection failed: {{error}}"
   },
   "taskProgress": {
-    "juntarDeNovo": "Merge again",
+    "rejoin": "Merge again",
     "title": "Tasks",
     "inProgress": "{{title}} in progress",
     "errors": "{{title}} with errors",
     "done": "{{title}} done",
-    "ajustes": "Adjustments: {{usados}}/{{teto}}",
+    "adjustments": "Adjustments: {{used}}/{{cap}}",
     "extra": "extra",
-    "fase": {
-      "fila": "queued",
-      "revisao": "in review",
-      "ajuste": "adjustment {{n}}",
-      "falhou": "failed"
+    "phase": {
+      "queue": "queued",
+      "review": "in review",
+      "adjustment": "adjustment {{n}}",
+      "failed": "failed"
     }
   },
   "diff": {
@@ -1535,21 +1543,22 @@
       "too-large": "The content exceeds the maximum size.",
       "failed": "Could not save."
     },
-    "discardPrompt": "You have unsaved changes in this file. Discard them?"
+    "discardPrompt": "You have unsaved changes in this file. Discard them?",
+    "editMode": "Edit file"
   },
   "createRepo": {
-    "titulo": "This project has no remote repository yet",
-    "descricao": "There is no remote configured, so there is nowhere to push your commits. You can create a repository on GitHub now — using the same credential your git already uses.",
-    "nomeLabel": "Repository name",
-    "nomePlaceholder": "my-project",
-    "nomeInvalido": "Use only letters, numbers, dot, hyphen and underscore.",
-    "privado": "Private",
-    "publico": "Public",
-    "criar": "Create and push",
-    "criando": "Creating…",
-    "sucesso": "Repository {{repo}} created and commits pushed.",
-    "criadoSemPush": "Repository {{repo}} created, but the push failed. The remote is already set up — try pushing again.",
-    "erro": {
+    "title": "This project has no remote repository yet",
+    "description": "There is no remote configured, so there is nowhere to push your commits. You can create a repository on GitHub now — using the same credential your git already uses.",
+    "nameLabel": "Repository name",
+    "namePlaceholder": "my-project",
+    "invalidName": "Use only letters, numbers, dot, hyphen and underscore.",
+    "private": "Private",
+    "public": "Public",
+    "create": "Create and push",
+    "creating": "Creating…",
+    "success": "Repository {{repo}} created and commits pushed.",
+    "createdWithoutPush": "Repository {{repo}} created, but the push failed. The remote is already set up — try pushing again.",
+    "error": {
       "noCredential": "The GitHub CLI is installed but not authenticated — authenticate with the command below. One-time step: future creations won't ask for anything.",
       "noCredentialGhMissing": "There is no GitHub HTTPS credential on this machine — expected if your git authenticates over SSH: pushing works through your keys, but the API that creates the repository requires a token, and an SSH key cannot provide one. The GitHub CLI solves this for good: install and authenticate with the commands below. One-time step — future creations won't ask for anything.",
       "auth": "The GitHub token was rejected or lacks permission to create repositories. Refresh your authentication (`gh auth login` or your git HTTPS credentials) and make sure the \"repo\" scope is included. Detail:",
@@ -1557,19 +1566,19 @@
       "invalidName": "GitHub rejected that name. Use only letters, numbers, dot, hyphen and underscore.",
       "noCommits": "This folder has no commits yet. Make the first commit before publishing.",
       "other": "Could not create the repository:",
-      "detalhe": "Detail",
-      "detalheGitExit": "no HTTPS credential for github.com (git exited with {{codigo}})",
-      "detalheGitSpawn": "could not run \"git credential fill\"",
-      "detalheGitTimeout": "the git credential helper did not respond within 20s",
-      "detalheGhAusente": "gh not found in PATH",
-      "detalheGhFalhou": "gh failed",
-      "detalheGhSemToken": "gh provided no token"
+      "detail": "Detail",
+      "detailGitExit": "no HTTPS credential for github.com (git exited with {{code}})",
+      "detailGitSpawn": "could not run \"git credential fill\"",
+      "detailGitTimeout": "the git credential helper did not respond within 20s",
+      "detailGhMissing": "gh not found in PATH",
+      "detailGhFailed": "gh failed",
+      "detailGhNoToken": "gh provided no token"
     },
-    "comandos": {
-      "rotulo": "Terminal",
-      "copiar": "Copy",
-      "copiado": "Copied!",
-      "outros": "Other systems and distros — see cli.github.com"
+    "commands": {
+      "label": "Terminal",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "others": "Other systems and distros — see cli.github.com"
     }
   },
   "mcp": {
@@ -1641,11 +1650,11 @@
       "toolsAvailable_one": "{{count}} tool available",
       "toolsAvailable_other": "{{count}} tools available",
       "enabledHint": "Turns this server on or off for every conversation",
-    "optimize": "Optimize",
-    "optimizeHint": "Rewrites the tool descriptions with the auxiliary model",
-    "optimizeAgain": "Optimize again — the tool list changed",
-    "optimized": "Optimized · {{count}}",
-    "optimizeNoAux": "Set an auxiliary model in Preferences to optimize",
+      "optimize": "Optimize",
+      "optimizeHint": "Rewrites the tool descriptions with the auxiliary model",
+      "optimizeAgain": "Optimize again — the tool list changed",
+      "optimized": "Optimized · {{count}}",
+      "optimizeNoAux": "Set an auxiliary model in Preferences to optimize",
       "reconnect": "Reconnect",
       "edit": "Edit",
       "remove": "Remove",
@@ -2114,11 +2123,11 @@
         "description": "Permanently deletes conversations that have been archived for a while, counted from the day they were archived. Pinned conversations are left alone."
       },
       "compact": {
+        "50": "At 50% of context",
+        "75": "At 75% of context",
         "title": "Automatic compaction",
         "description": "Summarizes the start of the conversation when the context fills up, so it keeps fitting the model.",
-        "auto": "Near the limit",
-        "75": "At 75% of context",
-        "50": "At 50% of context"
+        "auto": "Near the limit"
       },
       "compactSuggest": {
         "title": "Suggest continuing in another chat",
@@ -2156,7 +2165,8 @@
     "remove": "Remove",
     "edit": "Edit",
     "dismiss": "Dismiss",
-    "addFolder": "Add folder"
+    "addFolder": "Add folder",
+    "reorder": "Reorder"
   },
   "appearance": {
     "title": "Appearance",
@@ -2337,7 +2347,8 @@
       "motion": "Motion piece",
       "video": "Video",
       "design": "Design",
-      "slides": "Deck"
+      "slides": "Deck",
+      "gif": "GIF"
     },
     "period": {
       "all": "Any time",
@@ -2374,279 +2385,279 @@
   "worktreeSettings": {
     "title": "Worktrees folder",
     "description": "Where the worktrees Orbit creates for chats and pipeline tasks are stored.",
-    "padrao": "Orbit data",
-    "projeto": "Inside the project",
-    "personalizada": "Chosen folder",
-    "dicaPadrao": "Outside any project, in Orbit's data folder: it doesn't show up in searches or the editor. Applies to new worktrees.",
-    "dicaProjeto": "In .orbit/worktrees inside each repository, visible in the editor. Orbit keeps the folder out of git by itself (.git/info/exclude); tools that scan the whole project without honoring git may still see it. Applies to new worktrees.",
-    "dicaPersonalizada": "In a folder of yours, outside projects. Applies to new worktrees; existing ones stay where they are.",
-    "escolher": "Choose…",
-    "naoExiste": "The folder no longer exists (disconnected drive?). New worktrees will be created there again once it's available.",
-    "dentroDeRepositorio": "The folder is inside a git repository: the worktrees would show up in its status and searches.",
-    "outroDisco": "The folder is on a different disk than your home folder: dependencies (node_modules) can't be cloned without using space and will be linked to the project's — the agent won't be able to install packages in the worktree.",
-    "recusadaRepositorio": "{{pasta}} is inside a git repository. Pick a folder outside projects — or use \"Inside the project\", which keeps the worktrees out of git by itself."
+    "default": "Orbit data",
+    "project": "Inside the project",
+    "custom": "Chosen folder",
+    "hintDefault": "Outside any project, in Orbit's data folder: it doesn't show up in searches or the editor. Applies to new worktrees.",
+    "hintProject": "In .orbit/worktrees inside each repository, visible in the editor. Orbit keeps the folder out of git by itself (.git/info/exclude); tools that scan the whole project without honoring git may still see it. Applies to new worktrees.",
+    "hintCustom": "In a folder of yours, outside projects. Applies to new worktrees; existing ones stay where they are.",
+    "choose": "Choose…",
+    "doesNotExist": "The folder no longer exists (disconnected drive?). New worktrees will be created there again once it's available.",
+    "insideRepository": "The folder is inside a git repository: the worktrees would show up in its status and searches.",
+    "otherDrive": "The folder is on a different disk than your home folder: dependencies (node_modules) can't be cloned without using space and will be linked to the project's — the agent won't be able to install packages in the worktree.",
+    "rejectedRepository": "{{folder}} is inside a git repository. Pick a folder outside projects — or use \"Inside the project\", which keeps the worktrees out of git by itself."
   },
-  "excluirChat": {
-    "worktree": "This chat worked in the {{nome}} worktree ({{branch}}).",
-    "removerWorktree": "Also remove the worktree",
-    "descartar": "I understand this will be lost",
-    "perdas": "Will be lost: {{itens}}."
+  "deleteChat": {
+    "worktree": "This chat worked in the {{name}} worktree ({{branch}}).",
+    "removeWorktree": "Also remove the worktree",
+    "discard": "I understand this will be lost",
+    "losses": "Will be lost: {{items}}."
   },
   "worktree": {
-    "titulo": "Worktree",
-    "principal": "Main",
-    "tituloAtual": "This chat's worktree: {{nome}}",
-    "novo": "New worktree…",
+    "title": "Worktree",
+    "main": "Main",
+    "currentTitle": "This chat's worktree: {{name}}",
+    "new": "New worktree…",
     "detached": "no branch ({{head}})",
-    "alteracoes_one": "{{count}} change",
-    "alteracoes_other": "{{count}} changes",
-    "aFrente_one": "{{count}} commit ahead",
-    "aFrente_other": "{{count}} commits ahead",
-    "daEsteira": "pipeline",
-    "externo": "created outside Orbit",
-    "ausente": "folder no longer exists",
-    "remover": "Remove worktree",
-    "criarTitulo": "New worktree",
-    "criarDescricao": "A separate working copy of the repository, on its own branch. What this chat does there doesn't touch the main checkout or other chats.",
-    "nome": "Name",
-    "nomePlaceholder": "E.g.: refactor-login",
-    "nomeDica": "Becomes the folder name and the orbit/<name> branch.",
+    "changes_one": "{{count}} change",
+    "changes_other": "{{count}} changes",
+    "ahead_one": "{{count}} commit ahead",
+    "ahead_other": "{{count}} commits ahead",
+    "pipelineName": "pipeline",
+    "external": "created outside Orbit",
+    "missing": "folder no longer exists",
+    "remove": "Remove worktree",
+    "createTitle": "New worktree",
+    "createDescription": "A separate working copy of the repository, on its own branch. What this chat does there doesn't touch the main checkout or other chats.",
+    "name": "Name",
+    "namePlaceholder": "E.g.: refactor-login",
+    "nameHint": "Becomes the folder name and the orbit/<name> branch.",
     "base": "Start from",
-    "baseAtual": "Current branch ({{branch}})",
-    "baseRemoto": "Up-to-date remote ({{remoto}})",
-    "trocarParaEle": "Switch this chat to it",
-    "preparando": "Preparing the worktree — copying dependencies can take a few seconds…",
-    "criar": "Create",
-    "removerTitulo": "Remove the “{{nome}}” worktree?",
-    "removerDescricao": "The worktree folder is deleted and processes running in it are stopped.",
-    "removerAlteracoes_one": "{{count}} file has uncommitted changes — it will be lost.",
-    "removerAlteracoes_other": "{{count}} files have uncommitted changes — they will be lost.",
-    "removerExterno": "This worktree was created outside Orbit ({{caminho}}). Make sure no other tool uses it.",
-    "apagarBranch": "Also delete the {{branch}} branch",
-    "apagarBranchAviso_one": "{{count}} commit that only exists there will be lost.",
-    "apagarBranchAviso_other": "{{count}} commits that only exist there will be lost."
+    "currentBase": "Current branch ({{branch}})",
+    "remoteBase": "Up-to-date remote ({{remote}})",
+    "switchToIt": "Switch this chat to it",
+    "preparing": "Preparing the worktree — copying dependencies can take a few seconds…",
+    "create": "Create",
+    "removeTitle": "Remove the “{{name}}” worktree?",
+    "removeDescription": "The worktree folder is deleted and processes running in it are stopped.",
+    "removeChanges_one": "{{count}} file has uncommitted changes — it will be lost.",
+    "removeChanges_other": "{{count}} files have uncommitted changes — they will be lost.",
+    "removeExternal": "This worktree was created outside Orbit ({{path}}). Make sure no other tool uses it.",
+    "deleteBranch": "Also delete the {{branch}} branch",
+    "deleteBranchWarning_one": "{{count}} commit that only exists there will be lost.",
+    "deleteBranchWarning_other": "{{count}} commits that only exist there will be lost."
   },
-  "esteira": {
-    "titulo": "Pipelines",
-    "carregando": "Loading board...",
-    "vazioTitulo": "No boards yet",
-    "vazioSubtitulo": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
-    "novaEsteira": "New pipeline",
-    "criar": "Create",
-    "nomeEsteira": "Pipeline name",
-    "nomeExemplo": "e.g. Features",
-    "pastas": "Folders",
-    "pastasDica": "Working folders, same as in chat",
-    "modeloPadrao": "Default model",
-    "modeloDica": "Initial model for every phase, with the reasoning level beside it. To give a phase its own model, use its pencil.",
-    "fases": "Phases",
-    "fasesDica": "Copied from the system templates — editing the pipeline never changes the master",
-    "pendentes": "Pending",
-    "concluidas": "Done",
-    "emAndamento": "Running",
-    "falhas": "Failed",
+  "pipeline": {
+    "title": "Pipelines",
+    "loading": "Loading board...",
+    "emptyTitle": "No boards yet",
+    "emptySubtitle": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
+    "newPipeline": "New pipeline",
+    "create": "Create",
+    "pipelineName": "Pipeline name",
+    "nameExample": "e.g. Features",
+    "folders": "Folders",
+    "foldersHint": "Working folders, same as in chat",
+    "defaultModel": "Default model",
+    "modelHint": "Initial model for every phase, with the reasoning level beside it. To give a phase its own model, use its pencil.",
+    "phases": "Phases",
+    "phasesHint": "Copied from the system templates — editing the pipeline never changes the master",
+    "pendingPlural": "Pending",
+    "completedPlural": "Done",
+    "inProgress": "Running",
+    "failures": "Failed",
     "commits": "Commits",
-    "tempoTotal": "Total time",
-    "iniciar": "Start",
-    "pausar": "Pause",
-    "retomar": "Resume",
-    "pausada": "Paused",
-    "erro": "Error",
-    "pushFalhou": "Push failed",
-    "pausadaPorErro": "Task paused after failing the phase",
-    "filaLigada": "Auto queue on",
-    "filaDesligada": "Auto queue off",
-    "filaDica": "Runs pending tasks one at a time, respecting dependencies",
-    "removerEsteira": "Delete pipeline",
-    "confirmarRemocao": "Delete the pipeline \"{{nome}}\" and its tasks?",
-    "descricao": "Description",
-    "semAnotacao": "This phase has not run yet.",
-    "executando": "Running…",
-    "iniciando": "Starting the phase…",
-    "comandosControlados": "Recorded commands",
-    "criadaEm": "Created",
-    "concluidaEm": "Finished",
-    "tempoTrabalho": "Work time",
+    "totalTime": "Total time",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "paused": "Paused",
+    "error": "Error",
+    "pushFailed": "Push failed",
+    "pausedByError": "Task paused after failing the phase",
+    "queueOn": "Auto queue on",
+    "queueOff": "Auto queue off",
+    "queueHint": "Runs pending tasks one at a time, respecting dependencies",
+    "removePipeline": "Delete pipeline",
+    "confirmRemoval": "Delete the pipeline \"{{name}}\" and its tasks?",
+    "description": "Description",
+    "noNote": "This phase has not run yet.",
+    "running": "Running…",
+    "starting": "Starting the phase…",
+    "controlledCommands": "Recorded commands",
+    "createdAt": "Created",
+    "completedAt": "Finished",
+    "workTime": "Work time",
     "tokens": "Tokens",
-    "custo": "Cost",
-    "dependenciasTitulo": "Dependencies",
-    "semDependencias": "None",
-    "aguardando": "waiting on {{titulo}}",
-    "aguardandoTitulo": "Blocked by dependency \"{{titulo}}\"",
-    "proxima": "Next",
-    "browserEmUso": "Browser in use by this task — click to open",
-    "adicionarDependencia": "add dependency",
-    "dependencias_one": "{{count}} dependency",
-    "dependencias_other": "{{count}} dependencies",
-    "excluirTask": "Delete task",
-    "confirmarExclusaoTask": "Delete task \"{{titulo}}\"?",
-    "exclusaoTaskDescricao": "This action cannot be undone — the task and its phase notes will be lost.",
-    "exclusaoTaskDescricaoWorktree": "This action cannot be undone — the task, its notes and its worktree will be deleted, along with anything not committed. The {{branch}} branch stays in the repository.",
-    "worktreePorTask": "Isolate each task in a worktree",
-    "worktreePorTaskDica": "Each task works on its own branch and copy, so several can run at once without touching each other. Starts from the current branch (uncommitted changes are left out) and applies to tasks that haven't started yet.",
+    "cost": "Cost",
+    "dependenciesTitle": "Dependencies",
+    "noDependencies": "None",
+    "waiting": "waiting on {{title}}",
+    "waitingTitle": "Blocked by dependency \"{{title}}\"",
+    "next": "Next",
+    "browserInUse": "Browser in use by this task — click to open",
+    "addDependency": "add dependency",
+    "dependencies_one": "{{count}} dependency",
+    "dependencies_other": "{{count}} dependencies",
+    "deleteTask": "Delete task",
+    "confirmTaskDeletion": "Delete task \"{{title}}\"?",
+    "taskDeletionDescription": "This action cannot be undone — the task and its phase notes will be lost.",
+    "taskDeletionDescriptionWorktree": "This action cannot be undone — the task, its notes and its worktree will be deleted, along with anything not committed. The {{branch}} branch stays in the repository.",
+    "worktreePerTask": "Isolate each task in a worktree",
+    "worktreePerTaskHint": "Each task works on its own branch and copy, so several can run at once without touching each other. Starts from the current branch (uncommitted changes are left out) and applies to tasks that haven't started yet.",
     "worktreeBase": "Created from {{base}}",
-    "abrirWorktree": "Open folder",
-    "dependenciasVinculadas": "node_modules linked to the main checkout",
+    "openWorktree": "Open folder",
+    "linkedDependencies": "node_modules linked to the main checkout",
     "status": {
-      "pendente": "Pending",
-      "em_progresso": "Running",
-      "pausada": "Paused",
-      "concluida": "Done"
+      "pending": "Pending",
+      "in_progress": "Running",
+      "paused": "Paused",
+      "completed": "Done"
     },
-    "subtitulo": "Pipelines that run tasks phase by phase, without chats",
-    "criarPrimeira": "Create the first pipeline",
-    "repositorioPrincipal": "Main repository",
-    "voltar": "Back to the list",
-    "adicionarTarefa": "Add task",
-    "tasksResumo": "{{concluidas}}/{{total}} tasks",
-    "adicionarFase": "Add phase",
-    "criarFase": "Create my own phase",
-    "editarFase": "Edit phase",
-    "novaFase": "New phase",
-    "faseNome": "Name",
-    "faseDescricao": "Description",
-    "faseDescricaoDica": "One line — shown in the pipeline list",
-    "faseTipo": "Role",
-    "faseTipoDica": "Defines what the phase does (and what it leaves to the next ones), regardless of its name",
-    "fasePrompt": "Prompt",
-    "fasePromptDica": "Instructions for the agent in this phase, including what it must record in the note.",
-    "faseCapacidades": "Capabilities",
-    "salvarNestaEsteira": "Save in this pipeline",
-    "maisOpcoesSalvar": "More save options",
-    "salvarNaOriginal": "Save to the original phase",
-    "salvarComoNovaFase": "Create a new phase and save",
-    "faseModelo": "Phase model",
-    "usarPadrao": "Use default",
-    "seguePadrao": "Follows the pipeline's default model. Pick another to give this phase its own.",
-    "padrao": "default",
-    "opcoesFase": "Phase options",
-    "excluirFase": "Delete phase",
-    "excluirFaseTitulo": "Delete phase?",
-    "excluirFaseConfirmar": "\"{{nome}}\" will no longer appear in \"Add phase\". Pipelines that already use it are unchanged.",
-    "capacidade": {
-      "leitura": "Read",
+    "subtitle": "Pipelines that run tasks phase by phase, without chats",
+    "createFirst": "Create the first pipeline",
+    "mainRepository": "Main repository",
+    "back": "Back to the list",
+    "addTask": "Add task",
+    "tasksSummary": "{{completed}}/{{total}} tasks",
+    "addPhase": "Add phase",
+    "createPhase": "Create my own phase",
+    "editPhase": "Edit phase",
+    "newPhase": "New phase",
+    "phaseName": "Name",
+    "phaseDescription": "Description",
+    "phaseDescriptionHint": "One line — shown in the pipeline list",
+    "phaseKind": "Role",
+    "phaseKindHint": "Defines what the phase does (and what it leaves to the next ones), regardless of its name",
+    "phasePrompt": "Prompt",
+    "phasePromptHint": "Instructions for the agent in this phase, including what it must record in the note.",
+    "phaseCapabilities": "Capabilities",
+    "saveInThisPipeline": "Save in this pipeline",
+    "moreSaveOptions": "More save options",
+    "saveToOriginal": "Save to the original phase",
+    "saveAsNewPhase": "Create a new phase and save",
+    "phaseModel": "Phase model",
+    "useDefault": "Use default",
+    "followsDefault": "Follows the pipeline's default model. Pick another to give this phase its own.",
+    "default": "default",
+    "phaseOptions": "Phase options",
+    "deletePhase": "Delete phase",
+    "deletePhaseTitle": "Delete phase?",
+    "deletePhaseConfirm": "\"{{name}}\" will no longer appear in \"Add phase\". Pipelines that already use it are unchanged.",
+    "capability": {
+      "read": "Read",
       "edit": "Edit",
       "shell": "Shell",
       "browser": "Browser",
-      "memoria": "Memory"
+      "memory": "Memory"
     },
-    "tipo": {
-      "desenvolvimento": "Development",
-      "validacao": "Validation",
-      "seguranca": "Security",
-      "revisao": "Code review",
+    "kind": {
+      "development": "Development",
+      "validation": "Validation",
+      "security": "Security",
+      "review": "Code review",
       "infra": "Infra",
-      "generico": "Generic"
+      "generic": "Generic"
     },
-    "arquivosAlterados_one": "{{count}} file changed",
-    "arquivosAlterados_other": "{{count}} files changed",
-    "devolver": "Send back",
-    "devolverTitulo": "Send back “{{titulo}}”",
-    "devolverDica": "The task goes back through the pipeline as round {{rodada}}, building on what it already did. Your comment takes priority over the original description.",
-    "devolverComentario": "What needs to change",
-    "devolverPlaceholder": "E.g.: The shipping calculation is wrong — it must use dimensional weight. And the button should be disabled while it calculates.",
-    "devolverFase": "Restart from",
-    "devolverDependentes_one": "{{titulos}} depends on this task and already ran against the previous version.",
-    "devolverDependentes_other": "{{count}} tasks depend on this one and already ran against the previous version: {{titulos}}.",
-    "rodada": "Round {{rodada}}",
-    "rodadaCurta": "R{{rodada}}",
-    "rodadaTitulo": "Round {{rodada}}: the task was sent back for review",
-    "comentarioRevisao": "Review comment",
-    "retomarComInstrucao": "Resume with instruction",
-    "retomarInstrucaoTitulo": "Resume “{{titulo}}”",
-    "retomarInstrucaoDica": "The “{{fase}}” phase runs again following your instruction. Later phases receive it too, as context.",
-    "retomarInstrucaoPlaceholder": "E.g.: Tests run with npm run test:unit, not npm test. Or: don't touch the database schema, only the API.",
-    "instrucaoAoRetomar": "Instruction on resume",
-    "naoRodouNaRodada": "This phase did not run in this round: it restarted at a later phase. Its work is in the previous round.",
-    "fase": {
-      "desenvolvimento": {
-        "nome": "Development",
-        "descricao": "Implements the task following the project's conventions"
+    "changedFiles_one": "{{count}} file changed",
+    "changedFiles_other": "{{count}} files changed",
+    "return": "Send back",
+    "returnTitle": "Send back “{{title}}”",
+    "returnHint": "The task goes back through the pipeline as round {{round}}, building on what it already did. Your comment takes priority over the original description.",
+    "returnComment": "What needs to change",
+    "returnPlaceholder": "E.g.: The shipping calculation is wrong — it must use dimensional weight. And the button should be disabled while it calculates.",
+    "returnPhase": "Restart from",
+    "returnDependents_one": "{{titles}} depends on this task and already ran against the previous version.",
+    "returnDependents_other": "{{count}} tasks depend on this one and already ran against the previous version: {{titles}}.",
+    "round": "Round {{round}}",
+    "roundShort": "R{{round}}",
+    "roundTitle": "Round {{round}}: the task was sent back for review",
+    "reviewComment": "Review comment",
+    "resumeWithInstruction": "Resume with instruction",
+    "resumeInstructionTitle": "Resume “{{title}}”",
+    "resumeInstructionHint": "The “{{phase}}” phase runs again following your instruction. Later phases receive it too, as context.",
+    "resumeInstructionPlaceholder": "E.g.: Tests run with npm run test:unit, not npm test. Or: don't touch the database schema, only the API.",
+    "resumeInstruction": "Instruction on resume",
+    "didNotRunInRound": "This phase did not run in this round: it restarted at a later phase. Its work is in the previous round.",
+    "phase": {
+      "development": {
+        "name": "Development",
+        "description": "Implements the task following the project's conventions"
       },
-      "validacao": {
-        "nome": "Validation",
-        "descricao": "Validates the implementation: build, tests and diff review"
+      "validation": {
+        "name": "Validation",
+        "description": "Validates the implementation: build, tests and diff review"
       },
-      "seguranca": {
-        "nome": "Security",
-        "descricao": "Audit of dependencies, secrets and permissions"
+      "security": {
+        "name": "Security",
+        "description": "Audit of dependencies, secrets and permissions"
       },
-      "revisao": {
-        "nome": "Code review",
-        "descricao": "Quality and style review"
+      "review": {
+        "name": "Code review",
+        "description": "Quality and style review"
       },
       "infra": {
-        "nome": "Infra",
-        "descricao": "Deploy and environment checklist"
+        "name": "Infra",
+        "description": "Deploy and environment checklist"
       }
     },
     "push": "Push the branch when finishing",
     "prints": "Capture screenshots of the result",
-    "editarEsteira": "Edit pipeline",
-    "salvar": "Save",
-    "novaTask": "New task",
-    "criarTask": "Create task",
-    "taskTitulo": "Title",
-    "taskTituloExemplo": "e.g. Fix login on mobile",
-    "taskDescricao": "Description",
-    "taskDescricaoDica": "The full brief the phases receive — the task runs without a chat, so what is not here never reaches the agent.",
-    "taskDependencias": "Depends on",
-    "taskDependenciasDica": "This task only starts after the selected ones are done.",
-    "selecioneDependencias": "None — starts right away",
-    "semTasksParaDependencia": "No other task in this pipeline yet",
-    "buscarTask": "Search task...",
-    "nenhumaTask": "No task found",
+    "editPipeline": "Edit pipeline",
+    "save": "Save",
+    "newTask": "New task",
+    "createTask": "Create task",
+    "taskTitle": "Title",
+    "taskTitleExample": "e.g. Fix login on mobile",
+    "taskDescription": "Description",
+    "taskDescriptionHint": "The full brief the phases receive — the task runs without a chat, so what is not here never reaches the agent.",
+    "taskDependencies": "Depends on",
+    "taskDependenciesHint": "This task only starts after the selected ones are done.",
+    "selectDependencies": "None — starts right away",
+    "noTasksForDependency": "No other task in this pipeline yet",
+    "searchTask": "Search task...",
+    "noTasks": "No task found",
     "commit": "Create a commit when finishing",
-    "commitPromptTitulo": "Final commit message",
-    "commitPromptDica": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase, the changed files and the repository's most recent commit — exactly the same context a phase gets. Empty uses the default: what the task asks about the commit; with none, the style of the most recent commit; with no history, the memory preferences; and finally Conventional Commits (header + body of summarized topics).",
-    "commitPromptVazio": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
-    "commitFalhou": "Final commit failed"
+    "commitPromptTitle": "Final commit message",
+    "commitPromptHint": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase, the changed files and the repository's most recent commit — exactly the same context a phase gets. Empty uses the default: what the task asks about the commit; with none, the style of the most recent commit; with no history, the memory preferences; and finally Conventional Commits (header + body of summarized topics).",
+    "commitPromptEmpty": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
+    "commitFailed": "Final commit failed"
   },
-  "rotinas": {
-    "titulo": "Routines",
-    "subtitulo": "Sessions that come back on their own: the agent runs the same prompt on schedule.",
-    "carregando": "Loading routines…",
-    "abas": {
-      "criar": "Create",
-      "minhas": "My routines"
+  "routines": {
+    "title": "Routines",
+    "subtitle": "Sessions that come back on their own: the agent runs the same prompt on schedule.",
+    "loading": "Loading routines…",
+    "tabs": {
+      "create": "Create",
+      "my": "My routines"
     },
-    "criar": {
-      "descreverDica": "Describe it in plain words. The model turns it into a title, prompt, schedule and modes — you review everything in the next step.",
-      "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.\n\nOr: every Monday, analyze the project and create improvement tasks in pipeline mode (Orbit's esteira board).",
-      "modelo": "Model",
-      "gerar": "Generate",
-      "gerando": "Generating…",
-      "semModelo": "Pick a model to generate the routine.",
-      "titulo": "New routine",
+    "create": {
+      "describeHint": "Describe it in plain words. The model turns it into a title, prompt, schedule and modes — you review everything in the next step.",
+      "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.\n\nOr: every Monday, analyze the project and create improvement tasks in pipeline mode (Orbit's pipeline board).",
+      "model": "Model",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "noModel": "Pick a model to generate the routine.",
+      "title": "New routine",
       "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
-      "modoChatDica": "Chat mode: the routine runs with no working folders — just the conversation and the chat tools."
+      "modeChatHint": "Chat mode: the routine runs with no working folders — just the conversation and the chat tools."
     },
-    "revisar": {
-      "titulo": "Review routine",
-      "subtitulo": "The agent suggested it — confirm or adjust before creating.",
-      "voltar": "Back",
-      "campoTitulo": "Title",
-      "campoPrompt": "Routine prompt",
-      "campoPromptDica": "This is what the agent receives on every run. It must be self-contained: there is nobody to answer questions.",
-      "agenda": "When to run",
-      "modos": "Modes",
-      "modosDica": "The agent suggested these based on the work described. Toggle them freely.",
-      "sugerido": "suggested",
-      "pastas": "Working folders",
-      "pastasDica": "Chosen in this step — the routine always runs in them.",
-      "semPastas": "No folder open. Open a folder in code mode before creating the routine.",
-      "criar": "Create routine"
+    "review": {
+      "title": "Review routine",
+      "subtitle": "The agent suggested it — confirm or adjust before creating.",
+      "back": "Back",
+      "titleField": "Title",
+      "promptField": "Routine prompt",
+      "promptFieldHint": "This is what the agent receives on every run. It must be self-contained: there is nobody to answer questions.",
+      "schedule": "When to run",
+      "modes": "Modes",
+      "modesHint": "The agent suggested these based on the work described. Toggle them freely.",
+      "suggested": "suggested",
+      "folders": "Working folders",
+      "foldersHint": "Chosen in this step — the routine always runs in them.",
+      "noFolders": "No folder open. Open a folder in code mode before creating the routine.",
+      "create": "Create routine"
     },
-    "agenda": {
-      "modo": {
-        "diario": "Every day",
-        "semanal": "Days of the week",
-        "intervalo": "Every N days",
-        "horas": "Every N hours",
-        "unico": "Once"
+    "schedule": {
+      "mode": {
+        "daily": "Every day",
+        "weekly": "Days of the week",
+        "intervalDays": "Every N days",
+        "intervalHours": "Every N hours",
+        "once": "Once"
       },
-      "horario": "at",
-      "dia": {
+      "time": "at",
+      "day": {
         "0": "S",
         "1": "M",
         "2": "T",
@@ -2655,19 +2666,19 @@
         "5": "F",
         "6": "S"
       },
-      "uteis": "Mon to Fri",
-      "fimDeSemana": "Weekend",
-      "aCada": "Every",
-      "dias": "days",
-      "horas": "hours",
+      "workdays": "Mon to Fri",
+      "weekend": "Weekend",
+      "every": "Every",
+      "days": "days",
+      "hours": "hours",
       "em": "on",
-      "umaVezDica": "The routine turns itself off after running.",
-      "resumoHoras": "Every {{horas}} hours",
-      "resumoUnico": "Once on {{data}} at {{horario}}",
-      "resumoDiario": "Every day at {{horario}}",
-      "resumoDias": "{{dias}} at {{horario}}",
-      "resumoIntervalo": "Every {{dias}} days at {{horario}}",
-      "diaAbrev": {
+      "onceHint": "The routine turns itself off after running.",
+      "summaryHours": "Every {{hours}} hours",
+      "summarySingle": "Once on {{date}} at {{time}}",
+      "summaryDaily": "Every day at {{time}}",
+      "summaryDays": "{{days}} at {{time}}",
+      "summaryInterval": "Every {{days}} days at {{time}}",
+      "dayAbbr": {
         "0": "Sun",
         "1": "Mon",
         "2": "Tue",
@@ -2676,82 +2687,82 @@
         "5": "Fri",
         "6": "Sat"
       },
-      "resumoUteis": "Mon to Fri at {{horario}}",
-      "resumoFimDeSemana": "Weekends at {{horario}}"
+      "summaryWorkdays": "Mon to Fri at {{time}}",
+      "summaryWeekend": "Weekends at {{time}}"
     },
     "background": {
-      "titulo": "Run in the background",
-      "dica": "The app relaunches itself if you quit — routines fire even when nobody opens Orbit."
+      "title": "Run in the background",
+      "hint": "The app relaunches itself if you quit — routines fire even when nobody opens Orbit."
     },
-    "modos": {
+    "modes": {
       "loop": {
-        "nome": "Loop",
-        "descricao": "The agent reviews its own work and iterates until done."
+        "name": "Loop",
+        "description": "The agent reviews its own work and iterates until done."
       },
       "subagents": {
-        "nome": "Subagents",
-        "descricao": "Can delegate parallel investigations to ephemeral workers."
+        "name": "Subagents",
+        "description": "Can delegate parallel investigations to ephemeral workers."
       },
       "orchestrate": {
-        "nome": "Orchestra",
-        "descricao": "Splits into a task plan and workers. Implies loop and subagents."
+        "name": "Orchestra",
+        "description": "Splits into a task plan and workers. Implies loop and subagents."
       },
       "brain": {
-        "nome": "Memory",
-        "descricao": "Persistent memory — this is what makes the routine remember earlier runs."
+        "name": "Memory",
+        "description": "Persistent memory — this is what makes the routine remember earlier runs."
       },
       "browser": {
-        "nome": "Browser",
-        "descricao": "Opens and inspects pages in the panel browser."
+        "name": "Browser",
+        "description": "Opens and inspects pages in the panel browser."
       },
       "plan": {
-        "nome": "Plan mode",
-        "descricao": "Plans only, never executes. The routine waits for approval."
+        "name": "Plan mode",
+        "description": "Plans only, never executes. The routine waits for approval."
       },
       "simple": {
-        "nome": "Simple",
-        "descricao": "Direct plain-text answer, no formatting."
+        "name": "Simple",
+        "description": "Direct plain-text answer, no formatting."
       },
-      "permissaoAviso": "The routine fires on its own: on \"Ask\" it stops at the first sensitive action and waits for you to answer in the run's session.",
+      "permissionWarning": "The routine fires on its own: on \"Ask\" it stops at the first sensitive action and waits for you to answer in the run's session.",
       "search": {
-        "nome": "Research",
-        "descricao": "In-depth web research with search tools."
+        "name": "Research",
+        "description": "In-depth web research with search tools."
       },
       "vision": {
-        "nome": "Vision",
-        "descricao": "Images and screenshots are described by the configured vision model."
+        "name": "Vision",
+        "description": "Images and screenshots are described by the configured vision model."
       }
     },
-    "lista": {
-      "vazioTitulo": "No routines yet",
-      "vazioSubtitulo": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a check after every deploy.",
-      "criarPrimeira": "Create the first routine",
-      "ativa": "Active",
-      "pausada": "Paused",
-      "proxima": "Next: {{quando}}",
-      "executarAgora": "Run now",
-      "editar": "Edit",
-      "salvar": "Save",
-      "excluir": "Delete",
-      "excluirTitulo": "Delete routine",
-      "excluirDescricao": "\"{{titulo}}\" and ALL the sessions it produced will be deleted. This cannot be undone.",
-      "nova": "New routine",
-      "vazioSubtituloChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check."
+    "list": {
+      "emptyTitle": "No routines yet",
+      "emptySubtitle": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a check after every deploy.",
+      "createFirst": "Create the first routine",
+      "active": "Active",
+      "paused": "Paused",
+      "next": "Next: {{when}}",
+      "runNow": "Run now",
+      "edit": "Edit",
+      "save": "Save",
+      "delete": "Delete",
+      "deleteTitle": "Delete routine",
+      "deleteDescription": "\"{{title}}\" and ALL the sessions it produced will be deleted. This cannot be undone.",
+      "new": "New routine",
+      "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check."
     },
     "runs": {
-      "titulo": "Sessions",
-      "vazio": "It hasn't run yet.",
-      "abrirChat": "Open session",
-      "rodando": "Running…",
+      "title": "Sessions",
+      "empty": "It hasn't run yet.",
+      "openChat": "Open session",
+      "running": "Running…",
       "ok": "Done",
-      "erro": "Failed",
-      "tokens": "{{valor}} tokens"
+      "error": "Failed",
+      "tokens": "{{value}} tokens"
     },
-    "modo": {
+    "mode": {
       "chat": "Chat mode",
       "code": "Code mode"
     },
-    "subtituloChat": "Chat sessions that come back on their own — no working folders, just conversation and the chat tools.",
+    "subtitleChat": "Chat sessions that come back on their own — no working folders, just conversation and the chat tools.",
     "timePlaceholder": "HH:MM"
   },
   "queue": {
@@ -2770,7 +2781,8 @@
     "now": "Now",
     "inSeconds": "In seconds",
     "inMinutes": "In {{count}}min",
-    "inHours": "In {{count}}h"
+    "inHours": "In {{count}}h",
+    "toggleSection": "Toggle section"
   },
   "conversation": {
     "emptyTitle": "No messages yet",
@@ -3104,7 +3116,10 @@
     "draftHint": "Bring the material before asking: whatever you attach here becomes part of the conversation as soon as you send the first message.",
     "quoteInChat": "Quote in chat",
     "speak": "Read excerpt",
-    "docxUnavailable": "This document could not be displayed as it looks. The Text view still shows its content."
+    "docxUnavailable": "This document could not be displayed as it looks. The Text view still shows its content.",
+    "removeMaterial": "Remove material",
+    "consulted_one": "{{count}} source consulted",
+    "consulted_other": "{{count}} sources consulted"
   },
   "reply": {
     "action": "Reply",
@@ -3433,7 +3448,7 @@
       "elevated": "Apps running as administrator cannot be controlled by Orbit; neither can the UAC prompt or the lock screen."
     },
     "unavailable": {
-      "mas": "Unavailable in the Mac App Store version: the store sandbox blocks accessibility and event posting. Use the version from the website.",
+      "but": "Unavailable in the Mac App Store version: the store sandbox blocks accessibility and event posting. Use the version from the website.",
       "platform": "For now, available on macOS and Windows only."
     },
     "model": {

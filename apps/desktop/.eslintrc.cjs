@@ -10,17 +10,17 @@ module.exports = {
   parser: '@typescript-eslint/parser',
   plugins: ['react-refresh'],
   rules: {
-    // Desligada de propósito: é uma dica de granularidade do Fast Refresh
-    // (dev), sem efeito em produção, e o repositório viola a premissa dela por
-    // decisão de arquitetura — provider e seu hook no mesmo arquivo
-    // (theme-provider/useTheme, workspace-context/useWorkspace) e componentes
-    // do shadcn junto de suas variants (button/buttonVariants). Cumpri-la
-    // exigiria quebrar 19 arquivos em dois, incluindo os vendorizados do
-    // shadcn e do ai-elements, que assim divergiriam do upstream.
+    // Turned off on purpose: it is a granularity hint of Fast Refresh
+    // (dev), with no effect in production, and the repository violates its premise by
+    // architecture decision — provider and its hook in the same file
+    // (theme-provider/useTheme, workspace-context/useWorkspace) and components
+    // of shadcn along with its variants (button/buttonVariants). Complying with it
+    // would require breaking 19 files in two, including the vendored ones from
+    // shadcn and ai-elements, which would then diverge from upstream.
     'react-refresh/only-export-components': 'off',
-    // Prefixo "_" e rest siblings marcam descarte DELIBERADO — o caso comum
-    // é desestruturar uma prop só para ela não vazar no {...props} de um
-    // elemento do DOM (React avisa em atributo desconhecido).
+    // The "_" prefix and rest siblings mark DELIBERATE discarding — the common case
+    // it is destructuring a single prop so that it does not leak into the {...props} of a
+    // DOM element (React warns on an unknown attribute).
     '@typescript-eslint/no-unused-vars': [
       'error',
       { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },

@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 /**
- * Baixa o ffmpeg e o ffprobe ESTÁTICOS que o Orbit leva junto (edição de
- * vídeo do agente — ver electron/lib/video/ffmpeg.ts).
+ * Downloads the STATIC ffmpeg and ffprobe that Orbit ships (video editing
+ * of the agent — see electron/lib/video/ffmpeg.ts).
  *
  *   node scripts/fetch-ffmpeg.mjs [--arch arm64|x64] [--force] [--soft]
  *
- * O `npm run dev` chama com `--soft` (predev): o ffmpeg sobe junto na primeira
- * vez, e depois o carimbo faz a chamada custar nada. No modo soft uma falha
- * (sem rede, fonte fora do ar) só avisa — o dev abre igual, sem as tools de
- * vídeo, em vez de travar quem nem vai mexer com vídeo. No build a falha é
- * fatal: um release sem ffmpeg seria um release quebrado.
+ * `npm run dev` calls it with `--soft` (predev): ffmpeg comes up along on the first
+ * time, and afterwards the stamp makes the call cost nothing. In soft mode a failure
+ * (no network, source down) only warns — dev opens anyway, without the video
+ * tools, instead of blocking whoever is not even going to touch video. In the build the failure is
+ * fatal: a release without ffmpeg would be a broken release.
  *
- * Saída: resources/ffmpeg/<platform>-<arch>/{ffmpeg,ffprobe} — é de lá que o
- * dev lê, e é essa pasta que o electron-builder copia para `Resources/ffmpeg`
- * do app (extraResources), igual ao whisper-server.
+ * Output: resources/ffmpeg/<platform>-<arch>/{ffmpeg,ffprobe} — it is from there that
+ * dev reads, and it is this folder that electron-builder copies to `Resources/ffmpeg`
+ * of the app (extraResources), like whisper-server.
  *
- * Builds estáticos de terceiros, com versão fixa onde a fonte permite:
- *   - Windows: gyan.dev "essentials" (espelho versionado no GitHub);
- *   - macOS:   martin-riedl.de (arm64 e Intel, caminho versionado);
- *   - Linux:   BtbN, ramo n9.0 (o arquivo é "latest" do ramo, sem versão fixa).
- * Todos trazem libx264, libass, freetype/fontconfig e o filtro `subtitles` —
- * o render do EDL depende deles, e a verificação no fim recusa um build sem.
+ * Third-party static builds, with a fixed version where the source allows it:
+ *   - Windows: gyan.dev "essentials" (versioned mirror on GitHub);
+ *   - macOS:   martin-riedl.de (arm64 and Intel, versioned path);
+ *   - Linux:   BtbN, n9.0 branch (the file is the "latest" of the branch, without a fixed version).
+ * All of them bring libx264, libass, freetype/fontconfig and the `subtitles` filter —
+ * the EDL render depends on them, and the check at the end rejects a build without them.
  *
- * Já baixado na mesma fonte, não refaz nada (carimbo em VERSION).
+ * Already downloaded from the same source, it redoes nothing (stamp in VERSION).
  */
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -35,7 +35,7 @@ const MAC_ARM = 'https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_
 const MAC_X64 = 'https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2'
 const BTBN = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest'
 
-/** Arquivos a baixar por alvo; cada um contém um ou os dois executáveis. */
+/** Files to download per target; each one contains one or both executables. */
 const TARGETS = {
   'win32-x64': [
     'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip',
@@ -46,7 +46,7 @@ const TARGETS = {
   'linux-arm64': [`${BTBN}/ffmpeg-n9.0-latest-linuxarm64-gpl-9.0.tar.xz`],
 }
 
-/** O que o render precisa do build — sem isto o EDL não fecha. */
+/** What the render needs from the build — without it the EDL does not close. */
 const REQUIRED_FILTERS = ['subtitles', 'ass', 'drawtext', 'ebur128', 'loudnorm', 'afade', 'overlay', 'showwavespic']
 const REQUIRED_ENCODERS = ['libx264', 'aac']
 
@@ -63,7 +63,7 @@ const platform = process.platform
 const key = `${platform}-${arch}`
 const sources = TARGETS[key]
 if (!sources) {
-  console.log(`» ffmpeg: sem build estático conhecido para ${key} — o app vai procurar um ffmpeg no PATH`)
+  console.log(`» ffmpeg: no known static build for ${key} — the app will look for an ffmpeg in the PATH`)
   process.exit(0)
 }
 
@@ -76,17 +76,17 @@ const signature = sources.join('\n')
 
 const done = () => wanted.every((name) => fs.existsSync(path.join(outDir, name)))
 if (!force && done() && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8').trim() === signature) {
-  console.log(`» ffmpeg (${key}) já baixado: ${path.relative(root, outDir)}`)
+  console.log(`» ffmpeg (${key}) already downloaded: ${path.relative(root, outDir)}`)
   process.exit(0)
 }
 
 async function download(url, file) {
   const res = await fetch(url, { redirect: 'follow' })
-  if (!res.ok || !res.body) throw new Error(`download falhou (${res.status}): ${url}`)
+  if (!res.ok || !res.body) throw new Error(`download failed (${res.status}): ${url}`)
   await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(file))
 }
 
-/** Primeiro arquivo com esse nome dentro da pasta (os pacotes aninham em bin/). */
+/** First file with that name inside the folder (the packages nest it in bin/). */
 function findFile(dir, name) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
@@ -107,13 +107,13 @@ async function fetchAll() {
 
   for (const url of sources) {
     const archive = path.join(work, path.basename(new URL(url).pathname))
-    console.log(`» baixando ${url}`)
+    console.log(`» downloading ${url}`)
     await download(url, archive)
     const into = path.join(work, `x-${path.basename(archive)}`)
     fs.mkdirSync(into)
-    // bsdtar (Windows 10+ e macOS) abre zip; no Linux as fontes são .tar.xz. No
-    // Windows o caminho é explícito: o tar do Git Bash (GNU) vem antes no PATH e
-    // não abre zip.
+    // bsdtar (Windows 10+ and macOS) opens zip; on Linux the sources are .tar.xz. On
+    // Windows the path is explicit: the tar from Git Bash (GNU) comes first in the PATH and
+    // does not open zip.
     const tar = platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar'
     execFileSync(tar, ['-xf', archive, '-C', into], { stdio: 'inherit' })
     for (const name of wanted) {
@@ -126,42 +126,42 @@ async function fetchAll() {
   }
 
   const missing = wanted.filter((name) => !fs.existsSync(path.join(outDir, name)))
-  if (missing.length) throw new Error(`os pacotes não trouxeram: ${missing.join(', ')}`)
+  if (missing.length) throw new Error(`the packages did not bring: ${missing.join(', ')}`)
 
-  // Verificação: só dá para executar o binário da arquitetura desta máquina (ou
-  // Intel num Mac com Rosetta). Quando não roda aqui, o build segue com aviso.
+  // Verification: only the binary of this machine's architecture can be executed (or
+  // Intel on a Mac with Rosetta). When it does not run here, the build goes on with a warning.
   try {
     const ffmpeg = path.join(outDir, wanted[0])
     const filters = execFileSync(ffmpeg, ['-hide_banner', '-filters'], { encoding: 'utf8' })
     const encoders = execFileSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8' })
     const hasWord = (text, word) => new RegExp(`\\s${word}\\s`).test(text)
     const lacking = [
-      ...REQUIRED_FILTERS.filter((f) => !hasWord(filters, f)).map((f) => `filtro ${f}`),
+      ...REQUIRED_FILTERS.filter((f) => !hasWord(filters, f)).map((f) => `filter ${f}`),
       ...REQUIRED_ENCODERS.filter((e) => !hasWord(encoders, e)).map((e) => `encoder ${e}`),
     ]
-    if (lacking.length) throw Object.assign(new Error(`o build não tem: ${lacking.join(', ')}`), { fatal: true })
+    if (lacking.length) throw Object.assign(new Error(`the build does not have: ${lacking.join(', ')}`), { fatal: true })
     const version = execFileSync(ffmpeg, ['-hide_banner', '-version'], { encoding: 'utf8' }).split('\n')[0]
     console.log(`» ${version}`)
   } catch (err) {
     if (err.fatal) throw err
-    console.warn(`» aviso: não deu para executar o ffmpeg de ${key} nesta máquina (${err.code ?? err.message}); verificação pulada`)
+    console.warn(`» warning: could not run the ffmpeg of ${key} on this machine (${err.code ?? err.message}); verification skipped`)
   }
 
   fs.writeFileSync(stamp, `${signature}\n`)
   fs.rmSync(work, { recursive: true, force: true })
-  console.log(`» pronto: ${path.relative(root, outDir)}`)
+  console.log(`» ready: ${path.relative(root, outDir)}`)
 }
 
-// Sem process.exit aqui: no Windows, sair no meio de um fetch que falhou
-// derruba o Node numa assertion da libuv (código 127), e o predev quebraria o
-// dev justamente no caso que o --soft existe para tolerar.
+// No process.exit here: on Windows, exiting in the middle of a fetch that failed
+// it takes Node down in a libuv assertion (code 127), and the predev would break the
+// dev precisely in the case the --soft exists to tolerate.
 try {
   await fetchAll()
 } catch (err) {
   fs.rmSync(work, { recursive: true, force: true })
   if (soft) {
     console.warn(`» ffmpeg: ${err?.message ?? err}`)
-    console.warn('» seguindo sem ffmpeg — as tools de vídeo ficam desligadas até `npm run ffmpeg:fetch` dar certo')
+    console.warn('» going on without ffmpeg — the video tools stay off until `npm run ffmpeg:fetch` succeeds')
   } else {
     console.error(err)
     process.exitCode = 1

@@ -1,21 +1,21 @@
 /**
- * Acesso ao acervo real de memórias e ao índice de vetores persistido.
+ * Access to the real memory pool and to the persisted vector index.
  *
- * Existe para que os runners locais (revisão por página e avaliação por JSON)
- * compartilhem a mesma leitura. NADA aqui imprime texto de memória: quem chama
- * recebe os objetos e decide o que fazer com eles.
+ * It exists so the local runners (page review and JSON evaluation)
+ * share the same reading. NOTHING here prints memory text: the caller
+ * receives the objects and decides what to do with them.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Memory } from '@shared/memory'
 
-/** Pasta local de trabalho da revisão. Fica fora do repositório, de propósito. */
+/** Local working folder of the review. It stays outside the repository, on purpose. */
 export const OUT = process.env.MEMORY_REVIEW_DIR
   ? path.resolve(process.env.MEMORY_REVIEW_DIR)
   : path.join(os.homedir(), '.orbit-memory-review')
 
-/** Onde o app guarda as memórias do usuário no macOS. */
+/** Where the app keeps the user's memories on macOS. */
 export function itemsDir(): string {
   return path.join(
     os.homedir(),
@@ -31,10 +31,10 @@ export function itemsDir(): string {
 }
 
 /**
- * Lê todas as memórias do usuário.
+ * Reads all of the user's memories.
  *
- * Memórias `core` ficam de fora: elas já entram no bloco fixo do prompt e não
- * são candidatas a recuperação.
+ * `core` memories stay out: they already enter the fixed prompt block and are
+ * not retrieval candidates.
  */
 export function readMemories(): Memory[] {
   const dir = itemsDir()
@@ -42,7 +42,7 @@ export function readMemories(): Memory[] {
   const out: Memory[] = []
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.json'))) {
     const raw = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'))
-    // Um arquivo pode conter um objeto ou um array de memórias.
+    // A file may contain one object or an array of memories.
     for (const m of Array.isArray(raw) ? raw : [raw]) {
       if (m && typeof m.id === 'string' && typeof m.text === 'string' && m.kind !== 'core') out.push(m as Memory)
     }
@@ -50,7 +50,7 @@ export function readMemories(): Memory[] {
   return out
 }
 
-/** Onde ficam os documentos markdown anexados às memórias. */
+/** Where the markdown documents attached to memories live. */
 export function docsDir(): string {
   return path.join(
     os.homedir(),
@@ -65,7 +65,7 @@ export function docsDir(): string {
   )
 }
 
-/** Documentos anexados, por id de memória. Vazio se a pasta não existir. */
+/** Attached documents, by memory id. Empty if the folder does not exist. */
 export function readDocs(): Map<string, string> {
   const dir = docsDir()
   const out = new Map<string, string>()
@@ -74,13 +74,13 @@ export function readDocs(): Map<string, string> {
     try {
       out.set(path.basename(file, '.md'), fs.readFileSync(path.join(dir, file), 'utf8'))
     } catch {
-      /* documento ilegível: fica de fora da medição */
+      /* unreadable document: it stays out of the measurement */
     }
   }
   return out
 }
 
-/** Caminho do índice de vetores que o app persiste. */
+/** Path of the vector index the app persists. */
 export function vectorsPath(): string {
   return path.join(
     os.homedir(),
@@ -95,7 +95,7 @@ export function vectorsPath(): string {
   )
 }
 
-/** Decodifica um vetor Float32 gravado em base64. */
+/** Decodes a Float32 vector stored in base64. */
 export function decode(b64: string): Float32Array | null {
   try {
     const buf = Buffer.from(b64, 'base64')
@@ -106,7 +106,7 @@ export function decode(b64: string): Float32Array | null {
   }
 }
 
-/** Vetores persistidos, por id de memória. Vazio se o índice não existir. */
+/** Persisted vectors, by memory id. Empty if the index does not exist. */
 export function readVectors(): Map<string, Float32Array> {
   const out = new Map<string, Float32Array>()
   const file = vectorsPath()
@@ -120,7 +120,7 @@ export function readVectors(): Map<string, Float32Array> {
       if (vec) out.set(id, vec)
     }
   } catch {
-    /* índice ilegível: devolve o que der */
+    /* unreadable index: return what we can */
   }
   return out
 }

@@ -54,16 +54,16 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Blocos inline da resposta do assistente (fence ```orbit-ui, ver
- * src/lib/orbit-ui.ts). São componentes do próprio app — sem iframe, sem moldura
- * própria — que herdam fonte, cor e tema do chat. Cada bloco entra com um fade
- * curto ao montar, e como o parser entrega uma linha por vez, a resposta parece
- * ser montada ao vivo.
+ * Inline blocks of the assistant reply (```orbit-ui fence, see
+ * src/lib/orbit-ui.ts). They are components of the app itself — no iframe, no frame
+ * of their own — that inherit font, color and theme from the chat. Each block enters with a short
+ * fade on mount, and since the parser delivers one line at a time, the reply seems
+ * to be assembled live.
  *
- * Interatividade: os componentes de entrada gravam num estado local do fence
- * (`Scope`), e todo o resto lê dele — texto com `{expr}`, números como
- * expressão, `showIf`. O estado vive só na tela: reabrir a conversa devolve os
- * valores iniciais.
+ * Interactivity: the input components write to a local state of the fence
+ * (`Scope`), and everything else reads from it — text with `{expr}`, numbers as an
+ * expression, `showIf`. The state lives only on screen: reopening the conversation gives back the
+ * initial values.
  */
 
 const SERIES = [
@@ -94,14 +94,14 @@ const TONES = {
 
 type Of<T extends OrbitUiBlock["type"]> = Extract<OrbitUiBlock, { type: T }>
 
-// ── Estado e contexto ──────────────────────────────────────────────────────
+// ── State and context ──────────────────────────────────────────────────────
 
-/** Onde o renderer está: a sessão de quem os botões `send` falam. */
+/** Where the renderer is: the session the `send` buttons talk to. */
 export const OrbitUiHostContext = createContext<{ sessionId?: string }>({})
 
 type UiState = {
   scope: Scope
-  /** Há algum componente de entrada: gráficos param de animar a cada mudança. */
+  /** There is some input component: charts stop animating on every change. */
   interactive: boolean
   setValue: (id: string, value: Value) => void
   send: (text: string) => boolean
@@ -114,7 +114,7 @@ const UiContext = createContext<UiState>({
   send: () => false,
 })
 
-/** Texto do bloco com os `{expr}` resolvidos contra o estado atual. */
+/** Text of the block with the `{expr}` resolved against the current state. */
 function useText() {
   const { scope } = useContext(UiContext)
   return (text: string | undefined) => (text ? interpolate(text, scope) : "")
@@ -148,7 +148,7 @@ function defaultsOf(blocks: OrbitUiBlock[]): Scope {
   return out
 }
 
-/** Manda `text` como mensagem do usuário na sessão; se o agente está ocupado, entra na fila. */
+/** Sends `text` as a user message in the session; if the agent is busy, it joins the queue. */
 function sendToSession(sessionId: string | undefined, text: string): boolean {
   if (!sessionId || !text.trim()) return false
   const store = useSessionStore.getState()
@@ -162,13 +162,13 @@ function sendToSession(sessionId: string | undefined, text: string): boolean {
   return true
 }
 
-// ── Componentes de exibição ────────────────────────────────────────────────
+// ── Display components ─────────────────────────────────────────────────────
 
 /**
- * Tamanho do número do card conforme o comprimento do texto já resolvido. O
- * card tem largura de coluna, então "R$ 1.234.567,89" não cabe no corpo grande
- * de "R$ 12k": em vez de cortar com reticências, a fonte desce um degrau por
- * faixa, e o que ainda assim não couber quebra linha.
+ * Card number size according to the length of the already resolved text. The
+ * card has a column width, so "R$ 1.234.567,89" does not fit in the large body
+ * of "R$ 12k": instead of cutting with an ellipsis, the font drops one step per
+ * range, and whatever still does not fit wraps to the next line.
  */
 function statSize(value: string): string {
   const n = value.length
@@ -309,7 +309,7 @@ const TOOLTIP = {
 
 type ChartRows = { rows: Record<string, string | number | null>[]; keys: { key: string; name: string }[] }
 
-/** Linhas do gráfico: pontos prontos (valor pode ser expressão) ou funções amostradas. */
+/** Chart lines: ready-made points (value may be an expression) or sampled functions. */
 function chartRows(block: Of<"chart">, scope: Scope, tx: (s: string | undefined) => string): ChartRows {
   const finite = (n: number) => (Number.isFinite(n) ? n : null)
   if (block.data) {
@@ -337,8 +337,8 @@ function Chart(block: Of<"chart">) {
   const { kind, title, unit, xLabel } = block
   const { rows, keys } = useMemo(() => chartRows(block, scope, tx), [block, scope, tx])
   const fmt = (v: unknown) => (typeof v === "number" ? `${formatValue(v)}${unit ? ` ${unit}` : ""}` : "—")
-  // Com entradas na tela o gráfico se redesenha a cada passo do slider: a
-  // animação de entrada viraria um arrasto atrás do dedo.
+  // With inputs on screen the chart redraws on every slider step: the
+  // entrance animation would become a drag trailing the finger.
   const animate = !interactive
   const multi = keys.length > 1
   const margin = { top: 4, right: 8, bottom: xLabel ? 14 : 0, left: -12 }
@@ -539,7 +539,7 @@ function Progress({ items }: Of<"progress">) {
   )
 }
 
-// ── Entradas ───────────────────────────────────────────────────────────────
+// ── Inputs ─────────────────────────────────────────────────────────────────
 
 const FIELD = "h-8 w-full rounded-lg bg-secondary px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
@@ -566,10 +566,10 @@ function useInput<T extends Value>(id: string, fallback: T) {
 }
 
 /**
- * Slider sem o visual nativo do navegador (que desenha uma trilha com contorno):
- * trilha fina preenchida até o valor (`--fill`, em %) e uma bolinha com um anel
- * na cor do fundo, para ela "recortar" a trilha. A margem negativa da bolinha
- * centraliza os 16px dela nos 6px da trilha.
+ * Slider without the browser's native look (which draws a track with an outline):
+ * a thin track filled up to the value (`--fill`, in %) and a knob with a ring
+ * in the background color, so that it "cuts out" the track. The knob's negative margin
+ * centers its 16px on the track's 6px.
  */
 const SLIDER = [
   "h-4 w-full cursor-pointer appearance-none bg-transparent outline-none",
@@ -606,8 +606,8 @@ function SliderInput(block: Of<"slider">) {
 function NumberInput(block: Of<"number">) {
   const tx = useText()
   const [value, set] = useInput(block.id, block.value)
-  // Rascunho em texto: "1." e "-" são estados legítimos de quem digita e não
-  // sobreviveriam a um valor numérico controlado.
+  // Text draft: "1." and "-" are legitimate states of someone typing and would not
+  // survive a controlled numeric value.
   const [draft, setDraft] = useState(String(value))
   useEffect(() => {
     if (Number(draft) !== Number(value)) setDraft(String(value))
@@ -754,28 +754,28 @@ function Buttons({ items }: Of<"buttons">) {
 }
 
 /**
- * Cartão de navegação: "isso fica aqui, quer ir?".
+ * Navigation card: "this lives here, want to go?".
  *
- * Nada abre sozinho — o clique é o consentimento, e o cartão só existe porque o
- * usuário perguntou onde ficava. O caminho ("Configurações → Voz") é montado com
- * as mesmas chaves de i18n da tela, então renomear a aba renomeia o cartão.
+ * Nothing opens by itself — the click is the consent, and the card only exists because the
+ * user asked where it was. The path ("Settings → Voice") is built with
+ * the same i18n keys as the screen, so renaming the tab renames the card.
  */
-function NavBlock({ destino, nota }: Of<"nav">) {
+function NavBlock({ destination, note }: Of<"nav">) {
   const { t } = useTranslation()
   const tx = useText()
   const openSettings = useSettingsUi((state) => state.openSettings)
   const [opened, setOpened] = useState(false)
-  const target = uiDestination(destino)
+  const target = uiDestination(destination)
   const tab = target?.desktop
 
-  // Sem aba no desktop não há para onde levar: um destino que só existe no
-  // celular não vira cartão, porque um cartão vazio é pior que o silêncio.
+  // Without a tab on desktop there is nowhere to lead to: a destination that only exists on
+  // mobile does not become a card, because an empty card is worse than silence.
   if (!target || !tab) return null
 
   const path = `${t("settings.title")} → ${t(SETTINGS_TAB_LABEL_KEY[tab])}`
 
-  // A aba some nesta plataforma (Computador só tem driver no macOS/Windows,
-  // Sistema só existe no Windows): explicar é melhor que prometer.
+  // The tab disappears on this platform (Computer only has a driver on macOS/Windows,
+  // System only exists on Windows): explaining is better than promising.
   if (!supportsSurface(target, "desktop", windowApi.platform as DesktopPlatform)) {
     return (
       <div className="flex items-start gap-3 rounded-xl border border-dashed border-border px-3.5 py-3">
@@ -802,7 +802,7 @@ function NavBlock({ destino, nota }: Of<"nav">) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium">{path}</span>
-        {nota && <span className="mt-0.5 block text-xs text-muted-foreground">{tx(nota)}</span>}
+        {note && <span className="mt-0.5 block text-xs text-muted-foreground">{tx(note)}</span>}
       </span>
       <span className="mt-0.5 flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
         {opened ? t("orbitUi.nav.opened") : t("orbitUi.nav.open")}
@@ -854,8 +854,8 @@ function Block({ block }: { block: OrbitUiBlock }) {
 type Layout = { start: number; blocks: OrbitUiBlock[]; grouped: boolean }
 
 /**
- * Entradas consecutivas (exceto abas) dividem uma grade: quatro sliders em
- * sequência viram um painel, não uma coluna de quatro faixas.
+ * Consecutive inputs (except tabs) share a grid: four sliders in
+ * sequence become a panel, not a column of four strips.
  */
 function layoutOf(blocks: OrbitUiBlock[]): Layout[] {
   const out: Layout[] = []
@@ -868,7 +868,7 @@ function layoutOf(blocks: OrbitUiBlock[]): Layout[] {
   return out
 }
 
-/** Renderer do fence `orbit-ui`, plugado no Streamdown (plugins.renderers). */
+/** Renderer of the `orbit-ui` fence, plugged into Streamdown (plugins.renderers). */
 export const OrbitUiRenderer = memo(function OrbitUiRenderer({ code, isIncomplete }: CustomRendererProps) {
   const { sessionId } = useContext(OrbitUiHostContext)
   const { blocks, pending } = useMemo(() => parseOrbitUi(code, isIncomplete), [code, isIncomplete])

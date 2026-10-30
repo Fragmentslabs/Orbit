@@ -12,22 +12,22 @@ import { MAX_ROTATION_SLOTS } from "@/src/stores/model-rotation-store"
 import { dropId, dragId } from "./use-rotation-drag-sort"
 import { Hint } from "@/components/ui/hint"
 
-// O card da linha JÁ é a borda visível — o trigger do picker vive dentro
-// dele sem borda/fundo próprios, senão vira caixa-dentro-de-caixa (era o
-// aninhamento que fazia a lista parecer desalinhada).
+// The row card ALREADY is the visible border — the picker trigger lives inside
+// it without its own border/background, otherwise it becomes a box-inside-a-box (it was the
+// nesting that made the list look misaligned).
 const SLOT_PICKER_TRIGGER_CLASS =
   "h-8 w-full justify-start gap-1.5 rounded-md border-0 bg-transparent px-1.5 text-xs font-normal shadow-none hover:bg-accent/40"
 
 /**
- * Linha de slot da rotação:
- *   - alça de drag (`GripVerticalIcon`)
- *   - número da posição (1..N)
- *   - `ModelPicker` controlado (sem grupo "Rotações" para não criar loop)
- *   - botão de remover slot
+ * Rotation slot row:
+ *   - drag handle (`GripVerticalIcon`)
+ *   - position number (1..N)
+ *   - controlled `ModelPicker` (no "Rotations" group so as not to create a loop)
+ *   - remove slot button
  *
- * O trigger do picker é o mesmo padrão do `preferences-panel`: logo do
- * provedor + nome do modelo. Não repetimos o nome do provedor ao lado — o
- * logo já comunica isso.
+ * The picker trigger is the same pattern as the `preferences-panel`: provider
+ * logo + model name. We do not repeat the provider name next to it — the
+ * logo already communicates that.
  */
 export function RotationSlotRow({
   index,
@@ -46,9 +46,9 @@ export function RotationSlotRow({
   })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: dropId(index) })
 
-  // O valor é "completo" só quando ambos os ids estão presentes (um slot
-  // vazio recém-criado tem providerId/modelId vazios e precisa aparecer
-  // como "Nenhum" no trigger, não como modelo em branco).
+  // The value is "complete" only when both ids are present (an empty
+  // slot just created has empty providerId/modelId and needs to appear
+  // as "None" in the trigger, not as a blank model).
   const value: SelectedModel | null =
     model.providerId && model.modelId ? { providerId: model.providerId, modelId: model.modelId } : null
 
@@ -105,8 +105,8 @@ export function RotationSlotRow({
 export { MAX_ROTATION_SLOTS }
 
 /**
- * Exportado para que o `useProviderStore` continue importável daqui se um
- * dia quisermos mover a regra "logo + nome" para um componente dedicado.
- * Mantém o `model-selector` como única fonte de verdade.
+ * Exported so that `useProviderStore` stays importable from here if one
+ * day we want to move the "logo + name" rule to a dedicated component.
+ * It keeps the `model-selector` as the single source of truth.
  */
 export { ModelSelectorLogo, ModelSelectorName }

@@ -1,55 +1,55 @@
 /**
- * Gravação da cena do grafo num SkPicture.
+ * Recording of the graph scene into a SkPicture.
  *
- * Um SkPicture é uma lista de comandos de desenho gravada UMA vez e reproduzida
- * pela GPU a cada frame. É a diferença entre o grafo andar e o grafo travar:
- * com react-native-svg cada círculo, traço e rótulo é uma view nativa, e mudar
- * a transform obrigava o motor a redesenhar a árvore inteira em CPU — algumas
- * centenas de nós já não fechavam 60fps num celular. Aqui o React não participa
- * do frame: ele grava a cena quando o CONTEÚDO muda (layout novo, nível de zoom,
- * busca) e a thread de UI só aplica uma matriz por cima.
+ * A SkPicture is a list of drawing commands recorded ONCE and replayed
+ * by the GPU on every frame. It is the difference between the graph moving and the graph
+ * freezing: with react-native-svg every circle, stroke and label is a native view, and changing
+ * the transform forced the engine to redraw the whole tree on the CPU — a few
+ * hundred nodes already failed to keep 60fps on a phone. Here React does not take part
+ * in the frame: it records the scene when the CONTENT changes (new layout, zoom level,
+ * search) and the UI thread only applies a matrix on top.
  *
- * O que sobra fora do picture é o que muda a toque de dedo: o realce do nó
- * selecionado, desenhado como componente normal por cima.
+ * What remains outside the picture is what changes on a finger touch: the highlight of the
+ * selected node, drawn as a normal component on top.
  */
 import { Skia, createPicture, PaintStyle } from '@shopify/react-native-skia'
 import type { SkFont, SkPaint, SkPicture } from '@shopify/react-native-skia'
-import type { IndiceGrafo, NoDesenho } from './graph-index'
+import type { GraphIndex, NodeShape } from './graph-index'
 
-export interface Fontes {
-  fato: SkFont
+export interface Fonts {
+  body: SkFont
   area: SkFont
-  raiz: SkFont
+  root: SkFont
 }
 
-export interface OpcoesCena {
-  /** 3 = tudo, 2 = sem rótulo, 1 = sem anel e só árvore, 0 = resumo por bloco. */
-  nivel: number
-  /** Ids que casam com a busca; null quando a busca está vazia. */
-  casam: Set<string> | null
-  fontes: Fontes
-  corTexto: string
+export interface SceneOptions {
+  /** 3 = everything, 2 = no label, 1 = no ring and tree only, 0 = summary per block. */
+  level: number
+  /** Ids that match the search; null when the search is empty. */
+  matches: Set<string> | null
+  fonts: Fonts
+  textColor: string
 }
 
-/** Largura já medida do rótulo, guardada no nó — medir é o passo caro da
- *  gravação, e o texto não muda entre uma gravação e outra. */
-const larguras = new WeakMap<NoDesenho, number>()
+/** Measured width of the label, stored on the node — measuring is the expensive step of
+ *  the recording, and the text does not change between one recording and the next. */
+const labelWidths = new WeakMap<NodeShape, number>()
 
-function larguraDe(no: NoDesenho, fonte: SkFont): number {
-  const guardada = larguras.get(no)
-  if (guardada != null) return guardada
-  const largura = fonte.measureText(no.rotulo).width
-  larguras.set(no, largura)
-  return largura
+function labelWidth(node: NodeShape, font: SkFont): number {
+  const stored = labelWidths.get(node)
+  if (stored != null) return stored
+  const width = font.measureText(node.label).width
+  labelWidths.set(node, width)
+  return width
 }
 
 /**
- * Converte as cores do tema (`hsl(...)`) para hexadecimal. O parser de cor do
- * Skia não cobre hsl, e passar a string crua devolveria preto sem avisar.
+ * Converts the theme colors (`hsl(...)`) to hexadecimal. The Skia color parser
+ * does not cover hsl, and passing the raw string would return black without warning.
  */
-export function corSkia(cor: string): string {
-  const m = /hsla?\(\s*([\d.]+)[,\s]+([\d.]+)%[,\s]+([\d.]+)%/.exec(cor)
-  if (!m) return cor
+export function toSkiaColor(color: string): string {
+  const m = /hsla?\(\s*([\d.]+)[,\s]+([\d.]+)%[,\s]+([\d.]+)%/.exec(color)
+  if (!m) return color
   const h = Number(m[1]) / 360
   const s = Number(m[2]) / 100
   const l = Number(m[3]) / 100
@@ -59,7 +59,7 @@ export function corSkia(cor: string): string {
   }
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s
   const p = 2 * l - q
-  const canal = (t: number) => {
+  const channel = (t: number) => {
     let x = t
     if (x < 0) x += 1
     if (x > 1) x -= 1
@@ -72,126 +72,126 @@ export function corSkia(cor: string): string {
     Math.round(v * 255)
       .toString(16)
       .padStart(2, '0')
-  return `#${hex(canal(h + 1 / 3))}${hex(canal(h))}${hex(canal(h - 1 / 3))}`
+  return `#${hex(channel(h + 1 / 3))}${hex(channel(h))}${hex(channel(h - 1 / 3))}`
 }
 
-/** Opacidade do nó: fora da busca apaga, esquecida desbota. */
-function opacidadeDe(no: NoDesenho, casam: Set<string> | null): number {
-  if (casam && !casam.has(no.id)) return 0.18
-  return no.velha ? 0.45 : 1
+/** Node opacity: outside the search it fades, forgotten fades more. */
+function opacityOf(node: NodeShape, matches: Set<string> | null): number {
+  if (matches && !matches.has(node.id)) return 0.18
+  return node.stale ? 0.45 : 1
 }
 
-function pintura(estilo: PaintStyle): SkPaint {
+function paint(style: PaintStyle): SkPaint {
   const p = Skia.Paint()
   p.setAntiAlias(true)
-  p.setStyle(estilo)
+  p.setStyle(style)
   return p
 }
 
-export function gravarCena(indice: IndiceGrafo, opcoes: OpcoesCena): SkPicture | null {
-  if (indice.total === 0) return null
-  const { nivel, casam, fontes, corTexto } = opcoes
-  const limites = indice.limites
-  const caixa = Skia.XYWHRect(
-    limites.minX,
-    limites.minY,
-    Math.max(1, limites.maxX - limites.minX),
-    Math.max(1, limites.maxY - limites.minY),
+export function recordScene(index: GraphIndex, options: SceneOptions): SkPicture | null {
+  if (index.total === 0) return null
+  const { level, matches, fonts, textColor } = options
+  const bounds = index.bounds
+  const box = Skia.XYWHRect(
+    bounds.minX,
+    bounds.minY,
+    Math.max(1, bounds.maxX - bounds.minX),
+    Math.max(1, bounds.maxY - bounds.minY),
   )
 
   return createPicture((canvas) => {
-    // Três pinturas para a cena inteira, reconfiguradas antes de cada comando:
-    // o Skia copia o estado da pintura para a lista no momento do desenho, e
-    // criar uma por nó só geraria lixo.
-    const preenche = pintura(PaintStyle.Fill)
-    const traca = pintura(PaintStyle.Stroke)
-    const texto = pintura(PaintStyle.Fill)
-    texto.setColor(Skia.Color(corTexto))
+    // Three paints for the whole scene, reconfigured before each command:
+    // Skia copies the paint state into the list at drawing time, and
+    // creating one per node would only generate garbage.
+    const fillPaint = paint(PaintStyle.Fill)
+    const strokePaint = paint(PaintStyle.Stroke)
+    const textPaint = paint(PaintStyle.Fill)
+    textPaint.setColor(Skia.Color(textColor))
 
-    // ── Resumo: um ponto por bloco, no zoom em que o nó vira sujeira ──────
-    if (nivel === 0) {
-      for (const bloco of indice.blocos) {
-        const cor = Skia.Color(bloco.cor)
-        preenche.setColor(cor)
-        preenche.setAlphaf(0.3)
-        canvas.drawCircle(bloco.cx, bloco.cy, bloco.raio, preenche)
-        traca.setColor(cor)
-        traca.setAlphaf(0.7)
-        traca.setStrokeWidth(1)
-        canvas.drawCircle(bloco.cx, bloco.cy, bloco.raio, traca)
+    // ── Summary: one dot per block, at the zoom where the node becomes noise ──
+    if (level === 0) {
+      for (const block of index.blocks) {
+        const color = Skia.Color(block.color)
+        fillPaint.setColor(color)
+        fillPaint.setAlphaf(0.3)
+        canvas.drawCircle(block.cx, block.cy, block.radius, fillPaint)
+        strokePaint.setColor(color)
+        strokePaint.setAlphaf(0.7)
+        strokePaint.setStrokeWidth(1)
+        canvas.drawCircle(block.cx, block.cy, block.radius, strokePaint)
       }
-      // Os marcos ficam: são eles que dizem onde cada projeto está enquanto o
-      // resto é nuvem.
-      for (const no of indice.marcos) {
-        desenharNo(canvas, no, 1, preenche, traca)
-        if (no.isRoot) desenharRotulo(canvas, no, fontes.raiz, texto, 1)
+      // The landmarks stay: they are what says where each project is while the
+      // rest is a cloud.
+      for (const node of index.landmarks) {
+        drawNode(canvas, node, 1, fillPaint, strokePaint)
+        if (node.isRoot) drawLabel(canvas, node, fonts.root, textPaint, 1)
       }
       return
     }
 
-    // ── Arestas ──────────────────────────────────────────────────────────
-    const tracejado = Skia.PathEffect.MakeDash([6, 4], 0)
-    const pontilhado = Skia.PathEffect.MakeDash([3, 5], 0)
-    for (const aresta of indice.arestas) {
-      // Nível 1 é o zoom de longe: só a árvore, que é o esqueleto do desenho.
-      // As arestas de relação viram cruzamento ilegível nessa escala.
-      if (nivel <= 1 && !aresta.arvore) continue
-      traca.setColor(Skia.Color(aresta.cor))
-      traca.setAlphaf(aresta.opacidade)
-      traca.setStrokeWidth(aresta.largura)
-      traca.setPathEffect(
-        aresta.traco === '3 5' ? pontilhado : aresta.traco === '6 4' ? tracejado : null,
+    // ── Edges ────────────────────────────────────────────────────────────
+    const dashed = Skia.PathEffect.MakeDash([6, 4], 0)
+    const dotted = Skia.PathEffect.MakeDash([3, 5], 0)
+    for (const edge of index.edges) {
+      // Level 1 is the far zoom: only the tree, which is the skeleton of the drawing.
+      // The relation edges become an illegible crossing at that scale.
+      if (level <= 1 && !edge.tree) continue
+      strokePaint.setColor(Skia.Color(edge.color))
+      strokePaint.setAlphaf(edge.opacity)
+      strokePaint.setStrokeWidth(edge.width)
+      strokePaint.setPathEffect(
+        edge.dash === '3 5' ? dotted : edge.dash === '6 4' ? dashed : null,
       )
-      canvas.drawLine(aresta.x1, aresta.y1, aresta.x2, aresta.y2, traca)
+      canvas.drawLine(edge.x1, edge.y1, edge.x2, edge.y2, strokePaint)
     }
-    traca.setPathEffect(null)
+    strokePaint.setPathEffect(null)
 
-    // ── Nós ──────────────────────────────────────────────────────────────
-    for (const no of indice.nos) {
-      const opacidade = opacidadeDe(no, casam)
-      if (nivel >= 2 && no.recente && !no.isRoot) {
-        traca.setColor(Skia.Color(no.cor))
-        traca.setAlphaf(0.5 * opacidade)
-        traca.setStrokeWidth(1.5)
-        canvas.drawCircle(no.x, no.y, no.r + 4, traca)
+    // ── Nodes ────────────────────────────────────────────────────────────
+    for (const node of index.nodes) {
+      const opacity = opacityOf(node, matches)
+      if (level >= 2 && node.recent && !node.isRoot) {
+        strokePaint.setColor(Skia.Color(node.color))
+        strokePaint.setAlphaf(0.5 * opacity)
+        strokePaint.setStrokeWidth(1.5)
+        canvas.drawCircle(node.x, node.y, node.r + 4, strokePaint)
       }
-      desenharNo(canvas, no, opacidade, preenche, traca)
-      if (nivel >= 3 || no.isRoot) {
-        const fonte = no.isRoot ? fontes.raiz : no.fontSize >= 11 ? fontes.area : fontes.fato
-        desenharRotulo(canvas, no, fonte, texto, opacidade)
+      drawNode(canvas, node, opacity, fillPaint, strokePaint)
+      if (level >= 3 || node.isRoot) {
+        const font = node.isRoot ? fonts.root : node.fontSize >= 11 ? fonts.area : fonts.body
+        drawLabel(canvas, node, font, textPaint, opacity)
       }
     }
-  }, caixa)
+  }, box)
 }
 
-/** Círculo do nó: preenchimento translúcido + contorno na cor do tipo. */
-function desenharNo(
+/** Node circle: translucent fill + outline in the type color. */
+function drawNode(
   canvas: Parameters<Parameters<typeof createPicture>[0]>[0],
-  no: NoDesenho,
-  opacidade: number,
-  preenche: SkPaint,
-  traca: SkPaint,
+  node: NodeShape,
+  opacity: number,
+  fillPaint: SkPaint,
+  strokePaint: SkPaint,
 ): void {
-  const cor = Skia.Color(no.cor)
-  preenche.setColor(cor)
-  preenche.setAlphaf(no.fillOpacity * opacidade)
-  canvas.drawCircle(no.x, no.y, no.r, preenche)
-  traca.setColor(cor)
-  traca.setAlphaf(opacidade)
-  traca.setStrokeWidth(no.larguraTraco)
-  canvas.drawCircle(no.x, no.y, no.r, traca)
+  const color = Skia.Color(node.color)
+  fillPaint.setColor(color)
+  fillPaint.setAlphaf(node.fillOpacity * opacity)
+  canvas.drawCircle(node.x, node.y, node.r, fillPaint)
+  strokePaint.setColor(color)
+  strokePaint.setAlphaf(opacity)
+  strokePaint.setStrokeWidth(node.strokeWidth)
+  canvas.drawCircle(node.x, node.y, node.r, strokePaint)
 }
 
-/** Rótulo centrado abaixo do círculo (estilo Obsidian). O Skia desenha a
- *  partir da linha de base à esquerda, então a centralização é nossa. */
-function desenharRotulo(
+/** Label centered below the circle (Obsidian style). Skia draws
+ *  from the baseline to the left, so the centering is ours. */
+function drawLabel(
   canvas: Parameters<Parameters<typeof createPicture>[0]>[0],
-  no: NoDesenho,
-  fonte: SkFont,
-  texto: SkPaint,
-  opacidade: number,
+  node: NodeShape,
+  font: SkFont,
+  textPaint: SkPaint,
+  opacity: number,
 ): void {
-  if (!no.rotulo) return
-  texto.setAlphaf(opacidade)
-  canvas.drawText(no.rotulo, no.x - larguraDe(no, fonte) / 2, no.y + no.rotuloY, texto, fonte)
+  if (!node.label) return
+  textPaint.setAlphaf(opacity)
+  canvas.drawText(node.label, node.x - labelWidth(node, font) / 2, node.y + node.labelY, textPaint, font)
 }

@@ -4,58 +4,58 @@ import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransient
 import { ProviderResolutionError } from './provider-errors'
 
 /**
- * Esta classificação decide se a rotação de modelos dispara. Errar para menos
- * deixa o fallback nunca acontecer; errar para mais gasta uma chamada em cada
- * modelo da rotação por um erro que trocar de modelo não resolve (auth, por
- * exemplo). Nenhum dos dois aparece como bug na tela — daí o teste.
+ * This classification decides whether the model rotation fires. Erring low
+ * lets the fallback never happen; erring high spends a call on every
+ * model of the rotation for an error that switching models does not solve (auth, for
+ * example). Neither of the two shows up as a bug on screen — hence the test.
  *
- * Os payloads abaixo são as formas reais em que cada provedor manda o erro:
- * o motivo costuma vir em `code`/`type`, não na mensagem.
+ * The payloads below are the real shapes in which each provider sends the error:
+ * the reason usually comes in `code`/`type`, not in the message.
  */
 
 describe('errorToText', () => {
-  it('usa a mensagem do Error', () => {
+  it('uses the Error message', () => {
     expect(errorToText(new Error('boom'))).toBe('boom')
   })
 
-  it('desce pela cadeia error/message aninhada dos gateways', () => {
+  it('walks down the nested error/message chain of the gateways', () => {
     expect(errorToText({ error: { error: { message: 'rate limited' } } })).toBe('rate limited')
   })
 
-  it('não estoura em cadeia ciclica', () => {
+  it('does not blow up on a cyclic chain', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.error = cyclic
     expect(() => errorToText(cyclic)).not.toThrow()
   })
 
-  it('serializa objeto sem message em vez de "[object Object]"', () => {
+  it('serializes an object without message instead of "[object Object]"', () => {
     expect(errorToText({ status: 500 })).not.toContain('[object Object]')
   })
 })
 
 describe('classifyProviderError', () => {
-  it('preserva o texto cru no detail', () => {
+  it('preserves the raw text in the detail', () => {
     const { detail } = classifyProviderError(new Error('Upstream said no'))
     expect(detail).toBe('Upstream said no')
   })
 
-  describe('moderação', () => {
+  describe('moderation', () => {
     it.each([
       ['DashScope/Qwen', { error: { code: 'data_inspection_failed', message: 'blocked' } }],
       ['OpenAI content filter', { error: { code: 'content_filter', message: 'The response was filtered' } }],
       ['Gemini', new Error('Candidate blocked: PROHIBITED_CONTENT')],
       ['Bedrock guardrail', new Error('Request blocked by guardrail policy')],
-    ])('classifica %s como moderation', (_label, payload) => {
+    ])('classifies %s as moderation', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('moderation')
     })
   })
 
-  describe('modelo indisponível', () => {
+  describe('model unavailable', () => {
     it.each([
       ['OpenAI', { error: { code: 'model_not_found', message: 'The model does not exist' } }],
       ['OpenRouter', new Error('No endpoints found for meta-llama/llama-4')],
       ['generico', new Error('gpt-9 is not supported by this provider')],
-    ])('classifica %s como model-unavailable', (_label, payload) => {
+    ])('classifies %s as model-unavailable', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('model-unavailable')
     })
   })
@@ -66,33 +66,33 @@ describe('classifyProviderError', () => {
       ['OpenCode Zen', new Error('FreeUsageLimitError: free tier exhausted')],
       ['quota', { error: { message: 'You exceeded your current quota' } }],
       ['RATE_LIMIT_EXCEEDED', new Error('RATE_LIMIT_EXCEEDED')],
-    ])('classifica %s como rate-limit', (_label, payload) => {
+    ])('classifies %s as rate-limit', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('rate-limit')
     })
 
-    it('vence a rede quando o 429 vem junto de retry-after', () => {
-      // 429 e 503 podem aparecer no mesmo payload; rate-limit é o mais
-      // específico e é checado primeiro de propósito.
+    it('beats network when the 429 comes with a retry-after', () => {
+      // 429 and 503 may show up in the same payload; rate-limit is the most
+      // specific and is checked first on purpose.
       const payload = { statusCode: 429, message: 'Too Many Requests, retry-after: 30' }
       expect(classifyProviderError(payload).kind).toBe('rate-limit')
     })
   })
 
-  describe('rede', () => {
+  describe('network', () => {
     it.each([
-      ['servidor local desligado', new Error('connect ECONNREFUSED 127.0.0.1:11434')],
+      ['local server down', new Error('connect ECONNREFUSED 127.0.0.1:11434')],
       ['DNS', new Error('getaddrinfo ENOTFOUND api.example.com')],
       ['undici', new Error('UND_ERR_CONNECT_TIMEOUT')],
-      ['SDK da Vercel', new Error('fetch failed')],
-      ['Anthropic sobrecarregado', { error: { type: 'overloaded_error' }, statusCode: 529 }],
+      ['Vercel SDK', new Error('fetch failed')],
+      ['Overloaded Anthropic', { error: { type: 'overloaded_error' }, statusCode: 529 }],
       ['gateway', { statusCode: 502, message: 'Bad Gateway' }],
-    ])('classifica %s como network', (_label, payload) => {
+    ])('classifies %s as network', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('network')
     })
 
-    it('classifica a recusa de sessão do OpenCode Go como network (rotacionável)', () => {
-      // A requisição nem foi roteada, mas o turno não pode morrer: a rotação
-      // segue adiante (o providerFetch já repetiu uma vez com id novo).
+    it('classifies the OpenCode Go session refusal as network (rotatable)', () => {
+      // The request was not even routed, but the turn cannot die: the rotation
+      // goes on (providerFetch already retried once with a new id).
       const err = new Error(
         'Error from provider (Console Go): Request is missing x-opencode-session and ' +
           'cannot be routed efficiently. Please see https://opencode.ai/docs/go/#where-can-i-use-it',
@@ -103,12 +103,12 @@ describe('classifyProviderError', () => {
     })
   })
 
-  describe('contexto estourado', () => {
+  describe('context overflow', () => {
     /**
-     * O caso que motivou o kind: o turno pediu 3,4M tokens num modelo de 1M.
-     * Classificado como `rate-limit`, a UI mandava "aguardar ou trocar de
-     * modelo" — e a rotação repetia o mesmo request gigante em cada modelo da
-     * sequência, todos com a mesma resposta.
+     * The case that motivated the kind: the turn requested 3.4M tokens on a 1M model.
+     * Classified as `rate-limit`, the UI told you to "wait or switch
+     * models" — and the rotation repeated the same giant request on every model of the
+     * sequence, all with the same answer.
      */
     const overflow =
       "Error from provider (Console Go): Upstream request failed: [invalid_request_error] " +
@@ -116,7 +116,7 @@ describe('classifyProviderError', () => {
       'tokens (3463912 in the messages, 0 in the completion). Please reduce the length of the ' +
       'messages or completion.'
 
-    it('classifica o estouro de contexto e NÃO rotaciona', () => {
+    it('classifies the context overflow and does NOT rotate', () => {
       const { kind } = classifyProviderError(new Error(overflow))
       expect(kind).toBe('context-length')
       expect(isRecoverableErrorKind(kind)).toBe(false)
@@ -126,25 +126,25 @@ describe('classifyProviderError', () => {
       ['OpenAI', { error: { code: 'context_length_exceeded', message: 'too long' } }],
       ['Anthropic', new Error('prompt is too long: 213423 tokens > 200000 maximum')],
       [
-        'Anthropic com max_tokens',
+        'Anthropic with max_tokens',
         new Error('input length and `max_tokens` exceed context limit: 190000 + 32000 > 200000'),
       ],
       [
         'Google',
         new Error('The input token count (1200000) exceeds the maximum number of tokens allowed'),
       ],
-    ])('reconhece a forma do %s', (_label, payload) => {
+    ])('recognizes the %s shape', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('context-length')
     })
 
     /**
-     * Regressão do defeito real: `matchable` serializava o erro inteiro, e o
-     * APICallError do SDK carrega `responseHeaders`. Como todo provedor
-     * compatível com a OpenAI devolve `x-ratelimit-*` em TODA resposta, o
-     * padrão /rate[ _-]?limit/ casava em qualquer falha daqueles provedores —
-     * o motivo verdadeiro nunca era alcançado.
+     * Regression of the real defect: `matchable` serialized the whole error, and the SDK's
+     * APICallError carries `responseHeaders`. Since every OpenAI-compatible
+     * provider returns `x-ratelimit-*` on EVERY response, the
+     * /rate[ _-]?limit/ pattern matched on any failure of those providers —
+     * the true reason was never reached.
      */
-    it('ignora headers x-ratelimit-* ao classificar', () => {
+    it('ignores x-ratelimit-* headers when classifying', () => {
       const err = Object.assign(new Error(overflow), {
         statusCode: 400,
         responseHeaders: {
@@ -156,16 +156,16 @@ describe('classifyProviderError', () => {
     })
 
     /**
-     * Mesmo defeito, outro campo: o APICallError também guarda
-     * `requestBodyValues` — o prompt inteiro (conversa, system, descrição das
-     * ferramentas). Um "is not supported" em qualquer ponto da conversa fazia
-     * uma falha de DNS chegar como "o provedor não serve este modelo".
+     * Same defect, another field: APICallError also keeps
+     * `requestBodyValues` — the whole prompt (conversation, system, tool
+     * descriptions). An "is not supported" anywhere in the conversation made
+     * a DNS failure arrive as "the provider does not serve this model".
      */
-    it('ignora o corpo da requisição ao classificar', () => {
+    it('ignores the request body when classifying', () => {
       const apiError = Object.assign(new Error('Cannot connect to API: getaddrinfo ENOTFOUND opencode.ai'), {
         requestBodyValues: {
           model: 'deepseek-v4.1-flash',
-          messages: [{ role: 'user', content: 'o backup do SQL Server is not supported no docker?' }],
+          messages: [{ role: 'user', content: 'the SQL Server backup is not supported in docker?' }],
         },
       })
       const retryError = Object.assign(
@@ -175,7 +175,7 @@ describe('classifyProviderError', () => {
       expect(classifyProviderError(retryError).kind).toBe('network')
     })
 
-    it('mas ainda reconhece o rate-limit de verdade, que vem no status/corpo', () => {
+    it('but still recognizes the real rate-limit, which comes in the status/body', () => {
       const err = Object.assign(new Error('Upstream request failed'), {
         statusCode: 429,
         responseHeaders: { 'x-ratelimit-remaining-requests': '0' },
@@ -186,44 +186,44 @@ describe('classifyProviderError', () => {
     })
   })
 
-  describe('configuração do provedor', () => {
+  describe('provider configuration', () => {
     it.each([
-      ['provedor desconhecido', new ProviderResolutionError('Unknown provider: x', 'unknown-provider')],
+      ['unknown provider', new ProviderResolutionError('Unknown provider: x', 'unknown-provider')],
       [
-        'chave ausente',
+        'missing key',
         new ProviderResolutionError('No API key configured for Anthropic. Add one in Settings.', 'missing-key'),
       ],
-      ['SDK não empacotado', new ProviderResolutionError('Missing SDK: @ai-sdk/x', 'missing-sdk')],
-    ])('classifica %s como provider-config', (_label, payload) => {
+      ['SDK not bundled', new ProviderResolutionError('Missing SDK: @ai-sdk/x', 'missing-sdk')],
+    ])('classifies %s as provider-config', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('provider-config')
     })
 
-    it('vence os padrões do provedor (id com "429" não vira rate-limit)', () => {
+    it('beats the provider defaults (an id with "429" does not become rate-limit)', () => {
       const err = new ProviderResolutionError('Unknown provider: gateway-429', 'unknown-provider')
       expect(classifyProviderError(err).kind).toBe('provider-config')
     })
 
-    it('não rotaciona — trocar de modelo não conserta configuração', () => {
+    it('does not rotate — switching models does not fix configuration', () => {
       expect(isRecoverableErrorKind('provider-config')).toBe(false)
     })
   })
 
-  describe('o que NÃO pode rotacionar', () => {
+  describe('what must NOT rotate', () => {
     it.each([
-      ['chave inválida', { error: { code: 'invalid_api_key', message: 'Incorrect API key provided' } }],
+      ['invalid key', { error: { code: 'invalid_api_key', message: 'Incorrect API key provided' } }],
       ['401', { statusCode: 401, message: 'Unauthorized' }],
       ['403', { statusCode: 403, message: 'Forbidden' }],
-      // Contexto estourado saiu daqui: ganhou kind próprio (`context-length`,
-      // coberto acima). Continua não rotacionando — o que mudou é que agora a
-      // UI sabe dizer o que resolve, em vez de mostrar o texto cru.
-    ])('deixa %s como unknown (trocar de modelo não resolve)', (_label, payload) => {
+      // Context overflow left here: it got a kind of its own (`context-length`,
+      // covered above). It still does not rotate — what changed is that now the
+      // UI knows how to say what solves it, instead of showing the raw text.
+    ])('leaves %s as unknown (switching models does not fix it)', (_label, payload) => {
       const { kind } = classifyProviderError(payload)
       expect(kind).toBe('unknown')
       expect(isRecoverableErrorKind(kind)).toBe(false)
     })
   })
 
-  it('nunca lança, nem com getter que estoura', () => {
+  it('never throws, not even with a getter that blows up', () => {
     const hostile = {
       get error() {
         throw new Error('getter explodiu')
@@ -234,19 +234,19 @@ describe('classifyProviderError', () => {
 })
 
 describe('isRecoverableErrorKind', () => {
-  it('rotaciona os quatro kinds que trocar de modelo resolve', () => {
+  it('rotates the four kinds that switching models solves', () => {
     for (const kind of ['moderation', 'model-unavailable', 'rate-limit', 'network'] as const) {
       expect(isRecoverableErrorKind(kind)).toBe(true)
     }
   })
 
-  it('não rotaciona unknown', () => {
+  it('does not rotate unknown', () => {
     expect(isRecoverableErrorKind('unknown')).toBe(false)
   })
 })
 
 describe('isTransientErrorKind', () => {
-  it('só rede e rate-limit valem uma nova rodada no mesmo modelo', () => {
+  it('only network and rate-limit earn another round on the same model', () => {
     expect(isTransientErrorKind('network')).toBe(true)
     expect(isTransientErrorKind('rate-limit')).toBe(true)
     expect(isTransientErrorKind('model-unavailable')).toBe(false)

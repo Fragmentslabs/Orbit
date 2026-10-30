@@ -4,12 +4,12 @@ import type { PanelSnapshotTab } from '@shared/panel'
 import { panelSnapshotFor } from '../panel-state'
 
 /**
- * O que o usuário está vendo na aba lateral, para o agente.
+ * What the user is seeing in the side tab, for the agent.
  *
- * Não é anexo nem captura de tela: o renderer espelha o store do painel para o
- * main (ver panel-store.ts) e esta tool devolve o último snapshot DA SESSÃO que
- * está chamando. Serve para "isso", "aqui", "aquele design que está aberto" —
- * o agente descobre o que está na tela sem o usuário precisar anexar de novo.
+ * It is not an attachment nor a screen capture: the renderer mirrors the panel store to
+ * main (see panel-store.ts) and this tool returns the latest snapshot OF THE SESSION that
+ * is calling. It serves for "this", "here", "that design that is open" —
+ * the agent finds out what is on the screen without the user having to attach it again.
  */
 
 function describeTab(tab: PanelSnapshotTab): string {

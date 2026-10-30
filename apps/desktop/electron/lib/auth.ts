@@ -4,9 +4,9 @@ import type { ProviderCredential } from '@shared/chat'
 import { dataDir } from './storage'
 
 /**
- * Armazenamento de credenciais por provedor, no mesmo espírito do
- * `auth.json` do opencode: um arquivo JSON local com permissões restritas.
- * Usa escrita atômica (temp → rename) para evitar corrupção em crash.
+ * Per-provider credential storage, in the same spirit as opencode's
+ * `auth.json`: a local JSON file with restricted permissions.
+ * It uses atomic writing (temp → rename) to avoid corruption on a crash.
  */
 
 function authFile() {
@@ -19,9 +19,9 @@ async function readAll(): Promise<AuthData> {
   try {
     return JSON.parse(await fs.readFile(authFile(), 'utf8'))
   } catch (err) {
-    // ENOENT = primeira execução (ainda sem chaves); outros erros = corrupção
+    // ENOENT = first run (no keys yet); other errors = corruption
     if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      console.error('[auth] erro ao ler auth.json — chaves podem ter sido perdidas:', err)
+      console.error('[auth] failed to read auth.json — credentials may have been lost:', err)
     }
     return {}
   }
@@ -52,12 +52,12 @@ export async function removeCredential(providerId: string): Promise<void> {
   await writeAll(data)
 }
 
-/** IDs dos provedores com credencial salva (nunca expõe as chaves ao renderer). */
+/** IDs of the providers with a saved credential (it never exposes the keys to the renderer). */
 export async function listCredentialProviders(): Promise<string[]> {
   return Object.keys(await readAll())
 }
 
-/** Resolve a chave de API: credencial salva ou variável de ambiente do catálogo. */
+/** Resolves the API key: saved credential or the catalog's environment variable. */
 export async function resolveApiKey(providerId: string, envNames: string[]): Promise<string | undefined> {
   const credential = await getCredential(providerId)
   if (credential?.key) return credential.key

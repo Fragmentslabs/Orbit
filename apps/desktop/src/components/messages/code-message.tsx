@@ -31,7 +31,7 @@ import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
-import { isRotinaProposal, RotinaProposalCard } from "@/src/components/rotinas/rotina-proposal-card"
+import { isRoutineProposal, RoutineProposalCard } from "@/src/components/routines/routine-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskTrigger } from "@/src/components/ai/task"
 import { ToolActionItem } from "@/src/components/ai/actions-group"
@@ -51,9 +51,9 @@ import {
 } from "@/src/components/messages/shared"
 
 /**
- * Mensagem do assistente no modo código: ferramentas agrupadas em Tasks
- * (estilo agente), resultados de teste estruturados, reasoning e — no modo
- * plano com pesquisa — fontes consultadas.
+ * Assistant message in code mode: tools grouped into Tasks
+ * (agent style), structured test results, reasoning and — in plan mode
+ * with research — consulted sources.
  */
 
 function testSummaryOf(part: ToolPart): TestSummary | null {
@@ -78,21 +78,21 @@ const MAX_VISIBLE = 5
 
 function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff }: {
   parts: ToolPart[]
-  /** Modo detalhado: título e todas as ações abertas, sem acordeon. */
+  /** Detailed mode: title and all actions open, no accordion. */
   flat?: boolean
   snapshot?: { patch?: string; files?: string[] }
   sessionId?: string
   messageId?: string
-  /** Selo "+N -N" no cabeçalho do grupo. O chat principal o desliga: ali ele
-   *  é renderizado no rodapé da mensagem, que fica sempre visível (ver
-   *  DiffBadge e AssistantMessageActions). */
+  /** "+N -N" badge in the group header. The main chat turns it off: there it
+   *  is rendered in the message footer, which stays always visible (see
+   *  DiffBadge and AssistantMessageActions). */
   showDiff?: boolean
-  /** A mensagem é a última e o turno ainda está em streaming — só nesse caso
-   *  uma part "running" é de verdade. Sem isto, uma mensagem antiga com uma
-   *  tool-call que nunca recebeu resultado (abort, conexão caída) ficava
-   *  mostrando "Working"/shimmer para sempre, mesmo fora de qualquer turno
-   *  ativo — o chat-engine agora fecha essas parts ao salvar, mas uma
-   *  mensagem já gravada quebrada antes desse fix se autocura aqui. */
+  /** The message is the last one and the turn is still streaming — only in that case
+   *  is a "running" part real. Without this, an old message with a
+   *  tool-call that never received a result (abort, dropped connection) kept
+   *  showing "Working"/shimmer forever, even outside any active
+   *  turn — chat-engine now closes those parts when saving, but a
+   *  message already recorded and broken before that fix heals itself here. */
   live: boolean
 }) {
   const { t } = useTranslation()
@@ -102,12 +102,12 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff
   const [showAll, setShowAll] = useState(false)
   const prevWorking = useRef(working)
 
-  // Abre automaticamente enquanto trabalha
+  // Opens automatically while it works
   useEffect(() => {
     if (working) setOpen(true)
   }, [working])
 
-  // Auto-collapse 1s após o streaming terminar
+  // Auto-collapse 1s after the streaming ends
   useEffect(() => {
     if (prevWorking.current && !working) {
       const timer = setTimeout(() => setOpen(false), 1000)
@@ -116,11 +116,11 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff
     prevWorking.current = working
   }, [working])
 
-  // Tools visíveis: as MAX_VISIBLE últimas (ou todas se showAll)
+  // Visible tools: the last MAX_VISIBLE ones (or all of them if showAll)
   const visibleParts = showAll ? parts : parts.slice(-MAX_VISIBLE)
   const hiddenCount = parts.length - MAX_VISIBLE
 
-  // Reseta showAll quando o grupo muda (nova mensagem)
+  // Resets showAll when the group changes (new message)
   useEffect(() => { setShowAll(false) }, [parts.length])
 
   const title = working
@@ -139,8 +139,8 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff
     )
   })
 
-  // Só o chat do browser-tab ainda usa o selo no cabeçalho (lá não há rodapé);
-  // no chat principal ele sai no rodapé da mensagem — ver diffInFooter.
+  // Only the browser-tab chat still uses the badge in the header (there is no footer there);
+  // in the main chat it comes out in the message footer — see diffInFooter.
   const diffBadge = showDiff && !working && (
     <DiffBadge patch={snapshot?.patch} parts={parts} sessionId={sessionId} messageId={messageId} />
   )
@@ -162,8 +162,8 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat, showDiff
       <TaskTrigger title={title}>
         <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
           {working ? <Shimmer>{title}</Shimmer> : <p className="text-sm">{title}</p>}
-          {/* O canto direito é do chevron: o selo, quando aparece, entra ao lado
-              dele sem disputar o `ml-auto`. */}
+          {/* The right corner belongs to the chevron: the badge, when it appears, enters next to
+              it without disputing the `ml-auto`. */}
           <div className="ml-auto flex items-center gap-2">
             {diffBadge}
             <ChevronDownIcon
@@ -195,20 +195,20 @@ type Segment =
 
 function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boolean): Segment[] {
   const segments: Segment[] = []
-  // Um card por peça na MESMA mensagem: `design_write` roda uma tela por
-  // chamada, e cada uma deixaria outro card do mesmo canvas. O primeiro lugar
-  // fica, com o estado da última chamada (é ela que sabe quantas telas há).
+  // One card per piece in the SAME message: `design_write` runs one screen per
+  // call, and each one would leave another card of the same canvas. The first place
+  // stays, with the state of the last call (it is the one that knows how many screens there are).
   const pieces = new Map<string, Extract<Segment, { kind: "part" }>>()
   for (const part of parts) {
-    // Mídia que é de uma peça: fica como parte própria para dar lugar ao card
-    // dela (uma imagem com card não pode virar miniatura de um grupo).
+    // Media that belongs to a piece: it stays as its own part to give way to its
+    // card (an image with a card cannot become a thumbnail of a group).
     if (cardPart(part)) {
       segments.push({ kind: "part", id: part.id, part })
       continue
     }
-    // Subagentes, TODO viva, propostas de skill e de conexão MCP, show_image e
-    // artefatos têm render próprio — a chamada não entra no acordeon de ações (o
-    // card do artefato JÁ é o resultado dela; o de MCP espera uma decisão sua)
+    // Sub-agents, live TODO, skill and MCP connection proposals, show_image and
+    // artifacts have their own render — the call does not enter the actions accordion (the
+    // artifact card ALREADY is its result; the MCP one waits for a decision of yours)
     if (
       part.type === "tool" &&
       part.tool !== "subagent" &&
@@ -221,16 +221,16 @@ function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boo
       part.tool !== "update_artifact" &&
       part.tool !== "create_document" &&
       part.tool !== "update_document" &&
-      // As peças (motion, design, slides) têm card próprio, como no chat —
-      // fechar a aba do painel não pode tirá-las de vista.
+      // The pieces (motion, design, slides) have their own card, as in the chat —
+      // closing the panel tab cannot take them out of sight.
       !isPieceCardTool(part.tool)
     ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
       else segments.push({ kind: "task", id: part.id, parts: [part] })
     } else if (part.type === "image") {
-      // Imagens consecutivas (várias de uma vez, ou os passos de uma edição
-      // em cadeia) viram uma tira de miniaturas — ver ImageGroupView.
+      // Consecutive images (several at once, or the steps of a chained
+      // edit) become a thumbnail strip — see ImageGroupView.
       const last = segments[segments.length - 1]
       if (last?.kind === "image-group") last.parts.push(part)
       else segments.push({ kind: "image-group", id: part.id, parts: [part] })
@@ -247,16 +247,16 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   sessionId?: string
   isLast: boolean
   isBusy: boolean
-  /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui o padrão */
+  /** Label of the waiting state (e.g. "Trying fallback 2/3…") — it replaces the default */
   busyLabel?: string
   onRetry?: () => void
-  /** O selo "+N -N" sai no rodapé da mensagem (junto de copiar/falar/gastos)
-   *  em vez do cabeçalho das ações — ver AssistantMessageActions. */
+  /** The "+N -N" badge comes out in the message footer (next to copy/speak/usage)
+   *  instead of the actions header — see AssistantMessageActions. */
   diffInFooter?: boolean
 }) {
   const { t } = useTranslation()
   const view = useSetting("chatView")
-  // Mídia de uma peça de motion vira o card dela, igual ao modo chat.
+  // Media of a motion piece becomes its card, just like in chat mode.
   const indexes = useMotionBundleIndexes(sessionId)
   const plan = useMemo(
     () => planMotionBundles(message.parts, indexes, message.id),
@@ -270,9 +270,10 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
     () =>
       segmentParts(
         arrangeForView(parts, view),
-        // A proposta de rotina tem card próprio, como as peças — sem isto ela
-        // cairia no grupo de tarefas e a decisão "criar/descartar" sumiria.
-        (part) => plan.cards.has(part.id) || isRotinaProposal(part),
+        // The routine proposal has its own card, like the pieces — without this
+        // it would fall into the task group and the "create/discard" decision
+        // would disappear.
+        (part) => plan.cards.has(part.id) || isRoutineProposal(part),
       ),
     [parts, view, plan],
   )
@@ -281,20 +282,20 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
-  // O ÚLTIMO bloco de texto da mensagem é a resposta final (branca); os
-  // anteriores são narração intermediária do agente e ficam em cor apagada —
-  // inclusive se alguma ação (read, bash etc.) chegar depois do texto no
-  // stream. Um bloco é um run de partes consecutivas de texto (lastTextRunStart):
-  // dois trechos separados só por reasoning são a MESMA resposta — caso do
-  // corte por limite de tokens seguido de AUTO_CONTINUE, em que a continuação
-  // não pode apagar o trecho anterior. Textos internos do engine NUNCA contam
-  // como resposta final nem quebram o run: ficam sempre apagados, como
-  // pensamento interno do agente. 'nudge' = verificação anti-overclaim;
-  // 'todo' = linha de fechamento da checklist; 'internal' é o nudge que
-  // terminou como "nada a corrigir" e nem aparece.
+  // The LAST text block of the message is the final answer (white); the
+  // previous ones are intermediate narration of the agent and stay in a faded color —
+  // including if some action (read, bash etc.) arrives after the text in
+  // the stream. A block is a run of consecutive text parts (lastTextRunStart):
+  // two excerpts separated only by reasoning are the SAME answer — the case of
+  // the cut by the token limit followed by AUTO_CONTINUE, in which the continuation
+  // cannot erase the previous excerpt. Engine internal texts NEVER count
+  // as the final answer nor break the run: they stay always faded, as
+  // internal thought of the agent. 'nudge' = anti-overclaim check;
+  // 'todo' = closing line of the checklist; 'internal' is the nudge that
+  // ended as "nothing to fix" and does not even appear.
   const lastRunStart = useMemo(() => lastTextRunStart(segments), [segments])
 
-  // Só a última todowrite é a checklist viva; anteriores viram uma linha
+  // Only the last todowrite is the live checklist; previous ones become a single line
   const lastTodoId = [...message.parts]
     .reverse()
     .find((p) => p.type === "tool" && p.tool === "todowrite")?.id
@@ -340,8 +341,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
-        ) : segment.part.type === "tool" && segment.part.tool === "rotinas_manage" ? (
-          <RotinaProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" && segment.part.tool === "routines_manage" ? (
+          <RoutineProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" &&
           (segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update") ? (
           <McpProposalCard key={segment.id} part={segment.part} />
@@ -362,9 +363,9 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         ) : null,
       )}
       {message.error && (
-        // Refazer só faz sentido na ÚLTIMA resposta: o retry reexecuta o turno
-        // sobre a mensagem do usuário, e numa resposta antiga isso descartaria
-        // o que veio depois dela.
+        // Redoing only makes sense in the LAST reply: the retry reruns the turn
+        // over the user message, and in an old reply that would discard
+        // what came after it.
         <MessageError
           sessionId={sessionId}
           error={message.error}

@@ -1,6 +1,6 @@
 import type { ModelScores, PriceTier, SpeedTier } from "@shared/models"
 
-/** Labels e formatters da aba Models (separados dos componentes p/ fast refresh). */
+/** Labels and formatters of the Models tab (split from the components for fast refresh). */
 
 export const CAPABILITY_LABELS: Record<string, string> = {
   coding: "Coding",
@@ -9,7 +9,7 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   reasoning: "Reasoning",
 }
 
-/** Modalidades de entrada (models.dev/OpenRouter): text, image, audio, video, pdf */
+/** Input modalities (models.dev/OpenRouter): text, image, audio, video, pdf */
 export const MODALITY_LABELS: Record<string, string> = {
   text: "Text",
   image: "Image",
@@ -31,7 +31,7 @@ export const SPEED_LABELS: Record<SpeedTier, string> = {
   deep: "Deep Thinking",
 }
 
-/** Nomes amigáveis para ids de disponibilidade (models.dev + openrouter) */
+/** Friendly names for availability ids (models.dev + openrouter) */
 export const AVAILABILITY_LABELS: Record<string, string> = {
   openrouter: "OpenRouter",
   anthropic: "Anthropic",
@@ -60,7 +60,7 @@ export function formatContext(tokens: number): string {
   return `${Math.round(tokens / 1000)}k`
 }
 
-/** USD por 1M de tokens */
+/** USD per 1M tokens */
 export function formatPrice(value: number): string {
   if (value <= 0) return "Free"
   if (value < 0.01) return `$${value.toFixed(4)}`
@@ -73,7 +73,7 @@ export function scoreColor(score: number): string {
   return "bg-rose-500"
 }
 
-/** Categorias exibidas em comparação/detalhe, na ordem do spec. */
+/** Categories shown in comparison/detail, in the order of the spec. */
 export const SCORE_CATEGORIES: { key: keyof ModelScores; label: string }[] = [
   { key: "coding", label: "Coding" },
   { key: "agentic", label: "Agentic" },

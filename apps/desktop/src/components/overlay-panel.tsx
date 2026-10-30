@@ -15,12 +15,12 @@ import { cn } from "@/lib/utils"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Preferências → Overlay: o atalho global (⇧⌘espaço), o modelo do painel com o
- * nível de thinking, o modo visão e os pré-requisitos do que o painel usa.
+ * Preferences → Overlay: the global shortcut (⇧⌘space), the panel model with the
+ * thinking level, the vision mode and the prerequisites of what the panel uses.
  *
- * A regra da tela é a mesma do recurso: tudo que o agente precisa para AGIR
- * aparece aqui com estado (ligado/desligado) e o caminho para ligar. O que
- * estiver desligado ele diz que não consegue fazer — nunca inventa.
+ * The rule of the screen is the same as the feature's: everything the agent needs to ACT
+ * appears here with a state (on/off) and the path to turn it on. What
+ * is turned off it says it cannot do — it never invents.
  */
 export function OverlayPanel() {
   const { t } = useTranslation()
@@ -43,7 +43,7 @@ export function OverlayPanel() {
   const callReady = voice.tts.enabled && voice.stt.enabled
   const opacity = Math.round(overlay.opacity * 100)
 
-  // Modelo efetivo do painel: o escolhido aqui ou o da conversa.
+  // Effective model of the panel: the one chosen here or the conversation's.
   const model = overlay.model ?? selectedModel
   const canSee = model ? modelSupportsVision(catalog[model.providerId], model.modelId) : false
   const visionReady = overlay.vision && !!visionModel
@@ -104,8 +104,8 @@ export function OverlayPanel() {
         />
       </SettingRow>
 
-      {/* Modelo do painel: o seletor e, ao lado, o nível de thinking DESTE
-          modelo — o mesmo mapa por modelo que o input do chat lê. */}
+      {/* Panel model: the selector and, next to it, the thinking level of THIS
+          model — the same per-model map the chat input reads. */}
       <div className="rounded-lg border border-border p-3">
         <ModelField
           label={t("overlaySettings.model.title")}
@@ -136,13 +136,13 @@ export function OverlayPanel() {
         />
       </SettingRow>
 
-      {/* Só modelos que enxergam: escolher um cego aqui seria escolher nada. */}
+      {/* Only models that can see: choosing a blind one here would be choosing nothing. */}
       <div className="pl-11">
         <ModelField
           label={t("overlaySettings.vision.model")}
           value={visionModel}
-          // Escolher um modelo liga o modo (mesma convenção do diálogo de
-          // visão do chat); limpar não força o desligamento.
+          // Choosing a model turns the mode on (same convention as the vision
+          // dialog of the chat); clearing does not force it off.
           onChange={(next) => {
             setVisionModel(next)
             if (next) set({ vision: true })
@@ -184,8 +184,8 @@ export function OverlayPanel() {
         </div>
       </SettingRow>
 
-      {/* Pré-requisitos: o que o painel pode fazer, com estado e o caminho
-          para ligar. É o retrato do que o agente vai dizer que não consegue. */}
+      {/* Prerequisites: what the panel can do, with state and the path
+          to turn it on. It is the picture of what the agent will say it cannot do. */}
       <div className="rounded-lg border border-border p-3">
         <p className="text-xs font-medium">{t("overlaySettings.prerequisites.title")}</p>
         <ul className="mt-1.5 flex flex-col">
@@ -227,7 +227,7 @@ export function OverlayPanel() {
   )
 }
 
-/** Uma capacidade do painel: estado, detalhe e, quando mora em outra aba, o atalho. */
+/** A capability of the panel: state, detail and, when it lives in another tab, the shortcut. */
 function Capability({
   ok,
   label,

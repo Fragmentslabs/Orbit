@@ -5,29 +5,29 @@ import { readJson } from '../storage'
 import type { ToolContext } from './context'
 
 /**
- * Tool session_context: metadados dos últimos N turnos da sessão — modo
- * ativo, permissionMode, timestamps, arquivos alterados (snapshot) e tool
- * parts com erro. É puramente leitura: lê o histórico persistido via
- * sessionId (mesmo storage do chat-engine) e não injeta nada no contexto —
- * o modelo decide quando chamar.
+ * Tool session_context: metadata of the session's last N turns — active
+ * mode, permissionMode, timestamps, changed files (snapshot) and tool
+ * parts with an error. It is purely read: it reads the persisted history via
+ * sessionId (the same storage as chat-engine) and injects nothing into the context —
+ * the model decides when to call it.
  *
- * Turno = uma mensagem de usuário + a resposta do assistente seguinte.
- * Mensagens sintéticas de compactação (summary) são ignoradas.
+ * Turn = one user message + the following assistant response.
+ * Synthetic compaction messages (summary) are ignored.
  */
 
 const MAX_TEXT_SNIPPET = 200
 
 interface TurnRecord {
   role: 'user'
-  /** Primeiro texto da mensagem do usuário, truncado para contexto */
+  /** First text of the user message, truncated for context */
   text: string
   createdAt: number
   completedAt?: number
   mode?: string
   permissionMode?: string
-  /** Arquivos alterados no turno (snapshot do assistente) */
+  /** Files changed in the turn (assistant snapshot) */
   files: string[]
-  /** Tool parts que terminaram em erro */
+  /** Tool parts that ended in an error */
   errors: { tool: string; error: string }[]
   truncated?: boolean
 }
@@ -58,7 +58,7 @@ export function createSessionContextTool(ctx: ToolContext) {
       let current: TurnRecord | null = null
       for (const message of messages) {
         if (message.role === 'user') {
-          // Mensagens de compactação são artefato interno, não turnos do usuário
+          // Compaction messages are an internal artifact, not user turns
           if (message.summary) continue
           const textPart = message.parts.find(
             (p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text',

@@ -1,13 +1,13 @@
 /**
- * Folha da memória citada na conversa — o "hover card + aba do painel" do
- * desktop num só gesto, porque no celular não existe hover.
+ * Sheet of the memory cited in the conversation — the "hover card + panel tab" of the
+ * desktop in a single gesture, because on the phone there is no hover.
  *
- * Tocar no chip abre este resumo; o botão principal leva à tela de Memórias já
- * focada naquela memória (o parâmetro `id` seleciona o nó no grafo). Fechar
- * devolve a pessoa à conversa no mesmo ponto — nada de navegação perdida.
+ * Tapping the chip opens this summary; the main button leads to the Memories screen already
+ * focused on that memory (the `id` parameter selects the node in the graph). Closing
+ * returns the person to the conversation at the same point — no lost navigation.
  *
- * É montada UMA vez no ChatScreen: os chips só pedem o id ao store, então uma
- * resposta com várias citações continua com uma folha só.
+ * It is mounted ONCE in the ChatScreen: the chips only ask the store for the id, so an
+ * answer with several citations still has a single sheet.
  */
 import { useEffect, useMemo, useRef } from 'react'
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
@@ -36,18 +36,18 @@ export function MemorySheet() {
     [index, memoryId],
   )
 
-  // Citação de uma memória que o índice local não tem (chegou depois, ou a
-  // lista nunca foi buscada): pede uma vez por id. O ref evita o laço
-  // fetch → índice igual → fetch de novo enquanto a memória não existir.
-  const buscadoPara = useRef<string | null>(null)
+  // Citation of a memory the local index does not have (it arrived later, or the
+  // list was never fetched): asks once per id. The ref avoids the loop
+  // fetch → same index → fetch again while the memory does not exist.
+  const fetchedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!memoryId || memory) return
-    if (buscadoPara.current === memoryId) return
-    buscadoPara.current = memoryId
+    if (fetchedFor.current === memoryId) return
+    fetchedFor.current = memoryId
     void fetch()
   }, [memoryId, memory, fetch])
 
-  const abrirNaTela = () => {
+  const openInScreen = () => {
     if (!memoryId) return
     close()
     router.push({ pathname: '/memories', params: { id: memoryId } })
@@ -57,18 +57,18 @@ export function MemorySheet() {
 
   return (
     <BottomSheet
-      aberto={memoryId != null}
-      aoFechar={close}
-      titulo={
-        <View style={s.titulo}>
+      open={memoryId != null}
+      onClose={close}
+      title={
+        <View style={s.title}>
           <Brain size={15} color={tokens.primary} />
-          <Text style={[s.tituloTexto, { color: tokens.foreground }]}>{t('memorySheet.title')}</Text>
+          <Text style={[s.titleText, { color: tokens.foreground }]}>{t('memorySheet.title')}</Text>
         </View>
       }
     >
       {memory ? (
-        <View style={s.conteudo}>
-          <Text style={[s.texto, { color: tokens.foreground }]}>{memory.text}</Text>
+        <View style={s.content}>
+          <Text style={[s.text, { color: tokens.foreground }]}>{memory.text}</Text>
 
           <View style={s.badges}>
             <View style={[s.kindBadge, { backgroundColor: `${kindColor}26` }]}>
@@ -97,33 +97,33 @@ export function MemorySheet() {
             {t('memoryCard.uses', { count: memory.hits })} · {formatDate(memory.createdAt)}
           </Text>
 
-          <View style={[s.acoes, { borderTopColor: tokens.border }]}>
-            <Pressable onPress={close} style={s.secundario}>
-              <Text style={[s.secundarioTexto, { color: tokens.mutedForeground }]}>
+          <View style={[s.actions, { borderTopColor: tokens.border }]}>
+            <Pressable onPress={close} style={s.secondary}>
+              <Text style={[s.secondaryText, { color: tokens.mutedForeground }]}>
                 {t('memorySheet.close')}
               </Text>
             </Pressable>
             <Pressable
-              onPress={abrirNaTela}
+              onPress={openInScreen}
               style={({ pressed }) => [
-                s.primario,
+                s.primary,
                 { backgroundColor: tokens.primary, opacity: pressed ? 0.85 : 1 },
               ]}
             >
               <ExternalLink size={13} color={tokens.primaryForeground} />
-              <Text style={[s.primarioTexto, { color: tokens.primaryForeground }]}>
+              <Text style={[s.primaryText, { color: tokens.primaryForeground }]}>
                 {t('memorySheet.openInScreen')}
               </Text>
             </Pressable>
           </View>
         </View>
       ) : loading ? (
-        <View style={s.estado}>
+        <View style={s.state}>
           <ActivityIndicator color={tokens.primary} />
         </View>
       ) : (
-        <View style={s.estado}>
-          <Text style={[s.texto, { color: tokens.mutedForeground, textAlign: 'center' }]}>
+        <View style={s.state}>
+          <Text style={[s.text, { color: tokens.mutedForeground, textAlign: 'center' }]}>
             {t('memorySheet.notFound')}
           </Text>
           <Text style={[s.meta, { color: tokens.mutedForeground }]}>{memoryId}</Text>
@@ -134,11 +134,11 @@ export function MemorySheet() {
 }
 
 const s = StyleSheet.create({
-  titulo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  tituloTexto: { fontSize: 15, fontWeight: '600' },
+  title: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  titleText: { fontSize: 15, fontWeight: '600' },
 
-  conteudo: { gap: 10 },
-  texto: { fontSize: 14, lineHeight: 20 },
+  content: { gap: 10 },
+  text: { fontSize: 14, lineHeight: 20 },
 
   badges: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   kindBadge: { borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 },
@@ -148,7 +148,7 @@ const s = StyleSheet.create({
   tag: { fontSize: 11 },
   meta: { fontSize: 11 },
 
-  acoes: {
+  actions: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -157,9 +157,9 @@ const s = StyleSheet.create({
     paddingTop: 12,
     marginTop: 2,
   },
-  secundario: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8 },
-  secundarioTexto: { fontSize: 13, fontWeight: '500' },
-  primario: {
+  secondary: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8 },
+  secondaryText: { fontSize: 13, fontWeight: '500' },
+  primary: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -167,7 +167,7 @@ const s = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 8,
   },
-  primarioTexto: { fontSize: 13, fontWeight: '600' },
+  primaryText: { fontSize: 13, fontWeight: '600' },
 
-  estado: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 24 },
+  state: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 24 },
 })

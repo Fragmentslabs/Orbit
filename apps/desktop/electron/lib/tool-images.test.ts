@@ -18,7 +18,7 @@ function content(...parts: Array<Record<string, unknown>>): unknown {
 }
 
 describe('hoistToolImages', () => {
-  it('tira a imagem do resultado da tool e a entrega como mensagem de usuário', () => {
+  it('takes the image out of the tool result and delivers it as a user message', () => {
     const messages = toolMessage(
       content({ type: 'text', text: 'Screen 1200×780 px.' }, { type: 'image-data', data: IMAGE, mediaType: 'image/jpeg' }),
     )
@@ -37,14 +37,14 @@ describe('hoistToolImages', () => {
     expect(user.content).toContainEqual({ type: 'file', data: IMAGE, mediaType: 'image/jpeg' })
   })
 
-  it('não mexe em resultado que já é texto', () => {
-    const messages = toolMessage({ type: 'text', value: 'sem imagem' })
+  it('does not touch a result that is already text', () => {
+    const messages = toolMessage({ type: 'text', value: 'no image' })
     const result = hoistToolImages(messages)
     expect(result.images).toBe(0)
     expect(result.messages).toBe(messages)
   })
 
-  it('é idempotente: a segunda passada não duplica a mensagem', () => {
+  it('is idempotent: the second pass does not duplicate the message', () => {
     const once = hoistToolImages(
       toolMessage(content({ type: 'text', text: 'ok' }, { type: 'image-data', data: IMAGE, mediaType: 'image/webp' })),
     )
@@ -53,7 +53,7 @@ describe('hoistToolImages', () => {
     expect(twice.messages).toBe(once.messages)
   })
 
-  it('leva mais de uma imagem do mesmo resultado', () => {
+  it('carries more than one image from the same result', () => {
     const result = hoistToolImages(
       toolMessage(
         content(

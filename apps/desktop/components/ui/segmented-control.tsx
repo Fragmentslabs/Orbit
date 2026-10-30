@@ -2,10 +2,10 @@ import { cn } from "@/lib/utils"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * SegmentedControl — 3 estados mutuamente exclusivos. Usado nos ajustes de
- * thresholds de permissões (low / medium / high). Implementação leve em torno
- * de <button> + variantes tailwind; sem dependência de cva/buttonVariants
- * para manter o visual contido.
+ * SegmentedControl — 3 mutually exclusive states. Used in the settings of
+ * permission thresholds (low / medium / high). Lightweight implementation around
+ * <button> + tailwind variants; without a dependency on cva/buttonVariants
+ * to keep the visuals contained.
  */
 
 export interface SegmentedOption<T extends string> {

@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest"
 import { planDesignReload } from "./design-reload"
 
 describe("planDesignReload", () => {
-  it("recarrega só o artboard que mudou", () => {
+  it("reloads only the artboard that changed", () => {
     expect(planDesignReload(["Hero.html"])).toEqual({ index: false, boards: ["Hero.html"], all: false })
   })
 
-  it("o canvas.json re-lê o índice, sem mexer nos artboards", () => {
+  it("canvas.json re-reads the index, without touching the artboards", () => {
     expect(planDesignReload(["canvas.json"])).toEqual({ index: true, boards: [], all: false })
   })
 
-  it("uma gravação do agente costuma trazer os dois: índice e telas", () => {
+  it("an agent write usually brings both: index and screens", () => {
     expect(planDesignReload(["canvas.json", "Hero.html", "Pricing.html"])).toEqual({
       index: true,
       boards: ["Hero.html", "Pricing.html"],
@@ -18,16 +18,16 @@ describe("planDesignReload", () => {
     })
   })
 
-  it("mudança fora dos artboards (CSS, imagem, fonte) recarrega todas as telas", () => {
+  it("a change outside the artboards (CSS, image, font) reloads every screen", () => {
     expect(planDesignReload(["base.css", "logo.svg"])).toEqual({ index: false, boards: [], all: true })
   })
 
-  it("sem lista, recarrega tudo — como antes do watcher mandar os nomes", () => {
+  it("with no list, it reloads everything — as before the watcher sent the names", () => {
     expect(planDesignReload(undefined)).toEqual({ index: true, boards: [], all: true })
     expect(planDesignReload([])).toEqual({ index: true, boards: [], all: true })
   })
 
-  it("artboard em subpasta mantém o caminho do canvas.json", () => {
+  it("an artboard in a subfolder keeps the canvas.json path", () => {
     expect(planDesignReload(["pages/About.html"]).boards).toEqual(["pages/About.html"])
   })
 })

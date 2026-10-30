@@ -1,10 +1,10 @@
 /**
- * Tipos da aba Models — catálogo unificado construído pelo Orbit Ranking
- * Engine (electron/lib/models) a partir do OpenRouter, da Artificial Analysis
- * e do catálogo models.dev (disponibilidade por provedor).
+ * Types of the Models tab — unified catalog built by the Orbit Ranking
+ * Engine (electron/lib/models) from OpenRouter, Artificial Analysis
+ * and the models.dev catalog (availability per provider).
  */
 
-/** Scores normalizados 0→100 (relativos ao melhor modelo do dataset). */
+/** Scores normalized 0→100 (relative to the best model of the dataset). */
 export interface ModelScores {
   intelligence?: number
   coding?: number
@@ -13,21 +13,21 @@ export interface ModelScores {
   speed?: number
 }
 
-/** Valores técnicos crus, exibidos no modo "Technical" da comparação. */
+/** Raw technical values, shown in the "Technical" mode of the comparison. */
 export interface ModelBenchmarks {
-  /** Índices da Artificial Analysis (escala própria da AA) */
+  /** Artificial Analysis indices (AA's own scale) */
   intelligenceIndex?: number
   codingIndex?: number
   agenticIndex?: number
-  /** Benchmarks individuais (0-1 ou 0-100 conforme a fonte, já em %) */
+  /** Individual benchmarks (0-1 or 0-100 depending on the source, already in %) */
   swebench?: number
   livecodebench?: number
   gpqa?: number
   hle?: number
   mmluPro?: number
-  /** Velocidade medida (mediana das últimas 72h, via AA) */
+  /** Measured speed (median of the last 72h, via AA) */
   tokensPerSecond?: number
-  /** Time to first token, em segundos */
+  /** Time to first token, in seconds */
   ttft?: number
 }
 
@@ -35,33 +35,33 @@ export type PriceTier = "free" | "low" | "medium" | "premium"
 export type SpeedTier = "fast" | "balanced" | "deep"
 
 export interface OrbitModel {
-  /** Slug canônico (id do OpenRouter quando disponível, ex: "anthropic/claude-opus-4.6") */
+  /** Canonical slug (OpenRouter id when available, e.g. "anthropic/claude-opus-4.6") */
   id: string
   name: string
-  /** Criador do modelo (anthropic, openai, google…) */
+  /** Creator of the model (anthropic, openai, google…) */
   provider: string
   providerName: string
   contextWindow: number
-  /** USD por 1M de tokens */
+  /** USD per 1M tokens */
   pricing: { input: number; output: number }
   priceTier: PriceTier
   speedTier: SpeedTier
   scores: ModelScores
   benchmarks: ModelBenchmarks
-  /** Provedores onde o modelo está disponível (openrouter + ids do models.dev) */
+  /** Providers where the model is available (openrouter + models.dev ids) */
   availability: string[]
-  /** Modalidades de entrada aceitas (text, image, audio, video, pdf) — union OpenRouter + models.dev */
+  /** Accepted input modalities (text, image, audio, video, pdf) — OpenRouter + models.dev union */
   modalities: string[]
-  /** Capacidades derivadas: coding, vision, agent, reasoning, free… */
+  /** Derived capabilities: coding, vision, agent, reasoning, free… */
   tags: string[]
   releaseDate?: string
-  /** Fontes que contribuíram com dados */
+  /** Sources that contributed data */
   sources: ("openrouter" | "artificialanalysis")[]
 }
 
 export interface ModelsSnapshot {
   models: OrbitModel[]
   updatedAt: number
-  /** Se a chave da Artificial Analysis está configurada (dados de speed/benchmarks) */
+  /** Whether the Artificial Analysis key is configured (speed/benchmarks data) */
   hasAAKey: boolean
 }

@@ -6,18 +6,18 @@ import { Readable } from 'node:stream'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * O MUX do áudio da peça com o ffmpeg de verdade. O vídeo sai do mesmo caminho
- * rawvideo do render (quadros crus no stdin) e o som entra numa passada final —
- * só que aqui não há captura de janela, então dá para conferir de ponta a ponta
- * o que os argumentos sozinhos não provam:
+ * The MUX of the piece's audio with the real ffmpeg. The video comes out of the same
+ * rawvideo path as the render (raw frames on stdin) and the sound comes in on a final pass —
+ * only here there is no window capture, so one can check end to end
+ * what the arguments alone do not prove:
  *
- *   1. o comprimento é o da COMPOSIÇÃO, não o do áudio;
- *   2. um áudio mais curto NÃO encurta o vídeo (é o que `-shortest` faria, e é o
- *      reflexo que este teste existe para segurar);
- *   3. o codec acompanha o contêiner (aac no mp4, Opus no webm — aac em webm é
- *      recusado pelo muxer).
+ *   1. the length is the COMPOSITION's, not the audio's;
+ *   2. shorter audio does NOT shorten the video (that is what `-shortest` would do, and it is the
+ *      reflex this test exists to hold back);
+ *   3. the codec follows the container (aac in mp4, Opus in webm — aac in webm is
+ *      refused by the muxer).
  *
- * Sem ffmpeg na máquina, a suíte pula (como render.test.ts e o ffmpeg do motion).
+ * Without ffmpeg on the machine, the suite skips (like render.test.ts and motion's ffmpeg).
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -38,11 +38,11 @@ const { motionVideoAudioTracks } = await import('./motion-video-audio')
 const W = 64
 const H = 64
 const FPS = 5
-/** A peça deste teste: 4 quadros a 5 fps = 0,8s. */
+/** This test's piece: 4 frames at 5 fps = 0.8s. */
 const FRAMES = 4
 const PIECE = FRAMES / FPS
 
-/** Um quadro opaco, como o caminho sem alfa (janela de fundo preto) entrega. */
+/** An opaque frame, as the path without alpha (black-background window) delivers. */
 function opaqueFrame(r: number, g: number, b: number): Buffer {
   const frame = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) {
@@ -54,20 +54,20 @@ function opaqueFrame(r: number, g: number, b: number): Buffer {
   return frame
 }
 
-/** O stdin de uma faixa: os mesmos bytes, quadro após quadro. */
+/** The stdin of one track: the same bytes, frame after frame. */
 function frames(frame: Buffer, count: number): Readable {
   return Readable.from([Buffer.concat(Array.from({ length: count }, () => frame))])
 }
 
-/** Os argumentos de UMA faixa, como o render monta (uma faixa = o vídeo inteiro). */
+/** The arguments of ONE track, as the render builds them (one track = the whole video). */
 function bandArgs(format: Parameters<typeof motionFfmpegArgs>[0]['format'], output: string): string[] {
   return motionFfmpegArgs({ width: W, height: H, captureWidth: W, captureHeight: H, fps: FPS, format, output })
 }
 
 /**
- * Um tom de 440 Hz em PCM16 mono, montado aqui e entregue cru no stdin do
- * ffmpeg: áudio de verdade sem depender do lavfi (a build que o app leva junto
- * não é obrigada a trazer os filtros de síntese).
+ * A 440 Hz tone in mono PCM16, built here and handed raw to the stdin of
+ * ffmpeg: real audio without depending on lavfi (the build the app ships with
+ * is not required to bring the synthesis filters).
  */
 async function tone(file: string, seconds: number): Promise<void> {
   const samples = Math.round(44100 * seconds)
@@ -100,8 +100,8 @@ async function audioCodec(file: string): Promise<string> {
 }
 
 /**
- * Pico do áudio num trecho, de 0 a 1, medido no PCM decodificado. É o que prova
- * que a faixa está no INSTANTE declarado — que o arquivo tem som, o ffprobe já diz.
+ * Audio peak in a stretch, from 0 to 1, measured on the decoded PCM. It is what proves
+ * that the track is at the declared INSTANT — that the file has sound, ffprobe already says.
  */
 async function peak(file: string, from: number, to: number): Promise<number> {
   const raw = `${file}.${from}-${to}.raw`
@@ -114,12 +114,12 @@ async function peak(file: string, from: number, to: number): Promise<number> {
   return max
 }
 
-/** Monta o vídeo mudo da peça (uma faixa, como o caminho sequencial). */
+/** Builds the piece's silent video (one track, like the sequential path). */
 async function muteVideo(file: string, format: Parameters<typeof bandArgs>[0]): Promise<void> {
   await runFfmpeg(bandArgs(format, file), { stdin: frames(opaqueFrame(0, 200, 90), FRAMES) })
 }
 
-describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
+describe.skipIf(!hasFfmpeg)('composition audio (real ffmpeg)', () => {
   beforeAll(async () => {
     await fsp.mkdir(work, { recursive: true })
   })
@@ -128,7 +128,7 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
     await fsp.rm(work, { recursive: true, force: true })
   })
 
-  it('áudio mais longo é cortado no fim da peça, sem re-encodar nem perder quadro', async () => {
+  it('longer audio is cut at the end of the piece, with no re-encode and no dropped frame', async () => {
     const video = path.join(work, 'mute-long.mp4')
     await muteVideo(video, 'mp4')
     const audio = path.join(work, 'tone-2s.wav')
@@ -138,12 +138,12 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
     await runFfmpeg(motionAudioFfmpegArgs({ video, audio, output: out, duration: PIECE, format: 'mp4' }))
 
     expect(await audioCodec(out)).toBe('aac')
-    // O `-t` corta o som, não a imagem: quadro por quadro continua a peça inteira.
+    // `-t` cuts the sound, not the picture: frame by frame the whole piece remains.
     expect(await frameCount(out)).toBe(FRAMES)
     expect(await duration(out)).toBeCloseTo(PIECE, 1)
   })
 
-  it('áudio mais curto deixa a cauda em silêncio, sem encurtar o vídeo', async () => {
+  it('shorter audio leaves the tail silent, without shortening the video', async () => {
     const video = path.join(work, 'mute-short.mp4')
     await muteVideo(video, 'mp4')
     const audio = path.join(work, 'tone-short.wav')
@@ -153,12 +153,12 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
     await runFfmpeg(motionAudioFfmpegArgs({ video, audio, output: out, duration: PIECE, format: 'mp4' }))
 
     expect(await audioCodec(out)).toBe('aac')
-    // É AQUI que o `-shortest` quebraria: com ele o vídeo sairia com 1 quadro.
+    // This is WHERE `-shortest` would break: with it the video would come out with 1 frame.
     expect(await frameCount(out)).toBe(FRAMES)
     expect(await duration(out)).toBeCloseTo(PIECE, 1)
   })
 
-  it('webm leva Opus: o contêiner não aceita aac', async () => {
+  it('webm takes Opus: the container does not accept aac', async () => {
     const video = path.join(work, 'mute.webm')
     await muteVideo(video, 'webm')
     const audio = path.join(work, 'tone-webm.wav')
@@ -171,7 +171,7 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
     expect(await frameCount(out)).toBe(FRAMES)
   })
 
-  it('a faixa entra no INSTANTE declarado: antes do start é silêncio', async () => {
+  it('the track enters at the declared INSTANT: before start is silence', async () => {
     const video = path.join(work, 'mix-late.mp4')
     await muteVideo(video, 'mp4')
     const audio = path.join(work, 'late.wav')
@@ -188,14 +188,14 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       }),
     )
 
-    // O `adelay` tem que ter empurrado o som de verdade: nada antes de 0,4s, som
-    // depois. É o que os argumentos sozinhos não provam — só o ffmpeg.
+    // `adelay` must have pushed the sound for real: nothing before 0.4s, sound
+    // after. That is what the arguments alone do not prove — only ffmpeg.
     expect(await peak(out, 0, 0.3)).toBeLessThan(0.001)
     expect(await peak(out, 0.45, 0.68)).toBeGreaterThan(0.01)
     expect(await duration(out)).toBeCloseTo(PIECE, 1)
   })
 
-  it('cama com duck + narração + efeito: o grafo roda e o comprimento é o da peça', async () => {
+  it('bed with duck + narration + effect: the graph runs and the length is the piece one', async () => {
     const video = path.join(work, 'mix-bed.mp4')
     await muteVideo(video, 'mp4')
     const voice = path.join(work, 'voice.wav')
@@ -220,22 +220,22 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       }),
     )
 
-    // O `sidechaincompress` com os rótulos deste grafo é o pedaço mais frágil:
-    // se ele não rodasse, aqui sairia erro e não um arquivo.
+    // `sidechaincompress` with this graph's labels is the most fragile piece:
+    // if it did not run, an error would come out here and not a file.
     expect(await audioCodec(out)).toBe('aac')
     expect(await frameCount(out)).toBe(FRAMES)
-    // A cama tem 2s numa peça de 0,8s: o `-t` a corta, e nada estica o arquivo.
+    // The bed is 2s long in a 0.8s piece: `-t` cuts it, and nothing stretches the file.
     expect(await duration(out)).toBeCloseTo(PIECE, 1)
     expect(await duration(out)).toBeLessThan(PIECE + 0.2)
   })
 
-  // O tratamento é filtro de ffmpeg escrito à mão: só rodar prova que o grafo é
-  // válido (nome de opção, aspas da expressão, rótulos) E que faz o que diz.
+  // The treatment is a hand-written ffmpeg filter: running it is the only proof that the graph is
+  // valid (option name, expression quotes, labels) AND that it does what it says.
   describe('tratamento', () => {
     const plainEvent = { start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false }
     const noFx = { eq: [], automation: [] }
 
-    it('passa-alta, eq, compressor e curva de volume: o grafo roda e a curva SOBE o nível', async () => {
+    it('high-pass, eq, compressor and volume curve: the graph runs and the curve RAISES the level', async () => {
       const video = path.join(work, 'fx-video.mp4')
       await muteVideo(video, 'mp4')
       const voice = path.join(work, 'fx-voice.wav')
@@ -257,7 +257,7 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
                 highpass: 80,
                 eq: [{ freq: 440, gain: 3, q: 1 }],
                 compress: { threshold: -24, ratio: 3, attack: 5, release: 100, makeup: 0 },
-                // Começa 30 dB abaixo e chega a 0 dB no fim da peça.
+                // Starts 30 dB down and reaches 0 dB at the end of the piece.
                 automation: [
                   { at: 0, db: -30 },
                   { at: PIECE, db: 0 },
@@ -270,11 +270,11 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
 
       expect(await audioCodec(out)).toBe('aac')
       expect(await frameCount(out)).toBe(FRAMES)
-      // A curva é por TEMPO DA PEÇA: o começo sai bem mais baixo que o fim.
+      // The curve is by PIECE TIME: the start comes out much lower than the end.
       expect(await peak(out, 0.05, 0.2)).toBeLessThan(await peak(out, 0.6, 0.78))
     })
 
-    it('a curva também vale para uma faixa que entra tarde (o t é o da peça, depois do atraso)', async () => {
+    it('the curve also applies to a track that enters late (t is the piece one, after the delay)', async () => {
       const video = path.join(work, 'fx-late-video.mp4')
       await muteVideo(video, 'mp4')
       const hit = path.join(work, 'fx-late.wav')
@@ -287,8 +287,8 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
           output: out,
           duration: PIECE,
           format: 'mp4',
-          // Entra em 0,4s; a curva diz "mudo até 0,5s". Se o t fosse o da faixa
-          // (e não o da peça), o trecho 0,4–0,5 ainda seria mudo por mais 0,5s.
+          // Enters at 0.4s; the curve says "muted until 0.5s". If t were the track's
+          // (and not the piece's), the 0.4–0.5 stretch would still be muted for another 0.5s.
           events: [
             {
               ...plainEvent,
@@ -310,7 +310,7 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       expect(await peak(out, 0.6, 0.78)).toBeGreaterThan(0.01)
     })
 
-    it('o teto de pico de verdade segura o som, e o volume de entrega roda no mesmo grafo', async () => {
+    it('the true-peak ceiling holds the sound, and the delivery volume runs in the same graph', async () => {
       const video = path.join(work, 'master-video.mp4')
       await muteVideo(video, 'mp4')
       const loud = path.join(work, 'master-loud.wav')
@@ -319,7 +319,7 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       const limited = path.join(work, 'master-limited.mp4')
       const normalized = path.join(work, 'master-normalized.mp4')
       const base = { video, duration: PIECE, format: 'mp4' as const }
-      // +12 dB sobre um tom já forte: passa de 1.0 sem teto.
+      // +12 dB over an already strong tone: goes past 1.0 with no ceiling.
       const events = [{ ...plainEvent, file: loud, gainDb: 12 }]
 
       await runFfmpeg(motionAudioMixFfmpegArgs({ ...base, output: raw, events }))
@@ -329,16 +329,16 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       const ceiling = Math.pow(10, -6 / 20)
       expect(await peak(limited, 0.1, 0.7)).toBeLessThanOrEqual(ceiling + 0.03)
       expect(await peak(limited, 0.1, 0.7)).toBeLessThan(await peak(raw, 0.1, 0.7))
-      // O loudnorm devolve 192 kHz; sem o aresample o aac sairia em taxa absurda.
+      // loudnorm returns 192 kHz; without the aresample the aac would come out at an absurd rate.
       const { stdout } = await runFfprobe(['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=sample_rate', '-of', 'csv=p=0', normalized])
       expect(Number(stdout.toString().trim())).toBe(48000)
       expect(await frameCount(normalized)).toBe(FRAMES)
     })
 
-    it('corte inicial: o som sai do ponto do ARQUIVO pedido, no instante da peça', async () => {
+    it('initial cut: the sound starts at the requested FILE point, at the piece instant', async () => {
       const video = path.join(work, 'offset-video.mp4')
       await muteVideo(video, 'mp4')
-      // 0,3s de silêncio e depois 0,5s de tom: cortar em 0,3 deixa só o tom.
+      // 0.3s of silence and then 0.5s of tone: cutting at 0.3 leaves only the tone.
       const src = path.join(work, 'offset-src.wav')
       const rate = 44100
       const pcm = Buffer.alloc(Math.round(rate * 0.8) * 2)
@@ -359,14 +359,14 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
           events: [{ ...plainEvent, file: src, start: 0.2, offset: 0.3 }],
         }),
       )
-      // Antes do start: silêncio. Logo depois dele já há tom (o silêncio do começo do
-      // arquivo foi cortado) — sem o corte, o tom só chegaria em 0,5s. Esta é a
-      // medição que pegou o mp4/aac comendo o silêncio do atraso.
+      // Before the start: silence. Right after it there is already tone (the silence at the beginning of the
+      // file was cut) — without the cut, the tone would only arrive at 0.5s. This is the
+      // measurement that caught mp4/aac eating the delay's silence.
       expect(await peak(out, 0, 0.18)).toBeLessThan(0.001)
       expect(await peak(out, 0.25, 0.4)).toBeGreaterThan(0.01)
     })
 
-    it('loop: um arquivo curto cobre a peça inteira', async () => {
+    it('loop: a short file covers the whole piece', async () => {
       const video = path.join(work, 'loop-video.mp4')
       await muteVideo(video, 'mp4')
       const short = path.join(work, 'loop-short.wav')
@@ -386,7 +386,7 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       expect(await duration(out)).toBeCloseTo(PIECE, 1)
     })
 
-    it('o som de um <video> só entra quando o arquivo TEM faixa de áudio (ffprobe de verdade)', async () => {
+    it('the sound of a <video> only enters when the file HAS an audio stream (real ffprobe)', async () => {
       const silent = path.join(work, 'clip-silent.mp4')
       await muteVideo(silent, 'mp4')
       const voice = path.join(work, 'clip-voice.wav')
@@ -402,12 +402,12 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
         start: 0,
         in: 0,
       })
-      // Sem passar o sondador: é o ffprobe do app que responde.
+      // Without passing a prober: it is the app's ffprobe that answers.
       const tracks = await motionVideoAudioTracks(work, [fact(silent), fact(talking)])
       expect(tracks.map((t) => t.name)).toEqual(['clip-talking.mp4 (video)'])
     })
 
-    it('o duck personalizado roda com os rótulos do grafo', async () => {
+    it('the custom duck runs with the graph labels', async () => {
       const video = path.join(work, 'duck-video.mp4')
       await muteVideo(video, 'mp4')
       const voice = path.join(work, 'duck-voice.wav')

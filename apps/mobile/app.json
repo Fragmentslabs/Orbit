@@ -53,7 +53,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "O Orbit precisa do microfone para ditar as mensagens — o áudio vira texto no seu computador e nada é enviado para a nuvem.",
+          "microphonePermission": "Orbit needs the microphone to dictate messages — the audio is turned into text on your computer and nothing is sent to the cloud.",
           "enableBackgroundPlayback": false,
           "enableBackgroundRecording": false
         }
@@ -61,14 +61,14 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "O Orbit precisa de acesso à câmera para escanear o QR code de conexão."
+          "cameraPermission": "Orbit needs camera access to scan the connection QR code."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "O Orbit precisa acessar suas fotos para anexar imagens ao chat.",
-          "cameraPermission": "O Orbit precisa de acesso à câmera para tirar fotos e anexar ao chat."
+          "photosPermission": "Orbit needs access to your photos to attach images to the chat.",
+          "cameraPermission": "Orbit needs camera access to take photos and attach them to the chat."
         }
       ],
       [

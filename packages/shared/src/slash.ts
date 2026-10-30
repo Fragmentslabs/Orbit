@@ -5,7 +5,9 @@ export type SlashActionKind = "pipeline" | "insert" | "init"
 export interface SlashActionSpec {
   id: string
   command: string
+  /** Shown by the palette as it is — pt-BR UI copy (the palette has no i18n key for it). */
   description: string
+  /** How the user calls it, in pt and en — it is what links the typed text to the action. */
   keywords: string[]
   modes: SessionMode[]
   kind: SlashActionKind
@@ -20,95 +22,95 @@ export const SLASH_ACTIONS: SlashActionSpec[] = [
   {
     id: "code-review",
     command: "/code-review",
-    description: "Revisa o diff atual (ou um alvo): pontos críticos → sugestões → aplica as aprovadas",
+    description: "Reviews the current diff (or a target): critical points → suggestions → applies the approved ones",
     keywords: ["review", "revisao", "pr", "diff"],
     modes: ["code"],
     kind: "pipeline",
-    buildPrompt: (input) => `Faça um code review completo seguindo este pipeline:
+    buildPrompt: (input) => `Do a complete code review following this pipeline:
 
-1. **Levantar o alvo**: ${target(input, "rode `git diff` (e `git diff --staged`) na pasta do projeto; se não houver mudanças, use `git show HEAD`")}
-2. **Analisar pontos críticos**: bugs, edge cases, segurança, performance, legibilidade e aderência às convenções do projeto (consulte a memória do projeto se disponível).
-3. **Relatar**: liste os achados por severidade (crítico / importante / sugestão), cada um com arquivo:linha e explicação curta.
-4. **Confirmar**: use a ferramenta question para perguntar QUAIS correções devo aplicar.
-5. **Aplicar** apenas as aprovadas e mostrar um resumo do que mudou.`,
+1. **Gather the target**: ${target(input, "run `git diff` (and `git diff --staged`) in the project folder; if there are no changes, use `git show HEAD`")}
+2. **Analyze the critical points**: bugs, edge cases, security, performance, readability and adherence to the project's conventions (check the project memory if available).
+3. **Report**: list the findings by severity (critical / important / suggestion), each with file:line and a short explanation.
+4. **Confirm**: use the question tool to ask WHICH fixes I should apply.
+5. **Apply** only the approved ones and show a summary of what changed.`,
   },
   {
     id: "refactor",
     command: "/refactor",
-    description: "Analisa estrutura → propõe melhoria → executa com validação (tests + typecheck)",
+    description: "Analyzes structure → proposes an improvement → executes with validation (tests + typecheck)",
     keywords: ["refatorar", "refactor", "melhorar codigo"],
     modes: ["code"],
     kind: "pipeline",
-    buildPrompt: (input) => `Refatore com validação, seguindo este pipeline:
+    buildPrompt: (input) => `Refactor with validation, following this pipeline:
 
-1. **Alvo**: ${target(input, "identifique pela conversa/contexto o arquivo ou módulo a refatorar; se ambíguo, pergunte")}
-2. **Analisar** a estrutura atual: responsabilidades, duplicação, acoplamento, nomes.
-3. **Propor** a refatoração (o que muda, por quê, riscos) e AGUARDAR minha confirmação via ferramenta question antes de tocar em qualquer arquivo.
-4. **Executar** a refatoração aprovada em passos pequenos.
-5. **Validar**: rode typecheck e os testes do projeto (descubra os comandos em package.json/scripts ou equivalente). Se algo quebrar, corrija antes de concluir.
-6. **Resumir** o que mudou e o resultado da validação.`,
+1. **Target**: ${target(input, "identify from the conversation/context the file or module to refactor; if ambiguous, ask")}
+2. **Analyze** the current structure: responsibilities, duplication, coupling, names.
+3. **Propose** the refactor (what changes, why, risks) and WAIT for my confirmation through the question tool before touching any file.
+4. **Execute** the approved refactor in small steps.
+5. **Validate**: run typecheck and the project's tests (find the commands in package.json/scripts or equivalent). If something breaks, fix it before finishing.
+6. **Summarize** what changed and the validation result.`,
   },
   {
-    id: "melhorar-ui",
-    command: "/melhorar-ui",
-    description: "Analisa acessibilidade, responsividade e consistência com o design system",
+    id: "improve-ui",
+    command: "/improve-ui",
+    description: "Analyzes accessibility, responsiveness and consistency with the design system",
     keywords: ["ui", "interface", "design", "acessibilidade", "a11y"],
     modes: ["code"],
     kind: "pipeline",
-    buildPrompt: (input) => `Melhore a interface seguindo este pipeline:
+    buildPrompt: (input) => `Improve the interface following this pipeline:
 
-1. **Alvo**: ${target(input, "identifique pela conversa o componente/tela; se ambíguo, pergunte")}
-2. **Analisar** em três eixos:
-   - Acessibilidade: semântica, foco, contraste, aria, navegação por teclado
-   - Responsividade: comportamento em larguras pequenas, overflow, truncamento
-   - Consistência: compare com o design system / componentes ui existentes do projeto (consulte a memória de design do projeto se disponível)
-3. **Sugerir** as mudanças em lista priorizada, com trecho de código para cada uma.
-4. **Perguntar** via ferramenta question quais aplicar, e aplicar as aprovadas.`,
+1. **Target**: ${target(input, "identify the component/screen from the conversation; if ambiguous, ask")}
+2. **Analyze** along three axes:
+   - Accessibility: semantics, focus, contrast, aria, keyboard navigation
+   - Responsiveness: behavior at small widths, overflow, truncation
+   - Consistency: compare with the design system / existing ui components of the project (check the project's design memory if available)
+3. **Suggest** the changes in a prioritized list, with a code snippet for each one.
+4. **Ask** through the question tool which ones to apply, and apply the approved ones.`,
   },
   {
-    id: "explicar",
-    command: "/explicar",
-    description: "Explica um trecho de código com o contexto do projeto",
+    id: "explain",
+    command: "/explain",
+    description: "Explains a piece of code with the project's context",
     keywords: ["explicar", "explain", "entender", "codigo"],
     modes: ["chat", "code"],
     kind: "pipeline",
-    buildPrompt: (input) => `Explique o seguinte com contexto:
+    buildPrompt: (input) => `Explain the following with context:
 
-${target(input, "(cole o trecho de código ou indique arquivo:linhas)")}
+${target(input, "(paste the code snippet or point to file:lines)")}
 
-Estruture a explicação em: o que faz (visão geral) → como funciona (passo a passo) → por que existe (papel no projeto, se identificável pelo contexto/memória) → pontos de atenção.`,
+Structure the explanation as: what it does (overview) → how it works (step by step) → why it exists (its role in the project, if identifiable from the context/memory) → points of attention.`,
   },
   {
     id: "debug",
     command: "/debug",
-    description: "Analisa log de erro / stack trace → causa raiz → sugere ou aplica correção",
+    description: "Analyzes an error log / stack trace → root cause → suggests or applies a fix",
     keywords: ["debug", "erro", "stack", "trace", "bug"],
     modes: ["code"],
     kind: "pipeline",
-    buildPrompt: (input) => `Depure este problema seguindo o pipeline:
+    buildPrompt: (input) => `Debug this problem following the pipeline:
 
-${target(input, "(cole o log de erro ou stack trace)")}
+${target(input, "(paste the error log or stack trace)")}
 
-1. **Interpretar** o erro: o que ele diz literalmente e onde acontece.
-2. **Investigar** a causa raiz no código (leia os arquivos envolvidos — não pare no sintoma).
-3. **Explicar** a causa raiz em 2-3 frases.
-4. **Corrigir**: proponha a correção e, antes de aplicar qualquer mudança, confirme comigo via ferramenta question. Depois de aplicar, valide (typecheck/teste relevante).`,
+1. **Interpret** the error: what it says literally and where it happens.
+2. **Investigate** the root cause in the code (read the files involved — do not stop at the symptom).
+3. **Explain** the root cause in 2-3 sentences.
+4. **Fix**: propose the fix and, before applying any change, confirm with me through the question tool. After applying, validate (typecheck/relevant test).`,
   },
   {
-    id: "buscar-memoria",
-    command: "/buscar-memoria",
-    description: "Busca textual nas memórias (Brain) antes de responder",
+    id: "search-memory",
+    command: "/search-memory",
+    description: "Text search in the memories (Brain) before answering",
     keywords: ["lembrar", "memoria", "brain", "recall", "buscar"],
     modes: ["chat", "code"],
     kind: "pipeline",
-    buildPrompt: (input) => `Busque nas memórias do projeto (Brain) o que for relevante para: ${target(input, "liste todas as memórias disponíveis e seus resumos")}
+    buildPrompt: (input) => `Search the project memories (Brain) for what is relevant to: ${target(input, "list every available memory and its summary")}
 
-Use as memórias encontradas para responder com detalhes, citando as fontes. Se a busca não encontrar nada relevante, informe o usuário e sugira criar uma memória sobre o assunto.`,
+Use the memories found to answer in detail, citing the sources. If the search finds nothing relevant, tell the user and suggest creating a memory about the subject.`,
   },
   {
     id: "init",
     command: "/init",
-    description: "Analisa o projeto e gera/complementa memórias por área (stack, arquitetura, design…)",
+    description: "Analyzes the project and generates/extends memories by area (stack, architecture, design…)",
     keywords: ["init", "analisar projeto", "scan", "onboarding"],
     modes: ["code"],
     kind: "init",
@@ -116,7 +118,7 @@ Use as memórias encontradas para responder com detalhes, citando as fontes. Se 
   {
     id: "init-force",
     command: "/init-force",
-    description: "Reanalisa o projeto do zero e sobrescreve as memórias existentes",
+    description: "Re-analyzes the project from scratch and overwrites the existing memories",
     keywords: ["init-force", "force", "reanalisar", "sobrescrever"],
     modes: ["code"],
     kind: "init",

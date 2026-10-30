@@ -1,16 +1,16 @@
-// Host do Computer Use no Windows: o C# que o windows.ps1 compila uma vez.
+// Computer Use host on Windows: the C# that windows.ps1 compiles once.
 //
-// C# 5 de proposito: e o que o Add-Type do PowerShell 5.1 aceita.
+// C# 5 on purpose: it is what the Add-Type of PowerShell 5.1 accepts.
 //
-// Coordenadas: o processo e per-monitor DPI aware (v2), entao UIA, DWM,
-// PrintWindow e GetWindowRect falam PIXEL FISICO do desktop virtual. E o
-// espaco do contrato no Windows (ver docs/computer-use-windows.md).
+// Coordinates: the process is per-monitor DPI aware (v2), so UIA, DWM, PrintWindow and
+// GetWindowRect speak PHYSICAL PIXEL of the virtual desktop. It is the space of the
+// contract on Windows (see docs/computer-use-windows.md).
 //
-// Identidade do elemento: cada arvore gera um "ref" por no (RuntimeId da UIA)
-// e o host guarda ref -> AutomationElement ate a proxima arvore daquele pid.
-// Quando o ref nao serve mais, as acoes caem para o "path" (indices de filhos
-// na Control View a partir da janela) e SEMPRE conferem papel e nome antes de
-// agir: melhor "indice velho" do que clicar no elemento errado.
+// Element identity: each tree generates a "ref" per node (UIA RuntimeId) and the host
+// keeps ref -> AutomationElement until the next tree of that pid. When the ref no
+// longer works, the actions fall back to the "path" (indices of children in the
+// Control View from the window) and ALWAYS check role and name before acting: better
+// "stale index" than clicking on the wrong element.
 
 using System;
 using System.Collections.Generic;
@@ -32,7 +32,7 @@ public class HostError : Exception
 
 public static partial class OrbitHost
 {
-    // ------------------------------------------------------------- Win32
+// ------------------------------------------------------------- Win32
 
     [StructLayout(LayoutKind.Sequential)]
     struct RECT { public int Left, Top, Right, Bottom; }
@@ -85,12 +85,12 @@ public static partial class OrbitHost
     const int TokenElevation = 20;
     const int DefaultTextLimit = 300;
 
-    // ------------------------------------------------------------ estado
+// ------------------------------------------------------------ state
 
     static readonly JavaScriptSerializer Json = MakeJson();
     static bool selfElevatedKnown;
     static bool selfElevated;
-    // Semente aleatoria: depois que o host reinicia, um ref velho nao pode bater com a geracao nova.
+// Random seed: after the host restarts, an old ref cannot match the new generation.
     static int generation = new Random().Next(1, 1000000);
     static readonly Dictionary<int, RefMap> Maps = new Dictionary<int, RefMap>();
     static readonly Dictionary<string, string> NameByPath = new Dictionary<string, string>();
@@ -113,13 +113,13 @@ public static partial class OrbitHost
 
     static OrbitHost()
     {
-        // Antes de QUALQUER chamada de janela ou UIA: -4 = PER_MONITOR_AWARE_V2.
+// Before ANY window or UIA call: -4 = PER_MONITOR_AWARE_V2.
         try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch (Exception) { }
     }
 
-    // --------------------------------------------------------- protocolo
+// --------------------------------------------------------- protocol
 
-    /// <summary>Uma linha de pedido -> uma linha de resposta (nunca lanca).</summary>
+/// <summary>One request line -> one response line (never throws).</summary>
     public static string Handle(string line)
     {
         object id = null;
@@ -158,10 +158,10 @@ public static partial class OrbitHost
         return DispatchAction(op, a);
     }
 
-    // As acoes (mouse, teclado, elemento...) moram em windows-host-actions.cs:
-    // static object DispatchAction(string op, Dictionary<string, object> a)
+// The actions (mouse, keyboard, element...) live in windows-host-actions.cs:
+// static object DispatchAction(string op, Dictionary<string, object> a)
 
-    // ----------------------------------------------------------- helpers
+// ----------------------------------------------------------- helpers
 
     static Dictionary<string, object> Obj(params object[] kv)
     {
@@ -200,7 +200,7 @@ public static partial class OrbitHost
         return new int[] { r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top };
     }
 
-    // ------------------------------------------------- processos e janelas
+// ------------------------------------------------- processes and windows
 
     static bool SelfElevated()
     {
@@ -219,11 +219,11 @@ public static partial class OrbitHost
         return selfElevated;
     }
 
-    /// <summary>
-    /// O app roda com integridade maior que a nossa? O UIPI descarta mensagens
-    /// e SendInput para ele - so recusamos com clareza. Nao conseguir nem abrir
-    /// o token do processo e, na pratica, o mesmo sinal.
-    /// </summary>
+/// <summary>
+/// Does the app run with higher integrity than ours? UIPI discards messages and
+/// SendInput to it - we just refuse with clarity. Not even being able to open the
+/// process token is, in practice, the same signal.
+/// </summary>
     static bool IsElevatedTarget(IntPtr process)
     {
         if (SelfElevated()) return false;
@@ -262,7 +262,7 @@ public static partial class OrbitHost
                 if (QueryFullProcessImageName(h, 0, sb, ref size)) info.Path = sb.ToString();
                 uint len = 256;
                 StringBuilder aumid = new StringBuilder((int)len);
-                // 0 = sucesso; apps nao empacotados devolvem APPMODEL_ERROR_NO_PACKAGE.
+// 0 = success; apps that are not packaged return APPMODEL_ERROR_NO_PACKAGE.
                 if (GetApplicationUserModelId(h, ref len, aumid) == 0) info.Aumid = aumid.ToString();
             }
             info.Elevated = IsElevatedTarget(h);
@@ -311,11 +311,11 @@ public static partial class OrbitHost
         return sb.ToString();
     }
 
-    /// <summary>
-    /// O retangulo UNICO de uma janela: o que o DWM desenha, sem a borda
-    /// invisivel de ~7 px que o GetWindowRect inclui. Apps, captura e frames da
-    /// arvore concordam porque todos partem daqui.
-    /// </summary>
+/// <summary>
+/// The SINGLE rectangle of a window: what DWM draws, without the invisible ~7 px border
+/// that GetWindowRect includes. Apps, capture and tree frames agree because they all
+/// start from here.
+/// </summary>
     static RECT FrameOf(IntPtr hwnd)
     {
         RECT r;
@@ -324,7 +324,7 @@ public static partial class OrbitHost
         return r;
     }
 
-    /// <summary>UAC, tela de bloqueio e Ctrl+Alt+Del rodam no desktop seguro: la nada e alcancavel.</summary>
+/// <summary>UAC, lock screen and Ctrl+Alt+Del run on the secure desktop: nothing is reachable there.</summary>
     static void CheckDesktop()
     {
         IntPtr desktop = OpenInputDesktop(0, false, 0x0100);
@@ -333,7 +333,7 @@ public static partial class OrbitHost
         CloseDesktop(desktop);
     }
 
-    // -------------------------------------------------------------- perms
+// -------------------------------------------------------------- perms
 
     static object OpPerms()
     {
@@ -347,7 +347,7 @@ public static partial class OrbitHost
         return Obj("accessibility", true, "notes", notes);
     }
 
-    // --------------------------------------------------------------- apps
+// --------------------------------------------------------------- apps
 
     class WinRow
     {
@@ -360,7 +360,7 @@ public static partial class OrbitHost
     static List<WinRow> ListWindows()
     {
         List<IntPtr> handles = new List<IntPtr>();
-        // EnumWindows devolve na ordem z, da frente para tras.
+// EnumWindows returns in z order, from the front to the back.
         EnumWindows(delegate (IntPtr h, IntPtr l) { handles.Add(h); return true; }, IntPtr.Zero);
 
         Dictionary<uint, ProcInfo> procs = new Dictionary<uint, ProcInfo>();
@@ -382,8 +382,8 @@ public static partial class OrbitHost
             uint pid = PidOf(h);
             ProcInfo proc;
             if (!procs.TryGetValue(pid, out proc)) { proc = InfoOf(pid); procs[pid] = proc; }
-            // Apps UWP vivem dentro de um ApplicationFrameWindow do ApplicationFrameHost:
-            // o dono de verdade e o processo da CoreWindow filha.
+// UWP apps live inside an ApplicationFrameWindow of the ApplicationFrameHost: the real
+// owner is the process of the child CoreWindow.
             if (string.Equals(proc.Exe, "ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
             {
                 uint inner = InnerPid(h, pid);
@@ -442,7 +442,7 @@ public static partial class OrbitHost
         return Obj("apps", apps, "windows", windows);
     }
 
-    // --------------------------------------------------------------- tree
+// --------------------------------------------------------------- tree
 
     static CacheRequest MakeCache()
     {
@@ -520,7 +520,7 @@ public static partial class OrbitHost
         {
             key = "k:" + gen + ":" + e.Cached.AutomationId + "|" + RoleOf(e) + "|" + e.Cached.Name;
         }
-        // Chaves repetidas (elementos sem RuntimeId e com a mesma identidade) ganham um sufixo.
+// Repeated keys (elements without a RuntimeId and with the same identity) get a suffix.
         string unique = key;
         int n = 1;
         while (map.Elements.ContainsKey(unique)) { n++; unique = key + "#" + n; }
@@ -535,7 +535,7 @@ public static partial class OrbitHost
         if (v.IndexOf("://", StringComparison.Ordinal) > 0) return v;
         if (v.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || v.StartsWith("chrome:", StringComparison.OrdinalIgnoreCase)
             || v.StartsWith("edge:", StringComparison.OrdinalIgnoreCase) || v.StartsWith("file:", StringComparison.OrdinalIgnoreCase)) return v;
-        // O Chromium esconde "https://" na barra de endereco.
+// Chromium hides "https://" in the address bar.
         if (v.IndexOf(' ') >= 0) return null;
         return "https://" + v;
     }
@@ -557,9 +557,8 @@ public static partial class OrbitHost
 
         bool enhance = Bool(a, "enhance");
         int wait = Int(a, "enhanceWaitMs", 0);
-        // O Chromium/Electron liga a arvore de acessibilidade quando um cliente
-        // UIA pergunta, e monta de forma assincrona: na primeira vez o app
-        // precisa de um instante.
+// Chromium/Electron turns the accessibility tree on when a UIA client asks, and builds
+// it asynchronously: the first time the app needs a moment.
         if (enhance && wait > 0)
         {
             try { AutomationElement.FromHandle(hwnd); } catch (Exception) { }
@@ -642,8 +641,8 @@ public static partial class OrbitHost
         }
         omitted += queue.Count;
 
-        // A UIA nao tem URL: a da pagina vem da barra de endereco do navegador
-        // (so quando ela nao esta com foco - com foco o valor e o que se digita).
+// UIA has no URL: the page's comes from the browser's address bar (only when it is not
+// focused - focused, the value is what is being typed).
         if (addressBar != null && firstDocument >= 0) raw[firstDocument]["url"] = addressBar;
         MarkEditableDocuments(raw, addressBar != null);
 
@@ -657,11 +656,11 @@ public static partial class OrbitHost
             "ms", (int)(DateTime.UtcNow - started).TotalMilliseconds);
     }
 
-    /// <summary>
-    /// "Document" e a pagina no Chromium e tambem a area de texto do Bloco de
-    /// Notas: fora de um navegador, um Document com texto vira area de texto
-    /// editavel ("editable"), que o format.ts traduz para AXTextArea.
-    /// </summary>
+/// <summary>
+/// "Document" is the page in Chromium and also the text area of Notepad: outside a
+/// browser, a Document with text becomes an editable text area ("editable"), which
+/// format.ts translates to AXTextArea.
+/// </summary>
     static void MarkEditableDocuments(List<Dictionary<string, object>> nodes, bool inBrowser)
     {
         foreach (Dictionary<string, object> n in nodes)
@@ -722,7 +721,7 @@ public static partial class OrbitHost
             }
             catch (Exception) { }
         }
-        // Texto sem ValuePattern (Bloco de Notas no Windows 11): o TextPattern devolve o conteudo.
+// Text without a ValuePattern (Notepad on Windows 11): TextPattern returns the content.
         if (role == "Document" && value == null && !secure && Flag(e, AutomationElement.IsTextPatternAvailableProperty))
         {
             try
@@ -765,7 +764,7 @@ public static partial class OrbitHost
         if (!list.Contains(value)) list.Add(value);
     }
 
-    // ------------------------------------------------------------ capture
+// ------------------------------------------------------------ capture
 
     static bool LooksBlack(Bitmap bmp)
     {
@@ -780,7 +779,7 @@ public static partial class OrbitHost
         return true;
     }
 
-    /// <summary>Alguma janela de outro app esta por cima de pontos da janela?</summary>
+/// <summary>Is any window of another app on top of points of the window?</summary>
     static bool IsCovered(IntPtr hwnd, RECT fr)
     {
         int w = fr.Right - fr.Left, h = fr.Bottom - fr.Top;
@@ -801,13 +800,13 @@ public static partial class OrbitHost
         return false;
     }
 
-    /// <summary>
-    /// PrintWindow(PW_RENDERFULLCONTENT) pede ao proprio app que se desenhe
-    /// num bitmap - sai a janela inteira mesmo coberta. Se sair preto (GPU), o
-    /// CopyFromScreen so serve com a janela descoberta: copiar a tela com
-    /// outra janela por cima mostraria o app errado. Sem nenhum dos dois,
-    /// nao ha imagem (e o motivo vai no erro).
-    /// </summary>
+/// <summary>
+/// PrintWindow(PW_RENDERFULLCONTENT) asks the app itself to draw into a bitmap - the
+/// whole window comes out even when covered. If it comes out black (GPU),
+/// CopyFromScreen only works with the window uncovered: copying the screen with another
+/// window on top would show the wrong app. With neither of the two, there is no image
+/// (and the reason goes in the error).
+/// </summary>
     static object OpCapture(Dictionary<string, object> a)
     {
         CheckDesktop();

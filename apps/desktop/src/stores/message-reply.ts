@@ -2,18 +2,18 @@ import { create } from "zustand"
 import { messageReplyPrefix, type MessageReplyQuote } from "@shared/chat"
 
 /**
- * Mensagem marcada como resposta, esperando o envio.
+ * Message marked as a reply, waiting for the send.
  *
- * Guarda o trecho citado e o papel de quem escreveu — o que o compositor
- * prepende no texto na hora de enviar (ver formatMessageReply, no shared).
- * É por chat, como o rascunho: responder uma mensagem de um chat e trocar de
- * conversa não pode levar a citação junto. Chat novo usa a chave "draft" até o
- * primeiro envio, quando o session-store chama adopt().
+ * It keeps the cited stretch and the role of whoever wrote it — what the composer
+ * prepends to the text at send time (see formatMessageReply, in shared).
+ * It is per chat, like the draft: replying to a message in one chat and switching
+ * conversation cannot carry the citation along. A new chat uses the "draft" key until the
+ * first send, when the session-store calls adopt().
  */
 
 const DRAFT_KEY = "draft"
 
-/** Chave do balde: a mesma regra do rascunho (draftKey ?? sessionId ?? "draft"). */
+/** Bucket key: the same rule as the draft (draftKey ?? sessionId ?? "draft"). */
 function keyOf(key: string | null | undefined): string {
   return key ?? DRAFT_KEY
 }
@@ -47,11 +47,11 @@ export const useMessageReply = create<MessageReplyState>((set, get) => ({
 }))
 
 /**
- * Texto do envio com a citação na frente, consumindo a resposta pendente.
+ * Send text with the citation in front, consuming the pending reply.
  *
- * Existe para os quatro caminhos de envio (Enter, fila, agendamento, painel
- * lateral) não repetirem a montagem — e, principalmente, para nenhum deles
- * esquecer de LIMPAR a resposta depois de enviar.
+ * It exists so the four send paths (Enter, queue, scheduling, side
+ * panel) do not repeat the assembly — and, mainly, so that none of them
+ * forgets to CLEAR the reply after sending.
  */
 export function withReplyPrefix(key: string | null | undefined, text: string): string {
   const reply = useMessageReply.getState().replies[keyOf(key)]

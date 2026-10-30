@@ -197,7 +197,7 @@ The agent engine runs locally in the desktop app — your code never leaves your
 - Persistent memory graph
 
 ### v0.2
-- **Conveyor mode** — a task pipeline (esteira): boards with phases (plan → develop → validate → done), manual or automatic execution, per-phase prompts and models
+- **Pipeline mode** — boards of tasks with phases (plan → develop → validate → done), manual or automatic execution, per-phase prompts and models
 - **Routines** — scheduled, recurring agent tasks
 - Team collaboration & shared memories
 

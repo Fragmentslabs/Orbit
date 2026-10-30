@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Fala contínua (`voice:tts:stream-*`, modo chamada): as frases chegam aos
- * pedaços e a síntese corre à frente da reprodução — a frase seguinte começa a
- * ser gerada assim que a anterior termina de ser GERADA, sem esperar o renderer
- * tocá-la. Era essa espera que deixava o silêncio entre "Claro." e o resto.
+ * Continuous speech (`voice:tts:stream-*`, call mode): the sentences arrive at the
+ * chunks and the synthesis runs ahead of playback — the next sentence starts
+ * being generated as soon as the previous one finishes being GENERATED, without waiting for the renderer
+ * to play it. It was that wait that left the silence between "Claro." and the rest.
  */
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -24,7 +24,7 @@ vi.mock('../app-settings', async () => {
   return { getAppSettings: () => DEFAULT_APP_SETTINGS, onAppSettingsChange: () => () => {} }
 })
 
-/** Síntese simulada: 30 ms por frase, um pedaço de áudio por frase. */
+/** Simulated synthesis: 30 ms per sentence, one audio chunk per sentence. */
 const spoken: { text: string; startedAt: number }[] = []
 let failOn: string | null = null
 vi.mock('./tts', () => ({
@@ -53,7 +53,7 @@ const call = (canal: string, payload: unknown) => handlers.get(canal)!({}, paylo
 const doneOf = (id: string) => sent.filter((e) => e.canal === 'voice:tts:done' && e.payload.id === id)
 const waitDone = (id: string) =>
   vi.waitFor(() => {
-    if (doneOf(id).length === 0) throw new Error('ainda sem done')
+    if (doneOf(id).length === 0) throw new Error('still without done')
   })
 
 beforeEach(() => {
@@ -62,11 +62,11 @@ beforeEach(() => {
   failOn = null
 })
 
-describe('fala contínua', () => {
-  it('fala as frases na ordem, uma emendada na outra, e termina uma vez só', async () => {
+describe('continuous speech', () => {
+  it('speaks the sentences in order, one spliced onto the next, and ends only once', async () => {
     const { id } = (await call('voice:tts:stream-start', { engine: 'local' })) as { id: string }
     await call('voice:tts:stream-append', { id, text: 'Claro.' })
-    // Chega enquanto "Claro." ainda está sendo gerado.
+    // It arrives while "Claro." is still being generated.
     await call('voice:tts:stream-append', { id, text: 'Aqui está o resumo.' })
     await call('voice:tts:stream-append', { id, text: 'Foram três decisões.' })
     await call('voice:tts:stream-end', { id })
@@ -77,19 +77,19 @@ describe('fala contínua', () => {
       .filter((e) => e.canal === 'voice:tts:chunk' && e.payload.id === id)
       .map((e) => Buffer.from(e.payload.pcm ?? '', 'base64').toString())
     expect(audio).toEqual(['Claro.', 'Aqui está o resumo.', 'Foram três decisões.'])
-    // Cada frase começa logo que a anterior foi gerada (~30 ms), não depois de tocar.
+    // Each sentence starts as soon as the previous one was generated (~30 ms), not after it plays.
     expect(spoken[1].startedAt - spoken[0].startedAt).toBeLessThan(200)
-    // Cada pedaço diz de qual frase é: o renderer mostra a que está tocando.
+    // Each chunk says which sentence it belongs to: the renderer shows the one that is playing.
     const segs = sent.filter((e) => e.canal === 'voice:tts:chunk').map((e) => (e.payload as { seg?: number }).seg)
     expect(segs).toEqual([0, 1, 2])
     expect(doneOf(id)).toEqual([{ canal: 'voice:tts:done', payload: { id } }])
   })
 
-  it('espera a próxima frase enquanto a fala estiver aberta', async () => {
+  it('waits for the next sentence while the speech is open', async () => {
     const { id } = (await call('voice:tts:stream-start', { engine: 'local' })) as { id: string }
     await call('voice:tts:stream-append', { id, text: 'Um.' })
     await new Promise((resolve) => setTimeout(resolve, 120))
-    // A fila esvaziou, mas sem `end` a fala continua aberta.
+    // The queue emptied, but without `end` the utterance stays open.
     expect(doneOf(id)).toHaveLength(0)
     await call('voice:tts:stream-append', { id, text: 'Dois.' })
     await call('voice:tts:stream-end', { id })
@@ -97,7 +97,7 @@ describe('fala contínua', () => {
     expect(spoken.map((s) => s.text)).toEqual(['Um.', 'Dois.'])
   })
 
-  it('falha da síntese encerra a fala com o erro', async () => {
+  it('a synthesis failure closes the speech with the error', async () => {
     failOn = 'Dois.'
     const { id } = (await call('voice:tts:stream-start', { engine: 'local' })) as { id: string }
     await call('voice:tts:stream-append', { id, text: 'Um.' })
@@ -106,23 +106,23 @@ describe('fala contínua', () => {
     expect(doneOf(id)[0].payload.error).toBe('motor caiu')
   })
 
-  it('clear descarta as frases ainda não geradas e a fala continua aberta', async () => {
+  it('clear drops the sentences not yet generated and the speech stays open', async () => {
     const { id } = (await call('voice:tts:stream-start', { engine: 'local' })) as { id: string }
     await call('voice:tts:stream-append', { id, text: 'Deixa eu ver.' })
     await call('voice:tts:stream-append', { id, text: 'Pensamento um.' })
     await call('voice:tts:stream-append', { id, text: 'Pensamento dois.' })
-    // "Deixa eu ver." já está sendo gerada; as outras duas ainda esperam.
+    // "Deixa eu ver." is already being generated; the other two still wait.
     await call('voice:tts:stream-clear', { id })
     await call('voice:tts:stream-append', { id, text: 'Abre às oito.' })
     await call('voice:tts:stream-end', { id })
     await waitDone(id)
     expect(spoken.map((s) => s.text)).toEqual(['Deixa eu ver.', 'Abre às oito.'])
-    // As descartadas consumiram os números 1 e 2: o renderer conta igual.
+    // The discarded ones consumed numbers 1 and 2: the renderer counts the same way.
     const segs = sent.filter((e) => e.canal === 'voice:tts:chunk').map((e) => (e.payload as { seg?: number }).seg)
     expect(segs).toEqual([0, 3])
   })
 
-  it('cancelada (interromper), para de gerar e não acusa erro', async () => {
+  it('cancelled (interrupt), it stops generating and does not report an error', async () => {
     const { id } = (await call('voice:tts:stream-start', { engine: 'local' })) as { id: string }
     await call('voice:tts:stream-append', { id, text: 'Um.' })
     await call('voice:tts:stream-append', { id, text: 'Dois.' })

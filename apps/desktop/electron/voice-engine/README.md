@@ -1,50 +1,50 @@
-# voice-engine — motor de TTS embutido
+# voice-engine — the built-in TTS engine
 
-Processo filho do main (`utilityProcess.fork`) que roda o **Supertonic 3** em
-ONNX Runtime, na CPU, e devolve o áudio **em pedaços** conforme cada pedaço de
-texto fica pronto.
+Child process of the main (`utilityProcess.fork`) that runs **Supertonic 3** on
+ONNX Runtime, on the CPU, and returns the audio **in pieces** as each piece of
+text becomes ready.
 
-| Arquivo | O que é |
+| File | What it is |
 |---|---|
-| `engine.mjs` | O motor: boot, protocolo com o main, corte em frases, reamostragem 44,1 → 24 kHz e PCM 16-bit em base64 |
-| `helper.js` | Cópia **sem alterações** de `supertonic/nodejs/helper.js` (motor upstream) |
-| `LICENSE-supertonic.txt` | MIT, do repositório arquivado `supertone-oss-archive/supertonic` |
+| `engine.mjs` | The engine: boot, protocol with the main, splitting into sentences, resampling 44.1 → 24 kHz and 16-bit PCM in base64 |
+| `helper.js` | **Unchanged** copy of `supertonic/nodejs/helper.js` (upstream engine) |
+| `LICENSE-supertonic.txt` | MIT, from the archived repository `supertone-oss-archive/supertonic` |
 
-## Licenças (importante)
+## Licenses (important)
 
-- **Código** (`helper.js`, e a referência que `engine.mjs` porta): MIT — pode
-  acompanhar o app, está aqui com a licença ao lado.
-- **Pesos do modelo**: **OpenRAIL-M** e **nunca entram no build**. Eles são
-  baixados pelo usuário para `<userData>/voice/models/supertonic-3`
-  (ver `../lib/voice/download.ts` e `../lib/voice/manifest.ts`, que fixam a
-  revisão `aafc6e32416a594460b32413efc49d7fe4ce6d46` do HuggingFace e os sha256
-  dos quatro `.onnx`). O app nunca redistribui os pesos.
+- **Code** (`helper.js`, and the reference that `engine.mjs` ports): MIT — it may
+  ship with the app, and it is here with the license next to it.
+- **Model weights**: **OpenRAIL-M** and they **never enter the build**. They are
+  downloaded by the user to `<userData>/voice/models/supertonic-3`
+  (see `../lib/voice/download.ts` and `../lib/voice/manifest.ts`, which pin the
+  HuggingFace revision `aafc6e32416a594460b32413efc49d7fe4ce6d46` and the sha256
+  of the four `.onnx` files). The app never redistributes the weights.
 
-## Uso
+## Usage
 
 ```
 utilityProcess.fork(".../voice-engine/engine.mjs", ["--assets", "<userData>/voice/models/supertonic-3"])
 ```
 
-`--assets` aponta para a pasta que contém `onnx/` e `voice_styles/` (a mesma
-estrutura do laboratório de referência). Opcionais: `--sample-rate` (24000),
+`--assets` points to the folder that holds `onnx/` and `voice_styles/` (the same
+structure as the reference lab). Optional: `--sample-rate` (24000),
 `--steps` (8), `--max-chars` (140).
 
-Por que MessagePort e não stdio: o `utilityProcess.fork` do Electron **não**
-aceita `stdin` como pipe — o canal com o filho é o `parentPort`.
+Why MessagePort and not stdio: the Electron `utilityProcess.fork` does **not**
+accept `stdin` as a pipe — the channel with the child is the `parentPort`.
 
-## Protocolo
+## Protocol
 
-Entrada (`postMessage`):
+Input (`postMessage`):
 
 ```jsonc
 { "id": "…", "cmd": "speak", "text": "…", "voice": "F2", "lang": "pt", "speed": 1, "steps": 8, "maxChars": 140 }
-{ "cmd": "status" }            // devolve o retrato do motor
-{ "cmd": "cancel", "id": "…" } // para entre pedaços; o pedaço em inferência é descartado
-{ "cmd": "shutdown" }          // sai limpo (o main mata se não sair)
+{ "cmd": "status" }            // returns the engine snapshot
+{ "cmd": "cancel", "id": "…" } // stops between pieces; the piece in inference is discarded
+{ "cmd": "shutdown" }          // exits cleanly (the main kills it if it does not)
 ```
 
-Saída (mesmo formato do laboratório):
+Output (same format as the lab):
 
 ```jsonc
 { "type": "ready", "sr": 24000, "nativeSr": 44100, "voices": ["…"], "bootMs": 428, "modelVersion": "v1.7.3" }
@@ -54,14 +54,14 @@ Saída (mesmo formato do laboratório):
 { "id": "…", "done": true, "error": "…" }
 ```
 
-Logs vão para o **stderr** (o main os repassa ao console como `[voice-engine]`).
+Logs go to **stderr** (the main relays them to the console as `[voice-engine]`).
 
-## Medições deste motor (Mac Apple Silicon, CPU, `steps=8`)
+## Measurements of this engine (Apple Silicon Mac, CPU, `steps=8`)
 
-| Fala | Pedaços | 1º áudio | Síntese | Áudio | RTF |
+| Speech | Pieces | 1st audio | Synthesis | Audio | RTF |
 |---|---|---|---|---|---|
-| "Olá, esta é uma frase de teste…" (105 chars, F2, pt) | 1 | 1920 ms | 1893 ms | 8568 ms | 0,22 |
-| Duas frases com corte em 40 chars (F2, pt) | 2 | 690 ms | 1739 ms | 8032 ms | 0,22 |
+| "Olá, esta é uma frase de teste…" (105 chars, F2, pt) | 1 | 1920 ms | 1893 ms | 8568 ms | 0.22 |
+| Two sentences split at 40 chars (F2, pt) | 2 | 690 ms | 1739 ms | 8032 ms | 0.22 |
 
-Boot (carregar os 4 ONNX + 10 vozes): **~430 ms**. O streaming começa a tocar
-com menos de 1 s de pedido feito, contra os ~1,9 s do texto inteiro pronto.
+Boot (loading the 4 ONNX files + 10 voices): **~430 ms**. Streaming starts playing
+under 1 s from the request, against the ~1.9 s of the whole text being ready.

@@ -2,22 +2,22 @@ import { describe, expect, it } from "vitest"
 import { firstLine } from "./document-preview"
 
 /**
- * A linha que o card mostra embaixo do título é tudo que a conversa guarda do
- * conteúdo do documento — tem que ser texto de verdade, não o título de novo
- * nem marcação crua.
+ * The line the card shows under the title is everything the conversation keeps of the
+ * document content — it has to be real text, not the title again
+ * nor raw markup.
  */
 describe("firstLine", () => {
-  it("pula o título e a régua e devolve o primeiro parágrafo", () => {
+  it("skips the title and the rule and returns the first paragraph", () => {
     expect(firstLine("# Prova de Matemática\n\n---\n\nLeia com atenção.")).toBe("Leia com atenção.")
   })
 
-  it("tira a marcação que apareceria crua", () => {
+  it("strips the markup that would show up raw", () => {
     expect(firstLine("> **Escola:** veja o [manual](https://x.com) e `anexo`")).toBe(
       "Escola: veja o manual e anexo",
     )
   })
 
-  it("devolve os underscores escapados como o leitor os vê", () => {
+  it("returns escaped underscores as the reader sees them", () => {
     expect(firstLine("**Data:** \\_\\_/\\_\\_/\\_\\_")).toBe("Data: __/__/__")
   })
 
@@ -26,7 +26,7 @@ describe("firstLine", () => {
     expect(firstLine(longa)).toBe(`${"a".repeat(110)}…`)
   })
 
-  it("documento só com título não tem linha para mostrar", () => {
+  it("a document with only a title has no line to show", () => {
     expect(firstLine("# Só o título\n\n\\pagebreak\n")).toBeNull()
   })
 })

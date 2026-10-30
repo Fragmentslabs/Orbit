@@ -4,16 +4,16 @@ import { useMessageReply } from "@/src/stores/message-reply"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
- * ↑/↓ no compositor: traz de volta os textos já enviados NESTA sessão (as
- * revertidas ficam de fora sozinhas — ver inputHistory).
+ * ↑/↓ in the composer: brings back the texts already sent in THIS session (the
+ * reverted ones stay out on their own — see inputHistory).
  *
- * Devolve o texto a colocar no campo, ou `null` quando a tecla não é do
- * histórico e o caret deve seguir o caminho dele.
+ * Returns the text to put in the field, or `null` when the key is not part of the
+ * history and the caret should go its own way.
  *
- * A citação anda junto com o texto: recuperar uma mensagem que era resposta
- * rearma a barra no compositor, e voltar ao rascunho devolve a citação que
- * estava armada antes — o mesmo tratamento que o revert dá à mensagem devolvida
- * ao input, para o `> [assistant] …` nunca aparecer cru no campo.
+ * The citation travels with the text: recovering a message that was a reply
+ * re-arms the bar in the composer, and going back to the draft returns the citation that
+ * was armed before — the same treatment revert gives to the message returned
+ * to the input, so that `> [assistant] …` never shows up raw in the field.
  */
 export function useInputHistory(
   sessionId: string | undefined,
@@ -21,16 +21,16 @@ export function useInputHistory(
 ): (direction: "older" | "newer", input: HistoryInput) => string | null {
   const cursor = useRef<HistoryCursor>(NO_HISTORY)
 
-  // O histórico é o desta conversa: trocar de chat (ou ir para um chat novo)
-  // recomeça a navegação do zero, em vez de continuar de onde parou no outro.
+  // The history is this conversation's: switching chats (or going to a new chat)
+  // restarts the navigation from scratch, instead of continuing from where it stopped in the other.
   useEffect(() => {
     cursor.current = NO_HISTORY
   }, [sessionId])
 
   return useCallback(
     (direction: "older" | "newer", input: HistoryInput) => {
-      // A seta só é do histórico na ponta do campo — sai antes de montar a
-      // lista, que é o caso de toda seta usada para andar dentro do texto.
+      // The arrow only belongs to the history at the edge of the field — it bails out before building
+      // the list, which is the case for every arrow used to move inside the text.
       if (direction === "older" ? !input.atStart : !input.atEnd) return null
 
       const messages = sessionId ? useSessionStore.getState().messages[sessionId] : undefined

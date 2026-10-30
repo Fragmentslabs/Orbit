@@ -1,11 +1,11 @@
 /**
- * Motor de embeddings da memória: onnxruntime-node DIRETO (sem transformers.js,
- * que duplicava a RAM nas medições) + tokenizer compacto (tokenizer.mjs).
- * Mesmo módulo no worker do app (worker.mjs) e no benchmark — o que se mede é o
- * que roda em produção.
+ * Memory embedding engine: onnxruntime-node DIRECTLY (without transformers.js,
+ * which duplicated the RAM in the measurements) + compact tokenizer (tokenizer.mjs).
+ * Same module in the app worker (worker.mjs) and in the benchmark — what is measured is
+ * what runs in production.
  *
- * Saída: vetor float32 com pooling por média e normalizado em L2, truncado para
- * `dim` dimensões (Matryoshka) e renormalizado.
+ * Output: float32 vector with mean pooling and normalized in L2, truncated to
+ * `dim` dimensions (Matryoshka) and renormalized.
  */
 import path from "node:path"
 import { createRequire } from "node:module"
@@ -35,7 +35,7 @@ export async function createEmbedder(opts) {
   const tok = loadTokenizer(opts.tokenizerPath)
   const session = await ort.InferenceSession.create(opts.modelPath, {
     graphOptimizationLevel: "all",
-    // Sem arena: o padrão reserva blocos que nunca devolve ao SO (medido: ~+100 MB).
+    // Without arena: the default reserves blocks that it never gives back to the OS (measured: ~+100 MB).
     enableCpuMemArena: false,
     intraOpNumThreads: opts.threads ?? 2,
   })
@@ -54,7 +54,7 @@ export async function createEmbedder(opts) {
     const v = new Float32Array(H)
     for (let t = 0; t < n; t++) for (let k = 0; k < H; k++) v[k] += data[t * H + k]
     for (let k = 0; k < H; k++) v[k] /= n
-    // Matryoshka: fatia os primeiros `dim` componentes e renormaliza.
+    // Matryoshka: slices the first `dim` components and renormalizes.
     return l2(v.slice(0, Math.min(dim, H)))
   }
 

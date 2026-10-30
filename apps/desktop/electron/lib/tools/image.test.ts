@@ -5,12 +5,12 @@ import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * A volta completa da edição de imagem: achar a referência, editar por ela e
- * devolver algo que o chat consiga MOSTRAR.
+ * The full round of image editing: finding the reference, editing through it and
+ * returning something the chat can SHOW.
  *
- * O image-ops.test.ts cobre o processamento; o que se verifica aqui é a
- * ligação com a galeria, que é onde a foto anexada pelo usuário vive — sem
- * ela as operações existiriam sem nada para operar.
+ * image-ops.test.ts covers the processing; what is checked here is the
+ * link with the gallery, which is where the photo the user attached lives — without
+ * it the operations would exist with nothing to operate on.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-image-test-${process.pid}`)
@@ -32,16 +32,16 @@ let media: typeof import('../media')
 beforeAll(async () => {
   media = await import('../media')
   const { createImageTools } = await import('./image')
-  // ctx null = modo chat: a única origem é a galeria, que é o caso do usuário
-  // que arrastou uma foto para a conversa.
-  tools = createImageTools({ sessionId: 'sessao1' }, null) as unknown as Record<string, ToolLike>
+  // ctx null = chat mode: the only source is the gallery, which is the case of the user
+  // who dragged a photo into the conversation.
+  tools = createImageTools({ sessionId: 'session1' }, null) as unknown as Record<string, ToolLike>
 })
 
 afterAll(async () => {
   await fsp.rm(userData, { recursive: true, force: true })
 })
 
-/** Assunto vermelho sobre fundo branco, como uma foto de produto. */
+/** A red subject on a white background, like a product photo. */
 async function productShot(): Promise<Buffer> {
   return sharp({ create: { width: 80, height: 80, channels: 3, background: '#ffffff' } })
     .composite([
@@ -60,62 +60,62 @@ async function productShot(): Promise<Buffer> {
 }
 
 describe('tools de imagem', () => {
-  it('image_list encontra a imagem anexada e devolve a referência', async () => {
+  it('image_list finds the attached image and returns its ref', async () => {
     await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
-      name: 'produto.png',
+      sessionId: 'session1',
+      name: 'product.png',
     })
     const listed = (await tools.image_list.execute({})) as string
-    expect(listed).toContain('produto.png')
+    expect(listed).toContain('product.png')
     expect(listed).toContain('attached by the user')
     expect(listed).toMatch(/orbit-media:\/\/img_\w+\.png/)
   })
 
-  it('não confunde a imagem de outra conversa com a desta', async () => {
+  it('does not take another conversation image for this one', async () => {
     await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'outra-sessao',
-      name: 'de-outro-chat.png',
+      sessionId: 'other-session',
+      name: 'from-other-chat.png',
     })
-    expect((await tools.image_list.execute({})) as string).not.toContain('de-outro-chat.png')
+    expect((await tools.image_list.execute({})) as string).not.toContain('from-other-chat.png')
   })
 
-  it('image_info lê pela referência da galeria', async () => {
+  it('image_info reads through the gallery ref', async () => {
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
-      name: 'medida.png',
+      sessionId: 'session1',
+      name: 'size.png',
     })
     const info = (await tools.image_info.execute({ ref: url })) as string
     expect(info).toContain('80x80')
     expect(info).toContain('png')
   })
 
-  it('image_edit devolve o formato que o chat sabe renderizar', async () => {
+  it('image_edit returns the format the chat can render', async () => {
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
-      name: 'reduzir.png',
+      sessionId: 'session1',
+      name: 'shrink.png',
     })
     const result = (await tools.image_edit.execute({ ref: url, resize: { width: 40 } })) as {
       mediaUrl: string
       message: string
     }
-    // O chat-engine materializa a ImagePart a partir de mediaUrl: sem essa
-    // chave o usuário só leria sobre a edição em vez de vê-la.
+    // chat-engine materializes the ImagePart from mediaUrl: without that
+    // key the user would only read about the edit instead of seeing it.
     expect(result.mediaUrl).toMatch(/^orbit-media:\/\//)
     expect(result.message).toContain('40x40')
 
-    // E o resultado entra na galeria, o que permite encadear outra edição.
+    // And the result enters the gallery, which allows chaining another edit.
     const saved = await media.readMedia(media.mediaIdFromUrl(result.mediaUrl)!)
     expect((await sharp(saved!.buffer).metadata()).width).toBe(40)
   })
 
-  it('image_edit relata quanto do fundo saiu', async () => {
+  it('image_edit reports how much of the background was removed', async () => {
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
+      sessionId: 'session1',
       name: 'fundo.png',
     })
     const result = (await tools.image_edit.execute({
@@ -125,11 +125,11 @@ describe('tools de imagem', () => {
     expect(result.message).toMatch(/background #ffffff removed from 8\d%/)
   })
 
-  it('avisa quando o recorte de fundo não pegou nada, em vez de entregar calado', async () => {
+  it('warns when the background cut caught nothing instead of delivering silently', async () => {
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
-      name: 'errado.png',
+      sessionId: 'session1',
+      name: 'wrong.png',
     })
     const result = (await tools.image_edit.execute({
       ref: url,
@@ -138,18 +138,18 @@ describe('tools de imagem', () => {
     expect(result.message).toContain('almost nothing was removed')
   })
 
-  it('o original continua intacto na galeria depois da edição', async () => {
+  it('the original stays intact in the gallery after the edit', async () => {
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
-      name: 'intacta.png',
+      sessionId: 'session1',
+      name: 'intact.png',
     })
     await tools.image_edit.execute({ ref: url, resize: { width: 20 } })
     const original = await media.readMedia(media.mediaIdFromUrl(url)!)
     expect((await sharp(original!.buffer).metadata()).width).toBe(80)
   })
 
-  it('referência inexistente explica o problema em vez de estourar', async () => {
+  it('a missing ref explains the problem instead of throwing', async () => {
     const out = (await tools.image_edit.execute({
       ref: 'orbit-media://img_naoexiste.png',
       resize: { width: 10 },
@@ -157,44 +157,44 @@ describe('tools de imagem', () => {
     expect(out).toContain('not found')
   })
 
-  it('pedido sem nenhuma operação não gera uma cópia silenciosa', async () => {
+  it('a request with no operation does not create a silent copy', async () => {
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao1',
+      sessionId: 'session1',
       name: 'vazia.png',
     })
     const out = (await tools.image_edit.execute({ ref: url })) as string
     expect(out).toContain('No operation requested')
   })
 
-  it('no chat, um caminho de arquivo não vira leitura de disco', async () => {
-    // Sem pasta de trabalho não há o que resolver, e aceitar o caminho seria
-    // ler um arquivo qualquer da máquina a partir de um texto do modelo.
+  it('in chat, a file path does not become a disk read', async () => {
+    // With no working folder there is nothing to resolve, and accepting the path would be
+    // reading any file on the machine from a text of the model.
     const out = (await tools.image_info.execute({ ref: '../../etc/passwd.png' })) as string
     expect(out).toContain('Image not found')
   })
 })
 
 describe('image_delete', () => {
-  it('apaga uma imagem do agente de um turno anterior (sem hooks do turno)', async () => {
-    // A limpeza retroativa é o caso que mais importa: a galeria já encheu de
-    // passos de uma conversa antiga e o usuário pede para arrumar. Antes isto
-    // era impossível — a trava olhava o turno em vez da origem.
+  it('deletes an agent image from a previous turn (without the turn hooks)', async () => {
+    // Retroactive cleanup is the case that matters most: the gallery has already filled with
+    // steps from an old conversation and the user asks to tidy it up. Before this
+    // was impossible — the lock looked at the turn instead of the origin.
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'chat',
-      sessionId: 'sessao1',
-      name: 'passo-de-ontem.png',
+      sessionId: 'session1',
+      name: 'yesterday-step.png',
     })
     const out = (await tools.image_delete.execute({ refs: [url] })) as string
     expect(out).toContain('deleted')
     expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).toBeNull()
   })
 
-  it('apaga uma imagem gerada nesta mesma resposta e a tira do arquivo', async () => {
+  it('deletes an image generated in this same reply and drops it from the file', async () => {
     const { createImageTools } = await import('./image')
     const turnMediaUrls = new Set<string>()
     const removeImageParts = vi.fn()
-    const hookedTools = createImageTools({ sessionId: 'sessao2' }, null, {
+    const hookedTools = createImageTools({ sessionId: 'session2' }, null, {
       turnMediaUrls,
       removeImageParts,
       noteDerived: vi.fn(),
@@ -202,15 +202,15 @@ describe('image_delete', () => {
 
     const original = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao2',
-      name: 'rascunho-base.png',
+      sessionId: 'session2',
+      name: 'draft-base.png',
     })
     const edited = (await hookedTools.image_edit.execute({
       ref: original,
       resize: { width: 40 },
     })) as { mediaUrl: string }
-    // O chat-engine registra a imagem em turnMediaUrls assim que ela entra na
-    // resposta — aqui simulamos esse passo.
+    // chat-engine registers the image in turnMediaUrls as soon as it enters the
+    // response — here we simulate that step.
     turnMediaUrls.add(edited.mediaUrl)
 
     const out = (await hookedTools.image_delete.execute({ refs: [edited.mediaUrl] })) as string
@@ -219,11 +219,11 @@ describe('image_delete', () => {
     expect(await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!)).toBeNull()
   })
 
-  it('nunca apaga o que o usuário anexou, nem no próprio turno', async () => {
+  it('never deletes what the user attached, not even in the same turn', async () => {
     const { createImageTools } = await import('./image')
     const turnMediaUrls = new Set<string>()
     const removeImageParts = vi.fn()
-    const hookedTools = createImageTools({ sessionId: 'sessao3' }, null, {
+    const hookedTools = createImageTools({ sessionId: 'session3' }, null, {
       turnMediaUrls,
       removeImageParts,
       noteDerived: vi.fn(),
@@ -231,10 +231,10 @@ describe('image_delete', () => {
 
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao3',
-      name: 'anexo-do-usuario.png',
+      sessionId: 'session3',
+      name: 'user-attachment.png',
     })
-    // Mesmo listada como imagem do turno, a foto do usuário é dele.
+    // Even listed as a turn image, the user's photo belongs to them.
     turnMediaUrls.add(url)
 
     const out = (await hookedTools.image_delete.execute({ refs: [url] })) as string
@@ -243,9 +243,9 @@ describe('image_delete', () => {
     expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).not.toBeNull()
   })
 
-  it('recusa apagar imagem de outra conversa', async () => {
+  it('refuses to delete an image from another conversation', async () => {
     const { createImageTools } = await import('./image')
-    const outrosTools = createImageTools({ sessionId: 'sessao-atual' }, null, {
+    const outrosTools = createImageTools({ sessionId: 'current-session' }, null, {
       turnMediaUrls: new Set<string>(),
       removeImageParts: vi.fn(),
       noteDerived: vi.fn(),
@@ -253,18 +253,18 @@ describe('image_delete', () => {
 
     const url = await media.saveMedia(await productShot(), 'png', {
       source: 'chat',
-      sessionId: 'outra-sessao',
-      name: 'de-outro-chat.png',
+      sessionId: 'other-session',
+      name: 'from-other-chat.png',
     })
     const out = (await outrosTools.image_delete.execute({ refs: [url] })) as string
     expect(out).toContain('another conversation')
     expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).not.toBeNull()
   })
 
-  it('a edição registra de qual imagem veio, e avisa o runtime', async () => {
+  it('the edit records which image it came from and notifies the runtime', async () => {
     const { createImageTools } = await import('./image')
     const noteDerived = vi.fn()
-    const hookedTools = createImageTools({ sessionId: 'sessao4' }, null, {
+    const hookedTools = createImageTools({ sessionId: 'session4' }, null, {
       turnMediaUrls: new Set<string>(),
       removeImageParts: vi.fn(),
       noteDerived,
@@ -272,24 +272,24 @@ describe('image_delete', () => {
 
     const original = await media.saveMedia(await productShot(), 'png', {
       source: 'user',
-      sessionId: 'sessao4',
+      sessionId: 'session4',
       name: 'base.png',
     })
-    const editada = (await hookedTools.image_edit.execute({
+    const edited = (await hookedTools.image_edit.execute({
       ref: original,
       resize: { width: 40 },
     })) as { mediaUrl: string }
 
-    // Sem o parentId a galeria não tem como empilhar as versões, e sem o aviso
-    // ao runtime o degrau nunca seria recolhido no fim do turno.
-    const entry = await media.getMediaEntry(media.mediaIdFromUrl(editada.mediaUrl)!)
+    // Without the parentId the gallery has no way to stack the versions, and without the notice
+    // to the runtime the step would never be folded at the end of the turn.
+    const entry = await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!)
     expect(entry?.parentId).toBe(media.mediaIdFromUrl(original))
-    expect(noteDerived).toHaveBeenCalledWith(editada.mediaUrl, original, false)
+    expect(noteDerived).toHaveBeenCalledWith(edited.mediaUrl, original, false)
   })
 })
 
-describe('a edição de uma imagem buscada na web mantém o crédito', () => {
-  it('recortar ou escrever por cima é adaptar: a licença continua exigindo o autor', async () => {
+describe('editing an image searched on the web keeps the credit', () => {
+  it('cropping or writing over is adapting: the license still requires the author', async () => {
     const credit = {
       title: 'Leão',
       creator: 'Ana',
@@ -299,7 +299,7 @@ describe('a edição de uma imagem buscada na web mantém o crédito', () => {
       provider: 'commons' as const,
       attribution: '"Leão" by Ana, licensed under CC BY 4.0',
     }
-    const url = await media.saveMedia(await productShot(), 'png', { source: 'chat', sessionId: 'sessao1', name: 'Leão', credit })
+    const url = await media.saveMedia(await productShot(), 'png', { source: 'chat', sessionId: 'session1', name: 'Lion', credit })
     const id = media.mediaIdFromUrl(url)!
 
     const edited = (await tools.image_edit.execute({ ref: url, resize: { width: 40 } })) as { mediaUrl: string }
@@ -309,8 +309,8 @@ describe('a edição de uma imagem buscada na web mantém o crédito', () => {
     expect(entry?.credit).toEqual(credit)
   })
 
-  it('uma imagem sem crédito (anexo do usuário) continua sem', async () => {
-    const url = await media.saveMedia(await productShot(), 'png', { source: 'user', sessionId: 'sessao1', name: 'foto' })
+  it('an image without credit (user attachment) stays without', async () => {
+    const url = await media.saveMedia(await productShot(), 'png', { source: 'user', sessionId: 'session1', name: 'foto' })
     const edited = (await tools.image_edit.execute({ ref: url, resize: { width: 40 } })) as { mediaUrl: string }
     expect((await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!))?.credit).toBeUndefined()
   })

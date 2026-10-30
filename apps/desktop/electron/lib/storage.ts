@@ -3,9 +3,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 /**
- * Storage JSON simples baseado em arquivos, seguindo o padrão do opencode:
- * cada chave vira um arquivo `<key>.json` e a escrita é atômica
- * (escreve em arquivo temporário e renomeia).
+ * Simple file-based JSON storage, following opencode's pattern:
+ * each key becomes a `<key>.json` file and the writing is atomic
+ * (writes to a temporary file and renames).
  */
 
 const KEY_SEGMENT = /^[a-zA-Z0-9_-]+$/
@@ -17,7 +17,7 @@ function storageDir() {
 function fileFor(key: string) {
   const segments = key.split('/')
   for (const segment of segments) {
-    if (!KEY_SEGMENT.test(segment)) throw new Error(`Chave de storage inválida: ${key}`)
+    if (!KEY_SEGMENT.test(segment)) throw new Error(`Invalid storage key: ${key}`)
   }
   return path.join(storageDir(), ...segments) + '.json'
 }
@@ -45,14 +45,14 @@ export async function removeJson(key: string): Promise<void> {
 }
 
 /**
- * Variante para arquivos de texto cru (`.md`) — mesma validação de chave e
- * escrita atômica dos JSON. Usada pelos documentos anexados de memória,
- * que ficam legíveis/editáveis fora do app.
+ * Variant for raw text files (`.md`) — same key validation and
+ * atomic writing as the JSON ones. Used by the attached memory documents,
+ * which stay readable/editable outside the app.
  */
 function textFileFor(key: string) {
   const segments = key.split('/')
   for (const segment of segments) {
-    if (!KEY_SEGMENT.test(segment)) throw new Error(`Chave de storage inválida: ${key}`)
+    if (!KEY_SEGMENT.test(segment)) throw new Error(`Invalid storage key: ${key}`)
   }
   return path.join(storageDir(), ...segments) + '.md'
 }
@@ -78,7 +78,7 @@ export async function removeText(key: string): Promise<void> {
   await fs.rm(textFileFor(key), { force: true })
 }
 
-/** Lista as chaves existentes sob um prefixo (ex.: "session/"). */
+/** Lists the existing keys under a prefix (e.g. "session/"). */
 export async function listKeys(prefix: string): Promise<string[]> {
   const base = storageDir()
   const dir = path.join(base, ...prefix.split('/').filter(Boolean))
@@ -96,7 +96,7 @@ export async function listKeys(prefix: string): Promise<string[]> {
   }
 }
 
-/** Diretório raiz de dados do app (auth, cache do catálogo, etc). */
+/** Root data directory of the app (auth, catalog cache, etc). */
 export function dataDir() {
   return path.join(app.getPath('userData'), 'orbit-data')
 }

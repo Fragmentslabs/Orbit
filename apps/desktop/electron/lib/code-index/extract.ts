@@ -3,38 +3,38 @@ import type { SyntaxNode } from '@lezer/common'
 import { languageFor, parserFor, type DefRule, type LezerSpec, type SymbolKind } from './languages'
 
 /**
- * O que um arquivo declara e o que ele usa. É a unidade que o índice guarda
- * (e persiste) por arquivo; o grafo de quem-chama-quem é derivado disso no
- * momento da consulta, nunca salvo — assim mudar um arquivo só exige
- * re-extrair aquele arquivo.
+ * What a file declares and what it uses. It is the unit the index keeps
+ * (and persists) per file; the who-calls-whom graph is derived from it at
+ * query time, never saved — that way changing a file only requires
+ * re-extracting that file.
  */
 
 export interface SymbolDef {
   name: string
-  /** Nome qualificado pelo escopo: `Classe.metodo`, `Tipo.Metodo` (Go), `S.m` (impl do Rust). */
+  /** Name qualified by scope: `Class.method`, `Type.Method` (Go), `S.m` (Rust impl). */
   qual: string
   kind: SymbolKind
-  /** Linhas 1-based, inclusivas. */
+  /** 1-based, inclusive lines. */
   line: number
   end: number
-  /** Índice da definição que contém esta, -1 no topo do arquivo. */
+  /** Index of the definition that contains this one, -1 at the top of the file. */
   parent: number
-  /** Cabeçalho da definição em uma linha (até o corpo). */
+  /** Header of the definition on a single line (up to the body). */
   sig: string
-  /** Comentário logo acima — entra na busca, não na saída. */
+  /** Comment right above — it goes into the search, not into the output. */
   doc: string
-  /** Faz parte da API pública do arquivo (export, pub, public, nome exportado em Go). */
+  /** Part of the public API of the file (export, pub, public, exported name in Go). */
   exported?: true
 }
 
-/** Como o nome foi usado: chamada/valor simples, acesso a membro (`x.foo`) ou tipo (`: Foo`). */
+/** How the name was used: plain call/value, member access (`x.foo`) or type (`: Foo`). */
 export const enum UseKind {
   Plain = 0,
   Member = 1,
   Type = 2,
 }
 
-/** [nome usado, índice da definição onde o uso está (-1 = topo do arquivo), linha, tipo de uso] */
+/** [used name, index of the definition where the use is (-1 = top of the file), line, use kind] */
 export type SymbolUse = [name: string, owner: number, line: number, kind: UseKind]
 
 export interface FileFacts {
@@ -42,20 +42,20 @@ export interface FileFacts {
   lines: number
   defs: SymbolDef[]
   uses: SymbolUse[]
-  /** Especificadores de import (JS/TS) — desempatam nomes repetidos. */
+  /** Import specifiers (JS/TS) — they break ties between repeated names. */
   imports: string[]
-  /** Nome ligado por import → de onde veio: o `helper` daqui é o do arquivo importado. */
+  /** Name bound by an import → where it came from: the `helper` here is the one from the imported file. */
   importNames: Array<[name: string, spec: string]>
-  /** Nomes ligados localmente (parâmetros, variáveis locais): sombreiam homônimos de outros arquivos. */
+  /** Names bound locally (parameters, local variables): they shadow homonyms from other files. */
   locals: string[]
 }
 
 const MAX_SIG = 200
 const MAX_DOC = 240
-/** Linhas guardadas por (quem usa, nome): o bastante para listar cada chamada sem inchar o índice. */
+/** Lines stored per (who uses, name): enough to list each call without bloating the index. */
 const MAX_LINES_PER_USE = 30
 
-/** Palavras que os extratores de linha confundiriam com identificador. */
+/** Words the line extractors would mistake for an identifier. */
 const NOISE = new Set([
   'number', 'boolean', 'any', 'unknown', 'never', 'object', 'symbol', 'bigint', 'undefined', 'length',
   'if', 'else', 'for', 'while', 'return', 'true', 'false', 'null', 'nil', 'self', 'this', 'super',
@@ -94,7 +94,7 @@ interface Frame {
   from: number
   to: number
   type: string
-  /** Índice da definição (ou -1 para container, que só qualifica). */
+  /** Index of the definition (or -1 for a container, which only qualifies). */
   def: number
   name: string
 }
@@ -167,8 +167,8 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
       if (name.length > 1 && !NOISE.has(name)) {
         const owner = ownerDef()
         const kind = kindOfUse(spec, node)
-        // Cada linha conta: `createVideoTools` chama resolveSafePath em 11
-        // lugares, e o agente precisa de todos — não só do primeiro.
+        // Every line counts: `createVideoTools` calls resolveSafePath in 11
+        // places, and the agent needs all of them — not just the first.
         const line = lineAt(starts, node.from)
         const key = `${owner}\0${kind}\0${name}`
         const lineKey = `${key}\0${line}`
@@ -196,7 +196,7 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
     if (top && top.from === node.from && top.to === node.to && top.type === node.name) frames.pop()
   }
 
-  // Caminhada iterativa: recursão estoura a pilha em arquivo gerado gigante.
+  // Iterative walk: recursion blows the stack on a giant generated file.
   for (;;) {
     enter(cursor.node)
     if (cursor.firstChild()) continue
@@ -211,8 +211,8 @@ function extractWithTree(spec: LezerSpec, top: SyntaxNode, source: string, start
 }
 
 /**
- * API pública por convenção de cada linguagem. Sem regra (C/C++), nada é
- * marcado — o outline não afirma o que não sabe.
+ * Public API by the convention of each language. With no rule (C/C++), nothing is
+ * marked — the outline does not claim what it does not know.
  */
 function isExported(lang: string, node: SyntaxNode, name: string, sig: string, parent: number): boolean {
   switch (lang) {
@@ -268,7 +268,7 @@ function kindFor(node: SyntaxNode, rule: DefRule): SymbolKind {
 
 const isTypeLike = (kind: SymbolKind) => kind === 'class' || kind === 'interface' || kind === 'enum'
 
-/** Primeiro (ou último) nó de nome, sem descer em corpo, parâmetros ou tipos. */
+/** First (or last) name node, without descending into body, parameters or types. */
 function findName(node: SyntaxNode, rule: DefRule, spec: LezerSpec): SyntaxNode | null {
   let found: SyntaxNode | null = null
   const visit = (parent: SyntaxNode, depth: number): boolean => {
@@ -303,7 +303,7 @@ function receiverType(node: SyntaxNode, childType: string, source: string): stri
 }
 
 function signature(node: SyntaxNode, spec: LezerSpec, source: string): string {
-  // `export function f` — o export faz parte do que o agente precisa saber.
+  // `export function f` — the export is part of what the agent needs to know.
   const start = node.parent?.name === 'ExportDeclaration' ? node.parent.from : node.from
   let end = node.to
   for (let child = node.firstChild; child; child = child.nextSibling) {
@@ -321,7 +321,7 @@ const COMMENT_LINE = /^\s*(\/\/\/?|#(?!include|define|if|endif|pragma)|\*|\/\*\*
 function docAbove(lines: string[], index: number): string {
   const parts: string[] = []
   let i = index - 1
-  // Decorators/annotations ficam entre o comentário e a definição.
+  // Decorators/annotations sit between the comment and the definition.
   while (i >= 0 && /^\s*@/.test(lines[i])) i--
   for (let n = 0; i >= 0 && n < 8; i--, n++) {
     if (!COMMENT_LINE.test(lines[i])) break
@@ -343,9 +343,9 @@ const LINE_KIND: Record<string, SymbolKind> = {
 }
 
 /**
- * Extrator de linha: definição por regex, fim pela indentação (a próxima linha
- * não vazia com indentação ≤ à da definição). Uso = qualquer identificador,
- * filtrado depois pelo grafo contra os nomes que existem de fato.
+ * Line extractor: definition by regex, end by indentation (the next non-empty line
+ * with indentation ≤ that of the definition). Use = any identifier,
+ * filtered afterwards by the graph against the names that actually exist.
  */
 function extractByLines(lang: string, source: string, lineCount: number): FileFacts {
   const lines = source.split('\n')
@@ -363,8 +363,8 @@ function extractByLines(lang: string, source: string, lineCount: number): FileFa
     const text = lines[i]
     if (!text.trim() || COMMENT_LINE.test(text)) continue
     const indent = text.length - text.trimStart().length
-    // `}`/`end` fecha o bloco na própria linha; qualquer outra linha no mesmo
-    // nível fecha na última linha de código antes dela.
+    // `}`/`end` closes the block on its own line; any other line at the same
+    // level closes on the last line of code before it.
     const closesBlock = /^\s*(\}|end\b)/.test(text)
     closeUntil(indent, closesBlock ? i + 1 : lastCode)
     lastCode = i + 1
@@ -407,13 +407,13 @@ function extractByLines(lang: string, source: string, lineCount: number): FileFa
       const key = `${owner}\0${name}\0${i}`
       if (seen.has(key)) continue
       seen.add(key)
-      // Sem árvore não dá para separar membro de chamada: `.foo` vira membro
-      // pelo ponto antes do nome, o resto fica simples.
+      // Without a tree there is no way to separate a member from a call: `.foo` becomes a member
+      // because of the dot before the name, the rest stays plain.
       const kind = match.index! > 0 && code[match.index! - 1] === '.' ? UseKind.Member : UseKind.Plain
       uses.push([name, owner, i + 1, kind])
     }
   }
-  // O identificador na linha da própria definição não é uso dela.
+  // The identifier on the line of the definition itself is not a use of it.
   const defSites = new Set(defs.map((d) => `${d.line}\0${d.name}`))
   const filtered = uses.filter(([name, , line]) => !defSites.has(`${line}\0${name}`))
   return { lang, lines: lineCount, defs, uses: filtered, imports: [], importNames: [], locals: [] }

@@ -3,14 +3,14 @@ import { create } from "zustand"
 import type { ModelsSnapshot, OrbitModel, PriceTier, SpeedTier } from "@shared/models"
 import { modelsApi } from "@/src/lib/ipc"
 
-/** Estado da aba Models: snapshot do catálogo unificado, busca, filtros e seleção. */
+/** State of the Models tab: unified catalog snapshot, search, filters and selection. */
 
 export type ContextFilter = "any" | "32k" | "128k" | "1m"
 
 export interface ModelFilters {
   providers: string[]
   capabilities: string[]
-  /** Modalidades de entrada: text, image, audio, video, pdf */
+  /** Input modalities: text, image, audio, video, pdf */
   modalities: string[]
   prices: PriceTier[]
   speeds: SpeedTier[]
@@ -40,10 +40,10 @@ interface ModelsState {
   loading: boolean
   search: string
   filters: ModelFilters
-  /** IDs marcados para comparação */
+  /** IDs marked for comparison */
   selected: string[]
   compareOpen: boolean
-  /** Modelo aberto no painel de detalhe */
+  /** Model opened in the detail panel */
   detailId: string | null
 
   initialize: () => Promise<void>
@@ -127,7 +127,7 @@ export function hasActiveFilters(filters: ModelFilters): boolean {
   )
 }
 
-/** Aplica busca (nome/provider/tags) + filtros — usada com useMemo nos componentes. */
+/** Applies search (name/provider/tags) + filters — used with useMemo in the components. */
 export function filterModels(models: OrbitModel[], search: string, filters: ModelFilters): OrbitModel[] {
   const query = search.trim().toLowerCase()
   return models.filter((model) => {

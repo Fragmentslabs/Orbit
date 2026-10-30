@@ -4,10 +4,10 @@ let Notifications: any = null
 
 try {
   if (Platform.OS !== 'web') {
-    // Carregamento condicional de módulo opcional: import estático não
-    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-    // build sem o nativo) e é justamente por isso que o require está
-    // dentro do try/if.
+    // Conditional loading of an optional module: a static import does not
+    // work here (the module may not exist at runtime — Expo Go, web,
+    // build without the native part) and that is exactly why the require is
+    // inside the try/if.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     Notifications = require('expo-notifications')
   }
@@ -17,7 +17,7 @@ try {
 
 // ─── Notification Handler ────────────────────────────────────────────────────
 
-/** Configura como notificações são exibidas quando o app está em foreground. */
+/** Sets up how notifications are displayed when the app is in the foreground. */
 export function configureNotifications() {
   if (!Notifications) return
   Notifications.setNotificationHandler({
@@ -33,7 +33,7 @@ export function configureNotifications() {
 
 // ─── Permissions ─────────────────────────────────────────────────────────────
 
-/** Solicita permissão para notificações. Retorna true se concedido. */
+/** Requests permission for notifications. Returns true if granted. */
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!Notifications) return false
   const { status: existing } = await Notifications.getPermissionsAsync()
@@ -49,13 +49,13 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export interface NotificationPayload {
   title: string
   body: string
-  /** Dados extras acessíveis no listener. */
+  /** Extra data accessible in the listener. */
   data?: Record<string, unknown>
 }
 
 /**
- * Exibe uma notificação local imediata.
- * Não precisa de push server — roda no dispositivo.
+ * Shows an immediate local notification.
+ * No push server needed — it runs on the device.
  */
 export async function scheduleLocalNotification(
   payload: NotificationPayload
@@ -71,7 +71,7 @@ export async function scheduleLocalNotification(
       data: payload.data ?? {},
       sound: 'notif.wav',
     },
-    trigger: null, // imediato
+    trigger: null, // immediate
   })
 
   return id
@@ -79,7 +79,7 @@ export async function scheduleLocalNotification(
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
 
-/** Atualiza o badge count (iOS). No Android, badges são gerenciados pelo canal. */
+/** Updates the badge count (iOS). On Android, badges are managed by the channel. */
 export async function setBadgeCount(count: number) {
   if (!Notifications) return
   if (Platform.OS === 'ios') {
@@ -87,7 +87,7 @@ export async function setBadgeCount(count: number) {
   }
 }
 
-/** Limpa o badge. */
+/** Clears the badge. */
 export async function clearBadge() {
   if (!Notifications) return
   if (Platform.OS === 'ios') {
@@ -100,8 +100,8 @@ export async function clearBadge() {
 export type NotificationListener = (notification: unknown) => void
 
 /**
- * Registra listener para notificações recebidas (app em foreground).
- * Retorna uma função de cleanup.
+ * Registers a listener for received notifications (app in the foreground).
+ * Returns a cleanup function.
  */
 export function addNotificationReceivedListener(
   handler: NotificationListener
@@ -112,8 +112,8 @@ export function addNotificationReceivedListener(
 }
 
 /**
- * Registra listener para quando o usuário toca numa notificação.
- * Retorna uma função de cleanup.
+ * Registers a listener for when the user taps a notification.
+ * Returns a cleanup function.
  */
 export function addNotificationResponseListener(
   handler: (response: { notification: { request: { content: { data: unknown } } } }) => void

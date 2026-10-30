@@ -1,28 +1,28 @@
 #!/usr/bin/env node
-// Stage 0 do Computer Use no Windows: mede o host ANTES de confiar nos números
-// do plano (docs/computer-use-windows.md). Sobe o MESMO host persistente do app
-// (electron/lib/computer/bridges/windows*) e roda os cenários contra os apps
-// abertos. Não foi possível rodá-lo no Mac: este script existe para ser rodado
-// num Windows, e o relatório que ele grava é o que fecha (ou reprova) o portão.
+// Stage 0 of Computer Use on Windows: measures the host BEFORE trusting the numbers
+// of the plan (docs/computer-use-windows.md). Starts the SAME persistent host as the app
+// (electron/lib/computer/bridges/windows*) and runs the scenarios against the open
+// apps. It could not be run on the Mac: this script exists to be run
+// on a Windows machine, and the report it writes is what closes (or rejects) the gate.
 //
-// Uso (PowerShell ou cmd, com os apps de teste abertos):
-//   node scripts/cu-probe-win.mjs                    mede tudo que der com o que está aberto
-//   node scripts/cu-probe-win.mjs --runs 5           repetições por medição
-//   node scripts/cu-probe-win.mjs --apps notepad,chrome,calculator   só estes
-//   node scripts/cu-probe-win.mjs --global           também testa o ponteiro global (MOVE O SEU MOUSE)
-//   node scripts/cu-probe-win.mjs --out relatorio.json
+// Usage (PowerShell or cmd, with the test apps open):
+//   node scripts/cu-probe-win.mjs                    measures everything possible with what is open
+//   node scripts/cu-probe-win.mjs --runs 5           repetitions per measurement
+//   node scripts/cu-probe-win.mjs --apps notepad,chrome,calculator   only these
+//   node scripts/cu-probe-win.mjs --global           also tests the global pointer (MOVES YOUR MOUSE)
+//   node scripts/cu-probe-win.mjs --out report.json
 //
-// Antes de rodar, abra o que quiser medir (o Bloco de Notas o probe abre sozinho):
-//   Chrome com uma página grande (~1500 nós de acessibilidade), o Explorer, um app
-//   Electron (VS Code, Slack...), a Calculadora (UWP), um app WPF e o Excel. Para o
-//   teste de app elevado, abra um Bloco de Notas "como administrador". Para o teste
-//   de DPI, deixe o monitor principal em 150% e, se tiver, um segundo monitor.
+// Before running, open what you want to measure (the probe opens Notepad on its own):
+//   Chrome with a large page (~1500 accessibility nodes), Explorer, an
+//   Electron app (VS Code, Slack...), Calculator (UWP), a WPF app and Excel. For the
+//   elevated app test, open Notepad "as administrator". For the
+//   DPI test, set the main monitor to 150% and, if you have one, a second monitor.
 //
-// O terminal que roda o probe faz o papel da "janela da frente": os apps de teste
-// ficam ATRÁS dele durante os testes de segundo plano.
+// The terminal that runs the probe plays the role of the "front window": the test apps
+// stay BEHIND it during the background tests.
 //
-// O probe escreve no Bloco de Notas que ele mesmo abre e na barra de endereço do
-// navegador (e desfaz). Não aperta botões de apps que ele não conhece.
+// The probe writes in the Notepad it opens itself and in the address bar of the
+// browser (and undoes it). It does not press buttons of apps it does not know.
 
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -32,7 +32,7 @@ import readline from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
 if (process.platform !== 'win32') {
-  console.error('O probe do Stage 0 só roda no Windows (o host usa UI Automation, DWM e GDI).')
+  console.error('The Stage 0 probe only runs on Windows (the host uses UI Automation, DWM and GDI).')
   process.exit(1)
 }
 
@@ -46,12 +46,12 @@ const GLOBAL = flag('--global')
 const OUT = value('--out') ?? path.join(process.cwd(), 'cu-probe-win-report.json')
 const ONLY = value('--apps')?.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
 
-// Os critérios do portão (docs/computer-use-windows.md → Stage 0).
+// The gate criteria (docs/computer-use-windows.md → Stage 0).
 const CRITERIA = { treeMs: 800, treeNodes: 1000, captureMs: 150, clickMs: 150 }
 
 const report = { when: new Date().toISOString(), os: `${os.type()} ${os.release()}`, criteria: CRITERIA, env: {}, apps: {}, verdict: {} }
 
-// ------------------------------------------------------------------ estatística
+// ------------------------------------------------------------------ statistics
 
 const sorted = (xs) => [...xs].sort((a, b) => a - b)
 const median = (xs) => (xs.length ? sorted(xs)[Math.floor((xs.length - 1) / 2)] : null)
@@ -59,11 +59,11 @@ const p95 = (xs) => (xs.length ? sorted(xs)[Math.min(xs.length - 1, Math.ceil(xs
 const stats = (xs) => ({ n: xs.length, median: median(xs), p95: p95(xs), min: xs.length ? Math.min(...xs) : null, max: xs.length ? Math.max(...xs) : null })
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const log = (...parts) => console.log(...parts)
-const pass = (ok) => (ok === null ? 'n/a ' : ok ? 'OK  ' : 'FALHA')
+const pass = (ok) => (ok === null ? 'n/a  ' : ok ? 'OK   ' : 'FAIL ')
 
-// ------------------------------------------------------------------ o host
+// ------------------------------------------------------------------ the host
 
-/** Cliente do host: uma linha JSON por pedido, resposta casada por id. */
+/** Client of the host: one JSON line per request, response matched by id. */
 class Host {
   constructor(file) {
     this.pending = new Map()
@@ -72,7 +72,7 @@ class Host {
     this.stderr = ''
     this.child.stderr.on('data', (d) => (this.stderr += d.toString()))
     this.child.on('close', (code) => {
-      for (const p of this.pending.values()) p.reject(new Error(`o host saiu (código ${code}): ${this.stderr.slice(-300)}`))
+      for (const p of this.pending.values()) p.reject(new Error(`the host exited (code ${code}): ${this.stderr.slice(-300)}`))
       this.pending.clear()
     })
     readline.createInterface({ input: this.child.stdout, crlfDelay: Infinity }).on('line', (line) => {
@@ -87,7 +87,7 @@ class Host {
       this.pending.delete(msg.id)
       clearTimeout(p.timer)
       if (msg.ok) p.resolve(msg.result)
-      else p.reject(Object.assign(new Error(msg.error?.message ?? 'erro do host'), { code: msg.error?.code }))
+      else p.reject(Object.assign(new Error(msg.error?.message ?? 'host error'), { code: msg.error?.code }))
     })
   }
 
@@ -96,14 +96,14 @@ class Host {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(Object.assign(new Error(`${op} passou de ${timeoutMs} ms`), { code: 'timeout' }))
+        reject(Object.assign(new Error(`${op} took more than ${timeoutMs} ms`), { code: 'timeout' }))
       }, timeoutMs)
       this.pending.set(id, { resolve, reject, timer })
       this.child.stdin.write(`${JSON.stringify({ id, op, args })}\n`)
     })
   }
 
-  /** Mede o tempo de parede de uma chamada. */
+  /** Measures the wall time of a call. */
   async timed(op, args, timeoutMs) {
     const t0 = performance.now()
     const result = await this.call(op, args, timeoutMs)
@@ -124,16 +124,16 @@ function ps(command) {
 function writeHostFiles() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-probe-win-'))
   const ps1 = fs.readFileSync(path.join(BRIDGES, 'windows.ps1'), 'utf8')
-  // O app grava o .ps1 com BOM (o PowerShell 5.1 lê ANSI sem ele): o probe faz o mesmo.
+  // The app writes the .ps1 with BOM (PowerShell 5.1 reads it as ANSI without it): the probe does the same.
   fs.writeFileSync(path.join(dir, 'host.ps1'), `﻿${ps1}`, 'utf8')
   fs.copyFileSync(path.join(BRIDGES, 'windows-host.cs'), path.join(dir, 'host.cs'))
   fs.copyFileSync(path.join(BRIDGES, 'windows-host-actions.cs'), path.join(dir, 'actions.cs'))
   return path.join(dir, 'host.ps1')
 }
 
-// ------------------------------------------------------------------ cenários
+// ------------------------------------------------------------------ scenarios
 
-/** Texto da árvore: usado como "impressão digital" para saber se a ação mudou algo. */
+/** Text of the tree: used as a "fingerprint" to know whether the action changed something. */
 function digest(tree) {
   return tree.nodes.map((n) => `${n.role}|${n.title ?? ''}|${(n.value ?? '').slice(0, 60)}|${n.selected ? 1 : 0}|${n.enabled ? 1 : 0}`).join('\n')
 }
@@ -149,28 +149,28 @@ function findPressTarget(tree) {
 }
 
 const KINDS = [
-  { id: 'notepad', label: 'Bloco de Notas (Win32/RichEdit ou Win11)', match: (a) => /^notepad\.exe$/i.test(a.exe) },
+  { id: 'notepad', label: 'Notepad (Win32/RichEdit or Win11)', match: (a) => /^notepad\.exe$/i.test(a.exe) },
   { id: 'explorer', label: 'Explorer', match: (a) => /^explorer\.exe$/i.test(a.exe) },
   { id: 'chrome', label: 'Chrome (Chromium)', match: (a) => /^(chrome|msedge|brave)\.exe$/i.test(a.exe) },
-  { id: 'electron', label: 'App Electron (VS Code, Slack...)', match: (a) => /^(code|slack|discord|teams|ms-teams|whatsapp|notion|obsidian)\.exe$/i.test(a.exe) },
-  { id: 'calculator', label: 'Calculadora (UWP)', match: (a) => /^calculatorapp\.exe$/i.test(a.exe) || /calculator/i.test(a.bundleId ?? '') },
-  { id: 'wpf', label: 'App WPF (--wpf <exe>)', match: (a) => Boolean(value('--wpf')) && a.exe?.toLowerCase() === value('--wpf').toLowerCase() },
+  { id: 'electron', label: 'Electron app (VS Code, Slack...)', match: (a) => /^(code|slack|discord|teams|ms-teams|whatsapp|notion|obsidian)\.exe$/i.test(a.exe) },
+  { id: 'calculator', label: 'Calculator (UWP)', match: (a) => /^calculatorapp\.exe$/i.test(a.exe) || /calculator/i.test(a.bundleId ?? '') },
+  { id: 'wpf', label: 'WPF app (--wpf <exe>)', match: (a) => Boolean(value('--wpf')) && a.exe?.toLowerCase() === value('--wpf').toLowerCase() },
   { id: 'excel', label: 'Excel', match: (a) => /^excel\.exe$/i.test(a.exe) },
 ]
 
 async function probeApp(host, kind, app, windows, front) {
   const out = { app: { name: app.name, exe: app.exe, pid: app.pid, elevated: app.elevated }, checks: {} }
   const win = windows.find((w) => w.pid === app.pid)
-  if (!win) return { ...out, skipped: 'sem janela visível' }
+  if (!win) return { ...out, skipped: 'no visible window' }
   if (app.elevated) {
-    // UIPI: o Orbit comum não controla app elevado. O host deve ao menos dizer isso.
-    out.checks.elevated = { detected: true, note: 'o app roda como administrador — as ações precisam ser recusadas com mensagem clara' }
+    // UIPI: an ordinary Orbit does not control an elevated app. The host must at least say so.
+    out.checks.elevated = { detected: true, note: 'the app runs as administrator — actions must be refused with a clear message' }
     return out
   }
   const request = (extra = {}) => ({ pid: app.pid, window: { id: win.id, frame: win.frame, title: win.title }, maxNodes: 2000, enhance: true, enhanceWaitMs: 450, ...extra })
 
-  // 1) Árvore: com CacheRequest (o host) e sem (varredura uma-propriedade-por-chamada).
-  await host.call('tree', request()).catch(() => undefined) // aquece: o Chromium monta a árvore na primeira vez
+  // 1) Tree: with CacheRequest (the host) and without (one-property-per-call scan).
+  await host.call('tree', request()).catch(() => undefined) // warms it up: Chromium builds the tree on the first time
   const cached = []
   let tree = null
   for (let i = 0; i < RUNS; i++) {
@@ -189,11 +189,11 @@ async function probeApp(host, kind, app, windows, front) {
     withCache: stats(cached),
     withoutCache: stats(uncached),
     url: tree.nodes.find((n) => n.url)?.url ?? null,
-    // O critério só vale para uma árvore de tamanho parecido com a do Chrome (~1500 nós).
+    // The criterion is only worth for a tree of a size similar to Chrome's (~1500 nodes).
     pass: tree.nodes.length >= CRITERIA.treeNodes ? median(cached) < CRITERIA.treeMs : null,
   }
 
-  // 2) Captura: PrintWindow (o host) e o quanto a janela está coberta.
+  // 2) Capture: PrintWindow (the host) and how much the window is covered.
   const captures = []
   const methods = new Set()
   let covered = false
@@ -213,13 +213,13 @@ async function probeApp(host, kind, app, windows, front) {
   fs.rmSync(file, { force: true })
   out.checks.capture = { ...stats(captures), methods: [...methods], coveredDuringTest: covered, pass: captures.length ? median(captures) < CRITERIA.captureMs : false }
 
-  // 3) Segundo plano: o terminal vai para a frente e o app fica ATRÁS dele.
+  // 3) Background: the terminal goes to the front and the app stays BEHIND it.
   await host.call('activate', { pid: front.pid }).catch(() => undefined)
   await sleep(250)
   const background = {}
   const before = await host.call('foreground')
 
-  // 3a) Texto (modo dirigido: ValuePattern / EM_REPLACESEL, sem teclado sintético).
+  // 3a) Text (directed mode: ValuePattern / EM_REPLACESEL, without synthetic keyboard).
   const textTarget = findTextTarget(tree)
   if (textTarget) {
     const marker = `orbit-${Date.now() % 100000}`
@@ -233,16 +233,16 @@ async function probeApp(host, kind, app, windows, front) {
       const arrived = Boolean(node?.value?.includes(marker))
       const fg = await host.call('foreground')
       background.text = { arrived, stoleFocus: fg.window !== before.window, role: textTarget.role }
-      // Desfaz: devolve o valor original quando o campo aceita.
+      // Undoes it: gives the original value back when the field accepts it.
       await host.call('element', { ...elementArgs(request, app, win, node ?? textTarget), kind: 'setValue', value: original }).catch(() => undefined)
     } catch (e) {
       background.text = { arrived: false, error: `${e.code ?? ''} ${e.message}` }
     }
   } else {
-    background.text = { arrived: null, note: 'nenhum campo de texto na árvore' }
+    background.text = { arrived: null, note: 'no text field in the tree' }
   }
 
-  // 3b) Clique por padrão da UIA: latência e efeito.
+  // 3b) Click by UIA default pattern: latency and effect.
   const pressTarget = findPressTarget(tree)
   if (pressTarget) {
     try {
@@ -257,10 +257,10 @@ async function probeApp(host, kind, app, windows, front) {
       background.press = { error: `${e.code ?? ''} ${e.message}` }
     }
   } else {
-    background.press = { note: 'nenhum controle seguro (caixa de seleção, aba, item de lista) para apertar' }
+    background.press = { note: 'no safe control (check box, tab, list item) to press' }
   }
 
-  // 3c) Experimento — mensagem de mouse postada (NÃO é usada pelo driver): chega?
+  // 3c) Experiment — posted mouse message (NOT used by the driver): does it arrive?
   if (pressTarget?.frame) {
     try {
       const cx = pressTarget.frame[0] + Math.floor(pressTarget.frame[2] / 2)
@@ -276,7 +276,7 @@ async function probeApp(host, kind, app, windows, front) {
     }
   }
 
-  // 3d) Experimento — WM_CHAR postado no elemento com foco da thread: chega?
+  // 3d) Experiment — WM_CHAR posted to the focused element of the thread: does it arrive?
   if (textTarget) {
     try {
       const marker = `w${Date.now() % 10000}`
@@ -292,7 +292,7 @@ async function probeApp(host, kind, app, windows, front) {
     }
   }
 
-  // 3e) Rolagem pela UIA (ScrollPattern).
+  // 3e) Scrolling through UIA (ScrollPattern).
   try {
     const cx = win.frame[0] + Math.floor(win.frame[2] / 2)
     const cy = win.frame[1] + Math.floor(win.frame[3] / 2)
@@ -302,15 +302,15 @@ async function probeApp(host, kind, app, windows, front) {
     background.scrollPattern = { error: `${e.code ?? ''} ${e.message}` }
   }
 
-  // 3f) Atalho em modo dirigido: deve recusar com mensagem clara (precisa do ponteiro global).
+  // 3f) Shortcut in directed mode: it must refuse with a clear message (it needs the global pointer).
   try {
     await host.call('keys', { pid: app.pid, combos: [{ code: 0x41, flags: 2 }], mode: 'pid' })
-    background.shortcutDirected = { refused: false, note: 'aceitou — inesperado' }
+    background.shortcutDirected = { refused: false, note: 'accepted — unexpected' }
   } catch (e) {
     background.shortcutDirected = { refused: e.code === 'unavailable', code: e.code }
   }
 
-  // 3g) Ponteiro global (só com --global; MOVE O MOUSE e traz o app para a frente).
+  // 3g) Global pointer (only with --global; MOVES THE MOUSE and brings the app to the front).
   if (GLOBAL && pressTarget?.frame) {
     try {
       const c0 = await host.call('cursor')
@@ -328,7 +328,7 @@ async function probeApp(host, kind, app, windows, front) {
   return out
 }
 
-/** Os argumentos de uma ação de elemento: ref + path + identidade (como o act.ts monta). */
+/** The arguments of an element action: ref + path + identity (as act.ts assembles it). */
 function elementArgs(request, app, win, node) {
   return {
     pid: app.pid,
@@ -339,33 +339,33 @@ function elementArgs(request, app, win, node) {
   }
 }
 
-// ------------------------------------------------------------------ principal
+// ------------------------------------------------------------------ main
 
 async function main() {
-  log('Probe do Stage 0 — Computer Use no Windows')
+  log('Stage 0 probe — Computer Use on Windows')
   log(`${report.os}, node ${process.version}\n`)
 
-  // PowerShell: versão, Constrained Language Mode, elevação do próprio probe.
+  // PowerShell: version, Constrained Language Mode, elevation of the probe itself.
   const psInfo = await ps(
     "[pscustomobject]@{ version = $PSVersionTable.PSVersion.ToString(); mode = [string]$ExecutionContext.SessionState.LanguageMode; admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } | ConvertTo-Json -Compress",
   )
   report.env.powershell = psInfo ? JSON.parse(psInfo) : null
-  log('PowerShell:', report.env.powershell ?? '(não respondeu)')
+  log('PowerShell:', report.env.powershell ?? '(did not answer)')
   if (report.env.powershell && report.env.powershell.mode !== 'FullLanguage') {
-    log(`\nFALHA: o PowerShell está em ${report.env.powershell.mode}. O host precisa de Add-Type (AppLocker/WDAC bloqueia). O Orbit mostraria este motivo nas Preferências.`)
+    log(`\nFAIL: PowerShell is in ${report.env.powershell.mode}. The host needs Add-Type (AppLocker/WDAC blocks it). Orbit would show this reason in the Preferences.`)
     report.verdict.constrainedLanguage = true
     fs.writeFileSync(OUT, JSON.stringify(report, null, 2))
     process.exit(2)
   }
 
-  // Partida do host (inclui o Add-Type).
+  // Start of the host (it includes the Add-Type).
   const file = writeHostFiles()
   const t0 = performance.now()
   const host = new Host(file)
   try {
     await host.call('ping', {}, 60000)
   } catch (e) {
-    log(`\nFALHA ao subir o host: ${e.message}\n${host.stderr.slice(-600)}`)
+    log(`\nFAILED to start the host: ${e.message}\n${host.stderr.slice(-600)}`)
     report.verdict.hostStarted = false
     fs.writeFileSync(OUT, JSON.stringify(report, null, 2))
     host.stop()
@@ -374,52 +374,52 @@ async function main() {
   report.env.hostStartMs = Math.round(performance.now() - t0)
   const warm = await host.timed('ping')
   report.env.pingMs = warm.ms
-  log(`Host: partida ${report.env.hostStartMs} ms (Add-Type uma vez); ping já aquecido ${warm.ms} ms`)
+  log(`Host: start-up ${report.env.hostStartMs} ms (Add-Type once); warm ping ${warm.ms} ms`)
 
   const perms = await host.call('perms')
   report.env.perms = perms
   for (const n of perms.notes ?? []) log(`  - ${n}`)
 
-  // DPI e monitores.
+  // DPI and monitors.
   const displays = await host.call('displays')
   report.env.displays = displays.monitors
-  log('\nMonitores:')
-  for (const m of displays.monitors) log(`  ${m.primary ? '*' : ' '} ${m.frame[2]}x${m.frame[3]} px em (${m.frame[0]}, ${m.frame[1]}) — ${Math.round(m.scale * 100)}% (${m.dpi} dpi)`)
+  log('\nMonitors:')
+  for (const m of displays.monitors) log(`  ${m.primary ? '*' : ' '} ${m.frame[2]}x${m.frame[3]} px at (${m.frame[0]}, ${m.frame[1]}) — ${Math.round(m.scale * 100)}% (${m.dpi} dpi)`)
   report.verdict.dpi150 = displays.monitors.some((m) => Math.abs(m.scale - 1.5) < 0.01)
   report.verdict.multiMonitor = displays.monitors.length > 1
-  if (!report.verdict.dpi150) log('  (nenhum monitor a 150%: o teste de DPI não vale — Configurações → Sistema → Vídeo → Escala)')
-  if (!report.verdict.multiMonitor) log('  (um monitor só: o teste de dois monitores não vale)')
+  if (!report.verdict.dpi150) log('  (no monitor at 150%: the DPI test does not apply — Settings → System → Display → Scale)')
+  if (!report.verdict.multiMonitor) log('  (a single monitor: the two-monitor test does not apply)')
 
-  // O terminal que roda o probe é a "janela da frente" dos testes de segundo plano.
+  // The terminal that runs the probe is the "front window" of the background tests.
   const front = await host.call('foreground')
   report.env.terminal = front
-  log(`\nJanela da frente (este terminal): pid ${front.pid} "${front.title}"`)
+  log(`\nFront window (this terminal): pid ${front.pid} "${front.title}"`)
 
-  // Garante o Bloco de Notas (o probe o abre e testa o openApp de quebra).
+  // Guarantees Notepad (the probe opens it and tests openApp on the way).
   let snapshot = await host.call('apps')
   if (!snapshot.apps.some((a) => /^notepad\.exe$/i.test(a.exe)) && (!ONLY || ONLY.includes('notepad'))) {
     const t1 = performance.now()
     try {
       const opened = await host.call('openApp', { app: 'notepad' }, 40000)
       report.env.openApp = { ms: Math.round(performance.now() - t1), done: opened.done }
-      log(`openApp("notepad"): ${opened.done} em ${report.env.openApp.ms} ms`)
+      log(`openApp("notepad"): ${opened.done} in ${report.env.openApp.ms} ms`)
     } catch (e) {
       report.env.openApp = { error: `${e.code ?? ''} ${e.message}` }
-      log(`openApp("notepad") falhou: ${e.message}`)
+      log(`openApp("notepad") failed: ${e.message}`)
     }
     snapshot = await host.call('apps')
   }
 
   const elevatedApps = snapshot.apps.filter((a) => a.elevated)
   report.env.elevatedApps = elevatedApps.map((a) => a.name)
-  log(`\nApps elevados (administrador) detectados: ${elevatedApps.length ? elevatedApps.map((a) => a.name).join(', ') : 'nenhum (abra um Bloco de Notas como administrador para testar o UIPI)'}`)
+  log(`\nElevated apps (administrator) detected: ${elevatedApps.length ? elevatedApps.map((a) => a.name).join(', ') : 'none (open Notepad as administrator to test the UIPI)'}`)
 
   for (const kind of KINDS) {
     if (ONLY && !ONLY.includes(kind.id)) continue
     const app = snapshot.apps.find((a) => kind.match(a) && !a.elevated) ?? snapshot.apps.find((a) => kind.match(a))
     if (!app) {
-      report.apps[kind.id] = { skipped: 'não está aberto' }
-      log(`\n== ${kind.label}: não está aberto — pulado`)
+      report.apps[kind.id] = { skipped: 'not open' }
+      log(`\n== ${kind.label}: not open — skipped`)
       continue
     }
     log(`\n== ${kind.label}: ${app.name} (${app.exe}, pid ${app.pid})`)
@@ -429,14 +429,14 @@ async function main() {
       printApp(r)
     } catch (e) {
       report.apps[kind.id] = { error: `${e.code ?? ''} ${e.message}` }
-      log(`  ERRO: ${e.message}`)
+      log(`  ERROR: ${e.message}`)
     }
   }
 
-  // Quem estava na frente volta a ficar.
+  // Whoever was in front comes back to the front.
   await host.call('activate', { pid: front.pid }).catch(() => undefined)
 
-  // Veredito contra o portão.
+  // Verdict against the gate.
   const apps = Object.values(report.apps).filter((a) => a.checks)
   const trees = apps.map((a) => a.checks.tree).filter((t) => t && t.pass !== null)
   const captures = apps.map((a) => a.checks.capture).filter(Boolean)
@@ -453,41 +453,41 @@ async function main() {
       }),
   )
 
-  log('\n=== Veredito do portão ===')
-  log(`  árvore (CacheRequest) < ${CRITERIA.treeMs} ms com ≥ ${CRITERIA.treeNodes} nós : ${pass(report.verdict.tree)}`)
-  log(`  captura < ${CRITERIA.captureMs} ms                                  : ${pass(report.verdict.capture)}`)
-  log(`  clique por elemento < ${CRITERIA.clickMs} ms                         : ${pass(report.verdict.click)}`)
-  log('  segundo plano por tipo de app (texto e clique pela UIA / mensagens postadas):')
+  log('\n=== Gate verdict ===')
+  log(`  tree (CacheRequest) < ${CRITERIA.treeMs} ms with ≥ ${CRITERIA.treeNodes} nodes : ${pass(report.verdict.tree)}`)
+  log(`  capture < ${CRITERIA.captureMs} ms                                  : ${pass(report.verdict.capture)}`)
+  log(`  click per element < ${CRITERIA.clickMs} ms                         : ${pass(report.verdict.click)}`)
+  log('  background per app type (text and click by UIA / posted messages):')
   for (const [id, row] of Object.entries(report.verdict.backgroundMatrix)) {
-    log(`    ${id.padEnd(11)} texto=${fmt(row.textByUia)} clique=${fmt(row.pressByUia)} | mouse-msg=${fmt(row.mouseMessage)} char-msg=${fmt(row.charMessage)} rolagem=${row.scrollPattern ?? 'n/a'}`)
+    log(`    ${id.padEnd(11)} text=${fmt(row.textByUia)} click=${fmt(row.pressByUia)} | mouse-msg=${fmt(row.mouseMessage)} char-msg=${fmt(row.charMessage)} scroll=${row.scrollPattern ?? 'n/a'}`)
   }
-  log('\nManual (o Node não vê o desktopCapturer do Electron): grave uma janela COBERTA com cu_record_start no Orbit,')
-  log('confira que o vídeo mostra o app e não o que está por cima, e anote se o Windows desenhou a borda amarela.')
+  log('\nManual (Node cannot see the Electron desktopCapturer): record a COVERED window with cu_record_start in Orbit,')
+  log('check that the video shows the app and not what is on top of it, and note whether Windows drew the yellow border.')
 
   host.stop()
   fs.writeFileSync(OUT, JSON.stringify(report, null, 2))
-  log(`\nRelatório: ${OUT}`)
+  log(`\nReport: ${OUT}`)
 }
 
-const fmt = (v) => (v === null || v === undefined ? 'n/a' : v ? 'sim' : 'NÃO')
+const fmt = (v) => (v === null || v === undefined ? 'n/a' : v ? 'yes' : 'NO')
 
 function printApp(r) {
-  if (r.skipped) return log(`  pulado: ${r.skipped}`)
+  if (r.skipped) return log(`  skipped: ${r.skipped}`)
   const c = r.checks
-  if (c.elevated) return log(`  ELEVADO: ${c.elevated.note}`)
+  if (c.elevated) return log(`  ELEVATED: ${c.elevated.note}`)
   const t = c.tree
-  log(`  árvore: ${t.nodes} nós${t.truncated ? ` (parou: ${t.truncated})` : ''}; com CacheRequest mediana ${t.withCache.median} ms (p95 ${t.withCache.p95}); sem: ${t.withoutCache.median ?? '?'} ms; ${pass(t.pass)}${t.url ? `; URL ${t.url}` : ''}`)
+  log(`  tree: ${t.nodes} nodes${t.truncated ? ` (stopped: ${t.truncated})` : ''}; with CacheRequest median ${t.withCache.median} ms (p95 ${t.withCache.p95}); without: ${t.withoutCache.median ?? '?'} ms; ${pass(t.pass)}${t.url ? `; URL ${t.url}` : ''}`)
   const k = c.capture
-  log(`  captura: mediana ${k.median ?? '?'} ms (p95 ${k.p95 ?? '?'}) por ${k.methods.join('/') || 'nenhuma'}${k.coveredDuringTest ? ', janela COBERTA durante o teste' : ''}; ${pass(k.pass)}${c.captureError ? `; ERRO ${c.captureError.message}` : ''}`)
+  log(`  capture: median ${k.median ?? '?'} ms (p95 ${k.p95 ?? '?'}) by ${k.methods.join('/') || 'none'}${k.coveredDuringTest ? ', window COVERED during the test' : ''}; ${pass(k.pass)}${c.captureError ? `; ERROR ${c.captureError.message}` : ''}`)
   const b = c.background
   if (!b) return
-  if (b.text) log(`  texto em segundo plano: ${b.text.arrived === null ? b.text.note : `${b.text.arrived ? 'chegou' : 'NÃO chegou'}${b.text.stoleFocus ? ', ROUBOU O FOCO' : ''}${b.text.error ? ` (${b.text.error})` : ''}`}`)
-  if (b.press) log(`  clique pela UIA: ${b.press.ms !== undefined ? `${b.press.ms} ms, ${b.press.done}/${b.press.action}, ${b.press.changedTree ? 'mudou a tela' : 'SEM efeito visível'}${b.press.stoleFocus ? ', ROUBOU O FOCO' : ''}; ${pass(b.press.pass)}` : (b.press.note ?? b.press.error)}`)
-  if (b.postedMouse) log(`  [experimento] mouse por mensagem: ${b.postedMouse.sent === false ? `não enviado (${b.postedMouse.reason})` : b.postedMouse.error ?? `${b.postedMouse.hadEffect ? 'TEVE efeito' : 'sem efeito'} (${b.postedMouse.class})`}`)
-  if (b.postedChars) log(`  [experimento] WM_CHAR: ${b.postedChars.error ?? `${b.postedChars.arrived ? 'chegou' : 'não chegou'} (${b.postedChars.class})`}`)
-  if (b.scrollPattern) log(`  rolagem (ScrollPattern): ${b.scrollPattern.done ?? b.scrollPattern.reason ?? b.scrollPattern.error}`)
-  if (b.shortcutDirected) log(`  atalho em modo dirigido: ${b.shortcutDirected.refused ? 'recusado com mensagem (esperado)' : 'NÃO recusou'}`)
-  if (b.globalPointer) log(`  ponteiro global: ${b.globalPointer.error ?? `${b.globalPointer.ms} ms, cursor ${b.globalPointer.cursorMoved ? 'moveu' : 'NÃO moveu'} para ${b.globalPointer.landedAt} (queria ${b.globalPointer.wanted})`}`)
+  if (b.text) log(`  text in the background: ${b.text.arrived === null ? b.text.note : `${b.text.arrived ? 'arrived' : 'did NOT arrive'}${b.text.stoleFocus ? ', STOLE THE FOCUS' : ''}${b.text.error ? ` (${b.text.error})` : ''}`}`)
+  if (b.press) log(`  click by UIA: ${b.press.ms !== undefined ? `${b.press.ms} ms, ${b.press.done}/${b.press.action}, ${b.press.changedTree ? 'changed the screen' : 'NO visible effect'}${b.press.stoleFocus ? ', STOLE THE FOCUS' : ''}; ${pass(b.press.pass)}` : (b.press.note ?? b.press.error)}`)
+  if (b.postedMouse) log(`  [experiment] mouse by message: ${b.postedMouse.sent === false ? `not sent (${b.postedMouse.reason})` : b.postedMouse.error ?? `${b.postedMouse.hadEffect ? 'HAD effect' : 'no effect'} (${b.postedMouse.class})`}`)
+  if (b.postedChars) log(`  [experiment] WM_CHAR: ${b.postedChars.error ?? `${b.postedChars.arrived ? 'arrived' : 'did not arrive'} (${b.postedChars.class})`}`)
+  if (b.scrollPattern) log(`  scroll (ScrollPattern): ${b.scrollPattern.done ?? b.scrollPattern.reason ?? b.scrollPattern.error}`)
+  if (b.shortcutDirected) log(`  shortcut in directed mode: ${b.shortcutDirected.refused ? 'refused with a message (expected)' : 'did NOT refuse'}`)
+  if (b.globalPointer) log(`  global pointer: ${b.globalPointer.error ?? `${b.globalPointer.ms} ms, cursor ${b.globalPointer.cursorMoved ? 'moved' : 'did NOT move'} to ${b.globalPointer.landedAt} (wanted ${b.globalPointer.wanted})`}`)
 }
 
 main().catch((e) => {

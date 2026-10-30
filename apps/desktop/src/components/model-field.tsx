@@ -20,7 +20,7 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import type { DefaultModel } from "@/src/stores/model-mode-prefs"
 
-/** Seletor de modelo das Preferências (modelo padrão, subagentes, auxiliar…). */
+/** Model selector of Preferences (default model, sub-agents, auxiliary…). */
 const MAX_MODELS_PER_PROVIDER = 40
 
 export function ModelField({
@@ -35,9 +35,9 @@ export function ModelField({
   value: DefaultModel | null
   onChange: (v: DefaultModel | null) => void
   nullLabel?: string
-  /** Controle extra ao lado do seletor (ex.: nível de raciocínio) */
+  /** Extra control next to the selector (e.g. reasoning level) */
   action?: ReactNode
-  /** Restringe a lista (ex.: só modelos com visão para o modelo de visão) */
+  /** Restricts the list (e.g. only vision models for the vision model) */
   filter?: (provider: CatalogProvider, model: CatalogModel) => boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -54,8 +54,8 @@ export function ModelField({
         .map((id) => ({
           provider: catalog[id],
           models: Object.values(catalog[id].models)
-            // Filtro antes do corte: o teto de 40 vale para o que sobrou, não
-            // para a lista crua (senão um filtro de visão poderia zerar tudo).
+            // Filter before the cut: the ceiling of 40 counts for what is left, not
+            // for the raw list (otherwise a vision filter could zero everything).
             .filter((model) => (filter ? filter(catalog[id], model) : true))
             .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
             .slice(0, MAX_MODELS_PER_PROVIDER),
@@ -141,10 +141,10 @@ export function ModelField({
               variant="ghost"
               className="w-full justify-start gap-2 text-xs"
               onClick={() => {
-                // Handoff determinístico: marca a intenção e fecha o seletor. O
-                // settings só abre no onOpenChangeComplete, quando este dialog
-                // terminou de sair — o setTimeout de 120ms disputava com a
-                // animação de saída de 100ms.
+                // Deterministic handoff: it marks the intention and closes the selector. The
+                // settings only opens in onOpenChangeComplete, when this dialog
+                // has finished leaving — the 120ms setTimeout disputed with the
+                // 100ms exit animation.
                 setSkipFinalFocus(true)
                 pendingSettings.current = true
                 setOpen(false)

@@ -5,9 +5,9 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Compressão de ponta a ponta com o ffmpeg de verdade (o que vem com o app).
- * Sem o binário na máquina, a suíte pula — o planejamento continua coberto pelo
- * plan.test.ts, que é puro.
+ * End-to-end compression with the real ffmpeg (the one that ships with the app).
+ * Without the binary on the machine, the suite skips — the planning stays covered by
+ * plan.test.ts, which is pure.
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -29,8 +29,8 @@ const source = path.join(work, 'source.mp4')
 
 beforeAll(async () => {
   await fsp.mkdir(work, { recursive: true })
-  // 6 s, 640x360, com áudio e bitrate alto de propósito: dá margem para
-  // comprimir de verdade e medir o antes/depois.
+  // 6 s, 640x360, with audio and a high bitrate on purpose: it leaves room to
+  // compress for real and measure the before/after.
   await runFfmpeg([
     '-v', 'error',
     '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30:duration=6',
@@ -61,7 +61,7 @@ describe('buildFfmpegArgs', () => {
     container: 'mp4',
   })
 
-  it('teto em bytes codifica com maxrate e sem CRF', () => {
+  it('a byte ceiling encodes with maxrate and no CRF', () => {
     const args = buildFfmpegArgs('in.mp4', 'out.mp4', plan)
     expect(args).toContain('-maxrate')
     expect(args).toContain('-bufsize')
@@ -69,7 +69,7 @@ describe('buildFfmpegArgs', () => {
     expect(args.join(' ')).toContain('-movflags +faststart')
   })
 
-  it('mapeia os streams explicitamente e descarta legenda/dados', () => {
+  it('maps the streams explicitly and drops subtitle/data', () => {
     const args = buildFfmpegArgs('in.mp4', 'out.mp4', plan)
     expect(args.slice(0, 8)).toEqual(['-v', 'error', '-i', 'in.mp4', '-map', '0:v:0', '-map', '0:a:0?'])
     expect(args).toContain('-sn')
@@ -97,7 +97,7 @@ describe('buildFfmpegArgs', () => {
 })
 
 describe.skipIf(!hasFfmpeg)('compressMedia (real ffmpeg)', () => {
-  it('cabe no teto em bytes e mantém a duração', async () => {
+  it('fits the byte ceiling and keeps the duration', async () => {
     const out = path.join(work, 'out', 'small.mp4')
     const report = await compressMedia({ file: source, output: out, target: { maxBytes: 200_000 } })
 
@@ -111,11 +111,11 @@ describe.skipIf(!hasFfmpeg)('compressMedia (real ffmpeg)', () => {
     expect(report.after.video).toHaveLength(1)
     expect(report.after.audio).toHaveLength(1)
     expect(fs.existsSync(out)).toBe(true)
-    // Nada de temporário largado ao lado do arquivo final.
+    // No temporary file left behind next to the final file.
     expect((await fsp.readdir(path.dirname(out))).filter((f) => f.includes('.part'))).toHaveLength(0)
   }, 120_000)
 
-  it('não recodifica o que já cabe no alvo', async () => {
+  it('does not re-encode what already fits the target', async () => {
     const stat = await fsp.stat(source)
     const out = path.join(work, 'out', 'unnecessary.mp4')
     const report = await compressMedia({ file: source, output: out, target: { maxBytes: stat.size * 2 } })
@@ -124,7 +124,7 @@ describe.skipIf(!hasFfmpeg)('compressMedia (real ffmpeg)', () => {
     expect(fs.existsSync(out)).toBe(false)
   })
 
-  it('extrai o áudio de um vídeo para mp3', async () => {
+  it('extracts the audio of a video to mp3', async () => {
     const out = path.join(work, 'out', 'audio.mp3')
     const report = await compressMedia({ file: source, output: out, target: { quality: 70 }, format: 'mp3' })
     expect(report.kind).toBe('audio')
@@ -134,20 +134,20 @@ describe.skipIf(!hasFfmpeg)('compressMedia (real ffmpeg)', () => {
     expect(report.after.sizeBytes).toBeLessThan(report.before.sizeBytes)
   }, 120_000)
 
-  it('reduz resolução sem inflar o fps', async () => {
+  it('reduces resolution without inflating the fps', async () => {
     const out = path.join(work, 'out', 'smaller.mp4')
     const report = await compressMedia({ file: source, output: out, target: { quality: 70, height: 180 } })
     expect(report.after.display?.height).toBe(180)
     expect(report.after.display?.width).toBe(320)
   }, 120_000)
 
-  it('recusa escrever por cima da origem', async () => {
+  it('refuses to write over the source', async () => {
     await expect(compressMedia({ file: source, output: source, target: { quality: 50 } })).rejects.toThrow(
       /cannot be the source/,
     )
   })
 
-  it('o arquivo comprimido continua legível pelo ffprobe', async () => {
+  it('the compressed file is still readable by ffprobe', async () => {
     const out = path.join(work, 'out', 'small.mp4')
     const probe = await probeMedia(out)
     expect(probe.durationMs).toBeGreaterThan(5000)

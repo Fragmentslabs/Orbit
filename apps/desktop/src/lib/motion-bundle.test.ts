@@ -9,12 +9,12 @@ import {
 } from "./motion-bundle"
 
 /**
- * O recolhimento das mídias de uma peça em UM card.
+ * The gathering of a piece's media into ONE card.
  *
- * A regra que estes testes protegem: a peça tem um card só, na mensagem onde ela
- * apareceu, e ele mostra os arquivos ATUAIS — as mídias das mensagens seguintes
- * somem em vez de virarem cards novos. É o que faz "regravar a narração" ser uma
- * atualização, e não mais uma bolha na conversa.
+ * The rule these tests protect: the piece has a single card, in the message where it
+ * appeared, and it shows the CURRENT files — the media of the following messages
+ * vanish instead of becoming new cards. That is what makes "re-record the narration" an
+ * update, and not one more bubble in the conversation.
  */
 
 function bundle(id: string, keys: string[]): MotionBundle {
@@ -47,36 +47,36 @@ const text = (id: string, value: string): MessagePart => ({
 })
 
 const INTRO = bundle("mv_intro", ["aud_narracao.wav", "img_capa.png"])
-const OUTRA = bundle("mv_outra", ["aud_outra.wav"])
+const OTHER = bundle("mv_other", ["aud_outra.wav"])
 
 describe("bundleOfPart", () => {
-  const { byKey } = indexMotionBundles([INTRO, OUTRA], {})
+  const { byKey } = indexMotionBundles([INTRO, OTHER], {})
 
-  it("reconhece a mídia pela URL do registro", () => {
+  it("recognizes the media by the registry URL", () => {
     expect(bundleOfPart(audio("p1", "orbit-audio://aud_narracao.wav"), byKey)?.motionId).toBe("mv_intro")
     expect(bundleOfPart(image("p2", "orbit-media://img_capa.png"), byKey)?.motionId).toBe("mv_intro")
-    expect(bundleOfPart(audio("p3", "orbit-audio://aud_outra.wav"), byKey)?.motionId).toBe("mv_outra")
+    expect(bundleOfPart(audio("p3", "orbit-audio://aud_outra.wav"), byKey)?.motionId).toBe("mv_other")
   })
 
-  it("mídia que não é de peça nenhuma continua um player solto", () => {
+  it("media that belongs to no piece stays a loose player", () => {
     expect(bundleOfPart(audio("p4", "orbit-audio://aud_avulsa.wav"), byKey)).toBeNull()
     expect(bundleOfPart(text("p5", "oi"), byKey)).toBeNull()
   })
 
-  it("vídeo é reconhecido pela URL ou pelo caminho no disco", () => {
+  it("video is recognized by the URL or by the path on disk", () => {
     const comPath = bundle("mv_video", ["/tmp/projeto/clipe.mp4"])
     const indexes = indexMotionBundles([comPath], {})
     const part = { id: "p6", type: "video", src: "orbit-video://vid_x", path: "/tmp/projeto/clipe.mp4" } as MessagePart
     expect(bundleOfPart(part, indexes.byKey)?.motionId).toBe("mv_video")
   })
 
-  it("sem peças carregadas, nada é recolhido", () => {
+  it("with no pieces loaded, nothing is collapsed", () => {
     expect(bundleOfPart(audio("p7", "orbit-audio://aud_narracao.wav"), new Map())).toBeNull()
   })
 })
 
 describe("planMotionBundles", () => {
-  it("sem endereço ainda, não recolhe nada (a lista chegou, a âncora não)", () => {
+  it("with no address yet, it collapses nothing (the list arrived, the anchor did not)", () => {
     const indexes = indexMotionBundles([INTRO], {})
     const plan = planMotionBundles([audio("p1", "orbit-audio://aud_narracao.wav")], indexes, "m1")
     expect(plan.cards.size).toBe(0)
@@ -97,47 +97,47 @@ describe("planMotionBundles", () => {
       parts: [text("t3", "troquei a narração"), audio("a2", "orbit-audio://aud_narracao.wav")],
     } as ChatMessage,
   ]
-  const { byKey } = indexMotionBundles([INTRO, OUTRA], {})
+  const { byKey } = indexMotionBundles([INTRO, OTHER], {})
   const anchors = motionBundleAnchors(messages, byKey)
 
-  it("o card mora na PRIMEIRA mensagem com mídia da peça", () => {
+  it("the card lives in the FIRST message with media of the piece", () => {
     expect(anchors).toEqual({ mv_intro: "m2" })
   })
 
-  it("na mensagem do card, a primeira mídia vira o card e as outras somem", () => {
+  it("in the card's message, the first media becomes the card and the others disappear", () => {
     const parts = [image("i1", "orbit-media://img_capa.png"), audio("a1", "orbit-audio://aud_narracao.wav")]
     const plan = planMotionBundles(parts, { byKey, anchors }, "m2")
-    // A primeira da peça dá lugar ao card; a segunda é uma linha dele.
+    // The first one of the piece gives way to the card; the second is a line of it.
     expect([...plan.cards.keys()]).toEqual(["i1"])
     expect(plan.cards.get("i1")?.motionId).toBe("mv_intro")
     expect([...plan.hidden]).toEqual(["a1"])
   })
 
-  it("mídia repetida numa mensagem seguinte é recolhida, sem card novo", () => {
+  it("repeated media in a following message is collapsed, with no new card", () => {
     const plan = planMotionBundles(messages[2].parts, { byKey, anchors }, "m3")
     expect(plan.cards.size).toBe(0)
     expect([...plan.hidden]).toEqual(["a2"])
   })
 
-  it("duas peças na mesma mensagem: um card para cada", () => {
-    const plano = indexMotionBundles([INTRO, OUTRA], { mv_intro: "m9", mv_outra: "m9" })
+  it("two pieces in the same message: one card for each", () => {
+    const plano = indexMotionBundles([INTRO, OTHER], { mv_intro: "m9", mv_other: "m9" })
     const parts = [audio("a8", "orbit-audio://aud_narracao.wav"), audio("a9", "orbit-audio://aud_outra.wav")]
     const plan = planMotionBundles(parts, plano, "m9")
     expect(plan.cards.size).toBe(2)
     expect(plan.hidden.size).toBe(0)
   })
 
-  it("sem âncora (peça ainda não carregada), nada muda na conversa", () => {
+  it("with no anchor (piece not loaded yet), nothing changes in the conversation", () => {
     const plan = planMotionBundles(messages[1].parts, { byKey, anchors: {} }, "m2")
     expect(plan.cards.size).toBe(0)
-    // Nem card nem sumiço: a mídia continua sendo o player dela até o endereço
-    // do card ser calculado (senão a conversa piscaria a cada carga).
+    // Neither card nor vanishing: the media keeps being its own player until the card's
+    // address is computed (otherwise the conversation would blink on every load).
     expect(plan.hidden.size).toBe(0)
   })
 })
 
 describe("motionBundleAnchors", () => {
-  it("a primeira mensagem manda, mesmo quando a mídia volta depois", () => {
+  it("the first message rules, even when the media comes back later", () => {
     const first = {
       id: "m1",
       role: "assistant",
@@ -152,7 +152,7 @@ describe("motionBundleAnchors", () => {
     expect(motionBundleAnchors([first, second], byKey)).toEqual({ mv_intro: "m1" })
   })
 
-  it("mensagem do usuário não ancora card", () => {
+  it("a user message anchors no card", () => {
     const msg = {
       id: "m1",
       role: "user",

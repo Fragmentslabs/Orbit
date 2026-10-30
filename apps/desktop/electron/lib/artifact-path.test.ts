@@ -5,32 +5,32 @@ import { resolveArtifactPath } from './artifact-path'
 const BASE = path.resolve('/tmp/orbit-artifacts')
 
 describe('resolveArtifactPath', () => {
-  it('resolve um nome simples dentro da base', () => {
+  it('resolves a simple name inside the base', () => {
     expect(resolveArtifactPath(BASE, 'index.json')).toBe(path.join(BASE, 'index.json'))
   })
 
-  it('aceita pastas aninhadas', () => {
+  it('accepts nested folders', () => {
     expect(resolveArtifactPath(BASE, 'pages/home.json')).toBe(path.join(BASE, 'pages', 'home.json'))
   })
 
-  it('normaliza separadores do windows', () => {
+  it('normalizes Windows separators', () => {
     expect(resolveArtifactPath(BASE, 'pages\\home.json')).toBe(path.join(BASE, 'pages', 'home.json'))
   })
 
-  it('recusa caminho absoluto unix', () => {
+  it('refuses a unix absolute path', () => {
     expect(() => resolveArtifactPath(BASE, '/etc/passwd')).toThrow(/relative/)
   })
 
-  it('recusa caminho absoluto windows', () => {
+  it('refuses a windows absolute path', () => {
     expect(() => resolveArtifactPath(BASE, 'C:\\Windows\\system32')).toThrow(/relative/)
   })
 
-  it('recusa escapar da base com ..', () => {
-    expect(() => resolveArtifactPath(BASE, '../fora.json')).toThrow(/escapes/)
-    expect(() => resolveArtifactPath(BASE, 'pages/../../fora.json')).toThrow(/escapes/)
+  it('refuses to escape the base with ..', () => {
+    expect(() => resolveArtifactPath(BASE, '../outside.json')).toThrow(/escapes/)
+    expect(() => resolveArtifactPath(BASE, 'pages/../../outside.json')).toThrow(/escapes/)
   })
 
-  it('recusa nome vazio', () => {
+  it('refuses an empty name', () => {
     expect(() => resolveArtifactPath(BASE, '')).toThrow(/required/)
   })
 })

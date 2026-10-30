@@ -13,23 +13,23 @@ import {
 } from './session-documents'
 
 /**
- * O que o painel lateral precisa de um documento, venha ele de onde vier.
+ * What the side panel needs from a document, wherever it comes from.
  *
- * São duas origens com armazenamento diferente: as FONTES da conversa (anexos
- * e fontes da pasta, em session-docs/) e os DOCUMENTOS que o agente produziu
- * (na galeria de mídia). O painel é um só — o usuário abre "um PDF" e espera
- * sumário, localizar, zoom, imprimir e baixar nos dois casos.
+ * They are two origins with different storage: the conversation's SOURCES (attachments
+ * and folder sources, in session-docs/) and the DOCUMENTS the agent produced
+ * (in the media gallery). The panel is a single one — the user opens "a PDF" and expects
+ * outline, find, zoom, print and download in both cases.
  *
- * O id diz a origem: `doc1`/`src2` são fontes da conversa; qualquer outro é um
- * registro da galeria. Por isso a fachada não precisa de um parâmetro de tipo
- * que quem chama teria que acertar.
+ * The id says the origin: `doc1`/`src2` are conversation sources; anything else is a
+ * gallery record. That is why the facade does not need a type parameter
+ * that whoever calls would have to get right.
  *
- * As fontes têm caminho próprio (e não caem no genérico) porque nem todas são
- * arquivo: trecho colado e página baixada nascem como texto e não têm bytes
- * para rasterizar nem para baixar.
+ * The sources have their own path (and do not fall into the generic one) because not all of them are
+ * files: a pasted stretch and a downloaded page are born as text and have no bytes
+ * to rasterize nor to download.
  */
 
-/** Id de fonte da conversa. O resto é id da galeria (doc_xxxx.md). */
+/** Conversation source id. The rest is a gallery id (doc_xxxx.md). */
 const SESSION_DOC = /^(doc|src)[0-9]+$/
 
 function isSessionDoc(id: string): boolean {
@@ -37,12 +37,12 @@ function isSessionDoc(id: string): boolean {
 }
 
 /**
- * Arquivo de um documento da galeria: o PDF quando houver, senão o .docx.
+ * File of a gallery document: the PDF when there is one, otherwise the .docx.
  *
- * Nenhum dos dois em disco é o caso NORMAL — um documento escrito pelo agente
- * nasce só em Markdown. Como este visualizador trabalha sobre o arquivo
- * renderizado (é dele que saem as páginas, o sumário e a impressão), o PDF é
- * gerado aqui, na primeira abertura, e fica em cache.
+ * Neither of them on disk is the NORMAL case — a document written by the agent
+ * is born only in Markdown. Since this viewer works over the rendered file
+ * (that is where the pages, the outline and the printing come from), the PDF is
+ * generated here, on the first opening, and cached.
  */
 async function mediaFile(id: string): Promise<{ path: string; ext: 'pdf' | 'docx' } | null> {
   for (const ext of ['pdf', 'docx'] as const) {
@@ -53,7 +53,7 @@ async function mediaFile(id: string): Promise<{ path: string; ext: 'pdf' | 'docx
   return rendered ? { path: rendered, ext: 'pdf' } : null
 }
 
-/** Texto paginado do documento, para o modo Texto e para a contagem da busca. */
+/** Paginated text of the document, for Text mode and for the search count. */
 export async function viewText(
   sessionId: string,
   id: string,
@@ -65,9 +65,9 @@ export async function viewText(
   const entry = await getMediaEntry(id)
   try {
     const bytes = await fsp.readFile(file.path)
-    // Extrai do ARQUIVO RENDERIZADO, e não do Markdown de origem: é o que faz
-    // a página 3 do texto ser a página 3 que a imagem mostra. O cache da
-    // extração é por hash do conteúdo, então relê de graça.
+    // It extracts from the RENDERED FILE, and not from the source Markdown: that is what makes
+    // page 3 of the text be the page 3 that the image shows. The extraction's
+    // cache is by content hash, so it re-reads for free.
     const extracted = await extractDocument(bytes, file.ext === 'pdf' ? 'pdf' : 'docx')
     return {
       id,
@@ -79,10 +79,10 @@ export async function viewText(
         label: p.label,
         lines: p.text.split('\n'),
       })),
-      // O .docx também tem original: ele é desenhado como documento em HTML
-      // (viewHtml), e não em páginas. Antes só o PDF entrava, e o .docx que o
-      // agente editou abria como lista de linhas — o mesmo defeito que o
-      // anexo tinha, pelo outro caminho do painel.
+      // The .docx also has an original: it is drawn as a document in HTML
+      // (viewHtml), and not as pages. Before this only the PDF entered, and the .docx the
+      // agent edited opened as a list of lines — the same defect the
+      // attachment had, through the panel's other path.
       hasOriginal: true,
       originalKind: file.ext,
     }
@@ -91,7 +91,7 @@ export async function viewText(
   }
 }
 
-/** Páginas desenhadas, com o trecho marcado. Só existe para PDF. */
+/** Drawn pages, with the stretch marked. It only exists for PDFs. */
 export async function viewRender(
   sessionId: string,
   id: string,
@@ -129,7 +129,7 @@ export async function viewRender(
   }
 }
 
-/** O .docx como documento em HTML, para o modo Original do painel. */
+/** The .docx as a document in HTML, for the panel's Original mode. */
 export async function viewHtml(sessionId: string, id: string): Promise<{ html: string } | null> {
   if (isSessionDoc(id)) return renderSessionDocx(sessionId, id)
   const file = await mediaFile(id)
@@ -143,10 +143,10 @@ export async function viewPrint(
 ): Promise<{ ok: boolean; error?: string }> {
   if (isSessionDoc(id)) return printSessionDocument(sessionId, id)
   const file = await mediaFile(id)
-  // Só PDF: o Chromium não renderiza .docx, e mandar um para a janela de
-  // impressão faz ele BAIXAR o arquivo em vez de abrir o diálogo.
+  // PDF only: Chromium does not render .docx, and sending one to the print
+  // window makes it DOWNLOAD the file instead of opening the dialog.
   if (!file || file.ext !== 'pdf') {
-    return { ok: false, error: 'Este documento não tem versão em PDF para imprimir. Baixe o arquivo.' }
+    return { ok: false, error: 'This document has no PDF version to print. Download the file.' }
   }
   const entry = await getMediaEntry(id)
   return printFile(file.path, entry?.name)
@@ -159,7 +159,7 @@ export async function viewExport(
   if (isSessionDoc(id)) return exportSessionDocument(sessionId, id)
 
   const file = await mediaFile(id)
-  if (!file) return { ok: false, error: 'Documento não encontrado.' }
+  if (!file) return { ok: false, error: 'Document not found.' }
   const entry = await getMediaEntry(id)
   const base = (entry?.name || 'documento').slice(0, 60)
   const target = await saveExport(null, {

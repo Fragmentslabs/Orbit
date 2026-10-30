@@ -6,24 +6,24 @@ import { useConnectionStore } from './connection-store'
 import type { SelectedModel } from './session-model-prefs'
 
 /**
- * Rotação de modelos no celular — espelho do store do desktop
+ * Model rotation on the phone — mirror of the desktop store
  * (`apps/desktop/src/stores/model-rotation-store.ts`).
  *
- * Listas nomeadas de modelos (1..4 slots) que o engine tenta em sequência
- * quando um falha no início do turno (rate-limit, rede, moderação). Não há
- * toggle global nem rotação "ativa": a rotação é criada aqui e ESCOLHIDA POR
- * CHAT no seletor de modelo, como se fosse um modelo. Escolher um modelo
- * limpa a rotação do chat (e vice-versa).
+ * Named model lists (1..4 slots) that the engine tries in sequence
+ * when one fails at the start of the turn (rate limit, network, moderation). There is no
+ * global toggle nor an "active" rotation: the rotation is created here and CHOSEN PER
+ * CHAT in the model picker, as if it were a model. Choosing a model
+ * clears the rotation of the chat (and vice versa).
  *
- * Quem roda a sequência é o desktop — o celular é companion. O renderer do
- * desktop é a fonte da verdade (o estado vive no localStorage dele):
- *   - na conexão o celular puxa o snapshot (`GET /api/rotations`);
- *   - mudanças no desktop chegam pelo WS 'rotation:change';
- *   - mudanças feitas aqui vão por 'rotation:set' (CRUD, lista inteira) e
- *     'rotation:select' (escolha por chat), o desktop persiste e devolve.
+ * What runs the sequence is the desktop — the phone is a companion. The desktop
+ * renderer is the source of truth (the state lives in its localStorage):
+ *   - on connection the phone pulls the snapshot (`GET /api/rotations`);
+ *   - changes on the desktop arrive through the WS 'rotation:change';
+ *   - changes made here go through 'rotation:set' (CRUD, whole list) and
+ *     'rotation:select' (choice per chat); the desktop persists and sends them back.
  *
- * O cache local existe só para a tela abrir preenchida offline; o snapshot do
- * desktop substitui o que estiver aqui, porque é lá que a lista vive.
+ * The local cache exists only so the screen opens filled in offline; the desktop
+ * snapshot replaces whatever is here, because that is where the list lives.
  */
 
 const STORAGE_KEY = 'orbit_model_rotations'
@@ -57,26 +57,26 @@ function sanitize(config: unknown): RotationConfig {
 interface ModelRotationState extends RotationConfig {
   hydrated: boolean
   hydrate: () => Promise<void>
-  /** Snapshot vindo do desktop (HTTP no connect ou WS 'rotation:change'). */
+  /** Snapshot coming from the desktop (HTTP on connect or WS 'rotation:change'). */
   applySync: (config: RotationConfig) => void
   create: (name: string) => ModelRotation
   rename: (id: string, name: string) => void
   updateModels: (id: string, models: SelectedModel[]) => void
   remove: (id: string) => void
-  /** Pina a rotação num chat (como escolher um modelo); null desfaz. */
+  /** Pins the rotation in a chat (like choosing a model); null undoes it. */
   selectRotation: (sessionId: string | null | undefined, rotationId: string | null) => void
-  /** Move a escolha do draft (chat novo) para a sessão criada no 1º envio. */
+  /** Moves the choice of the draft (new chat) to the session created on the 1st send. */
   adoptRotation: (sessionId: string) => void
 }
 
-/** CRUD → desktop (fonte da verdade), que persiste e devolve pelo broadcast. */
+/** CRUD → desktop (source of truth), which persists and sends it back through the broadcast. */
 function pushRotations(rotations: ModelRotation[]): void {
   const { wsClient } = useConnectionStore.getState()
   try {
     void wsClient.send({ type: 'rotation:set', rotations })
   } catch {
-    // Offline: fica no cache local até a próxima conexão, quando o snapshot
-    // do desktop (que não tem a mudança) volta a valer.
+    // Offline: it stays in the local cache until the next connection, when the desktop
+    // snapshot (which does not have the change) takes over again.
   }
 }
 
@@ -96,7 +96,7 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
         const raw = await Storage.getItem(STORAGE_KEY)
         if (raw) set(sanitize(JSON.parse(raw)))
       } catch {
-        // cache corrompido — segue vazio
+        // corrupted cache — stays empty
       }
       set({ hydrated: true })
 
@@ -106,15 +106,15 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
         const res = await http.getRotations()
         if (res.ok && res.data?.config) get().applySync(res.data.config)
       } catch {
-        // Offline — fica com o cache local
+        // Offline — keeps the local cache
       }
     },
 
     applySync: (config) => {
-      // O desktop manda o estado inteiro; aqui ele SUBSTITUI o local (ao
-      // contrário dos overrides de modelo, onde a escolha local vence): a
-      // lista de rotações vive lá, então divergir seria mostrar rotação que
-      // não existe mais.
+      // The desktop sends the whole state; here it REPLACES the local one (unlike
+      // the model overrides, where the local choice wins): the list of rotations
+      // lives there, so diverging would mean showing a rotation that
+      // no longer exists.
       persist(sanitize(config))
     },
 
@@ -146,7 +146,7 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
       const rotations = get().rotations.filter((r) => r.id !== id)
       persist({
         rotations,
-        // Chats que apontavam para a rotação removida voltam ao modelo
+        // Chats that pointed to the removed rotation go back to the model
         sessionOverrides: Object.fromEntries(
           Object.entries(get().sessionOverrides).filter(([, v]) => v !== id),
         ),
@@ -169,8 +169,8 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
           sessionId: sessionId ?? null,
         })
       } catch {
-        // Offline: sem o desktop saber da escolha, o turno roda no modelo —
-        // é o engine de lá que resolve a sequência.
+        // Offline: with the desktop unaware of the choice, the turn runs on the model —
+        // it is the engine there that resolves the sequence.
       }
     },
 
@@ -181,20 +181,20 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
       overrides[sessionId] = draft
       delete overrides[ROTATION_DRAFT_KEY]
       persist({ rotations: get().rotations, sessionOverrides: overrides })
-      // O desktop faz o mesmo adopt no store dele quando a sessão nasce por
-      // lá; aqui a sessão nasceu no celular, então a escolha é reenviada já
-      // com o id definitivo.
+      // The desktop does the same adopt in its store when the session is born over
+      // there; here the session was born on the phone, so the choice is resent already
+      // with the definitive id.
       const { wsClient } = useConnectionStore.getState()
       try {
         void wsClient.send({ type: 'rotation:select', rotationId: draft, sessionId })
       } catch {
-        // Offline — o desktop reaplica no próximo envio pelo snapshot
+        // Offline — the desktop reapplies it on the next send through the snapshot
       }
     },
   }
 })
 
-/** Rotação escolhida para um chat (ou null). Hook reativo para o seletor. */
+/** Rotation chosen for a chat (or null). Reactive hook for the picker. */
 export function useSessionRotation(sessionId?: string | null): ModelRotation | null {
   const rotations = useModelRotationStore((s) => s.rotations)
   const overrides = useModelRotationStore((s) => s.sessionOverrides)

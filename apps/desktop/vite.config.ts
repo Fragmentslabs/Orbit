@@ -20,14 +20,14 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Segunda página do renderer: os painéis flutuantes do Computer Use
-      // (conversa + ações por cima de outros apps). Entrada própria para não
-      // carregar os sincronizadores da janela principal (fila, celular).
+      // Second renderer page: the floating Computer Use panels
+      // (conversation + actions over other apps). Its own entry so as not to
+      // load the synchronizers of the main window (queue, phone).
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'computer-panels': path.resolve(__dirname, 'computer-panels.html'),
-        // Overlay do atalho global (⇧⌘espaço): página própria para o painel
-        // abrir só com o que precisa — sem os sincronizadores da principal.
+        // Overlay of the global shortcut (⇧⌘space): its own page so the panel
+        // opens only with what it needs — without the synchronizers of the main one.
         overlay: path.resolve(__dirname, 'overlay.html'),
       },
     },
@@ -44,21 +44,21 @@ export default defineConfig({
           },
           build: {
             rollupOptions: {
-              // pdf-parse (via pdfjs-dist) resolve seu worker.mjs num caminho
-              // relativo ao próprio arquivo em runtime — empacotado num único
-              // bundle, esse caminho relativo passa a apontar para dentro de
-              // dist-electron/, onde o worker não existe. Externalizar deixa
-              // o require apontar pro node_modules real, preservando os
-              // caminhos relativos entre os arquivos do pacote. O
-              // @napi-rs/canvas também é externalizado: é um módulo nativo
-              // (.node), impossível de bundlar, e é usado para polyfill do
-              // DOMMatrix exigido pelo pdfjs-dist.
+              // pdf-parse (via pdfjs-dist) resolves its worker.mjs to a path
+              // relative to the file itself at runtime — packed into a single
+              // bundle, that relative path starts pointing inside
+              // dist-electron/, where the worker does not exist. Externalizing leaves
+              // the require point to the real node_modules, preserving the
+              // relative paths between the files of the package. The
+              // @napi-rs/canvas is also externalized: it is a native module
+              // (.node), impossible to bundle, and it is used to polyfill the
+              // DOMMatrix required by pdfjs-dist.
               //
-              // onnxruntime-node é o runtime do TTS local: nativo (.node + a
-              // libonnxruntime), carregado pelo processo filho do motor de voz
-              // (electron/voice-engine). Fica fora do bundle pelo mesmo motivo
-              // do canvas — e porque quem o importa é o processo filho, não
-              // este bundle; externalizar garante que continue assim.
+              // onnxruntime-node is the runtime of the local TTS: native (.node + the
+              // libonnxruntime), loaded by the child process of the voice engine
+              // (electron/voice-engine). It stays out of the bundle for the same reason
+              // as canvas — and because the one that imports it is the child process, not
+              // this bundle; externalizing guarantees that it stays that way.
               external: ['node-pty', 'pdf-parse', '@napi-rs/canvas', 'onnxruntime-node'],
             },
           },

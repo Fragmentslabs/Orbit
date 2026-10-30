@@ -60,7 +60,7 @@ import fractaLogo from "@/src/assets/fracta-logo.png"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Regex de slug válido: apenas minúsculas, números e underscores */
+/** Regex of a valid slug: only lowercase letters, numbers and underscores */
 const SLUG_REGEX = /^[a-z0-9_]+$/
 
 /* ------------------------------------------------------------------ */
@@ -78,8 +78,8 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
   const idRef = useRef(0)
   const valueJsonRef = useRef("")
 
-  // Sincroniza do pai apenas quando o valor externo muda de verdade
-  // (não quando nós mesmos emitimos a mudança via onChange)
+  // Syncs from the parent only when the external value really changes
+  // (not when we ourselves emit the change via onChange)
   useEffect(() => {
     const json = JSON.stringify(value)
     if (json === valueJsonRef.current) return
@@ -161,7 +161,7 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Dialog: Adicionar / Editar Servidor MCP                            */
+/*  Dialog: Add / Edit MCP Server                                      */
 /* ------------------------------------------------------------------ */
 
 function McpServerDialog({ open, onOpenChange, initial }: {
@@ -188,8 +188,8 @@ function McpServerDialog({ open, onOpenChange, initial }: {
   const [redirectUri, setRedirectUri] = useState("")
   const [saving, setSaving] = useState(false)
 
-  // A porta do loopback é escolhida em runtime; o usuário precisa do valor
-  // exato para cadastrar o redirect_uri no app OAuth do provedor.
+  // The loopback port is chosen at runtime; the user needs the exact
+  // value to register the redirect_uri in the provider's OAuth app.
   useEffect(() => {
     if (!oauthOpen || redirectUri) return
     void mcpApi.oauthRedirect().then(setRedirectUri).catch(() => {})
@@ -219,7 +219,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       const result = await window.ipcRenderer.invoke("select-folder")
       if (result) setCwd(result as string)
     } catch {
-      // diálogo cancelado ou indisponível — mantém o cwd atual
+      // dialog cancelled or unavailable — keeps the current cwd
     }
   }
 
@@ -247,8 +247,8 @@ function McpServerDialog({ open, onOpenChange, initial }: {
     if (permissionMode) entry.permissionMode = permissionMode as "ask" | "approve" | "full"
     if (autoReconnect !== true) entry.autoReconnect = false
     if (type === "http") {
-      // clientName fica fora da UI de propósito: é o nome que aparece na tela
-      // de consentimento do provedor e não deve fingir ser outro app.
+      // clientName stays out of the UI on purpose: it is the name that appears on the
+      // provider consent screen and must not pretend to be another app.
       const oauth: NonNullable<McpServerConfig["oauth"]> = {}
       if (oauthClientId.trim()) oauth.clientId = oauthClientId.trim()
       if (oauthClientSecret.trim()) oauth.clientSecret = oauthClientSecret.trim()
@@ -313,8 +313,8 @@ function McpServerDialog({ open, onOpenChange, initial }: {
                   {t("mcp.servers.dialog.headersHint")}
                 </p>
               </div>
-              {/* OAuth: só precisa mexer aqui quando o provedor recusa o
-                  registro dinâmico (Figma, por exemplo, responde 403). */}
+              {/* OAuth: it only needs to be touched here when the provider refuses
+                  dynamic registration (Figma, for example, answers 403). */}
               <div className="rounded-md border">
                 <button
                   type="button"
@@ -440,7 +440,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Dialog: Criar Skill Manualmente                                     */
+/*  Dialog: Create Skill Manually                                      */
 /* ------------------------------------------------------------------ */
 
 function sanitizeSlugHint(name: string): string {
@@ -510,7 +510,7 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
         oldSlug: initial?.slug !== slug.trim() ? initial?.slug : undefined,
       })
     } catch (err) {
-      console.error("[skills] falha ao criar skill:", err)
+      console.error("[skills] failed to create skill:", err)
     }
     await refresh()
     setSaving(false)
@@ -589,9 +589,9 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
 /* ------------------------------------------------------------------ */
 
 /**
- * Servidor OAuth que ainda depende do usuário: nunca foi autorizado neste
- * dispositivo ou o servidor voltou a pedir autorização. Conectado/desabilitado
- * não têm o que autorizar, então o botão some.
+ * OAuth server that still depends on the user: it was never authorized on this
+ * device or the server went back to asking for authorization. Connected/disabled
+ * have nothing to authorize, so the button disappears.
  */
 function needsAuth(server: McpServerStatus): boolean {
   if (!server.usesOAuth) return false
@@ -613,10 +613,10 @@ function StatusBadge({ state, error }: { state: string; error?: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Integrações oficiais: Nodara, Fracta                                */
+/*  Official integrations: Nodara, Fracta                               */
 /* ------------------------------------------------------------------ */
 
-/** Nodara e Fracta expõem o mesmo formato de estado (ver @shared/nodara, @shared/fracta). */
+/** Nodara and Fracta expose the same state format (see @shared/nodara, @shared/fracta). */
 type IntegrationStatus = NodaraStatus | FractaStatus
 
 interface IntegrationDef {
@@ -627,11 +627,11 @@ interface IntegrationDef {
     connect: () => Promise<IntegrationStatus>
     disconnect: () => Promise<IntegrationStatus>
   }
-  /** Prefixo das chaves em mcp.integrations: <key>Description, <key>Tools, <key>Hint... */
+  /** Prefix of the keys in mcp.integrations: <key>Description, <key>Tools, <key>Hint... */
   i18nKey: "nodara" | "fracta"
-  /** Códigos que o main devolve normalizados (o 401 cru não ajuda ninguém). */
+  /** Codes the main process returns normalized (a raw 401 helps nobody). */
   errorCodes: Record<string, string>
-  /** Página de download; sem ela, "não instalado" só re-checa o estado. */
+  /** Download page; without it, "not installed" only re-checks the state. */
   site?: string
   beta?: boolean
 }
@@ -668,10 +668,10 @@ const INTEGRATIONS: IntegrationDef[] = [
   },
 ]
 
-/** Enquanto o card está aberto, reflete o app abrindo/fechando. */
+/** While the card is open, it reflects the app opening/closing. */
 const INTEGRATION_POLL_MS = 15_000
 
-/** Cor do selo por estado: verde só quando as tools estão de fato no agente. */
+/** Badge color per state: green only when the tools are actually in the agent. */
 const INTEGRATION_BADGE_TONE: Record<IntegrationStatus["state"], string> = {
   connected: "text-emerald-500",
   installed: "text-amber-500",
@@ -681,7 +681,7 @@ const INTEGRATION_BADGE_TONE: Record<IntegrationStatus["state"], string> = {
   "not-installed": "text-muted-foreground",
 }
 
-/** Mensagem do estado atual — o card mostra sempre o que falta pra conectar. */
+/** Message of the current state — the card always shows what is missing to connect. */
 function integrationHint(def: IntegrationDef, status: IntegrationStatus, t: TFunction): string {
   const prefix = `mcp.integrations.${def.i18nKey}`
   if (status.state === "connected") {
@@ -715,9 +715,9 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
     }
   }, [api])
 
-  // Conectar cobre também o reparo: o main reescreve URL e token a partir do
-  // arquivo publicado pelo app antes de reconectar, então um 401 por token
-  // vencido se resolve no mesmo botão.
+  // Connect also covers the repair: the main process rewrites the URL and token from the
+  // file published by the app before reconnecting, so a 401 for an expired
+  // token is solved with the same button.
   const run = async (action: () => Promise<IntegrationStatus>) => {
     setBusy(true)
     try {
@@ -731,8 +731,8 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
   const state = status?.state ?? "not-installed"
   const connected = state === "connected"
   const canConnect = state === "installed" || state === "error"
-  // "stopped"/"disabled" dependem de uma ação do usuário dentro do app — o
-  // botão só re-checa o estado. Sem página de download, "não instalado" também.
+  // "stopped"/"disabled" depend on a user action inside the app — the
+  // button only re-checks the state. Without a download page, "not installed" too.
   const canRetry = state === "stopped" || state === "disabled" || (state === "not-installed" && !def.site)
   const actionLabel = canConnect
     ? t(state === "installed" ? "mcp.integrations.connect" : "mcp.integrations.reconnect")
@@ -798,7 +798,7 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
 }
 
 /* ------------------------------------------------------------------ */
-/*  Panel principal                                                     */
+/*  Main panel                                                         */
 /* ------------------------------------------------------------------ */
 
 export function McpSkillsPanel() {
@@ -811,7 +811,7 @@ export function McpSkillsPanel() {
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
   const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
-  // Nome do servidor com ação em andamento (o OAuth espera o navegador, pode demorar)
+  // Name of the server with an action in progress (OAuth waits for the browser, it may take a while)
   const [busy, setBusy] = useState<string | null>(null)
 
   const { setMode, setView } = useWorkspace()
@@ -830,9 +830,9 @@ export function McpSkillsPanel() {
     }
   }
 
-  // Descrições reescritas por servidor (botão "Otimizar"). Estado próprio, e
-  // não o `busy`, porque otimizar não reconecta o servidor: o card continua
-  // utilizável enquanto o modelo auxiliar escreve.
+  // Descriptions rewritten per server ("Optimize" button). Its own state, and
+  // not the `busy` one, because optimizing does not reconnect the server: the card stays
+  // usable while the auxiliary model writes.
   const [descriptions, setDescriptions] = useState<
     Record<string, { optimized: boolean; count: number; tools: number }>
   >({})
@@ -869,8 +869,8 @@ export function McpSkillsPanel() {
       await refresh()
     } catch (err) {
       const message = String((err as Error)?.message ?? err)
-      // Sem modelo auxiliar o backend recusa ANTES de gastar token: o card
-      // convida a configurar em vez de mostrar o erro cru do IPC.
+      // Without an auxiliary model the backend refuses BEFORE spending tokens: the card
+      // invites to configure instead of showing the raw IPC error.
       setOptimizeError((current) => ({
         ...current,
         [name]: /aux/i.test(message) ? t("mcp.servers.optimizeNoAux") : message,
@@ -880,8 +880,8 @@ export function McpSkillsPanel() {
     }
   }
 
-  /** Liga/desliga o servidor no APP inteiro — o recorte por conversa é no
-   *  popover de ferramentas do composer. */
+  /** Turns the server on/off in the WHOLE APP — the per-conversation narrowing is in the
+   *  tools popover of the composer. */
   const toggleServer = (name: string, enabled: boolean) =>
     runServerAction(name, async () => {
       const config = await mcpApi.config()
@@ -896,7 +896,7 @@ export function McpSkillsPanel() {
     if (result.imported) await refresh()
   }
 
-  // Abre um chat novo com "/create-skill " pré-preenchido
+  // Opens a new chat with "/create-skill " pre-filled
   const askOrbitToCreate = () => {
     useDraftInput.getState().setDraft("draft", "/create-skill ")
     setMode("chat")
@@ -906,7 +906,7 @@ export function McpSkillsPanel() {
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
-      {/* Integrações oficiais */}
+      {/* Official integrations */}
       <div>
         <div className="mb-2">
           <p className="text-sm font-semibold">{t("mcp.integrations.title")}</p>
@@ -1141,9 +1141,9 @@ export function McpSkillsPanel() {
                     {t("mcp.skills.viewContent")}
                   </Button>
                 </div>
-                {/* Skills nativas do app são somente leitura: para customizar,
-                    o usuário cria uma skill própria com o mesmo slug (a global
-                    sobrescreve a nativa). */}
+                {/* Native skills of the app are read-only: to customize,
+                    the user creates their own skill with the same slug (the global
+                    overrides the native one). */}
                 {skill.source !== "builtin" && (
                   <div className="flex items-center gap-1 self-start pt-1">
                     <Hint label={t("mcp.skills.edit")}>

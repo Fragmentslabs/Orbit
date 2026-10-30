@@ -6,88 +6,88 @@ import { isModelDownloaded, modelDir } from "./download"
 import { TTS_MAX_CHARS, TTS_MODEL_ID, TTS_STEPS } from "./manifest"
 
 /**
- * Cliente do motor Supertonic 3 — o processo filho que sintetiza a fala.
+ * Client for the Supertonic 3 engine — the child process that synthesises speech.
  *
- * A inferência NUNCA roda no main: ela é CPU-bound e leva segundos por pedaço,
- * o que travaria as janelas e o IPC. Aqui vive só o cliente: sobe o motor
- * (`voice-engine/engine.mjs`) com `utilityProcess.fork`, manda os pedidos e
- * devolve o áudio pedaço a pedaço conforme chega.
+ * Inference NEVER runs in the main: it is CPU-bound and takes seconds per chunk,
+ * which would freeze the windows and the IPC. Only the client lives here: it starts the engine
+ * (`voice-engine/engine.mjs`) with `utilityProcess.fork`, sends the requests and
+ * returns the audio chunk by chunk as it arrives.
  *
- * O motor é caro de subir (lê ~400 MB de ONNX, mantém ~0,5 GB em memória) e
- * barato de manter quente entre falas — então ele fica de pé enquanto está
- * sendo usado e se desliga sozinho depois de um tempo ocioso.
+ * The engine is expensive to start (reads ~400 MB of ONNX, keeps ~0.5 GB in memory) and
+ * cheap to keep warm between utterances — so it stays up while it is
+ * being used and shuts itself down after an idle period.
  *
- * O canal é o MessagePort (`child.postMessage` / `child.on("message")`), porque
- * o `utilityProcess.fork` do Electron não aceita stdin como pipe. O formato das
- * mensagens é o do laboratório: `{start}`, um por pedaço `{i,n,text,sr,audioMs,
- * synthMs,pcm:<base64 PCM16>}` e o `{done}` no fim.
+ * The channel is the MessagePort (`child.postMessage` / `child.on("message")`), because
+ * Electron's `utilityProcess.fork` does not accept stdin as a pipe. The message
+ * format is the lab's: `{start}`, one per chunk `{i,n,text,sr,audioMs,
+ * synthMs,pcm:<base64 PCM16>}` and the `{done}` at the end.
  */
 
-/** Um pedaço de fala pronto, já decodificado para PCM 16-bit. */
+/** A finished speech chunk, already decoded to 16-bit PCM. */
 export interface TtsChunk {
   id: string
-  /** Índice do pedaço (0-based) e total de pedaços do pedido. */
+  /** Chunk index (0-based) and total chunks of the request. */
   i: number
   n: number
-  /** Texto que gerou ESTE pedaço (é o que o corte em fim de frase produziu). */
+  /** Text that generated THIS chunk (what the sentence-end cut produced). */
   text: string
-  /** Taxa do PCM — a do contrato: 24000 Hz. */
+  /** PCM rate — the one in the contract: 24000 Hz. */
   sr: number
   pcm: Buffer
   audioMs: number
   synthMs: number
-  /** ms do início do pedido até este pedaço ficar pronto. */
+  /** ms from the request start until this chunk was ready. */
   firstMs: number
 }
 
 export interface TtsSpeakOptions {
-  /** M1–M5 / F1–F5 (o padrão do motor é F2). */
+  /** M1–M5 / F1–F5 (the engine default is F2). */
   voice?: string
-  /** `pt`, `en`, … ou `na` (agnóstico). */
+  /** `pt`, `en`, … or `na` (agnostic). */
   lang?: string
-  /** Fator de velocidade, 0,5–2,0 (1 = natural). */
+  /** Speed factor, 0.5–2.0 (1 = natural). */
   speed?: number
-  /** Passos de denoising (padrão 8). */
+  /** Denoising steps (default 8). */
   steps?: number
-  /** Alvo de caracteres por pedaço (o corte real é sempre em fim de frase). */
+  /** Target characters per chunk (the actual cut is always at a sentence end). */
   maxChars?: number
 }
 
 export interface TtsSpeakResult {
   pieces: number
   audioMs: number
-  /** Tempo total do pedido, incluindo a espera na fila de inferência. */
+  /** Total request time, including the wait in the inference queue. */
   ms: number
   rtf: number | null
-  /** true quando o `signal` abortou o pedido (não é erro). */
+  /** true when the `signal` aborted the request (it is not an error). */
   cancelled: boolean
 }
 
 export interface TtsStatus {
-  /** O processo do motor está de pé e pronto. */
+  /** The engine process is up and ready. */
   running: boolean
-  /** O pacote do modelo está baixado e completo (o TTS não tem extração). */
+  /** The model package is downloaded and complete (TTS has no extraction). */
   installed: boolean
-  /** Subindo (carregando os ONNX). */
+  /** Starting up (loading the ONNX). */
   starting: boolean
-  /** Falas em andamento. */
+  /** Utterances in progress. */
   pending: number
   pid: number | null
-  /** Últimas linhas do stderr do motor — diagnóstico do app empacotado. */
+  /** Last lines of the engine's stderr — diagnostics for the packaged app. */
   log: string[]
 }
 
-/** Sem uso por este tempo, o motor se desliga (devolve ~0,5 GB de RAM). */
+/** Unused for this long, the engine shuts down (returns ~0.5 GB of RAM). */
 const IDLE_SHUTDOWN_MS = 5 * 60_000
-/** Ler 400 MB de ONNX do disco: generoso, é uma leitura só. */
+/** Reading 400 MB of ONNX from disk: generous, it is a single read. */
 const READY_TIMEOUT_MS = 120_000
-/** Fala sem NENHUMA mensagem nova do motor é considerada travada. */
+/** An utterance with NO new engine message is considered stuck. */
 const STALL_TIMEOUT_MS = 120_000
-/** Espera pelo `shutdown` antes de matar o processo. */
+/** Wait for `shutdown` before killing the process. */
 const GRACE_MS = 2_000
 const LOG_LINES = 40
 
-/** Mensagens do motor (engine.mjs). Só os campos que o cliente usa. */
+/** Engine messages (engine.mjs). Only the fields the client uses. */
 interface EngineMessage {
   type?: "ready" | "status" | "error"
   message?: string
@@ -119,17 +119,17 @@ interface Pending {
   audioMs: number
   pieces: number
   startedAt: number
-  /** Reiniciado a cada mensagem: um pedido parado não fica pendurado para sempre. */
+  /** Restarted on every message: a stuck request does not hang forever. */
   stall: NodeJS.Timeout | null
 }
 
 let child: UtilityProcess | null = null
-/** Motor pronto para receber falas. */
+/** Engine ready to receive utterances. */
 let ready = false
-/** Boot em andamento: chamadas concorrentes compartilham esta promessa. */
+/** Boot in progress: concurrent calls share this promise. */
 let starting: Promise<void> | null = null
 let idleTimer: NodeJS.Timeout | null = null
-/** O main pediu o encerramento: a saída não é falha. */
+/** The main requested the shutdown: the exit is not a failure. */
 let stopping = false
 const pending = new Map<string, Pending>()
 const logLines: string[] = []
@@ -143,13 +143,13 @@ function pushLog(line: string): void {
 }
 
 /**
- * Pasta do motor embutido. O main roda de `dist-electron`, então APP_ROOT é a
- * raiz do app nos dois modos (em dev: apps/desktop; empacotado: o app.asar) e o
- * diretório do motor é distribuído junto — sem nenhum peso de modelo dentro.
+ * Folder of the bundled engine. The main runs from `dist-electron`, so APP_ROOT is the
+ * app root in both modes (in dev: apps/desktop; packaged: the app.asar) and the
+ * engine directory is shipped along — with no model weight inside.
  */
 function engineFile(): string {
-  const raiz = process.env.APP_ROOT ?? app.getAppPath()
-  return path.join(raiz, "electron", "voice-engine", "engine.mjs")
+  const root = process.env.APP_ROOT ?? app.getAppPath()
+  return path.join(root, "electron", "voice-engine", "engine.mjs")
 }
 
 function clearIdleTimer(): void {
@@ -159,7 +159,7 @@ function clearIdleTimer(): void {
   }
 }
 
-/** Reagenda o desligamento por ociosidade (só com o motor de pé e sem fala). */
+/** Reschedules the idle shutdown (only with the engine up and no utterance). */
 function scheduleIdleShutdown(): void {
   clearIdleTimer()
   if (!child || pending.size > 0) return
@@ -169,7 +169,7 @@ function scheduleIdleShutdown(): void {
   idleTimer.unref?.()
 }
 
-/** Rejeita todas as falas em andamento (o motor caiu ou não subiu). */
+/** Rejects all utterances in progress (the engine died or did not come up). */
 function failAll(reason: string): void {
   for (const [id, entry] of pending) {
     if (entry.stall) clearTimeout(entry.stall)
@@ -181,19 +181,19 @@ function failAll(reason: string): void {
 function onEngineMessage(message: EngineMessage): void {
   if (!message || typeof message !== "object") return
   if (message.type === "ready") {
-    pushLog(`[voice] motor pronto em ${message.bootMs ?? 0} ms`)
+    pushLog(`[voice] engine ready in ${message.bootMs ?? 0} ms`)
     return
   }
   if (message.type === "error") {
-    pushLog(`[voice][erro] ${message.message ?? "erro no motor"}`)
+    pushLog(`[voice][error] ${message.message ?? "engine error"}`)
     return
   }
   if (message.type === "status") return
 
   const id = String(message.id ?? "")
   const entry = pending.get(id)
-  // Mensagem de um pedido já resolvido (cancelado pelo usuário): só o motor
-  // terminando o que tinha começado — não há para quem entregar.
+  // Message for an already resolved request (cancelled by the user): just the engine
+  // finishing what it had started — there is nobody to deliver to.
   if (!entry) return
 
   if (entry.stall) clearTimeout(entry.stall)
@@ -203,8 +203,8 @@ function onEngineMessage(message: EngineMessage): void {
     entry.audioMs += message.audioMs ?? 0
     entry.stall = setTimeout(() => {
       pending.delete(id)
-      // Sem ninguém esperando, o motor volta à contagem de ociosidade — senão
-      // um pedido travado deixaria o processo de ~0,5 GB vivo para sempre.
+      // With nobody waiting, the engine goes back to the idle countdown — otherwise
+      // a stuck request would keep the ~0.5 GB process alive forever.
       scheduleIdleShutdown()
       entry.reject(new Error("o motor de voz parou de responder no meio da fala"))
     }, STALL_TIMEOUT_MS)
@@ -239,7 +239,7 @@ function onEngineMessage(message: EngineMessage): void {
   }
 }
 
-/** Sobe o motor e espera o `ready`. Sempre a mesma promessa enquanto sobe. */
+/** Starts the engine and waits for `ready`. Always the same promise while it starts. */
 function startEngine(): Promise<void> {
   if (child && ready) return Promise.resolve()
   if (starting) return starting
@@ -248,8 +248,8 @@ function startEngine(): Promise<void> {
     let settled = false
     const proc = utilityProcess.fork(engineFile(), ["--assets", modelDir(TTS_MODEL_ID)], {
       stdio: "pipe",
-      // A mesma folga de heap do laboratório: a inferência converte os tensores
-      // em arrays JS a cada passo do denoising, e o pedaço maior pesa.
+      // The same heap headroom as in the lab: inference converts the tensors
+      // into JS arrays at every denoising step, and the larger chunk weighs on it.
       execArgv: ["--max-old-space-size=4096"],
     })
     child = proc
@@ -258,7 +258,7 @@ function startEngine(): Promise<void> {
     const timeout = setTimeout(() => {
       if (settled) return
       settled = true
-      reject(new Error(`o motor de voz não ficou pronto em ${Math.round(READY_TIMEOUT_MS / 1000)}s`))
+      reject(new Error(`the voice engine was not ready in ${Math.round(READY_TIMEOUT_MS / 1000)}s`))
     }, READY_TIMEOUT_MS)
 
     proc.stdout?.on("data", (chunk: Buffer) => pushLog(chunk.toString()))
@@ -279,19 +279,19 @@ function startEngine(): Promise<void> {
       if (child === proc) child = null
       ready = false
       clearIdleTimer()
-      const pedido = stopping
+      const askedByApp = stopping
       stopping = false
       if (!settled) {
-        // Morreu antes de ficar pronto (modelo ausente, binding do ONNX…) —
-        // a mensagem do motor já foi para o log.
+        // Died before becoming ready (missing model, ONNX binding…) —
+        // the engine's message has already gone to the log.
         settled = true
         clearTimeout(timeout)
-        reject(new Error(`o motor de voz encerrou durante a inicialização (código ${code})`))
+        reject(new Error(`the voice engine exited while starting (code ${code})`))
       }
-      // Processo morto não responde mais nada: pendências viram erro, mesmo
-      // quando a saída foi pedida (desligamento por ociosidade com fala viva).
-      failAll(`o motor de voz encerrou (código ${code})`)
-      pushLog(`[voice] motor encerrou (código ${code})${pedido ? " (pedido pelo app)" : ""}`)
+      // A dead process answers nothing anymore: pending items become errors, even
+      // when the exit was requested (idle shutdown with a live utterance).
+      failAll(`the voice engine exited (code ${code})`)
+      pushLog(`[voice] engine exited (code ${code})${askedByApp ? " (requested by the app)" : ""}`)
     })
   }).finally(() => {
     starting = null
@@ -301,11 +301,11 @@ function startEngine(): Promise<void> {
 }
 
 /**
- * Sintetiza `text` e entrega o áudio em pedaços.
+ * Synthesises `text` and delivers the audio in chunks.
  *
- * O `onChunk` é chamado na ordem dos pedaços; o retorno só chega no fim (ou com
- * `cancelled: true` quando o `signal` aborta — aí o motor para entre pedaços e
- * nada mais é entregue).
+ * `onChunk` is called in chunk order; the return only arrives at the end (or with
+ * `cancelled: true` when the `signal` aborts — then the engine stops between chunks and
+ * nothing else is delivered).
  */
 export async function speak(
   text: string,
@@ -313,30 +313,30 @@ export async function speak(
   onChunk: (chunk: TtsChunk) => void,
   signal?: AbortSignal,
 ): Promise<TtsSpeakResult> {
-  const texto = String(text ?? "").trim()
-  if (!texto) throw new Error("nada para sintetizar: o texto está vazio")
+  const spoken = String(text ?? "").trim()
+  if (!spoken) throw new Error("nothing to synthesize: the text is empty")
   if (!(await isModelDownloaded(TTS_MODEL_ID))) {
-    throw new Error("os modelos do TTS ainda não foram baixados (Configurações → Voz)")
+    throw new Error("the TTS models have not been downloaded yet (Settings → Voice)")
   }
   if (signal?.aborted) return { pieces: 0, audioMs: 0, ms: 0, rtf: null, cancelled: true }
 
   await startEngine()
   const proc = child
-  if (!proc) throw new Error("o motor de voz não está de pé")
+  if (!proc) throw new Error("the voice engine is not up")
 
   const id = randomUUID()
   return await new Promise<TtsSpeakResult>((resolve, reject) => {
-    // `terminado` fecha o pedido uma vez só: sem ele, um `signal` que aborta
-    // DEPOIS do fim mandaria um cancel para o motor por um id que não existe
-    // mais (o `cancelados` do motor cresceria à toa).
-    let terminado = false
+    // `settled` closes the request only once: without it, a `signal` aborting
+    // AFTER the end would send a cancel to the engine for an id that no longer
+    // exists (the engine's `cancelledIds` would grow for nothing).
+    let settled = false
     const entry: Pending = {
       resolve: (result) => {
-        terminado = true
+        settled = true
         resolve(result)
       },
       reject: (err) => {
-        terminado = true
+        settled = true
         reject(err)
       },
       onChunk,
@@ -353,21 +353,21 @@ export async function speak(
       try {
         proc.postMessage({ cmd: "cancel", id })
       } catch {
-        // motor já foi
+        // engine is already gone
       }
       scheduleIdleShutdown()
-      reject(new Error("o motor de voz não começou a responder a tempo"))
+      reject(new Error("the voice engine did not start answering in time"))
     }, STALL_TIMEOUT_MS)
 
-    const cancelar = () => {
-      if (terminado) return
-      // O motor confere o cancelamento entre pedaços (e não manda o pedaço que
-      // estava inferindo); o `done` cancelado chega logo depois e resolve o
-      // pedido como `cancelled`.
+    const onAbort = () => {
+      if (settled) return
+      // The engine checks for cancellation between chunks (and does not send the chunk it
+      // was inferring); the cancelled `done` arrives right after and resolves the
+      // request as `cancelled`.
       try {
         proc.postMessage({ cmd: "cancel", id })
       } catch {
-        // motor já foi
+        // engine is already gone
       }
     }
     if (signal) {
@@ -377,14 +377,14 @@ export async function speak(
         resolve({ pieces: 0, audioMs: 0, ms: 0, rtf: null, cancelled: true })
         return
       }
-      signal.addEventListener("abort", cancelar, { once: true })
+      signal.addEventListener("abort", onAbort, { once: true })
     }
 
     try {
       proc.postMessage({
         id,
         cmd: "speak",
-        text: texto,
+        text: spoken,
         voice: options.voice,
         lang: options.lang,
         speed: options.speed,
@@ -394,12 +394,12 @@ export async function speak(
     } catch (err) {
       pending.delete(id)
       if (entry.stall) clearTimeout(entry.stall)
-      reject(new Error(`não foi possível falar com o motor de voz: ${(err as Error).message}`))
+      reject(new Error(`could not talk to the voice engine: ${(err as Error).message}`))
     }
   })
 }
 
-/** Estado do motor (para `voice:status` e para o diagnóstico). */
+/** Engine state (for `voice:status` and for diagnostics). */
 export async function ttsStatus(): Promise<TtsStatus> {
   return {
     running: Boolean(child) && ready,
@@ -411,12 +411,12 @@ export async function ttsStatus(): Promise<TtsStatus> {
   }
 }
 
-/** O motor embutido está no disco? (o arquivo vem no build, não é baixado). */
+/** Is the bundled engine on disk? (the file comes with the build, it is not downloaded). */
 export function enginePresent(): boolean {
   return existsSync(engineFile())
 }
 
-/** Encerra o motor: `shutdown` educado e, se ele não sair, `kill`. */
+/** Shuts the engine down: a polite `shutdown` and, if it does not exit, `kill`. */
 export function shutdownTts(): void {
   clearIdleTimer()
   const proc = child
@@ -427,13 +427,13 @@ export function shutdownTts(): void {
   try {
     proc.postMessage({ cmd: "shutdown" })
   } catch {
-    // já morreu
+    // already dead
   }
   const kill = setTimeout(() => {
     try {
       proc.kill()
     } catch {
-      // já morreu
+      // already dead
     }
   }, GRACE_MS)
   kill.unref?.()

@@ -30,7 +30,7 @@ import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
-import { isRotinaProposal, RotinaProposalCard } from "@/src/components/rotinas/rotina-proposal-card"
+import { isRoutineProposal, RoutineProposalCard } from "@/src/components/routines/routine-proposal-card"
 import {
   AgentPartView,
   AssistantMarkdown,
@@ -42,9 +42,9 @@ import {
 } from "@/src/components/messages/shared"
 
 /**
- * Mensagem do assistente no modo chat: reasoning colapsável, pesquisa
- * renderizada como chain-of-thought, texto com citações inline e fontes
- * consultadas listadas ao final.
+ * Assistant message in chat mode: collapsible reasoning, research
+ * rendered as chain-of-thought, text with inline citations and consulted
+ * sources listed at the end.
  */
 
 function useStepLabels(): Record<string, string> {
@@ -99,13 +99,13 @@ function ResearchBlock({ parts, flat }: { parts: ToolPart[]; flat?: boolean }) {
   const researching = parts.some((p) => p.state === "running")
   const [open, setOpen] = useState(researching)
 
-  // Abre automaticamente enquanto pesquisa e recolhe ao concluir
+  // Opens automatically while researching and collapses on completion
   useEffect(() => {
     setOpen(researching)
   }, [researching])
 
   return (
-    // Modo detalhado: a cadeia de passos fica sempre aberta.
+    // Detailed mode: the chain of steps stays always open.
     <ChainOfThought open={flat || open} onOpenChange={setOpen} className="my-2">
       <ChainOfThoughtHeader>
         {researching ? (
@@ -123,10 +123,10 @@ function ResearchBlock({ parts, flat }: { parts: ToolPart[]; flat?: boolean }) {
   )
 }
 
-/** Agrupa as parts: ferramentas web consecutivas viram um único bloco de
- *  pesquisa; imagens consecutivas (várias pedidas de uma vez, ou os passos
- *  de uma edição em cadeia) viram uma tira de miniaturas em vez de N figuras
- *  em largura cheia empilhadas — ver ImageGroupView. */
+/** Groups the parts: consecutive web tools become a single research
+ *  block; consecutive images (several asked for at once, or the steps
+ *  of a chained edit) become a thumbnail strip instead of N full-width
+ *  figures stacked — see ImageGroupView. */
 type Segment =
   | { kind: "research"; id: string; parts: ToolPart[] }
   | { kind: "actions"; id: string; parts: ToolPart[] }
@@ -134,16 +134,16 @@ type Segment =
   | { kind: "part"; id: string; part: MessagePart }
 
 /**
- * Ferramentas que NÃO entram no acordeon: o que elas produzem já tem um card
- * na conversa (o artefato, o documento, a imagem, o subagente), e repetir a
- * chamada ao lado do resultado é ruído. A proposta de skill e a checklist de
- * TODO são interativas — recolhê-las esconderia o que se espera que a pessoa
- * responda.
+ * Tools that do NOT enter the accordion: what they produce already has a card
+ * in the conversation (the artifact, the document, the image, the sub-agent), and repeating the
+ * call next to the result is noise. The skill proposal and the TODO
+ * checklist are interactive — collapsing them would hide what the person is expected
+ * to answer.
  */
 const RENDER_PROPRIO = new Set([
   "subagent",
   "create_skill",
-  // Conexão MCP e uma decisão do usuário no card — igual à proposta de skill.
+  // MCP connection and a user decision in the card — just like the skill proposal.
   "mcp_connect",
   "mcp_update",
   "todowrite",
@@ -152,22 +152,22 @@ const RENDER_PROPRIO = new Set([
   "update_artifact",
   "create_document",
   "update_document",
-  // As peças (motion, design, slides) têm card próprio — ver piece-tools.ts.
+  // The pieces (motion, design, slides) have their own card — see piece-tools.ts.
   ...MOTION_CARD_TOOLS,
   ...DESIGN_CARD_TOOLS,
   ...SLIDES_CARD_TOOLS,
 ])
 
 /**
- * `cardPart`: partes que dão lugar ao card da peça. Elas não entram no
- * agrupamento (uma imagem com card não pode virar miniatura de um grupo — o
- * card é que fala pela peça).
+ * `cardPart`: parts that give way to the piece card. They do not enter the
+ * grouping (an image with a card cannot become a thumbnail of a group — the
+ * card is what speaks for the piece).
  */
 function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boolean): Segment[] {
   const segments: Segment[] = []
-  // Um card por peça na MESMA mensagem: `design_write` roda uma tela por
-  // chamada, e cada uma deixaria outro card do mesmo canvas. O primeiro lugar
-  // fica, com o estado da última chamada (é ela que sabe quantas telas há).
+  // One card per piece in the SAME message: `design_write` runs one screen per
+  // call, and each one would leave another card of the same canvas. The first place
+  // stays, with the state of the last call (it is the one that knows how many screens there are).
   const pieces = new Map<string, Extract<Segment, { kind: "part" }>>()
   for (const part of parts) {
     if (cardPart(part)) {
@@ -177,8 +177,8 @@ function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boo
       if (last?.kind === "research") last.parts.push(part)
       else segments.push({ kind: "research", id: part.id, parts: [part] })
     } else if (part.type === "tool" && !RENDER_PROPRIO.has(part.tool)) {
-      // Memória, documentos, imagem, esteira: ferramentas que interessam
-      // ENQUANTO rodam e viram ruído depois. Uma linha só, como no código.
+      // Memory, documents, image, pipeline: tools that matter
+      // WHILE they run and become noise afterwards. A single line, as in the code.
       const last = segments[segments.length - 1]
       if (last?.kind === "actions") last.parts.push(part)
       else segments.push({ kind: "actions", id: part.id, parts: [part] })
@@ -199,14 +199,14 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   sessionId?: string
   isLast: boolean
   isBusy: boolean
-  /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui "Pensando…" */
+  /** Label of the waiting state (e.g. "Trying fallback 2/3…") — it replaces "Thinking…" */
   busyLabel?: string
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
   const view = useSetting("chatView")
-  // Mídia que é de uma PEÇA vira o card da peça, não um player solto — ver
-  // planMotionBundles. O que a composição não usa continua listado no card.
+  // Media that belongs to a PIECE becomes the piece card, not a loose player — see
+  // planMotionBundles. What the composition does not use stays listed in the card.
   const indexes = useMotionBundleIndexes(sessionId)
   const plan = useMemo(
     () => planMotionBundles(message.parts, indexes, message.id),
@@ -220,9 +220,10 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
     () =>
       segmentParts(
         arrangeForView(parts, view),
-        // A proposta de rotina tem card próprio como as peças — sem isto ela
-        // cairia no acordeon de ações e a decisão "criar/descartar" sumiria.
-        (part) => plan.cards.has(part.id) || isRotinaProposal(part),
+        // The routine proposal has its own card, like the pieces — without this
+        // it would fall into the action accordion and the "create/discard"
+        // decision would disappear.
+        (part) => plan.cards.has(part.id) || isRoutineProposal(part),
       ),
     [parts, view, plan],
   )
@@ -231,16 +232,16 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
-  // O ÚLTIMO bloco de texto da mensagem é a resposta final (branca); os
-  // anteriores são narração intermediária ("pensando alto") e ficam em cor
-  // apagada — inclusive se alguma ferramenta (pesquisa, agente etc.) chegar
-  // depois do texto no stream. Um bloco é um run de partes consecutivas de
-  // texto (lastTextRunStart): dois trechos separados só por reasoning são a
-  // MESMA resposta — caso do corte por limite de tokens seguido de
-  // AUTO_CONTINUE. Textos do engine NUNCA contam como resposta final nem
-  // quebram o run: 'nudge' (verificação anti-overclaim) e 'todo' (fechamento
-  // da checklist) ficam apagados; 'internal' ("nada a corrigir") não
-  // renderiza.
+  // The LAST text block of the message is the final answer (white); the
+  // previous ones are intermediate narration ("thinking out loud") and stay in a
+  // faded color — including if some tool (research, agent etc.) arrives
+  // after the text in the stream. A block is a run of consecutive text
+  // parts (lastTextRunStart): two excerpts separated only by reasoning are the
+  // SAME answer — the case of the cut by the token limit followed by
+  // AUTO_CONTINUE. Engine texts NEVER count as the final answer nor
+  // break the run: 'nudge' (anti-overclaim check) and 'todo' (closing
+  // of the checklist) stay faded; 'internal' ("nothing to fix") does not
+  // render.
   const lastRunStart = useMemo(() => lastTextRunStart(segments), [segments])
 
   return (
@@ -280,15 +281,15 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         ) : segment.part.type === "video" ? (
           <VideoPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "file" ? null : segment.part.type === "image" ? (
-          // Nunca acontece de fato — segmentParts sempre roteia "image" para
-          // um segmento "image-group" — mas o TS não sabe disso estaticamente.
+          // It never happens in fact — segmentParts always routes "image" to
+          // an "image-group" segment — but TS does not know that statically.
           null
         ) : segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
-        ) : segment.part.tool === "rotinas_manage" ? (
-          <RotinaProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.tool === "routines_manage" ? (
+          <RoutineProposalCard key={segment.id} part={segment.part} />
         ) : MOTION_CARD_TOOLS.has(segment.part.tool) ? (
           <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : DESIGN_CARD_TOOLS.has(segment.part.tool) ? (
@@ -297,8 +298,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SlidesPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update" ? (
           <McpProposalCard key={segment.id} part={segment.part} />
-        ) : // O card do artefato já é o resultado destas tools — o chip genérico
-        // ao lado dele seria ruído
+        ) : // The artifact card already is the result of these tools — the generic chip
+        // next to it would be noise
         segment.part.tool === "show_image" ||
           segment.part.tool === "create_artifact" ||
           segment.part.tool === "update_artifact" ||
@@ -316,9 +317,9 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         ),
       )}
       {message.error && (
-        // Refazer só faz sentido na ÚLTIMA resposta: o retry reexecuta o turno
-        // sobre a mensagem do usuário, e numa resposta antiga isso descartaria
-        // o que veio depois dela.
+        // Redoing only makes sense in the LAST reply: the retry reruns the turn
+        // over the user message, and in an old reply that would discard
+        // what came after it.
         <MessageError
           sessionId={sessionId}
           error={message.error}

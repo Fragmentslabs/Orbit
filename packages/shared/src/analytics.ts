@@ -7,8 +7,8 @@ export interface ModelDayBreakdown {
   cost: number
 }
 
-/** O mesmo dia visto por projeto — o que o heatmap usa quando o filtro sai de
- *  "todos" e passa a mostrar as horas gastas num projeto só. */
+/** The same day seen per project — what the heatmap uses when the filter leaves
+ *  "all" and starts showing the hours spent in a single project. */
 export interface ProjectDayBreakdown {
   projectId: string
   hours: number
@@ -28,9 +28,9 @@ export interface AnalyticsDay {
 }
 
 export interface ProjectBreakdown {
-  /** projectIdOf(directory) das memórias; "__chat__" para sessões sem pasta */
+  /** projectIdOf(directory) of the memories; "__chat__" for sessions without a folder */
   projectId: string
-  /** Nome da pasta do projeto (basename do directory) */
+  /** Name of the project folder (basename of the directory) */
   name: string
   directory?: string
   hours: number
@@ -55,7 +55,7 @@ export interface AnalyticsSummary {
   peakHour: number
 }
 
-/** Período escolhido no date range picker (ms, limites já no começo/fim do dia). */
+/** Period chosen in the date range picker (ms, bounds already at the start/end of the day). */
 export interface CustomAnalyticsRange {
   type: 'custom'
   from: number

@@ -15,66 +15,66 @@ import {
 } from "./voice-call"
 
 describe("turnEnded", () => {
-  it("silêncio antes de qualquer fala não encerra a vez", () => {
+  it("silence before any speech does not end the turn", () => {
     expect(turnEnded({ heardSpeech: false, lastSpeechAt: 0, now: 10_000, silenceMs: 900 })).toBe(false)
   })
 
-  it("encerra só depois do silêncio configurado", () => {
+  it("ends only after the configured silence", () => {
     expect(turnEnded({ heardSpeech: true, lastSpeechAt: 1000, now: 1800, silenceMs: 900 })).toBe(false)
     expect(turnEnded({ heardSpeech: true, lastSpeechAt: 1000, now: 1900, silenceMs: 900 })).toBe(true)
   })
 })
 
 describe("takeSpeakable", () => {
-  it("só entrega frases completas enquanto a resposta chega", () => {
+  it("delivers only complete sentences while the reply arrives", () => {
     const text = "Abre às oito. Fecha às"
     const first = takeSpeakable(text, 0, false)
     expect(first.chunk).toBe("Abre às oito.")
     expect(takeSpeakable(text, first.next, false)).toEqual({ chunk: "", next: first.next })
   })
 
-  it("com a resposta terminada, entrega o resto", () => {
+  it("once the reply is finished, it delivers the rest", () => {
     const text = "Abre às oito. Fecha às dez"
     const first = takeSpeakable(text, 0, false)
     expect(takeSpeakable(text, first.next, true).chunk).toBe("Fecha às dez")
   })
 
-  it("não corta número decimal no meio", () => {
+  it("does not cut a decimal number in half", () => {
     expect(takeSpeakable("Custa 3.50 reais", 0, false).chunk).toBe("")
   })
 })
 
 describe("spokenPrefix", () => {
-  it("revela o texto na proporção do áudio, sempre no fim de uma palavra", () => {
+  it("reveals the text in proportion to the audio, always at the end of a word", () => {
     expect(spokenPrefix("Primeira frase dita.", 0)).toBe("")
     expect(spokenPrefix("Primeira frase dita.", 0.5)).toBe("Primeira frase")
     expect(spokenPrefix("Primeira frase dita.", 1)).toBe("Primeira frase dita.")
   })
 
-  it("no fim, mostra a última palavra inteira em vez de cortá-la", () => {
+  it("at the end, it shows the last whole word instead of cutting it", () => {
     expect(spokenPrefix("Uma frase", 0.9)).toBe("Uma frase")
   })
 
-  it("fração inválida não revela nada", () => {
+  it("an invalid fraction reveals nothing", () => {
     expect(spokenPrefix("Uma frase", Number.NaN)).toBe("")
   })
 })
 
 describe("speechPieceText", () => {
-  it("divide o texto por palavras sem sobrepor nem deixar buraco", () => {
+  it("splits the text by words without overlapping or leaving a gap", () => {
     const text = "Uma frase um pouco maior para dividir"
     const pieces = [0, 1, 2].map((index) => speechPieceText(text, index, 3))
     expect(pieces.join(" ")).toBe(text)
   })
 
-  it("pedaço fora do intervalo não devolve texto", () => {
+  it("a chunk outside the range returns no text", () => {
     expect(speechPieceText("Uma frase", 3, 3)).toBe("")
     expect(speechPieceText("", 0, 2)).toBe("")
   })
 })
 
 describe("captionLines", () => {
-  it("corta em linhas curtas, sempre no fim de uma palavra", () => {
+  it("cuts into short lines, always at the end of a word", () => {
     const normalized = normalizeSpeech("A primeira linha tem um tamanho curto e a segunda continua.")
     const lines = captionLines(normalized, 20)
     expect(lines.map((line) => line.text)).toEqual([
@@ -86,7 +86,7 @@ describe("captionLines", () => {
     for (const line of lines) expect(normalized.slice(line.start, line.end).trim()).toBe(line.text)
   })
 
-  it("normaliza quebras e espaços antes de medir", () => {
+  it("normalizes breaks and spaces before measuring", () => {
     expect(normalizeSpeech("  Uma   frase\ncom   espaços  ")).toBe("Uma frase com espaços")
     expect(captionLines("  Uma   frase\ncom   espaços  ", 10).map((line) => line.text)).toEqual([
       "Uma frase",
@@ -95,14 +95,14 @@ describe("captionLines", () => {
     ])
   })
 
-  it("texto vazio não vira linha", () => {
+  it("empty text does not become a line", () => {
     expect(captionLines("", 20)).toEqual([])
     expect(captionLines("   \n ", 20)).toEqual([])
   })
 })
 
 describe("captionIndexAt", () => {
-  it("a próxima linha só assume quando a primeira letra dela começa", () => {
+  it("the next line only takes over when its first letter starts", () => {
     const lines = captionLines("A primeira linha tem um tamanho curto e a segunda continua.", 20)
     expect(captionIndexAt(lines, 0)).toBe(0)
     expect(captionIndexAt(lines, 20)).toBe(0)
@@ -114,7 +114,7 @@ describe("captionIndexAt", () => {
 })
 
 describe("speechText", () => {
-  it("tira a formatação e o que só faz sentido na tela", () => {
+  it("strips the formatting and whatever only makes sense on screen", () => {
     const md = "## Resumo\n- **Abre** às 8\n- veja [o site](https://x.com)\n```js\nconst a = 1\n```\nFim `ok`"
     expect(speechText(md)).toBe("Resumo\nAbre às 8\nveja o site\nFim ok")
   })
@@ -123,12 +123,12 @@ describe("speechText", () => {
 describe("callSpeech", () => {
   const msg = (parts: unknown[]) => ({ id: "m", role: "assistant", createdAt: 0, parts }) as unknown as ChatMessage
 
-  it("sem ferramentas, a resposta inteira é o lead (falado em streaming)", () => {
+  it("with no tools, the whole reply is the lead (spoken while streaming)", () => {
     const speech = callSpeech(msg([{ type: "reasoning", text: "pensando" }, { type: "text", text: "Abre às oito." }]))
     expect(speech).toEqual({ lead: "Abre às oito.", hasTool: false, final: null })
   })
 
-  it("com ferramentas, a narração do meio não é falada; o final, sim", () => {
+  it("with tools, the narration in the middle is not spoken; the ending is", () => {
     const speech = callSpeech(
       msg([
         { type: "text", text: "Deixa eu pesquisar isso." },
@@ -140,21 +140,21 @@ describe("callSpeech", () => {
       ]),
     )
     expect(speech.hasTool).toBe(true)
-    // A frase de espera fica completa (a ferramenta a fechou) e vai para a fala na hora.
+    // The waiting sentence stays complete (the tool closed it) and goes to the speech right away.
     expect(takeSpeakable(speech.lead, 0, false).chunk).toBe("Deixa eu pesquisar isso.")
     expect(speech.final).toBe("Abre às oito e fecha às dez.")
   })
 
-  it("o resumo da compactação nunca é falado", () => {
+  it("the compaction summary is never spoken", () => {
     const summary = { ...msg([{ type: "text", text: "Summary of the conversation so far:\n\nUser prefers brief replies." }]), summary: true }
     expect(callSpeech(summary as ChatMessage)).toEqual({ lead: "", hasTool: false, final: null })
   })
 
-  it("terminou numa ferramenta: não há resposta final para falar", () => {
+  it("ended on a tool: there is no final reply to speak", () => {
     expect(callSpeech(msg([{ type: "text", text: "Vou ver." }, { type: "tool", tool: "x" }])).final).toBeNull()
   })
 
-  it("texto do engine não conta, e raciocínio vazado em <think> some", () => {
+  it("engine text does not count, and reasoning leaked into <think> disappears", () => {
     const speech = callSpeech(
       msg([
         { type: "text", text: "nudge interno", source: "nudge" },
@@ -166,23 +166,23 @@ describe("callSpeech", () => {
 })
 
 describe("isSpeech", () => {
-  it("começar exige mais volume do que continuar (histerese)", () => {
+  it("starting requires more volume than continuing (hysteresis)", () => {
     expect(isSpeech(0.25, false)).toBe(false)
     expect(isSpeech(0.25, true)).toBe(true)
     expect(isSpeech(0.1, true)).toBe(false)
   })
 
-  it("com a sala barulhenta, continuar exige passar do ruído", () => {
-    // Ruído de 0,2: o limiar de continuar sobe para 0,32.
+  it("in a noisy room, continuing requires getting above the noise", () => {
+    // Noise of 0.2: the continuation threshold goes up to 0.32.
     expect(isSpeech(0.25, true, 0.2)).toBe(false)
     expect(isSpeech(0.33, true, 0.2)).toBe(true)
-    // Nunca acima do limiar de começar.
+    // Never above the starting threshold.
     expect(isSpeech(0.35, true, 0.9)).toBe(true)
   })
 })
 
 describe("isCallOwner", () => {
-  it("só a sessão dona é dona", () => {
+  it("only the owner session is the owner", () => {
     expect(isCallOwner({ callSessionId: "s1", sessionId: "s1" })).toBe(true)
     expect(isCallOwner({ callSessionId: "s1", sessionId: "s2" })).toBe(false)
     expect(isCallOwner({ callSessionId: "s1", sessionId: undefined })).toBe(false)

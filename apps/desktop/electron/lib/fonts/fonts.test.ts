@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-/** Mesmo molde do design-store.test.ts: `app`/`protocol` do main são mockados. */
+/** Same shape as design-store.test.ts: main's `app`/`protocol` are mocked. */
 const registered = vi.hoisted(() => ({
   handlers: new Map<string, (request: Request) => Promise<Response>>(),
 }))
@@ -26,7 +26,7 @@ const { familyOf } = await import('./system')
 
 const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(64, 1)])
 
-/** Um `fetch` de mentira: o teste não toca a rede, mas passa pelas mesmas checagens. */
+/** A fake `fetch`: the test does not touch the network, but goes through the same checks. */
 function fakeFetch(responses: (url: string) => Response | null) {
   const calls: string[] = []
   const fetcher = (async (input: RequestInfo | URL) => {
@@ -42,7 +42,7 @@ function fakeFetch(responses: (url: string) => Response | null) {
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 
 describe('a biblioteca de fontes', () => {
-  it('guarda o arquivo pelo hash: o mesmo byte não entra duas vezes', async () => {
+  it('stores the file by hash: the same byte does not enter twice', async () => {
     const first = await storeFontFile(WOFF2, 'woff2')
     const second = await storeFontFile(Buffer.from(WOFF2), 'woff2')
     const other = await storeFontFile(Buffer.concat([WOFF2, Buffer.from('x')]), 'woff2')
@@ -51,7 +51,7 @@ describe('a biblioteca de fontes', () => {
     expect(first).toMatch(/^[a-f0-9]{32}\.woff2$/)
   })
 
-  it('serve o arquivo com CORS e recusa caminho fora do armazém', async () => {
+  it('serves the file with CORS and refuses a path outside the store', async () => {
     registerFontProtocol()
     const handler = registered.handlers.get('orbit-font')!
     const file = await storeFontFile(WOFF2, 'woff2')
@@ -65,7 +65,7 @@ describe('a biblioteca de fontes', () => {
     expect((await handler(new Request(`orbit-font://f/${'a'.repeat(32)}.woff2`))).status).toBe(404)
   })
 
-  it('monta o @font-face com a faixa de pesos e o unicode-range', () => {
+  it('builds the @font-face with the weight range and the unicode-range', () => {
     const css = fontFaceCss([
       {
         id: 'inter',
@@ -85,22 +85,22 @@ describe('a biblioteca de fontes', () => {
   })
 })
 
-describe('o catálogo', () => {
+describe('the catalog', () => {
   const fonts = [
     { id: 'inter', family: 'Inter', subsets: ['latin'], weights: [400], styles: ['normal'], variable: true },
     { id: 'inter-tight', family: 'Inter Tight', subsets: ['latin'], weights: [400], styles: ['normal'], variable: true },
     { id: 'playfair-display', family: 'Playfair Display', subsets: ['latin'], weights: [400], styles: ['normal'], variable: true },
   ]
 
-  it('põe o nome exato na frente de quem só contém o termo', () => {
+  it('puts the exact name ahead of the one that only contains the term', () => {
     expect(searchCatalog(fonts, 'inter', 2).map((font) => font.id)).toEqual(['inter', 'inter-tight'])
     expect(searchCatalog(fonts, 'playfair', 1)[0].id).toBe('playfair-display')
     expect(searchCatalog(fonts, 'nada-disso', 5)).toEqual([])
   })
 })
 
-describe('instalar uma família', () => {
-  it('baixa os subsets pedidos, registra no índice e não repete a rede', async () => {
+describe('install a family', () => {
+  it('downloads the requested subsets, records them in the index and does not repeat the network', async () => {
     const { fetcher, calls } = fakeFetch((url) => {
       if (url.startsWith('https://api.fontsource.org/v1/fonts'))
         return json([
@@ -146,7 +146,7 @@ describe('instalar uma família', () => {
     expect(calls.length).toBe(before)
   })
 
-  it('recusa um "woff2" que não é fonte', async () => {
+  it('refuses a "woff2" that is not a font', async () => {
     const { fetcher } = fakeFetch((url) => {
       if (url.startsWith('https://api.fontsource.org/v1/fonts'))
         return json([{ id: 'broken', family: 'Broken', subsets: ['latin'], weights: [400], styles: ['normal'], variable: false }])
@@ -156,26 +156,26 @@ describe('instalar uma família', () => {
       if (url.endsWith('.woff2')) return new Response('<html>not found</html>', { status: 200 })
       return null
     })
-    // `now` adiantado: força reler o catálogo em vez de usar o que o teste anterior gravou.
+    // `now` set ahead: forces re-reading the catalog instead of using what the previous test wrote.
     const farFuture = () => Date.now() + 365 * 24 * 60 * 60 * 1000
     await expect(ensureFont('Broken', {}, { fetcher, now: farFuture })).rejects.toThrow(/could not download/)
   })
 })
 
 describe('o artboard', () => {
-  it('recebe o @font-face da biblioteca ANTES do CSS do próprio board', async () => {
+  it('receives the library @font-face BEFORE the CSS of the board itself', async () => {
     const { injectDesignRuntime } = await import('../design/design-runtime')
     const html = '<html><head><title>x</title><style>body{color:red}</style></head><body></body></html>'
     const out = injectDesignRuntime(html, "@font-face{font-family:'Inter'}")
     expect(out).toContain('data-orbit-fonts')
     expect(out.indexOf('data-orbit-fonts')).toBeLessThan(out.indexOf('<style>body'))
-    // Biblioteca vazia não injeta tag nenhuma.
+    // An empty library injects no tag at all.
     expect(injectDesignRuntime(html, '')).not.toContain('data-orbit-fonts')
   })
 })
 
-describe('as famílias do sistema', () => {
-  it('tira o sufixo de estilo da entrada do registro', () => {
+describe('the system families', () => {
+  it('strips the style suffix from the registry entry', () => {
     expect(familyOf('Arial (TrueType)')).toBe('Arial')
     expect(familyOf('Segoe UI Semibold')).toBe('Segoe UI')
     expect(familyOf('Segoe UI Bold Italic')).toBe('Segoe UI')
@@ -184,8 +184,8 @@ describe('as famílias do sistema', () => {
   })
 })
 
-describe('o índice', () => {
-  it('troca a família quando o id se repete', async () => {
+describe('the index', () => {
+  it('swaps the family when the id repeats', async () => {
     const base = {
       id: 'inter',
       family: 'Inter',
@@ -201,13 +201,13 @@ describe('o índice', () => {
     const fonts = await listFonts()
     expect(fonts.filter((font) => font.id === 'inter')).toHaveLength(1)
     expect(fonts.find((font) => font.id === 'inter')?.family).toBe('Inter Display')
-    // `addedAt` é preservado: reinstalar não "envelhece" a fonte.
+    // `addedAt` is preserved: reinstalling does not "age" the font.
     expect(fonts.find((font) => font.id === 'inter')?.addedAt).toBe(10)
   })
 })
 
-describe('o @font-face de uma família instalada', () => {
-  it('só declara quando o nome está na biblioteca, sem diferenciar maiúsculas', async () => {
+describe('the @font-face of an installed family', () => {
+  it('only declares it when the name is in the library, case-insensitively', async () => {
     await addFont({
       id: 'roboto',
       family: 'Roboto',
@@ -220,7 +220,7 @@ describe('o @font-face de uma família instalada', () => {
     })
     expect(await fontFacesForFamily('roboto')).toContain("font-family: 'Roboto'")
     expect(await fontFacesForFamily('  ROBOTO ')).toContain('orbit-font://f/abc.woff2')
-    // Fonte do sistema (ou inventada) não tem declaração nenhuma.
+    // A system (or made-up) font has no declaration at all.
     expect(await fontFacesForFamily('Segoe UI')).toBe('')
     expect(await fontFacesForFamily('')).toBe('')
   })

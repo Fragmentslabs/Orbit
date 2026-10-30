@@ -34,7 +34,7 @@ import { Truncate } from "@/components/ui/truncated-text"
 type ThemePref = "light" | "dark" | "system"
 type View = "main" | "visible"
 
-/** Agrupamento dos modos por contexto de uso nos inputs. */
+/** Grouping of the modes by usage context in the inputs. */
 const MODE_GROUPS: { key: "both" | "chat" | "code"; ids: ModeId[] }[] = [
   { key: "both", ids: ["search", "plan", "simple", "brain", "vision", "computer"] },
   { key: "code", ids: ["subagents", "orchestra", "loop"] },
@@ -70,7 +70,7 @@ function useModeRowOptions(): { id: ModeId; label: string; icon: typeof Search }
     { id: "subagents", label: t("codeInput.modes.subagents.label"), icon: Bot },
     { id: "orchestra", label: t("codeInput.modes.orchestra.label"), icon: Network },
     { id: "loop", label: t("codeInput.modes.loop.label"), icon: RefreshCw },
-    // Computador existe no macOS e no Windows: nas outras plataformas a opção some.
+    // Computer exists on macOS and Windows: on the other platforms the option disappears.
     ...(isComputerPlatform(windowApi.platform) ? [{ id: "computer" as const, label: t("input.modes.computer.label"), icon: Monitor }] : []),
   ]
 }
@@ -281,9 +281,9 @@ export function AppearancePanel() {
 
       <div className="border-t pt-4">
         <p className="mb-3 text-xs font-medium text-muted-foreground">{t("appearance.persona.title")}</p>
-        {/* Três estados, e não um interruptor: a persona da saudação e a que
-            flutua sobre a conversa custam coisas diferentes, e quem desliga
-            costuma querer só a segunda fora do caminho. */}
+        {/* Three states, and not a switch: the greeting persona and the one that
+            floats over the conversation cost different things, and whoever turns it off
+            usually wants only the second one out of the way. */}
         <div className="rounded-lg border border-input bg-background px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -297,10 +297,10 @@ export function AppearancePanel() {
               <SelectTrigger size="sm" className="shrink-0">
                 <SelectValue>{t(`appearance.persona.options.${personaVisibility}.label`)}</SelectValue>
               </SelectTrigger>
-              {/* A lista aberta NÃO herda a largura do gatilho: por padrão ela é
-                  tão estreita quanto ele, e os rótulos das opções são frases —
-                  chegavam cortados. Aqui ela cresce até o texto caber e, se
-                  mesmo assim faltar espaço, quebra a linha. */}
+              {/* The open list does NOT inherit the trigger's width: by default it is
+                  as narrow as the trigger, and the option labels are sentences —
+                  they arrived cut off. Here it grows until the text fits and, if
+                  space is still missing, it wraps the line. */}
               <SelectContent
                 align="end"
                 alignItemWithTrigger={false}

@@ -6,33 +6,33 @@ import { getMotion, registerMotion } from './motion-store'
 import { piecesDir, pieceSlug } from '../tools/piece-paths'
 
 /**
- * O PROJETO de uma composição: a pasta inteira num `.zip`, e a volta.
+ * The PROJECT of a composition: the whole folder in a `.zip`, and back.
  *
- * Uma peça de motion é uma pasta do app — o HTML, as mídias que entraram, as
- * fontes, o `audio.json`. Ela não sai de lá sozinha: o render entrega o VÍDEO,
- * nunca a peça. Sem isto, levar uma composição de uma conversa para outra (ou
- * guardá-la antes de limpar o disco) era copiar arquivos à mão.
+ * A motion piece is a folder of the app — the HTML, the media that came in, the
+ * fonts, the `audio.json`. It does not leave there by itself: the render delivers the VIDEO,
+ * never the piece. Without this, taking a composition from one conversation to another (or
+ * saving it before cleaning the disk) meant copying files by hand.
  *
- * O `.zip` carrega um manifesto `orbit.json` na raiz — é o que faz um arquivo
- * renomeado continuar sendo reconhecido como peça, e não como um zip qualquer.
- * Na volta, nada é sobrescrito: a peça importada nasce com id novo numa pasta
- * nova, e o mesmo zip pode ser importado quantas vezes se quiser, cada vez como
- * uma peça independente.
+ * The `.zip` carries an `orbit.json` manifest at the root — it is what makes a renamed
+ * file still be recognized as a piece, and not as any zip.
+ * On the way back, nothing is overwritten: the imported piece is born with a new id in a new
+ * folder, and the same zip can be imported as many times as wanted, each time as
+ * an independent piece.
  */
 
 export const MOTION_PROJECT_MANIFEST = 'orbit.json'
 
-/** Versão do formato. Um zip de versão futura é recusado com o motivo. */
+/** Format version. A zip of a future version is refused with the reason. */
 export const MOTION_PROJECT_VERSION = 1
 
 /**
- * Teto do zip: acima disto a importação pelo chat fica cara (o arquivo viaja
- * como anexo) e é mais honesto recusar do que arrastar a conversa por minutos.
+ * Zip ceiling: above this the import through the chat gets expensive (the file travels
+ * as an attachment) and it is more honest to refuse than to drag the conversation for minutes.
  */
 export const MAX_PROJECT_ZIP_BYTES = 256 * 1024 * 1024
-/** Teto do que sai do zip (proteção contra bomba de descompressão). */
+/** Ceiling on what comes out of the zip (protection against a decompression bomb). */
 export const MAX_PROJECT_BYTES = 1024 * 1024 * 1024
-/** Teto inútil de propósito: nenhuma peça tem isso de arquivos. */
+/** Deliberately useless ceiling: no piece has that many files. */
 export const MAX_PROJECT_FILES = 400
 
 export interface MotionProjectManifest {
@@ -41,17 +41,17 @@ export interface MotionProjectManifest {
   name: string
   createdAt: number
   entry: string
-  /** O formato declarado na composição, para quem quiser saber antes de abrir. */
+  /** The format declared in the composition, for whoever wants to know before opening. */
   format: { width?: number; height?: number; fps?: number; durationInFrames?: number } | null
-  /** Os arquivos que o zip leva, relativo à raiz dele (o manifesto inclusive). */
+  /** The files the zip carries, relative to its root (the manifest included). */
   files: string[]
 }
 
-/** Extensões que viajam comprimidas; mídia já é comprimida e vai armazenada. */
+/** Extensions that travel compressed; media is already compressed and goes stored. */
 const TEXT_EXTENSIONS = new Set(['.html', '.htm', '.css', '.js', '.mjs', '.json', '.svg', '.txt', '.srt', '.vtt'])
 const MAX_DEPTH = 4
 
-/** `<meta name="orbit-motion" content="width=…,fps=…,duration=…">` → formato. */
+/** `<meta name="orbit-motion" content="width=…,fps=…,duration=…">` → format. */
 export function motionFormatOf(html: string): MotionProjectManifest['format'] {
   const tag = /<meta\s+name=["']orbit-motion["']\s+content=["']([^"']*)["']/i.exec(html)
   if (!tag) return null
@@ -66,14 +66,14 @@ export function motionFormatOf(html: string): MotionProjectManifest['format'] {
   return Object.keys(spec).length ? spec : null
 }
 
-/** Nome relativo à pasta, com `/`, sem escapar dela. */
+/** Relative name inside the folder, with `/`, without escaping it. */
 function relativeName(root: string, target: string): string | null {
   const rel = path.relative(path.resolve(root), path.resolve(target))
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null
   return rel.split(path.sep).join('/')
 }
 
-/** Os arquivos da pasta da peça (todos — o zip leva a peça inteira). */
+/** The piece folder's files (all of them — the zip carries the whole piece). */
 async function listProjectFiles(
   root: string,
   dir = root,
@@ -89,8 +89,8 @@ async function listProjectFiles(
   }
   for (const item of items) {
     if (out.length >= MAX_PROJECT_FILES) break
-    // `.motion-*` é o temporário do editor, `.DS_Store` é do Finder: nada disso
-    // é a peça.
+    // `.motion-*` is the editor's temporary file, `.DS_Store` is Finder's: none of it
+    // is the piece.
     if (item.name.startsWith('.')) continue
     const abs = path.join(dir, item.name)
     if (item.isDirectory()) {
@@ -98,8 +98,8 @@ async function listProjectFiles(
       continue
     }
     if (!item.isFile()) continue
-    // Sempre relativo à RAIZ da peça (`fonts/inter.woff2`), inclusive nas
-    // subpastas — é esse caminho que o zip guarda e que o import recria.
+    // Always relative to the piece's ROOT (`fonts/inter.woff2`), subfolders
+    // included — it is this path the zip stores and the import recreates.
     const rel = relativeName(root, abs)
     if (rel) out.push(rel)
   }
@@ -107,10 +107,10 @@ async function listProjectFiles(
 }
 
 /**
- * Monta o `.zip` da composição: pasta inteira + `orbit.json` na raiz.
+ * Builds the composition's `.zip`: the whole folder + `orbit.json` at the root.
  *
- * O manifesto é escrito NA HORA (nunca o que estiver em disco), para o nome e o
- * formato estarem sempre de acordo com a peça que está sendo exportada.
+ * The manifest is written RIGHT NOW (never whatever is on disk), so the name and the
+ * format always match the piece being exported.
  */
 export async function exportMotionProject(id: string): Promise<{ buffer: Buffer; name: string; files: number }> {
   const entry = await getMotion(id)
@@ -122,12 +122,10 @@ export async function exportMotionProject(id: string): Promise<{ buffer: Buffer;
   const names = await listProjectFiles(folder)
   if (!names.length) throw new Error('the composition folder is empty')
   const archive: Record<string, [Uint8Array, { level: 0 | 6 }]> = {}
-  let bytes = 0
   for (const name of names) {
     const abs = path.join(folder, name)
     const data = await fsp.readFile(abs).catch(() => null)
     if (!data) continue
-    bytes += data.byteLength
     const level = TEXT_EXTENSIONS.has(path.extname(name).toLowerCase()) ? 6 : 0
     archive[name] = [new Uint8Array(data), { level }]
   }
@@ -148,20 +146,20 @@ export async function exportMotionProject(id: string): Promise<{ buffer: Buffer;
   return { buffer, name: `${manifest.name}.zip`, files: manifest.files.length }
 }
 
-/** O que o zip declara, sem descomprimir mídia nenhuma. */
+/** What the zip declares, without decompressing any media at all. */
 interface ZipScan {
-  /** Nome de cada entrada de arquivo (sem as de diretório). */
+  /** Name of each file entry (directory entries excluded). */
   names: string[]
-  /** Soma declarada do conteúdo descomprimido. */
+  /** Declared sum of the decompressed content. */
   bytes: number
 }
 
 /**
- * Lê o DIRETÓRIO do zip (nomes e tamanhos declarados), sem inflar o conteúdo.
+ * Reads the zip's DIRECTORY (names and declared sizes), without inflating the content.
  *
- * É o que permite recusar uma bomba de descompressão antes de ela acontecer: o
- * tamanho original vem no cabeçalho e o `filter` do fflate decide entrada por
- * entrada, antes do inflate.
+ * It is what allows refusing a decompression bomb before it happens: the
+ * original size comes in the header and fflate's `filter` decides entry by
+ * entry, before the inflate.
  */
 function scanZip(data: Uint8Array): ZipScan {
   const names: string[] = []
@@ -178,15 +176,15 @@ function scanZip(data: Uint8Array): ZipScan {
   return { names, bytes }
 }
 
-/** É um zip? (assinatura, como a importação de skills.) */
+/** Is it a zip? (signature, like the skills import.) */
 export function isZip(buffer: Buffer | Uint8Array): boolean {
   return buffer.length > 4 && buffer[0] === 0x50 && buffer[1] === 0x4b
 }
 
 /**
- * O manifesto de um zip de peça, ou `null` quando o arquivo não é um projeto de
- * motion. É a pergunta que o chat faz em todo anexo `.zip` antes de decidir o
- * que fazer com ele — um zip comum segue o caminho de anexo de sempre.
+ * The manifest of a piece zip, or `null` when the file is not a motion
+ * project. It is the question the chat asks of every `.zip` attachment before deciding what
+ * to do with it — a regular zip follows the usual attachment path.
  */
 export function readMotionProject(buffer: Buffer): MotionProjectManifest | null {
   if (!isZip(buffer)) return null
@@ -231,9 +229,9 @@ export function readMotionProject(buffer: Buffer): MotionProjectManifest | null 
 }
 
 /**
- * Caminho relativo SEGURO de uma entrada do zip. Devolve `null` para o que
- * tentaria escapar da pasta (absoluto, `..`, nome vazio) ou não é arquivo da
- * peça (lixo do sistema, o próprio manifesto).
+ * SAFE relative path of a zip entry. Returns `null` for what
+ * would try to escape the folder (absolute, `..`, empty name) or is not a file of the
+ * piece (system junk, the manifest itself).
  */
 export function safeZipEntry(rootPrefix: string, name: string): string | null {
   const clean = name.replace(/\\/g, '/')
@@ -250,7 +248,7 @@ export function safeZipEntry(rootPrefix: string, name: string): string | null {
   return rel
 }
 
-/** Primeira pasta livre com aquele nome (`intro`, `intro-2`, `intro-3`…). */
+/** First free folder with that name (`intro`, `intro-2`, `intro-3`…). */
 async function uniqueFolder(root: string, name: string): Promise<string> {
   for (let attempt = 1; attempt < 200; attempt++) {
     const folder = path.join(root, attempt === 1 ? name : `${name}-${attempt}`)
@@ -262,22 +260,22 @@ async function uniqueFolder(root: string, name: string): Promise<string> {
 
 export interface ImportedMotionProject {
   id: string
-  /** Nome da peça (a pasta), que é como as tools a chamam na conversa. */
+  /** Name of the piece (the folder) — it is how the tools call it in the conversation. */
   name: string
   folder: string
   entry: string
   files: number
   bytes: number
-  /** Quantos arquivos declarados no zip não entraram (lixo do sistema). */
+  /** How many files declared in the zip did not come in (system junk). */
   skipped: number
 }
 
 /**
- * Recria a peça a partir do zip, numa pasta NOVA desta conversa.
+ * Recreates the piece from the zip, in a NEW folder of this conversation.
  *
- * Nada é sobrescrito: o nome ganha sufixo quando já existe (`intro-2`) e o id
- * nasce da pasta nova, então importar o mesmo zip duas vezes dá duas peças
- * independentes — que é o que se espera de "importar".
+ * Nothing is overwritten: the name gets a suffix when it already exists (`intro-2`) and the id
+ * is born from the new folder, so importing the same zip twice gives two
+ * independent pieces — which is what one expects from "import".
  */
 export async function importMotionProject(
   buffer: Buffer,
@@ -292,8 +290,8 @@ export async function importMotionProject(
   if (!manifest) throw new Error(`the .zip is not a motion project (no ${MOTION_PROJECT_MANIFEST} at the root)`)
   const data = new Uint8Array(buffer)
   const scan = scanZip(data)
-  // Antes de inflar QUALQUER coisa: o cabeçalho já diz o tamanho descomprimido,
-  // e é aqui que uma bomba de descompressão é recusada.
+  // Before inflating ANYTHING: the header already states the decompressed size,
+  // and it is here that a decompression bomb is refused.
   if (scan.bytes > MAX_PROJECT_BYTES) throw new Error('the project is larger than the import limit')
   if (scan.names.length > MAX_PROJECT_FILES) throw new Error('the project has more files than a composition can have')
   const manifestName = scan.names
@@ -312,7 +310,7 @@ export async function importMotionProject(
 
   const root = piecesDir('motion', opts.sessionId)
   const folder = await uniqueFolder(root, pieceSlug(manifest.name, 'motion'))
-  // `entry` vem do manifesto: só vale se for um arquivo que o zip realmente traz.
+  // `entry` comes from the manifest: it only counts if it is a file the zip really carries.
   const entryRel = manifest.entry.replace(/\\/g, '/').replace(/^\.\//, '')
   const available = wanted.map((name) => name.slice(rootPrefix.length).replace(/\\/g, '/'))
   const entryName = available.includes(entryRel) ? entryRel : available.find((name) => /\.html?$/i.test(name))
@@ -352,8 +350,8 @@ export async function importMotionProject(
       skipped: scan.names.length - wanted.length,
     }
   } catch (err) {
-    // Importação que falhou no meio não pode deixar meia peça ocupando a pasta
-    // nem um registro apontando para ela.
+    // An import that failed halfway cannot leave half a piece taking up the folder
+    // nor a registry entry pointing at it.
     await fsp.rm(folder, { recursive: true, force: true }).catch(() => {})
     throw err
   }

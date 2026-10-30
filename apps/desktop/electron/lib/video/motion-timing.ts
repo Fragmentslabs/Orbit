@@ -1,28 +1,28 @@
 /**
- * O TEMPO das mídias dentro de uma composição: em que ponto do arquivo um
- * `<video>` ou um GIF está num dado instante da PEÇA.
+ * The TIME of media inside a composition: at what point of the file a
+ * `<video>` or a GIF is at a given instant of the PIECE.
  *
- * Mora aqui, em JS de página, porque o runtime roda na janela e não importa
- * nada — e porque só assim os testes executam a MESMA função que a página usa,
- * sem DOM. A regra de ouro é a do resto do runtime: a posição é função pura do
- * instante `t`. Nenhuma mídia anda sozinha.
+ * It lives here, in page JS, because the runtime runs in the window and imports
+ * nothing — and because only this way do the tests execute the SAME function the page uses,
+ * without a DOM. The golden rule is the rest of the runtime's: the position is a pure function of
+ * the instant `t`. No media moves by itself.
  *
- * Atributos que a composição pode pôr no elemento (todos opcionais, em segundos):
- *   - `data-start`: o instante da PEÇA em que o vídeo/GIF começa a tocar. Antes
- *     disso ele fica parado no primeiro quadro;
- *   - `data-in`: de que ponto do ARQUIVO ele começa (um corte no início);
- *   - `data-end`: o instante da PEÇA em que ele para, preso no último quadro;
- *   - `data-loop="false"` num GIF: toca uma vez e fica no último quadro (o padrão
- *     é repetir, como todo GIF);
- *   - `data-gain` (dB) e `data-audio="false"` num vídeo: nível do som dele na
- *     mixagem, ou fora dela (o atributo HTML `muted` também o tira).
- * Sem nenhum deles o comportamento é o de antes: o arquivo toca desde o quadro 0.
+ * Attributes the composition may put on the element (all optional, in seconds):
+ *   - `data-start`: the instant of the PIECE at which the video/GIF starts playing. Before
+ *     that it stays frozen on the first frame;
+ *   - `data-in`: from what point of the FILE it starts (a cut at the beginning);
+ *   - `data-end`: the instant of the PIECE at which it stops, frozen on the last frame;
+ *   - `data-loop="false"` on a GIF: plays once and stays on the last frame (the default
+ *     is to repeat, like every GIF);
+ *   - `data-gain` (dB) and `data-audio="false"` on a video: level of its sound in the
+ *     mix, or out of it (the HTML `muted` attribute also takes it out).
+ * Without any of them the behavior is the previous one: the file plays from frame 0.
  *
- * Sem crases, sem `${` e sem barra invertida: é interpolado no template do runtime.
+ * No backticks, no `${` and no backslash: it is interpolated into the runtime's template.
  */
 export const MOTION_TIMING_SCRIPT = `
-  // Posição, em segundos DO ARQUIVO, de um vídeo no instante t da peça.
-  // m = { start, in, end, loop, duration } (end e duration podem faltar).
+  // Position, in seconds OF THE FILE, of a video at instant t of the piece.
+  // m = { start, in, end, loop, duration } (end and duration may be missing).
   function orbitVideoTime(t, m) {
     const start = m.start || 0
     const offset = m.in || 0
@@ -35,8 +35,8 @@ export const MOTION_TIMING_SCRIPT = `
     return Math.min(at, m.duration - 0.001)
   }
 
-  // Índice do quadro de um GIF no instante local t (já descontado o data-start).
-  // durations = segundos de cada quadro; loop = repete (o padrão de todo GIF).
+  // Frame index of a GIF at local instant t (the data-start already discounted).
+  // durations = seconds of each frame; loop = repeats (the default of every GIF).
   function orbitGifFrame(t, durations, loop) {
     const n = durations.length
     if (n === 0 || t <= 0) return 0
@@ -52,8 +52,8 @@ export const MOTION_TIMING_SCRIPT = `
     return n - 1
   }
 
-  // Duração de um quadro de GIF. Os navegadores tratam atraso menor que 20 ms
-  // (inclusive 0) como 100 ms — o que um GIF "sem atraso" sempre mostrou.
+  // Duration of a GIF frame. Browsers treat a delay shorter than 20 ms
+  // (0 included) as 100 ms — which is what a GIF "without delay" has always shown.
   function orbitGifDelay(seconds) {
     return typeof seconds === 'number' && isFinite(seconds) && seconds >= 0.02 ? seconds : 0.1
   }

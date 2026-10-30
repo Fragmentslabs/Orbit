@@ -1,21 +1,21 @@
 /**
- * Tokenizer BPE enxuto para o Bekko (vocabulário de 256k tokens, estilo Gemma).
+ * Lean BPE tokenizer for Bekko (256k-token vocabulary, Gemma style).
  *
- * Por que não carregar o tokenizer.json (34 MB): parseá-lo cria ~580 mil
- * strings de merge e centenas de MB de heap. Aqui o tokenizer.json é compilado
- * UMA vez para um binário compacto (tokenizer.bin) e o runtime lê só arrays
- * tipados — os merges viram (chave numérica → rank, id fundido), sem strings.
+ * Why not load tokenizer.json (34 MB): parsing it creates ~580 thousand
+ * merge strings and hundreds of MB of heap. Here tokenizer.json is compiled
+ * ONCE into a compact binary (tokenizer.bin) and the runtime reads only typed
+ * arrays — the merges become (numeric key → rank, merged id), without strings.
  *
- * Equivalência: normalizador Replace(" "→"▁") + Metaspace(prepend always,
- * split) + BPE com byte fallback + <bos> … <eos>. Conferida contra o
- * transformers.js em tokenizer.test.ts (quando o tokenizer.json existe).
+ * Equivalence: Replace normalizer (" "→"▁") + Metaspace(prepend always,
+ * split) + BPE with byte fallback + <bos> … <eos>. Checked against
+ * transformers.js in tokenizer.test.ts (when tokenizer.json exists).
  */
 import fs from "node:fs"
 
 const MAGIC = 0x4f425431 // "OBT1"
 const SPACE = "▁"
 
-/** Compila o tokenizer.json do Hugging Face no formato binário compacto. */
+/** Compiles the Hugging Face tokenizer.json into the compact binary format. */
 export function compileTokenizer(jsonPath, outPath) {
   const t = JSON.parse(fs.readFileSync(jsonPath, "utf8"))
   const vocab = t.model.vocab // { token: id }
@@ -51,12 +51,12 @@ export function compileTokenizer(jsonPath, outPath) {
   return { bytes: buf.length, merges: n, vocab: V }
 }
 
-/** Carrega o binário. Sem cópias: os arrays tipados apontam para um único Buffer. */
+/** Loads the binary. No copies: the typed arrays point to a single Buffer. */
 export function loadTokenizer(binPath) {
   const buf = fs.readFileSync(binPath)
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
   const head = new Int32Array(ab, 0, 8)
-  if (head[0] !== MAGIC) throw new Error("tokenizer.bin inválido")
+  if (head[0] !== MAGIC) throw new Error("invalid tokenizer.bin")
   const [, V, nc, n, UNK, BOS, EOS, addedLen] = head
   let off = 32
   const take = (Ctor, len) => { const a = new Ctor(ab, off, len); off += len * Ctor.BYTES_PER_ELEMENT; return a }
@@ -64,7 +64,7 @@ export function loadTokenizer(binPath) {
   const ranks = take(Int32Array, n), merged = take(Int32Array, n)
   if (off % 8) off += 8 - (off % 8)
   const keys = new Float64Array(ab, off, n)
-  // Tokens adicionados (\n, \n\n…, <pad>, tags HTML…): casam no texto cru, antes do BPE.
+  // Added tokens (\n, \n\n…, <pad>, HTML tags…): they match in the raw text, before the BPE.
   const addedList = JSON.parse(Buffer.from(ab, off + n * 8, addedLen).toString("utf8"))
   const addedId = new Map(addedList)
   const addedRe = new RegExp(
@@ -112,10 +112,10 @@ export function loadTokenizer(binPath) {
     return ids
   }
 
-  /** Ids com <bos> … <eos>, truncados em `maxTokens` (mantendo o <eos>). */
+  /** Ids with <bos> … <eos>, truncated at `maxTokens` (keeping the <eos>). */
   function encode(text, maxTokens = 512) {
-    // Cada trecho entre tokens adicionados é pré-tokenizado à parte: ganha "▁"
-    // na frente e, dentro dele, cada "▁" inicia um pedaço (Metaspace).
+    // Each snippet between added tokens is pre-tokenized separately: it gets "▁"
+    // in front and, inside it, each "▁" starts a piece (Metaspace).
     const pieces = []
     for (const seg of text.split(addedRe)) {
       if (!seg) continue

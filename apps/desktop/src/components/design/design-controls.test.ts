@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { numberOf, stripPx, toCssLength } from "./design-controls"
 
-describe("valores do painel", () => {
-  it("stripPx tira só o px de números", () => {
+describe("panel values", () => {
+  it("stripPx strips only the px from numbers", () => {
     expect(stripPx("12px")).toBe("12")
     expect(stripPx("-4.5px")).toBe("-4.5")
     expect(stripPx("1rem")).toBe("1rem")
@@ -10,7 +10,7 @@ describe("valores do painel", () => {
     expect(stripPx("auto")).toBe("auto")
   })
 
-  it("toCssLength põe px em número puro e deixa o resto como está", () => {
+  it("toCssLength adds px to a bare number and leaves the rest as it is", () => {
     expect(toCssLength("24")).toBe("24px")
     expect(toCssLength(" 8.5 ")).toBe("8.5px")
     expect(toCssLength("1rem")).toBe("1rem")
@@ -19,7 +19,7 @@ describe("valores do painel", () => {
     expect(toCssLength("1.5", true)).toBe("1.5")
   })
 
-  it("numberOf lê o número (com ou sem px) e recusa o resto", () => {
+  it("numberOf reads the number (with or without px) and rejects the rest", () => {
     expect(numberOf("16")).toBe(16)
     expect(numberOf("16px")).toBe(16)
     expect(numberOf("-2.5px")).toBe(-2.5)

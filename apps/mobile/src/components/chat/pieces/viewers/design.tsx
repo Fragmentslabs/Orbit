@@ -1,21 +1,21 @@
 /**
- * Design no celular.
+ * Design on the phone.
  *
- * O `piece.url` de design NÃO é uma página: é o `canvas.json` do canvas, o
- * índice que o desktop grava na pasta da peça (ver
+ * The design `piece.url` is NOT a page: it is the `canvas.json` of the canvas, the
+ * index the desktop writes in the folder of the piece (see
  * apps/desktop/electron/lib/design/design-canvas.ts):
  *
- *   { v: 1, title?, boards: { "<arquivo>.html": { title?, x, y, w, h } }, order: string[] }
+ *   { v: 1, title?, boards: { "<file>.html": { title?, x, y, w, h } }, order: string[] }
  *
- * Cada artboard é um HTML autocontido na MESMA pasta, e `order` é a sequência
- * das telas (empilhamento, de trás para frente) — a mesma que a barra de telas
- * do desktop usa. Este viewer busca esse índice, monta a lista e abre uma tela
- * de cada vez; o HTML de cada uma sai da própria URL da peça trocando o
- * `canvas.json` do fim pelo arquivo da artboard (o token assinado é um segmento
- * do caminho e vale para a pasta inteira, então o irmão herda a autorização).
+ * Each artboard is a self-contained HTML in the SAME folder, and `order` is the sequence
+ * of the screens (stacking, back to front) — the same one the screen bar of
+ * the desktop uses. This viewer fetches that index, builds the list and opens one screen
+ * at a time; the HTML of each one comes from the piece URL itself, swapping the
+ * `canvas.json` at the end for the artboard file (the signed token is a segment
+ * of the path and is valid for the whole folder, so the sibling inherits the authorization).
  *
- * A artboard é interativa de verdade (é um documento, com rolagem, hover e
- * toque próprios): nada é desenhado por cima dela além das barras de fora.
+ * The artboard is really interactive (it is a document, with its own scrolling, hover and
+ * touch): nothing is drawn over it beyond the outer bars.
  */
 import { AlertCircle, ChevronLeft, ChevronRight, Frame, RotateCw } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -37,20 +37,20 @@ import { PieceView } from '../../PieceView'
 
 import type { PieceViewerProps } from './index'
 
-/** Uma tela do canvas: o arquivo `.html` e o título que ele tem no índice. */
+/** One screen of the canvas: the `.html` file and the title it has in the index. */
 export interface DesignScreen {
   file: string
   title?: string
 }
 
-/** Nome do índice dentro da pasta do canvas — o fim da `piece.url`. */
+/** Name of the index inside the canvas folder — the end of `piece.url`. */
 const INDEX_FILE = 'canvas.json'
 
 /**
- * Medidas do que NÃO é a tela, para o WebView receber o que sobra da janela:
- * a barra da casca (`PieceViewer`: botão de 32 + padding + borda), a barra
- * interna do `PieceView` com a margem dela, a linha das setas e a tira de
- * chips. Abaixo disso a tela não cabe e vira um selo.
+ * Measurements of what is NOT the screen, so the WebView receives what is left of the window:
+ * the bar of the shell (`PieceViewer`: a 32 button + padding + border), the inner bar
+ * of `PieceView` with its margin, the row of arrows and the strip of
+ * chips. Below that the screen does not fit and becomes a seal.
  */
 const SHELL_HEADER = 54
 const PIECE_CHROME = 41
@@ -76,13 +76,13 @@ function boardXy(value: unknown): { x: number; y: number } {
 }
 
 /**
- * O `canvas.json` (já parseado) na lista de telas, ou `[]`.
+ * The `canvas.json` (already parsed) in the list of screens, or `[]`.
  *
- * `order` manda: é a ordem que o desktop mostra, e o celular não pode numerar as
- * telas em ordem diferente. A artboard que existe em `boards` mas ficou fora do
- * `order` (índice pela metade, escrito durante a geração) continua sendo tela —
- * entra no fim, na ordem de leitura do canvas (x, depois y) —, senão uma peça
- * com conteúdo apareceria vazia aqui.
+ * `order` rules: it is the order the desktop shows, and the phone cannot number the
+ * screens in a different order. The artboard that exists in `boards` but was left out of
+ * `order` (a half-written index, written during generation) is still a screen —
+ * it comes in at the end, in the reading order of the canvas (x, then y) —, otherwise a piece
+ * with content would show up empty here.
  */
 export function parseDesignCanvas(raw: unknown): DesignScreen[] {
   const canvas = (raw ?? {}) as { boards?: unknown; order?: unknown }
@@ -114,14 +114,14 @@ export function parseDesignCanvas(raw: unknown): DesignScreen[] {
 }
 
 /**
- * A URL do HTML de uma artboard, derivada da URL do índice.
+ * The URL of the HTML of an artboard, derived from the URL of the index.
  *
- * O índice mora no fim do caminho (`…/design/<id>/<token>/canvas.json`), então a
- * pasta é a URL sem esse último segmento e o arquivo entra codificado — o mesmo
- * formato que o companion monta (`encodeURIComponent` por segmento). Sem
- * `canvas.json` no fim (URL já na pasta, por exemplo), o arquivo entra depois de
- * uma barra em vez de comer o último segmento: cortar o token deixaria a tela
- * sem autorização.
+ * The index lives at the end of the path (`…/design/<id>/<token>/canvas.json`), so the
+ * folder is the URL without that last segment and the file comes in encoded — the same
+ * format the companion builds (`encodeURIComponent` per segment). Without
+ * `canvas.json` at the end (a URL already in the folder, for example), the file comes in after
+ * a slash instead of eating the last segment: cutting the token would leave the screen
+ * without authorization.
  */
 export function artboardUrl(canvasUrl: string, file: string): string | null {
   const clean = canvasUrl.trim().split('#')[0].split('?')[0]
@@ -145,7 +145,7 @@ export function artboardUrl(canvasUrl: string, file: string): string | null {
   return relative ? folder + relative : null
 }
 
-/** O que escrever no chip e na barra da tela: o título do índice, ou o arquivo. */
+/** What to write in the chip and in the screen bar: the title from the index, or the file. */
 export function screenLabel(screen: DesignScreen): string {
   const title = screen.title?.trim()
   if (title) return title
@@ -155,7 +155,7 @@ export function screenLabel(screen: DesignScreen): string {
 
 type Status = 'loading' | 'error' | 'ready'
 
-/** Caixa centrada dos estados sem tela (carregando, erro, canvas vazio). */
+/** Centered box for the states without a screen (loading, error, empty canvas). */
 function StateBox({ children, testID }: { children: ReactNode; testID?: string }) {
   return (
     <View testID={testID} className="flex-1 items-center justify-center gap-2 px-8">
@@ -176,10 +176,10 @@ export function DesignViewer({ piece }: PieceViewerProps) {
   const [selected, setSelected] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
-  // Peça nova (ou "tentar de novo") recomeça do zero: nada do canvas anterior
-  // sobrevive à troca de fonte. Ajuste DURANTE a renderização, o padrão do
-  // React para estado derivado de prop — num efeito haveria um render
-  // intermediário mostrando as telas da peça anterior.
+  // A new piece (or "try again") starts from scratch: nothing from the previous canvas
+  // survives the source change. Adjustment DURING rendering, the React pattern
+  // for state derived from a prop — in an effect there would be an intermediate
+  // render showing the screens of the previous piece.
   const sourceKey = `${piece.url}#${attempt}`
   const [seenSource, setSeenSource] = useState(sourceKey)
   if (seenSource !== sourceKey) {
@@ -190,9 +190,9 @@ export function DesignViewer({ piece }: PieceViewerProps) {
     setSelected(null)
   }
 
-  // O índice do canvas é a única leitura desta camada. `AbortController` porque
-  // fechar a tela cheia desmonta o viewer no meio da busca, e um `setState`
-  // depois disso é ruído.
+  // The canvas index is the only read of this layer. `AbortController` because
+  // closing the full screen unmounts the viewer in the middle of the fetch, and a `setState`
+  // after that is noise.
   useEffect(() => {
     let alive = true
     const controller = new AbortController()
@@ -209,9 +209,9 @@ export function DesignViewer({ piece }: PieceViewerProps) {
       })
       .catch((err: unknown) => {
         if (!alive) return
-        // Token expirado, desktop desligado, canvas removido: a mesma caixa de
-        // erro, com o motivo concreto embaixo e um "tentar de novo" que refaz a
-        // busca (o índice pode voltar; a URL assinada, não).
+        // Expired token, desktop off, canvas removed: the same error
+        // box, with the concrete reason below and a "try again" that redoes the
+        // fetch (the index may come back; the signed URL, may not).
         setDetail(err instanceof Error ? err.message : String(err))
         setStatus('error')
       })
@@ -222,9 +222,9 @@ export function DesignViewer({ piece }: PieceViewerProps) {
     }
   }, [piece.url, attempt])
 
-  // A tela aberta é guardada pelo NOME do arquivo, não pelo índice: um índice
-  // sobrevive torto a um canvas que mudou, um nome ou está no canvas ou não
-  // está.
+  // The open screen is stored by the file NAME, not by the index: an index
+  // survives crooked to a canvas that changed, a name either is in the canvas or
+  // is not.
   const index = useMemo(() => {
     if (!selected) return 0
     const found = screens.findIndex((screen) => screen.file === selected)
@@ -292,9 +292,9 @@ export function DesignViewer({ piece }: PieceViewerProps) {
     )
   }
 
-  // Canvas sem tela (índice recém-criado, peça esvaziada) ou artboard que não dá
-  // para endereçar: estado vazio de verdade. Nada de WebView apontando para o
-  // JSON nem de tile quebrado — esse é o bug que a galeria já teve.
+  // Canvas without a screen (freshly created index, emptied piece) or an artboard that cannot
+  // be addressed: a real empty state. No WebView pointing at the
+  // JSON and no broken tile — that is the bug the gallery already had.
   if (!screen || !src) {
     return (
       <StateBox testID="design-empty">
@@ -316,7 +316,7 @@ export function DesignViewer({ piece }: PieceViewerProps) {
 
   return (
     <View className="flex-1">
-      {/* A tela em si: só ela é montada, e a interação é toda dela. */}
+      {/* The screen itself: only it is mounted, and the interaction is all its own. */}
       <PieceView
         src={src}
         title={screenLabel(screen)}
@@ -362,10 +362,10 @@ export function DesignViewer({ piece }: PieceViewerProps) {
         </Pressable>
       </View>
 
-      {/* O "select de telas": a tira rola na horizontal, a tela aberta fica
-          marcada, e um toque pula direto para ela. A faixa do indicador em casa
-          entra na altura da tira (a tela já descontou ela da própria altura),
-          senão os chips ficariam por baixo dele. */}
+      {/* The "screen select": the strip scrolls horizontally, the open screen stays
+          marked, and a tap jumps straight to it. The home indicator band
+          counts toward the height of the strip (the screen already discounted it from its own height),
+          otherwise the chips would sit under it. */}
       <ScrollView
         testID="design-screens"
         horizontal

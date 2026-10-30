@@ -12,35 +12,35 @@ import { describeTransitions } from './motion-transitions'
 import { motionVideoAudioTracks } from './motion-video-audio'
 import { getMotion, registerMotion } from './motion-store'
 
-/** A peça já tem item na galeria? O `motionId` é o vínculo, não a pasta. */
+/** Does the piece already have an item in the gallery? The `motionId` is the link, not the folder. */
 async function isInGallery(id: string): Promise<boolean> {
   try {
     const items = await listMedia({ kind: 'motion' })
     return items.some((item) => item.motionId === id)
   } catch {
-    // Índice ilegível: trata como "não está", e o registro abaixo o reescreve.
+    // Unreadable index: treat it as "not there", and the record below rewrites it.
     return false
   }
 }
 
 /**
- * Reabre uma peça que JÁ está no registro — o card do chat, o tile da Mídia.
+ * Reopens a piece that is ALREADY in the registry — the chat card, the Media tile.
  *
- * Não mede nem reporta nada: quem clicou quer ver a peça, não um relatório.
- * `false` quando a composição saiu do registro (uma peça de projeto apagado
- * some com ele), e aí quem chamou diz que ela não está mais lá.
+ * It measures and reports nothing: whoever clicked wants to see the piece, not a report.
+ * `false` when the composition left the registry (a piece of a deleted project
+ * goes with it), and then the caller says it is no longer there.
  */
 export async function reopenMotion(id: string): Promise<boolean> {
   const entry = await getMotion(id)
   if (!entry) return false
-  // Depois de reiniciar o app o registro volta do disco, mas o watcher não: sem
-  // registrar de novo a peça reaberta abriria sem recarga ao vivo. É idempotente
-  // (mesmo id, mesma entrada) e só religa o watcher.
+  // After restarting the app the registry comes back from disk, but the watcher does not: without
+  // registering again, the reopened piece would open without live reload. It is idempotent
+  // (same id, same entry) and only reconnects the watcher.
   await registerMotion(entry.folder, entry.entry).catch(() => {})
-  // Sem `sessionId` de propósito: o renderer resolve o balde pelo chat ATIVO. A
-  // sessão gravada no registro é a de ORIGEM — para uma peça antiga é outra
-  // conversa, e a aba nasceria num painel que não está na tela (o clique
-  // parecia não fazer nada).
+  // No `sessionId` on purpose: the renderer resolves the bucket by the ACTIVE chat. The
+  // session recorded in the registry is the one of ORIGIN — for an old piece it is another
+  // conversation, and the tab would be born in a panel that is not on screen (the click
+  // seemed to do nothing).
   panelMotionPreview({
     id,
     entry: path.relative(entry.folder, entry.entry),
@@ -51,48 +51,48 @@ export async function reopenMotion(id: string): Promise<boolean> {
 }
 
 /**
- * Abre uma composição na aba Motion e conta ao agente como ela ficou.
+ * Opens a composition in the Motion tab and tells the agent how it turned out.
  *
- * É o passo comum de motion_write, motion_edit e motion_preview (a composição
- * no armazenamento do Orbit, nos dois modos): registra a pasta, manda o painel
- * abrir (ou focar) a
- * aba e MEDE a composição na mesma janela offscreen que a aba usa — o agente
- * fica sabendo agora se ela carrega e quem entra e sai, e quando, em vez de
- * descobrir pelo usuário reclamando de uma tela girando.
+ * It is the common step of motion_write, motion_edit and motion_preview (the composition
+ * in Orbit's storage, in both modes): registers the folder, tells the panel
+ * to open (or focus) the
+ * tab and MEASURES the composition in the same offscreen window the tab uses — the agent
+ * learns right now whether it loads and who enters and leaves, and when, instead of
+ * finding out from the user complaining about a spinning screen.
  */
 export async function openMotionAndReport(input: {
-  /** Entrada .html (ou a pasta dela), já resolvida e autorizada. */
+  /** The .html entry (or its folder), already resolved and authorized. */
   target: string
-  /** Pasta de trabalho que registra a composição. */
+  /** Working folder that registers the composition. */
   root?: string
   sessionId: string
-  /** Como o agente chama a composição no texto (caminho relativo ou nome). */
+  /** How the agent calls the composition in the text (relative path or name). */
   label: string
-  /** O que fazer a seguir, dito na linguagem das tools que o agente tem. */
+  /** What to do next, said in the language of the tools the agent has. */
   nextStep: string
-  /** O que fazer quando não carregou. */
+  /** What to do when it did not load. */
   fixHint: string
-  /** false num worker: a peça é registrada e medida, mas nenhuma aba abre. */
+  /** false in a worker: the piece is registered and measured, but no tab opens. */
   openTab?: boolean
 }): Promise<string> {
   const preview = await prepareMotionPreview(input.target, { root: input.root, sessionId: input.sessionId })
   const name = path.basename(preview.folder)
-  // O id faz a mesma composição voltar à MESMA aba; `entry` é o caminho dentro
-  // da pasta e `path` o absoluto, que a nota do chat devolve ao agente.
+  // The id makes the same composition come back to the SAME tab; `entry` is the path inside
+  // the folder and `path` the absolute one, which the chat note gives back to the agent.
   if (input.openTab !== false) {
     panelMotionPreview({ id: preview.id, entry: preview.entry, title: name, path: preview.file, sessionId: input.sessionId })
   }
   try {
     const measured = await measureMotionLayers(preview.id, preview.url)
-    // A peça entra na galeria na PRIMEIRA vez que abre: é isso que a deixa
-    // reabrível quando a aba do painel for fechada. Uma vez só (a capa custa uma
-    // janela offscreen a mais) e best-effort — o preview nunca depende disso.
+    // The piece enters the gallery the FIRST time it opens: that is what makes it
+    // reopenable when the panel's tab is closed. Once only (the cover costs one
+    // extra offscreen window) and best-effort — the preview never depends on it.
     if (!(await isInGallery(preview.id))) {
       await registerMotionCover(preview.id, { sessionId: input.sessionId }).catch(() => false)
     }
-    // As faixas entram no relatório: o agente precisa saber que a peça JÁ tem som
-    // (a aba o toca com o preview e o render o mistura) e em que instantes, antes
-    // de mexer no comprimento dela ou de reescrever a composição.
+    // The tracks enter the report: the agent needs to know that the piece ALREADY has sound
+    // (the tab plays it with the preview and the render mixes it) and at which instants, before
+    // changing its length or rewriting the composition.
     let audio = ''
     let plan: MotionAudioPlan | null = null
     try {
@@ -115,9 +115,9 @@ export async function openMotionAndReport(input: {
     } catch (err) {
       audio = `Audio: the manifest in the composition folder is broken — ${err instanceof Error ? err.message : String(err)}. The render will fail on it.`
     }
-    // O lint junta o que só se vê no texto da composição (relógio de parede,
-    // arquivo que falta…) com o que só se vê rodando (transição fora da peça,
-    // faixa de áudio depois do fim).
+    // The lint joins what is only seen in the composition's text (wall clock,
+    // missing file…) with what is only seen while running (transition outside the piece,
+    // audio track after the end).
     const lint = await lintMotionComposition({
       entry: preview.file,
       folder: preview.folder,
@@ -137,8 +137,8 @@ export async function openMotionAndReport(input: {
       .filter(Boolean)
       .join('\n')
   } catch (err) {
-    // A composição não carregou: o lint estático (sem rodar nada) costuma apontar
-    // o motivo — um arquivo que falta, um script que não existe.
+    // The composition did not load: the static lint (without running anything) usually points to
+    // the reason — a missing file, a script that does not exist.
     const lint = await lintMotionComposition({ entry: preview.file, folder: preview.folder })
     return [
       `Motion "${name}" is open in the Motion tab, but it DID NOT LOAD: ${err instanceof Error ? err.message : String(err)}. ` +

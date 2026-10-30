@@ -3,26 +3,27 @@ import type { ShotGeometry } from './geometry'
 import { ComputerError, type AppInfo, type Frame, type WindowInfo } from './types'
 
 /**
- * Observações numeradas por sessão. Cada índice mostrado ao modelo vira um
- * handle serializável (caminho + identidade) — a bridge do macOS não guarda
- * elementos entre processos, então a ação re-encontra o elemento pelo caminho
- * e confere que ainda é o mesmo; o host do Windows guarda, e o `ref` é a chave. Uma observação nova do mesmo app invalida a anterior.
+ * Observations numbered by session. Each index shown to the model becomes a
+ * serializable handle (path + identity) — the macOS bridge does not keep elements
+ * between processes, so the action finds the element again by the path and checks that
+ * it is still the same one; the Windows host keeps it, and the `ref` is the key. A new
+ * observation of the same app invalidates the previous one.
  */
 
-/** Depois disso a observação vence: a tela provavelmente mudou. */
+/** After this the observation expires: the screen has probably changed. */
 export const OBSERVATION_TTL_MS = 120_000
 
 export interface ElementHandle {
   index: number
   path: number[]
-  /** Identidade do host (Windows); a ação vai por ela e usa o `path` de fallback */
+  /** Identity from the host (Windows); the action goes by it and uses the `path` as a fallback */
   ref?: string
-  /** Papel no vocabulário do AX (o que o modelo vê) */
+  /** Role in the AX vocabulary (what the model sees) */
   role: string
-  /** Papel como o host mandou (UIA no Windows) — é com ele que o host confere a identidade */
+  /** Role as the host sent it (UIA on Windows) — it is with it that the host checks the identity */
   nativeRole?: string
   title: string | null
-  /** Pontos globais */
+  /** Global points */
   frame: Frame | null
   actions: string[]
   secure: boolean
@@ -35,27 +36,27 @@ export interface ObservationRecord {
   app: AppInfo
   window: WindowInfo
   geometry: ShotGeometry
-  /** O screenshot existe? Sem ele as coordenadas são pontos da janela. */
+  /** Does the screenshot exist? Without it the coordinates are window points. */
   hasScreenshot: boolean
   url: string | null
   elements: Map<number, ElementHandle>
-  /** Resumo da árvore — duas observações iguais seguidas = a ação não mudou nada */
+  /** Summary of the tree — two identical observations in a row = the action changed nothing */
   digest: string | null
-  /** Identidade → índice: a próxima observação da mesma janela mantém os índices */
+  /** Identity → index: the next observation of the same window keeps the indices */
   keys?: Map<string, number>
-  /** Índice → linha: a base do diff. Ausente quando a árvore não foi lida inteira (cu_query) */
+  /** Index → line: the base of the diff. Absent when the tree was not read whole (cu_query) */
   bodies?: Map<number, string>
-  /** Quantos diffs seguidos desde a última árvore completa (0 = esta é completa) */
+  /** How many diffs in a row since the last full tree (0 = this one is full) */
   diffChain?: number
 }
 
-/** O último app observado com um pid — o que o gate de permissões lê. */
+/** The last app observed with a pid — what the permission gate reads. */
 export interface RecentTarget {
   bundleId: string | null
   name: string
   pid: number
   url: string | null
-  /** Windows: o exe ("chrome.exe") — é ele que diz se o app é navegador */
+  /** Windows: the exe ("chrome.exe") — it is what says whether the app is a browser */
   exe?: string
 }
 
@@ -64,9 +65,9 @@ export function newObservationId(): string {
 }
 
 export function createRegistry(now: () => number = Date.now) {
-  /** sessão → pid → observação mais recente */
+  /** session → pid → most recent observation */
   const bySession = new Map<string, Map<number, ObservationRecord>>()
-  /** pid → o app e a URL da última observação, de qualquer sessão (para o gate) */
+  /** pid → the app and the URL of the last observation, from any session (for the gate) */
   const recent = new Map<number, RecentTarget>()
 
   function fresh(record: ObservationRecord): ObservationRecord {
@@ -94,15 +95,15 @@ export function createRegistry(now: () => number = Date.now) {
       })
     },
 
-    /** A observação mais recente de um app nesta sessão, se houver (sem checar validade). */
+    /** The most recent observation of an app in this session, if there is one (without checking validity). */
     peek(sessionId: string, pid: number): ObservationRecord | null {
       return bySession.get(sessionId)?.get(pid) ?? null
     },
 
     /**
-     * A observação contra a qual uma ação é resolvida. Com `observationId`,
-     * precisa ser exatamente a mais recente daquele app — índice de uma
-     * observação anterior é erro explícito, nunca um clique no lugar errado.
+     * The observation against which an action is resolved. With `observationId`, it has to
+     * be exactly the most recent one of that app — an index from an earlier observation is
+     * an explicit error, never a click in the wrong place.
      */
     forAction(sessionId: string, pid: number, observationId?: string): ObservationRecord {
       const latest = bySession.get(sessionId)?.get(pid)
@@ -127,9 +128,9 @@ export function createRegistry(now: () => number = Date.now) {
     },
 
     /**
-     * O app observado mais recentemente que casa com o texto do modelo (bundle
-     * id, nome ou pid) — o gate de permissões não resolve apps, só lê isto
-     * para pedir aprovação pelo bundle e pelo site certos.
+     * The most recently observed app that matches the model's text (bundle id, name or
+     * pid) — the permission gate does not resolve apps, it only reads this to ask for
+     * approval by the right bundle and site.
      */
     lastTargetFor(query: string): RecentTarget | null {
       const q = query.trim().toLowerCase()
@@ -154,5 +155,5 @@ export function createRegistry(now: () => number = Date.now) {
 
 export type Registry = ReturnType<typeof createRegistry>
 
-/** O registro do app. Mora aqui (sem electron) para o gate de permissões poder ler a URL vista. */
+/** The app registry. It lives here (without electron) so the permission gate can read the URL seen. */
 export const computerRegistry = createRegistry()

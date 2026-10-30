@@ -16,13 +16,13 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { useModeOverrides } from "@/src/stores/mode-overrides"
 
 /**
- * Configuração do modo Visão: escolhe o modelo de visão que DESCREVE imagens
- * para modelos sem visão (anexos e screenshots com ver: true). Só mostra
- * modelos com suporte a imagem. Sem modelo selecionado, o modo fica
- * desligado e o modelo principal não recebe imagens.
+ * Vision mode settings: it chooses the vision model that DESCRIBES images
+ * for models without vision (attachments and screenshots with see: true). It only shows
+ * models with image support. With no model selected, the mode stays
+ * off and the main model does not receive images.
  *
- * O modelo é global; a ATIVAÇÃO é por chat (targetSession): escolher modelo
- * liga o modo para a sessão que abriu o dialog (undefined = chat novo).
+ * The model is global; the ACTIVATION is per chat (targetSession): choosing a model
+ * turns the mode on for the session that opened the dialog (undefined = new chat).
  */
 export function VisionConfigDialog({ open, onOpenChange, targetSession }: {
   open: boolean
@@ -66,8 +66,8 @@ export function VisionConfigDialog({ open, onOpenChange, targetSession }: {
             <ModelPicker
               value={visionModel}
               onValueChange={(model) => {
-                // Escolher modelo configura E ativa o modo (nesta sessão);
-                // limpar desativa
+                // Choosing a model configures AND turns the mode on (in this session);
+                // clearing it turns it off
                 setVisionModel(model)
                 setModeActive("vision", targetSession, model != null)
               }}

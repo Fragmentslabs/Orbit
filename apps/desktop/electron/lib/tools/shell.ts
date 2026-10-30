@@ -10,16 +10,16 @@ import { parseFileView, parseInspection, symbolSearchPattern } from '../bash-ins
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
 /**
- * Saída guardada: o começo E o fim. Guardar só o começo, como antes, perdia
- * justamente o que importa num build ou teste que falha — o erro e o resumo
- * vêm no fim — e o agente rodava de novo para ver. O meio é o que sai.
+ * Stored output: the beginning AND the end. Keeping only the beginning, as before, lost
+ * exactly what matters in a build or test that fails — the error and the summary
+ * come at the end — and the agent ran it again to see. The middle is what gets dropped.
  */
 const OUTPUT_HEAD = 6_000
 const OUTPUT_TAIL = 10_000
 const SIGKILL_GRACE = 200
-// Janela de tolerância após o kill do abort: se o processo não emitiu 'close'
-// nesse tempo, o kill falhou (ex.: taskkill sem permissão no Windows) — o
-// runShell resolve mesmo assim (nunca deixa o turno do agente preso).
+// Tolerance window after the abort's kill: if the process did not emit 'close'
+// in that time, the kill failed (e.g. taskkill without permission on Windows) — the
+// runShell resolves anyway (it never leaves the agent's turn stuck).
 const SETTLE_GRACE_MS = 5000
 
 const execFileAsync = promisify(execFile)
@@ -27,10 +27,10 @@ const execFileAsync = promisify(execFile)
 async function killTree(pid: number): Promise<void> {
   const isWin = process.platform === 'win32'
   if (isWin) {
-    // taskkill via execFile (assíncrono): execSync BLOQUEAVA o main process —
-    // congelava todos os IPC handlers durante o kill, inclusive novos cliques
-    // no botão de parar. Falha (exit != 0) é comum (processo já morto) e é
-    // coberta pelo watchdog de settle do runShell.
+    // taskkill via execFile (asynchronous): execSync BLOCKED the main process —
+    // it froze every IPC handler during the kill, including new clicks
+    // on the stop button. Failure (exit != 0) is common (process already dead) and is
+    // covered by runShell's settle watchdog.
     try {
       await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
     } catch {
@@ -41,12 +41,12 @@ async function killTree(pid: number): Promise<void> {
   try {
     process.kill(-pid, 'SIGTERM')
     setTimeout(() => {
-      // SIGKILL de reforço caso o SIGTERM não tenha sido suficiente
-      try { process.kill(-pid, 'SIGKILL') } catch { /* já encerrou */ }
+      // Reinforcement SIGKILL in case the SIGTERM was not enough
+      try { process.kill(-pid, 'SIGKILL') } catch { /* already exited */ }
     }, SIGKILL_GRACE)
   } catch {
-    // sem grupo próprio (ex.: spawn sem detached) — cai no kill direto
-    try { process.kill(pid, 'SIGTERM') } catch { /* já encerrou */ }
+    // with no group of its own (e.g. spawn without detached) — it falls back to a direct kill
+    try { process.kill(pid, 'SIGTERM') } catch { /* already exited */ }
   }
 }
 
@@ -55,7 +55,7 @@ function makeLabel(command: string): string {
   return `auto: ${flat.slice(0, 60)}${flat.length > 60 ? '…' : ''}`
 }
 
-/** Acumula a saída de um processo guardando só o começo e o fim. */
+/** Accumulates a process's output keeping only the beginning and the end. */
 export function createOutputCollector(headChars = OUTPUT_HEAD, tailChars = OUTPUT_TAIL) {
   let head = ''
   let tail = ''
@@ -90,8 +90,8 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
         : spawn(process.env.SHELL || '/bin/bash', ['-c', command], {
             cwd,
             env: userShellEnv(),
-            // detached:true garante grupo próprio (setsid): o killTree cobre a
-            // árvore inteira E a promoção p/ background preserva os filhos.
+            // detached:true guarantees a group of its own (setsid): killTree covers the
+            // whole tree AND the promotion to background preserves the children.
             detached: true,
             stdio: ['ignore', 'pipe', 'pipe'],
           })
@@ -104,13 +104,13 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
       const pid = child.pid
       const kill = () => { if (pid != null) void killTree(pid) }
 
-      // Watchdog pós-abort: se o kill falhar silenciosamente (ex.: taskkill
-      // sem permissão no Windows), o 'close' nunca chega e a Promise ficaria
-      // pendente PARA SEMPRE — o turno do agente trava e o botão de parar vira
-      // no-op (o segundo abort é ignorado porque o sinal já foi abortado).
-      // Após SETTLE_GRACE_MS, resolve mesmo assim: registra o processo ainda
-      // vivo no gerenciador (vira visível e terminável no painel de processos)
-      // e devolve a saída parcial com um aviso explícito.
+      // Post-abort watchdog: if the kill fails silently (e.g. taskkill
+      // without permission on Windows), 'close' never arrives and the Promise would stay
+      // pending FOREVER — the agent's turn gets stuck and the stop button becomes a
+      // no-op (the second abort is ignored because the signal was already aborted).
+      // After SETTLE_GRACE_MS, it resolves anyway: it registers the still-alive
+      // process in the manager (it becomes visible and killable in the process panel)
+      // and returns the partial output with an explicit warning.
       let settleTimer: NodeJS.Timeout | undefined
       const armSettleWatchdog = () => {
         if (settleTimer) return
@@ -135,16 +135,16 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
             sessionId,
           })
           console.warn(
-            `[shell] kill não confirmado após ${SETTLE_GRACE_MS / 1000}s — PID ${pid} ainda vivo; ` +
-              'registrado como background (acompanhe/encerre pelo painel de processos)',
+            `[shell] kill not confirmed after ${SETTLE_GRACE_MS / 1000}s — PID ${pid} still alive; ` +
+              'recorded as background (follow/end it in the processes panel)',
           )
           resolve({ output, exitCode: null, background })
         }, SETTLE_GRACE_MS)
       }
 
-      // Timeout promove o comando para background em vez de matar: dev servers
-      // (npm run dev) e builds longos continuam vivos, e a tool retorna já com
-      // a saída parcial + ponteiro (bash_list/bash_output/bash_kill).
+      // Timeout promotes the command to background instead of killing it: dev servers
+      // (npm run dev) and long builds stay alive, and the tool already returns
+      // the partial output + pointer (bash_list/bash_output/bash_kill).
       const timer = setTimeout(() => {
         clearTimeout(timer)
         const output = collected.text()
@@ -153,9 +153,9 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
         child.stderr.removeListener('data', append)
         child.removeAllListeners('close')
         child.removeAllListeners('error')
-        // A partir daqui o processo é dono da própria vida: o abort do turno
-        // (Stop, nova mensagem) NÃO deve derrubá-lo — só bash_kill/lixeira. Sem
-        // esta remoção, o abort disparava onAbort e matava o processo promovido.
+        // From here on the process owns its own life: the turn's abort
+        // (Stop, new message) must NOT bring it down — only bash_kill/trash. Without
+        // this removal, the abort fired onAbort and killed the promoted process.
         abort.removeEventListener('abort', onAbort)
         const background = registerProcess(child, {
           label: makeLabel(command),
@@ -192,13 +192,13 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
   )
 }
 
-/** Dicas já dadas neste turno: uma de cada tipo basta, repetir só custa tokens. */
+/** Hints already given in this turn: one of each kind is enough, repeating only costs tokens. */
 const hintsGiven = new WeakMap<ToolContext, Set<'search' | 'read'>>()
 
 /**
- * Bash usado para ler ou buscar código: aponta a ferramenta certa, uma vez por
- * turno. Depois do code-index o agente passou a fazer MAIS isso (62% das
- * chamadas de bash), por fora do índice e do `read`.
+ * Bash used to read or search code: it points to the right tool, once per
+ * turn. After the code-index the agent started doing this MORE (62% of the
+ * bash calls), outside the index and outside `read`.
  */
 export function inspectionHint(ctx: ToolContext, command: string): string {
   const inspection = parseInspection(command, ctx.directory)

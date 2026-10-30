@@ -1,21 +1,20 @@
-# Host persistente do Computer Use no Windows.
+# Persistent Computer Use host on Windows.
 #
-# Um unico powershell.exe que fica vivo: o Orbit manda uma linha JSON por
-# pedido no stdin ({"id":7,"op":"tree","args":{...}}) e le uma linha por
-# resposta no stdout ({"id":7,"ok":true,"result":...}). O Add-Type (que e o
-# que custa 1-2 s) roda UMA vez, na partida; cada operacao depois e so uma
-# chamada ao C# ja compilado.
+# A single powershell.exe that stays alive: Orbit sends one JSON line per request on
+# stdin ({"id":7,"op":"tree","args":{...}}) and reads one line per response on stdout
+# ({"id":7,"ok":true,"result":...}). Add-Type (which is what costs 1-2 s) runs ONCE, at
+# startup; every operation afterwards is just a call into the already compiled C#.
 #
-# Regras que o arquivo segue:
-#  - o C# mora em windows-host.cs (leitura) e windows-host-actions.cs (acoes); o
-#    driver grava os tres arquivos lado a lado como host.ps1, host.cs e actions.cs;
-#  - ASCII puro (o Orbit grava com BOM, mas nao dependemos disso);
-#  - stdin/stdout em UTF-8 sem BOM: o PowerShell 5.1 usaria a pagina de codigo
-#    ANSI e corromperia texto fora do ASCII;
-#  - o C# e C# 5 (o compilador do Add-Type do PowerShell 5.1): sem "?.",
-#    interpolacao de string nem "out var";
-#  - nada de SetFocus: focar um controle de outro app ATIVA a janela dele e
-#    rouba o teclado do usuario.
+# Rules the file follows:
+#  - the C# lives in windows-host.cs (reading) and windows-host-actions.cs (actions);
+#    the driver writes the three files side by side as host.ps1, host.cs and actions.cs;
+#  - pure ASCII (Orbit writes it with a BOM, but we do not rely on that);
+#  - stdin/stdout in UTF-8 without a BOM: PowerShell 5.1 would use the ANSI codepage
+#    and would corrupt text outside ASCII;
+#  - the C# is C# 5 (the Add-Type compiler of PowerShell 5.1): no "?.", no string
+#    interpolation and no "out var";
+#  - no SetFocus: focusing a control of another app ACTIVATES its window and steals
+#    the user's keyboard.
 
 $ErrorActionPreference = 'Stop'
 
@@ -25,8 +24,8 @@ $stdout = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $ut
 $stdout.AutoFlush = $true
 $stdout.NewLine = "`n"
 
-# Constrained Language Mode (AppLocker/WDAC) proibe Add-Type: sem ele nao ha
-# host. O Orbit ainda assim recebe uma resposta clara em vez de um timeout.
+# Constrained Language Mode (AppLocker/WDAC) forbids Add-Type: without it there is no
+# host. Orbit still gets a clear answer instead of a timeout.
 $ready = $false
 $loadError = $null
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
@@ -49,7 +48,7 @@ while ($true) {
         $stdout.WriteLine([OrbitHost]::Handle($line))
         continue
     }
-    # Sem o host compilado: so da para dizer por que.
+    # Without the compiled host: all we can do is say why.
     try {
         $req = $line | ConvertFrom-Json
         if ($req.op -eq 'perms') {

@@ -18,33 +18,33 @@ import {
 } from './browser-input'
 
 /**
- * Engine de captura headless do Orbit.
+ * Orbit's headless capture engine.
  *
- * O agente escreve um script JS (run_browser_script) ou pede um lote de fotos
- * (capture_batch); os dois rodam aqui. O script do agente NÃO roda no main:
- * vai para um `utilityProcess` (Node do Electron, processo separado), que fala
- * com o main por IPC e controla uma `BrowserWindow` oculta. Assim um laço
- * infinito ou um throw do script não derruba o app — basta matar o processo no
+ * The agent writes a JS script (run_browser_script) or asks for a batch of photos
+ * (capture_batch); both run here. The agent's script does NOT run in the main:
+ * it goes to a `utilityProcess` (Electron's Node, a separate process), which talks
+ * to the main over IPC and drives a hidden `BrowserWindow`. That way an infinite
+ * loop or a throw in the script does not bring the app down — it is enough to kill the process on
  * timeout.
  *
- * A janela oculta usa a MESMA partition persistente do `<webview>` do painel
- * direito (BROWSER_PARTITION) — cookies, logins e localStorage são
- * compartilhados: o que está logado no painel está logado aqui.
+ * The hidden window uses the SAME persistent partition as the right panel's `<webview>`
+ * (BROWSER_PARTITION) — cookies, logins and localStorage are
+ * shared: what is logged in in the panel is logged in here.
  *
- * Playwright não entra no bundle: a engine é o próprio Chromium do Electron.
+ * Playwright does not enter the bundle: the engine is Electron's own Chromium.
  */
 
-/** Sessão persistente compartilhada com o `<webview>` do painel (cookies/logins).
- *  Precisa ser idêntica à BROWSER_PARTITION do renderer (webview-session.ts). */
+/** Persistent session shared with the panel's `<webview>` (cookies/logins).
+ *  It has to be identical to the renderer's BROWSER_PARTITION (webview-session.ts). */
 export const BROWSER_PARTITION = 'persist:orbit-browser'
 
-/** Altura máxima de uma captura fullPage (evita estourar memória em páginas infinitas). */
+/** Maximum height of a fullPage capture (avoids blowing memory on infinite pages). */
 const MAX_FULL_PAGE_HEIGHT = 8000
 export const DEFAULT_VIEWPORT = { width: 1280, height: 800 }
 const DEFAULT_TIMEOUT_MS = 120_000
 const LOAD_TIMEOUT_MS = 20_000
 const MAX_LOGS = 200
-/** Limite de caracteres por resposta de orbit.fetch (o corpo vai por IPC). */
+/** Character limit per orbit.fetch response (the body crosses IPC). */
 const MAX_FETCH_CHARS = 200_000
 
 export type CaptureFormat = 'webp' | 'png' | 'jpeg'
@@ -57,7 +57,7 @@ export interface CaptureItem {
   size: number
 }
 
-/** Artefato textual salvo pelo script (orbit.save). */
+/** Text artifact saved by the script (orbit.save). */
 export interface ArtifactItem {
   name: string
   path: string
@@ -68,7 +68,7 @@ export interface ScriptRunResult {
   taskId: string
   captures: CaptureItem[]
   artifacts: ArtifactItem[]
-  /** Pasta onde os artefatos foram gravados (undefined se o script não salvou nada). */
+  /** Folder where the artifacts were written (undefined if the script saved nothing). */
   artifactsDir?: string
   logs: string[]
   returned?: unknown
@@ -79,16 +79,16 @@ export interface ScriptRunResult {
 export interface RunScriptOptions {
   script: string
   sessionId: string
-  /** Identificador da tarefa — vira a pasta em orbit-data/scripts/<taskId> */
+  /** Task identifier — becomes the folder in orbit-data/scripts/<taskId> */
   taskId?: string
-  /** Origem registrada nas imagens salvas */
+  /** Source recorded on the saved images */
   source?: MediaSource
-  /** Preserva a pasta do script após a execução (padrão: apaga) */
+  /** Preserves the script's folder after execution (default: deletes) */
   keep?: boolean
   timeoutMs?: number
   viewport?: { width: number; height: number }
-  /** Pasta (absoluta) onde orbit.save grava os artefatos. Sem ela, os
-   *  artefatos vão para a pasta da tarefa e ela é preservada. */
+  /** Folder (absolute) where orbit.save writes the artifacts. Without it, the
+   *  artifacts go to the task folder and it is preserved. */
   outDir?: string
 }
 
@@ -96,7 +96,7 @@ function scriptsDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'scripts')
 }
 
-/** taskId seguro para virar nome de pasta (o agente pode mandar qualquer coisa). */
+/** taskId safe to become a folder name (the agent may send anything). */
 function safeTaskId(raw?: string): string {
   const cleaned = (raw ?? '').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
   if (cleaned) return cleaned
@@ -108,13 +108,13 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Ponte que roda DENTRO do utilityProcess. Fica aqui como texto porque o main
- * é empacotado num bundle único (vite-plugin-electron) — não há um segundo
- * entry para o processo filho; o arquivo é gerado na pasta da tarefa a cada
- * execução, junto do run.js do agente.
+ * Bridge that runs INSIDE the utilityProcess. It lives here as text because the main
+ * is bundled into a single bundle (vite-plugin-electron) — there is no second
+ * entry for the child process; the file is generated in the task folder on every
+ * execution, along with the agent's run.js.
  *
- * Todas as operações de browser viram chamadas IPC para o main; o script do
- * agente só enxerga o objeto global `orbit`.
+ * Every browser operation becomes an IPC call to the main; the agent's script
+ * only sees the global `orbit` object.
  */
 const RUNNER_SOURCE = `'use strict'
 const fs = require('node:fs')
@@ -204,15 +204,15 @@ interface DoneMessage {
   error?: string
 }
 
-/** Cria a janela oculta de captura (usada aqui e pela gravação — browser-record). */
+/** Creates the hidden capture window (used here and by the recording — browser-record). */
 export function createHiddenWindow(viewport: { width: number; height: number }): BrowserWindow {
   return new BrowserWindow({
     show: false,
     width: viewport.width,
     height: viewport.height,
     useContentSize: true,
-    // Sem isto o Chromium não pinta uma janela que nunca foi exibida e o
-    // capturePage volta em branco/preto (o caso clássico do macOS).
+    // Without this Chromium does not paint a window that was never shown and the
+    // capturePage comes back blank/black (the classic macOS case).
     paintWhenInitiallyHidden: true,
     webPreferences: {
       partition: BROWSER_PARTITION,
@@ -225,8 +225,8 @@ export function createHiddenWindow(viewport: { width: number; height: number }):
 }
 
 /**
- * Roda um script do agente na engine oculta e devolve o manifesto das imagens.
- * Nunca lança por culpa do script — o erro volta no campo `error`.
+ * Runs an agent script in the hidden engine and returns the manifest of the images.
+ * It never throws because of the script — the error comes back in the `error` field.
  */
 export async function runBrowserScript(options: RunScriptOptions): Promise<ScriptRunResult> {
   const taskId = safeTaskId(options.taskId)
@@ -243,8 +243,8 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
 
   const captures: CaptureItem[] = []
   const artifacts: ArtifactItem[] = []
-  // Artefatos vão para a pasta pedida (dentro da pasta de trabalho) ou, sem
-  // ela, para a pasta da tarefa — que então é preservada no final.
+  // Artifacts go to the requested folder (inside the working folder) or, without
+  // it, to the task folder — which is then preserved at the end.
   const artifactsBase = options.outDir ? path.resolve(options.outDir) : path.join(taskDir, 'artifacts')
   const logs: string[] = []
   const pushLog = (line: string) => {
@@ -253,12 +253,12 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
 
   const win = createHiddenWindow(viewport)
   let timedOut = false
-  // Console da página: erros também entram no resultado (o agente vê por que
-  // um print saiu em branco sem precisar pedir).
+  // Page console: errors also enter the result (the agent sees why
+  // a screenshot came out blank without having to ask).
   const pageConsole = new ConsoleBuffer()
   attachConsole(win.webContents, () => pageConsole)
   let heldPointer: { x: number; y: number } | null = null
-  /** Alvo do script: seletor CSS (string) ou { x, y } / { selector }. */
+  /** Script target: CSS selector (string) or { x, y } / { selector }. */
   const toTarget = (raw: unknown): BrowserTarget =>
     typeof raw === 'string' ? { selector: raw } : ((raw ?? {}) as BrowserTarget)
   const point = async (raw: unknown, scroll: boolean) => {
@@ -270,10 +270,10 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
   const waitForLoad = async () => {
     const deadline = Date.now() + LOAD_TIMEOUT_MS
     while (win.webContents.isLoading() && Date.now() < deadline) await delay(150)
-    await delay(400) // deixa SPAs hidratarem
+    await delay(400) // lets SPAs hydrate
   }
 
-  /** Captura a viewport (ou a página inteira, esticando a janela oculta). */
+  /** Captures the viewport (or the whole page, stretching the hidden window). */
   const capture = async (name: string, opts: { fullPage?: boolean; format?: CaptureFormat; maxWidth?: number }) => {
     const format = opts.format ?? 'webp'
     const originalSize = win.getContentSize()
@@ -282,7 +282,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
         `Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0, ${viewport.height})`,
       )) as number
       win.setContentSize(originalSize[0], Math.min(Math.ceil(height), MAX_FULL_PAGE_HEIGHT))
-      await delay(400) // repaint na nova altura
+      await delay(400) // repaint at the new height
     }
     try {
       const image = await win.webContents.capturePage()
@@ -333,7 +333,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
         try {
           await Promise.race([win.loadURL(url), delay(LOAD_TIMEOUT_MS)])
         } catch (err) {
-          // ERR_ABORTED (-3) é normal em SPAs/redirects
+          // ERR_ABORTED (-3) is normal in SPAs/redirects
           if ((err as { errno?: number }).errno !== -3) throw err
         }
         await waitForLoad()
@@ -357,7 +357,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
           if (found) return true
           await delay(200)
         }
-        throw new Error(`waitFor: seletor não apareceu em ${opts.timeout ?? 10_000}ms — ${selector}`)
+        throw new Error(`waitFor: selector did not appear within ${opts.timeout ?? 10_000}ms — ${selector}`)
       }
       case 'resize': {
         const width = Math.round(Number(args.width) || viewport.width)
@@ -401,8 +401,8 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
         pushLog(String(args.message ?? ''))
         return true
       case 'fetch': {
-        // Busca na sessão do browser (cookies/logins do painel inclusos) —
-        // serve para robots.txt, sitemap, bundles JS e APIs autenticadas.
+        // Fetches in the browser session (panel cookies/logins included) —
+        // useful for robots.txt, sitemap, JS bundles and authenticated APIs.
         const url = String(args.url ?? '')
         const opts = (args.options ?? {}) as {
           method?: string
@@ -447,7 +447,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
         return { path: target, name: relative, bytes: buffer.length }
       }
       default:
-        throw new Error(`Operação desconhecida: ${op}`)
+        throw new Error(`Unknown operation: ${op}`)
     }
   }
 
@@ -466,16 +466,16 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
 
     const timer = setTimeout(() => {
       timedOut = true
-      finish({ error: `O script excedeu o tempo limite de ${Math.round(timeoutMs / 1000)}s e foi encerrado.` })
+      finish({ error: `The script exceeded the ${Math.round(timeoutMs / 1000)}s time limit and was terminated.` })
     }, timeoutMs)
 
-    // Responder um processo já morto (timeout) lança — o script não existe
-    // mais para receber, e a falha não pode derrubar o turno.
+    // Answering a process that is already dead (timeout) throws — the script no longer
+    // exists to receive it, and the failure cannot bring the turn down.
     const reply = (payload: Record<string, unknown>) => {
       try {
         child.postMessage({ type: 'reply', ...payload })
       } catch {
-        // processo encerrado
+        // process already gone
       }
     }
 
@@ -494,27 +494,27 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
     })
 
     child.on('exit', (code) => {
-      finish(code === 0 ? {} : { error: `O processo do script terminou com código ${code}.` })
+      finish(code === 0 ? {} : { error: `The script process exited with code ${code}.` })
     })
   })
 
   try {
     child.kill()
   } catch {
-    // já morreu
+    // already dead
   }
   if (!win.isDestroyed()) win.destroy()
-  // A pasta da tarefa só é apagada quando não há artefato dentro dela: com
-  // outDir, os artefatos estão fora e a limpeza continua valendo.
+  // The task folder is only deleted when there is no artifact inside it: with
+  // outDir, the artifacts are outside and the cleanup still applies.
   if (!options.keep && artifacts.length === 0) {
     await fsp.rm(taskDir, { recursive: true, force: true })
   }
 
-  // Só os erros da página vão para o resultado sozinhos — o resto o script
-  // pede com orbit.console() quando quiser.
+  // Only the page's errors go into the result on their own — the rest the script
+  // asks for with orbit.console() when it wants.
   const pageErrors = pageConsole.query({ level: 'error', limit: 20 })
   if (pageErrors.length > 0) {
-    pushLog(`[página] ${pageErrors.length} erro(s) no console:\n${formatConsoleEntries(pageErrors)}`)
+    pushLog(`[page] ${pageErrors.length} error(s) in the console:\n${formatConsoleEntries(pageErrors)}`)
   }
 
   return {
@@ -529,7 +529,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
   }
 }
 
-/** Captura única fora de um script (usada pelo panel_screenshot com fullPage). */
+/** Single capture outside a script (used by panel_screenshot with fullPage). */
 export async function captureUrl(options: {
   url: string
   sessionId: string

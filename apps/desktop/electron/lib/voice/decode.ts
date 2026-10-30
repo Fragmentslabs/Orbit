@@ -2,25 +2,25 @@ import { BrowserWindow } from 'electron'
 import { STT_SAMPLE_RATE } from './audio'
 
 /**
- * Arquivo de áudio qualquer → PCM16 mono a 16 kHz, o que os motores de ditado
- * consomem.
+ * Any audio file → PCM16 mono at 16 kHz, what the dictation engines
+ * consume.
  *
- * Quem decodifica é o próprio Chromium do Electron (`decodeAudioData`), numa
- * janela oculta: mp3, m4a/aac, ogg/opus (áudio de WhatsApp), webm, flac e wav,
- * em qualquer sistema, sem dependência nova. O `afconvert` só existe no macOS e
- * não lê opus; o ffmpeg custaria dezenas de MB no app. A reamostragem e a
- * mistura para mono saem de um OfflineAudioContext a 16 kHz.
+ * The decoder is Electron's own Chromium (`decodeAudioData`), in a hidden
+ * window: mp3, m4a/aac, ogg/opus (WhatsApp audio), webm, flac and wav,
+ * on any system, with no new dependency. `afconvert` only exists on macOS and
+ * cannot read opus; ffmpeg would cost tens of MB in the app. The resampling and the
+ * mixdown to mono come from a 16 kHz OfflineAudioContext.
  *
- * Os bytes entram e saem da janela em PEDAÇOS de base64: um arquivo de 30 MB
- * inteiro dentro de um único `executeJavaScript` viraria um script gigante.
+ * The bytes enter and leave the window in base64 CHUNKS: a whole 30 MB file
+ * inside a single `executeJavaScript` would become a gigantic script.
  */
 
-/** Tamanho de cada pedaço (base64) que atravessa a fronteira da janela. */
+/** Size of each chunk (base64) that crosses the window boundary. */
 const CHUNK = 4 * 1024 * 1024
-/** Teto do arquivo de entrada e da duração: acima disso a resposta diz o porquê. */
+/** Ceiling of the input file and of the duration: above that the answer says why. */
 export const MAX_AUDIO_BYTES = 200 * 1024 * 1024
 export const MAX_AUDIO_MS = 3 * 60 * 60 * 1000
-/** A janela fica de pé um pouco para transcrições em sequência; depois some. */
+/** The window stays up a while for back-to-back transcriptions; then it goes away. */
 const IDLE_CLOSE_MS = 60_000
 
 let win: BrowserWindow | null = null
@@ -49,7 +49,7 @@ function scheduleClose(): void {
   idleTimer.unref?.()
 }
 
-/** Roda dentro da janela: decodifica o que foi acumulado em `__orbitIn`. */
+/** Runs inside the window: decodes what was accumulated in `__orbitIn`. */
 const DECODE_IN_PAGE = `(async (rate) => {
   const parts = window.__orbitIn || []
   window.__orbitIn = []
@@ -82,7 +82,7 @@ const DECODE_IN_PAGE = `(async (rate) => {
   return { bytes: window.__orbitOut.length, durationMs: audio.duration * 1000 }
 })`
 
-/** Fatia [start, end) do PCM decodificado, em base64. */
+/** Slices [start, end) of the decoded PCM, in base64. */
 const TAKE_IN_PAGE = `((start, end) => {
   const slice = window.__orbitOut.subarray(start, end)
   let bin = ''
@@ -91,8 +91,8 @@ const TAKE_IN_PAGE = `((start, end) => {
 })`
 
 /**
- * Decodifica um arquivo de áudio para PCM16 mono 16 kHz. Uma decodificação por
- * vez (a janela é uma só). Lança com mensagem legível para formato inválido.
+ * Decodes an audio file to PCM16 mono at 16 kHz. One decoding at a
+ * time (there is only one window). It throws with a readable message for an invalid format.
  */
 export function decodeAudioFile(bytes: Buffer): Promise<{ pcm: Buffer; durationMs: number }> {
   const run = async () => {
@@ -117,7 +117,7 @@ export function decodeAudioFile(bytes: Buffer): Promise<{ pcm: Buffer; durationM
         throw new Error(`the audio is ${Math.round(info.durationMs / 60000)} min long; the limit is ${MAX_AUDIO_MS / 60000} min`)
       }
       const out: Buffer[] = []
-      // Pedaços múltiplos de 2 bytes: nenhuma amostra PCM16 é partida ao meio.
+      // Chunks that are multiples of 2 bytes: no PCM16 sample is split in half.
       const step = (CHUNK / 4) * 3 - (((CHUNK / 4) * 3) % 2)
       for (let start = 0; start < info.bytes; start += step) {
         const part: string = await page.webContents.executeJavaScript(

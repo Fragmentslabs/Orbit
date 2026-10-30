@@ -36,7 +36,7 @@ import { useChatSearchStore } from '~/stores/chat-search-store'
 import { useShallow } from 'zustand/react/shallow'
 import { Storage } from '~/lib/storage'
 
-/** Lista vazia compartilhada: identidade estável para o memo do footer. */
+/** Shared empty list: stable identity for the footer memo. */
 const EMPTY_ASKS: PendingAsk[] = []
 
 const AUTO_FOLDER_MAP_KEY = 'orbit_auto_folder_map'
@@ -55,11 +55,11 @@ async function persistAutoFolderMap(map: Record<string, string>): Promise<void> 
 }
 
 interface ChatScreenProps {
-  /** ID da sessão existente. Ausente = rascunho de conversa nova. */
+  /** ID of the existing session. Absent = draft of a new conversation. */
   sessionId?: string
 }
 
-// Referência estável para o seletor do zustand (evita loop de getSnapshot)
+// Stable reference for the zustand selector (avoids a getSnapshot loop)
 const NO_MESSAGES: never[] = []
 
 export function ChatScreen({ sessionId }: ChatScreenProps) {
@@ -71,8 +71,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const session = useSessionStore(
     useShallow((s) => s.sessions.find((sess) => sess.id === sessionId))
   )
-  // Seletores estreitos: assinar o mapa inteiro re-renderizava a tela toda a
-  // cada delta de QUALQUER sessão (e o mapa muda de identidade em todo set).
+  // Narrow selectors: subscribing to the whole map re-rendered the whole screen on
+  // every delta of ANY session (and the map changes identity on every set).
   const activeMessages = useSessionStore((s) =>
     sessionId ? s.messages[sessionId] ?? NO_MESSAGES : NO_MESSAGES,
   )
@@ -97,26 +97,26 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const replyToAsk = useChatStore((s) => s.replyToAsk)
 
   const isStreaming = activeStatus === 'streaming' || activeStatus === 'submitted'
-  // Referência estável quando não há pedido: o footer da lista é memoizado e
-  // um `[]` novo a cada render derrubava o memo do MessageList (a lista
-  // inteira reconciliava junto com qualquer estado da tela).
+  // Stable reference when there is no request: the list footer is memoized and
+  // a new `[]` on every render brought down the memo of MessageList (the whole list
+  // reconciled along with any state of the screen).
   const activeAsks = sessionId ? pendingAsks[sessionId] ?? EMPTY_ASKS : EMPTY_ASKS
   const isEmpty = activeMessages.length === 0
-  // Fim da lista visível? Decide se o chip de pendência precisa existir.
+  // End of the list visible? Decides whether the pending chip needs to exist.
   const [listAtBottom, setListAtBottom] = useState(true)
 
   const messageListRef = useRef<MessageListHandle>(null)
   const chatSearchOpen = useChatSearchStore((s) => s.open)
   const closeChatSearch = useChatSearchStore((s) => s.close)
 
-  // Persona: grande no centro quando vazio, some assim que a conversa começa.
-  // useState com inicializador lazy no lugar de `useRef(new ...).current`:
-  // valor igualmente estável, legível no render (react-hooks/refs proíbe ler
-  // ref aqui) e alocado uma única vez.
+  // Persona: large in the center when empty, it disappears as soon as the conversation starts.
+  // useState with a lazy initializer instead of `useRef(new ...).current`:
+  // an equally stable value, readable during render (react-hooks/refs forbids reading a
+  // ref here) and allocated only once.
   const [chatProgress] = useState(() => new Animated.Value(isEmpty ? 0 : 1))
-  // Persona pequena do header: só aparece depois que a do centro termina de
-  // sumir (mesma lógica em duas etapas do desktop) — por isso o delay igual
-  // à duração da animação do centro.
+  // Small persona of the header: it only shows up after the one in the center finishes
+  // disappearing (same two-step logic as the desktop) — hence the delay equal
+  // to the duration of the animation of the center.
   const [headerPersonaOpacity] = useState(() => new Animated.Value(isEmpty ? 0 : 1))
 
   useEffect(() => {
@@ -143,32 +143,32 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     closeChatSearch()
   }, [sessionId, selectSession, closeChatSearch])
 
-  // Cria a sessão no primeiro envio quando ainda é um rascunho (sem id).
+  // Creates the session on the first send when it is still a draft (no id).
   const [creating, setCreating] = useState(false)
 
-  // Pastas do modo código: o rascunho herda a pasta do último chat (store
-  // persistido, como o workspace do desktop); a sessão existente herda as dela
-  // (e mudanças são persistidas no próximo envio).
+  // Folders of code mode: the draft inherits the folder of the last chat (persisted
+  // store, like the desktop workspace); the existing session inherits its own
+  // (and changes are persisted on the next send).
   const [folders, setFolders] = useState<string[]>(() => useDraftFolders.getState().folders)
-  // Ref espelho das pastas, atualizado no setter (não no render): o handleSend
-  // fica com identidade estável entre trocas de modo — senão o memo do
-  // ChatInput quebra e o PromptInput inteiro re-renderiza (o delay da troca).
-  // Nasce com o mesmo valor do state, senão o envio veria uma lista vazia
-  // enquanto a tela mostra a pasta herdada.
+  // Mirror ref of the folders, updated in the setter (not during render): handleSend
+  // keeps a stable identity across mode switches — otherwise the memo of
+  // ChatInput breaks and the whole PromptInput re-renders (the switch delay).
+  // It is born with the same value as the state, otherwise the send would see an empty list
+  // while the screen shows the inherited folder.
   const foldersRef = useRef<string[]>(useDraftFolders.getState().folders)
   const applyFolders = useCallback((next: string[], persistir: boolean) => {
     foldersRef.current = next
     setFolders(next)
-    // Persiste como "pasta mais recente": o próximo chat novo já nasce nela,
-    // mesmo padrão do workspace do desktop. Lista vazia nunca é persistida —
-    // abrir uma conversa de chat (que não tem pasta) apagaria a herança.
+    // Persists as the "most recent folder": the next new chat is already born in it,
+    // same pattern as the desktop workspace. An empty list is never persisted —
+    // opening a chat conversation (which has no folder) would erase the inheritance.
     if (persistir && next.length > 0) useDraftFolders.getState().setFolders(next)
   }, [])
-  // Escolha explícita no seletor: essa vale como a pasta mais recente.
+  // Explicit choice in the selector: that one counts as the most recent folder.
   const updateFolders = useCallback((next: string[]) => applyFolders(next, true), [applyFolders])
   useEffect(() => {
-    // Rascunho (sem sessão) herda a pasta do último chat de código; a sessão
-    // existente manda no seletor, inclusive quando não tem pasta.
+    // Draft (no session) inherits the folder of the last code chat; the existing
+    // session rules in the selector, including when it has no folder.
     if (!session) {
       void useDraftFolders.getState().hydrate().then((recentes) => {
         if (recentes.length > 0 && foldersRef.current.length === 0) {
@@ -177,9 +177,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       })
       return
     }
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     applyFolders(
       session.directory ? [session.directory, ...(session.extraDirectories ?? [])] : [],
@@ -187,22 +187,22 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     )
   }, [sessionId, session, session?.directory, session?.extraDirectories, applyFolders])
 
-  // O mesmo respiro que o PromptInput aplica fixo embaixo — os dois precisam
-  // usar o mesmo número para o input encostar no teclado quando ele abre.
+  // The same breathing room that PromptInput applies fixed at the bottom — both need
+  // to use the same number so the input touches the keyboard when it opens.
   const respiroDoInput = useBottomBreathing()
 
   const isCode = (session?.mode ?? mode) === 'code'
-  // Modo código sem pasta não tem em que trabalhar: o envio fica bloqueado até
-  // escolher uma (o texto continua editável).
-  const precisaDePasta = isCode && folders.length === 0
+  // Code mode without a folder has nothing to work in: the send stays blocked until
+  // one is chosen (the text stays editable).
+  const needsFolder = isCode && folders.length === 0
 
-  // Sugestões do estado vazio — traduzidas e por modo, como no desktop
+  // Suggestions of the empty state — translated and per mode, as on the desktop
   const chatSuggestions = t('chatScreen.suggestions.chat', { returnObjects: true }) as string[]
   const codeSuggestions = t('chatScreen.suggestions.code', { returnObjects: true }) as string[]
   const suggestions = isCode ? codeSuggestions : chatSuggestions
 
-  // A tela pode ser reaproveitada com outro id (trocar de chat na sidebar)
-  // ou desmontada enquanto o "criar chat" ainda espera o desktop.
+  // The screen can be reused with another id (switching chats in the sidebar)
+  // or unmounted while "create chat" is still waiting for the desktop.
   const mountedRef = useRef(true)
   const sessionIdRef = useRef(sessionId)
   useEffect(() => {
@@ -217,14 +217,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   const handleSend = useCallback(
     async (text: string, options?: SendMessageOptions, files?: FilePart[]) => {
-      // Modo lido na hora do envio (getState) + pastas via ref: nada disso
-      // entra nas deps, então o handleSend não muda quando a aba troca.
+      // Mode read at send time (getState) + folders via ref: none of that
+      // goes into the deps, so handleSend does not change when the tab switches.
       const target = sessionId
         ? useSessionStore.getState().sessions.find((s) => s.id === sessionId)
         : undefined
       const codeMode = (target?.mode ?? useWorkspaceStore.getState().mode) === 'code'
-      // Sem pasta o modo código não roda: o botão já está desabilitado, mas as
-      // sugestões chamam o envio direto.
+      // Without a folder, code mode does not run: the button is already disabled, but the
+      // suggestions call the send directly.
       if (codeMode && foldersRef.current.length === 0) return
       const dirConfig = codeMode
         ? { directory: foldersRef.current[0], extraDirectories: foldersRef.current.slice(1) }
@@ -233,8 +233,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         sendMessage(text, { options, files, sessionId, ...dirConfig })
         return
       }
-      // O input já se limpou ao chamar o envio: qualquer saída sem enviar
-      // devolve texto e anexos ao rascunho, senão a mensagem evapora.
+      // The input has already cleared itself when calling the send: any exit without sending
+      // gives text and attachments back to the draft, otherwise the message evaporates.
       const devolver = () => useDraftInput.getState().setDraft(null, text, files)
       if (creating) {
         devolver()
@@ -249,8 +249,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           return
         }
 
-        // Pasta escolhida no "+" da sidebar tem precedência: é uma decisão
-        // explícita, não vale sobrescrever com o mapeamento automático.
+        // Folder chosen in the "+" of the sidebar takes precedence: it is an explicit
+        // decision, it is not to be overwritten with the automatic mapping.
         const { pendingFolderId, setPendingFolder } = useDraftFolders.getState()
         const pendingFolder = pendingFolderId
           ? useSessionStore.getState().folders.find((f) => f.id === pendingFolderId)
@@ -266,8 +266,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           const existingFolder = allFolders.find((f) => f.id === existingFolderId)
 
           if (existingFolder) {
-            // Pasta arquivada não recebe chats novos: o diretório continua
-            // mapeado nela e a sessão nasce solta — mesma regra do desktop.
+            // An archived folder does not receive new chats: the directory stays
+            // mapped in it and the session is born loose — same rule as the desktop.
             if (!existingFolder.archived && existingFolder.mode === 'code') {
               await useSessionStore.getState().moveToFolder(created.id, existingFolder.id)
             }
@@ -296,9 +296,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         }
 
         sendMessage(text, { options, files, sessionId: created.id, ...dirConfig })
-        // Só leva para o chat novo se a pessoa ainda está no rascunho: se ela
-        // já foi para outra conversa, puxá-la de volta parecia que a mensagem
-        // tinha caído no chat errado.
+        // It only takes you to the new chat if the person is still in the draft: if they
+        // already went to another conversation, pulling them back looked like the message
+        // had fallen into the wrong chat.
         if (mountedRef.current && !sessionIdRef.current) {
           router.replace({ pathname: '/(main)/chat/[id]', params: { id: created.id } })
         }
@@ -353,8 +353,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   const setReply = useReply((s) => s.setReply)
 
-  // Responder: marca a mensagem no compositor (a barra acima do campo de
-  // texto). O recorte sai daqui — o PromptInput só prepende e limpa.
+  // Reply: marks the message in the composer (the bar above the text
+  // field). The clipping comes out from here — PromptInput only prepends and clears.
   const handleReply = useCallback(
     (message: ChatMessage) => {
       const text = replyExcerpt(visibleMessageText(message))
@@ -363,8 +363,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     [sessionId, setReply],
   )
 
-  // Closure inline aqui virava prop nova a cada render e derrubava o memo do
-  // MessageList — que existe justamente para a lista não reconciliar à toa.
+  // An inline closure here became a new prop on every render and brought down the memo of
+  // MessageList — which exists precisely so the list does not reconcile for nothing.
   const handleLoadOlder = useCallback(() => {
     if (sessionId) void loadOlderMessages(sessionId)
   }, [sessionId, loadOlderMessages])
@@ -385,13 +385,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   const handleDismissRevert = useCallback(
     (_sid: string) => {
-      // Apenas esconde a barra localmente — o revert permanece consolidado
+      // Only hides the bar locally — the revert remains consolidated
     },
     [],
   )
 
-  // Identidades estáveis entre trocas de modo — sem elas o memo do ChatInput
-  // quebra e o PromptInput inteiro re-renderiza (o delay da troca de aba).
+  // Stable identities across mode switches — without them the memo of ChatInput
+  // breaks and the whole PromptInput re-renders (the tab switch delay).
   const onCreateSession = useCallback(
     () => createSession(useWorkspaceStore.getState().mode),
     [createSession],
@@ -402,15 +402,15 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     [router],
   )
 
-  // Footer da lista memoizado: o MessageList é memo e precisa de props
-  // estáveis para não re-renderizar quando o modo troca.
+  // Memoized list footer: MessageList is memo and needs stable props
+  // so as not to re-render when the mode switches.
   //
-  // É aqui que moram os cards da CONVERSA — pedido do agente, revert, plano e
-  // progresso. Antes eles ficavam empilhados acima do input: cada um que
-  // aparecia encurtava a conversa, e com dois ou três o histórico sumia da
-  // tela. Como item do fim da lista, eles rolam junto com as mensagens.
-  // Continuam na faixa de baixo só os que também existem SEM conversa
-  // (sugestões, pasta, aviso de visão) — esses não têm lista para entrar.
+  // This is where the cards of the CONVERSATION live — agent request, revert, plan and
+  // progress. Before, they were stacked above the input: each one that
+  // showed up shortened the conversation, and with two or three the history vanished from
+  // the screen. As an item at the end of the list, they scroll along with the messages.
+  // Only the ones that also exist WITHOUT a conversation stay in the bottom band
+  // (suggestions, folder, vision notice) — those have no list to enter.
   const revert = session?.revert
   const listFooter = useMemo<React.ReactElement | undefined>(() => {
     const cards: React.ReactElement[] = []
@@ -461,8 +461,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           key={ask.requestId}
           ask={ask}
           onReply={(value) => replyToAsk(ask.requestId, value)}
-          // A lista já tem paddingHorizontal e o footer já tem gap: a margem
-          // própria do card viraria recuo duplo e espaço dobrado.
+          // The list already has paddingHorizontal and the footer already has a gap: the card's
+          // own margin would become a double indent and double spacing.
           style={{ marginHorizontal: 0, marginVertical: 0 }}
         />,
       )
@@ -493,26 +493,26 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const personaState = isEmpty ? 'idle' : isStreaming ? 'thinking' : 'idle'
   const personaVisible = showsPersonaOnWelcome(useAppearanceStore((s) => s.personaVisibility))
 
-  // O inset de baixo NÃO entra no SafeScreen: com o teclado aberto ele sobrava
-  // entre o input e o teclado (o KAV já empurra a coluna inteira). Quem aplica
-  // o respiro de baixo é o PromptInput, que sabe se o teclado está aberto.
+  // The bottom inset does NOT enter SafeScreen: with the keyboard open it was left over
+  // between the input and the keyboard (the KAV already pushes the whole column). Whoever applies
+  // the bottom breathing room is PromptInput, which knows whether the keyboard is open.
   return (
     <SafeScreen edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* KAV do react-native-keyboard-controller: mesma API do RN, mas a
-          animação roda na thread nativa em sincronia com o teclado — sem o
-          lag de abrir/fechar do KAV clássico (que só reage no keyboardDidShow/
-          Hide). A coluna inteira acompanha: header fixo, conversa encolhe,
-          input rente ao teclado.
+      {/* KAV of react-native-keyboard-controller: same API as RN, but the
+          animation runs on the native thread in sync with the keyboard — without the
+          open/close lag of the classic KAV (which only reacts on keyboardDidShow/
+          Hide). The whole column follows: fixed header, the conversation shrinks,
+          input flush with the keyboard.
 
-          A lib calcula o padding como `bottom do frame - (altura da tela -
-          teclado - offset)`, e o frame já nasce deslocado pelo paddingTop do
-          SafeScreen — passar o inset de cima como offset somava a altura da
-          notch ao espaço do teclado. O offset NEGATIVO aqui desconta o respiro
-          que o input aplica fixo embaixo: assim o padding animado vale
-          `teclado - respiro`, o total bate nos dois extremos e só existe UMA
-          animação (duas saíam de fase e faziam o input passar do ponto). */}
+          The lib calculates the padding as `bottom of the frame - (screen height -
+          keyboard - offset)`, and the frame is already offset by the paddingTop of
+          SafeScreen — passing the top inset as offset added the notch height to
+          the keyboard space. The NEGATIVE offset here discounts the breathing room
+          that the input applies fixed at the bottom: so the animated padding counts as
+          `keyboard - breathingRoom`, the total matches at both extremes and there is only ONE
+          animation (two went out of phase and made the input overshoot). */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior="padding"
@@ -538,7 +538,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         )}
 
         <View style={{ flex: 1 }}>
-          {/* Centro: persona grande + título — some assim que a conversa começa */}
+          {/* Center: large persona + title — disappears as soon as the conversation starts */}
           <Animated.View
             pointerEvents={isEmpty ? 'auto' : 'none'}
             style={{
@@ -561,7 +561,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
             </View>
           </Animated.View>
 
-          {/* Mensagens — aparece assim que a conversa começa */}
+          {/* Messages — show up as soon as the conversation starts */}
           <Animated.View pointerEvents={isEmpty ? 'none' : 'auto'} style={{ flex: 1, opacity: chatProgress }}>
             {!isEmpty && (
               <MessageList
@@ -578,18 +578,18 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </Animated.View>
         </View>
 
-        {/* Sugestões — ancoradas acima do input, só na conversa vazia */}
+        {/* Suggestions — anchored above the input, only in the empty conversation */}
         {isEmpty && (
           <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
             <Suggestions suggestions={suggestions} onSelect={handleSuggestion} />
           </View>
         )}
 
-        {/* Modo código: seleção da pasta principal + adicionais (como no desktop) */}
+        {/* Code mode: selection of the main folder + additional ones (as on the desktop) */}
         {isCode && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
             <FolderSelector folders={folders} onFoldersChange={updateFolders} />
-            {precisaDePasta && (
+            {needsFolder && (
               <Text style={{ fontSize: 11, marginTop: 6, color: tokens.mutedForeground }}>
                 {t('chatScreen.folderRequired')}
               </Text>
@@ -597,9 +597,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </View>
         )}
 
-        {/* Pendência fora de vista: o card do pedido está na conversa (footer
-            da lista), e este atalho leva até ele. Só existe quando a pessoa
-            subiu no histórico — com o card à vista ele seria ruído. */}
+        {/* Pending out of view: the request card is in the conversation (footer
+            of the list), and this shortcut takes you to it. It only exists when the person
+            scrolled up in the history — with the card in view it would be noise. */}
         {activeAsks.length > 0 && !listAtBottom && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8, alignItems: 'flex-start' }}>
             <Pressable
@@ -625,9 +625,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </View>
         )}
 
-        {/* Aviso do modo Visão: imagem anexada + modelo sem visão + modo off.
-            Fica na faixa porque também existe sem conversa (imagem pendente na
-            tela inicial, onde não há lista para entrar). */}
+        {/* Vision mode notice: image attached + model without vision + mode off.
+            It stays in the band because it also exists without a conversation (image pending on
+            the initial screen, where there is no list to enter). */}
         {sessionId && <VisionHintCard sessionId={sessionId} />}
 
         <ChatInput
@@ -635,7 +635,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           onAbort={handleAbort}
           isStreaming={isStreaming}
           sessionId={sessionId}
-          sendDisabled={precisaDePasta}
+          sendDisabled={needsFolder}
           onCreateSession={onCreateSession}
           onNavigateToSession={onNavigateToSession}
         />

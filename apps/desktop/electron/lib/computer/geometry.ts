@@ -1,29 +1,29 @@
 import { ComputerError, type Frame } from './types'
 
 /**
- * Espaços de coordenada do Computer Use no macOS:
- *  - pontos globais: o espaço do AX, do CGWindowList e dos eventos (origem no
- *    topo esquerdo do monitor principal; monitores à esquerda/acima ficam
- *    negativos);
- *  - pixels do screenshot: o que o modelo vê, já reduzido ao lado máximo.
- * Entre os dois só existe a razão de escala da janela.
+ * Coordinate spaces of Computer Use on macOS:
+ *  - global points: the space of AX, of CGWindowList and of the events (origin at the
+ *    top left of the main monitor; monitors to the left/above become
+ *    negative);
+ *  - screenshot pixels: what the model sees, already reduced to the maximum edge.
+ * Between the two there is only the scale ratio of the window.
  *
- * No Windows o host é per-monitor DPI aware: UIA, DWM, PrintWindow e SendInput
- * falam pixel físico do desktop virtual, e o "global" do contrato é esse
- * pixel. O screenshot já sai do tamanho do frame (escala 1). DIP só existe do
- * lado do Electron — `physicalToDip` é a ponte, se algo do Orbit precisar se
- * alinhar à janela-alvo.
+ * On Windows the host is per-monitor DPI aware: UIA, DWM, PrintWindow and SendInput
+ * speak physical pixel of the virtual desktop, and the contract's "global" is that
+ * pixel. The screenshot already comes out at frame size (scale 1). DIP only exists on
+ * the Electron side — `physicalToDip` is the bridge, if something in Orbit needs to
+ * line up with the target window.
  */
 
 export interface ShotGeometry {
-  /** Frame da janela em pontos globais */
+  /** Window frame in global points */
   frame: Frame
-  /** Tamanho do espaço de coordenadas mostrado ao modelo */
+  /** Size of the coordinate space shown to the model */
   width: number
   height: number
 }
 
-/** Tamanho que cabe em `maxEdge` mantendo a proporção (nunca amplia). */
+/** Size that fits in `maxEdge` keeping the proportion (never enlarges). */
 export function fitWithin(width: number, height: number, maxEdge: number): { width: number; height: number } {
   const longest = Math.max(width, height)
   if (longest <= maxEdge) return { width: Math.round(width), height: Math.round(height) }
@@ -32,19 +32,19 @@ export function fitWithin(width: number, height: number, maxEdge: number): { wid
 }
 
 /**
- * O espaço de coordenadas de uma janela: o tamanho que o screenshot dela tem
- * (pontos × escala do monitor, reduzido ao lado máximo). É o MESMO com ou sem
- * screenshot na observação — antes, sem screenshot, x/y viravam pontos da
- * janela, e o agente que repetia "os mesmos passos" de uma observação com
- * imagem errava pela metade num monitor Retina (visto na Fase 0: o arrasto
- * caiu abaixo da linha de texto e não selecionou nada).
+ * The coordinate space of a window: the size its screenshot has (points × monitor
+ * scale, reduced to the maximum edge). It is the SAME with or without a screenshot in
+ * the observation — before, without a screenshot, x/y became window points, and the
+ * agent that repeated "the same steps" of an observation with an image was off by
+ * half on a Retina monitor (seen in Phase 0: the drag landed below the text line and
+ * selected nothing).
  */
 export function windowSpace(frame: Frame, scale: number, maxEdge: number): ShotGeometry {
   const size = fitWithin(frame[2] * scale, frame[3] * scale, maxEdge)
   return { frame, width: size.width, height: size.height }
 }
 
-/** Ponto do screenshot → ponto global. Fora da imagem é erro, não um clique em outro app. */
+/** Screenshot point → global point. Outside the image is an error, not a click in another app. */
 export function shotToGlobal(g: ShotGeometry, x: number, y: number): [number, number] {
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > g.width || y > g.height) {
     throw new ComputerError(
@@ -56,7 +56,7 @@ export function shotToGlobal(g: ShotGeometry, x: number, y: number): [number, nu
   return [round2(fx + (x * fw) / g.width), round2(fy + (y * fh) / g.height)]
 }
 
-/** Frame global → retângulo no espaço do screenshot (para a árvore apontar onde o elemento está na imagem). */
+/** Global frame → rectangle in the screenshot space (so the tree can point at where the element is in the image). */
 export function globalToShot(g: ShotGeometry, frame: Frame): Frame {
   const [fx, fy, fw, fh] = g.frame
   const sx = g.width / fw
@@ -68,7 +68,7 @@ export function frameCenter(frame: Frame): [number, number] {
   return [round2(frame[0] + frame[2] / 2), round2(frame[1] + frame[3] / 2)]
 }
 
-/** O elemento aparece na janela? (frame zerado ou fora dela = rolado para fora/oculto) */
+/** Does the element show up in the window? (zeroed frame or outside it = scrolled out/hidden) */
 export function visibleIn(window: Frame, frame: Frame): boolean {
   if (frame[2] <= 0 || frame[3] <= 0) return false
   return frame[0] < window[0] + window[2] && frame[0] + frame[2] > window[0] && frame[1] < window[1] + window[3] && frame[1] + frame[3] > window[1]
@@ -79,9 +79,10 @@ function round2(n: number): number {
 }
 
 /**
- * Um monitor: limites em DIP (como o Electron descreve), o fator de escala e o
- * canto em pixel físico (`screen.dipToScreenRect(null, bounds)`). Sem o canto
- * físico, vale o canto DIP — certo para monitores ao lado de um principal a 100%.
+ * A monitor: bounds in DIP (as Electron describes them), the scale factor and the
+ * corner in physical pixel (`screen.dipToScreenRect(null, bounds)`). Without the
+ * physical corner, the DIP corner applies — right for monitors next to a main one at
+ * 100%.
  */
 export interface DisplayScale {
   bounds: { x: number; y: number; width: number; height: number }
@@ -90,9 +91,9 @@ export interface DisplayScale {
 }
 
 /**
- * Retângulo em pixel físico (Windows) → DIP do Electron. Cada monitor tem a
- * sua escala, então a conversão é relativa ao canto do monitor que contém o
- * centro do retângulo (o mesmo que `screen.screenToDipRect`, testável sem
+ * Rectangle in physical pixel (Windows) → Electron DIP. Each monitor has its own
+ * scale, so the conversion is relative to the corner of the monitor that contains the
+ * center of the rectangle (the same as `screen.screenToDipRect`, testable without
  * Electron).
  */
 export function physicalToDip(frame: Frame, displays: DisplayScale[]): Frame {

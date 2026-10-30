@@ -1,22 +1,22 @@
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
- * Respiro entre o input e a barra de gestos do aparelho quando o teclado está
- * FECHADO. É um padding fixo do input — nunca animado.
+ * Breathing room between the input and the gesture bar of the device when the keyboard is
+ * CLOSED. It is a fixed padding of the input — never animated.
  *
- * Quem anima é só o KeyboardAvoidingView, e ele recebe este mesmo valor como
- * `keyboardVerticalOffset` NEGATIVO, o que faz a conta dele virar
- * `padding = alturaDoTeclado - respiro`. Somando o respiro fixo do input:
- * fechado sobra o respiro, aberto o input encosta no teclado, e no meio da
- * transição existe uma única animação.
+ * What animates is only the KeyboardAvoidingView, and it receives this same value as a
+ * NEGATIVE `keyboardVerticalOffset`, which makes its calculation become
+ * `padding = keyboardHeight - breathingRoom`. Adding the fixed breathing room of the input:
+ * closed, the breathing room is left; open, the input touches the keyboard; and in the middle of the
+ * transition there is a single animation.
  *
- * A versão anterior animava o respiro por fora (interpolando o `progress` do
- * teclado): dava certo nos extremos, mas o `progress` do KAV e o do hook
- * público vêm de handlers diferentes — as duas animações saíam de fase por
- * alguns pixels e o input passava do ponto e voltava.
+ * The previous version animated the breathing room from the outside (interpolating the `progress` of the
+ * keyboard): it worked at the extremes, but the `progress` of the KAV and the one of the public
+ * hook come from different handlers — the two animations went out of phase by
+ * a few pixels and the input overshot and came back.
  *
- * O piso de 8 existe porque aparelho sem barra de gestos reporta inset 0, e aí
- * o input encostaria na borda da tela.
+ * The floor of 8 exists because a device without a gesture bar reports inset 0, and then
+ * the input would touch the edge of the screen.
  */
 export function useBottomBreathing(): number {
   const insets = useSafeAreaInsets()

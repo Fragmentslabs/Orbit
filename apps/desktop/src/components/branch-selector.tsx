@@ -11,28 +11,28 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Checkout de um branch aberto em outro worktree: o git recusa ("already used
- * by worktree at '…'", ou "already checked out at" em versões antigas). Não é
- * caso de alterações não commitadas — o diálogo certo é outro.
+ * Checkout of a branch open in another worktree: git refuses ("already used
+ * by worktree at '…'", or "already checked out at" in older versions). It is not
+ * the uncommitted changes case — the right dialog is another one.
  */
-export function branchEmUsoEm(erro: string): string | null {
-  return /already (?:used by worktree|checked out) at '([^']+)'/.exec(erro)?.[1] ?? null
+export function usedByWorktreeIn(error: string): string | null {
+  return /already (?:used by worktree|checked out) at '([^']+)'/.exec(error)?.[1] ?? null
 }
 
 interface BranchSelectorProps {
   repoPath: string
   onRequestAgentAction?: (instruction: string) => void
-  /** Controla a abertura do dropdown externamente (uso combinado com hideTrigger) */
+  /** Controls the opening of the dropdown externally (used together with hideTrigger) */
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  /** Omite o botão gatilho — usado quando outro componente abre este dropdown */
+  /** Omits the trigger button — used when another component opens this dropdown */
   hideTrigger?: boolean
   /**
-   * Lado em que o dropdown abre. O rodapé das pastas fica no fim do painel,
-   * então lá ele abre para CIMA — para baixo sairia da janela.
+   * Side on which the dropdown opens. The folders footer sits at the bottom of the panel,
+   * so there it opens UPWARDS — downwards it would leave the window.
    */
   side?: "top" | "bottom"
-  /** Gatilho enxuto (sem borda, mais baixo) para barras estreitas. */
+  /** Lean trigger (no border, shorter) for narrow bars. */
   compact?: boolean
 }
 
@@ -49,7 +49,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
   const setOpen = onOpenChange ?? setUncontrolledOpen
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [conflictError, setConflictError] = useState<string | null>(null)
-  const [emUso, setEmUso] = useState<{ branch: string; caminho: string } | null>(null)
+  const [usedBy, setUsedBy] = useState<{ branch: string; path: string } | null>(null)
   const [pendingBranch, setPendingBranch] = useState<string | null>(null)
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
   const [commitMessage, setCommitMessage] = useState("")
@@ -64,10 +64,10 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     fetchBranches(repoPath)
   }, [repoPath, fetchBranches])
 
-  // hideTrigger não tem um <button> visível para o Base UI Menu ancorar — só
-  // esse caso (composição via CompactWorkspaceSelector) usa o dropdown manual
-  // com fechamento por clique fora; o caso normal usa o Menu (portal, z acima
-  // de qualquer overlay do chat, alinhamento nativo).
+  // hideTrigger has no visible <button> for the Base UI Menu to anchor to — only
+  // that case (composition via CompactWorkspaceSelector) uses the manual dropdown
+  // with closing on outside click; the normal case uses the Menu (portal, z above
+  // any chat overlay, native alignment).
   useEffect(() => {
     if (!hideTrigger || !open) return
     const handler = (e: MouseEvent) => {
@@ -82,9 +82,9 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     const result = await checkoutBranch(repoPath, branch)
     setCheckoutLoading(false)
     if (!result.ok) {
-      const caminho = branchEmUsoEm(result.error ?? "")
-      if (caminho) {
-        setEmUso({ branch, caminho })
+      const path = usedByWorktreeIn(result.error ?? "")
+      if (path) {
+        setUsedBy({ branch, path })
         return
       }
       setConflictError(result.error ?? t("branch.unknownError"))
@@ -99,9 +99,9 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     const result = await checkoutBranch(repoPath, branch)
     setCheckoutLoading(false)
     if (!result.ok) {
-      const caminho = branchEmUsoEm(result.error ?? "")
-      if (caminho) {
-        setEmUso({ branch, caminho })
+      const path = usedByWorktreeIn(result.error ?? "")
+      if (path) {
+        setUsedBy({ branch, path })
         return
       }
       setConflictError(result.error ?? t("branch.unknownError"))
@@ -167,9 +167,9 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
               key={branch}
               type="button"
               onClick={() => handleSelect(branch)}
-              // O dropdown tem largura fixa (w-44) e nome de branch é longo por
-              // convenção — `feature/`, `fix/`, número do ticket. Sem o title, a
-              // elipse esconde justamente a parte que distingue uma da outra.
+              // The dropdown has a fixed width (w-44) and a branch name is long by
+              // convention — `feature/`, `fix/`, ticket number. Without the title, the
+              // ellipsis hides precisely the part that distinguishes one from the other.
               className={cn(
                 "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
                 active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
@@ -266,18 +266,18 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
         </DialogContent>
       </Dialog>
 
-      {/* Branch aberto em outro worktree */}
-      <Dialog open={emUso !== null} onOpenChange={(v) => !v && setEmUso(null)}>
+      {/* Branch open in another worktree */}
+      <Dialog open={usedBy !== null} onOpenChange={(v) => !v && setUsedBy(null)}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>{t("branch.emUsoTitulo", { branch: emUso?.branch })}</DialogTitle>
+            <DialogTitle>{t("branch.inUseTitle", { branch: usedBy?.branch })}</DialogTitle>
             <DialogDescription>
-              {t("branch.emUsoDescricao")}
-              <span className="mt-2 block break-all rounded bg-muted p-2 font-mono text-xs text-muted-foreground">{emUso?.caminho}</span>
+              {t("branch.inUseDescription")}
+              <span className="mt-2 block break-all rounded bg-muted p-2 font-mono text-xs text-muted-foreground">{usedBy?.path}</span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={() => setEmUso(null)}>{t("common.close")}</Button>
+            <Button onClick={() => setUsedBy(null)}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

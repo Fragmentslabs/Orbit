@@ -5,19 +5,19 @@ import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
 
 /**
- * Fila de mensagens do celular.
+ * Message queue of the phone.
  *
- * A fila de verdade mora no desktop — é ele quem envia o próximo item quando a
- * sessão fica livre —, então só existe uma fila por chat, a mesma nos dois
- * aparelhos. Aqui ficam:
- *  - `remote`: o espelho dela, recebido no connect ('queue:get') e a cada
- *    mudança ('queue:change');
- *  - `outbox`: o que foi escrito SEM conexão. Não há onde entregar, então fica
- *    guardado no aparelho e entra na fila do desktop ao reconectar.
+ * The real queue lives on the desktop — it is what sends the next item when the
+ * session becomes free —, so there is only one queue per chat, the same on both
+ * devices. Here live:
+ *  - `remote`: its mirror, received on connect ('queue:get') and on every
+ *    change ('queue:change');
+ *  - `outbox`: what was written WITHOUT a connection. There is nowhere to deliver it, so it stays
+ *    stored on the device and enters the desktop queue on reconnection.
  *
- * O celular nunca tira itens da fila para enviar: antes cada aparelho tinha a
- * sua e as duas disputavam a sessão — e um envio com a sessão ainda rodando
- * aborta o turno atual no meio.
+ * The phone never takes items out of the queue to send: before, each device had its
+ * own and the two competed for the session — and a send with the session still running
+ * aborts the current turn halfway.
  */
 
 const OUTBOX_STORAGE_KEY = StorageKeys.queuedMessages
@@ -25,16 +25,16 @@ const OUTBOX_STORAGE_KEY = StorageKeys.queuedMessages
 interface MessageQueueState {
   remote: MessageQueueSnapshot
   outbox: Record<string, QueuedMessage[]>
-  /** remote + outbox por sessão — o que a UI mostra, na ordem de saída. */
+  /** remote + outbox per session — what the UI shows, in send order. */
   queues: Record<string, QueuedMessage[]>
   initialized: boolean
 
   initialize: () => Promise<void>
-  /** Fila inteira vinda do desktop. */
+  /** Whole queue coming from the desktop. */
   applySync: (queues: MessageQueueSnapshot) => void
-  /** Busca a fila do desktop (connect). */
+  /** Fetches the queue of the desktop (connect). */
   fetchRemote: () => Promise<void>
-  /** Entrega ao desktop o que foi escrito sem conexão, na ordem. */
+  /** Delivers to the desktop what was written without a connection, in order. */
   flushOutbox: () => Promise<void>
   enqueueForSend: (
     sessionId: string,
@@ -51,7 +51,7 @@ interface MessageQueueState {
     scheduledAt: number,
     extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
   ) => void
-  /** Item que era para sair agora, mas a sessão estava ocupada: fura a fila. */
+  /** Item that was meant to go out now, but the session was busy: it jumps the queue. */
   enqueueFront: (sessionId: string, msg: QueuedMessage) => void
   remove: (sessionId: string, msgId: string) => void
 }
@@ -104,8 +104,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
     set((s) => ({ remote: next, queues: merge(next, s.outbox) }))
   }
 
-  /** Online: vai para a fila do desktop (já aparece na tela, sem esperar o
-   *  eco). Sem conexão, ou se a entrega falhar: fica no outbox. */
+  /** Online: it goes to the desktop queue (it already shows on screen, without waiting for the
+   *  echo). Without a connection, or if the delivery fails: it stays in the outbox. */
   function add(sessionId: string, msg: QueuedMessage, front: boolean) {
     const toOutbox = () => {
       const current = (get().outbox[sessionId] ?? []).filter((m) => m.id !== msg.id)
@@ -119,7 +119,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
     setRemote({ ...get().remote, [sessionId]: front ? [msg, ...current] : [...current, msg] })
     void sendOp({ op: 'enqueue', sessionId, msg, front }).then((ok) => {
       if (ok) return
-      // Não chegou: sai do espelho otimista e espera a próxima conexão.
+      // It did not arrive: it leaves the optimistic mirror and waits for the next connection.
       setRemote({
         ...get().remote,
         [sessionId]: (get().remote[sessionId] ?? []).filter((m) => m.id !== msg.id),
@@ -174,7 +174,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
         const res = await useConnectionStore.getState().wsClient.send({ type: 'queue:get' })
         if (res.ok && res.data) setRemote(res.data as MessageQueueSnapshot)
       } catch {
-        // O próximo 'queue:change' traz a fila.
+        // The next 'queue:change' brings the queue.
       }
     },
 
@@ -183,8 +183,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
       for (const [sessionId, msgs] of Object.entries(get().outbox)) {
         for (const msg of msgs) {
           if (!isOnline()) return
-          // O desktop ignora um id que já tem: reentregar depois de uma
-          // resposta perdida não duplica a mensagem.
+          // The desktop ignores an id it already has: redelivering after a lost
+          // response does not duplicate the message.
           if (!(await sendOp({ op: 'enqueue', sessionId, msg }))) return
           setOutbox({
             ...get().outbox,

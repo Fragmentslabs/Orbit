@@ -5,151 +5,164 @@ import { USER_NAME_MAX } from './user-name'
 import { VOICE_CALL_SILENCE_OPTIONS, VOICE_DEFAULTS, type VoiceEngineId, type VoiceSettings, type VoiceTtsEngine } from './voice'
 
 /**
- * Configurações gerais do app (Preferências → Geral e Navegador).
+ * General app settings (Preferences → General and Browser).
  *
- * O renderer é a fonte da verdade (vivem no localStorage dele) e empurra uma
- * cópia ao main a cada mudança; o main grava essa cópia em disco porque parte
- * delas vale antes de qualquer janela abrir (cookies do navegador, arquivamento
- * automático). Os valores padrão reproduzem o comportamento de antes de cada
- * opção existir.
+ * The renderer is the source of truth (they live in its localStorage) and pushes a
+ * copy to the main on every change; the main writes that copy to disk because some
+ * of them are worth before any window opens (browser cookies, automatic
+ * archiving). The default values reproduce the behavior from before each
+ * option existed.
  */
 
-/** Como a resposta do agente é exibida no chat. */
+/** How the agent's answer is displayed in the chat. */
 export type ChatViewMode =
-  /** Raciocínio reunido num bloco só no topo; ações agrupadas e recolhidas. */
+  /** Reasoning gathered in a single block at the top; actions grouped and collapsed. */
   | 'summary'
-  /** Cada passo no lugar em que aconteceu: raciocínio e ações em acordeons. */
+  /** Each step in the place where it happened: reasoning and actions in accordions. */
   | 'steps'
-  /** Tudo aberto, sem acordeons: raciocínio por extenso e cada ação listada. */
+  /** Everything open, no accordions: reasoning in full and each action listed. */
   | 'detailed'
 
 /**
- * Quando compactar o histórico sozinho. `auto` = perto do limite do modelo.
- * Não há "desligada": sem compactar, a conversa acaba estourando o contexto
- * do modelo e para de responder.
+ * When to compact the history on its own. `auto` = near the model's limit.
+ * There is no "off": without compacting, the conversation ends up blowing the model's
+ * context and stops answering.
  */
 export type AutoCompactMode = 'auto' | '75' | '50'
 
-/** Onde abrir links clicados no app. */
+/** Where to open links clicked in the app. */
 export type LinkTarget = 'integrated' | 'external'
 
 /**
- * Rotina de memória (tela de Memórias). A captura diária lê as conversas do dia
- * com o modelo auxiliar e propõe até 3 memórias; a consolidação semanal promove
- * as que se repetiram. Desligada por padrão: consome tokens.
+ * Memory routine (Memories screen). The daily capture reads the day's
+ * conversations with the auxiliary model and proposes up to 3 memories; the
+ * weekly consolidation promotes the ones that repeated. Off by default: it
+ * spends tokens.
  */
 export type MemoryRoutineMode = 'off' | 'daily' | 'weekly' | 'daily+weekly'
 
-/** Por quanto tempo o navegador integrado guarda cookies e logins. */
+/** For how long the built-in browser keeps cookies and logins. */
 export type CookieRetention = 'persistent' | 'until-quit'
 
 /**
- * Onde os worktrees criados pelo Orbit (chats e tasks da esteira) ficam.
- *  - `padrao`: na pasta de dados do Orbit, fora de qualquer projeto;
- *  - `projeto`: dentro do repositório, em .orbit/worktrees (o Orbit tira a
- *    pasta do git pelo .git/info/exclude) — visível no editor;
- *  - `personalizada`: numa pasta escolhida pelo usuário.
- * Vale para worktrees novos: os existentes continuam onde estão.
+ * Where the worktrees created by Orbit (chats and pipeline tasks) live.
+ *  - `default`: in the Orbit data folder, outside any project;
+ *  - `project`: inside the repository, in .orbit/worktrees (Orbit removes the
+ *    folder from git through .git/info/exclude) — visible in the editor;
+ *  - `custom`: in a folder chosen by the user.
+ * It applies to new worktrees: the existing ones stay where they are.
  */
-export type LocalWorktrees = 'padrao' | 'projeto' | 'personalizada'
+export type LocalWorktrees = 'default' | 'project' | 'custom'
 
 /**
- * Como o agente entrega clique e teclado ao controlar o computador.
- *  - `directed`: direto para o app (por pid), sem mover o cursor do usuário;
- *  - `global`: pelo ponteiro real — move o cursor, e é o único que arrasta.
+ * Values and key persisted before this block was translated. They still arrive
+ * from the renderer's localStorage and from the copy the main keeps on disk, so
+ * the normalization below translates them instead of falling back to the
+ * default. Idempotent: current values pass straight through.
+ */
+const LEGACY_LOCAL_WORKTREES: Record<string, LocalWorktrees> = {
+  padrao: 'default',
+  projeto: 'project',
+  personalizada: 'custom',
+}
+
+/**
+ * How the agent delivers clicks and keyboard when controlling the computer.
+ *  - `directed`: straight to the app (by pid), without moving the user's cursor;
+ *  - `global`: through the real pointer — it moves the cursor, and it is the only one that drags.
  */
 export type ComputerPointer = 'directed' | 'global'
 
-/** Lados máximos oferecidos para o screenshot (px). */
+/** Maximum sides offered for the screenshot (px). */
 export const COMPUTER_SCREENSHOT_EDGES = [1024, 1280, 1600] as const
 
 export interface AppSettings {
-  /** Modelo para tarefas auxiliares (título, compactação, sugestões). null = o modelo da conversa. */
+  /** Model for auxiliary tasks (title, compaction, suggestions). null = the model of the conversation. */
   auxModel: { providerId: string; modelId: string } | null
-  /** Raciocínio do modelo auxiliar. null = sem raciocínio. */
+  /** Reasoning of the auxiliary model. null = no reasoning. */
   auxReasoning: ReasoningConfig | null
-  /** Rotina de memória — rodada pelo scheduler, usando o modelo auxiliar. */
+  /** Memory routine — run by the scheduler, using the auxiliary model. */
   memoryRoutine: MemoryRoutineMode
   /**
-   * Como o Orbit chama o usuário ("Olá, Desknik"). Aprendido na conversa —
-   * nunca lido do sistema operacional — e editável nas Preferências. null =
-   * ainda não sabe, e a tela inicial usa uma saudação neutra.
+   * How Orbit calls the user ("Hi, Desknik"). Learned in the conversation —
+   * never read from the operating system — and editable in the Preferences. null =
+   * it does not know yet, and the start screen uses a neutral greeting.
    */
   userName: string | null
   /**
-   * Como o Orbit fala (Preferências → Comportamento). `style` é o ponto de
-   * partida; `note` é o ajuste escrito pelo próprio usuário, na língua dele,
-   * e vence o estilo. Nada aqui é aprendido: comportamento não vira memória —
-   * o que é inferido na conversa morre com ela.
+   * How Orbit speaks (Preferences → Behavior). `style` is the starting
+   * point; `note` is the adjustment written by the user themself, in their language,
+   * and it wins over the style. Nothing here is learned: behavior does not become memory —
+   * what is inferred in the conversation dies with it.
    */
   persona: {
     style: PersonaStyle
-    /** Ajuste livre (≤ PERSONA_NOTE_MAX). Vazio = só o estilo. */
+    /** Free adjustment (≤ PERSONA_NOTE_MAX). Empty = only the style. */
     note: string
   }
-  /** Sugere a próxima mensagem no input (Tab completa). */
+  /** Suggests the next message in the input (Tab completes it). */
   promptSuggestions: boolean
   chatView: ChatViewMode
-  /** Arquiva conversas sem atividade há N dias. null = desligado. */
+  /** Archives conversations with no activity for N days. null = off. */
   autoArchiveDays: number | null
-  /** Exclui conversas arquivadas há N dias (contados desde o arquivamento). null = desligado. */
+  /** Deletes conversations archived N days ago (counted from the archiving). null = off. */
   deleteArchivedDays: number | null
   autoCompact: AutoCompactMode
-  /** A partir de quantas compactações a conversa sugere continuar num chat
-   *  novo em vez de compactar de novo. 0 = desligado. */
+  /** From how many compactions the conversation suggests continuing in a new
+   *  chat instead of compacting again. 0 = off. */
   compactSuggestionAfter: number
-  /** Rodadas extras em falha temporária (mensagens da fila). 0 = desligado. */
+  /** Extra rounds on a temporary failure (queue messages). 0 = off. */
   transientRetries: number
-  /** Continuações automáticas quando a resposta para no limite de passos. 0 = desligado. */
+  /** Automatic continuations when the answer stops at the step limit. 0 = off. */
   autoContinues: number
-  /** Largura da sidebar esquerda, em px (arrastável pela borda). */
+  /** Width of the left sidebar, in px (draggable by the edge). */
   sidebarWidth: number
-  /** Abre o Orbit junto com o sistema (login do usuário). */
+  /** Opens Orbit together with the system (user login). */
   launchAtLogin: boolean
-  /** O botão fechar esconde na bandeja do sistema em vez de encerrar o app. */
+  /** The close button hides to the system tray instead of quitting the app. */
   closeToTray: boolean
   browser: {
     links: LinkTarget
-    /** O agente usa o navegador por conta própria (testar, capturar, documentar). */
+    /** The agent uses the browser on its own (test, capture, document). */
     agentTools: boolean
     cookies: CookieRetention
   }
   worktrees: {
     local: LocalWorktrees
-    /** Só com local = 'personalizada' */
-    pasta: string | null
+    /** Only with local = 'custom' */
+    folder: string | null
   }
-  /** Núcleo de voz (TTS local e ditado/STT). Ver voice.ts. */
+  /** Voice core (local TTS and dictation/STT). See voice.ts. */
   voice: VoiceSettings
-  /** Controle do computador (Preferências → Computador). */
+  /** Computer control (Preferences → Computer). */
   computer: {
-    /** Interruptor geral — sem ele as tools nem existem, mesmo com o modo ligado na conversa. */
+    /** Master switch — without it the tools do not even exist, even with the mode on in the conversation. */
     enabled: boolean
     pointer: ComputerPointer
-    /** Lado maior do screenshot enviado ao modelo */
+    /** Larger side of the screenshot sent to the model */
     maxScreenshotEdge: number
     /**
-     * Modelo do subagente de Computer Use (computer_task). null = o modelo
-     * auxiliar, se ele chama tools; senão o da conversa (ver computer-task.ts).
-     * Um modelo menor e mais rápido encurta cada passo do laço.
+     * Model of the Computer Use subagent (computer_task). null = the auxiliary
+     * model, if it calls tools; otherwise the one of the conversation (see computer-task.ts).
+     * A smaller and faster model shortens each step of the loop.
      */
     model: { providerId: string; modelId: string } | null
   }
   /**
-   * Overlay (atalho global ⇧⌘espaço): o painel que desce no rodapé da tela para
-   * perguntar, traduzir a seleção ou conversar por voz. Ver overlay.ts.
+   * Overlay (global shortcut ⇧⌘space): the panel that comes down at the bottom of the screen to
+   * ask, translate the selection or talk by voice. See overlay.ts.
    */
   overlay: OverlaySettings
 }
 
-/** Largura da sidebar: 256px é o tamanho histórico (16rem), e o teto evita que
- *  ela coma o conteúdo em janela estreita. O piso é 15rem: abaixo disso as
- *  linhas (ícone + título + selos) ficam espremidas e a sidebar parece quebrada. */
+/** Sidebar width: 256px is the historical size (16rem), and the ceiling prevents it
+ *  from eating the content in a narrow window. The floor is 15rem: below that the
+ *  lines (icon + title + badges) get squeezed and the sidebar looks broken. */
 export const SIDEBAR_DEFAULT_WIDTH = 256
 export const SIDEBAR_MIN_WIDTH = 240
 export const SIDEBAR_MAX_WIDTH = 420
 
-/** Traz a largura para dentro do arrastável (usado ao normalizar e ao arrastar). */
+/** Brings the width inside the draggable range (used when normalizing and when dragging). */
 export function clampSidebarWidth(width: number): number {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)))
 }
@@ -157,27 +170,27 @@ export function clampSidebarWidth(width: number): number {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   auxModel: null,
   auxReasoning: null,
-  // Desligada: gasta tokens e o valor só se prova no uso.
+  // Off: it spends tokens and the value only proves itself in use.
   memoryRoutine: 'off',
-  // Sem nome até o usuário contar: a tela inicial saúda sem ele.
+  // No name until the user tells one: the start screen greets without it.
   userName: null,
-  // Sem estilo e sem ajuste: o prompt fica exatamente como era antes da opção.
+  // No style and no adjustment: the prompt stays exactly as it was before the option.
   persona: { style: 'default', note: '' },
   promptSuggestions: false,
   chatView: 'summary',
   autoArchiveDays: null,
   deleteArchivedDays: null,
   autoCompact: 'auto',
-  // Duas compactações funcionam bem; da terceira em diante o resumo já é um
-  // resumo de resumo, e o começo da conversa (o porquê das decisões) se perde.
+  // Two compactions work well; from the third on the summary is already a
+  // summary of a summary, and the beginning of the conversation (the why of the decisions) is lost.
   compactSuggestionAfter: 2,
   transientRetries: 3,
   autoContinues: 3,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
-  // Abrir junto com o sistema é intrusivo: só quando a pessoa pedir.
+  // Opening together with the system is intrusive: only when the person asks for it.
   launchAtLogin: false,
-  // Fechar para a bandeja é o comportamento pedido (como Claude/Codex): o X
-  // esconde o app, que continua vivo servindo os apps conectados.
+  // Closing to the tray is the requested behavior (like Claude/Codex): the X
+  // hides the app, which stays alive serving the connected apps.
   closeToTray: true,
   browser: {
     links: 'integrated',
@@ -185,21 +198,21 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     cookies: 'persistent',
   },
   worktrees: {
-    local: 'padrao',
-    pasta: null,
+    local: 'default',
+    folder: null,
   },
-  // Cópia própria dos padrões: o objeto do voice.ts é constante compartilhada e
-  // não pode virar o alvo de uma edição acidental da UI.
+  // Own copy of the defaults: the voice.ts object is a shared constant and
+  // cannot become the target of an accidental edit by the UI.
   voice: { tts: { ...VOICE_DEFAULTS.tts }, stt: { ...VOICE_DEFAULTS.stt }, call: { ...VOICE_DEFAULTS.call } },
-  // Controlar o computador é opt-in explícito; o ponteiro real, outro opt-in.
+  // Controlling the computer is an explicit opt-in; the real pointer, another opt-in.
   computer: {
     enabled: false,
     pointer: 'directed',
     maxScreenshotEdge: 1280,
     model: null,
   },
-  // Overlay ligado por padrão: é um atalho, não um recurso que age sozinho —
-  // quem não quiser desliga em Preferências → Overlay.
+  // Overlay on by default: it is a shortcut, not a feature that acts on its own —
+  // whoever does not want it turns it off in Preferences → Overlay.
   overlay: { ...OVERLAY_DEFAULTS },
 }
 
@@ -208,22 +221,22 @@ export const DELETE_ARCHIVED_DAY_OPTIONS = [7, 14, 30, 90] as const
 export const MAX_TRANSIENT_RETRIES = 5
 export const MAX_AUTO_CONTINUES = 5
 
-/** Ids de voz do Supertonic 3: M1–M5 (masculinas) e F1–F5 (femininas). */
+/** Supertonic 3 voice ids: M1–M5 (male) and F1–F5 (female). */
 const VOICE_ID = /^[MF][1-5]$/
-/** Código de idioma curto (`pt`, `en`, `na`); o STT também aceita `auto`. */
+/** Short language code (`pt`, `en`, `na`); the STT also accepts `auto`. */
 const VOICE_LANG = /^[a-z]{2,8}$/
 
 /**
- * Normaliza o bloco de voz. Os campos do Supertonic seguem o contrato do motor
- * (voz no formato M#/F#, `speed` entre 0,5 e 2 limitado lá também), então um
- * valor salvo fora do domínio vira o padrão em vez de derrubar a síntese.
+ * Normalizes the voice block. The Supertonic fields follow the engine contract
+ * (voice in the M#/F# format, `speed` between 0.5 and 2 also clamped there), so a
+ * value saved outside the domain becomes the default instead of breaking the synthesis.
  */
 function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Partial<VoiceSettings>
   const tts = (v.tts && typeof v.tts === 'object' ? v.tts : {}) as Partial<VoiceSettings['tts']>
   const stt = (v.stt && typeof v.stt === 'object' ? v.stt : {}) as Partial<VoiceSettings['stt']>
   const call = (v.call && typeof v.call === 'object' ? v.call : {}) as Partial<VoiceSettings['call']>
-  const voz = typeof tts.voice === 'string' ? tts.voice.trim().toUpperCase() : ''
+  const voiceId = typeof tts.voice === 'string' ? tts.voice.trim().toUpperCase() : ''
   const lang = typeof tts.lang === 'string' ? tts.lang.trim().toLowerCase() : ''
   const speed = typeof tts.speed === 'number' && Number.isFinite(tts.speed)
     ? Math.min(2, Math.max(0.5, tts.speed))
@@ -235,10 +248,10 @@ function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
   return {
     tts: {
       enabled: typeof tts.enabled === 'boolean' ? tts.enabled : d.tts.enabled,
-      voice: VOICE_ID.test(voz) ? voz : d.tts.voice,
+      voice: VOICE_ID.test(voiceId) ? voiceId : d.tts.voice,
       lang: VOICE_LANG.test(lang) ? lang : d.tts.lang,
       speed,
-      // Prioridade de áudio: valor fora do domínio volta ao padrão ("model").
+      // Audio priority: a value outside the domain goes back to the default ("model").
       engine: oneOfVoiceTtsEngine(tts.engine, d.tts.engine),
     },
     stt: {
@@ -253,7 +266,7 @@ function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
     },
     call: {
       enabled: typeof call.enabled === 'boolean' ? call.enabled : d.call.enabled,
-      // Só os valores que a tela oferece: um número qualquer salvo volta ao padrão.
+      // Only the values the screen offers: any saved number goes back to the default.
       silenceMs: (VOICE_CALL_SILENCE_OPTIONS as readonly number[]).includes(call.silenceMs as number)
         ? (call.silenceMs as number)
         : d.call.silenceMs,
@@ -265,14 +278,14 @@ function oneOfVoiceEngine(value: unknown, fallback: VoiceEngineId): VoiceEngineI
   return value === 'parakeet' || value === 'whisper' ? value : fallback
 }
 
-/** Prioridade de áudio do TTS: `model` (rota pelo modelo) ou `local`. */
+/** Audio priority of the TTS: `model` (route through the model) or `local`. */
 function oneOfVoiceTtsEngine(value: unknown, fallback: VoiceTtsEngine): VoiceTtsEngine {
   return value === 'model' || value === 'local' ? value : fallback
 }
 
 /**
- * Completa um objeto parcial (versão antiga salva, ou o que veio de outro
- * processo) com os padrões, descartando valores fora do domínio. Nunca lança.
+ * Completes a partial object (old saved version, or what came from another
+ * process) with the defaults, discarding values outside the domain. It never throws.
  */
 export function normalizeAppSettings(raw: unknown): AppSettings {
   const value = (raw && typeof raw === 'object' ? raw : {}) as Partial<AppSettings>
@@ -295,9 +308,9 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       : null
   const dayOption = (v: unknown, options: readonly number[]) =>
     typeof v === 'number' && options.includes(v) ? v : null
-  // Nome do usuário: só texto, aparado e com teto. Vazio (ou só espaços)
-  // volta a ser "não sei" — nunca uma string vazia que a saudação teria de
-  // tratar como caso especial.
+  // User name: text only, trimmed and with a ceiling. Empty (or only spaces)
+  // goes back to being "I do not know" — never an empty string that the greeting would have to
+  // treat as a special case.
   const userName =
     typeof value.userName === 'string' ? value.userName.trim().slice(0, USER_NAME_MAX) : ''
   const browser = (value.browser && typeof value.browser === 'object' ? value.browser : {}) as Partial<AppSettings['browser']>
@@ -314,9 +327,9 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       const p = (value.persona && typeof value.persona === 'object' ? value.persona : {}) as Partial<AppSettings['persona']>
       return {
         style: oneOf(p.style, ['default', 'direct', 'mentor', 'technical'], d.persona.style),
-        // Só teto, sem trim: o renderer normaliza a cada tecla, e aparar aqui
-        // engoliria o espaço que o usuário acabou de digitar. Quem consome
-        // (personaPromptLines) é que apara.
+        // Ceiling only, no trim: the renderer normalizes on every keystroke, and trimming here
+        // would swallow the space the user has just typed. Whoever consumes it
+        // (personaPromptLines) is the one that trims.
         note: typeof p.note === 'string' ? p.note.slice(0, PERSONA_NOTE_MAX) : '',
       }
     })(),
@@ -324,9 +337,9 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     chatView: oneOf(value.chatView, ['summary', 'steps', 'detailed'], d.chatView),
     autoArchiveDays: dayOption(value.autoArchiveDays, AUTO_ARCHIVE_DAY_OPTIONS),
     deleteArchivedDays: dayOption(value.deleteArchivedDays, DELETE_ARCHIVED_DAY_OPTIONS),
-    // 'off' de versões anteriores cai no padrão: a opção deixou de existir.
+    // 'off' from previous versions falls back to the default: the option no longer exists.
     autoCompact: oneOf(value.autoCompact, ['auto', '75', '50'], d.autoCompact),
-    // Teto de 5: acima disso o card vira ruído em vez de aviso.
+    // Ceiling of 5: above that the card becomes noise instead of a warning.
     compactSuggestionAfter: count(value.compactSuggestionAfter, 5, d.compactSuggestionAfter),
     transientRetries: count(value.transientRetries, MAX_TRANSIENT_RETRIES, d.transientRetries),
     autoContinues: count(value.autoContinues, MAX_AUTO_CONTINUES, d.autoContinues),
@@ -339,11 +352,16 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       cookies: oneOf(browser.cookies, ['persistent', 'until-quit'], d.browser.cookies),
     },
     worktrees: (() => {
-      const w = (value.worktrees && typeof value.worktrees === 'object' ? value.worktrees : {}) as Partial<AppSettings['worktrees']>
-      const pasta = typeof w.pasta === 'string' && w.pasta.trim() ? w.pasta.trim() : null
-      const local = oneOf(w.local, ['padrao', 'projeto', 'personalizada'], d.worktrees.local)
-      // Personalizada sem pasta escolhida não tem para onde ir: volta ao padrão.
-      return local === 'personalizada' && !pasta ? { local: d.worktrees.local, pasta: null } : { local, pasta }
+      const w = (value.worktrees && typeof value.worktrees === 'object' ? value.worktrees : {}) as Partial<AppSettings['worktrees']> & { pasta?: unknown }
+      // Settings written before the translation still carry `pasta`.
+      const folderRaw = w.folder ?? w.pasta
+      const folder = typeof folderRaw === 'string' && folderRaw.trim() ? folderRaw.trim() : null
+      const localRaw = w.local
+      const local = typeof localRaw === 'string' && Object.prototype.hasOwnProperty.call(LEGACY_LOCAL_WORKTREES, localRaw)
+        ? LEGACY_LOCAL_WORKTREES[localRaw]
+        : oneOf(localRaw, ['default', 'project', 'custom'], d.worktrees.local)
+      // Customized without a chosen folder has nowhere to go: it goes back to the default.
+      return local === 'custom' && !folder ? { local: d.worktrees.local, folder: null } : { local, folder }
     })(),
     voice: voiceSettings(value.voice, d.voice),
     computer: (() => {

@@ -1,12 +1,12 @@
 import type { SettingsTab } from "@shared/ui-destinations"
 
 /**
- * Rótulo de cada aba do SettingsDialog, por chave de i18n.
+ * Label of each SettingsDialog tab, by i18n key.
  *
- * Existe porque o rótulo da aba e o caminho mostrado no cartão de navegação do
- * chat (`nav` do orbit-ui) têm de ser o mesmo texto: duas listas de rótulos
- * divergem no primeiro rename. Note que `overlay` não mora em `settings.tabs` —
- * ele reaproveita o título do painel do overlay.
+ * It exists because the tab label and the path shown in the chat's navigation
+ * card (orbit-ui's `nav`) have to be the same text: two label lists
+ * diverge on the first rename. Note that `overlay` does not live in `settings.tabs` —
+ * it reuses the overlay panel's title.
  */
 export const SETTINGS_TAB_LABEL_KEY: Record<SettingsTab, string> = {
   providers: "settings.tabs.providers.label",

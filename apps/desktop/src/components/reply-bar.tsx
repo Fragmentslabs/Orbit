@@ -5,29 +5,29 @@ import { useMessageReply } from "@/src/stores/message-reply"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Rótulo de quem escreveu a mensagem respondida — o texto gravado traz o
- *  papel (`[assistant]`), e a tradução sai daqui. */
+/** Label of whoever wrote the replied message — the recorded text brings the
+ *  role (`[assistant]`), and the translation comes from here. */
 export function useReplyLabel() {
   const { t } = useTranslation()
   return (role: "user" | "assistant") => t(role === "user" ? "reply.you" : "reply.assistant")
 }
 
 /**
- * Citação da mensagem respondida, como badge na linha de contexto acima do
- * input — a MESMA linha dos badges de anexo (é o `leading` do
- * PromptInputAttachments que a coloca lá).
+ * Quote of the replied message, as a badge in the context row above the
+ * input — the SAME row as the attachment badges (it is the `leading` of
+ * PromptInputAttachments that puts it there).
  *
- * Vive no compositor (e não só na bolha enviada) porque é ela que diz o que vai
- * sair: sem o badge, o texto enviado ganharia uma citação que ninguém viu sendo
- * escolhida. O X desfaz a resposta sem mexer no texto digitado.
+ * It lives in the composer (and not only in the sent bubble) because it is what says what is going
+ * to leave: without the badge, the sent text would get a quote nobody saw being
+ * chosen. The X undoes the reply without touching the typed text.
  *
- * O desenho é o mesmo dos anexos de propósito: uma linha só, altura de badge e
- * o trecho cortado no fim — assim ela é lida como "isto vai junto com a
- * mensagem", e não como parte do que se digita.
+ * The drawing is the same as the attachments on purpose: a single row, badge height and
+ * the excerpt cut at the end — that way it is read as "this goes along with the
+ * message", and not as part of what one types.
  *
- * O teto de largura (`max-w-[60%]`) é o que sustenta "na mesma linha": sem ele
- * o trecho longo (até 140 caracteres) ocupa a linha inteira e joga o badge do
- * anexo para baixo. Com trecho curto o teto não age — o badge encolhe junto.
+ * The width ceiling (`max-w-[60%]`) is what sustains "on the same row": without it
+ * the long excerpt (up to 140 characters) takes the whole row and throws the attachment
+ * badge down. With a short excerpt the ceiling does not act — the badge shrinks along.
  */
 export function ReplyBar({ replyKey }: { replyKey: string }) {
   const { t } = useTranslation()

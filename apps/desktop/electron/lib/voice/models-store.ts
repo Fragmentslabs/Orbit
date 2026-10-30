@@ -1,24 +1,24 @@
 /**
- * Onde os modelos de ditado ficam no disco — e o que o motor precisa que esteja
- * pronto antes de abrir uma sessão.
+ * Where the dictation models live on disk — and what the engine needs to be
+ * ready before opening a session.
  *
- * O DOWNLOAD não mora aqui: quem baixa é o `./download.ts` do núcleo (retomada,
- * progresso, sha256), que já existia quando este motor foi escrito. Este módulo
- * só CONCORDA com ele sobre o layout e checa o que chegou:
+ * The DOWNLOAD does not live here: the core's `./download.ts` is what downloads (resumption,
+ * progress, sha256), and it already existed when this engine was written. This module
+ * only AGREES with it on the layout and checks what arrived:
  *
- *   <userData>/voice/models/<id>/<arquivo da URL>   # o download do núcleo
- *   <userData>/voice/models/<id>/model/             # Parakeet extraído (por este motor)
- *   <userData>/voice/models/silero_vad.onnx         # VAD do Parakeet (por este motor)
+ *   <userData>/voice/models/<id>/<URL file>   # the core's download
+ *   <userData>/voice/models/<id>/model/             # Parakeet extracted (by this engine)
+ *   <userData>/voice/models/silero_vad.onnx         # Parakeet VAD (by this engine)
  *
- * A checagem de "instalado" repete a regra do downloader (tamanho EXATO do
- * arquivo), para as duas visões nunca discordarem.
+ * The "installed" check repeats the downloader's rule (EXACT file size),
+ * so the two views never disagree.
  *
- * Por que não importar `./download.ts` ou `./manifest.ts` daqui: `manifest.ts`
- * importa `./stt.ts` e lê `STT_MODELS` no topo do módulo. Como `stt.ts` importa
- * os motores, um import destes arquivos aqui fecharia um ciclo em que o
- * manifesto pode avaliar antes de `STT_MODELS` existir (ReferenceError de TDZ,
- * dependendo de quem entra primeiro). As poucas funções de caminho foram
- * repetidas de propósito — são triviais e o ciclo seria pior.
+ * Why not import `./download.ts` or `./manifest.ts` from here: `manifest.ts`
+ * imports `./stt.ts` and reads `STT_MODELS` at the top of the module. Since `stt.ts` imports
+ * the engines, an import of these files here would close a cycle in which the
+ * manifest may evaluate before `STT_MODELS` exists (TDZ ReferenceError,
+ * depending on which one comes in first). The few path functions were
+ * repeated on purpose — they are trivial and the cycle would be worse.
  */
 
 import { app } from 'electron'
@@ -41,40 +41,40 @@ import {
 
 export const PARAKEET_ID = 'parakeet-tdt-0.6b-v3'
 
-/** Raiz dos dados de voz: `<userData>/voice`. */
+/** Root of the voice data: `<userData>/voice`. */
 export function voiceDir(): string {
   return path.join(app.getPath('userData'), 'voice')
 }
 
-/** Raiz dos modelos: `<userData>/voice/models` (mesmo caminho do núcleo). */
+/** Root of the models: `<userData>/voice/models` (same path as the core). */
 export function modelsDir(): string {
   return path.join(voiceDir(), 'models')
 }
 
-/** Pasta de um modelo — é ela que some quando o modelo é removido. */
+/** Folder of a model — it is the one that disappears when the model is removed. */
 export function modelDirFor(id: string): string {
   return path.join(modelsDir(), id)
 }
 
-/** Caminho do arquivo baixado (para o Parakeet, o próprio `.tar.bz2`). */
+/** Path of the downloaded file (for Parakeet, the `.tar.bz2` itself). */
 export function modelFileFor(def: SttModelDef): string {
   return path.join(modelDirFor(def.id), fileNameOf(def))
 }
 
-/** Onde os arquivos do Parakeet ficam depois de extraídos. */
+/** Where the Parakeet files live after being extracted. */
 export function parakeetFilesDir(id: string = PARAKEET_ID): string {
   return path.join(modelDirFor(id), PARAKEET_EXTRACT_DIR)
 }
 
-/** Caminho do VAD Silero (compartilhado entre modelos de Parakeet). */
+/** Path of the Silero VAD (shared among Parakeet models). */
 export function sileroVadPath(): string {
   return path.join(modelsDir(), SILERO_VAD_FILE)
 }
 
 /**
- * `whisper-server` que vem com o app (scripts/build-whisper-server.mjs): em
- * `Resources/whisper` no empacotado, em `resources/whisper/<plataforma>-<arch>`
- * no dev. `null` quando o ambiente não diz onde o app está (testes).
+ * `whisper-server` that ships with the app (scripts/build-whisper-server.mjs): in
+ * `Resources/whisper` when packaged, in `resources/whisper/<platform>-<arch>`
+ * in dev. `null` when the environment does not say where the app is (tests).
  */
 export function bundledWhisperServerPath(): string | null {
   const exe = process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server'
@@ -84,7 +84,7 @@ export function bundledWhisperServerPath(): string | null {
   return path.join(appPath, 'resources', 'whisper', `${process.platform}-${process.arch}`, exe)
 }
 
-/** Caminho do binário opcional do `whisper-server` posto pelo usuário. */
+/** Path of the optional `whisper-server` binary placed by the user. */
 export function localWhisperServerPath(): string {
   return path.join(voiceDir(), 'whisper', process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server')
 }
@@ -97,32 +97,32 @@ function sizeOf(file: string): number {
   }
 }
 
-/** Arquivo baixado por inteiro (mesma regra do downloader do núcleo). */
+/** File downloaded in full (same rule as the core downloader). */
 export function fileComplete(def: SttModelDef): boolean {
   return sizeOf(modelFileFor(def)) === def.bytes
 }
 
-/** Um modelo de whisper está pronto para o servidor carregar. */
+/** A whisper model is ready for the server to load. */
 export function isWhisperModelInstalled(id: string): boolean {
   const def = getSttModel(id)
   if (!def || def.engine !== 'whisper') return false
   return fileComplete(def)
 }
 
-/** Ids de modelos de whisper já baixados, na ordem do catálogo. */
+/** Ids of the whisper models already downloaded, in catalog order. */
 export function whisperInstalledIds(): string[] {
   return modelsForEngine('whisper')
     .filter((def) => fileComplete(def))
     .map((def) => def.id)
 }
 
-/** O pacote do Parakeet está no disco (baixado pelo downloader do núcleo). */
+/** The Parakeet package is on disk (downloaded by the core downloader). */
 export function parakeetArchiveComplete(): boolean {
   const def = getSttModel(PARAKEET_ID)
   return Boolean(def && fileComplete(def))
 }
 
-/** O Parakeet está extraído e o VAD presente — dá para transcrever já. */
+/** Parakeet is extracted and the VAD present — it can transcribe right now. */
 export function isParakeetReady(): boolean {
   const dir = parakeetFilesDir()
   if (!PARAKEET_FILES.every((f) => sizeOf(path.join(dir, f)) > 0)) return false
@@ -130,7 +130,7 @@ export function isParakeetReady(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Preparo do Parakeet (extração do pacote + VAD)
+// Parakeet preparation (package extraction + VAD)
 // ---------------------------------------------------------------------------
 
 async function fetchFile(url: string, dest: string): Promise<void> {
@@ -139,8 +139,8 @@ async function fetchFile(url: string, dest: string): Promise<void> {
   if (!res.ok || !res.body) throw new Error(`${url} respondeu HTTP ${res.status}`)
   const out = fs.createWriteStream(`${dest}.part`)
   try {
-    // `getReader()` e não `for await`: o `ReadableStream` que o tipo de `fetch`
-    // expõe (lib DOM) não declara `Symbol.asyncIterator` — só o do Node declara.
+    // `getReader()` and not `for await`: the `ReadableStream` exposed by `fetch`'s
+    // type (lib DOM) does not declare `Symbol.asyncIterator` — only Node's does.
     const reader = res.body.getReader()
     for (;;) {
       const { done, value } = await reader.read()
@@ -159,23 +159,23 @@ async function fetchFile(url: string, dest: string): Promise<void> {
   }
 }
 
-/** Baixa o VAD Silero (~629 KiB) se ele ainda não estiver no disco. */
+/** Downloads the Silero VAD (~629 KiB) if it is not on disk yet. */
 export async function ensureSileroVad(): Promise<string> {
   const dest = sileroVadPath()
   if (sizeOf(dest) === SILERO_VAD_BYTES) return dest
   await fetchFile(SILERO_VAD_URL, dest)
   if (sizeOf(dest) !== SILERO_VAD_BYTES) {
     await fsp.rm(dest, { force: true }).catch(() => {})
-    throw new Error('o VAD Silero baixou com tamanho errado')
+    throw new Error('the Silero VAD downloaded with the wrong size')
   }
   return dest
 }
 
 function extractTarBz2(archive: string, destDir: string): Promise<void> {
-  // `tar` com bzip2 existe no macOS, no Linux e no Windows 10+ (bsdtar).
+  // `tar` with bzip2 exists on macOS, on Linux and on Windows 10+ (bsdtar).
   return new Promise((resolve, reject) => {
     execFile('tar', ['-xjf', archive, '-C', destDir], { timeout: 600_000 }, (err, _o, stderr) =>
-      err ? reject(new Error(`falha ao extrair o pacote (tar): ${stderr || err.message}`)) : resolve(),
+      err ? reject(new Error(`failed to extract the package (tar): ${stderr || err.message}`)) : resolve(),
     )
   })
 }
@@ -183,25 +183,25 @@ function extractTarBz2(archive: string, destDir: string): Promise<void> {
 let extractInFlight: Promise<void> | null = null
 
 // ---------------------------------------------------------------------------
-// Fase da extração (o `voice:status` publica isto; ver `./status.ts`)
+// Extraction phase (`voice:status` publishes this; see `./status.ts`)
 // ---------------------------------------------------------------------------
 
-/** Fase da extração do pacote do Parakeet. */
+/** Phase of the Parakeet package extraction. */
 export type ExtractPhase = 'idle' | 'extracting' | 'error'
 
 let extractPhase: ExtractPhase = 'idle'
 let extractError: string | null = null
 const extractListeners = new Set<(phase: ExtractPhase, error: string | null) => void>()
 
-/** Fase atual da extração (`idle` quando não há extração em curso). */
+/** Current extraction phase (`idle` when there is no extraction in progress). */
 export function parakeetExtractPhase(): { phase: ExtractPhase; error: string | null } {
   return { phase: extractPhase, error: extractError }
 }
 
 /**
- * Avisa a CADA mudança de fase da extração (início, fim, erro). É por aqui que
- * o núcleo emite `voice:status-changed` mesmo quando a extração é disparada no
- * primeiro uso (dentro do motor), e não só logo depois do download.
+ * Notifies on EVERY extraction phase change (start, end, error). It is through here that
+ * the core emits `voice:status-changed` even when the extraction is triggered on
+ * first use (inside the engine), and not only right after the download.
  */
 export function onParakeetExtractPhaseChange(
   listener: (phase: ExtractPhase, error: string | null) => void,
@@ -219,33 +219,33 @@ function setExtractPhase(phase: ExtractPhase, error: string | null = null): void
     try {
       listener(phase, error)
     } catch {
-      // um listener com defeito não pode derrubar a extração
+      // a faulty listener cannot take the extraction down
     }
   }
 }
 
 /**
- * Extrai o pacote do Parakeet para `<models>/<id>/model/`.
+ * Extracts the Parakeet package to `<models>/<id>/model/`.
  *
- * O downloader do núcleo não descompacta pacotes de STT, então a extração é do
- * motor. Ela vai para uma pasta temporária e só troca de nome no fim: com os
- * arquivos aparecendo aos poucos, um `status` otimista diria "pronto" com o
- * encoder pela metade (foi exatamente o que aconteceu no laboratório).
+ * The core downloader does not unpack STT packages, so the extraction belongs to the
+ * engine. It goes to a temporary folder and only changes name at the end: with the
+ * files appearing little by little, an optimistic `status` would say "ready" with the
+ * encoder half written (that is exactly what happened in the laboratory).
  *
- * A fase fica em `parakeetExtractPhase()` — "baixado" nunca se apresenta como
- * "pronto": enquanto o pacote não está extraído o estado é `downloaded` ou
- * `extracting`, e é isso que o `voice:status` publica.
+ * The phase lives in `parakeetExtractPhase()` — "downloaded" never presents itself as
+ * "ready": while the package is not extracted the state is `downloaded` or
+ * `extracting`, and that is what `voice:status` publishes.
  */
 export function ensureParakeetExtracted(): Promise<void> {
   if (isParakeetReady()) return Promise.resolve()
   if (extractInFlight) return extractInFlight
 
   const def = getSttModel(PARAKEET_ID)
-  if (!def) return Promise.reject(new Error('o modelo do Parakeet não está no catálogo'))
+  if (!def) return Promise.reject(new Error('the Parakeet model is not in the catalog'))
 
   extractInFlight = (async () => {
     if (!fileComplete(def)) {
-      throw new Error(`o pacote do Parakeet ainda não foi baixado (${def.bytes} bytes em <userData>/voice/models/${PARAKEET_ID})`)
+      throw new Error(`the Parakeet package has not been downloaded yet (${def.bytes} bytes at <userData>/voice/models/${PARAKEET_ID})`)
     }
     const archive = modelFileFor(def)
     const dir = modelDirFor(def.id)
@@ -261,7 +261,7 @@ export function ensureParakeetExtracted(): Promise<void> {
       await fsp.rm(target, { recursive: true, force: true })
       await fsp.rename(source, target)
       if (!PARAKEET_FILES.every((f) => sizeOf(path.join(target, f)) > 0)) {
-        throw new Error(`o pacote não trouxe ${PARAKEET_FILES.join(', ')}`)
+        throw new Error(`the package did not bring ${PARAKEET_FILES.join(', ')}`)
       }
       await ensureSileroVad()
     } catch (err) {

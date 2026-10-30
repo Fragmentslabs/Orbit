@@ -5,13 +5,13 @@ import { useConnectionStore } from '~/stores/connection-store'
 import { useReasoningPrefsStore } from '~/stores/reasoning-prefs'
 
 /**
- * Thinking POR CHAT (mesmo padrão do modelo e dos modos por chat). `overrides`
- * guarda a escolha de cada sessão; o chat novo usa a chave DRAFT até a criação
- * da sessão (adopt) e, sem override, vale o nível POR MODELO que o desktop
- * mantém (reasoning-prefs) — o default das Preferências.
+ * Thinking PER CHAT (same pattern as the model and the per-chat modes). `overrides`
+ * holds the choice of each session; the new chat uses the DRAFT key until the session
+ * is created (adopt) and, without an override, the PER-MODEL level that the desktop
+ * keeps (reasoning-prefs) applies — the default of the Preferences.
  *
- * O desktop é a fonte da verdade: aplica o que o celular escolhe (WS
- * 'session:prefs-select') e devolve o mapa inteiro pelo 'session:prefs-change'.
+ * The desktop is the source of truth: it applies what the phone chooses (WS
+ * 'session:prefs-select') and sends the whole map back through 'session:prefs-change'.
  */
 
 const STORAGE_KEY = 'orbit_session_reasoning'
@@ -23,8 +23,8 @@ interface SessionReasoningState {
   overrides: SessionReasoningMap
   hydrated: boolean
   hydrate: () => Promise<void>
-  /** Snapshot do desktop (connect) ou evento ao vivo. No connect só preenche
-   *  o que falta (escolha feita aqui vence); no evento ao vivo ele substitui. */
+  /** Desktop snapshot (connect) or live event. On connect it only fills in
+   *  what is missing (a choice made here wins); on a live event it replaces. */
   applySync: (remote: SessionReasoningMap, authoritative?: boolean) => void
   setPref: (sessionId: string | null | undefined, pref: ModelReasoningPref) => void
   adopt: (sessionId: string, fallback?: ModelReasoningPref) => void
@@ -54,7 +54,7 @@ export const useSessionReasoning = create<SessionReasoningState>((set, get) => (
       const raw = await Storage.getItem(STORAGE_KEY)
       if (raw) set({ overrides: normalizar(JSON.parse(raw)) })
     } catch {
-      // prefs corrompidas — todo chat segue o nível do modelo
+      // corrupted prefs — every chat follows the level of the model
     }
     set({ hydrated: true })
   },
@@ -65,8 +65,8 @@ export const useSessionReasoning = create<SessionReasoningState>((set, get) => (
 
     let next: SessionReasoningMap
     if (authoritative) {
-      // O mapa do desktop substitui o local — assim um nível que voltou a
-      // seguir o default lá (chave removida) também volta aqui.
+      // The desktop map replaces the local one — so a level that went back to
+      // following the default there (key removed) also goes back here.
       next = { ...incoming }
       const draft = get().overrides[DRAFT_KEY]
       if (draft !== undefined) next[DRAFT_KEY] = draft
@@ -91,14 +91,14 @@ export const useSessionReasoning = create<SessionReasoningState>((set, get) => (
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
 
-    // Chat novo é por aparelho: não viaja. Com sessão, o desktop aplica no
-    // renderer dele (fonte da verdade) e devolve o snapshot a todos.
+    // A new chat is per device: it does not travel. With a session, the desktop applies it in
+    // its renderer (source of truth) and sends the snapshot back to everyone.
     if (!sessionId) return
     const { wsClient } = useConnectionStore.getState()
     try {
       void wsClient.send({ type: 'session:prefs-select', sessionId, reasoning: pref }).catch(() => {})
     } catch {
-      // Offline: o envio leva o thinking da sessão no próprio turno.
+      // Offline: the send carries the thinking of the session in the turn itself.
     }
   },
 
@@ -124,7 +124,7 @@ export const useSessionReasoning = create<SessionReasoningState>((set, get) => (
   },
 }))
 
-/** Nível efetivo do chat: override da sessão > nível do modelo (desktop). */
+/** Effective level of the chat: session override > level of the model (desktop). */
 export function sessionReasoningFor(
   sessionId: string | null | undefined,
   providerId: string | undefined,

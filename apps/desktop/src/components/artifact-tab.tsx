@@ -37,12 +37,12 @@ function formatDate(timestamp: number, locale: string): string {
 }
 
 /**
- * Artefato em tela cheia na aba do painel direito — o mesmo arquivo do card na
- * conversa, com espaço pra valer (dashboard, protótipo de tela).
+ * Artifact in fullscreen in the right panel tab — the same file as the card in the
+ * conversation, with room to spare (dashboard, screen prototype).
  *
- * A aba guarda só o `artifactId`: o título e a revisão vêm do registry a cada
- * abertura, então uma aba que ficou aberta enquanto o agente chamava
- * update_artifact mostra a versão nova ao voltar.
+ * The tab keeps only the `artifactId`: the title and the revision come from the registry on every
+ * opening, so a tab that stayed open while the agent called
+ * update_artifact shows the new version when you come back.
  */
 export function ArtifactTab({ artifactId, title }: { artifactId?: string; title: string }) {
   const { t, i18n } = useTranslation()
@@ -56,8 +56,8 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
   useEffect(() => {
     if (!artifactId) return
     let cancelled = false
-    // Artefato e documento usam a mesma aba: os dois são servidos como HTML
-    // pelo orbit-artifact://.
+    // Artifact and document use the same tab: both are served as HTML
+    // through orbit-artifact://.
     void mediaApi.list({ kind: ["artifact", "document"] }).then((entries) => {
       if (cancelled) return
       const found = entries.find((e) => e.id === artifactId) ?? null
@@ -69,9 +69,9 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
     }
   }, [artifactId, reloads])
 
-  // Mesma razão do card na conversa: a aba pode estar aberta enquanto o agente
-  // reescreve o artefato. O bump do `reloads` refaz a leitura do registry (daí
-  // ele estar nas deps do efeito acima) e remonta o iframe.
+  // Same reason as the card in the conversation: the tab may be open while the agent
+  // rewrites the artifact. The bump of `reloads` re-reads the registry (hence
+  // it being in the deps of the effect above) and remounts the iframe.
   useEffect(
     () =>
       artifactApi.onUpdated((payload) => {
@@ -80,8 +80,8 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
     [artifactId],
   )
 
-  // Esc sai da tela cheia (a aba só ouve enquanto está nela — fora, o Esc é de
-  // quem estiver com o foco).
+  // Esc leaves fullscreen (the tab only listens while it is in it — outside, Esc belongs to
+  // whoever has the focus).
   useEffect(() => {
     if (!fullscreen) return
     const onKey = (e: KeyboardEvent) => {
@@ -95,7 +95,7 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
     if (artifactId) void artifactApi.export(artifactId)
   }, [artifactId])
 
-  /** Abre o chat de origem e rola até a mensagem onde o artefato apareceu. */
+  /** Opens the origin chat and scrolls to the message where the artifact appeared. */
   const showInChat = useCallback(async () => {
     const sessionId = entry?.sessionId
     if (!sessionId) return
@@ -123,7 +123,7 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
     )
   }
 
-  // Documento: o id do registro é o fonte .md, mas o que renderiza é o .html.
+  // Document: the registry id is the .md source, but what renders is the .html.
   const fileId = artifactId.endsWith(".md") ? artifactId.replace(/\.md$/, ".html") : artifactId
   const src = `${ARTIFACT_SCHEME}://${fileId}?rev=${entry?.revision ?? 1}&r=${reloads}`
   const revision = entry?.revision ?? 1
@@ -160,9 +160,9 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
         className="flex-1"
       />
 
-      {/* Rodapé só na tela cheia: na aba estreita o chrome rouba a altura que o
-          artefato precisa. Mesmo molde do visor de mídia — detalhes à esquerda,
-          ações à direita. */}
+      {/* Footer only in fullscreen: in the narrow tab the chrome steals the height the
+          artifact needs. Same mold as the media viewer — details on the left,
+          actions on the right. */}
       {fullscreen && entry && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">{entry.name || title}</span>

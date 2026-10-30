@@ -14,14 +14,14 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Modo apresentação do canvas, na aba própria: uma tela por vez, na proporção
- * dela e ajustada ao painel, e os links entre os artboards (`<a href="Outra.html">`)
- * navegam de verdade — o protótipo que o usuário clica, não o canvas de edição.
+ * Presentation mode of the canvas, in its own tab: one screen at a time, in its own proportion
+ * and fitted to the panel, and the links between the artboards (`<a href="Other.html">`)
+ * really navigate — the prototype the user clicks, not the editing canvas.
  *
- * Quem intercepta o clique é a ponte do artboard (modo `play`): ela não deixa o
- * iframe navegar sozinho — o painel é quem sabe QUAL tela vem a seguir (e qual
- * é a anterior, para o voltar), e a tela nova entra sempre pela mesma rota, com
- * a ponte injetada.
+ * What intercepts the click is the artboard bridge (`play` mode): it does not let the
+ * iframe navigate on its own — the panel is what knows WHICH screen comes next (and which
+ * is the previous one, for going back), and the new screen always enters through the same route, with
+ * the bridge injected.
  */
 
 interface Board {
@@ -47,7 +47,7 @@ export function DesignPresenter({
   designId: string
   title: string
   startFile: string
-  /** A aba nasceu do editor em tela cheia: já entra apresentando assim. */
+  /** The tab was born from the fullscreen editor: it already enters presenting like this. */
   initialFullscreen?: boolean
 }) {
   const { t } = useTranslation()
@@ -60,12 +60,12 @@ export function DesignPresenter({
   const [reloads, setReloads] = useState(0)
   const [box, setBox] = useState({ w: 0, h: 0 })
   const [fullscreen, setFullscreen] = useState(initialFullscreen)
-  // Como a tela se apresenta: "real" mostra o frame no tamanho dele (a tela
-  // rola quando não cabe); "fit" escala para caber inteira na área da aba.
+  // How the screen presents itself: "real" shows the frame at its own size (the screen
+  // scrolls when it does not fit); "fit" scales it to fit entirely in the tab area.
   const [mode, setMode] = useState<"fit" | "real">("fit")
-  // Lista de telas: barra flutuante à esquerda, no molde da sidebar do modo
-  // edição — fixável aberta, ou fechada abrindo no hover da borda. Fechada por
-  // padrão para a tela não nascer coberta.
+  // List of screens: floating bar on the left, in the mold of the sidebar of the editing
+  // mode — pinnable open, or closed opening on the edge hover. Closed by
+  // default so the screen is not born covered.
   const [screensOpen, setScreensOpen] = useState(false)
 
   const load = useCallback(() => {
@@ -83,27 +83,27 @@ export function DesignPresenter({
 
   useEffect(() => load(), [load])
 
-  /** A tela que está na frente, sem re-assinar o listener a cada navegação. */
+  /** The screen that is in front, without re-subscribing the listener on every navigation. */
   const currentRef = useRef(current)
   currentRef.current = current
 
-  // O agente mexeu no canvas: recarrega a tela em que a pessoa está — e só
-  // quando a mudança é dela, do índice ou de um arquivo que ela usa (CSS,
-  // imagem, fonte). O watcher manda os nomes (ver design-store.ts).
+  // The agent touched the canvas: it reloads the screen the person is on — and only
+  // when the change is of it, of the index or of a file it uses (CSS,
+  // image, font). The watcher sends the names (see design-store.ts).
   useEffect(
     () =>
       designApi.onChanged((payload) => {
         if (payload.id !== designId) return
         const plan = planDesignReload(payload.files)
         if (plan.index) load()
-        // A tela da frente só remonta se ELA mudou (ou se a mudança pode afetar
-        // qualquer tela: CSS, imagem, fonte da pasta).
+        // The front screen only remounts if IT changed (or if the change may affect
+        // any screen: CSS, image, folder font).
         if (plan.all || plan.boards.includes(currentRef.current)) setReloads((n) => n + 1)
       }),
     [designId, load],
   )
 
-  // O Play de outro artboard reaproveita a aba e só troca a tela inicial.
+  // The Play of another artboard reuses the tab and only swaps the initial screen.
   useEffect(() => {
     setCurrent(startFile)
     setHistory([])
@@ -151,8 +151,8 @@ export function DesignPresenter({
     return () => window.removeEventListener("message", onMessage)
   }, [files, goTo])
 
-  // Esc sai da tela cheia (a aba só ouve enquanto está nela — fora, o Esc é de
-  // quem estiver com o foco).
+  // Esc leaves fullscreen (the tab only listens while it is in it — outside, Esc belongs to
+  // whoever has the focus).
   useEffect(() => {
     if (!fullscreen) return
     const onKey = (e: KeyboardEvent) => {
@@ -162,7 +162,7 @@ export function DesignPresenter({
     return () => window.removeEventListener("keydown", onKey)
   }, [fullscreen])
 
-  // O Esc com o foco DENTRO do artboard chega pela ponte (ele cancela as teclas).
+  // Esc with the focus INSIDE the artboard arrives through the bridge (it cancels the keys).
   useEffect(() => {
     if (!fullscreen) return
     const onMessage = (event: MessageEvent) => {
@@ -174,7 +174,7 @@ export function DesignPresenter({
     return () => window.removeEventListener("message", onMessage)
   }, [fullscreen])
 
-  // A tela ocupa o palco inteiro, na proporção dela.
+  // The screen takes the whole stage, in its own proportion.
   useEffect(() => {
     const el = stageRef.current
     if (!el) return
@@ -185,9 +185,9 @@ export function DesignPresenter({
     return () => observer.disconnect()
   }, [])
 
-  // "fit": escala pela LARGURA (a tela encosta nas laterais, sem faixa) e a
-  // altura acompanha a proporção; se ficar mais alta que a área, o palco rola
-  // na vertical em vez de cortar atrás do header. "real": tamanho original.
+  // "fit": scales by the WIDTH (the screen touches the sides, with no band) and the
+  // height follows the proportion; if it becomes taller than the area, the stage scrolls
+  // vertically instead of cutting behind the header. "real": original size.
   const scale = board && box.w > 0 && box.h > 0 ? box.w / board.w : 1
   const fit = mode === "fit"
   const overflowsY = fit && !!board && box.h > 0 && board.h * scale > box.h + 1
@@ -252,10 +252,10 @@ export function DesignPresenter({
         ref={stageRef}
         className={cn(
           "relative flex min-h-0 flex-1 overflow-hidden bg-black/30",
-          // "fit" preenche a largura; centraliza na vertical quando cabe e rola
-          // (alinhado ao topo) quando a tela é mais alta que a área. "real"
-          // deixa o frame no tamanho dele e rola quando ele é maior. Sem tela
-          // (carregando/erro), centraliza o aviso em qualquer modo.
+          // "fit" fills the width; it centers vertically when it fits and scrolls
+          // (aligned to the top) when the screen is taller than the area. "real"
+          // leaves the frame at its own size and scrolls when it is bigger. With no screen
+          // (loading/error), it centers the notice in any mode.
           !board
             ? "items-center justify-center"
             : fit
@@ -278,8 +278,8 @@ export function DesignPresenter({
           <div
             className={cn(
               "relative overflow-hidden bg-white shadow-lg ring-1 ring-border/60",
-              // `m-auto` centra com folga e, sem folga, libera a rolagem (o
-              // `justify-center` do flex clipa o topo/esquerda nesse caso).
+              // `m-auto` centers with slack and, without slack, frees the scroll (the
+              // flex `justify-center` clips the top/left in that case).
               !fit && "m-auto",
             )}
             style={fit ? { width: board.w * scale, height: board.h * scale } : { width: board.w, height: board.h }}
@@ -303,10 +303,10 @@ export function DesignPresenter({
           </div>
         )}
 
-        {/* Em tela cheia, a lista de telas fica na barra flutuante da esquerda —
-            o mesmo gesto da sidebar do modo edição (fixa aberta pelo botão, ou
-            abre no hover da borda quando fechada). No painel (sem tela cheia)
-            ela vira a faixa horizontal de baixo. */}
+        {/* In fullscreen, the list of screens stays in the floating bar on the left —
+            the same gesture as the sidebar of the editing mode (pinned open by the button, or
+            opens on the edge hover when closed). In the panel (without fullscreen)
+            it becomes the horizontal strip at the bottom. */}
         {fullscreen && boards.length > 1 && (
           <FloatingSidebar
             side="left"
@@ -343,8 +343,8 @@ export function DesignPresenter({
         )}
       </div>
 
-      {/* No painel (sem tela cheia) a lista de telas fica na faixa de baixo,
-          com o preview ocupando o resto por cima. */}
+      {/* In the panel (without fullscreen) the list of screens stays in the bottom strip,
+          with the preview taking the rest on top. */}
       {!fullscreen && boards.length > 1 && (
         <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-border/60 p-2">
           {boards.map((b) => (

@@ -1,17 +1,17 @@
 import type { ToolPart } from "@shared/chat"
 
 /**
- * Referência de um deck de slides a partir da tool part (slides_preview /
- * slides_write) — espelha design-part-ref.ts.
+ * Reference of a slide deck from the tool part (slides_preview /
+ * slides_write) — mirrors design-part-ref.ts.
  *
- * Os dois modos endereçam o deck de jeitos diferentes: o caminho da pasta do
- * projeto (slides_preview, modo código) ou o título do deck na conversa
- * (slides_write, modo chat) — com fallback para o nome que a própria tool
- * relatou no texto (`Deck "..."`), necessário quando o segmento vem de um
- * histórico antigo sem o input completo.
+ * The two modes address the deck in different ways: the project folder path
+ * (slides_preview, code mode) or the deck title in the conversation
+ * (slides_write, chat mode) — with a fallback to the name the tool itself
+ * reported in the text (`Deck "..."`), needed when the segment comes from an old
+ * history without the complete input.
  */
 export interface SlidesPartRef {
-  /** Deck endereçado pelo id (sld_…) — de qualquer conversa. */
+  /** Deck addressed by the id (sld_…) — from any conversation. */
   id?: string
   path?: string
   name?: string
@@ -19,14 +19,14 @@ export interface SlidesPartRef {
   slides?: number
 }
 
-/** Extrai o nome do deck do relatório da tool (ver openSlidesAndReport). */
+/** Extracts the deck name from the tool report (see openSlidesAndReport). */
 export function slidesNameInReport(output: string | undefined): string | null {
   if (!output) return null
   const match = /Deck "([^"]+)"/.exec(output)
   return match ? match[1] : null
 }
 
-/** Quantos slides o relatório diz que o deck tem. */
+/** How many slides the report says the deck has. */
 export function slidesCountInReport(output: string | undefined): number | null {
   if (!output) return null
   const match = /with (\d+) slides?/.exec(output)
@@ -36,12 +36,12 @@ export function slidesCountInReport(output: string | undefined): number | null {
 export function slidesRefOf(part: ToolPart): SlidesPartRef | null {
   const input = part.input as Record<string, unknown> | undefined
   const rawPath = typeof input?.path === "string" ? input.path : undefined
-  // slides_write endereça pelo `title`; slides_edit e slides_preview, pelo `name`.
+  // slides_write addresses by `title`; slides_edit and slides_preview, by `name`.
   const title = typeof input?.title === "string" ? input.title : typeof input?.name === "string" ? input.name : undefined
   const id = typeof input?.id === "string" && input.id.startsWith("sld_") ? input.id : undefined
-  // `slides_write` endereça pelo TÍTULO e o main resolve a pasta pelo slug do
-  // título (slides-slug.ts) — aqui não se normaliza nada, para não duplicar a
-  // regra em dois lugares.
+  // `slides_write` addresses by TITLE and main resolves the folder by the slug of the
+  // title (slides-slug.ts) — nothing is normalized here, so as not to duplicate the
+  // rule in two places.
   const name = title?.trim() || undefined
   const label = rawPath
     ? rawPath.split(/[\\/]/).filter(Boolean).pop()

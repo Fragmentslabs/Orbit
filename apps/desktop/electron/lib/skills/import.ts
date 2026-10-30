@@ -5,12 +5,12 @@ import { globalSkillsDir } from './index'
 import { parseSkill } from './parser'
 
 /**
- * Importação de skills. Dois formatos aceitos:
- * 1. Texto: arquivo .skill/.md com frontmatter (+ arquivos extras selecionados
- *    juntos, que viram o bundle).
- * 2. ZIP (formato dos .skill exportados pelo Claude): arquivo com magic "PK"
- *    contendo SKILL.md + scripts — extraído como bundle, preservando a
- *    estrutura relativa à pasta do manifesto.
+ * Skill import. Two accepted formats:
+ * 1. Text: .skill/.md file with frontmatter (+ extra files selected
+ *    together, which become the bundle).
+ * 2. ZIP (the format of .skill files exported by Claude): file with the magic "PK"
+ *    containing SKILL.md + scripts — extracted as a bundle, preserving the
+ *    structure relative to the manifest folder.
  */
 
 export interface ImportResult {
@@ -25,7 +25,7 @@ function isZip(buffer: Buffer): boolean {
   return buffer.length > 3 && buffer[0] === 0x50 && buffer[1] === 0x4b
 }
 
-/** Impede que entradas do zip escapem da pasta destino (path traversal). */
+/** Keeps zip entries from escaping the destination folder (path traversal). */
 function safeJoin(base: string, relative: string): string | null {
   const resolved = path.resolve(base, relative)
   const rel = path.relative(base, resolved)
@@ -50,7 +50,7 @@ async function writeFlatOrBundle(
   await fsp.writeFile(path.join(bundle, 'skill.md'), manifestRaw, 'utf8')
   for (const extra of extras) {
     const target = safeJoin(bundle, extra.relPath)
-    if (!target) continue // entrada maliciosa/inválida — pula
+    if (!target) continue // malicious/invalid entry — skip
     await fsp.mkdir(path.dirname(target), { recursive: true })
     await fsp.writeFile(target, extra.data)
   }
@@ -61,25 +61,25 @@ function importZip(buffer: Buffer): Promise<ImportResult> | ImportResult {
   try {
     entries = unzipSync(new Uint8Array(buffer))
   } catch {
-    return { imported: false, error: 'Arquivo ZIP inválido ou corrompido.' }
+    return { imported: false, error: 'Invalid or corrupted ZIP file.' }
   }
   const names = Object.keys(entries).filter((n) => !n.endsWith('/'))
 
-  // Manifesto: SKILL.md (qualquer caixa), o menos aninhado quando houver vários
+  // Manifest: SKILL.md (any case), the least nested one when there are several
   const manifestName = names
     .filter((n) => n.split('/').pop()?.toLowerCase() === 'skill.md')
     .sort((a, b) => a.split('/').length - b.split('/').length)[0]
   if (!manifestName) {
-    return { imported: false, error: 'O pacote não contém um SKILL.md — não é uma skill válida.' }
+    return { imported: false, error: 'The package does not contain a SKILL.md — it is not a valid skill.' }
   }
 
   const raw = strFromU8(entries[manifestName])
   const parsed = parseSkill(raw, 'global', manifestName)
   if (!parsed) {
-    return { imported: false, error: 'SKILL.md sem frontmatter válido (---\nname: …\n---).' }
+    return { imported: false, error: 'SKILL.md with no valid frontmatter (---\nname: …\n---).' }
   }
 
-  // Caminhos relativos à pasta do manifesto (remove o diretório raiz do zip)
+  // Paths relative to the manifest folder (drops the zip root directory)
   const rootPrefix = manifestName.includes('/')
     ? manifestName.slice(0, manifestName.lastIndexOf('/') + 1)
     : ''
@@ -96,10 +96,10 @@ function importZip(buffer: Buffer): Promise<ImportResult> | ImportResult {
   }))
 }
 
-/** Lê um anexo de chat que pode ser uma skill (.skill texto/ZIP, ou .md com
- * frontmatter de skill) e devolve uma descrição textual para o agente — NÃO
- * grava nada em disco (isso só acontece via create_skill + aprovação no card).
- * Retorna null quando o conteúdo não é uma skill válida (ex.: .md comum). */
+/** Reads a chat attachment that may be a skill (.skill text/ZIP, or .md with
+ * skill frontmatter) and returns a textual description for the agent — it does
+ * NOT write anything to disk (that only happens via create_skill + approval on the card).
+ * Returns null when the content is not a valid skill (e.g. a plain .md). */
 export function describeSkillAttachment(buffer: Buffer, filename?: string): string | null {
   if (isZip(buffer)) {
     let entries: Record<string, Uint8Array>
@@ -139,23 +139,23 @@ export function describeSkillAttachment(buffer: Buffer, filename?: string): stri
   return [`Name: ${parsed.name}`, `Description: ${parsed.description}`, '', parsed.content].join('\n')
 }
 
-/** Importa a seleção do dialog (arquivo zip OU manifesto texto + extras). */
+/** Imports the dialog selection (zip file OR text manifest + extras). */
 export async function importSkillSelection(filePaths: string[]): Promise<ImportResult> {
   if (filePaths.length === 0) return { imported: false }
 
   const manifestPath = filePaths.find((p) => TEXT_EXTENSIONS.has(path.extname(p).toLowerCase()))
   if (!manifestPath) {
-    return { imported: false, error: 'Selecione um arquivo .skill ou .md (o manifesto da skill).' }
+    return { imported: false, error: 'Select a .skill or .md file (the skill manifest).' }
   }
 
   const buffer = await fsp.readFile(manifestPath)
-  // .skill do Claude é um ZIP (bundle SKILL.md + scripts)
+  // Claude .skill file is a ZIP (bundle SKILL.md + scripts)
   if (isZip(buffer)) return importZip(buffer)
 
   const raw = buffer.toString('utf8')
   const parsed = parseSkill(raw, 'global', manifestPath)
   if (!parsed) {
-    return { imported: false, error: 'Arquivo sem frontmatter válido (---\nname: …\n---).' }
+    return { imported: false, error: 'File with no valid frontmatter (---\nname: …\n---).' }
   }
   const extras = await Promise.all(
     filePaths

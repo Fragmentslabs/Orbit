@@ -1,34 +1,34 @@
 /**
- * Skills: conhecimento curado (arquivos .skill/.md com frontmatter) injetado no
- * system prompt. Três fontes mescladas — builtin (nativas do app, somente
- * leitura), global (orbit-data/skills) e projeto ({workspace}/.orbit/skills,
- * só no code mode). A precedência é da mais específica para a menos:
- * projeto > global > builtin (uma skill global com o mesmo slug sobrescreve
- * a nativa).
+ * Skills: curated knowledge (.skill/.md files with frontmatter) injected into the
+ * system prompt. Three merged sources — builtin (native to the app, read
+ * only), global (orbit-data/skills) and project ({workspace}/.orbit/skills,
+ * only in code mode). The precedence goes from the most specific to the least:
+ * project > global > builtin (a global skill with the same slug overrides
+ * the native one).
  */
 
 export type SkillSource = "builtin" | "global" | "project"
 
 export interface Skill {
-  /** Nome de exibição (pode conter espaços, maiúsculas) */
+  /** Display name (may contain spaces, capitals) */
   name: string
   description: string
-  /** Slug snake_case para referência @slug — único, derivado do nome mas editável */
+  /** Snake_case slug for the @slug reference — unique, derived from the name but editable */
   slug: string
-  /** Corpo markdown (após o frontmatter) */
+  /** Markdown body (after the frontmatter) */
   content: string
   source: SkillSource
   filePath: string
-  /** Arquivos auxiliares do bundle (scripts/funções) — caminhos absolutos */
+  /** Auxiliary files of the bundle (scripts/functions) — absolute paths */
   scripts?: string[]
 }
 
-/** Skill proposta pelo agente (create_skill) aguardando aprovação do usuário */
+/** Skill proposed by the agent (create_skill) awaiting user approval */
 export interface SkillProposal {
   slug: string
   name: string
   description: string
   content: string
-  /** Nomes relativos dos arquivos auxiliares incluídos na proposta */
+  /** Relative names of the auxiliary files included in the proposal */
   files: string[]
 }

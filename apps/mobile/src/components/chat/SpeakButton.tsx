@@ -1,14 +1,14 @@
 /**
- * OUVIR: lê a resposta em voz alta.
+ * LISTEN: reads the answer out loud.
  *
- * Só existe em resposta do assistente com texto para ler (`speakableText`) —
- * mesma regra do desktop, inclusive no que fica de fora: o JSON do orbit-ui e o
- * código do mermaid são imagens inline, não prosa.
+ * It only exists in an assistant answer with text to read (`speakableText`) —
+ * same rule as the desktop, including what is left out: the orbit-ui JSON and the
+ * mermaid code are inline images, not prose.
  *
- * A síntese roda no desktop, que devolve a URL assinada de um WAV; aqui só se
- * pede e se toca (ver `stores/speak-store`). Sem motor de voz pronto, o botão
- * vira ícone vermelho e o motivo do desktop aparece embaixo (ver MessageActions)
- * em vez de um botão morto sem explicação.
+ * The synthesis runs on the desktop, which returns the signed URL of a WAV; here it is only
+ * requested and played (see `stores/speak-store`). Without a ready voice engine, the button
+ * becomes a red icon and the reason from the desktop shows below (see MessageActions)
+ * instead of a dead button with no explanation.
  */
 import { useMemo } from 'react'
 import { ActivityIndicator } from 'react-native'
@@ -25,14 +25,14 @@ export function SpeakButton({ message }: { message: ChatMessage }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const text = useMemo(() => speakableText(message), [message])
-  // `state` só vale para ESTA mensagem: a store guarda um id por vez.
+  // `state` only counts for THIS message: the store holds one id at a time.
   const state = useSpeakStore((s) => (s.messageId === message.id ? s.state : 'idle'))
-  // Preso a ESTA mensagem: a store guarda um erro por vez, e um erro de outra
-  // bolha não pode pintar este ícone de vermelho.
+  // Tied to THIS message: the store holds one error at a time, and an error from another
+  // bubble cannot paint this icon red.
   const error = useSpeakStore((s) => (s.errorMessageId === message.id ? s.error : null))
   const toggle = useSpeakStore((s) => s.toggle)
 
-  // Turno só de ferramentas: não há o que ler.
+  // Tool-only turn: there is nothing to read.
   if (!text) return null
 
   const label =
@@ -50,8 +50,8 @@ export function SpeakButton({ message }: { message: ChatMessage }) {
       testID="speak-button"
     >
       {state === 'generating' ? (
-        // 20px dentro de uma caixa fixa de 21: encolhe na tela sem mudar de
-        // tamanho no layout, então a linha não pula enquanto a voz é gerada.
+        // 20px inside a fixed 21 box: it shrinks on screen without changing
+        // size in the layout, so the row does not jump while the voice is generated.
         <ActivityIndicator
           size="small"
           color={tokens.primary}

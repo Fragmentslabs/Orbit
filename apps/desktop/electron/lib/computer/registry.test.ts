@@ -18,14 +18,14 @@ function record(over: Partial<ObservationRecord> = {}): ObservationRecord {
 }
 
 describe('registry', () => {
-  it('ação resolve contra a observação mais recente do app', () => {
+  it('an action resolves against the latest observation of the app', () => {
     const r = createRegistry(() => 0)
     r.record(record())
     const obs = r.forAction('s1', 10)
     expect(r.element(obs, 3).title).toBe('Pagar')
   })
 
-  it('observação nova invalida os índices da anterior', () => {
+  it('a new observation invalidates the previous indexes', () => {
     const r = createRegistry(() => 0)
     r.record(record({ id: 'obs_1' }))
     r.record(record({ id: 'obs_2', elements: new Map() }))
@@ -34,7 +34,7 @@ describe('registry', () => {
     expect(() => r.element(latest, 3)).toThrow(/does not exist/)
   })
 
-  it('vence depois do TTL', () => {
+  it('expires after the TTL', () => {
     let now = 0
     const r = createRegistry(() => now)
     r.record(record())
@@ -42,18 +42,18 @@ describe('registry', () => {
     expect(() => r.forAction('s1', 10)).toThrow(/expired/)
   })
 
-  it('sem observação do app, manda observar antes', () => {
+  it('with no observation of the app, it tells you to observe first', () => {
     const r = createRegistry(() => 0)
     expect(() => r.forAction('s1', 99)).toThrow(/cu_observe first/)
   })
 
-  it('sessões não enxergam as observações umas das outras', () => {
+  it('sessions do not see the observations of other sessions', () => {
     const r = createRegistry(() => 0)
     r.record(record())
     expect(() => r.forAction('outra', 10)).toThrow(/cu_observe first/)
   })
 
-  it('lastTargetFor acha o app por bundle, nome ou pid (para o gate pedir por site)', () => {
+  it('lastTargetFor finds the app by bundle, name or pid (so the gate can ask by site)', () => {
     const r = createRegistry(() => 0)
     r.record(record())
     expect(r.lastTargetFor('com.apple.Safari')?.url).toBe('https://banco.com.br/')

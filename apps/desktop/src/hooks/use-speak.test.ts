@@ -11,12 +11,12 @@ import {
   type VoiceStatusSource,
 } from "./use-speak"
 
-/** Deixa a fila de microtasks esvaziar (o `apply` chega depois do `invoke`). */
+/** Lets the microtask queue drain (the `apply` arrives after the `invoke`). */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 /**
- * Ponte de mentira do observador: entrega os retratos em ordem, conta as
- * consultas e guarda o listener do canal como o preload faria.
+ * Fake bridge for the observer: delivers the snapshots in order, counts the
+ * queries and keeps the channel listener the way the preload would.
  */
 function fakeSource(snapshots: unknown[]) {
   let listener: (() => void) | null = null
@@ -36,21 +36,21 @@ function fakeSource(snapshots: unknown[]) {
   }
   return {
     source,
-    /** O main avisa que o estado mudou. */
+    /** Main reports that the state changed. */
     emit: () => listener?.(),
     calls: () => calls,
     subscribed: () => listener !== null,
   }
 }
 
-/** Amostras PCM16LE -> base64, exatamente como chegam em `voice:tts:chunk`. */
+/** PCM16LE samples -> base64, exactly as they arrive in `voice:tts:chunk`. */
 function pcm(...samples: number[]): string {
   const bytes = Buffer.alloc(samples.length * 2)
   samples.forEach((value, index) => bytes.writeInt16LE(value, index * 2))
   return bytes.toString("base64")
 }
 
-/** Pedaço que o ChunkPlayer agendou, como o AudioContext de mentira o vê. */
+/** Chunk that ChunkPlayer scheduled, as the fake AudioContext sees it. */
 interface FakeSource {
   buffer: AudioBuffer | null
   onended: (() => void) | null
@@ -59,8 +59,8 @@ interface FakeSource {
 }
 
 /**
- * AudioContext de mentira: registra o que foi agendado, sem tocar nada. Nada
- * aqui precisa de DOM — é o que permite testar a emenda dos pedaços em Node.
+ * Fake AudioContext: records what was scheduled, without playing anything. Nothing
+ * here needs a DOM — that is what makes it possible to test the splicing of the chunks in Node.
  */
 class FakeContext {
   currentTime = 0
@@ -118,7 +118,7 @@ function newPlayer(context: FakeContext) {
 }
 
 describe("decodePcm16", () => {
-  it("converte PCM16LE para amostras em -1..1", () => {
+  it("converts PCM16LE to samples in -1..1", () => {
     const samples = decodePcm16(pcm(0, 32767, -32768, 16384, -16384))
 
     expect(samples.length).toBe(5)
@@ -129,27 +129,27 @@ describe("decodePcm16", () => {
     expect(samples[4]).toBeCloseTo(-0.5, 4)
   })
 
-  it("byte solto no fim é descartado (o quadro é de 2 bytes)", () => {
+  it("a stray byte at the end is dropped (the frame is 2 bytes)", () => {
     const bytes = Buffer.from([0x10, 0x20, 0x30])
 
     expect(decodePcm16(bytes.toString("base64")).length).toBe(1)
   })
 
-  it("base64 vazio ou inválido vira um buffer vazio, sem estourar", () => {
+  it("an empty or invalid base64 becomes an empty buffer, without blowing up", () => {
     expect(decodePcm16("").length).toBe(0)
     expect(decodePcm16("isto-não-é-base64!!").length).toBe(0)
   })
 })
 
 describe("ChunkPlayer", () => {
-  it("emenda cada pedaço no fim do anterior, respeitando a taxa do pedaço", () => {
+  it("splices each chunk at the end of the previous one, respecting the chunk rate", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
 
     player.schedule(new Float32Array(2400).fill(0.5), 24000)
     player.schedule(new Float32Array(1200).fill(-0.5), 12000)
 
-    // 0.1s cada; o segundo começa exatamente onde o primeiro termina.
+    // 0.1s each; the second starts exactly where the first ends.
     expect(context.started[0].startedAt).toBeCloseTo(0.02, 4)
     expect(context.started[1].startedAt).toBeCloseTo(0.12, 4)
     expect(player.scheduledEnd).toBeCloseTo(0.22, 4)
@@ -158,7 +158,7 @@ describe("ChunkPlayer", () => {
     expect(player.pending).toBe(2)
   })
 
-  it("se a reprodução atrasou, agenda em 'agora' em vez de acumular espera", () => {
+  it("if playback fell behind, it schedules at 'now' instead of piling up delay", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
 
@@ -169,7 +169,7 @@ describe("ChunkPlayer", () => {
     expect(context.started[1].startedAt).toBeCloseTo(5.02, 4)
   })
 
-  it("pedaço vazio não agenda nada nem cria contexto", () => {
+  it("an empty chunk schedules nothing and creates no context", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
 
@@ -179,7 +179,7 @@ describe("ChunkPlayer", () => {
     expect(player.pending).toBe(0)
   })
 
-  it("avisa a cada pedaço que termina e para de contar o que já tocou", () => {
+  it("notifies on every chunk that ends and stops counting what already played", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
     const ended = vi.fn()
@@ -198,7 +198,7 @@ describe("ChunkPlayer", () => {
     expect(ended).toHaveBeenCalledTimes(2)
   })
 
-  it("stopAll interrompe o que estava agendado e zera a fila", () => {
+  it("stopAll interrupts what was scheduled and clears the queue", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
 
@@ -212,7 +212,7 @@ describe("ChunkPlayer", () => {
     expect(player.scheduledEnd).toBe(0)
   })
 
-  it("close fecha o AudioContext — o hook o abre de novo se falar outra vez", () => {
+  it("close shuts the AudioContext — the hook opens it again if it speaks once more", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
 
@@ -223,10 +223,10 @@ describe("ChunkPlayer", () => {
     expect(player.pending).toBe(0)
   })
 
-  it("spokenText cresce com o áudio, pedaço por pedaço da frase", () => {
+  it("spokenText grows with the audio, chunk by chunk of the sentence", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
-    // 1s cada; o primeiro começa em 0.02 e o segundo emenda em 1.02.
+    // 1s each; the first starts at 0.02 and the second splices at 1.02.
     player.schedule(new Float32Array(24000).fill(0), 24000, 0, "Primeira frase.")
     player.schedule(new Float32Array(24000).fill(0), 24000, 0, "Segunda frase.")
     player.schedule(new Float32Array(24000).fill(0), 24000, 1, "Outra frase mais comprida.")
@@ -245,7 +245,7 @@ describe("ChunkPlayer", () => {
     expect(player.spokenText(1)).toBe("Outra frase mais")
   })
 
-  it("spokenText some quando a frase saiu da fila (corte para ferramentas)", () => {
+  it("spokenText disappears when the sentence leaves the queue (cut for tools)", () => {
     const context = new FakeContext()
     const player = newPlayer(context)
 
@@ -264,17 +264,17 @@ describe("ChunkPlayer", () => {
 })
 
 describe("readTtsPrefs", () => {
-  it("sem o bloco `voice` no store, valem os padrões do app", () => {
+  it("with no `voice` block in the store, the app defaults apply", () => {
     expect(readTtsPrefs(undefined)).toEqual({ enabled: true, voice: "F2", lang: "auto", speed: 1 })
   })
 
-  it("lê o que estiver gravado", () => {
+  it("reads whatever is saved", () => {
     const prefs = readTtsPrefs({ tts: { enabled: false, voice: "M1", lang: "en", speed: 1.25 } })
 
     expect(prefs).toEqual({ enabled: false, voice: "M1", lang: "en", speed: 1.25 })
   })
 
-  it("valor fora do domínio cai no padrão em vez de quebrar a fala", () => {
+  it("a value outside the domain falls back to the default instead of breaking speech", () => {
     const prefs = readTtsPrefs({ tts: { voice: "  ", lang: 7, speed: 0 } })
 
     expect(prefs).toEqual({ enabled: true, voice: "F2", lang: "auto", speed: 1 })
@@ -282,41 +282,41 @@ describe("readTtsPrefs", () => {
 })
 
 describe("readTtsEngine", () => {
-  it("sem escolha gravada, vale o padrão: o modelo", () => {
+  it("with no saved choice, the default applies: the model", () => {
     expect(readTtsEngine(undefined)).toBe("model")
     expect(readTtsEngine({})).toBe("model")
   })
 
-  it("lê a escolha gravada e ignora um valor fora do domínio", () => {
+  it("reads the saved choice and ignores a value outside the domain", () => {
     expect(readTtsEngine({ tts: { engine: "local" } })).toBe("local")
     expect(readTtsEngine({ tts: { engine: "x" } })).toBe("model")
   })
 })
 
 describe("readTtsStatus", () => {
-  it("sem resposta do main (ou sem motor), o botão não é bloqueado", () => {
+  it("with no answer from main (or no engine), the button is not blocked", () => {
     expect(readTtsStatus(undefined)).toEqual({ ready: true, known: false })
     expect(readTtsStatus({ engines: [] })).toEqual({ ready: true, known: false })
   })
 
-  it("ttsReady decide quando vem do main", () => {
+  it("ttsReady decides when it comes from main", () => {
     expect(readTtsStatus({ ttsReady: false, models: {} })).toEqual({ ready: false, known: true })
     expect(readTtsStatus({ ttsReady: true })).toEqual({ ready: true, known: true })
   })
 
-  it("sem ttsReady, qualquer modelo instalado libera o botão", () => {
+  it("without ttsReady, any installed model frees the button", () => {
     expect(readTtsStatus({ models: { tts: { installed: true } } }).ready).toBe(true)
     expect(readTtsStatus({ models: { tts: { installed: false } } })).toEqual({ ready: false, known: true })
   })
 
-  it("na prioridade 'modelo', a rota do provedor destrava o botão sem o modelo local", () => {
+  it("with the 'model' priority, the provider route frees the button without the local model", () => {
     expect(readTtsStatus({ ttsReady: false, models: {}, modelTts: { available: true } }, "model")).toEqual({
       ready: true,
       known: true,
     })
   })
 
-  it("na prioridade 'local', a rota do modelo não interfere", () => {
+  it("with the 'local' priority, the model route does not interfere", () => {
     expect(readTtsStatus({ ttsReady: false, models: {}, modelTts: { available: true } }, "local")).toEqual({
       ready: false,
       known: true,
@@ -325,7 +325,7 @@ describe("readTtsStatus", () => {
 })
 
 describe("subscribeVoiceStatus", () => {
-  it("lê o estado ao assinar e reconsulta a cada voice:status-changed", async () => {
+  it("reads the state on subscribe and re-reads on every voice:status-changed", async () => {
     const fake = fakeSource([{ ttsReady: false }, { ttsReady: true }])
     const seen: unknown[] = []
 
@@ -335,8 +335,8 @@ describe("subscribeVoiceStatus", () => {
     expect(fake.calls()).toBe(1)
     expect(readTtsStatus(seen.at(-1))).toEqual({ ready: false, known: true })
 
-    // O download terminou nas Preferências: o evento destrava o botão sem
-    // precisar sair e voltar para o chat.
+    // The download finished in Settings: the event unlocks the button without
+    // having to leave the chat and come back.
     fake.emit()
     await flush()
 
@@ -351,7 +351,7 @@ describe("subscribeVoiceStatus", () => {
     expect(fake.calls()).toBe(2)
   })
 
-  it("o mesmo payload serve às duas leituras (TTS e ditado)", async () => {
+  it("the same payload serves both readings (TTS and dictation)", async () => {
     const fake = fakeSource([
       {
         ttsReady: true,
@@ -371,26 +371,26 @@ describe("subscribeVoiceStatus", () => {
     })
   })
 
-  it("main que não respondeu (erro ou sem ponte) não bloqueia ninguém", async () => {
+  it("a main that did not answer (error or no bridge) blocks nobody", async () => {
     const seen: unknown[] = []
-    const quebrada: VoiceStatusSource = {
+    const broken: VoiceStatusSource = {
       status: () => Promise.reject(new Error("sem motor")),
       onStatusChanged: () => () => {},
     }
-    subscribeVoiceStatus(quebrada, (raw) => seen.push(raw))
+    subscribeVoiceStatus(broken, (raw) => seen.push(raw))
     await flush()
 
     expect(readTtsStatus(seen.at(-1))).toEqual({ ready: true, known: false })
     expect(parseVoiceStatus(seen.at(-1))).toBeNull()
 
-    // Ponte que nem existe (preview no navegador): o invoke estoura na hora.
-    const semPonte: VoiceStatusSource = {
+    // A bridge that does not even exist (browser preview): the invoke throws right away.
+    const noBridge: VoiceStatusSource = {
       status: () => {
         throw new Error("sem ipcRenderer")
       },
       onStatusChanged: () => () => {},
     }
-    subscribeVoiceStatus(semPonte, (raw) => seen.push(raw))
+    subscribeVoiceStatus(noBridge, (raw) => seen.push(raw))
 
     expect(seen.at(-1)).toBeUndefined()
     expect(readTtsStatus(seen.at(-1))).toEqual({ ready: true, known: false })
@@ -398,7 +398,7 @@ describe("subscribeVoiceStatus", () => {
 })
 
 describe("TTS_SAMPLE_RATE", () => {
-  it("é a taxa dos pedaços do motor (24 kHz)", () => {
+  it("it is the engine's chunk rate (24 kHz)", () => {
     expect(TTS_SAMPLE_RATE).toBe(24000)
   })
 })

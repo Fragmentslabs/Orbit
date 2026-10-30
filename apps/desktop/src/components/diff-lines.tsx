@@ -5,13 +5,13 @@ import type { FileDiff } from "@/lib/unified-diff";
 import { cn } from "@/lib/utils";
 
 /**
- * Renderiza os hunks de um arquivo diff com syntax highlighting: as linhas
- * adicionadas/removidas mantêm as cores da linguagem e só o fundo muda
- * (verde/vermelho). Usado pelo visualizador de arquivos das Pastas e pela
- * aba Diff.
+ * Renders the hunks of a diff file with syntax highlighting: the added/removed
+ * lines keep the language colors and only the background changes
+ * (green/red). Used by the file viewer of the Folders and by the
+ * Diff tab.
  */
 
-/** Reconstrói o conteúdo de um lado do diff (old = ctx + del, new = ctx + add). */
+/** Rebuilds the content of one side of the diff (old = ctx + del, new = ctx + add). */
 function rebuildContent(file: FileDiff, side: "old" | "new"): string {
   const lines: string[] = [];
   for (const hunk of file.hunks) {
@@ -31,7 +31,7 @@ interface FileTokens {
   newTokens: HighlightedToken[][] | null;
 }
 
-/** Realça os dois lados do arquivo; retorna null até o highlighting terminar. */
+/** Highlights both sides of the file; returns null until the highlighting is done. */
 function useFileTokens(
   file: FileDiff,
   filePath: string | undefined,
@@ -65,11 +65,11 @@ export function HighlightedDiffFile({
   stickyHeader = true,
 }: {
   file: FileDiff;
-  /** Caminho usado para detectar a linguagem (default: caminho novo do arquivo). */
+  /** Path used to detect the language (default: new path of the file). */
   filePath?: string;
-  /** Quebra linhas longas em vez de rolagem horizontal. */
+  /** Wraps long lines instead of horizontal scrolling. */
   wrap?: boolean;
-  /** Mantém o cabeçalho do hunk fixo no topo durante a rolagem. */
+  /** Keeps the hunk header stuck at the top during the scroll. */
   stickyHeader?: boolean;
 }) {
   const { theme } = useTheme();
@@ -104,8 +104,8 @@ export function HighlightedDiffFile({
                   : line.kind === "del"
                     ? `${oldLine}  `
                     : `${oldLine} →${newLine}`;
-              // Tokens da linha, indexados pela ordem no conteúdo reconstruído
-              // (a ordem dos hunks é sequencial, então o índice bate).
+              // Tokens of the line, indexed by the order in the rebuilt content
+              // (the order of the hunks is sequential, so the index matches).
               let lineTokens: HighlightedToken[] | null | undefined;
               if (line.kind === "del") {
                 lineTokens = tokens?.oldTokens?.[oldIdx];

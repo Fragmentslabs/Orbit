@@ -11,10 +11,10 @@ interface HeatmapProps {
   days: AnalyticsDay[]
   className?: string
   cellSize?: string
-  /** O que o tooltip do dia abre: o consumo por modelo ou por projeto. Os
-   *  quadrados não mudam — o dia é o mesmo, só a leitura dele é outra. */
+  /** What the day tooltip opens: usage by model or by project. The
+   *  squares do not change — the day is the same, only its reading is different. */
   breakdown?: "model" | "project"
-  /** projectId → nome exibível, para a leitura por projeto. */
+  /** projectId → displayable name, for the reading by project. */
   projectNames?: Record<string, string>
 }
 
@@ -28,8 +28,8 @@ export function ActivityHeatmap({
   projectNames,
 }: HeatmapProps) {
   const { t, i18n } = useTranslation()
-  // Guardamos o retângulo da CÉLULA; a posição do balão sai de uma medição
-  // dele já montado — só assim dá para saber se cabe acima e dentro da janela.
+  // We store the rectangle of the CELL; the balloon position comes from a measurement
+  // of it once mounted — that is the only way to know whether it fits above and inside the window.
   const [tooltip, setTooltip] = useState<{
     day: AnalyticsDay
     anchor: { left: number; top: number; right: number; bottom: number }
@@ -37,39 +37,39 @@ export function ActivityHeatmap({
   const tooltipRef = useRef<HTMLDivElement>(null)
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null)
 
-  // Mede o balão depois de montado e o prende à janela: centralizado na
-  // célula, acima dela por padrão e virando para baixo quando não há espaço.
-  // Sem isto o deslocamento era fixo e o balão vazava para fora do app nas
-  // bordas — que é exatamente onde ficam as primeiras e as últimas semanas.
+  // Measures the balloon after it mounts and pins it to the window: centered on the
+  // cell, above it by default, flipping down when there is no room.
+  // Without this the offset was fixed and the balloon leaked out of the app at the
+  // edges — which is exactly where the first and the last weeks sit.
   useLayoutEffect(() => {
     const el = tooltipRef.current
     if (!tooltip || !el) {
       setTooltipPos(null)
       return
     }
-    const MARGEM = 8
+    const MARGIN = 8
     const { width, height } = el.getBoundingClientRect()
     const { left: aLeft, right: aRight, top: aTop, bottom: aBottom } = tooltip.anchor
 
     let left = (aLeft + aRight) / 2 - width / 2
-    left = Math.min(Math.max(MARGEM, left), Math.max(MARGEM, window.innerWidth - width - MARGEM))
+    left = Math.min(Math.max(MARGIN, left), Math.max(MARGIN, window.innerWidth - width - MARGIN))
 
-    let top = aTop - height - MARGEM
-    if (top < MARGEM) {
-      top = Math.min(aBottom + MARGEM, Math.max(MARGEM, window.innerHeight - height - MARGEM))
+    let top = aTop - height - MARGIN
+    if (top < MARGIN) {
+      top = Math.min(aBottom + MARGIN, Math.max(MARGIN, window.innerHeight - height - MARGIN))
     }
 
     setTooltipPos({ left, top })
   }, [tooltip])
 
-  // A intensidade do quadrado é HORA trabalhada no dia — é o que este gráfico
-  // se propõe a mostrar. Dia com mensagem mas sem hora contabilizada continua
-  // pintado no tom mais fraco, e não apagado.
+  // The intensity of the square is HOURS worked on the day — that is what this chart
+  // sets out to show. A day with a message but no accounted hours stays
+  // painted in the faintest tone, not blanked out.
   //
-  // Hora sem resposta também conta: o tempo é creditado ao dia da mensagem
-  // ANTERIOR, então uma pergunta às 23h55 respondida às 00h03 deixa o primeiro
-  // dia com horas e nenhuma resposta do assistente. Exigir só a resposta
-  // apagava esse dia do gráfico enquanto as horas dele seguiam no total.
+  // Hours without a reply also count: the time is credited to the day of the
+  // PREVIOUS message, so a question at 23:55 answered at 00:03 leaves the first
+  // day with hours and no assistant reply. Requiring only the reply
+  // erased that day from the chart while its hours stayed in the total.
   const scoreOf = (day: AnalyticsDay | null): number | null =>
     day && (day.totalMessages > 0 || day.totalHours > 0) ? day.totalHours : null
 
@@ -84,8 +84,8 @@ export function ActivityHeatmap({
     const start = new Date(monday)
     start.setDate(start.getDate() - (TOTAL_WEEKS - 1) * 7)
 
-    // Piso zero de proposito: a escala agora e de horas, e um piso de 1h
-    // achataria todos os dias curtos no tom mais fraco.
+    // Zero floor on purpose: the scale is now in hours, and a 1h floor
+    // would flatten every short day into the faintest tone.
     let mx = 0
     const weekData: { date: string; day: AnalyticsDay | null }[][] = []
     const current = new Date(start)
@@ -180,8 +180,8 @@ export function ActivityHeatmap({
           style={
             tooltipPos
               ? { left: tooltipPos.left, top: tooltipPos.top }
-              : // Primeiro frame: ainda sem medida. Fica montado e invisível
-                // para poder ser medido, em vez de piscar no lugar errado.
+              : // First frame: no measurement yet. It stays mounted and invisible
+                // so it can be measured, instead of blinking in the wrong place.
                 { left: 0, top: 0, visibility: "hidden" }
           }
         >

@@ -7,17 +7,17 @@ import type { CustomAnalyticsRange } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-// O pacote do datetimepicker chama TurboModuleRegistry.getEnforcing no load do
-// módulo e LANÇA em binários sem o módulo nativo (build desatualizado / Expo
-// Go antigo). Por isso o require é lazy e protegido: um import estático
-// derrubaria esta rota no carregamento (default export nunca registrado). Com
-// o módulo ausente, a UI cai no fallback manual (CampoDataManual).
-const PickerNativo: ComponentType<any> | null = (() => {
+// The datetimepicker package calls TurboModuleRegistry.getEnforcing on module
+// load and THROWS in binaries without the native module (outdated build / old Expo
+// Go). That is why the require is lazy and guarded: a static import
+// would take this route down at load time (default export never registered). With
+// the module missing, the UI falls back to the manual fallback (ManualDateField).
+const NativePicker: ComponentType<any> | null = (() => {
   try {
-    // Carregamento condicional de módulo opcional: import estático não
-    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-    // build sem o nativo) e é justamente por isso que o require está
-    // dentro do try/if.
+    // Conditional loading of an optional module: a static import does not
+    // work here (the module may not exist at runtime — Expo Go, web,
+    // build without the native part) and that is exactly why the require is
+    // inside the try/if.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@react-native-community/datetimepicker').default
   } catch {
@@ -26,50 +26,50 @@ const PickerNativo: ComponentType<any> | null = (() => {
 })()
 
 /**
- * Seleção de período personalizado da tela de uso — espelho do date range
- * picker do desktop. iOS: calendário nativo inline dentro do modal; Android:
- * dialog nativo por campo (De/Até). Binários sem o módulo nativo caem no
- * fallback manual (campos DD/MM/AAAA).
+ * Custom period selection of the usage screen — mirror of the desktop date range
+ * picker. iOS: native inline calendar inside the modal; Android:
+ * native dialog per field (From/To). Binaries without the native module fall back
+ * to the manual fallback (DD/MM/YYYY fields).
  */
 
-const DIA_MS = 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 
-function comecoDoDia(d: Date): Date {
+function startOfDay(d: Date): Date {
   const c = new Date(d)
   c.setHours(0, 0, 0, 0)
   return c
 }
 
-function fimDoDia(d: Date): Date {
+function endOfDay(d: Date): Date {
   const c = new Date(d)
   c.setHours(23, 59, 59, 999)
   return c
 }
 
-export function formatarDataCurta(d: Date, locale: string): string {
+export function formatShortDate(d: Date, locale: string): string {
   return d.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-/** "01 ago – 10 ago" — rótulo do chip quando o período customizado está ativo. */
-export function rotuloPeriodo(range: CustomAnalyticsRange, locale: string): string {
-  return `${formatarDataCurta(new Date(range.from), locale)} – ${formatarDataCurta(new Date(range.to), locale)}`
+/** "01 Aug – 10 Aug" — label of the chip when the custom period is active. */
+export function rangeLabel(range: CustomAnalyticsRange, locale: string): string {
+  return `${formatShortDate(new Date(range.from), locale)} – ${formatShortDate(new Date(range.to), locale)}`
 }
 
-/** Fallback manual: só números DD/MM/AAAA, para builds sem o módulo nativo. */
-function CampoDataManual({
-  valor,
+/** Manual fallback: digits only DD/MM/YYYY, for builds without the native module. */
+function ManualDateField({
+  value,
   locale,
   onChange,
 }: {
-  valor: Date
+  value: Date
   locale: string
   onChange: (d: Date) => void
 }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const texto = valor.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const text = value.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
   return (
     <TextInput
-      value={texto}
+      value={text}
       keyboardType="numeric"
       onChangeText={(v) => {
         const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
@@ -82,136 +82,136 @@ function CampoDataManual({
   )
 }
 
-/** Boundary: se o datetimepicker lançar (módulo nativo ausente), usa o manual. */
-class ErroNativoBoundary extends Component<{ fallback: ReactNode; onErro: () => void; children: ReactNode }, { erro: boolean }> {
-  state = { erro: false }
+/** Boundary: if the datetimepicker throws (native module missing), use the manual one. */
+class NativeErrorBoundary extends Component<{ fallback: ReactNode; onError: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
   static getDerivedStateFromError() {
-    return { erro: true }
+    return { failed: true }
   }
   componentDidCatch() {
-    this.props.onErro()
+    this.props.onError()
   }
   render() {
-    return this.state.erro ? this.props.fallback : this.props.children
+    return this.state.failed ? this.props.fallback : this.props.children
   }
 }
 
 export function CustomRangeModal({
-  visivel,
-  valorAtual,
-  onCancelar,
-  onConfirmar,
+  visible,
+  currentValue,
+  onCancel,
+  onConfirm,
 }: {
-  visivel: boolean
-  valorAtual: CustomAnalyticsRange | null
-  onCancelar: () => void
-  onConfirmar: (range: CustomAnalyticsRange) => void
+  visible: boolean
+  currentValue: CustomAnalyticsRange | null
+  onCancel: () => void
+  onConfirm: (range: CustomAnalyticsRange) => void
 }) {
   const { t, i18n } = useTranslation()
-  const tema = useThemeStore((s) => s.resolved)
-  const tokens = getThemeTokens(tema)
-  const [de, setDe] = useState(() => (valorAtual ? new Date(valorAtual.from) : new Date(Date.now() - 6 * DIA_MS)))
-  const [ate, setAte] = useState(() => (valorAtual ? new Date(valorAtual.to) : new Date()))
-  const [campo, setCampo] = useState<'de' | 'ate'>('de')
-  const [campoAberto, setCampoAberto] = useState<'de' | 'ate' | null>(null)
-  const [modoNativo, setModoNativo] = useState(!!PickerNativo)
+  const theme = useThemeStore((s) => s.resolved)
+  const tokens = getThemeTokens(theme)
+  const [from, setFrom] = useState(() => (currentValue ? new Date(currentValue.from) : new Date(Date.now() - 6 * DAY_MS)))
+  const [to, setTo] = useState(() => (currentValue ? new Date(currentValue.to) : new Date()))
+  const [field, setField] = useState<'from' | 'to'>('from')
+  const [openField, setOpenField] = useState<'from' | 'to' | null>(null)
+  const [nativeMode, setNativeMode] = useState(!!NativePicker)
 
-  const valorDoCampo = campo === 'de' ? de : ate
-  const definirValor = campo === 'de' ? setDe : setAte
+  const fieldValue = field === 'from' ? from : to
+  const setFieldValue = field === 'from' ? setFrom : setTo
 
-  const confirmar = () => {
-    let inicio = comecoDoDia(de)
-    let fim = fimDoDia(ate)
-    // Seleção invertida (até antes do de) — inverte, como no picker do desktop.
-    if (fim.getTime() < inicio.getTime()) {
-      const trocado = inicio
-      inicio = comecoDoDia(ate)
-      fim = fimDoDia(trocado)
+  const confirm = () => {
+    let start = startOfDay(from)
+    let end = endOfDay(to)
+    // Inverted selection (to before from) — inverts it, as in the desktop picker.
+    if (end.getTime() < start.getTime()) {
+      const swapped = start
+      start = startOfDay(to)
+      end = endOfDay(swapped)
     }
-    onConfirmar({ type: 'custom', from: inicio.getTime(), to: fim.getTime() })
+    onConfirm({ type: 'custom', from: start.getTime(), to: end.getTime() })
   }
 
-  const chipEstilo = (ativo: boolean) => ({
-    borderColor: ativo ? tokens.primary : tokens.border,
-    backgroundColor: ativo ? tokens.background : tokens.muted,
+  const chipStyle = (active: boolean) => ({
+    borderColor: active ? tokens.primary : tokens.border,
+    backgroundColor: active ? tokens.background : tokens.muted,
   })
 
-  const seletorNativo = PickerNativo ? (
-    <PickerNativo
+  const nativeSelector = NativePicker ? (
+    <NativePicker
       mode="date"
       display={Platform.OS === 'ios' ? 'inline' : 'default'}
-      value={valorDoCampo}
+      value={fieldValue}
       maximumDate={new Date()}
       locale={i18n.language}
-      themeVariant={tema === 'dark' ? 'dark' : 'light'}
-      onChange={(evento: DateTimePickerEvent, data?: Date) => {
+      themeVariant={theme === 'dark' ? 'dark' : 'light'}
+      onChange={(event: DateTimePickerEvent, date?: Date) => {
         if (Platform.OS === 'android') {
-          setCampoAberto(null)
-          if (evento.type === 'set' && data) definirValor(data)
-        } else if (data) {
-          definirValor(data)
+          setOpenField(null)
+          if (event.type === 'set' && date) setFieldValue(date)
+        } else if (date) {
+          setFieldValue(date)
         }
       }}
     />
   ) : null
 
   return (
-    <Modal visible={visivel} animationType="fade" transparent onRequestClose={onCancelar}>
-      <Pressable style={s.backdrop} onPress={onCancelar} accessibilityLabel={t('scheduleSheet.cancel')}>
-        <View style={[s.caixa, { backgroundColor: tokens.card }]}>
-          <Text style={[s.titulo, { color: tokens.foreground }]}>{t('usageScreen.rangeCustom')}</Text>
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
+      <Pressable style={s.backdrop} onPress={onCancel} accessibilityLabel={t('scheduleSheet.cancel')}>
+        <View style={[s.box, { backgroundColor: tokens.card }]}>
+          <Text style={[s.heading, { color: tokens.foreground }]}>{t('usageScreen.rangeCustom')}</Text>
 
-          <View style={s.camposRow}>
-            {(['de', 'ate'] as const).map((c) => (
+          <View style={s.fieldsRow}>
+            {(['from', 'to'] as const).map((c) => (
               <Pressable
                 key={c}
                 onPress={() => {
-                  setCampo(c)
-                  setCampoAberto(c)
+                  setField(c)
+                  setOpenField(c)
                 }}
-                style={[s.campoChip, chipEstilo(campo === c)]}
+                style={[s.fieldChip, chipStyle(field === c)]}
               >
-                <CalendarDays size={14} color={campo === c ? tokens.primary : tokens.mutedForeground} />
-                <Text style={[s.campoLabel, { color: campo === c ? tokens.primary : tokens.mutedForeground }]}>
-                  {t(c === 'de' ? 'usageScreen.customFrom' : 'usageScreen.customTo')}
+                <CalendarDays size={14} color={field === c ? tokens.primary : tokens.mutedForeground} />
+                <Text style={[s.fieldLabel, { color: field === c ? tokens.primary : tokens.mutedForeground }]}>
+                  {t(c === 'from' ? 'usageScreen.customFrom' : 'usageScreen.customTo')}
                 </Text>
-                <Text style={[s.campoValor, { color: tokens.foreground }]}>
-                  {formatarDataCurta(c === 'de' ? de : ate, i18n.language)}
+                <Text style={[s.fieldValueText, { color: tokens.foreground }]}>
+                  {formatShortDate(c === 'from' ? from : to, i18n.language)}
                 </Text>
               </Pressable>
             ))}
           </View>
 
-          <View style={s.seletorWrap}>
+          <View style={s.selectorWrap}>
             {Platform.OS === 'android' ? (
-              campoAberto ? (
-                <ErroNativoBoundary
-                  fallback={<CampoDataManual valor={valorDoCampo} locale={i18n.language} onChange={definirValor} />}
-                  onErro={() => setModoNativo(false)}
+              openField ? (
+                <NativeErrorBoundary
+                  fallback={<ManualDateField value={fieldValue} locale={i18n.language} onChange={setFieldValue} />}
+                  onError={() => setNativeMode(false)}
                 >
-                  {seletorNativo}
-                </ErroNativoBoundary>
+                  {nativeSelector}
+                </NativeErrorBoundary>
               ) : (
-                <Text style={[s.dica, { color: tokens.mutedForeground }]}>{t('usageScreen.customHint')}</Text>
+                <Text style={[s.hint, { color: tokens.mutedForeground }]}>{t('usageScreen.customHint')}</Text>
               )
-            ) : modoNativo ? (
-              <ErroNativoBoundary
-                fallback={<CampoDataManual valor={valorDoCampo} locale={i18n.language} onChange={definirValor} />}
-                onErro={() => setModoNativo(false)}
+            ) : nativeMode ? (
+              <NativeErrorBoundary
+                fallback={<ManualDateField value={fieldValue} locale={i18n.language} onChange={setFieldValue} />}
+                onError={() => setNativeMode(false)}
               >
-                {seletorNativo}
-              </ErroNativoBoundary>
+                {nativeSelector}
+              </NativeErrorBoundary>
             ) : (
-              <CampoDataManual valor={valorDoCampo} locale={i18n.language} onChange={definirValor} />
+              <ManualDateField value={fieldValue} locale={i18n.language} onChange={setFieldValue} />
             )}
           </View>
 
-          <View style={[s.rodape, { borderTopColor: tokens.border }]}>
-            <Pressable onPress={onCancelar} style={s.botao} hitSlop={4}>
+          <View style={[s.footer, { borderTopColor: tokens.border }]}>
+            <Pressable onPress={onCancel} style={s.button} hitSlop={4}>
               <Text style={{ color: tokens.primary, fontSize: 16 }}>{t('scheduleSheet.cancel')}</Text>
             </Pressable>
-            <View style={[s.divisor, { backgroundColor: tokens.border }]} />
-            <Pressable onPress={confirmar} style={s.botao} hitSlop={4}>
+            <View style={[s.divider, { backgroundColor: tokens.border }]} />
+            <Pressable onPress={confirm} style={s.button} hitSlop={4}>
               <Text style={{ color: tokens.primary, fontSize: 16, fontWeight: '600' }}>{t('scheduleSheet.ok')}</Text>
             </Pressable>
           </View>
@@ -229,7 +229,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     padding: 24,
   },
-  caixa: {
+  box: {
     width: '100%',
     maxWidth: 360,
     borderRadius: 16,
@@ -237,9 +237,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-  titulo: { fontSize: 16, fontWeight: '600', marginBottom: 14 },
-  camposRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, width: '100%' },
-  campoChip: {
+  heading: { fontSize: 16, fontWeight: '600', marginBottom: 14 },
+  fieldsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, width: '100%' },
+  fieldChip: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -249,10 +249,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 9,
   },
-  campoLabel: { fontSize: 12, fontWeight: '600' },
-  campoValor: { fontSize: 12, marginLeft: 'auto' },
-  seletorWrap: { alignItems: 'center', paddingHorizontal: 16, marginTop: 8, minHeight: 60 },
-  dica: { fontSize: 12, paddingVertical: 20 },
+  fieldLabel: { fontSize: 12, fontWeight: '600' },
+  fieldValueText: { fontSize: 12, marginLeft: 'auto' },
+  selectorWrap: { alignItems: 'center', paddingHorizontal: 16, marginTop: 8, minHeight: 60 },
+  hint: { fontSize: 12, paddingVertical: 20 },
   inputManual: {
     borderRadius: 8,
     borderWidth: 1,
@@ -264,12 +264,12 @@ const s = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
-  rodape: {
+  footer: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
     marginTop: 12,
     alignSelf: 'stretch',
   },
-  botao: { flex: 1, alignItems: 'center', paddingVertical: 14 },
-  divisor: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
+  button: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  divider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
 })

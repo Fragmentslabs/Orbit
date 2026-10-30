@@ -32,7 +32,7 @@ async function documentXml(buffer: Buffer): Promise<string> {
 
 let folder: string | null = null
 
-/** O mesmo .docx em disco, que é como o painel o entrega ao mammoth. */
+/** The same .docx on disk, which is how the panel delivers it to mammoth. */
 async function toFile(body: string): Promise<string> {
   folder ??= await fsp.mkdtemp(path.join(os.tmpdir(), 'orbit-docx-view-'))
   const file = path.join(folder, `${Math.random().toString(36).slice(2)}.docx`)
@@ -45,56 +45,56 @@ afterAll(async () => {
 })
 
 describe('normalizePageBreaks', () => {
-  it('converte a quebra do pPr na quebra de run que o mammoth entende', async () => {
+  it('converts the pPr break into the run break mammoth understands', async () => {
     const buffer = await build(
-      '<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>Depois</w:t></w:r></w:p>',
+      '<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>After</w:t></w:r></w:p>',
     )
     const xml = await documentXml(await normalizePageBreaks(buffer))
     expect(xml).not.toContain('<w:pageBreakBefore')
-    // A quebra entra como PRIMEIRO run do parágrafo — não antes dele, que
-    // deixaria uma página em branco a mais.
-    expect(xml).toContain('<w:pPr></w:pPr><w:r><w:br w:type="page"/></w:r><w:r><w:t>Depois')
+    // The break enters as the paragraph's FIRST run — not before it, which
+    // would leave one extra blank page.
+    expect(xml).toContain('<w:pPr></w:pPr><w:r><w:br w:type="page"/></w:r><w:r><w:t>After')
   })
 
-  it('devolve o próprio buffer quando não há quebra de pPr', async () => {
-    const buffer = await build('<w:p><w:r><w:t>Um</w:t></w:r></w:p>')
+  it('returns the buffer itself when there is no pPr break', async () => {
+    const buffer = await build('<w:p><w:r><w:t>One</w:t></w:r></w:p>')
     expect(await normalizePageBreaks(buffer)).toBe(buffer)
   })
 
-  it('não estraga um pacote que não é .docx', async () => {
-    const buffer = Buffer.from('isto não é um zip')
+  it('does not ruin a package that is not a .docx', async () => {
+    const buffer = Buffer.from('this is not a zip')
     expect(await normalizePageBreaks(buffer)).toBe(buffer)
   })
 })
 
-describe('docxFileToHtml — quebras', () => {
-  it('a quebra do pPr vira uma folha a mais', async () => {
+describe('docxFileToHtml — breaks', () => {
+  it('the pPr break becomes one more sheet', async () => {
     const file = await toFile(
-      '<w:p><w:r><w:t>Um</w:t></w:r></w:p><w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>Dois</w:t></w:r></w:p>',
+      '<w:p><w:r><w:t>One</w:t></w:r></w:p><w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>Two</w:t></w:r></w:p>',
     )
     const result = await docxFileToHtml(file)
     expect(result).not.toBeNull()
-    const folhas = splitDocxPages(result!.html)
-    expect(folhas).toHaveLength(2)
-    expect(folhas[0]).toContain('Um')
-    expect(folhas[0]).not.toContain('Dois')
-    expect(folhas[1]).toContain('Dois')
+    const sheets = splitDocxPages(result!.html)
+    expect(sheets).toHaveLength(2)
+    expect(sheets[0]).toContain('One')
+    expect(sheets[0]).not.toContain('Two')
+    expect(sheets[1]).toContain('Two')
   })
 
-  it('a quebra de run (Ctrl+Enter) também separa', async () => {
+  it('the run break (Ctrl+Enter) also separates', async () => {
     const file = await toFile(
-      '<w:p><w:r><w:t>Um</w:t></w:r><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:t>Dois</w:t></w:r></w:p>',
+      '<w:p><w:r><w:t>One</w:t></w:r><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:t>Two</w:t></w:r></w:p>',
     )
-    const folhas = splitDocxPages((await docxFileToHtml(file))!.html)
-    expect(folhas).toHaveLength(2)
-    expect(folhas[1]).toContain('Dois')
+    const sheets = splitDocxPages((await docxFileToHtml(file))!.html)
+    expect(sheets).toHaveLength(2)
+    expect(sheets[1]).toContain('Two')
   })
 
-  it('sem quebra, o documento continua uma folha só', async () => {
-    const file = await toFile('<w:p><w:r><w:t>Um</w:t></w:r></w:p><w:p><w:r><w:t>Dois</w:t></w:r></w:p>')
-    const folhas = splitDocxPages((await docxFileToHtml(file))!.html)
-    expect(folhas).toHaveLength(1)
-    expect(folhas[0]).toContain('Um')
-    expect(folhas[0]).toContain('Dois')
+  it('without a break, the document stays a single sheet', async () => {
+    const file = await toFile('<w:p><w:r><w:t>One</w:t></w:r></w:p><w:p><w:r><w:t>Two</w:t></w:r></w:p>')
+    const sheets = splitDocxPages((await docxFileToHtml(file))!.html)
+    expect(sheets).toHaveLength(1)
+    expect(sheets[0]).toContain('One')
+    expect(sheets[0]).toContain('Two')
   })
 })

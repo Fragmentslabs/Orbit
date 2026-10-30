@@ -1,13 +1,13 @@
 /**
- * Cópia SEM ALTERAÇÕES de `supertonic/nodejs/helper.js`, do repositório
- * arquivado `supertone-oss-archive/supertonic` (commit 1e9799e) — o motor Node
- * do Supertonic 3. É MIT (ver LICENSE-supertonic.txt ao lado); os PESOS são
- * OpenRAIL-M e NÃO acompanham o app: o usuário os baixa para
- * `<userData>/voice/models/supertonic-3` (ver lib/voice/download.ts).
+ * UNCHANGED copy of `supertonic/nodejs/helper.js`, from the archived repository
+ * `supertone-oss-archive/supertonic` (commit 1e9799e) — the Node engine
+ * of Supertonic 3. It is MIT (see LICENSE-supertonic.txt next to it); the WEIGHTS are
+ * OpenRAIL-M and do NOT ship with the app: the user downloads them to
+ * `<userData>/voice/models/supertonic-3` (see lib/voice/download.ts).
  *
- * Não editar: um ajuste aqui vira divergência silenciosa do upstream. O que o
- * app precisa a mais (protocolo, reamostragem, fatiamento do streaming) mora em
- * engine.mjs, que só importa este arquivo.
+ * Do not edit: a tweak here becomes a silent divergence from upstream. What the
+ * app needs beyond it (protocol, resampling, streaming slicing) lives in
+ * engine.mjs, which only imports this file.
  */
 import fs from 'fs';
 import path from 'path';

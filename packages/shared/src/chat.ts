@@ -1,14 +1,14 @@
 /**
- * Tipos compartilhados entre o main process (Electron) e o renderer.
- * Modelo de dados inspirado no opencode: sessões + mensagens compostas por "parts"
- * (texto, reasoning e chamadas de ferramenta).
+ * Types shared between the main process (Electron) and the renderer.
+ * Data model inspired by opencode: sessions + messages composed of "parts"
+ * (text, reasoning and tool calls).
  */
 
 export type SessionMode = "chat" | "code"
 
 export type ChatStatus = "idle" | "submitted" | "streaming" | "cancelling" | "error" | "fallback"
 
-/** Resultado de busca textual em sessões (título + mensagens). */
+/** Result of the text search in sessions (title + messages). */
 export interface SearchHit {
   sessionId: string
   sessionTitle: string
@@ -19,100 +19,100 @@ export interface SearchHit {
 
 export interface SessionOrchestration {
   role: "orchestrator" | "worker"
-  /** Só em workers: sessão do orquestrador que criou este worker */
+  /** Workers only: the orchestrator session that created this worker */
   parentSessionId?: string
-  /** Descrição da tarefa delegada (workers) */
+  /** Description of the delegated task (workers) */
   task?: string
-  /** Modos que o orquestrador deu a este worker (workers). Ficam na sessão
-   *  porque o plano é sobrescrito a cada plano novo, e quem continua a
-   *  conversa depois (message_worker) precisa dos mesmos modos. */
+  /** Modes the orchestrator gave this worker (workers). They stay on the
+   *  session because the plan is overwritten by every new plan, and whoever
+   *  resumes the conversation later (message_worker) needs the same modes. */
   options?: SendMessageOptions
-  /** Modo Visão do worker (ver OrchestrationTask.vision) */
+  /** Worker Vision mode (see OrchestrationTask.vision) */
   vision?: boolean
 }
 
-/** Estado de revert ativo numa sessão. O revert trunca as mensagens a
- * partir de `messageId` imediatamente (tanto modo código quanto chat),
- * guardando as descartadas em `discardedMessages` para permitir unrevert.
- * Em modo código, `snapshot`/`files`/`diff` registram o estado do
- * filesystem anterior ao restore. */
+/** Active revert state in a session. The revert truncates the messages
+ * starting at `messageId` immediately (both code mode and chat mode),
+ * keeping the discarded ones in `discardedMessages` to allow unrevert.
+ * In code mode, `snapshot`/`files`/`diff` record the filesystem state
+ * prior to the restore. */
 export interface SessionRevert {
   messageId: string
-  /** Tree hash capturado antes do restore (modo código) — permite unrevert do filesystem */
+  /** Tree hash captured before the restore (code mode) — allows unrevert of the filesystem */
   snapshot?: string
-  /** Tree hash DEPOIS do restore (modo código). O unrevert só devolve um
-   *  caminho se ele ainda estiver exatamente neste estado; se outra conversa
-   *  (ou a pessoa) mexeu no meio, o caminho é preservado e vira conflito. */
+  /** Tree hash AFTER the restore (code mode). The unrevert only gives a
+   *  path back if it is still exactly in this state; if another conversation
+   *  (or the person) touched it in between, the path is preserved and becomes a conflict. */
   after?: string
-  /** Arquivos efetivamente revertidos (modo código) */
+  /** Files actually reverted (code mode) */
   files?: string[]
-  /** Arquivos que o turno mudou mas que NÃO foram revertidos porque mudaram
-   *  depois (outra conversa, edição externa, save manual no painel). */
+  /** Files the turn changed but that were NOT reverted because they changed
+   *  afterwards (another conversation, external edit, manual save in the panel). */
   conflicts?: string[]
-  /** Arquivos que mudaram na pasta DURANTE os turnos desfeitos mas que as
-   *  ferramentas de escrita do Orbit não gravaram (bash, MCP, algo de fora):
-   *  autor incerto. NÃO são revertidos por padrão — a barra oferece reverter
-   *  também (`session:revertUncertain`). */
+  /** Files that changed in the folder DURING the undone turns but that Orbit's
+   *  write tools did not write (bash, MCP, something from outside):
+   *  uncertain author. They are NOT reverted by default — the bar offers reverting
+   *  them too (`session:revertUncertain`). */
   uncertain?: string[]
-  /** Os turnos desfeitos, do último para o primeiro — o que o revert dos
-   *  caminhos incertos precisa para refazer a transição. Interno. */
+  /** The undone turns, from the last to the first — what the revert of the
+   *  uncertain paths needs to redo the transition. Internal. */
   fileTurns?: RevertFileTurn[]
-  /** Diff unificado das mudanças revertidas (modo código) */
+  /** Unified diff of the reverted changes (code mode) */
   diff?: string
-  /** Mensagens descartadas no truncamento — permite unrevert da conversa */
+  /** Messages discarded in the truncation — allows unrevert of the conversation */
   discardedMessages?: ChatMessage[]
-  /** true quando o filesystem foi restaurado (revert em modo código com
-   * snapshot). false quando o filesystem não pôde ser restaurado (modo
-   * código sem snapshot para a mensagem) — a UI avisa explicitamente em
-   * vez de tratar como revert de chat. Ausente em modo chat (sem arquivos
-   * envolvidos). */
+  /** true when the filesystem was restored (revert in code mode with
+   * snapshot). false when the filesystem could not be restored (code
+   * mode without a snapshot for the message) — the UI warns explicitly in
+   * stead of treating it as a chat revert. Absent in chat mode (no files
+   * involved). */
   filesRestored?: boolean
-  /** Motivo de o filesystem não ter sido restaurado — presente quando
-   * filesRestored === false em modo código. */
+  /** Reason the filesystem was not restored — present when
+   * filesRestored === false in code mode. */
   reason?: 'no-snapshot' | 'capture-failed' | 'no-end-snapshot'
-  /** O que o revert desfez FORA do repositório, nos dois modos: as peças
-   * (motion, design, slides) e a galeria (artefatos, documentos, imagens,
-   * áudios, vídeos). Ausente quando os turnos desfeitos não tocaram em mídia. */
+  /** What the revert undid OUTSIDE the repository, in both modes: the pieces
+   * (motion, design, slides) and the gallery (artifacts, documents, images,
+   * audio, videos). Absent when the undone turns did not touch media. */
   media?: SessionMediaRevert
 }
 
-/** Um turno desfeito pelo revert (modo código): a transição end → start. */
+/** One turn undone by the revert (code mode): the transition end → start. */
 export interface RevertFileTurn {
-  /** Tree do fim do turno. */
+  /** Tree at the end of the turn. */
   from: string
-  /** Tree do começo do turno. */
+  /** Tree of the start of the turn. */
   to: string
-  /** Caminhos de autoria confirmada (e saves manuais, que viram conflito). */
+  /** Paths with confirmed authorship (and manual saves, which become a conflict). */
   paths: string[]
-  /** Caminhos de autor incerto deste turno. */
+  /** Paths of uncertain author in this turn. */
   uncertain: string[]
-  /** Saves manuais do painel durante o turno — nunca revertidos. */
+  /** Manual saves from the panel during the turn — never reverted. */
   manual: string[]
 }
 
-/** Resultado do unrevert — o que voltou e o que ficou intacto por conflito. */
+/** Result of the unrevert — what came back and what stayed intact because of a conflict. */
 export interface UnrevertResult {
   done: boolean
-  /** Modo código: arquivos devolvidos e os que foram preservados. `error`
-   *  quando os arquivos não puderam ser devolvidos de jeito nenhum: o estado
-   *  pós-revert não foi registrado, ou a restauração falhou. */
+  /** Code mode: files given back and the ones that were preserved. `error`
+   *  when the files could not be given back at all: the post-revert state
+   *  was not recorded, or the restore failed. */
   files?: { restored: number; conflicts: string[]; error?: 'no-after' | 'failed' }
-  /** Peças/galeria devolvidas e preservadas. */
+  /** Pieces/gallery given back and preserved. */
   media?: SessionMediaRevert
 }
 
-/** Resumo do revert de mídia — só contagens (o diário fica no disco do main). */
+/** Summary of the media revert — counts only (the journal stays on the main's disk). */
 export interface SessionMediaRevert {
-  /** false quando o diário não pôde ser aplicado — a UI avisa. */
+  /** false when the journal could not be applied — the UI warns. */
   restored: boolean
-  /** Peças devolvidas ao estado anterior (ou removidas, se o turno as criou). */
+  /** Pieces given back to the previous state (or removed, if the turn created them). */
   pieces: number
-  /** Entradas da galeria devolvidas ao estado anterior (ou removidas). */
+  /** Gallery entries given back to the previous state (or removed). */
   items: number
-  /** Peças/itens que NÃO foram desfeitos porque mudaram depois do turno
-   *  (outra conversa, edição no painel). Ficam intactos. */
+  /** Pieces/items that were NOT undone because they changed after the turn
+   *  (another conversation, edit in the panel). They stay intact. */
   conflicts: number
-  /** Rótulos curtos dos itens preservados, para a barra de revert. */
+  /** Short labels of the preserved items, for the revert bar. */
   conflictLabels?: string[]
   error?: string
 }
@@ -123,21 +123,21 @@ export interface SessionInfo {
   mode: SessionMode
   pinned: boolean
   archived: boolean
-  /** Quando foi arquivada (null/ausente = não arquivada, ou arquivada antes deste campo existir). */
+  /** When it was archived (null/absent = not archived, or archived before this field existed). */
   archivedAt?: number | null
   folderId: string | null
-  /** Pasta principal de trabalho (modo código) */
+  /** Main working folder (code mode) */
   directory?: string
-  /** Pastas adicionais anexadas (modo código) */
+  /** Additional folders attached (code mode) */
   extraDirectories?: string[]
-  /** Papel na orquestração (orquestrador ou worker) */
+  /** Role in the orchestration (orchestrator or worker) */
   orchestration?: SessionOrchestration
-  /** Sessão-pai na árvore da sidebar (atalho de orchestration.parentSessionId) */
+  /** Parent session in the sidebar tree (shortcut of orchestration.parentSessionId) */
   parentId?: string
-  /** Execução de uma rotina agendada: a sessão vive no grupo "Rotinas" da
-   *  sidebar (nunca em pasta) e é excluída junto com a rotina. */
+  /** Run of a scheduled routine: the session lives in the "Routines" group of
+   *  the sidebar (never in a folder) and is deleted together with the routine. */
   routineId?: string
-  /** Revert ativo (modo código) — limpo ao desfazer ou enviar nova mensagem */
+  /** Active revert (code mode) — cleared when undoing or sending a new message */
   revert?: SessionRevert
   createdAt: number
   updatedAt: number
@@ -148,20 +148,20 @@ export interface FolderInfo {
   name: string
   mode: SessionMode
   pinned: boolean
-  /** Pasta arquivada: some do grupo "Pastas" e vai para "Arquivados" com seus
-   *  chats (arquivados junto). Chats removidos de uma pasta arquivada caem
-   *  para os recentes, sem desarquivar. */
+  /** Archived folder: it leaves the "Folders" group and goes to "Archived" with its
+   *  chats (archived along). Chats removed from an archived folder fall back
+   *  to the recent ones, without unarchiving. */
   archived: boolean
-  /** Workspace do projeto, gravado pelo PRIMEIRO chat que entrou na pasta
-   *  (repositório principal + extras). Os chats dizem onde a pasta está sendo
-   *  usada AGORA; este campo é a memória dela: com a pasta vazia (todos os
-   *  chats apagados), o "+" volta ao mesmo repositório em vez de herdar o
-   *  workspace da tela. Só nasce em pasta de código. */
+  /** Project workspace, recorded by the FIRST chat that entered the folder
+   *  (main repository + extras). The chats say where the folder is being
+   *  used NOW; this field is its memory: with the folder empty (all the
+   *  chats deleted), the "+" goes back to the same repository instead of inheriting the
+   *  workspace of the screen. It is only born in a code folder. */
   workspace?: string[]
   createdAt: number
 }
 
-/** Nome da pasta a partir do caminho do projeto: "meu-app" → "Meu App". */
+/** Folder name from the project path: "my-app" → "My App". */
 export function normalizeFolderName(directoryPath: string): string {
   const baseName = directoryPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? directoryPath
   return baseName
@@ -170,8 +170,8 @@ export function normalizeFolderName(directoryPath: string): string {
     .join(" ")
 }
 
-/** Chave de comparação de nomes de pasta: ignora caixa, espaços extras e
- *  acentos — "Nodara", "nodara" e "Nodará" são o mesmo projeto. */
+/** Comparison key for folder names: ignores case, extra spaces and
+ *  accents — "café", "Cafe" and "CAFÉ" are the same folder. */
 export function folderKey(name: string): string {
   return name
     .trim()
@@ -182,15 +182,15 @@ export function folderKey(name: string): string {
 }
 
 /**
- * Atividade de cada sessão para a ORDENAÇÃO da sidebar.
+ * Activity of each session for the sidebar ORDERING.
  *
- * A de um chat é a dele OU a do sub-chat/worker mais recente aninhado nele:
- * mexer num filho sobe o bloco inteiro (pai + filhos) para o topo. Sem isso a
- * posição do pai dependeria só da atividade do próprio pai, e uma conversa
- * lateral recém-usada ficava escondida embaixo de um pai parado.
+ * The activity of a chat is its own OR the one of the most recent sub-chat/worker nested in it:
+ * touching a child raises the whole block (parent + children) to the top. Without this the
+ * position of the parent would depend only on the parent's own activity, and a
+ * recently used side conversation stayed hidden under a stalled parent.
  *
- * Filhos arquivados não contam — eles saem da árvore visível (ficam no grupo
- * "Arquivados"), então não podem mover o pai.
+ * Archived children do not count — they leave the visible tree (they stay in the
+ * "Archived" group), so they cannot move the parent.
  */
 export function sessionActivityMap(sessions: SessionInfo[]): Map<string, number> {
   const childrenByParent = new Map<string, SessionInfo[]>()
@@ -206,8 +206,8 @@ export function sessionActivityMap(sessions: SessionInfo[]): Map<string, number>
   const compute = (session: SessionInfo): number => {
     const cached = activity.get(session.id)
     if (cached !== undefined) return cached
-    // Ciclo de parentId não deveria existir, mas não pode virar recursão
-    // infinita se algum registro corrompido aparecer.
+    // A parentId cycle should not exist, but it cannot become infinite
+    // recursion if some corrupted record shows up.
     if (computing.has(session.id)) return session.updatedAt
     computing.add(session.id)
     let latest = session.updatedAt
@@ -230,26 +230,26 @@ export interface TextPart {
   text: string
   state: TextPartState
   /**
-   * "attachment" = gerado por extração de anexo (PDF/planilha/DOCX/skill),
-   * não digitado pelo usuário. O modelo ainda recebe esse texto normalmente
-   * (toModelMessages/partText não filtram por origem) — só a bolha visível
-   * do chat esconde essas parts, mostrando apenas o que a pessoa escreveu.
-   * "vision" = indicador transitório do modo Visão ("Analisando imagem…"),
-   * emitido enquanto o modelo de visão descreve um anexo; nunca persiste.
-   * "nudge" = texto gerado numa continuação INTERNA do engine (nudge de
-   * verificação/anti-overclaim — ver NO_CHANGES_PROMPT em chat-engine.ts),
-   * não em resposta direta ao usuário. A UI renderiza sempre em cor apagada
-   * (nunca como resposta final branca); quando o turno de fato grava arquivos
-   * depois do nudge, o engine promove a normal apenas o ÚLTIMO texto do
-   * nudge — a resposta pós-correção — mantendo os anteriores apagados.
-   * "internal" = texto do nudge que terminou como confirmação de que não
-   * havia nada a corrigir (falso positivo do gatilho): é verificação interna
-   * pura — a UI NÃO o renderiza de forma alguma.
-   * "todo" = texto gerado na continuação do nudge de fechamento da TODO
-   * (TODO_COMPLETION_PROMPT): bookkeeping da checklist, não a resposta ao
-   * usuário. Renderiza como o "nudge" (sempre apagado, nunca resposta final),
-   * mas nunca é promovido a normal — senão essa linha curta roubaria o lugar
-   * da resposta final que o modelo já tinha escrito.
+   * "attachment" = generated by extraction of an attachment (PDF/spreadsheet/DOCX/skill),
+   * not typed by the user. The model still receives that text normally
+   * (toModelMessages/partText do not filter by origin) — only the visible bubble
+   * of the chat hides these parts, showing only what the person wrote.
+   * "vision" = transient indicator of Vision mode ("Analyzing image…"),
+   * emitted while the vision model describes an attachment; never persists.
+   * "nudge" = text generated in an INTERNAL continuation of the engine (check
+   * nudge/anti-overclaim — see NO_CHANGES_PROMPT in chat-engine.ts),
+   * not in direct response to the user. The UI always renders it in a dimmed color
+   * (never as a white final answer); when the turn does write files
+   * after the nudge, the engine promotes to normal only the LAST text of the
+   * nudge — the post-correction answer — keeping the previous ones dimmed.
+   * "internal" = text of the nudge that ended as confirmation that there
+   * was nothing to correct (false positive of the trigger): it is pure internal
+   * verification — the UI does NOT render it in any way.
+   * "todo" = text generated in the continuation of the TODO closing nudge
+   * (TODO_COMPLETION_PROMPT): checklist bookkeeping, not the answer to the
+   * user. It renders like the "nudge" (always dimmed, never the final answer),
+   * but it is never promoted to normal — otherwise that short line would steal the place
+   * of the final answer the model had already written.
    */
   source?: "attachment" | "vision" | "nudge" | "internal" | "todo"
 }
@@ -267,26 +267,26 @@ export type ToolPartState = "running" | "done" | "error"
 export type PieceKind = "motion" | "design" | "slides"
 
 /**
- * A peça que a tool acabou de escrever, já endereçável.
+ * The piece the tool has just written, already addressable.
  *
- * Quem preenche é o companion (`companion-media`): o celular recebe a URL http
- * assinada pronta e nunca monta uma — o scheme `orbit-motion://` que o desktop
- * usa dentro do Electron não existe fora dele.
+ * Whoever fills it is the companion (`companion-media`): the phone receives the signed
+ * http URL ready and never builds one — the `orbit-motion://` scheme that the desktop
+ * uses inside Electron does not exist outside it.
  *
- * `url` não é sempre o mesmo tipo de recurso, e isso é de propósito:
- * motion e slides apontam para o HTML da peça (o `index.html`, que é o que se
- * desenha); design aponta para o `canvas.json`, porque um canvas tem várias
- * telas e quem escolhe qual abrir é o visualizador do celular.
+ * `url` is not always the same kind of resource, and that is on purpose:
+ * motion and slides point to the HTML of the piece (the `index.html`, which is what gets
+ * drawn); design points to the `canvas.json`, because a canvas has several
+ * screens and whoever chooses which one to open is the phone's viewer.
  */
 export interface PieceRef {
   kind: PieceKind
   id: string
-  /** URL http absoluta e assinada do recurso principal da peça. */
+  /** Absolute and signed http URL of the main resource of the piece. */
   url: string
-  /** URL http absoluta da capa (frame, primeira tela). Sem ela o card usa o ícone do tipo. */
+  /** Absolute http URL of the cover (frame, first screen). Without it the card uses the type icon. */
   cover?: string
   title?: string
-  /** Motion: duração em segundos. Design: quantidade de telas. Slides: quantidade de slides. */
+  /** Motion: duration in seconds. Design: number of screens. Slides: number of slides. */
   count?: number
 }
 
@@ -300,25 +300,25 @@ export interface ToolPart {
   output?: string
   error?: string
   /**
-   * Preenchido só pelas tools de peça (`motion_*`, `design_*`, `slides_*`), e só
-   * no caminho do companion. É o que faz a conversa do celular mostrar um card
-   * em vez de uma linha de tool.
+   * Filled only by the piece tools (`motion_*`, `design_*`, `slides_*`), and only
+   * on the companion path. It is what makes the phone conversation show a card
+   * instead of a tool line.
    */
   piece?: PieceRef
 }
 
-/** Imagem que o assistente inclui na resposta (tool show_image) */
+/** Image the assistant includes in the answer (tool show_image) */
 export interface ImagePart {
   id: string
   type: "image"
-  /** URL orbit-media:// servida pelo protocolo do main (arquivo em orbit-data/media) */
+  /** orbit-media:// URL served by the main's protocol (file in orbit-data/media) */
   src: string
   alt?: string
 }
 
 /**
- * Áudio produzido pelo agente (tool audio_generate): a resposta mostra um
- * player. O arquivo mora em orbit-data/audio e é servido por orbit-audio://.
+ * Audio produced by the agent (tool audio_generate): the answer shows a
+ * player. The file lives in orbit-data/audio and is served by orbit-audio://.
  */
 export interface AudioPart {
   id: string
@@ -330,9 +330,9 @@ export interface AudioPart {
 }
 
 /**
- * Vídeo produzido pelo agente (video_render, motion_render, show_video): a
- * resposta mostra um player. O arquivo continua no projeto do usuário; a URL
- * orbit-video://vid_xxx aponta para ele pelo registro do main (video-store.ts).
+ * Video produced by the agent (video_render, motion_render, show_video): the
+ * answer shows a player. The file stays in the user's project; the URL
+ * orbit-video://vid_xxx points to it through the main's registry (video-store.ts).
  */
 export interface VideoPart {
   id: string
@@ -341,109 +341,109 @@ export interface VideoPart {
   src: string
   title?: string
   durationMs?: number
-  /** Caminho do arquivo no disco (para "mostrar na pasta"). */
+  /** File path on disk (for "show in folder"). */
   path?: string
 }
 
-/** Arquivo anexado pelo usuário à mensagem (data URL vinda do input) */
+/** File attached by the user to the message (data URL coming from the input) */
 export interface FilePart {
   id: string
   type: "file"
   /** MIME type (image/png, text/plain, application/pdf…) */
   mime: string
   filename?: string
-  /** Data URL com o conteúdo do arquivo */
+  /** Data URL with the content of the file */
   url: string
   /**
-   * Chip de UI: anexo já pré-processado pelo engine (conteúdo extraído como
-   * texto no TextPart irmão ou descrito pelo modelo de visão). O modelo NÃO
-   * recebe o arquivo (toModelMessages ignora chips). Em imagens, `url`
-   * carrega um thumbnail reduzido só para a bolha do chat; nos demais
-   * formatos fica vazio.
+   * UI chip: an attachment already pre-processed by the engine (content extracted as
+   * text in the sibling TextPart or described by the vision model). The model does NOT
+   * receive the file (toModelMessages ignores chips). For images, `url`
+   * carries a reduced thumbnail only for the chat bubble; in the other
+   * formats it stays empty.
    */
   chip?: boolean
   /**
-   * Documento da conversa que este anexo virou (doc1, doc2…). É o que faz o
-   * chip abrir o arquivo no painel: sem ele, o chip sabe o nome do arquivo
-   * mas não tem como alcançar o conteúdo, que vive no store de fontes e não
-   * na mensagem. Ausente em anexo que não é documento (imagem, texto solto) e
-   * nos anexos anteriores a este campo existir.
+   * Conversation document this attachment became (doc1, doc2…). It is what makes the
+   * chip open the file in the panel: without it, the chip knows the file name
+   * but has no way to reach the content, which lives in the sources store and not
+   * in the message. Absent in an attachment that is not a document (image, loose text) and
+   * in the attachments before this field existed.
    */
   documentId?: string
   /**
-   * Imagem original na galeria (`orbit-media://…`), quando o chip carrega só
-   * um thumbnail.
+   * Original image in the gallery (`orbit-media://…`), when the chip carries only
+   * a thumbnail.
    *
-   * A bolha do chat mostra o thumbnail de propósito — ele já está na mensagem
-   * e é leve. Mas ampliar, copiar ou salvar têm que alcançar os bytes de
-   * verdade: sem este campo o visualizador esticaria 320px para a tela inteira
-   * e o botão de salvar entregaria a miniatura no lugar da foto. Ausente nos
-   * anexos anteriores a este campo existir (aí o thumbnail é tudo que há).
+   * The chat bubble shows the thumbnail on purpose — it is already in the message
+   * and it is light. But enlarging, copying or saving have to reach the real
+   * bytes: without this field the viewer would stretch 320px to the whole screen
+   * and the save button would hand over the miniature instead of the photo. Absent in the
+   * attachments before this field existed (then the thumbnail is all there is).
    */
   mediaUrl?: string
   /**
-   * O anexo JÁ É um item da galeria (arrastado da aba Mídia): o arquivo existe
-   * em disco, e o engine NÃO copia nada — o agente recebe a referência e o
-   * caminho, e a bolha mostra o chip. `url` é só o preview (thumbnail), não o
-   * conteúdo. Ausente nos anexos comuns (colados/escolhidos), que viram cópia
-   * própria na galeria.
+   * The attachment ALREADY IS a gallery item (dragged from the Media tab): the file exists
+   * on disk, and the engine does NOT copy anything — the agent receives the reference and the
+   * path, and the bubble shows the chip. `url` is only the preview (thumbnail), not the
+   * content. Absent in ordinary attachments (pasted/chosen), which become their own
+   * copy in the gallery.
    */
   mediaId?: string
   /**
-   * O anexo é uma FONTE da conversa (`doc1`, `src2`…), arrastada da aba Fontes:
-   * o conteúdo já está guardado e endereçado, então nada é copiado e `url` fica
-   * vazio. O agente recebe o id e o nome na nota do anexo, e lê o documento com
-   * doc_read/doc_search como leria qualquer outra fonte — o chip na bolha é só
-   * o gesto de dizer "é ESTE documento", não um segundo arquivo.
+   * The attachment is a SOURCE of the conversation (`doc1`, `src2`…), dragged from the Sources tab:
+   * the content is already stored and addressed, so nothing is copied and `url` stays
+   * empty. The agent receives the id and the name in the attachment note, and reads the document with
+   * doc_read/doc_search as it would read any other source — the chip in the bubble is only
+   * the gesture of saying "it is THIS document", not a second file.
    */
   sourceId?: string
   /**
-   * O conteúdo deste anexo vale só no TURNO EM QUE CHEGOU (visão nativa).
+   * The content of this attachment is worth only in the TURN IT ARRIVED (native vision).
    *
-   * A part continua na mensagem — a bolha mostra a imagem —, mas o modelo
-   * deixa de recebê-la nos turnos seguintes: o histórico fica com a linha de
-   * referência em texto, e o agente volta à imagem por ela quando precisar
-   * (describe_image/image_edit). Sem isto, uma foto colada era reenviada em
-   * TODO turno, para sempre — o anexo mais caro da conversa era justamente o
-   * mais antigo. Só é marcado quando existe a referência estável: sem ela,
-   * perder a imagem seria pior que pagar por ela.
+   * The part stays in the message — the bubble shows the image —, but the model
+   * stops receiving it in the following turns: the history keeps the reference line in
+   * text, and the agent goes back to the image through it when it needs to
+   * (describe_image/image_edit). Without this, a pasted photo was resent in
+   * EVERY turn, forever — the most expensive attachment of the conversation was precisely the
+   * oldest one. It is only marked when the stable reference exists: without it,
+   * losing the image would be worse than paying for it.
    */
   turnOnly?: boolean
 }
 
-/** MIME marcador de um elemento selecionado no browser do painel (modo
- * seleção). O renderer serializa o elemento (tag/url/selector/texto/html)
- * como data URL neste MIME; o preprocessAttachment do engine o transforma em
- * chip (badge na bolha) + TextPart com source "attachment" — o modelo recebe
- * o detalhe completo, a bolha do usuário mostra só o chip. */
+/** MIME marker of an element selected in the panel browser (selection
+ * mode). The renderer serializes the element (tag/url/selector/text/html)
+ * as a data URL in this MIME; the engine's preprocessAttachment turns it into
+ * a chip (badge in the bubble) + TextPart with source "attachment" — the model receives
+ * the complete detail, the user bubble shows only the chip. */
 export const BROWSER_SELECTION_MIME = "application/x-orbit-browser-selection"
 
-/** MIME marcador de um trecho citado num painel. Mesmo contrato do
- * BROWSER_SELECTION_MIME: o renderer serializa o payload (o `kind` diz se é
- * trecho de documento — página, linhas e texto — ou INSTANTE de uma composição
- * de motion — arquivo, quadro e fps) como data URL neste MIME, e o
- * preprocessAttachment do engine o transforma em chip (badge na bolha) +
- * TextPart com source "attachment". O modelo recebe o trecho/instante e a
- * citação clicável; a bolha do usuário mostra só o chip.
+/** MIME marker of a passage quoted in a panel. Same contract as
+ * BROWSER_SELECTION_MIME: the renderer serializes the payload (the `kind` says whether it is
+ * a document passage — page, lines and text — or an INSTANT of a motion composition
+ * — file, frame and fps) as a data URL in this MIME, and the engine's
+ * preprocessAttachment turns it into a chip (badge in the bubble) +
+ * TextPart with source "attachment". The model receives the passage/instant and the
+ * clickable citation; the user bubble shows only the chip.
  *
- * Os dois tipos dividem o MIME porque o gesto é um só — apontar algo num painel
- * e anexar à próxima mensagem. Um caminho paralelo só para o instante de motion
- * duplicaria chip, serialização e limpeza para divergirem depois. */
+ * Both kinds share the MIME because the gesture is one — pointing at something in a panel
+ * and attaching it to the next message. A parallel path only for the motion instant
+ * would duplicate chip, serialization and cleanup for them to diverge later. */
 export const DOCUMENT_QUOTE_MIME = "application/x-orbit-document-quote"
 
 /**
- * MIME de uma FONTE arrastada da aba Fontes até o composer.
+ * MIME of a SOURCE dragged from the Sources tab to the composer.
  *
- * O payload é só a identidade do documento ({ id, name, kind, type }): o
- * conteúdo já está guardado no escopo da conversa e é alcançado pelo id. O
- * anexo que nasce daí é uma REFERÊNCIA (`FilePart.sourceId`) — nada é copiado,
- * igual ao arrasto da aba Mídia (MEDIA_DND_MIME), e a bolha mostra um chip com
- * o nome exato do documento em vez de um "src3" solto.
+ * The payload is only the identity of the document ({ id, name, kind, type }): the
+ * content is already stored in the conversation scope and is reached by the id. The
+ * attachment that is born from it is a REFERENCE (`FilePart.sourceId`) — nothing is copied,
+ * like the drag from the Media tab (MEDIA_DND_MIME), and the bubble shows a chip with
+ * the exact name of the document instead of a loose "src3".
  */
 export const SOURCE_DND_MIME = "application/x-orbit-source"
 
-/** O que o arrasto de uma fonte carrega. `type` é o rótulo curto que a lista
- *  já mostra ("PDF", "MD"), para o chip não precisar reabrir o id. */
+/** What the drag of a source carries. `type` is the short label the list
+ *  already shows ("PDF", "MD"), so the chip does not need to reopen the id. */
 export interface SourceDndPayload {
   id: string
   name?: string
@@ -451,17 +451,17 @@ export interface SourceDndPayload {
   type?: string
 }
 
-/** O que o chip de citação carrega. `page`/`fromLine`/`toLine` só existem
- * onde a fonte tem essa noção (PDF, DOCX, planilha — tudo que passa pelo
- * texto extraído em páginas). Um documento vivo em Markdown cita só o
- * trecho: ele não tem página, e inventar uma seria pior que não ter. */
+/** What the citation chip carries. `page`/`fromLine`/`toLine` only exist
+ * where the source has that notion (PDF, DOCX, spreadsheet — everything that goes through
+ * text extracted in pages). A live Markdown document quotes only the
+ * passage: it has no page, and inventing one would be worse than not having it. */
 export interface DocumentQuotePayload {
   /**
-   * De onde o trecho veio, porque decide o que o agente pode fazer com ele:
-   * "document" é um documento do agente (read_document/update_document, id
-   * doc_….md) e "source" é uma fonte da conversa (doc_read/doc_search, id
-   * doc1/src1). Sem essa distinção o id chega ao modelo sem endereço, e ele
-   * sai procurando o arquivo que estava na mão dele.
+   * Where the passage came from, because it decides what the agent can do with it:
+   * "document" is an agent document (read_document/update_document, id
+   * doc_….md) and "source" is a source of the conversation (doc_read/doc_search, id
+   * doc1/src1). Without this distinction the id reaches the model without an address, and it
+   * goes off looking for the file that was in its hand.
    */
   kind: "document" | "source"
   docId: string
@@ -473,57 +473,57 @@ export interface DocumentQuotePayload {
 }
 
 /**
- * Instante apontado na aba Motion — o usuário congela o quadro e pede um ajuste
- * naquele ponto ("no 2,30 s, deixe o título maior") sem o modelo ter de
- * adivinhar a qual quadro a frase se refere.
+ * Instant pointed at in the Motion tab — the user freezes the frame and asks for an adjustment
+ * at that point ("at 2.30 s, make the title bigger") without the model having to
+ * guess which frame the sentence refers to.
  *
- * O QUADRO é a verdade. A unidade de tempo do sistema é quadro inteiro (é o que
- * o runtime do preview e o render consomem); os segundos existem para o olho
- * humano e saem de `motionSeconds` na hora de exibir. Guardar os dois seria
- * criar uma segunda verdade, que diverge no arredondamento.
+ * The FRAME is the truth. The time unit of the system is the whole frame (it is what
+ * the preview runtime and the render consume); the seconds exist for the human eye
+ * and come out of `motionSeconds` when displaying. Storing both would be
+ * creating a second truth, which diverges in the rounding.
  */
 export interface MotionQuotePayload {
   kind: "motion"
-  /** Caminho da entrada DENTRO da pasta registrada (ex.: `index.html`). */
+  /** Path of the entry INSIDE the registered folder (e.g. `index.html`). */
   file: string
-  /** Nome exibível da composição. */
+  /** Displayable name of the composition. */
   name: string
-  /** Quadro inteiro do playhead no momento do clique. */
+  /** Whole frame of the playhead at the moment of the click. */
   frame: number
-  /** fps da composição — é ele que converte o quadro em segundos. */
+  /** fps of the composition — it is what converts the frame into seconds. */
   fps: number
-  /** Caminho absoluto da entrada — o endereço que o agente edita. */
+  /** Absolute path of the entry — the address the agent edits. */
   path?: string
-  /** Camada selecionada pelo usuário na faixa de camadas. */
+  /** Layer selected by the user in the layers strip. */
   layer?: string
-  /** Faixa de SOM selecionada, quando o foco é um som e não um elemento do DOM.
-   *  O áudio da peça toca fora do palco (ver motion-audio.ts), então não é uma
-   *  camada — chamá-la de camada mandaria o agente procurar no lugar errado. */
+  /** SOUND track selected, when the focus is a sound and not an element of the DOM.
+   *  The audio of the piece plays outside the stage (see motion-audio.ts), so it is not a
+   *  layer — calling it a layer would send the agent looking in the wrong place. */
   audio?: string
-  /** Camadas em cena naquele quadro (medidas, não declaradas). */
+  /** Layers on stage at that frame (measured, not declared). */
   onScreen?: string[]
 }
 
 /**
- * Elemento apontado na aba Design — o usuário seleciona algo no canvas e pede
- * um ajuste naquele elemento ("deixe este botão maior") sem o modelo ter de
- * adivinhar de qual dos artboards, e de qual pedaço dele, a frase fala.
+ * Element pointed at in the Design tab — the user selects something on the canvas and asks
+ * for an adjustment on that element ("make this button bigger") without the model having to
+ * guess which of the artboards, and which piece of it, the sentence is about.
  *
- * O endereço é o mesmo que a aba usa para editar: o artboard (`file`) e o
- * caminho de filhos a partir do <body> (`elementPath`). O trecho de HTML vai
- * junto porque é o que o modelo procura no fonte para editar.
+ * The address is the same one the tab uses to edit: the artboard (`file`) and the
+ * path of children from the <body> (`elementPath`). The HTML snippet goes
+ * along because it is what the model looks for in the source to edit.
  */
 export interface DesignQuotePayload {
   kind: "design"
-  /** Nome do canvas (a pasta) — o `name` das tools design_* no modo chat. */
+  /** Canvas name (the folder) — the `name` of the design_* tools in chat mode. */
   name: string
-  /** Pasta absoluta do canvas — o endereço no modo código (design_preview). */
+  /** Absolute folder of the canvas — the address in code mode (design_preview). */
   path?: string
-  /** Arquivo do artboard dentro do canvas (ex.: `Main.html`). */
+  /** Artboard file inside the canvas (e.g. `Main.html`). */
   file: string
-  /** Título do artboard, quando ele tem um. */
+  /** Artboard title, when it has one. */
   boardTitle?: string
-  /** Caminho de filhos-elemento a partir do <body>; ausente = o artboard inteiro. */
+  /** Path of child elements from the <body>; absent = the whole artboard. */
   elementPath?: number[]
   tag?: string
   label?: string
@@ -531,121 +531,121 @@ export interface DesignQuotePayload {
   html?: string
 }
 
-/** O que um anexo de citação carrega: trecho de documento (document|source),
- *  instante de composição (motion) ou elemento de design. Ver DOCUMENT_QUOTE_MIME. */
+/** What an attachment of a citation carries: document passage (document|source),
+ *  composition instant (motion) or design element. See DOCUMENT_QUOTE_MIME. */
 export type QuotePayload = DocumentQuotePayload | MotionQuotePayload | DesignQuotePayload
 
 /**
- * O texto que o modelo lê ao receber um elemento de design apontado. Em inglês
- * porque o destinatário é o modelo; o texto do usuário vem colado, como no
- * motion (ver formatMotionQuoteText).
+ * The text the model reads when it receives a pointed design element. In English
+ * because the recipient is the model; the user's text comes pasted, as in
+ * motion (see formatMotionQuoteText).
  */
 export function formatDesignQuoteText(quote: DesignQuotePayload, userText?: string): string {
   const board = quote.boardTitle ? `${quote.file} ("${quote.boardTitle}")` : quote.file
-  const linhas = [`[Design element selected by the user — canvas "${quote.name}", artboard ${board}]`]
-  linhas.push(
+  const lines = [`[Design element selected by the user — canvas "${quote.name}", artboard ${board}]`]
+  lines.push(
     quote.path
       ? `Canvas folder: ${quote.path} — edit ${quote.file} there (or with design_edit, name "${quote.name}", if it is a canvas of this chat).`
       : `Edit it with design_edit({ name: "${quote.name}", file: "${quote.file}" }) — read it first with design_read.`,
   )
   if (quote.elementPath && quote.elementPath.length > 0) {
-    linhas.push(
+    lines.push(
       `Element: <${quote.tag ?? "?"}>${quote.label ? ` ${quote.label}` : ""} — child path from <body>: ${quote.elementPath.join(" > ")}`,
     )
-    if (quote.text) linhas.push(`Text: ${quote.text}`)
-    if (quote.html) linhas.push(`HTML: ${quote.html}`)
+    if (quote.text) lines.push(`Text: ${quote.text}`)
+    if (quote.html) lines.push(`HTML: ${quote.html}`)
   } else {
-    linhas.push("Selection: the whole artboard.")
+    lines.push("Selection: the whole artboard.")
   }
   const note = userText?.trim()
-  if (note) linhas.push("---", note)
-  return linhas.join("\n")
+  if (note) lines.push("---", note)
+  return lines.join("\n")
 }
 
-/** fps assumido quando a composição não declarou nenhum — o mesmo do runtime. */
+/** fps assumed when the composition declared none — the same as the runtime. */
 export const MOTION_FALLBACK_FPS = 30
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 
-/** Timecode `mm:ss:ff` do quadro — a composição fala em quadros, o olho em
- *  mm:ss:ff. Divide o cálculo com o painel para o chip e o texto do modelo não
- *  discordarem no mesmo instante. */
+/** `mm:ss:ff` timecode of the frame — the composition speaks in frames, the eye in
+ *  mm:ss:ff. Shares the calculation with the panel so the chip and the model text do not
+ *  disagree at the same instant. */
 export function motionTimecode(frame: number, fps: number): string {
   const rate = fps > 0 ? fps : MOTION_FALLBACK_FPS
   const total = Math.max(0, Math.round(frame))
   return `${pad2(Math.floor(total / (rate * 60)))}:${pad2(Math.floor(total / rate) % 60)}:${pad2(total % rate)}`
 }
 
-/** Os segundos com vírgula (`2,30 s`) — é como o usuário digita no chat. */
+/** The seconds with a comma (`2,30 s`) — that is how the user types it in the chat. */
 export function motionSeconds(frame: number, fps: number): string {
   const rate = fps > 0 ? fps : MOTION_FALLBACK_FPS
   return `${(Math.max(0, frame) / rate).toFixed(2).replace(".", ",")} s`
 }
 
 /**
- * O texto que o modelo lê ao receber um instante apontado.
+ * The text the model reads when it receives a pointed instant.
  *
- * Em inglês porque o destinatário é o modelo. O texto do usuário vem colado ao
- * instante de propósito: numa parte separada, "deixe o título maior" chegaria
- * sem dizer de QUE ponto da composição se fala, e o modelo teria de descobrir
- * sozinho — que é justamente a ambiguidade que este anexo existe para matar.
- * Sem texto (o usuário só apontou o quadro), nada é acrescentado: nem `---` nem
- * linha vazia sobrando no fim.
+ * In English because the recipient is the model. The user text comes attached to the
+ * instant on purpose: in a separate part, "make the title bigger" would arrive
+ * without saying WHICH point of the composition is meant, and the model would have to
+ * figure it out alone — which is precisely the ambiguity this attachment exists to kill.
+ * Without text (the user only pointed the frame), nothing is added: no `---` and no
+ * empty line left at the end.
  */
 export function formatMotionQuoteText(quote: MotionQuotePayload, userText?: string): string {
   const frame = Math.max(0, Math.round(quote.frame))
-  const linhas = [
+  const lines = [
     `[Motion composition — ${quote.name || quote.file}]`,
     `File: ${quote.path || quote.file}`,
     `Frame ${frame} at ${quote.fps} fps — ${motionSeconds(quote.frame, quote.fps)} (${motionTimecode(quote.frame, quote.fps)})`,
   ]
-  if (quote.layer) linhas.push(`Selected layer: ${quote.layer}`)
-  if (quote.audio) linhas.push(`Selected audio track: ${quote.audio}`)
-  if (quote.onScreen?.length) linhas.push(`On screen at this frame: ${quote.onScreen.join(", ")}`)
+  if (quote.layer) lines.push(`Selected layer: ${quote.layer}`)
+  if (quote.audio) lines.push(`Selected audio track: ${quote.audio}`)
+  if (quote.onScreen?.length) lines.push(`On screen at this frame: ${quote.onScreen.join(", ")}`)
   const note = userText?.trim()
-  if (note) linhas.push("---", note)
-  return linhas.join("\n")
+  if (note) lines.push("---", note)
+  return lines.join("\n")
 }
 
 /**
- * Mensagem respondida ("responder", como no WhatsApp).
+ * Replied message ("reply", as in WhatsApp).
  *
- * Diferente da citação de documento (DOCUMENT_QUOTE_MIME), que viaja como
- * anexo, aqui o trecho citado entra no TEXTO da mensagem enviada, como uma
- * citação de Markdown (`> …`) com um marcador de quem escreveu:
+ * Unlike the document quote (DOCUMENT_QUOTE_MIME), which travels as an
+ * attachment, here the quoted snippet enters the TEXT of the sent message, as a
+ * Markdown quote (`> …`) with a marker of who wrote it:
  *
- *     > [assistant] primeira linha do trecho
- *     > segunda linha
+ *     > [assistant] first line of the snippet
+ *     > second line
  *
- *     resposta do usuário
+ *     user answer
  *
- * O motivo de ir no texto, e não num anexo: a resposta é sobre a conversa em
- * si — ela precisa aparecer na bolha, no histórico gravado e na cópia da
- * mensagem, que são justamente as coisas que um anexo não alcança. O
- * marcador é `[user]`/`[assistant]`, e não o rótulo traduzido, porque o
- * idioma da interface muda e o texto gravado não pode mudar junto.
+ * The reason to go in the text, and not in an attachment: the answer is about the conversation
+ * itself — it has to show up in the bubble, in the stored history and in the copy of the
+ * message, which are precisely the things an attachment does not reach. The
+ * marker is `[user]`/`[assistant]`, and not the translated label, because the
+ * interface language changes and the stored text cannot change along.
  */
 export interface MessageReplyQuote {
   role: "user" | "assistant"
-  /** O trecho citado, já recortado por quem cria a resposta. */
+  /** The quoted snippet, already clipped by whoever creates the reply. */
   text: string
 }
 
-/** Teto do trecho citado. A mensagem inteira já está no histórico do modelo —
- *  o que a citação precisa é APONTAR para ela, não repeti-la por completo em
- *  toda mensagem seguinte da conversa. */
+/** Cap of the quoted snippet. The whole message is already in the model history —
+ *  what the quote needs is to POINT to it, not to repeat it in full in
+ *  every following message of the conversation. */
 export const MESSAGE_REPLY_MAX_CHARS = 1200
 
 const REPLY_HEADER = /^\[(user|assistant)\]\s?/
 
-/** Recorta o trecho que vira resposta. */
+/** Clips the snippet that becomes the reply. */
 export function replyExcerpt(text: string, max: number = MESSAGE_REPLY_MAX_CHARS): string {
   const trimmed = text.trim()
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed
 }
 
-/** O trecho como citação de Markdown. Linhas vazias viram `>` para a citação
- *  não ser cortada em duas no meio. */
+/** The snippet as a Markdown quote. Empty lines become `>` so the quote
+ *  is not cut in two in the middle. */
 export function formatMessageReply(reply: MessageReplyQuote): string {
   const [first = "", ...rest] = reply.text.split("\n")
   return [
@@ -654,19 +654,19 @@ export function formatMessageReply(reply: MessageReplyQuote): string {
   ].join("\n")
 }
 
-/** O que se prepende no texto enviado (com a linha em branco que separa a
- *  citação da resposta). */
+/** What is prepended to the sent text (with the blank line that separates the
+ *  quote from the answer). */
 export function messageReplyPrefix(reply: MessageReplyQuote | null | undefined): string {
   if (!reply) return ""
   return `${formatMessageReply(reply)}\n\n`
 }
 
 /**
- * Separa a citação do corpo da mensagem.
+ * Separates the quote from the body of the message.
  *
- * Texto que não abre com `>` — ou cujo bloco citado não traz o marcador — não
- * tem resposta: devolve o texto intacto e `reply: null`. É o caso do usuário
- * que escreveu uma citação por conta própria.
+ * Text that does not start with `>` — or whose quoted block does not carry the marker — has no
+ * reply: it returns the text intact and `reply: null`. That is the case of the user
+ * who wrote a quote of their own.
  */
 export function parseMessageReply(text: string): { reply: MessageReplyQuote | null; body: string } {
   const lines = text.split("\n")
@@ -687,18 +687,18 @@ export function parseMessageReply(text: string): { reply: MessageReplyQuote | nu
   }
 }
 
-/** O trecho numa linha só, para a prévia (barra do compositor, bolha). */
+/** The snippet in a single line, for the preview (composer bar, bubble). */
 export function replySnippet(text: string, max = 140): string {
   const oneLine = text.replace(/\s+/g, " ").trim()
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine
 }
 
-/** Agente do pipeline /init exibido como acordeon (estilo thinking): o
- * principal narra a revisão; cada worker mostra sua exploração em streaming. */
+/** /init pipeline agent shown as an accordion (thinking style): the
+ * main one narrates the review; each worker shows its exploration in streaming. */
 export interface AgentPart {
   id: string
   type: "agent"
-  /** Rótulo exibido (ex: "Design System", "Agente principal") */
+  /** Displayed label (e.g. "Design System", "Main agent") */
   label: string
   role: "main" | "worker"
   text: string
@@ -707,53 +707,53 @@ export interface AgentPart {
 }
 
 /**
- * Artefato HTML que o assistente inclui na resposta (tool create_artifact):
- * uma página renderizável — dashboard, protótipo, diagrama, relatório — que
- * vive num arquivo próprio em orbit-data/artifacts e é servida pelo protocolo
- * orbit-artifact://.
+ * HTML artifact the assistant includes in the answer (tool create_artifact):
+ * a renderable page — dashboard, prototype, diagram, report — that
+ * lives in a file of its own in orbit-data/artifacts and is served by the
+ * orbit-artifact:// protocol.
  *
- * O HTML NUNCA entra na part: a mensagem persiste só a URL (o mesmo contrato
- * da ImagePart), senão cada conversa carregaria kilobytes de markup no
- * storage e na sincronização com o companion.
+ * The HTML NEVER enters the part: the message persists only the URL (the same contract
+ * as the ImagePart), otherwise every conversation would carry kilobytes of markup in
+ * storage and in the sync with the companion.
  */
 export interface ArtifactPart {
   id: string
   type: "artifact"
-  /** URL orbit-artifact://<id>.html servida pelo protocolo do main */
+  /** orbit-artifact://<id>.html URL served by the main process protocol */
   src: string
-  /** Id do registro na galeria (o nome do arquivo) — usado para abrir no
-   *  painel, atualizar e excluir */
+  /** Registry id in the gallery (the file name) — used to open in the
+   *  panel, update and delete */
   artifactId: string
   title: string
-  /** Miniatura capturada na criação (orbit-artifact://<id>.png), quando houve */
+  /** Thumbnail captured on creation (orbit-artifact://<id>.png), when there was one */
   thumb?: string
-  /** Revisão: incrementa a cada update_artifact. A UI usa como cache-buster do
-   *  iframe — a URL não muda quando o artefato é reescrito no mesmo arquivo. */
+  /** Revision: increments on every update_artifact. The UI uses it as a cache-buster of the
+   *  iframe — the URL does not change when the artifact is rewritten in the same file. */
   revision?: number
 }
 
 /**
- * Documento autorado pelo agente (tool create_document): relatório, proposta,
- * ata, documentação. O fonte é Markdown — e o documento É o Markdown; PDF e
- * DOCX são renderizações feitas quando alguém pede o arquivo.
+ * Document authored by the agent (tool create_document): report, proposal,
+ * minutes, documentation. The source is Markdown — and the document IS the Markdown; PDF and
+ * DOCX are renderings made when someone asks for the file.
  *
- * O preview mostrado na conversa é HTML e não o PDF — o Electron não embarca
- * o visualizador de PDF do Chrome, e o .docx não é renderizável no navegador.
- * Como o PDF é gerado A PARTIR desse HTML, o que se vê é o que sai impresso.
+ * The preview shown in the conversation is HTML and not the PDF — Electron does not ship
+ * Chrome's PDF viewer, and the .docx is not renderable in the browser.
+ * Since the PDF is generated FROM that HTML, what one sees is what comes out printed.
  */
 export interface DocumentPart {
   id: string
   type: "document"
-  /** Id do registro na galeria (doc_xxx.md) — o fonte Markdown */
+  /** Registry id in the gallery (doc_xxx.md) — the Markdown source */
   documentId: string
   title: string
-  /** URL orbit-artifact:// do HTML de preview */
+  /** orbit-artifact:// URL of the preview HTML */
   previewSrc: string
-  /** Renderizações JÁ em disco. Vazio é o normal: o documento nasce só em
-   *  Markdown, e o PDF/DOCX é gerado no primeiro download. */
+  /** Renderings ALREADY on disk. Empty is the norm: the document is born only in
+   *  Markdown, and the PDF/DOCX is generated on the first download. */
   formats: ("pdf" | "docx")[]
   thumb?: string
-  /** Incrementa a cada update_document — cache-buster do iframe */
+  /** Increments on every update_document — iframe cache-buster */
   revision?: number
 }
 
@@ -770,16 +770,16 @@ export type MessagePart =
   | DocumentPart
 
 /**
- * As parts de arquivo que vão AO MODELO numa mensagem do usuário.
+ * The file parts that go TO THE MODEL in a user message.
  *
- * No chat, o modelo nunca recebe os bytes de um anexo: ele recebe um texto —
- * o trecho de abertura do documento, a nota da imagem/áudio/vídeo, ou a linha
- * de referência da galeria. O que chega como part de arquivo é só quando ele
- * precisa MESMO dos pixels (visão nativa), e mesmo aí só no primeiro turno de
- * um anexo `turnOnly` — depois disso, o indicador é o texto.
+ * In chat, the model never receives the bytes of an attachment: it receives a text —
+ * the opening snippet of the document, the note of the image/audio/video, or the gallery
+ * reference line. What arrives as a file part is only when it REALLY needs
+ * the pixels (native vision), and even then only on the first turn of a
+ * `turnOnly` attachment — after that, the indicator is the text.
  *
- * Chip é decoração da UI (o conteúdo já está na TextPart irmã), e `url` vazio
- * é o resquício dos chips gravados antes da flag existir.
+ * Chip is UI decoration (the content is already in the sibling TextPart), and an empty `url`
+ * is the leftover of chips written before the flag existed.
  */
 export function modelFileParts(parts: MessagePart[], isCurrentTurn: boolean): FilePart[] {
   return parts.filter(
@@ -789,113 +789,113 @@ export function modelFileParts(parts: MessagePart[], isCurrentTurn: boolean): Fi
 }
 
 export interface TokenUsage {
-  /** Soma de todos os steps do turno (tool loop) — reflete custo/billing, NÃO
-   * o tamanho do contexto atual (um turno com N idas-e-vindas de tool reenvia
-   * o histórico N vezes, então este valor pode ser um múltiplo do contexto real). */
+  /** Sum of all steps of the turn (tool loop) — reflects cost/billing, NOT
+   * the size of the current context (a turn with N tool round-trips resends
+   * the history N times, so this value can be a multiple of the real context). */
   input: number
   output: number
   reasoning: number
   cacheRead: number
   cacheWrite: number
-  /** USD, calculado com os preços do catálogo (quando disponíveis) */
+  /** USD, calculated with the catalog prices (when available) */
   cost?: number
-  /** Usage só do ÚLTIMO step do turno — essa sim é a métrica correta de
-   * "tamanho do contexto atual", usada pelo medidor de contexto e pelo
-   * gatilho de compactação. Ausente em mensagens persistidas antes desse campo existir. */
+  /** Usage of the LAST step of the turn only — that one is the correct metric of
+   * "size of the current context", used by the context meter and by the
+   * compaction trigger. Absent in messages persisted before this field existed. */
   lastStep?: {
     input: number
     output: number
-    /** Da entrada desta chamada, quanto veio do cache do provedor. Ausente em mensagens antigas. */
+    /** Of the input of this call, how much came from the provider cache. Absent in old messages. */
     cacheRead?: number
-    /** Da entrada desta chamada, quanto foi gravado no cache. Ausente em mensagens antigas. */
+    /** Of the input of this call, how much was written to the cache. Absent in old messages. */
     cacheWrite?: number
-    /** Da saída desta chamada, quanto foi raciocínio (já incluído no output). Ausente em mensagens antigas. */
+    /** Of the output of this call, how much was reasoning (already included in the output). Absent in old messages. */
     reasoning?: number
   }
 }
 
-/** Snapshots do filesystem capturados em volta de uma resposta do assistente
- * (modo código): permitem revert per-message. */
+/** Filesystem snapshots captured around an assistant answer
+ * (code mode): they allow per-message revert. */
 export interface AssistantSnapshot {
-  /** Tree hash antes do stream começar. Ausente quando a captura inicial
-   * falhou (ver `failed`) — sinaliza que não há estado anterior para
+  /** Tree hash before the stream starts. Absent when the initial capture
+   * failed (see `failed`) — it signals that there is no previous state to
    * diff/revert. */
   start?: string
-  /** Tree hash depois de todas as tools executarem */
+  /** Tree hash after all tools run */
   end?: string
-  /** Arquivos alterados entre start e end */
+  /** Files changed between start and end */
   files?: string[]
-  /** Diff unificado entre start e end (truncado em ~200kB) */
+  /** Unified diff between start and end (truncated at ~200kB) */
   patch?: string
-  /** Caminhos que a PESSOA salvou à mão pelo painel durante o turno (relativos
-   *  à pasta, com '/'). O turno não os reverte — são trabalho dela, não do
-   *  agente; o revert os reporta como mantidos. */
+  /** Paths the PERSON saved by hand through the panel during the turn (relative
+   *  to the folder, with '/'). The turn does not revert them — they are their work, not the
+   *  agent's; the revert reports them as kept. */
   manual?: string[]
-  /** Caminhos (relativos, '/'; uma pasta cobre o que há dentro) que as
-   *  ferramentas de escrita do turno gravaram — a autoria que o revert usa.
-   *  Ausente em turnos anteriores ao diário: aí todo o diff conta como do
-   *  turno. */
+  /** Paths (relative, '/'; a folder covers what is inside it) that the write
+   *  tools of the turn wrote — the authorship the revert uses.
+   *  Absent in turns prior to the journal: there the whole diff counts as the
+   *  turn's. */
   authored?: string[]
-  /** Caminhos que as ferramentas de OUTRAS conversas gravaram nesta pasta
-   *  enquanto o turno rodava — fora do revert dele. */
+  /** Paths that the tools of OTHER conversations wrote in this folder
+   *  while the turn was running — outside its revert. */
   others?: string[]
-  /** true quando o rastreamento do filesystem falhou neste turno (start/end
-   *  não capturados) — a UI avisa que as alterações não foram registradas. */
+  /** true when the filesystem tracking failed in this turn (start/end
+   *  not captured) — the UI warns that the changes were not recorded. */
   failed?: boolean
-  /** Motivo da falha da captura inicial (start) — para diagnóstico e a UI
-   * explicar por que não há diff/revert disponível. */
+  /** Reason for the failure of the initial capture (start) — for diagnosis and for the UI
+   * to explain why no diff/revert is available. */
   captureError?: string
   /**
-   * Veredito da verificação de fim de turno, calculado pelo engine comparando
-   * os snapshots (não é afirmação do modelo):
-   * - `changed`: arquivos alterados (files/patch preenchidos)
-   * - `unchanged`: o turno não escreveu NADA no filesystem
-   * - `unknown`: sem snapshot ou a captura falhou — não dá para afirmar nada
+   * Verdict of the end-of-turn check, calculated by the engine comparing
+   * the snapshots (it is not a claim of the model):
+   * - `changed`: files changed (files/patch filled)
+   * - `unchanged`: the turn wrote NOTHING to the filesystem
+   * - `unknown`: no snapshot or the capture failed — nothing can be asserted
    *
-   * É a única evidência dura do que o turno fez que sobrevive para os turnos
-   * seguintes: ToolParts nunca voltam ao modelo (ver todo-context.ts), então
-   * sem isto o histórico guarda só a NARRATIVA do agente sobre o próprio
-   * trabalho — e uma alegação falsa vira "fato" nos turnos posteriores.
+   * It is the only hard evidence of what the turn did that survives to the
+   * following turns: ToolParts never go back to the model (see todo-context.ts), so
+   * without this the history keeps only the agent's NARRATIVE about its own
+   * work — and a false claim becomes a "fact" in later turns.
    */
   verified?: 'changed' | 'unchanged' | 'unknown'
 }
 
 /**
- * Causa da falha de um turno, quando reconhecível.
- * - `moderation`: o provedor bloqueou a resposta por filtro de conteúdo. É
- *   server-side (ex: DashScope/Qwen) — não há como desligar pelo request.
- * - `model-unavailable`: o modelo não existe/não é servido pelo provedor.
- * - `rate-limit`: limite de uso/requisições do provedor (429, FreeUsageLimit).
- * - `network`: falha de rede/indisponibilidade do endpoint (timeout, 5xx...).
- * - `context-length`: a requisição ficou maior que a janela do modelo.
- * - `context-length-turn`: idem, mas o que estourou foi o trabalho do próprio
- *   turno (resultados de ferramenta acumulados), não o histórico.
- * `moderation`, `model-unavailable`, `rate-limit` e `network` são resolvidas
- * trocando de modelo — é o que a rotação de modelos faz automaticamente (ver
- * `resolveRotation` no main). `provider-config` (provedor/SDK desconhecido,
- * chave ausente) e `unknown` NÃO são: trocar de modelo não conserta
- * configuração. `context-length` também não: o payload que estourou é o mesmo
- * em qualquer modelo — o que resolve é compactar a conversa. Em
- * `context-length-turn` nem isso: compactar só alcança o histórico, que
- * cabia; o que resolve é um turno novo, que não reenvia os resultados de
- * ferramenta deste.
+ * Cause of a turn failure, when recognizable.
+ * - `moderation`: the provider blocked the answer by content filter. It is
+ *   server-side (e.g. DashScope/Qwen) — there is no way to turn it off in the request.
+ * - `model-unavailable`: the model does not exist/is not served by the provider.
+ * - `rate-limit`: usage/request limit of the provider (429, FreeUsageLimit).
+ * - `network`: network failure/endpoint unavailability (timeout, 5xx...).
+ * - `context-length`: the request became larger than the model window.
+ * - `context-length-turn`: same, but what overflowed was the work of the turn
+ *   itself (accumulated tool results), not the history.
+ * `moderation`, `model-unavailable`, `rate-limit` and `network` are solved
+ * by switching models — it is what the model rotation does automatically (see
+ * `resolveRotation` in the main process). `provider-config` (unknown provider/SDK,
+ * missing key) and `unknown` are NOT: switching models does not fix
+ * configuration. `context-length` neither: the payload that overflowed is the same
+ * in any model — what solves it is compacting the conversation. In
+ * `context-length-turn` not even that: compacting only reaches the history, which
+ * fitted; what solves it is a new turn, which does not resend the tool
+ * results of this one.
  */
 export type MessageErrorKind =
   | "moderation"
   | "model-unavailable"
   | "rate-limit"
   | "network"
-  /** Requisição maior que a janela de contexto do modelo. Não rotacionável. */
+  /** Request larger than the model context window. Not rotatable. */
   | "context-length"
-  /** Idem, mas estourou no meio do turno — o histórico cabia, o acúmulo de
-   *  resultados de ferramenta do turno é que passou da janela. */
+  /** Same, but it overflowed mid-turn — the history fitted, the accumulation of
+   *  tool results of the turn is what went past the window. */
   | "context-length-turn"
-  /** Configuração nossa, não falha do provedor: chave ausente, provedor/SDK desconhecido. */
+  /** Our configuration, not a provider failure: missing key, unknown provider/SDK. */
   | "provider-config"
-  /** O provedor recusou o REQUEST por excesso de tools (o Groq recusa acima de
-   *  128 e a chamada inteira falha). Não é rotacionável: o teto é do endpoint,
-   *  e outro modelo do mesmo provedor herda o mesmo limite. O que resolve é
-   *  mandar menos tools — o catálogo sob demanda já corta (ver aplicarFreio). */
+  /** The provider refused the REQUEST for too many tools (Groq refuses above
+   *  128 and the whole call fails). It is not rotatable: the ceiling belongs to the endpoint,
+   *  and another model of the same provider inherits the same limit. What solves it is
+   *  sending fewer tools — the on-demand catalog already does that (see aplicarFreio). */
   | "tool-limit"
   | "unknown"
 
@@ -903,83 +903,83 @@ export interface ChatMessage {
   id: string
   role: "user" | "assistant"
   parts: MessagePart[]
-  /** Quando a mensagem foi criada — para o assistant, é o início do turno (antes do modelo responder). */
+  /** When the message was created — for the assistant, it is the start of the turn (before the model answers). */
   createdAt: number
-  /** Quando o assistant terminou de responder (stream concluído, erro ou abort). Ausente enquanto ainda está gerando. */
+  /** When the assistant finished answering (stream completed, error or abort). Absent while still generating. */
   completedAt?: number
   providerId?: string
   modelId?: string
   error?: string
-  /** Classificação da falha — a UI usa para explicar a causa e oferecer a ação
-   *  certa (ex: moderação do provedor só é contornável trocando de modelo). */
+  /** Classification of the failure — the UI uses it to explain the cause and offer the right
+   *  action (e.g. provider moderation can only be worked around by switching models). */
   errorKind?: MessageErrorKind
-  /** Quantas vezes o turno foi tentado antes de desistir — só quando > 1 */
+  /** How many times the turn was attempted before giving up — only when > 1 */
   attempts?: number
-  /** Gerada em modo simples: UI enxuta (sem tool/reasoning views); texto ainda com markdown */
+  /** Generated in simple mode: lean UI (no tool/reasoning views); text still in markdown */
   simple?: boolean
-  /** Modo ativo do turno em que a mensagem foi enviada (user) — metadados
-   *  lidos pela tool session_context. Ausente em mensagens antigas. */
+  /** Active mode of the turn in which the message was sent (user) — metadata
+   *  read by the session_context tool. Absent in old messages. */
   mode?: SessionMode
-  /** Modo de permissões vigente no turno (user) — metadados lidos pela tool
-   *  session_context. Ausente em mensagens antigas. */
+  /** Permission mode in force in the turn (user) — metadata read by the
+   *  session_context tool. Absent in old messages. */
   permissionMode?: PermissionMode
-  /** Tokens consumidos na geração desta mensagem (assistant) */
+  /** Tokens consumed in the generation of this message (assistant) */
   tokens?: TokenUsage
-  /** Mensagem sintética de compactação: resumo do histórico anterior */
+  /** Synthetic compaction message: summary of the previous history */
   summary?: boolean
-  /** Resumo de ABERTURA de um chat que continua outro (card de compactação):
-   *  mesma mecânica do summary, mas é o brief da conversa anterior, não uma
-   *  compactação desta — a UI usa para rotular o card. */
+  /** OPENING summary of a chat that continues another one (compaction card):
+   *  same mechanics as summary, but it is the brief of the previous conversation, not a
+   *  compaction of this one — the UI uses it to label the card. */
   continuation?: boolean
-  /** Snapshots start/end do filesystem (assistant, modo código) */
+  /** start/end snapshots of the filesystem (assistant, code mode) */
   snapshot?: AssistantSnapshot
-  /** true quando a geração parou por atingir o teto de passos (MAX_STEPS) em
-   * vez de o modelo concluir naturalmente — sinaliza à UI e ao próprio
-   * modelo (no próximo turno) que o trabalho pode ter ficado incompleto. */
+  /** true when the generation stopped on reaching the step ceiling (MAX_STEPS)
+   * instead of the model concluding naturally — it signals to the UI and to the
+   * model itself (in the next turn) that the work may have been left incomplete. */
   truncated?: boolean
-  /** true quando a resposta terminou com itens da TODO ainda "in_progress"
-   * (o modelo não marcou como concluído). Vira lembrete para o modelo no
-   * próximo turno (via messageContextText) e para a UI explicar o spinner. */
+  /** true when the answer ended with TODO items still "in_progress"
+   * (the model did not mark them as done). It becomes a reminder for the model in the
+   * next turn (via messageContextText) and for the UI to explain the spinner. */
   todoReminder?: boolean
-  /** Mensagem de usuário escrita pelo orquestrador num worker (não pelo
-   *  usuário). Ausente = o usuário digitou no chat do worker — é assim que o
-   *  orquestrador sabe que você entrou num worker e deu um comando direto. */
+  /** User message written by the orchestrator into a worker (not by the
+   *  person). Absent = the user typed it in the worker's chat — that is how the
+   *  orchestrator tells that you stepped into a worker and gave it a command. */
   origin?: "orchestrator"
 }
 
 export interface ModelVariant {
-  /** ID único usado na comunicação (ex: "high", "max", "medium") */
+  /** Unique ID used in the communication (e.g. "high", "max", "medium") */
   id: string
-  /** Label de exibição no dropdown */
+  /** Display label in the dropdown */
   label: string
-  /** Descrição curta para tooltip (opcional) */
+  /** Short description for the tooltip (optional) */
   description?: string
 }
 
 export interface ReasoningConfig {
-  /** Toggle on/off do thinking */
+  /** On/off toggle of thinking */
   enabled: boolean
-  /** ID da variant selecionada — undefined usa o baseline do modelo */
+  /** ID of the selected variant — undefined uses the model baseline */
   variantId?: string
 }
 
 export type PermissionMode = "ask" | "approve" | "full"
 export type PermissionDecision = "allow" | "always_chat" | "always" | "deny"
 
-/** Ação sensível que uma ferramenta quer executar (bash, write, edit, MCP) */
+/** Sensitive action a tool wants to execute (bash, write, edit, MCP) */
 export interface PermissionClaim {
   tool: string
-  /** Título curto exibido na UI (ex: "bash: git push --force") */
+  /** Short title shown in the UI (e.g. "bash: git push --force") */
   title: string
   detail?: string
-  /** Ação crítica (nível deny) — a UI destaca o aviso */
+  /** Critical action (deny level) — the UI highlights the warning */
   critical?: boolean
-  /** Pergunta mesmo no modo irrestrito (ex.: remover worktree): trocar o modo
-   *  para irrestrito não aprova este pedido sozinho. */
+  /** Asks even in unrestricted mode (e.g. removing a worktree): switching the mode
+   *  to unrestricted does not approve this request by itself. */
   alwaysAsk?: boolean
 }
 
-/** Pergunta estruturada da tool question */
+/** Structured question of the question tool */
 export interface Question {
   id: string
   text: string
@@ -988,11 +988,11 @@ export interface Question {
 }
 
 /**
- * Resposta de uma pergunta como texto (a tool recebe `answers: string[]`).
- * Opção marcada e texto livre ficam em linhas separadas, com o texto rotulado:
- * unidos por vírgula o agente não distinguia "A, B" (duas opções) de "A, mas
- * só no backend" (uma opção com ressalva). Sem opção marcada, o texto É a
- * resposta e vai sem rótulo. O rótulo vem traduzido de quem respondeu.
+ * Answer of a question as text (the tool receives `answers: string[]`).
+ * Checked option and free text stay on separate lines, with the text labeled:
+ * joined by commas the agent could not tell "A, B" (two options) from "A, but
+ * only in the backend" (one option with a caveat). With no option checked, the text IS the
+ * answer and goes without a label. The label comes translated from whoever answered.
  */
 export function formatAskAnswer(picks: string[], note: string | undefined, noteLabel: string): string {
   const text = note?.trim() ?? ""
@@ -1002,28 +1002,28 @@ export function formatAskAnswer(picks: string[], note: string | undefined, noteL
   return `${chosen}\n${noteLabel}: ${text}`
 }
 
-/** Uma pergunta e sua resposta no texto devolvido ao agente (e na mensagem
- *  de retomada): as linhas extras da resposta ficam alinhadas sob a seta. */
+/** One question and its answer in the text returned to the agent (and in the resume
+ *  message): the extra lines of the answer stay aligned under the arrow. */
 export function formatAskLine(index: number, question: string, answer: string): string {
   return `${index + 1}. ${question}\n   → ${answer.replace(/\n/g, "\n     ")}`
 }
 
-/** Aviso que abre o resultado da tool subagent quando o modo código foi
- *  pedido sem pasta de trabalho. Em inglês porque o destinatário é o modelo. */
+/** Warning that opens the result of the subagent tool when code mode was
+ *  requested without a working folder. In English because the recipient is the model. */
 export const SUBAGENT_NO_FOLDER_NOTICE =
   "[Notice: there is no working folder in this conversation — the subagent ran in chat mode, without file access.]"
 
-/** Resultado da tool subagent quando o subagente não devolveu texto. */
+/** Result of the subagent tool when the subagent returned no text. */
 export const SUBAGENT_EMPTY_OUTPUT = "(the subagent returned no text)"
 
-// Versões em português: conversas antigas no disco ainda as carregam.
+// Portuguese versions: old conversations on disk still carry them.
 const SUBAGENT_NO_FOLDER_PREFIXES = ["[Notice: there is no working folder", "[Aviso: não há pasta de trabalho"]
 const SUBAGENT_EMPTY_OUTPUTS = [SUBAGENT_EMPTY_OUTPUT, "(o subagente não retornou texto)"]
 
 /**
- * Separa o resultado da tool subagent para o card: o aviso de "sem pasta" e o
- * resultado vazio são texto para o modelo, e a UI os troca por i18n. O resto
- * (a resposta do subagente) vai como está.
+ * Separates the result of the subagent tool for the card: the "no folder" warning and the
+ * empty result are text for the model, and the UI replaces them with i18n. The rest
+ * (the subagent answer) goes as it is.
  */
 export function parseSubagentOutput(output: string): { noFolder: boolean; empty: boolean; text: string } {
   let text = output
@@ -1036,182 +1036,208 @@ export function parseSubagentOutput(output: string): { noFolder: boolean; empty:
   return { noFolder, empty, text: empty ? "" : text }
 }
 
-/** Origem de um pedido vindo de worker (exibido no chat do orquestrador) */
+/** Origin of a request coming from a worker (shown in the orchestrator's chat) */
 export interface AskOrigin {
   workerSessionId: string
   workerTitle: string
 }
 
-/** Item de pedido pendente (permissão ou question) — eventos individuais, em lote e UI */
+/** Pending request item (permission or question) — individual events, batch and UI */
 export interface AskItem {
   requestId: string
   kind: "permission" | "question" | "subchat"
   claim?: PermissionClaim
   questions?: Question[]
   origin?: AskOrigin
-  /** Sugestão de abrir uma conversa separada: o título e o brief que ela teria.
-   *  A resposta é "new" (abre e já começa a trabalhar), "here" (faz nesta) ou
-   *  "deny" (deixa de lado). Nunca abre sozinha — quem decide é o usuário. */
+  /** Suggestion to open a separate conversation: the title and the brief it would have.
+   *  The answer is "new" (opens it and starts working right away), "here" (does it in this one) or
+   *  "deny" (sets it aside). It never opens by itself — the user decides. */
   subchat?: { title: string; brief: string }
 }
 
 export interface PlanReview {
   status: "proposed" | "implementing" | "rejected" | "revising"
   messageId: string
-  /** Conteúdo do plano exibido no chat; não é persistido como arquivo por padrão. */
+  /** Content of the plan shown in the chat; not persisted as a file by default. */
   content?: string
   permissionMode?: PermissionMode
 }
 
 export interface SendMessageOptions {
-  /** Modo pesquisa aprofundada (prompt de deep research + ferramentas web) */
+  /** Deep research mode (deep research prompt + web tools) */
   research?: boolean
-  /** Habilita ferramentas de browser nativo */
+  /** Enables native browser tools */
   browser?: boolean
-  /** Controle do computador nesta conversa (vale só com o interruptor das
-   *  Preferências → Computador ligado). Nunca vem do celular nem de rotinas. */
+  /** Computer control in this conversation (only effective with the
+   *  Preferences → Computer switch on). Never comes from the phone nor from routines. */
   computer?: boolean
-  /** Modo plano: apenas ferramentas de leitura, saída em formato de plano */
+  /** Plan mode: read-only tools, output in plan format */
   plan?: boolean
-  /** Ao aceitar um plano: sinaliza para o backend usar o prompt de implementação */
+  /** On accepting a plan: signals the backend to use the implementation prompt */
   planReview?: PlanReview
-  /** Modo simples: respostas diretas em texto puro, sem formatação */
+  /** Simple mode: direct answers in plain text, no formatting */
   simple?: boolean
-  /** Modo chamada (conversa por voz): a resposta será LIDA em voz alta, então
-   *  vem curta, direta e sem formatação. */
+  /** Call mode (voice conversation): the answer will be READ aloud, so
+   *  it comes short, direct and without formatting. */
   voiceCall?: boolean
   /**
-   * Turno nascido no overlay (⇧⌘espaço): resposta curta e tools para enxergar a
-   * tela e a seleção do app que estava na frente. Não implica falar — o overlay
-   * em modo texto manda `overlay` sem `voiceCall`.
+   * Turn born in the overlay (⇧⌘space): short answer and tools to see the
+   * screen and the selection of the app that was in front. It does not imply speaking — the overlay
+   * in text mode sends `overlay` without `voiceCall`.
    */
   overlay?: boolean
-  /** Configuração de reasoning/thinking do modelo quando suportado */
+  /** Reasoning/thinking configuration of the model when supported */
   reasoning?: ReasoningConfig
-  /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */
+  /** Subagents mode: exposes the subagent tool (ephemeral workers in the background) */
   subagents?: boolean
-  /** Modo Brain: memória persistente (ferramentas memory_* ) */
+  /** Brain mode: persistent memory (memory_* tools) */
   brain?: boolean
-  /** Injeta memórias relevantes automaticamente no prompt */
+  /** Injects relevant memories automatically into the prompt */
   brainContext?: boolean
-  /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */
+  /** Orchestra mode: splits into a task plan + workers in child sessions */
   orchestrate?: { plan?: OrchestrationPlan }
-  /** Modo Loop: agente revisa e itera até completar a tarefa (max N iterações configurável) */
+  /** Loop mode: the agent reviews and iterates until the task is complete (configurable max N iterations) */
   loop?: boolean
   /**
-   * Recorte de servidores MCP desta conversa (nomes). `undefined` = todos os
-   * servidores ligados no app, que é o default; o recorte é o mesmo que o
-   * prompt descreve, para o modelo não ver na lista um servidor que não tem
-   * tool disponível no turno.
+   * Slice of MCP servers of this conversation (names). `undefined` = all
+   * servers enabled in the app, which is the default; the slice is the same one the
+   * prompt describes, so the model does not see in the list a server that has no
+   * tool available in the turn.
    */
   toolsServers?: string[]
-  /** Modo de permissões (code-mode e workers): default efetivo "ask" */
+  /** Permission mode (code mode and workers): effective default "ask" */
   permissionMode?: PermissionMode
   /**
-   * O modo acima veio do seletor global (desktop ou celular), e não de uma
-   * escolha explícita (aceitar plano com um modo, rotina). Só esses turnos
-   * seguem a troca do seletor no meio da resposta.
+   * The mode above came from the global selector (desktop or phone), and not from an
+   * explicit choice (accepting a plan with a mode, a routine). Only those turns
+   * follow the selector change mid-answer.
    */
   followGlobalPermission?: boolean
-  /** /init: executa o pipeline de análise de projeto em vez de gerar texto */
+  /** /init: runs the project analysis pipeline instead of generating text */
   initMode?: boolean
-  /** Enviada pelo chat do navegador em tela cheia: o usuário abriu o navegador
-   *  e está pedindo dali, então o agente pode usá-lo mesmo com as ferramentas
-   *  de navegador desligadas em Preferências → Navegador. */
+  /** Sent by the full-screen browser chat: the user opened the browser
+   *  and is asking from there, so the agent may use it even with the browser
+   *  tools turned off in Preferences → Browser. */
   fromBrowser?: boolean
-  /** Rodadas extras, em segundo plano, quando o turno falha por motivo
-   *  transitório (rede, rate-limit) antes do primeiro token. O turno é o mesmo:
-   *  nada novo aparece no chat entre uma tentativa e outra. */
+  /** Extra rounds, in the background, when the turn fails for a transient
+   *  reason (network, rate-limit) before the first token. It is the same turn:
+   *  nothing new appears in the chat between one attempt and the next. */
   retries?: number
 }
 
 export interface OrchestrationTask {
   id: string
   title: string
-  /** Prompt autocontido enviado ao worker */
+  /** Self-contained prompt sent to the worker */
   prompt: string
-  /** Modos escolhidos pelo orquestrador para este worker (research, browser,
-   *  plan/readonly, simple...). Nunca `orchestrate`: worker não orquestra. */
+  /** Modes the orchestrator chose for this worker (research, browser,
+   *  plan/readonly, simple...). Never `orchestrate`: a worker does not orchestrate. */
   options: SendMessageOptions
-  /** Modo Visão: fora de SendMessageOptions porque a visão é ligada pela
-   *  presença de um visionModel, não por uma flag de opção. */
+  /** Vision mode: outside SendMessageOptions because vision is switched on by
+   *  the presence of a visionModel, not by an option flag. */
   vision?: boolean
-  /** Sessão filha criada na execução */
+  /** Child session created during execution */
   workerSessionId?: string
   status: ChatStatus
-  /** Quantas rodadas de revisão o orquestrador já mandou para este worker. */
+  /** How many review rounds the orchestrator has already sent this worker. */
   revisions?: number
   /**
-   * Etapa no acompanhamento do orquestrador. `status` continua sendo o estado
-   * do chat do worker (o que apps antigos leem); `fase` diz o que o
-   * orquestrador fez com ele.
+   * Step in the orchestrator's follow-up. `status` remains the state of the
+   * worker's chat (what older apps read); `phase` says what the orchestrator
+   * did with it.
    */
-  fase?: FaseTarefaOrquestra
-  /** Ids de tarefas que precisam ser aceitas antes desta começar */
-  dependeDe?: string[]
-  /** Arquivos/pastas que a tarefa vai mexer, declarados pelo orquestrador.
-   *  É a "posse" que deixa os workers rodarem em paralelo sem se tocar. */
-  arquivos?: string[]
-  /** Criada pelo orquestrador durante a revisão (não estava no plano aprovado) */
+  phase?: OrchestrationTaskPhase
+  /** Ids of the tasks that must be accepted before this one starts */
+  dependsOn?: string[]
+  /** Files/folders the task will touch, as declared by the orchestrator. It is
+   *  the "ownership" that lets workers run in parallel without stepping on
+   *  each other. */
+  files?: string[]
+  /** Created by the orchestrator during the review (it was not in the approved plan) */
   extra?: boolean
-  /** Última nota da revisão: o que foi pedido no ajuste, ou por que falhou */
-  notaRevisao?: string
-  /** Worktree próprio do worker (orquestra com "Isolar workers em worktrees") */
-  worktree?: { caminho: string; pasta: string; branch: string; base: string }
-  /** O branch do worker já foi juntado no chat */
-  juntada?: boolean
+  /** Last note from the review: what the adjustment asked for, or why it failed */
+  reviewNote?: string
+  /** The worker's own worktree (orchestra with "Isolate workers in worktrees") */
+  worktree?: { path: string; folder: string; branch: string; base: string }
+  /** The worker's branch has already been merged into the chat */
+  merged?: boolean
 }
 
-export type FaseTarefaOrquestra =
-  /** Esperando a vez (dependências ou o teto de workers simultâneos) */
-  | "fila"
-  | "rodando"
-  /** Terminou e está com o orquestrador */
-  | "revisao"
-  /** Voltou a rodar com um pedido de ajuste */
-  | "ajuste"
-  | "aceita"
-  | "falhou"
+export type OrchestrationTaskPhase =
+  /** Waiting its turn (dependencies or the simultaneous-worker cap) */
+  | "queued"
+  | "running"
+  /** Finished and in the orchestrator's hands */
+  | "review"
+  /** Back to work with an adjustment request */
+  | "adjustment"
+  | "accepted"
+  | "failed"
 
-/** Comportamento do orquestrador depois de dividir (configurações da Orquestra). */
+/** Orchestra behavior after splitting (Orchestra settings). */
 export interface OrchestrationSettings {
   /**
-   * `orquestrar`: divide, roda e sintetiza, sem revisão.
-   * `acompanhar`: revisa cada worker ao terminar, pede ajustes, cria workers
-   * extras e faz a revisão de integração no fim.
-   * `rigoroso`: acompanhar + só aceita depois de rodar as verificações do
-   * projeto (typecheck, testes, lint).
+   * `orchestrate`: splits, runs and synthesizes, with no review.
+   * `supervise`: reviews each worker as it finishes, asks for adjustments,
+   * creates extra workers and runs the integration review at the end.
+   * `rigorous`: supervise + only accepts after running the project's checks
+   * (typecheck, tests, lint).
    */
-  comportamento: "orquestrar" | "acompanhar" | "rigoroso"
-  /** Ajustes que cada worker pode receber; o teto global é isso × workers do plano */
-  ajustesPorWorker: number
-  /** Cada worker num git worktree próprio, juntado no fim */
+  behavior: "orchestrate" | "supervise" | "rigorous"
+  /** Adjustments each worker may get; the global cap is this × the plan's workers */
+  adjustmentsPerWorker: number
+  /** Each worker in its own git worktree, merged at the end */
   worktrees: boolean
-  /** Plano de uma tarefa só começa sem esperar o "Aprovar" do card */
-  aprovarTarefaUnica: boolean
+  /** A single-task plan starts without waiting for the card's "Approve" */
+  approveSingleTask: boolean
 }
 
-export const ORCHESTRATION_SETTINGS_PADRAO: OrchestrationSettings = {
-  comportamento: "acompanhar",
-  ajustesPorWorker: 2,
+export const DEFAULT_ORCHESTRATION_SETTINGS: OrchestrationSettings = {
+  behavior: "supervise",
+  adjustmentsPerWorker: 2,
   worktrees: false,
-  aprovarTarefaUnica: false,
+  approveSingleTask: false,
 }
 
-export const MAX_AJUSTES_POR_WORKER = 5
+export const MAX_ADJUSTMENTS_PER_WORKER = 5
 
-/** Completa/saneia o que veio do renderer ou do celular. Nunca lança. */
+/**
+ * Keys and values persisted before the domain was renamed. They still arrive
+ * from the renderer's localStorage, from the companion mirror and from plans
+ * approved by an older build, so the normalization below translates them
+ * instead of silently falling back to the default. Idempotent: current keys
+ * and values pass straight through.
+ */
+const LEGACY_BEHAVIOR: Record<string, OrchestrationSettings["behavior"]> = {
+  orquestrar: "orchestrate",
+  acompanhar: "supervise",
+  rigoroso: "rigorous",
+}
+
+function normalizeBehavior(raw: unknown): OrchestrationSettings["behavior"] {
+  const d = DEFAULT_ORCHESTRATION_SETTINGS.behavior
+  if (raw === "orchestrate" || raw === "supervise" || raw === "rigorous") return raw
+  if (typeof raw === "string" && Object.prototype.hasOwnProperty.call(LEGACY_BEHAVIOR, raw)) {
+    return LEGACY_BEHAVIOR[raw]
+  }
+  return d
+}
+
+/** Fills in / sanitizes what came from the renderer or the phone. Never throws. */
 export function normalizeOrchestrationSettings(raw: unknown): OrchestrationSettings {
-  const v = (raw && typeof raw === "object" ? raw : {}) as Partial<OrchestrationSettings>
-  const d = ORCHESTRATION_SETTINGS_PADRAO
-  const ajustes = typeof v.ajustesPorWorker === "number" && Number.isInteger(v.ajustesPorWorker)
-    ? Math.min(MAX_AJUSTES_POR_WORKER, Math.max(0, v.ajustesPorWorker))
-    : d.ajustesPorWorker
+  const v = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  const d = DEFAULT_ORCHESTRATION_SETTINGS
+  // Settings written before the rename still carry the Portuguese keys.
+  const rawAdjustments = v.adjustmentsPerWorker ?? v.ajustesPorWorker
+  const adjustments = typeof rawAdjustments === "number" && Number.isInteger(rawAdjustments)
+    ? Math.min(MAX_ADJUSTMENTS_PER_WORKER, Math.max(0, rawAdjustments))
+    : d.adjustmentsPerWorker
+  const rawSingleTask = v.approveSingleTask ?? v.aprovarTarefaUnica
   return {
-    comportamento: v.comportamento === "orquestrar" || v.comportamento === "rigoroso" ? v.comportamento : d.comportamento,
-    ajustesPorWorker: ajustes,
+    behavior: normalizeBehavior(v.behavior ?? v.comportamento),
+    adjustmentsPerWorker: adjustments,
     worktrees: typeof v.worktrees === "boolean" ? v.worktrees : d.worktrees,
-    aprovarTarefaUnica: typeof v.aprovarTarefaUnica === "boolean" ? v.aprovarTarefaUnica : d.aprovarTarefaUnica,
+    approveSingleTask: typeof rawSingleTask === "boolean" ? rawSingleTask : d.approveSingleTask,
   }
 }
 
@@ -1219,29 +1245,160 @@ export interface OrchestrationPlan {
   id: string
   tasks: OrchestrationTask[]
   status: "proposed" | "approved" | "running" | "done" | "rejected"
-  /** Configuração vigente quando o plano foi aprovado */
+  /** Settings in force when the plan was approved */
   config?: OrchestrationSettings
-  /** Acompanhamento em andamento: orçamento de ajustes e o que o orquestrador está fazendo */
-  revisao?: {
-    ajustesUsados: number
-    tetoAjustes: number
-    /** Ex.: "Revisando: Motores de STT" — vazio quando ele não está fazendo nada */
-    atividade?: string
-    /** Resultado do merge dos worktrees dos workers, quando houve */
+  /** Follow-up in progress: the adjustment budget and what the orchestrator is doing */
+  review?: {
+    adjustmentsUsed: number
+    maxAdjustments: number
+    /** E.g. "Reviewing: STT engines" — empty when it is not doing anything */
+    activity?: string
+    /** Result of merging the workers' worktrees, when there was one */
     merge?: {
       ok: boolean
-      detalhe: string
-      /** Ainda há trabalho aceito por juntar — o card oferece "Juntar de novo" */
-      pendente?: boolean
+      detail: string
+      /** Accepted work is still unmerged — the card offers "Merge again" */
+      pending?: boolean
     }
   }
-  /** Tokens/custo acumulados: planejamento + workers + síntese */
+  /** Accumulated tokens/cost: planning + workers + synthesis */
   usage?: TokenUsage
-  /** Card fechado pelo usuário. O plano CONTINUA guardado — tarefas, prompts e
-   *  uso acumulado são histórico e contexto do orquestrador se a conversa
-   *  continuar; a marca só diz que o card não deve voltar a aparecer. Plano novo
-   *  grava por cima e não herda a marca. */
+  /** Card closed by the user. The plan STAYS stored — tasks, prompts and
+   *  accumulated usage are the orchestrator's history and context if the
+   *  conversation goes on; the mark only says the card must not come back. A new
+   *  plan overwrites it and does not inherit the mark. */
   dismissed?: boolean
+}
+
+/**
+ * Phases persisted before the domain was renamed to English. A plan approved by
+ * an older build still carries them, so the normalization below translates the
+ * value instead of dropping the phase (which would make the card fall back to
+ * the raw chat status). Idempotent: current values pass straight through.
+ */
+const LEGACY_PHASE: Record<string, OrchestrationTaskPhase> = {
+  fila: "queued",
+  rodando: "running",
+  revisao: "review",
+  ajuste: "adjustment",
+  aceita: "accepted",
+  falhou: "failed",
+}
+
+const PHASES: readonly OrchestrationTaskPhase[] = ["queued", "running", "review", "adjustment", "accepted", "failed"]
+
+const PLAN_STATUS: readonly OrchestrationPlan["status"][] = ["proposed", "approved", "running", "done", "rejected"]
+
+const TASK_STATUS: readonly ChatStatus[] = ["idle", "submitted", "streaming", "cancelling", "error", "fallback"]
+
+function normalizePhase(raw: unknown): OrchestrationTaskPhase | undefined {
+  if (typeof raw !== "string") return undefined
+  if ((PHASES as readonly string[]).includes(raw)) return raw as OrchestrationTaskPhase
+  return Object.prototype.hasOwnProperty.call(LEGACY_PHASE, raw) ? LEGACY_PHASE[raw] : undefined
+}
+
+/** First value found among the current key and the legacy one. */
+function pick(raw: Record<string, unknown>, next: string, legacy: string): unknown {
+  return raw[next] ?? raw[legacy]
+}
+
+function asStrings(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : []
+}
+
+function normalizePlanWorktree(raw: unknown): OrchestrationTask["worktree"] {
+  if (!raw || typeof raw !== "object") return undefined
+  const w = raw as Record<string, unknown>
+  const dir = pick(w, "path", "caminho")
+  if (typeof dir !== "string" || !dir) return undefined
+  const folder = pick(w, "folder", "pasta")
+  return {
+    path: dir,
+    folder: typeof folder === "string" && folder ? folder : dir,
+    branch: typeof w.branch === "string" ? w.branch : "",
+    base: typeof w.base === "string" ? w.base : "",
+  }
+}
+
+function normalizePlanTask(raw: unknown): OrchestrationTask | null {
+  if (!raw || typeof raw !== "object") return null
+  const t = raw as Record<string, unknown>
+  if (t.id === undefined) return null
+  const phase = normalizePhase(t.phase ?? t.fase)
+  const dependsOnRaw = pick(t, "dependsOn", "dependeDe")
+  const filesRaw = pick(t, "files", "arquivos")
+  const reviewNote = pick(t, "reviewNote", "notaRevisao")
+  const merged = pick(t, "merged", "juntada")
+  const worktree = normalizePlanWorktree(t.worktree)
+  return {
+    id: String(t.id),
+    title: typeof t.title === "string" ? t.title : "",
+    prompt: typeof t.prompt === "string" ? t.prompt : "",
+    options: (t.options && typeof t.options === "object" ? t.options : {}) as SendMessageOptions,
+    ...(t.vision !== undefined ? { vision: Boolean(t.vision) } : {}),
+    ...(t.workerSessionId !== undefined ? { workerSessionId: String(t.workerSessionId) } : {}),
+    status: (TASK_STATUS as readonly string[]).includes(t.status as string) ? (t.status as ChatStatus) : "idle",
+    ...(t.revisions !== undefined ? { revisions: Number(t.revisions) } : {}),
+    ...(phase ? { phase } : {}),
+    ...(dependsOnRaw !== undefined ? { dependsOn: asStrings(dependsOnRaw) } : {}),
+    ...(filesRaw !== undefined ? { files: asStrings(filesRaw) } : {}),
+    ...(t.extra !== undefined ? { extra: Boolean(t.extra) } : {}),
+    ...(reviewNote !== undefined ? { reviewNote: String(reviewNote) } : {}),
+    ...(worktree ? { worktree } : {}),
+    ...(merged !== undefined ? { merged: Boolean(merged) } : {}),
+  }
+}
+
+function normalizePlanReview(raw: unknown): OrchestrationPlan["review"] {
+  if (!raw || typeof raw !== "object") return undefined
+  const r = raw as Record<string, unknown>
+  const used = Number(pick(r, "adjustmentsUsed", "ajustesUsados") ?? 0)
+  const max = Number(pick(r, "maxAdjustments", "tetoAjustes") ?? 0)
+  const activity = pick(r, "activity", "atividade")
+  const mergeRaw = r.merge && typeof r.merge === "object" ? (r.merge as Record<string, unknown>) : undefined
+  const detail = mergeRaw ? pick(mergeRaw, "detail", "detalhe") : undefined
+  const pending = mergeRaw ? pick(mergeRaw, "pending", "pendente") : undefined
+  return {
+    adjustmentsUsed: Number.isFinite(used) ? used : 0,
+    maxAdjustments: Number.isFinite(max) ? max : 0,
+    ...(typeof activity === "string" ? { activity } : {}),
+    ...(mergeRaw
+      ? {
+          merge: {
+            ok: Boolean(mergeRaw.ok),
+            detail: typeof detail === "string" ? detail : "",
+            ...(pending !== undefined ? { pending: Boolean(pending) } : {}),
+          },
+        }
+      : {}),
+  }
+}
+
+/**
+ * Fills in / migrates a persisted plan. Plans stored before the domain was
+ * renamed to English carry Portuguese keys and phase values; they are translated
+ * here, at the read edge. Idempotent: a plan already in the current shape comes
+ * back unchanged, and an unusable value falls back to the default instead of
+ * throwing.
+ */
+export function normalizeOrchestrationPlan(raw: unknown): OrchestrationPlan | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const p = raw as Record<string, unknown>
+  if (p.id === undefined) return undefined
+  const review = normalizePlanReview(p.review ?? p.revisao)
+  return {
+    id: String(p.id),
+    tasks: Array.isArray(p.tasks)
+      ? p.tasks.map(normalizePlanTask).filter((t): t is OrchestrationTask => !!t)
+      : [],
+    status: (PLAN_STATUS as readonly string[]).includes(p.status as string)
+      ? (p.status as OrchestrationPlan["status"])
+      : "proposed",
+    ...(p.config !== undefined ? { config: normalizeOrchestrationSettings(p.config) } : {}),
+    ...(review ? { review } : {}),
+    ...(p.usage !== undefined ? { usage: p.usage as TokenUsage } : {}),
+    ...(p.dismissed !== undefined ? { dismissed: Boolean(p.dismissed) } : {}),
+  }
 }
 
 export interface WorkerModelConfig {
@@ -1250,49 +1407,49 @@ export interface WorkerModelConfig {
   reasoning?: ReasoningConfig
 }
 
-/** Modelo de um slot de rotação — mesma forma de `SelectedModel` do renderer. */
+/** Model of a rotation slot — same shape as the renderer's `SelectedModel`. */
 export interface RotationModel {
   providerId: string
   modelId: string
 }
 
-/** Rotação nomeada: lista ordenada de modelos (1..4 slots). Se um modelo
- *  falhar com erro recuperável, o turno tenta o próximo da lista. */
+/** Named rotation: ordered list of models (1..4 slots). If a model
+ *  fails with a recoverable error, the turn tries the next one in the list. */
 export interface ModelRotation {
   id: string
   name: string
   models: RotationModel[]
 }
 
-/** Estado completo da rotação de modelos (renderer → main via IPC
- *  `rotation:sync`). Não há toggle global nem rotação "ativa": a rotação é
- *  apenas criada e ESCOLHIDA POR CHAT no seletor de modelo, como um modelo
- *  (`sessionOverrides` = sessão → rotação; "draft" = chat novo). */
+/** Full state of the model rotation (renderer → main via IPC
+ *  `rotation:sync`). There is no global toggle and no "active" rotation: the rotation is
+ *  merely created and CHOSEN PER CHAT in the model selector, like a model
+ *  (`sessionOverrides` = session → rotation; "draft" = new chat). */
 export interface RotationConfig {
   rotations: ModelRotation[]
   sessionOverrides: Record<string, string>
 }
 
 export interface RotationFallbackInfo {
-  /** Índice (1-based) da tentativa atual dentro da sequência */
+  /** Index (1-based) of the current attempt within the sequence */
   current: number
-  /** Tamanho total da sequência */
+  /** Total size of the sequence */
   total: number
-  /** true quando não é troca de modelo, e sim uma nova rodada do turno depois
-   *  de uma falha transitória (ver SendMessageOptions.retries) */
+  /** true when it is not a model switch, but a new round of the turn after
+   *  a transient failure (see SendMessageOptions.retries) */
   retry?: boolean
 }
 
 export interface SendMessageInput {
   sessionId: string
   text: string
-  /** Arquivos anexados à mensagem do usuário */
+  /** Files attached to the user message */
   files?: FilePart[]
   /**
-   * Id da resposta que falhou, quando este envio é um "tentar novamente".
-   * O turno roda DE NOVO sobre a mesma mensagem do usuário (nada de bolha
-   * duplicada): a tentativa que falhou sai do histórico e vira a nota de
-   * retomada que o modelo recebe (ver session/retry-note.ts).
+   * Id of the answer that failed, when this send is a "try again".
+   * The turn runs AGAIN over the same user message (no duplicated
+   * bubble): the attempt that failed leaves the history and becomes the
+   * resume note the model receives (see session/retry-note.ts).
    */
   retryOf?: string
   providerId: string
@@ -1301,27 +1458,27 @@ export interface SendMessageInput {
   options: SendMessageOptions
   directory?: string
   extraDirectories?: string[]
-  /** Modelo dos workers (subagents/orchestra), vindo do modal de configuração */
+  /** Model of the workers (subagents/orchestra), coming from the configuration modal */
   workerModel?: WorkerModelConfig
   /**
-   * Modelo que conduz a orquestra (planejamento e síntese). Ausente = o modelo
-   * do próprio chat. Os workers não o usam: seguem workerModel.
+   * Model that conducts the orchestra (planning and synthesis). Absent = the
+   * chat's own model. Workers do not use it: they follow workerModel.
    */
   orchestratorModel?: WorkerModelConfig
-  /** Modelo de visão delegado (modo Visão) — descreve imagens para modelos sem visão */
+  /** Delegated vision model (Vision mode) — describes images for models without vision */
   visionModel?: WorkerModelConfig
-  /** Preenchido pelo main process em execuções de worker — nunca pelo renderer */
+  /** Filled by the main process in worker runs — never by the renderer */
   orchestrationRole?: "orchestrator" | "worker"
-  /** Sessão do orquestrador que criou este worker (preenchido pelo main) */
+  /** Session of the orchestrator that created this worker (filled by the main process) */
   parentSessionId?: string
-  /** Título curto da tarefa do worker, para badges de origem (preenchido pelo main) */
+  /** Short title of the worker task, for origin badges (filled by the main process) */
   workerTitle?: string
-  /** Configuração do modo loop (enviada do renderer) */
+  /** Loop mode configuration (sent from the renderer) */
   loopConfig?: { maxIterations: number }
-  /** Idioma preferido do usuário (nome em inglês, ex: "Portuguese", "English") —
-   * usado nos system prompts para instruir o modelo a responder nesse idioma
-   * por padrão. O modelo ainda pode seguir o idioma da própria mensagem do
-   * usuário quando ela difere claramente disto (ver IDENTITY em prompts.ts). */
+  /** Preferred language of the user (name in English, e.g. "Portuguese", "English") —
+   * used in the system prompts to instruct the model to answer in that language
+   * by default. The model may still follow the language of the user's own message
+   * when it clearly differs from this (see IDENTITY in prompts.ts). */
   language?: string
 }
 
@@ -1331,12 +1488,12 @@ export type ChatEvent =
       sessionId: string
       status: ChatStatus
       error?: string
-      /** Classificação do erro — o texto de `error` é diagnóstico e não se traduz. */
+      /** Classification of the error — the `error` text is diagnostic and is not translated. */
       errorKind?: MessageErrorKind
       fallback?: RotationFallbackInfo
     }
   | { type: "message"; sessionId: string; message: ChatMessage }
-  /** Substituição completa do histórico (ex: compactação insere resumo no meio) */
+  /** Full replacement of the history (e.g. compaction inserts a summary in the middle) */
   | { type: "messages"; sessionId: string; messages: ChatMessage[] }
   | { type: "part"; sessionId: string; messageId: string; part: MessagePart }
   | {
@@ -1349,14 +1506,14 @@ export type ChatEvent =
     }
   | { type: "title"; sessionId: string; title: string }
   /**
-   * Tamanho do contexto DURANTE o turno, para o medidor andar a cada passo do
-   * tool loop em vez de esperar o fim da resposta. `estimated`: medido no
-   * request antes do envio (sem tokenizer, sem system prompt) — chega quando
-   * passa do último valor real, que é justamente o aviso de que o próximo
-   * envio vai crescer. O valor real vem do provedor ao fim de cada passo.
+   * Size of the context DURING the turn, so the meter moves on every step of the
+   * tool loop instead of waiting for the end of the answer. `estimated`: measured in the
+   * request before sending (no tokenizer, no system prompt) — it arrives when
+   * it goes past the last real value, which is precisely the warning that the next
+   * send is going to grow. The real value comes from the provider at the end of each step.
    *
-   * Evento à parte, e não `tokens` na mensagem: a UI lê `tokens` como "o turno
-   * terminou" e destrava o input.
+   * A separate event, and not `tokens` in the message: the UI reads `tokens` as "the turn
+   * is over" and unlocks the input.
    */
   | {
       type: "context"
@@ -1365,77 +1522,77 @@ export type ChatEvent =
       input: number
       output: number
       estimated?: boolean
-      /** Cache lido/gravado nesta chamada (só no valor medido, não na estimativa). */
+      /** Cache read/written in this call (only in the measured value, not in the estimate). */
       cacheRead?: number
       cacheWrite?: number
     }
-  /** Próxima mensagem provável do usuário — o input a mostra apagada e Tab completa */
+  /** Next likely message of the user — the input shows it greyed out and Tab completes it */
   | { type: "suggestion"; sessionId: string; text: string }
   /**
-   * A próxima compactação passaria do limite de resumos: a UI oferece continuar
-   * num chat novo (com um resumo do estado atual) ou compactar aqui. Chega só
-   * no FIM de um turno — é quando o usage real é conhecido e não há turno
-   * rodando, que é o que a compactação manual exige (ver compactSession).
-   * É uma oferta, não um bloqueio: ignorada, a compactação automática do
-   * início do turno seguinte roda como sempre.
+   * The next compaction would go past the summary limit: the UI offers to continue
+   * in a new chat (with a summary of the current state) or to compact here. It arrives only
+   * at the END of a turn — that is when the real usage is known and there is no turn
+   * running, which is what manual compaction requires (see compactSession).
+   * It is an offer, not a block: ignored, the automatic compaction at the
+   * start of the next turn runs as always.
    */
   | {
       type: "compaction:suggest"
       sessionId: string
-      /** Resumos já no histórico (= compactações feitas) */
+      /** Summaries already in the history (= compactions made) */
       summaries: number
-      /** A partir de quantos resumos a sugestão aparece */
+      /** From how many summaries the suggestion shows up */
       threshold: number
     }
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
   | { type: "plan:review"; sessionId: string; review: PlanReview }
-  /** Session criada/atualizada pelo main process (workers da orquestração) */
+  /** Session created/updated by the main process (orchestration workers) */
   | { type: "session"; sessionId: string; session: SessionInfo }
-  /** Pedido de permissão aguardando resposta (card inline; origin = veio de worker) */
+  /** Permission request awaiting an answer (inline card; origin = came from a worker) */
   | { type: "permission"; sessionId: string; requestId: string; claim: PermissionClaim; origin?: AskOrigin }
-  /** Perguntas da tool question aguardando resposta */
+  /** Questions of the question tool awaiting an answer */
   | { type: "question"; sessionId: string; requestId: string; questions: Question[]; origin?: AskOrigin }
-  /** Sugestão de levar um assunto para outra conversa — o card decide o destino */
+  /** Suggestion to take a subject to another conversation — the card decides the destination */
   | { type: "subchat"; sessionId: string; requestId: string; title: string; brief: string; origin?: AskOrigin }
-  /** Lote de pedidos de workers agrupados numa janela de batching (card único) */
+  /** Batch of worker requests grouped in a batching window (single card) */
   | { type: "ask:batch"; sessionId: string; batchId: string; items: AskItem[] }
-  /** Pedido resolvido/cancelado — remove o card da UI */
+  /** Request resolved/canceled — removes the card from the UI */
   | { type: "ask:done"; sessionId: string; requestId: string }
-  /** Sessão excluída (desktop ou companion) — remove da UI em todos os clientes */
+  /** Session deleted (desktop or companion) — removes it from the UI on every client */
   | { type: "session:deleted"; sessionId: string }
-  /** Lista de pastas mudou (criada/renomeada/fixada/removida) — substituição completa */
+  /** Folder list changed (created/renamed/pinned/removed) — full replacement */
   | { type: "folders"; folders: FolderInfo[] }
-  /** Clique numa notificação nativa — o renderer abre a sessão correspondente */
+  /** Click on a native notification — the renderer opens the corresponding session */
   | { type: "notifications:open"; sessionId: string }
 
-/** Modalidades suportadas por um modelo (models.dev): text, image, audio, video, pdf */
+/** Modalities supported by a model (models.dev): text, image, audio, video, pdf */
 export interface ModelModalities {
   input: string[]
   output: string[]
 }
 
-/** Modelo do catálogo models.dev (mesmo formato usado pelo opencode) */
+/** models.dev catalog model (same format used by opencode) */
 export interface CatalogModel {
   id: string
   name: string
   reasoning: boolean
-  /** Modelo sempre pensa (não há controle de nível) — ex: DeepSeek R1 */
+  /** The model always thinks (no level control) — e.g. DeepSeek R1 */
   reasoningAlwaysOn?: boolean
-  /** Níveis de reasoning disponíveis (metadados gerados no main process) */
+  /** Available reasoning levels (metadata generated in the main process) */
   variants?: ModelVariant[]
   tool_call: boolean
   attachment: boolean
-  /** Tipos de input/output aceitos (text, image, audio, video, pdf) */
+  /** Accepted input/output types (text, image, audio, video, pdf) */
   modalities?: ModelModalities
   release_date?: string
   limit?: { context: number; output: number }
-  /** Preço por 1M tokens (models.dev). Os campos de cache podem faltar em modelos sem cache. */
+  /** Price per 1M tokens (models.dev). The cache fields may be missing in models without cache. */
   cost?: {
     input: number
     output: number
     cache_read?: number
     cache_write?: number
-    /** Faixas por tamanho de contexto (ex.: acima de 200k tokens, outro preço). */
+    /** Ranges by context size (e.g. above 200k tokens, another price). */
     tiers?: {
       input: number
       output: number
@@ -1444,18 +1601,18 @@ export interface CatalogModel {
       tier?: { type: string; size: number }
     }[]
   }
-  /** Estado no catálogo (models.dev): `deprecated` = removido do backend do provedor */
+  /** Catalog status (models.dev): `deprecated` = removed from the provider backend */
   status?: 'deprecated' | 'beta'
-  /** Família no models.dev (ex: "deepseek-flash"). Quando um id é renomeado,
-   *  o id antigo costuma virar a família dos sucessores — ver findCatalogModel. */
+  /** Family in models.dev (e.g. "deepseek-flash"). When an id is renamed,
+   *  the old id usually becomes the family of the successors — see findCatalogModel. */
   family?: string
-  /** Pacote e endpoint próprios do modelo, quando diferem dos do provedor
-   *  (models.dev). Um gateway como o OpenCode serve o Claude pelo protocolo
-   *  Anthropic e o GPT pelo /responses, sob o mesmo provedor. */
+  /** Package and endpoint of the model itself, when they differ from the provider's
+   *  (models.dev). A gateway such as OpenCode serves Claude over the Anthropic
+   *  protocol and GPT over /responses, under the same provider. */
   provider?: { npm?: string; api?: string }
-  /** Controles de reasoning que o models.dev declara para o modelo. `effort`
-   *  lista os níveis que o provedor aceita; `toggle` é liga/desliga;
-   *  `budget_tokens` é um orçamento em tokens, com limites opcionais. */
+  /** Reasoning controls that models.dev declares for the model. `effort`
+   *  lists the levels the provider accepts; `toggle` is on/off;
+   *  `budget_tokens` is a budget in tokens, with optional limits. */
   reasoning_options?: Array<
     | { type: 'effort'; values: Array<string | null> }
     | { type: 'toggle' }
@@ -1464,24 +1621,24 @@ export interface CatalogModel {
 }
 
 /**
- * Dialeto de fio de um provedor FORA do models.dev (provedor personalizado).
- * No catálogo quem decide o SDK é o `npm`; aqui o usuário escolhe o protocolo,
- * porque um gateway que fala Anthropic Messages não funciona pelo adaptador
- * openai-compatible.
+ * Wire dialect of a provider OUTSIDE models.dev (custom provider).
+ * In the catalog the `npm` decides the SDK; here the user chooses the protocol,
+ * because a gateway that speaks Anthropic Messages does not work through the
+ * openai-compatible adapter.
  */
 export type ProviderProtocol = 'openai-completions' | 'openai-responses' | 'anthropic-messages'
 
 /**
- * Ajustes de gateway que o models.dev não tem como descrever. Todos opcionais:
- * ausentes, valem os padrões do protocolo.
+ * Gateway adjustments that models.dev has no way to describe. All optional:
+ * when absent, the protocol defaults apply.
  */
 export interface ProviderCompat {
-  /** Campo que carrega o teto de tokens de saída (APIs OpenAI-like). */
+  /** Field that carries the output token ceiling (OpenAI-like APIs). */
   maxTokensField?: 'max_tokens' | 'max_completion_tokens'
   /**
-   * `deepseek`: o raciocínio volta em `reasoning_content` e precisa ser
-   * reenviado em todas as mensagens de assistente (o DeepSeek devolve 400 em
-   * conversa multi-turno sem ele). `none`: nunca injeta o campo.
+   * `deepseek`: the reasoning comes back in `reasoning_content` and has to be
+   * resent in all assistant messages (DeepSeek returns 400 on a
+   * multi-turn conversation without it). `none`: never injects the field.
    */
   thinkingFormat?: 'deepseek' | 'none'
 }
@@ -1493,69 +1650,69 @@ export interface CatalogProvider {
   npm?: string
   api?: string
   models: Record<string, CatalogModel>
-  /** Só em provedores personalizados (ver ProviderProtocol). */
+  /** Only in custom providers (see ProviderProtocol). */
   protocol?: ProviderProtocol
-  /** Só em provedores personalizados (ver ProviderCompat). */
+  /** Only in custom providers (see ProviderCompat). */
   compat?: ProviderCompat
   /**
-   * Só em provedores personalizados, e só na resposta do `list`: a chave está
-   * salva (auth.json) ou a variável de ambiente existe. Não é persistido no
-   * arquivo de provedores.
+   * Only in custom providers, and only in the `list` response: the key is
+   * saved (auth.json) or the environment variable exists. It is not persisted in the
+   * providers file.
    */
   hasKey?: boolean
 }
 
 /**
- * Teto de tools por request em provedores que impõem um. O Groq recusa acima
- * de 128 e a chamada inteira falha ("too many tools") — não é limite de
- * modelo, é política do endpoint, por isso fica aqui e não no catálogo do
- * models.dev. `undefined` = sem teto conhecido.
+ * Ceiling of tools per request in providers that impose one. Groq refuses above
+ * 128 and the whole call fails ("too many tools") — it is not a model
+ * limit, it is a policy of the endpoint, which is why it lives here and not in the
+ * models.dev catalog. `undefined` = no known ceiling.
  */
-const LIMITE_DE_TOOLS_POR_PROVEDOR: Record<string, number> = { groq: 128 }
+const TOOL_LIMIT_PER_PROVIDER: Record<string, number> = { groq: 128 }
 
-export function limiteDeTools(providerId: string): number | undefined {
-  return LIMITE_DE_TOOLS_POR_PROVEDOR[providerId]
+export function toolLimitFor(providerId: string): number | undefined {
+  return TOOL_LIMIT_PER_PROVIDER[providerId]
 }
 
-/** Modelo declarado num provedor personalizado — o models.dev não o conhece. */
+/** Model declared in a custom provider — models.dev does not know it. */
 export interface CustomModelInput {
   id: string
   name?: string
   contextWindow?: number
   maxTokens?: number
-  /** Ausente = inferido do id (ver inferReasoning em custom-providers.ts). */
+  /** Absent = inferred from the id (see inferReasoning in custom-providers.ts). */
   reasoning?: boolean
 }
 
-/** Provedor personalizado criado pelo usuário (fora da listagem do models.dev). */
+/** Custom provider created by the user (outside the models.dev listing). */
 export interface CustomProviderInput {
-  /** Slug sem o prefixo `custom:` (ex: "meu-gateway"). */
+  /** Slug without the `custom:` prefix (e.g. "my-gateway"). */
   id: string
   name: string
   baseURL: string
-  /** Vai para o auth.json; nunca volta pelo IPC. */
+  /** Goes to auth.json; never comes back over IPC. */
   apiKey?: string
-  /** Em vez de guardar a chave, lê de uma variável de ambiente. */
+  /** Instead of storing the key, reads it from an environment variable. */
   keyEnv?: string
   protocol?: ProviderProtocol
   compat?: ProviderCompat
   models?: CustomModelInput[]
 }
 
-/** Alteração de um provedor personalizado — campo ausente fica como está. */
+/** Change to a custom provider — an absent field stays as it is. */
 export interface CustomProviderPatch {
   name?: string
   baseURL?: string
   apiKey?: string
-  /** `null`/vazio = deixa de usar variável de ambiente. */
+  /** `null`/empty = stops using an environment variable. */
   keyEnv?: string | null
   protocol?: ProviderProtocol
   compat?: ProviderCompat | null
-  /** Substitui a lista inteira quando presente. */
+  /** Replaces the whole list when present. */
   models?: CustomModelInput[]
 }
 
-/** Modelo encontrado ao consultar o `GET /models` de um servidor. */
+/** Model found when querying the `GET /models` of a server. */
 export interface DiscoveredModel {
   id: string
   name?: string
@@ -1566,14 +1723,14 @@ export interface DiscoveredModel {
 export type Catalog = Record<string, CatalogProvider>
 
 /**
- * Acha o modelo no catálogo, seguindo renomeações. O models.dev às vezes troca
- * o id de um modelo (ex: "deepseek-flash" → "deepseek-v4.1-flash") e o id
- * antigo passa a ser a família dos sucessores. Uma escolha salva com o id
- * antigo sumia do catálogo, e o engine deixava de mandar o nível de reasoning
- * sem avisar ninguém — o modelo respondia sem pensar.
+ * Finds the model in the catalog, following renames. models.dev sometimes changes
+ * the id of a model (e.g. "deepseek-flash" → "deepseek-v4.1-flash") and the old
+ * id becomes the family of the successors. A choice saved with the old id
+ * disappeared from the catalog, and the engine stopped sending the reasoning level
+ * without warning anyone — the model answered without thinking.
  *
- * Sem o id exato, procura no MESMO provedor os modelos cuja família é o id
- * pedido e fica com o mais recente. `renamed` diz se houve troca.
+ * Without the exact id, it looks in the SAME provider for the models whose family is the
+ * requested id and keeps the most recent one. `renamed` says whether there was a swap.
  */
 export function findCatalogModel(
   catalog: Catalog,
@@ -1591,16 +1748,16 @@ export function findCatalogModel(
   return id && model ? { modelId: id, model, renamed: true } : undefined
 }
 
-/** Níveis de reasoning do mais fraco ao mais forte — `closestVariant` usa a
- *  ordem para trocar um nível que o modelo não tem pelo vizinho mais próximo. */
+/** Reasoning levels from weakest to strongest — `closestVariant` uses the
+ *  order to swap a level the model does not have for the closest neighbor. */
 export const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 /**
- * O nível que vale de fato para um modelo. Um nível salvo que o modelo não
- * oferece (ex: "medium" num modelo que só tem low/high/max) era descartado em
- * silêncio, e o turno saía sem reasoning nenhum. Aqui ele vira o próximo mais
- * forte disponível; não havendo, o mais forte abaixo. Sem nível pedido, ou
- * com um que não é da escala, fica `undefined`.
+ * The level that actually applies to a model. A saved level that the model does not
+ * offer (e.g. "medium" in a model that only has low/high/max) was discarded in
+ * silence, and the turn came out with no reasoning at all. Here it becomes the next
+ * strongest available; if there is none, the strongest below. With no level requested, or
+ * with one that is not in the scale, it stays `undefined`.
  */
 export function closestVariant(available: string[], wanted: string | undefined): string | undefined {
   if (!wanted || available.length === 0) return undefined
@@ -1614,8 +1771,8 @@ export function closestVariant(available: string[], wanted: string | undefined):
   return (ranked.find((v) => v.rank > rank) ?? ranked[ranked.length - 1])?.id
 }
 
-/** O modelo aceita imagens como input? Usa as modalidades do models.dev
- * (input inclui 'image'); sem modalidades, cai no flag `attachment`. */
+/** Does the model accept images as input? Uses the models.dev modalities
+ * (input includes 'image'); without modalities, falls back to the `attachment` flag. */
 export function modelSupportsVision(provider: CatalogProvider | undefined, modelId: string): boolean {
   const model = provider?.models[modelId]
   if (!model) return false
@@ -1629,25 +1786,25 @@ export interface ProviderCredential {
   key: string
 }
 
-/** Chaves usadas no storage genérico (main process) */
-/** Mensagem enfileirada para envio posterior (fila ou agendada) */
+/** Keys used in the generic storage (main process) */
+/** Message queued for later sending (queue or scheduled) */
 export interface QueuedMessage {
   id: string
   text: string
-  /** Arquivos anexados (data URLs) */
+  /** Attached files (data URLs) */
   files?: FilePart[]
   options: SendMessageOptions
   mode: SessionMode
   sessionId?: string
   directory?: string
   extraDirectories?: string[]
-  /** Timestamp MS para envio agendado; undefined = envia assim que possível */
+  /** MS timestamp for scheduled sending; undefined = sends as soon as possible */
   scheduledAt?: number
   createdAt: number
 }
 
-/** Rodadas extras que uma mensagem da fila ganha em falha transitória
- *  (SendMessageOptions.retries) — a pessoa não está olhando quando ela sai. */
+/** Extra rounds a queue message gets on a transient failure
+ *  (SendMessageOptions.retries) — the person is not watching when it fires. */
 export const MAX_QUEUE_RETRIES = 3
 
 export const StorageKeys = {
@@ -1661,11 +1818,11 @@ export const StorageKeys = {
   memory: (id: string) => `memory/items/${id}`,
   memoryItemsPrefix: "memory/items/",
   memoryIndex: "memory/_index",
-  /** Idioma efetivo do app, publicado pelo renderer para o main ler.
-   *  O scheduler de rotinas roda sem renderer no laço e precisa dele. */
+  /** Effective app language, published by the renderer for the main process.
+   *  The routine scheduler runs with no renderer in the loop and needs it. */
   appLanguage: "app-language",
   queuedMessages: "message-queue",
-  /** Modelo selecionado no desktop. Lido por quem responde sem conversa no
-   *  laço: o companion HTTP e o sampling de um app conectado (lib/mcp). */
+  /** Model selected on the desktop. Read by whoever answers without a conversation in the
+   *  loop: the companion HTTP and the sampling of a connected app (lib/mcp). */
   selectedModel: "companion/selected-model",
 } as const

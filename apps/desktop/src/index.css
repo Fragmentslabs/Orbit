@@ -166,16 +166,16 @@
   }
 }
 /**
- * Camada de seleção do visualizador de PDF.
+ * Selection layer of the PDF viewer.
  *
- * A página é uma imagem e o texto por cima é transparente, existindo só para
- * dar seleção e cópia. Sem uma regra de ::selection o Chromium pinta o
- * selecionado com a cor de destaque do sistema, IGNORANDO o transparente — e o
- * texto reaparece deslocado sobre o da imagem, como se estivesse sendo escrito
- * em cima dela.
+ * The page is an image and the text over it is transparent, existing only to
+ * give selection and copy. Without a ::selection rule Chromium paints the
+ * selection with the system highlight color, IGNORING the transparent — and the
+ * text shows up shifted over the one in the image, as if it were being written
+ * on top of it.
  *
- * Medido por captura de tela: sem regra, 1338 pixels escuros na área do texto
- * selecionado; declarando o fundo, zero — e a faixa continua visível.
+ * Measured by screenshot: without the rule, 1338 dark pixels in the text area
+ * of the selection; declaring the background, zero — and the highlight stays visible.
  */
 .pdf-text-layer ::selection {
   color: transparent;
@@ -183,9 +183,9 @@
 }
 
 /**
- * Fantasma de uma conversa arrastada (session-drag.tsx): ao sair da lista ele
- * "levanta" — cresce um pouco, inclina e ganha sombra —, e é assim que segue o
- * cursor até ser solto.
+ * Ghost of a dragged conversation (session-drag.tsx): as it leaves the list it
+ * "lifts" — grows a little, tilts and gains a shadow —, and that is how it follows the
+ * cursor until it is dropped.
  */
 @keyframes session-drag-lift {
   from {
@@ -209,8 +209,8 @@
 }
 
 /**
- * Botão de falar enquanto o motor GERA o áudio (antes do primeiro pedaço
- * tocar): três barras subindo e descendo em sequência — "vem som aí".
+ * Speak button while the engine GENERATES the audio (before the first chunk
+ * plays): three bars going up and down in sequence — "sound is coming".
  */
 @keyframes voice-gen-bar {
   0%,
@@ -254,9 +254,9 @@
 }
 
 /**
- * Os três pontinhos do badge da chamada (voice-call-badge): "Ouvindo" e
- * "Falando" usam o MESMO ritmo — só o verbo muda. `currentColor` para o
- * dourado do pill valer nos dois estados sem CSS extra.
+ * The three dots of the call badge (voice-call-badge): "Listening" and
+ * "Speaking" use the SAME rhythm — only the verb changes. `currentColor` so the
+ * gold of the pill holds in both states without extra CSS.
  */
 @keyframes voice-state-dot {
   0%,
@@ -300,11 +300,11 @@
   }
 }
 
-/* Pulso do botão de conectar provedor: uma linha de 1px que sai da borda do
-   botão e caminha para fora, devagar e igual em todas as direções.
-   `transform: scale()` foi descartado aqui: o botão é muito mais largo que
-   alto, então escalar fazia a borda avançar mais nos lados do que em cima e
-   embaixo. `outline-offset` cresce em pixels — igual dos quatro lados. */
+/* Pulse of the provider connect button: a 1px line that leaves the border of the
+   button and walks outward, slowly and evenly in all directions.
+   `transform: scale()` was discarded here: the button is much wider than it is
+   tall, so scaling made the border advance more on the sides than on the top and
+   bottom. `outline-offset` grows in pixels — even on all four sides. */
 @keyframes provider-pulse {
   0% {
     outline-offset: 0;
@@ -323,8 +323,8 @@
   }
 }
 
-/* Mesmo pulso, outro bloqueio real: a pasta do modo código, que precisa ser
-   escolhida antes de enviar (ver FolderSelector). */
+/* Same pulse, another real blocker: the code mode folder, which has to be
+   chosen before sending (see FolderSelector). */
 .provider-pulse-ring,
 .folder-pulse-ring {
   outline: 1px solid var(--primary);
@@ -339,10 +339,10 @@
   }
 }
 
-/* Abertura da tela de boas-vindas: "Olá!", "Sou Orbit" e "Seu assistente
-   pessoal" se sucedem no mesmo lugar — cada uma entra, fica o tempo de leitura
-   e sai. Duração e atraso vêm do JS (chat-view), para as três falas e o
-   convite final não saírem de sincronia. */
+/* Opening of the welcome screen: "Hello!", "I am Orbit" and "Your personal
+   assistant" follow one another in the same place — each one comes in, stays for the
+   reading time and leaves. Duration and delay come from the JS (chat-view), so the three lines and
+   the final invitation do not fall out of sync. */
 @keyframes intro-greeting {
   0% {
     opacity: 0;
@@ -375,12 +375,12 @@
   }
 }
 
-/* Grifo do termo buscado dentro da mensagem (ver highlightTextIn em
-   lib/message-jump.ts): marca SÓ o texto casado, sem caixa em volta da
-   mensagem. O amarelo é o --primary do tema numa camada translúcida, que
-   funciona tanto sobre a bolha do usuário quanto sobre o texto solto da
-   resposta. O grifo é registrado/apagado em CSS.highlights, então some
-   sozinho quando a busca fecha. */
+/* Highlight of the term searched inside the message (see highlightTextIn in
+   lib/message-jump.ts): marks ONLY the matched text, without a box around the
+   message. The yellow is the theme's --primary in a translucent layer, which
+   works both over the user's bubble and over the loose text of the
+   answer. The highlight is registered/erased in CSS.highlights, so it goes away
+   on its own when the search closes. */
 ::highlight(orbit-search-hit) {
   background-color: color-mix(in oklab, var(--primary) 45%, transparent);
 }

@@ -1,12 +1,12 @@
 /**
- * Helpers para geração e parsing de QR codes de conexão.
+ * Helpers for generating and parsing connection QR codes.
  *
- * Formato do payload (JSON stringificado):
+ * Payload format (stringified JSON):
  * { "h": host, "p": port, "v": 1, "pin"?: pin }
  *
- * O PIN é opcional no payload: o QR code já é exibido lado a lado com o PIN
- * em texto claro no desktop, então incluí-lo permite conectar com um único
- * scan sem abrir mão de segurança adicional (quem vê o QR já vê o PIN).
+ * The PIN is optional in the payload: the QR code is already shown side by side with the PIN
+ * in clear text on the desktop, so including it allows connecting with a single
+ * scan without giving up additional security (whoever sees the QR already sees the PIN).
  */
 
 import type { ConnectionConfig } from './types'
@@ -14,20 +14,20 @@ import type { ConnectionConfig } from './types'
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface QrPayload {
-  /** Host (IP ou hostname). */
+  /** Host (IP or hostname). */
   h: string
-  /** Porta WebSocket. */
+  /** WebSocket port. */
   p: number
-  /** Versão do protocolo. */
+  /** Protocol version. */
   v: number
-  /** PIN de pareamento (opcional — mesmo exibido em texto ao lado do QR). */
+  /** Pairing PIN (optional — the same shown as text next to the QR). */
   pin?: string
 }
 
 // ─── Functions ───────────────────────────────────────────────────────────────
 
 /**
- * Gera o payload para exibir como QR code.
+ * Generates the payload to display as a QR code.
  */
 export function generateConnectionPayload(host: string, port: number, pin?: string): string {
   const payload: QrPayload = { h: host, p: port, v: 1, ...(pin ? { pin } : {}) }
@@ -35,8 +35,8 @@ export function generateConnectionPayload(host: string, port: number, pin?: stri
 }
 
 /**
- * Faz parse de um payload escaneado de QR code.
- * Retorna a configuração (com PIN se presente no payload) ou null se inválido.
+ * Parses a payload scanned from a QR code.
+ * Returns the configuration (with the PIN if present in the payload) or null if invalid.
  */
 export function parseConnectionPayload(data: string): Omit<ConnectionConfig, 'pin'> & { pin?: string } | null {
   try {
@@ -63,7 +63,7 @@ export function parseConnectionPayload(data: string): Omit<ConnectionConfig, 'pi
 }
 
 /**
- * Valida se um PIN tem formato aceitável (6 dígitos numéricos).
+ * Validates whether a PIN has an acceptable format (6 numeric digits).
  */
 export function isValidPin(pin: string): boolean {
   return /^\d{6}$/.test(pin)

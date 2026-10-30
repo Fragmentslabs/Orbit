@@ -12,36 +12,36 @@ import { overlayOpenContext, setOverlayOpenContext } from './open-context'
 import { frontmostForeignWindow, readSelectedText } from './selection'
 
 /**
- * A janela do overlay (⇧⌘espaço): desce no rodapé da tela, por cima de tudo,
- * com a persona, o campo de pergunta e a resposta curta.
+ * The overlay window (⇧⌘space): it comes down at the bottom of the screen, on top of
+ * everything, with the persona, the question field and the short answer.
  *
- * Decisões que valem registrar:
- *  - é uma janela PRÓPRIA, não a principal: a principal nasce maximizada e
- *    mostrar/esconder aquela custaria o flash de uma janela inteira. Esta é
- *    transparente, sem moldura, e fica pré-aquecida e escondida;
- *  - em modo chamada ela NÃO rouba o foco (`showInactive`): a pessoa continua
- *    no app dela, falando — e a seleção daquele app segue legível pelo AX;
- *  - a seleção é lida ANTES de mostrar (em modo texto o foco passa para cá, e
- *    depois disso o app em primeiro plano já é o Orbit).
+ * Decisions worth recording:
+ *  - it is a WINDOW OF ITS OWN, not the main one: the main one is born maximized and
+ *    showing/hiding it would cost the flash of a whole window. This one is
+ *    transparent, frameless, and stays pre-warmed and hidden;
+ *  - in call mode it does NOT steal the focus (`showInactive`): the person stays in
+ *    their app, talking — and that app's selection stays readable through AX;
+ *  - the selection is read BEFORE showing (in text mode the focus moves here, and
+ *    after that the app in the foreground is already Orbit).
  */
 
 export interface OverlayHost {
-  /** Preload compartilhado com as janelas do app. */
+  /** Preload shared with the app windows. */
   preload: string
-  /** Carrega o renderer do overlay (dev server ou arquivo). */
+  /** Loads the overlay renderer (dev server or file). */
   load: (win: BrowserWindow) => void
 }
 
 export const OVERLAY_WIDTH = 660
 const MARGIN_BOTTOM = 18
 /**
- * Piso da altura: o card FECHADO (~58 pt: persona + campo) mais o vão de 8 pt
- * em cima e embaixo. É piso, não tamanho — abaixo disto o card é cortado pela
- * janela e os cantos arredondados de cima viram uma linha reta.
+ * Floor for the height: the CLOSED card (~58 pt: persona + field) plus the 8 pt gap
+ * above and below. It is a floor, not a size — below this the card is cut by the
+ * window and the rounded top corners become a straight line.
  */
 const MIN_HEIGHT = 74
 const MAX_HEIGHT = 520
-/** Tempo do "tchau" antes de a janela sumir (a fala final ainda toca). */
+/** Time of the "bye" before the window goes away (the final speech still plays). */
 const FAREWELL_MS = 1200
 
 let win: BrowserWindow | null = null
@@ -49,25 +49,25 @@ let host: OverlayHost | null = null
 let loading: Promise<BrowserWindow> | null = null
 let height = MIN_HEIGHT
 /**
- * O renderer já informou a altura real do card alguma vez? Antes disso só existe
- * o piso; depois dele, a última medida vale mais que o piso — encolher a janela
- * a cada abertura cortava o card até o próximo relatório.
+ * Has the renderer ever reported the real height of the card? Before that only the
+ * floor exists; after it, the last measurement is worth more than the floor —
+ * shrinking the window on every opening cut the card until the next report.
  */
 let measured = false
 let shortcutError: string | null = null
-/** Monitor escolhido na abertura: o painel não pula de tela se o cursor sair. */
+/** Monitor chosen at the opening: the panel does not jump screens if the cursor leaves. */
 let anchorDisplay: ReturnType<typeof screen.getDisplayNearestPoint> | null = null
 /**
- * O renderer avisou que montou e já escuta `overlay:open`. Sem este aperto de
- * mão, o primeiro ⇧⌘espaço logo depois do boot podia mandar o contexto para uma
- * página que ainda estava montando — e o painel abria vazio, sem a seleção.
+ * The renderer has announced that it mounted and already listens to `overlay:open`.
+ * Without this handshake, the first ⇧⌘space right after boot could send the context to
+ * a page that was still mounting — and the panel opened empty, without the selection.
  */
 let rendererReady = false
 let resolveReady: (() => void) | null = null
 const readyPromise = new Promise<void>((resolve) => {
   resolveReady = resolve
 })
-/** `before-quit`: aí o close da janela pode fechar de verdade. */
+/** `before-quit`: that is when the window's close can really close. */
 let disposing = false
 
 export function markOverlayReady(): void {
@@ -75,16 +75,16 @@ export function markOverlayReady(): void {
   resolveReady?.()
 }
 
-/** Chamado no before-quit: sem isto o `close` do painel bloquearia a saída. */
+/** Called in before-quit: without this the panel's `close` would block the exit. */
 export function disposeOverlay(): void {
   disposing = true
   const target = getOverlayWindow()
   if (target && !target.isDestroyed()) target.destroy()
 }
 /**
- * Seleção lida na ABERTURA do painel. Em modo texto o foco passa para cá, e
- * apps que não expõem AXSelectedText não podem mais ser copiados (Cmd+C iria
- * para o Orbit) — este é o único caminho para o "traduz isso" deles.
+ * Selection read at the OPENING of the panel. In text mode the focus moves here, and
+ * apps that do not expose AXSelectedText can no longer be copied (Cmd+C would go to
+ * Orbit) — this is the only path for their "translate this".
  */
 let lastSelection: { text: string; app: string | null; at: number } | null = null
 
@@ -92,7 +92,7 @@ export function lastOverlaySelection(): { text: string; app: string | null; at: 
   return lastSelection
 }
 
-/** Anota o app e a janela da frente na abertura (ver open-context.ts). */
+/** Notes the app and the front window at the opening (see open-context.ts). */
 async function captureOpenContext(): Promise<void> {
   const front = await frontmostForeignWindow().catch(() => null)
   setOverlayOpenContext(
@@ -114,12 +114,12 @@ function overlaySettings(): OverlaySettings {
   return getAppSettings().overlay
 }
 
-/** Monitor onde está o cursor: é sobre ele que a pessoa quer o painel. */
+/** Monitor where the cursor is: that is the one the person wants the panel on. */
 function targetDisplay() {
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
 }
 
-/** Mantém a borda de baixo ancorada: crescer para cima não pode empurrar o painel para fora. */
+/** Keeps the bottom edge anchored: growing upwards cannot push the panel off screen. */
 function place(nextHeight: number): void {
   const target = getOverlayWindow()
   if (!target) return
@@ -137,7 +137,7 @@ function createWindow(): Promise<BrowserWindow> {
   const existing = getOverlayWindow()
   if (existing) return Promise.resolve(existing)
   if (loading) return loading
-  if (!host) return Promise.reject(new Error('setupOverlay() não foi chamado'))
+  if (!host) return Promise.reject(new Error('setupOverlay() was not called'))
 
   const created = new BrowserWindow({
     width: OVERLAY_WIDTH,
@@ -153,10 +153,10 @@ function createWindow(): Promise<BrowserWindow> {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    // NADA de `vibrancy`/`backgroundMaterial`: o material nativo pinta o
-    // RETÂNGULO INTEIRO da janela, e o painel (com margem para a sombra e
-    // altura variável) aparecia com um segundo card de vidro atrás dele. O
-    // card é um só, desenhado no CSS, e a transparência é o alpha dele.
+    // NO `vibrancy`/`backgroundMaterial`: the native material paints the
+    // ENTIRE RECTANGLE of the window, and the panel (with a margin for the shadow and a
+    // variable height) appeared with a second glass card behind it. There is
+    // only one card, drawn in CSS, and the transparency is its alpha.
     webPreferences: {
       preload: host.preload,
       backgroundThrottling: false,
@@ -167,45 +167,45 @@ function createWindow(): Promise<BrowserWindow> {
   created.setAlwaysOnTop(true, 'floating')
   floatAboveFullScreen(created)
   created.setMenuBarVisibility(false)
-  // A pessoa vê o painel; a captura de tela não. É o que permite o `see_screen`
-  // tirar o print com o painel na frente SEM esconder a janela — antes ela
-  // sumia por um instante a cada print. Efeito colateral (bom, na maioria dos
-  // casos): o painel também fica fora de prints manuais e de compartilhamento
-  // de tela no Zoom/Meet.
+  // The person sees the panel; the screenshot does not. It is what lets `see_screen`
+  // take the print with the panel in front WITHOUT hiding the window — before, it
+  // disappeared for an instant on every print. Side effect (a good one, in most
+  // cases): the panel also stays out of manual screenshots and of screen
+  // sharing on Zoom/Meet.
   created.setContentProtection(true)
   created.on('closed', () => {
     if (win === created) win = null
     loading = null
   })
-  // O painel não é uma janela de trabalho: fechá-lo (Cmd+W) só esconde — menos
-  // na saída do app, quando a janela tem de morrer junto.
+  // The panel is not a work window: closing it (Cmd+W) only hides — except
+  // when the app exits, when the window has to die with it.
   created.on('close', (event) => {
     if (disposing || created.isDestroyed()) return
     event.preventDefault()
     hideOverlay()
   })
   created.webContents.on('render-process-gone', (_event, details) => {
-    console.error(`[overlay] processo do renderer encerrado: ${details.reason}`)
+    console.error(`[overlay] renderer process exited: ${details.reason}`)
   })
 
   loading = new Promise<BrowserWindow>((resolve) => {
     created.webContents.once('did-finish-load', () => resolve(created))
     host!.load(created)
-    // Se a página nunca terminar de carregar, a promessa não pode segurar o
-    // atalho para sempre.
+    // If the page never finishes loading, the promise cannot hold the
+    // shortcut forever.
     setTimeout(() => resolve(created), 4000)
   })
   place(MIN_HEIGHT)
   return loading
 }
 
-/** Cria a janela escondida no boot: o primeiro ⇧⌘espaço tem que ser instantâneo. */
+/** Creates the hidden window at boot: the first ⇧⌘space must be instant. */
 export function prewarmOverlay(): void {
   if (!overlaySettings().enabled) return
   void createWindow().catch(() => undefined)
 }
 
-/** A voz está pronta para o overlay abrir falando? (TTS e ditado ligados) */
+/** Is the voice ready for the overlay to open talking? (TTS and dictation on) */
 function callReady(): boolean {
   const voice = getAppSettings().voice
   return voice.tts.enabled && voice.stt.enabled
@@ -214,7 +214,7 @@ function callReady(): boolean {
 export async function openOverlay(options?: { call?: boolean }): Promise<void> {
   const target = await createWindow().catch(() => null)
   if (!target || target.isDestroyed()) return
-  // Primeira abertura: espera o renderer montar (ele avisa por overlay:ready).
+  // First opening: wait for the renderer to mount (it announces it via overlay:ready).
   if (!rendererReady) {
     await Promise.race([readyPromise, new Promise((resolve) => setTimeout(resolve, 1500))])
   }
@@ -226,18 +226,18 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
 
   const context: OverlayContext = {
     call,
-    // A seleção chega num segundo evento: lê-la aqui custaria dois `osascript`
-    // (~200-400 ms) na frente de um atalho que precisa ser instantâneo.
+    // The selection arrives in a second event: reading it here would cost two `osascript`
+    // (~200-400 ms) in front of a shortcut that has to be instant.
     selection: null,
     selectionApp: null,
     settings,
     at: Date.now(),
   }
 
-  // Reancora no monitor do cursor SEM encolher para o piso: janela menor que o
-  // card corta o topo dele e os cantos de cima saem retos. Depois da primeira
-  // medida vale a última altura; o renderer reporta a exata assim que abre e o
-  // vão a mais fica transparente (a janela não tem fundo).
+  // Re-anchors on the cursor monitor WITHOUT shrinking to the floor: a window smaller
+  // than the card cuts its top and the top corners come out straight. After the first
+  // measurement the last height applies; the renderer reports the exact one as soon as
+  // it opens and the extra gap stays transparent (the window has no background).
   place(measured ? height : MIN_HEIGHT)
   if (!target.isVisible()) {
     if (call) target.showInactive()
@@ -249,7 +249,7 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
   target.setAlwaysOnTop(true, 'floating')
   target.webContents.send('overlay:open', context)
 
-  // Em paralelo com a seleção e fora do caminho do atalho: o painel já abriu.
+  // In parallel with the selection and out of the shortcut's path: the panel is already open.
   void captureOpenContext().catch(() => undefined)
   void readSelectedText()
     .catch(() => null)
@@ -266,16 +266,16 @@ export async function openOverlay(options?: { call?: boolean }): Promise<void> {
 }
 
 /**
- * Uma janela do Orbit estava em uso quando o painel abriu? Se sim, é para lá
- * que o foco volta ao fechar; se não, a pessoa estava em outro app.
+ * Was an Orbit window in use when the panel opened? If so, that is where the focus
+ * returns on close; if not, the person was in another app.
  */
 let orbitWasActive = false
 
 /**
- * Fechar o painel não pode deixar o macOS escolher quem ativa: ao esconder a
- * janela com foco, ele traz a principal do Orbit para a frente e só depois a
- * pessoa volta ao app de antes — um flash. Por isso o foco é devolvido ao app
- * em que ela estava ANTES de o painel sumir.
+ * Closing the panel cannot let macOS choose who activates: when hiding the window
+ * that has the focus, it brings Orbit's main one to the front and only then the
+ * person goes back to the previous app — a flash. That is why the focus is given
+ * back to the app the person was in BEFORE the panel goes away.
  */
 async function giveFocusBack(closing: BrowserWindow): Promise<void> {
   if (process.platform !== 'darwin' || orbitWasActive) return
@@ -284,8 +284,8 @@ async function giveFocusBack(closing: BrowserWindow): Promise<void> {
     await getComputerDriver().act({ op: 'activate', pid: front.pid }).catch(() => undefined)
     return
   }
-  // Sem saber onde a pessoa estava: se só o painel estava à vista, esconder o
-  // app devolve o foco ao anterior; com a janela principal à vista, deixa.
+  // Without knowing where the person was: if only the panel was visible, hiding the
+  // app gives the focus back to the previous one; with the main window visible, it leaves it.
   const othersVisible = BrowserWindow.getAllWindows().some((other) => other !== closing && !other.isDestroyed() && other.isVisible())
   if (!othersVisible) app.hide()
 }
@@ -310,14 +310,14 @@ export function toggleOverlay(options?: { call?: boolean }): void {
   else void openOverlay(options)
 }
 
-/** O renderer mede o conteúdo e pede a altura; a janela acompanha. */
+/** The renderer measures the content and asks for the height; the window follows. */
 export function resizeOverlay(nextHeight: number): void {
   if (!getOverlayWindow()) return
   measured = true
   place(nextHeight)
 }
 
-/** Eventos do chat chegam também ao overlay — ele pode ser quem fez a pergunta. */
+/** Chat events reach the overlay too — it may be the one that asked the question. */
 export function forwardToOverlay(channel: string, payload: unknown): void {
   const target = getOverlayWindow()
   if (!target) return
@@ -326,9 +326,9 @@ export function forwardToOverlay(channel: string, payload: unknown): void {
 }
 
 /**
- * A tool `end_call` vale em qualquer lugar onde exista uma conversa falada: no
- * overlay (que some) e no modo chamada da janela principal (que volta para o
- * texto). Um evento, todos os renderers escutam.
+ * The `end_call` tool is valid anywhere a spoken conversation exists: in the overlay
+ * (which goes away) and in call mode of the main window (which goes back to text).
+ * One event, every renderer listens to it.
  */
 export function endCallEverywhere(reason?: string): void {
   for (const other of BrowserWindow.getAllWindows()) {
@@ -338,8 +338,8 @@ export function endCallEverywhere(reason?: string): void {
 }
 
 /**
- * O agente encerrou a conversa ("não era nada, tchau Orbit"): desliga a escuta
- * e some com o painel. O atraso deixa a despedida ser falada.
+ * The agent ended the conversation ("it was nothing, bye Orbit"): it turns off the
+ * listening and makes the panel go away. The delay lets the goodbye be spoken.
  */
 export function endOverlayCall(reason?: string): void {
   const target = getOverlayWindow()
@@ -351,7 +351,7 @@ export function endOverlayCall(reason?: string): void {
   }, FAREWELL_MS)
 }
 
-/** Registra o atalho global conforme as preferências. Devolve o conflito, se houver. */
+/** Registers the global shortcut according to the preferences. Returns the conflict, if any. */
 export function syncOverlayShortcut(): { ok: boolean; error?: string } {
   globalShortcut.unregister(OVERLAY_SHORTCUT)
   shortcutError = null
@@ -375,14 +375,14 @@ export function overlayShortcutStatus(): { shortcut: string; ok: boolean; error?
   }
 }
 
-/** Preferências mudando com o painel aberto: atalho, opacidade e persona ao vivo. */
+/** Preferences changing with the panel open: shortcut, opacity and persona live. */
 export function watchOverlaySettings(): void {
   onAppSettingsChange((next, prev) => {
     if (next.overlay.enabled !== prev.overlay.enabled) syncOverlayShortcut()
     if (!getOverlayWindow()) return
-    // Qualquer mudança no bloco vale, inclusive o MODELO: a janela é
-    // pré-aquecida e não recarrega a cada abertura, então sem este repasse ela
-    // seguiria com o modelo escolhido no boot.
+    // Any change in the block counts, including the MODEL: the window is
+    // pre-warmed and does not reload on every opening, so without this relay it
+    // would keep the model chosen at boot.
     if (JSON.stringify(next.overlay) !== JSON.stringify(prev.overlay)) {
       forwardToOverlay('overlay:event', { type: 'settings', settings: next.overlay } satisfies OverlayEvent)
     }

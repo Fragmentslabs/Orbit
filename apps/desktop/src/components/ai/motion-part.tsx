@@ -8,22 +8,22 @@ import { motionRefOf } from "@/src/lib/motion-part-ref"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Card da peça de motion (motion_preview, motion_write, motion_edit): o caminho
- * de volta para a composição.
+ * Card of the motion piece (motion_preview, motion_write, motion_edit): the way
+ * back to the composition.
  *
- * A aba do painel vive em MEMÓRIA — fechá-la era perder a peça de vista, mesmo
- * com ela inteira no disco, porque nada a listava na conversa. Este card é o que
- * fica: é desenhado da PRÓPRIA tool part (como o card de skill), então já está
- * no histórico quando a conversa é reaberta, sem depender de nenhum registro
- * posterior.
+ * The panel tab lives in MEMORY — closing it meant losing sight of the piece, even
+ * with it entirely on disk, because nothing listed it in the conversation. This card is what
+ * remains: it is drawn from the tool part ITSELF (like the skill card), so it is already
+ * in the history when the conversation is reopened, without depending on any later
+ * record.
  *
- * Os dois modos endereçam a peça de jeitos diferentes e o card cobre os dois —
- * o caminho da pasta do projeto (código) e o nome da composição da conversa
- * (chat). Ver `motionRefOf`.
+ * The two modes address the piece in different ways and the card covers both —
+ * the project folder path (code) and the name of the conversation composition
+ * (chat). See `motionRefOf`.
  *
- * O id da composição não vem no card: quem traduz referência em peça é o main,
- * que é o dono do registro (`motion.json`). O renderer não conhece pasta de
- * projeto — e no chat não há pasta nenhuma para conhecer.
+ * The composition id does not come in the card: the main process is what translates a reference into a piece,
+ * and it owns the registry (`motion.json`). The renderer does not know the project
+ * folder — and in chat there is no folder at all to know.
  */
 
 export function MotionPartView({ part, sessionId }: { part: ToolPart; sessionId?: string }) {
@@ -34,8 +34,8 @@ export function MotionPartView({ part, sessionId }: { part: ToolPart; sessionId?
   const id = ref?.id
   const path = ref?.path
   const name = ref?.name
-  // Composição da conversa precisa da sessão para ser encontrada; a do projeto
-  // se resolve pelo caminho sozinha.
+  // The conversation composition needs the session to be found; the project
+  // one resolves itself through the path.
   const canOpen = Boolean(id || path || (name && sessionId))
 
   const open = useCallback(() => {
@@ -49,8 +49,8 @@ export function MotionPartView({ part, sessionId }: { part: ToolPart; sessionId?
       .finally(() => setOpening(false))
   }, [canOpen, opening, id, path, name, sessionId])
 
-  // Sem referência não há o que reabrir — e uma peça que falhou já é dita em
-  // texto pelo agente, que viu o erro da tool.
+  // Without a reference there is nothing to reopen — and a piece that failed is already said in
+  // text by the agent, which saw the tool's error.
   if (!ref || part.state === "error") return null
 
   return (

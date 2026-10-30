@@ -56,23 +56,23 @@ import {
   drawerTranslateX,
 } from '~/components/layout/sidebar-anim'
 
-/** Mesma chave do desktop (app-sidebar) — pastas abertas/fechadas persistidas. */
+/** Same key as the desktop (app-sidebar) — open/closed folders persisted. */
 const FOLDER_EXPANDED_KEY = 'orbit.sidebar.folder-expanded'
 
-/** Itens sentinela para seções vazias — SectionList não chama renderItem
- *  para seções com data vazio, então o texto de estado vazio é um item. */
+/** Sentinel items for empty sections — SectionList does not call renderItem
+ *  for sections with empty data, so the empty-state text is an item. */
 const EMPTY_CHATS_ITEM = { __empty: 'chats-empty' as const }
 const EMPTY_FOLDERS_ITEM = { __empty: 'folders-empty' as const }
 
-/** Array vazio estável — identidade fixa evita quebrar o memo do SessionRow. */
+/** Stable empty array — a fixed identity avoids breaking the memo of SessionRow. */
 const EMPTY_CHILDREN: SessionInfo[] = []
 
 type EmptyItem = { __empty: 'chats-empty' | 'folders-empty' }
 type ChatListItem = SessionInfo | FolderInfo | EmptyItem
 
-/** Seções da lista virtualizada: cabeçalhos de grupo (acordeão), pastas
- *  (recolhidas + expandidas), chats (fixados no topo, como no desktop) e
- *  arquivados. */
+/** Sections of the virtualized list: group headers (accordion), folders
+ *  (collapsed + expanded), chats (pinned at the top, as on the desktop) and
+ *  archived. */
 type ChatListSection = SectionListData<ChatListItem> & {
   kind:
     | 'folders-group'
@@ -82,11 +82,11 @@ type ChatListSection = SectionListData<ChatListItem> & {
     | 'chats-group'
     | 'chats'
     | 'chats-empty'
-    | 'rotinas-group'
-    | 'rotinas'
+    | 'routines-group'
+    | 'routines'
     | 'archived-group'
     | 'archived'
-    /** Pasta ATIVA que guarda chats arquivados — agrupamento só de leitura. */
+    /** ACTIVE folder that holds archived chats — read-only grouping. */
     | 'archived-folder'
   folder?: FolderInfo
 }
@@ -126,13 +126,13 @@ export function Sidebar() {
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
   const organizeSidebar = useSessionStore((s) => s.organizeSidebar)
 
-  // Posição do drawer vive no módulo de animação — o gesto de swipe
-  // (useSidebarSwipe) arrasta os mesmos valores durante o toque.
+  // Drawer position lives in the animation module — the swipe gesture
+  // (useSidebarSwipe) drags the same values during the touch.
   useEffect(() => {
     animateDrawer(sidebarOpen)
   }, [sidebarOpen])
 
-  // ─── Modo de seleção (chats e pastas) ────────────────────────────────────
+  // ─── Selection mode (chats and folders) ──────────────────────────────────
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
@@ -149,8 +149,8 @@ export function Sidebar() {
     setSelectedFolderIds(new Set())
   }
 
-  // Estável: um useCallback lá embaixo depende dela e era recriado a cada
-  // render por causa disto. Só usa o setter do useState, que já é estável.
+  // Stable: a useCallback further down depends on it and was recreated on every
+  // render because of this. It only uses the useState setter, which is already stable.
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -176,7 +176,7 @@ export function Sidebar() {
     }
   }, [selectedIds.size, selectedFolderIds.size, selectionMode])
 
-  // ─── Pastas em acordeão (mesma lógica do desktop: fechadas por padrão, estado persistido) ──
+  // ─── Folders in accordion (same logic as the desktop: closed by default, state persisted) ──
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const expandedLoadedRef = useRef(false)
 
@@ -205,11 +205,11 @@ export function Sidebar() {
     })
   }, [])
 
-  // ─── Agrupadores em acordeão (mesma lógica do desktop: Pastas e Chats
-  // abertos por padrão, Arquivados recolhido; estado só em memória) ──────────
-  const [groupsExpanded, setGroupsExpanded] = useState({ folders: true, chats: true, rotinas: true, archived: false })
+  // ─── Accordion groupers (same logic as the desktop: Folders and Chats open
+  // by default, Archived collapsed; state in memory only) ────────────────────
+  const [groupsExpanded, setGroupsExpanded] = useState({ folders: true, chats: true, routines: true, archived: false })
 
-  const toggleGroup = useCallback((key: 'folders' | 'chats' | 'rotinas' | 'archived') => {
+  const toggleGroup = useCallback((key: 'folders' | 'chats' | 'routines' | 'archived') => {
     setGroupsExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
@@ -237,7 +237,7 @@ export function Sidebar() {
     )
   }
 
-  // ─── Menu de ações (long-press) ──────────────────────────────────────────
+  // ─── Action menu (long-press) ────────────────────────────────────────────
   const [sessionMenu, setSessionMenu] = useState<string | null>(null)
   const [folderMenu, setFolderMenu] = useState<string | null>(null)
   const [renamingSession, setRenamingSession] = useState<string | null>(null)
@@ -340,22 +340,22 @@ export function Sidebar() {
     router.push('/(main)')
   }, [closeSidebar, router])
 
-  /** "+" da pasta: chat novo já apontando para a pasta e para o workspace do
-   *  chat mais recente dela — ou, com a pasta VAZIA, para a memória da pasta
-   *  (`folder.workspace`, gravada pelo primeiro chat que entrou nela), como no
-   *  desktop. A sessão só nasce no 1º envio — o pendingFolder guarda o destino
-   *  até lá. */
+  /** "+" of the folder: a new chat already pointing at the folder and at the workspace of
+   *  its most recent chat — or, with the folder EMPTY, at the memory of the folder
+   *  (`folder.workspace`, written by the first chat that entered it), as on the
+   *  desktop. The session is only born on the 1st send — pendingFolder holds the
+   *  destination until then. */
   const handleNewChatInFolder = useCallback((folder: FolderInfo) => {
-    const maisRecente = sessions
+    const mostRecent = sessions
       .filter((s) => s.folderId === folder.id)
       .reduce<SessionInfo | undefined>(
-        (melhor, s) => (melhor && s.updatedAt <= melhor.updatedAt ? melhor : s),
+        (best, s) => (best && s.updatedAt <= best.updatedAt ? best : s),
         undefined,
       )
-    const pastas = maisRecente?.directory
-      ? [maisRecente.directory, ...(maisRecente.extraDirectories ?? [])]
+    const folders = mostRecent?.directory
+      ? [mostRecent.directory, ...(mostRecent.extraDirectories ?? [])]
       : folder.workspace
-    if (pastas?.length) useDraftFolders.getState().setFolders(pastas)
+    if (folders?.length) useDraftFolders.getState().setFolders(folders)
     useDraftFolders.getState().setPendingFolder(folder.id)
     if (folder.mode !== mode) setMode(folder.mode)
     closeSidebar()
@@ -372,11 +372,11 @@ export function Sidebar() {
   }, [selectionMode, toggleSelected, closeSidebar, router])
 
   const topItems: NavItem[] = [
-    // Esteira só existe no modo código (pipeline de tasks sem chat).
-    { label: t('sidebar.esteira'), icon: Layers, view: 'esteira', codeOnly: true },
-    // Rotinas existe nos dois modos — a tela lista/cria só as do modo ativo
-    // (mesma lógica da esteira/rotinas do desktop).
-    { label: t('sidebar.rotinas'), icon: CalendarClock, view: 'rotinas' },
+    // The pipeline only exists in code mode (tasks run phase by phase, no chat).
+    { label: t('sidebar.pipeline'), icon: Layers, view: 'pipeline', codeOnly: true },
+    // Routines exist in both modes — the screen lists/creates only the ones of
+    // the active mode (same logic as the desktop pipeline/routines).
+    { label: t('sidebar.routines'), icon: CalendarClock, view: 'routines' },
     { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
     { label: t('sidebar.usage'), icon: BarChart3, view: 'usage' },
     { label: t('sidebar.media'), icon: Images, view: 'media' },
@@ -390,7 +390,7 @@ export function Sidebar() {
 
   const filteredTopItems = topItems.filter((item) => !item.codeOnly || mode === 'code')
 
-  // ─── Lista de chats agrupada: fixados / pastas / chats / rotinas / arquivados ──
+  // ─── Grouped chat list: pinned / folders / chats / routines / archived ─────
   const {
     pinned,
     folderGroups,
@@ -400,21 +400,22 @@ export function Sidebar() {
     archivedLoose,
     routineSessions,
   } = useMemo(() => {
-    // Posição de um chat = atividade do bloco dele (ele OU o sub-chat/worker
-    // aninhado mais recente) — mesma regra do app-sidebar do desktop: mexer
-    // numa conversa lateral sobe o pai junto, sem depender só do chat principal.
+    // Position of a chat = activity of its block (itself OR the most recent
+    // nested sub-chat/worker) — same rule as the desktop's app-sidebar: moving
+    // a side conversation brings the parent up with it, without depending only
+    // on the main chat.
     const activity = sessionActivityMap(sessions)
     const activityOf = (s: SessionInfo) => activity.get(s.id) ?? s.updatedAt
-    // Chats de rotina saem da listagem normal: eles vivem no grupo "Rotinas"
-    // logo abaixo, e apareceriam duplicados (e afogariam os recentes) se
-    // também entrassem em "Conversas" ou nas pastas — mesmo critério do
-    // app-sidebar do desktop.
+    // Routine chats leave the normal listing: they live in the "Routines" group
+    // right below, and would show up duplicated (and drown the recents) if they
+    // also went into "Chats" or into the folders — same criterion as the
+    // desktop's app-sidebar.
     const modeSessions = sessions.filter((s) => s.mode === mode && !s.parentId)
-    // Grupo "Rotinas" do modo ativo: a sessão de cada execução herda o modo da
-    // rotina (scheduler.ts), então a sidebar de chat só lista as rotinas de
-    // chat e a de código só as de código. Sem filtro de arquivado: os chats de
-    // rotina não entram no grupo "Arquivados", então arquivar um faria ele
-    // sumir da sidebar inteira.
+    // "Routines" group of the active mode: the session of each execution
+    // inherits the routine's mode (scheduler.ts), so the chat sidebar lists only
+    // the chat routines and the code one only the code ones. No archived filter:
+    // routine chats do not go into the "Archived" group, so archiving one would
+    // make it vanish from the whole sidebar.
     const routineSessions = modeSessions
       .filter((s) => !!s.routineId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -423,21 +424,21 @@ export function Sidebar() {
       .filter((s) => s.archived && !s.routineId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
     const modeFolders = folders.filter((f) => f.mode === mode)
-    // Pasta arquivada sai do grupo "Pastas" e vai para "Arquivados" com os
-    // chats dela — mesma separação do app-sidebar do desktop.
+    // An archived folder leaves the "Folders" group and goes to "Archived" with
+    // its chats — same split as the desktop's app-sidebar.
     const activeFolders = modeFolders.filter((f) => !f.archived)
     const archivedFolders = modeFolders.filter((f) => f.archived)
     const archivedFolderIds = new Set(archivedFolders.map((f) => f.id))
-    // Só pastas ATIVAS seguram chats fora da raiz: um chat desarquivado dentro
-    // de uma pasta arquivada cai nos recentes (a pasta continua arquivada).
+    // Only ACTIVE folders hold chats out of the root: an unarchived chat inside
+    // an archived folder falls into the recents (the folder stays archived).
     const rootSessions = activeSessions.filter(
       (s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId),
     )
     const pinned = rootSessions.filter((s) => s.pinned).sort((a, b) => activityOf(b) - activityOf(a))
     const recent = rootSessions.filter((s) => !s.pinned).sort((a, b) => activityOf(b) - activityOf(a))
-    // Ordem das pastas segue o desktop: fixadas primeiro, depois por atividade
-    // (sessão mais recente dentro da pasta) — dentre as fixadas, mais recentes
-    // primeiro.
+    // Folder order follows the desktop: pinned first, then by activity
+    // (most recent session inside the folder) — among the pinned ones, the most recent
+    // first.
     const folderActivity = (folderId: string) =>
       activeSessions
         .filter((s) => s.folderId === folderId)
@@ -453,11 +454,11 @@ export function Sidebar() {
         .sort((a, b) => activityOf(b) - activityOf(a)),
     }))
 
-    // ── Arquivados ──
-    // Pastas arquivadas levam os próprios chats; chats arquivados que ainda
-    // pertencem a uma pasta ATIVA ganham um agrupamento espelho (só leitura)
-    // logo abaixo — sem ele perderiam a referência da pasta de origem; o resto
-    // fica solto.
+    // ── Archived ────
+    // Archived folders bring their own chats; archived chats that still
+    // belong to an ACTIVE folder get a mirror grouping (read-only)
+    // right below — without it they would lose the reference to the source folder; the rest
+    // stays loose.
     const archivedFolderGroups = [...archivedFolders]
       .sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
@@ -477,8 +478,8 @@ export function Sidebar() {
         folder,
         sessions: archivedInActiveFolders.filter((s) => s.folderId === folder.id),
       }))
-    // Solto = o que não coube em nenhum agrupamento acima (inclui o caso raro
-    // de folderId apontando para pasta que não existe mais).
+    // Loose = what did not fit into any grouping above (includes the rare case
+    // of a folderId pointing to a folder that no longer exists).
     const grouped = new Set(
       [...archivedFolderGroups, ...archivedMirrorGroups].flatMap((g) => g.sessions.map((s) => s.id)),
     )
@@ -495,9 +496,9 @@ export function Sidebar() {
     }
   }, [sessions, folders, mode])
 
-  // ─── Subchats (workers/forks) — agrupados sob o chat pai, como o desktop
-  // (childrenByParent em app-sidebar): o pai ganha um chevron colado no título
-  // e os subchats ficam indentados com linha vertical. ────────────────────────────────────────────────
+  // ─── Subchats (workers/forks) — grouped under the parent chat, like the desktop
+  // (childrenByParent in app-sidebar): the parent gets a chevron glued to the title
+  // and the subchats stay indented with a vertical line. ────────────────────────────────────────────────
   const childrenByParent = useMemo(() => {
     const map: Record<string, SessionInfo[]> = {}
     for (const s of sessions) {
@@ -507,37 +508,37 @@ export function Sidebar() {
     return map
   }, [sessions])
 
-  // Expansão dos espelhos de pasta em "Arquivados" — estado próprio e só em
-  // memória, como o useState(false) do ArchivedFolderGroup no desktop.
+  // Expansion of the folder mirrors in "Archived" — own state and in
+  // memory only, like the useState(false) of ArchivedFolderGroup on the desktop.
   const [expandedMirrors, setExpandedMirrors] = useState<Record<string, boolean>>({})
   const toggleMirror = useCallback((id: string) => {
     setExpandedMirrors((prev) => ({ ...prev, [id]: !prev[id] }))
   }, [])
 
-  // Subchats abertos por padrão (igual ao useState(true) do desktop); estado
-  // só em memória.
+  // Subchats open by default (same as the desktop's useState(true)); state
+  // in memory only.
   const [childrenExpanded, setChildrenExpanded] = useState<Record<string, boolean>>({})
   const toggleChildren = useCallback((id: string) => {
     setChildrenExpanded((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
   }, [])
 
-  // Seções da SectionList. Cada agrupador (Pastas/Chats/Arquivados) abre com
-  // uma seção-só-cabeçalho (o acordeão); o conteúdo de cada grupo só entra na
-  // lista quando o grupo está aberto. Dentro de "Pastas" a ordem de
-  // `folderGroups` é preservada: pastas recolhidas viram itens de uma seção
-  // "Pastas" e pastas abertas viram seções próprias (header = linha da pasta,
-  // dados = sessões dela) inseridas NA POSIÇÃO da pasta — assim expandir/
-  // recolher não move a pasta de lugar. Cada linha da lista fica virtualizada,
-  // então trocar de modo monta só ~12 células de uma vez.
+  // Sections of the SectionList. Each grouper (Folders/Chats/Archived) opens with
+  // a header-only section (the accordion); the content of each group only enters the
+  // list when the group is open. Inside "Folders" the order of
+  // `folderGroups` is preserved: collapsed folders become items of a "Folders"
+  // section and open folders become sections of their own (header = folder row,
+  // data = its sessions) inserted AT THE POSITION of the folder — so expanding/
+  // collapsing does not move the folder around. Each row of the list is virtualized,
+  // so switching mode mounts only ~12 cells at once.
   const sections = useMemo<ChatListSection[]>(() => {
     const out: ChatListSection[] = []
 
-    // ── Grupo "Pastas" (acordeão) ──
+    // ── "Folders" (accordion) ──────
     out.push({ kind: 'folders-group', data: [] })
     if (groupsExpanded.folders) {
       if (folderGroups.length > 0) {
-        // Executa em runs: blocos contíguos de pastas recolhidas formam uma
-        // seção; cada pasta aberta vira uma seção própria no meio do caminho.
+        // Runs at a time: contiguous blocks of collapsed folders form one
+        // section; each open folder becomes a section of its own along the way.
         let collapsedRun: FolderInfo[] = []
         for (const g of folderGroups) {
           if (expandedFolders[g.folder.id]) {
@@ -556,8 +557,8 @@ export function Sidebar() {
       }
     }
 
-    // ── Grupo "Chats" (acordeão) — fixados no topo da própria seção, como no
-    // desktop (sem sub-seção "Fixados"; cada fixado mostra o ícone de pin) ──
+    // ── "Chats" group (accordion) — pinned at the top of its own section, as on the
+    // desktop (no "Pinned" sub-section; each pinned one shows the pin icon) ──
     out.push({ kind: 'chats-group', data: [] })
     if (groupsExpanded.chats) {
       if (pinned.length > 0 || recent.length > 0) {
@@ -567,15 +568,15 @@ export function Sidebar() {
       }
     }
 
-    // ── Grupo "Rotinas" do modo ativo (acordeão, só quando existe conteúdo) ──
+    // ── "Routines" group of the active mode (accordion, only when it has content) ──
     if (routineSessions.length > 0) {
-      out.push({ kind: 'rotinas-group', data: [] })
-      if (groupsExpanded.rotinas) {
-        out.push({ kind: 'rotinas', data: routineSessions })
+      out.push({ kind: 'routines-group', data: [] })
+      if (groupsExpanded.routines) {
+        out.push({ kind: 'routines', data: routineSessions })
       }
     }
 
-    // ── Grupo "Arquivados" (acordeão, só quando existe conteúdo) ──
+    // ── "Archived" group (accordion, only when there is content) ──
     if (
       archivedFolderGroups.length > 0 ||
       archivedMirrorGroups.length > 0 ||
@@ -583,8 +584,8 @@ export function Sidebar() {
     ) {
       out.push({ kind: 'archived-group', data: [] })
       if (groupsExpanded.archived) {
-        // Pastas arquivadas primeiro — linhas de pasta de verdade (com menu de
-        // desarquivar), nos mesmos runs usados no grupo "Pastas".
+        // Archived folders first — real folder rows (with an unarchive menu),
+        // in the same runs used in the "Folders" group.
         let collapsedRun: FolderInfo[] = []
         for (const g of archivedFolderGroups) {
           if (expandedFolders[g.folder.id]) {
@@ -599,8 +600,8 @@ export function Sidebar() {
         }
         if (collapsedRun.length > 0) out.push({ kind: 'folders', data: collapsedRun })
 
-        // Depois os espelhos das pastas ativas. A expansão tem estado próprio:
-        // compartilhar o do grupo "Pastas" abriria as duas de uma vez.
+        // Then the mirrors of the active folders. The expansion has its own state:
+        // sharing the one of the "Folders" group would open both at once.
         for (const g of archivedMirrorGroups) {
           out.push({
             kind: 'archived-folder',
@@ -627,9 +628,9 @@ export function Sidebar() {
     groupsExpanded,
   ])
 
-  // Linha de filho do chat — worker continua com o Bot (é um agente), subchat
-  // usa MessagesSquare (os dois balões aninhados dizem "conversa aberta daqui"),
-  // igual ao desktop.
+  // Child row of the chat — worker keeps the Bot (it is an agent), subchat
+  // uses MessagesSquare (the two nested bubbles say "conversation open from here"),
+  // same as the desktop.
   const renderChildRow = useCallback(
     (child: SessionInfo) => (
       <SessionRow
@@ -694,8 +695,8 @@ export function Sidebar() {
       return renderFolderRow(item as FolderInfo, false)
     }
     const session = item as SessionInfo
-    // Subchats aparecem aninhados sob o pai — exceto em Arquivados, que segue o
-    // desktop (archived renderiza SessionItem sem childSessions).
+    // Subchats appear nested under the parent — except in Archived, which follows the
+    // desktop (archived renders SessionItem without childSessions).
     const children =
       listSection.kind === 'archived' || listSection.kind === 'archived-folder'
         ? EMPTY_CHILDREN
@@ -733,8 +734,8 @@ export function Sidebar() {
           onToggle={() => toggleGroup('folders')}
           tokens={tokens}
           actions={[
-            // Mesmo botão do desktop: mescla pastas duplicadas do projeto e
-            // recolhe os chats de código soltos para a pasta deles.
+            // Same button as the desktop: merges duplicate folders of the project and
+            // pulls the loose code chats into their folder.
             {
               icon: Wand2,
               label: t('sidebar.organize'),
@@ -766,12 +767,12 @@ export function Sidebar() {
         />
       )
     }
-    if (listSection.kind === 'rotinas-group') {
+    if (listSection.kind === 'routines-group') {
       return (
         <AccordionHeader
-          label={t('sidebar.rotinas')}
-          expanded={groupsExpanded.rotinas}
-          onToggle={() => toggleGroup('rotinas')}
+          label={t('sidebar.routines')}
+          expanded={groupsExpanded.routines}
+          onToggle={() => toggleGroup('routines')}
           tokens={tokens}
         />
       )
@@ -860,7 +861,7 @@ export function Sidebar() {
             </View>
           </View>
 
-          {/* Barra de seleção */}
+          {/* Selection bar */}
           {selectionMode && (
             <View className="flex-row items-center justify-between px-4 py-2" style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}>
               <View className="flex-row items-center gap-2">
@@ -877,8 +878,8 @@ export function Sidebar() {
             </View>
           )}
 
-          {/* Lista de chats — SectionList virtualizada: trocar de modo monta
-              só as células visíveis (~12 por lote), igual ao seletor de modelos */}
+          {/* Chat list — virtualized SectionList: switching mode mounts
+              only the visible cells (~12 per batch), like the model picker */}
           <SectionList
             className="flex-1"
             sections={sections}
@@ -893,7 +894,7 @@ export function Sidebar() {
             contentContainerStyle={{ paddingBottom: 8 }}
             ListHeaderComponent={
               <View>
-                {/* Novo chat */}
+                {/* New chat */}
                 <View className="px-3 pt-2 pb-1">
                   <Pressable
                     onPress={handleNewChat}
@@ -907,7 +908,7 @@ export function Sidebar() {
                   </Pressable>
                 </View>
 
-                {/* Ações fixas */}
+                {/* Fixed actions */}
                 <View className="pt-1">
                   {filteredTopItems.map((item) => (
                     <SidebarItem
@@ -926,7 +927,7 @@ export function Sidebar() {
                   ))}
                 </View>
 
-                {/* Divisor entre as ações fixas e a lista de chats */}
+                {/* Divider between the fixed actions and the chat list */}
                 <View className="mt-2 pt-2" style={{ borderTopWidth: 1, borderTopColor: tokens.border }} />
               </View>
             }
@@ -1052,14 +1053,14 @@ const SidebarItem = memo(function SidebarItem({
   )
 })
 
-/** Cabeçalho de agrupador em acordeão (Pastas/Chats/Arquivados) — replica o
- *  AccordionGroup do desktop: label clicável com chevron (right recolhido /
- *  down aberto). Layout igual ao desktop: label com flex-1 e chevron na
- *  extremidade direita ("between"), com a ação (ex: lupa de busca) entre a
- *  label e o chevron. A ação é um Pressable aninhado — o responder do RN dá
- *  o toque ao filho, então tocar na lupa não alterna o acordeão (equivalente
- *  ao stopPropagation do desktop). No RN o rotate do lucide some em algumas
- *  versões, então trocamos o ícone em vez de rotacionar. */
+/** Header of an accordion grouper (Folders/Chats/Archived) — replicates the
+ *  AccordionGroup of the desktop: clickable label with chevron (right collapsed /
+ *  down open). Layout same as the desktop: label with flex-1 and chevron at the
+ *  right edge ("between"), with the action (e.g. search magnifier) between the
+ *  label and the chevron. The action is a nested Pressable — the RN responder gives
+ *  the touch to the child, so tapping the magnifier does not toggle the accordion (equivalent
+ *  to the stopPropagation of the desktop). In RN the lucide rotate disappears in some
+ *  versions, so we swap the icon instead of rotating it. */
 const AccordionHeader = memo(function AccordionHeader({
   label,
   expanded,
@@ -1153,8 +1154,8 @@ const FolderRow = memo(function FolderRow({
         </View>
       )}
       <Folder size={14} color={tokens.mutedForeground} />
-      {/* Desktop: chevron colado no texto da pasta (gap-1, sem between); o pin
-          fica fora do container flex-1, na extremidade direita da linha. */}
+      {/* Desktop: chevron glued to the folder text (gap-1, no between); the pin
+          stays outside the flex-1 container, at the right edge of the row. */}
       <View className="min-w-0 flex-1 flex-row items-center gap-1">
         <Text className="shrink text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
           {folder.name}
@@ -1167,8 +1168,8 @@ const FolderRow = memo(function FolderRow({
           ))}
       </View>
       {folder.pinned && <Pin size={14} color={tokens.mutedForeground} />}
-      {/* Chat novo já dentro da pasta, como o "+" da linha de pasta no desktop
-          (lá ele aparece no hover; aqui fica fixo, que é o que dá para tocar). */}
+      {/* New chat already inside the folder, like the "+" of the folder row on the desktop
+          (there it shows on hover; here it is fixed, which is what can be tapped). */}
       {!selectionMode && onNewChat && (
         <Pressable
           onPress={(e) => {
@@ -1193,12 +1194,12 @@ const FolderRow = memo(function FolderRow({
   prev.onNewChat === next.onNewChat
 )
 
-/** Pasta ATIVA que ainda guarda chats arquivados, mostrada dentro de
- *  "Arquivados". Porta o ArchivedFolderGroup do desktop: é só leitura de
- *  propósito — reusar a linha normal faria a pasta expandir junto com a do
- *  grupo "Pastas" e ofereceria renomear/arquivar/excluir a pasta real a
- *  partir daqui. Nenhuma pasta espelho é criada no armazenamento: o chat
- *  mantém o folderId, então volta sozinho para o lugar ao ser desarquivado. */
+/** ACTIVE folder that still holds archived chats, shown inside
+ *  "Archived". Ports the ArchivedFolderGroup of the desktop: it is read-only on
+ *  purpose — reusing the normal row would make the folder expand together with the one of
+ *  the "Folders" group and would offer to rename/archive/delete the real folder
+ *  from here. No mirror folder is created in storage: the chat
+ *  keeps the folderId, so it goes back on its own to the place when unarchived. */
 const ArchivedFolderRow = memo(function ArchivedFolderRow({
   folder,
   count,
@@ -1262,7 +1263,7 @@ const SessionRow = memo(function SessionRow({
   selectionMode?: boolean
   selected?: boolean
   icon?: typeof MessageSquare
-  /** Subchats (workers/forks) aninhados sob o chat pai, como no desktop
+  /** Subchats (workers/forks) nested under the parent chat, as on the desktop
    *  (SessionItem / SessionRowWithChildren). */
   childSessions?: SessionInfo[]
   childrenExpanded?: boolean
@@ -1297,8 +1298,8 @@ const SessionRow = memo(function SessionRow({
       ) : (
         <Icon size={16} color={active ? tokens.foreground : tokens.mutedForeground} />
       )}
-      {/* Desktop: título + indicadores + chevron de subchats no trailing (colado
-          no texto, dentro do container flex-1); pin fora, na extremidade. */}
+      {/* Desktop: title + indicators + subchat chevron in the trailing (glued to the
+          text, inside the flex-1 container); pin outside, at the edge. */}
       <View className="min-w-0 flex-1 flex-row items-center gap-2">
         <Text
           className={cn('shrink text-sm', active && 'font-medium')}
@@ -1337,10 +1338,10 @@ const SessionRow = memo(function SessionRow({
     </Pressable>
   )
 
-  // Subchats: linha alinhada com o ícone do chat pai (+8px de folga, mesmo
-  // padrão da linha das pastas). Chats soltos partem da borda do drawer
-  // (ml-8 = 24 + 8); dentro de pasta o conteúdo já começa depois da linha da
-  // pasta + pl-2.5, então ml-5 = ícone do pai + 8.
+  // Subchats: row aligned with the icon of the parent chat (+8px of slack, same
+  // pattern as the folder row). Loose chats start from the edge of the drawer
+  // (ml-8 = 24 + 8); inside a folder the content already starts after the folder
+  // row + pl-2.5, so ml-5 = parent icon + 8.
   const content = (
     <View>
       {card}
@@ -1355,11 +1356,11 @@ const SessionRow = memo(function SessionRow({
     </View>
   )
 
-  // Sessões dentro de pasta ficam indentadas com linha vertical à esquerda.
-  // A linha fica alinhada com o ícone da pasta no card pai (mx-3 + px-3 = 24px)
-  // com uma folga de 8px: ml-8 = 32px; em modo de seleção o checkbox soma 16px
-  // (ml-12 = 48px). A borda cobre o padding vertical inteiro da célula (incluindo
-  // os subchats), então a linha continua sem quebrar entre os cards.
+  // Sessions inside a folder are indented with a vertical line on the left.
+  // The line stays aligned with the folder icon in the parent card (mx-3 + px-3 = 24px)
+  // with 8px of slack: ml-8 = 32px; in selection mode the checkbox adds 16px
+  // (ml-12 = 48px). The border covers the whole vertical padding of the cell (including
+  // the subchats), so the line keeps going without breaking between the cards.
   if (indented) {
     return (
       <View

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-/** true quando `curr` cai em um dia civil diferente de `prev` (ou é a primeira mensagem). */
+/** true when `curr` falls on a different calendar day than `prev` (or is the first message). */
 export function isNewDay(prev: number | undefined, curr: number): boolean {
   if (prev === undefined) return true
   const a = new Date(prev)
@@ -13,7 +13,7 @@ export function dayKey(timestamp: number): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
 
-/** Badge de data estilo WhatsApp: "Hoje" / "Ontem" / data completa. */
+/** WhatsApp-style date badge: "Today" / "Yesterday" / full date. */
 export function DateSeparator({ timestamp }: { timestamp: number }) {
   const { t, i18n } = useTranslation()
 

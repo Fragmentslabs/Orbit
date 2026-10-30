@@ -21,25 +21,25 @@ import { probeMedia, runFfmpeg, type MediaProbe } from './ffmpeg'
 import { readCachedTranscript, transcribeVideo } from './transcript'
 
 /**
- * Executa um EDL já com caminhos resolvidos. As regras de produção estão na
- * ORDEM dos passos, não em instruções ao modelo:
+ * Runs an EDL with the paths already resolved. The production rules are in the
+ * ORDER of the steps, not in instructions to the model:
  *
- *  1. cada trecho é extraído e reencodado sozinho (ajuste de quadro, grade,
- *     fades de 30 ms no áudio) — todos com os mesmos parâmetros;
- *  2. os trechos são concatenados com `-c copy` (sem segunda perda);
- *  3. um passo final aplica overlays (com o tempo deslocado para a janela
- *     deles), música e, POR ÚLTIMO, as legendas — senão um overlay as cobre —
- *     e normaliza a loudness;
- *  4. a saída é medida (ebur128): o agente não ouve, então relata número.
+ *  1. each stretch is extracted and re-encoded on its own (frame fit, grade,
+ *     30 ms fades in the audio) — all with the same parameters;
+ *  2. the stretches are concatenated with `-c copy` (without a second loss);
+ *  3. a final step applies overlays (with the time shifted into their
+ *     window), music and, LAST, the subtitles — otherwise an overlay covers them —
+ *     and normalizes the loudness;
+ *  4. the output is measured (ebur128): the agent does not hear, so it reports a number.
  */
 
 export interface RenderOptions {
   editDir: string
-  /** Nome do arquivo de saída dentro de editDir (final.mp4, preview.mp4…). */
+  /** Output file name inside editDir (final.mp4, preview.mp4…). */
   outName: string
   preview: boolean
   signal?: AbortSignal
-  /** Idioma da fala, para transcrever quando a legenda pedir e não houver cache. */
+  /** Speech language, to transcribe when the subtitle asks for it and there is no cache. */
   language?: string
 }
 
@@ -70,7 +70,7 @@ function n(value: number): string {
   return Number(value.toFixed(3)).toString()
 }
 
-/** Lê o resumo do ebur128 no stderr (o último bloco "Summary"). */
+/** Reads the ebur128 summary from stderr (the last "Summary" block). */
 export function parseEbur128(stderr: string): Loudness {
   const summary = stderr.slice(stderr.lastIndexOf('Summary:'))
   const pick = (re: RegExp) => {
@@ -93,7 +93,7 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
   const warnings: string[] = []
   const signal = opts.signal
 
-  // Sondagem e transcrições (cache) das fontes usadas.
+  // Probing and (cached) transcriptions of the sources used.
   const used = [...new Set(edl.ranges.map((r) => r.source))]
   for (const id of used) if (!edl.sources[id]) throw new Error(`range uses source "${id}", which is not in sources`)
   const probes: Record<string, MediaProbe> = {}
@@ -136,7 +136,7 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
   await fs.mkdir(opts.editDir, { recursive: true })
   const work = await fs.mkdtemp(path.join(opts.editDir, '.render-'))
   try {
-    // 1. Trechos.
+    // 1. Stretches.
     const segs: string[] = []
     for (const [i, r] of ranges.entries()) {
       const probe = probes[r.source]
@@ -151,7 +151,7 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
           '-ss', n(r.startMs / 1000),
           '-t', n(durS),
           '-i', edl.sources[r.source],
-          // Fonte sem áudio: silêncio do mesmo tamanho, senão o concat desalinha.
+          // Source without audio: silence of the same size, otherwise the concat misaligns.
           ...(hasAudio ? [] : ['-f', 'lavfi', '-t', n(durS), '-i', 'anullsrc=r=48000:cl=stereo']),
           '-filter_complex',
           `[0:v]${vf}[v];[${hasAudio ? '0:a' : '1:a'}]${edgeFadeFilter(r.endMs - r.startMs, r.volumeDb)}[a]`,
@@ -167,11 +167,11 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
       segs.push(seg)
     }
 
-    // 2. Concat sem reencode.
+    // 2. Concat without re-encode.
     await fs.writeFile(path.join(work, 'list.txt'), segs.map((s) => `file '${s}'`).join('\n'))
     await runFfmpeg(['-v', 'error', '-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'joined.mp4'], { cwd: work, signal })
 
-    // 3. Passo final: overlays → legendas (por último) no vídeo; música e loudness no áudio.
+    // 3. Final step: overlays → subtitles (last) in the video; music and loudness in the audio.
     const inputs: string[] = ['-i', 'joined.mp4']
     const graph: string[] = []
     let video = '[0:v]'
@@ -221,8 +221,8 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
         subtitlesFile = path.join(opts.editDir, `${path.parse(opts.outName).name}.ass`)
         await fs.writeFile(subtitlesFile, ass)
       }
-      // Caminho relativo + cwd = pasta de trabalho: o filtro subtitles não
-      // precisa de escape de "C:\" no Windows.
+      // Relative path + cwd = working folder: the subtitles filter does not
+      // need escaping of "C:\" on Windows.
       graph.push(`${video}subtitles=filename=${assName}[vsub]`)
       video = '[vsub]'
       videoFiltered = true
@@ -277,7 +277,7 @@ export async function renderEdl(edl: Edl, opts: RenderOptions): Promise<RenderRe
       )
     }
 
-    // 4. Medida (o agente relata número, não "soa bem").
+    // 4. Measurement (the agent reports a number, not "it sounds good").
     let loudness: Loudness | undefined
     try {
       loudness = await measureLoudness(output, signal)

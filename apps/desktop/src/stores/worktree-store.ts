@@ -1,106 +1,106 @@
 import { create } from "zustand"
-import type { CriarWorktreeResultado, ListaWorktrees } from "@shared/worktrees"
+import type { CreateWorktreeResult, WorktreeList } from "@shared/worktrees"
 import { worktreeApi } from "@/src/lib/ipc"
 
 /**
- * Worktrees do repositório de cada pasta (seletor do header) e o mapa
- * "pasta dentro de um worktree → mesma pasta no repositório principal".
+ * Worktrees of each folder's repository (header selector) and the map
+ * "folder inside a worktree → same folder in the main repository".
  *
- * O mapa existe porque o resto do app identifica o projeto pelo caminho: sem
- * ele, um chat aberto num worktree cairia numa pasta nova da sidebar, com o
- * nome do worktree, em vez de ficar junto dos outros chats do projeto.
+ * The map exists because the rest of the app identifies the project by path: without
+ * it, a chat opened in a worktree would land in a new sidebar folder, with the
+ * worktree's name, instead of staying with the other chats of the project.
  */
 interface WorktreeState {
-  /** Por pasta consultada (a pasta principal do chat); null = não é repositório git */
-  porPasta: Record<string, ListaWorktrees | null>
-  carregando: Record<string, boolean>
-  /** pasta num worktree → pasta equivalente no principal */
-  principalDe: Record<string, string>
-  carregar: (pasta: string) => Promise<ListaWorktrees | null>
-  criar: (pasta: string, nome: string, base?: string) => Promise<CriarWorktreeResultado>
-  remover: (pasta: string, caminho: string, apagarBranch?: boolean) => Promise<void>
-  /** Resolve (e guarda) o principal de uma pasta que chegou de fora — ex.: troca feita pelo agente */
-  resolverPrincipal: (pasta: string) => Promise<string>
+  /** Per folder queried (the chat's main folder); null = not a git repository */
+  byFolder: Record<string, WorktreeList | null>
+  loading: Record<string, boolean>
+  /** folder in a worktree → equivalent folder in the main one */
+  mainByFolder: Record<string, string>
+  load: (folder: string) => Promise<WorktreeList | null>
+  create: (folder: string, name: string, base?: string) => Promise<CreateWorktreeResult>
+  remove: (folder: string, path: string, deleteBranch?: boolean) => Promise<void>
+  /** Resolves (and keeps) the main one of a folder that came from outside — e.g.: a switch made by the agent */
+  resolveMain: (folder: string) => Promise<string>
 }
 
-const consultas = new Map<string, Promise<ListaWorktrees | null>>()
+const queries = new Map<string, Promise<WorktreeList | null>>()
 
 export const useWorktreeStore = create<WorktreeState>((set, get) => ({
-  porPasta: {},
-  carregando: {},
-  principalDe: {},
+  byFolder: {},
+  loading: {},
+  mainByFolder: {},
 
-  carregar: (pasta) => {
-    // O chip do header e o menu compacto montam juntos e pedem a mesma lista:
-    // uma consulta em andamento é compartilhada (cada uma roda git status em
-    // todos os worktrees).
-    const emAndamento = consultas.get(pasta)
-    if (emAndamento) return emAndamento
-    const consulta = carregarAgora(pasta).finally(() => consultas.delete(pasta))
-    consultas.set(pasta, consulta)
-    return consulta
+  load: (folder) => {
+    // The header chip and the compact menu mount together and ask for the same list:
+    // a query in progress is shared (each one runs git status on
+    // every worktree).
+    const inFlight = queries.get(folder)
+    if (inFlight) return inFlight
+    const query = loadNow(folder).finally(() => queries.delete(folder))
+    queries.set(folder, query)
+    return query
   },
 
-  criar: async (pasta, nome, base) => {
-    const criado = await worktreeApi.criar(pasta, nome, base)
-    await get().carregar(pasta)
-    // A lista acima foi consultada pela pasta antiga; a nova também precisa
-    // do mapa (é para ela que o chat vai).
-    const principal = await worktreeApi.principal(criado.pasta)
-    set((s) => ({ principalDe: { ...s.principalDe, [criado.pasta]: principal } }))
-    return criado
+  create: async (folder, name, base) => {
+    const created = await worktreeApi.create(folder, name, base)
+    await get().load(folder)
+    // The list above was queried by the old folder; the new one also needs
+    // the map (it is to it that the chat is going).
+    const main = await worktreeApi.main(created.folder)
+    set((s) => ({ mainByFolder: { ...s.mainByFolder, [created.folder]: main } }))
+    return created
   },
 
-  remover: async (pasta, caminho, apagarBranch) => {
-    await worktreeApi.remover(pasta, caminho, apagarBranch)
-    await get().carregar(pasta)
+  remove: async (folder, path, deleteBranch) => {
+    await worktreeApi.remove(folder, path, deleteBranch)
+    await get().load(folder)
   },
 
-  resolverPrincipal: async (pasta) => {
-    const conhecido = get().principalDe[pasta]
-    if (conhecido) return conhecido
-    const principal = await worktreeApi.principal(pasta)
-    if (principal !== pasta) set((s) => ({ principalDe: { ...s.principalDe, [pasta]: principal } }))
-    return principal
+  resolveMain: async (folder) => {
+    const known = get().mainByFolder[folder]
+    if (known) return known
+    const main = await worktreeApi.main(folder)
+    if (main !== folder) set((s) => ({ mainByFolder: { ...s.mainByFolder, [folder]: main } }))
+    return main
   },
 }))
 
-/** Pasta no repositório principal, quando já conhecida (síncrono, para a sidebar). */
-export function principalConhecido(pasta: string): string {
-  return useWorktreeStore.getState().principalDe[pasta] ?? pasta
+/** Folder in the main repository, when already known (synchronous, for the sidebar). */
+export function knownMain(folder: string): string {
+  return useWorktreeStore.getState().mainByFolder[folder] ?? folder
 }
 
-/** Consulta de fato: lista os worktrees e atualiza o mapa worktree → principal. */
-async function carregarAgora(pasta: string): Promise<ListaWorktrees | null> {
+/** The query itself: lists the worktrees and updates the worktree → main map. */
+async function loadNow(folder: string): Promise<WorktreeList | null> {
   const set = useWorktreeStore.setState
-  set((s) => ({ carregando: { ...s.carregando, [pasta]: true } }))
+  set((s) => ({ loading: { ...s.loading, [folder]: true } }))
   try {
-    const lista = await worktreeApi.listar(pasta)
+    const list = await worktreeApi.list(folder)
     set((s) => {
-      const principalDe = { ...s.principalDe }
-      const principal = lista?.worktrees.find((w) => w.principal)
-      if (lista && principal) {
-        // Quando a subpasta do chat não existe num worktree, a pasta dele é a
-        // raiz — e o equivalente no principal também é a raiz.
-        for (const w of lista.worktrees) {
-          if (!w.principal) principalDe[w.pasta] = w.pasta === w.caminho ? principal.caminho : principal.pasta
+      const mainByFolder = { ...s.mainByFolder }
+      const main = list?.worktrees.find((w) => w.primary)
+      if (list && main) {
+        // When the chat's subfolder does not exist in a worktree, its folder is the
+        // root — and the equivalent in the main one is also the root.
+        for (const w of list.worktrees) {
+          if (!w.primary) mainByFolder[w.folder] = w.folder === w.path ? main.path : main.folder
         }
       }
-      return { porPasta: { ...s.porPasta, [pasta]: lista }, principalDe }
+      return { byFolder: { ...s.byFolder, [folder]: list }, mainByFolder }
     })
-    return lista
+    return list
   } finally {
-    set((s) => ({ carregando: { ...s.carregando, [pasta]: false } }))
+    set((s) => ({ loading: { ...s.loading, [folder]: false } }))
   }
 }
 
 /**
- * Pastas do chat ativo depois que a pasta principal dele mudou fora da tela
- * (o agente trocou de worktree). A sessão em disco só tem as extras do último
- * envio; o workspace tem as atuais — uma pasta associada (ou removida) depois
- * daquele envio só existe nele. Por isso as extras vêm do workspace: copiar
- * a sessão perderia a pasta recém-associada e traria de volta a removida.
+ * Folders of the active chat after its main folder changed off-screen
+ * (the agent switched worktree). The session on disk only has the extras from the last
+ * send; the workspace has the current ones — a folder associated (or removed) after
+ * that send only exists in it. That is why the extras come from the workspace: copying
+ * the session would lose the newly associated folder and bring the removed one back.
  */
-export function pastasAposTroca(principal: string, pastasDoWorkspace: string[]): string[] {
-  return [principal, ...new Set(pastasDoWorkspace.slice(1).filter((p) => p !== principal))]
+export function foldersAfterSwitch(main: string, workspaceFolders: string[]): string[] {
+  return [main, ...new Set(workspaceFolders.slice(1).filter((p) => p !== main))]
 }

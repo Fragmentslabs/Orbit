@@ -3,14 +3,14 @@ import { z } from 'zod'
 import { computeAnalytics, computeWorkReport, type WorkReportProject } from '../analytics'
 
 /**
- * Relatórios de uso para o agente — as mesmas contas da tela "Uso do Orbit",
- * só que em texto, para responder perguntas como "quantas horas trabalhei no
- * projeto X e o que foi feito em cada dia?".
+ * Usage reports for the agent — the same math as the "Orbit usage" screen,
+ * only in text, to answer questions like "how many hours did I work on
+ * project X and what was done on each day?".
  *
- * A contagem de horas é a do painel (tempo de geração + os intervalos entre
- * mensagens que passam nas regras de sessão), então os dois nunca divergem.
- * O que foi feito vem dos títulos das conversas e dos pedidos do usuário
- * naquele dia: é histórico real, não resumo inventado pelo modelo.
+ * The hour count is the panel's (generation time + the gaps between
+ * messages that pass the session rules), so the two never diverge.
+ * What was done comes from the conversation titles and the user's requests
+ * on that day: it is real history, not a summary invented by the model.
  */
 
 const PERIODO = {
@@ -33,96 +33,96 @@ const PERIODO = {
     .describe('Last N days counting today, when from/to are not given. Default: 30.'),
 }
 
-/** Data local a partir de YYYY-MM-DD, ou null se o dia não existe. O formato
- *  passa no regex do schema mas "2026-13-01" e "2026-02-31" não são datas, e
- *  sem esta checagem viravam NaN — que compara falso com tudo e fazia o
- *  relatório responder "nenhuma atividade" em vez de acusar o erro. */
-function lerData(texto: string): Date | null {
-  const [ano, mes, dia] = texto.split('-').map(Number)
-  const d = new Date(ano, mes - 1, dia)
-  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) return null
+/** Local date from YYYY-MM-DD, or null if the day does not exist. The format
+ *  passes the schema regex but "2026-13-01" and "2026-02-31" are not dates, and
+ *  without this check they became NaN — which compares false with everything and made the
+ *  report answer "no activity" instead of flagging the error. */
+function parseDate(text: string): Date | null {
+  const [year, month, day] = text.split('-').map(Number)
+  const d = new Date(year, month - 1, day)
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null
   return d
 }
 
-type Periodo = { since: number; until: number }
+type Period = { since: number; until: number }
 
-function resolverPeriodo(input: { from?: string; to?: string; days?: number }): Periodo | string {
-  const fim = input.to ? lerData(input.to) : new Date()
-  if (!fim) return `Error: "${input.to}" is not a valid date (use YYYY-MM-DD).`
-  fim.setHours(23, 59, 59, 999)
+function resolvePeriod(input: { from?: string; to?: string; days?: number }): Period | string {
+  const end = input.to ? parseDate(input.to) : new Date()
+  if (!end) return `Error: "${input.to}" is not a valid date (use YYYY-MM-DD).`
+  end.setHours(23, 59, 59, 999)
 
   if (input.from) {
-    const inicio = lerData(input.from)
-    if (!inicio) return `Error: "${input.from}" is not a valid date (use YYYY-MM-DD).`
-    inicio.setHours(0, 0, 0, 0)
-    if (inicio.getTime() > fim.getTime()) {
+    const start = parseDate(input.from)
+    if (!start) return `Error: "${input.from}" is not a valid date (use YYYY-MM-DD).`
+    start.setHours(0, 0, 0, 0)
+    if (start.getTime() > end.getTime()) {
       return `Error: the start (${input.from}) is after the end (${input.to ?? 'today'}).`
     }
-    return { since: inicio.getTime(), until: fim.getTime() }
+    return { since: start.getTime(), until: end.getTime() }
   }
-  const inicio = new Date(fim)
-  inicio.setDate(inicio.getDate() - ((input.days ?? 30) - 1))
-  inicio.setHours(0, 0, 0, 0)
-  return { since: inicio.getTime(), until: fim.getTime() }
+  const start = new Date(end)
+  start.setDate(start.getDate() - ((input.days ?? 30) - 1))
+  start.setHours(0, 0, 0, 0)
+  return { since: start.getTime(), until: end.getTime() }
 }
 
-const dataCurta = (ts: number) => {
+const shortDate = (ts: number) => {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-const hora = (ts: number) => {
+const timeOf = (ts: number) => {
   const d = new Date(ts)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-const horas = (h: number) => `${h.toFixed(2)}h`
-const dinheiro = (c: number) => (c > 0 ? `$${c.toFixed(c < 1 ? 4 : 2)}` : '$0')
+const hoursOf = (h: number) => `${h.toFixed(2)}h`
+const money = (c: number) => (c > 0 ? `$${c.toFixed(c < 1 ? 4 : 2)}` : '$0')
 const tokens = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n)
 
 /**
- * Teto do que uma chamada devolve. Um ano de histórico detalhado passa de um
- * milhão de caracteres — o resultado sozinho estouraria a janela de contexto,
- * levando junto a conversa em que a pergunta foi feita. Cortar e DIZER que
- * cortou é melhor do que devolver tudo: o modelo reduz o período e pergunta
- * de novo.
+ * Cap on what one call returns. A year of detailed history goes past a
+ * million characters — the result alone would overflow the context window,
+ * taking down the conversation in which the question was asked. Cutting and SAYING that
+ * it cut is better than returning everything: the model narrows the period and asks
+ * again.
  */
-const LIMITE_SAIDA = 20_000
+const OUTPUT_LIMIT = 20_000
 
-function cortarNoLimite(linhas: string[]): string {
+function cutAtLimit(lines: string[]): string {
   let total = 0
-  for (let i = 0; i < linhas.length; i++) {
-    total += linhas[i].length + 1
-    if (total <= LIMITE_SAIDA) continue
+  for (let i = 0; i < lines.length; i++) {
+    total += lines[i].length + 1
+    if (total <= OUTPUT_LIMIT) continue
     return [
-      ...linhas.slice(0, i),
+      ...lines.slice(0, i),
       '',
-      `[report cut at ${i} of ${linhas.length} lines for size. Narrow the period (from/to or days), name a project (project) or pass detail=false for hours only.]`,
+      `[report cut at ${i} of ${lines.length} lines for size. Narrow the period (from/to or days), name a project (project) or pass detail=false for hours only.]`,
     ].join('\n')
   }
-  return linhas.join('\n')
+  return lines.join('\n')
 }
 
-function escreverProjeto(proj: WorkReportProject, comDetalhe: boolean): string[] {
-  const linhas: string[] = []
-  const nome = proj.name || 'No project (chat)'
-  linhas.push('')
-  linhas.push(`## ${nome}${proj.directory ? ` — ${proj.directory}` : ''}`)
-  linhas.push(
-    `Total: ${horas(proj.hours)} · ${proj.days.length} day(s) · ${proj.sessions} conversation(s) · ${tokens(proj.tokens)} tokens · ${dinheiro(proj.cost)}`,
+function writeProject(proj: WorkReportProject, withDetail: boolean): string[] {
+  const lines: string[] = []
+  const name = proj.name || 'No project (chat)'
+  lines.push('')
+  lines.push(`## ${name}${proj.directory ? ` — ${proj.directory}` : ''}`)
+  lines.push(
+    `Total: ${hoursOf(proj.hours)} · ${proj.days.length} day(s) · ${proj.sessions} conversation(s) · ${tokens(proj.tokens)} tokens · ${money(proj.cost)}`,
   )
 
-  for (const dia of proj.days) {
-    linhas.push('')
-    linhas.push(
-      `### ${dia.date} — ${horas(dia.hours)} (${hora(dia.firstAt)}–${hora(dia.lastAt)}, ${dia.messages} reply(ies), ${dinheiro(dia.cost)})`,
+  for (const day of proj.days) {
+    lines.push('')
+    lines.push(
+      `### ${day.date} — ${hoursOf(day.hours)} (${timeOf(day.firstAt)}–${timeOf(day.lastAt)}, ${day.messages} reply(ies), ${money(day.cost)})`,
     )
-    for (const sessao of dia.sessions) {
-      linhas.push(`- "${sessao.title}" — ${horas(sessao.hours)}`)
-      if (!comDetalhe) continue
-      for (const prompt of sessao.prompts) linhas.push(`  · ${prompt}`)
+    for (const session of day.sessions) {
+      lines.push(`- "${session.title}" — ${hoursOf(session.hours)}`)
+      if (!withDetail) continue
+      for (const prompt of session.prompts) lines.push(`  · ${prompt}`)
     }
   }
-  return linhas
+  return lines
 }
 
 export function createUsageTools(): ToolSet {
@@ -157,40 +157,40 @@ export function createUsageTools(): ToolSet {
           ),
       }),
       execute: async ({ project, from, to, days, detail }) => {
-        const periodo = resolverPeriodo({ from, to, days })
-        if (typeof periodo === 'string') return periodo
-        const { since, until } = periodo
-        // O relatório atravessa projetos de propósito: o histórico é todo do
-        // mesmo usuário, e exigir que ele apontasse pasta por pasta para ter o
-        // detalhe transformaria "o que eu fiz este mês" num interrogatório.
-        // Sai detalhado por padrão; detail=false devolve só as horas.
-        const comDetalhe = detail !== false
-        const relatorio = await computeWorkReport({
+        const period = resolvePeriod({ from, to, days })
+        if (typeof period === 'string') return period
+        const { since, until } = period
+        // The report crosses projects on purpose: the history is all of the
+        // same user, and requiring them to point folder by folder to get the
+        // detail would turn "what I did this month" into an interrogation.
+        // It comes detailed by default; detail=false returns only the hours.
+        const withDetail = detail !== false
+        const report = await computeWorkReport({
           since,
           until,
           project,
-          promptsPerDay: comDetalhe ? 6 : 0,
+          promptsPerDay: withDetail ? 6 : 0,
         })
 
-        const cabecalho = `Period: ${dataCurta(since)} to ${dataCurta(until)}`
-        if (relatorio.projects.length === 0) {
+        const header = `Period: ${shortDate(since)} to ${shortDate(until)}`
+        if (report.projects.length === 0) {
           if (project) {
             return [
-              `${cabecalho}. No activity in a project matching "${project}".`,
-              relatorio.knownProjects.length
-                ? `Projects with activity in the period: ${relatorio.knownProjects.join(', ')}.`
+              `${header}. No activity in a project matching "${project}".`,
+              report.knownProjects.length
+                ? `Projects with activity in the period: ${report.knownProjects.join(', ')}.`
                 : 'There was no activity at all in this period.',
             ].join('\n')
           }
-          return `${cabecalho}. No activity recorded.`
+          return `${header}. No activity recorded.`
         }
 
-        const linhas = [
-          cabecalho,
-          `Total: ${horas(relatorio.totalHours)} · ${tokens(relatorio.totalTokens)} tokens · ${dinheiro(relatorio.totalCost)}`,
+        const lines = [
+          header,
+          `Total: ${hoursOf(report.totalHours)} · ${tokens(report.totalTokens)} tokens · ${money(report.totalCost)}`,
         ]
-        for (const proj of relatorio.projects) linhas.push(...escreverProjeto(proj, comDetalhe))
-        return cortarNoLimite(linhas)
+        for (const proj of report.projects) lines.push(...writeProject(proj, withDetail))
+        return cutAtLimit(lines)
       },
     }),
 
@@ -205,46 +205,46 @@ export function createUsageTools(): ToolSet {
         ...PERIODO,
       }),
       execute: async ({ groupBy, from, to, days }) => {
-        const periodo = resolverPeriodo({ from, to, days })
-        if (typeof periodo === 'string') return periodo
-        const { since, until } = periodo
+        const period = resolvePeriod({ from, to, days })
+        if (typeof period === 'string') return period
+        const { since, until } = period
         const data = await computeAnalytics({ type: 'custom', from: since, to: until })
-        const cabecalho = [
-          `Period: ${dataCurta(since)} to ${dataCurta(until)}`,
-          `Total: ${tokens(data.totalTokens)} tokens · ${horas(data.totalHours)} · ${dinheiro(data.totalCost)} · ${data.totalSessions} conversation(s) · ${data.totalMessages} reply(ies)`,
+        const header = [
+          `Period: ${shortDate(since)} to ${shortDate(until)}`,
+          `Total: ${tokens(data.totalTokens)} tokens · ${hoursOf(data.totalHours)} · ${money(data.totalCost)} · ${data.totalSessions} conversation(s) · ${data.totalMessages} reply(ies)`,
         ]
 
         if (groupBy === 'project') {
-          if (data.byProject.length === 0) return `${cabecalho.join('\n')}\nNo projects in the period.`
+          if (data.byProject.length === 0) return `${header.join('\n')}\nNo projects in the period.`
           return [
-            ...cabecalho,
+            ...header,
             'By project (name · hours · tokens · cost · conversations):',
             ...data.byProject.map(
               (p) =>
-                `- ${p.name || 'No project (chat)'} · ${horas(p.hours)} · ${tokens(p.tokens)} · ${dinheiro(p.cost)} · ${p.sessions}`,
+                `- ${p.name || 'No project (chat)'} · ${hoursOf(p.hours)} · ${tokens(p.tokens)} · ${money(p.cost)} · ${p.sessions}`,
             ),
           ].join('\n')
         }
 
         if (groupBy === 'day') {
-          if (data.days.length === 0) return `${cabecalho.join('\n')}\nNo days with activity.`
+          if (data.days.length === 0) return `${header.join('\n')}\nNo days with activity.`
           return [
-            ...cabecalho,
+            ...header,
             'By day (date · hours · tokens · cost):',
             ...data.days.map(
               (d) =>
-                `- ${d.date} · ${horas(d.totalHours)} · ${tokens(d.totalTokens)} · ${dinheiro(d.totalCost)}`,
+                `- ${d.date} · ${hoursOf(d.totalHours)} · ${tokens(d.totalTokens)} · ${money(d.totalCost)}`,
             ),
           ].join('\n')
         }
 
-        if (data.byModel.length === 0) return `${cabecalho.join('\n')}\nNo models in the period.`
+        if (data.byModel.length === 0) return `${header.join('\n')}\nNo models in the period.`
         return [
-          ...cabecalho,
+          ...header,
           'By model (provider/model · tokens · hours · cost):',
           ...data.byModel.map(
             (m) =>
-              `- ${m.providerId}/${m.modelId} · ${tokens(m.tokens)} · ${horas(m.hours)} · ${dinheiro(m.cost)}`,
+              `- ${m.providerId}/${m.modelId} · ${tokens(m.tokens)} · ${hoursOf(m.hours)} · ${money(m.cost)}`,
           ),
         ].join('\n')
       },

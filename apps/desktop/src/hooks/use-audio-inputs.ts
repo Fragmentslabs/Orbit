@@ -1,20 +1,20 @@
 import { useEffect, useState } from "react"
 
 /**
- * Microfones da máquina (`enumerateDevices`), atualizados quando um aparelho é
- * plugado ou tirado. É o que alimenta o seletor de microfone da aba de voz.
+ * The machine's microphones (`enumerateDevices`), refreshed when a device is
+ * plugged in or removed. This is what feeds the microphone selector in the voice tab.
  *
- * Os pseudo-aparelhos do Chromium ("default" e, no Windows, "communications")
- * ficam de fora: o "Padrão do sistema" da tela já é o `micDeviceId: null`, e
- * repetir o mesmo microfone com outro nome só confunde.
+ * Chromium's pseudo-devices ("default" and, on Windows, "communications")
+ * are left out: the screen's "System default" is already `micDeviceId: null`, and
+ * repeating the same microphone under another name only confuses.
  *
- * Sem permissão de microfone o Chromium devolve os aparelhos SEM rótulo — quem
- * mostra decide o nome de reserva (o índice serve).
+ * Without microphone permission Chromium returns the devices WITHOUT a label —
+ * whoever displays them decides the fallback name (the index will do).
  */
 
 export interface AudioInput {
   deviceId: string
-  /** Vazio quando o rótulo ainda não foi liberado pela permissão. */
+  /** Empty when the label has not been released by the permission yet. */
   label: string
 }
 

@@ -34,7 +34,7 @@ describe('phrasesOf / packTranscript', () => {
 
 describe('tokensToWords (Parakeet)', () => {
   it('joins BPE pieces into words, glues punctuation and offsets the times', () => {
-    // Formato real do sherpa-onnx com o parakeet-tdt-0.6b-v3.
+    // Real sherpa-onnx format with parakeet-tdt-0.6b-v3.
     const words = tokensToWords(
       {
         tokens: [' H', 'ello', ' and', ' W', 'el', 'come', ' ', '1', '.', ' Toda', 'y'],

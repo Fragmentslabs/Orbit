@@ -1,24 +1,24 @@
 import type { ModelMessage } from 'ai'
 
 /**
- * Cache de prompt da Anthropic. Ao contrário do OpenAI e do DeepSeek, que
- * cacheiam o prefixo sozinhos, a Anthropic só cacheia até onde o request marca
- * `cache_control` — sem marca nenhuma, todo passo do tool loop pagava o prefixo
- * inteiro (tools + system + histórico) a preço cheio. Com a marca, a leitura
- * do cache custa ~10% do input.
+ * Anthropic's prompt cache. Unlike OpenAI and DeepSeek, which
+ * cache the prefix on their own, Anthropic only caches up to where the request marks
+ * `cache_control` — with no mark at all, every step of the tool loop paid the whole prefix
+ * (tools + system + history) at full price. With the mark, reading the
+ * cache costs ~10% of the input.
  *
- * Três marcas, do limite de quatro que a API aceita:
- * - a PRIMEIRA mensagem: o prefixo tools + system + começo do histórico, que
- *   só muda quando a conversa é compactada — vale entre turnos;
- * - as DUAS ÚLTIMAS: o ponto onde o próximo passo continua. A API procura um
- *   prefixo cacheado até 20 blocos antes de cada marca, e um passo do tool
- *   loop acrescenta dois (a chamada e o resultado), então o passo seguinte
- *   sempre acha o anterior.
+ * Three marks, out of the four the API accepts:
+ * - the FIRST message: the tools + system + start-of-history prefix, which
+ *   only changes when the conversation is compacted — it counts between turns;
+ * - the LAST TWO: the point where the next step continues. The API looks for a
+ *   cached prefix up to 20 blocks before each mark, and a step of the tool
+ *   loop adds two (the call and the result), so the following step
+ *   always finds the previous one.
  */
 
 const ANTHROPIC_CACHE = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const
 
-/** SDKs que falam o protocolo Anthropic Messages e leem a marca. */
+/** SDKs that speak the Anthropic Messages protocol and read the mark. */
 export function supportsAnthropicCache(npm: string): boolean {
   return npm === '@ai-sdk/anthropic'
 }

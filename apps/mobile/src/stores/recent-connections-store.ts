@@ -6,24 +6,24 @@ const STORAGE_KEY = 'orbit_recent_connections'
 const MAX_RECENT = 5
 
 /**
- * Conexão recente. Guarda o PIN da última conexão bem-sucedida para permitir
- * reconectar com um toque — o PIN do desktop expira em 5 min, então se
- * estiver desatualizado a conexão simplesmente falha com 'invalid_pin' e o
- * usuário cai no fluxo manual normalmente (mesmo tratamento de erro já existente).
+ * Recent connection. Stores the PIN of the last successful connection so it can
+ * reconnect with a single tap — the desktop PIN expires in 5 min, so if it
+ * is out of date the connection simply fails with 'invalid_pin' and the
+ * user falls back to the manual flow normally (same error handling as before).
  */
 export interface RecentConnection {
   host: string
   port: number
-  /** Nome do desktop (hostname cru), vindo do auth:ok. NUNCA o nome do
-   *  celular: `ConnectionConfig.deviceName` é o que ESTE aparelho envia para o
-   *  desktop exibir, e usá-lo como fallback fazia a lista de recentes mostrar
-   *  o nome do próprio celular no lugar do PC. */
+  /** Desktop name (raw hostname), coming from auth:ok. NEVER the name of the
+   *  phone: `ConnectionConfig.deviceName` is what THIS device sends for the
+   *  desktop to display, and using it as a fallback made the recents list show
+   *  the name of the phone itself instead of the PC. */
   deviceName?: string
-  /** Última conexão bem-sucedida (epoch ms). */
+  /** Last successful connection (epoch ms). */
   lastConnectedAt?: number
-  /** PIN usado na última conexão bem-sucedida (expira em 5 min no desktop). */
+  /** PIN used in the last successful connection (expires in 5 min on the desktop). */
   pin?: string
-  /** Token persistente do pareamento — reconecta sem PIN. */
+  /** Persistent pairing token — reconnects without a PIN. */
   token?: string
 }
 

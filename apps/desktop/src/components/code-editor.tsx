@@ -43,36 +43,36 @@ import { lintApi } from "@/src/lib/ipc"
 import { applyCase, buildMatcher, replaceInText } from "@/src/lib/text-match"
 
 /**
- * Visualizador/editor do painel de arquivos.
+ * Viewer/editor of the files panel.
  *
- * Um renderizador só para ver e editar: entrar no modo de edição não pode
- * mudar a aparência do arquivo. O destaque é do Lezer (incremental, aguenta
- * digitação); o shiki continua servindo o visualizador de DIFF, e os dois
- * compartilham a paleta via `code-editor-theme` — ver a nota lá.
+ * A single renderer for viewing and editing: entering edit mode cannot
+ * change the appearance of the file. The highlighting is Lezer's (incremental, it handles
+ * typing); shiki keeps serving the DIFF viewer, and the two
+ * share the palette via `code-editor-theme` — see the note there.
  *
- * O CodeMirror é dono do próprio scroller (só materializa as linhas visíveis),
- * então o container precisa ter altura definida e NÃO pode rolar por fora:
- * quem usa este componente passa `overflow-hidden` no pai.
+ * CodeMirror owns its own scroller (it only materializes the visible lines),
+ * so the container needs a defined height and CANNOT scroll outside:
+ * whoever uses this component passes `overflow-hidden` on the parent.
  */
 
 /**
- * Marca a transação como vinda do agente, não do teclado. O `onChange` existe
- * para o salvamento automático; disparado por uma escrita do agente, ele
- * agendaria um save logo depois de o disco ter mudado — e o save sairia com o
- * mtime velho, virando um falso conflito.
+ * Marks the transaction as coming from the agent, not from the keyboard. `onChange` exists
+ * for the automatic saving; fired by an agent write, it
+ * would schedule a save right after the disk had changed — and the save would come out with the
+ * old mtime, turning into a false conflict.
  */
 const fromAgent = Annotation.define<boolean>()
 
-/** Marca as linhas que o agente acabou de escrever. */
+/** Marks the lines the agent has just written. */
 const markAgentLines = StateEffect.define<{ from: number; to: number }[]>()
 const clearAgentLines = StateEffect.define<null>()
 
 const agentLine = Decoration.line({ class: "cm-agentTouched" })
 
 /**
- * Realce do que o agente mudou. É o que faz a escrita dele ser percebida como
- * algo que aconteceu ali, e não como o arquivo tendo piscado — sem isso a
- * pessoa só descobre a alteração quando esbarra nela.
+ * Highlight of what the agent changed. It is what makes its write be perceived as
+ * something that happened there, and not as the file having blinked — without it the
+ * person only finds out about the change when they bump into it.
  */
 const agentHighlight = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -104,10 +104,10 @@ const agentHighlightTheme = EditorView.baseTheme({
   },
 })
 
-/** Quanto tempo o realce da escrita do agente fica na tela. */
+/** How long the highlight of the agent write stays on screen. */
 const AGENT_HIGHLIGHT_MS = 4000
 
-/** Realce do elemento selecionado no canvas de Design (fica até outra seleção). */
+/** Highlight of the element selected in the Design canvas (stays until another selection). */
 const setElementHighlight = StateEffect.define<{ from: number; to: number } | null>()
 
 const elementMark = Decoration.mark({ class: "cm-selectedElement" })
@@ -146,11 +146,11 @@ const setFindQuery = StateEffect.define<{
 } | null>()
 
 /**
- * Consulta da busca do painel, para grifar as ocorrências DENTRO do arquivo.
+ * Query of the panel search, to mark the occurrences INSIDE the file.
  *
- * Não dá para reusar o realçador do `@codemirror/search`: ele devolve
- * `Decoration.none` enquanto o painel dele está fechado — e aqui ele nunca
- * abre, porque quem manda a consulta é o campo da direita.
+ * The `@codemirror/search` highlighter cannot be reused: it returns
+ * `Decoration.none` while its panel is closed — and here it never
+ * opens, because the field on the right is what sends the query.
  */
 const findQuery = StateField.define<{
   query: string
@@ -167,14 +167,14 @@ const findQuery = StateField.define<{
 
 const findMatchMark = Decoration.mark({ class: "cm-findMatch" })
 
-/** Teto de marcas: um `.*` num arquivo grande viraria uma por caractere. */
+/** Ceiling of marks: a `.*` in a large file would become one per character. */
 const FIND_MATCH_LIMIT = 2000
 
 /**
- * Intervalos de casamento no texto, com teto.
+ * Match ranges in the text, with a ceiling.
  *
- * É o mesmo passo para as duas pontas: o que o campo grifa e o que o "próximo"
- * percorre. Separado assim, é impossível as duas contarem diferente.
+ * It is the same pass for both ends: what the field marks and what "next"
+ * walks through. Split like this, it is impossible for the two to count differently.
  */
 function collectMatches(
   text: string,
@@ -185,8 +185,8 @@ function collectMatches(
   let match: RegExpExecArray | null
   while ((match = matcher.exec(text)) !== null && ranges.length < limit) {
     if (match[0].length === 0) {
-      // Casamento vazio (regex do tipo `a*`) não avança sozinho: sem isso o
-      // laço não termina.
+      // An empty match (a regex like `a*`) does not advance by itself: without this the
+      // loop does not end.
       matcher.lastIndex += 1
       continue
     }
@@ -215,16 +215,16 @@ const findMatches = EditorView.decorations.compute(
   },
 )
 
-/** Erro de estrutura sai da árvore que já existe: dá para ser quase imediato. */
+/** A structure error comes out of the tree that already exists: it can be almost immediate. */
 const SYNTAX_LINT_DELAY_MS = 300
-/** O eslint atravessa IPC e roda numa worker; não vale correr atrás de cada tecla. */
+/** eslint crosses IPC and runs in a worker; it is not worth chasing every keystroke. */
 const ESLINT_DELAY_MS = 700
 
 const JSON_FILE_RE = /\.jsonc?$/i
 
 /**
- * Erro de estrutura, da árvore do Lezer (ou do `JSON.parse`, em .json). Custa
- * quase nada porque o parse já aconteceu para colorir o arquivo.
+ * Structure error, from the Lezer tree (or from `JSON.parse`, in .json). It costs
+ * almost nothing because the parse already happened to color the file.
  */
 function syntaxLinter(filePath: string) {
   const isJson = JSON_FILE_RE.test(filePath)
@@ -236,9 +236,9 @@ function syntaxLinter(filePath: string) {
 }
 
 /**
- * O que o PROJETO considera errado, pelo eslint dele. Silencia de vez quando o
- * projeto não tem eslint utilizável — repetir a tentativa a cada pausa na
- * digitação seria puro desperdício.
+ * What the PROJECT considers wrong, through its eslint. It goes quiet for good when the
+ * project has no usable eslint — repeating the attempt on every typing pause
+ * would be pure waste.
  */
 function projectLinter(filePath: string, root: string | undefined) {
   let unavailable = false
@@ -257,8 +257,8 @@ function projectLinter(filePath: string, root: string | undefined) {
 }
 
 /**
- * Extensões fixas. Montadas à mão em vez do `basicSetup` para não arrastar
- * autocomplete e lint, que aqui não têm de onde tirar sugestão.
+ * Fixed extensions. Assembled by hand instead of `basicSetup` so as not to drag
+ * autocomplete and lint, which here have nowhere to take a suggestion from.
  */
 function baseExtensions(): Extension[] {
   return [
@@ -267,10 +267,10 @@ function baseExtensions(): Extension[] {
     highlightActiveLine(),
     highlightSpecialChars(),
     highlightSelectionMatches(),
-    // Sem `search()`/`searchKeymap`: a barra de busca do arquivo é nossa
-    // (`FileFindBar`), com a mesma gramática do campo do painel direito. O
-    // painel da lib abria com rótulos em inglês e caixas brancas — corpo
-    // estranho no meio do app.
+    // No `search()`/`searchKeymap`: the file search bar is ours
+    // (`FileFindBar`), with the same grammar as the right panel field. The
+    // lib panel opened with English labels and white boxes — a foreign
+    // body in the middle of the app.
     drawSelection(),
     rectangularSelection(),
     crosshairCursor(),
@@ -283,18 +283,18 @@ function baseExtensions(): Extension[] {
     findQuery,
     findMatches,
     lintGutter(),
-    // Alt+clique para cursor extra sai daqui: o padrão do
-    // `clickAddsSelectionRange` já é `altKey`, mas sem isto o segundo cursor
-    // é descartado na hora de aplicar a seleção.
+    // Alt+click for an extra cursor comes from here: the default of
+    // `clickAddsSelectionRange` is already `altKey`, but without this the second cursor
+    // is discarded when the selection is applied.
     EditorState.allowMultipleSelections.of(true),
   ]
 }
 
 /**
- * Modo da linguagem pelo nome do arquivo. O `language-data` resolve cada
- * `@codemirror/lang-*` por import dinâmico — no build viram chunks separados,
- * o mesmo arranjo das gramáticas do shiki, e nada disso entra no bundle
- * inicial.
+ * Language mode by the file name. `language-data` resolves each
+ * `@codemirror/lang-*` through dynamic import — in the build they become separate chunks,
+ * the same arrangement as the shiki grammars, and none of it enters the initial
+ * bundle.
  */
 async function languageFor(filePath: string): Promise<Extension> {
   const name = filePath.split(/[\\/]/).pop() ?? filePath
@@ -303,21 +303,21 @@ async function languageFor(filePath: string): Promise<Extension> {
   try {
     return await found.load()
   } catch {
-    // Linguagem que não carregou vira texto puro: sem cor, mas legível.
+    // A language that did not load becomes plain text: no color, but readable.
     return []
   }
 }
 
 type HtmlNode = ReturnType<typeof syntaxTree>["topNode"]
 
-/** Tag de um `Element` do Lezer (o nome vem do primeiro `TagName`). */
+/** Tag of a Lezer `Element` (the name comes from the first `TagName`). */
 function tagNameOf(state: EditorState, node: HtmlNode): string | null {
   const open = node.getChild("OpenTag") ?? node.getChild("SelfClosingTag")
   const name = open?.getChild("TagName")
   return name ? state.sliceDoc(name.from, name.to).toLowerCase() : null
 }
 
-/** Filhos-ELEMENTO diretos (a mesma numeração que o DOM do artboard usa). */
+/** Direct ELEMENT children (the same numbering the artboard DOM uses). */
 function childElements(node: HtmlNode): HtmlNode[] {
   const out: HtmlNode[] = []
   for (let child = node.firstChild; child; child = child.nextSibling) {
@@ -327,9 +327,9 @@ function childElements(node: HtmlNode): HtmlNode[] {
 }
 
 /**
- * O intervalo no FONTE do elemento apontado pelo caminho (filhos-elemento a
- * partir do <body>) — o mesmo caminho que a ponte usa no DOM vivo. `null` se o
- * fonte ainda não foi parseado (idioma carregando) ou o caminho não existe.
+ * The range in the SOURCE of the element pointed to by the path (element children
+ * from the <body>) — the same path the bridge uses on the live DOM. `null` if the
+ * source has not been parsed yet (language loading) or the path does not exist.
  */
 function elementRange(state: EditorState, path: number[]): { from: number; to: number } | null {
   let body: HtmlNode | null = null
@@ -354,9 +354,9 @@ function elementRange(state: EditorState, path: number[]): { from: number; to: n
 
 export interface AgentWriteOutcome {
   kind: MergePlan["kind"]
-  /** O buffer estava igual ao disco antes desta escrita? */
+  /** Was the buffer equal to the disk before this write? */
   wasClean: boolean
-  /** Conteúdo do buffer depois de aplicar (igual ao anterior se não aplicou). */
+  /** Buffer content after applying (equal to the previous one if it did not apply). */
   content: string
 }
 
@@ -368,18 +368,18 @@ export interface SearchReplaceOptions {
 }
 
 export interface CodeEditorHandle {
-  /** Funde a escrita do agente no buffer. Ver `planMerge` para os critérios. */
+  /** Merges the agent write into the buffer. See `planMerge` for the criteria. */
   applyAgentWrite: (write: AgentWrite) => AgentWriteOutcome
   getContent: () => string
-  /** Realça e rola até o elemento do caminho (filhos-elemento do <body>); `null` limpa. */
+  /** Highlights and scrolls to the element of the path (element children of the <body>); `null` clears. */
   revealElement: (path: number[] | null) => void
   /**
-   * Substitui no BUFFER, nunca no disco.
+   * Replaces in the BUFFER, never on disk.
    *
-   * É o caminho do "substituir neste arquivo": a troca entra como uma edição
-   * comum — desfaz com Mod+Z, marca o rascunho e o salvamento automático a
-   * grava. Escrever no disco por baixo do buffer apagaria o que ainda não foi
-   * salvo, que é exatamente o trabalho que ninguém quer perder.
+   * It is the path of "replace in this file": the swap enters as a common
+   * edit — undo with Mod+Z, it marks the draft and the automatic saving
+   * records it. Writing to disk underneath the buffer would erase what has not been
+   * saved yet, which is exactly the work nobody wants to lose.
    */
   replaceAll: (
     query: string,
@@ -387,21 +387,21 @@ export interface CodeEditorHandle {
     options?: SearchReplaceOptions,
   ) => number
   /**
-   * Leva a vista até a linha e a deixa selecionada — sem isso, clicar numa
-   * ocorrência da busca abriria o arquivo sempre no topo, e a linha que o
-   * usuário clicou ficaria escondida.
+   * Takes the view to the line and leaves it selected — without that, clicking an
+   * occurrence of the search would open the file always at the top, and the line the
+   * user clicked would stay hidden.
    */
   scrollToLine: (line: number) => void
   /**
-   * Grifa as ocorrências da busca do painel DENTRO do arquivo aberto. O campo
-   * da direita deixa de ser só uma lista: ele aponta no texto o que está
-   * listando. Consulta vazia limpa o grifo.
+   * Marks the occurrences of the panel search INSIDE the open file. The field
+   * on the right stops being just a list: it points in the text at what it is
+   * listing. An empty query clears the marks.
    */
   highlightQuery: (query: string, options?: SearchReplaceOptions) => void
   /**
-   * Anda até a próxima ocorrência e a seleciona, rolando até ela. `start` é o
-   * primeiro salto (consulta nova, a partir do cursor); `next`/`prev` dão a
-   * volta no fim do arquivo. Devolve a posição para a barra mostrar "3 de 12".
+   * Walks to the next occurrence and selects it, scrolling to it. `start` is the
+   * first jump (new query, from the cursor); `next`/`prev` wrap around
+   * at the end of the file. Returns the position so the bar can show "3 of 12".
    */
   find: (
     query: string,
@@ -409,9 +409,9 @@ export interface CodeEditorHandle {
     direction: "start" | "next" | "prev",
   ) => { total: number; index: number }
   /**
-   * Troca SÓ a ocorrência selecionada — o "substituir" da barra do arquivo.
-   * Devolve `false` quando a seleção não é um casamento (o usuário mexeu no
-   * texto entre o salto e o clique), e aí nada é escrito.
+   * Swaps ONLY the selected occurrence — the "replace" of the file bar.
+   * Returns `false` when the selection is not a match (the user touched the
+   * text between the jump and the click), and then nothing is written.
    */
   replaceMatch: (
     query: string,
@@ -421,20 +421,20 @@ export interface CodeEditorHandle {
 }
 
 export interface CodeEditorProps {
-  /** Conteúdo em disco. Serve de base para saber se há rascunho não salvo. */
+  /** Content on disk. It serves as a basis to know whether there is an unsaved draft. */
   content: string
-  /** Caminho do arquivo — define a linguagem e delimita o histórico de undo. */
+  /** File path — it defines the language and delimits the undo history. */
   filePath: string
-  /** Quebra de linha: ligada para prosa (markdown), desligada para código. */
+  /** Line wrapping: on for prose (markdown), off for code. */
   wrap?: boolean
   editable?: boolean
-  /** Raiz do workspace — o eslint do projeto é resolvido a partir dela. */
+  /** Workspace root — the project eslint is resolved from it. */
   workspaceRoot?: string
   onSave?: (content: string) => void
   onDirtyChange?: (dirty: boolean) => void
-  /** Cada tecla digitada — usado pelo salvamento automático. */
+  /** Every key typed — used by the automatic saving. */
   onChange?: (content: string) => void
-  /** Cmd+F: o dono do editor abre a barra de busca dele. */
+  /** Cmd+F: the owner of the editor opens its search bar. */
   onRequestFind?: () => void
 }
 
@@ -454,25 +454,25 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
 ) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
-  /** O que está em disco — base da comparação de "sujo". */
+  /** What is on disk — basis of the "dirty" comparison. */
   const baseline = useRef(content)
   const dirty = useRef(false)
   const highlightTimer = useRef<number>()
-  /** Caminho do elemento a realçar (`undefined` = ninguém pediu ainda). */
+  /** Path of the element to highlight (`undefined` = nobody asked yet). */
   const revealPath = useRef<number[] | null | undefined>(undefined)
-  /** Chave do último realce aplicado — evita rolar de novo a cada recarga. */
+  /** Key of the last highlight applied — avoids scrolling again on every reload. */
   const appliedReveal = useRef<string | null>(null)
   /**
-   * Callbacks por ref: entram no keymap e no updateListener, que são montados
-   * uma vez. Sem isso, cada re-render do pai exigiria recriar o editor.
+   * Callbacks by ref: they enter the keymap and the updateListener, which are mounted
+   * once. Without that, every re-render of the parent would require recreating the editor.
    */
   const callbacks = useRef({ onSave, onDirtyChange, onChange, onRequestFind })
   callbacks.current = { onSave, onDirtyChange, onChange, onRequestFind }
 
   /**
-   * Um jogo de compartments POR INSTÂNCIA. Trocar linguagem, tema ou quebra de
-   * linha por reconfiguração mantém o editor vivo — recriar o EditorView
-   * jogaria fora scroll, seleção e histórico a cada mudança de tema.
+   * One set of compartments PER INSTANCE. Swapping language, theme or line
+   * wrapping by reconfiguration keeps the editor alive — recreating the EditorView
+   * would throw away scroll, selection and history on every theme change.
    */
   const conf = useRef({
     language: new Compartment(),
@@ -494,10 +494,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
   }, [])
 
   /**
-   * Aplica o realce do elemento pedido por último. `forceScroll` rola até ele
-   * (seleção nova); sem isso só reafirma o realce (recarga do arquivo, idioma
-   * que terminou de carregar). Se o caminho não resolve (árvore ainda vazia),
-   * não faz nada — a próxima chamada tenta de novo.
+   * Applies the highlight of the element requested last. `forceScroll` scrolls to it
+   * (new selection); without that it only reasserts the highlight (file reload, language
+   * that finished loading). If the path does not resolve (tree still empty),
+   * it does nothing — the next call tries again.
    */
   const applyReveal = useCallback((forceScroll: boolean) => {
     const instance = view.current
@@ -529,11 +529,11 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         doc: content,
         extensions: [
           ...baseExtensions(),
-          // A ordem importa: o primeiro keymap que reconhece a tecla vence.
-          // Mod+s vem antes do `defaultKeymap` porque salvar é nosso; o resto
-          // é o conjunto que se espera de um editor — Alt+seta move a linha,
-          // Shift+Alt+seta duplica, Mod+Shift+K apaga, Mod+d seleciona a
-          // próxima ocorrência.
+          // The order matters: the first keymap that recognizes the key wins.
+          // Mod+s comes before the `defaultKeymap` because saving is ours; the rest
+          // is the set one expects from an editor — Alt+arrow moves the line,
+          // Shift+Alt+arrow duplicates, Mod+Shift+K deletes, Mod+d selects the
+          // next occurrence.
           keymap.of([
             {
               key: "Mod-s",
@@ -544,8 +544,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
               },
             },
             {
-              // Quem abre a busca é o dono do editor: a barra vive ao lado
-              // dele, com o estado que sobrevive à troca de arquivo.
+              // Whoever opens the search is the owner of the editor: the bar lives next to
+              // it, with the state that survives the file switch.
               key: "Mod-f",
               preventDefault: true,
               run: () => {
@@ -578,12 +578,12 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
       instance.destroy()
       view.current = null
     }
-    // Só na montagem: as props entram pelos efeitos de sincronia abaixo.
+    // Only on mount: the props enter through the sync effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Conteúdo vindo de fora: outro arquivo, ou recarga do disco. Substitui o
-  // buffer inteiro e zera o estado de rascunho — é uma base nova.
+  // Content coming from outside: another file, or a disk reload. It replaces the
+  // whole buffer and resets the draft state — it is a new basis.
   useEffect(() => {
     baseline.current = content
     const instance = view.current
@@ -600,9 +600,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     applyReveal(false)
   }, [content, reportDirty, applyReveal])
 
-  // Linguagem e histórico seguem o ARQUIVO, não o conteúdo. Reconfigurar o
-  // `history()` descarta a pilha de undo: sem isso, um Ctrl+Z depois de trocar
-  // de arquivo despejaria o texto do arquivo anterior dentro deste.
+  // Language and history follow the FILE, not the content. Reconfiguring
+  // `history()` discards the undo stack: without that, a Ctrl+Z after switching
+  // file would dump the text of the previous file into this one.
   useEffect(() => {
     const c = conf.current
     view.current?.dispatch({ effects: c.history.reconfigure(history()) })
@@ -638,11 +638,11 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     })
   }, [editable])
 
-  // O linter do eslint fecha sobre o caminho e a raiz, então é remontado
-  // quando qualquer um muda — junto vai o estado de "projeto sem eslint".
-  // Erro de sintaxe vale em qualquer arquivo; o do projeto só onde a edição
-  // faz sentido (arquivo de commit é histórico, e julgá-lo pela config de
-  // hoje diria mais sobre a config do que sobre o arquivo).
+  // The eslint linter closes over the path and the root, so it is remounted
+  // when either changes — the "project without eslint" state goes along.
+  // A syntax error applies in any file; the project one only where the edit
+  // makes sense (a commit file is history, and judging it by today's config
+  // would say more about the config than about the file).
   useEffect(() => {
     view.current?.dispatch({
       effects: conf.current.diagnostics.reconfigure([
@@ -664,8 +664,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         const instance = view.current
         if (!instance || query === "") return 0
         const before = instance.state.doc.toString()
-        // As mesmas regras da lista de ocorrências (palavra inteira, caixa,
-        // preservar formato): a prévia só é honesta se a tecla fizer o mesmo.
+        // The same rules as the occurrence list (whole word, case,
+        // preserve format): the preview is only honest if the key does the same.
         const { text: after, count } = replaceInText(
           before,
           query,
@@ -673,15 +673,15 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
           options,
         )
         if (count === 0) return 0
-        // Uma transação só: a substituição inteira é UM passo de desfazer.
+        // A single transaction: the whole replacement is ONE undo step.
         instance.dispatch({ changes: { from: 0, to: before.length, insert: after } })
         return count
       },
       scrollToLine: (line) => {
         const instance = view.current
         if (!instance) return
-        // O documento pode ter encolhido desde a busca (substituição em massa):
-        // a linha vem de um resultado antigo e precisa caber no que existe hoje.
+        // The document may have shrunk since the search (mass replacement):
+        // the line comes from an old result and needs to fit in what exists today.
         const target = instance.state.doc.line(
           Math.min(Math.max(1, line), instance.state.doc.lines),
         )
@@ -692,9 +692,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         instance.focus()
       },
       /**
-       * Grifa pela consulta da busca do painel: mesmas opções (caixa, palavra
-       * inteira, regex) e uma decoração própria, porque o realçador do
-       * `@codemirror/search` só pinta com o painel dele aberto.
+       * Marks by the panel search query: same options (case, whole
+       * word, regex) and its own decoration, because the `@codemirror/search`
+       * highlighter only paints with its panel open.
        */
       highlightQuery: (query, options = {}) => {
         const instance = view.current
@@ -723,8 +723,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
               break
             }
           }
-          // Do começo do arquivo, "anterior" dá a volta: o fim é o anterior
-          // de quem está no topo.
+          // From the start of the file, "previous" wraps around: the end is the previous
+          // one of whoever is at the top.
           if (index === -1) index = matches.length - 1
         } else {
           const after = direction === "next" ? selection.to : selection.from
@@ -746,9 +746,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         const selected = instance.state.sliceDoc(selection.from, selection.to)
         const matcher = buildMatcher(query, options)
         if (!matcher) return false
-        // A seleção tem de ser EXATAMENTE um casamento: entre o salto e o
-        // clique o texto pode ter mudado, e trocar o que está selecionado sem
-        // conferir comeria um trecho que ninguém pediu.
+        // The selection has to be EXACTLY a match: between the jump and the
+        // click the text may have changed, and swapping what is selected without
+        // checking would eat a stretch nobody asked for.
         const exact = new RegExp(
           "^(?:" + matcher.source + ")$",
           matcher.flags.replace("g", ""),
@@ -774,15 +774,15 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
           annotations: fromAgent.of(true),
           changes: plan.changes,
           effects: markAgentLines.of(
-            // Posições DEPOIS da alteração: o texto inserido é o que deve
-            // acender, e ele só existe no documento resultante.
+            // Positions AFTER the change: the inserted text is what should
+            // light up, and it only exists in the resulting document.
             plan.changes.map((change) => ({
               from: change.from,
               to: change.from + change.insert.length,
             })),
           ),
-          // A escrita é do agente: mexer no cursor tiraria a pessoa de onde
-          // ela estava lendo.
+          // The write is the agent's: touching the cursor would take the person out of where
+          // they were reading.
           scrollIntoView: false,
         })
         window.clearTimeout(highlightTimer.current)
@@ -790,8 +790,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
           view.current?.dispatch({ effects: clearAgentLines.of(null) })
         }, AGENT_HIGHLIGHT_MS)
         const next = instance.state.doc.toString()
-        // Buffer limpo antes: agora ele espelha o disco de novo, então a base
-        // anda junto e nada fica marcado como rascunho.
+        // Clean buffer before: now it mirrors the disk again, so the basis
+        // moves along and nothing is marked as a draft.
         if (wasClean) {
           baseline.current = next
           reportDirty(false)

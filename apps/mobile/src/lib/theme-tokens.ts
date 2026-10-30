@@ -1,6 +1,6 @@
 import type { ResolvedTheme } from '~/stores/theme-store'
 
-/** Tokens de tema inline — usados onde CSS classes do NativeWind não mudam com o tema. */
+/** Inline theme tokens — used where the NativeWind CSS classes do not change with the theme. */
 
 export type ThemeTokens = Record<string, string>
 
@@ -48,7 +48,7 @@ export function getThemeTokens(resolved: ResolvedTheme): ThemeTokens {
   return resolved === 'dark' ? dark : light
 }
 
-/** Converte `hsl(...)` em `hsla(...)` com a opacidade dada — fundos translúcidos estilo `bg-primary/10` do desktop. */
-export function withAlpha(cor: string, alpha: number): string {
-  return cor.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`)
+/** Converts `hsl(...)` into `hsla(...)` with the given opacity — translucent backgrounds in the style of `bg-primary/10` on the desktop. */
+export function withAlpha(color: string, alpha: number): string {
+  return color.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`)
 }

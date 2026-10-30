@@ -7,21 +7,21 @@ import type { NodaraStatus } from '@shared/nodara'
 import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 
 /**
- * Integração oficial com o Nodara (controle de dispositivos Android via MCP).
+ * Official integration with Nodara (Android device control over MCP).
  *
- * O Nodara publica um "bridge file" em ~/.nodara/mcp.json com a URL do seu
- * servidor MCP local e o token de acesso. Aqui a gente lê esse arquivo,
- * confere se o app está no ar (/health) e registra/atualiza o servidor
- * "Nodara" no mcp-config.json do Orbit — é isso que faz as tools aparecerem
- * pro agente.
+ * Nodara publishes a "bridge file" at ~/.nodara/mcp.json with the URL of its
+ * local MCP server and the access token. Here we read that file,
+ * check whether the app is up (/health) and register/update the "Nodara"
+ * server in Orbit's mcp-config.json — that is what makes the tools show up
+ * for the agent.
  *
- * Dois pontos que a primeira versão errava e agora são tratados:
- *  - O estado exibido vinha só do /health do Nodara. O app podia estar rodando
- *    (= "conectado") sem nenhuma entrada MCP no Orbit, então o agente não
- *    tinha tool nenhuma. Agora o estado combina as duas pontas.
- *  - O token do Nodara pode ser regenerado (e a porta, trocada). A entrada
- *    salva no Orbit ficava com o token velho e todo request voltava 401. Um
- *    watcher no bridge file mantém a credencial em dia.
+ * Two points that the first version got wrong and are now handled:
+ *  - The displayed state came only from Nodara's /health. The app could be running
+ *    (= "connected") with no MCP entry in Orbit, so the agent had
+ *    no tool at all. Now the state combines both ends.
+ *  - Nodara's token may be regenerated (and the port changed). The entry
+ *    saved in Orbit kept the old token and every request came back 401. A
+ *    watcher on the bridge file keeps the credential up to date.
  */
 
 const BRIDGE_PATH = path.join(os.homedir(), '.nodara', 'mcp.json')
@@ -49,7 +49,7 @@ async function readBridge(): Promise<NodaraBridge | null> {
   }
 }
 
-/** Confere se o servidor local do Nodara está no ar (o /health é público). */
+/** Checks whether Nodara's local server is up (the /health is public). */
 async function probeHealth(mcpUrl: string): Promise<boolean> {
   try {
     const response = await fetch(`${new URL(mcpUrl).origin}/health`, {
@@ -64,12 +64,12 @@ async function probeHealth(mcpUrl: string): Promise<boolean> {
 }
 
 function authHeader(token: string): Record<string, string> {
-  // O Nodara aceita Bearer, X-Nodara-Token ou ?token=. Header é preferível:
-  // mantém o token fora da URL exibida no card e na lista de servidores MCP.
+  // Nodara accepts Bearer, X-Nodara-Token or ?token=. Header is preferable:
+  // it keeps the token out of the URL displayed in the card and in the MCP server list.
   return { Authorization: `Bearer ${token}` }
 }
 
-/** Entrada MCP do Nodara, preservando as preferências do usuário na edição. */
+/** Nodara's MCP entry, preserving the user's preferences when editing. */
 function buildEntry(bridge: NodaraBridge, existing?: McpServerConfig): McpServerConfig {
   const headers = { ...(existing?.headers ?? {}) }
   delete headers.Authorization
@@ -90,7 +90,7 @@ function findEntry(servers: McpServerConfig[]): McpServerConfig | undefined {
   return servers.find((server) => server.name === NODARA_SERVER_NAME)
 }
 
-/** A entrada salva bate com o que o Nodara está publicando agora? */
+/** Does the saved entry match what Nodara is publishing right now? */
 function entryMatchesBridge(entry: McpServerConfig, bridge: NodaraBridge): boolean {
   if (entry.url !== bridge.mcpUrl) return false
   const current = entry.headers?.Authorization ?? entry.headers?.authorization
@@ -98,9 +98,9 @@ function entryMatchesBridge(entry: McpServerConfig, bridge: NodaraBridge): boole
 }
 
 /**
- * Traduz o erro cru do transporte num código acionável. Um 401 do Nodara
- * chega como "Streamable HTTP error: Error POSTing to endpoint: {"error":
- * "Unauthorized"}" — inútil pra quem só quer saber que precisa reconectar.
+ * Translates the transport's raw error into an actionable code. A 401 from Nodara
+ * arrives as "Streamable HTTP error: Error POSTing to endpoint: {"error":
+ * "Unauthorized"}" — useless to whoever only wants to know that they need to reconnect.
  */
 function normalizeError(error?: string): string | undefined {
   if (!error) return undefined
@@ -110,8 +110,8 @@ function normalizeError(error?: string): string | undefined {
 }
 
 /**
- * Estado da integração: cruza o bridge file + /health do Nodara com o que o
- * Orbit realmente tem registrado e conectado.
+ * State of the integration: crosses the bridge file + Nodara's /health with what
+ * Orbit actually has registered and connected.
  */
 export async function discoverNodara(): Promise<NodaraStatus> {
   const bridge = await readBridge()
@@ -128,8 +128,8 @@ export async function discoverNodara(): Promise<NodaraStatus> {
   }
 
   if (!bridge) {
-    // Sem bridge file: ou o Nodara nunca rodou, ou foi desinstalado. Se o
-    // Orbit tem a entrada e ela está conectada, o que vale é a conexão viva.
+    // No bridge file: either Nodara never ran, or it was uninstalled. If
+    // Orbit has the entry and it is connected, what counts is the live connection.
     if (linked && runtime?.state === 'connected') return { ...base, state: 'connected', tokenStale: false }
     return { ...base, state: 'not-installed', tokenStale: false }
   }
@@ -138,19 +138,19 @@ export async function discoverNodara(): Promise<NodaraStatus> {
   const tokenStale = linked && !!entry && !entryMatchesBridge(entry, bridge)
 
   if (!running) {
-    // "disabled" é a ponte desligada nas configurações do Nodara: reconectar
-    // não resolve, quem tem que agir é o usuário lá dentro.
+    // "disabled" is the bridge turned off in Nodara's settings: reconnecting
+    // does not solve it, the user is the one who has to act there.
     return { ...base, state: bridge.enabled === false ? 'disabled' : 'stopped', tokenStale }
   }
   if (!linked) return { ...base, state: 'installed', tokenStale: false }
   if (runtime?.state === 'connected') return { ...base, state: 'connected', tokenStale }
-  // Entrada desabilitada no Orbit não é falha: o botão Conectar reativa.
+  // An entry disabled in Orbit is not a failure: the Connect button reactivates it.
   return { ...base, state: entry?.enabled === false ? 'installed' : 'error', tokenStale }
 }
 
 /**
- * Registra (ou repara) o servidor MCP do Nodara e conecta. Retorna o estado
- * pós-conexão para o card refletir o resultado real, não a intenção.
+ * Registers (or repairs) Nodara's MCP server and connects. Returns the post-connection
+ * state so the card reflects the real result, not the intention.
  */
 export async function connectNodara(): Promise<NodaraStatus> {
   const bridge = await readBridge()
@@ -168,15 +168,15 @@ export async function connectNodara(): Promise<NodaraStatus> {
   else config.servers.push(entry)
 
   await saveMcpConfig(config)
-  // saveMcpConfig só reconecta o que mudou; se a entrada era idêntica e estava
-  // em erro, força a nova tentativa aqui — o clique tem que valer alguma coisa.
+  // saveMcpConfig only reconnects what changed; if the entry was identical and was
+  // in error, it forces the new attempt here — the click has to count for something.
   const status = listMcpStatus().find((s) => s.config.name === NODARA_SERVER_NAME)
   if (status && status.state !== 'connected') await reconnectMcp(NODARA_SERVER_NAME)
 
   return discoverNodara()
 }
 
-/** Remove o Nodara dos servidores MCP (o app em si continua rodando). */
+/** Removes Nodara from the MCP servers (the app itself keeps running). */
 export async function disconnectNodara(): Promise<NodaraStatus> {
   const config = await readMcpConfig()
   const servers = config.servers.filter((server) => server.name !== NODARA_SERVER_NAME)
@@ -185,8 +185,8 @@ export async function disconnectNodara(): Promise<NodaraStatus> {
 }
 
 /**
- * Mantém a credencial salva igual à do bridge file. Só age quando o usuário
- * já conectou o Nodara alguma vez — nunca registra sozinho.
+ * Keeps the saved credential equal to the one in the bridge file. It only acts when the user
+ * has already connected Nodara at some point — it never registers on its own.
  */
 export async function syncNodaraCredentials(): Promise<boolean> {
   const bridge = await readBridge()
@@ -205,10 +205,10 @@ export async function syncNodaraCredentials(): Promise<boolean> {
 let watching = false
 
 /**
- * Observa ~/.nodara/mcp.json: quando o Nodara reinicia com outra porta ou o
- * token é regenerado, a entrada do Orbit se atualiza sozinha em vez de ficar
- * batendo 401. watchFile (stat polling) porque o arquivo é reescrito inteiro
- * pelo Nodara e pode nem existir ainda quando o Orbit sobe.
+ * Watches ~/.nodara/mcp.json: when Nodara restarts on another port or the
+ * token is regenerated, Orbit's entry updates itself instead of getting
+ * 401s. watchFile (stat polling) because the file is rewritten whole
+ * by Nodara and may not even exist yet when Orbit starts.
  */
 export function watchNodaraBridge(): void {
   if (watching) return

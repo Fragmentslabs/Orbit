@@ -15,14 +15,14 @@ function text(content: string): TextPart {
 }
 
 describe('retryContextNote', () => {
-  it('sem nada executado: diz que o trabalho começa do mesmo ponto', () => {
+  it('with nothing executed: it says the work starts from the same point', () => {
     const note = retryContextNote(failed({ error: 'rate limited' }))
     expect(note).toContain('RETRY')
     expect(note).toContain('rate limited')
     expect(note).toContain('nothing had run')
   })
 
-  it('com tool calls e arquivos escritos: lista os caminhos e manda conferir', () => {
+  it('with tool calls and written files: it lists the paths and tells you to check', () => {
     const note = retryContextNote(
       failed({
         error: 'tool blew up',
@@ -35,7 +35,7 @@ describe('retryContextNote', () => {
     expect(note).toContain('may be half-done')
   })
 
-  it('nunca cita mais de 12 caminhos — o resto vira contagem', () => {
+  it('never cites more than 12 paths — the rest becomes a count', () => {
     const authored = Array.from({ length: 15 }, (_, i) => `f${i}.ts`)
     const note = retryContextNote(failed({ parts: [tool('done')], snapshot: { authored } }))
     expect(note).toContain('f11.ts')
@@ -43,13 +43,13 @@ describe('retryContextNote', () => {
     expect(note).toContain('(+3 more)')
   })
 
-  it('interrompido pela pessoa (sem erro): diz que foi interrompido', () => {
+  it('interrupted by the person (no error): it says it was interrupted', () => {
     const note = retryContextNote(failed({ parts: [tool('error', 'Interrupted.')] }))
     expect(note).toContain('was interrupted')
     expect(note).toContain('check the real state')
   })
 
-  it('leva o fim do que já foi escrito, para o modelo não se contradizer', () => {
+  it('carries the end of what was already written, so the model does not contradict itself', () => {
     const note = retryContextNote(
       failed({
         error: 'boom',
@@ -61,21 +61,21 @@ describe('retryContextNote', () => {
     expect(note.split('\n')).toHaveLength(1)
   })
 
-  it('caminho com colchete não quebra o marcador', () => {
+  it('a path with a bracket does not break the marker', () => {
     const note = retryContextNote(failed({ parts: [tool('done')], snapshot: { authored: ['src/[id].tsx'] } }))
     expect(note).toContain('src/id.tsx')
     expect(note.slice(0, -1)).not.toContain(']')
   })
 
-  it('o texto do erro não quebra o marcador: uma linha, sem "]" interno', () => {
+  it('the error text does not break the marker: one line, no inner "]"', () => {
     const note = retryContextNote(
       failed({ error: 'Invalid value for \'tools\':\n[invalid_value] maximum is 128 ] oops' }),
     )
     expect(note.split('\n')).toHaveLength(1)
     expect(note.startsWith('[SYSTEM: ')).toBe(true)
     expect(note.endsWith(']')).toBe(true)
-    // Um único "]" — o do fim. Qualquer outro faria a linha não casar com
-    // ENGINE_MARKER_LINE e o marcador vazaria para a resposta visível.
+    // A single "]" — the one at the end. Any other would make the line not match
+    // ENGINE_MARKER_LINE and the marker would leak into the visible answer.
     expect(note.slice(0, -1)).not.toContain(']')
     expect(note).toContain('maximum is 128')
   })

@@ -34,9 +34,9 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const remove = useMessageQueueStore((s) => s.remove)
   const [expanded, setExpanded] = useState(false)
   const items = sessionId ? queues[sessionId] : undefined
-  // A fila é a mesma do desktop; o que ainda não chegou lá (escrito sem
-  // conexão) ganha um aviso no lugar do selo.
-  const pendentes = useMemo(
+  // The queue is the same as the desktop; what has not reached it yet (written without
+  // a connection) gets a notice in place of the seal.
+  const pending = useMemo(
     () => new Set((sessionId ? outbox[sessionId] : undefined)?.map((m) => m.id)),
     [outbox, sessionId],
   )
@@ -94,7 +94,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 {msg.text}
               </Text>
               <Text className="text-[10px]" style={{ color: tokens.mutedForeground, opacity: 0.6 }}>
-                {pendentes.has(msg.id)
+                {pending.has(msg.id)
                   ? t('queue.offline')
                   : msg.scheduledAt
                     ? formatSchedule(msg.scheduledAt, i18n.language, t)

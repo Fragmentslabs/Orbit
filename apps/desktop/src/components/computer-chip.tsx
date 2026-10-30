@@ -13,32 +13,32 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Chip "Controlando <app>" no header enquanto o agente desta conversa controla
- * o computador: app atual, tempo desde o início e Parar — que aborta o turno
- * inteiro (o mesmo do ⌘⇧.). Some quando o controle termina (fim do turno,
- * ociosidade ou Parar).
+ * Chip "Controlling <app>" in the header while the agent of this conversation controls
+ * the computer: current app, time since the start and Stop — which aborts the whole
+ * turn (the same as ⌘⇧.). It goes away when the control ends (end of the turn,
+ * idleness or Stop).
  *
- * O chip abre a miniatura da tela controlada, porque com o Orbit na frente o
- * app costuma estar atrás dele e a pessoa não vê o que o agente faz:
- *  - hover espia (abre depois de um instante, fecha ao sair);
- *  - clique fixa o popover até Esc, clique fora ou outro clique — é o que
- *    funciona por teclado e trackpad;
- *  - abre sozinho só quando a tela importa para a decisão: um pedido de
- *    aprovação para agir num app, ou as ações seguidas que não mudam nada;
- *  - "Fixar acima da mensagem" troca o popover por um card ao lado do campo,
- *    para assistir uma tarefa longa sem segurar o mouse parado.
+ * The chip opens the thumbnail of the controlled screen, because with Orbit in front the
+ * app is usually behind it and the person does not see what the agent does:
+ *  - hover peeks (opens after a moment, closes on leaving);
+ *  - a click pins the popover until Esc, a click outside or another click — it is what
+ *    works with keyboard and trackpad;
+ *  - it opens by itself only when the screen matters for the decision: a request for
+ *    approval to act in an app, or the following actions that change nothing;
+ *  - "Pin above the message" swaps the popover for a card next to the field,
+ *    to watch a long task without holding the mouse still.
  */
 
 const activity = new Map<string, ComputerActivity>()
 const listeners = new Set<() => void>()
 let subscribed = false
 
-/** Espera do hover antes de abrir: passar o mouse pelo header a caminho de outra coisa não abre nada. */
+/** Hover wait before opening: passing the mouse over the header on the way to something else opens nothing. */
 const PEEK_OPEN_MS = 300
-/** Tolerância ao sair: dá tempo de levar o mouse do chip até os botões do popover. */
+/** Leaving tolerance: it gives time to take the mouse from the chip to the popover buttons. */
 const PEEK_CLOSE_MS = 200
 
-/** Tools do Computer Use que agem na tela (as que pedem aprovação por app). */
+/** Computer Use tools that act on the screen (the ones that ask for approval per app). */
 const ACTING_TOOLS = new Set(["cu_computer", "cu_batch"])
 
 function subscribe(listener: () => void): () => void {
@@ -46,7 +46,7 @@ function subscribe(listener: () => void): () => void {
   if (!subscribed && typeof window !== "undefined" && window.ipcRenderer) {
     subscribed = true
     const notify = () => listeners.forEach((l) => l())
-    // Depois de um reload do renderer, o main ainda pode estar controlando.
+    // After a renderer reload, the main process may still be controlling.
     void computerApi.activity().then((list) => {
       for (const item of list) activity.set(item.sessionId, item)
       notify()
@@ -60,7 +60,7 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-/** A atividade de controle desta conversa, com um tique por segundo para o relógio. */
+/** The control activity of this conversation, with a tick per second for the clock. */
 export function useComputerActivity(sessionId: string | undefined): ComputerActivity | undefined {
   const [, setTick] = useState(0)
   useEffect(() => subscribe(() => setTick((v) => v + 1)), [])
@@ -79,8 +79,8 @@ function elapsed(since: number): string {
 }
 
 /**
- * Por que abrir sozinho, agora: a chave identifica o momento (o pedido, ou o
- * resultado que mandou parar), para que fechar uma vez não reabra no mesmo.
+ * Why open by itself, now: the key identifies the moment (the request, or the
+ * result that ordered a stop), so that closing it once does not reopen on the same one.
  */
 function useAutoOpenReason(sessionId: string | undefined): { key: string; kind: "approval" | "stalled" } | null {
   const approval = useSessionStore((state) =>
@@ -116,7 +116,7 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reason = useAutoOpenReason(entry ? sessionId : undefined)
 
-  // Abre sozinho num momento novo; o momento que passou (aprovação respondida) fecha o que ele abriu.
+  // It opens by itself on a new moment; the moment that passed (approval answered) closes what it opened.
   useEffect(() => {
     if (reason && !dismissed.current.has(reason.key) && !pinnedAbove) setAutoKey(reason.key)
     else if (!reason) setAutoKey(null)
@@ -129,7 +129,7 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
     [],
   )
 
-  // O controle acabou: nada fica aberto para a próxima vez.
+  // The control is over: nothing stays open for the next time.
   useEffect(() => {
     if (entry) return
     setHeld(false)
@@ -139,7 +139,7 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
 
   if (!sessionId || !entry) return null
   const label = t("computer.chip.controlling", { app: entry.app })
-  // Fixado acima da mensagem, o popover seria a mesma imagem duas vezes.
+  // Pinned above the message, the popover would be the same image twice.
   const open = !pinnedAbove && (held || peek || autoKey !== null)
 
   const schedule = (next: boolean, ms: number) => {
@@ -165,7 +165,7 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
           if (details.reason === "trigger-press") setHeld(true)
           return
         }
-        // Clique no chip com o popover só espiando: fixa em vez de fechar.
+        // Click on the chip with the popover only peeking: it pins instead of closing.
         if (details.reason === "trigger-press" && !held && peek) {
           setHeld(true)
           return
@@ -177,8 +177,8 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
         {...hover}
         title={entry.lastAction ?? label}
         className={cn(
-          // Amarelo primário do Orbit; o texto fica no foreground porque amarelo
-          // sobre fundo claro não se lê.
+          // Orbit's primary yellow; the text stays in the foreground because yellow
+          // on a light background cannot be read.
           "inline-flex max-w-full items-center gap-1.5 self-center rounded-full border border-primary/60 bg-primary/10 py-0.5 pl-0.5 pr-0.5 text-[11px] font-medium text-foreground shadow-sm backdrop-blur",
           className,
         )}
@@ -223,7 +223,7 @@ export function ComputerChip({ sessionId, className }: { sessionId?: string; cla
   )
 }
 
-/** O conteúdo comum ao popover e ao card fixado: cabeçalho, imagem, última ação e ações. */
+/** The content common to the popover and the pinned card: header, image, last action and actions. */
 function ComputerThumbBody({
   sessionId,
   entry,
@@ -305,9 +305,9 @@ function ComputerThumbBody({
 }
 
 /**
- * O card fixado acima do campo de mensagem ("Fixar acima da mensagem" do
- * popover). Some quando o controle termina, e a fixação vai junto: a próxima
- * tarefa volta a começar pelo chip.
+ * The card pinned above the message field ("Pin above the message" from the
+ * popover). It goes away when the control ends, and the pinning goes with it: the next
+ * task starts again from the chip.
  */
 export function ComputerThumbCard({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()

@@ -7,31 +7,31 @@ import type { FractaStatus } from '@shared/fracta'
 import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 
 /**
- * Integração oficial com o Fracta (bancos de dados via MCP).
+ * Official integration with Fracta (databases over MCP).
  *
- * O Fracta guarda as configurações do seu servidor MCP em mcp.json, na pasta
- * de dados do app: se está ligado, o token de acesso e a URL em que o backend
- * está ouvindo. É o mesmo arquivo que a ponte STDIO do próprio Fracta lê.
- * Aqui a gente lê esse arquivo, confere se o backend está no ar e registra
- * (ou atualiza) o servidor "Fracta" no mcp-config.json do Orbit — é isso que
- * faz as tools aparecerem pro agente.
+ * Fracta keeps its MCP server settings in mcp.json, in the app's data
+ * folder: whether it is on, the access token and the URL the backend
+ * is listening on. It is the same file that Fracta's own STDIO bridge reads.
+ * Here we read that file, check whether the backend is up and register
+ * (or update) the "Fracta" server in Orbit's mcp-config.json — that is what
+ * makes the tools show up for the agent.
  *
- * Mesmo desenho do Nodara (./nodara.ts): o estado combina as duas pontas, e
- * um watcher no mcp.json mantém a credencial em dia quando o usuário gera um
- * token novo ou o backend sobe em outra porta.
+ * The same design as Nodara (./nodara.ts): the state combines both ends, and
+ * a watcher on mcp.json keeps the credential up to date when the user generates a
+ * new token or the backend comes up on another port.
  */
 
 const HEALTH_TIMEOUT_MS = 2_500
 const SETTINGS_WATCH_INTERVAL_MS = 10_000
-/** O backend grava a URL ao subir; antes disso, a porta padrão. */
+/** The backend writes the URL when it starts; before that, the default port. */
 const DEFAULT_MCP_URL = 'http://127.0.0.1:3000/mcp'
 
 export const FRACTA_SERVER_NAME = 'Fracta'
 
 /**
- * Pasta de dados do Fracta — a mesma convenção do backend dele
- * (backend/src/utils/appPaths.ts), que espelha o userData do Electron.
- * FRACTA_DATA_DIR, quando absoluto, vale lá e cá.
+ * Fracta's data folder — the same convention as its backend
+ * (backend/src/utils/appPaths.ts), which mirrors Electron's userData.
+ * FRACTA_DATA_DIR, when absolute, counts there and here.
  */
 function fractaDataDir(): string {
   const configured = process.env.FRACTA_DATA_DIR?.trim()
@@ -70,10 +70,10 @@ function mcpUrlOf(settings: FractaSettings): string {
 type Probe = 'ok' | 'disabled' | 'unauthorized' | 'down'
 
 /**
- * Confere se o backend do Fracta está no ar. Não há /health próprio do MCP,
- * então um GET autenticado em /mcp sem sessão faz as vezes: o Fracta responde
- * 400 ("initialize first") quando tudo está certo, 401 para token inválido e
- * 403 com o servidor MCP desligado — sempre em JSON-RPC.
+ * Checks whether the Fracta backend is up. There is no MCP of its own
+ * /health, so an authenticated GET on /mcp without a session does the job: Fracta answers
+ * 400 ("initialize first") when everything is fine, 401 for an invalid token and
+ * 403 with the MCP server off — always in JSON-RPC.
  */
 async function probe(settings: FractaSettings): Promise<Probe> {
   try {
@@ -95,7 +95,7 @@ function authHeader(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` }
 }
 
-/** Entrada MCP do Fracta, preservando as preferências do usuário na edição. */
+/** Fracta's MCP entry, preserving the user's preferences when editing. */
 function buildEntry(settings: FractaSettings, existing?: McpServerConfig): McpServerConfig {
   const headers = { ...(existing?.headers ?? {}) }
   delete headers.Authorization
@@ -115,14 +115,14 @@ function findEntry(servers: McpServerConfig[]): McpServerConfig | undefined {
   return servers.find((server) => server.name === FRACTA_SERVER_NAME)
 }
 
-/** A entrada salva bate com o que o Fracta está publicando agora? */
+/** Does the saved entry match what Fracta is publishing right now? */
 function entryMatchesSettings(entry: McpServerConfig, settings: FractaSettings): boolean {
   if (entry.url !== mcpUrlOf(settings)) return false
   const current = entry.headers?.Authorization ?? entry.headers?.authorization
   return current === (settings.token ? `Bearer ${settings.token}` : undefined)
 }
 
-/** Traduz o erro cru do transporte num código acionável pelo card. */
+/** Translates the transport's raw error into a code the card can act on. */
 function normalizeError(error?: string): string | undefined {
   if (!error) return undefined
   if (/turned off|\b403\b|forbidden/i.test(error)) return 'fracta-disabled'
@@ -132,8 +132,8 @@ function normalizeError(error?: string): string | undefined {
 }
 
 /**
- * Estado da integração: cruza o mcp.json + resposta do backend do Fracta com
- * o que o Orbit realmente tem registrado e conectado.
+ * State of the integration: crosses mcp.json + Fracta backend's response with
+ * what Orbit actually has registered and connected.
  */
 export async function discoverFracta(): Promise<FractaStatus> {
   const settings = await readSettings()
@@ -150,8 +150,8 @@ export async function discoverFracta(): Promise<FractaStatus> {
   }
 
   if (!settings) {
-    // Sem mcp.json: o Fracta nunca rodou aqui, ou usa outra pasta de dados.
-    // Se o Orbit tem a entrada e ela está conectada, vale a conexão viva.
+    // No mcp.json: Fracta never ran here, or it uses another data folder.
+    // If Orbit has the entry and it is connected, the live connection counts.
     if (linked && runtime?.state === 'connected') return { ...base, state: 'connected', tokenStale: false }
     return { ...base, state: 'not-installed', tokenStale: false }
   }
@@ -162,17 +162,17 @@ export async function discoverFracta(): Promise<FractaStatus> {
   if (health === 'down') {
     return { ...base, state: settings.enabled === false ? 'disabled' : 'stopped', tokenStale }
   }
-  // Servidor MCP desligado no Fracta: reconectar não resolve, quem age é o usuário lá dentro.
+  // MCP server off in Fracta: reconnecting does not solve it, the user is the one who acts there.
   if (health === 'disabled') return { ...base, state: 'disabled', tokenStale }
   if (!linked) return { ...base, state: 'installed', tokenStale: false }
   if (runtime?.state === 'connected') return { ...base, state: 'connected', tokenStale }
-  // Entrada desabilitada no Orbit não é falha: o botão Conectar reativa.
+  // An entry disabled in Orbit is not a failure: the Connect button reactivates it.
   return { ...base, state: entry?.enabled === false ? 'installed' : 'error', tokenStale }
 }
 
 /**
- * Registra (ou repara) o servidor MCP do Fracta e conecta. Retorna o estado
- * pós-conexão para o card refletir o resultado real, não a intenção.
+ * Registers (or repairs) Fracta's MCP server and connects. Returns the post-connection
+ * state so the card reflects the real result, not the intention.
  */
 export async function connectFracta(): Promise<FractaStatus> {
   const settings = await readSettings()
@@ -191,15 +191,15 @@ export async function connectFracta(): Promise<FractaStatus> {
   else config.servers.push(entry)
 
   await saveMcpConfig(config)
-  // saveMcpConfig só reconecta o que mudou; se a entrada era idêntica e estava
-  // em erro, força a nova tentativa aqui — o clique tem que valer alguma coisa.
+  // saveMcpConfig only reconnects what changed; if the entry was identical and was
+  // in error, it forces the new attempt here — the click has to count for something.
   const status = listMcpStatus().find((s) => s.config.name === FRACTA_SERVER_NAME)
   if (status && status.state !== 'connected') await reconnectMcp(FRACTA_SERVER_NAME)
 
   return discoverFracta()
 }
 
-/** Remove o Fracta dos servidores MCP (o app em si continua rodando). */
+/** Removes Fracta from the MCP servers (the app itself keeps running). */
 export async function disconnectFracta(): Promise<FractaStatus> {
   const config = await readMcpConfig()
   const servers = config.servers.filter((server) => server.name !== FRACTA_SERVER_NAME)
@@ -208,8 +208,8 @@ export async function disconnectFracta(): Promise<FractaStatus> {
 }
 
 /**
- * Mantém a credencial salva igual à do mcp.json. Só age quando o usuário já
- * conectou o Fracta alguma vez — nunca registra sozinho.
+ * Keeps the saved credential equal to the one in mcp.json. It only acts when the user has
+ * already connected Fracta at some point — it never registers on its own.
  */
 export async function syncFractaCredentials(): Promise<boolean> {
   const settings = await readSettings()
@@ -228,10 +228,10 @@ export async function syncFractaCredentials(): Promise<boolean> {
 let watching = false
 
 /**
- * Observa o mcp.json do Fracta: um token gerado de novo em Configurações →
- * Agentes (MCP), ou o backend subindo em outra porta, atualiza a entrada do
- * Orbit sozinha. watchFile (stat polling) porque o Fracta reescreve o arquivo
- * inteiro (temp + rename) e ele pode nem existir quando o Orbit sobe.
+ * Watches Fracta's mcp.json: a token generated again in Settings →
+ * Agents (MCP), or the backend coming up on another port, updates Orbit's entry
+ * on its own. watchFile (stat polling) because Fracta rewrites the whole file
+ * (temp + rename) and it may not even exist when Orbit starts.
  */
 export function watchFractaSettings(): void {
   if (watching) return

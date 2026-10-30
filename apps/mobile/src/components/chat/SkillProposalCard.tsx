@@ -12,8 +12,8 @@ interface SkillProposalCardProps {
 }
 
 /**
- * Mesma regra do desktop: o output da tool confirma o slug sanitizado
- * ("Skill @<slug> proposta…"); nunca usar o output inteiro como slug.
+ * Same rule as the desktop: the output of the tool confirms the sanitized slug
+ * ("Skill @<slug> proposed…"); never use the whole output as the slug.
  */
 function slugOf(part: ToolPart): string | null {
   const fromOutput = (part.output as string)?.match(/@([a-z0-9_]+)/)?.[1]
@@ -24,9 +24,9 @@ function slugOf(part: ToolPart): string | null {
 }
 
 /**
- * Card de proposta de skill (tool create_skill) exibido inline na mensagem.
- * Espelha o SkillProposalCard do desktop: botões sempre que a skill não
- * está instalada e o usuário não recusou — "dispensada" só com recusa real.
+ * Card of the skill proposal (tool create_skill) shown inline in the message.
+ * Mirrors the SkillProposalCard of the desktop: buttons whenever the skill is not
+ * installed and the user has not refused — "dismissed" only with a real refusal.
  */
 export function SkillProposalCard({ part }: SkillProposalCardProps) {
   const { t } = useTranslation()
@@ -39,8 +39,8 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
   const fetchPending = useToolsStore((s) => s.fetchPending)
   const fetchSkills = useToolsStore((s) => s.fetchSkills)
 
-  // Re-sincroniza com o companion a cada card que monta: a proposta foi
-  // estagiada durante a execução da tool e pode não estar no cache local.
+  // Re-syncs with the companion on every card that mounts: the proposal was
+  // staged during the execution of the tool and may not be in the local cache.
   useEffect(() => {
     void fetchSkills()
     void fetchPending()
@@ -61,8 +61,8 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
 
   const installed = skills.some((sk) => sk.slug === slug)
   const proposal = pending.find((p) => p.slug === slug)
-  // Sem a proposta no store, usa os dados do próprio tool part para manter
-  // os botões visíveis até a sincronização chegar.
+  // Without the proposal in the store, it uses the data of the tool part itself to keep
+  // the buttons visible until the synchronization arrives.
   const data: SkillProposal =
     proposal ??
     ({

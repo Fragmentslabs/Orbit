@@ -12,16 +12,16 @@ import { startChatMirror, useSessionStore } from "@/src/stores/session-store"
 import { Hint } from "@/components/ui/hint"
 
 /**
- * Painéis flutuantes do Computer Use, na janela transparente que cobre a tela
- * enquanto o Orbit está fora de foco: a conversa na borda esquerda e as ações
- * do agente na direita — alças recolhidas que abrem no hover, como na tela
- * cheia do navegador.
+ * Floating panels of Computer Use, in the transparent window that covers the screen
+ * while Orbit is out of focus: the conversation on the left edge and the agent's
+ * actions on the right — collapsed handles that open on hover, as in the browser
+ * fullscreen.
  *
- * A janela deixa o mouse passar; cada painel avisa o main quando o mouse entra
- * ou sai dele, e só então a janela captura cliques.
+ * The window lets the mouse through; each panel tells the main process when the mouse enters
+ * or leaves it, and only then does the window capture clicks.
  */
 
-/** Liga a captura de clique enquanto o mouse está sobre algum painel. */
+/** Enables click capture while the mouse is over some panel. */
 function useInteractive() {
   const inside = useRef(new Set<string>())
   return useCallback((key: string, over: boolean) => {
@@ -42,7 +42,7 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
   const setInteractive = useInteractive()
   const app = activity?.sessionId === sessionId ? activity.app : null
 
-  // Espelho passivo dos eventos do chat + a sessão que o main indicar.
+  // Passive mirror of the chat events + the session the main process indicates.
   useEffect(() => {
     startChatMirror()
     if (!window.ipcRenderer) return
@@ -60,8 +60,8 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
     }
   }, [])
 
-  // Histórico + pedidos pendentes do disco, e o status do turno em andamento
-  // (o espelho só vê os eventos de agora em diante).
+  // History + pending requests from disk, and the status of the turn in progress
+  // (the mirror only sees the events from now on).
   useEffect(() => {
     if (!sessionId) return
     void useSessionStore.getState().ensureMessages(sessionId)
@@ -112,10 +112,10 @@ export function ComputerPanels({ initialSessionId }: { initialSessionId: string 
 const isComputerTool = (part: ToolPart) => part.tool.startsWith("cu_") || part.tool === "computer_task"
 
 /**
- * Falar com a conversa que está controlando sem voltar ao Orbit: o mesmo campo
- * do atalho. A mensagem entra na fila da conversa, com as opções do último
- * envio dela, e sai quando o passo atual termina — para mudar de rumo AGORA, o
- * Parar das ações continua ali.
+ * Talk to the conversation that is controlling without going back to Orbit: the same field
+ * as the shortcut. The message enters the queue of the conversation, with the options of its last
+ * send, and leaves when the current step ends — to change course NOW, the
+ * Stop of the actions is still there.
  */
 function PanelReply({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation()
@@ -143,8 +143,8 @@ function PanelReply({ sessionId }: { sessionId: string }) {
         ref={inputRef}
         onFocusChange={(focused) => {
           window.ipcRenderer?.send("computer-panels:keyboard", focused)
-          // O clique chega antes de a janela aceitar foco: o campo é focado de
-          // novo assim que ela aceita.
+          // The click arrives before the window accepts focus: the field is focused
+          // again as soon as it does.
           if (focused && document.activeElement !== inputRef.current) requestAnimationFrame(() => inputRef.current?.focus())
         }}
         placeholder={t("computer.panels.replyPlaceholder")}

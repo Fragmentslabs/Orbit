@@ -1,10 +1,10 @@
 /**
- * Chip de memória citada na conversa — o espelho mobile do memory-citation do
- * desktop, adaptado ao que a plataforma tem: não há hover, então o toque abre
- * a folha com o resumo (ver MemorySheet).
+ * Chip of a memory cited in the conversation — the mobile mirror of the desktop
+ * memory-citation, adapted to what the platform has: there is no hover, so the tap opens
+ * the sheet with the summary (see MemorySheet).
  *
- * É um <Text> e não um <Pressable> de propósito: ele vive DENTRO do parágrafo
- * do markdown, e só um Text aninhado flui no meio da frase.
+ * It is a <Text> and not a <Pressable> on purpose: it lives INSIDE the paragraph
+ * of the markdown, and only a nested Text flows in the middle of the sentence.
  */
 import { memo, useEffect, useMemo } from 'react'
 import { Text } from 'react-native'
@@ -13,7 +13,7 @@ import { useMemorySheetStore } from '~/stores/memory-sheet-store'
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-/** Rótulo curto o bastante para caber no meio de uma frase. */
+/** Label short enough to fit in the middle of a sentence. */
 const MAX_LABEL = 34
 
 function shortLabel(text: string): string {
@@ -27,9 +27,9 @@ export const MemoryChip = memo(function MemoryChip({
   size = 14,
 }: {
   memoryId: string
-  /** Texto do link escrita pelo modelo; quando é só o id, vale o título da memória. */
+  /** Text of the link written by the model; when it is only the id, the memory title wins. */
   label?: string
-  /** Tamanho do texto em volta — o chip entra dois pontos menor. */
+  /** Size of the surrounding text — the chip comes in two points smaller. */
   size?: number
 }) {
   const open = useMemorySheetStore((s) => s.open)
@@ -39,17 +39,17 @@ export const MemoryChip = memo(function MemoryChip({
 
   const memory = useMemo(() => index.find((m) => m.id === memoryId), [index, memoryId])
 
-  // Índice ainda não carregado nesta conversa: o chip nasce com o id e é
-  // renomeado quando a lista chega (ensureIndex busca uma vez por sessão).
+  // Index not loaded yet in this conversation: the chip is born with the id and is
+  // renamed when the list arrives (ensureIndex fetches once per session).
   useEffect(() => {
     if (!memory) void ensureIndex()
   }, [memory, ensureIndex])
 
-  const texto = useMemo(() => {
-    const escrito = label?.trim()
-    if (escrito && escrito !== memoryId) return shortLabel(escrito)
-    const daMemoria = memory?.title ?? memory?.summary ?? memory?.text ?? ''
-    return daMemoria ? shortLabel(daMemoria) : memoryId
+  const text = useMemo(() => {
+    const written = label?.trim()
+    if (written && written !== memoryId) return shortLabel(written)
+    const fromMemory = memory?.title ?? memory?.summary ?? memory?.text ?? ''
+    return fromMemory ? shortLabel(fromMemory) : memoryId
   }, [label, memory, memoryId])
 
   return (
@@ -66,7 +66,7 @@ export const MemoryChip = memo(function MemoryChip({
         overflow: 'hidden',
       }}
     >
-      {texto}
+      {text}
     </Text>
   )
 })

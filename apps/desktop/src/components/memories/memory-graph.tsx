@@ -1,12 +1,12 @@
 /**
- * Grafo de memórias — o layout vem de @shared/memory-layout (o mesmo que o
- * mobile usa), então as duas plataformas desenham exatamente as mesmas
- * posições: a raiz do projeto no centro e os ramos crescendo para todos os
- * lados, com espaço mínimo garantido entre os rótulos. É uma vista única e
- * contínua — projetos ocupam regiões distintas do canvas, sem moldura nem
- * rótulo separando um do outro; quem isola um projeto é o filtro.
- * Aqui ficam só o desenho SVG, o zoom/pan, o colapso de subárvore e as
- * interações (selecionar, ligar com Ctrl+clique, soltar arquivo).
+ * Memory graph — the layout comes from @shared/memory-layout (the same one the
+ * mobile app uses), so both platforms draw exactly the same
+ * positions: the project root in the center and the branches growing to all
+ * sides, with a minimum space guaranteed between the labels. It is a single and
+ * continuous view — projects occupy distinct regions of the canvas, with no frame and no
+ * label separating one from the other; what isolates a project is the filter.
+ * Here only the SVG drawing, the zoom/pan, the subtree collapse and the
+ * interactions live (select, link with Ctrl+click, drop file).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
@@ -41,8 +41,8 @@ const MINIMAP_W = 160
 const MINIMAP_H = 120
 
 /**
- * Rótulo desenhado. Traduz o nome da área e delega o resto ao helper
- * compartilhado, para o texto medido pela colisão ser o mesmo que aparece.
+ * Drawn label. It translates the area name and delegates the rest to the
+ * shared helper, so the text measured by the collision is the same one that appears.
  */
 function nodeLabel(memory: Memory, isRoot: boolean, t: TFunction): string {
   if (!isRoot && memory.area) {
@@ -54,8 +54,8 @@ function nodeLabel(memory: Memory, isRoot: boolean, t: TFunction): string {
 }
 
 /**
- * Retângulo realmente ocupado pelo nó no canvas: o círculo unido ao rótulo
- * centrado abaixo. Enquadrar por (x, y) apenas cortaria os rótulos das bordas.
+ * Rectangle actually occupied by the node on the canvas: the circle joined to the label
+ * centered below it. Framing only by (x, y) would cut the labels at the edges.
  */
 function extentOf(node: LayoutNode) {
   const halfW = Math.max(node.r, node.labelHalfWidth)
@@ -67,7 +67,7 @@ function extentOf(node: LayoutNode) {
   }
 }
 
-/** Ícone do nó, quando a memória tem área ou categoria com ícone próprio. */
+/** Node icon, when the memory has an area or category with its own icon. */
 function iconNameOf(memory: Memory, isRoot: boolean): string | undefined {
   if (isRoot) return "BrainCircuit"
   if (memory.area) return AREA_ICON[memory.area]
@@ -76,8 +76,8 @@ function iconNameOf(memory: Memory, isRoot: boolean): string | undefined {
 }
 
 /**
- * Rótulo do zoom. Assina o viewport em vez de receber o transform por prop:
- * assim só ele redesenha enquanto o canvas se move, e não a cena inteira.
+ * Zoom label. It subscribes to the viewport instead of receiving the transform by prop:
+ * that way only it redraws while the canvas moves, and not the whole scene.
  */
 function ZoomLabel({ viewport }: { viewport: CanvasViewport }) {
   const k = useSyncExternalStore(viewport.subscribe, () => viewport.getTransform().k)
@@ -88,7 +88,7 @@ function ZoomLabel({ viewport }: { viewport: CanvasViewport }) {
   )
 }
 
-/** Retângulo do que está visível, no minimapa. Assina pelo mesmo motivo. */
+/** Rectangle of what is visible, in the minimap. It subscribes for the same reason. */
 function MinimapViewport({ viewport, bounds, containerRef }: {
   viewport: CanvasViewport
   bounds: { minX: number; minY: number; width: number; height: number }
@@ -123,16 +123,16 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
 }) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
-  // Pan/zoom moram fora do state do React: durante o gesto o transform vai
-  // direto para o DOM e a cena não é reconciliada. Ver use-graph-viewport.
+  // Pan/zoom live outside the React state: during the gesture the transform goes
+  // straight to the DOM and the scene is not reconciled. See use-graph-viewport.
   const viewport = useCanvasViewport({ minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX })
   const [linkSource, setLinkSource] = useState<string | null>(null)
   const [dropActive, setDropActive] = useState(false)
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
 
   const { nodes, edges } = useMemo(
-    // labelOf entra na simulação: é a largura do texto TRADUZIDO que define o
-    // espaço mínimo, senão as áreas colidiriam em idiomas mais verbosos.
+    // labelOf enters the simulation: it is the width of the TRANSLATED text that defines the
+    // minimum space, otherwise the areas would collide in more verbose languages.
     () =>
       layoutMemoryGraph(pool, {
         collapsedIds,
@@ -186,15 +186,15 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
     }, animate)
   }, [nodes, viewport])
 
-  // O primeiro enquadramento é instantâneo; os seguintes (o grafo mudou de
-  // tamanho) deslizam, que é menos abrupto do que o conteúdo saltar.
+  // The first framing is instant; the following ones (the graph changed
+  // size) slide, which is less abrupt than the content jumping.
   const framed = useRef(false)
   useEffect(() => {
     fitView(framed.current)
     framed.current = true
-    // Reenquadra quando o grafo MUDA DE TAMANHO. fitView depende de `nodes`,
-    // que troca de identidade a cada recálculo — como dep, jogaria fora o
-    // pan/zoom do usuário a cada atualização.
+    // Re-frames when the graph CHANGES SIZE. fitView depends on `nodes`,
+    // which changes identity on every recalculation — as a dep, it would throw away the
+    // user's pan/zoom on every update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length])
 
@@ -239,7 +239,7 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
 
   const handleNodeClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    // Clique que é só o fim de um arraste não seleciona nada.
+    // A click that is only the end of a drag selects nothing.
     if (viewport.wasDragged()) return
     if (e.ctrlKey || e.metaKey) {
       if (!linkSource) {
@@ -277,7 +277,7 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
     const el = containerRef.current
     if (!el) return
     const svgRect = e.currentTarget.getBoundingClientRect()
-    // Ponto do minimapa → coordenada do grafo → centro da vista.
+    // Minimap point → graph coordinate → center of the view.
     const gx = bounds.minX + ((e.clientX - svgRect.left) / MINIMAP_W) * bounds.width
     const gy = bounds.minY + ((e.clientY - svgRect.top) / MINIMAP_H) * bounds.height
     const { k } = viewport.getTransform()
@@ -350,16 +350,16 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
             onPointerDown={viewport.onPointerDown}
             onClick={() => { if (!viewport.wasDragged()) onSelect(null) }}
           >
-            {/* O transform é escrito direto neste <g> pelo viewport — nada de
-                transição CSS aqui: ela reiniciava a cada evento de roda e era
-                o que fazia o zoom parecer travado. */}
+            {/* The transform is written straight into this <g> by the viewport — no
+                CSS transition here: it restarted on every wheel event and was
+                what made the zoom look stuck. */}
             <g ref={viewport.sceneRef}>
               {edges.map((edge) => {
                 const a = nodeById.get(edge.from)
                 const b = nodeById.get(edge.to)
                 if (!a || !b) return null
-                // Todas as arestas são retas — num grafo que cresce em todas as
-                // direções, curva só embaralha. O que separa os tipos é o traço.
+                // All the edges are straight — in a graph that grows in all
+                // directions, a curve only muddles. What separates the types is the stroke.
                 return (
                   <line
                     key={`${edge.from}:${edge.to}`}
@@ -412,9 +412,9 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
                         opacity={isSelected || isLinkSource ? 0.9 : 0.5}
                       />
                     )}
-                    {/* Círculo + rótulo centrado abaixo (estilo Obsidian). O
-                        deslocamento vertical do texto vem de LABEL_OFFSET, o
-                        mesmo valor que a colisão do layout reserva. */}
+                    {/* Circle + label centered below (Obsidian style). The
+                        vertical offset of the text comes from LABEL_OFFSET, the
+                        same value the layout collision reserves. */}
                     <circle
                       r={node.r}
                       fill={color}
@@ -443,7 +443,7 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
                     >
                       {nodeLabel(memory, node.isRoot, t)}
                     </text>
-                    {/* Expand / Collapse toggle — só no hover do nó */}
+                    {/* Expand / Collapse toggle — only on the hover of the node */}
                     {node.childCount > 0 && (
                       <g
                         className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"

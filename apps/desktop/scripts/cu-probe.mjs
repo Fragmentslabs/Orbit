@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Fase 0 do Computer Use: mede a bridge JXA ANTES de qualquer decisão de
-// produto. Roda a MESMA bridge do app (electron/lib/computer/bridges/macos.js)
-// contra os apps abertos e imprime uma tabela com os critérios de aprovação
-// definidos em docs/computer-use.md.
+// Phase 0 of Computer Use: measures the JXA bridge BEFORE any product
+// decision. Runs the SAME bridge as the app (electron/lib/computer/bridges/macos.js)
+// against the open apps and prints a table with the approval criteria
+// defined in docs/computer-use.md.
 //
-// Uso:
-//   node scripts/cu-probe.mjs                 mede tudo que der com o que está aberto
-//   node scripts/cu-probe.mjs --runs 5        repetições por medição (p95 sai daí)
-//   node scripts/cu-probe.mjs --frozen        congela o TextEdit (SIGSTOP) e mede o timeout
-//   node scripts/cu-probe.mjs --json          saída em JSON (para colar no doc)
+// Usage:
+//   node scripts/cu-probe.mjs                 measures everything possible with what is open
+//   node scripts/cu-probe.mjs --runs 5        repetitions per measurement (p95 comes from there)
+//   node scripts/cu-probe.mjs --frozen        freezes TextEdit (SIGSTOP) and measures the timeout
+//   node scripts/cu-probe.mjs --json          JSON output (to paste into the doc)
 //
-// Permissões: quem roda a probe é o terminal (ou o app que abriu o terminal).
-// Para medir AX e captura, conceda Acessibilidade e Gravação de Tela a ele.
+// Permissions: whoever runs the probe is the terminal (or the app that opened the terminal).
+// To measure AX and capture, grant Accessibility and Screen Recording to it.
 
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
@@ -20,7 +20,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 if (process.platform !== 'darwin') {
-  console.error('A probe da Fase 0 só roda no macOS.')
+  console.error('The Phase 0 probe only runs on macOS.')
   process.exit(1)
 }
 
@@ -31,7 +31,7 @@ const RUNS = Number(args[args.indexOf('--runs') + 1]) || 3
 const JSON_OUT = args.includes('--json')
 const FROZEN = args.includes('--frozen')
 
-// Os mesmos limites que o doc fixa como critério de aprovação.
+// The same limits the doc sets as the approval criterion.
 const CRITERIA = {
   observeP95Ms: 1500,
   frozenMs: 3000,
@@ -94,13 +94,13 @@ function check(name, pass, detail) {
   report.checks.push({ name, pass, detail })
 }
 
-// 1. Permissões e custo fixo de uma invocação
+// 1. Permissions and fixed cost of one invocation
 const perms = await bridge('perms')
 report.permissions = perms.ok ? perms.result : perms.error
 report.spawnMs = perms.ms
-check('Acessibilidade concedida ao processo que roda a probe', perms.ok && perms.result.accessibility, perms.ok ? '' : perms.error?.message)
+check('Accessibility granted to the process that runs the probe', perms.ok && perms.result.accessibility, perms.ok ? '' : perms.error?.message)
 
-// 2. Lista de janelas (CGWindowList + NSWorkspace)
+// 2. Window list (CGWindowList + NSWorkspace)
 const listTimes = []
 let snapshot = null
 for (let i = 0; i < RUNS; i++) {
@@ -110,9 +110,9 @@ for (let i = 0; i < RUNS; i++) {
 }
 report.appsP95Ms = p95(listTimes)
 report.windowTitlesVisible = Boolean(snapshot?.windows.some((w) => w.title))
-check('Lista de apps e janelas', Boolean(snapshot), `p95 ${report.appsP95Ms} ms`)
+check('List of apps and windows', Boolean(snapshot), `p95 ${report.appsP95Ms} ms`)
 
-// 3. Árvore AX e captura por app aberto
+// 3. AX tree and capture per open app
 report.apps = []
 for (const probe of PROBE_APPS) {
   const app = snapshot?.apps.find((a) => a.bundleId === probe.bundleId)
@@ -123,14 +123,14 @@ for (const probe of PROBE_APPS) {
   const win = snapshot.windows.find((w) => w.pid === app.pid)
   const entry = { ...probe, running: true, pid: app.pid, windowId: win?.id ?? null }
   if (!win) {
-    report.apps.push({ ...entry, note: 'sem janela visível' })
+    report.apps.push({ ...entry, note: 'no visible window' })
     continue
   }
   for (const enhance of probe.kind === 'chromium' ? [false, true] : [false]) {
     const times = []
     let last = null
     for (let i = 0; i < RUNS; i++) {
-      // Como o app: só a primeira leitura com a flag espera o Chromium montar a árvore.
+      // Like the app: only the first read with the flag waits for Chromium to build the tree.
       const enhanceWaitMs = enhance && i === 0 ? 450 : 0
       const r = await bridge('tree', { pid: app.pid, window: { frame: win.frame, title: win.title }, maxNodes: 250, enhance, enhanceWaitMs })
       times.push(r.ms)
@@ -154,44 +154,44 @@ for (const probe of PROBE_APPS) {
 
 for (const a of report.apps.filter((x) => x.running && x.tree)) {
   if (a.tree.error) {
-    check(`Árvore ${a.label}`, false, a.tree.error.message)
+    check(`Tree ${a.label}`, false, a.tree.error.message)
     continue
   }
   if (a.kind === 'native') {
-    check(`Observe ${a.label} p95 < ${CRITERIA.observeP95Ms} ms`, a.tree.p95Ms < CRITERIA.observeP95Ms, `${a.tree.p95Ms} ms, ${a.tree.nodes} nós`)
+    check(`Observe ${a.label} p95 < ${CRITERIA.observeP95Ms} ms`, a.tree.p95Ms < CRITERIA.observeP95Ms, `${a.tree.p95Ms} ms, ${a.tree.nodes} nodes`)
   } else {
     const plain = a.tree.nodes
     const rich = a.treeEnhanced?.nodes ?? 0
-    check(`Árvore ${a.label} não vazia com a flag de acessibilidade`, rich > 20, `${plain} nós sem flag → ${rich} com flag`)
+    check(`Tree ${a.label} not empty with the accessibility flag`, rich > 20, `${plain} nodes without flag → ${rich} with flag`)
   }
   if (a.capture) {
     check(
-      `Captura ${a.label} p95 < ${CRITERIA.captureP95Ms} ms`,
+      `Capture ${a.label} p95 < ${CRITERIA.captureP95Ms} ms`,
       Boolean(a.capture.p95Ms && a.capture.p95Ms < CRITERIA.captureP95Ms),
       a.capture.error ?? `${a.capture.p95Ms} ms, ${a.capture.kb} KB`,
     )
   }
 }
 
-// 4. App congelado: o timeout de mensageria tem que segurar a observação
+// 4. Frozen app: the messaging timeout has to hold the observation
 if (FROZEN) {
   const textEdit = report.apps.find((a) => a.bundleId === 'com.apple.TextEdit' && a.windowId)
   if (!textEdit) {
-    check('Timeout com app congelado', false, 'abra o TextEdit com uma janela para este teste')
+    check('Timeout with a frozen app', false, 'open TextEdit with a window for this test')
   } else {
     const win = snapshot.windows.find((w) => w.id === textEdit.windowId)
     process.kill(textEdit.pid, 'SIGSTOP')
     try {
       const r = await bridge('tree', { pid: textEdit.pid, window: { frame: win.frame }, maxNodes: 250 }, 20_000)
       report.frozen = { ms: r.ms, ok: r.ok, truncated: r.result?.truncated ?? null, error: r.error ?? null }
-      check(`App congelado responde em < ${CRITERIA.frozenMs} ms`, r.ms < CRITERIA.frozenMs, `${r.ms} ms (${r.ok ? r.result.truncated ?? 'completo' : r.error.code})`)
+      check(`Frozen app answers in < ${CRITERIA.frozenMs} ms`, r.ms < CRITERIA.frozenMs, `${r.ms} ms (${r.ok ? r.result.truncated ?? 'complete' : r.error.code})`)
     } finally {
       process.kill(textEdit.pid, 'SIGCONT')
     }
   }
 }
 
-// 5. Processo quente: o quanto do tempo é só subir o osascript
+// 5. Warm process: how much of the time is only starting osascript
 const warmStart = Date.now()
 await new Promise((resolve) => {
   const child = spawn('osascript', ['-l', 'JavaScript', '-e', 'function run() { return "1" }'])
@@ -202,23 +202,23 @@ report.coldSpawnMs = Date.now() - warmStart
 if (JSON_OUT) {
   console.log(JSON.stringify(report, null, 2))
 } else {
-  console.log(`\nComputer Use — Fase 0 (${report.at}, Darwin ${report.macos}, ${RUNS} execuções)\n`)
-  console.log(`Subir o osascript: ${report.coldSpawnMs} ms · invocação mínima da bridge: ${report.spawnMs} ms`)
-  console.log(`Títulos de janela visíveis (Gravação de Tela): ${report.windowTitlesVisible ? 'sim' : 'não'}\n`)
-  console.log('| App | Árvore p95 | Nós | Com flag | Captura p95 |')
+  console.log(`\nComputer Use — Phase 0 (${report.at}, Darwin ${report.macos}, ${RUNS} runs)\n`)
+  console.log(`Starting osascript: ${report.coldSpawnMs} ms · minimum bridge invocation: ${report.spawnMs} ms`)
+  console.log(`Visible window titles (Screen Recording): ${report.windowTitlesVisible ? 'yes' : 'no'}\n`)
+  console.log('| App | Tree p95 | Nodes | With flag | Capture p95 |')
   console.log('|---|---|---|---|---|')
   for (const a of report.apps) {
     if (!a.running) {
-      console.log(`| ${a.label} | não está aberto | | | |`)
+      console.log(`| ${a.label} | not open | | | |`)
       continue
     }
     const tree = a.tree?.error ? a.tree.error.code : a.tree ? `${a.tree.p95Ms} ms` : a.note ?? '—'
     const nodes = a.tree?.nodes ?? '—'
-    const rich = a.treeEnhanced ? (a.treeEnhanced.error ? a.treeEnhanced.error.code : `${a.treeEnhanced.nodes} nós`) : '—'
-    const cap = a.capture ? (a.capture.error ? 'negada' : `${a.capture.p95Ms} ms (${a.capture.kb} KB)`) : '—'
+    const rich = a.treeEnhanced ? (a.treeEnhanced.error ? a.treeEnhanced.error.code : `${a.treeEnhanced.nodes} nodes`) : '—'
+    const cap = a.capture ? (a.capture.error ? 'denied' : `${a.capture.p95Ms} ms (${a.capture.kb} KB)`) : '—'
     console.log(`| ${a.label} | ${tree} | ${nodes} | ${rich} | ${cap} |`)
   }
-  console.log('\nCritérios:')
+  console.log('\nCriteria:')
   for (const c of report.checks) console.log(`  ${c.pass ? '✓' : '✗'} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`)
   console.log('')
 }

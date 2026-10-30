@@ -1,16 +1,16 @@
 import type { CatalogModel, CatalogProvider } from '@shared/chat'
 
 /**
- * Pacote que o runtime usa para falar com um provedor. No catálogo quem manda
- * é o `npm` do models.dev; num provedor personalizado (que o models.dev não
- * conhece) quem manda é o `protocol` escolhido no cadastro. Sem nenhum dos
- * dois, cai no adaptador openai-compatible — o mesmo fallback de antes.
+ * Package the runtime uses to talk to a provider. In the catalog whoever decides
+ * is models.dev's `npm`; in a custom provider (which models.dev does not
+ * know) whoever decides is the `protocol` chosen in the registration. With neither of the
+ * two, it falls back to the openai-compatible adapter — the same fallback as before.
  *
- * Mora num módulo próprio (sem imports do app) porque catalog.ts, providers.ts
- * e reasoning/index.ts precisam da MESMA resposta: se o reasoning achasse que
- * o provedor fala openai-compatible enquanto o runtime usa o SDK da Anthropic,
- * o providerOptions sairia no namespace errado e o nível de reasoning se
- * perderia em silêncio.
+ * It lives in a module of its own (without app imports) because catalog.ts, providers.ts
+ * and reasoning/index.ts need the SAME answer: if reasoning thought the provider
+ * spoke openai-compatible while the runtime uses the Anthropic SDK,
+ * the providerOptions would go out in the wrong namespace and the reasoning level would
+ * get lost silently.
  */
 export function providerRuntimeNpm(
   provider: Pick<CatalogProvider, 'npm' | 'protocol'> | undefined,
@@ -27,11 +27,11 @@ export function providerRuntimeNpm(
 }
 
 /**
- * Pacote e endpoint de um MODELO. O models.dev pode trocar os dois por modelo
- * (`model.provider`): no OpenCode Go o provedor declara openai-compatible, mas
- * o Claude Haiku só existe em /go/anthropic/v1 pelo protocolo Anthropic — pelo
- * endpoint OpenAI o gateway responde "Model does not support this protocol.".
- * Sem modelo, ou sem o override, vale o do provedor.
+ * Package and endpoint of a MODEL. models.dev may swap both per model
+ * (`model.provider`): in OpenCode Go the provider declares openai-compatible, but
+ * Claude Haiku only exists in /go/anthropic/v1 through the Anthropic protocol — through the
+ * OpenAI endpoint the gateway answers "Model does not support this protocol.".
+ * Without a model, or without the override, the provider's counts.
  */
 export function modelRuntime(
   provider: Pick<CatalogProvider, 'npm' | 'protocol' | 'api'> | undefined,

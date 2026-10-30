@@ -7,8 +7,8 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
-/** Pastas recentes do seletor (`orbit-recent-folders`), escritas pelo
- *  code-input. Servem de candidatas ao projeto de uma pasta nova. */
+/** Recent folders of the selector (`orbit-recent-folders`), written by the
+ *  code-input. They serve as candidates for the project of a new folder. */
 export function loadRecentFolders(): string[] {
   try {
     const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
@@ -29,13 +29,13 @@ export async function pickFolder(): Promise<string | null> {
 }
 
 /**
- * Nome da pasta principal do chat. Num worktree, é o nome do projeto (o
- * repositório principal): o worktree em si já aparece no seletor ao lado, e o
- * nome da pasta dele não diz de que projeto se trata.
+ * Name of the main folder of the chat. In a worktree, it is the name of the project (the
+ * main repository): the worktree itself already appears in the selector next to it, and the
+ * name of its folder does not say which project it is about.
  */
-export function useNomeDaPastaPrincipal(pasta: string | undefined): string {
-  const principal = useWorktreeStore((s) => (pasta ? s.principalDe[pasta] : undefined))
-  return pasta ? getFolderName(principal ?? pasta) : ""
+export function useMainFolderName(folder: string | undefined): string {
+  const main = useWorktreeStore((s) => (folder ? s.mainByFolder[folder] : undefined))
+  return folder ? getFolderName(main ?? folder) : ""
 }
 
 export function getFolderName(path: string): string {
@@ -46,33 +46,33 @@ export function getFolderName(path: string): string {
 interface FolderSelectorProps {
   folders: string[]
   onFoldersChange: (folders: string[]) => void
-  /** Estilo menor do trigger (usado no header). Não muda o comportamento —
-   * ver hideTrigger para onde o dropdown completo é usado. */
+  /** Smaller trigger style (used in the header). It does not change the behavior —
+   * see hideTrigger for where the full dropdown is used. */
   compact?: boolean
-  /** Controla a abertura do dropdown externamente (uso combinado com hideTrigger) */
+  /** Controls the opening of the dropdown externally (used together with hideTrigger) */
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  /** Omite o botão gatilho — usado quando outro componente abre este dropdown */
+  /** Omits the trigger button — used when another component opens this dropdown */
   hideTrigger?: boolean
-  /** Pasta ainda não escolhida (bloqueio do envio no modo código): a linha
-   *  que se abre ao redor do gatilho chama o olho para o que resolve. */
+  /** Folder not chosen yet (sending blocked in code mode): the line
+   *  that opens around the trigger draws the eye to what solves it. */
   pulse?: boolean
 }
 
 export function FolderSelector({ folders, onFoldersChange, compact, open: openProp, onOpenChange, hideTrigger, pulse }: FolderSelectorProps) {
   const { t } = useTranslation()
-  const nomePrincipal = useNomeDaPastaPrincipal(folders[0])
+  const mainName = useMainFolderName(folders[0])
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const recentOpen = openProp ?? uncontrolledOpen
   const setRecentOpen = onOpenChange ?? setUncontrolledOpen
   const recentRef = useRef<HTMLDivElement>(null)
   const [recentFolders] = useState<string[]>(loadRecentFolders)
 
-  // O dropdown completo (seções, trocar/adicionar/remover) só existe no modo
-  // hideTrigger — usado pelo CompactWorkspaceSelector no header em telas
-  // pequenas. Fora dele (header em telas grandes, ou o seletor acima do
-  // input) o trigger nunca abre dropdown, então não precisa fechar por
-  // clique fora.
+  // The full dropdown (sections, switch/add/remove) only exists in
+  // hideTrigger mode — used by CompactWorkspaceSelector in the header on
+  // small screens. Outside it (header on large screens, or the selector above the
+  // input) the trigger never opens a dropdown, so it does not need to close on
+  // outside click.
   useEffect(() => {
     if (!hideTrigger) return
     function handleClickOutside(e: MouseEvent) {
@@ -93,11 +93,11 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
     if (folders[0] === folderPath) return
     onFoldersChange(
       folders.includes(folderPath)
-        // Já associada (escolhida na lista): vira a principal e a antiga desce
-        // para as extras.
+        // Already attached (chosen in the list): it becomes the main one and the old one goes down
+        // to the extras.
         ? [folderPath, ...folders.filter((f) => f !== folderPath)]
-        // Pasta nova pelo seletor: troca o repositório principal, preservando
-        // as extras já associadas.
+        // New folder through the selector: it swaps the main repository, preserving
+        // the extras already attached.
         : [folderPath, ...folders.slice(1)],
     )
   }, [folders, onFoldersChange, setRecentOpen])
@@ -153,8 +153,8 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
       {primaryFolder && (
         <div className="pt-1">
           {sectionLabel(t("folderSelector.primary"))}
-          {/* Clicar na pasta principal abre o seletor nativo para trocá-la —
-              selecionar a que já é principal não faria nada. */}
+          {/* Clicking the main folder opens the native selector to swap it —
+              selecting the one that is already the main one would do nothing. */}
           {folderRow(primaryFolder, { active: true, onSelect: () => void setPrimaryFolder() })}
         </div>
       )}
@@ -193,12 +193,12 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
           )}
         </div>
       ) : (
-        // Sem dropdown fora do header em telas pequenas (hideTrigger, acima):
-        // o clique troca a pasta principal direto pelo seletor nativo, como
-        // era antes de existir o dropdown.
+        // With no dropdown outside the header on small screens (hideTrigger, above):
+        // the click swaps the main folder straight through the native selector, as
+        // it was before the dropdown existed.
         <span className="relative inline-flex min-w-0 max-w-full">
-          {/* Sem pasta o modo código não tem onde trabalhar: o mesmo pulso do
-              botão de conectar provedor marca o único controle que resolve. */}
+          {/* Without a folder code mode has nowhere to work: the same pulse of the
+              connect provider button marks the only control that solves it. */}
           {pulse && (
             <span
               aria-hidden
@@ -209,16 +209,16 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
             <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
             
               <Truncate>
-                  <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+                  <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : mainName}</span>
               </Truncate>
           </button>
         </span>
       )}
-      {/* Pastas extras + "+" ao lado do trigger. No header (compact) quem
-          esconde essa fileira em telas pequenas é o container query do
-          próprio header — lá ela é substituída pelo CompactWorkspaceSelector,
-          que traz tudo isso dentro do dropdown. Só o hideTrigger (o dropdown
-          em si) nunca mostra a fileira. */}
+      {/* Extra folders + "+" next to the trigger. In the header (compact) what
+          hides this row on small screens is the container query of the
+          header itself — there it is replaced by CompactWorkspaceSelector,
+          which brings all of that inside the dropdown. Only hideTrigger (the dropdown
+          itself) never shows the row. */}
       {!hideTrigger && (
         <div className={compact ? "flex min-w-0 items-center gap-1.5" : "hidden min-w-0 items-center gap-1.5 sm:flex"}>
           {folders.slice(1).map((folder) => (

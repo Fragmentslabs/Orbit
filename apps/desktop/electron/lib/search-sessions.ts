@@ -1,6 +1,6 @@
 /**
- * Busca textual entre sessões (título + parts text das mensagens).
- * Scan linear on-demand — mesmos caps do IPC search:sessions.
+ * Text search across sessions (title + text parts of the messages).
+ * Linear on-demand scan — same caps as the search:sessions IPC.
  */
 import type { ChatMessage, SearchHit, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'

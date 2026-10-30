@@ -1,12 +1,12 @@
 /**
- * Helpers de anexos (FilePart) no nativo.
+ * Helpers for attachments (FilePart) on native.
  *
- * - `uriToFilePart`: converte um asset local (câmera/galeria/document picker)
- *   em FilePart com data URL. Usa expo-file-system (API legacy, que preserva
- *   readAsStringAsync) porque `fetch(file://…)` + FileReader falha no RN
- *   nativo — era a causa dos erros ao anexar foto/arquivo.
- * - `openFilePart`: grava o data URL num arquivo de cache e abre o share
- *   sheet do sistema (o usuário escolhe o app que suporta o tipo).
+ * - `uriToFilePart`: converts a local asset (camera/gallery/document picker)
+ *   into a FilePart with a data URL. Uses expo-file-system (legacy API, which keeps
+ *   readAsStringAsync) because `fetch(file://…)` + FileReader fails on native
+ *   RN — that was the cause of the errors when attaching a photo/file.
+ * - `openFilePart`: writes the data URL to a cache file and opens the system
+ *   share sheet (the user picks the app that supports the type).
  */
 import { Platform } from 'react-native'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -47,7 +47,7 @@ export async function uriToFilePart(uri: string, mime?: string, filename?: strin
   }
 }
 
-/** Extensão razoável a partir do mime/nome, pro share sheet sugerir apps certos. */
+/** Reasonable extension from the mime/name, so the share sheet suggests the right apps. */
 function extensionFor(file: FilePart): string {
   const fromName = file.filename?.match(/\.([a-zA-Z0-9]+)$/)?.[1]
   if (fromName) return fromName
@@ -56,8 +56,8 @@ function extensionFor(file: FilePart): string {
 }
 
 /**
- * Abre um FilePart: URLs http(s) vão pro navegador via share/Linking;
- * data URLs são materializados num arquivo de cache e compartilhados.
+ * Opens a FilePart: http(s) URLs go to the browser via share/Linking;
+ * data URLs are materialized into a cache file and shared.
  */
 export async function openFilePart(file: FilePart): Promise<void> {
   if (!file.url) return
@@ -77,10 +77,10 @@ export async function openFilePart(file: FilePart): Promise<void> {
     await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 })
   }
 
-  // Carregamento condicional de módulo opcional: import estático não
-  // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-  // build sem o nativo) e é justamente por isso que o require está
-  // dentro do try/if.
+  // Conditional loading of an optional module: a static import does not
+  // work here (the module may not exist at runtime — Expo Go, web,
+  // build without the native part) and that is exactly why the require is
+  // inside the try/if.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   Sharing = require('expo-sharing') as typeof import('expo-sharing')
   if (await Sharing.isAvailableAsync()) {

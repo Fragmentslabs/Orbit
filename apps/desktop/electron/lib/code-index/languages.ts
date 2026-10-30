@@ -1,12 +1,12 @@
 import type { LRParser } from '@lezer/lr'
 
 /**
- * Como cada linguagem vira símbolos. Os parsers são os do Lezer — os mesmos
- * que o editor (CodeMirror) já carrega —, então o índice não traz dependência
- * nativa nenhuma: nada de tree-sitter para recompilar por Electron/arquitetura.
+ * How each language becomes symbols. The parsers are the Lezer ones — the same
+ * ones the editor (CodeMirror) already loads —, so the index brings no native
+ * dependency at all: no tree-sitter to recompile per Electron/architecture.
  *
- * Cada regra diz que nó do parser é uma definição e onde está o nome dela. O
- * resto (referências, escopo, assinatura) é o mesmo algoritmo para todas.
+ * Each rule says which parser node is a definition and where its name is. The
+ * rest (references, scope, signature) is the same algorithm for all of them.
  */
 
 export type SymbolKind =
@@ -21,19 +21,19 @@ export type SymbolKind =
 
 export interface DefRule {
   kind: SymbolKind
-  /** Tipos de nó que carregam o nome, procurados em pré-ordem sem entrar em corpo/parâmetros. */
+  /** Node types that carry the name, looked up in pre-order without entering body/parameters. */
   name: string[]
-  /** Só é definição se tiver este filho direto (struct de C com corpo, método de C++ declarado). */
+  /** It is only a definition if it has this direct child (C struct with a body, declared C++ method). */
   requires?: string
-  /** Só fora de corpo de função — variáveis de módulo e de classe, nunca as locais. */
+  /** Only outside a function body — module and class variables, never the local ones. */
   topLevel?: boolean
-  /** Não vira símbolo: só qualifica o que está dentro (o `impl S` do Rust). */
+  /** Does not become a symbol: it only qualifies what is inside (the Rust `impl S`). */
   container?: boolean
-  /** O nome é a ÚLTIMA ocorrência, não a primeira (`impl Trait for S` → S). */
+  /** The name is the LAST occurrence, not the first (`impl Trait for S` → S). */
   lastName?: boolean
-  /** Troca o tipo conforme um filho direto (`const f = () => {}` é função; `type S struct` é classe). */
+  /** Changes the kind according to a direct child (`const f = () => {}` is a function; `type S struct` is a class). */
   kindByChild?: Record<string, SymbolKind>
-  /** O escopo vem do primeiro TypeName deste filho (receiver de método Go). */
+  /** The scope comes from the first TypeName of this child (Go method receiver). */
   receiver?: string
 }
 
@@ -41,25 +41,25 @@ export interface LezerSpec {
   id: string
   load: () => Promise<LRParser>
   defs: Record<string, DefRule>
-  /** Nós de identificador que contam como uso de um símbolo. */
+  /** Identifier nodes that count as a use of a symbol. */
   refs: Set<string>
-  /** Dos refs, os que são acesso a membro (`x.foo`) — só ligam a métodos/campos. */
+  /** Of the refs, the ones that are member access (`x.foo`) — they only link to methods/fields. */
   members?: Set<string>
-  /** Membro quando o pai é um destes (PHP: o Name dentro de `$x->go`). */
+  /** Member when the parent is one of these (PHP: the Name inside `$x->go`). */
   memberParents?: Set<string>
-  /** Nós que LIGAM um nome no arquivo (parâmetro, variável local, nome importado). */
+  /** Nodes that BIND a name in the file (parameter, local variable, imported name). */
   bindings?: Set<string>
-  /** Ligação quando o pai é um destes (Python: VariableName dentro de ParamList). */
+  /** Binding when the parent is one of these (Python: VariableName inside ParamList). */
   bindingParents?: Set<string>
-  /** Dos refs, os que são uso de tipo (`: Foo`) — só ligam a classe/interface/tipo. */
+  /** Of the refs, the ones that are type uses (`: Foo`) — they only link to class/interface/type. */
   types?: Set<string>
-  /** Onde a assinatura termina — e onde a busca do nome não entra. */
+  /** Where the signature ends — and where the name search does not enter. */
   bodies: Set<string>
-  /** Também fora da busca do nome (parâmetros, anotações de tipo). */
+  /** Also outside the name search (parameters, type annotations). */
   skip: Set<string>
-  /** Corpos de função: dentro deles, regras `topLevel` não disparam. */
+  /** Function bodies: inside them, `topLevel` rules do not fire. */
   scopes: Set<string>
-  /** Nós de import cujo filho String é o caminho do módulo (JS/TS). */
+  /** Import nodes whose String child is the module path (JS/TS). */
   imports?: Set<string>
 }
 
@@ -223,8 +223,8 @@ const php: LezerSpec = {
 const BY_EXTENSION: Record<string, LezerSpec> = {}
 const register = (spec: LezerSpec, exts: string[]) => exts.forEach((ext) => (BY_EXTENSION[ext] = spec))
 
-// .ts sem jsx de propósito: em .ts, `<T>(x) => x` é genérico, e com jsx ligado
-// o parser leria uma tag.
+// .ts without jsx on purpose: in .ts, `<T>(x) => x` is generic, and with jsx on
+// the parser would read a tag.
 register(jsSpec('typescript', 'ts'), ['.ts', '.mts', '.cts'])
 register(jsSpec('tsx', 'ts jsx'), ['.tsx'])
 register(jsSpec('javascript', 'jsx'), ['.js', '.jsx', '.mjs', '.cjs'])
@@ -236,9 +236,9 @@ register(cpp, ['.c', '.h', '.cc', '.cpp', '.cxx', '.hpp', '.hh', '.hxx'])
 register(php, ['.php'])
 
 /**
- * Linguagens sem parser Lezer: entram por um extrator de linha (regex). Acha
- * menos (sem escopo fino, sem distinguir string de código), mas põe o arquivo
- * no mapa — uma busca que ignora o app Swift inteiro seria pior.
+ * Languages without a Lezer parser: they come in through a line extractor (regex). It finds
+ * less (no fine scope, no telling a string from code), but it puts the file
+ * on the map — a search that ignores the whole Swift app would be worse.
  */
 const LINE_LANGUAGES: Record<string, string> = {
   '.kt': 'kotlin',
@@ -265,7 +265,7 @@ export function languageFor(ext: string): LanguageHandler | null {
   return id ? { type: 'line', id } : null
 }
 
-/** Os parsers configurados ficam em cache: configure() cria um novo a cada chamada. */
+/** The configured parsers are cached: configure() creates a new one on every call. */
 const parserCache = new Map<string, Promise<LRParser>>()
 
 export function parserFor(spec: LezerSpec): Promise<LRParser> {

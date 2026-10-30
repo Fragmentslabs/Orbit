@@ -7,9 +7,9 @@ import { actionsForMode } from "@/src/lib/slash-actions"
 import { useSkillsStore } from "@/src/stores/skills-store"
 
 /**
- * Comandos do palette "/" (dados + hooks, sem JSX — o componente visual é o
- * SlashPalette). Grupos na ordem de exibição: Ações → Skills → MCP → Memória
- * → Modos.
+ * Palette "/" commands (data + hooks, without JSX — the visual component is
+ * SlashPalette). Groups in display order: Actions → Skills → MCP → Memory
+ * → Modes.
  */
 
 export interface SlashCommand {
@@ -17,16 +17,16 @@ export interface SlashCommand {
   label: string
   description?: string
   keywords?: string[]
-  group: "Modos" | "Skills" | "MCP" | "Memória" | "Ações"
-  /** Estado atual do toggle (bolinha à direita) */
+  group: "Modes" | "Skills" | "MCP" | "Memory" | "Actions"
+  /** Current state of the toggle (dot on the right) */
   active?: boolean
-  /** Item desabilitado (ex.: Loop na orquestra) — some, mas não faz nada */
+  /** Disabled item (e.g. Loop in the orchestra) — greys out and does nothing */
   disabled?: boolean
   run: (ctx: { setText: (text: string) => void }) => void
 }
 
-/** O comando casa com a query se todos os termos aparecerem no rótulo,
- *  descrição ou palavras-chave. */
+/** The command matches the query if all the terms appear in the label,
+ *  description or keywords. */
 export function commandMatches(command: SlashCommand, query: string): boolean {
   if (!query) return true
   const haystack = normalizeText(
@@ -36,10 +36,10 @@ export function commandMatches(command: SlashCommand, query: string): boolean {
 }
 
 /**
- * Referências `@` do composer. Skills valem só no modo código. Servidores MCP
- * valem nos dois modos (as tools não têm liga/desliga) e respeitam o recorte
- * `options.servers` da conversa, para não citar servidor que este turno não
- * expõe.
+ * Composer `@` references. Skills only count in code mode. MCP servers
+ * count in both modes (the tools have no on/off) and respect the conversation's
+ * `options.servers` scope, so as not to cite a server this turn does not
+ * expose.
  */
 export function useReferenceCommands(
   mode?: SessionMode,
@@ -74,7 +74,7 @@ export function useReferenceCommands(
           .map<SlashCommand>((server) => ({
             id: `mcp-${server.config.name}`,
             label: `@mcp:${server.config.name}`,
-            description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
+            description: t("input.slash.mcpServer", { count: server.toolNames.length }),
             group: "MCP",
             run: ({ setText }) => setText(`@mcp:${server.config.name} `),
           })),
@@ -84,9 +84,9 @@ export function useReferenceCommands(
   )
 }
 
-/** Ações "/" (pipelines de src/lib/slash-actions) como comandos do palette.
- * Selecionar insere o comando (ou o texto de referência) no input — o envio
- * é resolvido pelo submit dos inputs via resolveSlashAction. */
+/** "/" Actions (pipelines from src/lib/slash-actions) as palette commands.
+ * Selecting inserts the command (or the reference text) into the input — the send
+ * is resolved by the inputs' submit via resolveSlashAction. */
 export function useSlashActionCommands(mode: SessionMode): SlashCommand[] {
   return useMemo<SlashCommand[]>(
     () =>
@@ -95,7 +95,7 @@ export function useSlashActionCommands(mode: SessionMode): SlashCommand[] {
         label: action.command,
         description: action.description,
         keywords: action.keywords,
-        group: "Ações",
+        group: "Actions",
         run: ({ setText }) =>
           setText(action.kind === "insert" && action.insertText ? action.insertText : `${action.command} `),
       })),

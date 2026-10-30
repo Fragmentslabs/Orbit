@@ -6,35 +6,35 @@ import { describeImage, getTurnImages } from '../vision'
 import { mediaIdFromUrl, readMedia } from '../media'
 
 /**
- * Modo Visão (agent-driven): o agente decide quando e como olhar uma imagem —
- * descrição geral (sem focus) ou perguntas específicas com o contexto da
- * conversa embutido no focus. A imagem nunca entra no contexto do modelo
- * principal.
+ * Vision mode (agent-driven): the agent decides when and how to look at an image —
+ * a general description (no focus) or specific questions with the conversation's
+ * context embedded in the focus. The image never enters the main model's
+ * context.
  *
- * Alcança o anexo do turno (registry efêmero, limpo no finally do runChat) e
- * qualquer imagem da galeria. A segunda origem é o que torna possível olhar
- * ANTES de editar: sem ela, o agente só enxergaria a foto na mensagem em que
- * ela chegou, e um "agora escreve na jaqueta" no turno seguinte seria feito no
- * escuro.
+ * It reaches the turn's attachment (ephemeral registry, cleaned in runChat's finally) and
+ * any image in the gallery. The second source is what makes it possible to look
+ * BEFORE editing: without it, the agent would only see the photo in the message in which
+ * it arrived, and a "now write on the jacket" in the next turn would be done in
+ * the dark.
  *
- * A descrição de um anexo do turno é persistida no histórico pelo chat-engine
- * (hook do tool-result), então turnos futuros a veem como texto.
+ * The description of a turn attachment is persisted in the history by chat-engine
+ * (tool-result hook), so future turns see it as text.
  */
 /**
- * A imagem pedida, como data URL — do turno ou da galeria.
+ * The requested image, as a data URL — from the turn or from the gallery.
  *
- * O `ref` numérico e a URL orbit-media:// convivem porque cobrem momentos
- * diferentes: o número é o anexo que chegou AGORA (e que não fica guardado em
- * lugar nenhum depois do turno), a URL é tudo o mais. Devolver null em vez de
- * lançar deixa a mensagem de erro no chamador, que sabe qual das duas formas
- * foi tentada.
+ * The numeric `ref` and the orbit-media:// URL coexist because they cover different
+ * moments: the number is the attachment that arrived NOW (and that is not kept
+ * anywhere after the turn), the URL is everything else. Returning null instead of
+ * throwing leaves the error message to the caller, which knows which of the two forms
+ * was tried.
  */
 async function resolveImage(sessionId: string, ref: number | string): Promise<string | null> {
   if (typeof ref === 'number') {
     return getTurnImages(sessionId)?.[ref - 1]?.url ?? null
   }
-  // Um número em forma de texto continua sendo o anexo do turno: o modelo
-  // erra essa forma com frequência, e recusar seria pedantismo.
+  // A number in text form is still the turn's attachment: the model
+  // gets this form wrong often, and refusing would be pedantry.
   if (/^\d+$/.test(ref.trim())) {
     return getTurnImages(sessionId)?.[Number(ref.trim()) - 1]?.url ?? null
   }
@@ -43,10 +43,10 @@ async function resolveImage(sessionId: string, ref: number | string): Promise<st
   const file = await readMedia(id)
   if (!file) return null
 
-  // SVG é texto, não imagem, e nenhum modelo de visão o aceita: mandá-lo
-  // cru devolve erro do provedor em vez de descrição. Rasterizar é o que
-  // permite OLHAR um vetor — e é pedido com frequência, porque conferir se um
-  // traçado ficou bom é justamente uma pergunta visual.
+  // SVG is text, not an image, and no vision model accepts it: sending it
+  // raw returns a provider error instead of a description. Rasterizing is what
+  // allows LOOKING at a vector — and it is a frequent request, because checking whether a
+  // path came out good is precisely a visual question.
   if (file.contentType === 'image/svg+xml') {
     const png = await sharp(file.buffer)
       .resize({ width: 1024, withoutEnlargement: false })
@@ -73,10 +73,10 @@ export function createDescribeImageTool(input: SendMessageInput) {
         .describe('What you need to know about the image. The vision model does not see the conversation — include relevant context here when the answer depends on it. Omit for a general description.'),
     }),
     execute: async ({ ref, focus }) => {
-      // Duas origens, porque o anexo do turno some no fim dele: a imagem que
-      // acabou de chegar vive no registry, e qualquer outra — a de um turno
-      // anterior, ou o resultado de uma edição — vive na galeria. Sem a
-      // segunda, olhar antes de editar só funcionaria na primeira mensagem.
+      // Two sources, because the turn's attachment disappears at its end: the image that
+      // just arrived lives in the registry, and any other — from a previous
+      // turn, or the result of an edit — lives in the gallery. Without the
+      // second, looking before editing would only work in the first message.
       const image = await resolveImage(input.sessionId, ref)
       if (!image) {
         throw new Error(

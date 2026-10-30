@@ -20,7 +20,7 @@ export function createBackgroundTools(ctx: ToolContext) {
         pid: info.pid,
         label: info.label,
         status: info.status,
-        message: `Processo "${label}" iniciado (PID ${info.pid}).`,
+        message: `Process "${label}" started (PID ${info.pid}).`,
       }
     },
   })

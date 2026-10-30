@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { voiceSample } from "./voice-preview-button"
 
 describe("voiceSample", () => {
-  it("fala no idioma da leitura, com o inglês para o agnóstico e o desconhecido", () => {
+  it("speaks in the reading language, with English for the agnostic and the unknown", () => {
     expect(voiceSample("pt")).toMatch(/^Olá!/)
     expect(voiceSample("es")).toMatch(/^¡Hola!/)
     expect(voiceSample("na")).toBe(voiceSample("en"))

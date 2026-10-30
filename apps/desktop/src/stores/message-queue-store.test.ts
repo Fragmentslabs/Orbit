@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const status: Record<string, string> = {}
 const sendMessage = vi.fn()
-/** Sessões que o main diz estarem rodando (chat:running). */
+/** Sessions main says are running (chat:running). */
 let running: string[] = []
 
 const storageWrite = vi.fn()
@@ -18,7 +18,7 @@ vi.mock("@/src/stores/session-store", () => ({
 
 const { useMessageQueueStore } = await import("./message-queue-store")
 
-/** A saída da fila confere o main antes de enviar (assíncrono). */
+/** The queue exit checks main before sending (asynchronous). */
 const settle = () => new Promise((r) => setTimeout(r, 0))
 
 function queue(text: string) {
@@ -27,14 +27,14 @@ function queue(text: string) {
   useMessageQueueStore.getState().enqueueForSend("s1", text, {}, "code")
 }
 
-describe("fila de mensagens", () => {
+describe("message queue", () => {
   beforeEach(() => {
     sendMessage.mockReset()
     running = []
     for (const k of Object.keys(status)) delete status[k]
   })
 
-  it("sai quando o turno anterior termina bem, já com as rodadas extras", async () => {
+  it("goes out when the previous turn ends well, extra rounds included", async () => {
     queue("próxima")
     status.s1 = "idle"
     useMessageQueueStore.getState().onSessionIdle("s1")
@@ -45,7 +45,7 @@ describe("fila de mensagens", () => {
     expect(sendMessage.mock.calls[0][2].options.retries).toBe(3)
   })
 
-  it("pausa quando o turno anterior falha — nem o agendador a solta", async () => {
+  it("pauses when the previous turn fails — not even the scheduler releases it", async () => {
     queue("depende da resposta anterior")
     status.s1 = "error"
     const q = useMessageQueueStore.getState()
@@ -57,7 +57,7 @@ describe("fila de mensagens", () => {
     expect(q.queueSize("s1")).toBe(1)
   })
 
-  it("um item da fila que falhou não é reenviado pela fila (o engine repete o turno)", async () => {
+  it("a queue item that failed is not resent by the queue (the engine repeats the turn)", async () => {
     queue("falha")
     status.s1 = "idle"
     const q = useMessageQueueStore.getState()
@@ -71,7 +71,7 @@ describe("fila de mensagens", () => {
     expect(q.queueSize("s1")).toBe(0)
   })
 
-  it("volta a andar depois de um turno que termina bem", async () => {
+  it("moves again after a turn that ends well", async () => {
     queue("segura")
     status.s1 = "error"
     const q = useMessageQueueStore.getState()
@@ -83,17 +83,17 @@ describe("fila de mensagens", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1)
   })
 
-  it("não sai enquanto o main ainda roda a sessão (idle entre iterações do loop)", async () => {
+  it("does not go out while main still runs the session (idle between loop iterations)", async () => {
     vi.useFakeTimers()
     try {
-      queue("depois do loop")
+      queue("after do loop")
       status.s1 = "idle"
       running = ["s1"]
       useMessageQueueStore.getState().onSessionIdle("s1")
       await vi.advanceTimersByTimeAsync(0)
       expect(sendMessage).not.toHaveBeenCalled()
 
-      // O loop acabou: a rechecagem solta a fila sem precisar de outro idle.
+      // The loop is over: the re-check releases the queue without needing another idle.
       running = []
       await vi.advanceTimersByTimeAsync(2_500)
       expect(sendMessage).toHaveBeenCalledTimes(1)
@@ -102,25 +102,25 @@ describe("fila de mensagens", () => {
     }
   })
 
-  it("a fila inteira vai para o disco, não só as agendadas", () => {
+  it("the whole queue goes to disk, not only the scheduled ones", () => {
     storageWrite.mockReset()
     queue("assim que possível")
-    const [, salvo] = storageWrite.mock.calls.at(-1)!
-    expect(salvo.s1.map((m: { text: string }) => m.text)).toEqual(["assim que possível"])
+    const [, saved] = storageWrite.mock.calls.at(-1)!
+    expect(saved.s1.map((m: { text: string }) => m.text)).toEqual(["assim que possível"])
   })
 
-  it("ao abrir, junta o que estava salvo com o que chegou durante a leitura", async () => {
+  it("on open, it merges what was saved with what arrived during the read", async () => {
     useMessageQueueStore.setState({ queues: {} })
     useMessageQueueStore.getState().enqueueForSend("s1", "chegou agora", {}, "code")
     storageRead.mockResolvedValueOnce({
-      s1: [{ id: "q_salvo", text: "de antes", options: {}, mode: "code", sessionId: "s1", createdAt: 1 }],
+      s1: [{ id: "q_salvo", text: "de before", options: {}, mode: "code", sessionId: "s1", createdAt: 1 }],
     })
     await useMessageQueueStore.getState().initialize()
 
-    expect(useMessageQueueStore.getState().queues.s1.map((m) => m.text)).toEqual(["de antes", "chegou agora"])
+    expect(useMessageQueueStore.getState().queues.s1.map((m) => m.text)).toEqual(["de before", "chegou agora"])
   })
 
-  it("sendNow tira o item da fila pausada e envia", () => {
+  it("sendNow takes the item out of the paused queue and sends it", () => {
     queue("manual")
     status.s1 = "error"
     const q = useMessageQueueStore.getState()
@@ -131,7 +131,7 @@ describe("fila de mensagens", () => {
     expect(q.queueSize("s1")).toBe(0)
   })
 
-  it("sendNow não atropela um turno em andamento", () => {
+  it("sendNow does not cut into a turn in progress", () => {
     queue("espera")
     const q = useMessageQueueStore.getState()
     q.sendNow("s1", q.queues.s1[0].id)
@@ -140,35 +140,35 @@ describe("fila de mensagens", () => {
     expect(q.queueSize("s1")).toBe(1)
   })
 
-  it("editar um item grava no mesmo lugar da fila", () => {
+  it("editing an item writes to the same place in the queue", () => {
     queue("primeira")
     const store = useMessageQueueStore.getState()
     store.enqueueForSend("s1", "segunda", {}, "code")
     store.enqueueForSend("s1", "terceira", {}, "code")
-    // Depois dos enqueues: o snapshot do getState acima é velho.
-    const antes = useMessageQueueStore.getState().queues.s1.map((m) => m.id)
+    // After the enqueues: the getState snapshot above is stale.
+    const before = useMessageQueueStore.getState().queues.s1.map((m) => m.id)
 
-    useMessageQueueStore.getState().update("s1", antes[1], "segunda (editada)")
+    useMessageQueueStore.getState().update("s1", before[1], "segunda (editada)")
 
-    const depois = useMessageQueueStore.getState().queues.s1
-    expect(depois.map((m) => m.id)).toEqual(antes)
-    expect(depois.map((m) => m.text)).toEqual(["primeira", "segunda (editada)", "terceira"])
+    const after = useMessageQueueStore.getState().queues.s1
+    expect(after.map((m) => m.id)).toEqual(before)
+    expect(after.map((m) => m.text)).toEqual(["primeira", "segunda (editada)", "terceira"])
   })
 
-  it("editar não perde os campos do item (modo, opções, sessão)", () => {
+  it("editing does not lose the item's fields (mode, options, session)", () => {
     queue("original")
     const q = useMessageQueueStore.getState()
-    const antes = q.queues.s1[0]
-    q.update("s1", antes.id, "editada")
+    const before = q.queues.s1[0]
+    q.update("s1", before.id, "editada")
 
-    const depois = useMessageQueueStore.getState().queues.s1[0]
-    expect(depois.text).toBe("editada")
-    expect(depois.mode).toBe(antes.mode)
-    expect(depois.sessionId).toBe(antes.sessionId)
-    expect(depois.createdAt).toBe(antes.createdAt)
+    const after = useMessageQueueStore.getState().queues.s1[0]
+    expect(after.text).toBe("editada")
+    expect(after.mode).toBe(before.mode)
+    expect(after.sessionId).toBe(before.sessionId)
+    expect(after.createdAt).toBe(before.createdAt)
   })
 
-  it("remover ou enviar o item em edição encerra o modo edição", () => {
+  it("removing or sending the item being edited ends edit mode", () => {
     useMessageQueueStore.setState({ editing: {} })
     queue("alvo")
     const q = useMessageQueueStore.getState()
@@ -180,22 +180,22 @@ describe("fila de mensagens", () => {
     expect(useMessageQueueStore.getState().editing.s1).toBeUndefined()
   })
 
-  it("enviar primeiro traz o item para a frente sem bagunçar o resto", () => {
+  it("send first brings the item forward without messing up the rest", () => {
     queue("primeira")
     const store = useMessageQueueStore.getState()
     store.enqueueForSend("s1", "segunda", {}, "code")
     store.enqueueForSend("s1", "terceira", {}, "code")
-    const ultima = useMessageQueueStore.getState().queues.s1[2]
+    const last = useMessageQueueStore.getState().queues.s1[2]
 
-    useMessageQueueStore.getState().moveToFront("s1", ultima.id)
+    useMessageQueueStore.getState().moveToFront("s1", last.id)
 
     expect(useMessageQueueStore.getState().queues.s1.map((m) => m.text)).toEqual([
       "terceira",
       "primeira",
       "segunda",
     ])
-    // Quem já está na frente não muda de lugar — nem reordena à toa.
-    useMessageQueueStore.getState().moveToFront("s1", ultima.id)
+    // Whoever is already in front does not change places — nor reorders for nothing.
+    useMessageQueueStore.getState().moveToFront("s1", last.id)
     expect(useMessageQueueStore.getState().queues.s1.map((m) => m.text)).toEqual([
       "terceira",
       "primeira",

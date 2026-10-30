@@ -30,60 +30,60 @@ import {
 } from "@/src/lib/folders";
 import { Truncate } from "@/components/ui/truncated-text";
 
-/** Pedido de foco num arquivo: o `nonce` faz o mesmo arquivo valer de novo. */
+/** Request to focus a file: the `nonce` makes the same file count again. */
 export interface RevealRequest {
   /**
-   * O arquivo pedido. Chega ABSOLUTO quando vem do índice do painel (é o que
-   * não deixa dúvida com vários repos) e relativo ao repo quando o patch é quem
-   * nomeia — os dois casos são resolvidos aqui.
+   * The requested file. It arrives ABSOLUTE when it comes from the panel index (which is what
+   * leaves no doubt with several repos) and relative to the repo when the patch is what
+   * names it — both cases are resolved here.
    */
   path: string;
-  /** Muda a cada clique: sem isso, clicar de novo no mesmo arquivo não faria nada. */
+  /** Changes on every click: without that, clicking the same file again would do nothing. */
   nonce: number;
 }
 
 export interface ChangesViewProps {
   /**
-   * Repositórios do espaço: em cada pasta do chat (a principal e as anexadas),
-   * a própria pasta quando é repo e/ou as subpastas com git próprio.
+   * Repositories of the workspace: in each folder of the chat (the main one and the attached ones),
+   * the folder itself when it is a repo and/or the subfolders with their own git.
    */
   repos: GitRepoEntry[];
-  /** Pasta principal — usada só quando nenhum repo foi descoberto. */
+  /** Main folder — used only when no repo was discovered. */
   repoRoot: string;
-  /** Arquivo a trazer para a vista (clique no índice à direita). */
+  /** File to bring into view (click on the index on the right). */
   reveal: RevealRequest | null;
-  /** Abrir o arquivo no editor — esta visão só lê. Recebe caminho absoluto. */
+  /** Open the file in the editor — this view only reads. It receives an absolute path. */
   onOpenFile: (path: string) => void;
-  /** Muda quando o rodapé manda recarregar. */
+  /** Changes when the footer asks for a reload. */
   reloadToken?: number;
   /**
-   * A aba do índice que está à vista. Não muda o que se lê — os diffs do
-   * working tree são os mesmos nas duas — só o ícone do estado vazio, que
-   * acompanha a aba para a leitura não parecer de outro lugar.
+   * The index tab that is in view. It does not change what is read — the working tree
+   * diffs are the same in both — only the empty-state icon, which
+   * follows the tab so the reading does not seem to be from another place.
    */
   mode?: "changes" | "commits";
-  /** Fecha (e reabre) o painel da direita — o mesmo botão da aba Arquivos. */
+  /** Closes (and reopens) the right panel — the same button as the Files tab. */
   onToggleBrowser: () => void;
 }
 
 /**
- * Altura de uma linha do diff — `leading-5` em diff-lines.tsx.
+ * Height of one diff line — `leading-5` in diff-lines.tsx.
  *
- * Isto não é estética: é o que permite saber onde está uma seção que ainda não
- * foi desenhada. O miolo só monta quando chega perto da vista, então o que
- * está fora dela é espaço reservado; se a conta da altura errasse, clicar num
- * arquivo cairia longe dele. Por isso a leitura empilhada NÃO quebra linha —
- * quebrar tornaria a altura de cada linha imprevisível, e a conta, chute.
+ * This is not aesthetics: it is what makes it possible to know where a section that has not
+ * been drawn yet is. The body only mounts when it gets near the view, so what
+ * is outside it is reserved space; if the height math were wrong, clicking a
+ * file would land far from it. That is why the stacked reading does NOT wrap lines —
+ * wrapping would make the height of each line unpredictable, and the math, a guess.
  */
 const LINE_PX = 20;
-/** Cabeçalho do hunk: `px-4 py-1` mais `text-[11px]` com entrelinha 1.5. */
+/** Hunk header: `px-4 py-1` plus `text-[11px]` with 1.5 line height. */
 const HUNK_PX = 24.5;
 /**
- * Teto de linhas desenhadas por arquivo.
+ * Ceiling of lines drawn per file.
  *
- * O maior diff deste repositório tem 1.859 linhas. Sem teto, chegar nele monta
- * ~7 mil elementos e duas tokenizações gigantes de uma vez — a aba engasga
- * exatamente no arquivo que a pessoa mais quer ler. O resto fica a um clique.
+ * The largest diff in this repository has 1,859 lines. Without a ceiling, reaching it mounts
+ * ~7 thousand elements and two giant tokenizations at once — the tab chokes
+ * exactly on the file the person most wants to read. The rest is one click away.
  */
 const MAX_LINES_PER_FILE = 400;
 
@@ -92,11 +92,11 @@ function countLines(file: FileDiff): number {
 }
 
 /**
- * Corta o arquivo no teto de linhas, preservando a numeração.
+ * Cuts the file at the line ceiling, preserving the numbering.
  *
- * O corte é por linha, não por hunk: um hunk pode ser cortado no meio, e como
- * o renderizador conta a numeração a partir do início do hunk, os números
- * continuam certos.
+ * The cut is by line, not by hunk: a hunk may be cut in the middle, and since
+ * the renderer counts the numbering from the start of the hunk, the numbers
+ * stay right.
  */
 function truncateDiff(
   file: FileDiff,
@@ -114,28 +114,28 @@ function truncateDiff(
   return { body: { ...file, hunks }, hidden: countLines(file) - shown };
 }
 
-/** Altura que a seção vai ter quando montar — sem montar. */
+/** Height the section will have when it mounts — without mounting. */
 function heightOf(body: FileDiff): number {
   return countLines(body) * LINE_PX + body.hunks.length * HUNK_PX;
 }
 
-/** Chave de uma seção: o mesmo caminho pode existir em dois repositórios. */
+/** Key of a section: the same path can exist in two repositories. */
 function sectionKey(repoPath: string, filePath: string): string {
   return `${repoPath}::${filePath}`;
 }
 
 interface DiffSectionProps {
   file: FileDiff;
-  /** Chave da seção (repo + caminho) — o que o observer e o scroll usam. */
+  /** Key of the section (repo + path) — what the observer and the scroll use. */
   id: string;
   open: boolean;
-  /** Miolo montado? Fora da vista, só a altura reservada. */
+  /** Body mounted? Outside the view, only the reserved height. */
   active: boolean;
   flash: boolean;
   showAll: boolean;
-  /** Registra o espaço reservado para o observer da vista. */
+  /** Registers the space reserved for the view observer. */
   observe: (el: HTMLElement | null) => void;
-  /** Ref da seção inteira, para o scroll do "ir para o arquivo". */
+  /** Ref of the whole section, for the scroll of "go to the file". */
   sectionRef: (el: HTMLElement | null) => void;
   onToggle: () => void;
   onShowAll: () => void;
@@ -211,8 +211,8 @@ function DiffSection({
             )}
           </span>
         </button>
-        {/* A lista à direita leva ao diff, não ao arquivo. Sem esta porta, um
-            arquivo alterado ficaria impossível de abrir para editar. */}
+        {/* The list on the right leads to the diff, not to the file. Without this door, a
+            changed file would be impossible to open for editing. */}
         <Hint label={t("folders.openFile")}>
           <button
             type="button"
@@ -229,9 +229,9 @@ function DiffSection({
         (active ? (
           <>
             <div className="min-w-0 overflow-x-auto border-t border-border/50">
-              {/* min-w-max: a linha não quebra, então o bloco cresce até a
-                  linha mais longa e o scroll horizontal aparece — é o que
-                  mantém a altura de cada linha em exatamente LINE_PX. */}
+              {/* min-w-max: the line does not wrap, so the block grows to the
+                  longest line and the horizontal scroll appears — that is what
+                  keeps the height of each line at exactly LINE_PX. */}
               <div className="min-w-max font-mono text-xs">
                 <HighlightedDiffFile
                   file={body}
@@ -263,20 +263,20 @@ function DiffSection({
 }
 
 /**
- * A leitura das alterações do working tree: todos os arquivos empilhados, um
- * abaixo do outro, como a aba de diff sempre foi.
+ * The reading of the working tree changes: every file stacked, one
+ * below the other, as the diff tab has always been.
  *
- * O que mudou aqui foi o custo. Montar tudo de uma vez disparava uma
- * tokenização do Shiki por lado de cada arquivo — ~100 de uma vez, num diff
- * de 8 mil linhas. Agora o cabeçalho de cada arquivo (que é o índice da
- * leitura) aparece sempre, e o miolo monta quando chega perto da vista: o
- * Shiki roda só no que está sendo olhado, e a aba abre instantânea.
+ * What changed here was the cost. Mounting everything at once fired one
+ * Shiki tokenization per side of each file — ~100 at once, in a diff
+ * of 8 thousand lines. Now the header of each file (which is the index of the
+ * reading) always appears, and the body mounts when it gets near the view: the
+ * Shiki runs only on what is being looked at, and the tab opens instantly.
  *
- * E o que mudou depois foi o alcance: num espaço com mais de um repositório
- * (`front/` e `back/`, cada um com o seu git) a leitura não é de um repo só —
- * é do espaço inteiro, com os arquivos de cada projeto debaixo do nome dele.
- * Antes disso a aba tentava ler o diff da pasta raiz, que não é repo, e o que
- * aparecia era o erro do git.
+ * And what changed afterwards was the reach: in a workspace with more than one repository
+ * (`front/` and `back/`, each with its own git) the reading is not of a single repo —
+ * it is of the whole workspace, with the files of each project under its name.
+ * Before that the tab tried to read the diff of the root folder, which is not a repo, and what
+ * appeared was the git error.
  */
 export function ChangesView({
   repos,
@@ -289,8 +289,8 @@ export function ChangesView({
 }: ChangesViewProps) {
   const { t } = useTranslation();
 
-  // Um repo só (o caso comum) não ganha cabeçalho: a lista vem solta, como
-  // sempre veio. Sem nenhum repo descoberto, a leitura é da pasta de trabalho.
+  // A single repo (the common case) gets no header: the list comes loose, as
+  // it always came. With no repo discovered, the reading is of the working folder.
   const list = useMemo<GitRepoEntry[]>(
     () =>
       repos.length > 0
@@ -307,8 +307,8 @@ export function ChangesView({
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState<Set<string>>(new Set());
-  /** Seções com o miolo montado. Só cresce: remontar ao rolar de volta
-   *  refaria a tokenização que acabou de ser paga. */
+  /** Sections with the body mounted. It only grows: remounting on scrolling back
+   *  would redo the tokenization that was just paid for. */
   const [active, setActive] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -323,8 +323,8 @@ export function ChangesView({
     void (async () => {
       const nextPatches: Record<string, string> = {};
       const nextErrors: Record<string, string> = {};
-      // Em série de propósito: são N processos git, e um espaço com vários
-      // repos não deve disparar todos de uma vez.
+      // In series on purpose: they are N git processes, and a workspace with several
+      // repos must not fire them all at once.
       for (const repo of list) {
         const result = (await window.ipcRenderer.invoke(
           "git:workingDiff",
@@ -343,7 +343,7 @@ export function ChangesView({
     };
   }, [list, reloadToken]);
 
-  /** O diff de cada projeto, já separado e com os totais dele. */
+  /** The diff of each project, already split and with its totals. */
   const groups = useMemo(
     () =>
       list.map((repo) => {
@@ -397,7 +397,7 @@ export function ChangesView({
           return next ?? prev;
         });
       },
-      // Uma tela de folga: quando a seção entra na vista, o miolo já chegou.
+      // One screen of slack: when the section enters the view, the body has already arrived.
       { rootMargin: "1200px 0px" },
     );
     observerRef.current = observer;
@@ -412,18 +412,18 @@ export function ChangesView({
     observerRef.current?.observe(el);
   }, []);
 
-  /** Traz o arquivo pedido à vista: abre a seção, monta o miolo e rola até ela. */
+  /** Brings the requested file into view: opens the section, mounts the body and scrolls to it. */
   useEffect(() => {
     if (!reveal || loading) return;
     if (lastReveal.current === reveal.nonce) return;
 
-    // O caminho chega absoluto (índice do painel) ou relativo ao repo (patch).
-    // Com vários repos só o absoluto não deixa dúvida — o relativo casa no
-    // primeiro projeto que tiver aquele arquivo.
+    // The path arrives absolute (panel index) or relative to the repo (patch).
+    // With several repos only the absolute one leaves no doubt — the relative one matches in the
+    // first project that has that file.
     const wanted = reveal.path.replace(/\\/g, "/");
     let key: string | null = null;
-    // O repo que casa é o de caminho MAIS LONGO: a raiz é prefixo de todo repo
-    // aninhado, e ficar com o primeiro casaria o arquivo do `front/` com a raiz.
+    // The repo that matches is the one with the LONGEST path: the root is a prefix of every nested
+    // repo, and keeping the first would match the `front/` file with the root.
     let best = -1;
     for (const group of groups) {
       const root = group.repo.path.replace(/[\\/]+$/, "").replace(/\\/g, "/");
@@ -451,9 +451,9 @@ export function ChangesView({
     setActive((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     setFlash(key);
 
-    // A rolagem espera o layout: a seção pode ter acabado de ser reaberta, e
-    // as de cima estão no lugar certo porque o espaço reservado tem a altura
-    // que o miolo vai ter.
+    // The scroll waits for the layout: the section may have just been reopened, and
+    // the ones above are in the right place because the reserved space has the height
+    // the body is going to have.
     const frame = window.requestAnimationFrame(() => {
       sections.current
         .get(key)
@@ -480,9 +480,9 @@ export function ChangesView({
   }, []);
 
   return (
-    // Mesmo cabeçalho e mesmas margens da aba Arquivos (`file-viewer.tsx`): é o
-    // mesmo painel em dois modos, e alternar entre eles não pode deslocar o topo
-    // nem trocar a cor da faixa.
+    // Same header and same margins as the Files tab (`file-viewer.tsx`): it is the
+    // same panel in two modes, and switching between them cannot shift the top
+    // nor change the color of the strip.
     <Artifact className="h-full min-w-0 rounded-none border-0 bg-sidebar mt-2">
       <ArtifactHeader className="min-w-0 bg-sidebar">
         <div className="min-w-0">
@@ -505,10 +505,10 @@ export function ChangesView({
               </span>
             </span>
           )}
-          {/* O botão que fecha o painel da direita é o mesmo da aba Arquivos —
-              e é ele que dá a altura da faixa: sem um alvo de 32px do lado, o
-              cabeçalho encolhia e as duas abas não batiam. Vem por último: o
-              canto é justamente o que ele fecha, e é ali que se procura. */}
+          {/* The button that closes the right panel is the same as the Files tab's —
+              and it is what gives the height of the strip: without a 32px target on the side, the
+              header shrank and the two tabs did not match. It comes last: the
+              corner is exactly what it closes, and that is where one looks. */}
           <ArtifactAction
             icon={PanelRightCloseIcon}
             onClick={onToggleBrowser}
@@ -516,8 +516,8 @@ export function ChangesView({
         </ArtifactActions>
       </ArtifactHeader>
 
-      {/* `p-3` dos quatro lados: sem a folga de cima, o primeiro arquivo da
-          leitura ficava colado no cabeçalho. */}
+      {/* `p-3` on all four sides: without the top slack, the first file of the
+          reading stuck to the header. */}
       <ArtifactContent className="min-h-0 min-w-0 overflow-hidden p-3">
         {loading ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -525,9 +525,9 @@ export function ChangesView({
             {t("folders.changesLoading")}
           </div>
         ) : changeCount === 0 && !groups.some((g) => g.error) ? (
-          // Mesmo vazio da aba Arquivos: ícone grande ao centro e a frase
-          // embaixo. O ícone segue a aba — no histórico a leitura é a mesma,
-          // mas o painel inteiro está falando de commits.
+          // Same empty state as the Files tab: a big icon in the center and the sentence
+          // below. The icon follows the tab — in the history the reading is the same,
+          // but the whole panel is talking about commits.
           <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
             {mode === "commits" ? (
               <HistoryIcon className="size-16 text-muted-foreground/20" />
@@ -554,8 +554,8 @@ export function ChangesView({
                           {group.repo.name}
                         </span>
                       </Truncate>
-                      {/* Projeto aninhado: o caminho desfaz a dúvida de qual
-                          "front" é este. */}
+                      {/* Nested project: the path resolves the doubt about which
+                          "front" this one is. */}
                       {group.repo.relative.includes("/") && (
                         <Truncate text={group.repo.relative}>
                           <span className="min-w-0 truncate text-[10px] text-muted-foreground">

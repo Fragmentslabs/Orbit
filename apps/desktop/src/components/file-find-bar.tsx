@@ -24,20 +24,20 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 export interface FileFindBarProps {
-  /** O editor do arquivo aberto — a barra só manda; quem casa é ele. */
+  /** The editor of the open file — the bar only asks; it is the one that matches. */
   editor: RefObject<CodeEditorHandle>;
   onClose: () => void;
 }
 
 /**
- * Busca DENTRO do arquivo aberto (Cmd+F).
+ * Search INSIDE the open file (Cmd+F).
  *
- * Substitui o painel do `@codemirror/search`, que abria com os rótulos da lib
- * em inglês ("Find", "match case", "by word") e caixas brancas — um corpo
- * estranho dentro do app. Aqui a gramática é a mesma do campo da aba de
- * arquivos: um contorno só, os filtros num popover e o substituir atrás do
- * chevron. Quem casa o texto é o editor (`find`/`replaceMatch`), para a barra
- * não ter uma segunda opinião sobre onde estão as ocorrências.
+ * It replaces the `@codemirror/search` panel, which opened with the lib's labels
+ * in English ("Find", "match case", "by word") and white boxes — a foreign
+ * body inside the app. Here the grammar is the same as the field of the files
+ * tab: a single outline, the filters in a popover and the replace behind the
+ * chevron. What matches the text is the editor (`find`/`replaceMatch`), so the bar
+ * does not have a second opinion about where the occurrences are.
  */
 export function FileFindBar({ editor, onClose }: FileFindBarProps) {
   const { t } = useTranslation();
@@ -56,21 +56,21 @@ export function FileFindBar({ editor, onClose }: FileFindBarProps) {
     [caseSensitive, wholeWord, regex],
   );
 
-  /** Expressão que não compila não é "zero resultados" — é erro de sintaxe. */
+  /** An expression that does not compile is not "zero results" — it is a syntax error. */
   const invalid = useMemo(
     () => query !== "" && buildMatcher(query, options) === null,
     [query, options],
   );
 
-  // Cmd+F tem de cair no campo: abrir a barra e deixar o foco no texto não
-  // adianta nada.
+  // Cmd+F has to land on the field: opening the bar and leaving the focus in the text is
+  // no use at all.
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, []);
 
-  // Consulta nova: grifa tudo e salta para a primeira ocorrência a partir do
-  // cursor. Sem o salto, a contagem diria "12" sem mostrar onde estão.
+  // New query: it marks everything and jumps to the first occurrence from the
+  // cursor. Without the jump, the count would say "12" without showing where they are.
   useEffect(() => {
     const handle = editor.current;
     if (!handle) return;
@@ -80,7 +80,7 @@ export function FileFindBar({ editor, onClose }: FileFindBarProps) {
     );
   }, [query, options, editor]);
 
-  // Fechar a barra devolve o arquivo sem grifo.
+  // Closing the bar gives the file back without marks.
   useEffect(() => () => editor.current?.highlightQuery(""), [editor]);
 
   const activeFilters =
@@ -294,7 +294,7 @@ export function FileFindBar({ editor, onClose }: FileFindBarProps) {
   );
 }
 
-/** Opção do popover de filtros — não fecha ao clicar: os filtros combinam. */
+/** Option of the filters popover — it does not close on click: the filters combine. */
 function FilterOption({
   active,
   icon,

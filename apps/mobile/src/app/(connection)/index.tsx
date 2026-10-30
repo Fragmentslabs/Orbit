@@ -40,9 +40,9 @@ export default function ConnectionScreen() {
 
   const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected' && !connection.errorReason
 
-  // Ao entrar na tela o persona começa dormindo e acorda depois de um instante,
-  // tocando a transição sleep → normal (espelho do fluxo do desktop). Só depois
-  // disso ele assume o estado derivado da conexão.
+  // On entering the screen the persona starts asleep and wakes up after a moment,
+  // playing the sleep → normal transition (mirrors the desktop flow). Only then
+  // does it take on the state derived from the connection.
   const [personaAwake, setPersonaAwake] = useState(false)
   useEffect(() => {
     const t = setTimeout(() => setPersonaAwake(true), 700)
@@ -164,8 +164,8 @@ export default function ConnectionScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.fgSemibold, { color: tokens.foreground }]}>
-            {/* Duas chaves em vez de interpolar " — nome": com o travessao
-                dentro do valor, a traducao nao tinha como pontuar a frase. */}
+            {/* Two keys instead of interpolating " — name": with the dash inside the
+                value, the translation had no way to punctuate the sentence. */}
             {prettyDeviceName(found.name)
               ? t('connectionScreen.desktopFoundNamed', { name: prettyDeviceName(found.name) })
               : t('connectionScreen.desktopFound')}

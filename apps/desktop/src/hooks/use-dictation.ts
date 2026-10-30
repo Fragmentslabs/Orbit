@@ -14,20 +14,20 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 
 /**
- * Ditado por voz no input: abre o microfone, manda o áudio em PCM16 para o
- * motor do main e devolve o texto (provisório e final).
+ * Voice dictation in the input: opens the microphone, sends the audio as PCM16 to the
+ * engine in main and returns the text (provisional and final).
  *
- * O contrato do IPC é fixo e vive no processo principal:
+ * The IPC contract is fixed and lives in the main process:
  *   invoke "voice:stt:start" { engine, modelId?, language?, sampleRate, threads?, live } -> { id }
  *   invoke "voice:stt:push"  { id, pcm: base64 PCM16 }
  *   invoke "voice:stt:stop"  { id } -> { text, audioMs, ms }
  *   invoke "voice:stt:cancel" { id }
- *   evento "voice:stt:partial" -> { id, text }
+ *   event "voice:stt:partial" -> { id, text }
  *
- * Duas regras que o laboratório de voz pagou para aprender (vozlab §13/§14):
- * o microfone é sempre solto e o AudioContext sempre fechado, aconteça o que
- * acontecer no meio da captura; e o AudioContext nasce dentro do gesto do
- * usuário, senão em alguns motores ele nasce suspenso e o grafo nunca roda.
+ * Two rules the voice lab paid to learn (vozlab §13/§14):
+ * the microphone is always released and the AudioContext always closed, whatever
+ * happens in the middle of the capture; and the AudioContext is created inside the user
+ * gesture, otherwise on some engines it starts suspended and the graph never runs.
  */
 
 const CHANNELS = {
@@ -38,8 +38,8 @@ const CHANNELS = {
   partial: "voice:stt:partial",
 } as const
 
-/** Espera pelo `flush` do worklet ao soltar o botão: sem isso o resto do bloco
- *  de 1024 quadros (~64 ms) ficaria no processor e a última sílaba se perderia. */
+/** Waits for the worklet `flush` when the button is released: without it the rest of the
+ *  1024-frame block (~64 ms) would stay in the processor and the last syllable would be lost. */
 const FLUSH_WAIT_MS = 40
 
 interface Capture {
@@ -49,26 +49,26 @@ interface Capture {
   source: MediaStreamAudioSourceNode
   node: AudioWorkletNode
   sink: GainNode
-  /** Blocos do worklet ainda não enviados (agrupados em pedaços de ~128 ms). */
+  /** Worklet blocks not sent yet (grouped into ~128 ms chunks). */
   pending: Int16Array[]
   frames: number
 }
 
 export interface DictationCallbacks {
-  /** Texto provisório do motor (a preferência `live` decide se vai para o input). */
+  /** Provisional text from the engine (the `live` preference decides whether it goes to the input). */
   onPartial?: (text: string) => void
-  /** Fim da captura. Vem vazio quando ninguém falou — quem mostrou provisório
-   *  usa isso para devolver o input ao que era. */
+  /** End of the capture. Comes back empty when nobody spoke — whoever showed provisional
+   *  text uses it to put the input back the way it was. */
   onFinal?: (text: string) => void
-  /** Nível (0..1) de cada bloco do microfone (~64 ms) — alimenta a onda. */
+  /** Level (0..1) of each microphone block (~64 ms) — feeds the waveform. */
   onLevel?: (level: number) => void
 }
 
 export interface Dictation {
   settings: VoiceSttSettings
-  /** Microfone aberto, capturando. */
+  /** Microphone open, capturing. */
   listening: boolean
-  /** Permissão/motor a caminho — o botão já pode se mostrar ativo. */
+  /** Permission/engine on the way — the button can already look active. */
   starting: boolean
   error: string | null
   dismissError: () => void
@@ -77,7 +77,7 @@ export interface Dictation {
   cancel: () => void
 }
 
-/** Envia o que está acumulado como um pedaço PCM16 (base64). */
+/** Sends what has accumulated as one PCM16 chunk (base64). */
 function pushPending(capture: Capture): Promise<unknown> {
   if (capture.frames === 0) return Promise.resolve()
   const pcm = new Int16Array(capture.frames)
@@ -92,9 +92,9 @@ function pushPending(capture: Capture): Promise<unknown> {
 }
 
 /**
- * Solta a faixa e fecha o AudioContext — SEMPRE, inclusive quando o motor
- * troca, a permissão é negada ou o componente desmonta. Microfone pendurado é
- * o defeito documentado do laboratório (a captura seguinte vinha muda).
+ * Releases the track and closes the AudioContext — ALWAYS, including when the engine
+ * changes, the permission is denied or the component unmounts. A dangling microphone is
+ * the lab's documented defect (the next capture came out mute).
  */
 function releaseCapture(capture: Capture) {
   capture.pending = []
@@ -104,16 +104,16 @@ function releaseCapture(capture: Capture) {
   capture.node.disconnect()
   capture.sink.disconnect()
   for (const track of capture.stream.getTracks()) track.stop()
-  // close() rejeita se o contexto já estava fechado — não é erro para nós.
+  // close() rejects if the context was already closed — not an error for us.
   void capture.ctx.close().catch(() => {})
 }
 
-/** Marca de "cancelado durante a abertura" — não é erro para mostrar. */
+/** "Cancelled while opening" marker — not an error to show. */
 const CANCELLED = Symbol("dictation-cancelled")
 
 export function useDictation(
   callbacks: DictationCallbacks = {},
-  /** Força preferências nesta captura (a chamada sempre quer o texto ao vivo). */
+  /** Forces preferences for this capture (the call always wants live text). */
   overrides: { live?: boolean } = {},
 ): Dictation {
   const settings = useAppSettings((s) => s.settings)
@@ -129,13 +129,13 @@ export function useDictation(
   const captureRef = useRef<Capture | null>(null)
   const sessionIdRef = useRef<string | null>(null)
   const startingRef = useRef(false)
-  // O botão pode ser solto antes de o microfone abrir: encerra assim que abrir.
+  // The button can be released before the microphone opens: end as soon as it opens.
   const stopRequestedRef = useRef(false)
   /**
-   * Cancelamento pedido com a captura AINDA ABRINDO (motor iniciando, pedido do
-   * microfone em curso). Sem isto o cancel() não tinha o que cancelar, a
-   * abertura terminava sozinha e deixava o microfone aberto sem dono — o
-   * próximo start() via a captura órfã, não abria outra e herdava o texto dela.
+   * Cancellation requested while the capture is STILL OPENING (engine starting, microphone
+   * request in progress). Without this cancel() had nothing to cancel, the
+   * opening finished on its own and left the microphone open with no owner — the
+   * next start() saw the orphan capture, did not open another one and inherited its text.
    */
   const cancelRequestedRef = useRef(false)
   const callbacksRef = useRef(callbacks)
@@ -143,7 +143,7 @@ export function useDictation(
     callbacksRef.current = callbacks
   })
 
-  // Parciais do motor: só interessam à captura em andamento (o id confere).
+  // Engine partials: only the capture in progress cares (the id must match).
   useEffect(() => {
     const ipc = window.ipcRenderer
     if (!ipc) return
@@ -155,8 +155,8 @@ export function useDictation(
     return () => ipc.off(CHANNELS.partial, wrapper)
   }, [])
 
-  /** Encerra a captura: solta o microfone, fecha o áudio e espera o texto final
-   *  (ou cancela a sessão, sem texto). */
+  /** Ends the capture: releases the microphone, closes the audio and waits for the final
+   *  text (or cancels the session, without text). */
   const finish = useCallback(async (capture: Capture, cancel = false) => {
     captureRef.current = null
     sessionIdRef.current = null
@@ -166,10 +166,10 @@ export function useDictation(
       await new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))
       await pushPending(capture)
     } catch {
-      // O main pode ter caído no meio: o texto que vier ainda serve.
+      // Main may have died midway: whatever text comes is still usable.
     }
-    // Microfone fechado ANTES de esperar a transcrição: o motor não precisa
-    // dele e a faixa aberta atrapalha o próximo uso (e assusta o usuário).
+    // Microphone closed BEFORE waiting for the transcription: the engine does not need
+    // it and the open track gets in the way of the next use (and startles the user).
     releaseCapture(capture)
     try {
       if (cancel) {
@@ -181,8 +181,8 @@ export function useDictation(
         | undefined
       callbacksRef.current.onFinal?.(typeof result?.text === "string" ? result.text : "")
     } catch (err) {
-      // Sem texto final, o provisório que já está no input fica: melhor o
-      // usuário corrigir o que viu do que o texto sumir da tela.
+      // With no final text, the provisional text already in the input stays: better the
+      // user fixing what they saw than the text vanishing from the screen.
       setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
@@ -196,7 +196,7 @@ export function useDictation(
     startingRef.current = true
     setStarting(true)
     setError(null)
-    // Cada etapa assíncrona da abertura confere se ainda é para abrir.
+    // Every async step of the opening checks whether it should still open.
     const bail = () => {
       if (cancelRequestedRef.current) throw CANCELLED
     }
@@ -205,16 +205,16 @@ export function useDictation(
     let stream: MediaStream | null = null
     let sessionId: string | null = null
     try {
-      // 1) O AudioContext nasce DENTRO do gesto (o pointerdown do botão) e é
-      //    retomado na hora: fora do gesto ele pode nascer suspenso e aí o
-      //    worklet nunca roda — a "gravação" ficaria muda (vozlab §14).
+      // 1) The AudioContext is created INSIDE the gesture (the button's pointerdown) and is
+      //    resumed right away: outside the gesture it may start suspended and then the
+      //    worklet never runs — the "recording" would be mute (vozlab §14).
       ctx = new AudioContext({ sampleRate: DICTATION_SAMPLE_RATE })
       if (ctx.state === "suspended") await ctx.resume()
       bail()
-      if (ctx.state !== "running") throw new Error("audio-context-nao-rodou")
+      if (ctx.state !== "running") throw new Error("audio-context-not-running")
 
-      // 2) Sessão no motor antes de abrir o microfone: modelo não baixado falha
-      //    aqui, sem ninguém segurando a faixa.
+      // 2) Session in the engine before opening the microphone: a model that was not downloaded fails
+      //    here, with nobody holding the track.
       const started = (await ipc.invoke(CHANNELS.start, {
         engine: voice.engine,
         modelId: voice.modelId ?? undefined,
@@ -223,19 +223,19 @@ export function useDictation(
         threads: voice.threads,
         live: voice.live,
       })) as { id?: unknown } | undefined
-      if (!started || typeof started.id !== "string") throw new Error("voice:stt:start sem id")
+      if (!started || typeof started.id !== "string") throw new Error("voice:stt:start without id")
       sessionId = started.id
       bail()
 
-      // 3) Microfone e worklet
+      // 3) Microphone and worklet
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          // `ideal`, não `exact`: o microfone escolhido desplugado cai no padrão
-          // do sistema em vez de derrubar o ditado com OverconstrainedError.
+          // `ideal`, not `exact`: the chosen microphone unplugged falls back to the system
+          // default instead of taking the dictation down with OverconstrainedError.
           ...(voice.micDeviceId ? { deviceId: { ideal: voice.micDeviceId } } : {}),
         },
       })
@@ -245,8 +245,8 @@ export function useDictation(
       const node = new AudioWorkletNode(ctx, PCM_WORKLET_PROCESSOR)
       const source = ctx.createMediaStreamSource(stream)
       const sink = ctx.createGain()
-      // O ganho 0 no destino mantém o grafo sendo puxado (sem isso o worklet
-      // não é chamado) sem devolver o microfone nos alto-falantes.
+      // Gain 0 at the destination keeps the graph being pulled (without it the worklet
+      // is not called) without sending the microphone back to the speakers.
       sink.gain.value = 0
       source.connect(node)
       node.connect(sink)
@@ -263,8 +263,8 @@ export function useDictation(
       }
       captureRef.current = capture
       sessionIdRef.current = sessionId
-      // A captura começou: libera a trava de start ANTES de esperar a
-      // transcrição, senão um novo ditado ficaria bloqueado por ~1 s.
+      // The capture started: release the start lock BEFORE waiting for the
+      // transcription, otherwise a new dictation would be blocked for ~1 s.
       startingRef.current = false
       setStarting(false)
       setListening(true)
@@ -274,14 +274,14 @@ export function useDictation(
         await finish(capture)
       }
     } catch (err) {
-      // Falhou no meio: nem sessão pendurada no main, nem microfone aberto.
+      // Failed midway: no session dangling in main, no microphone left open.
       if (sessionId) {
         void Promise.resolve(ipc.invoke(CHANNELS.cancel, { id: sessionId })).catch(() => {})
       }
       sessionIdRef.current = null
       if (stream) for (const track of stream.getTracks()) track.stop()
       if (ctx) void ctx.close().catch(() => {})
-      // Cancelado no meio da abertura não é erro: só não abre.
+      // Cancelled in the middle of the opening is not an error: it just does not open.
       if (err !== CANCELLED) setError(err instanceof Error ? err.message : String(err))
     } finally {
       startingRef.current = false
@@ -292,7 +292,7 @@ export function useDictation(
   const stop = useCallback(async () => {
     const capture = captureRef.current
     if (!capture) {
-      // Soltou antes de a captura existir: quem terminar o start encerra.
+      // Released before the capture existed: whoever finishes the start ends it.
       stopRequestedRef.current = true
       return
     }
@@ -303,18 +303,18 @@ export function useDictation(
     stopRequestedRef.current = false
     const capture = captureRef.current
     if (!capture) {
-      // Ainda abrindo: quem está abrindo desiste na próxima etapa.
+      // Still opening: whoever is opening gives up at the next step.
       if (startingRef.current) cancelRequestedRef.current = true
       return
     }
     void finish(capture, true)
   }, [finish])
 
-  // Desmontou no meio da fala (troca de chat, fechou o painel): libera o
-  // microfone e cancela a sessão, sem esperar texto.
+  // Unmounted in the middle of the speech (chat switch, panel closed): release the
+  // microphone and cancel the session, without waiting for text.
   useEffect(
     () => () => {
-      // Desmontou com a captura ainda abrindo: ela não pode terminar de abrir.
+      // Unmounted with the capture still opening: it cannot finish opening.
       cancelRequestedRef.current = true
       const capture = captureRef.current
       captureRef.current = null
@@ -326,15 +326,15 @@ export function useDictation(
     [],
   )
 
-  // A persona fica em "listening" enquanto se grava — desde o instante da pressão
-  // (`starting`), que é quando o usuário já entende que está falando. O estado é
-  // global porque a persona vive em outro ramo da árvore (stores/voice-activity).
+  // The persona stays in "listening" while recording — from the instant of the press
+  // (`starting`), which is when the user already understands they are speaking. The state is
+  // global because the persona lives in another branch of the tree (stores/voice-activity).
   useEffect(() => {
     useVoiceActivity.getState().setListening(listening || starting)
   }, [listening, starting])
   useEffect(() => () => useVoiceActivity.getState().setListening(false), [])
 
-  /** Some com o aviso de erro (o botão volta ao normal sem nova tentativa). */
+  /** Hides the error notice (the button goes back to normal without a new attempt). */
   const dismissError = useCallback(() => setError(null), [])
 
   return { settings: voice, listening, starting, error, start, stop, cancel, dismissError }

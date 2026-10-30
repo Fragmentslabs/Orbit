@@ -2,23 +2,24 @@ import { parseCommons, matchesLicense, parseOpenverse } from './providers'
 import type { Fetcher, ImageProvider, ImageResult, Orientation, SearchOptions, SearchOutcome } from './types'
 
 /**
- * A busca em si: monta o pedido de cada provedor, junta e filtra o que volta.
+ * The search itself: it builds each provider's request, joins and filters what comes
+ * back.
  *
- * Os dois provedores respondem sem chave. O Openverse limita o uso anônimo (20
- * pedidos por minuto, 200 por dia por IP), então um 429 vira um AVISO, e não um
- * erro: a busca segue com o que o outro provedor trouxe.
+ * Both providers answer without a key. Openverse limits anonymous use (20 requests
+ * per minute, 200 per day per IP), so a 429 becomes a WARNING, not an error: the
+ * search goes on with what the other provider brought.
  */
 
-/** Quem pergunta: a Wikimedia pede um User-Agent que diga quem é o app. */
+/** Who is asking: Wikimedia asks for a User-Agent that says which app it is. */
 export const USER_AGENT = 'Orbit/1.0 (desktop app; image search for video projects)'
 
 const COMMONS_ENDPOINT = 'https://commons.wikimedia.org/w/api.php'
 const OPENVERSE_ENDPOINT = 'https://api.openverse.org/v1/images/'
-/** O Openverse leva até ~15 s numa busca que não está em cache. */
+/** Openverse takes up to ~15 s on a search that is not cached. */
 const REQUEST_TIMEOUT_MS = 25_000
-/** Depois que um provedor já trouxe resultados, o mais lento ganha só esta janela. */
+/** Once a provider has brought results, the slower one gets only this window. */
 export const GRACE_MS = 6_000
-/** Largura do arquivo pedido ao Commons: sobra para um quadro de 1080p sem trazer o original de 60 MP. */
+/** Width of the file requested from Commons: enough for a 1080p frame without bringing the 60 MP original. */
 const COMMONS_WIDTH = 1920
 
 export const MAX_RESULTS = 12
@@ -28,10 +29,10 @@ export function commonsUrl(opts: SearchOptions): string {
     action: 'query',
     format: 'json',
     generator: 'search',
-    // `filetype:bitmap` deixa de fora SVG, PDF e áudio — só imagem que um vídeo usa.
+    // `filetype:bitmap` leaves SVG, PDF and audio out — only images a video can use.
     gsrsearch: `${opts.query} filetype:bitmap`,
     gsrnamespace: '6',
-    // Pede mais do que o necessário: o filtro de tamanho e licença descarta parte.
+    // Asks for more than needed: the size and license filter discards part of it.
     gsrlimit: String(Math.min(50, opts.limit * 3)),
     prop: 'imageinfo',
     iiprop: 'url|size|mime|extmetadata',
@@ -44,7 +45,7 @@ export function commonsUrl(opts: SearchOptions): string {
 export function openverseUrl(opts: SearchOptions): string {
   const params = new URLSearchParams({
     q: opts.query,
-    // O acesso anônimo do Openverse recusa (401) page_size acima de 20.
+    // Openverse anonymous access refuses (401) a page_size above 20.
     page_size: String(Math.min(20, opts.limit * 3)),
     mature: 'false',
   })
@@ -63,7 +64,7 @@ function orientationOf(width: number, height: number): Orientation {
   return 'square'
 }
 
-/** O resultado cabe no que foi pedido (tamanho, orientação, licença)? */
+/** Does the result fit what was asked (size, orientation, license)? */
 export function acceptable(result: ImageResult, opts: SearchOptions): boolean {
   if (!matchesLicense(result.credit.license, opts.license)) return false
   if (result.width !== undefined && result.width < opts.minWidth) return false
@@ -71,7 +72,7 @@ export function acceptable(result: ImageResult, opts: SearchOptions): boolean {
   return true
 }
 
-/** Intercala os provedores (1º de um, 1º do outro…): nenhum domina a lista. */
+/** Interleaves the providers (1st of one, 1st of the other…): none dominates the list. */
 export function interleave<T>(lists: T[][]): T[] {
   const out: T[] = []
   const longest = Math.max(0, ...lists.map((l) => l.length))
@@ -106,9 +107,10 @@ async function fromProvider(provider: ImageProvider, opts: SearchOptions, fetche
 }
 
 /**
- * Espera os provedores, mas sem deixar o mais lento segurar a resposta: quando um
- * já trouxe resultados, os outros têm `graceMs` para chegar. O que não chegou vira
- * aviso — a busca parcial ainda serve, e o agente pode repetir.
+ * Waits for the providers, but without letting the slowest one hold the answer: once
+ * one has brought results, the others have `graceMs` to arrive. Those that did not
+ * arrive become a warning — the partial search still serves, and the agent can
+ * repeat it.
  */
 async function gather(
   providers: ImageProvider[],
@@ -131,7 +133,7 @@ async function gather(
   })
   const all = Promise.all(pending).then(() => undefined)
   await Promise.race([all, first.then(() => new Promise<void>((resolve) => setTimeout(resolve, graceMs)))])
-  // Os que ainda não responderam entram como aviso (a requisição segue e expira sozinha).
+  // Those that have not answered yet come in as a warning (the request goes on and expires on its own).
   return slots.map((slot, i) => slot ?? { results: [], warning: `${LABEL[providers[i]]}: too slow — repeat the search to include it` })
 }
 
@@ -142,7 +144,7 @@ export async function searchImages(opts: SearchOptions, fetcher: Fetcher = fetch
   const seen = new Set<string>()
   const results: ImageResult[] = []
   for (const result of interleave(lists)) {
-    // O mesmo arquivo costuma vir dos dois (o Openverse indexa o Commons).
+    // The same file usually comes from both (Openverse indexes Commons).
     const key = result.credit.sourceUrl
     if (seen.has(key)) continue
     seen.add(key)

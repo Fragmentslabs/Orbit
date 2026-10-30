@@ -1,21 +1,21 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 
 /**
- * Um erro de renderização fica onde aconteceu.
+ * A rendering error stays where it happened.
  *
- * O app não tinha nenhum: qualquer componente que lançasse durante a
- * renderização desmontava a árvore inteira, e o que sobrava era o fundo da
- * janela — uma tela preta, sem mensagem, sem nada no log do terminal. Abrir
- * um chat com UMA mensagem que o renderer não soubesse desenhar apagava o app.
+ * The app had none: any component that threw during
+ * rendering unmounted the whole tree, and what was left was the window
+ * background — a black screen, with no message, with nothing in the terminal log. Opening
+ * a chat with ONE message the renderer did not know how to draw erased the app.
  *
- * `resetKeys` devolve a chance de renderizar quando o que quebrou muda — trocar
- * de conversa, por exemplo, não pode continuar mostrando o erro da anterior.
+ * `resetKeys` gives back the chance to render when what broke changes — switching
+ * conversation, for example, cannot keep showing the previous one's error.
  */
 export class ErrorBoundary extends Component<
   {
     children: ReactNode
     fallback: (error: Error, reset: () => void) => ReactNode
-    /** Onde isto está, para o log dizer QUAL pedaço quebrou. */
+    /** Where this is, so the log says WHICH piece broke. */
     label: string
     resetKeys?: unknown[]
   },
@@ -43,8 +43,8 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Vai para o console do renderer — e de lá para o terminal, pelo
-    // encaminhamento do main. É o que torna o erro achável depois.
+    // It goes to the renderer console — and from there to the terminal, through the
+    // forwarding of the main process. It is what makes the error findable later.
     console.error(`[render] ${this.props.label}:`, error, info.componentStack)
   }
 

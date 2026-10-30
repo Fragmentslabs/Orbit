@@ -5,8 +5,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Deep merge de payloads de providerOptions (base → variant). Objetos são
- * mesclados recursivamente; arrays e primitivos são substituídos.
+ * Deep merge of providerOptions payloads (base → variant). Objects are
+ * merged recursively; arrays and primitives are replaced.
  */
 export function mergeOptions(...sources: VariantPayload[]): VariantPayload {
   const result: VariantPayload = {}

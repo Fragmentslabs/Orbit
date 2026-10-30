@@ -7,11 +7,11 @@ import type { ChatMessage, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 
 /**
- * Revert por mensagem, ponta a ponta: mensagens + S/E/C por caminho.
+ * Revert per message, end to end: messages + S/E/C per path.
  *
- * Os cenários que importam são os de CONCORRÊNCIA: duas conversas na mesma
- * pasta, arquivo mexido por fora depois do turno, e o que muda entre o revert
- * e o unrevert. O revert não pode ser um "restore da pasta inteira".
+ * The scenarios that matter are the CONCURRENCY ones: two conversations in the same
+ * folder, a file touched from outside after the turn, and what changes between the revert
+ * and the unrevert. The revert cannot be a "restore of the whole folder".
  */
 const userData = path.join(os.tmpdir(), `orbit-revert-${process.pid}`)
 
@@ -33,14 +33,14 @@ let counter = 0
 let roots: string[] = []
 
 async function setup(options: {
-  /** Estado inicial dos arquivos (antes do turno). */
+  /** Initial state of the files (before the turn). */
   initial: Record<string, string>
-  /** O que o turno fez. */
+  /** What the turn did. */
   turn: Record<string, string | null>
   verified?: 'changed' | 'unchanged'
-  /** Caminhos que o turno mudou mas são saves manuais do painel. */
+  /** Paths the turn changed but which are manual saves from the panel. */
   manual?: string[]
-  /** Captura o `end` mesmo num turno 'unchanged' (pasta mudou só por save manual). */
+  /** Captures `end` even on an 'unchanged' turn (folder changed only by a manual save). */
   captureEnd?: boolean
 }): Promise<{ dir: string; sessionId: string }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-revert-proj-'))
@@ -108,7 +108,7 @@ function exists(dir: string, rel: string): Promise<boolean> {
 }
 
 afterEach(async () => {
-  // gc das capturas é fire-and-forget nos snapshots.
+  // the gc of the captures is fire-and-forget in the snapshots.
   await new Promise((resolve) => setTimeout(resolve, 80))
 })
 
@@ -118,54 +118,54 @@ afterAll(async () => {
   roots = []
 })
 
-describe('revert de arquivos (S/E/C)', () => {
-  it('desfaz só os caminhos do turno, sem tocar no resto da pasta', async () => {
+describe('file revert (S/E/C)', () => {
+  it('undoes only the turn paths, without touching the rest of the folder', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes', 'intocado.txt': 'fica' },
-      turn: { 'a.txt': 'turno', 'novo.txt': 'criado' },
+      initial: { 'a.txt': 'before', 'intocado.txt': 'stays' },
+      turn: { 'a.txt': 'turno', 'new.txt': 'created' },
     })
 
     const state = await revert(sessionId, 'u1')
 
     expect(state?.filesRestored).toBe(true)
-    expect(state?.files?.sort()).toEqual(['a.txt', 'novo.txt'])
+    expect(state?.files?.sort()).toEqual(['a.txt', 'new.txt'])
     expect(state?.conflicts).toEqual([])
-    expect(await read(dir, 'a.txt')).toBe('antes')
-    expect(await exists(dir, 'novo.txt')).toBe(false)
-    expect(await read(dir, 'intocado.txt')).toBe('fica')
+    expect(await read(dir, 'a.txt')).toBe('before')
+    expect(await exists(dir, 'new.txt')).toBe(false)
+    expect(await read(dir, 'intocado.txt')).toBe('stays')
   })
 
-  it('duas conversas na mesma pasta: o que a outra mudou depois do turno fica', async () => {
+  it('two conversations in the same folder: what the other changed after the turn stays', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes' },
+      initial: { 'a.txt': 'before' },
       turn: { 'a.txt': 'turno' },
     })
-    // Outra conversa no MESMO projeto escreve depois do snapshot final.
-    await fs.writeFile(path.join(dir, 'a.txt'), 'outra conversa', 'utf8')
+    // Another conversation in the SAME project writes after the final snapshot.
+    await fs.writeFile(path.join(dir, 'a.txt'), 'another conversation', 'utf8')
 
     const state = await revert(sessionId, 'u1')
 
     expect(state?.files).toEqual([])
     expect(state?.conflicts).toEqual(['a.txt'])
-    expect(await read(dir, 'a.txt')).toBe('outra conversa')
+    expect(await read(dir, 'a.txt')).toBe('another conversation')
   })
 
-  it('turno de leitura não reseta a pasta', async () => {
+  it('a read-only turn does not reset the folder', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'estável' },
+      initial: { 'a.txt': 'stable' },
       turn: {},
       verified: 'unchanged',
     })
     const state = await revert(sessionId, 'u1')
     expect(state?.filesRestored).toBe(true)
     expect(state?.files).toBeUndefined()
-    expect(await read(dir, 'a.txt')).toBe('estável')
+    expect(await read(dir, 'a.txt')).toBe('stable')
   })
 
-  it('save manual do painel durante o turno é preservado e reportado', async () => {
+  it('a manual panel save during the turn is preserved and reported', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes', 'manual.txt': 'antes' },
-      turn: { 'a.txt': 'turno', 'manual.txt': 'salvo à mão' },
+      initial: { 'a.txt': 'before', 'manual.txt': 'before' },
+      turn: { 'a.txt': 'turno', 'manual.txt': 'saved by hand' },
       manual: ['manual.txt'],
     })
 
@@ -173,14 +173,14 @@ describe('revert de arquivos (S/E/C)', () => {
 
     expect(state?.files).toEqual(['a.txt'])
     expect(state?.conflicts).toEqual(['manual.txt'])
-    expect(await read(dir, 'a.txt')).toBe('antes')
-    expect(await read(dir, 'manual.txt')).toBe('salvo à mão')
+    expect(await read(dir, 'a.txt')).toBe('before')
+    expect(await read(dir, 'manual.txt')).toBe('saved by hand')
   })
 
-  it('turno só com save manual (unchanged + end): preserva o save e reporta', async () => {
+  it('a turn with only a manual save (unchanged + end): preserves the save and reports', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes' },
-      turn: { 'a.txt': 'salvo à mão' },
+      initial: { 'a.txt': 'before' },
+      turn: { 'a.txt': 'saved by hand' },
       verified: 'unchanged',
       captureEnd: true,
       manual: ['a.txt'],
@@ -191,15 +191,15 @@ describe('revert de arquivos (S/E/C)', () => {
     expect(state?.filesRestored).toBe(true)
     expect(state?.files).toEqual([])
     expect(state?.conflicts).toEqual(['a.txt'])
-    expect(await read(dir, 'a.txt')).toBe('salvo à mão')
+    expect(await read(dir, 'a.txt')).toBe('saved by hand')
   })
 
-  it('revert espera outra operação travada na mesma pasta (outro revert)', async () => {
+  it('revert waits for another operation locked on the same folder (another revert)', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes' },
+      initial: { 'a.txt': 'before' },
       turn: { 'a.txt': 'turno' },
     })
-    // Simula outro revert da mesma pasta em andamento: este tem de esperar.
+    // Simulates another revert of the same folder in progress: this one has to wait.
     let release!: () => void
     const gate = new Promise<void>((resolve) => (release = resolve))
     let entered!: () => void
@@ -216,18 +216,18 @@ describe('revert de arquivos (S/E/C)', () => {
     release()
     await turn
     await pending
-    expect(await read(dir, 'a.txt')).toBe('antes')
+    expect(await read(dir, 'a.txt')).toBe('before')
   })
 })
 
-describe('revert com a captura do estado atual falhando', () => {
-  it('não toca em arquivo nenhum e avisa capture-failed', async () => {
+describe('revert with the current-state capture failing', () => {
+  it('touches no file at all and reports capture-failed', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes' },
-      turn: { 'a.txt': 'turno', 'novo.txt': 'criado' },
+      initial: { 'a.txt': 'before' },
+      turn: { 'a.txt': 'turno', 'new.txt': 'created' },
     })
-    // Um index.lock órfão no repositório auxiliar faz o `add --all` da
-    // captura falhar — o mesmo que um crash no meio de outra captura deixa.
+    // An orphan index.lock in the auxiliary repository makes the `add --all` of the
+    // capture fail — the same thing a crash in the middle of another capture leaves behind.
     const hash = crypto.createHash('sha1').update(path.resolve(dir)).digest('hex').slice(0, 16)
     const lock = path.join(userData, 'snapshots', hash, 'index.lock')
     await fs.writeFile(lock, '')
@@ -236,10 +236,10 @@ describe('revert com a captura do estado atual falhando', () => {
 
       expect(state?.filesRestored).toBe(false)
       expect(state?.reason).toBe('capture-failed')
-      // Sem o estado de antes, desfazer deixaria os arquivos sem volta.
+      // Without the previous state, undoing would leave the files with no way back.
       expect(await read(dir, 'a.txt')).toBe('turno')
-      expect(await read(dir, 'novo.txt')).toBe('criado')
-      // As mensagens continuam truncadas e o unrevert as devolve.
+      expect(await read(dir, 'new.txt')).toBe('created')
+      // The messages stay truncated and the unrevert gives them back.
       expect(state?.discardedMessages?.map((m) => m.id)).toEqual(['u1', 'a1'])
     } finally {
       await fs.rm(lock, { force: true })
@@ -252,14 +252,14 @@ describe('revert com a captura do estado atual falhando', () => {
   })
 })
 
-describe('unrevert de arquivos', () => {
-  it('devolve os caminhos que ainda estão como o revert os deixou', async () => {
+describe('file unrevert', () => {
+  it('gives back the paths that are still as the revert left them', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes' },
+      initial: { 'a.txt': 'before' },
       turn: { 'a.txt': 'turno' },
     })
     await revert(sessionId, 'u1')
-    expect(await read(dir, 'a.txt')).toBe('antes')
+    expect(await read(dir, 'a.txt')).toBe('before')
 
     const result = await unrevert(sessionId)
 
@@ -269,13 +269,13 @@ describe('unrevert de arquivos', () => {
     expect(await read(dir, 'a.txt')).toBe('turno')
   })
 
-  it('não sobrescreve o que mudou entre o revert e o unrevert', async () => {
+  it('does not overwrite what changed between the revert and the unrevert', async () => {
     const { dir, sessionId } = await setup({
-      initial: { 'a.txt': 'antes' },
+      initial: { 'a.txt': 'before' },
       turn: { 'a.txt': 'turno' },
     })
     await revert(sessionId, 'u1')
-    // Entre o revert e o desfazer, alguém escreve.
+    // Between the revert and the undo, someone writes.
     await fs.writeFile(path.join(dir, 'a.txt'), 'novidade', 'utf8')
 
     const result = await unrevert(sessionId)

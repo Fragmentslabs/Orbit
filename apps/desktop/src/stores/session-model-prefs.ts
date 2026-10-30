@@ -8,11 +8,11 @@ import { sessionModelsApi } from "@/src/lib/ipc"
 import { useModelRotationStore } from "@/src/stores/model-rotation-store"
 
 /**
- * Modelo selecionado POR CHAT (padrão do opencode: o modelo segue a sessão,
- * não o app inteiro). `overrides` guarda o modelo escolhido de cada sessão;
- * chats novos usam a chave DRAFT até o primeiro envio (adopt), quando o
- * override vira da sessão. Sem override, vale o default global do provider.
- * `recents` é global (últimos 5 modelos escolhidos em qualquer chat).
+ * Model selected PER CHAT (opencode's default: the model follows the session,
+ * not the whole app). `overrides` keeps the model chosen for each session;
+ * new chats use the DRAFT key until the first send (adopt), when the
+ * override becomes the session's. With no override, the provider's global default applies.
+ * `recents` is global (the last 5 models chosen in any chat).
  */
 
 const STORAGE_KEY = "orbit-session-models"
@@ -25,7 +25,7 @@ function loadRecord(): Record<string, SelectedModel> {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw) as Record<string, SelectedModel>
   } catch {
-    // prefs corrompidas — recomeça sem overrides
+    // corrupted prefs — starts over without overrides
   }
   return {}
 }
@@ -42,7 +42,7 @@ function loadRecents(): SelectedModel[] {
       if (Array.isArray(parsed)) return parsed.slice(0, MAX_RECENTS)
     }
   } catch {
-    // recents corrompidos — recomeça vazio
+    // corrupted recents — starts over empty
   }
   return []
 }
@@ -53,19 +53,19 @@ function persistRecents(recents: SelectedModel[]) {
 
 interface SessionModelPrefsState {
   overrides: Record<string, SelectedModel>
-  /** Últimos modelos usados (global, mais recente primeiro, máx. 5) */
+  /** Last models used (global, most recent first, max. 5) */
   recents: SelectedModel[]
   selectModel: (sessionId: string | null | undefined, providerId: string, modelId: string) => void
-  /** Move o override do draft (chat novo) para a sessão criada no 1º envio */
+  /** Moves the draft's override (new chat) to the session created on the 1st send */
   adopt: (sessionId: string, fallback?: SelectedModel) => void
-  /** Registra um modelo como "usado" (entra nos recentes). Chamado apenas
-   *  quando o agente concluiu uma resposta de fato — nunca em falha. */
+  /** Records a model as "used" (it goes into recents). Called only
+   *  when the agent actually finished an answer — never on failure. */
   markUsed: (providerId?: string, modelId?: string) => void
-  /** Remove um modelo dos recentes (botão "x" no seletor). */
+  /** Removes a model from recents (the "x" button in the selector). */
   removeRecent: (providerId: string, modelId: string) => void
   clear: (sessionId: string) => void
-  /** Troca, em overrides e recentes, os modelos que `next` mapear para outro
-   *  (renomeação no catálogo — ver model-migration-sync). */
+  /** Swaps, in overrides and recents, the models `next` maps to another
+   *  (rename in the catalog — see model-migration-sync). */
   remap: (next: (model: SelectedModel) => SelectedModel | undefined) => void
 }
 
@@ -79,15 +79,15 @@ selectModel: (sessionId, providerId, modelId) => {
     const overrides = { ...get().overrides, [key]: selected }
     persistRecord(overrides)
 
-    // NOTA: escolher não mexe em `recents` — um modelo só entra nos recentes
-    // quando é realmente usado (markUsed, no fim de uma resposta do agente).
+    // NOTE: choosing does not touch `recents` — a model only goes into recents
+    // when it is really used (markUsed, at the end of an agent answer).
     set({ overrides })
 
-    // Empurra o mapa para o main (cache HTTP + repasse aos companions)
+    // Pushes the map to main (HTTP cache + relay to the companions)
     sessionModelsApi.sync(overrides)
 
-    // Chat novo (draft): o modelo escolhido vira também o default global,
-    // para o próximo chat novo já abrir nele.
+    // New chat (draft): the chosen model also becomes the global default,
+    // so the next new chat already opens in it.
     if (!sessionId) useProviderStore.getState().selectModel(providerId, modelId)
   },
 
@@ -97,8 +97,8 @@ selectModel: (sessionId, providerId, modelId) => {
       overrides[sessionId] = overrides[DRAFT_KEY]
       delete overrides[DRAFT_KEY]
     } else if (fallback) {
-      // Sem escolha explícita no draft, fixa o modelo efetivamente usado
-      // (herdado do último chat) para a sessão continuar nele.
+      // With no explicit choice in the draft, pins the model actually used
+      // (inherited from the last chat) so the session continues in it.
       overrides[sessionId] = fallback
     } else {
       return
@@ -151,32 +151,32 @@ selectModel: (sessionId, providerId, modelId) => {
   },
 }))
 
-// Sincronização com companions (mobile): empurra o estado inicial para o main
-// (após reload do renderer o cache do main precisa ser repopulado) e aplica
-// seleções feitas pelos companions via WS 'models:select' / HTTP PUT selected.
+// Sync with companions (mobile): pushes the initial state to main
+// (after a renderer reload the main cache has to be repopulated) and applies
+// selections made by the companions via WS 'models:select' / HTTP PUT selected.
 if (typeof window !== "undefined" && window.ipcRenderer) {
   sessionModelsApi.sync(loadRecord())
   sessionModelsApi.onSelect(({ providerId, modelId, sessionId }) => {
     if (providerId && modelId) {
-      // Escolher um modelo desfaz a rotação do chat — mesmo par do seletor do
-      // desktop (model-picker.tsx). Sem isto a rotação continuaria vencendo,
-      // porque o engine a resolve antes do modelo pinado.
+      // Choosing a model undoes the chat's rotation — the same pair as the
+      // desktop selector (model-picker.tsx). Without this the rotation would keep winning,
+      // Vision mode: the configured model has to exist, be connected and have
       useModelRotationStore.getState().selectRotation(sessionId ?? null, null)
       useSessionModelPrefs.getState().selectModel(sessionId ?? null, providerId, modelId)
     }
   })
 }
 
-/** Sessão mais recente não arquivada e não-worker — o modelo dela é o default
- *  do próximo chat novo. */
+/** Most recent session that is not archived and not a worker — its model is the default
+ *  for the next new chat. */
 function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
   return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
 }
 
-/** Override herdado do PAI: um subchat não tem escolha própria até alguém
- *  trocar o modelo nele. Sem isto ele caía no default GLOBAL do provider, que
- *  pode ser outro modelo (subchat aberto a partir de um chat em DeepSeek
- *  nascia em Claude). Sobe a cadeia até o primeiro ancestral com override. */
+/** Override inherited from the PARENT: a subchat has no choice of its own until someone
+ *  changes the model in it. Without this it fell into the provider's GLOBAL default, which
+ *  may be another model (a subchat opened from a chat in DeepSeek
+ *  was born in Claude). It climbs the chain up to the first ancestor with an override. */
 function inheritedOverride(
   sessionId: string,
   overrides: Record<string, SelectedModel>,
@@ -194,10 +194,10 @@ function inheritedOverride(
   return undefined
 }
 
-/** Modelo efetivo da sessão: override por chat > override herdado do pai
- *  (subchats) > default global do provider. Chat novo (draft) sem escolha
- *  explícita herda o modelo do último chat usado (override da sessão mais
- *  recente) antes de cair no default global. */
+/** Effective model of the session: per-chat override > override inherited from the parent
+ *  (subchats) > provider's global default. A new chat (draft) with no explicit
+ *  choice inherits the model of the last chat used (override of the most recent
+ *  session) before falling back to the global default. */
 export function sessionModelFor(sessionId?: string | null): SelectedModel | null {
   const prefs = useSessionModelPrefs.getState()
   const override = prefs.overrides[sessionId ?? DRAFT_KEY]
@@ -214,8 +214,8 @@ export function sessionModelFor(sessionId?: string | null): SelectedModel | null
   return useProviderStore.getState().selectedModel
 }
 
-/** Hook reativo do modelo efetivo da sessão (reage a override, a default e à
- *  sessão mais recente — para o chat novo acompanhar o último modelo usado). */
+/** Reactive hook for the session's effective model (reacts to the override, to the default and to the
+ *  most recent session — so the new chat follows the last model used). */
 export function useSessionModel(sessionId?: string | null): SelectedModel | null {
   const overrides = useSessionModelPrefs((s) => s.overrides)
   const globalModel = useProviderStore((s) => s.selectedModel)

@@ -11,10 +11,10 @@ import { cn } from "@/lib/utils"
 import type { ModelVariant } from "@shared/chat"
 
 /**
- * Dropdown de nível de thinking (abre para cima). Sempre visível quando o
- * modelo expõe variants (thinking é sempre ativo em modelos com reasoning;
- * o nível é a única escolha). Modelos que permitem desligar (`canDisable`)
- * ganham a opção "Off" — via `onSelect(null)`.
+ * Thinking level dropdown (opens upwards). Always visible when the
+ * model exposes variants (thinking is always active in models with reasoning;
+ * the level is the only choice). Models that allow turning it off (`canDisable`)
+ * get the "Off" option — through `onSelect(null)`.
  */
 export function ReasoningPicker({
   variants,
@@ -26,7 +26,7 @@ export function ReasoningPicker({
 }: {
   variants: ModelVariant[]
   enabled: boolean
-  /** Se o modelo permite desligar o thinking (false para reasoningAlwaysOn) */
+  /** Whether the model allows turning thinking off (false for reasoningAlwaysOn) */
   canDisable?: boolean
   selected: string | undefined
   onSelect: (variantId: string | null) => void
@@ -59,7 +59,7 @@ export function ReasoningPicker({
         <Brain className="size-3 text-foreground" />
         <SelectValue placeholder={t("reasoning.placeholder")}>
           {(value) => {
-            // Base UI renderiza o valor cru no trigger; aqui formatamos com o label traduzido
+            // Base UI renders the raw value in the trigger; here we format it with the translated label
             if (value == null) return t("reasoning.placeholder")
             if (value === "off") return t("reasoning.off")
             const variant = variants.find((v) => v.id === value)

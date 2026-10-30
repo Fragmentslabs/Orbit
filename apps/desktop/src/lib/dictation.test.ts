@@ -10,15 +10,15 @@ import {
   voiceTargetReady,
 } from "./dictation"
 
-/** AppSettings sem o bloco `voice` (localStorage de uma versão anterior). */
-const semVoz = {} as AppSettings
+/** AppSettings without the `voice` block (localStorage from an earlier version). */
+const withoutVoice = {} as AppSettings
 
-/** AppSettings com o bloco, do jeito que o objeto cru chegaria do localStorage. */
-const comVoz = (stt: Record<string, unknown>) => ({ voice: { stt } }) as unknown as AppSettings
+/** AppSettings with the block, the way the raw object would arrive from localStorage. */
+const withVoice = (stt: Record<string, unknown>) => ({ voice: { stt } }) as unknown as AppSettings
 
 describe("resolveVoiceSttSettings", () => {
-  it("bloco ausente cai nos padrões do produto", () => {
-    expect(resolveVoiceSttSettings(semVoz)).toEqual({
+  it("a missing block falls back to the product defaults", () => {
+    expect(resolveVoiceSttSettings(withoutVoice)).toEqual({
       enabled: true,
       engine: "parakeet",
       modelId: null,
@@ -30,9 +30,9 @@ describe("resolveVoiceSttSettings", () => {
     })
   })
 
-  it("lê o que o usuário escolheu", () => {
+  it("reads what the user chose", () => {
     const voice = resolveVoiceSttSettings(
-      comVoz({
+      withVoice({
         enabled: false,
         engine: "whisper",
         modelId: "small",
@@ -55,9 +55,9 @@ describe("resolveVoiceSttSettings", () => {
     })
   })
 
-  it("valores de tipo errado não vazam para o motor", () => {
+  it("values of the wrong type do not leak into the engine", () => {
     const voice = resolveVoiceSttSettings(
-      comVoz({ enabled: "sim", engine: 42, modelId: "", language: null, live: "on", threads: NaN, preload: "sim", micDeviceId: 7 }),
+      withVoice({ enabled: "sim", engine: 42, modelId: "", language: null, live: "on", threads: NaN, preload: "sim", micDeviceId: 7 }),
     )
     expect(voice).toEqual({
       enabled: true,
@@ -71,14 +71,14 @@ describe("resolveVoiceSttSettings", () => {
     })
   })
 
-  it("null e undefined não lançam", () => {
+  it("null and undefined do not throw", () => {
     expect(resolveVoiceSttSettings(null).engine).toBe("parakeet")
     expect(resolveVoiceSttSettings(undefined).enabled).toBe(true)
   })
 })
 
 describe("parseVoiceStatus", () => {
-  it("aceita modelos como mapa por id (a forma do canal)", () => {
+  it("accepts models as a map by id (the channel's shape)", () => {
     const status = parseVoiceStatus({
       engines: [{ id: "parakeet", available: true, installed: true }, { engine: "whisper", available: false }],
       models: { small: { installed: true, engine: "whisper" }, parakeet: { installed: false } },
@@ -95,7 +95,7 @@ describe("parseVoiceStatus", () => {
     })
   })
 
-  it("aceita listas de objetos e de strings", () => {
+  it("accepts lists of objects and of strings", () => {
     const status = parseVoiceStatus({ engines: ["parakeet"], models: [{ id: "small", engine: "whisper", downloaded: false }] })
     expect(status).toEqual({
       engines: [{ id: "parakeet" }],
@@ -103,7 +103,7 @@ describe("parseVoiceStatus", () => {
     })
   })
 
-  it("payload irreconhecível vira null", () => {
+  it("an unrecognizable payload becomes null", () => {
     expect(parseVoiceStatus(null)).toBeNull()
     expect(parseVoiceStatus("parakeet")).toBeNull()
     expect(parseVoiceStatus({})).toBeNull()
@@ -119,90 +119,90 @@ describe("voiceTargetReady", () => {
     models: { small: { installed: true, engine: "whisper" }, medium: { installed: false, engine: "whisper" } },
   })
 
-  it("sem status não bloqueia (quem falha é o start)", () => {
+  it("with no status it does not block (start is the one that fails)", () => {
     expect(voiceTargetReady(null, "parakeet", null)).toBe(true)
     expect(voiceTargetReady(parseVoiceStatus({ models: {} }), "whisper", null)).toBe(true)
   })
 
-  it("motor disponível e modelo baixado libera", () => {
+  it("an available engine and a downloaded model free it", () => {
     expect(voiceTargetReady(status, "parakeet", null)).toBe(true)
     expect(voiceTargetReady(status, "whisper", "small")).toBe(true)
   })
 
-  it("motor desconhecido ou indisponível bloqueia", () => {
+  it("an unknown or unavailable engine blocks it", () => {
     expect(voiceTargetReady(status, "apple", null)).toBe(false)
-    const indisponivel = parseVoiceStatus({ engines: [{ id: "whisper", available: false }], models: {} })
-    expect(voiceTargetReady(indisponivel, "whisper", "small")).toBe(false)
+    const unavailable = parseVoiceStatus({ engines: [{ id: "whisper", available: false }], models: {} })
+    expect(voiceTargetReady(unavailable, "whisper", "small")).toBe(false)
   })
 
-  it("motor sem nenhum modelo no disco bloqueia (modelId nulo = o recomendado)", () => {
+  it("an engine with no model on disk blocks it (null modelId = the recommended one)", () => {
     expect(voiceTargetReady(status, "whisper", null)).toBe(false)
   })
 
-  it("modelo escolhido que o main não viu baixado bloqueia", () => {
+  it("a chosen model that main did not see downloaded blocks", () => {
     expect(voiceTargetReady(status, "whisper", "medium")).toBe(false)
     expect(voiceTargetReady(status, "whisper", "large-v3-turbo")).toBe(false)
   })
 })
 
 describe("appendDictation", () => {
-  it("junta com um espaço quando falta separador", () => {
+  it("joins with a space when the separator is missing", () => {
     expect(appendDictation("manda uma mensagem", "pro João")).toBe("manda uma mensagem pro João")
   })
 
-  it("respeita o espaço ou a quebra que o usuário já digitou", () => {
+  it("respects the space or break the user already typed", () => {
     expect(appendDictation("manda uma mensagem ", "pro João")).toBe("manda uma mensagem pro João")
     expect(appendDictation("linha um\n", "linha dois")).toBe("linha um\nlinha dois")
   })
 
-  it("input vazio recebe só o ditado, sem espaço na frente", () => {
+  it("an empty input receives only the dictation, with no leading space", () => {
     expect(appendDictation("", "  bom dia  ")).toBe("bom dia")
   })
 
-  it("ditado vazio não mexe no que o usuário escreveu", () => {
+  it("empty dictation does not touch what the user wrote", () => {
     expect(appendDictation("texto do usuário", "")).toBe("texto do usuário")
     expect(appendDictation("texto do usuário", "   \n ")).toBe("texto do usuário")
   })
 })
 
 describe("pcm16ToBase64", () => {
-  it("codifica o PCM16 em little-endian", () => {
+  it("encodes PCM16 as little-endian", () => {
     expect(pcm16ToBase64(new Int16Array([1, -1]))).toBe("AQD//w==")
     expect(pcm16ToBase64(new Int16Array([0, 0, 0, 0]))).toBe("AAAAAAAAAAA=")
   })
 
-  it("aguenta mais de um bloco interno sem estourar a pilha", () => {
+  it("handles more than one inner block without blowing the stack", () => {
     const pcm = new Int16Array(20000).fill(1000)
-    // 40 000 bytes: 4 caracteres por grupo de 3 bytes, com padding no fim
+    // 40 000 bytes: 4 characters per group of 3 bytes, with padding at the end
     expect(pcm16ToBase64(pcm).length).toBe(4 * Math.ceil(pcm.byteLength / 3))
     expect(Buffer.from(pcm16ToBase64(pcm), "base64").byteLength).toBe(pcm.byteLength)
   })
 
-  it("respeita o offset da view", () => {
+  it("respects the view's offset", () => {
     const buffer = new Int16Array([9, 1, -1]).subarray(1)
     expect(pcm16ToBase64(buffer)).toBe("AQD//w==")
   })
 })
 
 describe("pcmWorkletUrl", () => {
-  it("resolve na raiz do documento (dev e file:// do build)", () => {
+  it("resolves at the document root (dev and the build's file://)", () => {
     expect(pcmWorkletUrl("http://localhost:5173/")).toBe("http://localhost:5173/pcm-capture-worklet.js")
     expect(pcmWorkletUrl("file:///opt/orbit/dist/index.html")).toBe("file:///opt/orbit/dist/pcm-capture-worklet.js")
   })
 })
 
 describe("pcmLevel", () => {
-  it("silêncio e bloco vazio ficam no chão", () => {
+  it("silence and an empty block stay at the floor", () => {
     expect(pcmLevel(new Int16Array(0))).toBe(0)
     expect(pcmLevel(new Int16Array(1024))).toBe(0)
   })
 
-  it("sobe com o volume e satura em 1", () => {
+  it("rises with the volume and saturates at 1", () => {
     const tone = (amp: number) => Int16Array.from({ length: 1024 }, (_, i) => Math.round(amp * Math.sin(i / 4)))
-    const baixo = pcmLevel(tone(300))
-    const medio = pcmLevel(tone(3000))
-    expect(baixo).toBeGreaterThan(0)
-    expect(medio).toBeGreaterThan(baixo)
+    const low = pcmLevel(tone(300))
+    const mid = pcmLevel(tone(3000))
+    expect(low).toBeGreaterThan(0)
+    expect(mid).toBeGreaterThan(low)
     expect(pcmLevel(tone(32767))).toBe(1)
   })
 })

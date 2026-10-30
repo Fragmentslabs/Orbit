@@ -3,12 +3,12 @@ import type { Memory } from "@shared/memory"
 import { useMemoryStore } from "@/src/stores/memory-store"
 
 /**
- * Uma memória do índice, com carregamento sob demanda.
+ * One memory from the index, loaded on demand.
  *
- * O índice da tela de Memórias pode nunca ter sido carregado dentro de uma
- * conversa — o chip da citação é a primeira coisa que pede uma memória. Sem o
- * initialize() aqui, todo chip nasceria "não encontrada". Ele é idempotente:
- * se o índice já veio, não há nova chamada.
+ * The Memories screen index may never have been loaded inside a
+ * conversation — the citation chip is the first thing to ask for a memory. Without
+ * initialize() here, every chip would be born "not found". It is idempotent:
+ * if the index has already arrived, there is no new call.
  */
 export function useMemoryById(id: string | undefined): Memory | undefined {
   const index = useMemoryStore((s) => s.index)

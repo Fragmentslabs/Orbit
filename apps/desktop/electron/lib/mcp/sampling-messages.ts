@@ -2,22 +2,22 @@ import { jsonSchema, tool, type ModelMessage, type ToolSet } from 'ai'
 import type { ContentBlock, SamplingMessage, Tool } from '@modelcontextprotocol/sdk/types.js'
 
 /**
- * Tradução entre o vocabulário do MCP (sampling) e o do ai-sdk.
+ * Translation between the MCP (sampling) vocabulary and the ai-sdk one.
  *
- * Módulo puro — sem electron, sem storage, sem rede — porque é aqui que mora o
- * que dá errado em silêncio: o `tool_result` não é uma mensagem no MCP, é um
- * bloco dentro da mensagem do usuário; e o nome da tool não vem no resultado,
- * só o id. Um teste cobre exatamente essas duas voltas.
+ * A pure module — no electron, no storage, no network — because this is where things
+ * fail silently: the `tool_result` is not a message in MCP, it is a block inside the
+ * user message; and the tool name does not come in the result, only the id. A test
+ * covers exactly those two round trips.
  */
 
-/** Texto de um bloco de conteúdo do MCP (o que for imagem vira marca). */
+/** Text of an MCP content block (whatever is an image becomes a marker). */
 export function blockToText(content: ContentBlock[] | undefined): string {
   if (!content?.length) return ''
   return content
     .map((block) => {
       if (block.type === 'text') return block.text
-      if (block.type === 'image') return '[imagem]'
-      if (block.type === 'audio') return '[áudio]'
+      if (block.type === 'image') return '[image]'
+      if (block.type === 'audio') return '[audio]'
       return ''
     })
     .filter(Boolean)
@@ -36,12 +36,12 @@ type ToolResultPart = {
 }
 
 /**
- * Blocos de sampling → mensagens do ai-sdk.
+ * Sampling blocks → ai-sdk messages.
  *
- * O mapeamento não é 1:1: no MCP o `tool_result` viaja DENTRO de uma mensagem
- * de usuário, enquanto o ai-sdk o quer numa mensagem de role `tool` — daí a
- * mensagem extra que este laço empurra. O nome da tool não vem no resultado
- * (só o id), então ele é recuperado do `tool_use` visto antes na conversa.
+ * The mapping is not 1:1: in MCP the `tool_result` travels INSIDE a user message,
+ * while the ai-sdk wants it in a message with role `tool` — hence the extra message
+ * this loop pushes. The tool name does not come in the result (only the id), so it is
+ * retrieved from the `tool_use` seen earlier in the conversation.
  */
 export function toModelMessages(messages: SamplingMessage[]): ModelMessage[] {
   const out: ModelMessage[] = []
@@ -57,7 +57,7 @@ export function toModelMessages(messages: SamplingMessage[]): ModelMessage[] {
         else if (block.type === 'tool_use') {
           toolNames.set(block.id, block.name)
           parts.push({ type: 'tool-call', toolCallId: block.id, toolName: block.name, input: block.input })
-        } else console.warn('[mcp:sampling] bloco ignorado na resposta:', block.type)
+        } else console.warn('[mcp:sampling] block ignored in the response:', block.type)
       }
       if (parts.length) out.push({ role: 'assistant', content: parts })
       continue
@@ -73,9 +73,9 @@ export function toModelMessages(messages: SamplingMessage[]): ModelMessage[] {
           type: 'tool-result',
           toolCallId: block.toolUseId,
           toolName: toolNames.get(block.toolUseId) ?? 'desconhecida',
-          output: { type: 'text', value: blockToText(block.content) || '(sem conteúdo)' },
+          output: { type: 'text', value: blockToText(block.content) || '(no content)' },
         })
-      } else console.warn('[mcp:sampling] bloco ignorado no pedido:', block.type)
+      } else console.warn('[mcp:sampling] block ignored in the request:', block.type)
     }
     if (parts.length) out.push({ role: 'user', content: parts })
     if (results.length) out.push({ role: 'tool', content: results })
@@ -85,11 +85,11 @@ export function toModelMessages(messages: SamplingMessage[]): ModelMessage[] {
 }
 
 /**
- * Tools declaradas pelo app → ToolSet do ai-sdk.
+ * Tools declared by the app → ai-sdk ToolSet.
  *
- * SEM `execute`: o Orbit não executa nada. O modelo escolhe e preenche os
- * parâmetros, e quem roda a função é o app — a execução nunca sai do controle
- * de quem declarou a ferramenta.
+ * WITHOUT `execute`: Orbit executes nothing. The model chooses and fills in the
+ * parameters, and whoever runs the function is the app — execution never leaves the
+ * control of whoever declared the tool.
  */
 export function toAiTools(tools: Tool[]): ToolSet {
   const set: ToolSet = {}
@@ -102,7 +102,7 @@ export function toAiTools(tools: Tool[]): ToolSet {
   return set
 }
 
-/** `finishReason` do modelo → `stopReason` do MCP. */
+/** Model `finishReason` → MCP `stopReason`. */
 export function toStopReason(finishReason: string, usedTools: boolean): string {
   if (usedTools) return 'toolUse'
   if (finishReason === 'length') return 'maxTokens'

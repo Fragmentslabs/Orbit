@@ -27,20 +27,20 @@ import { Hint } from "@/components/ui/hint"
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
 /**
- * O palco de um deck de slides na aba do painel direito.
+ * The stage of a slides deck in the right panel tab.
  *
- * O iframe carrega a PASTA registrada por `orbit-slides://<id>/<entrada>`; a
- * ponte com o runtime injetado fica em use-slides-deck.ts, compartilhada com o
- * card do chat. Aqui ficam a moldura da aba e as rédeas que são de interface:
- * a lista, as notas do apresentador, o contador e a tela cheia.
+ * The iframe loads the registered FOLDER through `orbit-slides://<id>/<entry>`; the
+ * bridge with the injected runtime lives in use-slides-deck.ts, shared with the
+ * chat card. Here live the tab frame and the reins that belong to the interface:
+ * the list, the presenter notes, the counter and fullscreen.
  *
- * A lista muda de lugar conforme o espaço. No painel estreito ela é uma faixa
- * no rodapé: uma coluna de 208px comeria justamente a largura de que o 16:9
- * precisa, e deitada a mesma informação custa só altura, só enquanto aberta.
- * Em TELA CHEIA, onde há espaço para os dois, ela vira a sidebar flutuante da
- * direita — o MESMO componente da aba Design (FloatingSidebar): painel com a
- * aparência da sidebar do app, botão ao lado para alternar e abertura por hover
- * na borda quando está fechada.
+ * The list changes place according to the space. In the narrow panel it is a strip
+ * in the footer: a 208px column would eat precisely the width the 16:9
+ * needs, and lying down the same information costs only height, only while open.
+ * In FULLSCREEN, where there is room for both, it becomes the floating sidebar on the
+ * right — the SAME component as the Design tab (FloatingSidebar): a panel with the
+ * look of the app sidebar, a button next to it to toggle and opening by hover
+ * on the edge when it is closed.
  */
 export function SlidesTab({
   slidesId,
@@ -49,22 +49,22 @@ export function SlidesTab({
 }: {
   slidesId?: string
   entry?: string
-  /** Nome exibível do deck (a pasta registrada). */
+  /** Displayable name of the deck (the registered folder). */
   title: string
 }) {
   const { t } = useTranslation()
   const [showList, setShowList] = useState(true)
   /**
-   * A lista da TELA CHEIA tem estado próprio, e nasce fechada: lá o deck está
-   * sendo apresentado, e abrir a sidebar por cima do palco (como a faixa do
-   * rodapé fica por padrão no painel estreito) cobriria justamente o slide.
-   * Fechada, ela abre no hover da borda ou pelo botão ao lado — o mesmo
-   * comportamento da FloatingSidebar do Design.
+   * The FULLSCREEN list has its own state, and is born closed: there the deck is
+   * being presented, and opening the sidebar over the stage (as the footer
+   * strip stays by default in the narrow panel) would cover precisely the slide.
+   * Closed, it opens on the edge hover or through the button next to it — the same
+   * behavior as the Design FloatingSidebar.
    */
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
-  /** Impressão em andamento (uma janela do Chromium) e a falha dela. */
+  /** Printing in progress (a Chromium window) and its failure. */
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -75,9 +75,9 @@ export function SlidesTab({
   })
 
   /**
-   * Baixar em PDF. Quem imprime é o main, sobre o próprio index.html — a aba só
-   * pede e mostra o resultado. O nome sugerido é o nome do deck NO ORBIT (o
-   * mesmo da aba e da galeria); o diálogo do sistema deixa mudar.
+   * Download as PDF. What prints is the main process, over index.html itself — the tab only
+   * asks and shows the result. The suggested name is the deck name IN ORBIT (the
+   * same as the tab and the gallery); the system dialog lets one change it.
    */
   const downloadPdf = useCallback(async () => {
     if (!slidesId || exporting) return
@@ -85,7 +85,7 @@ export function SlidesTab({
     setExportError(null)
     try {
       const result = await slidesApi.exportPdf(slidesId, title)
-      // Cancelar no diálogo de salvar não é erro: o usuário desistiu.
+      // Cancelling in the save dialog is not an error: the user gave up.
       if (!result.ok && !result.canceled) setExportError(result.error ?? t("slides.exportFailed"))
     } catch {
       setExportError(t("slides.exportFailed"))
@@ -94,9 +94,9 @@ export function SlidesTab({
     }
   }, [slidesId, exporting, title, t])
 
-  // Teclado do LADO DE FORA do iframe (com o foco na barra da aba). Dentro do
-  // palco quem trata é o runtime — os dois não se atropelam, porque um keydown
-  // não atravessa a fronteira do iframe.
+  // Keyboard from OUTSIDE the iframe (with the focus on the tab bar). Inside the
+  // stage the runtime is what handles it — the two do not run over each other, because a keydown
+  // does not cross the iframe boundary.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
@@ -128,8 +128,8 @@ export function SlidesTab({
     return () => window.removeEventListener("keydown", onKey)
   }, [fullscreen, go, index, total])
 
-  // A lista rola sozinha até o slide atual: num deck de 20, a linha ativa não
-  // pode ficar fora de vista só porque o usuário avançou pelo teclado.
+  // The list scrolls by itself to the current slide: in a deck of 20, the active row cannot
+  // stay out of view just because the user advanced by keyboard.
   const activeRowRef = useRef<HTMLButtonElement | null>(null)
   useEffect(() => {
     activeRowRef.current?.scrollIntoView({ block: "nearest" })
@@ -138,12 +138,12 @@ export function SlidesTab({
   const progress = total > 0 ? ((index + 1) / total) * 100 : 0
 
   /**
-   * O índice em forma de lista. O MESMO conteúdo serve aos dois lugares — a
-   * faixa do rodapé no painel estreito e a sidebar flutuante da tela cheia —,
-   * então só a densidade muda: no rodapé cada linha custa altura do palco, e
-   * na sidebar há espaço para respirar. Miniaturas de verdade exigiriam um
-   * render por slide (o iframe é opaco); o título é o que se procura ao
-   * navegar.
+   * The index as a list. The SAME content serves both places — the
+   * footer strip in the narrow panel and the floating sidebar of fullscreen —,
+   * so only the density changes: in the footer each row costs stage height, and
+   * in the sidebar there is room to breathe. Real thumbnails would require one
+   * render per slide (the iframe is opaque); the title is what one looks for when
+   * navigating.
    */
   const slideRows = (dense: boolean) =>
     deck?.slides.map((slide, i) => (
@@ -190,8 +190,8 @@ export function SlidesTab({
         fullscreen && FULLSCREEN_OVERLAY_CLASS,
       )}
     >
-      {/* Cabeçalho: deck + arquivo à esquerda; lista, notas, recarregar e tela
-          cheia à direita. Mesmo respiro do cabeçalho do motion. */}
+      {/* Header: deck + file on the left; list, notes, reload and full
+          screen on the right. Same breathing room as the motion header. */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
@@ -205,8 +205,8 @@ export function SlidesTab({
           </Truncate>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          {/* Na tela cheia quem abre e fecha a lista é o botão da sidebar
-              flutuante, ao lado dela (mesmo desenho da aba Design). */}
+          {/* In fullscreen what opens and closes the list is the button of the floating
+              sidebar, next to it (same drawing as the Design tab). */}
           {!fullscreen && (
             <IconAction
               icon={List}
@@ -236,8 +236,8 @@ export function SlidesTab({
         </div>
       </div>
 
-      {/* A falha do PDF não pode substituir o palco: uma faixa fina avisa e o
-          deck continua navegável. */}
+      {/* The PDF failure cannot replace the stage: a thin strip warns and the
+          deck stays navigable. */}
       {exportError && (
         <div className="flex shrink-0 items-center gap-1.5 border-b border-border/60 bg-destructive/10 px-3 py-1 text-[0.6875rem] text-destructive">
           <AlertTriangle className="size-3 shrink-0" />
@@ -254,18 +254,18 @@ export function SlidesTab({
         </div>
       )}
 
-      {/* O palco. O iframe ocupa a área toda e o runtime cuida da escala — a
-          mesma imagem em qualquer tamanho de painel. */}
+      {/* The stage. The iframe takes the whole area and the runtime handles the scale — the
+          same image at any panel size. */}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
         <iframe
           ref={iframeRef}
-          // A URL muda a cada recarga (o arquivo é reescrito no lugar), então
-          // ela é a chave do remount.
+          // The URL changes on every reload (the file is rewritten in place), so
+          // it is the key of the remount.
           key={src}
           src={src}
           title={title}
-          // SEM allow-same-origin de propósito: `allow-scripts` + same-origin
-          // deixaria o deck remover o próprio sandbox.
+          // WITHOUT allow-same-origin on purpose: `allow-scripts` + same-origin
+          // would let the deck remove its own sandbox.
           sandbox="allow-scripts"
           referrerPolicy="no-referrer"
           className="h-full w-full border-0 bg-black"
@@ -287,9 +287,9 @@ export function SlidesTab({
           </div>
         )}
 
-        {/* Tela cheia: a lista flutua à direita, por cima do palco, com a
-            aparência da sidebar do app. Fechada, encostar na borda abre; o
-            botão ao lado dela alterna e continua clicável para reabrir. */}
+        {/* Fullscreen: the list floats on the right, over the stage, with the
+            look of the app sidebar. Closed, touching the edge opens it; the
+            button next to it toggles and stays clickable to reopen. */}
         {fullscreen && (
           <FloatingSidebar
             side="right"
@@ -307,7 +307,7 @@ export function SlidesTab({
         )}
       </div>
 
-      {/* Notas do apresentador — o que DIZER neste slide, fora da tela. */}
+      {/* Presenter notes — what to SAY on this slide, off screen. */}
       {showNotes && (
         <div className="max-h-32 shrink-0 overflow-y-auto border-t border-border/60 bg-sidebar px-3 py-2">
           <div className="mb-1 flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
@@ -322,14 +322,14 @@ export function SlidesTab({
         </div>
       )}
 
-      {/* Painel estreito: a lista é uma faixa no rodapé, empilhada acima do
-          transporte. Em tela cheia ela sai daqui e vira a sidebar flutuante. */}
+      {/* Narrow panel: the list is a strip in the footer, stacked above the
+          transport. In fullscreen it leaves here and becomes the floating sidebar. */}
       {!fullscreen && showList && !!deck?.slides.length && (
         <div className="max-h-56 shrink-0 overflow-y-auto border-t border-border/60">{slideRows(true)}</div>
       )}
 
-      {/* Transporte: anterior, contador, próximo — e a barra de progresso
-          colada no rodapé, que é o que se olha de longe. */}
+      {/* Transport: previous, counter, next — and the progress bar
+          stuck to the footer, which is what one looks at from afar. */}
       <div className="relative flex shrink-0 items-center justify-center gap-1 border-t border-border/60 p-1.5">
         <IconAction
           icon={ChevronLeft}

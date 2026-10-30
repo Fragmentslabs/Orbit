@@ -42,8 +42,8 @@ export function AttachmentSheet({
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
   const [backdropAnim] = useState(() => new Animated.Value(0))
 
-  // O mobile mostra SEMPRE os modos no "+" (toggles da barra + avançados),
-  // além dos anexos — comportamento fixo, sem opção de ocultar.
+  // Mobile ALWAYS shows the modes in the "+" (bar toggles + advanced),
+  // besides the attachments — fixed behavior, with no option to hide it.
   const hasSimple = simpleModes && simpleModes.length > 0
   const hasConfig = configModes && configModes.length > 0
 
@@ -91,8 +91,8 @@ export function AttachmentSheet({
         {hasConfig && configModes && (
           <>
             <View style={[s.divider, { backgroundColor: tokens.border }]} />
-            {/* Sem o paddingTop do modesList: ele somaria ao margin da
-                divisoria e a folga de baixo ficava maior que a de cima. */}
+            {/* Without the paddingTop of modesList: it would add to the margin of the
+                divider and the bottom gap ended up bigger than the top one. */}
             <View style={[s.modesList, s.modesListAfterDivider]}>
               {configModes.map((mode) => <ModeRow key={mode.id} mode={mode} tokens={tokens} />)}
             </View>

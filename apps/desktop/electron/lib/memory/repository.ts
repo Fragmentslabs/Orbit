@@ -3,13 +3,13 @@ import { StorageKeys } from '@shared/chat'
 import { listKeys, readJson, removeJson, removeText, readText, writeJson, writeText } from '../storage'
 
 /**
- * Persistência das memórias sobre o storage JSON atômico:
- * - memory/items/<id>.json  → fonte da verdade (um arquivo por memória)
- * - memory/_index.json      → cache com todas as memórias (rebuildável)
- * - memory/docs/<id>.md     → documento markdown opcional anexado
+ * Memory persistence on top of the atomic JSON storage:
+ * - memory/items/<id>.json  → source of truth (one file per memory)
+ * - memory/_index.json      → cache with every memory (rebuildable)
+ * - memory/docs/<id>.md     → optional attached markdown document
  *
- * Toda mutação passa por uma fila serializada — o índice é read-modify-write
- * e duas sessões podem salvar ao mesmo tempo.
+ * Every mutation goes through a serialized queue — the index is read-modify-write
+ * and two sessions can save at the same time.
  */
 
 const docKey = (id: string) => `memory/docs/${id}`
@@ -28,7 +28,7 @@ async function persistIndex(index: Memory[]): Promise<void> {
   await writeJson(StorageKeys.memoryIndex, index)
 }
 
-/** Reconstrói o índice varrendo os itens — recuperação de índice ausente/corrompido. */
+/** Rebuilds the index by scanning the items — recovery from a missing/corrupted index. */
 export async function rebuildIndex(): Promise<Memory[]> {
   const keys = await listKeys(StorageKeys.memoryItemsPrefix)
   const items = await Promise.all(keys.map((key) => readJson<Memory>(key)))
@@ -37,7 +37,7 @@ export async function rebuildIndex(): Promise<Memory[]> {
   return index
 }
 
-/** Índice completo em memória (lazy). O main é o único escritor. */
+/** Full in-memory index (lazy). The main process is the only writer. */
 export async function getIndex(): Promise<Memory[]> {
   if (indexCache) return indexCache
   try {
@@ -47,7 +47,7 @@ export async function getIndex(): Promise<Memory[]> {
       return stored
     }
   } catch {
-    // índice corrompido — reconstrói abaixo
+    // corrupted index — rebuild below
   }
   return rebuildIndex()
 }
@@ -57,7 +57,7 @@ export async function get(id: string): Promise<Memory | null> {
   return index.find((m) => m.id === id) ?? null
 }
 
-/** Cria/atualiza uma memória (item + índice), serializado. */
+/** Creates/updates a memory (item + index), serialized. */
 export function put(memory: Memory): Promise<void> {
   return enqueue(async () => {
     const index = await getIndex()
@@ -69,9 +69,9 @@ export function put(memory: Memory): Promise<void> {
 }
 
 /**
- * Várias memórias numa escrita só do índice. A busca marca uso em todos os
- * resultados de uma vez; com put() um a um, cada resultado regravava o índice
- * inteiro — uma busca de 12 resultados eram 12 índices escritos em sequência.
+ * Several memories in a single index write. Search marks usage on all the
+ * results at once; with put() one by one, each result rewrote the whole
+ * index — a search with 12 results meant 12 index writes in sequence.
  */
 export function putMany(memories: Memory[]): Promise<void> {
   if (memories.length === 0) return Promise.resolve()
@@ -88,8 +88,8 @@ export function putMany(memories: Memory[]): Promise<void> {
 }
 
 /**
- * Remove uma memória em cascata: item, doc anexado e a referência em
- * relatedIds das demais. Retorna as memórias que tiveram backlinks ajustados.
+ * Removes a memory in cascade: item, attached doc and the reference in
+ * relatedIds of the others. Returns the memories whose backlinks were adjusted.
  */
 export function remove(id: string): Promise<Memory[]> {
   return enqueue(async () => {

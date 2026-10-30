@@ -1,25 +1,24 @@
 /**
- * Leitura em voz alta SOB DEMANDA, entregue como ARQUIVO — o caminho do app
- * companion.
+ * Reading aloud ON DEMAND, delivered as a FILE — the companion app's path.
  *
- * O desktop fala em streaming (`voice:tts:chunk` + `ChunkPlayer` no renderer):
- * PCM16 cru agendado num AudioContext. O celular não tem AudioContext nem um
- * caminho barato para tocar PCM ao vivo, então a fala atravessa de outro jeito:
- * o texto vai em `POST /api/voice/speak`, o desktop sintetiza, escreve um WAV e
- * devolve a URL assinada do escopo `audio` — a MESMA rota que o player do
- * celular já usa para os áudios do agente (com Range, então dá para buscar
- * posição).
+ * The desktop speaks in streaming (`voice:tts:chunk` + `ChunkPlayer` in the renderer):
+ * raw PCM16 scheduled in an AudioContext. The phone has no AudioContext nor a
+ * cheap way to play live PCM, so the speech travels another way:
+ * the text goes in `POST /api/voice/speak`, the desktop synthesises, writes a WAV and
+ * returns the signed URL of the `audio` scope — the SAME route the phone's
+ * player already uses for the agent's audios (with Range, so seeking a
+ * position works).
  *
- * O WAV mora na pasta de áudio, mas NÃO entra no índice de mídia de propósito:
- * ouvir a mesma resposta dez vezes encheria a galeria com dez entradas iguais.
- * Como `resolveAudioFile` valida só a FORMA do id (o arquivo existir basta), um
- * id fora do índice é servível do mesmo jeito.
+ * The WAV lives in the audio folder, but does NOT enter the media index on purpose:
+ * listening to the same answer ten times would fill the gallery with ten identical entries.
+ * Since `resolveAudioFile` validates only the SHAPE of the id (the file existing is enough), an
+ * id outside the index is servable all the same.
  *
- * CACHE: o id é o hash de (texto, voz, idioma, velocidade), então ouvir de novo
- * a mesma resposta não sintetiza nada — o segundo toque é instantâneo. O
- * manifesto ao lado do cache guarda a duração (evita reabrir o WAV) e serve de
- * lista para a poda: sem ela, cada resposta ouvida deixaria um arquivo para
- * sempre.
+ * CACHE: the id is the hash of (text, voice, language, speed), so listening again
+ * to the same answer synthesises nothing — the second tap is instant. The
+ * manifest next to the cache stores the duration (avoids reopening the WAV) and serves as
+ * the list for pruning: without it, every answer heard would leave a file
+ * forever.
  */
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -27,31 +26,31 @@ import { createHash } from 'node:crypto'
 import { audioDir, audioFilePath } from '../audio-store'
 import { synthesizeToWav } from './index'
 
-/** Muda quando o áudio gravado muda de formato — invalida o cache inteiro. */
+/** Changes when the recorded audio changes format — it invalidates the whole cache. */
 const CACHE_VERSION = 'v1'
 
-/** Quantos WAV de fala ficam guardados; acima disso o mais antigo sai. */
+/** How many speech WAVs are kept; above that the oldest leaves. */
 export const MAX_SPEECH_CACHE_FILES = 200
 
 const MANIFEST = 'speech-cache.json'
 
 export interface SpokenFile {
-  /** Id no acervo de áudio (`aud_….wav`) — serve o WAV pelo escopo `audio`. */
+  /** Id in the audio pool (`aud_….wav`) — serves the WAV through the `audio` scope. */
   id: string
-  /** Duração do áudio, em milissegundos. */
+  /** Audio duration, in milliseconds. */
   durationMs: number
-  /** Já estava sintetizado: a resposta veio do cache. */
+  /** It was already synthesised: the answer came from the cache. */
   cached: boolean
 }
 
 export interface SpeakFileOptions {
   voice?: string
-  /** Idioma (`pt`, `en`, …) ou `auto`; ausente = o das preferências. */
+  /** Language (`pt`, `en`, …) or `auto`; absent = the one from the preferences. */
   lang?: string
   speed?: number
 }
 
-/** O que o manifesto guarda por arquivo — e é o que sobra para podar. */
+/** What the manifest stores per file — and it is what is left to prune. */
 type Manifest = Record<string, { durationMs: number; usedAt: number }>
 
 function manifestPath(): string {
@@ -64,26 +63,26 @@ async function readManifest(): Promise<Manifest> {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
     return parsed as Manifest
   } catch {
-    // Sem manifesto (primeira vez, arquivo corrompido): o cache recomeça. Pior
-    // caso é sintetizar de novo — nunca servir um arquivo que não existe.
+    // No manifest (first time, corrupted file): the cache starts over. The worst
+    // case is synthesising again — never serving a file that does not exist.
     return {}
   }
 }
 
 async function writeManifest(manifest: Manifest): Promise<void> {
   await fs.mkdir(audioDir(), { recursive: true })
-  const alvo = manifestPath()
-  // Temporário + rename: uma leitura concorrente vê o manifesto antigo inteiro,
-  // nunca um JSON pela metade.
-  const tmp = `${alvo}.${process.pid}.part`
+  const target = manifestPath()
+  // Temporary + rename: a concurrent read sees the whole old manifest,
+  // never a half-written JSON.
+  const tmp = `${target}.${process.pid}.part`
   await fs.writeFile(tmp, JSON.stringify(manifest))
-  await fs.rename(tmp, alvo)
+  await fs.rename(tmp, target)
 }
 
 /**
- * Id do WAV de cache: `aud_<24 hex>.wav` — a mesma forma que `SAFE_AUDIO_ID`
- * exige (é o que torna o arquivo servível), sem carimbo de tempo, porque aqui o
- * conteúdo É a chave.
+ * Id of the cache WAV: `aud_<24 hex>.wav` — the same shape `SAFE_AUDIO_ID`
+ * requires (it is what makes the file servable), with no timestamp, because here the
+ * content IS the key.
  */
 export function speechCacheId(text: string, opts: SpeakFileOptions = {}): string {
   const hash = createHash('sha256')
@@ -96,54 +95,54 @@ export function speechCacheId(text: string, opts: SpeakFileOptions = {}): string
 }
 
 /**
- * Sintetiza (ou reaproveita) o WAV da fala. Devolve o id e a duração; quem
- * chama monta a URL assinada, que depende do host da requisição.
+ * Synthesises (or reuses) the speech WAV. Returns the id and the duration; the
+ * caller builds the signed URL, which depends on the request host.
  */
 export async function speakToFile(text: string, opts: SpeakFileOptions = {}): Promise<SpokenFile> {
-  const alvo = String(text ?? '').trim()
-  if (!alvo) throw new Error('nada para falar: o texto está vazio')
+  const target = String(text ?? '').trim()
+  if (!target) throw new Error('nothing to speak: the text is empty')
 
-  const id = speechCacheId(alvo, opts)
-  const manifesto = await readManifest()
-  const guardado = manifesto[id]
-  if (guardado) {
+  const id = speechCacheId(target, opts)
+  const manifest = await readManifest()
+  const stored = manifest[id]
+  if (stored) {
     try {
       await fs.access(audioFilePath(id))
-      manifesto[id] = { durationMs: guardado.durationMs, usedAt: Date.now() }
-      await writeManifest(manifesto)
-      return { id, durationMs: guardado.durationMs, cached: true }
+      manifest[id] = { durationMs: stored.durationMs, usedAt: Date.now() }
+      await writeManifest(manifest)
+      return { id, durationMs: stored.durationMs, cached: true }
     } catch {
-      // O manifesto jurava que existia e não existe (pasta limpa por fora):
-      // sintetiza de novo, como se nunca tivesse estado lá.
-      delete manifesto[id]
+      // The manifest swore it existed and it does not (folder cleaned from outside):
+      // synthesise again, as if it had never been there.
+      delete manifest[id]
     }
   }
 
-  const { wav, durationMs } = await synthesizeToWav(alvo, opts)
+  const { wav, durationMs } = await synthesizeToWav(target, opts)
   await fs.mkdir(audioDir(), { recursive: true })
-  const arquivo = audioFilePath(id)
-  const tmp = `${arquivo}.${process.pid}.part`
+  const file = audioFilePath(id)
+  const tmp = `${file}.${process.pid}.part`
   await fs.writeFile(tmp, wav)
-  // Rename é atômico: dois "ouvir" no mesmo texto não fazem o player abrir um
-  // WAV pela metade.
-  await fs.rename(tmp, arquivo)
+  // Rename is atomic: two "listen" requests on the same text do not make the player open a
+  // half-written WAV.
+  await fs.rename(tmp, file)
 
-  manifesto[id] = { durationMs, usedAt: Date.now() }
-  await prune(manifesto)
+  manifest[id] = { durationMs, usedAt: Date.now() }
+  await prune(manifest)
   return { id, durationMs, cached: false }
 }
 
-/** Grava o manifesto e, se passou do teto, apaga os WAVs mais antigos. */
-async function prune(manifesto: Manifest): Promise<void> {
-  const ids = Object.keys(manifesto)
+/** Writes the manifest and, if the ceiling was exceeded, deletes the oldest WAVs. */
+async function prune(manifest: Manifest): Promise<void> {
+  const ids = Object.keys(manifest)
   if (ids.length > MAX_SPEECH_CACHE_FILES) {
-    ids.sort((a, b) => manifesto[a].usedAt - manifesto[b].usedAt)
+    ids.sort((a, b) => manifest[a].usedAt - manifest[b].usedAt)
     for (const id of ids.slice(0, ids.length - MAX_SPEECH_CACHE_FILES)) {
-      delete manifesto[id]
+      delete manifest[id]
       await fs.rm(audioFilePath(id), { force: true }).catch(() => {
-        // Já não estava lá — o manifesto é que estava desatualizado.
+        // It was no longer there — the manifest was what was out of date.
       })
     }
   }
-  await writeManifest(manifesto)
+  await writeManifest(manifest)
 }

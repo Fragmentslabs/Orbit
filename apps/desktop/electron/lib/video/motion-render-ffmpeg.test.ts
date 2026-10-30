@@ -6,11 +6,11 @@ import { Readable } from 'node:stream'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * O caminho de PIXELS do motion de ponta a ponta, com o ffmpeg de verdade: o
- * quadro BGRA cru entra pelo stdin, o alfa é desmultiplicado antes da conversão
- * de formato e o vídeo sai com a cor reta. É o que se pode conferir fora do
- * Electron — a captura da janela, não. Sem ffmpeg na máquina, a suíte pula (como
- * o render.test.ts).
+ * The PIXEL path of motion end to end, with the real ffmpeg: the
+ * raw BGRA frame enters through stdin, the alpha is unpremultiplied before the format
+ * conversion and the video comes out with straight color. It is what can be checked outside
+ * Electron — the window capture, it cannot. Without ffmpeg on the machine, the suite skips (like
+ * render.test.ts).
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -31,7 +31,7 @@ const W = 64
 const H = 64
 const FPS = 5
 
-/** Cor reta (200,100,50) a 50% de alfa, como o `toBitmap()` do Chromium entrega: pré-multiplicada. */
+/** Straight color (200,100,50) at 50% alpha, as Chromium's `toBitmap()` delivers it: premultiplied. */
 function premultipliedFrame(): Buffer {
   const frame = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) {
@@ -43,7 +43,7 @@ function premultipliedFrame(): Buffer {
   return frame
 }
 
-/** Um quadro opaco, como o caminho sem alfa (janela de fundo preto) entrega. */
+/** An opaque frame, as the path without alpha (black-background window) delivers. */
 function opaqueFrame(r: number, g: number, b: number): Buffer {
   const frame = Buffer.alloc(W * H * 4)
   for (let i = 0; i < W * H; i++) {
@@ -55,17 +55,17 @@ function opaqueFrame(r: number, g: number, b: number): Buffer {
   return frame
 }
 
-/** O stdin de uma faixa: os mesmos bytes, quadro após quadro. */
+/** The stdin of one track: the same bytes, frame after frame. */
 function frames(frame: Buffer, count: number): Readable {
   return Readable.from([Buffer.concat(Array.from({ length: count }, () => frame))])
 }
 
-/** Os argumentos de UMA faixa, como o render monta (uma faixa = o vídeo inteiro). */
+/** The arguments of ONE track, as the render builds them (one track = the whole video). */
 function bandArgs(format: Parameters<typeof motionFfmpegArgs>[0]['format'], output: string): string[] {
   return motionFfmpegArgs({ width: W, height: H, captureWidth: W, captureHeight: H, fps: FPS, format, output })
 }
 
-/** Primeiro pixel do vídeo em RGBA. `decoder` força o decodificador (ver o VP9 com alfa). */
+/** First pixel of the video in RGBA. `decoder` forces the decoder (see VP9 with alpha). */
 async function firstPixel(file: string, decoder?: string): Promise<number[]> {
   const { stdout } = await runFfmpeg([
     '-v', 'error', ...(decoder ? ['-c:v', decoder] : []), '-i', file,
@@ -87,7 +87,7 @@ function expectPixel(actual: number[], [r, g, b, a]: number[], tolerance: number
   }
 }
 
-describe.skipIf(!hasFfmpeg)('caminho de pixels do motion (ffmpeg real)', () => {
+describe.skipIf(!hasFfmpeg)('motion pixel path (real ffmpeg)', () => {
   beforeAll(async () => {
     await fsp.mkdir(work, { recursive: true })
   })
@@ -96,7 +96,7 @@ describe.skipIf(!hasFfmpeg)('caminho de pixels do motion (ffmpeg real)', () => {
     await fsp.rm(work, { recursive: true, force: true })
   })
 
-  it('mov-alpha: o quadro cru desmultiplicado sai com a cor reta no ProRes 4444', async () => {
+  it('mov-alpha: the raw un-premultiplied frame comes out with straight color in ProRes 4444', async () => {
     const frame = premultipliedFrame()
     unpremultiplyBgra(frame)
     const out = path.join(work, 'alpha.mov')
@@ -104,30 +104,30 @@ describe.skipIf(!hasFfmpeg)('caminho de pixels do motion (ffmpeg real)', () => {
 
     expect(await frameCount(out)).toBe(3)
     const px = await firstPixel(out)
-    // Cor reta (200,100,50) com alfa 128 — e não (100,50,25), que é o que sairia
-    // sem a desmultiplicação: é essa diferença que este teste existe para pegar.
+    // Straight color (200,100,50) with alpha 128 — and not (100,50,25), which is what would come out
+    // without the unpremultiplication: it is that difference that this test exists to catch.
     expectPixel(px, [200, 100, 50, 128], 3)
     expect(Math.abs(px[0] - 100)).toBeGreaterThan(50)
   })
 
-  it('webm-alpha: VP9 com alfa também sai com a cor reta', async () => {
+  it('webm-alpha: VP9 with alpha also comes out with straight color', async () => {
     const frame = premultipliedFrame()
     unpremultiplyBgra(frame)
     const out = path.join(work, 'alpha.webm')
     await runFfmpeg(bandArgs('webm-alpha', out), { stdin: frames(frame, 3) })
 
     expect(await frameCount(out)).toBe(3)
-    // O alfa do VP9 ESTÁ no arquivo (o muxer marca alpha_mode=1), mas o
-    // decodificador NATIVO do ffmpeg não o expõe — sai yuv420p opaco. Quem o
-    // enxerga é o libvpx-vp9, que é como players e editoras leem o arquivo.
-    // VP9 é com perda e o alfa vai em yuva420p (croma subamostrado): a tolerância
-    // é maior, mas ainda muito menor que a distância até a cor pré-multiplicada.
+    // The VP9 alpha IS in the file (the muxer marks alpha_mode=1), but the
+    // NATIVE decoder of ffmpeg does not expose it — it comes out as opaque yuv420p. Whoever
+    // sees it is libvpx-vp9, which is how players and editors read the file.
+    // VP9 is lossy and the alpha goes in yuva420p (subsampled chroma): the tolerance
+    // is larger, but still much smaller than the distance to the premultiplied color.
     const px = await firstPixel(out, 'libvpx-vp9')
     expectPixel(px, [200, 100, 50, 128], 16)
     expect(Math.abs(px[0] - 100)).toBeGreaterThan(50)
   })
 
-  it('mp4: o caminho sem alfa sai no tamanho pedido, quadro a quadro', async () => {
+  it('mp4: the path with no alpha comes out at the requested size, frame by frame', async () => {
     const out = path.join(work, 'opaque.mp4')
     await runFfmpeg(bandArgs('mp4', out), { stdin: frames(opaqueFrame(255, 0, 0), 4) })
 
@@ -137,7 +137,7 @@ describe.skipIf(!hasFfmpeg)('caminho de pixels do motion (ffmpeg real)', () => {
     expect(stdout.toString().trim()).toBe(`${W},${H}`)
   })
 
-  it('as faixas concatenam sem perder nem duplicar quadro', async () => {
+  it('the bands concatenate without losing or duplicating a frame', async () => {
     const dir = path.join(work, 'bands')
     await fsp.mkdir(dir, { recursive: true })
     const frame = opaqueFrame(0, 0, 255)
@@ -148,7 +148,7 @@ describe.skipIf(!hasFfmpeg)('caminho de pixels do motion (ffmpeg real)', () => {
     const out = path.join(dir, 'joined.mp4')
     await runFfmpeg(concatFfmpegArgs({ listFile: 'list.txt', output: out, format: 'mp4' }), { cwd: dir })
 
-    // 2 + 2 quadros: a concatenação é o que junta as faixas em um vídeo só.
+    // 2 + 2 frames: the concatenation is what joins the tracks into a single video.
     expect(await frameCount(out)).toBe(4)
   })
 })

@@ -17,7 +17,7 @@ const none: ExistingTree = { ids: new Set() }
 function node(partial: Partial<DraftNode> & { key: string }): DraftNode {
   return {
     title: partial.key,
-    summary: `Resumo específico do nó ${partial.key}, com conteúdo suficiente.`,
+    summary: `Specific summary of the node ${partial.key}, with enough content.`,
     category: 'structure',
     parent: 'root',
     related: [],
@@ -26,7 +26,7 @@ function node(partial: Partial<DraftNode> & { key: string }): DraftNode {
   }
 }
 
-/** Pasta mãe com front e backend, e uma regra de negócio que atravessa os dois. */
+/** Parent folder with front and backend, and one business rule that crosses both. */
 function frontBack() {
   const draft = createDraft()
   expect(upsertNode(draft, none, node({ key: 'root', parent: null }))).toBeNull()
@@ -39,100 +39,100 @@ function frontBack() {
   return draft
 }
 
-describe('rascunho da árvore do /init', () => {
-  it('monta front, back e regra transversal sem problemas', () => {
+describe('/init tree draft', () => {
+  it('builds front, back and a cross-cutting rule with no problem', () => {
     const draft = frontBack()
     expect(validateDraft(draft, none)).toEqual([])
     expect(draft.nodes.get('front')?.scope).toBe('front')
   })
 
-  it('não há mínimo de nós: um projeto pode ter só a raiz', () => {
+  it('there is no minimum of nodes: a project may have only the root', () => {
     const draft = createDraft()
     upsertNode(draft, none, node({ key: 'root', parent: null }))
     expect(validateDraft(draft, none)).toEqual([])
   })
 
-  it('pai precisa existir antes do filho', () => {
+  it('the parent must exist before the child', () => {
     const draft = createDraft()
     upsertNode(draft, none, node({ key: 'root', parent: null }))
-    expect(upsertNode(draft, none, node({ key: 'x', parent: 'nao-existe' }))).toMatch(/não existe/)
+    expect(upsertNode(draft, none, node({ key: 'x', parent: 'nao-existe' }))).toMatch(/does not exist/)
   })
 
-  it('só uma raiz', () => {
+  it('only one root', () => {
     const draft = frontBack()
-    expect(upsertNode(draft, none, node({ key: 'outra', parent: null }))).toMatch(/já existe a raiz/)
+    expect(upsertNode(draft, none, node({ key: 'another', parent: null }))).toMatch(/only one root/)
   })
 
-  it('barra ciclos ao mover um nó para baixo de um descendente', () => {
+  it('blocks cycles when moving a node under a descendant', () => {
     const draft = frontBack()
-    expect(upsertNode(draft, none, node({ key: 'front', parent: 'front-auth' }))).toMatch(/ciclo/)
+    expect(upsertNode(draft, none, node({ key: 'front', parent: 'front-auth' }))).toMatch(/cycle/)
   })
 
-  it('resumo longo é recusado: o detalhe vai para o documento', () => {
+  it('a long summary is refused: the detail goes to the document', () => {
     const draft = createDraft()
     const error = upsertNode(draft, none, node({ key: 'root', parent: null, summary: 'x'.repeat(400) }))
     expect(error).toMatch(/document/)
   })
 
-  it('não remove nó com filhos', () => {
+  it('does not remove a node with children', () => {
     const draft = frontBack()
-    expect(removeNode(draft, 'front')).toMatch(/tem filhos/)
+    expect(removeNode(draft, 'front')).toMatch(/has children/)
     expect(removeNode(draft, 'front-auth')).toBeNull()
     expect(removeNode(draft, 'front')).toBeNull()
-    // A ligação transversal para o nó removido some junto.
+    // The cross link to the removed node goes away with it.
     expect(draft.nodes.get('billing')?.related).toEqual(['back'])
   })
 
-  it('pais são gravados antes dos filhos', () => {
+  it('parents are written before the children', () => {
     const order = commitOrder(frontBack()).map((n) => n.key)
     expect(order.indexOf('root')).toBeLessThan(order.indexOf('front'))
     expect(order.indexOf('front')).toBeLessThan(order.indexOf('front-auth'))
   })
 
-  it('o subprojeto vem do nó de pasta mais próximo acima', () => {
+  it('the subproject comes from the nearest folder node above', () => {
     const draft = frontBack()
     expect(subprojectOf(draft, 'front-auth')).toBe('front')
     expect(subprojectOf(draft, 'billing')).toBeUndefined()
   })
 
-  it('duas partes não podem representar a mesma pasta', () => {
+  it('two parts cannot represent the same folder', () => {
     const draft = frontBack()
     upsertNode(draft, none, node({ key: 'front2', scope: 'Front' }))
-    expect(validateDraft(draft, none).join()).toMatch(/mesma pasta/)
+    expect(validateDraft(draft, none).join()).toMatch(/same folder/)
   })
 
-  it('o texto gravado abre com o título (é o rótulo no grafo)', () => {
+  it('the saved text opens with the title (it is the label in the graph)', () => {
     expect(memoryText(node({ key: 'k', title: 'Frontend', summary: 'App React.' }))).toBe('Frontend: App React.')
   })
 })
 
-describe('rascunho sobre uma árvore que já existe (re-init)', () => {
+describe('draft over a tree that already exists (re-init)', () => {
   const existing: ExistingTree = { ids: new Set(['mem_root', 'mem_front', 'mem_old']), rootId: 'mem_root' }
 
-  it('a raiz do rascunho reescreve a raiz existente em vez de criar outra', () => {
+  it('the draft root rewrites the existing root instead of creating another', () => {
     const draft = createDraft()
     expect(upsertNode(draft, existing, node({ key: 'root', parent: null }))).toBeNull()
     expect(draft.nodes.get('root')?.updates).toBe('mem_root')
   })
 
-  it('nó novo pode pendurar num nó existente, sem raiz no rascunho', () => {
+  it('a new node may hang on an existing node, with no root in the draft', () => {
     const draft = createDraft()
     expect(upsertNode(draft, existing, node({ key: 'front-state', parent: 'mem_front' }))).toBeNull()
     expect(validateDraft(draft, existing)).toEqual([])
   })
 
-  it('uma memória existente só é reescrita por um nó', () => {
+  it('an existing memory is only rewritten by one node', () => {
     const draft = createDraft()
     upsertNode(draft, existing, node({ key: 'a', parent: 'mem_root', updates: 'mem_front' }))
-    expect(upsertNode(draft, existing, node({ key: 'b', parent: 'mem_root', updates: 'mem_front' }))).toMatch(/já é atualizada/)
+    expect(upsertNode(draft, existing, node({ key: 'b', parent: 'mem_root', updates: 'mem_front' }))).toMatch(/already updated/)
   })
 
-  it('aposentar: nunca a raiz, nem o que está sendo atualizado ou tem filhos no rascunho', () => {
+  it('retire: never the root, nor what is being updated or has children in the draft', () => {
     const draft = createDraft()
     upsertNode(draft, existing, node({ key: 'a', parent: 'mem_front' }))
-    expect(retireExisting(draft, existing, 'mem_root', 'obsoleta, refeita')).toMatch(/raiz/)
-    expect(retireExisting(draft, existing, 'mem_front', 'obsoleta, refeita')).toMatch(/pendurado/)
-    expect(retireExisting(draft, existing, 'mem_old', 'genérica demais')).toBeNull()
-    expect(upsertNode(draft, existing, node({ key: 'b', parent: 'mem_root', updates: 'mem_old' }))).toMatch(/aposentada/)
+    expect(retireExisting(draft, existing, 'mem_root', 'obsolete, redone')).toMatch(/root/)
+    expect(retireExisting(draft, existing, 'mem_front', 'obsoleta, refeita')).toMatch(/hangs on/)
+    expect(retireExisting(draft, existing, 'mem_old', 'too generic')).toBeNull()
+    expect(upsertNode(draft, existing, node({ key: 'b', parent: 'mem_root', updates: 'mem_old' }))).toMatch(/was retired/)
   })
 })

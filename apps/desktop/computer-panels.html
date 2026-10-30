@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit — Computer</title>
     <script>
-      // Mesmo tema do app antes do primeiro paint; o fundo fica transparente —
-      // a janela cobre a tela inteira e só os painéis aparecem.
+      // Same theme as the app before the first paint; the background stays transparent —
+      // the window covers the whole screen and only the panels show.
       ;(function () {
         try {
           var stored = localStorage.getItem('vite-ui-theme')
@@ -14,7 +14,7 @@
           if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
           document.documentElement.classList.add(theme)
         } catch (e) {
-          /* best-effort: o ThemeProvider aplica o tema de qualquer forma */
+          /* best-effort: the ThemeProvider applies the theme anyway */
         }
       })()
     </script>

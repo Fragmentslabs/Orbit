@@ -8,23 +8,23 @@ import { terminalTheme } from "@/src/lib/terminal-theme"
 
 interface ManagedTerminalTabProps {
   ptyId: string
-  /** Sessão de chat dona da aba — os links do terminal abrem o browser nela. */
+  /** Chat session that owns the tab — the terminal links open the browser in it. */
   sessionId?: string
 }
 
 /**
- * Sessão persistente de terminal.
+ * Persistent terminal session.
  *
- * O painel lateral desmonta o conteúdo da aba ao trocar de chat/aba (o
- * RightPanel re-renderiza com outro sessionKey e o TerminalTabContent sai da
- * árvore). Recriar o xterm do zero nessa hora apagaria o buffer (scrollback) e
- * os listeners de `terminal:output` — o terminal "voltaria vazio".
+ * The side panel unmounts the content of the tab when switching chat/tab (the
+ * RightPanel re-renders with another sessionKey and the TerminalTabContent leaves the
+ * tree). Recreating the xterm from scratch at that moment would erase the buffer (scrollback) and
+ * the `terminal:output` listeners — the terminal "would come back empty".
  *
- * Por isso a instância do Terminal (e os listeners IPC) vive aqui, no módulo,
- * por ptyId: ao desmontar apenas desanexamos o host do DOM; ao remontar,
- * reanexamos o mesmo host com o buffer e o estado intactos. O output que
- * chega enquanto a aba está fora continua sendo gravado no buffer (o listener
- * fica registrado no módulo), então nada se perde.
+ * That is why the Terminal instance (and the IPC listeners) lives here, in the module,
+ * by ptyId: on unmount we only detach the host from the DOM; on remount,
+ * we re-attach the same host with the buffer and the state intact. The output that
+ * arrives while the tab is away keeps being written to the buffer (the listener
+ * stays registered in the module), so nothing is lost.
  */
 const terminalSessions = new Map<
   string,
@@ -32,10 +32,10 @@ const terminalSessions = new Map<
 >()
 
 /**
- * O tema do app vira classe no <html> ([theme-provider.tsx]). O xterm vive fora
- * do React, então ninguém o avisa da troca: um observer só, no módulo, repinta
- * todas as sessões abertas. Trocar `options.theme` recolore sem recriar o
- * terminal — buffer, scrollback e listeners continuam de pé.
+ * The app theme becomes a class on the <html> ([theme-provider.tsx]). The xterm lives outside
+ * React, so nobody tells it about the switch: a single observer, in the module, repaints
+ * all the open sessions. Swapping `options.theme` recolors without recreating the
+ * terminal — buffer, scrollback and listeners stay up.
  */
 function prefersDark() {
   return document.documentElement.classList.contains("dark")
@@ -77,13 +77,13 @@ function getTerminalSession(ptyId: string) {
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
 
-  // Links clicáveis: um `npm run dev` imprime http://localhost:5173 e
-  // Ctrl+Clique (Windows/Linux) ou Cmd+Clique (macOS) abre uma NOVA aba de
-  // browser no painel, na sessão dona do terminal. Clique simples não faz
-  // nada (evita abrir aba ao selecionar texto ou clicar por acidente). Sem
-  // sessão (órfão) ou esquema fora de http(s), cai no browser do sistema
-  // (setWindowOpenHandler do main). O handler substitui o default do addon
-  // (window.open cru) — funciona igual no Windows e no macOS, é tudo renderer.
+  // Clickable links: a `npm run dev` prints http://localhost:5173 and
+  // Ctrl+Click (Windows/Linux) or Cmd+Click (macOS) opens a NEW browser tab
+  // in the panel, in the session that owns the terminal. A simple click does
+  // nothing (it avoids opening a tab when selecting text or clicking by accident). With no
+  // session (orphan) or a scheme outside http(s), it falls into the system browser
+  // (main setWindowOpenHandler). The handler replaces the addon default
+  // (raw window.open) — it works the same on Windows and on macOS, it is all renderer.
   term.loadAddon(
     new WebLinksAddon((event, uri) => {
       if (event.button !== 0) return
@@ -101,8 +101,8 @@ function getTerminalSession(ptyId: string) {
   host.className = "absolute inset-0 px-2 py-1"
   term.open(host)
 
-  // Listeners registrados UMA vez, no módulo: continuam ativos mesmo com a aba
-  // desmontada, então o buffer recebe o output produzido durante a ausência.
+  // Listeners registered ONCE, in the module: they stay active even with the tab
+  // unmounted, so the buffer receives the output produced during the absence.
   term.onData((data) => {
     window.ipcRenderer.invoke("terminal:write", ptyId, data).catch(console.error)
   })
@@ -111,9 +111,9 @@ function getTerminalSession(ptyId: string) {
     window.ipcRenderer.invoke("terminal:resize", ptyId, cols, rows).catch(console.error)
   })
 
-  // Ctrl+Shift+C: copia a seleção (o Ctrl+C comum é capturado pelo menu
-  // nativo do Electron e nunca chega aqui). Retorna false para não enviar
-  // o atalho ao shell.
+  // Ctrl+Shift+C: copies the selection (the common Ctrl+C is captured by the
+  // Electron native menu and never reaches here). It returns false so as not to send
+  // the shortcut to the shell.
   term.attachCustomKeyEventHandler((event) => {
     if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "KeyC") {
       const selection = term.getSelection()
@@ -149,11 +149,11 @@ export function ManagedTerminalTab({ ptyId, sessionId }: ManagedTerminalTabProps
     if (!container) return
 
     const session = getTerminalSession(ptyId)
-    // Sessão dona do terminal: o xterm vive no módulo (fora do React), então o
-    // handler de links lê a sessão daqui no momento do clique — a aba pertence
-    // à sessão que a criou e o sessionKey não muda durante a vida dela.
+    // Session that owns the terminal: the xterm lives in the module (outside React), so the
+    // link handler reads the session from here at the moment of the click — the tab belongs
+    // to the session that created it and the sessionKey does not change during its life.
     session.sessionId = sessionId
-    // Reanexa o host com o buffer intacto (move o elemento, não recria o xterm)
+    // Re-attaches the host with the buffer intact (it moves the element, does not recreate the xterm)
     container.appendChild(session.host)
 
     const fit = () => {
@@ -175,16 +175,16 @@ export function ManagedTerminalTab({ ptyId, sessionId }: ManagedTerminalTabProps
 
     return () => {
       resizeObserver.disconnect()
-      // Apenas desanexa do DOM; a sessão (buffer + PTY) continua viva no módulo
+      // It only detaches from the DOM; the session (buffer + PTY) stays alive in the module
       session.host.remove()
     }
-    // Reanexa por ptyId; o sessionId é gravado na sessão e não muda durante
-    // a vida da aba (ver comentário acima).
+    // Re-attaches by ptyId; the sessionId is recorded in the session and does not change during
+    // the life of the tab (see the comment above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ptyId])
 
-  // Superfície do terminal: `--muted` no claro (o xterm é transparente) e a
-  // sidebar no escuro, como sempre foi.
+  // Terminal surface: `--muted` in light (the xterm is transparent) and the
+  // sidebar in dark, as it always was.
   return (
     <div
       className="flex-1 min-h-0 relative bg-muted dark:bg-sidebar"

@@ -36,30 +36,30 @@ import { scrollToMessage } from "@/src/lib/message-jump"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Galeria de mídia: página dedicada (aba do painel direito) com o que o agente
- * produziu — imagens (show_image, screenshots, capturas de scripts/lotes),
- * artefatos HTML (create_artifact) e as prints coladas pelo usuário. Lê o
- * registry do main (orbit-data/media/index.json), que indexa os dois tipos:
- * o arquivo do artefato mora em orbit-data/artifacts, e o registro aponta
- * para ele — nada é duplicado.
+ * Media gallery: dedicated page (right panel tab) with what the agent
+ * produced — images (show_image, screenshots, captures from scripts/batches),
+ * HTML artifacts (create_artifact) and the screenshots pasted by the user. It reads the
+ * main process registry (orbit-data/media/index.json), which indexes both types:
+ * the artifact file lives in orbit-data/artifacts, and the registry points
+ * to it — nothing is duplicated.
  *
- * Escopada por modo: no modo chat mostra só mídia de sessões de chat; no
- * modo código, só de sessões de código.
+ * Scoped by mode: in chat mode it shows only media from chat sessions; in
+ * code mode, only from code sessions.
  *
- * Não é um card no chat: aqui o usuário revisita, abre no chat de origem,
- * exclui em lote e enxerga o espaço em disco.
+ * It is not a card in the chat: here the user revisits, opens in the origin chat,
+ * deletes in bulk and sees the disk usage.
  */
 
 type SourceFilter = "all" | MediaSource
 type PeriodFilter = "all" | "today" | "week" | "month"
-/** Filtro por TIPO: o que a grade mostra — imagem, página, documento, áudio,
- *  peça de motion ou vídeo. */
+/** Filter by TYPE: what the grid shows — image, page, document, audio,
+ *  motion piece or video. */
 type KindFilter = "all" | MediaKind
 
 /**
- * O ícone de cada tipo, num lugar só: é o MESMO desenho no selo do tile e no
- * chip do filtro, e é isso que faz o filtro parecer um filtro daquilo que se vê
- * na grade. Tipo ausente em registro antigo conta como "image" (ver mediaKind).
+ * The icon of each type, in a single place: it is the SAME drawing in the tile badge and in the
+ * filter chip, and that is what makes the filter look like a filter of what one sees
+ * in the grid. A type missing in an old record counts as "image" (see mediaKind).
  */
 const KIND_ICON: Record<MediaKind, LucideIcon> = {
   image: ImageIcon,
@@ -73,30 +73,30 @@ const KIND_ICON: Record<MediaKind, LucideIcon> = {
 }
 
 /**
- * ESCOPO da galeria — um filtro só, com quatro naturezas.
+ * SCOPE of the gallery — a single filter, with four natures.
  *
- * São quatro porque são quatro as formas de a mídia pertencer a algo: a
- * conversa em que nasceu, a pasta da sidebar daquela conversa, o repositório
- * em que ela trabalhava, ou nada disso. Separar em vários filtros faria o
- * usuário combinar escopos que não se cruzam.
+ * There are four because there are four ways for the media to belong to something: the
+ * conversation in which it was born, the sidebar folder of that conversation, the repository
+ * it was working in, or none of that. Splitting it into several filters would make the
+ * user combine scopes that do not cross.
  *
- * A pasta vem da SESSÃO, não do registro: só documento grava `folderId`, e o
- * filtro precisa valer para imagem e artefato também.
+ * The folder comes from the SESSION, not from the record: only documents record `folderId`, and the
+ * filter needs to count for image and artifact too.
  */
 const SCOPE_ALL = "all"
 const SCOPE_SESSION = "session"
-/** Mídia que não pertence a pasta nem a repositório — a de chat solto. */
+/** Media that belongs neither to a folder nor to a repository — the one of a loose chat. */
 const SCOPE_LOOSE = "__loose__"
 const FOLDER_PREFIX = "folder:"
 const PROJECT_PREFIX = "project:"
 
 /**
- * Canvas de design e peça de motion são ATIVOS DO APP, não mídia da conversa:
- * a pasta mora no armazenamento do Orbit e continua válida fora da conversa
- * que a criou. Por isso o ESCOPO (pasta/repositório/conversa) não os esconde —
- * senão a pasta de design some da aba sempre que o escopo cair noutra conversa.
- * O que ainda os esconde é o filtro de TIPO, que é uma escolha explícita de quem
- * olha ("só imagens" não mostra canvas de design).
+ * Design canvas and motion piece are APP ASSETS, not conversation media:
+ * the folder lives in Orbit's storage and stays valid outside the conversation
+ * that created it. That is why the SCOPE (folder/repository/conversation) does not hide them —
+ * otherwise the design folder disappears from the tab whenever the scope falls on another conversation.
+ * What still hides them is the TYPE filter, which is an explicit choice of whoever
+ * looks ("images only" does not show a design canvas).
  */
 function isAppAsset(entry: MediaEntry): boolean {
   const kind = mediaKind(entry)
@@ -109,7 +109,7 @@ const PERIOD_MS: Record<Exclude<PeriodFilter, "all">, number> = {
   month: 30 * 24 * 60 * 60 * 1000,
 }
 
-/** Backfill roda uma vez por processo do renderer — é idempotente no main. */
+/** Backfill runs once per renderer process — it is idempotent in the main process. */
 let backfillDone = false
 
 function formatBytes(bytes: number): string {
@@ -118,7 +118,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** 754300 → "12:34"; passa de uma hora: "1:02:03". */
+/** 754300 → "12:34"; past one hour: "1:02:03". */
 function formatDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
   const h = Math.floor(total / 3600)
@@ -142,7 +142,7 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   selecting: boolean
   onToggle: () => void
   onOpen: () => void
-  /** Quantas imagens existem na cadeia que este tile representa. */
+  /** How many images exist in the chain this tile represents. */
   versions?: number
 }) {
   const [failed, setFailed] = useState(false)
@@ -151,18 +151,18 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   const isDark =
     theme === "dark" ||
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-  // Artefato sem miniatura (captura falhou) ou imagem quebrada caem no ícone —
-  // o tile continua clicável, o ativo ainda existe.
-  // O documento vivo tem uma capa por tema: a do grid é a do tema atual, para
-  // o tile não ser a única coisa branca numa tela escura.
+  // An artifact without a thumbnail (capture failed) or a broken image falls into the icon —
+  // the tile stays clickable, the asset still exists.
+  // The living document has one cover per theme: the grid one is the current theme's, so
+  // the tile is not the only white thing on a dark screen.
   const preview = thumbUrl(entry, isDark)
   const kind = mediaKind(entry)
   const isArtifact = kind === "artifact"
   const isDocument = kind === "document"
   const isAudio = kind === "audio"
   const FallbackIcon = isAudio ? AudioLines : isDocument ? FileText : isArtifact ? CodeXml : ImageOff
-  // Áudio toca no próprio tile: não há o que ver num visor, e abrir uma aba
-  // só para ouvir seria um passo a mais.
+  // Audio plays in the tile itself: there is nothing to see in a viewer, and opening a tab
+  // only to listen would be one step too many.
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
   useEffect(() => () => audioRef.current?.pause(), [])
@@ -178,11 +178,11 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
     if (audio.paused) void audio.play().catch(() => setPlaying(false))
     else audio.pause()
   }
-  // Selo por tipo — só o ÍCONE, e agora em TODO tile. O grid mistura imagem,
-  // página, documento, áudio e peça de motion, e o clique faz coisa diferente
-  // em cada um; sem o selo a diferença é invisível. Escrever "HTML", "WAV" ou
-  // "PDF/DOCX" gastava a largura do tile para repetir o que o desenho já diz —
-  // quem quiser o nome por extenso passa o mouse.
+  // Badge per type — only the ICON, and now in EVERY tile. The grid mixes image,
+  // page, document, audio and motion piece, and the click does something different
+  // in each one; without the badge the difference is invisible. Writing "HTML", "WAV" or
+  // "PDF/DOCX" spent the tile width to repeat what the drawing already says —
+  // whoever wants the full name hovers.
   const KindIcon = KIND_ICON[kind]
 
   return (
@@ -198,12 +198,12 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
         onClick={() => (selecting ? onToggle() : isAudio ? togglePlay() : onOpen())}
         className="block size-full cursor-pointer"
         onDragStart={(event) => {
-          // TODO tile — imagem, vídeo, motion, artefato, documento, áudio — é
-          // arrastável para o composer COMO ANEXO: o payload leva só a
-          // IDENTIDADE do item (id, nome, tipo e uma URL de preview). O anexo
-          // fica sendo uma REFERÊNCIA ao arquivo que já está aqui — nada é
-          // copiado, e o drop não cola caminho nenhum como texto no input.
-          // `draggable` é obrigatório nos tiles sem <img> (áudio cai no ícone).
+          // EVERY tile — image, video, motion, artifact, document, audio — is
+          // draggable to the composer AS AN ATTACHMENT: the payload carries only the
+          // IDENTITY of the item (id, name, type and a preview URL). The attachment
+          // stays being a REFERENCE to the file that is already here — nothing is
+          // copied, and the drop pastes no path as text into the input.
+          // `draggable` is mandatory in the tiles without <img> (audio falls into the icon).
           event.dataTransfer.setData(
             MEDIA_DND_MIME,
             JSON.stringify({
@@ -232,12 +232,12 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
           />
         )}
       </button>
-      {/* Selo do tipo e pilha de versões no MESMO canto. Agora que todo tile tem
-          selo, o `!badge` de antes esconderia a pilha justamente na imagem — que
-          é onde ela mais aparece. */}
+      {/* Type badge and version stack in the SAME corner. Now that every tile has a
+          badge, the previous `!badge` would hide the stack precisely in the image — which
+          is where it appears most. */}
       <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1">
-        {/* Pilha de edições: o tile é a versão atual, e a pilha diz que existe
-            histórico atrás dela — sem ela, o colapso pareceria perda. */}
+        {/* Edit stack: the tile is the current version, and the stack says there is
+            history behind it — without it, the collapse would look like a loss. */}
         {versions > 1 && (
           <span className="flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
             <Layers className="size-3" />
@@ -273,7 +273,7 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   )
 }
 
-/** Chip do filtro de escopo. */
+/** Chip of the scope filter. */
 function ScopeChip({
   active,
   onClick,
@@ -306,10 +306,10 @@ function ScopeChip({
 }
 
 /**
- * Pastas e repositórios num dropdown, e não um chip por item: com um projeto
- * ativo a barra de escopo virava uma parede de botões. "Everything" e "In
- * this chat" continuam como chips — são sempre as duas opções mais usadas —
- * e o resto (pasta específica, repositório específico, soltos) mora aqui.
+ * Folders and repositories in a dropdown, and not a chip per item: with a project
+ * active the scope bar became a wall of buttons. "Everything" and "In
+ * this chat" stay as chips — they are always the two most used options —
+ * and the rest (specific folder, specific repository, loose ones) lives here.
  */
 function ScopeFilterMenu({
   scope,
@@ -359,7 +359,7 @@ function ScopeFilterMenu({
         {folderOptions.length > 0 && (
           <>
             {hasLoose && <DropdownMenuSeparator />}
-            {/* O rótulo precisa de um grupo: fora de um Menu.Group o Base UI derruba a tela ao abrir. */}
+            {/* The label needs a group: outside a Menu.Group Base UI takes the screen down on opening. */}
             <DropdownMenuGroup>
               <DropdownMenuLabel className="text-[10px] text-muted-foreground">
                 {t("media.scope.folders")}
@@ -399,14 +399,14 @@ function ScopeFilterMenu({
 }
 
 /**
- * Filtro por TIPO de mídia, no mesmo molde do filtro de escopo: um chip só, que
- * mostra o tipo ativo — com o MESMO ícone que o tile leva no selo — e abre a
- * lista.
+ * Filter by media TYPE, in the same mold as the scope filter: a single chip, which
+ * shows the active type — with the SAME icon the tile carries in the badge — and opens the
+ * list.
  *
- * Chip por tipo seria uma parede de botões: são cinco, e cada um repetiria na
- * barra o que o selo já diz na grade. O menu é também onde "todos os tipos" cabe
- * como escolha explícita, em vez de virar um sexto chip colado no "Tudo" do
- * escopo — que quer dizer outra coisa.
+ * A chip per type would be a wall of buttons: there are five, and each one would repeat in the
+ * bar what the badge already says in the grid. The menu is also where "all types" fits
+ * as an explicit choice, instead of becoming a sixth chip glued to the "Everything" of the
+ * scope — which means something else.
  */
 function KindFilterMenu({
   kind,
@@ -463,8 +463,8 @@ export function MediaGallery() {
   const { t, i18n } = useTranslation()
   const { mode, setMode, folders } = useWorkspace()
   const sessions = useSessionStore((s) => s.sessions)
-  /** Pastas da sidebar (agrupamento de conversas) — diferentes das pastas de
-   *  trabalho do workspace, que são repositórios. */
+  /** Sidebar folders (grouping of conversations) — different from the workspace working
+   *  folders, which are repositories. */
   const sidebarFolders = useSessionStore((s) => s.folders)
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const [entries, setEntries] = useState<MediaEntry[]>([])
@@ -473,18 +473,18 @@ export function MediaGallery() {
   const [source, setSource] = useState<SourceFilter>("all")
   const [period, setPeriod] = useState<PeriodFilter>("all")
   const [kind, setKind] = useState<KindFilter>("all")
-  /** Escolha explícita do usuário; null = segue o padrão do contexto atual. */
+  /** Explicit user choice; null = follows the default of the current context. */
   const [scopeOverride, setScopeOverride] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<MediaEntry | null>(null)
-  /** Versões da imagem aberta, da mais antiga para a atual. */
+  /** Versions of the open image, from the oldest to the current one. */
   const [previewChain, setPreviewChain] = useState<MediaEntry[] | null>(null)
   /**
-   * Exclusão pendente de confirmação. Apagar mídia não tem desfazer, e desde
-   * que um item da grade passou a representar um grupo, um clique podia levar
-   * versões que a pessoa nem sabia que estavam ali — por isso o passo a mais,
-   * e por isso ele diz quantas são.
+   * Deletion pending confirmation. Deleting media has no undo, and since
+   * a grid item started representing a group, one click could take
+   * versions the person did not even know were there — hence the extra step,
+   * and hence it saying how many there are.
    */
   const [confirmDelete, setConfirmDelete] = useState<"selection" | "viewer" | null>(null)
   const mounted = useRef(true)
@@ -500,13 +500,13 @@ export function MediaGallery() {
   useEffect(() => {
     mounted.current = true
     void (async () => {
-      // Primeira abertura: indexa as imagens que existiam antes do registry.
+      // First opening: it indexes the images that existed before the registry.
       if (!backfillDone) {
         backfillDone = true
         try {
           await mediaApi.backfill()
         } catch {
-          // registro é melhor-esforço — a lista ainda funciona
+          // the registry is best-effort — the list still works
         }
       }
       await refresh()
@@ -514,14 +514,14 @@ export function MediaGallery() {
     return () => { mounted.current = false }
   }, [refresh])
 
-  // Artefato reescrito com a galeria aberta: o registro muda (revisão, tamanho,
-  // título) e a miniatura é recapturada com o MESMO nome de arquivo. Só o
-  // refresh traz a revisão nova, que é o que desempata a URL da miniatura.
+  // Artifact rewritten with the gallery open: the record changes (revision, size,
+  // title) and the thumbnail is recaptured with the SAME file name. Only the
+  // refresh brings the new revision, which is what breaks the tie in the thumbnail URL.
   useEffect(() => artifactApi.onUpdated(() => void refresh()), [refresh])
 
-  // Acervo mudou com o painel aberto (o agente gerou ou apagou uma imagem no
-  // meio da conversa). O respiro agrupa a rajada de um turno inteiro numa
-  // recarga só, em vez de uma por arquivo.
+  // The collection changed with the panel open (the agent generated or deleted an image in
+  // the middle of the conversation). The breathing room groups the burst of a whole turn into a
+  // single reload, instead of one per file.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
     const off = mediaApi.onChanged(() => {
@@ -534,17 +534,17 @@ export function MediaGallery() {
     }
   }, [refresh])
 
-  /** Sessões do modo atual — escopo da galeria (chat mostra só chat, etc). */
+  /** Sessions of the current mode — gallery scope (chat shows only chat, etc). */
   const modeSessionIds = useMemo(
     () => new Set(sessions.filter((s) => s.mode === mode).map((s) => s.id)),
     [sessions, mode],
   )
 
   /**
-   * Projeto de uma entrada: o diretório da sessão que a originou, normalizado
-   * com a MESMA regra das pastas da sidebar (folderKey/normalizeFolderName).
-   * Entrada sem sessão conhecida (órfã do backfill) ou sessão sem diretório
-   * (modo chat) não tem projeto.
+   * Project of an entry: the directory of the session that originated it, normalized
+   * with the SAME rule as the sidebar folders (folderKey/normalizeFolderName).
+   * An entry with no known session (orphan from the backfill) or a session without a directory
+   * (chat mode) has no project.
    */
   const sessionById = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions])
   const projectOf = useCallback((entry: MediaEntry): { key: string; label: string } | null => {
@@ -556,8 +556,8 @@ export function MediaGallery() {
   }, [sessionById])
 
   /**
-   * Pasta da sidebar de uma entrada, pela sessão que a originou. Entrada órfã
-   * (backfill) ou conversa fora de pasta não tem.
+   * Sidebar folder of an entry, through the session that originated it. An orphan entry
+   * (backfill) or a conversation outside a folder has none.
    */
   const folderById = useMemo(
     () => new Map(sidebarFolders.map((f) => [f.id, f.name])),
@@ -574,13 +574,13 @@ export function MediaGallery() {
     [sessionById, folderById],
   )
 
-  /** Entradas no escopo do modo atual (aplica o filtro de sessão uma vez só). */
+  /** Entries in the scope of the current mode (it applies the session filter only once). */
   const scopedEntries = useMemo(
     () => entries.filter((entry) => !entry.sessionId || modeSessionIds.has(entry.sessionId)),
     [entries, modeSessionIds],
   )
 
-  /** Pastas da sidebar com mídia no escopo — os chips do filtro. */
+  /** Sidebar folders with media in the scope — the filter chips. */
   const folderOptions = useMemo(() => {
     const byId = new Map<string, string>()
     for (const entry of scopedEntries) {
@@ -592,7 +592,7 @@ export function MediaGallery() {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [scopedEntries, folderOf])
 
-  /** Projetos com mídia no escopo — os chips do filtro. */
+  /** Projects with media in the scope — the filter chips. */
   const projectOptions = useMemo(() => {
     const byKey = new Map<string, string>()
     for (const entry of scopedEntries) {
@@ -609,13 +609,13 @@ export function MediaGallery() {
     [scopedEntries, folderOf, projectOf],
   )
 
-  /** Uma entrada cai neste escopo? É a regra única — filtro, padrão e chips
-   *  perguntam todos aqui, então não há como divergirem. */
+  /** Does an entry fall in this scope? It is the single rule — filter, default and chips
+   *  all ask here, so there is no way for them to diverge. */
   const matchesScope = useCallback(
     (entry: MediaEntry, value: string): boolean => {
       if (value === SCOPE_ALL) return true
-      // Sessão de origem OU uma sessão vinculada — um fork herda o que já
-      // existia na conversa original (ver linkMediaSessions, no main).
+      // Origin session OR a linked session — a fork inherits what already
+      // existed in the original conversation (see linkMediaSessions, in the main process).
       if (value === SCOPE_SESSION) {
         return (
           !!activeSessionId &&
@@ -640,20 +640,20 @@ export function MediaGallery() {
   )
 
   /**
-   * O escopo que a galeria abre quando o usuário ainda não escolheu.
+   * The scope the gallery opens with when the user has not chosen yet.
    *
-   * Do mais específico que o contexto oferece para o mais amplo: a pasta da
-   * sidebar da conversa, senão o repositório em que ela trabalha, senão — num
-   * CHAT SOLTO, que não pertence a nenhum dos dois — a própria conversa.
+   * From the most specific the context offers to the broadest: the sidebar folder of the
+   * conversation, otherwise the repository it works in, otherwise — in a
+   * LOOSE CHAT, which belongs to neither — the conversation itself.
    *
-   * Cada candidato só vale se tiver mídia: abrir a galeria vazia esconderia
-   * tudo que existe, e o usuário não teria como saber que o filtro é que está
-   * apertado.
+   * Each candidate only counts if it has media: opening the gallery empty would hide
+   * everything that exists, and the user would have no way of knowing that the filter is what is
+   * tight.
    */
   const defaultScope = useMemo(() => {
-    // O escopo padrão é escolhido pelo que é mídia DE CONVERSA: um canvas de
-    // design não pode decidir o escopo, senão a galeria abriria num filtro
-    // vazio só porque ele existe.
+    // The default scope is chosen by what is CONVERSATION media: a design
+    // canvas cannot decide the scope, otherwise the gallery would open in an empty
+    // filter just because it exists.
     const has = (value: string) => scopedEntries.some((entry) => !isAppAsset(entry) && matchesScope(entry, value))
     if (activeSession?.folderId) {
       const value = `${FOLDER_PREFIX}${activeSession.folderId}`
@@ -668,8 +668,8 @@ export function MediaGallery() {
     return SCOPE_ALL
   }, [activeSession, activeSessionId, folders, scopedEntries, matchesScope])
 
-  /** Valores que existem agora — o override morre quando sai de cena (ex.: o
-   *  usuário troca de modo e aquela pasta não tem mídia aqui). */
+  /** Values that exist now — the override dies when it leaves the scene (e.g. the
+   *  user switches mode and that folder has no media here). */
   const scopeValues = useMemo(
     () =>
       new Set([
@@ -682,25 +682,25 @@ export function MediaGallery() {
     [folderOptions, projectOptions],
   )
 
-  /** Tudo derivado: nada de setState em effect. */
+  /** All derived: no setState in an effect. */
   const scope = useMemo(
     () => (scopeOverride && scopeValues.has(scopeOverride) ? scopeOverride : defaultScope),
     [scopeOverride, scopeValues, defaultScope],
   )
 
   /**
-   * O que a grade mostra: uma entrada por foto de origem, com as versões dela
-   * atrás. A regra (e o porquê de ser pela raiz, e não pela ponta) mora em
-   * media-groups.ts, junto dos testes.
+   * What the grid shows: one entry per origin photo, with its versions
+   * behind it. The rule (and why it is by the root, and not by the tip) lives in
+   * media-groups.ts, along with the tests.
    */
   const { visible, versionsByHead } = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
     const filtrados = scopedEntries.filter((entry) => {
       if (source !== "all" && entry.source !== source) return false
-      // Tipo é o filtro mais direto que existe aqui ("cadê as peças?"): vai
-      // junto do escopo, antes da data, porque é ele que costuma estar errado
-      // quando a grade parece vazia.
+      // Type is the most direct filter that exists here ("where are the pieces?"): it goes
+      // along with the scope, before the date, because it is usually the one that is wrong
+      // when the grid looks empty.
       if (kind !== "all" && mediaKind(entry) !== kind) return false
       if (!isAppAsset(entry) && !matchesScope(entry, scope)) return false
       if (entry.createdAt < since) return false
@@ -711,8 +711,8 @@ export function MediaGallery() {
     return { visible: covers, versionsByHead: versions }
   }, [scopedEntries, source, period, kind, query, scope, matchesScope])
 
-  /** Apagar um item da grade leva o grupo dele — ver expandToGroups. */
-  const comVersoes = useCallback(
+  /** Deleting a grid item takes its group — see expandToGroups. */
+  const withVersions = useCallback(
     (ids: string[]) => expandToGroups(ids, scopedEntries),
     [scopedEntries],
   )
@@ -732,7 +732,7 @@ export function MediaGallery() {
     await refresh()
   }, [refresh])
 
-  /** Abre o chat de origem e rola até a mensagem onde a imagem apareceu. */
+  /** Opens the origin chat and scrolls to the message where the image appeared. */
   const openInChat = useCallback(async (entry: MediaEntry) => {
     if (!entry.sessionId) return
     const session = useSessionStore.getState().sessions.find((s) => s.id === entry.sessionId)
@@ -742,57 +742,57 @@ export function MediaGallery() {
     await useSessionStore.getState().selectSession(mode, session.id)
     setPreview(null)
     if (entry.messageId) {
-      // espera o chat renderizar a lista antes de procurar a mensagem
+      // waits for the chat to render the list before looking for the message
       setTimeout(() => void scrollToMessage(entry.messageId!), 400)
     }
   }, [setMode])
 
   /**
-   * Clique no tile: imagem abre o lightbox; artefato abre a aba própria (o
-   * lightbox é um <img>, e uma página renderizável precisa de iframe e
-   * espaço). A aba nasce no painel que está NA TELA, e não no da conversa de
-   * origem: aberta lá, ela ia para um painel escondido e o clique parecia não
-   * fazer nada. Artefato e documento da galeria se leem pelo próprio id, sem
-   * depender da conversa em que nasceram.
+   * Click on the tile: an image opens the lightbox; an artifact opens its own tab (the
+   * lightbox is an <img>, and a renderable page needs an iframe and
+   * room). The tab is born in the panel that is ON SCREEN, and not in the origin
+   * conversation's: opened there, it went to a hidden panel and the click seemed to
+   * do nothing. Artifact and document of the gallery are read by their own id, without
+   * depending on the conversation in which they were born.
    */
   const openEntry = useCallback(
     (entry: MediaEntry) => {
       const kind = mediaKind(entry)
-      // Documento abre na aba do painel igual ao artefato: o preview dele é
-      // HTML, e o lightbox só sabe mostrar <img>.
-      // Áudio toca no próprio tile (ver Thumb) — não há visor para ele.
+      // A document opens in the panel tab just like the artifact: its preview is
+      // HTML, and the lightbox only knows how to show <img>.
+      // Audio plays in the tile itself (see Thumb) — there is no viewer for it.
       if (kind === "audio") return
-      // Peça de motion: o clique abre a ABA, e não o visor — a capa é só a
-      // capa, e o que se quer ver é a apresentação rodando. O vínculo com a
-      // composição é o motionId, e quem sabe reabri-la é o main.
+      // Motion piece: the click opens the TAB, and not the viewer — the cover is only the
+      // cover, and what one wants to see is the presentation running. The link to the
+      // composition is the motionId, and the one that knows how to reopen it is the main process.
       if (kind === "motion") {
         if (entry.motionId) void motionApi.open({ id: entry.motionId })
         return
       }
-      // Canvas de design: mesmo caso do motion — o clique abre a ABA, não o
-      // visor; o vínculo é o designId, e quem sabe reabrir é o main.
+      // Design canvas: same case as motion — the click opens the TAB, not the
+      // viewer; the link is the designId, and the one that knows how to reopen it is the main process.
       if (kind === "design") {
         if (entry.designId) void designApi.open({ id: entry.designId })
         return
       }
-      // Deck de slides: idem — o clique reabre a ABA, e a capa é só a capa.
+      // Slides deck: same — the click reopens the TAB, and the cover is only the cover.
       if (kind === "slides") {
         if (entry.slidesId) void slidesApi.open({ id: entry.slidesId })
         return
       }
       if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
-        // A cadeia é fixada na abertura: trocar de versão dentro do visor não
-        // pode reescrever a lista por onde se está navegando.
+        // The chain is fixed on opening: switching version inside the viewer cannot
+        // rewrite the list one is navigating through.
         setPreviewChain(versionsByHead.get(entry.id) ?? null)
         return
       }
-      // Mesma chave com que o painel escolhe o balde que mostra.
+      // Same key with which the panel chooses the bucket it shows.
       const sessionId = useSessionStore.getState().activeIds[mode] ?? ORPHAN_KEY
-      // Documento vivo abre no canvas de Markdown, arquivo pedido abre no
-      // visualizador — quem decide e o openDocumentInPanel, para a galeria e o
-      // card da conversa concordarem. Artefato continua na aba que renderiza a
-      // pagina HTML.
+      // A living document opens in the Markdown canvas, a requested file opens in the
+      // viewer — what decides is openDocumentInPanel, so the gallery and the
+      // conversation card agree. The artifact stays in the tab that renders the
+      // HTML page.
       if (kind === "document") {
         void openDocumentInPanel(sessionId, entry.id, entry.name || entry.id)
         return
@@ -802,7 +802,7 @@ export function MediaGallery() {
     [mode, versionsByHead],
   )
 
-  /** Posição da versão aberta dentro da pilha, para as setas do visor. */
+  /** Position of the open version inside the stack, for the viewer arrows. */
   const previewIndex = useMemo(
     () => (preview && previewChain ? previewChain.findIndex((v) => v.id === preview.id) : -1),
     [preview, previewChain],
@@ -816,12 +816,12 @@ export function MediaGallery() {
     [previewChain, previewIndex],
   )
 
-  /** Apaga o que foi confirmado e fecha o que estiver aberto. */
+  /** Deletes what was confirmed and closes whatever is open. */
   const runDelete = useCallback(
     async (ids: string[]) => {
       if (ids.length === 0) return
-      // As abas das peças que vão embora fecham junto: a pasta some, e uma aba
-      // aberta num motion excluído só mostraria um erro.
+      // The tabs of the pieces that go away close along: the folder disappears, and a tab
+      // open on a deleted motion would only show an error.
       const motionIds = entries.flatMap((e) => (ids.includes(e.id) && e.motionId ? [e.motionId] : []))
       const designIds = entries.flatMap((e) => (ids.includes(e.id) && e.designId ? [e.designId] : []))
       const slidesIds = entries.flatMap((e) => (ids.includes(e.id) && e.slidesId ? [e.slidesId] : []))
@@ -879,9 +879,9 @@ export function MediaGallery() {
             </button>
           </Hint>
         </div>
-        {/* Escopo: "Tudo" e "Neste chat" são os dois mais usados e ficam
-            sempre visíveis; pasta/repositório/soltos — que podem ser muitos —
-            vão no dropdown ao lado, senão a barra vira uma parede de chips. */}
+        {/* Scope: "Everything" and "In this chat" are the two most used and stay
+            always visible; folder/repository/loose ones — which may be many —
+            go in the dropdown next to it, otherwise the bar becomes a wall of chips. */}
         <div className="flex flex-wrap items-center gap-1">
           <ScopeChip
             active={scope === SCOPE_ALL}
@@ -1031,8 +1031,8 @@ export function MediaGallery() {
                     className="max-h-[76vh] w-full rounded-md object-contain"
                   />
                 )}
-                {/* Setas só quando há para onde ir: numa foto sem histórico
-                    elas seriam dois botões mortos em cima da imagem. */}
+                {/* Arrows only when there is somewhere to go: in a photo without history
+                    they would be two dead buttons over the image. */}
                 {previewChain && previewIndex > 0 && (
                   <Hint label={t("media.previousVersion")}>
                     <button
@@ -1083,8 +1083,8 @@ export function MediaGallery() {
                         alt={`v${index + 1}`}
                         className="size-full object-cover"
                       />
-                      {/* O numero e como a pessoa fala da versao ("volta pra
-                          v2"), entao ele fica visivel, nao so no title. */}
+                      {/* The number is how the person talks about the version ("go back to
+                          v2"), so it stays visible, not only in the title. */}
                       <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[9px] leading-tight text-white">
                         v{index + 1}
                       </span>
@@ -1144,9 +1144,9 @@ export function MediaGallery() {
         </DialogContent>
       </Dialog>
 
-      {/* Exclusão da SELEÇÃO: um item da grade é o grupo inteiro, então o
-          número que importa não é quantos tiles foram marcados, e sim quantos
-          arquivos vão embora. */}
+      {/* Deletion of the SELECTION: a grid item is the whole group, so the
+          number that matters is not how many tiles were marked, but how many
+          files are going away. */}
       <Dialog
         open={confirmDelete === "selection"}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
@@ -1157,7 +1157,7 @@ export function MediaGallery() {
             <DialogDescription>
               {t("media.confirmDelete.selection", {
                 items: selected.size,
-                files: comVersoes([...selected]).length,
+                files: withVersions([...selected]).length,
               })}
               {selectedMotionCount > 0 && ` ${t("media.confirmDelete.motionNote", { count: selectedMotionCount })}`}
               {selectedDesignCount > 0 && ` ${t("media.confirmDelete.designNote", { count: selectedDesignCount })}`}
@@ -1170,7 +1170,7 @@ export function MediaGallery() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => void runDelete(comVersoes([...selected]))}
+              onClick={() => void runDelete(withVersions([...selected]))}
             >
               {t("media.confirmDelete.confirmAll")}
             </Button>
@@ -1178,8 +1178,8 @@ export function MediaGallery() {
         </DialogContent>
       </Dialog>
 
-      {/* Exclusão no VISOR: aqui a pessoa está olhando uma versão específica,
-          então as duas saídas ficam explícitas em vez de uma ser adivinhada. */}
+      {/* Deletion in the VIEWER: here the person is looking at a specific version,
+          so the two exits stay explicit instead of one being guessed. */}
       <Dialog
         open={confirmDelete === "viewer"}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
@@ -1200,7 +1200,7 @@ export function MediaGallery() {
             {previewChain && previewChain.length > 1 && (
               <Button
                 variant="destructive"
-                onClick={() => void runDelete(comVersoes(preview ? [preview.id] : []))}
+                onClick={() => void runDelete(withVersions(preview ? [preview.id] : []))}
               >
                 {t("media.confirmDelete.allVersions", { count: previewChain.length })}
               </Button>

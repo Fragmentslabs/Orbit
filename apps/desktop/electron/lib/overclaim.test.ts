@@ -3,27 +3,27 @@ import { describe, expect, it } from 'vitest'
 import { claimsCompletion, claimsImageLook, claimsScreenWork, isNoCorrectionReply } from './overclaim'
 
 /**
- * Heurística de linguagem: falso positivo custa uma ida a mais ao modelo,
- * falso negativo deixa passar uma resposta que afirma ter feito trabalho que
- * não aconteceu. O caso que mais dói é o da negação — "analisei e não alterei
- * nada" é a resposta honesta que o prompt exige, e ser cobrado por ela ensina
- * o agente exatamente a coisa errada.
+ * Language heuristic: a false positive costs one more trip to the model,
+ * a false negative lets through an answer that claims to have done work that
+ * did not happen. The case that hurts the most is the negation — "I analyzed it and changed
+ * nothing" is the honest answer the prompt demands, and being charged for it teaches
+ * the agent exactly the wrong thing.
  */
 
 describe('claimsCompletion', () => {
-  describe('afirma trabalho', () => {
+  describe('claims work', () => {
     it.each([
       'Criei o arquivo de configuração.',
       'Implementei a validação no formulário.',
       'Corrigi o bug do seletor.',
       'I added the rotation group to the picker.',
       'I fixed the alignment issue.',
-    ])('detecta: %s', (text) => {
+    ])('detects: %s', (text) => {
       expect(claimsCompletion(text)).toBe(true)
     })
   })
 
-  describe('negação — a resposta honesta não pode ser cobrada', () => {
+  describe('negation — the honest answer must not be charged', () => {
     it.each([
       'Analisei o código e não alterei nada.',
       'Não implementei ainda, quero confirmar antes.',
@@ -34,12 +34,12 @@ describe('claimsCompletion', () => {
       expect(claimsCompletion(text)).toBe(false)
     })
 
-    it('uma afirmação não negada ainda vale, mesmo junto de uma negada', () => {
+    it('an unnegated claim still counts, even next to a negated one', () => {
       expect(claimsCompletion('Implementei o parser, mas não alterei os testes.')).toBe(true)
     })
   })
 
-  describe('descrição de código existente não é afirmação do agente', () => {
+  describe('describing existing code is not a claim by the agent', () => {
     it.each([
       'The group is added in Sidebar.tsx by the layout effect.',
       'The file was created by the migration script.',
@@ -48,16 +48,16 @@ describe('claimsCompletion', () => {
       expect(claimsCompletion(text)).toBe(false)
     })
 
-    it('ignora verbos dentro de bloco de código', () => {
+    it('ignores verbs inside a code block', () => {
       expect(claimsCompletion('Veja:\n```ts\n// I added this earlier\nconst x = 1\n```')).toBe(false)
     })
 
-    it('ignora verbo citado como identificador inline', () => {
+    it('ignores a verb quoted as an inline identifier', () => {
       expect(claimsCompletion('O campo `added` guarda a contagem.')).toBe(false)
     })
   })
 
-  describe('trabalho de turnos anteriores', () => {
+  describe('work from previous turns', () => {
     it.each([
       'Adicionei esse campo no turno anterior.',
       'Como expliquei na resposta anterior, implementei o cache lá.',
@@ -67,7 +67,7 @@ describe('claimsCompletion', () => {
     })
   })
 
-  it('texto vazio não afirma nada', () => {
+  it('empty text claims nothing', () => {
     expect(claimsCompletion('')).toBe(false)
   })
 })
@@ -77,7 +77,7 @@ describe('isNoCorrectionReply', () => {
     'Nada a corrigir — o texto descrevia o turno anterior.',
     'Confirmado: nenhuma alteração foi feita neste turno.',
     'Ok, nada a corrigir.',
-  ])('reconhece a confirmação de falso positivo: %s', (text) => {
+  ])('recognizes the false-positive confirmation: %s', (text) => {
     expect(isNoCorrectionReply(text)).toBe(true)
   })
 
@@ -85,31 +85,31 @@ describe('isNoCorrectionReply', () => {
     'Correção: eu disse que criei o arquivo, mas não criei.',
     'Correto, na verdade não editei nada — vou fazer agora.',
     'Revisei e realmente faltou aplicar a mudança.',
-  ])('mantém visível a correção real: %s', (text) => {
+  ])('keeps the real correction visible: %s', (text) => {
     expect(isNoCorrectionReply(text)).toBe(false)
   })
 })
 
 describe('claimsScreenWork', () => {
-  it('pega a ação ou a visão de tela afirmada sem tool', () => {
+  it('catches the screen action or view claimed without a tool', () => {
     expect(claimsScreenWork('Abri o TextEdit e escrevi "oi" no documento novo.')).toBe(true)
     expect(claimsScreenWork('Não consigo, não — a captura até é gerada, mas o conteúdo não chega legível.')).toBe(true)
     expect(claimsScreenWork('I opened Safari and clicked Send.')).toBe(true)
   })
 
-  it('conversa sem tela não dispara', () => {
+  it('a conversation without a screen does not trigger', () => {
     expect(claimsScreenWork('Tchau, até a próxima.')).toBe(false)
     expect(claimsScreenWork('O Qwen 3.5 9B compete com modelos bem maiores em visão.')).toBe(false)
   })
 })
 
 describe('claimsImageLook', () => {
-  it('promessa de olhar pela imagem', () => {
+  it('promise to look at the image', () => {
     expect(claimsImageLook('Só o contorno da janela, sem nada legível. Vou tentar pela imagem, um instante.')).toBe(true)
     expect(claimsImageLook("Let me look at the screen image.")).toBe(true)
   })
 
-  it('resposta que já fala do conteúdo não dispara', () => {
+  it('an answer that already talks about the content does not trigger', () => {
     expect(claimsImageLook('Você está no TextEdit, com o arquivo aberto.')).toBe(false)
   })
 })

@@ -4,13 +4,13 @@ import { useSessionReasoning } from "@/src/stores/session-reasoning"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 
 /**
- * Thinking e autonomia POR CHAT com os companions (mobile), no mesmo desenho
- * do session-models/session-modes: o renderer é a fonte da verdade (as escolhas
- * vivem no localStorage dele), empurra o snapshot a cada mudança e aplica o que
- * foi escolhido no celular (WS 'session:prefs-select').
+ * Thinking and autonomy PER CHAT with the companions (mobile), in the same design
+ * as session-models/session-modes: the renderer is the source of truth (the choices
+ * live in its localStorage), pushes the snapshot on every change and applies what
+ * was chosen on the phone (WS 'session:prefs-select').
  *
- * A chave 'draft' fica fora: "chat novo" no desktop é outro chat que o "chat
- * novo" no celular — a mesma regra dos modos.
+ * The 'draft' key stays out: "new chat" on the desktop is another chat than "new
+ * chat" on the phone — the same rule as the modes.
  */
 
 const DRAFT_KEY = "draft"
@@ -26,8 +26,8 @@ function snapshot(): SessionPrefsSnapshot {
   }
 }
 
-// Dedup: os dois stores mudam também pelo que vem do celular — sem comparar,
-// cada aplicação voltaria como se fosse novidade.
+// Dedup: both stores also change through what comes from the phone — without comparing,
+// every application would come back as if it were new.
 let lastPushed = ""
 
 function push() {
@@ -43,7 +43,7 @@ function applyRemote(data: {
   reasoning?: { enabled: boolean; variantId?: string }
   permission?: "ask" | "approve" | "full"
 }) {
-  // Sem sessão é o rascunho do OUTRO aparelho: não mexe no daqui.
+  // Without a session it is the OTHER device's draft: do not touch the one here.
   if (!data?.sessionId) return
   if (data.permission) {
     usePermissionPrefs.getState().applyRemoteMode(data.sessionId, data.permission)
@@ -57,8 +57,8 @@ function applyRemote(data: {
 }
 
 if (typeof window !== "undefined" && window.ipcRenderer) {
-  // Estado inicial: depois de um reload do renderer o cache do main precisa
-  // ser repopulado, senão o mobile conecta e recebe um snapshot vazio.
+  // Initial state: after a renderer reload the main cache has to
+  // be repopulated, otherwise the mobile connects and receives an empty snapshot.
   push()
   useSessionReasoning.subscribe(push)
   usePermissionPrefs.subscribe(push)

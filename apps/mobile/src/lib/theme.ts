@@ -1,10 +1,10 @@
 import { Appearance } from 'react-native'
 
 /**
- * `Appearance.setColorScheme` existe no React Native mas NÃO no
- * react-native-web: chamá-la direto derruba o alvo web (`npm run
- * mobile:web`) no boot e nas telas de tema/aparência. No web o tema já vem
- * do theme-store + NativeWind, então ignorar a ausência é o certo.
+ * `Appearance.setColorScheme` exists in React Native but NOT in
+ * react-native-web: calling it directly takes the web target (`npm run
+ * mobile:web`) down at boot and on the theme/appearance screens. On the web the theme already comes
+ * from the theme-store + NativeWind, so ignoring the absence is the right thing.
  */
 export function setColorScheme(scheme: 'light' | 'dark'): void {
   Appearance.setColorScheme?.(scheme)
@@ -12,8 +12,8 @@ export function setColorScheme(scheme: 'light' | 'dark'): void {
 
 /**
  * Orbit Mobile Theme
- * CSS variables e utilitários de tema baseados no desktop
- * Cores em HSL para compatibilidade com NativeWind
+ * CSS variables and theme utilities based on the desktop
+ * Colors in HSL for compatibility with NativeWind
  */
 
 // ============================================
@@ -210,10 +210,10 @@ export function generateCSSVariables(theme: Theme): Record<string, string> {
  */
 export function getSystemColorScheme(): 'light' | 'dark' {
   try {
-    // Carregamento condicional de módulo opcional: import estático não
-    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-    // build sem o nativo) e é justamente por isso que o require está
-    // dentro do try/if.
+    // Conditional loading of an optional module: a static import does not
+    // work here (the module may not exist at runtime — Expo Go, web,
+    // build without the native part) and that is exactly why the require is
+    // inside the try/if.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Appearance } = require('react-native')
     return Appearance.getColorScheme() ?? 'light'

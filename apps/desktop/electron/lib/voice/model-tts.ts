@@ -5,60 +5,60 @@ import { listCredentialProviders, resolveApiKey } from "../auth"
 import { TTS_SAMPLE_RATE } from "./manifest"
 
 /**
- * Rota de fala PELO MODELO (preferência "Modelo de voz").
+ * Speech route THROUGH THE MODEL ("Voice model" preference).
  *
- * O motor local (Supertonic) é ótimo por ser offline, mas exige ~400 MB de
- * pesos no disco. Quando o usuário já tem um provedor de IA configurado, a
- * mesma fala pode sair do provedor — é a prioridade padrão desta preferência.
+ * The local engine (Supertonic) is great for being offline, but it requires ~400 MB of
+ * weights on disk. When the user already has an AI provider configured, the
+ * same speech can come from the provider — it is the default priority of this preference.
  *
- * Aqui só se decide se essa rota EXISTE e como usá-la; o disco e os motores
- * locais continuam sendo do `status.ts`/`tts.ts`. A regra é conservadora:
- * qualquer dúvida (sem provedor, sem chave, sem modelo de fala) vira
- * "indisponível" e o pipeline cai no motor local — a leitura nunca fica muda.
+ * Here we only decide whether that route EXISTS and how to use it; the disk and the local
+ * engines remain with `status.ts`/`tts.ts`. The rule is conservative:
+ * any doubt (no provider, no key, no speech model) becomes
+ * "unavailable" and the pipeline falls back to the local engine — the reading is never mute.
  */
 
-/** Modalidade de SAÍDA que marca um modelo como capaz de gerar fala. */
+/** OUTPUT modality that marks a model as capable of generating speech. */
 const AUDIO = "audio"
 
 /**
- * Modelos de fala conhecidos por provedor. O catálogo do models.dev é focado em
- * LLM de texto e costuma não listar os modelos de fala (OpenAI `tts-1`,
- * `gpt-4o-mini-tts`), então a modalidade `audio` sozinha não os encontraria.
+ * Speech models known per provider. The models.dev catalog focuses on
+ * text LLMs and usually does not list the speech models (OpenAI `tts-1`,
+ * `gpt-4o-mini-tts`), so the `audio` modality alone would not find them.
  */
 const KNOWN_SPEECH_MODEL: Record<string, string> = {
   openai: "gpt-4o-mini-tts",
 }
 
-/** Vozes da API de fala da OpenAI, por gênero (o Supertonic usa F#/M#). */
+/** Voices of the OpenAI speech API, by gender (Supertonic uses F#/M#). */
 const OPENAI_FEMALE = ["nova", "shimmer", "coral", "sage", "ballad"]
 const OPENAI_MALE = ["onyx", "echo", "fable", "ash", "alloy"]
 
-/** Uma rota de fala utilizável: provedor + modelo + URL base. */
+/** A usable speech route: provider + model + base URL. */
 export interface SpeechRoute {
   providerId: string
   providerName: string
-  /** URL base da API (ex.: `https://api.openai.com/v1`). */
+  /** Base URL of the API (e.g. `https://api.openai.com/v1`). */
   api: string
   modelId: string
-  /** Variáveis de ambiente que podem trazer a chave (ver auth.ts). */
+  /** Environment variables that may carry the key (see auth.ts). */
   env: string[]
 }
 
-/** A URL base termina em `/v1`? Sem isso não dá para montar o endpoint. */
+/** Does the base URL end in `/v1`? Without it the endpoint cannot be built. */
 function joinUrl(api: string, path: string): string {
   return `${api.replace(/\/+$/, "")}/${path}`
 }
 
 /**
- * Traduz a voz do Supertonic (F1–F5/M1–M5) para o nome que a API de fala
- * entende. Provedor desconhecido recebe o id original — se ele não aceitar, a
- * chamada falha e o pipeline cai no motor local (que usa o id original).
+ * Translates the Supertonic voice (F1–F5/M1–M5) to the name the speech API
+ * understands. An unknown provider receives the original id — if it does not accept it, the
+ * call fails and the pipeline falls back to the local engine (which uses the original id).
  */
 export function mapSpeechVoice(voice: string | undefined, providerId: string): string {
   const id = (voice ?? "").trim().toUpperCase()
   const match = /^([FM])([1-5])$/.exec(id)
-  // Provedor desconhecido recebe o id como veio (talvez ele o entenda); a
-  // falha da chamada é o que decide, e o pipeline cai no motor local.
+  // An unknown provider receives the id as it came (maybe it understands it); the
+  // call failure is what decides, and the pipeline falls back to the local engine.
   if (providerId !== "openai") return id || "nova"
   if (!match) return OPENAI_FEMALE[0]
   const table = match[1] === "F" ? OPENAI_FEMALE : OPENAI_MALE
@@ -66,9 +66,9 @@ export function mapSpeechVoice(voice: string | undefined, providerId: string): s
 }
 
 /**
- * Escolhe, de forma PURA (testável sem rede), o provedor + modelo de fala.
- * Percorre o catálogo e fica com o primeiro provedor CONFIGURADO (chave salva
- * ou variável de ambiente) que exponha um modelo de fala.
+ * Chooses, PURELY (testable without the network), the provider + speech model.
+ * It walks the catalog and keeps the first CONFIGURED provider (saved key
+ * or environment variable) that exposes a speech model.
  */
 export function pickSpeechRoute(
   catalog: Catalog,
@@ -97,15 +97,15 @@ export function pickSpeechRoute(
   return null
 }
 
-/** A rota de fala do modelo, agora — ou `null` quando não há nenhuma. */
+/** The model's speech route, right now — or `null` when there is none. */
 export async function resolveSpeechRoute(): Promise<SpeechRoute | null> {
   const [catalog, configured] = await Promise.all([getMergedCatalog(), listCredentialProviders()])
   return pickSpeechRoute(catalog, new Set(configured))
 }
 
 /**
- * Retrato da rota do modelo para o `voice:status` — a metade da prioridade de
- * áudio que não depende do disco local.
+ * Snapshot of the model route for `voice:status` — the half of the audio
+ * priority that does not depend on the local disk.
  */
 export async function modelTtsStatus(): Promise<VoiceModelTtsStatus> {
   try {
@@ -132,16 +132,16 @@ export interface ModelSpeakChunk {
   pcm: Buffer
 }
 
-/** Bytes de cada pedaço (par, porque a amostra é de 2 bytes). ~0,17 s a 24 kHz. */
+/** Bytes of each chunk (even, because the sample is 2 bytes). ~0.17 s at 24 kHz. */
 const PCM_CHUNK_BYTES = 8192
 
 /**
- * Sintetiza `text` pelo provedor e entrega o PCM16 em pedaços, no MESMO
- * contrato do motor local (PCM16LE, 24 kHz, mono) — o renderer toca os dois
- * caminhos sem saber a diferença.
+ * Synthesises `text` through the provider and delivers the PCM16 in chunks, in the SAME
+ * contract as the local engine (PCM16LE, 24 kHz, mono) — the renderer plays both
+ * paths without knowing the difference.
  *
- * Pedimos `response_format: "pcm"` justamente por isso: o provedor devolve PCM
- * cru na taxa do contrato, sem cabeçalho para decodificar no caminho do áudio.
+ * We ask for `response_format: "pcm"` precisely for that: the provider returns raw
+ * PCM at the contract rate, with no header to decode on the audio path.
  */
 export async function speakWithModel(
   text: string,
@@ -149,11 +149,11 @@ export async function speakWithModel(
   onChunk: (chunk: ModelSpeakChunk) => void,
   signal?: AbortSignal,
 ): Promise<{ pieces: number; audioMs: number }> {
-  const texto = String(text ?? "").trim()
-  if (!texto) throw new Error("nada para sintetizar: o texto está vazio")
+  const spoken = String(text ?? "").trim()
+  if (!spoken) throw new Error("nothing to synthesize: the text is empty")
 
   const route = await resolveSpeechRoute()
-  if (!route) throw new Error("nenhum provedor com modelo de fala configurado")
+  if (!route) throw new Error("no provider with a speech model configured")
   const apiKey = await resolveApiKey(route.providerId, route.env)
 
   const response = await fetch(joinUrl(route.api, "audio/speech"), {
@@ -164,7 +164,7 @@ export async function speakWithModel(
     },
     body: JSON.stringify({
       model: route.modelId,
-      input: texto,
+      input: spoken,
       voice: mapSpeechVoice(options.voice, route.providerId),
       response_format: "pcm",
       ...(typeof options.speed === "number" ? { speed: options.speed } : {}),
@@ -178,7 +178,7 @@ export async function speakWithModel(
   }
 
   const pcm = Buffer.from(await response.arrayBuffer())
-  if (pcm.length === 0) throw new Error("o modelo de fala não devolveu áudio")
+  if (pcm.length === 0) throw new Error("the speech model returned no audio")
 
   const total = Math.ceil(pcm.length / PCM_CHUNK_BYTES)
   for (let index = 0; index < total; index++) {

@@ -9,41 +9,41 @@ import { usePromptInputController } from "@/src/components/ai/prompt-input"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Paleta "/" dos inputs: abre quando o texto começa com "/", filtra conforme
- * digita e navega por teclado. A captura de teclas usa onKeyDownCapture no
- * wrapper — roda ANTES do handler interno do PromptInputTextarea, então o
- * Enter-para-enviar continua intacto quando a paleta está fechada.
+ * The "/" palette of the inputs: it opens when the text starts with "/", filters as one
+ * types and navigates by keyboard. The key capture uses onKeyDownCapture on the
+ * wrapper — it runs BEFORE the internal handler of PromptInputTextarea, so the
+ * Enter-to-send stays intact when the palette is closed.
  *
- * A "/" é de COMANDOS E MODOS: o que se executa (pipelines como /init) e o
- * que se liga (Pesquisa, Plano, Loop, Visão…). As REFERÊNCIAS (skills, MCP,
- * arquivos) ficam na paleta "@".
+ * The "/" is for COMMANDS AND MODES: what is executed (pipelines like /init) and what
+ * is turned on (Research, Plan, Loop, Vision…). The REFERENCES (skills, MCP,
+ * files) stay in the "@" palette.
  */
 
 export type { SlashCommand } from "@/src/lib/slash-commands"
 
 const GROUP_ICON: Record<SlashCommand["group"], typeof Sparkles> = {
-  Modos: Wrench,
+  Modes: Wrench,
   Skills: Sparkles,
   MCP: Layers,
-  Memória: BrainCircuit,
-  Ações: Zap,
+  Memory: BrainCircuit,
+  Actions: Zap,
 }
 
-/** Ordem de exibição das seções: ações primeiro, modos por último (já têm chips na UI) */
-const GROUP_ORDER: SlashCommand["group"][] = ["Ações", "Modos"]
+/** Display order of the sections: actions first, modes last (they already have chips in the UI) */
+const GROUP_ORDER: SlashCommand["group"][] = ["Actions", "Modes"]
 
-/** Chave i18n de cada seção: o valor do grupo é identificador, não rótulo. */
+/** i18n key of each section: the group value is an identifier, not a label. */
 const GROUP_KEY: Record<SlashCommand["group"], string> = {
-  Ações: "actions",
+  Actions: "actions",
   Skills: "skills",
   MCP: "mcp",
-  Memória: "memory",
-  Modos: "modes",
+  Memory: "memory",
+  Modes: "modes",
 }
 
-/** Comandos literais enviados como texto — a paleta não abre sobre eles.
- * Inclui as ações "/" (resolvidas no submit dos inputs): depois de selecionar
- * "/code-review " a paleta fecha e o usuário completa/envia. */
+/** Literal commands sent as text — the palette does not open over them.
+ * It includes the "/" actions (resolved on the input submit): after selecting
+ * "/code-review " the palette closes and the user completes/sends. */
 const LITERAL_COMMANDS = ["/create-skill", "/document", ...SLASH_ACTION_COMMANDS.map((c) => c + " ")]
 
 export function SlashPalette({ commands, children, className }: {
@@ -98,7 +98,7 @@ export function SlashPalette({ commands, children, className }: {
     }
   }
 
-  // Agrupa preservando a ordem de `filtered` (já ordenado por seção)
+  // Groups preserving the order of `filtered` (already sorted by section)
   const groups = useMemo(() => {
     const map = new Map<SlashCommand["group"], SlashCommand[]>()
     for (const command of filtered) {
@@ -134,7 +134,7 @@ export function SlashPalette({ commands, children, className }: {
                       )}
                       onMouseEnter={() => setHighlight(index)}
                       onMouseDown={(e) => {
-                        // mousedown para não roubar o foco do textarea
+                        // mousedown so as not to steal the focus from the textarea
                         e.preventDefault()
                         select(command)
                       }}

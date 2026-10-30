@@ -1,32 +1,32 @@
 /**
- * Seleção de memórias para o contexto: candidatos (semântico + lexical + fusão)
- * e a política de dois níveis. Funções puras — o mesmo código roda no app e no
- * benchmark (electron/lib/memory/bench), então o que se mede é o que se entrega.
+ * Selection of memories for the context: candidates (semantic + lexical + fusion)
+ * and the two-level policy. Pure functions — the same code runs in the app and in the
+ * benchmark (electron/lib/memory/bench), so what is measured is what is delivered.
  */
 
 import { Bm25Index, dot, lexTokens, reciprocalRankFusion } from "./memory-retrieval"
 
 // ---------------------------------------------------------------------------
-// Candidatos
+// Candidates
 // ---------------------------------------------------------------------------
 
 export type RetrievalMode = "semantic" | "lexical" | "hybrid"
 
 export interface RetrievalParams {
   mode: RetrievalMode
-  /** Quantos candidatos cada fonte entrega à fusão */
+  /** How many candidates each source delivers to the fusion */
   semK: number
   lexK: number
-  /** Constante k do RRF */
+  /** RRF constant k */
   rrfK: number
-  /** Pesos de cada lista no RRF */
+  /** Weights of each list in the RRF */
   semWeight: number
   lexWeight: number
   /**
-   * Cobertura mínima (fração do IDF da consulta) para um acerto lexical entrar
-   * na fusão. Em 0, entra qualquer documento com um token em comum — o que num
-   * acervo grande é ruído: "de", "para" e um nome de cidade casam com dezenas de
-   * memórias. Quem decide o número é a calibração (bench/analysis.ts).
+   * Minimum coverage (fraction of the IDF of the query) for a lexical hit to enter
+   * the fusion. At 0, any document with a token in common enters — which in a
+   * large collection is noise: "de", "para" and a city name match dozens of
+   * memories. Whoever decides the number is the calibration (bench/analysis.ts).
    */
   lexMinCoverage: number
 }
@@ -42,11 +42,11 @@ export const DEFAULT_RETRIEVAL: RetrievalParams = {
 }
 
 /**
- * Fusão de produção — a MESMA constante que o bench usa (bench/policy.ts
- * reexporta daqui), para que o que se mede e o que se entrega sejam o mesmo
- * número. Peso lexical pequeno e corte de cobertura: com peso igual o RRF
- * perde ~30 pp de R@1 (medido); com o corte, empata com o semântico e mantém
- * o identificador exato no topo, que é o que o BM25 faz de melhor.
+ * Production fusion — the SAME constant the bench uses (bench/policy.ts
+ * re-exports it from here), so that what is measured and what is delivered are the same
+ * number. Small lexical weight and coverage cut: with equal weight the RRF
+ * loses ~30 pp of R@1 (measured); with the cut, it ties with the semantic one and keeps
+ * the exact identifier at the top, which is what BM25 does best.
  */
 export const PRODUCTION_RETRIEVAL: RetrievalParams = {
   ...DEFAULT_RETRIEVAL,
@@ -57,21 +57,21 @@ export const PRODUCTION_RETRIEVAL: RetrievalParams = {
 
 export interface Candidate {
   id: string
-  /** Cosseno com a consulta (null quando não há vetor ou modo lexical) */
+  /** Cosine with the query (null when there is no vector or in lexical mode) */
   cos: number | null
   semRank: number | null
-  /** BM25 e fração do IDF da consulta que o documento cobre (0..1) */
+  /** BM25 and fraction of the IDF of the query that the document covers (0..1) */
   bm25: number
   coverage: number
   lexRank: number | null
-  /** Score da fusão (RRF) — só para ordenar; a decisão usa os sinais brutos */
+  /** Fusion score (RRF) — only to order; the decision uses the raw signals */
   fused: number
 }
 
 export interface RetrievalInput {
-  /** Embedding da consulta; null/undefined ⇒ só lexical */
+  /** Embedding of the query; null/undefined ⇒ lexical only */
   queryVec?: ArrayLike<number> | null
-  /** Texto original da consulta (busca lexical) */
+  /** Original text of the query (lexical search) */
   lexicalQuery: string
   vectors: ReadonlyMap<string, ArrayLike<number>>
   lexical: Bm25Index
@@ -93,8 +93,8 @@ export function retrieveCandidates(input: RetrievalInput, params: RetrievalParam
 
   const qIdf = useLex ? queryIdfMass(input.lexical, input.lexicalQuery) : 0
   const rawLex = useLex ? input.lexical.search(input.lexicalQuery, Math.max(params.lexK, 50)) : []
-  // A cobertura é o quanto do IDF da consulta o documento cobre; o corte tira o
-  // acerto de um token só antes de ele disputar posição na fusão.
+  // The coverage is how much of the IDF of the query the document covers; the cut removes the
+  // single-token hit before it disputes position in the fusion.
   const lexHits =
     params.lexMinCoverage > 0 && qIdf > 0
       ? rawLex.filter((hit) => hit.score / qIdf >= params.lexMinCoverage)
@@ -122,21 +122,21 @@ export function retrieveCandidates(input: RetrievalInput, params: RetrievalParam
   })
 }
 
-/** Teto aproximado do BM25 para a consulta (todos os termos casando): normaliza a cobertura. */
+/** Approximate ceiling of the BM25 for the query (all terms matching): normalizes the coverage. */
 function queryIdfMass(index: Bm25Index, query: string): number {
   return index.queryMass(query)
 }
 
 // ---------------------------------------------------------------------------
-// Piso de ruído por acervo
+// Noise floor per collection
 // ---------------------------------------------------------------------------
 
 /**
- * Perguntas genéricas, sem relação com a vida de ninguém. Rodadas contra o
- * acervo do usuário, mostram até onde o cosseno chega "por acaso" naquele
- * conjunto de memórias — que varia com o tamanho, o idioma e o tom do acervo.
- * Nenhuma delas aparece no benchmark (cases.json); o conjunto foi escrito à
- * parte para a calibração não ver os casos de avaliação.
+ * Generic questions, unrelated to anyone's life. Run against the
+ * user's collection, they show how far the cosine gets "by chance" in that
+ * set of memories — which varies with the size, the language and the tone of the collection.
+ * None of them appears in the benchmark (cases.json); the set was written
+ * separately so the calibration does not see the evaluation cases.
  */
 export const NOISE_PROBES: string[] = [
   "Qual é a capital da Austrália?",
@@ -178,7 +178,7 @@ export const NOISE_PROBES: string[] = [
 ]
 
 export interface NoiseFloor {
-  /** Maior cosseno de cada sonda contra o acervo, em ordem crescente */
+  /** Highest cosine of each probe against the collection, in ascending order */
   tops: number[]
 }
 
@@ -203,37 +203,37 @@ export function quantile(sorted: number[], q: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Política de dois níveis
+// Two-level policy
 // ---------------------------------------------------------------------------
 
 export interface SelectionParams {
   /**
-   * Como o limiar de cosseno é obtido:
-   *  - "absolute": `injectCos` / `pointerCos` valem como estão
-   *  - "acervo": piso de ruído do acervo (quantil das sondas) + `injectDelta` / `pointerDelta`
+   * How the cosine threshold is obtained:
+   *  - "absolute": `injectCos` / `pointerCos` are worth as they are
+   *  - "collection": noise floor of the collection (quantile of the probes) + `injectDelta` / `pointerDelta`
    */
-  threshold: "absolute" | "acervo"
+  threshold: "absolute" | "collection"
   injectCos: number
   pointerCos: number
   noiseQuantile: number
   injectDelta: number
   pointerDelta: number
-  /** Distância mínima entre o 1º e o 2º candidato para injetar só pelo cosseno (0 = ignora) */
+  /** Minimum distance between the 1st and the 2nd candidate to inject by cosine alone (0 = ignores it) */
   minMargin: number
-  /** Cobertura lexical que, somada a um cosseno de ponteiro, basta para injetar (>1 = desliga) */
+  /** Lexical coverage that, added to a pointer cosine, is enough to inject (>1 = off) */
   lexInjectCoverage: number
-  /** Cobertura lexical que sozinha (sem cosseno alto) basta para um ponteiro */
+  /** Lexical coverage that alone (without a high cosine) is enough for a pointer */
   lexPointerCoverage: number
   maxInject: number
   maxPointers: number
-  /** Além do 1º, só entram candidatos a até `gap` de cosseno do 1º */
+  /** Beyond the 1st, only candidates up to `gap` of cosine from the 1st enter */
   gap: number
-  /** Teto de caracteres de uma memória injetada (o resto fica atrás do memory_open) */
+  /** Character ceiling of an injected memory (the rest stays behind memory_open) */
   maxInjectChars: number
 }
 
 export const DEFAULT_SELECTION: SelectionParams = {
-  threshold: "acervo",
+  threshold: "collection",
   injectCos: 0.6,
   pointerCos: 0.5,
   noiseQuantile: 1,
@@ -257,7 +257,7 @@ export interface Selected extends Candidate {
 export interface Selection {
   inject: Selected[]
   pointers: Selected[]
-  /** Limiares efetivamente usados (para depuração e para os relatórios) */
+  /** Thresholds effectively used (for debugging and for the reports) */
   thresholds: { inject: number; pointer: number }
 }
 
@@ -268,7 +268,7 @@ export function selectForContext(
 ): Selection {
   let injectT = params.injectCos
   let pointerT = params.pointerCos
-  if (params.threshold === "acervo" && noise && noise.tops.length > 0) {
+  if (params.threshold === "collection" && noise && noise.tops.length > 0) {
     const floor = quantile(noise.tops, params.noiseQuantile)
     injectT = floor + params.injectDelta
     pointerT = floor + params.pointerDelta
@@ -279,16 +279,16 @@ export function selectForContext(
   const second = bySem[1]
   const margin = top && second ? top.cos! - second.cos! : top ? 1 : 0
 
-  // Empate no topo é sinal de ambiguidade, não de relevância: se o 1º não está
-  // claramente à frente do 2º, nenhum dos dois merece injeção automática — os
-  // dois viram ponteiro. Sem `minMargin` (0), o critério fica desligado.
+  // A tie at the top is a sign of ambiguity, not of relevance: if the 1st is not
+  // clearly ahead of the 2nd, neither deserves automatic injection — both
+  // become a pointer. Without `minMargin` (0), the criterion is off.
   const ambiguous = params.minMargin > 0 && top != null && second != null && margin < params.minMargin
 
   const inject: Selected[] = []
   const pointers: Selected[] = []
   const used = new Set<string>()
 
-  // Candidatos em ordem de cosseno (os sem vetor, só léxicos, vão depois).
+  // Candidates in order of cosine (the ones without a vector, lexical only, come later).
   const ordered = [...bySem, ...candidates.filter((c) => c.cos == null)]
   for (const c of ordered) {
     if (used.has(c.id)) continue
@@ -310,7 +310,7 @@ export function selectForContext(
   return { inject, pointers, thresholds: { inject: injectT, pointer: pointerT } }
 }
 
-/** Quantos tokens lexicais a consulta tem (para decidir se vale a busca lexical). */
+/** How many lexical tokens the query has (to decide whether the lexical search is worth it). */
 export function queryTokenCount(query: string): number {
   return lexTokens(query).length
 }

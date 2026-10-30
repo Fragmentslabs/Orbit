@@ -5,18 +5,18 @@ import type { TimedWord } from './edl'
 import { extractPcm16k, probeMedia } from './ffmpeg'
 
 /**
- * Transcrição de vídeo POR PALAVRA, com cache — a "visão" principal do agente
- * sobre o material.
+ * Video transcription WORD BY WORD, with cache — the agent's main "vision"
+ * over the material.
  *
- * O modelo não assiste o vídeo: ele lê o que foi dito e quando. Cada palavra
- * tem início e fim, e é com isso que o EDL corta sem partir palavra e que as
- * legendas acompanham a fala. Imagem (video_timeline) só nos pontos de
- * decisão.
+ * The model does not watch the video: it reads what was said and when. Each word
+ * has a start and an end, and it is with that that the EDL cuts without splitting a word and that the
+ * subtitles follow the speech. Image (video_timeline) only at the decision
+ * points.
  *
- * Roda no motor de ditado local (Parakeet/whisper, Preferências → Voz) —
- * nada sai da máquina. O cache mora ao lado da edição
- * (`<pasta do vídeo>/edit/transcripts/`) e só é refeito quando o arquivo muda
- * (tamanho/data): retranscrever material que não mudou é tempo jogado fora.
+ * It runs on the local dictation engine (Parakeet/whisper, Preferences → Voice) —
+ * nothing leaves the machine. The cache lives next to the edit
+ * (`<video folder>/edit/transcripts/`) and is only redone when the file changes
+ * (size/date): re-transcribing material that did not change is wasted time.
  */
 
 export interface VideoTranscript {
@@ -30,9 +30,9 @@ export interface VideoTranscript {
 }
 
 /**
- * Pasta da edição de um vídeo: `<pasta dele>/edit` (saídas nunca no meio do
- * material). Um arquivo que JÁ está dentro de uma pasta `edit/` usa essa pasta
- * — sem `edit/edit/`, que era onde um áudio em edit/audio/ caía antes.
+ * A video's edit folder: `<its folder>/edit` (outputs never in the middle of the
+ * material). A file that is ALREADY inside an `edit/` folder uses that folder
+ * — without `edit/edit/`, which was where an audio in edit/audio/ used to land.
  */
 export function editDirFor(file: string): string {
   const dir = path.dirname(file)
@@ -43,7 +43,7 @@ function cacheFile(file: string): string {
   return path.join(editDirFor(file), 'transcripts', `${path.basename(file)}.json`)
 }
 
-/** Transcrição em cache que ainda vale para o arquivo como ele está agora. */
+/** Cached transcription that is still valid for the file as it is now. */
 export async function readCachedTranscript(file: string): Promise<VideoTranscript | null> {
   try {
     const [raw, stat] = await Promise.all([fs.readFile(cacheFile(file), 'utf8'), fs.stat(file)])
@@ -86,10 +86,10 @@ export async function transcribeVideo(
 }
 
 // ---------------------------------------------------------------------------
-// Texto empacotado (puro)
+// Packed text (plain)
 // ---------------------------------------------------------------------------
 
-/** 12.34 → "012.34" — largura fixa, o modelo compara tempos a olho. */
+/** 12.34 → "012.34" — fixed width, the model compares times by eye. */
 export function sec(ms: number): string {
   return (ms / 1000).toFixed(2).padStart(6, '0')
 }
@@ -98,13 +98,13 @@ export interface Phrase {
   startMs: number
   endMs: number
   text: string
-  /** Silêncio ANTES da frase (ms). */
+  /** Silence BEFORE the phrase (ms). */
   gapBeforeMs: number
 }
 
 /**
- * Frases: quebra em silêncio ≥ `breakMs` (500 ms — a pausa natural de quem
- * fala) ou quando a frase passa de ~12 s sem pausa.
+ * Phrases: break at a silence ≥ `breakMs` (500 ms — the natural pause of someone
+ * speaking) or when the phrase goes past ~12 s without a pause.
  */
 export function phrasesOf(words: TimedWord[], breakMs = 500, maxMs = 12_000): Phrase[] {
   const phrases: Phrase[] = []
@@ -132,8 +132,8 @@ export function phrasesOf(words: TimedWord[], breakMs = 500, maxMs = 12_000): Ph
 }
 
 /**
- * O que o agente lê: uma linha por frase com início–fim em segundos, e o
- * silêncio marcado quando passa de 1 s (ar morto é candidato a corte).
+ * What the agent reads: one line per phrase with start–end in seconds, and the
+ * silence marked when it goes past 1 s (dead air is a cut candidate).
  */
 export function packTranscript(entries: { id: string; file: string; transcript: VideoTranscript }[]): string {
   const out: string[] = [
@@ -157,7 +157,7 @@ export function packTranscript(entries: { id: string; file: string; transcript: 
   return out.join('\n')
 }
 
-/** Texto corrido, sem tempo: leitura e resumo — não serve para cortar. */
+/** Running text, without time: reading and summary — it is no good for cutting. */
 export function plainText(transcript: VideoTranscript): string {
   return transcript.words
     .map((w) => w.text)
@@ -166,9 +166,9 @@ export function plainText(transcript: VideoTranscript): string {
 }
 
 /**
- * Palavra a palavra com início–fim em segundos fonte (`word@012.34-012.78`).
- * É daqui que saem cues de legenda EXATAS: dividir a duração de um clipe por
- * quantidade de caracteres é chute, e o chute é o que dessincroniza legenda.
+ * Word by word with start–end in source seconds (`word@012.34-012.78`).
+ * It is from here that EXACT subtitle cues come: dividing a clip's duration by
+ * the number of characters is a guess, and the guess is what desynchronizes subtitles.
  */
 export function wordsText(entries: { id: string; file: string; transcript: VideoTranscript }[]): string {
   const out: string[] = [

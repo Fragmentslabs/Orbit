@@ -6,27 +6,27 @@ import { supportsAnthropicCache, withAnthropicCache } from './prompt-cache'
 import { modelRuntime } from './provider-npm'
 
 const history: ModelMessage[] = [
-  { role: 'user', content: 'primeira' },
-  { role: 'assistant', content: 'resposta' },
-  { role: 'user', content: 'segunda' },
-  { role: 'assistant', content: 'outra' },
-  { role: 'user', content: 'última' },
+  { role: 'user', content: 'first' },
+  { role: 'assistant', content: 'answer' },
+  { role: 'user', content: 'second' },
+  { role: 'assistant', content: 'another' },
+  { role: 'user', content: 'last' },
 ]
 
 const marked = (messages: ModelMessage[]) =>
   messages.flatMap((m, i) => (m.providerOptions?.anthropic?.cacheControl ? [i] : []))
 
 describe('withAnthropicCache', () => {
-  it('marca a primeira e as duas últimas mensagens', () => {
+  it('marks the first and the last two messages', () => {
     expect(marked(withAnthropicCache(history))).toEqual([0, 3, 4])
   })
 
-  it('nunca passa de três marcas, nem com histórico curto', () => {
+  it('never goes past three marks, not even with a short history', () => {
     expect(marked(withAnthropicCache(history.slice(0, 1)))).toEqual([0])
     expect(marked(withAnthropicCache(history.slice(0, 2)))).toEqual([0, 1])
   })
 
-  it('preserva o providerOptions que a mensagem já tinha', () => {
+  it('preserves the providerOptions the message already had', () => {
     const [first] = withAnthropicCache([
       { role: 'user', content: 'x', providerOptions: { anthropic: { foo: 1 }, openaiCompatible: { bar: 2 } } },
     ])
@@ -36,9 +36,9 @@ describe('withAnthropicCache', () => {
     })
   })
 
-  it('chega ao corpo do request como cache_control', async () => {
-    // A marca só vale se o SDK a traduzir: sem isto, um rename no SDK faria o
-    // cache sumir em silêncio, sem erro nenhum.
+  it('reaches the request body as cache_control', async () => {
+    // The mark only counts if the SDK translates it: without this, a rename in the SDK would make the
+    // cache vanish silently, with no error at all.
     let body: { messages: Array<{ content: Array<{ cache_control?: unknown }> }> } | undefined
     const anthropic = createAnthropic({
       apiKey: 'test',
@@ -56,19 +56,19 @@ describe('withAnthropicCache', () => {
     })
     await generateText({ model: anthropic('claude-haiku-4-5'), messages: withAnthropicCache(history) })
     const cached = body!.messages.map((m) => m.content.some((c) => c.cache_control != null))
-    // A Anthropic junta mensagens seguidas do mesmo papel; aqui não há, então
-    // são as mesmas cinco: a primeira e as duas últimas marcadas.
+    // Anthropic joins consecutive messages of the same role; here there are none, so
+    // they are the same five: the first and the last two marked.
     expect(cached).toEqual([true, false, false, true, true])
   })
 })
 
 describe('modelRuntime', () => {
-  // O caso real: no OpenCode Go o provedor declara openai-compatible, mas o
-  // Claude Haiku só existe pelo protocolo Anthropic, em outro endpoint. Pelo
-  // endpoint OpenAI o gateway responde "Model does not support this protocol.".
+  // The real case: in OpenCode Go the provider declares openai-compatible, but
+  // Claude Haiku only exists through the Anthropic protocol, at another endpoint. Through the
+  // OpenAI endpoint the gateway answers "Model does not support this protocol.".
   const opencodeGo = { npm: '@ai-sdk/openai-compatible', api: 'https://opencode.ai/inference/go/openai/v1' }
 
-  it('usa o pacote e o endpoint do modelo quando o catálogo os declara', () => {
+  it('uses the package and the model endpoint when the catalog declares them', () => {
     const haiku = { provider: { npm: '@ai-sdk/anthropic', api: 'https://opencode.ai/inference/go/anthropic/v1' } }
     expect(modelRuntime(opencodeGo, haiku)).toEqual({
       npm: '@ai-sdk/anthropic',
@@ -77,7 +77,7 @@ describe('modelRuntime', () => {
     expect(supportsAnthropicCache(modelRuntime(opencodeGo, haiku).npm)).toBe(true)
   })
 
-  it('cai no do provedor sem override', () => {
+  it('falls back to the provider one without an override', () => {
     expect(modelRuntime(opencodeGo, {})).toEqual(opencodeGo)
     expect(modelRuntime(opencodeGo, { provider: { api: 'https://x/v1' } })).toEqual({
       npm: '@ai-sdk/openai-compatible',
@@ -85,7 +85,7 @@ describe('modelRuntime', () => {
     })
   })
 
-  it('no provedor personalizado, o protocolo do cadastro decide', () => {
+  it('in a custom provider, the protocol of the registration decides', () => {
     expect(modelRuntime({ protocol: 'anthropic-messages', api: 'https://gw/v1' }).npm).toBe('@ai-sdk/anthropic')
   })
 })

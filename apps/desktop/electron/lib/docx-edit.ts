@@ -1,23 +1,23 @@
 import { createRequire } from 'node:module'
 
 /**
- * Edição de um .docx EXISTENTE preservando a formatação.
+ * Editing an EXISTING .docx while preserving the formatting.
  *
- * A estratégia é cópia cirúrgica, não regeneração: partimos dos bytes
- * originais e trocamos só o texto pedido dentro do `word/document.xml`. Tudo
- * o mais — estilos, fontes, cabeçalho, rodapé, imagens, numeração — continua
- * sendo exatamente o do arquivo de origem, porque nunca foi tocado.
+ * The strategy is surgical copying, not regeneration: we start from the original
+ * bytes and swap only the requested text inside `word/document.xml`. Everything
+ * else — styles, fonts, header, footer, images, numbering — remains
+ * exactly as in the source file, because it was never touched.
  *
- * A alternativa barata (ler com mammoth, virar Markdown, regerar pelo nosso
- * renderizador) perderia justamente a formatação, que é o motivo de editar um
- * documento existente em vez de escrever um novo.
+ * The cheap alternative (read with mammoth, turn into Markdown, regenerate with our
+ * renderer) would lose precisely the formatting, which is the reason for editing an
+ * existing document instead of writing a new one.
  *
- * O OBSTÁCULO REAL é a fragmentação de runs. O Word quebra uma frase em vários
- * `<w:r>` por causa de marcas de revisão e corretor ortográfico, então uma
- * frase visível no documento quase nunca existe como string contígua no XML —
- * procurar por ela ingenuamente não acha nada. Aqui a busca é feita sobre o
- * texto CONCATENADO do parágrafo, com um índice de volta para (run, posição),
- * e a troca é costurada entre os runs afetados.
+ * The REAL OBSTACLE is run fragmentation. Word breaks a sentence into several
+ * `<w:r>` because of revision marks and spell checker, so a
+ * sentence visible in the document almost never exists as a contiguous string in the XML —
+ * searching for it naively finds nothing. Here the search is done over the
+ * CONCATENATED text of the paragraph, with an index back to (run, position),
+ * and the swap is stitched across the affected runs.
  */
 
 const _require = createRequire(import.meta.url)
@@ -25,46 +25,46 @@ const _require = createRequire(import.meta.url)
 export interface Replacement {
   find: string
   replace: string
-  /** Trocar todas as ocorrências (padrão: só a primeira). */
+  /** Replaces every occurrence (default: only the first). */
   all?: boolean
 }
 
 /**
- * Mudanças de ESTRUTURA — o que troca de texto não alcança: um item a mais na
- * lista, uma linha a mais na tabela, um parágrafo que sai.
+ * STRUCTURE changes — what the text swap cannot reach: one more item in the
+ * list, one more row in the table, a paragraph that goes away.
  *
- * Todas partem de algo que já existe no arquivo e o CLONAM. É o mesmo princípio
- * da troca de texto: o parágrafo novo herda o estilo, a numeração, a fonte e o
- * recuo de um parágrafo de verdade do documento, e a linha nova herda bordas,
- * sombreamento e largura das colunas de uma linha de verdade da tabela. Nada é
- * desenhado do zero, e por isso nada destoa.
+ * All of them start from something that already exists in the file and CLONE it. It is the same
+ * principle as the text swap: the new paragraph inherits the style, numbering, font and
+ * indentation of a real paragraph in the document, and the new row inherits the borders,
+ * shading and column widths of a real row of the table. Nothing is
+ * drawn from scratch, and that is why nothing looks off.
  *
- * Sem isto, pedir "acrescenta um item" não tinha ferramenta, e o recurso era
- * reescrever o documento inteiro em Markdown — que é exatamente o caminho que
- * joga fora a formatação que o usuário queria manter.
+ * Without this, asking "add an item" had no tool, and the feature was
+ * rewriting the whole document in Markdown — which is exactly the path that
+ * throws away the formatting the user wanted to keep.
  */
 export interface StructuralEdits {
-  /** Parágrafos novos depois do parágrafo que contém `after`. */
+  /** New paragraphs after the paragraph that contains `after`. */
   insert?: { after: string; text: string; like?: string }[]
-  /** Remove o parágrafo que contém o texto. */
+  /** Removes the paragraph that contains the text. */
   remove?: { containing: string; all?: boolean }[]
-  /** Linha nova numa tabela, depois da linha que contém `after`. */
+  /** New row in a table, after the row that contains `after`. */
   rows?: { after: string; cells: string[] }[]
-  /** Remove a linha de tabela que contém o texto. */
+  /** Removes the table row that contains the text. */
   removeRows?: { containing: string }[]
 }
 
 export interface EditResult {
   bytes: Buffer
-  /** Quantas substituições cada entrada produziu, na ordem recebida. */
+  /** How many replacements each entry produced, in the order received. */
   applied: number[]
-  /** Por operação estrutural, na ordem recebida: quantas vezes foi aplicada.
-   *  Zero é âncora não encontrada (ou remoção recusada, ver removeParagraph). */
+  /** Per structural operation, in the order received: how many times it was applied.
+   *  Zero is an anchor not found (or a refused removal, see removeParagraph). */
   structural: { insert: number[]; remove: number[]; rows: number[]; removeRows: number[] }
 }
 
 interface RunText {
-  /** O elemento <w:t> cujo texto entra na concatenação. */
+  /** The <w:t> element whose text enters the concatenation. */
   node: Element
   start: number
   end: number
@@ -75,9 +75,9 @@ type XmlDoc = Document
 function textNodes(paragraph: Element): RunText[] {
   const out: RunText[] = []
   let offset = 0
-  // Só <w:t> conta como texto do parágrafo. <w:delText> (texto já marcado como
-  // excluído numa revisão) fica de fora de propósito: ele não aparece no
-  // documento aceito, e editá-lo mudaria um histórico, não o conteúdo.
+  // Only <w:t> counts as the paragraph's text. <w:delText> (text already marked as
+  // deleted in a revision) is left out on purpose: it does not appear in the
+  // accepted document, and editing it would change a history, not the content.
   const nodes = paragraph.getElementsByTagName('w:t')
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes.item(i)
@@ -90,11 +90,11 @@ function textNodes(paragraph: Element): RunText[] {
 }
 
 /**
- * Escreve `value` no <w:t>, cuidando do espaço.
+ * Writes `value` into the <w:t>, taking care of the space.
  *
- * Sem `xml:space="preserve"`, o Word descarta espaço no início e no fim do
- * run — a frase sai com as palavras coladas, e o erro só aparece ao abrir o
- * arquivo.
+ * Without `xml:space="preserve"`, Word discards space at the start and end of the
+ * run — the sentence comes out with the words glued together, and the error only shows up
+ * when opening the file.
  */
 function setText(node: Element, value: string): void {
   node.textContent = value
@@ -102,10 +102,10 @@ function setText(node: Element, value: string): void {
 }
 
 /**
- * Aplica uma substituição no parágrafo. O texto novo entra INTEIRO no primeiro
- * run da ocorrência, herdando a formatação dali; os runs seguintes perdem a
- * parte que casou. É o comportamento que preserva o visual quando a frase
- * atravessa formatações diferentes (metade em negrito, por exemplo).
+ * Applies a replacement in the paragraph. The new text enters WHOLE in the first
+ * run of the occurrence, inheriting the formatting from there; the following runs lose the
+ * part that matched. It is the behavior that preserves the look when the sentence
+ * crosses different formats (half in bold, for example).
  */
 function replaceInParagraph(
   paragraph: Element,
@@ -117,8 +117,8 @@ function replaceInParagraph(
   let count = 0
 
   for (;;) {
-    // Reconstrói o índice a cada volta: a substituição anterior mudou os
-    // tamanhos dos runs, então as posições antigas não valem mais.
+    // Rebuilds the index on every round: the previous replacement changed the
+    // run sizes, so the old positions are no longer valid.
     const runs = textNodes(paragraph)
     if (runs.length === 0) return count
     const full = runs.map((r) => r.node.textContent ?? '').join('')
@@ -137,12 +137,12 @@ function replaceInParagraph(
     count += 1
     if (!all) return count
 
-    // Substituição que contém o procurado ("X" → "XY") repetiria para sempre.
+    // A replacement that contains the searched one ("X" → "XY") would repeat forever.
     if (replacement.includes(find)) return count
   }
 }
 
-/** Aplica as substituições no documento inteiro, parágrafo a parágrafo. */
+/** Applies the replacements in the whole document, paragraph by paragraph. */
 export function applyReplacements(doc: XmlDoc, replacements: Replacement[]): number[] {
   const paragraphs = doc.getElementsByTagName('w:p')
   return replacements.map((r) => {
@@ -197,13 +197,13 @@ function childrenNamed(node: Element, tag: string): Element[] {
 }
 
 /**
- * Troca TODO o texto de um parágrafo, guardando a formatação do primeiro run
- * com texto. Os outros runs de texto saem; o que não é texto (marcadores de
- * revisão, bookmarks) fica onde estava.
+ * Swaps ALL the text of a paragraph, keeping the formatting of the first run
+ * with text. The other text runs leave; what is not text (revision
+ * markers, bookmarks) stays where it was.
  *
- * Parágrafo vazio não tem run para herdar: aí o run novo copia as
- * propriedades da marca de parágrafo (w:pPr/w:rPr), que é como o Word
- * formataria o que alguém digitasse ali.
+ * An empty paragraph has no run to inherit from: then the new run copies the
+ * paragraph mark's properties (w:pPr/w:rPr), which is how Word
+ * would format what someone typed there.
  */
 function setParagraphText(paragraph: Element, text: string): void {
   const doc = paragraph.ownerDocument
@@ -225,8 +225,8 @@ function setParagraphText(paragraph: Element, text: string): void {
     return
   }
 
-  // O namespace do próprio parágrafo, e não uma constante: é ele que o resto
-  // do documento usa, e um run num namespace diferente não seria o mesmo w:r.
+  // The paragraph's own namespace, and not a constant: it is the one the rest
+  // of the document uses, and a run in a different namespace would not be the same w:r.
   const ns = paragraph.namespaceURI || W_NS
   const run = doc.createElementNS(ns, 'w:r')
   const pPr = childrenNamed(paragraph, 'w:pPr')[0]
@@ -249,8 +249,8 @@ function insertParagraphs(
   const model = like ? findParagraph(doc, like) : anchor
   if (!model) return 0
 
-  // Uma linha por parágrafo: \n no texto vira parágrafos irmãos, todos no
-  // molde do modelo — é o "acrescenta estes três itens" de uma vez.
+  // One line per paragraph: \n in the text becomes sibling paragraphs, all on the
+  // template's mold — it is the "add these three items" all at once.
   let reference: Element = anchor
   const lines = text.split(/\r?\n/)
   for (const line of lines) {
@@ -263,9 +263,9 @@ function insertParagraphs(
 }
 
 /**
- * Remove o parágrafo. A exceção é o ÚLTIMO parágrafo de uma célula de tabela:
- * o formato exige ao menos um por célula, e o Word chama de corrompido o
- * arquivo que não tiver — aí o parágrafo fica e só o texto dele sai.
+ * Removes the paragraph. The exception is the LAST paragraph of a table cell:
+ * the format requires at least one per cell, and Word calls the file corrupt if there is
+ * none — then the paragraph stays and only its text leaves.
  */
 function removeParagraph(doc: XmlDoc, containing: string, all: boolean): number {
   let count = 0
@@ -287,8 +287,8 @@ function insertRow(doc: XmlDoc, after: string, cells: string[]): number {
 
   const clone = row.cloneNode(true) as Element
   childrenNamed(clone, 'w:tc').forEach((cell, index) => {
-    // Cada célula fica com um parágrafo só — o primeiro, que carrega o estilo
-    // da coluna — e recebe o valor da posição dela.
+    // Each cell is left with a single paragraph — the first, which carries the column's
+    // style — and receives the value of its position.
     const paragraphs = childrenNamed(cell, 'w:p')
     for (const extra of paragraphs.slice(1)) cell.removeChild(extra)
     if (paragraphs[0]) setParagraphText(paragraphs[0], cells[index] ?? '')
@@ -297,7 +297,7 @@ function insertRow(doc: XmlDoc, after: string, cells: string[]): number {
   return 1
 }
 
-/** Remove a linha — menos a última da tabela, que deixaria uma tabela vazia. */
+/** Removes the row — except the last one of the table, which would leave an empty table. */
 function removeRow(doc: XmlDoc, containing: string): number {
   const anchor = findParagraph(doc, containing)
   const row = anchor ? ancestor(anchor, 'w:tr') : null
@@ -307,7 +307,7 @@ function removeRow(doc: XmlDoc, containing: string): number {
   return 1
 }
 
-/** Aplica as mudanças de estrutura, sobre o texto COMO ESTÁ no arquivo. */
+/** Applies the structure changes, over the text AS IT IS in the file. */
 export function applyStructural(doc: XmlDoc, edits: StructuralEdits): EditResult['structural'] {
   return {
     insert: (edits.insert ?? []).map((op) => insertParagraphs(doc, op.after, op.text, op.like)),
@@ -318,13 +318,13 @@ export function applyStructural(doc: XmlDoc, edits: StructuralEdits): EditResult
 }
 
 /**
- * Abre o .docx, aplica as mudanças e devolve um arquivo NOVO. O original
- * nunca é tocado — quem chama decide onde gravar.
+ * Opens the .docx, applies the changes and returns a NEW file. The original
+ * is never touched — whoever calls decides where to write.
  *
- * A estrutura vem ANTES do texto: as âncoras das inserções e remoções apontam
- * para o texto como ele está no arquivo, e uma troca feita antes mudaria o que
- * elas procuram. A ordem é fixa e está na descrição da tool, para o modelo
- * não ter que adivinhar.
+ * The structure comes BEFORE the text: the anchors of the insertions and removals point
+ * to the text as it is in the file, and a swap made before would change what
+ * they look for. The order is fixed and is in the tool's description, so the model
+ * does not have to guess.
  */
 export async function editDocx(
   original: Buffer,
@@ -348,7 +348,7 @@ export async function editDocx(
   return { bytes, applied, structural }
 }
 
-/** Texto corrido do documento, para o agente localizar o que quer trocar. */
+/** Running text of the document, so the agent can locate what it wants to swap. */
 export async function readDocxParagraphs(original: Buffer): Promise<string[]> {
   const JSZip = _require('jszip') as typeof import('jszip')
   const { DOMParser } = _require('@xmldom/xmldom') as typeof import('@xmldom/xmldom')

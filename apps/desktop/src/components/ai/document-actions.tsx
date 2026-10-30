@@ -13,19 +13,19 @@ import { docsApi, documentApi } from "@/src/lib/ipc"
 import { Hint } from "@/components/ui/hint"
 
 /**
- * Os dois controles que o documento carrega onde quer que ele apareça — o
- * card da conversa e o canvas do painel.
+ * The two controls the document carries wherever it appears — the
+ * conversation card and the panel canvas.
  *
- * Vivem aqui porque os dois lugares precisam do MESMO comportamento: baixar
- * renderiza na hora e pode falhar, promover a fonte depende de um estado que
- * muda por fora. Duplicar isso em dois componentes garantiria que um dos dois
- * ficasse para trás.
+ * They live here because both places need the SAME behavior: download
+ * renders on the spot and can fail, promoting to source depends on a state that
+ * changes from outside. Duplicating that in two components would guarantee that one of the two
+ * fell behind.
  */
 
 const LABEL: Record<DocumentDownload, string> = { md: "Markdown", pdf: "PDF", docx: "Word" }
 const EXT: Record<DocumentDownload, string> = { md: ".md", pdf: ".pdf", docx: ".docx" }
 
-/** Estilo comum dos dois: pastilha discreta, do tamanho do cabeçalho do card. */
+/** Common style of both: a discreet pill, the size of the card header. */
 const PILL = "h-6 gap-1 px-2 text-[11px] font-normal"
 
 export function DocumentDownloadMenu({
@@ -36,11 +36,11 @@ export function DocumentDownloadMenu({
 }: {
   documentId: string
   onError: (message: string) => void
-  /** Roda antes de baixar — o canvas grava o que estava na pausa da digitação,
-   *  senão o arquivo sairia com o texto de antes. */
+  /** Runs before downloading — the canvas saves what was in the typing pause,
+   *  otherwise the file would come out with the previous text. */
   beforeDownload?: () => Promise<void>
-  /** Só o ícone — para o card da conversa, onde o texto do botão competiria
-   *  com o título do documento. */
+  /** Icon only — for the conversation card, where the button text would compete
+   *  with the document title. */
   compact?: boolean
 }) {
   const { t } = useTranslation()
@@ -52,7 +52,7 @@ export function DocumentDownloadMenu({
       setBusy(format)
       try {
         const result = await documentApi.export(documentId, format)
-        // Cancelar no diálogo de salvar não é erro: o usuário desistiu.
+        // Cancelling in the save dialog is not an error: the user gave up.
         if (!result.ok && !result.canceled) onError(result.error ?? t("sources.actionFailed"))
       } finally {
         setBusy(null)
@@ -98,11 +98,11 @@ export function DocumentDownloadMenu({
 }
 
 /**
- * Promover o documento a fonte da conversa — e mostrar se ele JÁ é uma.
+ * Promotes the document to a source of the conversation — and shows whether it ALREADY is one.
  *
- * O estado é lido do disco, não guardado aqui: a fonte pode ser removida na
- * aba Fontes a qualquer momento, e aí a pastilha volta a ser clicável. É o
- * `documents:changed` que avisa, o mesmo evento que atualiza a aba Fontes.
+ * The state is read from disk, not kept here: the source can be removed in the
+ * Sources tab at any moment, and then the pill becomes clickable again. It is
+ * `documents:changed` that warns, the same event that updates the Sources tab.
  */
 export function DocumentSourceBadge({
   documentId,
@@ -124,7 +124,7 @@ export function DocumentSourceBadge({
   }, [sessionId, documentId])
 
   useEffect(refresh, [refresh])
-  // Remover a fonte na aba Fontes tem que soltar esta pastilha de volta.
+  // Removing the source in the Sources tab has to release this pill back.
   useEffect(() => docsApi.onChanged(refresh), [refresh])
 
   const add = useCallback(async () => {

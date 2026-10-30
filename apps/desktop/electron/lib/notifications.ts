@@ -3,22 +3,22 @@ import type { AskItem, ChatMessage, MessageErrorKind } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { lastProseText } from '@shared/chat-text'
 import { readJson } from './storage'
-import { somCustomDisponivel, tocarSom } from './sound'
+import { customSoundAvailable, playSound } from './sound'
 import { notifyCompanionMessage } from './companion-server'
 import { t, type MainMessageKey } from './i18n'
 
 /**
- * Notificações nativas do desktop.
+ * Native desktop notifications.
  *
- * Critérios de exibição (iguais para os 3 tipos):
- * - A janela principal NÃO está focada — com o app na frente o usuário já vê
- *   o card de permissão / a mensagem na tela; banner nativo seria spam.
- * - Prefis do tipo habilitada (persistidas via storage:write, na chave
- *   `notification-prefs`, pelo renderer — ver notification-prefs-store).
- * - Som custom `notification.wav` quando há player disponível (afplay,
- *   SoundPlayer etc.); sem player, cai no som nativo do sistema.
+ * Display criteria (the same for the 3 types):
+ * - The main window is NOT focused — with the app in front the user already sees
+ *   the permission card / the message on screen; a native banner would be spam.
+ * - Profile of the type enabled (persisted via storage:write, under the key
+ *   `notification-prefs`, by the renderer — see notification-prefs-store).
+ * - Custom sound `notification.wav` when there is a player available (afplay,
+ *   SoundPlayer etc.); without a player, it falls back to the system's native sound.
  *
- * Pendências de workers (origin) são agrupadas: um batch = uma notificação.
+ * Worker pendings (origin) are grouped: one batch = one notification.
  */
 export interface NotificationPrefs {
   pendingAsk: boolean
@@ -33,49 +33,49 @@ export async function getNotificationPrefs(): Promise<NotificationPrefs> {
   return { ...DEFAULTS, ...saved }
 }
 
-function windowPrincipal(): BrowserWindow | null {
+function mainWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null
 }
 
-function appVisivel(): boolean {
-  const win = windowPrincipal()
+function appVisible(): boolean {
+  const win = mainWindow()
   return !!win && win.isVisible() && win.isFocused()
 }
 
 /**
- * Preview da RESPOSTA do turno — o último bloco de prosa da mensagem, a mesma
- * regra que a bolha do chat e a leitura em voz alta usam (ver `lastProseText`).
- * Pegar a primeira parte de texto pegava a narração: num turno com
- * ferramentas ela é o preâmbulo ("vou implementar…"), não a resposta que a
- * pessoa lê no fim.
+ * Preview of the turn's ANSWER — the last prose block of the message, the same
+ * rule that the chat bubble and the read-aloud use (see `lastProseText`).
+ * Taking the first text part took the narration: in a turn with
+ * tools it is the preamble ("I'll implement…"), not the answer the
+ * person reads at the end.
  */
-function previewDe(mensagem: ChatMessage, max = 140): string {
-  const texto = lastProseText(mensagem).replace(/\s+/g, ' ').trim()
-  if (!texto) return ''
-  return texto.length > max ? `${texto.slice(0, max)}…` : texto
+function previewOf(message: ChatMessage, max = 140): string {
+  const text = lastProseText(message).replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
-async function tituloDaSessao(sessionId: string): Promise<string> {
+async function sessionTitle(sessionId: string): Promise<string> {
   const session = await readJson<{ title?: string }>(StorageKeys.session(sessionId))
   return session?.title?.trim() || sessionId.slice(0, 8)
 }
 
-interface NotificacaoBase {
+interface NotificationBase {
   title: string
   body: string
   sessionId?: string
 }
 
-async function mostrar(kind: keyof NotificationPrefs, n: NotificacaoBase): Promise<void> {
+async function show(kind: keyof NotificationPrefs, n: NotificationBase): Promise<void> {
   if (!Notification.isSupported()) return
-  if (appVisivel()) return
+  if (appVisible()) return
   const prefs = await getNotificationPrefs()
   if (!prefs[kind]) return
 
-  const win = windowPrincipal()
-  const somCustom = await somCustomDisponivel()
-  const notification = new Notification({ title: n.title, body: n.body, silent: somCustom })
-  if (somCustom) void tocarSom('notification.wav')
+  const win = mainWindow()
+  const hasCustomSound = await customSoundAvailable()
+  const notification = new Notification({ title: n.title, body: n.body, silent: hasCustomSound })
+  if (hasCustomSound) void playSound('notification.wav')
   notification.on('click', () => {
     if (win) {
       if (win.isMinimized()) win.restore()
@@ -89,65 +89,65 @@ async function mostrar(kind: keyof NotificationPrefs, n: NotificacaoBase): Promi
   notification.show()
 }
 
-/** Pergunta/permissão pendente (pedido de um turno; batch de workers = 1 aviso). */
+/** Pending question/permission (a turn's request; worker batch = 1 notice). */
 export async function notifyPendingAsk(sessionId: string, item: AskItem): Promise<void> {
-  const titulo = await tituloDaSessao(sessionId)
+  const title = await sessionTitle(sessionId)
   if (item.kind === 'question') {
-    const primeira = item.questions?.[0]?.text
-    void mostrar('pendingAsk', {
+    const firstQuestion = item.questions?.[0]?.text
+    void show('pendingAsk', {
       title: await t('notif.question.title'),
-      // O texto da pergunta é conteúdo (idioma do modelo/usuário); só o
-      // fallback é frase fixa.
-      body: primeira
-        ? `${titulo}: ${primeira}`
-        : await t('notif.question.pendingIn', { session: titulo }),
+      // The question's text is content (the model/user's language); only the
+      // fallback is a fixed sentence.
+      body: firstQuestion
+        ? `${title}: ${firstQuestion}`
+        : await t('notif.question.pendingIn', { session: title }),
       sessionId,
     })
   } else {
-    void mostrar('pendingAsk', {
+    void show('pendingAsk', {
       title: await t('notif.permission.title'),
-      body: `${titulo}: ${item.claim?.title ?? (await t('notif.permission.fallback'))}`,
+      body: `${title}: ${item.claim?.title ?? (await t('notif.permission.fallback'))}`,
       sessionId,
     })
   }
 }
 
-/** Lote de pedidos de workers — uma notificação só, com o primeiro claim. */
+/** Batch of worker requests — a single notification, with the first claim. */
 export async function notifyPendingAskBatch(sessionId: string, items: AskItem[]): Promise<void> {
   if (items.length === 0) return
-  const titulo = await tituloDaSessao(sessionId)
-  const primeiro = items[0]
+  const title = await sessionTitle(sessionId)
+  const first = items[0]
   const extra =
     items.length > 1 ? ` ${await t('notif.batch.more', { count: items.length - 1 })}` : ''
   const fallback = await t(
-    primeiro.kind === 'question' ? 'notif.pending.question' : 'notif.pending.action',
+    first.kind === 'question' ? 'notif.pending.question' : 'notif.pending.action',
   )
-  void mostrar('pendingAsk', {
+  void show('pendingAsk', {
     title: await t('notif.permission.title'),
     body:
-      primeiro.kind === 'question'
-        ? `${titulo}: ${primeiro.questions?.[0]?.text ?? fallback}${extra}`
-        : `${titulo}: ${primeiro.claim?.title ?? fallback}${extra}`,
+      first.kind === 'question'
+        ? `${title}: ${first.questions?.[0]?.text ?? fallback}${extra}`
+        : `${title}: ${first.claim?.title ?? fallback}${extra}`,
     sessionId,
   })
 }
 
-/** Nova mensagem do assistente concluída em sessão inativa (janela fora de foco). */
-export async function notifyNewMessage(sessionId: string, mensagem: ChatMessage): Promise<void> {
-  const preview = previewDe(mensagem)
+/** New assistant message completed in an inactive session (window out of focus). */
+export async function notifyNewMessage(sessionId: string, message: ChatMessage): Promise<void> {
+  const preview = previewOf(message)
   if (!preview) return
-  const titulo = await tituloDaSessao(sessionId)
-  void mostrar('newMessage', {
-    title: titulo,
+  const title = await sessionTitle(sessionId)
+  void show('newMessage', {
+    title,
     body: preview,
     sessionId,
   })
-  // Companions (mobile) também são avisados — as prefs do mobile decidem se
-  // exibem; o canal é local, independente das prefs do desktop.
-  notifyCompanionMessage(sessionId, titulo, preview)
+  // Companions (mobile) are also notified — the mobile's prefs decide whether they
+  // display it; the channel is local, independent of the desktop's prefs.
+  notifyCompanionMessage(sessionId, title, preview)
 }
 
-/** Motivo curto por tipo de falha, para o corpo do banner. */
+/** Short reason per failure type, for the banner's body. */
 const CHAT_ERROR_KEYS: Record<Exclude<MessageErrorKind, 'unknown'>, MainMessageKey> = {
   moderation: 'notif.chatError.kind.moderation',
   'model-unavailable': 'notif.chatError.kind.model-unavailable',
@@ -159,23 +159,23 @@ const CHAT_ERROR_KEYS: Record<Exclude<MessageErrorKind, 'unknown'>, MainMessageK
   'tool-limit': 'notif.chatError.kind.tool-limit',
 }
 
-/** Erro de chat (falha do provider, não aborto manual). */
+/** Chat error (provider failure, not a manual abort). */
 export async function notifyChatError(
   sessionId: string,
-  erro: string,
+  error: string,
   kind?: MessageErrorKind,
 ): Promise<void> {
-  const titulo = await tituloDaSessao(sessionId)
-  // Falha classificada → motivo traduzido (e curto, que é o que cabe num
-  // banner); o texto cru fica no card de erro dentro do app. Só o `unknown`
-  // cai no texto cru, por falta de explicação própria.
-  const motivo =
+  const title = await sessionTitle(sessionId)
+  // Classified failure → translated reason (and short, which is what fits in a
+  // banner); the raw text stays in the error card inside the app. Only `unknown`
+  // falls into the raw text, for lack of an explanation of its own.
+  const reason =
     kind && kind !== 'unknown'
       ? await t(CHAT_ERROR_KEYS[kind])
-      : erro.slice(0, 200) || (await t('notif.chatError.unexpected'))
-  void mostrar('chatError', {
+      : error.slice(0, 200) || (await t('notif.chatError.unexpected'))
+  void show('chatError', {
     title: await t('notif.chatError.title'),
-    body: `${titulo}: ${motivo}`,
+    body: `${title}: ${reason}`,
     sessionId,
   })
 }

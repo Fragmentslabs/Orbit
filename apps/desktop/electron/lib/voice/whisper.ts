@@ -1,27 +1,27 @@
 /**
- * Motor de ditado whisper.cpp — como PROCESSO AUXILIAR (`whisper-server`).
+ * whisper.cpp dictation engine — as a HELPER PROCESS (`whisper-server`).
  *
- * Por que processo e não addon N-API: o lab usou o binding `smart-whisper`
- * porque é Node puro, mas num app Electron um addon nativo sofre com ABI a cada
- * atualização do Electron (o README do lab recomenda explicitamente o
- * `whisper-server` aqui). O servidor é um processo separado: fala por HTTP, não
- * sabe o que é ABI do V8, e se travar não derruba o app.
+ * Why a process and not an N-API addon: the lab used the `smart-whisper` binding
+ * because it is pure Node, but in an Electron app a native addon suffers with ABI on every
+ * Electron update (the lab README explicitly recommends `whisper-server`
+ * here). The server is a separate process: it speaks over HTTP, it does not
+ * know what V8's ABI is, and if it hangs it does not take the app down.
  *
- * Duas heranças medidas do lab que estão implementadas de propósito:
+ * Two measured lab inheritances that are implemented on purpose:
  *
- *  - **greedy explícito**. O binding do lab partia de `BEAM_SEARCH` (5 feixes)
- *    sem ninguém pedir. O `whisper-server` decide a estratégia por
- *    `beam_size > 1`, então mandamos `beam_size=1` e `best_of=1` — greedy de um
- *    caminho só, que é o mais rápido com o mesmo texto (§17 do README);
- *  - **modelo quente**. O servidor carrega o modelo uma vez e o mantém; a
- *    rotina de aquecimento dele evita pagar a compilação dos shaders na
- *    primeira fala do usuário.
+ *  - **explicit greedy**. The lab binding started from `BEAM_SEARCH` (5 beams)
+ *    without anyone asking. `whisper-server` decides the strategy by
+ *    `beam_size > 1`, so we send `beam_size=1` and `best_of=1` — greedy with a single
+ *    path, which is the fastest with the same text (README §17);
+ *  - **warm model**. The server loads the model once and keeps it; its
+ *    warm-up routine avoids paying for the shader compilation on the
+ *    user's first utterance.
  *
- * O que NÃO vive aqui: o modelo ggml (baixado sob demanda por `models-store`) e
- * o binário do `whisper-server`, compilado no build (scripts/build-whisper-server.mjs).
- * O binário é procurado, nesta ordem: `ORBIT_WHISPER_SERVER`, o que vem com o
- * app, `<userData>/voice/whisper/whisper-server` e o PATH. Sem ele o motor fica indisponível com o motivo escrito — em vez de
- * falhar silenciosamente no meio de uma fala.
+ * What does NOT live here: the ggml model (downloaded on demand by `models-store`) and
+ * the `whisper-server` binary, compiled at build time (scripts/build-whisper-server.mjs).
+ * The binary is looked up, in this order: `ORBIT_WHISPER_SERVER`, the one shipped with the
+ * app, `<userData>/voice/whisper/whisper-server` and the PATH. Without it the engine is unavailable with the reason spelled out — instead of
+ * failing silently in the middle of an utterance.
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -44,12 +44,12 @@ import {
 } from './models-store'
 
 const ENGINE_ID = 'whisper'
-const ENGINE_LABEL = 'Whisper (whisper.cpp, processo auxiliar)'
+const ENGINE_LABEL = 'Whisper (whisper.cpp, helper process)'
 const DEFAULT_MODEL_ID = 'whisper-base'
 
-/** A janela fixa do whisper é 30 s: acima disso a prévia ao vivo não faz sentido. */
+/** whisper's fixed window is 30 s: beyond that the live preview makes no sense. */
 const MAX_PREVIEW_SAMPLES = STT_SAMPLE_RATE * 30
-/** Cadência da prévia ao vivo (o passo custa ~1,2 s no turbo — §17). */
+/** Cadence of the live preview (the step costs ~1.2 s on turbo — §17). */
 const PREVIEW_PERIOD_MS = 2000
 const READY_TIMEOUT_MS = 120_000
 const IDLE_SHUTDOWN_MS = 5 * 60_000
@@ -58,7 +58,7 @@ function serverBinaryName(): string {
   return process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server'
 }
 
-/** Primeiro `dir/name` existente no PATH (o PATH de um app de GUI é enxuto). */
+/** First existing `dir/name` in the PATH (a GUI app's PATH is lean). */
 function findInPath(name: string): string | null {
   const dirs = (userShellEnv().PATH ?? '').split(path.delimiter).filter(Boolean)
   for (const dir of dirs) {
@@ -66,13 +66,13 @@ function findInPath(name: string): string | null {
     try {
       if (fs.statSync(candidate).isFile()) return candidate
     } catch {
-      // segue procurando
+      // keep looking
     }
   }
   return null
 }
 
-/** Caminho do binário do whisper-server, ou null se não houver nenhum. */
+/** Path of the whisper-server binary, or null if there is none. */
 export function resolveWhisperServer(): string | null {
   const env = process.env.ORBIT_WHISPER_SERVER
   if (env && fs.existsSync(env)) return env
@@ -95,13 +95,13 @@ function freePort(): Promise<number> {
     srv.listen(0, '127.0.0.1', () => {
       const addr = srv.address()
       const port = addr && typeof addr === 'object' ? addr.port : 0
-      srv.close(() => (port ? resolve(port) : reject(new Error('não achei porta livre'))))
+      srv.close(() => (port ? resolve(port) : reject(new Error('no free port found'))))
     })
   })
 }
 
 // ---------------------------------------------------------------------------
-// Servidor por modelo
+// Server per model
 // ---------------------------------------------------------------------------
 
 interface WhisperServer {
@@ -122,16 +122,16 @@ async function waitHealthy(server: WhisperServer): Promise<void> {
   const deadline = Date.now() + READY_TIMEOUT_MS
   for (;;) {
     if (server.proc.exitCode !== null) {
-      throw new Error(`o whisper-server saiu (código ${server.proc.exitCode}): ${server.log.slice(-5).join(' ')}`)
+      throw new Error(`whisper-server exited (code ${server.proc.exitCode}): ${server.log.slice(-5).join(' ')}`)
     }
     try {
       const res = await fetch(`http://127.0.0.1:${server.port}/health`)
       if (res.ok) return
     } catch {
-      // ainda subindo
+      // still starting
     }
     if (Date.now() > deadline) {
-      throw new Error(`o whisper-server não ficou pronto em ${READY_TIMEOUT_MS / 1000} s`)
+      throw new Error(`whisper-server was not ready in ${READY_TIMEOUT_MS / 1000} s`)
     }
     await new Promise((r) => setTimeout(r, 250))
   }
@@ -151,25 +151,25 @@ function shutdownServer(modelId: string): void {
   try {
     server.proc.kill()
   } catch {
-    // já morreu
+    // already dead
   }
 }
 
-/** Encerra todos os servidores (o app está saindo). */
+/** Shuts down all servers (the app is exiting). */
 export function shutdownWhisperServers(): void {
   for (const id of [...servers.keys()]) shutdownServer(id)
 }
 
-// Sair do app não pode deixar o `whisper-server` (e o modelo carregado nele)
-// vivo como processo órfão. O handler de `exit` só aceita trabalho síncrono, e
-// é exatamente o que `kill()` é — o `shutdownWhisperServers` é para quem quiser
-// derrubar antes (troca de modelo, tela de configurações).
+// Leaving the app cannot leave the `whisper-server` (and the model loaded in it)
+// alive as an orphan process. The `exit` handler only accepts synchronous work, and
+// that is exactly what `kill()` is — `shutdownWhisperServers` is for whoever wants
+// to take it down earlier (model switch, settings screen).
 process.on('exit', () => {
   for (const server of servers.values()) {
     try {
       server.proc.kill()
     } catch {
-      // já morreu
+      // already dead
     }
   }
 })
@@ -185,12 +185,12 @@ async function ensureServer(modelId: string, threads: number): Promise<WhisperSe
   if (inFlight) return inFlight
 
   const bin = resolveWhisperServer()
-  if (!bin) throw new Error('whisper-server não encontrado (veja o motivo no status do motor)')
+  if (!bin) throw new Error('whisper-server not found (see the reason in the engine status)')
 
   const promise = (async () => {
     const def = getSttModel(modelId)
     if (!def) throw new Error(`modelo de ditado desconhecido: ${modelId}`)
-    if (!isWhisperModelInstalled(modelId)) throw new Error(`o modelo "${modelId}" não está baixado`)
+    if (!isWhisperModelInstalled(modelId)) throw new Error(`o modelo "${modelId}" is not downloaded`)
 
     const port = await freePort()
     const proc = spawn(
@@ -200,7 +200,7 @@ async function ensureServer(modelId: string, threads: number): Promise<WhisperSe
         '-t', String(threads),
         '--host', '127.0.0.1',
         '--port', String(port),
-        '-nt', // sem timestamps (o ditado não usa)
+        '-nt', // no timestamps (dictation does not use them)
       ],
       { env: userShellEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
     )
@@ -238,23 +238,23 @@ async function ensureServer(modelId: string, threads: number): Promise<WhisperSe
 }
 
 // ---------------------------------------------------------------------------
-// Inferência
+// Inference
 // ---------------------------------------------------------------------------
 
-/** Monta o multipart do `/inference` (o servidor só aceita arquivo, não PCM). */
+/** Builds the `/inference` multipart (the server only accepts a file, not PCM). */
 function inferenceForm(wav: Buffer, language: string, timestamps: boolean | 'words' = false): FormData {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'audio.wav')
-  // Com tempos pedidos, o verbose_json traz os segmentos (início/fim em s).
+  // With timings requested, verbose_json brings the segments (start/end in s).
   form.append('response_format', timestamps ? 'verbose_json' : 'json')
   form.append('language', language || 'auto')
-  // Greedy explícito: é `beam_size > 1` que liga o beam search no servidor.
+  // Explicit greedy: it is `beam_size > 1` that turns beam search on in the server.
   form.append('beam_size', '1')
   form.append('best_of', '1')
   form.append('no_timestamps', timestamps ? 'false' : 'true')
   form.append('temperature', '0')
-  // Por palavra (edição de vídeo): um segmento por palavra, quebrado na
-  // fronteira da palavra — liga os tempos por token no servidor.
+  // Per word (video editing): one segment per word, split at the
+  // word boundary — turns on per-token timings in the server.
   if (timestamps === 'words') {
     form.append('max_len', '1')
     form.append('split_on_word', 'true')
@@ -262,7 +262,7 @@ function inferenceForm(wav: Buffer, language: string, timestamps: boolean | 'wor
   return form
 }
 
-/** Transcreve 16 kHz mono — serializado por servidor (contexto não reentrante). */
+/** Transcribes 16 kHz mono — serialised per server (the context is not reentrant). */
 async function transcribe(
   modelId: string,
   threads: number,
@@ -291,8 +291,8 @@ async function transcribe(
         text: String(seg.text ?? '').trim(),
         ...(timestamps === 'words'
           ? {
-              // Com max_len=1 cada segmento JÁ é uma palavra; quando o servidor
-              // também manda `words`, eles são a fonte mais fina.
+              // With max_len=1 each segment ALREADY is a word; when the server
+              // also sends `words`, they are the finer source.
               words: (seg.words?.length
                 ? seg.words.map((w) => ({ text: String(w.word ?? ''), start: w.start ?? 0, end: w.end ?? 0 }))
                 : [{ text: String(seg.text ?? ''), start: seg.start ?? 0, end: seg.end ?? 0 }]
@@ -314,7 +314,7 @@ async function transcribe(
 }
 
 // ---------------------------------------------------------------------------
-// Sessão
+// Session
 // ---------------------------------------------------------------------------
 
 interface WhisperSession {
@@ -323,7 +323,7 @@ interface WhisperSession {
   threads: number
   language: string
   live: boolean
-  /** Arquivo transcrito com tempos: o fim pede os segmentos ao servidor. */
+  /** File transcribed with timings: the end asks the server for the segments. */
   timestamps: boolean | 'words'
   onPartial: (text: string) => void
   buffer: SampleBuffer
@@ -355,7 +355,7 @@ function schedulePreview(s: WhisperSession): void {
 
 function runPreview(s: WhisperSession): Promise<void> {
   if (s.stopping || s.cancelled) return Promise.resolve()
-  // Acima de 30 s a prévia para (é a janela do whisper) e o final transcreve tudo.
+  // Beyond 30 s the preview stops (it is whisper's window) and the final one transcribes everything.
   if (s.buffer.samples > MAX_PREVIEW_SAMPLES) return Promise.resolve()
   if (s.buffer.samples === s.lastPreviewSamples) {
     schedulePreview(s)
@@ -376,10 +376,10 @@ function runPreview(s: WhisperSession): Promise<void> {
       try {
         s.onPartial(text)
       } catch {
-        // erro do chamador não derruba a sessão
+        // an error in the caller does not take the session down
       }
     } catch {
-      // prévia é best-effort: o resultado final é o que conta
+      // the preview is best-effort: the final result is what counts
     } finally {
       schedulePreview(s)
     }
@@ -387,10 +387,10 @@ function runPreview(s: WhisperSession): Promise<void> {
 }
 
 /**
- * Modelo do "Automático" (`modelId` nulo): o que cabe na máquina quando está no
- * disco, senão o padrão, senão o primeiro whisper baixado. Fixar o padrão fazia
- * quem só baixou o small ver o microfone liberado e o start falhar com
- * "whisper-base não baixado".
+ * "Automatic" model (null `modelId`): the one that fits the machine when it is on
+ * disk, otherwise the default, otherwise the first whisper downloaded. Pinning the default made
+ * whoever downloaded only the small one see the microphone enabled and the start fail with
+ * "whisper-base not downloaded".
  */
 export function whisperAutoModelId(): string {
   const installed = whisperInstalledIds()
@@ -421,7 +421,7 @@ async function status(): Promise<SttEngineStatus> {
       available: false,
       installed: installed.length > 0,
       reason:
-        'whisper-server não encontrado — rode `npm run whisper:build` (apps/desktop), ponha o binário em ' +
+        'whisper-server not found — run `npm run whisper:build` (apps/desktop), put the binary in ' +
         `${localWhisperServerPath()}, ou defina ORBIT_WHISPER_SERVER`,
       detail,
     }
@@ -431,7 +431,7 @@ async function status(): Promise<SttEngineStatus> {
       engine: ENGINE_ID,
       available: false,
       installed: false,
-      reason: 'nenhum modelo whisper baixado (baixe tiny/base/small/medium/large-v3-turbo sob demanda)',
+      reason: 'no whisper model downloaded (fetch tiny/base/small/medium/large-v3-turbo on demand)',
       detail,
     }
   }
@@ -439,18 +439,18 @@ async function status(): Promise<SttEngineStatus> {
 }
 
 async function start(input: SttStartInput, onPartial: (text: string) => void): Promise<SttHandle> {
-  // Valida o modelo ANTES do binário: um id que não é do whisper é erro de
-  // integração e o motivo específico ajuda mais que "faltou o servidor".
+  // Validates the model BEFORE the binary: an id that is not whisper's is an
+  // integration error and the specific reason helps more than "the server is missing".
   const modelId = resolveModelId(input.modelId)
   const def = getSttModel(modelId)
-  if (!def || def.engine !== 'whisper') throw new Error(`o motor whisper não tem o modelo "${modelId}"`)
+  if (!def || def.engine !== 'whisper') throw new Error(`the whisper engine does not have the model "${modelId}"`)
 
   const bin = resolveWhisperServer()
   if (!bin) {
     const st = await status()
-    throw new Error(st.reason || 'whisper-server não encontrado')
+    throw new Error(st.reason || 'whisper-server not found')
   }
-  if (!isWhisperModelInstalled(modelId)) throw new Error(`o modelo "${modelId}" não está baixado`)
+  if (!isWhisperModelInstalled(modelId)) throw new Error(`o modelo "${modelId}" is not downloaded`)
 
   const threads = input.threads ?? defaultThreads()
   const language = input.language || 'pt'
@@ -471,7 +471,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
     previewTimer: null,
     lastPreviewSamples: 0,
   }
-  // Sobe o servidor aguardando o modelo carregar: se falhar, o erro sai no start.
+  // Starts the server waiting for the model to load: on failure, the error comes out at start.
   await ensureServer(modelId, threads)
 
   return {
@@ -510,8 +510,8 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
 }
 
 /**
- * Sobe o `whisper-server` e carrega o modelo ANTES do primeiro uso, para a
- * primeira sessão do usuário não pagar o `spawn` + a leitura do ggml.
+ * Starts `whisper-server` and loads the model BEFORE first use, so the
+ * user's first session does not pay for the `spawn` + the ggml read.
  */
 async function warmEngine(modelId: string | null, threads?: number): Promise<void> {
   const id = resolveModelId(modelId)
@@ -520,7 +520,7 @@ async function warmEngine(modelId: string | null, threads?: number): Promise<voi
   try {
     await ensureServer(id, threads ?? defaultThreads())
   } catch {
-    // binário ou modelo ausente: o motivo já aparece no `status()`
+    // binary or model missing: the reason already shows up in `status()`
   }
 }
 
@@ -530,8 +530,8 @@ export const whisperEngine: SttEngine = {
   defaultModelId: DEFAULT_MODEL_ID,
   status,
   warm: warmEngine,
-  // O servidor já se encerra sozinho depois de ocioso (`touch`/IDLE_SHUTDOWN_MS);
-  // isto é o gatilho explícito da fachada.
+  // The server already shuts itself down when idle (`touch`/IDLE_SHUTDOWN_MS);
+  // this is the facade's explicit trigger.
   release: shutdownWhisperServers,
   start,
 }

@@ -1,35 +1,35 @@
 /**
- * Leitura de um deck de slides a partir do HTML, no main.
+ * Reading a slide deck from HTML, in main.
  *
- * O deck é um arquivo só (`index.html` com um `<section class="slide">` por
- * slide) — o mesmo documento que o scheme serve e o runtime anima. Aqui não há
- * navegador: o que este módulo entrega é o que dá para saber LENDO o arquivo —
- * quantos slides, o título de cada um e as notas do apresentador. É o que o
- * agente recebe de volta do `slides_preview` e o que a aba usa como fallback
- * antes do runtime responder.
+ * The deck is a single file (`index.html` with one `<section class="slide">` per
+ * slide) — the same document the scheme serves and the runtime animates. There is
+ * no browser here: what this module delivers is what can be known by READING the
+ * file — how many slides, the title of each one and the presenter notes. It is
+ * what the agent gets back from `slides_preview` and what the tab uses as a
+ * fallback before the runtime answers.
  *
- * As regras de título e de nota são as MESMAS do runtime (slides-runtime.ts):
- * `data-title`, senão o primeiro h1/h2/h3, senão "Slide N"; a nota é o texto de
- * `<aside class="notes">` ou de um elemento com `data-notes`.
+ * The title and note rules are the SAME as the runtime's (slides-runtime.ts):
+ * `data-title`, otherwise the first h1/h2/h3, otherwise "Slide N"; the note is the
+ * text of `<aside class="notes">` or of an element with `data-notes`.
  *
- * O parser é de propósito um scanner de tags, e não um DOM: rodar um DOM no main
- * custaria uma janela do Chromium por preview, e o que se extrai aqui é raso.
+ * The parser is deliberately a tag scanner, and not a DOM: running a DOM in main
+ * would cost a Chromium window per preview, and what is extracted here is shallow.
  */
 
 export interface DeckSlideSummary {
-  /** Título exibível (o mesmo que a aba mostra na lista). */
+  /** Display title (the same one the tab shows in the list). */
   title: string
-  /** Notas do apresentador, texto puro ('' quando não há). */
+  /** Presenter notes, plain text ('' when there are none). */
   notes: string
 }
 
 export interface DeckSummary {
-  /** <title> do documento ('' quando ausente). */
+  /** <title> of the document ('' when absent). */
   title: string
   slides: DeckSlideSummary[]
 }
 
-/** Teto de slides lidos — um deck de verdade não chega perto disso. */
+/** Ceiling of slides read — a real deck does not come close to it. */
 const MAX_SLIDES = 300
 
 const ENTITIES: Record<string, string> = {
@@ -44,7 +44,7 @@ const ENTITIES: Record<string, string> = {
   hellip: '…',
 }
 
-/** Texto puro de um trecho de HTML: tags fora, entidades resolvidas. */
+/** Plain text of an HTML excerpt: tags out, entities resolved. */
 export function plainText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -61,7 +61,7 @@ export function plainText(html: string): string {
     .trim()
 }
 
-/** Atributos de uma tag de abertura, sem interpretar CSS nem nada. */
+/** Attributes of an opening tag, without interpreting CSS or anything else. */
 function attr(attrs: string, name: string): string | null {
   const pattern = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i')
   const match = pattern.exec(attrs)
@@ -75,16 +75,16 @@ function isSlideOpen(attrs: string): boolean {
 }
 
 export interface DeckSlideBody {
-  /** Atributos da tag de abertura do slide (é onde mora o `data-title`). */
+  /** Attributes of the slide's opening tag (that is where `data-title` lives). */
   attrs: string
-  /** O que está entre a abertura e o fechamento. */
+  /** What is between the opening and the closing tag. */
   body: string
 }
 
 /**
- * Corpo de cada `<section class="slide">` de TOPO, na ordem do documento.
- * Seções aninhadas pertencem ao slide que as contém (o mesmo critério do
- * runtime), então a busca pula o que já está dentro de um slide aberto.
+ * Body of each TOP-LEVEL `<section class="slide">`, in document order.
+ * Nested sections belong to the slide that contains them (the same criterion as
+ * the runtime), so the search skips whatever is already inside an open slide.
  */
 export function slideBodies(html: string): DeckSlideBody[] {
   const bodies: DeckSlideBody[] = []
@@ -106,8 +106,8 @@ export function slideBodies(html: string): DeckSlideBody[] {
     }
     depth--
     if (slideStart >= 0 && depth === slideDepth) {
-      // O `</section>` que fecha o slide: o corpo é o que está entre a tag de
-      // abertura e este fechamento.
+      // The `</section>` that closes the slide: the body is what lies between the opening
+      // tag and this closing one.
       const openTagEnd = html.indexOf('>', slideStart)
       bodies.push({
         attrs: html.slice(slideStart, openTagEnd).replace(/^<section\b/i, '').trim(),
@@ -121,7 +121,7 @@ export function slideBodies(html: string): DeckSlideBody[] {
   return bodies
 }
 
-/** Título de um slide: `data-title`, senão o primeiro heading, senão "Slide N". */
+/** Title of a slide: `data-title`, otherwise the first heading, otherwise "Slide N". */
 export function slideTitle(body: string, attrs: string | null, index: number): string {
   const explicit = attrs ? attr(attrs, 'data-title') : null
   if (explicit && explicit.trim()) return explicit.trim()
@@ -131,13 +131,13 @@ export function slideTitle(body: string, attrs: string | null, index: number): s
 }
 
 /**
- * Notas do apresentador. Duas formas, com semânticas diferentes:
+ * Presenter notes. Two forms, with different semantics:
  *
- *   <aside class="notes">o texto</aside>   → o TEXTO do elemento
- *   <div data-notes="o texto">…</div>      → o VALOR do atributo
+ *   <aside class="notes">the text</aside>   → the element's TEXT
+ *   <div data-notes="the text">…</div>      → the VALUE of the attribute
  *
- * Se o elemento tem `data-notes` preenchido, ele manda (é a forma explícita);
- * sem valor, vale o conteúdo — a mesma regra do runtime.
+ * If the element has `data-notes` filled in, it wins (it is the explicit form);
+ * with no value, the content counts — the same rule as the runtime.
  */
 export function slideNotes(body: string): string {
   const marked = /<([a-z][a-z0-9]*)\b([^>]*\bdata-notes\b[^>]*)>([\s\S]*?)<\/\1>/i.exec(body)
@@ -155,22 +155,22 @@ export function slideNotes(body: string): string {
   return ''
 }
 
-/** Tamanho do palco declarado pelo deck (padrão quando não há meta). */
+/** Stage size declared by the deck (the default when there is no meta). */
 export interface DeckSize {
   width: number
   height: number
 }
 
 /**
- * O tamanho do palco, lido do `<meta name="orbit-slides">`.
+ * The stage size, read from `<meta name="orbit-slides">`.
  *
- * O runtime já faz esta leitura no navegador, para escalar; aqui ela existe de
- * novo porque o PDF é impresso no PROCESSO PRINCIPAL, longe do deck: sem saber
- * o tamanho real, a página do PDF sairia 16:9 e um deck 4:3 (ou 1920x1080)
- * seria cortado ou reduzido com margem branca nas laterais.
+ * The runtime already does this reading in the browser, to scale; here it exists
+ * again because the PDF is printed in the MAIN PROCESS, far from the deck: without
+ * knowing the real size, the PDF page would come out 16:9 and a 4:3 deck (or a
+ * 1920x1080 one) would be cropped or shrunk with a white margin on the sides.
  *
- * Mesmo parse do runtime, e pelo mesmo motivo: `width=1920,height=1080`,
- * separado por vírgula ou ponto e vírgula. Valor inválido cai no padrão.
+ * Same parse as the runtime, and for the same reason: `width=1920,height=1080`,
+ * separated by comma or semicolon. An invalid value falls back to the default.
  */
 export function parseDeckSize(html: string, fallback: DeckSize): DeckSize {
   let width = fallback.width
@@ -190,11 +190,11 @@ export function parseDeckSize(html: string, fallback: DeckSize): DeckSize {
   return { width, height }
 }
 
-/** Resumo do deck lido do arquivo. */
+/** Summary of the deck read from the file. */
 export function readDeckSummary(html: string): DeckSummary {
   const titleTag = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)
-  // Os atributos de abertura acompanham o corpo: o `data-title` mora na tag,
-  // não dentro dela.
+  // The opening attributes come along with the body: the `data-title` lives in the tag,
+  // not inside it.
   const slides = slideBodies(html).map(({ attrs, body }, index) => ({
     title: slideTitle(body, attrs, index),
     notes: slideNotes(body),

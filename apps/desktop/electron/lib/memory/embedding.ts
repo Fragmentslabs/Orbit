@@ -8,30 +8,30 @@ import { INDEX_SCHEMA_VERSION, buildRetrievalText, indexSignature } from '@share
 import { readJson, writeJson } from '../storage'
 
 /**
- * Índice de embeddings das memórias, do lado do main.
+ * Memory embedding index, on the main side.
  *
- * Três responsabilidades:
- *  1. subir/derrubar o worker (`electron/memory-embed/worker.mjs`) por
- *     ociosidade — o modelo custa ~400 MB de RSS e não pode ficar para sempre;
- *  2. manter os vetores em disco, com assinatura por memória, para reindexar só
- *     o que mudou (conteúdo, enriquecimento, esquema ou modelo);
- *  3. degradar em silêncio: sem modelo baixado, sem worker ou com o índice
- *     corrompido, o app continua com a busca lexical.
+ * Three responsibilities:
+ *  1. start/stop the worker (`electron/memory-embed/worker.mjs`) when
+ *     idle — the model costs ~400 MB of RSS and cannot stay up forever;
+ *  2. keep the vectors on disk, with a signature per memory, to reindex only
+ *     what changed (content, enrichment, schema or model);
+ *  3. degrade silently: with no model downloaded, no worker or a corrupted
+ *     index, the app carries on with the lexical search.
  *
- * O que é indexado é o `buildRetrievalText` (título + conteúdo + entidades +
- * palavras-chave + conceitos), nunca o texto cru: é ele que dá recall para
- * perguntas que não repetem as palavras da memória.
+ * What gets indexed is `buildRetrievalText` (title + content + entities +
+ * keywords + concepts), never the raw text: it is what gives recall for
+ * questions that do not repeat the words of the memory.
  */
 
-/** Modelo de produção. O a25m foi medido e descartado (ver docs/memoria-contextual.md). */
+/** Production model. a25m was measured and discarded (see docs/contextual-memory.md). */
 export const MEMORY_MODEL_ID = 'bekko-a8m' as const
 export const MEMORY_MODEL_DIM = 256
-/** Repositório público de onde o modelo é baixado na primeira vez. */
+/** Public repository the model is downloaded from the first time. */
 const MODEL_REPO = 'hotchpotch/bekko-embedding-v1-a8m'
-/** O que um download avulso precisa trazer: o grafo e o tokenizador de origem. */
+/** What a standalone download has to bring: the graph and the source tokenizer. */
 const DOWNLOAD_FILES = ['onnx/model.onnx', 'tokenizer.json']
 
-/** Sem uso por este tempo, o worker se desliga (devolve ~400 MB). */
+/** Unused for this long, the worker shuts down (gives back ~400 MB). */
 const IDLE_SHUTDOWN_MS = 5 * 60_000
 const READY_TIMEOUT_MS = 60_000
 const STALL_TIMEOUT_MS = 60_000
@@ -40,9 +40,9 @@ const GRACE_MS = 1_500
 export const VECTORS_KEY = 'memory/vectors'
 
 interface StoredVector {
-  /** Assinatura do que foi embutido (conteúdo + enriquecimento + esquema + modelo) */
+  /** Signature of what was embedded (content + enrichment + schema + model) */
   sig: string
-  /** float32 em base64 */
+  /** float32 in base64 */
   vec: string
 }
 
@@ -51,46 +51,46 @@ interface VectorsPayload {
   model: string
   dim: number
   schema: number
-  /** Piso de ruído do acervo (maiores cossenos das sondas), ordenado */
+  /** Noise floor of the pool (highest cosines of the probes), sorted */
   noise?: number[]
-  /** Assinatura do acervo que produziu `noise` */
+  /** Signature of the pool that produced `noise` */
   noiseSig?: string
   items: Record<string, StoredVector>
 }
 
 export interface EmbeddingStatus {
-  /** Os arquivos do modelo estão no disco */
+  /** The model files are on disk */
   installed: boolean
-  /** O worker está de pé */
+  /** The worker is up */
   running: boolean
-  /** Memórias com vetor válido */
+  /** Memories with a valid vector */
   indexed: number
-  /** Memórias que precisam de (re)indexação */
+  /** Memories that need (re)indexing */
   pending: number
   model: string
   dim: number
 }
 
 // ---------------------------------------------------------------------------
-// Modelo em disco
+// Model on disk
 // ---------------------------------------------------------------------------
 
 /**
- * Pasta do modelo dentro do app empacotado: `resources/memory-embed/<id>`,
- * fora do asar (ver `extraResources` no electron-builder).
+ * Model folder inside the packaged app: `resources/memory-embed/<id>`,
+ * outside the asar (see `extraResources` in electron-builder).
  *
- * É de onde o modelo vem numa instalação nova. Deixá-lo aqui — em vez de
- * baixar na primeira execução — resolve três coisas de uma vez: funciona
- * offline desde o primeiro abrir, não há tela nem falha de download, e a
- * atualização do app é diferencial (os bytes do modelo não mudam entre
- * releases, então o updater não baixa esses blocos de novo).
+ * It is where the model comes from on a fresh install. Keeping it here — instead of
+ * downloading it on first run — solves three things at once: it works
+ * offline from the very first launch, there is no screen and no download failure, and the
+ * app update is differential (the model bytes do not change between
+ * releases, so the updater does not download those blocks again).
  */
 function bundledModelDir(id: string): string | null {
   const root = process.resourcesPath
   return root ? path.join(root, 'memory-embed', id) : null
 }
 
-/** Pasta do download avulso: `<userData>/memory/models/<id>`. */
+/** Folder of the standalone download: `<userData>/memory/models/<id>`. */
 export function modelDir(id: string = MEMORY_MODEL_ID): string {
   const custom = process.env.ORBIT_MEMORY_MODEL_DIR
   if (custom) return path.join(custom, id)
@@ -98,14 +98,14 @@ export function modelDir(id: string = MEMORY_MODEL_ID): string {
 }
 
 function devCacheDir(id: string): string {
-  const raiz = process.env.APP_ROOT ?? app.getAppPath()
-  return path.join(raiz, '.cache', 'memory-embed', id)
+  const root = process.env.APP_ROOT ?? app.getAppPath()
+  return path.join(root, '.cache', 'memory-embed', id)
 }
 
 /**
- * O que o motor precisa achar: o grafo ONNX e um tokenizador — o `.bin`
- * compilado (9 MB, o que o runtime lê) ou o `.json` de origem (34 MB), que o
- * worker compila na primeira execução quando o pacote trouxe só ele.
+ * What the engine has to find: the ONNX graph and a tokenizer — the compiled
+ * `.bin` (9 MB, what the runtime reads) or the source `.json` (34 MB), which the
+ * worker compiles on first run when the package brought only that.
  */
 const MODEL_CORE = ['onnx/model.onnx']
 const TOKENIZERS = ['tokenizer.bin', 'tokenizer.json']
@@ -118,12 +118,12 @@ function looksComplete(dir: string): boolean {
 }
 
 /**
- * Onde procurar o modelo, nesta ordem: override explícito, o que veio no
- * instalador, o que uma instalação antiga baixou, e o cache de desenvolvimento.
+ * Where to look for the model, in this order: explicit override, what came in the
+ * installer, what an old install downloaded, and the development cache.
  *
- * O pacote vem antes do `userData` de propósito: numa máquina que já teve uma
- * versão anterior, os dois podem existir, e o do pacote é o que está na
- * versão certa.
+ * The bundle comes before `userData` on purpose: on a machine that already had a
+ * previous version, both may exist, and the bundled one is the one at the
+ * right version.
  */
 function modelSearchPath(id: string): string[] {
   const custom = process.env.ORBIT_MEMORY_MODEL_DIR
@@ -139,7 +139,7 @@ export function modelInstalled(): boolean {
   return modelSearchPath(MEMORY_MODEL_ID).some(looksComplete)
 }
 
-/** Pasta efetivamente usada (a do pacote numa instalação nova, a do repo no dev). */
+/** Folder actually used (the bundled one on a fresh install, the repo one in dev). */
 function activeModelDir(): string | null {
   for (const dir of modelSearchPath(MEMORY_MODEL_ID)) {
     if (looksComplete(dir)) return dir
@@ -150,12 +150,12 @@ function activeModelDir(): string | null {
 export type DownloadProgress = (info: { file: string; received: number; total: number }) => void
 
 /**
- * Baixa o modelo do Hugging Face para `<userData>/memory/models/<id>`.
- * Silencioso por padrão: em falha (offline, proxy), o app segue no lexical.
+ * Downloads the model from Hugging Face to `<userData>/memory/models/<id>`.
+ * Silent by default: on failure (offline, proxy), the app carries on with the lexical search.
  */
 export async function downloadModel(onProgress?: DownloadProgress): Promise<boolean> {
-  // Já veio no instalador: não há nada a baixar, e um download criaria uma
-  // segunda cópia de 130 MB no disco.
+  // It already came in the installer: there is nothing to download, and a download would create a
+  // second 130 MB copy on disk.
   const bundled = bundledModelDir(MEMORY_MODEL_ID)
   if (bundled && looksComplete(bundled)) return true
   const dir = modelDir()
@@ -166,7 +166,7 @@ export async function downloadModel(onProgress?: DownloadProgress): Promise<bool
     await fsp.mkdir(path.dirname(target), { recursive: true })
     const url = `https://huggingface.co/${MODEL_REPO}/resolve/main/${file}`
     const res = await fetch(url, { redirect: 'follow' })
-    if (!res.ok || !res.body) throw new Error(`download de ${file} falhou (${res.status})`)
+    if (!res.ok || !res.body) throw new Error(`download of ${file} failed (${res.status})`)
     const total = Number(res.headers.get('content-length') ?? 0)
     const part = `${target}.part`
     const handle = await fsp.open(part, 'w')
@@ -186,7 +186,7 @@ export async function downloadModel(onProgress?: DownloadProgress): Promise<bool
 }
 
 // ---------------------------------------------------------------------------
-// Cliente do worker
+// Worker client
 // ---------------------------------------------------------------------------
 
 interface Pending {
@@ -213,8 +213,8 @@ function pushLog(text: string) {
 }
 
 function engineFile(): string {
-  const raiz = process.env.APP_ROOT ?? app.getAppPath()
-  return path.join(raiz, 'electron', 'memory-embed', 'worker.mjs')
+  const root = process.env.APP_ROOT ?? app.getAppPath()
+  return path.join(root, 'electron', 'memory-embed', 'worker.mjs')
 }
 
 function clearIdle() {
@@ -263,7 +263,7 @@ function onMessage(message: Record<string, unknown>) {
     entry.resolve(
       vectors.map((b64) => {
         const buf = Buffer.from(b64, 'base64')
-        // Cópia alinhada: Float32Array exige offset múltiplo de 4 no buffer.
+        // Aligned copy: Float32Array requires an offset that is a multiple of 4 in the buffer.
         return new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
       }),
     )
@@ -274,11 +274,11 @@ function startWorker(): Promise<void> {
   if (child && ready) return Promise.resolve()
   if (starting) return starting
   const dir = activeModelDir()
-  if (!dir) return Promise.reject(new Error('modelo de memória não instalado'))
+  if (!dir) return Promise.reject(new Error('memory model not installed'))
 
-  // Dentro do app assinado a pasta do modelo é somente-leitura na prática:
-  // escrever ali invalidaria a assinatura do bundle. O worker compila o
-  // tokenizador fora dela quando for o caso.
+  // Inside the signed app the model folder is read-only in practice:
+  // writing there would invalidate the bundle signature. The worker compiles the
+  // tokenizer outside it when that is the case.
   const readonly = dir === bundledModelDir(MEMORY_MODEL_ID)
 
   starting = new Promise<void>((resolve, reject) => {
@@ -303,7 +303,7 @@ function startWorker(): Promise<void> {
     const timeout = setTimeout(() => {
       if (settled) return
       settled = true
-      reject(new Error('o worker de memória não ficou pronto a tempo'))
+      reject(new Error('the memory worker was not ready in time'))
     }, READY_TIMEOUT_MS)
 
     proc.stdout?.on('data', (chunk: Buffer) => pushLog(chunk.toString()))
@@ -329,10 +329,10 @@ function startWorker(): Promise<void> {
       if (!settled) {
         settled = true
         clearTimeout(timeout)
-        reject(new Error(`o worker de memória encerrou ao iniciar (código ${code})`))
+        reject(new Error(`the memory worker exited while starting (code ${code})`))
       }
-      failAll(`o worker de memória encerrou (código ${code})`)
-      pushLog(`[memory] worker encerrou (código ${code})${asked ? ' (ociosidade)' : ''}`)
+      failAll(`the memory worker exited (code ${code})`)
+      pushLog(`[memory] worker exited (code ${code})${asked ? ' (idle)' : ''}`)
     })
   }).finally(() => {
     starting = null
@@ -348,11 +348,11 @@ export async function stopWorker(): Promise<void> {
   stopping = true
   child = null
   ready = false
-  failAll('worker de memória encerrado')
+  failAll('memory worker exited')
   try {
     proc.postMessage({ cmd: 'shutdown' })
   } catch {
-    // processo já morto
+    // process already dead
   }
   await new Promise<void>((resolve) => {
     const force = setTimeout(() => {
@@ -366,7 +366,7 @@ export async function stopWorker(): Promise<void> {
   })
 }
 
-/** Vetores de uma lista de textos. Lança quando o modelo não está disponível. */
+/** Vectors for a list of texts. Throws when the model is not available. */
 export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
   if (texts.length === 0) return []
   await startWorker()
@@ -375,7 +375,7 @@ export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
     const id = randomUUID()
     const timer = setTimeout(() => {
       pending.delete(id)
-      reject(new Error('o worker de memória parou de responder'))
+      reject(new Error('the memory worker stopped responding'))
     }, STALL_TIMEOUT_MS)
     pending.set(id, { resolve, reject, timer })
     child?.postMessage({ id, cmd: 'embed', texts })
@@ -383,7 +383,7 @@ export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Índice persistido
+// Persisted index
 // ---------------------------------------------------------------------------
 
 let cache: VectorsPayload | null = null
@@ -400,7 +400,7 @@ function emptyIndex(): VectorsPayload {
   return { v: 1, model: MEMORY_MODEL_ID, dim: MEMORY_MODEL_DIM, schema: INDEX_SCHEMA_VERSION, items: {} }
 }
 
-/** Índice em memória. Um payload de outro modelo/esquema é descartado inteiro. */
+/** In-memory index. A payload from another model/schema is discarded entirely. */
 export async function loadIndex(): Promise<VectorsPayload> {
   if (cache) return cache
   try {
@@ -417,7 +417,7 @@ export async function loadIndex(): Promise<VectorsPayload> {
       return stored
     }
   } catch {
-    // índice corrompido: começa vazio e reindexa em segundo plano
+    // corrupted index: starts empty and reindexes in the background
   }
   cache = emptyIndex()
   return cache
@@ -426,8 +426,8 @@ export async function loadIndex(): Promise<VectorsPayload> {
 let decoded: { payload: VectorsPayload; map: Map<string, Float32Array> } | null = null
 
 /**
- * Vetores decodificados. Memoizado pelo objeto do índice: enquanto ninguém
- * gravar por cima (syncIndex), a mesma tabela é reusada em cada turno.
+ * Decoded vectors. Memoized by the index object: as long as nobody writes over it
+ * (syncIndex), the same table is reused on every turn.
  */
 export async function vectorsById(): Promise<Map<string, Float32Array>> {
   const index = await loadIndex()
@@ -438,7 +438,7 @@ export async function vectorsById(): Promise<Map<string, Float32Array>> {
   return map
 }
 
-/** Assinatura do acervo inteiro — muda quando qualquer memória muda. */
+/** Signature of the whole pool — it changes when any memory changes. */
 function corpusSignature(memories: Memory[]): string {
   return indexSignature(
     { text: memories.map((m) => `${m.id}:${indexSignature(m, { id: MEMORY_MODEL_ID, dim: MEMORY_MODEL_DIM })}`).sort().join('|'), tags: [] },
@@ -453,9 +453,9 @@ export interface SyncResult {
 }
 
 /**
- * Deixa o índice em dia com o acervo: remove o que sumiu e embute só o que
- * mudou. Roda em segundo plano (o chamador não deve esperar), em lotes, para
- * uma reindexação grande não segurar o processo nem inundar o worker.
+ * Brings the index up to date with the pool: removes what is gone and embeds only what
+ * changed. Runs in the background (the caller must not wait), in batches, so that
+ * a large reindex does not hold up the process or flood the worker.
  */
 export async function syncIndex(memories: Memory[], options: { batch?: number } = {}): Promise<SyncResult> {
   const index = await loadIndex()
@@ -492,14 +492,14 @@ export async function syncIndex(memories: Memory[], options: { batch?: number } 
     if (removed > 0) await writeJson(VECTORS_KEY, index)
     return { indexed, removed, failed: false }
   } catch (err) {
-    // O que já foi embutido fica; a próxima chamada continua daqui.
-    console.error('[memory] indexação interrompida:', err)
+    // What was already embedded stays; the next call continues from here.
+    console.error('[memory] indexing interrupted:', err)
     await writeJson(VECTORS_KEY, index).catch(() => {})
     return { indexed, removed, failed: true }
   }
 }
 
-/** Piso de ruído do acervo, guardado junto com o índice (37 vetores por acervo novo). */
+/** Noise floor of the pool, stored together with the index (37 vectors per new pool). */
 export async function noiseFloorFor(probes: string[], memories: Memory[]): Promise<number[] | undefined> {
   const index = await loadIndex()
   const sig = corpusSignature(memories)
@@ -546,7 +546,7 @@ export async function embeddingStatus(memories: Memory[]): Promise<EmbeddingStat
   }
 }
 
-/** Diagnóstico das últimas linhas do worker (app empacotado). */
+/** Diagnostics of the worker's last lines (packaged app). */
 export function embeddingLog(): string[] {
   return [...log]
 }

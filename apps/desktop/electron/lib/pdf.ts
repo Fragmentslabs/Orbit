@@ -1,10 +1,10 @@
-// O pdfjs-dist (carregado pelo pdf-parse) exige globals de browser que não
-// existem no main process do Electron — sem eles, o módulo lança
-// `ReferenceError: DOMMatrix is not defined` no import. O pdfjs tenta fazer o
-// polyfill a partir do @napi-rs/canvas, mas num app empacotado o módulo nativo
-// pode não estar acessível. Por isso garantimos o polyfill aqui, ANTES de
-// carregar o pdf-parse. O import é lazy: só acontece quando houver um PDF de
-// verdade, evitando crash no startup do app.
+// pdfjs-dist (loaded by pdf-parse) requires browser globals that do not
+// exist in Electron's main process — without them, the module throws
+// `ReferenceError: DOMMatrix is not defined` on import. pdfjs tries to
+// polyfill from @napi-rs/canvas, but in a packaged app the native module
+// may not be accessible. That is why we guarantee the polyfill here, BEFORE
+// loading pdf-parse. The import is lazy: it only happens when there really is
+// a PDF, avoiding a crash at the app startup.
 async function ensurePdfGlobals(): Promise<void> {
   if (globalThis.DOMMatrix) return
   const canvas = await import('@napi-rs/canvas').catch(() => null)
@@ -13,8 +13,8 @@ async function ensurePdfGlobals(): Promise<void> {
     if (!globalThis.ImageData && canvas.ImageData) {
       globalThis.ImageData = canvas.ImageData as unknown as typeof ImageData
     }
-    // A rasterização desenha caminhos vetoriais — sem Path2D o pdfjs falha em
-    // páginas com traçado, que é a maioria das que têm tabela ou moldura.
+    // Rasterization draws vector paths — without Path2D pdfjs fails on
+    // pages with strokes, which is most of those with a table or a frame.
     const withPath = canvas as unknown as { Path2D?: typeof Path2D }
     if (!globalThis.Path2D && withPath.Path2D) {
       globalThis.Path2D = withPath.Path2D
@@ -22,7 +22,7 @@ async function ensurePdfGlobals(): Promise<void> {
     return
   }
   throw new Error(
-    'Não foi possível preparar o parser de PDF: DOMMatrix indisponível no main process. Verifique se @napi-rs/canvas está empacotado.'
+    'Could not prepare the PDF parser: DOMMatrix unavailable in the main process. Check whether @napi-rs/canvas is inpacotado.'
   )
 }
 
@@ -33,16 +33,16 @@ async function loadPdfParse(): Promise<typeof import('pdf-parse').PDFParse> {
 }
 
 /**
- * Abre o documento. Um ponto só de entrada de propósito: o construtor recebe
- * OPÇÕES, não os bytes, e passar os bytes direto compila — `Uint8Array` tem
- * `length`, `LoadParameters.length?` também, e o TypeScript aceita a
- * atribuição. O resultado era `data: undefined` e o pdfjs recusando com
- * "Please provide binary data as Uint8Array, rather than Buffer" em todo PDF,
- * anexo ou do repositório.
+ * Opens the document. A single entry point on purpose: the constructor receives
+ * OPTIONS, not the bytes, and passing the bytes directly compiles — `Uint8Array` has
+ * `length`, `LoadParameters.length?` does too, and TypeScript accepts the
+ * assignment. The result was `data: undefined` and pdfjs refusing with
+ * "Please provide binary data as Uint8Array, rather than Buffer" on every PDF,
+ * attachment or from the repository.
  *
- * A cópia dos bytes não é desperdício: o pdfjs TRANSFERE o array para o
- * worker e pode desanexá-lo, e quem chama ainda usa o mesmo Buffer depois
- * (o anexo grava o arquivo original em disco logo após extrair o texto).
+ * Copying the bytes is not waste: pdfjs TRANSFERS the array to the
+ * worker and may detach it, and whoever calls still uses the same Buffer afterwards
+ * (the attachment writes the original file to disk right after extracting the text).
  */
 async function openPdf(bytes: Uint8Array): Promise<InstanceType<typeof import('pdf-parse').PDFParse>> {
   const PDFParse = await loadPdfParse()
@@ -50,10 +50,10 @@ async function openPdf(bytes: Uint8Array): Promise<InstanceType<typeof import('p
 }
 
 /**
- * Texto POR PÁGINA — a unidade que a camada de documentos usa para servir um
- * trecho sem carregar o resto (ver documents.ts). O pdf-parse já devolve
- * `pages[]`; páginas vazias (só imagem, sem camada de texto) são preservadas
- * para a numeração continuar batendo com a do documento real.
+ * Text PER PAGE — the unit the document layer uses to serve a
+ * stretch without loading the rest (see documents.ts). pdf-parse already returns
+ * `pages[]`; empty pages (image only, without a text layer) are preserved
+ * so that the numbering keeps matching the real document's.
  */
 export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number; text: string }[]> {
   const parser = await openPdf(bytes)
@@ -61,19 +61,19 @@ export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number;
     const result = await parser.getText()
     return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
   } finally {
-    // Cada parser segura um documento do pdfjs; sem isto, um anexo por
-    // conversa acumularia no main process pelo resto da sessão.
+    // Each parser holds a pdfjs document; without this, one attachment per
+    // conversation would pile up in the main process for the rest of the session.
     await parser.destroy().catch(() => {})
   }
 }
 
 /**
- * Imagens EMBUTIDAS no PDF (as figuras de verdade, não a página renderizada).
+ * Images EMBEDDED in the PDF (the real figures, not the rendered page).
  *
- * É o complemento da rasterização: `rasterizePdf` devolve uma foto da página
- * inteira; isto devolve a foto que estava dentro dela, no tamanho e na
- * qualidade originais — que é o que serve para reaproveitar um gráfico, um
- * logotipo ou a digitalização de uma assinatura.
+ * It is the complement of rasterization: `rasterizePdf` returns a photo of the whole
+ * page; this returns the photo that was inside it, at the original size and
+ * quality — which is what serves to reuse a chart, a
+ * logo or the scan of a signature.
  */
 export const DEFAULT_IMAGE_MIN_SIZE = 80
 
@@ -82,11 +82,11 @@ export async function extractPdfImages(
   options: { pages?: number[]; max?: number; minSize?: number } = {},
 ): Promise<{ pageNumber: number; name: string; png: Buffer; width: number; height: number }[]> {
   const parser = await openPdf(bytes)
-  // O piso existe para não devolver os cacos decorativos (régua, fio, pixel de
-  // fundo) que todo PDF diagramado tem às dezenas. Fica explícito aqui, e não
-  // no default silencioso da lib, porque é a diferença entre "este PDF não tem
-  // figura" e "a figura que você quer é menor que o piso" — e quem chama
-  // precisa poder baixá-lo para ir buscar um logotipo pequeno.
+  // The floor exists so as not to return the decorative crumbs (ruler, line, background
+  // pixel) that every laid-out PDF has by the dozens. It is explicit here, and not
+  // in the lib's silent default, because it is the difference between "this PDF has no
+  // figure" and "the figure you want is smaller than the floor" — and whoever calls
+  // has to be able to lower it to go fetch a small logo.
   const result = await parser
     .getImage({ imageThreshold: Math.max(0, options.minSize ?? DEFAULT_IMAGE_MIN_SIZE) })
     .finally(() => parser.destroy().catch(() => {}))

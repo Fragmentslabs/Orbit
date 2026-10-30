@@ -2,38 +2,38 @@ import { panelApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
- * Pool de `<webview>` do painel direito — um por `sessionId:tabId`.
+ * Pool of `<webview>` for the right panel — one per `sessionId:tabId`.
  *
- * O ELEMENTO é descartável (medido no Electron 44, não suposto): o guest do
- * `<webview>` é destruído quando o elemento sai do DOM e criado de novo quando
- * ele volta. A versão anterior reaproveitava o MESMO elemento, mudando-o de
- * pai (host oculto ↔ container visível) — e aí nascia o defeito:
+ * The ELEMENT is disposable (measured on Electron 44, not assumed): the guest of the
+ * `<webview>` is destroyed when the element leaves the DOM and created again when
+ * it comes back. The previous version reused the SAME element, moving it from
+ * parent (hidden host ↔ visible container) — and there the defect was born:
  *
- * - se o elemento era reanexado antes de o primeiro guest terminar de nascer,
- *   o Electron criava DOIS guests para o mesmo elemento e o renderer acabava
- *   guardando o id do guest que já tinha morrido;
- * - com esse id morto, o próximo detach/atach falhava com "Invalid
- *   guestInstanceId: N" no console;
- * - e a aba ficava BRANCA para sempre: o `reset()` do Electron (que roda
- *   DEPOIS do detach) era pulado pelo erro, então `beforeFirstNavigation`
- *   continuava falso e o elemento nunca mais criava um guest — nem recarregando.
+ * - if the element was re-attached before the first guest finished being born,
+ *   Electron created TWO guests for the same element and the renderer ended up
+ *   keeping the id of the guest that had already died;
+ * - with that dead id, the next detach/attach failed with "Invalid
+ *   guestInstanceId: N" in the console;
+ * - and the tab stayed WHITE forever: Electron's `reset()` (which runs
+ *   AFTER the detach) was skipped by the error, so `beforeFirstNavigation`
+ *   stayed false and the element never created a guest again — not even on reload.
  *
- * Agora cada MONTAGEM cria um `<webview>` novo, direto no container visível,
- * e cada DESMONTAGEM o remove do DOM. O elemento nunca muda de pai e nunca é
- * reaproveitado: nasce no lugar onde vai ficar e morre quando sai de lá.
+ * Now every MOUNT creates a new `<webview>`, straight into the visible container,
+ * and every UNMOUNT removes it from the DOM. The element never changes parent and is never
+ * reused: it is born in the place where it is going to stay and dies when it leaves there.
  *
- * O que sobrevive é o ESTADO da aba (a URL), guardado no registro do pool:
- * - a URL da aba (volta na mesma página ao trocar de aba/chat);
- * - cookies, logins e localStorage (partition `persist:` — sobrevive até a
- *   reinicialização do app);
- * - o modo seleção, re-injetado a cada guest novo.
+ * What survives is the STATE of the tab (the URL), kept in the pool registry:
+ * - the tab URL (it comes back on the same page when switching tab/chat);
+ * - cookies, logins and localStorage (partition `persist:` — survives until
+ *   the app restarts);
+ * - the selection mode, re-injected on every new guest.
  *
- * O que não persiste é o estado em memória da página (formulário preenchido,
- * scroll, SPA state) — limitação do `<webview>`, não uma escolha nossa.
+ * What does not persist is the page's in-memory state (filled form,
+ * scroll, SPA state) — a limitation of the `<webview>`, not a choice of ours.
  */
 
-/** Sessão persistente do browser do painel: cookies/logins/localStorage em
- *  disco, compartilhada com a janela oculta de captura (browser-script.ts). */
+/** Persistent session of the panel browser: cookies/logins/localStorage on
+ *  disk, shared with the hidden capture window (browser-script.ts). */
 export const BROWSER_PARTITION = "persist:orbit-browser"
 
 export interface WebviewElement extends HTMLElement {
@@ -49,40 +49,40 @@ export interface WebviewElement extends HTMLElement {
 
 interface WebviewRecord {
   key: string
-  /** <webview> vivo. null quando não há elemento na tela (aba desmontada ou
-   *  elemento descartado). */
+  /** Live <webview>. null when there is no element on screen (tab unmounted or
+   *  element discarded). */
   el: WebviewElement | null
-  /** Último webContents do guest registrado no main. Guardado porque o
-   *  elemento já desconectado não devolve mais o id (o Electron zera o
-   *  guestInstanceId no reset) — e é ele que precisa ser solto no main. */
+  /** Last webContents of the guest registered in the main process. Kept because the
+   *  already disconnected element no longer returns the id (Electron zeroes the
+   *  guestInstanceId on reset) — and it is that one that needs to be released in the main process. */
   wcId: number | null
-  /** URL autoritativa da aba — sobrevive à recriação do guest. */
+  /** Authoritative URL of the tab — survives the recreation of the guest. */
   currentUrl: string
-  /** URL que já pedimos para este guest. Impede que o restauro se repita
-   *  quando a URL carregada não bate exatamente com a pedida (o Chromium
-   *  normaliza URLs) — sem essa trava, dom-ready e loadURL se realimentam num
-   *  laço infinito de ERR_ABORTED. Zerado a cada guest novo (mount/unmount) e
-   *  também quando a navegação não chega a commitar: com o guest em branco a
-   *  trava não vale, senão ele fica preso em about:blank para sempre. */
+  /** URL we already asked for this guest. Prevents the restore from repeating
+   *  when the loaded URL does not match the requested one exactly (Chromium
+   *  normalizes URLs) — without that lock, dom-ready and loadURL feed each other in an
+   *  infinite loop of ERR_ABORTED. Reset on every new guest (mount/unmount) and
+   *  also when the navigation does not get to commit: with a blank guest the
+   *  lock does not apply, otherwise it stays stuck in about:blank forever. */
   requestedUrl: string | null
-  /** true quando o elemento está no container visível de uma aba. */
+  /** true when the element is in the visible container of a tab. */
   mounted: boolean
   onNavigate?: (url: string) => void
-  /** Último acesso conhecido — base do eviction de webviews desmontados. */
+  /** Last known access — basis of the eviction of unmounted webviews. */
   lastUsed: number
 }
 
-/** Tamanho do host oculto quando NÃO há viewport definido (equivale ao painel
- *  aberto preenchendo o container). */
+/** Size of the hidden host when there is NO viewport defined (equivalent to the panel
+ *  open filling the container). */
 const HIDDEN_WIDTH = 1280
 const HIDDEN_HEIGHT = 800
 
 /**
- * Tamanho efetivo do host oculto: quando o agente define um viewport
- * (panel_resize), o browser em segundo plano renderiza nele — o screenshot
- * sai no tamanho escolhido MESMO com o painel fechado (teste de
- * responsividade em background de verdade). Sem viewport, assume o tamanho
- * padrão do painel.
+ * Effective size of the hidden host: when the agent defines a viewport
+ * (panel_resize), the background browser renders in it — the screenshot
+ * comes out in the chosen size EVEN with the panel closed (a real
+ * responsiveness test in the background). Without a viewport, it assumes the default
+ * size of the panel.
  */
 function hiddenHostSize(): { width: number; height: number } {
   const viewport = usePanelStore.getState().viewport
@@ -92,25 +92,25 @@ function hiddenHostSize(): { width: number; height: number } {
 }
 
 /**
- * TTL de webviews desmontados (aba fechada e browser do agente ocioso): depois
- * deste tempo sem uso, o registro é limpo. O custo de destruir é zero — a
- * próxima tool de browser recria o webview e navega para a URL que ela pede (o
- * store guarda a última URL da aba).
+ * TTL of unmounted webviews (tab closed and agent browser idle): after
+ * this time without use, the registry is cleared. The cost of destroying is zero — the
+ * next browser tool recreates the webview and navigates to the URL it asks for (the
+ * store keeps the last URL of the tab).
  */
 export const EVICT_TTL_MS = 10 * 60 * 1000
 
 const records = new Map<string, WebviewRecord>()
 
-// ─── Modo seleção ────────────────────────────────────────────────────────────
+// ─── Selection mode ──────────────────────────────────────────────────────────
 
-/** Prefixo do payload de seleção que a página manda por console.log. */
+/** Prefix of the selection payload the page sends through console.log. */
 const SELECT_PREFIX = "__ORBIT_SELECT__"
 
 /**
- * Injetado na página quando o modo seleção está ligado. É de UM tiro: ao
- * clicar, envia o payload e se desarma sozinho — o store espelha isso
- * (addSelection zera selectMode), então o botão nunca fica aceso sem os
- * listeners estarem de fato ativos.
+ * Injected into the page when selection mode is on. It is ONE shot: on
+ * click, it sends the payload and disarms itself — the store mirrors that
+ * (addSelection resets selectMode), so the button is never lit without the
+ * listeners being actually active.
  */
 const SELECT_ON = `(() => {
   if (window.__orbitSelectCleanup) window.__orbitSelectCleanup()
@@ -165,14 +165,14 @@ const SELECT_ON = `(() => {
 
 const SELECT_OFF = `window.__orbitSelectCleanup && window.__orbitSelectCleanup()`
 
-// ─── Acesso seguro ao guest ──────────────────────────────────────────────────
+// ─── Safe guest access ───────────────────────────────────────────────────────
 
 /**
- * true quando o guest está anexado e já emitiu dom-ready. É uma verificação AO
- * VIVO: `getWebContentsId()` lança exatamente enquanto essas condições não
- * valem. Um cache (WeakSet "já ficou pronto") mentiria depois de cada
- * re-parent, que é quando o guest é recriado — foi essa mentira que derrubava
- * a árvore React com "The WebView must be attached to the DOM...".
+ * true when the guest is attached and has already emitted dom-ready. It is a LIVE
+ * check: `getWebContentsId()` throws exactly while those conditions do not
+ * hold. A cache (WeakSet "it is ready already") would lie after every
+ * re-parent, which is when the guest is recreated — it was that lie that took down
+ * the React tree with "The WebView must be attached to the DOM...".
  */
 export function isWebviewReady(el: WebviewElement): boolean {
   try {
@@ -182,7 +182,7 @@ export function isWebviewReady(el: WebviewElement): boolean {
   }
 }
 
-/** getURL() que nunca lança: "" enquanto o guest não estiver pronto. */
+/** getURL() that never throws: "" while the guest is not ready. */
 export function safeWebviewURL(el: WebviewElement): string {
   if (!isWebviewReady(el)) return ""
   try {
@@ -197,17 +197,17 @@ function run(el: WebviewElement, code: string): void {
   try {
     void el.executeJavaScript(code).catch(() => {})
   } catch {
-    // guest morreu entre o check e a chamada — o próximo dom-ready re-aplica
+    // guest died between the check and the call — the next dom-ready re-applies
   }
 }
 
-/** A chave é `${sessionId}:${tabId}` — extrai o sessionId (nanoid, sem ":"). */
+/** The key is `${sessionId}:${tabId}` — extracts the sessionId (nanoid, no ":"). */
 function sessionIdOf(key: string): string {
   const idx = key.indexOf(":")
   return idx >= 0 ? key.slice(0, idx) : key
 }
 
-/** A chave é `${sessionId}:${tabId}` — extrai o tabId. */
+/** The key is `${sessionId}:${tabId}` — extracts the tabId. */
 function tabIdOf(key: string): string {
   const idx = key.indexOf(":")
   return idx >= 0 ? key.slice(idx + 1) : key
@@ -218,16 +218,16 @@ function isRealUrl(url: string | undefined): url is string {
 }
 
 /**
- * Decide se o restauro deve pedir a URL ao guest.
+ * Decides whether the restore should ask the guest for the URL.
  *
- * PURA de propósito: é a única parte desta corrida que dá para testar sem
- * Electron, e é exatamente onde morava o defeito. `requestedUrl` existe para o
- * laço de normalização do Chromium (a URL carregada não bate exatamente com a
- * pedida, então `guestUrl !== target` sozinho nunca fecharia e dom-ready +
- * loadURL se realimentariam num ERR_ABORTED infinito). Mas a trava só pode valer
- * se o guest chegou a carregar ALGO: com o guest em branco a tentativa anterior
- * não commitou, e insistir é o certo — sem isso nada mais carrega, porque o
- * guarda de navigateWebview também só olhava a URL PEDIDA, nunca o guest.
+ * PURE on purpose: it is the only part of this race that can be tested without
+ * Electron, and it is exactly where the defect lived. `requestedUrl` exists for the
+ * Chromium normalization loop (the loaded URL does not match the
+ * requested one exactly, so `guestUrl !== target` alone would never close and dom-ready +
+ * loadURL would feed each other in an infinite ERR_ABORTED). But the lock can only apply
+ * if the guest got to load SOMETHING: with a blank guest the previous attempt
+ * did not commit, and insisting is the right thing — without that nothing loads anymore, because the
+ * guard of navigateWebview also only looked at the REQUESTED URL, never at the guest.
  */
 export function shouldRestoreGuest(
   target: string,
@@ -239,9 +239,9 @@ export function shouldRestoreGuest(
 }
 
 /**
- * Decide se navigateWebview deve agir. Pura pelo mesmo motivo: pular só porque
- * `currentUrl === url` deixava a aba presa quando o guest estava em branco — a
- * URL atual já era a certa, ninguém carregava nada e o restauro também recusava.
+ * Decides whether navigateWebview should act. Pure for the same reason: skipping just because
+ * `currentUrl === url` left the tab stuck when the guest was blank — the
+ * current URL was already the right one, nobody loaded anything and the restore refused too.
  */
 export function shouldNavigate(currentUrl: string, url: string, guestUrl: string): boolean {
   if (!isRealUrl(url)) return false
@@ -263,10 +263,10 @@ function getHiddenHost(): HTMLDivElement {
 }
 
 /**
- * Mantém o host oculto no tamanho do viewport do store (panel_resize do
- * agente). A UI visível já é dimensionada pelo wrapper do web-preview.tsx —
- * aqui é o equivalente para o browser em segundo plano com o painel fechado:
- * sem isso, o print sairia sempre em 1280×800, ignorando o viewport.
+ * Keeps the hidden host at the size of the store viewport (the agent's
+ * panel_resize). The visible UI is already sized by the wrapper of web-preview.tsx —
+ * here is the equivalent for the background browser with the panel closed:
+ * without that, the shot would always come out at 1280×800, ignoring the viewport.
  */
 function applyHiddenHostSize(): void {
   if (!hiddenHost) return
@@ -275,40 +275,40 @@ function applyHiddenHostSize(): void {
   if (hiddenHost.style.height !== `${height}px`) hiddenHost.style.height = `${height}px`
 }
 
-// O host oculto segue o viewport do store. Se o resize chegar antes de
-// qualquer webview existir, o getHiddenHost() já cria no tamanho atual — o
-// subscribe só precisa atualizar quando o host já foi criado.
+// The hidden host follows the store viewport. If the resize arrives before
+// any webview exists, getHiddenHost() already creates it at the current size — the
+// subscribe only needs to update when the host has already been created.
 usePanelStore.subscribe((state, prev) => {
   if (state.viewport !== prev.viewport) applyHiddenHostSize()
 })
 
 /**
- * O `src` fica FIXO em about:blank pelo resto da vida do elemento. Ele é o que
- * o guest recriado carrega a cada mount: se apontasse para uma página real,
- * toda troca de aba recarregaria a página ANTIGA antes de irmos para a atual —
- * e mexer em `src` com o elemento anexado dispara uma navegação, que realimenta
- * o handler de navegação num laço. Quem manda na página é `currentUrl`, via
+ * The `src` stays FIXED at about:blank for the rest of the element's life. It is what
+ * the recreated guest loads on every mount: if it pointed at a real page,
+ * every tab switch would reload the OLD page before we went to the current one —
+ * and touching `src` with the element attached triggers a navigation, which feeds
+ * the navigation handler in a loop. What rules the page is `currentUrl`, via
  * restoreGuest.
  */
 function createWebview(): WebviewElement {
   const el = document.createElement("webview") as WebviewElement
-  // partition precisa ser definida ANTES de anexar ao DOM (depois é imutável)
+  // partition has to be set BEFORE attaching to the DOM (afterwards it is immutable)
   el.partition = BROWSER_PARTITION
   el.src = "about:blank"
   el.style.cssText = "width: 100%; height: 100%; display: flex; background: white; border: 0;"
   return el
 }
 
-// ─── Ciclo de vida ───────────────────────────────────────────────────────────
+// ─── Lifecycle ───────────────────────────────────────────────────────────
 
-/** Aplica no guest o estado que precisa sobreviver à recriação: URL e seleção. */
+/** Applies to the guest the state that needs to survive the recreation: URL and selection. */
 function restoreGuest(record: WebviewRecord): void {
   const el = record.el
   if (!el || !isWebviewReady(el)) return
 
-  // Registra SEMPRE, montado ou não: com o painel fechado o guest vive no host
-  // oculto e continua sendo o alvo das tools panel_* do agente (é o browser em
-  // segundo plano).
+  // Always REGISTERS, mounted or not: with the panel closed the guest lives in the hidden
+  // host and remains the target of the agent's panel_* tools (it is the browser in
+  // the background).
   registerGuest(record)
 
   const target = record.currentUrl
@@ -316,7 +316,7 @@ function restoreGuest(record: WebviewRecord): void {
     record.requestedUrl = target
     try {
       void el.loadURL(target).catch(() => {
-        // Não commitou: solta a trava para o próximo dom-ready tentar de novo.
+        // Did not commit: releases the lock so the next dom-ready tries again.
         if (records.get(record.key) === record) record.requestedUrl = null
       })
     } catch {
@@ -327,7 +327,7 @@ function restoreGuest(record: WebviewRecord): void {
   run(el, usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF)
 }
 
-/** Registra o webContents do guest no main (alvo das tools panel_*). */
+/** Registers the guest's webContents in the main process (target of the panel_* tools). */
 function registerGuest(record: WebviewRecord): void {
   const el = record.el
   if (!el) return
@@ -338,19 +338,19 @@ function registerGuest(record: WebviewRecord): void {
       panelApi.register(sessionIdOf(record.key), wcId)
     }
   } catch {
-    // o próximo dom-ready registra
+    // the next dom-ready registers it
   }
 }
 
-/** Registra a URL como a atual da aba e propaga para a UI e para o store. */
+/** Records the URL as the current one of the tab and propagates it to the UI and to the store. */
 function reportUrl(record: WebviewRecord, url: string): void {
   if (!isRealUrl(url) || record.currentUrl === url) return
-  // Redirect do servidor durante um restauro também passa por aqui: a URL que
-  // o guest realmente carregou vira a atual da aba.
+  // A server redirect during a restore also comes through here: the URL that
+  // the guest actually loaded becomes the current one of the tab.
   record.currentUrl = url
   record.onNavigate?.(url)
-  // Persiste na aba mesmo com o componente desmontado (agente navegando em
-  // background) — é o que faz a URL sobreviver a sair e voltar do chat.
+  // Persists in the tab even with the component unmounted (agent navigating in
+  // the background) — that is what makes the URL survive leaving and returning to the chat.
   usePanelStore.getState().setTabUrl(sessionIdOf(record.key), tabIdOf(record.key), url)
 }
 
@@ -359,20 +359,20 @@ function handleConsoleMessage(message: string): void {
   try {
     usePanelStore.getState().addSelection(JSON.parse(message.slice(SELECT_PREFIX.length)))
   } catch {
-    // payload malformado — ignora
+    // malformed payload — ignores it
   }
 }
 
-/** Cria o elemento e liga os listeners. NÃO anexa ao DOM — quem anexa decide
- *  onde o elemento nasce (container visível ou host oculto), e ele nunca muda
- *  de pai depois disso. */
+/** Creates the element and wires the listeners. Does NOT attach to the DOM — the caller decides
+ *  where the element is born (visible container or hidden host), and it never changes
+ *  parent after that. */
 function createElement(record: WebviewRecord): WebviewElement {
   const el = createWebview()
 
-  // dom-ready dispara quando o guest nasce (uma vez por elemento) — é o gancho
-  // para devolver o guest ao estado da aba.
+  // dom-ready fires when the guest is born (once per element) — it is the hook
+  // to return the guest to the state of the tab.
   el.addEventListener("dom-ready", () => {
-    // elemento descartado no meio do caminho: o registro já é outro
+    // element discarded along the way: the registry is already another one
     if (record.el !== el) return
     restoreGuest(record)
   })
@@ -393,7 +393,7 @@ function createElement(record: WebviewRecord): WebviewElement {
   return el
 }
 
-/** Cria (ou reaproveita) o registro da chave. */
+/** Creates (or reuses) the registry entry of the key. */
 function ensureRecord(key: string, src?: string): WebviewRecord {
   const existing = records.get(key)
   if (existing) return existing
@@ -411,11 +411,11 @@ function ensureRecord(key: string, src?: string): WebviewRecord {
 }
 
 /**
- * Descarta o elemento: ele sai do DOM (o guest morre com ele) e a referência
- * é solta. O registro (e a URL da aba) continua vivo.
+ * Discards the element: it leaves the DOM (the guest dies with it) and the reference
+ * is released. The registry (and the tab URL) stays alive.
  *
- * O elemento é DESCARTADO, nunca movido para outro pai: foi exatamente o
- * re-parent que corrompia o guest (ver o cabeçalho do arquivo).
+ * The element is DISCARDED, never moved to another parent: it was exactly the
+ * re-parent that corrupted the guest (see the header of the file).
  */
 function disposeElement(record: WebviewRecord): void {
   const el = record.el
@@ -426,11 +426,11 @@ function disposeElement(record: WebviewRecord): void {
   try {
     el.remove()
   } catch {
-    // já estava fora do DOM
+    // it was already out of the DOM
   }
 
-  // O guest morreu com o elemento: solta o registro no main (só se ele for o
-  // webContents deste webview — o browser do agente da sessão é outro).
+  // The guest died with the element: releases the registry in the main process (only if it is the
+  // webContents of this webview — the session's agent browser is another one).
   if (record.wcId) {
     panelApi.unregister(sessionIdOf(record.key), record.wcId)
     record.wcId = null
@@ -438,11 +438,11 @@ function disposeElement(record: WebviewRecord): void {
 }
 
 /**
- * Monta o webview da chave no container visível da aba.
+ * Mounts the webview of the key in the visible container of the tab.
  *
- * Cada montagem cria um `<webview>` NOVO, já no container: o elemento nunca
- * muda de pai (é o que mantinha o guest corrupto) e nasce com um único guest.
- * A URL da aba é reaplicada no dom-ready, pelo pool.
+ * Every mount creates a NEW `<webview>`, already in the container: the element never
+ * changes parent (which is what kept the guest corrupted) and is born with a single guest.
+ * The tab URL is re-applied on dom-ready, by the pool.
  */
 export function mountWebview(
   key: string,
@@ -454,14 +454,14 @@ export function mountWebview(
   record.onNavigate = onNavigate
   record.lastUsed = Date.now()
 
-  // Já está no lugar (re-render do React): reaplica o estado sem mexer no DOM.
+  // It is already in place (React re-render): re-applies the state without touching the DOM.
   const current = record.el
   if (current && record.mounted && current.parentElement === container) {
     restoreGuest(record)
     return current
   }
 
-  // Elemento novo: o anterior (se houver) é descartado, nunca reanexado.
+  // New element: the previous one (if any) is discarded, never re-attached.
   disposeElement(record)
 
   const el = createElement(record)
@@ -470,12 +470,12 @@ export function mountWebview(
   record.requestedUrl = null
   container.appendChild(el)
 
-  // Guest novo a caminho: o restauro desta geração ainda não foi tentado.
+  // New guest on the way: the restore of this generation has not been tried yet.
   restoreGuest(record)
   return el
 }
 
-/** Desmonta: o elemento sai do DOM e morre. A URL da aba fica no registro. */
+/** Unmounts: the element leaves the DOM and dies. The tab URL stays in the registry. */
 export function unmountWebview(key: string): void {
   const record = records.get(key)
   if (!record) return
@@ -490,25 +490,25 @@ export function getWebview(key: string): WebviewElement | null {
   return record?.el ?? null
 }
 
-/** URL atual conhecida da aba — não toca no guest, então nunca lança. */
+/** Known current URL of the tab — does not touch the guest, so it never throws. */
 export function getWebviewUrl(key: string): string {
   return records.get(key)?.currentUrl ?? ""
 }
 
-/** Chave canônica do browser do agente numa sessão (chat/task). */
+/** Canonical key of the agent browser in a session (chat/task). */
 function agentKey(sessionId: string): string {
   return `${sessionId}:browser-agent`
 }
 
 /**
- * Garante o webview do AGENTE da sessão existindo no host OCULTO (sem abrir a
- * UI). Usado quando o agente precisa do browser com o painel fechado: o guest
- * nasce escondido, registra no main no dom-ready e as tools panel_* passam a
- * agir nele.
+ * Ensures the AGENT webview of the session exists in the HIDDEN host (without opening the
+ * UI). Used when the agent needs the browser with the panel closed: the guest
+ * is born hidden, registers in the main process on dom-ready and the panel_* tools start
+ * acting on it.
  *
- * O elemento do agente nasce NO host oculto e nunca é movido. Quando a aba
- * Browser da sessão é aberta na tela, o pool cria um elemento novo para o
- * container visível (mesma URL, mesma sessão) — o do host oculto é descartado.
+ * The agent element is born IN the hidden host and is never moved. When the session's
+ * Browser tab is opened on screen, the pool creates a new element for the
+ * visible container (same URL, same session) — the one in the hidden host is discarded.
  */
 export function ensureAgentBrowser(sessionId: string, url?: string): void {
   if (!sessionId) return
@@ -521,12 +521,12 @@ export function ensureAgentBrowser(sessionId: string, url?: string): void {
     getHiddenHost().appendChild(el)
   }
   if (url) navigateWebview(key, url)
-  // O main pode ainda ter o webContents de um guest que já morreu: re-registra
-  // o vivo para as tools panel_* acharem o alvo.
+  // The main process may still have the webContents of a guest that already died: re-registers
+  // the live one so the panel_* tools find the target.
   registerGuest(record)
 }
 
-/** Navega a aba. Guest não pronto: a URL fica como atual e o dom-ready aplica. */
+/** Navigates the tab. Guest not ready: the URL stays as the current one and dom-ready applies it. */
 export function navigateWebview(key: string, url: string): void {
   const record = records.get(key)
   if (!record) return
@@ -535,22 +535,22 @@ export function navigateWebview(key: string, url: string): void {
   record.lastUsed = Date.now()
   record.currentUrl = url
   if (!record.el || !isWebviewReady(record.el)) {
-    // Guest não pronto: o dom-ready leva para a URL nova.
+    // Guest not ready: dom-ready takes it to the new URL.
     record.requestedUrl = null
     return
   }
   record.requestedUrl = url
   try {
     void record.el.loadURL(url).catch(() => {
-      // Não commitou: solta a trava para a próxima tentativa carregar de novo.
+      // Did not commit: releases the lock so the next attempt loads again.
       if (records.get(key) === record) record.requestedUrl = null
     })
   } catch {
-    record.requestedUrl = null // dom-ready seguinte restaura
+    record.requestedUrl = null // the next dom-ready restores it
   }
 }
 
-/** Recarrega a página da aba, sem recriar o elemento. */
+/** Reloads the page of the tab, without recreating the element. */
 export function reloadWebview(key: string): void {
   const record = records.get(key)
   if (!record || !record.el || !isWebviewReady(record.el)) return
@@ -558,11 +558,11 @@ export function reloadWebview(key: string): void {
   try {
     record.el.reload()
   } catch {
-    // guest trocado entre o check e a chamada — nada a recarregar
+    // guest swapped between the check and the call — nothing to reload
   }
 }
 
-/** Liga/desliga o modo seleção na página da aba (re-aplicado a cada guest novo). */
+/** Turns selection mode on/off in the page of the tab (re-applied on every new guest). */
 export function applySelectMode(key: string, on: boolean): void {
   const record = records.get(key)
   if (!record) return
@@ -572,12 +572,12 @@ export function applySelectMode(key: string, on: boolean): void {
 }
 
 /**
- * Destrói webviews desmontados e inativos. Pula:
- * - abas montadas (visíveis na UI);
- * - sessões cujo agente usou o browser recentemente (o browser em segundo
- *   plano NÃO pode morrer no meio do trabalho do agente — `agentBrowser.at`
- *   é atualizado pelo main a cada tool de browser).
- * Chamado periodicamente pelo App. Retorna quantos destruiu.
+ * Destroys unmounted and inactive webviews. Skips:
+ * - mounted tabs (visible in the UI);
+ * - sessions whose agent used the browser recently (the background
+ *   browser CANNOT die in the middle of the agent's work — `agentBrowser.at`
+ *   is updated by the main process on every browser tool).
+ * Called periodically by the App. Returns how many it destroyed.
  */
 export function evictInactiveWebviews(now = Date.now()): number {
   const agentBrowser = usePanelStore.getState().agentBrowser
@@ -594,7 +594,7 @@ export function evictInactiveWebviews(now = Date.now()): number {
   return removidos
 }
 
-/** Destrói o webview da chave (fecho da aba) — limpa o registro no main. */
+/** Destroys the webview of the key (tab close) — clears the registry in the main process. */
 export function destroyWebview(key: string): void {
   const record = records.get(key)
   if (!record) return

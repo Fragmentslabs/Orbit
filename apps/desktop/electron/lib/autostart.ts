@@ -4,21 +4,21 @@ import os from 'node:os'
 import path from 'node:path'
 
 /**
- * "Abrir junto com o sistema".
+ * "Open with the system".
  *
- * Windows e macOS têm o caminho nativo do Electron. No Linux o
- * `setLoginItemSettings` não cria entrada de autostart (o app é lançado pelo
- * desktop environment, não por um registro do sistema), então o caminho é
- * escrever o .desktop em ~/.config/autostart — que é exatamente o que os
- * gerenciadores de sessão leem.
+ * Windows and macOS have Electron's native path. On Linux,
+ * `setLoginItemSettings` does not create an autostart entry (the app is launched by the
+ * desktop environment, not by a system registry), so the path is to
+ * write the .desktop in ~/.config/autostart — which is exactly what the
+ * session managers read.
  *
- * Em modo dev o executável é o do Electron e a pasta do app vira argumento:
- * sem isso o login abriria um Electron vazio em vez do Orbit.
+ * In dev mode the executable is Electron's and the app's folder becomes an argument:
+ * without this, logging in would open an empty Electron instead of Orbit.
  */
 
 const LINUX_DESKTOP_FILE = 'orbit.desktop'
 
-/** Comando que o sistema deve executar para abrir o Orbit, já como lista. */
+/** Command the system must run to open Orbit, already as a list. */
 function launchCommand(): string[] {
   const appRoot = process.env.APP_ROOT
   const needsAppPath = !app.isPackaged && Boolean(appRoot)
@@ -30,7 +30,7 @@ function autostartFilePath(): string {
   return path.join(configDir, 'autostart', LINUX_DESKTOP_FILE)
 }
 
-/** Aspas simples no valor do Exec (o formato .desktop exige escapá-las). */
+/** Single quotes in the Exec value (the .desktop format requires escaping them). */
 function quoteDesktopArg(value: string): string {
   return `"${value.replace(/(["\\`$])/g, '\\$1')}"`
 }
@@ -50,7 +50,7 @@ async function applyLinux(enabled: boolean): Promise<void> {
       '[Desktop Entry]',
       'Type=Application',
       'Name=Orbit',
-      'Comment=Assistente de código do Orbit',
+      'Comment=Orbit coding assistant',
       `Exec=${exec}`,
       'Terminal=false',
       'X-GNOME-Autostart-enabled=true',
@@ -61,9 +61,9 @@ async function applyLinux(enabled: boolean): Promise<void> {
 }
 
 /**
- * Liga/desliga a abertura automática. Devolve o erro em vez de lançar: a
- * preferência é gravada de qualquer jeito (a UI não pode ficar mentindo que
- * salvou), mas quem chamou loga o motivo pelo qual o sistema não obedeceu.
+ * Turns the automatic opening on/off. It returns the error instead of throwing: the
+ * preference is written either way (the UI cannot keep lying that it
+ * saved), but the caller logs the reason the system did not obey.
  */
 export async function applyLaunchAtLogin(enabled: boolean): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -76,13 +76,13 @@ export async function applyLaunchAtLogin(enabled: boolean): Promise<{ ok: boolea
       openAtLogin: enabled,
       path: command,
       ...(args.length > 0 ? { args } : {}),
-      // Só o macOS entende: abre sem roubar o foco, como um app de bandeja.
+      // Only macOS understands it: it opens without stealing focus, like a tray app.
       ...(process.platform === 'darwin' ? { openAsHidden: true } : {}),
     })
     return { ok: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.warn('[autostart] não foi possível ajustar a abertura automática:', message)
+    console.warn('[autostart] could not set up launch at login:', message)
     return { ok: false, error: message }
   }
 }

@@ -2,51 +2,51 @@ import type { VoiceModelInfo } from "@shared/voice"
 import { STT_MODELS } from "./stt"
 
 /**
- * Manifesto dos modelos de voz baixáveis.
+ * Manifest of the downloadable voice models.
  *
- * O PESO nunca entra no build: aqui só ficam a origem, o tamanho e o hash, e o
- * downloader (download.ts) traz os arquivos para `<userData>/voice/models/<id>`
- * na primeira vez que o usuário pede.
+ * The WEIGHTS never enter the build: here there are only the origin, the size and the hash, and the
+ * downloader (download.ts) brings the files to `<userData>/voice/models/<id>`
+ * the first time the user asks for them.
  *
- * O TTS é o Supertonic 3, do repositório ARQUIVADO `supertone-oss-archive/supertonic-3`
- * no HuggingFace, na revisão fixada abaixo (mudar a revisão muda os bytes e os
- * sha256 daqui — os quatro .onnx são LFS, então o `x-linked-etag` do HF é o
- * sha256 do arquivo, conferido byte a byte com o que o laboratório baixou).
+ * The TTS is Supertonic 3, from the ARCHIVED `supertone-oss-archive/supertonic-3`
+ * repository on HuggingFace, at the revision pinned below (changing the revision changes the bytes and the
+ * sha256 here — the four .onnx files are LFS, so HF's `x-linked-etag` is the
+ * sha256 of the file, checked byte by byte against what the laboratory downloaded).
  *
- * Licença: o CÓDIGO do motor (voice-engine/helper.js) é MIT e vai junto no app;
- * os PESOS são OpenRAIL-M e são baixados pelo usuário, nunca redistribuídos.
+ * Licence: the engine CODE (voice-engine/helper.js) is MIT and ships with the app;
+ * the WEIGHTS are OpenRAIL-M and are downloaded by the user, never redistributed.
  */
 
-/** Repositório e revisão de origem dos assets do TTS. */
+/** Origin repository and revision of the TTS assets. */
 const REPO = "https://huggingface.co/supertone-oss-archive/supertonic-3"
 const REVISION = "aafc6e32416a594460b32413efc49d7fe4ce6d46"
 
-/** id do modelo de TTS — é o nome da pasta em `<userData>/voice/models`. */
+/** TTS model id — it is the folder name in `<userData>/voice/models`. */
 export const TTS_MODEL_ID = "supertonic-3"
 
-/** Formato de saída do motor: mono, PCM 16-bit. A taxa é esta, sempre. */
+/** Engine output format: mono, 16-bit PCM. The rate is this one, always. */
 export const TTS_SAMPLE_RATE = 24000
-/** Taxa nativa dos modelos (o motor reamostra para TTS_SAMPLE_RATE). */
+/** Native rate of the models (the engine resamples to TTS_SAMPLE_RATE). */
 export const TTS_NATIVE_SAMPLE_RATE = 44100
-/** Passos de denoising: 8 é o padrão do upstream; 10 é mais qualidade e mais lento. */
+/** Denoising steps: 8 is the upstream default; 10 is more quality and slower. */
 export const TTS_STEPS = 8
-/** Alvo de caracteres por pedaço no streaming (o corte real é em fim de frase). */
+/** Target characters per chunk in streaming (the real cut is at end of sentence). */
 export const TTS_MAX_CHARS = 140
-/** Silêncio de ligação entre pedaços, igual ao `call()` do motor (0,3 s). */
+/** Join silence between chunks, the same as the engine's `call()` (0.3 s). */
 export const TTS_JOIN_SILENCE_MS = 300
 
-/** Um arquivo do pacote do TTS, relativo à pasta do modelo. */
+/** A file of the TTS package, relative to the model folder. */
 export interface TtsAssetFile {
   path: string
   bytes: number
-  /** Só os .onnx (LFS) publicam sha256 na origem. */
+  /** Only the .onnx files (LFS) publish a sha256 at the origin. */
   sha256?: string
 }
 
 /**
- * Os 16 arquivos do Supertonic 3 (~401 MB). Os tamanhos e os sha256 vieram do
- * download de referência do laboratório; o downloader usa os dois para decidir
- * se um arquivo já está íntegro no disco.
+ * The 16 files of Supertonic 3 (~401 MB). The sizes and the sha256 came from the
+ * laboratory's reference download; the downloader uses both to decide
+ * whether a file is already intact on disk.
  */
 export const TTS_ASSETS: TtsAssetFile[] = [
   { path: "onnx/vector_estimator.onnx", bytes: 256534781, sha256: "883ac868ea0275ef0e991524dc64f16b3c0376efd7c320af6b53f5b780d7c61c" },
@@ -67,10 +67,10 @@ export const TTS_ASSETS: TtsAssetFile[] = [
   { path: "voice_styles/M5.json", bytes: 291469 },
 ]
 
-/** Tamanho total do pacote do TTS (o número que a UI mostra antes de baixar). */
+/** Total size of the TTS package (the number the UI shows before downloading). */
 export const TTS_BYTES = TTS_ASSETS.reduce((sum, file) => sum + file.bytes, 0)
 
-/** Vozes do Supertonic 3 — cada uma fala os 31 idiomas (não é por idioma). */
+/** Supertonic 3 voices — each one speaks the 31 languages (it is not per language). */
 export const TTS_VOICES: { id: string; label: string }[] = [
   { id: "M1", label: "Masculina animada e confiante (narração, institucional)" },
   { id: "M2", label: "Masculina grave e robusta (corporativo, documentário)" },
@@ -84,7 +84,7 @@ export const TTS_VOICES: { id: string; label: string }[] = [
   { id: "F5", label: "Feminina gentil e suave, calmante (bem-estar)" },
 ]
 
-/** Os 31 idiomas dos pesos + `na` (modo agnóstico). `pt` é verificado. */
+/** The 31 languages of the weights + `na` (agnostic mode). `pt` is verified. */
 export const TTS_LANGS: string[] = [
   "ar", "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "hi", "hr",
   "hu", "id", "it", "ja", "ko", "lt", "lv", "nl", "pl", "pt", "ro", "ru", "sk",
@@ -92,10 +92,10 @@ export const TTS_LANGS: string[] = [
 ]
 
 /**
- * O catálogo do lado do TTS. Um modelo, uma entrada: o pacote inteiro é o que
- * se baixa ou se apaga (baixar um .onnx sozinho não sintetiza nada). A `url` é
- * a página da revisão na origem — o download real usa TTS_ASSETS, arquivo a
- * arquivo, com retomada.
+ * The TTS-side catalog. One model, one entry: the whole package is what
+ * gets downloaded or deleted (downloading a single .onnx synthesises nothing). The `url` is
+ * the revision page at the origin — the real download uses TTS_ASSETS, file by
+ * file, with resumption.
  */
 export const TTS_MODELS: VoiceModelInfo[] = [
   {
@@ -109,20 +109,20 @@ export const TTS_MODELS: VoiceModelInfo[] = [
   },
 ]
 
-/** Catálogo completo: TTS + os modelos de STT (definidos pelo worker de STT). */
+/** Full catalog: TTS + the STT models (defined by the STT worker). */
 export const VOICE_MODELS: VoiceModelInfo[] = [...TTS_MODELS, ...STT_MODELS]
 
-/** URL de um arquivo do pacote do TTS, na revisão fixada. */
+/** URL of a TTS package file, at the pinned revision. */
 export function ttsAssetUrl(path: string): string {
   return `${REPO}/resolve/${REVISION}/${path}`
 }
 
-/** Informação de um id do catálogo (null quando o id não existe). */
+/** Information of a catalog id (null when the id does not exist). */
 export function modelInfo(modelId: string): VoiceModelInfo | null {
   return VOICE_MODELS.find((model) => model.id === modelId) ?? null
 }
 
-/** Modelos de STT do catálogo (o downloader trata TTS e STT igual). */
+/** Catalog STT models (the downloader treats TTS and STT alike). */
 export function isTtsModel(modelId: string): boolean {
   return modelId === TTS_MODEL_ID
 }

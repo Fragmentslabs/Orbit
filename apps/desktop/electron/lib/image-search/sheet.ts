@@ -3,10 +3,10 @@ import type { Fetcher, ImageResult } from './types'
 import { USER_AGENT } from './search'
 
 /**
- * Uma folha com as miniaturas dos resultados, cada uma com seu número. É o que
- * deixa o agente ESCOLHER a imagem olhando, e não só pelo título: sem ela, "foto
- * de leão" traria desenho, estátua e mapa com a mesma confiança. Uma imagem só
- * por busca — oito miniaturas custam o mesmo que uma foto.
+ * A sheet with the thumbnails of the results, each one with its number. It is what
+ * lets the agent CHOOSE the image by looking, and not only by the title: without it,
+ * "lion photo" would bring a drawing, a statue and a map with the same confidence.
+ * One image per search — eight thumbnails cost the same as one photo.
  */
 
 const CELL_W = 320
@@ -35,7 +35,7 @@ function label(n: number): Buffer {
   return Buffer.from(svg)
 }
 
-/** Monta a folha; `null` quando nenhuma miniatura pôde ser lida. */
+/** Builds the sheet; `null` when no thumbnail could be read. */
 export async function buildContactSheet(results: ImageResult[], fetcher: Fetcher = fetch): Promise<Buffer | null> {
   const picked = results.slice(0, MAX_SHEET_CELLS)
   const thumbs = await Promise.all(picked.map((r) => thumbnail(r, fetcher)))
@@ -52,7 +52,7 @@ export async function buildContactSheet(results: ImageResult[], fetcher: Fetcher
         composites.push({ input: cell, left: left + 2, top: top + 2 })
         any = true
       } catch {
-        // miniatura ilegível: a célula fica vazia, só com o número
+        // unreadable thumbnail: the cell stays empty, with just the number
       }
     }
     composites.push({ input: label(i + 1), left: left + 6, top: top + 6 })

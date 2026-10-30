@@ -1,65 +1,65 @@
 import { describe, expect, it, vi } from "vitest"
 
 /**
- * O pool do painel não dá para testar de ponta a ponta aqui: exige Electron, e o
- * `<webview>` recria o guest a cada re-parent. Mas o DEFEITO morava na decisão
- * pura de quando (re)carregar a URL — dois guardas que comparavam a URL PEDIDA
- * em vez do que o guest tinha carregado, e prendiam a aba em about:blank até um
- * F5. É essa tabela de decisão que os testes abaixo fixam.
+ * The panel pool cannot be tested end to end here: it requires Electron, and the
+ * `<webview>` recreates the guest on every re-parent. But the DEFECT lived in the
+ * pure decision of when to (re)load the URL — two guards that compared the REQUESTED URL
+ * instead of what the guest had loaded, and kept the tab in about:blank until an
+ * F5. It is that decision table that the tests below pin down.
  *
- * `window` é stubado ANTES do import: o ipc.ts lê `window.platform` no escopo do
- * módulo, e no ambiente node ele não existe.
+ * `window` is stubbed BEFORE the import: ipc.ts reads `window.platform` in the module
+ * scope, and in the node environment it does not exist.
  */
 vi.stubGlobal("window", { platform: "test" })
 
 const { shouldNavigate, shouldRestoreGuest } = await import("./webview-session")
 
-const URL_A = "https://exemplo.com/painel"
-const URL_B = "https://exemplo.com/outra"
+const URL_A = "https://example.com/painel"
+const URL_B = "https://example.com/outra"
 
 describe("shouldRestoreGuest", () => {
-  it("carrega quando o guest está em branco, mesmo já tendo pedido a URL", () => {
-    // O defeito: a tentativa anterior abortou (ERR_ABORTED é o normal num guest
-    // recém-reparentado) e deixou o guest em about:blank. `requestedUrl` dizia
-    // "já pedi" e o restauro se recusava para sempre.
+  it("loads when the guest is blank, even having already requested the URL", () => {
+    // The defect: the previous attempt aborted (ERR_ABORTED is normal in a guest
+    // just re-parented) and left the guest in about:blank. `requestedUrl` said
+    // "already asked" and the restore refused forever.
     expect(shouldRestoreGuest(URL_A, "about:blank", URL_A)).toBe(true)
     expect(shouldRestoreGuest(URL_A, "", URL_A)).toBe(true)
   })
 
-  it("não recarrega quando o guest já está na URL", () => {
+  it("does not reload when the guest is already at the URL", () => {
     expect(shouldRestoreGuest(URL_A, URL_A, null)).toBe(false)
   })
 
-  it("mantém a trava contra o laço de normalização do Chromium", () => {
-    // O guest já carregou uma página REAL (URL normalizada pelo Chromium) e já
-    // pedimos essa URL: insistir aqui realimentaria dom-ready + loadURL num laço.
-    expect(shouldRestoreGuest(URL_A, "https://exemplo.com/painel/", URL_A)).toBe(false)
+  it("keeps the lock against Chromium's normalization loop", () => {
+    // The guest has already loaded a REAL page (URL normalized by Chromium) and we already
+    // asked for that URL: insisting here would feed dom-ready + loadURL back in a loop.
+    expect(shouldRestoreGuest(URL_A, "https://example.com/painel/", URL_A)).toBe(false)
   })
 
-  it("não age sem URL real na aba", () => {
+  it("does not act without a real URL in the tab", () => {
     expect(shouldRestoreGuest("", "about:blank", null)).toBe(false)
     expect(shouldRestoreGuest("about:blank", "about:blank", null)).toBe(false)
   })
 })
 
 describe("shouldNavigate", () => {
-  it("navega quando o guest está em branco, mesmo com a URL atual igual", () => {
-    // O outro lado do mesmo defeito: `currentUrl` já era a URL certa, então o
-    // early-return por igualdade recusava a carga e nada acontecia.
+  it("navigates when the guest is blank, even with the current URL the same", () => {
+    // The other side of the same defect: `currentUrl` was already the right URL, so the
+    // early-return by equality refused the load and nothing happened.
     expect(shouldNavigate(URL_A, URL_A, "about:blank")).toBe(true)
     expect(shouldNavigate(URL_A, URL_A, "")).toBe(true)
   })
 
-  it("não navega quando o guest já está na URL", () => {
+  it("does not navigate when the guest is already at the URL", () => {
     expect(shouldNavigate(URL_A, URL_A, URL_A)).toBe(false)
   })
 
-  it("navega para uma URL nova ou a partir do vazio", () => {
+  it("navigates to a new URL or from empty", () => {
     expect(shouldNavigate(URL_A, URL_B, URL_A)).toBe(true)
     expect(shouldNavigate("", URL_A, "about:blank")).toBe(true)
   })
 
-  it("ignora url vazia ou about:blank", () => {
+  it("ignores an empty url or about:blank", () => {
     expect(shouldNavigate(URL_A, "", URL_A)).toBe(false)
     expect(shouldNavigate(URL_A, "about:blank", URL_A)).toBe(false)
   })

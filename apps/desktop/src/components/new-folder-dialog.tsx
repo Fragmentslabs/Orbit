@@ -13,19 +13,19 @@ import { Truncate } from "@/components/ui/truncated-text"
 interface NewFolderDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Só o modo código tem repositório — no chat o diálogo é só o nome. */
+  /** Only code mode has a repository — in chat the dialog is only the name. */
   mode: WorkspaceMode
   onCreate: (name: string, workspace?: string[]) => void
 }
 
 /**
- * Diálogo de nova pasta. Em modo código aceita o projeto de destino, e a pasta
- * já nasce com o workspace guardado: o "+" dela abre no repositório escolhido
- * em vez de herdar o workspace da tela até o primeiro chat entrar
- * (aprenderWorkspaceDaPasta, session-store).
+ * New folder dialog. In code mode it accepts the destination project, and the folder
+ * is born with the workspace already stored: its "+" opens in the chosen repository
+ * instead of inheriting the screen workspace until the first chat enters
+ * (learnFolderWorkspace, session-store).
  *
- * As opções são as pastas recentes do seletor do composer — não há caminho
- * digitado à mão, que erraria sem ninguém validar.
+ * The options are the recent folders of the composer selector — there is no hand-typed
+ * path, which would go wrong with nobody validating it.
  */
 export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolderDialogProps) {
   const { t } = useTranslation()
@@ -36,8 +36,8 @@ export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolde
   const listRef = useRef<HTMLDivElement>(null)
   const isCode = mode === "code"
 
-  // Recomeça a cada abertura: o diálogo é reaproveitado, e o projeto da pasta
-  // anterior não pode vazar para a próxima.
+  // It restarts on every opening: the dialog is reused, and the previous folder's project
+  // cannot leak into the next one.
   useEffect(() => {
     if (!open) return
     setName("")
@@ -62,10 +62,10 @@ export function NewFolderDialog({ open, onOpenChange, mode, onCreate }: NewFolde
     onOpenChange(false)
   }
 
-  // A lista de recentes pode estar vazia — ou não ter o projeto que a pessoa
-  // quer. O diálogo nativo é a saída, em vez de mandar abrir um chat antes.
-  // Não grava em `orbit-recent-folders`: isso é feito por quem de fato usa a
-  // pasta (code-input), e aqui a escolha pode ser abandonada no Cancelar.
+  // The recents list may be empty — or not have the project the person
+  // wants. The native dialog is the way out, instead of sending them to open a chat first.
+  // It does not write to `orbit-recent-folders`: that is done by whoever actually uses the
+  // folder (code-input), and here the choice may be abandoned on Cancel.
   const chooseFolder = async () => {
     setListOpen(false)
     const picked = await pickFolder()

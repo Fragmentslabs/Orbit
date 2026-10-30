@@ -1,28 +1,28 @@
 /**
- * Onde a persona aparece.
+ * Where the persona appears.
  *
- * Eram duas aparições com custos diferentes tratadas por um booleano só: a da
- * tela de chat novo é a saudação, e não disputa espaço com nada porque não há
- * conversa ainda; a do topo flutua SOBRE a lista de mensagens, e cobra por
- * isso um respiro no começo da lista e um véu de degradê. Quem desliga quase
- * sempre está incomodado com a segunda, e com um interruptor perdia as duas.
+ * They were two appearances with different costs handled by a single boolean: the one on the
+ * new chat screen is the greeting, and it does not dispute space with anything because there is no
+ * conversation yet; the one at the top floats OVER the message list, and charges for
+ * that a breathing room at the start of the list and a gradient veil. Whoever turns it off is almost
+ * always bothered by the second one, and with a single switch lost both.
  *
- * Os valores dizem onde ela FICA, não o que ela esconde: é o que o seletor
- * mostra, e ler a preferência tem que ser a mesma leitura nas duas telas.
+ * The values say where it STAYS, not what it hides: it is what the selector
+ * shows, and reading the preference has to be the same reading on both screens.
  */
 export type PersonaVisibility =
-  /** No chat novo e por cima da conversa. */
+  /** In the new chat and on top of the conversation. */
   | 'all'
-  /** Só na saudação do chat novo — a conversa fica limpa. */
+  /** Only in the greeting of the new chat — the conversation stays clean. */
   | 'welcome'
-  /** Em lugar nenhum. */
+  /** Nowhere. */
   | 'none'
 
 export const PERSONA_VISIBILITY: PersonaVisibility[] = ['all', 'welcome', 'none']
 
 export const DEFAULT_PERSONA_VISIBILITY: PersonaVisibility = 'all'
 
-/** Migração do booleano antigo: quem tinha desligado queria sumir com tudo. */
+/** Migration of the old boolean: whoever had turned it off wanted to get rid of everything. */
 export function personaVisibilityFrom(
   stored: string | null | undefined,
 ): PersonaVisibility {
@@ -34,12 +34,12 @@ export function personaVisibilityFrom(
   return DEFAULT_PERSONA_VISIBILITY
 }
 
-/** A persona flutuante, que passa por cima da conversa. */
+/** The floating persona, which goes over the conversation. */
 export function showsPersonaInChat(visibility: PersonaVisibility): boolean {
   return visibility === 'all'
 }
 
-/** A saudação da tela de chat novo. */
+/** The greeting of the new chat screen. */
 export function showsPersonaOnWelcome(visibility: PersonaVisibility): boolean {
   return visibility !== 'none'
 }

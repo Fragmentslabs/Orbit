@@ -14,11 +14,11 @@ import { MermaidDiagram } from "~/src/components/ai/mermaid-diagram"
 import { cn } from "~/lib/utils"
 import { Hint } from "@/components/ui/hint"
 
-// Mermaid: um bloco ```mermaid vira diagrama em qualquer Markdown do app — a
-// resposta do chat e o canvas do documento — sem moldura e no tema do Orbit
-// (ver mermaid-diagram.tsx). O mesmo bloco sai desenhado no PDF e no .docx,
-// pelo caminho do main (electron/lib/mermaid-render.ts). O fence `orbit-ui`
-// são os componentes inline da resposta (ver generative-ui.tsx).
+// Mermaid: a ```mermaid block becomes a diagram in any Markdown of the app — the
+// chat reply and the document canvas — frameless and in the Orbit theme
+// (see mermaid-diagram.tsx). The same block comes out drawn in the PDF and in the .docx,
+// through the main-process path (electron/lib/mermaid-render.ts). The `orbit-ui` fence
+// are the inline components of the reply (see generative-ui.tsx).
 const streamdownPlugins = {
   code,
   renderers: [
@@ -172,8 +172,8 @@ export type MessageBranchContentProps = HTMLAttributes<HTMLDivElement>
 
 export const MessageBranchContent = ({ children, ...props }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch()
-  // Sem o memo, a identidade muda a cada render e o efeito abaixo
-  // (que compara tamanhos) roda junto, sempre.
+  // Without the memo, the identity changes on every render and the effect below
+  // (which compares lengths) runs along with it, always.
   const childrenArray = useMemo(
     () => (Array.isArray(children) ? children : [children]),
     [children],
@@ -206,8 +206,8 @@ export type MessageBranchSelectorProps = HTMLAttributes<HTMLDivElement> & {
 
 export const MessageBranchSelector = ({
   className,
-  // `from` faz parte da API do componente mas não é atributo de DOM: fica
-  // fora do {...props} de propósito, senão o React avisa no console.
+  // `from` is part of the component's API but is not a DOM attribute: it stays
+  // out of {...props} on purpose, otherwise React warns in the console.
   from: _from,
   ...props
 }: MessageBranchSelectorProps) => {
@@ -289,50 +289,50 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
 }
 
 /**
- * Teto de altura das figuras do Markdown, e o alinhamento delas.
+ * Height ceiling of the Markdown figures, and their alignment.
  *
- * O streamdown só limita a LARGURA (max-w-full), o que basta para paisagem e
- * é péssimo para retrato: uma captura de celular 1080x1920 numa coluna de
- * 700px sai com 1244px de altura e engole a tela inteira. Com o teto, a mesma
- * imagem cai para ~360x640 — dá para ler sem ela dominar o texto.
+ * streamdown only limits the WIDTH (max-w-full), which is enough for landscape and
+ * is terrible for portrait: a phone screenshot 1080x1920 in a column of
+ * 700px comes out with 1244px of height and swallows the whole screen. With the ceiling, the same
+ * image drops to ~360x640 — readable without dominating the text.
  *
- * É teto, não tamanho: imagem pequena continua no tamanho natural, porque
- * esticar um ícone de 32px até a largura da coluna ficaria pior que pequeno.
- * E como só a altura é limitada (a largura fica em auto), o navegador reduz a
- * outra dimensão junto e a proporção se mantém.
+ * It is a ceiling, not a size: a small image stays at its natural size, because
+ * stretching a 32px icon to the width of the column would be worse than small.
+ * And since only the height is limited (the width stays auto), the browser shrinks the
+ * other dimension along with it and the proportion is kept.
  *
- * Fração da janela com um limite absoluto: 60vh acompanha a tela, e o teto em
- * rem impede que num monitor alto a figura volte a ocupar quase tudo.
+ * A fraction of the window with an absolute limit: 60vh follows the screen, and the ceiling in
+ * rem prevents a figure from going back to taking up almost everything on a tall monitor.
  *
- * E o centro é do INVÓLUCRO que o streamdown põe em volta da figura — um
- * `div.inline-block[data-streamdown=image-wrapper]`, onde também vivem o
- * botão de baixar e o estado de carregando.
+ * And the centering belongs to the WRAPPER that streamdown puts around the figure — a
+ * `div.inline-block[data-streamdown=image-wrapper]`, where the download
+ * button and the loading state also live.
  *
- * Centralizar pelo parágrafo não funciona, e o motivo é uma decisão do
- * streamdown: quando a imagem é o único filho do parágrafo, ele descarta o
- * <p> e devolve um Fragment. Ou seja, no caso que interessa — a figura
- * sozinha na linha — não existe parágrafo para alinhar.
+ * Centering through the paragraph does not work, and the reason is a decision of
+ * streamdown: when the image is the only child of the paragraph, it drops the
+ * <p> and returns a Fragment. That is, in the case that matters — the figure
+ * alone in the line — there is no paragraph to align.
  *
- * Daí o `:not(p *)`: a figura SOZINHA (sem <p> por cima) vira um bloco de
- * largura justa, centralizado. A que divide o parágrafo com outra coisa — a
- * fileira de selos de um README, `![a](…) ![b](…) ![c](…)` — continua inline,
- * fluindo com o texto, em vez de virar três linhas empilhadas.
+ * Hence the `:not(p *)`: the figure ALONE (with no <p> above it) becomes a block of
+ * fit width, centered. The one that shares the paragraph with something else — the
+ * row of badges of a README, `![a](…) ![b](…) ![c](…)` — stays inline,
+ * flowing with the text, instead of becoming three stacked lines.
  *
- * As classes vão inteiras e LITERAIS: o Tailwind varre o texto do fonte, e
- * nome montado em runtime (template literal, concatenação) não chega ao CSS
- * gerado — a regra some sem erro nenhum.
+ * The classes go in whole and LITERAL: Tailwind scans the source text, and a
+ * name built at runtime (template literal, concatenation) does not reach the generated
+ * CSS — the rule disappears with no error at all.
  */
 const IMAGE_LAYOUT = [
   "[&_img]:max-h-[min(60vh,40rem)]",
   "[&_[data-streamdown=image-wrapper]:not(p_*)]:block",
   "[&_[data-streamdown=image-wrapper]:not(p_*)]:w-fit",
   "[&_[data-streamdown=image-wrapper]:not(p_*)]:mx-auto",
-  // Garantia: o invólucro é dimensionado por fit-content, e se o navegador
-  // medir largo demais (a altura máxima da figura entra nessa conta), a
-  // figura ainda fica no meio da caixa em vez de encostar à esquerda.
+  // Guarantee: the wrapper is sized by fit-content, and if the browser
+  // measures it too wide (the figure's maximum height enters that count), the
+  // figure still stays in the middle of the box instead of touching the left.
   "[&_[data-streamdown=image-wrapper]:not(p_*)]:text-center",
-  // Legenda da figura — só a pré-visualização de arquivo gera <figcaption>,
-  // então o estilo pode morar aqui sem afetar o resto.
+  // Figure caption — only the file preview generates <figcaption>,
+  // so the style can live here without affecting the rest.
   "[&_figcaption]:mt-1.5",
   "[&_figcaption]:text-center",
   "[&_figcaption]:text-xs",
@@ -362,9 +362,9 @@ MessageResponse.displayName = "MessageResponse"
 
 export type MessageAttachmentProps = HTMLAttributes<HTMLDivElement> & {
   /**
-   * O `FileUIPart` do ai-sdk mais os campos que o Orbit acrescenta ao chip:
-   * `mediaUrl` é a imagem original na galeria (a `url` do chip é só o
-   * thumbnail da bolha), e o tipo do ai-sdk não os conhece.
+   * The ai-sdk `FileUIPart` plus the fields Orbit adds to the chip:
+   * `mediaUrl` is the original image in the gallery (the chip's `url` is only the
+   * bubble thumbnail), and the ai-sdk type does not know them.
    */
   data: FileUIPart & { mediaUrl?: string }
   className?: string
@@ -442,11 +442,11 @@ export function MessageAttachment({ data, className, onRemove, ...props }: Messa
       )}
       </div>
       {/*
-        A bolha mostra o thumbnail (leve, já está na mensagem), mas ampliar tem
-        que pegar o original da galeria: esticar 320px para a tela inteira é o
-        que fazia o preview sair borrado — e copiar/salvar entregavam a
-        miniatura no lugar da foto. Sem `mediaUrl` (anexo antigo) o thumbnail
-        volta a ser tudo que existe.
+        The bubble shows the thumbnail (light, it is already in the message), but enlarging has
+        to take the original from the gallery: stretching 320px to the whole screen is
+        what made the preview come out blurry — and copy/save handed over the
+        thumbnail instead of the photo. Without `mediaUrl` (old attachment) the thumbnail
+        goes back to being all there is.
       */}
       {isImage && (data.mediaUrl || data.url) && (
         <ImageLightbox

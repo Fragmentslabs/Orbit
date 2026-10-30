@@ -6,7 +6,7 @@ import { readDeckSummary } from './slides-deck'
 import { registerSlidesCover } from './slides-gallery'
 import { getSlides, registerSlides } from './slides-store'
 
-/** O deck já tem item na galeria? O `slidesId` é o vínculo, não a pasta. */
+/** Does the deck already have an item in the gallery? The `slidesId` is the link, not the folder. */
 async function isInGallery(id: string): Promise<boolean> {
   try {
     const items = await listMedia({ kind: 'slides' })
@@ -17,28 +17,28 @@ async function isInGallery(id: string): Promise<boolean> {
 }
 
 /**
- * Abre um deck na aba Slides do painel e conta ao agente como ele ficou.
+ * Opens a deck in the Slides tab of the panel and tells the agent how it turned out.
  *
- * Passo comum do `slides_preview` (modo código, deck na pasta do projeto) e do
- * `slides_write` (modo chat, deck no armazenamento do Orbit): registra a pasta,
- * manda o painel abrir (ou focar) a aba e lê o deck do DISCO — sem janela
- * offscreen, ao contrário do motion: o deck é HTML estático, e quantos slides
- * ele tem, com que título e que notas, se sabe lendo o arquivo.
+ * Common step of `slides_preview` (code mode, deck in the project folder) and of
+ * `slides_write` (chat mode, deck in the Orbit storage): registers the folder,
+ * tells the panel to open (or focus) the tab and reads the deck from DISK —
+ * without an offscreen window, unlike motion: the deck is static HTML, and how many
+ * slides it has, with what title and what notes, is known by reading the file.
  *
- * O relatório é o que fecha o ciclo: o agente fica sabendo na hora se escreveu
- * um `<section class="slide">` com o nome errado (zero slides) em vez de
- * descobrir pelo usuário olhando um palco vazio.
+ * The report closes the loop: the agent knows right away if it wrote a
+ * `<section class="slide">` with the wrong name (zero slides) instead of finding
+ * out from the user staring at an empty stage.
  */
 export async function openSlidesAndReport(input: {
-  /** Pasta do deck (ou o HTML de entrada), já resolvido e autorizado. */
+  /** Folder of the deck (or the entry HTML), already resolved and authorized. */
   target: string
-  /** Entrada explícita, quando `target` é a pasta. */
+  /** Explicit entry, when `target` is the folder. */
   entry?: string
   root?: string
   sessionId: string
   label: string
   nextStep: string
-  /** Refaz a capa mesmo que o deck já esteja na galeria (deck reescrito). */
+  /** Redoes the cover even if the deck is already in the gallery (rewritten deck). */
   refreshCover?: boolean
 }): Promise<string> {
   const reg = await registerSlides(input.target, {
@@ -47,8 +47,8 @@ export async function openSlidesAndReport(input: {
     sessionId: input.sessionId,
   })
   const name = path.basename(reg.folder)
-  // O id faz o mesmo deck voltar à MESMA aba; `entry` é o caminho dentro da
-  // pasta e `path` o absoluto, que a nota do chat devolve ao agente.
+  // The id makes the same deck come back to the SAME tab; `entry` is the path inside the
+  // folder and `path` the absolute one, which the chat note returns to the agent.
   panelSlidesPreview({
     id: reg.id,
     entry: path.relative(reg.folder, reg.entry).split(path.sep).join('/'),
@@ -70,9 +70,9 @@ export async function openSlidesAndReport(input: {
     )
   }
 
-  // Galeria: a capa é o slide 1, e é o que faz o deck existir na aba Mídia
-  // (sem isto ele só voltaria pelo card do chat). Best-effort — uma captura
-  // falha deixa o item sem capa, nunca derruba a abertura.
+  // Gallery: the cover is slide 1, and it is what makes the deck exist in the Media tab
+  // (without this it would only come back through the chat card). Best-effort — a failed
+  // capture leaves the item without a cover, it never takes down the opening.
   if (input.refreshCover || !(await isInGallery(reg.id))) {
     await registerSlidesCover(reg.id, { title: name, sessionId: input.sessionId }).catch(() => false)
   }
@@ -92,15 +92,15 @@ export async function openSlidesAndReport(input: {
 }
 
 /**
- * Reabre um deck que JÁ está no registro — o card do chat, o tile da galeria.
- * Sem `sessionId` de propósito: o renderer resolve o balde pelo chat ATIVO (ver
- * reopenMotion/reopenDesign, o mesmo raciocínio).
+ * Reopens a deck that is ALREADY in the registry — the chat card, the gallery tile.
+ * No `sessionId` on purpose: the renderer resolves the bucket from the ACTIVE chat
+ * (see reopenMotion/reopenDesign, the same reasoning).
  */
 export async function reopenSlides(id: string): Promise<boolean> {
   const entry = await getSlides(id)
   if (!entry) return false
-  // Depois de reiniciar o app o registro volta do disco, mas o watcher não: sem
-  // registrar de novo, o deck reaberto abriria sem recarga ao vivo. Idempotente.
+  // After restarting the app the registry comes back from disk, but the watcher does not:
+  // without registering again, the reopened deck would open without live reload. Idempotent.
   await registerSlides(entry.folder, { entry: entry.entry }).catch(() => {})
   panelSlidesPreview({
     id,

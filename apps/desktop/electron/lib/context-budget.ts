@@ -4,128 +4,128 @@ import type { CatalogModel } from '@shared/chat'
 import { parseFileView, parseInspection } from './bash-inspect'
 
 /**
- * Orçamento de contexto DENTRO do turno.
+ * Context budget WITHIN the turn.
  *
- * A compactação (compaction.ts) só alcança o histórico persistido ENTRE turnos,
- * e o `toModelMessages` já descarta os ToolParts antigos — ou seja, o que ela
- * resume é a menor parte do que vai para o modelo. O que estoura o contexto é o
- * tool loop do turno em andamento: o SDK reenvia toda chamada de ferramenta e
- * todo resultado a cada step, e com centenas de steps isso cresce sem teto
- * (um turno real chegou a pedir 3,4M tokens num modelo de 1M).
+ * Compaction (compaction.ts) only reaches the persisted history BETWEEN turns,
+ * and `toModelMessages` already discards the old ToolParts — that is, what it
+ * summarizes is the smallest part of what goes to the model. What blows up the context is
+ * the tool loop of the turn in progress: the SDK resends every tool call and
+ * every result on each step, and with hundreds of steps that grows without a ceiling
+ * (a real turn came to request 3.4M tokens on a 1M model).
  *
- * Este módulo corta esse acúmulo no `prepareStep` — o único ponto onde as
- * mensagens do turno passam antes de virar request.
+ * This module cuts that accumulation in `prepareStep` — the only point where the
+ * turn's messages pass before becoming a request.
  */
 
-/** Estimativa grosseira, sem tokenizer: a média de um texto em UTF-8. */
+/** Rough estimate, without a tokenizer: the average of a text in UTF-8. */
 const CHARS_PER_TOKEN = 4
 
 /**
- * Teto absoluto de contexto, independente do `limit.context` anunciado pelo
- * catálogo. Modelos de 1M+ só acionariam os cortes relativos perto de ~1M,
- * deixando a conversa operar rotineiramente com centenas de milhares de tokens
- * de histórico — caro e lento muito antes de virar erro. Compartilhado com a
- * compactação para que os dois cortes falem do mesmo teto.
+ * Absolute context ceiling, regardless of the `limit.context` announced by the
+ * catalog. Models of 1M+ would only trigger the relative cuts near ~1M,
+ * leaving the conversation to routinely operate with hundreds of thousands of tokens
+ * of history — expensive and slow long before becoming an error. Shared with
+ * compaction so that both cuts speak of the same ceiling.
  */
 export const ABSOLUTE_CONTEXT_CAP = 300_000
 
-/** Reserva para a resposta do modelo. */
+/** Reserve for the model's answer. */
 const OUTPUT_RESERVE_CAP = 32_000
-/** Reserva para o system prompt + definições das ferramentas, que não passam
- *  por aqui (o SDK monta o request depois do prepareStep). */
+/** Reserve for the system prompt + tool definitions, which do not pass
+ *  through here (the SDK assembles the request after prepareStep). */
 const PROMPT_RESERVE = 30_000
 const MIN_BUDGET = 16_000
 
-/** Tamanho fixo cobrado por anexo binário: um PNG de 1MB vira ~1.5k tokens no
- *  provedor, mas ~250k caracteres de base64 — contá-los por caractere faria o
- *  orçamento achar que estourou e descartar meio turno sem necessidade. */
+/** Fixed size charged per binary attachment: a 1MB PNG becomes ~1.5k tokens at the
+ *  provider, but ~250k characters of base64 — counting them by character would make the
+ *  budget think it overflowed and discard half a turn needlessly. */
 const BINARY_PART_CHARS = 6_000
 
 /**
- * Resultados de ferramenta preservados sempre, por mais apertado que esteja o
- * orçamento: é a mesa de trabalho do modelo neste instante. Descartar os
- * últimos faria o agente perder o que acabou de ler e reler em loop.
+ * Tool results always preserved, no matter how tight the
+ * budget is: it is the model's workbench right now. Discarding the
+ * last ones would make the agent lose what it just read and re-read it in a loop.
  */
 const KEEP_RECENT_RESULTS = 10
 
 /**
- * Piso do último recurso: quando nem descartando tudo o que é antigo o turno
- * cabe, o corte avança sobre os recentes e para aqui. Perder o que o modelo
- * acabou de ler é ruim; um request que o provedor recusa inteiro é pior — e
- * era exatamente o que acontecia antes deste módulo existir.
+ * Last-resort floor: when even discarding everything old the turn does not
+ * fit, the cut moves over the recent ones and stops here. Losing what the model
+ * just read is bad; a request the provider refuses entirely is worse — and
+ * that was exactly what happened before this module existed.
  */
 const MIN_KEPT_RESULTS = 2
 
 /**
- * Fração do orçamento a partir da qual chamadas repetidas passam a ser
- * descartadas. Abaixo disso o turno é pequeno e não vale mexer no contexto:
- * economia nenhuma justifica mudar o que o modelo vê num turno que cabe folgado.
+ * Fraction of the budget from which repeated calls start being
+ * discarded. Below that the turn is small and there is no point in touching the context:
+ * no saving justifies changing what the model sees in a turn that fits comfortably.
  */
 const SUPERSEDE_THRESHOLD = 0.5
 
-/** Strings dentro do input de uma chamada descartada acima disso são cortadas
- *  — o `content` de um `write` de arquivo grande fica no contexto para sempre,
- *  e depois de descartado o resultado ele não serve mais para nada. */
+/** Strings inside the input of a discarded call above this are cut
+ *  — the `content` of a `write` of a large file stays in the context forever,
+ *  and once the result is discarded it is no longer good for anything. */
 const MAX_KEPT_INPUT_STRING = 400
 
 /**
- * Ferramentas cuja repetição com os MESMOS argumentos torna o resultado
- * anterior redundante. Só leitura idempotente entra: `bash` roda comando (o
- * segundo `git status` não invalida o primeiro como registro do que houve) e
- * `write`/`edit` têm efeito colateral.
+ * Tools whose repetition with the SAME arguments makes the previous result
+ * redundant. Only idempotent reads enter: `bash` runs a command (the
+ * second `git status` does not invalidate the first as a record of what happened) and
+ * `write`/`edit` have side effects.
  */
 const IDEMPOTENT_TOOLS = new Set(['read', 'ls', 'glob', 'grep', 'code_search', 'code_outline', 'code_refs'])
 
 /**
- * Teto de TRABALHO do turno, abaixo do teto de segurança (`contextBudget`).
- * O teto de segurança só impede o request que o provedor recusa; nos dados
- * reais os turnos longos rodavam 200–470k tokens por passo, e cada passo
- * reenvia tudo — os 10% de turnos mais pesados eram 66% da entrada. Passando
- * disto, o que é antigo sai em lote (ver BATCH_TARGET).
+ * WORKING ceiling of the turn, below the safety ceiling (`contextBudget`).
+ * The safety ceiling only prevents the request the provider refuses; in real
+ * data long turns ran 200–470k tokens per step, and each step
+ * resends everything — the heaviest 10% of turns were 66% of the input. Going past
+ * this, what is old leaves in a batch (see BATCH_TARGET).
  */
 const WORKING_CONTEXT_CAP = 100_000
 
 /**
- * Até onde o corte em lote desce, como fração do teto de trabalho. Descartar
- * só o necessário para caber mudaria o meio do contexto a cada passo — e cada
- * mudança invalida o cache de prefixo do provedor dali em diante. Descendo bem
- * abaixo do teto, o contexto volta a crescer intacto por muitos passos antes
- * do próximo corte.
+ * How far the batch cut goes down, as a fraction of the working ceiling. Discarding
+ * only what is needed to fit would change the middle of the context on every step — and every
+ * change invalidates the provider's prefix cache from there on. Going well
+ * below the ceiling, the context grows back intact for many steps before
+ * the next cut.
  */
 const BATCH_TARGET = 0.6
 
 /**
- * Tools do Computer Use cujo resultado é uma observação da tela. Uma observação
- * só vale até a próxima árvore COMPLETA do mesmo app: dali para trás os índices
- * e o estado que ela mostra já não são verdade, e cada passo do laço a
- * reenviava — com o screenshot, quando havia. Os diffs (tools/computer.ts) se
- * apoiam na última árvore completa, então ela e o que vem depois ficam.
+ * Computer Use tools whose result is a screen observation. An observation
+ * is only valid until the next COMPLETE tree of the same app: from there back the indexes
+ * and the state it shows are no longer true, and each step of the loop
+ * resent it — with the screenshot, when there was one. The diffs (tools/computer.ts) rely
+ * on the last complete tree, so it and what comes after stay.
  */
 const OBSERVATION_TOOLS = new Set(['cu_observe', 'cu_computer', 'cu_batch', 'cu_query'])
 const OBSERVATION_APP = /^App: .*\bpid (\d+)\)/m
 const FULL_TREE = /^Tree \(\d+ elements/m
 /**
- * Observações vencidas saem juntas, não uma a cada passo: cada descarte muda
- * o meio do contexto e invalida o cache de prefixo do provedor dali em diante.
+ * Expired observations leave together, not one per step: every discard changes
+ * the middle of the context and invalidates the provider's prefix cache from there on.
  */
 const STALE_OBSERVATION_BATCH = 3
 const MAX_KEPT_SUMMARY = 500
 
-/** O `read` sem `limit` mostra até isto (MAX_READ_LINES em tools/files.ts). */
+/** `read` without `limit` shows up to this (MAX_READ_LINES in tools/files.ts). */
 const READ_DEFAULT_LINES = 2000
 
-/** Prefixo do texto que substitui um resultado descartado — serve de sentinela
- *  para não reprocessar, step após step, o que já foi cortado. */
+/** Prefix of the text that replaces a discarded result — it serves as a sentinel
+ *  to avoid reprocessing, step after step, what was already cut. */
 const DROPPED_MARK = '[SYSTEM: tool output dropped'
 
-/** Separador da chave de deduplicação: JSON serializado nunca contém quebra de
- *  linha crua, então não há como um argumento forjar a chave de outro. */
+/** Separator of the deduplication key: serialized JSON never contains a raw line
+ *  break, so there is no way for one argument to forge another's key. */
 const KEY_SEPARATOR = '\n'
 
 /**
- * Teto de passos por turno. O corte de contexto acima já impede o tool loop de
- * estourar a janela, então isto aqui é guarda de custo e de loop em falso: um
- * modelo de contexto pequeno não tem o que fazer com 300 idas ao provedor.
+ * Step ceiling per turn. The context cut above already prevents the tool loop from
+ * blowing the window, so this here is a guard for cost and for a false loop: a
+ * model with a small context has nothing to do with 300 trips to the provider.
  */
 const MAX_STEPS_CEILING = 300
 const MAX_STEPS_FLOOR = 120
@@ -138,14 +138,14 @@ export function maxStepsFor(model: CatalogModel | undefined): number {
   return Math.max(MAX_STEPS_FLOOR, Math.min(MAX_STEPS_CEILING, scaled))
 }
 
-/** Quantos tokens as mensagens do turno podem ocupar antes de o corte entrar. */
+/** How many tokens the turn's messages may take before the cut comes in. */
 export function contextBudget(model: CatalogModel | undefined): number {
   const context = Math.min(model?.limit?.context || ABSOLUTE_CONTEXT_CAP, ABSOLUTE_CONTEXT_CAP)
   const output = Math.min(model?.limit?.output || OUTPUT_RESERVE_CAP, OUTPUT_RESERVE_CAP)
   return Math.max(context - output - PROMPT_RESERVE, MIN_BUDGET)
 }
 
-/** Teto a partir do qual o corte em lote entra — nunca acima do de segurança. */
+/** Ceiling from which the batch cut comes in — never above the safety one. */
 export function workingBudget(model: CatalogModel | undefined): number {
   return Math.min(contextBudget(model), WORKING_CONTEXT_CAP)
 }
@@ -174,7 +174,7 @@ function partType(part: unknown): string | undefined {
   return isRecord(part) && typeof part.type === 'string' ? part.type : undefined
 }
 
-/** Caracteres de uma saída de ferramenta, sem contar base64 de anexo. */
+/** Characters of a tool output, not counting an attachment's base64. */
 function outputChars(output: unknown): number {
   if (!isRecord(output)) return 0
   if (output.type === 'content' && Array.isArray(output.value)) {
@@ -193,9 +193,9 @@ function partChars(part: unknown): number {
   return safeChars(part)
 }
 
-/** Tamanho do que vai ao modelo, em tokens. Superestima markup e subestima
- *  idiomas fora do latin-1, mas o erro é pequeno perto da ordem de grandeza
- *  que interessa aqui (dezenas de milhares de tokens). */
+/** Size of what goes to the model, in tokens. It overestimates markup and underestimates
+ *  languages outside latin-1, but the error is small next to the order of magnitude
+ *  that matters here (tens of thousands of tokens). */
 export function estimateTokens(messages: ModelMessage[]): number {
   let chars = 0
   for (const message of messages) {
@@ -218,24 +218,24 @@ function isDropped(part: Record<string, unknown>): boolean {
 }
 
 interface ResultSlot {
-  /** `${índice da mensagem}:${índice da part}` — identidade posicional, porque
-   *  o toolCallId pode vir vazio de parts saneadas pelo normalizeMessages. */
+  /** `${message index}:${part index}` — positional identity, because
+   *  the toolCallId may come empty from parts sanitized by normalizeMessages. */
   at: string
   toolCallId: string
   toolName: string
   chars: number
-  /** Começo do texto do resultado — o `read` e o `write` dizem ali o caminho
-   *  absoluto que resolveram, que o input relativo não diz. */
+  /** Start of the result text — `read` and `write` say there the absolute
+   *  path they resolved, which the relative input does not say. */
   head: string
-  /** Erro da ferramenta ou bash com exit code diferente de zero */
+  /** Tool error or bash with a non-zero exit code */
   failed: boolean
-  /** Saída de bash com o meio cortado (tools/shell.ts) — não cobre faixa nenhuma */
+  /** Bash output with the middle cut (tools/shell.ts) — it covers no range */
   partial: boolean
-  /** Observação do Computer Use: de qual app, se traz a árvore inteira e o que a ação fez antes dela */
+  /** Computer Use observation: from which app, whether it brings the whole tree and what the action did before it */
   observation: { pid: number; full: boolean; summary: string } | null
 }
 
-/** O texto de uma saída — numa com imagem, a parte de texto. */
+/** The text of an output — in one with an image, the text part. */
 function outputText(output: Record<string, unknown>): string {
   if (typeof output.value === 'string') return output.value
   if (output.type === 'content' && Array.isArray(output.value)) {
@@ -300,20 +300,20 @@ function collectResults(messages: ModelMessage[]): ResultSlot[] {
 }
 
 /**
- * O que um resultado representa, para saber quando um posterior o torna
- * redundante:
- * - `query`: leitura idempotente; a mesma chave repetida substitui a anterior.
- * - `file`: um trecho de arquivo (`read`, `cat`, `sed -n`, `head`); um trecho
- *   posterior do MESMO arquivo que o cubra o substitui.
- * - `overwrite`: um `write` do arquivo inteiro; nada antes dele sobre esse
- *   arquivo continua verdade.
+ * What a result represents, to know when a later one makes it
+ * redundant:
+ * - `query`: idempotent read; the same key repeated replaces the previous one.
+ * - `file`: a stretch of a file (`read`, `cat`, `sed -n`, `head`); a later stretch
+ *   of the SAME file that covers it replaces it.
+ * - `overwrite`: a `write` of the whole file; nothing before it about that
+ *   file remains true.
  */
 type ResultView =
   | { kind: 'query'; key: string }
   | { kind: 'file'; path: string; from: number; to: number }
   | { kind: 'overwrite'; path: string }
 
-/** O que tools/shell.ts escreve no lugar do meio de uma saída longa */
+/** What tools/shell.ts writes in place of the middle of a long output */
 const OMITTED_MIDDLE_MARK = 'characters omitted from the middle of the output'
 
 const READ_HEADER = /^<file path="([^"]+)">/
@@ -331,7 +331,7 @@ function viewOf(slot: ResultSlot, calls: Map<string, unknown>, directory?: strin
     return match && !slot.failed ? { kind: 'overwrite', path: match[1] } : null
   }
   if (slot.toolName === 'read') {
-    // Só arquivo de texto: documento (PDF/DOCX) pagina por página, não por linha.
+    // Text file only: a document (PDF/DOCX) is paged by page, not by line.
     const match = READ_HEADER.exec(slot.head)
     if (match && isRecord(input)) {
       const from = Math.max(1, numberOr(input.offset, 1))
@@ -352,7 +352,7 @@ function viewOf(slot: ResultSlot, calls: Map<string, unknown>, directory?: strin
   return serialized == null ? null : { kind: 'query', key: `${slot.toolName}${KEY_SEPARATOR}${serialized}` }
 }
 
-/** Por que um resultado posterior torna este redundante — null quando não torna. */
+/** Why a later result makes this one redundant — null when it does not. */
 function supersededBy(older: ResultView, newer: ResultView, newerFailed: boolean): DropReason | null {
   if (older.kind === 'query') {
     return newer.kind === 'query' && newer.key === older.key ? 'superseded' : null
@@ -369,7 +369,7 @@ type DropReason = 'superseded' | 'covered' | 'overwritten' | 'age' | 'oversized'
 function droppedText(toolName: string, chars: number, reason: DropReason, summary = ''): string {
   const tool = toolName || 'tool'
   if (reason === 'staleObservation') {
-    // O que a ação fez fica: sem isso o modelo perde o histórico do que já tentou.
+    // What the action did stays: without it the model loses the history of what it already tried.
     return `${DROPPED_MARK} — an older screen observation of this app; a newer full one is further down and these indices are no longer valid.${summary ? ` What this call did: ${summary}` : ''}]`
   }
   if (reason === 'oversized') {
@@ -387,9 +387,9 @@ function droppedText(toolName: string, chars: number, reason: DropReason, summar
   return `${DROPPED_MARK} — the \`${tool}\` result (${chars} chars) was removed to free up context in this turn. Call the tool again if you still need it.]`
 }
 
-/** Encurta strings longas do input de uma chamada cujo resultado foi
- *  descartado, preservando as chaves: o provedor valida o input contra o
- *  schema da ferramenta, e um objeto vazio derrubaria o turno com 400. */
+/** Shortens long strings in the input of a call whose result was
+ *  discarded, preserving the keys: the provider validates the input against the
+ *  tool's schema, and an empty object would bring the turn down with a 400. */
 function shrinkInput(input: unknown): unknown {
   if (!isRecord(input) || Array.isArray(input)) return input
   let changed = false
@@ -437,37 +437,37 @@ function rewrite(
 }
 
 /**
- * Corta o acúmulo do tool loop até caber no orçamento. Devolve a MESMA
- * referência quando nada muda, para o `prepareStep` poder responder `{}` e o
- * SDK pular a reescrita das mensagens.
+ * Cuts the tool loop accumulation until it fits the budget. Returns the SAME
+ * reference when nothing changes, so `prepareStep` can answer `{}` and the
+ * SDK skips rewriting the messages.
  *
- * Critérios, nesta ordem:
- * 1. Resultados que um posterior torna redundante: a mesma leitura repetida
- *    (`read` do mesmo arquivo três vezes num turno é de longe o caso mais
- *    comum), um trecho relido que cobre o anterior — pelo `read` ou por
- *    `cat`/`sed -n` no bash — e o arquivo reescrito por `write`.
- * 2. Teto de trabalho (`softBudget`), quando passa dele: o antigo sai em lote
- *    até BATCH_TARGET do teto, preservando os últimos resultados.
- * 3. Teto de segurança (`budgetTokens`), quando ainda não couber: descarta do
- *    mais antigo para o mais novo, e no limite até os recentes.
+ * Criteria, in this order:
+ * 1. Results that a later one makes redundant: the same read repeated
+ *    (`read` of the same file three times in a turn is by far the most
+ *    common case), a re-read stretch that covers the previous one — through `read` or through
+ *    `cat`/`sed -n` in bash — and the file rewritten by `write`.
+ * 2. Working ceiling (`softBudget`), when it goes past it: the old leaves in a batch
+ *    down to BATCH_TARGET of the ceiling, preserving the last results.
+ * 3. Safety ceiling (`budgetTokens`), when it still does not fit: it discards from the
+ *    oldest to the newest, and at the limit even the recent ones.
  *
- * O que é descartado vira uma linha dizendo o que havia ali e que a ferramenta
- * pode ser chamada de novo — nunca some em silêncio, senão o modelo conclui que
- * nunca leu o arquivo. As tool CALLS ficam: o par call/result é exigido pelos
- * provedores, e quebrá-lo derruba o turno com 400.
+ * What is discarded becomes a line saying what was there and that the tool
+ * can be called again — it never disappears silently, otherwise the model concludes that it
+ * never read the file. The tool CALLS stay: the call/result pair is required by the
+ * providers, and breaking it brings the turn down with a 400.
  */
 export interface TrimOptions {
-  /** Teto de trabalho do corte em lote (ver workingBudget) */
+  /** Working ceiling of the batch cut (see workingBudget) */
   softBudget?: number
   /**
-   * Memória do turno. O SDK entrega ao `prepareStep` as mensagens ORIGINAIS a
-   * cada passo, então sem isto o corte seria refeito do zero e o lote
-   * escorregaria um pouco a cada passo — exatamente a mudança no meio do
-   * contexto que o lote existe para evitar. Com ela, o que saiu continua fora,
-   * com o mesmo texto, e o prefixo fica estável entre os cortes.
+   * Turn memory. The SDK hands `prepareStep` the ORIGINAL messages on
+   * every step, so without this the cut would be redone from scratch and the batch
+   * would slide a little on every step — exactly the change in the middle of the
+   * context that the batch exists to avoid. With it, what left stays out,
+   * with the same text, and the prefix stays stable between cuts.
    */
   state?: TrimState
-  /** Pasta onde o bash roda, para resolver os caminhos de `cat`/`sed -n` */
+  /** Folder where bash runs, to resolve the paths of `cat`/`sed -n` */
   directory?: string
 }
 
@@ -493,11 +493,11 @@ export function trimTurnContext(
   let used = estimateTokens(messages)
   const memoryKey = (slot: ResultSlot) => slot.toolCallId || slot.at
 
-  // O aviso substituto é montado aqui, e não na reescrita, para que o
-  // abatimento seja o tamanho REAL do que sobrou. Estimá-lo por uma constante
-  // deixava o contador otimista alguns tokens por descarte — com centenas de
-  // descartes num turno, a conta fechava dentro do orçamento e o request saía
-  // fora dele, que é exatamente o erro que este módulo existe para evitar.
+  // The replacement notice is built here, and not in the rewrite, so that the
+  // deduction is the REAL size of what was left. Estimating it by a constant
+  // left the counter optimistic by a few tokens per discard — with hundreds of
+  // discards in a turn, the count closed inside the budget and the request went out
+  // outside it, which is exactly the error this module exists to avoid.
   const drop = (slot: ResultSlot, reason: DropReason) => {
     if (dropped.has(slot.at)) return
     const stub = droppedText(slot.toolName, slot.chars, reason, slot.observation?.summary)
@@ -507,7 +507,7 @@ export function trimTurnContext(
     used -= Math.max(0, Math.round((slot.chars - stub.length) / CHARS_PER_TOKEN))
   }
 
-  // O que já saiu num passo anterior continua fora, com o mesmo aviso.
+  // What already left on a previous step stays out, with the same notice.
   if (options.state) {
     for (const slot of results) {
       const reason = options.state.dropped.get(memoryKey(slot))
@@ -515,8 +515,8 @@ export function trimTurnContext(
     }
   }
 
-  // Observações vencidas saem sem esperar o orçamento apertar: não são só
-  // grandes, são falsas (índices e estado de uma tela que já mudou).
+  // Expired observations leave without waiting for the budget to tighten: they are not only
+  // large, they are false (indexes and state of a screen that has already changed).
   const latestFull = new Map<number, number>()
   results.forEach((slot, i) => {
     if (slot.observation?.full) latestFull.set(slot.observation.pid, i)
@@ -553,15 +553,15 @@ export function trimTurnContext(
   }
   if (options.softBudget && used > softBudget) evict(KEEP_RECENT_RESULTS, softBudget * BATCH_TARGET)
   evict(KEEP_RECENT_RESULTS)
-  // Ainda não coube: avança sobre a mesa de trabalho até o piso. Não é o caso
-  // comum — acontece quando poucas saídas gigantes sozinhas já passam do
-  // orçamento —, mas é o que garante um teto de verdade em vez de um teto que
-  // vale só enquanto o turno colabora.
+  // Still does not fit: it moves over the workbench down to the floor. It is not the common
+  // case — it happens when a few giant outputs alone already go past the
+  // budget —, but it is what guarantees a real ceiling instead of a ceiling that
+  // only holds while the turn cooperates.
   evict(MIN_KEPT_RESULTS)
-  // O piso protege a mesa de trabalho, mas não pode proteger um resultado que
-  // sozinho não cabe: um screenshot em base64 de 3,3M caracteres era o último
-  // resultado do turno, o piso o preservava e o request saía com 917k tokens
-  // num modelo de 1M. Aqui o maior sai primeiro, até caber.
+  // The floor protects the workbench, but it cannot protect a result that
+  // by itself does not fit: a base64 screenshot of 3.3M characters was the last
+  // result of the turn, the floor preserved it and the request went out with 917k tokens
+  // on a 1M model. Here the largest leaves first, until it fits.
   if (used > budgetTokens) {
     const bySize = [...results].sort((a, b) => b.chars - a.chars)
     for (const slot of bySize) {

@@ -7,9 +7,9 @@ export interface LoopConfig {
 }
 
 /**
- * 5 e nao 3: com o modo Loop ligado a orquestracao passa a usar este numero no
- * lugar do teto proprio dela (ORCHESTRATION_REVIEW_ROUNDS), entao o default
- * precisa ser maior que ele para ligar o Loop significar "revise mais".
+ * 5 instead of 3: with Loop mode on, the orchestration uses this number in
+ * place of its own ceiling (ORCHESTRATION_REVIEW_ROUNDS), so the default must be
+ * higher than it for turning Loop on to mean "review more".
  */
 const DEFAULTS: LoopConfig = {
   maxIterations: 5,

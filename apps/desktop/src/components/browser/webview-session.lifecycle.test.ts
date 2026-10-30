@@ -1,20 +1,20 @@
 import { describe, expect, it, vi } from "vitest"
 
 /**
- * Teste de VIDA do pool de <webview>, com um DOM de mentira.
+ * LIFE test of the <webview> pool, with a fake DOM.
  *
- * O defeito que motivou o arquivo não era do Electron (ele se comporta como
- * documentado) e sim do POOL: o <webview> era MOVIDO de pai (host oculto ↔
- * container visível) e reaproveitado. Quando o elemento era reanexado antes
- * do primeiro guest terminar de nascer, o Electron criava dois guests para o
- * mesmo elemento, o renderer guardava o id do guest morto e a aba ficava
- * BRANCA para sempre ("Invalid guestInstanceId" no console).
+ * The defect that motivated the file was not Electron's (it behaves as
+ * documented) but the POOL's: the <webview> was MOVED from parent (hidden host ↔
+ * visible container) and reused. When the element was re-attached before
+ * the first guest finished being born, Electron created two guests for the
+ * same element, the renderer kept the id of the dead guest and the tab stayed
+ * WHITE forever ("Invalid guestInstanceId" in the console).
  *
- * A regra que estes testes fixam: o <webview> NUNCA muda de pai. Ele nasce no
- * container onde vai ficar e é REMOVIDO (não movido) quando a aba desmonta.
+ * The rule these tests pin down: the <webview> NEVER changes parent. It is born in the
+ * container where it is going to stay and is REMOVED (not moved) when the tab unmounts.
  */
 
-/** Elemento de mentira: só o que o pool usa. */
+/** Fake element: only what the pool uses. */
 class FakeElement {
   parentElement: FakeElement | null = null
   children: FakeElement[] = []
@@ -26,16 +26,16 @@ class FakeElement {
   constructor(readonly tagName: string) {}
 
   addEventListener(type: string, cb: (event: unknown) => void): void {
-    const lista = this.listeners[type] ?? []
-    lista.push(cb)
-    this.listeners[type] = lista
+    const list = this.listeners[type] ?? []
+    list.push(cb)
+    this.listeners[type] = list
   }
 
   emit(type: string): void {
     for (const cb of this.listeners[type] ?? []) cb({ type })
   }
 
-  /** Simula o guest vivo: o Electron devolve o webContentsId. */
+  /** Simulates the live guest: Electron returns the webContentsId. */
   guestId = 0
 
   getWebContentsId(): number {
@@ -63,7 +63,7 @@ class FakeElement {
     this.parentElement?.removeChild(this)
   }
 
-  // Guest nunca pronto: o pool só usa isso depois do dom-ready.
+  // Guest never ready: the pool only uses that after dom-ready.
   getURL(): string {
     return "about:blank"
   }
@@ -96,70 +96,70 @@ const { ensureAgentBrowser, getWebviewUrl, mountWebview, unmountWebview } = awai
   "./webview-session"
 )
 
-/** O container visível da aba (o React providing). */
+/** The visible container of the tab (the React provider). */
 function container(): FakeElement {
   return new FakeElement("div")
 }
 
-describe("ciclo de vida do <webview>", () => {
-  it("cria um elemento NOVO a cada montagem e nunca o re-aproveita", () => {
+describe("lifecycle of the <webview>", () => {
+  it("creates a NEW element on every mount and never reuses it", () => {
     const box = container()
-    const primeiro = mountWebview("sessao:aba", box as unknown as HTMLElement)
-    expect(primeiro.parentElement).toBe(box)
+    const first = mountWebview("session:tab", box as unknown as HTMLElement)
+    expect(first.parentElement).toBe(box)
 
-    unmountWebview("sessao:aba")
-    // Desmontar REMOVE o elemento — não devolve ele para outro pai.
-    expect(primeiro.parentElement).toBe(null)
+    unmountWebview("session:tab")
+    // Unmounting REMOVES the element — it does not hand it back to another parent.
+    expect(first.parentElement).toBe(null)
 
-    const segundo = mountWebview("sessao:aba", box as unknown as HTMLElement)
-    expect(segundo).not.toBe(primeiro)
-    expect(segundo.parentElement).toBe(box)
+    const second = mountWebview("session:tab", box as unknown as HTMLElement)
+    expect(second).not.toBe(first)
+    expect(second.parentElement).toBe(box)
   })
 
-  it("não mexe no elemento quando a aba re-renderiza no mesmo container", () => {
+  it("leaves the element alone when the tab re-renders in the same container", () => {
     const box = container()
-    const primeiro = mountWebview("sessao:aba2", box as unknown as HTMLElement)
-    const segundo = mountWebview("sessao:aba2", box as unknown as HTMLElement)
-    expect(segundo).toBe(primeiro)
+    const first = mountWebview("session:tab2", box as unknown as HTMLElement)
+    const second = mountWebview("session:tab2", box as unknown as HTMLElement)
+    expect(second).toBe(first)
   })
 
-  it("não devolve o elemento da aba ao host oculto (era o re-parent que corrompia o guest)", () => {
+  it("does not give the tab's element back to the hidden host (the re-parent was corrupting the guest)", () => {
     const box = container()
-    mountWebview("sessao:aba3", box as unknown as HTMLElement)
-    unmountWebview("sessao:aba3")
-    // O host oculto (único filho do body) não existe: nada foi para lá.
+    mountWebview("session:tab3", box as unknown as HTMLElement)
+    unmountWebview("session:tab3")
+    // The hidden host (only child of the body) does not exist: nothing went there.
     expect(body.children).toHaveLength(0)
   })
 
-  it("mantém a URL da aba entre mount e unmount", () => {
+  it("keeps the tab's URL between mount and unmount", () => {
     const box = container()
-    mountWebview("sessao:aba4", box as unknown as HTMLElement, "https://exemplo.com/busca")
-    expect(getWebviewUrl("sessao:aba4")).toBe("https://exemplo.com/busca")
-    unmountWebview("sessao:aba4")
-    expect(getWebviewUrl("sessao:aba4")).toBe("https://exemplo.com/busca")
+    mountWebview("session:tab4", box as unknown as HTMLElement, "https://example.com/search")
+    expect(getWebviewUrl("session:tab4")).toBe("https://example.com/search")
+    unmountWebview("session:tab4")
+    expect(getWebviewUrl("session:tab4")).toBe("https://example.com/search")
   })
 
-  it("o browser do agente nasce no host oculto e fica lá", () => {
-    ensureAgentBrowser("sessao-agente")
+  it("the agent's browser is born in the hidden host and stays there", () => {
+    ensureAgentBrowser("agent-session")
     const host = body.children[0]
     expect(host).toBeDefined()
     expect(host.children).toHaveLength(1)
     expect(host.children[0].tagName).toBe("webview")
   })
 
-  it("registra o guest no main e solta o registro quando a aba desmonta", () => {
+  it("registers the guest in main and releases the registration when the tab unmounts", () => {
     const box = container()
-    const el = mountWebview("sessao:aba5", box as unknown as HTMLElement) as unknown as FakeElement
+    const el = mountWebview("session:tab5", box as unknown as HTMLElement) as unknown as FakeElement
 
-    // O guest nasce: o Electron passa a devolver o webContentsId.
+    // The guest is born: Electron starts returning the webContentsId.
     el.guestId = 42
     el.emit("dom-ready")
-    expect(send).toHaveBeenCalledWith("panel:register", "sessao", 42)
+    expect(send).toHaveBeenCalledWith("panel:register", "session", 42)
 
     send.mockClear()
-    unmountWebview("sessao:aba5")
-    // O guest morreu: o main precisa saber, senão as tools miram um
-    // webContents destruído.
-    expect(send).toHaveBeenCalledWith("panel:unregister", "sessao", 42)
+    unmountWebview("session:tab5")
+    // The guest died: the main process needs to know, otherwise the tools aim at a
+    // destroyed webContents.
+    expect(send).toHaveBeenCalledWith("panel:unregister", "session", 42)
   })
 })

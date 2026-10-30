@@ -16,14 +16,14 @@ interface SafeScreenProps {
 }
 
 /**
- * Wrapper de tela com safe area baseado em contexto (`useSafeAreaInsets`).
+ * Screen wrapper with a context-based safe area (`useSafeAreaInsets`).
  *
- * Substitui o `SafeAreaView` nativo do react-native-safe-area-context v5, que
- * aplica os insets por meio de um layout pass nativo assíncrono: durante as
- * transições do native-stack o conteúdo da tela nova montava grudado no topo
- * (sob a notch/status bar) e só "pulava" para a posição correta depois que o
- * view nativo re-mede. Aqui os insets vêm do SafeAreaProvider (síncrono) e o
- * padding é aplicado direto no View.
+ * Replaces the native `SafeAreaView` of react-native-safe-area-context v5, which
+ * applies the insets through an asynchronous native layout pass: during the
+ * native-stack transitions the content of the new screen mounted glued to the top
+ * (under the notch/status bar) and only "jumped" to the right position after the
+ * native view re-measured. Here the insets come from the SafeAreaProvider (synchronous) and the
+ * padding is applied straight on the View.
  */
 export function SafeScreen({ children, edges = ['top'], style, backgroundColor }: SafeScreenProps) {
   const insets = useSafeAreaInsets()

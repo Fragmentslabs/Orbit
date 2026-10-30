@@ -1,14 +1,13 @@
 import { BrowserWindow } from 'electron'
 import type { ChatEvent } from '@shared/chat'
-import type { RotinaEvent } from '@shared/rotinas'
-import type { EsteiraEvent } from '@shared/esteira'
-import { forwardChatEvent, forwardRotinaEvent, forwardEsteiraEvent } from './companion-server'
+import type { RoutineEvent } from '@shared/routines'
+import type { PipelineEvent } from '@shared/pipeline'
+import { forwardChatEvent, forwardPipelineEvent, forwardRoutineEvent } from './companion-server'
 
 /**
- * Emite um ChatEvent para todas as janelas + companions conectados.
- * Usado por módulos que não recebem o BrowserWindow (permission engine,
- * tool question) — o chat-engine continua usando seu emit(win) local
- * para os eventos de stream.
+ * Emits a ChatEvent to every window + connected companions. Used by modules that
+ * do not receive the BrowserWindow (permission engine, tool question) — the
+ * chat-engine keeps using its own local emit(win) for stream events.
  */
 export function broadcastChatEvent(event: ChatEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -19,25 +18,25 @@ export function broadcastChatEvent(event: ChatEvent): void {
 }
 
 /**
- * Emite um RotinaEvent para todas as janelas + companions conectados —
- * é o que mantém o app mobile com as rotinas em sincronia (criar, editar,
- * excluir, execução começando/terminando).
+ * Emits a RoutineEvent to every window + connected companions — this is what
+ * keeps the mobile app's routines in sync (create, edit, delete, execution
+ * starting/finishing).
  */
-export function broadcastRotinaEvent(event: RotinaEvent): void {
+export function broadcastRoutineEvent(event: RoutineEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('rotinas:event', event)
+    if (!win.isDestroyed()) win.webContents.send('routines:event', event)
   }
-  forwardRotinaEvent(event)
+  forwardRoutineEvent(event)
 }
 
 /**
- * Emite um EsteiraEvent para todas as janelas + companions conectados — é o
- * funnel ÚNICO do engine (engine.ts `emitir`): o app mobile reflete o board
- * inteiro por aqui (tasks, fases, fila, progresso ao vivo).
+ * Emits a PipelineEvent to every window + connected companions — it is the
+ * engine's SINGLE funnel (engine.ts `emit`): the mobile app mirrors the whole
+ * board through here (tasks, phases, queue, live progress).
  */
-export function broadcastEsteiraEvent(event: EsteiraEvent): void {
+export function broadcastPipelineEvent(event: PipelineEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('esteira:event', event)
+    if (!win.isDestroyed()) win.webContents.send('pipeline:event', event)
   }
-  forwardEsteiraEvent(event)
+  forwardPipelineEvent(event)
 }

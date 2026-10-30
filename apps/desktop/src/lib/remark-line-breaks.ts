@@ -2,36 +2,36 @@ import { defaultRemarkPlugins } from "streamdown"
 import type { Plugin, PluggableList } from "unified"
 
 /**
- * Quebra de linha simples vira <br> — a regra dos comentários do GitHub.
+ * A single line break becomes <br> — the GitHub comments' rule.
  *
- * O CommonMark junta as linhas de um parágrafo num texto só: "primeira
- * ideia\nsegunda ideia" sai como "primeira ideia segunda ideia". Numa resposta
- * longa de modelo isso passa; numa mensagem de chat APAGA informação — quem
- * escreve uma ideia por linha está separando ideias, não escrevendo parágrafo.
+ * CommonMark joins the lines of a paragraph into a single text: "first
+ * idea\nsecond idea" comes out as "first idea second idea". In a long model answer
+ * that passes; in a chat message it WIPES OUT information — whoever
+ * writes one idea per line is separating ideas, not writing a paragraph.
  *
- * A regra vale só onde a quebra é texto: parágrafo e título. Lista, tabela,
- * bloco de código e citação já carregam a quebra na ESTRUTURA do markdown e
- * não passam por aqui — dentro de um ``` de código uma linha por linha
- * continuaria sendo uma linha por linha de qualquer jeito.
+ * The rule only holds where the break is text: paragraph and heading. List, table,
+ * code block and quote already carry the break in the STRUCTURE of the markdown and
+ * do not go through here — inside a ``` of code one line per line
+ * would keep being one line per line anyway.
  *
- * É o `remark-breaks` sem a dependência: a transformação são vinte linhas e
- * evitam versão presa a um plugin que não temos de outra forma.
+ * It is `remark-breaks` without the dependency: the transformation is twenty lines and
+ * it avoids a version pinned to a plugin we do not have otherwise.
  */
 
-/** O mínimo de um nó mdast que esta transformação toca — sem @types/mdast. */
+/** The minimum of an mdast node this transformation touches — without @types/mdast. */
 export interface MdastNode {
   type: string
   value?: string
   children?: MdastNode[]
 }
 
-/** Um nó de texto com quebras vira texto + `break` + texto… */
+/** A text node with breaks becomes text + `break` + text… */
 function splitSoftBreaks(node: MdastNode): MdastNode[] {
   if (node.type !== "text" || typeof node.value !== "string") return [node]
   if (!node.value.includes("\n")) return [node]
 
   const chunks = node.value.split("\n")
-  // Quebra no FIM do texto é o fim do parágrafo, não uma linha em branco.
+  // A break at the END of the text is the end of the paragraph, not a blank line.
   while (chunks.length > 1 && chunks[chunks.length - 1] === "") chunks.pop()
 
   const out: MdastNode[] = []
@@ -42,7 +42,7 @@ function splitSoftBreaks(node: MdastNode): MdastNode[] {
   return out
 }
 
-/** A transformação em si — exportada para o teste exercitá-la na árvore. */
+/** The transformation itself — exported for the test to exercise it on the tree. */
 export function applyChatLineBreaks(tree: MdastNode): void {
   const walk = (node: MdastNode): void => {
     if (!node.children) return
@@ -58,11 +58,11 @@ export function applyChatLineBreaks(tree: MdastNode): void {
 export const remarkChatLineBreaks: Plugin = () => (tree) =>
   applyChatLineBreaks(tree as unknown as MdastNode)
 
-/** O pipeline do streamdown (GFM) + a quebra de linha do chat.
+/** The streamdown pipeline (GFM) + the chat line break.
  *
- * `remarkPlugins` no streamdown SUBSTITUI os defaults em vez de somar — daí
- * partir de `defaultRemarkPlugins` aqui, para tabela, autolink e afins
- * continuarem valendo. */
+ * `remarkPlugins` in streamdown REPLACES the defaults instead of adding to them — hence
+ * starting from `defaultRemarkPlugins` here, so that table, autolink and the like
+ * keep working. */
 export const chatRemarkPlugins: PluggableList = [
   ...Object.values(defaultRemarkPlugins),
   remarkChatLineBreaks,

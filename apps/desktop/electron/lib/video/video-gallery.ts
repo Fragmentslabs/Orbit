@@ -8,16 +8,16 @@ import { probeVideoAttachment, videoPosterPng } from './attachment-note'
 import { registerVideo } from './store'
 
 /**
- * Põe um vídeo na GALERIA de mídia: o anexo que o usuário mandou e o vídeo que o
- * agente produziu no modo chat. É o que os faz aparecerem na aba Mídia, no filtro
- * de tipo, e poderem ser excluídos de lá — liberando o arquivo.
+ * Puts a video in the media GALLERY: the attachment the user sent and the video the
+ * agent produced in chat mode. It is what makes them show up in the Media tab, in the
+ * type filter, and be deletable from there — freeing the file.
  *
- * Só entra aqui o que o app GUARDA. Um vídeo renderizado na pasta de um projeto
- * (modo código) é arquivo do projeto, não do app: a galeria não o lista, porque
- * excluir um item de lá apagaria um arquivo do usuário.
+ * Only what the app KEEPS enters here. A video rendered in a project's folder
+ * (code mode) is the project's file, not the app's: the gallery does not list it, because
+ * deleting an item from there would erase a user's file.
  */
 
-/** Id do item na galeria: o do anexo (`vdo_…`) ou um novo, para um vídeo produzido. */
+/** Id of the item in the gallery: the attachment's (`vdo_…`) or a new one, for a produced video. */
 function newVideoId(file: string): string {
   const ext = path.extname(file).toLowerCase().replace(/^\./, '') || 'mp4'
   return `vdo_${Date.now().toString(36)}${randomBytes(4).toString('hex')}.${ext}`
@@ -25,14 +25,14 @@ function newVideoId(file: string): string {
 
 export interface GalleryVideo {
   entry: MediaEntry
-  /** A capa em PNG (para quem precisa dela de novo, como o chip da bolha). */
+  /** The cover in PNG (for whoever needs it again, like the bubble chip). */
   poster?: Buffer
   probe: MediaProbe | null
 }
 
 export async function addVideoToGallery(input: {
   file: string
-  /** Mantém o id quando o arquivo JÁ é um anexo guardado (`vdo_…`). */
+  /** Keeps the id when the file is ALREADY a kept attachment (`vdo_…`). */
   id?: string
   name?: string
   sessionId?: string
@@ -42,8 +42,8 @@ export async function addVideoToGallery(input: {
 }): Promise<GalleryVideo> {
   const probe = input.probe === undefined ? await probeVideoAttachment(input.file) : input.probe
   const poster = probe ? await videoPosterPng(input.file, probe.durationMs) : undefined
-  // O mesmo arquivo (um render refeito por cima do anterior) é o MESMO item: a
-  // galeria não ganha um cartão novo a cada execução.
+  // The same file (a render redone over the previous one) is the SAME item: the
+  // gallery does not gain a new card at every run.
   const id = input.id ?? (await listMedia({ kind: 'video' })).find((e) => e.path === input.file)?.id ?? newVideoId(input.file)
   const { url } = await registerVideo(input.file, input.sessionId)
   const size = (await fsp.stat(input.file)).size

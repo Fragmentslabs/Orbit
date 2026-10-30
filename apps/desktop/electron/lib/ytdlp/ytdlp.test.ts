@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * O que dá para provar sem rede e sem o binário: a escolha do arquivo oficial
- * por plataforma, os argumentos que a tool monta, a leitura do JSON do yt-dlp
- * e o parser de legendas (incluindo a janela rolante das automáticas, que é
- * onde o texto sairia gaguejando).
+ * What can be proven without network and without the binary: the choice of the
+ * official file per platform, the arguments the tool builds, the reading of the
+ * yt-dlp JSON and the subtitle parser (including the scrolling window of the
+ * automatic ones, which is where the text would come out stuttering).
  */
 
 vi.mock('electron', () => ({
@@ -17,7 +17,7 @@ const { describeInfo, durationText, parseInfo, videoHeights } = await import('./
 const { cleanCueLine, cueText, matchLanguage, parseSubtitleFile, parseTimestamp, timestampedCues } = await import('./subtitles')
 
 describe('assetName', () => {
-  it('escolhe o arquivo oficial do release por plataforma', () => {
+  it('chooses the official release file per platform', () => {
     expect(assetName('darwin', 'arm64')).toBe('yt-dlp_macos')
     expect(assetName('darwin', 'x64')).toBe('yt-dlp_macos')
     expect(assetName('linux', 'x64')).toBe('yt-dlp_linux')
@@ -31,7 +31,7 @@ describe('assetName', () => {
 describe('argumentos do download', () => {
   const base = { url: 'https://example.com/v', output: '/tmp/x/%(title)s.%(ext)s' } as const
 
-  it('limita a resolução com -f (o -S sozinho não limita) e prefere mp4+m4a', () => {
+  it('limits the resolution with -f (the -S alone does not limit) and prefers mp4+m4a', () => {
     const args = buildDownloadArgs({ ...base, kind: 'video' })
     const filter = args[args.indexOf('-f') + 1]
     expect(filter).toContain('bv*[ext=mp4][height<=1080]+ba[ext=m4a]')
@@ -41,13 +41,13 @@ describe('argumentos do download', () => {
     expect(args).toContain('--no-playlist')
   })
 
-  it('best não impõe teto e prefere h264 só como desempate', () => {
+  it('best imposes no ceiling and prefers h264 only as a tie-breaker', () => {
     const args = buildDownloadArgs({ ...base, kind: 'video', quality: 'best' })
     expect(args[args.indexOf('-f') + 1]).toBe('bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b')
     expect(args).toContain('res,vcodec:h264')
   })
 
-  it('áudio extrai a faixa e só reencoda quando um formato foi pedido', () => {
+  it('audio extracts the track and only re-encodes when a format was requested', () => {
     const best = buildDownloadArgs({ ...base, kind: 'audio', audioFormat: 'best' })
     expect(best).toContain('--audio-format')
     expect(best).toContain('best')
@@ -74,19 +74,19 @@ describe('argumentos do download', () => {
     expect(args[args.indexOf('--cookies-from-browser') + 1]).toBe('chrome')
   })
 
-  it('o template de playlist numera as entradas', () => {
+  it('the playlist template numbers the entries', () => {
     expect(nameTemplate(false)).toBe('%(title).120B [%(id)s].%(ext)s')
     expect(nameTemplate(true)).toContain('%(playlist_index)03d')
   })
 
-  it('info de playlist lista sem abrir cada item', () => {
+  it('playlist info lists without opening each item', () => {
     const args = infoArgs({ url: 'https://example.com/p', playlist: true })
     expect(args).toContain('-J')
     expect(args).toContain('--flat-playlist')
     expect(args).toContain('--playlist-end')
   })
 
-  it('o padrão de legenda preserva a caixa e não abre curinga (evita baixar 40 traduções)', () => {
+  it('the subtitle pattern keeps the case and does not open a wildcard (avoids downloading 40 translations)', () => {
     expect(subtitleLangPattern(['pt-BR'])).toBe('pt-BR')
     expect(subtitleLangPattern(['pt', 'pt'])).toBe('pt')
     const args = subtitleArgs({ url: 'https://example.com/v', languages: ['pt-BR'], output: '/tmp/x/%(id)s.%(ext)s' })
@@ -96,8 +96,8 @@ describe('argumentos do download', () => {
   })
 })
 
-describe('erros do yt-dlp', () => {
-  it('mostra as linhas ERROR, não o banner', () => {
+describe('yt-dlp errors', () => {
+  it('shows the ERROR lines, not the banner', () => {
     const text = ytdlpError({
       code: 1,
       stdout: '',
@@ -108,12 +108,12 @@ describe('erros do yt-dlp', () => {
     expect(text).not.toContain('WARNING')
   })
 
-  it('sem ERROR, devolve o fim do stderr', () => {
+  it('with no ERROR, it returns the end of stderr', () => {
     expect(ytdlpError({ code: 2, stdout: '', stderr: 'line one\nline two' })).toBe('line one\nline two')
   })
 })
 
-describe('leitura do JSON', () => {
+describe('reading the JSON', () => {
   const info = {
     _type: 'video',
     extractor_key: 'Youtube',
@@ -138,7 +138,7 @@ describe('leitura do JSON', () => {
     webpage_url: 'https://example.com/watch?v=1',
   }
 
-  it('resume vídeo com o que decide qualidade e transcrição', () => {
+  it('summarizes a video with what decides quality and transcript', () => {
     const text = describeInfo(parseInfo(JSON.stringify(info)))
     expect(text).toContain('Youtube: "A talk" by Someone')
     expect(text).toContain('Duration 12:34')
@@ -154,36 +154,36 @@ describe('leitura do JSON', () => {
     expect(text.endsWith('…')).toBe(false)
   })
 
-  it('lista uma playlist com índice e link', () => {
+  it('lists a playlist with index and link', () => {
     const playlist = {
       _type: 'playlist',
-      title: 'Série',
-      uploader: 'Canal',
+      title: 'Series',
+      uploader: 'Channel',
       playlist_count: 2,
       entries: [
-        { id: 'a', title: 'Primeiro', duration: 61, webpage_url: 'https://example.com/a' },
-        { id: 'b', title: 'Segundo', duration: 62, url: 'https://example.com/b' },
+        { id: 'a', title: 'First', duration: 61, webpage_url: 'https://example.com/a' },
+        { id: 'b', title: 'Second', duration: 62, url: 'https://example.com/b' },
       ],
     }
     const text = describeInfo(playlist)
-    expect(text).toContain('Playlist: "Série" by Canal — 2 entries')
-    expect(text).toContain('01. Primeiro (1:01) — https://example.com/a')
-    expect(text).toContain('02. Segundo (1:02) — https://example.com/b')
+    expect(text).toContain('Playlist: "Series" by Channel — 2 entries')
+    expect(text).toContain('01. First (1:01) — https://example.com/a')
+    expect(text).toContain('02. Second (1:02) — https://example.com/b')
     expect(text).toContain('playlist: true')
   })
 
-  it('ordena e deduplica as resoluções', () => {
+  it('sorts and dedupes the resolutions', () => {
     expect(videoHeights(info.formats)).toEqual([1080, 2160])
     expect(durationText(3725)).toBe('1:02:05')
   })
 
-  it('recusa saída vazia em vez de devolver lixo', () => {
+  it('refuses an empty output instead of returning junk', () => {
     expect(() => parseInfo('   ')).toThrow(/returned nothing/)
   })
 })
 
 describe('legendas', () => {
-  it('lê VTT, tira tags e entidades', () => {
+  it('reads VTT, strips tags and entities', () => {
     const vtt = [
       'WEBVTT',
       '',
@@ -197,7 +197,7 @@ describe('legendas', () => {
     expect(cues[0].endMs).toBe(2000)
   })
 
-  it('desfaz a janela rolante das legendas automáticas', () => {
+  it('undoes the rolling window of the auto-generated subtitles', () => {
     const vtt = [
       'WEBVTT',
       '',
@@ -215,27 +215,27 @@ describe('legendas', () => {
     expect(cueText(parseSubtitleFile(vtt, 'x.en.vtt'))).toBe('hello world this is a test and more')
   })
 
-  it('quebra parágrafo quando a fala descansa', () => {
+  it('breaks the paragraph when the speech rests', () => {
     const vtt = [
       'WEBVTT',
       '',
       '00:00:01.000 --> 00:00:02.000',
-      'primeira parte',
+      'first part',
       '',
       '00:00:06.000 --> 00:00:07.000',
-      'segunda parte',
+      'second part',
     ].join('\n')
-    expect(cueText(parseSubtitleFile(vtt, 'x.pt.vtt'))).toBe('primeira parte\n\nsegunda parte')
+    expect(cueText(parseSubtitleFile(vtt, 'x.pt.vtt'))).toBe('first part\n\nsecond part')
   })
 
-  it('lê SRT com vírgula decimal e índice de bloco', () => {
-    const srt = ['1', '00:00:01,000 --> 00:00:02,500', 'Olá, mundo.', '', '2', '00:00:03,000 --> 00:00:04,000', 'Segunda linha.'].join('\n')
+  it('reads SRT with a decimal comma and block index', () => {
+    const srt = ['1', '00:00:01,000 --> 00:00:02,500', 'Hello, world.', '', '2', '00:00:03,000 --> 00:00:04,000', 'Second line.'].join('\n')
     const cues = parseSubtitleFile(srt, 'x.pt-BR.srt')
-    expect(cues.map((cue) => cue.text)).toEqual(['Olá, mundo.', 'Segunda linha.'])
-    expect(timestampedCues(cues)).toBe('[0:01] Olá, mundo.\n[0:03] Segunda linha.')
+    expect(cues.map((cue) => cue.text)).toEqual(['Hello, world.', 'Second line.'])
+    expect(timestampedCues(cues)).toBe('[0:01] Hello, world.\n[0:03] Second line.')
   })
 
-  it('lê json3 (palavra a palavra) e ignora o evento de quebra de linha', () => {
+  it('reads json3 (word by word) and ignores the line-break event', () => {
     const json3 = JSON.stringify({
       events: [
         { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: 'hello' }] },
@@ -250,23 +250,23 @@ describe('legendas', () => {
     expect(timestampedCues(cues).split('\n')).toHaveLength(3)
   })
 
-  it('devolve vazio para formato que não sabe ler (ass) em vez de inventar', () => {
+  it('returns empty for a format it cannot read (ass) instead of inventing', () => {
     expect(parseSubtitleFile('[Script Info]\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,oi', 'x.pt.ass')).toEqual([])
   })
 
-  it('limpa marcação e entidades numa linha', () => {
+  it('cleans markup and entities on one line', () => {
     expect(cleanCueLine('<c.colorE5E5E5>Tom &amp; Jerry</c>')).toBe('Tom & Jerry')
     expect(cleanCueLine('{\\an8}linha')).toBe('linha')
   })
 
-  it('casa o idioma pedido com a família e cai no primeiro disponível', () => {
+  it('matches the requested language with the family and falls back to the first available', () => {
     expect(matchLanguage(['pt-BR', 'en'], ['pt'])).toBe('pt-BR')
     expect(matchLanguage(['en', 'es'], ['pt'])).toBe('en')
     expect(matchLanguage(['pt-BR'], ['pt-br'])).toBe('pt-BR')
     expect(matchLanguage([], ['pt'])).toBeNull()
   })
 
-  it('lê os tempos nos formatos que os sites usam', () => {
+  it('reads the times in the formats the sites use', () => {
     expect(parseTimestamp('00:01:02.345')).toBe(62_345)
     expect(parseTimestamp('01:02,345')).toBe(62_345)
     expect(parseTimestamp('00:00:02.000 align:start position:0%')).toBe(2000)
@@ -274,8 +274,8 @@ describe('legendas', () => {
   })
 })
 
-describe('binário velho (retry com atualização)', () => {
-  it('reconhece os erros que um release novo conserta', () => {
+describe('old binary (retry with update)', () => {
+  it('recognizes the errors a new release fixes', () => {
     expect(looksStale({ stdout: '', stderr: 'ERROR: [youtube] abc: Unable to extract player response' })).toBe(true)
     expect(looksStale({ stdout: '', stderr: 'ERROR: nsig extraction failed' })).toBe(true)
     expect(looksStale({ stdout: '', stderr: "ERROR: [youtube] x: Sign in to confirm you're not a bot" })).toBe(true)
@@ -283,7 +283,7 @@ describe('binário velho (retry com atualização)', () => {
     expect(looksStale({ stdout: '', stderr: 'ERROR: No video formats found!' })).toBe(true)
   })
 
-  it('não culpa o binário por erro que atualização nenhuma resolve', () => {
+  it('does not blame the binary for an error no update solves', () => {
     expect(looksStale({ stdout: '', stderr: 'ERROR: [youtube] abc: Private video. Sign in if you have access' })).toBe(false)
     expect(looksStale({ stdout: '', stderr: 'ERROR: Video unavailable' })).toBe(false)
     expect(looksStale({ stdout: '', stderr: 'ERROR: HTTP Error 429: Too Many Requests' })).toBe(false)
@@ -291,7 +291,7 @@ describe('binário velho (retry com atualização)', () => {
     expect(looksStale({ stdout: '', stderr: '' })).toBe(false)
   })
 
-  it('conta na mensagem de erro o que a atualização fez', () => {
+  it('tells in the error message what the update did', () => {
     const base = { code: 1, stdout: '', stderr: 'ERROR: Unable to extract player response\n' }
 
     const updated = ytdlpError({ ...base, refresh: { updated: true, from: '2025.01.01', to: '2026.10.24' } })
@@ -307,7 +307,7 @@ describe('binário velho (retry com atualização)', () => {
     expect(ytdlpError(base)).not.toContain('was not updated')
   })
 
-  it('mede a idade pela data que o yt-dlp usa como versão', () => {
+  it('measures the age by the date yt-dlp uses as version', () => {
     const age = versionAgeDays('2026.10.24')
     expect(age).not.toBeNull()
     expect(age!).toBeGreaterThanOrEqual(0)
@@ -315,7 +315,7 @@ describe('binário velho (retry com atualização)', () => {
     expect(versionAgeDays(null)).toBeNull()
   })
 
-  it('descreve a origem e a idade do binário', () => {
+  it('describes the origin and the age of the binary', () => {
     const managed = describeBinary({ bin: '/x/yt-dlp', source: 'managed' }, '2026.10.24')
     expect(managed).toContain('yt-dlp 2026.10.24')
     expect(managed).toContain('managed copy')

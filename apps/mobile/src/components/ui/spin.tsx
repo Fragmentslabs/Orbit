@@ -9,10 +9,10 @@ export function Spin({
   active?: boolean;
   children: ReactNode;
 }) {
-  // useState com inicializador lazy, e não `useRef(new ...).current`: o valor
-  // é igualmente estável, mas pode ser lido no render (a regra react-hooks/refs
-  // proíbe ler ref aqui) e o Animated.Value é alocado UMA vez — com useRef o
-  // argumento era reconstruído a cada render e descartado.
+  // useState with a lazy initializer, not `useRef(new ...).current`: the value
+  // is equally stable, but can be read during render (the react-hooks/refs rule
+  // forbids reading a ref here) and the Animated.Value is allocated ONCE — with useRef the
+  // argument was rebuilt on every render and thrown away.
   const [rotationAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {

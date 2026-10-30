@@ -1,20 +1,20 @@
 /**
- * Como a escrita do agente entra no buffer aberto no painel.
+ * How the agent's write lands in the buffer open in the panel.
  *
- * O agente não digita: ele chama `write` (arquivo inteiro) ou `edit`
- * (substituição de trecho) e grava de uma vez. O renderer já recebe essas
- * chamadas pelo evento `part` do chat, com o input — então dá para aplicar a
- * mudança DENTRO do documento aberto em vez de recarregá-lo por cima.
+ * The agent does not type: it calls `write` (whole file) or `edit`
+ * (stretch replacement) and saves all at once. The renderer already receives those
+ * calls through the chat's `part` event, with the input — so the change can be applied
+ * INSIDE the open document instead of reloading over it.
  *
- * A diferença importa: recarregar joga fora cursor, seleção, scroll, histórico
- * de undo e qualquer rascunho não salvo. Aplicar como alteração pontual
- * preserva tudo isso, e é o que faz a edição do agente parecer que acontece
- * ali, em vez de o arquivo piscar.
+ * The difference matters: reloading throws away the cursor, selection, scroll, undo
+ * history and any unsaved draft. Applying it as a point change
+ * preserves all of that, and it is what makes the agent edit look like it happens
+ * there, instead of the file blinking.
  *
- * O `edit` ainda traz uma vantagem que o `write` não tem: ele diz a INTENÇÃO
- * (troque isto por aquilo), não só os bytes finais. Com a intenção dá para
- * fundir com segurança mesmo que a pessoa tenha mexido em OUTRA parte do
- * arquivo — e dá para saber, com precisão, quando não dá.
+ * `edit` still brings an advantage `write` does not have: it states the INTENT
+ * (replace this with that), not just the final bytes. With the intent it is possible to
+ * merge safely even if the person touched ANOTHER part of the
+ * file — and to know, precisely, when it is not possible.
  */
 
 export type AgentWrite =
@@ -28,13 +28,13 @@ export interface DocChange {
 }
 
 export type MergePlan =
-  /** Dá para aplicar sem ambiguidade. */
+  /** It can be applied without ambiguity. */
   | { kind: 'apply'; changes: DocChange[] }
-  /** O buffer já está como o agente quer (ou o agente não mudou nada). */
+  /** The buffer is already the way the agent wants it (or the agent changed nothing). */
   | { kind: 'noop' }
   /**
-   * O trecho que o agente esperava não existe mais no buffer, ou existe em
-   * vários lugares. Aplicar seria adivinhar — quem decide é a pessoa.
+   * The stretch the agent expected no longer exists in the buffer, or exists in
+   * several places. Applying would be guessing — the person decides.
    */
   | { kind: 'conflict'; reason: 'not-found' | 'ambiguous' }
 
@@ -50,13 +50,13 @@ function occurrences(doc: string, needle: string): number[] {
 }
 
 /**
- * A menor alteração que transforma `doc` em `next`: recorta o prefixo e o
- * sufixo em comum e troca só o miolo.
+ * The smallest change that turns `doc` into `next`: trims the common prefix and
+ * suffix and replaces only the middle.
  *
- * Não é um diff de verdade — duas alterações distantes uma da outra viram um
- * miolo grande que engloba as duas. Mas o caso normal do agente é uma região
- * só, e aí o que sobra é exatamente ela: o cursor de quem está lendo o resto
- * do arquivo não se mexe.
+ * It is not a real diff — two changes far apart from each other become one
+ * big middle that covers both. But the agent's normal case is a single
+ * region, and then what is left is exactly it: the cursor of whoever is reading the rest
+ * of the file does not move.
  */
 export function minimalChange(doc: string, next: string): DocChange | null {
   if (doc === next) return null
@@ -72,7 +72,7 @@ export function minimalChange(doc: string, next: string): DocChange | null {
   return { from: start, to: endDoc, insert: next.slice(start, endNext) }
 }
 
-/** O que fazer com a escrita do agente, dado o conteúdo atual do buffer. */
+/** What to do with the agent's write, given the current buffer content. */
 export function planMerge(doc: string, write: AgentWrite): MergePlan {
   if (write.kind === 'write') {
     const change = minimalChange(doc, write.content)
@@ -83,13 +83,13 @@ export function planMerge(doc: string, write: AgentWrite): MergePlan {
   if (oldString === newString) return { kind: 'noop' }
   const at = occurrences(doc, oldString)
   if (at.length === 0) {
-    // Ou a pessoa editou justamente esse trecho, ou o arquivo já estava
-    // diferente do que o agente leu. Nos dois casos, não dá para adivinhar.
+    // Either the person edited exactly that stretch, or the file was already
+    // different from what the agent read. In both cases, there is no guessing.
     return { kind: 'conflict', reason: 'not-found' }
   }
   if (at.length > 1 && !replaceAll) {
-    // O agente contava com um trecho único. Se agora há vários, o buffer
-    // divergiu do que ele leu e aplicar no primeiro seria chute.
+    // The agent counted on a unique stretch. If there are several now, the buffer
+    // diverged from what it read and applying to the first would be a guess.
     return { kind: 'conflict', reason: 'ambiguous' }
   }
   const targets = replaceAll ? at : [at[0]]
@@ -99,7 +99,7 @@ export function planMerge(doc: string, write: AgentWrite): MergePlan {
   }
 }
 
-/** A escrita descrita por uma tool call do agente, ou null se não for uma. */
+/** The write described by an agent tool call, or null if it is not one. */
 export function agentWriteFromTool(
   tool: string,
   input: Record<string, unknown> | undefined,

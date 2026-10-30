@@ -28,6 +28,7 @@ jobs:
       - name: Test
         run: npm test
 
-      # `npm run lint` ainda não passa no repositório (erros e avisos
-      # pré-existentes), então fica fora do gate por enquanto — ligar aqui
-      # quebraria todo PR por dívida que não é dele.
+      # Runs with --max-warnings 0 in both workspaces, so it only fails on
+      # something introduced by the change under review.
+      - name: Lint
+        run: npm run lint

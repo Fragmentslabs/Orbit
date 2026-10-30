@@ -10,13 +10,13 @@ import { useSkillsStore } from "@/src/stores/skills-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Servidores MCP da conversa — controle FIXO do composer, ao lado do medidor
- * de contexto, com o mesmo desenho dos botões de modo.
+ * MCP servers of the conversation — FIXED control of the composer, next to the context
+ * meter, with the same drawing as the mode buttons.
  *
- * As ferramentas não têm liga/desliga: existem sempre que há servidor ligado
- * no app. O que este popover decide é QUAIS servidores entram nesta conversa;
- * ligar/desligar o servidor em si é na página MCP & Skills (rodapé do popover,
- * ou clique direito no botão).
+ * The tools have no on/off: they exist whenever there is a server on
+ * in the app. What this popover decides is WHICH servers enter this conversation;
+ * turning the server itself on/off is on the MCP & Skills page (popover footer,
+ * or right click on the button).
  */
 export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; iconOnly?: boolean }) {
   const { t } = useTranslation()
@@ -26,22 +26,22 @@ export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; icon
   const setServers = useSessionTools((s) => s.setServers)
   const [open, setOpen] = useState(false)
 
-  // Sem servidor configurado não há o que recortar: um controle fixo e
-  // permanentemente inerte só ocuparia espaço no composer.
+  // With no server configured there is nothing to narrow: a fixed and
+  // permanently inert control would only take space in the composer.
   if (servers.length === 0) return null
 
-  // Servidores ligados no app (o "teto" da conversa). Os desligados aparecem
-  // na página MCP & Skills, não aqui.
+  // Servers on in the app (the "ceiling" of the conversation). The off ones appear
+  // on the MCP & Skills page, not here.
   const available = servers.filter((server) => server.config.enabled !== false)
-  // `null` = todos — acompanha servidor novo sem precisar reescolher.
+  // `null` = all — it follows a new server without needing to re-choose.
   const selected = selection ?? available.map((server) => server.config.name)
 
   const toggle = (name: string) => {
     const next = selected.includes(name)
       ? selected.filter((item) => item !== name)
       : [...selected, name]
-    // Selecionar todos de novo volta para "todos": a seleção não engessa a
-    // lista quando o usuário não fez um recorte de verdade.
+    // Selecting all again goes back to "all": the selection does not freeze the
+    // list when the user did not make a real narrowing.
     setServers(sessionId, next.length === available.length ? null : next)
   }
 
@@ -64,8 +64,8 @@ export function ToolsPopover({ sessionId, iconOnly }: { sessionId?: string; icon
             className={cn(
               "flex items-center rounded-md text-xs transition-colors",
               iconOnly ? "size-7 justify-center px-0" : "gap-1 px-1.5 py-1",
-              // Sempre no desenho do modo INATIVO: não há liga/desliga para
-              // sinalizar aqui — o que está ligado se vê no popover.
+              // Always in the INACTIVE mode drawing: there is no on/off to
+              // signal here — what is on is seen in the popover.
               "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50",
             )}
           >

@@ -1,18 +1,18 @@
 import { z } from 'zod'
 
 /**
- * EDL (edit decision list): o que o agente decide sobre um corte, em JSON.
+ * EDL (edit decision list): what the agent decides about a cut, in JSON.
  *
- * O modelo NÃO escreve comando de ffmpeg para editar: ele escreve QUAIS
- * trechos entram, em que ordem e com que acabamento, e o render (render.ts)
- * transforma isso em comandos determinísticos. As regras de produção que
- * um modelo esquece no meio de um filtergraph — não cortar no meio de uma
- * palavra, fade de áudio em todo corte, legenda por último, tempo das
- * legendas na linha do tempo de SAÍDA — moram aqui, no código, e não na
- * memória do modelo. (A ideia vem do video-use, do browser-use.)
+ * The model does NOT write ffmpeg commands to edit: it writes WHICH
+ * ranges go in, in what order and with what finish, and the render (render.ts)
+ * turns that into deterministic commands. The production rules that
+ * a model forgets in the middle of a filtergraph — not cutting in the middle of a
+ * word, audio fade at every cut, subtitles last, the timing of the
+ * subtitles on the OUTPUT timeline — live here, in the code, and not in the
+ * model's memory. (The idea comes from video-use, from browser-use.)
  *
- * Tudo neste arquivo é puro: entra EDL + transcrições, sai plano. É o que os
- * testes exercitam.
+ * Everything in this file is pure: EDL + transcripts in, plan out. That is what the
+ * tests exercise.
  */
 
 // ---------------------------------------------------------------------------
@@ -20,11 +20,11 @@ import { z } from 'zod'
 // ---------------------------------------------------------------------------
 
 export const GRADE_PRESETS: Record<string, string> = {
-  // Teal nas sombras, laranja nas altas, um pouco menos saturado.
+  // Teal in the shadows, orange in the highlights, a little less saturated.
   warm_cinematic: 'colorbalance=rs=-0.03:gs=-0.01:bs=0.04:rh=0.04:gh=0.01:bh=-0.03,eq=contrast=1.05:saturation=0.92',
-  // Só contraste (curva S suave) e um toque de saturação.
+  // Contrast only (soft S-curve) and a touch of saturation.
   neutral_punch: 'curves=preset=medium_contrast,eq=saturation=1.04',
-  // Mais frio e limpo, para tela/produto.
+  // Cooler and cleaner, for screen/product.
   cool_clean: 'colorbalance=rs=-0.02:bs=0.03:rm=-0.01:bm=0.02,eq=contrast=1.03:brightness=0.01',
   none: '',
 }
@@ -100,7 +100,7 @@ export type Edl = z.infer<typeof edlSchema>
 export type EdlRange = z.infer<typeof edlRangeSchema>
 export type EdlSubtitles = z.infer<typeof edlSubtitlesSchema>
 
-/** Palavra com tempo no arquivo de ORIGEM (ms). */
+/** Word with its time in the SOURCE file (ms). */
 export interface TimedWord {
   startMs: number
   endMs: number
@@ -108,7 +108,7 @@ export interface TimedWord {
 }
 
 // ---------------------------------------------------------------------------
-// Encaixe nas palavras
+// Snapping to words
 // ---------------------------------------------------------------------------
 
 export interface SnapNote {
@@ -122,15 +122,15 @@ export interface SnapNote {
 export interface PlannedRange extends EdlRange {
   startMs: number
   endMs: number
-  /** Onde o trecho começa na linha do tempo de SAÍDA. */
+  /** Where the range starts on the OUTPUT timeline. */
   outStartMs: number
 }
 
 /**
- * Leva cada borda de corte para fora da palavra em que caiu e dá uma folga
- * de ar (`padMs`) sem invadir a palavra vizinha. É a regra "nunca cortar
- * dentro de uma palavra" + "folga de 30–200 ms para absorver o desvio dos
- * timestamps" do video-use, aplicada pelo código.
+ * Moves every cut edge out of the word it fell in and gives it a bit of
+ * air (`padMs`) without invading the neighbouring word. It is the "never cut
+ * inside a word" + "30–200 ms of air to absorb the drift of the
+ * timestamps" rule from video-use, applied by the code.
  */
 export function snapRanges(
   ranges: EdlRange[],
@@ -157,7 +157,7 @@ export function snapRanges(
         notes.push({ range: i, edge: 'end', fromMs: endMs, toMs: hitEnd.endMs, why: `was inside "${hitEnd.text}"` })
         endMs = hitEnd.endMs
       }
-      // Folga: até `pad`, sem passar do fim da palavra anterior / início da próxima.
+      // Air: up to `pad`, without going past the end of the previous word / start of the next.
       const prev = [...words].reverse().find((w) => w.endMs <= startMs)
       const next = words.find((w) => w.startMs >= endMs)
       startMs = Math.max(prev ? prev.endMs : 0, startMs - pad, 0)
@@ -178,14 +178,14 @@ export function totalDurationMs(ranges: PlannedRange[]): number {
   return ranges.reduce((sum, r) => sum + (r.endMs - r.startMs), 0)
 }
 
-/** Fronteiras de corte na SAÍDA (onde a autoavaliação deve olhar). */
+/** Cut boundaries on the OUTPUT (where the self-evaluation should look). */
 export function cutPointsMs(ranges: PlannedRange[]): number[] {
   return ranges.slice(1).map((r) => r.outStartMs)
 }
 
 /**
- * Palavras que sobreviveram ao corte, no tempo de SAÍDA. Uma palavra entra
- * quando o meio dela está dentro de um trecho mantido.
+ * Words that survived the cut, in OUTPUT time. A word goes in
+ * when its middle is inside a kept range.
  */
 export function outputWords(ranges: PlannedRange[], wordsBySource: Record<string, TimedWord[] | undefined>): TimedWord[] {
   const out: TimedWord[] = []
@@ -202,7 +202,7 @@ export function outputWords(ranges: PlannedRange[], wordsBySource: Record<string
 }
 
 // ---------------------------------------------------------------------------
-// Legendas (ASS)
+// Subtitles (ASS)
 // ---------------------------------------------------------------------------
 
 export interface Cue {
@@ -212,8 +212,8 @@ export interface Cue {
 }
 
 /**
- * Agrupa palavras em blocos de legenda: no máximo `wordsPerChunk`, e quebra
- * antes em pausa longa (≥ 500 ms) ou fim de frase.
+ * Groups words into subtitle blocks: at most `wordsPerChunk`, and breaks
+ * earlier on a long pause (≥ 500 ms) or end of sentence.
  */
 export function chunkWords(words: TimedWord[], wordsPerChunk: number, uppercase: boolean): Cue[] {
   const cues: Cue[] = []
@@ -231,7 +231,7 @@ export function chunkWords(words: TimedWord[], wordsPerChunk: number, uppercase:
     if (/[.!?]$/.test(w.text)) flush()
   }
   flush()
-  // Sem buraco piscando entre blocos colados: estende até o próximo (≤ 300 ms).
+  // No blinking hole between glued blocks: extends up to the next one (≤ 300 ms).
   for (let i = 0; i < cues.length - 1; i++) {
     const gap = cues[i + 1].startMs - cues[i].endMs
     if (gap > 0 && gap <= 300) cues[i].endMs = cues[i + 1].startMs
@@ -247,7 +247,7 @@ function assTime(ms: number): string {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`
 }
 
-/** #RRGGBB → &H00BBGGRR (ordem do ASS). */
+/** #RRGGBB → &H00BBGGRR (ASS order). */
 function assColor(hex: string): string {
   const h = hex.replace('#', '')
   return `&H00${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toUpperCase()
@@ -314,19 +314,19 @@ export function buildAss(cues: Cue[], cfg: EdlSubtitles, size: { width: number; 
 }
 
 // ---------------------------------------------------------------------------
-// Filtros
+// Filters
 // ---------------------------------------------------------------------------
 
-/** Preset → cadeia; o resto é tratado como filtro cru (validado de leve). */
+/** Preset → chain; anything else is treated as a raw filter (lightly validated). */
 export function gradeFilter(grade: string | undefined): string {
   if (!grade) return ''
   if (grade in GRADE_PRESETS) return GRADE_PRESETS[grade]
-  // Cadeia simples só: rótulos e ';' abririam um grafo dentro do trecho.
+  // Simple chain only: labels and ';' would open a graph inside the range.
   if (/[;[\]]/.test(grade)) throw new Error(`grade must be a preset or a simple filter chain (no ';' or '[label]'): ${grade}`)
   return grade
 }
 
-/** Ajuste do quadro ao tamanho de saída — sempre termina em yuv420p e SAR 1. */
+/** Fits the frame to the output size — always ends in yuv420p and SAR 1. */
 export function fitFilter(width: number, height: number, fps: number, fit: 'cover' | 'contain'): string {
   const scale =
     fit === 'cover'
@@ -335,7 +335,7 @@ export function fitFilter(width: number, height: number, fps: number, fit: 'cove
   return `${scale},setsar=1,fps=${fps},format=yuv420p`
 }
 
-/** Fades de 30 ms nas duas pontas: corte sem estalo. */
+/** 30 ms fades at both ends: a cut without a click. */
 export function edgeFadeFilter(durationMs: number, volumeDb?: number): string {
   const d = Math.min(0.03, durationMs / 1000 / 4)
   const end = Math.max(0, durationMs / 1000 - d)
@@ -343,7 +343,7 @@ export function edgeFadeFilter(durationMs: number, volumeDb?: number): string {
   return `aresample=48000,aformat=channel_layouts=stereo${gain},afade=t=in:st=0:d=${d.toFixed(3)},afade=t=out:st=${end.toFixed(3)}:d=${d.toFixed(3)}`
 }
 
-/** Tamanho de saída: o pedido, ou o do primeiro vídeo; sempre par. */
+/** Output size: the requested one, or the first video's; always even. */
 export function outputSize(
   edl: Edl,
   firstDisplay: { width: number; height: number } | undefined,

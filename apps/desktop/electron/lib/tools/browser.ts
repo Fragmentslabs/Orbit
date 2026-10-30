@@ -3,9 +3,9 @@ import { BrowserWindow } from 'electron'
 import { z } from 'zod'
 
 /**
- * Ferramentas nativas de browser: o modelo controla uma janela oculta do
- * Electron para navegar, ler conteúdo renderizado (páginas com JavaScript)
- * e inspecionar links — indo além do webfetch estático.
+ * Native browser tools: the model controls a hidden Electron window to navigate,
+ * read rendered content (pages with JavaScript)
+ * and inspect links — going beyond the static webfetch.
  */
 
 const NAVIGATION_TIMEOUT = 30_000
@@ -35,10 +35,10 @@ export function destroyBrowserWindow(sessionId: string) {
 async function navigate(sessionId: string, url: string): Promise<BrowserWindow> {
   const win = getBrowserWindow(sessionId)
   await win.loadURL(url).catch((err) => {
-    // ERR_ABORTED acontece em redirects/SPAs; a página ainda carrega
+    // ERR_ABORTED happens on redirects/SPAs; the page still loads
     if (!(err instanceof Error) || !err.message.includes('ERR_ABORTED')) throw err
   })
-  await new Promise((r) => setTimeout(r, 1000)) // aguarda hidratação de SPAs
+  await new Promise((r) => setTimeout(r, 1000)) // waits for SPA hydration
   return win
 }
 

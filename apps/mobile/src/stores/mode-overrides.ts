@@ -3,15 +3,15 @@ import { Storage } from '~/lib/storage'
 import { pushModeSelect } from '~/lib/mode-sync'
 
 /**
- * Ativação por chat dos modos que antes eram estado local dos inputs
- * (pesquisa, navegador, plano, subagentes, orquestração e visão) — espelho do
- * mode-overrides do desktop.
+ * Per-chat activation of the modes that used to be local state of the inputs
+ * (research, browser, plan, subagents, orchestration and vision) — mirror of the
+ * desktop mode-overrides.
  *
- * Semântica igual a brain-prefs/simple-prefs: o valor efetivo é
- * `override ?? default`, onde o default vem das preferências
- * (model-mode-prefs, separado por modo chat/code). Chats novos (sem sessão)
- * usam a chave "draft"; quando a sessão é criada no primeiro envio, o
- * session-store chama adopt() para transferir os overrides.
+ * Same semantics as brain-prefs/simple-prefs: the effective value is
+ * `override ?? default`, where the default comes from the preferences
+ * (model-mode-prefs, separate per chat/code mode). New chats (without a session)
+ * use the "draft" key; when the session is created on the first send, the
+ * session-store calls adopt() to transfer the overrides.
  */
 
 export type OverridableMode =
@@ -41,9 +41,9 @@ interface ModeOverridesState {
     sessionId: string | null | undefined,
     value: boolean,
   ) => void
-  /** Aplica o mapa vindo do desktop (sem devolver o toggle para lá). */
+  /** Applies the map coming from the desktop (without sending the toggle back there). */
   applySync: (overrides: OverrideMap) => void
-  /** Transfere os overrides do rascunho para a sessão recém-criada */
+  /** Transfers the overrides of the draft to the newly created session */
   adopt: (sessionId: string) => void
 }
 
@@ -60,7 +60,7 @@ export const useModeOverrides = create<ModeOverridesState>((set, get) => ({
         return
       }
     } catch {
-      // prefs corrompidas → sem overrides
+      // corrupted prefs → no overrides
     }
     set({ hydrated: true })
   },
@@ -97,8 +97,8 @@ export const useModeOverrides = create<ModeOverridesState>((set, get) => ({
     if (!changed) return
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
-    // A sessão acabou de nascer no desktop sem modo nenhum: manda os do
-    // rascunho, senão o chat abre lá nos defaults.
+    // The session has just been born on the desktop with no mode at all: it sends the ones from
+    // the draft, otherwise the chat opens there on the defaults.
     for (const mode of Object.keys(overrides) as OverridableMode[]) {
       const value = overrides[mode]?.[sessionId]
       if (value !== undefined) pushModeSelect(mode, sessionId, value)
@@ -114,7 +114,7 @@ export function useModeActive(
   return useModeOverrides((s) => s.overrides[mode]?.[sessionId ?? DRAFT_KEY] ?? fallback)
 }
 
-/** Leitura fora de componentes React (callbacks de envio) */
+/** Read outside React components (send callbacks) */
 export function modeActiveFor(
   mode: OverridableMode,
   sessionId?: string | null,

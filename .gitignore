@@ -19,17 +19,17 @@ apps/*/node_modules
 apps/*/dist
 apps/*/dist-electron
 apps/*/.expo
-# whisper-server do ditado: fonte/build e o binário gerado
+# dictation whisper-server: source/build and the generated binary
 # (apps/desktop/scripts/build-whisper-server.mjs)
 apps/desktop/.whisper-build
 apps/desktop/resources/whisper
-# ffmpeg/ffprobe estáticos da edição de vídeo (apps/desktop/scripts/fetch-ffmpeg.mjs)
+# static ffmpeg/ffprobe of video editing (apps/desktop/scripts/fetch-ffmpeg.mjs)
 apps/desktop/.ffmpeg-build
 apps/desktop/resources/ffmpeg
-# Modelo de embedding empacotado (npm run memory:bundle) — 139 MB, nunca versionar
+# Bundled embedding model (npm run memory:bundle) — 139 MB, never commit
 apps/desktop/resources/memory-embed
-# Saídas da edição de vídeo/motion: a pasta edit/ que as ferramentas criam ao lado do
-# footage (renders, transcrições, folhas de contato) é sempre gerada, nunca autoria.
+# Video/motion edit outputs: the edit/ folder the tools create next to the
+# footage (renders, transcripts, contact sheets) is always generated, never authored.
 edit/
 
 # Packages
@@ -52,6 +52,6 @@ packages/*/node_modules
 
 release
 
-# Assets do AppX gerados no build:store (scripts/generate-appx-assets.mjs)
+# AppX assets generated in build:store (scripts/generate-appx-assets.mjs)
 apps/desktop/build/appx
 apps/desktop/.cache

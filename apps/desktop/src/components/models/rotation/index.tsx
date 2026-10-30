@@ -19,19 +19,19 @@ import { RotationList } from "./rotation-list"
 import { RotationDetail } from "./rotation-detail"
 
 /**
- * Modal de rotação de modelos.
+ * Model rotation modal.
  *
- * Layout split-view animado:
- *   - Lista à esquerda (260px) sempre visível quando o modal está aberto.
- *   - Quando uma rotação é selecionada, a lista desliza para fora e o
- *     `RotationDetail` entra com `slide-in-from-right-6`.
- *   - A volta (botão de "voltar" no detalhe) desfaz a transição.
+ * Animated split-view layout:
+ *   - List on the left (260px) always visible when the modal is open.
+ *   - When a rotation is selected, the list slides out and
+ *     `RotationDetail` enters with `slide-in-from-right-6`.
+ *   - Going back (the "back" button in the detail) undoes the transition.
  *
- * O id selecionado é decidido SÓ NA ABERTURA: o store de UI entrega um
- * `rotationId` (opcional). Se ele apontar para uma rotação válida, abrimos
- * direto no detalhe. Caso contrário (ou quando o usuário clica "Criar
- * rotação"), a lista é exibida em estado neutro. A `wasOpen` ref impede
- * que mudanças posteriores roubem a seleção (mesmo padrão do modal anterior).
+ * The selected id is decided ONLY ON OPENING: the UI store delivers a
+ * `rotationId` (optional). If it points to a valid rotation, we open
+ * straight in the detail. Otherwise (or when the user clicks "Create
+ * rotation"), the list is shown in a neutral state. The `wasOpen` ref prevents
+ * later changes from stealing the selection (same pattern as the previous modal).
  */
 export function RotationDialog() {
   const { t } = useTranslation()
@@ -56,8 +56,8 @@ export function RotationDialog() {
     }
     if (wasOpen.current) return
     wasOpen.current = true
-    // Split fixo: o painel da direita nunca fica vazio quando existe ao
-    // menos uma rotação — abre na rotação pedida ou na primeira da lista.
+    // Fixed split: the right panel is never empty when there is at
+    // least one rotation — it opens on the requested rotation or on the first of the list.
     if (requestRotationId && rotations.some((r) => r.id === requestRotationId)) {
       setSelectedId(requestRotationId)
     } else {
@@ -75,8 +75,8 @@ export function RotationDialog() {
   const handleConfirmRemove = () => {
     if (!confirmRemove) return
     const id = confirmRemove.id
-    // Ao excluir a rotação aberta, seleciona a vizinha em vez de deixar o
-    // painel vazio (só cai para `null` quando não sobra nenhuma).
+    // On deleting the open rotation, it selects the neighbor instead of leaving the
+    // panel empty (it only falls to `null` when none is left).
     const nextId =
       selectedId === id
         ? rotations.filter((r) => r.id !== id)[0]?.id ?? null
@@ -93,7 +93,7 @@ export function RotationDialog() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           className={cn(
-            // Largura maior para acomodar o split-view sem ficar espremido.
+            // Larger width to accommodate the split view without getting squeezed.
             "max-w-xl overflow-hidden p-0",
           )}
         >
@@ -107,10 +107,10 @@ export function RotationDialog() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Split fixo: a lista vive sempre à esquerda e o detalhe à
-              direita. Sem colapso/slide — trocar de rotação é um clique e o
-              painel da direita só fica vazio quando não existe rotação
-              alguma. */}
+          {/* Fixed split: the list always lives on the left and the detail on the
+              right. No collapse/slide — switching rotation is one click and the
+              right panel only stays empty when there is no rotation at
+              all. */}
           <div className="grid h-[380px] sm:grid-cols-[220px_minmax(0,1fr)]">
             <div className="min-h-0 border-r p-3">
               <RotationList
@@ -156,7 +156,7 @@ export function RotationDialog() {
   )
 }
 
-/** Host único montado na raiz do app (mesmo padrão do SettingsDialogHost). */
+/** Single host mounted at the root of the app (same pattern as SettingsDialogHost). */
 export function RotationDialogHost() {
   return <RotationDialog />
 }

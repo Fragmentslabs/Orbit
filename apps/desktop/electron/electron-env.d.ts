@@ -24,7 +24,7 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   platform: NodeJS.Platform
-  /** Retorna o caminho real de um File solto por drag & drop (webUtils). */
+  /** Returns the real path of a File dropped by drag & drop (webUtils). */
   getPathForFile: (file: File) => string
   ipcRenderer: {
     /** Returns the wrapper function — pass it to `off()` to remove this specific listener. */

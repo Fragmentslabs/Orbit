@@ -9,18 +9,18 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Badge da chamada no header, no mesmo desenho do chip "Controlando <app>"
- * do Computer Use: um pill com o telefone e o pulso, que no hover (ou clique)
- * abre para BAIXO o card da chamada com fase, legenda e controles.
+ * Call badge in the header, in the same drawing as the Computer Use "Controlling <app>"
+ * chip: a pill with the phone and the pulse, which on hover (or click)
+ * opens DOWNWARDS the call card with phase, caption and controls.
  *
- * Some quando a pessoa está na própria conversa da chamada — lá o painel do
- * composer é o lugar certo — e aparece em qualquer outra conversa ou aba,
- * inclusive nas páginas sem composer (memórias, modelos, ferramentas…).
+ * It disappears when the person is in the call's own conversation — there the composer
+ * panel is the right place — and appears in any other conversation or tab,
+ * including the pages without a composer (memories, models, tools…).
  */
 
-/** Espera do hover antes de abrir: passar o mouse pelo header a caminho de outra coisa não abre nada. */
+/** Hover wait before opening: passing the mouse over the header on the way to something else opens nothing. */
 const PEEK_OPEN_MS = 300
-/** Tolerância ao sair: dá tempo de levar o mouse do chip até os botões do card. */
+/** Leaving tolerance: it gives time to take the mouse from the chip to the card buttons. */
 const PEEK_CLOSE_MS = 200
 
 export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }) {
@@ -31,7 +31,7 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
   const [peek, setPeek] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // A chamada acabou: nada fica aberto para a próxima vez.
+  // The call is over: nothing stays open for the next time.
   useEffect(() => {
     if (call.active) return
     setHeld(false)
@@ -47,8 +47,8 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
 
   if (!call.active) return null
 
-  // Na conversa da chamada o painel do composer é o lugar certo; o badge só
-  // serve quando a pessoa está em outra conversa/aba.
+  // In the call conversation the composer panel is the right place; the badge only
+  // serves when the person is in another conversation/tab.
   if (callSessionId != null && activeSessionId === callSessionId) return null
 
   const phase = call.phase
@@ -59,9 +59,9 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
   const errorText = call.error === "reply" ? t("voice.call.replyError") : call.error
   const title = callSessionTitle || t("voice.call.inCall")
 
-  // O texto do pill É o indicador de estado: "Ouvindo" e "Falando" dividem o
-  // mesmo dourado e os mesmos três pontinhos — só o verbo muda. "Pensando"
-  // fica em cinza e sem pontinhos: ali não há som acontecendo.
+  // The pill text IS the state indicator: "Listening" and "Speaking" share the
+  // same gold and the same three dots — only the verb changes. "Thinking"
+  // stays in gray and without dots: there no sound is happening.
   const stateLabel =
     phase === "listening"
       ? t("voice.call.listeningShort")
@@ -90,7 +90,7 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
           if (details.reason === "trigger-press") setHeld(true)
           return
         }
-        // Clique no chip com o card só espiando: fixa em vez de fechar.
+        // Click on the chip with the card only peeking: it pins instead of closing.
         if (details.reason === "trigger-press" && !held && peek) {
           setHeld(true)
           return
@@ -152,7 +152,7 @@ export function VoiceCallBadge({ activeSessionId }: { activeSessionId?: string }
           ) : caption ? (
             <CallCaption lines={caption.lines} current={caption.current} />
           ) : (
-            // Mesma altura da legenda para o card não pular quando a fala começa.
+            // Same height as the caption so the card does not jump when the speech starts.
             <div title={text || placeholder} className="flex h-[2.75em] min-w-0 items-end overflow-hidden text-xs leading-snug">
               <span
                 className={cn(

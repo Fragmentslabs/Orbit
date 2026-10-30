@@ -5,13 +5,13 @@ import path from 'node:path'
 import { addBundledToolDir, userShellEnv } from '../shell-env'
 
 /**
- * O ffmpeg/ffprobe que o Orbit leva junto (scripts/fetch-ffmpeg.mjs): builds
- * estáticos com libx264, libass e freetype — o que o render do EDL precisa.
+ * The ffmpeg/ffprobe that Orbit ships with (scripts/fetch-ffmpeg.mjs): static
+ * builds with libx264, libass and freetype — what the EDL render needs.
  *
- * Procurado nesta ordem: `ORBIT_FFMPEG_DIR` (pasta com os dois), o que vem com
- * o app (`Resources/ffmpeg` empacotado, `resources/ffmpeg/<plataforma>-<arch>`
- * no dev) e, por último, o PATH do usuário. Sem nenhum, as tools de vídeo nem
- * aparecem para o agente.
+ * Looked up in this order: `ORBIT_FFMPEG_DIR` (folder with both), the one that comes with
+ * the app (`Resources/ffmpeg` when packaged, `resources/ffmpeg/<platform>-<arch>`
+ * in dev) and, last, the user's PATH. With none of them, the video tools do not even
+ * show up for the agent.
  */
 
 const EXE = process.platform === 'win32' ? '.exe' : ''
@@ -19,12 +19,12 @@ const EXE = process.platform === 'win32' ? '.exe' : ''
 export interface FfmpegPaths {
   ffmpeg: string
   ffprobe: string
-  /** De onde veio: o do app, o do env ou o do sistema. */
+  /** Where it came from: the app's, the env's or the system's. */
   source: 'bundled' | 'env' | 'path'
 }
 
 function bundledDir(): string | null {
-  // `app` ausente = fora do Electron (testes que mockam o módulo).
+  // `app` missing = outside Electron (tests that mock the module).
   if (!app) return null
   if (app.isPackaged) return path.join(process.resourcesPath, 'ffmpeg')
   const appPath = typeof app.getAppPath === 'function' ? app.getAppPath() : null
@@ -47,7 +47,7 @@ function findInPath(name: string): string | null {
     try {
       if (fs.statSync(candidate).isFile()) return candidate
     } catch {
-      // segue procurando
+      // keeps looking
     }
   }
   return null
@@ -70,8 +70,8 @@ export function resolveFfmpeg(): FfmpegPaths | null {
 }
 
 /**
- * Chamado na partida: põe a pasta do ffmpeg do app no PATH dos shells do
- * agente, para o `bash` achar `ffmpeg` também nos casos que o EDL não cobre.
+ * Called at startup: puts the app's ffmpeg folder on the PATH of the
+ * agent's shells, so `bash` also finds `ffmpeg` in the cases the EDL does not cover.
  */
 export function registerBundledFfmpeg(): void {
   const found = resolveFfmpeg()
@@ -86,10 +86,10 @@ export function requireFfmpeg(): FfmpegPaths {
 
 export interface RunOptions {
   signal?: AbortSignal
-  /** Tempo total esperado da saída (ms) — liga o progresso pelo `-progress`. */
+  /** Expected total output time (ms) — drives the progress through `-progress`. */
   durationMs?: number
   onProgress?: (fraction: number) => void
-  /** Bytes para o stdin (ex.: quadros PNG de uma composição). */
+  /** Bytes for stdin (e.g. PNG frames of a composition). */
   stdin?: NodeJS.ReadableStream
   cwd?: string
 }
@@ -99,7 +99,7 @@ export interface RunResult {
   stderr: string
 }
 
-/** Últimas linhas do stderr: é onde o ffmpeg diz o que deu errado. */
+/** Last lines of stderr: that is where ffmpeg says what went wrong. */
 function tail(text: string, lines = 12): string {
   return text.trim().split(/\r?\n/).slice(-lines).join('\n')
 }
@@ -120,7 +120,7 @@ function run(bin: string, args: string[], opts: RunOptions = {}): Promise<RunRes
         out.push(chunk)
         return
       }
-      // Com progresso, o stdout é o canal do `-progress pipe:1` (chave=valor).
+      // With progress, stdout is the `-progress pipe:1` channel (key=value).
       progressBuf += chunk.toString()
       const lines = progressBuf.split('\n')
       progressBuf = lines.pop() ?? ''
@@ -131,13 +131,13 @@ function run(bin: string, args: string[], opts: RunOptions = {}): Promise<RunRes
     })
     proc.stderr?.on('data', (chunk: Buffer) => {
       err += chunk.toString()
-      // Guarda só o fim: um render longo escreve megabytes de estatística.
+      // Keeps only the tail: a long render writes megabytes of statistics.
       if (err.length > 200_000) err = err.slice(-100_000)
     })
     if (opts.stdin && proc.stdin) {
       opts.stdin.pipe(proc.stdin)
       proc.stdin.on('error', () => {
-        // o ffmpeg fechou a entrada (erro dele aparece no stderr)
+        // ffmpeg closed the input (its error shows up in stderr)
       })
     }
     const onAbort = () => proc.kill('SIGKILL')
@@ -155,7 +155,7 @@ function run(bin: string, args: string[], opts: RunOptions = {}): Promise<RunRes
   })
 }
 
-/** Roda o ffmpeg (sempre com -y, sem banner, sem ler o teclado). */
+/** Runs ffmpeg (always with -y, no banner, without reading the keyboard). */
 export function runFfmpeg(args: string[], opts: RunOptions = {}): Promise<RunResult> {
   const progress = opts.onProgress ? ['-progress', 'pipe:1', '-nostats'] : []
   return run(requireFfmpeg().ffmpeg, ['-hide_banner', '-nostdin', '-y', ...progress, ...args], opts)
@@ -175,7 +175,7 @@ export interface VideoStreamInfo {
   width: number
   height: number
   fps: number
-  /** Rotação de exibição (vídeo de celular gravado em pé). */
+  /** Display rotation (phone video recorded upright). */
   rotation: number
   pixFmt?: string
 }
@@ -194,7 +194,7 @@ export interface MediaProbe {
   format: string
   video: VideoStreamInfo[]
   audio: AudioStreamInfo[]
-  /** Largura/altura como aparecem na tela (rotação aplicada). */
+  /** Width/height as they appear on screen (rotation applied). */
   display?: { width: number; height: number }
 }
 
@@ -221,11 +221,11 @@ interface RawStream {
   disposition?: { attached_pic?: number }
 }
 
-/** Converte a saída JSON do ffprobe no resumo que as tools usam (puro). */
+/** Turns ffprobe's JSON output into the summary the tools use (pure). */
 export function summarizeProbe(file: string, json: { format?: Record<string, string>; streams?: RawStream[] }): MediaProbe {
   const streams = json.streams ?? []
   const video = streams
-    // Capa de mp3/m4a vem como stream de vídeo de um quadro só.
+    // mp3/m4a cover art comes as a one-frame video stream.
     .filter((s) => s.codec_type === 'video' && !s.disposition?.attached_pic)
     .map((s) => {
       const rotation = Number(s.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? s.tags?.rotate ?? 0)
@@ -265,8 +265,8 @@ export async function probeMedia(file: string): Promise<MediaProbe> {
 }
 
 /**
- * Áudio do arquivo como PCM16 mono a 16 kHz — o formato dos motores de ditado.
- * Serve para qualquer contêiner que o ffmpeg abre (mp4, mov, mkv, webm…).
+ * Audio of the file as 16 kHz mono PCM16 — the format of the dictation engines.
+ * Works for any container ffmpeg opens (mp4, mov, mkv, webm…).
  */
 export async function extractPcm16k(file: string, opts: { signal?: AbortSignal } = {}): Promise<Buffer> {
   const { stdout } = await runFfmpeg(['-v', 'error', '-i', file, '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', 'pipe:1'], opts)

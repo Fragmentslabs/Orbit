@@ -12,17 +12,17 @@ import {
 } from './document-render'
 
 /**
- * Empacota os blocos num .docx de verdade.
+ * Packages the blocks into a real .docx.
  *
- * Um .docx é um ZIP com algumas partes XML, e o JSZip já é dependência do
- * projeto — então o arquivo sai sem biblioteca nova. Fazer à mão também
- * delimita o escopo de forma honesta: suportamos o que o gerador produz
- * (títulos, parágrafos, listas, tabelas, negrito/itálico/código), e nada além.
+ * A .docx is a ZIP with some XML parts, and JSZip is already a dependency of the
+ * project — so the file comes out without a new library. Doing it by hand also
+ * delimits the scope honestly: we support what the generator produces
+ * (headings, paragraphs, lists, tables, bold/italic/code), and nothing beyond.
  *
- * As quatro partes obrigatórias são [Content_Types].xml, _rels/.rels,
- * word/document.xml e o relacionamento dele. styles.xml e numbering.xml são
- * opcionais para o formato, mas sem eles o Word ignora os estilos de título e
- * desenha as listas sem marcador nenhum.
+ * The four mandatory parts are [Content_Types].xml, _rels/.rels,
+ * word/document.xml and its relationship. styles.xml and numbering.xml are
+ * optional for the format, but without them Word ignores the heading styles and
+ * draws the lists with no bullet at all.
  */
 
 const _require = createRequire(import.meta.url)
@@ -44,7 +44,7 @@ const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
 </Relationships>`
 
-/** rId1 e rId2 são fixos; as imagens dos diagramas vêm depois, a partir do rId3. */
+/** rId1 and rId2 are fixed; the diagrams' images come later, from rId3 on. */
 function docRels(media: string[]): string {
   const images = media
     .map(
@@ -61,11 +61,11 @@ ${images}
 }
 
 /**
- * Estilos derivados do estilo do documento.
+ * Styles derived from the document's style.
  *
- * O OOXML mede fonte em MEIOS-pontos (w:sz), então tudo é dobrado; a
- * justificação é do parágrafo (w:jc), não do corpo; e a cor do título é a
- * mesma cor de destaque usada no CSS, para o .docx e o PDF não divergirem.
+ * OOXML measures font in HALF-points (w:sz), so everything is doubled; the
+ * justification is the paragraph's (w:jc), not the body's; and the heading's color is the
+ * same accent color used in the CSS, so that the .docx and the PDF do not diverge.
  */
 function stylesXml(style: ResolvedStyle): string {
   const half = (pt: number) => Math.round(pt * 2)
@@ -110,14 +110,14 @@ function coreProps(title: string): string {
 </cp:coreProperties>`
 }
 
-/** Twips por centímetro — a unidade de medida de página do OOXML. */
+/** Twips per centimeter — OOXML's page measurement unit. */
 const TWIPS_PER_CM = 567
 
 /**
- * Gera o .docx a partir dos blocos, em A4 retrato, com a margem e as colunas
- * do estilo. As colunas valem para a SEÇÃO inteira: o documento tem um
- * `sectPr` só, então é o documento todo em uma ou mais colunas — trecho a
- * trecho exigiria dividir em várias seções.
+ * Generates the .docx from the blocks, in portrait A4, with the margin and the columns
+ * from the style. The columns count for the WHOLE SECTION: the document has a single
+ * `sectPr`, so it is the whole document in one or more columns — stretch by
+ * stretch would require splitting into several sections.
  */
 export async function buildDocx(
   blocks: Block[],
@@ -128,9 +128,9 @@ export async function buildDocx(
   const JSZip = _require('jszip') as typeof import('jszip')
   const resolved = normalizeStyle(style)
 
-  // Cada diagrama desenhado vira um PNG no pacote, uma vez só mesmo que a
-  // mesma fonte se repita. O que não desenhou fica sem imagem e o corpo o
-  // escreve como bloco de código.
+  // Each drawn diagram becomes a PNG in the package, only once even if the
+  // same source repeats. What did not draw stays without an image and the body
+  // writes it as a code block.
   const images = new Map<string, DocxImage & { png: Buffer; file: string }>()
   for (const source of mermaidSourcesOf(blocks)) {
     const diagram = diagrams?.(source)

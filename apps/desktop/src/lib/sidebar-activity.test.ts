@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest"
 import { sessionActivityMap, type SessionInfo } from "@shared/chat"
 
 /**
- * A ordem da sidebar usa a atividade do BLOCO (pai + sub-chats/workers), não a
- * do pai sozinho: interagir com uma conversa lateral tem de subir o pai junto.
+ * The sidebar order uses the BLOCK's activity (parent + sub-chats/workers), not the
+ * parent's alone: interacting with a side conversation has to bring the parent up with it.
  */
 
 let nextId = 0
@@ -24,12 +24,12 @@ function session(over: Partial<SessionInfo> & { updatedAt: number }): SessionInf
 }
 
 describe("sessionActivityMap", () => {
-  it("chat sem filhos vale a própria atividade", () => {
+  it("a chat with no children counts its own activity", () => {
     const root = session({ updatedAt: 10 })
     expect(sessionActivityMap([root]).get(root.id)).toBe(10)
   })
 
-  it("sub-chat mais recente sobe o pai", () => {
+  it("the most recent sub-chat lifts the parent", () => {
     const root = session({ updatedAt: 10 })
     const child = session({ updatedAt: 50, parentId: root.id })
     const map = sessionActivityMap([root, child])
@@ -37,7 +37,7 @@ describe("sessionActivityMap", () => {
     expect(map.get(child.id)).toBe(50)
   })
 
-  it("worker de outra modalidade também conta", () => {
+  it("a worker of another modality also counts", () => {
     const root = session({ updatedAt: 10, mode: "chat" })
     const worker = session({
       updatedAt: 90,
@@ -48,7 +48,7 @@ describe("sessionActivityMap", () => {
     expect(sessionActivityMap([root, worker]).get(root.id)).toBe(90)
   })
 
-  it("neto (sub-chat de sub-chat) sobe a cadeia inteira", () => {
+  it("a grandchild (sub-chat of a sub-chat) lifts the whole chain", () => {
     const root = session({ updatedAt: 10 })
     const child = session({ updatedAt: 20, parentId: root.id })
     const grandchild = session({ updatedAt: 70, parentId: child.id })
@@ -57,13 +57,13 @@ describe("sessionActivityMap", () => {
     expect(map.get(child.id)).toBe(70)
   })
 
-  it("filho arquivado não move o pai", () => {
+  it("an archived child does not move the parent", () => {
     const root = session({ updatedAt: 10 })
     const child = session({ updatedAt: 80, parentId: root.id, archived: true })
     expect(sessionActivityMap([root, child]).get(root.id)).toBe(10)
   })
 
-  it("parentId em ciclo não trava", () => {
+  it("a parentId in a cycle does not hang", () => {
     const a = session({ updatedAt: 5 })
     const b = session({ updatedAt: 7, parentId: a.id })
     a.parentId = b.id

@@ -3,22 +3,22 @@ import type { MotionAudioTrack } from './motion-audio'
 import { NO_FX } from './motion-audio-fx'
 
 /**
- * O SOM dos `<video>` de uma composição.
+ * The SOUND of a composition's `<video>`s.
  *
- * O runtime silencia todo vídeo da página (a janela do render não tem som e o
- * seek posiciona o arquivo quadro a quadro), então o som que o autor espera
- * ouvir — a fala de um depoimento, o ambiente de um b-roll — se perdia no
- * caminho. Aqui ele volta pela porta que já existe: vira uma FAIXA do plano de
- * áudio, exatamente como uma declarada no `audio.json`. O render a mistura, a
- * aba a toca numa linha própria, e o lint a confere — nada de caminho paralelo.
+ * The runtime mutes every video on the page (the render window has no sound and the
+ * seek positions the file frame by frame), so the sound the author expects to
+ * hear — the speech of a testimony, the ambience of a b-roll — was lost along
+ * the way. Here it comes back through the door that already exists: it becomes a TRACK of the
+ * audio plan, exactly like one declared in `audio.json`. The render mixes it, the
+ * tab plays it on its own line, and the lint checks it — no parallel path.
  *
- * O que decide se um vídeo soa: o arquivo ter uma faixa de áudio, e o autor não
- * o ter calado (atributo `muted`, ou `data-audio="false"`). O tempo vem dos
- * mesmos atributos que o runtime usa para posicionar a imagem (`data-start`,
- * `data-in`, `data-end`, `loop`), então som e imagem não podem discordar.
+ * What decides whether a video sounds: the file having an audio track, and the author not
+ * having muted it (`muted` attribute, or `data-audio="false"`). The time comes from the
+ * same attributes the runtime uses to position the picture (`data-start`,
+ * `data-in`, `data-end`, `loop`), so sound and picture cannot disagree.
  */
 
-/** O retrato de um `<video>` que o runtime publica (ver `videoFacts`). */
+/** The snapshot of a `<video>` that the runtime publishes (see `videoFacts`). */
 export interface MotionVideoFact {
   src: string
   muted: boolean
@@ -31,10 +31,10 @@ export interface MotionVideoFact {
 }
 
 /**
- * Caminho do arquivo dentro da pasta a partir do `src` que o runtime leu: a URL
- * do scheme (`orbit-motion://<id>/clip.mp4`) ou um caminho relativo. Fora da
- * pasta, ou URL de outro lugar, é `null` — o scheme não serve nada de lá e o
- * lint já avisa do arquivo.
+ * Path of the file inside the folder from the `src` the runtime read: the scheme
+ * URL (`orbit-motion://<id>/clip.mp4`) or a relative path. Outside the
+ * folder, or a URL from elsewhere, it is `null` — the scheme serves nothing from there and the
+ * lint already warns about the file.
  */
 export function videoFileIn(folder: string, src: string): string | null {
   let rel: string
@@ -63,20 +63,20 @@ export function videoFileIn(folder: string, src: string): string | null {
   return inside.startsWith('..') || path.isAbsolute(inside) ? null : file
 }
 
-/** O arquivo tem faixa de áudio? Injetável: o padrão pergunta ao ffprobe. */
+/** Does the file have an audio track? Injectable: the default asks ffprobe. */
 export type HasAudio = (file: string) => Promise<boolean>
 
 async function probeHasAudio(file: string): Promise<boolean> {
-  // Import tardio: o ffmpeg do app puxa o Electron, e este módulo precisa ser
-  // testável sem ele.
+  // Late import: the app's ffmpeg pulls in Electron, and this module needs to be
+  // testable without it.
   const { probeMedia } = await import('./ffmpeg')
   return (await probeMedia(file)).audio.length > 0
 }
 
 /**
- * As faixas de áudio dos vídeos da página. Vídeo calado, fora da pasta, sem faixa
- * de áudio ou ilegível não gera nada — e nunca derruba quem chama. O mesmo arquivo
- * com o mesmo recorte, usado por dois elementos, soa uma vez só.
+ * The audio tracks of the page's videos. A muted video, outside the folder, with no audio
+ * track or unreadable generates nothing — and never takes down the caller. The same file
+ * with the same trim, used by two elements, sounds only once.
  */
 export async function motionVideoAudioTracks(
   folder: string,

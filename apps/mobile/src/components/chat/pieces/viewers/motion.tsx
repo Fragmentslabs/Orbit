@@ -1,24 +1,24 @@
 /**
- * Motion no celular: o player.
+ * Motion on the phone: the player.
  *
- * A peça de motion NÃO tem relógio próprio. Ela declara o formato num
- * `<meta name="orbit-motion" content="width=…,fps=30,duration=6">` (ou em
- * `window.orbitMotion`) e só se move quando alguém chama
- * `window.orbitMotion.seek(quadro)` — sempre um INTEIRO de quadro; o runtime do
- * desktop converte para segundos (`t = quadro / fps`). Por isso o scrubber aqui
- * não é enfeite: sem um seek por quadro, a peça fica parada no primeiro.
+ * The motion piece does NOT have a clock of its own. It declares the format in an
+ * `<meta name="orbit-motion" content="width=…,fps=30,duration=6">` (or in
+ * `window.orbitMotion`) and only moves when someone calls
+ * `window.orbitMotion.seek(frame)` — always an INTEGER frame; the desktop runtime
+ * converts it to seconds (`t = frame / fps`). That is why the scrubber here
+ * is no decoration: without a seek per frame, the piece stays still at the first one.
  *
- * O caminho de fala com a página é o `onReady` do `PieceView`, que entrega o
- * `injectJavaScript` do WebView depois do load. Daqui saem três injeções:
+ * The speech path with the page is the `onReady` of `PieceView`, which delivers the
+ * `injectJavaScript` of the WebView after the load. Three injections leave from here:
  *
- *  1. a sonda que pergunta o formato (a resposta volta por postMessage);
- *  2. o `seek(quadro)` — o movimento em si;
- *  3. o enquadramento (`zoom`) da peça no palco: a composição é um documento de
- *     1920×1080 (o guia de motion proíbe layout responsivo), e sem escala num
- *     telefone se veria o canto superior esquerdo dela.
+ *  1. the probe that asks for the format (the answer comes back by postMessage);
+ *  2. the `seek(frame)` — the motion itself;
+ *  3. the framing (`zoom`) of the piece on the stage: the composition is a 1920×1080
+ *     document (the motion guide forbids responsive layout), and without scaling on a
+ *     phone you would see its top-left corner.
  *
- * Nada de URL montada aqui: `piece.url` já vem assinada pelo desktop e os
- * assets relativos da peça carregam junto por causa do token no caminho.
+ * No URL assembled here: `piece.url` already comes signed from the desktop and the
+ * relative assets of the piece load along with it because of the token in the path.
  */
 import { Pause, Play, Repeat } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -41,26 +41,26 @@ import { PieceView } from '../../PieceView'
 
 import type { PieceViewerProps } from './index'
 
-/** O fps padrão do contrato (`MOTION_FPS` do runtime do desktop). */
+/** The default fps of the contract (`MOTION_FPS` of the desktop runtime). */
 const DEFAULT_FPS = 30
-/** Marca das mensagens desta tela — a peça pode postar outras, e não são nossas. */
+/** Mark of the messages of this screen — the piece may post others, and they are not ours. */
 const MESSAGE_SOURCE = 'orbit-motion-player'
-/** Moldura do host: `mt-2` + a barra de título do `PieceView` + as bordas. */
+/** Frame of the host: `mt-2` + the title bar of `PieceView` + the borders. */
 const HOST_CHROME = 42
-/** Barra de controles, sem o inset de baixo. */
+/** Control bar, without the bottom inset. */
 const CONTROLS_HEIGHT = 52
-/** Abaixo disso a peça deixa de ser vista; melhor um palco baixo que nenhum. */
+/** Below this the piece stops being seen; better a low stage than none. */
 const MIN_STAGE = 120
 
 export interface MotionSpec {
-  /** Quadros por segundo declarados pela peça (ou o padrão do contrato). */
+  /** Frames per second declared by the piece (or the default of the contract). */
   fps: number
-  /** Comprimento em QUADROS — a unidade do `seek`. */
+  /** Length in FRAMES — the unit of `seek`. */
   frames: number
-  /** Tamanho do documento da composição, para enquadrá-la no palco. */
+  /** Size of the composition document, to fit it on the stage. */
   width: number
   height: number
-  /** A página expõe `orbitMotion.seek`: sem isso nada anda. */
+  /** The page exposes `orbitMotion.seek`: without that nothing moves. */
   seekable: boolean
 }
 
@@ -69,15 +69,15 @@ function positive(value: unknown): number {
 }
 
 /**
- * O que a página respondeu, na ordem de precedência do runtime do desktop:
- * `durationInFrames` é canônico e vence tudo; senão vale a duração declarada em
- * segundos, depois a timeline do GSAP e por último a `<meta>`. O fps resolve
- * antes de qualquer conta, porque segundos viram quadros com ele.
+ * What the page answered, in the order of precedence of the desktop runtime:
+ * `durationInFrames` is canonical and wins over everything; otherwise the declared duration in
+ * seconds counts, then the GSAP timeline and finally the `<meta>`. The fps is resolved
+ * before any calculation, because seconds become frames with it.
  *
- * `fallbackSeconds` é o `piece.count` (a duração que o desktop já conhece):
- * só entra quando a página não declara comprimento nenhum — peça antiga, ou
- * runtime que não chegou a rodar. Sem nada disso, `null`: melhor um controle
- * desligado do que uma duração inventada.
+ * `fallbackSeconds` is `piece.count` (the duration the desktop already knows):
+ * it only comes in when the page declares no length at all — an old piece, or a
+ * runtime that never got to run. Without any of that, `null`: better a disabled
+ * control than an invented duration.
  */
 export function resolveSpec(
   raw: Record<string, unknown>,
@@ -102,11 +102,11 @@ export function resolveSpec(
 }
 
 /**
- * `0:01` — minutos só quando existem, segundos sempre com dois dígitos.
+ * `0:01` — minutes only when they exist, seconds always with two digits.
  *
- * Arredonda em vez de truncar porque o número é lido junto com a régua: truncado,
- * o último quadro de uma peça de 3 s (2,97 s) apareceria como `0:02 / 0:03` com
- * a régua no fim.
+ * It rounds instead of truncating because the number is read together with the ruler: truncated,
+ * the last frame of a 3 s piece (2.97 s) would show as `0:02 / 0:03` with
+ * the ruler at the end.
  */
 export function formatTime(seconds: number): string {
   const whole = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0
@@ -114,7 +114,7 @@ export function formatTime(seconds: number): string {
   return `${minutes}:${String(whole % 60).padStart(2, '0')}`
 }
 
-/** O quadro sob o dedo: o `locationX` é relativo à trilha, então razão = x/width. */
+/** The frame under the finger: `locationX` is relative to the track, so ratio = x/width. */
 export function frameAtX(x: number, width: number, frames: number): number {
   if (!(width > 0) || !(frames > 0)) return 0
   const ratio = Math.min(1, Math.max(0, x / width))
@@ -122,10 +122,10 @@ export function frameAtX(x: number, width: number, frames: number): number {
 }
 
 /**
- * A sonda. Lê o que a página tem sem tocar em nada: `orbitMotion` (declarado
- * pela composição, ou resolvido pelo runtime quando ele foi injetado), a
- * `<meta>` do próprio documento, a timeline do GSAP e se existe um `seek` para
- * chamar. Volta por `postMessage` — não há valor de retorno em
+ * The probe. Reads what the page has without touching anything: `orbitMotion` (declared
+ * by the composition, or resolved by the runtime when it was injected), the
+ * `<meta>` of the document itself, the GSAP timeline and whether there is a `seek` to
+ * call. It comes back by `postMessage` — there is no return value in
  * `injectJavaScript`.
  */
 const PROBE_JS = `(function () {
@@ -183,8 +183,8 @@ const PROBE_JS = `(function () {
 true;`
 
 /**
- * O movimento: um quadro inteiro. O `try` existe porque o `seek` é código da
- * peça — se ele estourar, a tela precisa saber (e parar), não morrer calada.
+ * The motion: a whole frame. The `try` exists because `seek` is code of the
+ * piece — if it throws, the screen needs to know (and stop), not die silently.
  */
 export function seekScript(frame: number): string {
   return `(function () {
@@ -203,13 +203,13 @@ true;`
 }
 
 /**
- * Escala o documento da peça para caber no palco.
+ * Scales the document of the piece to fit the stage.
  *
- * A composição é uma página de tamanho fixo (1920×1080 no caso comum), então num
- * telefone o WebView mostraria só o canto dela. `zoom` no `<html>` reflui o
- * documento no tamanho visual certo — diferente de `transform`, que escalaria
- * sem encolher a área rolável. A `<meta viewport>` existe para o WebView não
- * usar a viewport virtual de 980px do modo "desktop" do Android.
+ * The composition is a fixed-size page (1920×1080 in the common case), so on a
+ * phone the WebView would show only its corner. `zoom` on `<html>` reflows the
+ * document to the right visual size — unlike `transform`, which would scale it
+ * without shrinking the scrollable area. The `<meta viewport>` exists so the WebView does not
+ * use the virtual 980px viewport of the Android "desktop" mode.
  */
 export function fitScript(scale: number): string {
   return `(function () {
@@ -239,18 +239,18 @@ export function MotionViewer({ piece }: PieceViewerProps) {
   const insets = useSafeAreaInsets()
   const dimensions = useWindowDimensions()
 
-  // Espaço que a casca deu ao viewer (flex:1, já sem o cabeçalho da tela cheia).
-  // Medido em vez de deduzido: o cabeçalho não é desta tela e mudaria a conta.
+  // Space the shell gave the viewer (flex:1, already without the full-screen header).
+  // Measured instead of deduced: the header is not from this screen and would change the calculation.
   const [box, setBox] = useState<{ width: number; height: number } | null>(null)
   const [spec, setSpec] = useState<MotionSpec | null>(null)
   const [frame, setFrame] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [loop, setLoop] = useState(true)
-  // A página recusou o seek (ou o runtime dela estourou): o controle para de
-  // fingir que funciona.
+  // The page refused the seek (or its runtime threw): the control stops
+  // pretending it works.
   const [broken, setBroken] = useState(false)
-  // Quantas cargas a página teve. Cada uma pede sonda nova e um seek novo —
-  // `frame` sozinho não muda quando o WebView recarrega por baixo.
+  // How many loads the page had. Each one asks for a new probe and a new seek —
+  // `frame` alone does not change when the WebView reloads underneath.
   const [loads, setLoads] = useState(0)
   const [trackWidth, setTrackWidth] = useState(0)
 
@@ -269,20 +269,20 @@ export function MotionViewer({ piece }: PieceViewerProps) {
   const ratio = spec && spec.frames > 1 ? Math.min(1, Math.max(0, frame / (spec.frames - 1))) : 0
   const timeLabel = `${formatTime(position)} / ${duration > 0 ? formatTime(duration) : '–:–'}`
 
-  // Espelho do quadro para o relógio do play: o efeito lê o valor de partida
-  // quando começa, e um estado atrasado faria o primeiro tique pular.
+  // Mirror of the frame for the play clock: the effect reads the starting value
+  // when it begins, and a stale state would make the first tick jump.
   useEffect(() => {
     frameRef.current = frame
   }, [frame])
 
-  // O único movimento da peça sai daqui: um `seek` por quadro exibido.
+  // The only motion of the piece leaves from here: one `seek` per displayed frame.
   useEffect(() => {
     if (loads === 0) return
     injectRef.current?.(seekScript(frame))
   }, [loads, frame])
 
-  // Play: relógio da tela, não da página. Cada tique deriva o quadro do tempo
-  // decorrido (e não de um contador) para não acumular atraso de timer.
+  // Play: clock of the screen, not of the page. Each tick derives the frame from the elapsed
+  // time (and not from a counter) so as not to accumulate timer drift.
   useEffect(() => {
     if (!playing || !spec) return
     const stepMs = 1000 / spec.fps
@@ -304,8 +304,8 @@ export function MotionViewer({ piece }: PieceViewerProps) {
     return () => clearInterval(timer)
   }, [playing, spec, loop])
 
-  // Enquadramento: só depois de saber o tamanho do documento (a sonda respondeu)
-  // e refeito quando o palco muda — girar o telefone muda a escala.
+  // Framing: only after knowing the size of the document (the probe answered)
+  // and redone when the stage changes — rotating the phone changes the scale.
   useEffect(() => {
     if (!spec || loads === 0 || stageWidth <= 0) return
     const scale = Math.min(stageWidth / spec.width, stageHeight / spec.height)
@@ -353,7 +353,7 @@ export function MotionViewer({ piece }: PieceViewerProps) {
       setPlaying(false)
       return
     }
-    // Parado no fim, tocar recomeça — senão o botão não faria nada.
+    // Stopped at the end, tapping starts over — otherwise the button would do nothing.
     if (frameRef.current >= spec.frames - 1) {
       frameRef.current = 0
       setFrame(0)
@@ -361,8 +361,8 @@ export function MotionViewer({ piece }: PieceViewerProps) {
     setPlaying(true)
   }, [spec, broken, playing])
 
-  // Arrastar a régua pausa: o play é um relógio que parte de um quadro fixo, e
-  // continuar tocando de outro ponto exigiria reiniciá-lo no meio do gesto.
+  // Dragging the ruler pauses: play is a clock that starts from a fixed frame, and
+  // continuing from another point would require restarting it in the middle of the gesture.
   const seekTo = useCallback(
     (next: number) => {
       if (!spec) return
@@ -386,9 +386,9 @@ export function MotionViewer({ piece }: PieceViewerProps) {
     setTrackWidth(event.nativeEvent.layout.width)
   }, [])
 
-  // O palco não muda enquanto a peça toca — e tocar re-renderiza este componente
-  // a cada quadro. Sem o memo, o host do WebView seria reconstruído 30 vezes por
-  // segundo à toa, junto com os `inject`s que ele dispara por `onReady`.
+  // The stage does not change while the piece plays — and playing re-renders this component
+  // on every frame. Without the memo, the WebView host would be rebuilt 30 times per
+  // second for nothing, along with the `inject`s it fires through `onReady`.
   const stage = useMemo(
     () => (
       <PieceView
@@ -450,17 +450,17 @@ export function MotionViewer({ piece }: PieceViewerProps) {
           )}
         </Pressable>
 
-        {/* A régua: toque e arrasto viram quadro. `locationX` já vem relativo à
-            trilha, então a razão x/largura é o próprio progresso. */}
+        {/* The ruler: touch and drag become a frame. `locationX` already comes relative to the
+            track, so the ratio x/width is the progress itself. */}
         <View
           testID="motion-track"
           accessibilityRole="adjustable"
-          // O nome da peça é o que a pessoa reconhece; não há chave de locale
-          // para "linha do tempo" (ver relatório).
+          // The name of the piece is what the person recognizes; there is no locale key
+          // for "timeline" (see report).
           accessibilityLabel={piece.title?.trim() || t('pieces.kind.motion')}
-          // `aria-value*` e não `accessibilityValue`: são a mesma coisa no
-          // nativo e, no WebView de teste (react-native-web), só estes chegam ao
-          // DOM — é por eles que o leitor de tela anuncia a posição.
+          // `aria-value*` and not `accessibilityValue`: they are the same thing on
+          // native and, in the test WebView (react-native-web), only these reach the
+          // DOM — it is through them that the screen reader announces the position.
           aria-valuemin={0}
           aria-valuemax={spec ? spec.frames - 1 : 0}
           aria-valuenow={frame}

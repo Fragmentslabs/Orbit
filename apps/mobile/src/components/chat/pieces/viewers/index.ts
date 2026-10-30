@@ -6,19 +6,19 @@ import { MotionViewer } from './motion'
 import { SlidesViewer } from './slides'
 
 /**
- * O contrato entre a casca (`PieceViewer`) e cada tipo.
+ * The contract between the shell (`PieceViewer`) and each type.
  *
- * Cada viewer recebe a peça já endereçada e ocupa o corpo da tela cheia — sem
- * cabeçalho, sem moldura: quem desenha a moldura é a casca, uma vez só, para os
- * três tipos ficarem idênticos.
+ * Each viewer receives the piece already addressed and fills the body of the full screen — without
+ * header, without frame: whoever draws the frame is the shell, once only, so the
+ * three types come out identical.
  */
 export interface PieceViewerProps {
   piece: PieceRef
 }
 
 /**
- * Um arquivo por tipo, e nada compartilhado entre eles: é o que permite os três
- * serem escritos em paralelo sem um pisar no outro.
+ * One file per type, and nothing shared between them: that is what allows the three
+ * to be written in parallel without one stepping on the other.
  */
 export const VIEWERS: Record<PieceKind, ComponentType<PieceViewerProps>> = {
   motion: MotionViewer,

@@ -8,7 +8,7 @@ interface Plan {
   in: Frames
 }
 
-// O script é JS de página: aqui ele roda como função pura, sem DOM.
+// The script is page JS: here it runs as a pure function, without a DOM.
 const { normalize, keyframes } = new Function(
   `${MOTION_TRANSITIONS_SCRIPT}; return { normalize: orbitNormalizeTransition, keyframes: orbitTransitionKeyframes }`,
 )() as {
@@ -59,7 +59,7 @@ describe('normalize', () => {
     expect(ok({ type: 'zoom', direction: 'out' }).direction).toBe('out')
     expect(normalize({ out: '.a', at: 0, type: 'push', direction: 'in' }).error).toMatch(/left, right, up or down/)
     expect(normalize({ out: '.a', at: 0, type: 'zoom', direction: 'left' }).error).toMatch(/"in" or "out"/)
-    // Sem lado: a direção é ignorada, não é erro.
+    // Without a side: the direction is ignored, it is not an error.
     expect(ok({ type: 'fade', direction: 'left' }).direction).toBeNull()
   })
 
@@ -104,7 +104,7 @@ describe('keyframes', () => {
   it('wipe cuts the two pieces into complementary parts, so stacking order does not matter', () => {
     const plan = keyframes(ok({ type: 'wipe', direction: 'left' }))
     expect(plan.in.map((f) => f.clipPath)).toEqual(['inset(0% 0% 0% 100%)', 'inset(0% 0% 0% 0%)'])
-    // O que a entrada ainda não ocupa é exatamente o que a saída ainda ocupa.
+    // What the entrance does not occupy yet is exactly what the exit still occupies.
     expect(plan.out.map((f) => f.clipPath)).toEqual(['inset(0% 0% 0% 0%)', 'inset(0% 100% 0% 0%)'])
   })
 

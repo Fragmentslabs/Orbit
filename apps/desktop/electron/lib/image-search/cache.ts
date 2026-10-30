@@ -1,10 +1,10 @@
 import type { ImageResult } from './types'
 
 /**
- * Os resultados da última busca, por id. O agente escolhe pelo id curto
- * (`wc:123`, `ov:<uuid>`) e a importação precisa do endereço e do crédito: manter
- * isso aqui evita que o MODELO digite URL e licença — que é onde um erro de
- * transcrição faria uma imagem entrar com o crédito errado.
+ * The results of the last search, by id. The agent chooses by the short id
+ * (`wc:123`, `ov:<uuid>`) and the import needs the address and the credit: keeping
+ * that here prevents the MODEL from typing a URL and a license — which is where a
+ * transcription mistake would make an image come in with the wrong credit.
  */
 
 const TTL_MS = 2 * 60 * 60 * 1000
@@ -17,7 +17,7 @@ export function rememberResults(results: ImageResult[], now = Date.now()): void 
     entries.delete(result.id)
     entries.set(result.id, { result, at: now })
   }
-  // O mais antigo sai primeiro (o Map guarda a ordem de inserção).
+  // The oldest one leaves first (the Map keeps the insertion order).
   while (entries.size > MAX_ENTRIES) {
     const oldest = entries.keys().next().value
     if (oldest === undefined) break

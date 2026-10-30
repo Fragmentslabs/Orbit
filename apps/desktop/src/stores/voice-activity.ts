@@ -1,23 +1,23 @@
 import { create } from "zustand"
 
 /**
- * Atividade de voz, global.
+ * Voice activity, global.
  *
- * Quem SABE que a voz está em curso são os botões (o de fala e o de ditado), mas
- * quem precisa DESENHAR isso é a persona — que vive em outro ramo da árvore, sem
- * qualquer ligação com eles. Um store compartilhado evita passar estado por props
- * ou subir um provider só para isso.
+ * Who KNOWS that voice is in progress are the buttons (the speech one and the dictation one), but
+ * who needs to DRAW that is the persona — which lives in another branch of the tree, with
+ * no link to them. A shared store avoids passing state through props
+ * or raising a provider just for that.
  *
- * `speaking` ganha da escuta: com o áudio saindo, é isso que a persona mostra.
+ * `speaking` wins over listening: with the audio going out, that is what the persona shows.
  */
 interface VoiceActivityState {
-  /** Áudio do TTS tocando agora. */
+  /** TTS audio playing right now. */
   speaking: boolean
-  /** Microfone aberto, capturando ditado. */
+  /** Microphone open, capturing dictation. */
   listening: boolean
-  /** Modo chamada ligado: o microfone de ditado sai de cena enquanto isso. */
+  /** Call mode on: the dictation microphone steps aside meanwhile. */
   inCall: boolean
-  /** Sessão dona da chamada em curso (a sidebar mostra o telefone nela). */
+  /** Session that owns the call in progress (the sidebar shows the phone on it). */
   callSessionId: string | null
   setSpeaking: (speaking: boolean) => void
   setListening: (listening: boolean) => void
@@ -37,8 +37,8 @@ export const useVoiceActivity = create<VoiceActivityState>((set) => ({
 }))
 
 /**
- * O estado que a persona deve mostrar, ou `null` quando não há voz em curso (e aí
- * valem os estados dela, como "thinking" ou "idle").
+ * The state the persona should show, or `null` when there is no voice in progress (and then
+ * its own states apply, such as "thinking" or "idle").
  */
 export function voiceActivityState(activity: {
   speaking: boolean

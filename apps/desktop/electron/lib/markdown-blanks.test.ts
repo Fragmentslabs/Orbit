@@ -2,44 +2,44 @@ import { describe, expect, it } from 'vitest'
 import { underscoreBlankWarning } from './markdown-blanks'
 
 /**
- * O caso veio de uma prova escolar: "**Data:** ____/____/______" chegou na tela
- * como "Data: //______". O aviso existe para o modelo consertar sozinho na
- * chamada seguinte, então ele não pode gritar em documento que está correto —
- * um aviso falso ensina a ignorar o aviso.
+ * The case came from a school test: "**Date:** ____/____/______" reached the screen
+ * as "Date: //______". The warning exists for the model to fix it by itself in the
+ * following call, so it cannot shout on a document that is correct —
+ * a false warning teaches you to ignore the warning.
  */
 
 describe('underscoreBlankWarning', () => {
-  it('avisa sobre o campo de data que vira "//"', () => {
-    const aviso = underscoreBlankWarning('**Nome:** ______\n\n**Data:** ____/____/______')
-    expect(aviso).toContain('line 3')
-    expect(aviso).toContain('update_document')
+  it('warns about the date field that becomes "//"', () => {
+    const warning = underscoreBlankWarning('**Name:** ______\n\n**Date:** ____/____/______')
+    expect(warning).toContain('line 3')
+    expect(warning).toContain('update_document')
   })
 
-  it('cala sobre um campo sozinho, que é renderizado inteiro', () => {
+  it('stays silent about a lone field, which is rendered whole', () => {
     expect(underscoreBlankWarning('**Escola:** ____________________')).toBeNull()
   })
 
-  it('cala sobre a lacuna no fim da conta', () => {
+  it('stays silent about the gap at the end of the account', () => {
     expect(underscoreBlankWarning('a) 245 + 138 = ______\n\nb) 356 + 274 = ______')).toBeNull()
   })
 
-  it('cala sobre negrito de verdade', () => {
-    // __assim__ também são dois grupos na mesma linha, mas com TEXTO no meio:
-    // é negrito pedido de propósito, não campo quebrado.
-    expect(underscoreBlankWarning('Isto é __mesmo__ negrito, e __isto__ também.')).toBeNull()
+  it('stays silent about real bold', () => {
+    // __like this__ is also two groups on the same line, but with TEXT in between:
+    // it is bold asked for on purpose, not a broken field.
+    expect(underscoreBlankWarning('This is __really__ bold, and __this__ too.')).toBeNull()
   })
 
-  it('pega telefone e CPF pelo mesmo motivo', () => {
+  it('catches a phone and an ID number for the same reason', () => {
     expect(underscoreBlankWarning('Telefone: (__)_____-____')).toContain('line 1')
     expect(underscoreBlankWarning('CPF: ___.___.___-__')).toContain('line 1')
   })
 
-  it('cala quando os grupos estão separados por espaço', () => {
+  it('stays silent when the groups are separated by a space', () => {
     expect(underscoreBlankWarning('**Data:** ____ / ____ / ______')).toBeNull()
   })
 
-  it('lista as linhas quando há várias', () => {
-    const aviso = underscoreBlankWarning('Data: __/__/__\nx\nCPF: ___.___.___-__')
-    expect(aviso).toContain('lines 1, 3')
+  it('lists the lines when there are several', () => {
+    const warning = underscoreBlankWarning('Date: __/__/__\nx\nTax ID: ___.___.___-__')
+    expect(warning).toContain('lines 1, 3')
   })
 })

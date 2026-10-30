@@ -14,11 +14,11 @@ interface ActionMenuProps {
   visible: boolean
   onClose: () => void
   items: ActionMenuItem[]
-  /** Posição do menu — padrão: canto superior direito (dropdown do header). */
+  /** Menu position — default: top right corner (header dropdown). */
   anchor?: { top?: number; right?: number; left?: number; bottom?: number }
 }
 
-/** Dropdown de ações reutilizável (header do chat, sidebar). */
+/** Reusable action dropdown (chat header, sidebar). */
 export function ActionMenu({ visible, onClose, items, anchor = { top: 52, right: 12 } }: ActionMenuProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 

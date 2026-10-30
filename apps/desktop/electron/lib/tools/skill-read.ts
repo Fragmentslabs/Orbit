@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { loadSkills } from '../skills'
 
 /**
- * Carrega o conteúdo completo de uma skill pelo slug.
+ * Loads the full content of a skill by slug.
  *
- * As skills nativas do app entram no prompt só com a descrição (senão todo
- * turno pagaria o texto inteiro de uma receita que talvez nem seja usada);
- * esta tool devolve o corpo na hora em que o agente vai aplicar a skill.
+ * The app's native skills enter the prompt with only the description (otherwise every
+ * turn would pay for the whole text of a recipe that may not even be used);
+ * this tool returns the body at the moment the agent is going to apply the skill.
  */
 export function createSkillReadTool(directory?: string) {
   return tool({

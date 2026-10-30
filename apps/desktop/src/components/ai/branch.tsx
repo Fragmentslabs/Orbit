@@ -70,8 +70,8 @@ export type BranchMessagesProps = HTMLAttributes<HTMLDivElement>
 export const BranchMessages = ({ children, ...props }: BranchMessagesProps) => {
   const { currentBranch, setBranches, branches } = useBranch()
 
-  // Sem o memo, a identidade muda a cada render e o efeito abaixo
-  // (que compara tamanhos) roda junto, sempre.
+  // Without the memo, the identity changes on every render and the effect below
+  // (which compares lengths) runs along with it, always.
   const childrenArray = useMemo(
     () => (Array.isArray(children) ? children : [children]),
     [children],

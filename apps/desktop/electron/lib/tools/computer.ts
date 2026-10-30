@@ -32,55 +32,55 @@ import { assertCanControl, isEnhanced, noteActivity, noteEnhanced, noteShotChang
 import { rememberShot, rememberTarget } from '../computer/shots'
 
 /**
- * Tools do Computer Use (macOS; Windows experimental até o Stage 0 — ver
- * docs/computer-use-windows.md). O laço é observar → agir por índice
- * → reobservar: cu_observe devolve screenshot + árvore numerada, cu_computer
- * age por índice (ou x/y do screenshot) e, por padrão, já devolve a observação
- * seguinte. A imagem entra no contexto pelo toModelOutput (como no
- * panel_screenshot) e fica fora do histórico persistido.
+ * Computer Use tools (macOS; Windows experimental up to Stage 0 — see
+ * docs/computer-use-windows.md). The loop is observe → act by index
+ * → re-observe: cu_observe returns a screenshot + numbered tree, cu_computer
+ * acts by index (or the screenshot's x/y) and, by default, already returns the next
+ * observation. The image enters the context through toModelOutput (as in
+ * panel_screenshot) and stays out of the persisted history.
  */
 
 export interface ComputerToolOptions {
   sessionId: string
-  /** O modelo do turno aceita imagem? */
+  /** Does the turn's model accept images? */
   modelVision: boolean
-  /** Modo Visão: descreve a imagem com outro modelo */
+  /** Vision mode: describes the image with another model */
   visionModel?: { providerId: string; modelId: string }
-  /** O modelo da conversa — o cu_verify cai nele quando não há modelo auxiliar */
+  /** The conversation's model — cu_verify falls back to it when there is no auxiliary model */
   conversation?: { providerId: string; modelId: string }
-  /** Chamado quando ações seguidas não mudam nada (o subagente para ali) */
+  /** Called when consecutive actions change nothing (the subagent stops there) */
   onStall?: () => void
 }
 
-/** Teto da imagem que vai ao modelo; acima disso, só o texto. */
+/** Cap of the image that goes to the model; above that, only the text. */
 const MAX_MODEL_IMAGE_BYTES = 300_000
 const DEFAULT_MAX_NODES = 250
 /**
- * Pausa antes do read_back. Curta de propósito: quase toda ação já mudou a
- * árvore nesse tempo. Se nada mudou, espera mais uma vez (SETTLE_RETRY_MS)
- * antes de dizer que a ação não funcionou — a interface lenta é que pagava os
- * 350 ms fixos de antes em toda ação.
+ * Pause before read_back. Short on purpose: almost every action has already changed the
+ * tree in that time. If nothing changed, it waits once more (SETTLE_RETRY_MS)
+ * before saying the action did not work — it was the slow interface that paid the
+ * fixed 350 ms of before on every action.
  */
 const SETTLE_MS = 150
 const SETTLE_RETRY_MS = 450
-/** Intervalo entre leituras enquanto espera um `expect`. */
+/** Interval between reads while waiting for an `expect`. */
 const EXPECT_POLL_MS = 300
 const EXPECT_DEFAULT_SECONDS = 4
-/** Ações seguidas sem mudança na árvore até a trava. */
+/** Consecutive actions without a change in the tree until the lock. */
 const STALL_LIMIT = 3
-/** Ações depois das quais a tela pode ter mudado de estrutura: o passo seguinte do batch relê a árvore antes de mirar. */
+/** Actions after which the screen may have changed structure: the batch's next step re-reads the tree before aiming. */
 const RESHAPING_ACTIONS = new Set(['left_click', 'right_click', 'middle_click', 'double_click', 'key', 'invoke', 'open_app', 'scroll', 'drag'])
 /**
- * Espera depois de ligar a árvore de um app Chromium/Electron pela primeira
- * vez: ela é montada de forma assíncrona (Fase 0: 13 nós lidos na hora, 250+
- * depois de ~300 ms).
+ * Wait after turning on the tree of a Chromium/Electron app for the first
+ * time: it is built asynchronously (Phase 0: 13 nodes read right away, 250+
+ * after ~300 ms).
  */
 const ENHANCE_WAIT_MS = 450
 
 /**
- * Escala do monitor onde a janela está (2 no Retina): é ela que define o espaço
- * x/y da janela. No Windows é 1: o host é DPI aware, frames e captura já vêm em
- * pixel físico — e o `screen` do Electron fala DIP, que aqui só atrapalharia.
+ * Scale of the monitor the window is on (2 on Retina): it is what defines the window's
+ * x/y space. On Windows it is 1: the host is DPI aware, frames and capture already come in
+ * physical pixels — and Electron's `screen` speaks DIP, which here would only get in the way.
  */
 function scaleFor(frame: [number, number, number, number]): number {
   if (process.platform === 'win32') return 1
@@ -93,7 +93,7 @@ function scaleFor(frame: [number, number, number, number]): number {
 
 const stash = new Map<string, { base64: string; mediaType: string } | { text: string }>()
 
-/** Alvo por descrição — sobrevive à tela mudando, ao contrário de um índice lido antes. */
+/** Target by description — it survives the screen changing, unlike an index read earlier. */
 const FIND = z
   .object({
     text: z.string().optional().describe('Text the element shows: title, value, placeholder or description (case-insensitive)'),
@@ -124,7 +124,7 @@ const ERROR_HINTS: Record<string, string> = {
   busy: 'Do not retry in a loop and do not work around it: tell the user in one line that another conversation is using the computer, and ask whether to wait for it or stop it (⌘⇧. stops it).',
 }
 
-/** No Windows não existe permissão de sistema: o axDenied lá é o host que não subiu (CLM, política). */
+/** On Windows there is no system permission: axDenied there means the host did not come up (CLM, policy). */
 const WINDOWS_HINTS: Record<string, string> = {
   axDenied:
     'Windows has no permission to grant here: the UI Automation host could not start (e.g. PowerShell in Constrained Language Mode or blocked by policy). Call cu_permissions and tell the user what it says.',
@@ -147,10 +147,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Guarda a imagem para o toModelOutput. Com o modo Visão ligado, só a
- * descrição entra no contexto — a imagem nunca. Não vai para a galeria: com
- * uma observação por ação, a aba de mídia ganharia dezenas de arquivos por
- * tarefa; a pessoa vê o screenshot mais recente na miniatura do painel.
+ * Keeps the image for toModelOutput. With Vision mode on, only the
+ * description enters the context — the image never does. It does not go to the gallery: with
+ * one observation per action, the media tab would gain dozens of files per
+ * task; the person sees the most recent screenshot in the panel thumbnail.
  */
 async function stashImage(options: ComputerToolOptions, toolCallId: string, result: ObservationResult): Promise<string> {
   if (!result.image) return ''
@@ -187,17 +187,17 @@ function toModelOutput({ toolCallId, output }: { toolCallId: string; output: unk
 export function createComputerTools(options: ComputerToolOptions): ToolSet {
   const { sessionId } = options
 
-  /** Espera só na primeira vez em cada app — o pid é resolvido pelo texto se já foi observado. */
+  /** It waits only the first time in each app — the pid is resolved from the text if it was already observed. */
   const enhanceWait = (app: string) => {
     const known = computerRegistry.lastTargetFor(app)
     return known && isEnhanced(known.pid) ? 0 : ENHANCE_WAIT_MS
   }
 
   /**
-   * A última observação de cada app cujo texto o MODELO leu neste loop — a
-   * única base válida para um diff. Uma do turno anterior (o histórico não
-   * guarda as tool parts antigas), do subagente ou de uma releitura interna
-   * do batch ele nunca viu.
+   * The last observation of each app whose text the MODEL read in this loop — the
+   * only valid base for a diff. One from the previous turn (the history does not
+   * keep the old tool parts), from the subagent or from an internal re-read
+   * of the batch, it never saw.
    */
   const shown = new Map<number, ObservationRecord>()
   const show = (result: ObservationResult) => {
@@ -214,7 +214,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       includeScreenshot?: boolean
       maxNodes?: number
       enhance?: boolean
-      /** O texto pode sair como diff contra o que o modelo leu por último */
+      /** The text can come out as a diff against what the model read last */
       diff?: boolean
     },
     signal: AbortSignal | undefined,
@@ -250,11 +250,11 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
   }
 
   /**
-   * Uma ação do cu_computer (ou um passo do cu_batch): executa, registra no
-   * chip, na linha do tempo da gravação e no alvo da miniatura.
+   * One cu_computer action (or one cu_batch step): it executes, records in the
+   * chip, in the recording timeline and in the thumbnail target.
    */
   const performAction = async (args: ActionArgs, signal: AbortSignal | undefined) => {
-    // Observar outra conversa controlando é inofensivo; agir junto, não.
+    // Observing another conversation in control is harmless; acting along with it is not.
     if (args.action !== 'wait') assertCanControl(sessionId)
     const startedAt = Date.now()
     const element = args.element ?? (args.find ? resolveFind(args.app, args.find) : undefined)
@@ -280,8 +280,8 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       signal,
     })
     if (outcome.app) noteActivity(sessionId, outcome.app.name, outcome.summary)
-    // Gravando: a ação entra na linha do tempo (é ela que decide o que fica
-    // no vídeo e onde vai o pulso de clique). `wait` fica inteiro.
+    // Recording: the action enters the timeline (it is what decides what stays
+    // in the video and where the click pulse goes). `wait` stays whole.
     if (isRecording(sessionId)) {
       noteRecordedAction(sessionId, {
         startedAt,
@@ -289,9 +289,9 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
         label: describeForTimeline(args),
         hold: args.action === 'wait',
         target: outcome.target,
-        // Pulso só onde houve clique: na rolagem o "alvo" é o centro da
-        // janela, e o vídeo enchia de quadrados sem sentido. O alvo segue
-        // valendo para o cursor desenhado ir até lá.
+        // Pulse only where there was a click: on scroll the "target" is the center of the
+        // window, and the video filled with meaningless squares. The target still
+        // holds so the drawn cursor goes there.
         pulse: CLICK_ACTIONS.has(args.action),
         window: outcome.record?.window.frame,
       })
@@ -304,8 +304,8 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
   }
 
   /**
-   * `find` → índice, contra a observação mais recente do app. Sem observação
-   * ainda, lê a árvore (sem imagem) para ter contra o que procurar.
+   * `find` → index, against the app's most recent observation. With no observation
+   * yet, it reads the tree (without an image) to have something to search against.
    */
   const resolveFind = (app: string | undefined, target: ElementQuery): number => {
     const pid = app ? computerRegistry.lastTargetFor(app)?.pid : undefined
@@ -314,7 +314,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
     return findElement(record, target)
   }
 
-  /** Espera um `expect` relendo só a árvore — o meio de um batch, onde ninguém lê a observação. */
+  /** Waits for an `expect` by re-reading only the tree — the middle of a batch, where nobody reads the observation. */
   const waitFor = async (app: string, expect: Expectation, signal: AbortSignal | undefined) => {
     const seconds = expect.timeout ?? EXPECT_DEFAULT_SECONDS
     const what = [expect.text && `"${expect.text}" on screen`, expect.gone && `"${expect.gone}" gone`].filter(Boolean).join(' and ') || 'the expected state'
@@ -328,7 +328,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
     }
   }
 
-  /** Relê só a árvore do app (sem imagem) — base fresca para o próximo passo mirar. */
+  /** Re-reads only the app's tree (without an image) — a fresh base for the next step to aim at. */
   const refreshTree = async (app: string, signal: AbortSignal | undefined) => {
     await sleep(SETTLE_MS)
     await runObserve({ app, includeScreenshot: false }, signal).catch((err: unknown) => {
@@ -337,10 +337,10 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
   }
 
   /**
-   * A observação depois de agir: árvore em texto, em diff quando o modelo
-   * acabou de ler a anterior; a imagem só quando pedida ou quando a árvore não
-   * diz nada. Com `expect`, relê até a condição valer (ou o prazo acabar) —
-   * é isso que deixa um batch atravessar uma tela que carrega.
+   * The observation after acting: the tree as text, as a diff when the model
+   * just read the previous one; the image only when asked for or when the tree says
+   * nothing. With `expect`, it re-reads until the condition holds (or the deadline runs out) —
+   * that is what lets a batch cross a screen that loads.
    */
   const readBack = async (
     outcome: Awaited<ReturnType<typeof performAction>>,
@@ -356,15 +356,15 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       try {
         return await runObserve({ app, windowId: outcome.reopen ? undefined : outcome.record?.window.id, includeScreenshot: withShot, diff: true }, signal)
       } catch (err) {
-        // A janela fechou (diálogo confirmado, por exemplo): observa a da frente do app.
+        // The window closed (a dialog confirmed, for example): it observes the app's front one.
         if (!(err instanceof ComputerError) || err.code !== 'windowNotFound') throw err
         return runObserve({ app, includeScreenshot: withShot, diff: true }, signal)
       }
     }
     await sleep(action === 'open_app' ? 0 : SETTLE_MS)
     const before = outcome.record?.digest ?? null
-    // A primeira leitura leva o screenshot: é ela que atualiza a miniatura do
-    // painel. As releituras de espera vão sem imagem, que é o que demora.
+    // The first read carries the screenshot: it is what updates the panel
+    // thumbnail. The wait re-reads go without an image, which is what takes time.
     let next = await look(true)
     let expectNote = ''
     if (expect && (expect.text || expect.gone)) {
@@ -379,7 +379,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
         ? `\n✓ Expected ${wanted}: confirmed.`
         : `\n✗ Expected ${wanted}: NOT seen after ${expect.timeout ?? EXPECT_DEFAULT_SECONDS}s. Read the tree below before going on.`
     } else if (before && next.record.digest === before && action !== 'wait') {
-      // A interface pode só estar lenta: mais uma leitura antes do alarme.
+      // The interface may just be slow: one more read before the alarm.
       await sleep(SETTLE_RETRY_MS)
       next = await look(false)
     }
@@ -393,9 +393,9 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       unchanged =
         '\nNothing changed in the accessibility tree after this action — it may not have worked. Do not repeat it blindly: try another way (element vs x/y, keyboard, open_app to bring the app forward), observe with screenshot: true, or ask the user.'
     }
-    // A imagem entra no contexto só quando pedida ou quando a árvore não
-    // diz nada (app sem acessibilidade): um screenshot por ação era o
-    // grosso do custo, e o histórico reenvia todos a cada passo.
+    // The image enters the context only when asked for or when the tree says
+    // nothing (an app without accessibility): one screenshot per action was the
+    // bulk of the cost, and the history resends them all on every step.
     const treePoor = next.record.elements.size <= 2
     if ((screenshot || treePoor) && !next.image) next = await look(true)
     show(next)
@@ -458,7 +458,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
       }),
       execute: async (args, { abortSignal, toolCallId }) => {
         try {
-          // A captura acontece sempre (é a miniatura do painel); ir ao modelo é que é exceção.
+          // The capture always happens (it is the panel thumbnail); going to the model is the exception.
           const result = await runObserve(
             {
               app: args.app,
@@ -566,13 +566,13 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
         for (const [i, step] of args.steps.entries()) {
           const isLast = i === args.steps.length - 1
           try {
-            // A tela pode ter mudado no passo anterior: mira contra a árvore de agora.
+            // The screen may have changed in the previous step: it aims against the tree of now.
             if (i > 0 && RESHAPING_ACTIONS.has(lastAction) && (step.find || step.element !== undefined)) await refreshTree(args.app, abortSignal)
             last = await performAction({ ...step, app: args.app }, abortSignal)
             lastAction = step.action
             done.push(`${i + 1}. ${last.summary}`)
-            // `expect` no meio do batch: espera o estado antes de seguir. No
-            // último passo, quem espera é o read_back.
+            // `expect` in the middle of the batch: it waits for the state before moving on. On the
+            // last step, what waits is read_back.
             if (step.expect && !isLast) {
               const waited = await waitFor(args.app, step.expect, abortSignal)
               if (!waited.ok) {
@@ -684,9 +684,9 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
           const app = resolveApp(snapshot, args.app)
           assertTargetAllowed(app)
           const win = resolveWindow(snapshot, app, args.window_id)
-          // Quem pede um vídeo quer ver acontecendo: gravar com a janela atrás
-          // de outras deixava a pessoa sem saber que começou (e, no ponteiro
-          // global, mexendo na mesma janela que o agente).
+          // Whoever asks for a video wants to see it happening: recording with the window behind
+          // others left the person not knowing it had started (and, with the global
+          // pointer, messing with the same window as the agent).
           if (args.bring_to_front !== false) {
             await driver.act({ op: 'activate', pid: app.pid }, abortSignal).catch(() => undefined)
             await driver
@@ -787,7 +787,7 @@ export function createComputerTools(options: ComputerToolOptions): ToolSet {
   }
 }
 
-/** Campos de uma ação (cu_computer e cada passo do cu_batch). */
+/** Fields of an action (cu_computer and each cu_batch step). */
 interface ActionArgs {
   action: (typeof COMPUTER_ACTIONS)[number]
   app?: string
@@ -808,10 +808,10 @@ interface ActionArgs {
   occurrence?: number
 }
 
-/** Ações que ganham o pulso de clique no vídeo. */
+/** Actions that get the click pulse in the video. */
 const CLICK_ACTIONS = new Set(['left_click', 'right_click', 'middle_click', 'double_click', 'triple_click', 'invoke'])
 
-/** Rótulo da ação na linha do tempo do vídeo: "left_click on element 3", "type “oi”". */
+/** Action label in the video timeline: "left_click on element 3", "type “hi”". */
 function describeForTimeline(args: { action: string; element?: number; x?: number; y?: number; text?: string; key?: string; direction?: string; seconds?: number }): string {
   if (args.action === 'type' || args.action === 'set_value' || (args.action === 'select_text' && args.text)) {
     const text = args.text ?? ''

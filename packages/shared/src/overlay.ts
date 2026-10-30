@@ -1,45 +1,45 @@
 /**
- * Overlay do Orbit: a janela que desce no rodapé da tela pelo atalho global
- * (⇧⌘espaço) para perguntar, traduzir o que está selecionado ou conversar por
- * voz sem sair do que a pessoa está fazendo.
+ * Orbit overlay: the window that comes down at the bottom of the screen through the global
+ * shortcut (⇧⌘space) to ask, translate what is selected or talk by
+ * voice without leaving what the person is doing.
  *
- * Aqui vive só o contrato (preferências + o contexto que o main entrega ao
- * renderer ao abrir). O comportamento mora em electron/lib/overlay e em
+ * Only the contract lives here (preferences + the context the main hands to the
+ * renderer when opening). The behavior lives in electron/lib/overlay and in
  * src/components/overlay.
  */
 
-/** Como o overlay abre: com o campo de texto ou direto em modo chamada. */
+/** How the overlay opens: with the text field or straight into call mode. */
 export type OverlayOpenMode = "text" | "call"
 
 export interface OverlaySettings {
-  /** Atalho global ligado. Desligado, o overlay só abre pelo menu/Preferências. */
+  /** Global shortcut on. Off, the overlay only opens from the menu/Preferences. */
   enabled: boolean
-  /** Abre já em modo chamada (exige TTS e ditado ligados em Preferências → Voz). */
+  /** Opens already in call mode (requires TTS and dictation on in Preferences → Voice). */
   openInCall: boolean
   /**
-   * Modelo deste modo. `null` = o modelo selecionado na conversa (o mesmo
-   * default global do app).
+   * Model of this mode. `null` = the model selected in the conversation (the same
+   * global default of the app).
    */
   model: { providerId: string; modelId: string } | null
   /**
-   * Modo Visão: a tela capturada vai para o modelo de visão (o mesmo das
-   * Preferências de visão, global), que devolve uma descrição em texto. É o
-   * caminho padrão porque funciona com qualquer modelo principal — e é o único
-   * que enxerga quando o modelo do painel é só de texto.
+   * Vision mode: the captured screen goes to the vision model (the same one from the
+   * vision Preferences, global), which returns a text description. It is the
+   * default path because it works with any main model — and it is the only
+   * one that sees when the panel model is text only.
    *
-   * Desligado, a imagem vai direto ao modelo do painel, e só se ele tiver
-   * visão; sem nenhum dos dois, o agente diz que não consegue olhar a tela.
+   * Off, the image goes straight to the panel model, and only if it has
+   * vision; without either, the agent says it cannot look at the screen.
    */
   vision: boolean
-  /** Opacidade do fundo do painel (1 = sólido). O texto nunca fica translúcido. */
+  /** Opacity of the panel background (1 = solid). The text never becomes translucent. */
   opacity: number
-  /** A persona (Rive) no lugar da marca. Sem ela, o painel mostra o halo estático. */
+  /** The persona (Rive) in place of the brand. Without it, the panel shows the static halo. */
   persona: boolean
 }
 
 /**
- * Atalho padrão. Cmd+Space é o Spotlight do macOS; Shift+Cmd+Space está livre
- * e é o que a maioria dos assistentes sobrepostos usa.
+ * Default shortcut. Cmd+Space is the macOS Spotlight; Shift+Cmd+Space is free
+ * and it is what most overlay assistants use.
  */
 export const OVERLAY_SHORTCUT = "CommandOrControl+Shift+Space"
 
@@ -49,26 +49,26 @@ export const OVERLAY_SHORTCUT_LABEL: Record<string, string> = {
   linux: "Ctrl+Shift+Space",
 }
 
-/** Piso da opacidade: abaixo disso o painel some sobre um papel de parede claro. */
+/** Opacity floor: below that the panel vanishes over a light wallpaper. */
 export const OVERLAY_OPACITY_MIN = 0.5
 
 export const OVERLAY_DEFAULTS: OverlaySettings = {
   enabled: true,
-  // Abre falando: é para isso que o atalho existe — perguntar de passagem, sem
-  // parar o que se está fazendo. Sem fala e ditado ligados (ou com o modelo de
-  // voz ausente) o painel cai no campo de texto, com o aviso do motivo.
+  // Opens speaking: that is what the shortcut exists for — asking in passing, without
+  // stopping what one is doing. Without speech and dictation on (or with the voice
+  // model absent) the panel falls back to the text field, with the warning of the reason.
   openInCall: true,
   model: null,
-  // Olhar a tela é o que o atalho mais serve para fazer, e o modo Visão é o
-  // único caminho que funciona com qualquer modelo principal — inclusive um só
-  // de texto. Sem modelo de visão escolhido, a tela continua ilegível para o
-  // agente, e ele é instruído a dizer isso em vez de adivinhar.
+  // Looking at the screen is what the shortcut serves most, and Vision mode is the
+  // only path that works with any main model — including a text-only
+  // one. With no vision model chosen, the screen stays unreadable to the
+  // agent, and it is instructed to say so instead of guessing.
   vision: true,
   opacity: 0.94,
   persona: true,
 }
 
-/** Completa um bloco parcial/antigo, descartando valores fora do domínio. */
+/** Completes a partial/old block, discarding values outside the domain. */
 export function normalizeOverlaySettings(raw: unknown): OverlaySettings {
   const value = (raw && typeof raw === "object" ? raw : {}) as Partial<OverlaySettings>
   const model =
@@ -96,26 +96,26 @@ export function normalizeOverlaySettings(raw: unknown): OverlaySettings {
 }
 
 /**
- * O que o main entrega ao renderer quando o overlay abre. A seleção é lida
- * ANTES de a janela receber o foco — depois disso o app em primeiro plano já é
- * o Orbit, e não há mais seleção alheia para ler.
+ * What the main hands to the renderer when the overlay opens. The selection is read
+ * BEFORE the window receives focus — after that the foreground app is already
+ * Orbit, and there is no other selection to read anymore.
  */
 export interface OverlayContext {
-  /** Abriu em modo chamada? */
+  /** Did it open in call mode? */
   call: boolean
-  /** Texto selecionado no app que estava na frente (null = nada selecionado). */
+  /** Text selected in the app that was in front (null = nothing selected). */
   selection: string | null
-  /** App de onde a seleção veio, para mostrar de onde o texto saiu. */
+  /** App the selection came from, to show where the text came out of. */
   selectionApp: string | null
   settings: OverlaySettings
   at: number
 }
 
-/** Eventos do main para o overlay. */
+/** Events from the main to the overlay. */
 export type OverlayEvent =
-  /** O agente encerrou a conversa ("tchau, Orbit") — a UI desliga a chamada. */
+  /** The agent ended the conversation ("bye, Orbit") — the UI hangs up the call. */
   | { type: "hangup"; reason?: string }
-  /** Preferências mudaram com o overlay aberto (opacidade, persona, modelo). */
+  /** Preferences changed with the overlay open (opacity, persona, model). */
   | { type: "settings"; settings: OverlaySettings }
-  /** A seleção lida depois da abertura (o painel não espera o `osascript`). */
+  /** The selection read after the opening (the panel does not wait for `osascript`). */
   | { type: "selection"; text: string | null; app: string | null }

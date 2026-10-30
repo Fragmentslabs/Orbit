@@ -3,14 +3,14 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- * O Chromium guarda só a ÚLTIMA chamada de `protocol.registerSchemesAsPrivileged`
- * (comprovado com um probe: registrar uma segunda lista faz a primeira deixar de
- * valer). Uma segunda chamada em qualquer módulo apaga silenciosamente o
- * `supportFetchAPI` dos schemes que já estavam lá — foi assim que o
- * `orbit-design://` parou de responder a `fetch` e o canvas.json deixou de
- * carregar ao abrir um design.
+ * Chromium keeps only the LAST call to `protocol.registerSchemesAsPrivileged`
+ * (proven with a probe: registering a second list makes the first stop
+ * counting). A second call in any module silently erases the
+ * `supportFetchAPI` of the schemes that were already there — that is how
+ * `orbit-design://` stopped answering `fetch` and canvas.json stopped
+ * loading when opening a design.
  *
- * Este teste é a trava: a lista é uma só, e mora em media.ts.
+ * This test is the lock: the list is a single one, and it lives in media.ts.
  */
 async function sources(dir: string, out: string[] = []): Promise<string[]> {
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
@@ -24,8 +24,8 @@ async function sources(dir: string, out: string[] = []): Promise<string[]> {
   return out
 }
 
-describe('privilégios de scheme', () => {
-  it('são registrados numa chamada única, em media.ts', async () => {
+describe('scheme privileges', () => {
+  it('are registered in a single call, in media.ts', async () => {
     const root = path.join(process.cwd(), 'electron')
     const files = await sources(root)
     const registered: string[] = []

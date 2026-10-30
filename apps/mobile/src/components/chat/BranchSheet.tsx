@@ -1,8 +1,8 @@
 /**
- * Troca de branch da pasta de trabalho, a partir do menu do header do chat.
- * Porte reduzido do BranchSelector do desktop: lista as branches locais,
- * marca a atual e faz checkout. Criar branch, commitar e pull/push ficaram de
- * fora — no celular o caso real é "estou na branch errada", não gerir o repo.
+ * Switching the branch of the working folder, from the chat header menu.
+ * Reduced port of the desktop BranchSelector: it lists the local branches,
+ * marks the current one and does checkout. Creating a branch, committing and pull/push were left
+ * out — on the phone the real case is "I am on the wrong branch", not managing the repo.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
@@ -54,9 +54,9 @@ export function BranchSheet({
   }, [wsClient, directory, t])
 
   useEffect(() => {
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (visible) void load()
   }, [visible, load])
@@ -72,8 +72,8 @@ export function BranchSheet({
       onClose()
       return
     }
-    // Árvore suja: o git recusa e a mensagem dele é o que aparece — não
-    // forçamos checkout por cima de alterações não commitadas.
+    // Dirty tree: git refuses and its message is what shows up — we do not
+    // force a checkout over uncommitted changes.
     setError(res.error ?? t('branch.switchError'))
   }
 

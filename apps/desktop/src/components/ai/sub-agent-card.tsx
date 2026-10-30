@@ -5,14 +5,14 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Card minimalista de subagente (tool subagent): mostra a tarefa delegada,
- * shimmer enquanto roda em segundo plano e o resultado inline ao concluir.
- * Subagentes são efêmeros — não têm chat próprio nem botão de expandir.
+ * Minimalist sub-agent card (tool subagent): shows the delegated task,
+ * shimmer while it runs in the background and the result inline on completion.
+ * Sub-agents are ephemeral — they have no chat of their own nor an expand button.
  */
 export function SubAgentCard({ part }: { part: ToolPart }) {
   const { t } = useTranslation()
   const task = typeof part.input?.task === "string" ? part.input.task : t("subagent.defaultTask")
-  // O resultado é texto para o modelo: o aviso de "sem pasta" e o vazio viram i18n.
+  // The result is text for the model: the "no folder" notice and the empty one become i18n.
   const result = part.output ? parseSubagentOutput(part.output) : null
 
   return (

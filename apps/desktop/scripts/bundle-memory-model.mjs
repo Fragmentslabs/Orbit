@@ -1,19 +1,19 @@
 /**
- * Prepara o modelo de embedding para ir DENTRO do app.
+ * Prepares the embedding model to go INSIDE the app.
  *
  *   npm run memory:bundle
  *
- * Leva `onnx/model.onnx` + `tokenizer.bin` para `resources/memory-embed/<id>`,
- * que o electron-builder empacota em `extraResources` (`memory-embed` no
- * `process.resourcesPath`). O app carrega o modelo do próprio bundle e nunca
- * baixa nada — nem na instalação, nem depois de uma atualização.
+ * Takes `onnx/model.onnx` + `tokenizer.bin` to `resources/memory-embed/<id>`,
+ * which electron-builder packs in `extraResources` (`memory-embed` in
+ * `process.resourcesPath`). The app loads the model from the bundle itself and never
+ * downloads anything — neither during the installation, nor after an update.
  *
- * O `.json` de 34 MB fica de fora: o runtime lê o `.bin` compilado, que é 9 MB.
- * Mandar o `.json` obrigaria o worker a compilar dentro do bundle assinado, o
- * que invalida a assinatura do app no macOS.
+ * The 34 MB `.json` stays out: the runtime reads the compiled `.bin`, which is 9 MB.
+ * Shipping the `.json` would force the worker to compile inside the signed bundle, which
+ * invalidates the app signature on macOS.
  *
- * Falha de propósito quando não acha o modelo: um build sem ele instalaria um
- * Orbit sem busca semântica, e isso não pode passar em silêncio.
+ * It fails on purpose when it does not find the model: a build without it would install an
+ * Orbit without semantic search, and that cannot pass silently.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -36,7 +36,7 @@ const userData =
       ? path.join(process.env.APPDATA ?? homedir(), 'Orbit')
       : path.join(process.env.XDG_CONFIG_HOME ?? path.join(homedir(), '.config'), 'orbit')
 
-/** De onde copiar: cache de desenvolvimento primeiro, depois uma instalação do app. */
+/** Where to copy from: development cache first, then an app installation. */
 const sources = [
   path.join(appRoot, '.cache', 'memory-embed', ID),
   path.join(userData, 'memory', 'models', ID),
@@ -46,43 +46,43 @@ const hasGraph = (dir) => fs.existsSync(path.join(dir, 'onnx', 'model.onnx'))
 const source = sources.find(hasGraph)
 
 if (!source) {
-  console.error(`\n✗ modelo ${ID} não encontrado.`)
-  console.error('  Rode `npm run memory:model -- --dev` para baixá-lo (130 MB, uma vez).')
-  console.error(`  Procurei em:\n${sources.map((s) => `    ${s}`).join('\n')}\n`)
+  console.error(`\n✗ model ${ID} not found.`)
+  console.error('  Run `npm run memory:model -- --dev` to download it (130 MB, once).')
+  console.error(`  Looked in:\n${sources.map((s) => `    ${s}`).join('\n')}\n`)
   process.exit(1)
 }
 
-// O tokenizador de origem é obrigatório para gerar o `.bin` quando ele ainda
-// não existe (primeira vez depois de um download limpo).
+// The source tokenizer is mandatory to generate the `.bin` when it still
+// does not exist (first time after a clean download).
 const json = path.join(source, 'tokenizer.json')
 const bin = path.join(source, 'tokenizer.bin')
 if (!fs.existsSync(bin)) {
   if (!fs.existsSync(json)) {
-    console.error(`\n✗ nem tokenizer.bin nem tokenizer.json em ${source}\n`)
+    console.error(`\n✗ neither tokenizer.bin nor tokenizer.json in ${source}\n`)
     process.exit(1)
   }
-  console.log('… compilando tokenizer.json → tokenizer.bin (só nesta máquina, uma vez)')
+  console.log('… compiling tokenizer.json → tokenizer.bin (this machine only, once)')
   compileTokenizer(json, bin)
 }
 
-console.log(`modelo ${ID}`)
-console.log(`  de   ${source}`)
-console.log(`  para ${dest}`)
+console.log(`model ${ID}`)
+console.log(`  from ${source}`)
+console.log(`  to   ${dest}`)
 
 let total = 0
 for (const file of FILES) {
   const from = path.join(source, file)
   const to = path.join(dest, file)
   if (!fs.existsSync(from)) {
-    console.error(`\n✗ ${file} ausente em ${source}\n`)
+    console.error(`\n✗ ${file} missing in ${source}\n`)
     process.exit(1)
   }
   const size = fs.statSync(from).size
   total += size
-  // Bytes iguais entre builds é o que faz a atualização ser diferencial: se o
-  // destino já tem o mesmo tamanho, não se toca nele (nem no mtime).
+  // Identical bytes between builds is what makes the update differential: if the
+  // destination already has the same size, it is not touched (not even the mtime).
   if (!force && fs.existsSync(to) && fs.statSync(to).size === size) {
-    console.log(`  = ${file} (${(size / 1e6).toFixed(1)} MB, já está)`)
+    console.log(`  = ${file} (${(size / 1e6).toFixed(1)} MB, already there)`)
     continue
   }
   fs.mkdirSync(path.dirname(to), { recursive: true })
@@ -90,4 +90,4 @@ for (const file of FILES) {
   console.log(`  + ${file} (${(size / 1e6).toFixed(1)} MB)`)
 }
 
-console.log(`pronto: ${(total / 1e6).toFixed(0)} MB vão dentro do app.`)
+console.log(`ready: ${(total / 1e6).toFixed(0)} MB go inside the app.`)

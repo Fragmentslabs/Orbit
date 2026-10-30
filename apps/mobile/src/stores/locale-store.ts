@@ -12,9 +12,9 @@ export const LOCALE_LABELS: Record<AppLocale, string> = {
   en: 'English',
 }
 
-/** Nome do idioma em inglês, usado nos system prompts enviados ao modelo
- * (mesma convenção do desktop — companion/settingsStore repassa isso ao
- * enviar mensagens, quando essa integração existir no lado mobile). */
+/** Language name in English, used in the system prompts sent to the model
+ * (same convention as the desktop — companion/settingsStore passes this on when
+ * sending messages, once that integration exists on the mobile side). */
 export const LOCALE_PROMPT_NAME: Record<AppLocale, string> = {
   'pt-BR': 'Portuguese',
   en: 'English',
@@ -34,7 +34,7 @@ export const useLocaleStore = create<LocaleState>((set) => ({
   },
 }))
 
-/** Hydrate async (chamar no root layout antes do primeiro render). */
+/** Async hydrate (call in the root layout before the first render). */
 export async function hydrateLocale(): Promise<AppLocale> {
   try {
     const raw = await Storage.getItem(LOCALE_KEY)

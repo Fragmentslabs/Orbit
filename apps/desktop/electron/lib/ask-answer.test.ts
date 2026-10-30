@@ -1,31 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import { formatAskAnswer, formatAskLine } from '@shared/chat'
 
-describe('resposta de pergunta', () => {
-  it('opção e texto livre vão separados, com o texto rotulado', () => {
-    expect(formatAskAnswer(['PostgreSQL'], ' com pgvector ', 'Observação')).toBe(
-      'PostgreSQL\nObservação: com pgvector',
+describe('question answer', () => {
+  it('option and free text go separately, with the text labeled', () => {
+    expect(formatAskAnswer(['PostgreSQL'], ' with pgvector ', 'Note')).toBe(
+      'PostgreSQL\nNote: with pgvector',
     )
   })
 
-  it('várias opções não se confundem com o texto (que pode ter vírgula)', () => {
-    expect(formatAskAnswer(['A', 'B'], 'sem testes, por enquanto', 'Note')).toBe(
-      'A, B\nNote: sem testes, por enquanto',
+  it('several options are not confused with the text (which may have a comma)', () => {
+    expect(formatAskAnswer(['A', 'B'], 'no tests, for now', 'Note')).toBe(
+      'A, B\nNote: no tests, for now',
     )
   })
 
-  it('sem opção marcada o texto é a resposta, sem rótulo', () => {
-    expect(formatAskAnswer([], 'outra coisa', 'Observação')).toBe('outra coisa')
+  it('with no option marked the text is the answer, without a label', () => {
+    expect(formatAskAnswer([], 'something else', 'Note')).toBe('something else')
   })
 
-  it('só opção, ou nada', () => {
-    expect(formatAskAnswer(['A'], '  ', 'Observação')).toBe('A')
-    expect(formatAskAnswer([], undefined, 'Observação')).toBe('')
+  it('only an option, or nothing', () => {
+    expect(formatAskAnswer(['A'], '  ', 'Note')).toBe('A')
+    expect(formatAskAnswer([], undefined, 'Note')).toBe('')
   })
 
-  it('a linha para o agente alinha a observação sob a seta', () => {
-    expect(formatAskLine(0, 'Qual banco?', 'PostgreSQL\nObservação: com pgvector')).toBe(
-      '1. Qual banco?\n   → PostgreSQL\n     Observação: com pgvector',
+  it('the line for the agent aligns the note under the arrow', () => {
+    expect(formatAskLine(0, 'Which database?', 'PostgreSQL\nNote: with pgvector')).toBe(
+      '1. Which database?\n   → PostgreSQL\n     Note: with pgvector',
     )
   })
 })

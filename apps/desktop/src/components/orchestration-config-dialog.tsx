@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { BrainIcon, ChevronDownIcon, MinusIcon, PlusIcon } from "lucide-react"
 import type { OrchestrationSettings, ReasoningConfig } from "@shared/chat"
-import { MAX_AJUSTES_POR_WORKER } from "@shared/chat"
+import { MAX_ADJUSTMENTS_PER_WORKER } from "@shared/chat"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
@@ -21,8 +21,9 @@ import { useProviderStore, type SelectedModel } from "@/src/stores/provider-stor
 export type DelegationConfigKind = "subagents" | "orchestra"
 
 /**
- * Modelo + thinking de um papel da delegação. As mesmas preferências de
- * Preferências → Código (o estado vive na provider-store): mudar aqui muda lá.
+ * Model + thinking of a delegation role. The same preferences as
+ * Preferences → Code (the state lives in the provider store): changing it here
+ * changes it there.
  */
 function ModelSection({
   label,
@@ -63,7 +64,7 @@ function ModelSection({
         value={model}
         onValueChange={(next) => {
           onModelChange(next)
-          // Outro modelo, outros níveis: o raciocínio volta a desligado.
+          // Another model, other levels: reasoning goes back to off.
           onReasoningChange(null)
         }}
         filter={(_provider, m) => m.tool_call !== false}
@@ -102,7 +103,7 @@ function ModelSection({
   )
 }
 
-/** Bloco do modal: um título e a moldura que separa o painel em duas colunas. */
+/** Modal block: a title and the frame that splits the panel into two columns. */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
@@ -113,12 +114,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /**
- * Configuração da delegação, aberta pela engrenagem de Subagentes ou de Orquestra
- * no "+". Subagentes: o modelo dos workers. Orquestra: quem conduz (planeja e
- * escreve a resposta final) e os workers — os mesmos dos subagentes.
+ * Delegation settings, opened by the Subagents or Orchestra gear in the "+".
+ * Subagents: the workers' model. Orchestra: who conducts (plans and writes the
+ * final answer) and the workers — the same ones as the subagents.
  */
 export function OrchestrationConfigDialog({ kind, onOpenChange }: {
-  /** null = fechado */
+  /** null = closed */
   kind: DelegationConfigKind | null
   onOpenChange: (open: boolean) => void
 }) {
@@ -145,9 +146,9 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
 
   return (
     <Dialog open={kind !== null} onOpenChange={onOpenChange}>
-      {/* Orquestra tem configuração demais para uma coluna só: os papéis
-          (orquestrador, worker) ficam à esquerda e o comportamento à direita,
-          em vez de uma lista que passa da altura da tela. */}
+      {/* Orchestra has too much configuration for a single column: the roles
+          (orchestrator, worker) sit on the left and the behavior on the right,
+          instead of a list taller than the screen. */}
       <DialogContent className={orchestra ? "sm:max-w-3xl" : "sm:max-w-sm"} showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{orchestra ? t("orchestrationConfig.titleOrchestra") : t("orchestrationConfig.titleSubagents")}</DialogTitle>
@@ -208,32 +209,32 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
 }
 
 /**
- * Como o orquestrador se comporta depois de dividir o trabalho. Vale para os
- * próximos planos aprovados — um plano em andamento segue a configuração com
- * que foi aprovado.
+ * How the orchestrator behaves after splitting the work. Applies to the next
+ * approved plans — a plan in progress follows the configuration it was approved
+ * with.
  */
 function BehaviorSection() {
   const { t } = useTranslation()
   const settings = useProviderStore((s) => s.orchestrationSettings)
   const update = useProviderStore((s) => s.setOrchestrationSettings)
-  const opcoes: Array<{ id: OrchestrationSettings["comportamento"]; label: string; hint: string }> = [
-    { id: "orquestrar", label: t("orchestrationConfig.behavior.orquestrar"), hint: t("orchestrationConfig.behavior.orquestrarHint") },
-    { id: "acompanhar", label: t("orchestrationConfig.behavior.acompanhar"), hint: t("orchestrationConfig.behavior.acompanharHint") },
-    { id: "rigoroso", label: t("orchestrationConfig.behavior.rigoroso"), hint: t("orchestrationConfig.behavior.rigorosoHint") },
+  const options: Array<{ id: OrchestrationSettings["behavior"]; label: string; hint: string }> = [
+    { id: "orchestrate", label: t("orchestrationConfig.behavior.orchestrate"), hint: t("orchestrationConfig.behavior.orchestrateHint") },
+    { id: "supervise", label: t("orchestrationConfig.behavior.follow"), hint: t("orchestrationConfig.behavior.followHint") },
+    { id: "rigorous", label: t("orchestrationConfig.behavior.strict"), hint: t("orchestrationConfig.behavior.strictHint") },
   ]
-  const revisa = settings.comportamento !== "orquestrar"
+  const reviews = settings.behavior !== "orchestrate"
 
   return (
     <Section title={t("orchestrationConfig.behavior.title")}>
       <div className="flex flex-col gap-1.5">
-        {opcoes.map((o) => (
+        {options.map((o) => (
           <button
             key={o.id}
             type="button"
-            onClick={() => update({ comportamento: o.id })}
+            onClick={() => update({ behavior: o.id })}
             className={cn(
               "flex flex-col items-start rounded-md border px-2.5 py-1.5 text-left transition-colors",
-              settings.comportamento === o.id ? "border-primary/50 bg-primary/10" : "hover:bg-accent/50",
+              settings.behavior === o.id ? "border-primary/50 bg-primary/10" : "hover:bg-accent/50",
             )}
           >
             <span className="text-xs font-medium">{o.label}</span>
@@ -242,30 +243,30 @@ function BehaviorSection() {
         ))}
       </div>
 
-      <div className={cn("flex items-center gap-3", !revisa && "opacity-50")}>
+      <div className={cn("flex items-center gap-3", !reviews && "opacity-50")}>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.ajustes")}</p>
-          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.ajustesHint")}</p>
+          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.adjustments")}</p>
+          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.adjustmentsHint")}</p>
         </div>
         <div className="flex items-center gap-1">
           <Button
             variant="outline"
             size="icon-sm"
             className="size-6"
-            disabled={!revisa || settings.ajustesPorWorker <= 0}
-            onClick={() => update({ ajustesPorWorker: settings.ajustesPorWorker - 1 })}
-            aria-label={t("orchestrationConfig.behavior.menos")}
+            disabled={!reviews || settings.adjustmentsPerWorker <= 0}
+            onClick={() => update({ adjustmentsPerWorker: settings.adjustmentsPerWorker - 1 })}
+            aria-label={t("orchestrationConfig.behavior.less")}
           >
             <MinusIcon className="size-3" />
           </Button>
-          <span className="w-5 text-center text-xs tabular-nums">{settings.ajustesPorWorker}</span>
+          <span className="w-5 text-center text-xs tabular-nums">{settings.adjustmentsPerWorker}</span>
           <Button
             variant="outline"
             size="icon-sm"
             className="size-6"
-            disabled={!revisa || settings.ajustesPorWorker >= MAX_AJUSTES_POR_WORKER}
-            onClick={() => update({ ajustesPorWorker: settings.ajustesPorWorker + 1 })}
-            aria-label={t("orchestrationConfig.behavior.mais")}
+            disabled={!reviews || settings.adjustmentsPerWorker >= MAX_ADJUSTMENTS_PER_WORKER}
+            onClick={() => update({ adjustmentsPerWorker: settings.adjustmentsPerWorker + 1 })}
+            aria-label={t("orchestrationConfig.behavior.more")}
           >
             <PlusIcon className="size-3" />
           </Button>
@@ -282,10 +283,10 @@ function BehaviorSection() {
 
       <label className="flex cursor-pointer items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.aprovarTarefaUnica")}</p>
-          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.aprovarTarefaUnicaHint")}</p>
+          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.approveSingleTask")}</p>
+          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.approveSingleTaskHint")}</p>
         </div>
-        <Switch checked={settings.aprovarTarefaUnica} onCheckedChange={(v) => update({ aprovarTarefaUnica: v })} />
+        <Switch checked={settings.approveSingleTask} onCheckedChange={(v) => update({ approveSingleTask: v })} />
       </label>
     </Section>
   )

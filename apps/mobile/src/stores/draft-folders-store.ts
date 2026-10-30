@@ -2,16 +2,16 @@ import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
 
 /**
- * Pastas do modo código que o próximo chat vai usar, e a pasta da sidebar em
- * que ele deve nascer.
+ * Folders of code mode that the next chat will use, and the sidebar folder in
+ * which it should be born.
  *
- * No desktop as pastas do seletor vivem no workspace e são persistidas
- * (`orbit-recent-folders`): abrir um chat novo já vem com a pasta do último
- * trabalho. No celular elas eram só um useState da tela de chat, então todo
- * chat novo começava sem pasta — e o modo código sem pasta não tem o que fazer.
+ * On the desktop the folders of the picker live in the workspace and are persisted
+ * (`orbit-recent-folders`): opening a new chat already comes with the folder of the last
+ * work. On the phone they were only a useState of the chat screen, so every
+ * new chat started without a folder — and code mode without a folder has nothing to do.
  *
- * `pendingFolderId` é o equivalente do pendingFolderId do desktop: o "+" da
- * pasta na sidebar leva o chat novo para dentro dela quando ele for criado.
+ * `pendingFolderId` is the equivalent of the desktop pendingFolderId: the "+" of the
+ * folder in the sidebar takes the new chat inside it when it is created.
  */
 
 const RECENT_FOLDERS_KEY = 'orbit_recent_folders'
@@ -22,7 +22,7 @@ interface DraftFoldersState {
   hydrated: boolean
   setFolders: (folders: string[]) => void
   setPendingFolder: (folderId: string | null) => void
-  /** Lê o disco na primeira vez; depois devolve o que já está em memória. */
+  /** Reads the disk the first time; afterwards returns what is already in memory. */
   hydrate: () => Promise<string[]>
 }
 

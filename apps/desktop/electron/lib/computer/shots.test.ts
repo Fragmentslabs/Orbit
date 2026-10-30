@@ -3,29 +3,29 @@ import { forgetShots, markerFor, rememberShot, rememberTarget, shotView } from '
 import type { ShotGeometry } from './geometry'
 
 /**
- * A miniatura do painel: só o último screenshot por conversa, em memória, com
- * o alvo da última ação convertido para o espaço da imagem.
+ * The panel thumbnail: only the last screenshot per conversation, in memory, with the
+ * target of the last action converted to the image space.
  */
 
 const geometry: ShotGeometry = { frame: [100, 50, 1000, 800], width: 1280, height: 1024 }
 const shot = (at: number) => ({ data: Buffer.from('img'), mediaType: 'image/webp', geometry, app: 'TextEdit', at })
 
 describe('markerFor', () => {
-  it('frame global → retângulo na imagem', () => {
+  it('global frame → rectangle in the image', () => {
     expect(markerFor(geometry, { frame: [1000, 750, 80, 30] })).toMatchObject({ x: 1152, y: 896, w: 102, h: 38 })
   })
 
-  it('ponto vira retângulo de tamanho 0', () => {
+  it('a point becomes a zero-size rectangle', () => {
     expect(markerFor(geometry, { point: [600, 450] })).toMatchObject({ x: 640, y: 512, w: 0, h: 0 })
   })
 
-  it('alvo fora da janela não tem marcador', () => {
+  it('a target outside the window has no marker', () => {
     expect(markerFor(geometry, { point: [5000, 5000] })).toBeNull()
   })
 })
 
-describe('último screenshot', () => {
-  it('guarda só o mais recente, e o alvo da ação vale para o screenshot seguinte', () => {
+describe('last screenshot', () => {
+  it('keeps only the most recent, and the action target holds for the next screenshot', () => {
     rememberShot('s1', shot(1))
     rememberTarget('s1', { point: [600, 450] }, 'left_click')
     rememberShot('s1', shot(2))
@@ -35,7 +35,7 @@ describe('último screenshot', () => {
     expect(view?.marker).toMatchObject({ x: 640, y: 512, label: 'left_click' })
   })
 
-  it('conversas não se misturam e o fim do controle limpa a memória', () => {
+  it('conversations do not mix and the end of control clears the memory', () => {
     rememberShot('s2', shot(3))
     expect(shotView('s3')).toBeNull()
     forgetShots('s2')

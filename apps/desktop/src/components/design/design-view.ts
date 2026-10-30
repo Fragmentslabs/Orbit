@@ -1,8 +1,8 @@
 /**
- * Contas da vista do canvas: o artboard vive em coordenadas do canvas.json e a
- * tela mostra `translate(view.x, view.y) scale(view.zoom)` por cima delas.
- * Quem monta o iframe de um board precisa saber se ele ainda encosta na
- * viewport — é o que permite deixar de fora o que ninguém está olhando.
+ * Math of the canvas view: the artboard lives in coordinates of canvas.json and the
+ * screen shows `translate(view.x, view.y) scale(view.zoom)` over them.
+ * Whoever mounts the iframe of a board needs to know whether it still touches the
+ * viewport — it is what allows leaving out what nobody is looking at.
  */
 
 export interface BoardRect {
@@ -24,9 +24,9 @@ export interface ViewportSize {
 }
 
 /**
- * O artboard encosta na viewport (com `margin` px de TELA em volta)? A margem
- * é o que faz o board já estar montado quando a pessoa dá um pan rápido — e
- * ela é em px de tela justamente para valer igual em qualquer zoom.
+ * Does the artboard touch the viewport (with `margin` SCREEN px around it)? The margin
+ * is what makes the board already be mounted when the person pans fast — and
+ * it is in screen px precisely to count the same at any zoom.
  */
 export function isBoardInView(
   board: BoardRect,

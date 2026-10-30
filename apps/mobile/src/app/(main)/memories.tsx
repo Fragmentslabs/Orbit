@@ -1,7 +1,7 @@
 /**
- * Tela de Memórias — espelho da memories-view do desktop: busca, alternância
- * Lista/Grafo, filtro automático pelo modo do workspace (chat mostra
- * core+seasonal+general; código mostra project+general com filtro de projeto).
+ * Memories screen — mirror of the desktop memories-view: search, List/Graph
+ * toggle, automatic filter by the workspace mode (chat shows
+ * core+seasonal+general; code shows project+general with a project filter).
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet, InteractionManager } from 'react-native'
@@ -23,7 +23,7 @@ import { SafeScreen } from '~/components/layout/SafeScreen'
 
 const ALL_PROJECTS = '__all__'
 
-const chaveDe = (m: Memory) => m.id
+const keyOf = (m: Memory) => m.id
 
 export default function MemoriesScreen() {
   const { t } = useTranslation()
@@ -39,16 +39,15 @@ export default function MemoriesScreen() {
   const [tab, setTab] = useState<'list' | 'graph'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // Chegada por citação na conversa (`/memories?id=mem_xxx`): abre já no grafo
-  // com o nó em foco — a lista é ordenada por atividade, então a memória citada
-  // poderia estar a várias rolagens da primeira dobra. Ajuste no RENDER (não
-  // em efeito), mesmo padrão do EditModal do MemoryCard: evita o render em
-  // cascata que o efeito provocaria.
-  const { id: memoriaDaRota } = useLocalSearchParams<{ id?: string }>()
-  const [rotaAplicada, setRotaAplicada] = useState<string | null>(null)
-  if (typeof memoriaDaRota === 'string' && memoriaDaRota && memoriaDaRota !== rotaAplicada) {
-    setRotaAplicada(memoriaDaRota)
-    setSelectedId(memoriaDaRota)
+  // Arrival by citation in the conversation (`/memories?id=mem_xxx`): opens straight in the graph
+  // with the node in focus — the list is ordered by activity, so the cited memory
+  // could be several scrolls below the first fold. Adjust in RENDER (not
+  // in an effect), same pattern as the EditModal of MemoryCard: it avoids the render at
+  const { id: memoryIdFromRoute } = useLocalSearchParams<{ id?: string }>()
+  const [appliedRoute, setRotaAplicada] = useState<string | null>(null)
+  if (typeof memoryIdFromRoute === 'string' && memoryIdFromRoute && memoryIdFromRoute !== appliedRoute) {
+    setRotaAplicada(memoryIdFromRoute)
+    setSelectedId(memoryIdFromRoute)
     setTab('graph')
   }
 
@@ -69,55 +68,55 @@ export default function MemoriesScreen() {
 
   const kinds: MemoryKind[] = mode === 'chat' ? ['core', 'seasonal', 'general'] : ['project', 'general']
 
-  // Pool visível (modo + projeto, sem a busca) — o grafo destaca em vez de esconder
+  // Visible pool (mode + project, without the search) — the graph highlights instead of hiding
   const [now] = useState(() => Date.now())
   const pool = useMemo(() => {
     return index.filter((m) => {
       if (!kinds.includes(m.kind)) return false
-      // Uma regra só: a memória aparece no modo em que vale.
+      // A single rule: the memory shows up in the mode where it counts.
       if (!visibleIn(m, mode)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
-      // O filtro vale para TODOS os kinds: uma memória geral criada em outro
-      // projeto não pertence a esta vista. As sem origem seguem globais.
+      // The filter applies to ALL kinds: a general memory created in another
+      // project does not belong to this view. Those without an origin stay global.
       if (projectFilter !== ALL_PROJECTS && !matchesProjectFilter(m, projectFilter)) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mode, projectFilter])
 
-  // Adiada: `searchMemories` pontua TODA memória do pool, e com milhares delas
-  // fazer isso a cada tecla digitada engasgava o próprio campo de texto.
+  // Delayed: `searchMemories` scores EVERY memory of the pool, and with thousands of them
+  // doing that on every keystroke choked the text field itself.
   const queryAdiada = useDeferredValue(query)
   const filtered = useMemo(() => {
     if (queryAdiada.trim()) return searchMemories(pool, queryAdiada, 50)
     return [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
   }, [pool, queryAdiada])
 
-  // Adianta o layout do grafo com a lista ainda na frente: quando o toggle é
-  // apertado, na maioria das vezes ele já está pronto (ou quase). Espera as
-  // interações para não disputar frame com a transição da tela.
+  // Warms up the graph layout with the list still in front: when the toggle is
+  // pressed, most of the time it is already ready (or nearly). It waits for the
+  // interactions so as not to fight for frames with the screen transition.
   useEffect(() => {
-    const tarefa = InteractionManager.runAfterInteractions(() => prewarmGraphLayout(pool))
-    return () => tarefa.cancel()
+    const task = InteractionManager.runAfterInteractions(() => prewarmGraphLayout(pool))
+    return () => task.cancel()
   }, [pool])
 
-  // Saiu da tela de memórias: não faz sentido continuar moendo em segundo plano.
+  // Left the memories screen: there is no point in keeping the grind going in the background.
   useEffect(() => () => stopGraphLayout(), [])
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
-  // Resolvido uma vez por índice: montar o array dentro do renderItem devolvia
-  // uma prop nova a cada rolagem e anulava o memo do card.
-  const relacionadas = useMemo(() => {
+  // Resolved once per index: building the array inside renderItem returned
+  // a new prop on every scroll and defeated the memo of the card.
+  const relatedByMemory = useMemo(() => {
     const mapa = new Map<string, Memory[]>()
     for (const m of index) {
-      const lista = m.relatedIds.map((id) => byId.get(id)).filter((x): x is Memory => x != null)
-      if (lista.length > 0) mapa.set(m.id, lista)
+      const list = m.relatedIds.map((id) => byId.get(id)).filter((x): x is Memory => x != null)
+      if (list.length > 0) mapa.set(m.id, list)
     }
     return mapa
   }, [index, byId])
-  const SEM_RELACIONADAS: Memory[] = useMemo(() => [], [])
+  const NO_RELATED: Memory[] = useMemo(() => [], [])
 
-  const abrirNoGrafo = useCallback((id: string) => {
+  const openInGraph = useCallback((id: string) => {
     setSelectedId(id)
     setTab('graph')
   }, [])
@@ -127,12 +126,12 @@ export default function MemoriesScreen() {
       <View style={{ marginBottom: 10 }}>
         <MemoryCard
           memory={item}
-          related={relacionadas.get(item.id) ?? SEM_RELACIONADAS}
-          onSelectRelated={abrirNoGrafo}
+          related={relatedByMemory.get(item.id) ?? NO_RELATED}
+          onSelectRelated={openInGraph}
         />
       </View>
     ),
-    [relacionadas, SEM_RELACIONADAS, abrirNoGrafo],
+    [relatedByMemory, NO_RELATED, openInGraph],
   )
 
   const empty = (tab === 'graph' ? pool : filtered).length === 0
@@ -153,7 +152,7 @@ export default function MemoriesScreen() {
       </View>
 
       <View style={s.body}>
-        {/* Busca + tabs Lista/Grafo */}
+        {/* Search + List/Graph tabs */}
         <View style={s.controls}>
           <View style={[s.searchBox, { backgroundColor: tokens.muted }]}>
             <Search size={15} color={tokens.mutedForeground} />
@@ -188,7 +187,7 @@ export default function MemoriesScreen() {
           </View>
         </View>
 
-        {/* Filtro de projeto (modo código, 2+ projetos) */}
+        {/* Project filter (code mode, 2+ projects) */}
         {mode === 'code' && projects.length > 1 && (
           <ScrollView
             horizontal
@@ -218,7 +217,7 @@ export default function MemoriesScreen() {
           </ScrollView>
         )}
 
-        {/* Conteúdo */}
+        {/* Content */}
         {empty ? (
           <View style={s.emptyBox}>
             <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{query ? t('memoriesScreen.emptyFound') : t('memoriesScreen.emptyYet')}</Text>
@@ -233,11 +232,11 @@ export default function MemoriesScreen() {
         ) : tab === 'list' ? (
           <FlatList
             data={filtered}
-            keyExtractor={chaveDe}
+            keyExtractor={keyOf}
             renderItem={renderItem}
-            // Cartões têm altura variável (markdown, tags, ações), então não há
-            // getItemLayout: o que dá para fazer é montar menos por lote e
-            // soltar da árvore nativa o que saiu da janela.
+            // Cards have variable height (markdown, tags, actions), so there is no
+            // getItemLayout: what can be done is to mount fewer per batch and
+            // release from the native tree what left the window.
             initialNumToRender={8}
             maxToRenderPerBatch={8}
             updateCellsBatchingPeriod={50}

@@ -6,7 +6,7 @@ const stats = '{"type":"stats","items":[{"label":"MRR","value":1200}]}'
 const callout = '{"type":"callout","text":"Atenção"}'
 
 describe("parseOrbitUi", () => {
-  it("lê um componente por linha e normaliza números para texto", () => {
+  it("reads one component per line and normalizes numbers to text", () => {
     const { blocks, pending } = parseOrbitUi(`${stats}\n${callout}`, false)
     expect(pending).toBe(false)
     expect(blocks).toHaveLength(2)
@@ -14,31 +14,31 @@ describe("parseOrbitUi", () => {
     expect(blocks[1]).toMatchObject({ type: "callout", tone: "info" })
   })
 
-  it("desenha a linha pronta enquanto a seguinte ainda chega", () => {
+  it("draws the finished line while the next one still arrives", () => {
     const partial = `${stats}\n{"type":"callout","te`
     const { blocks, pending } = parseOrbitUi(partial, true)
     expect(blocks).toHaveLength(1)
     expect(pending).toBe(true)
   })
 
-  it("não marca pendente quando a última linha já fechou", () => {
+  it("does not mark pending when the last line already closed", () => {
     expect(parseOrbitUi(stats, true).pending).toBe(false)
   })
 
-  it("descarta linha inválida em vez de quebrar a resposta", () => {
+  it("discards an invalid line instead of breaking the reply", () => {
     const { blocks, pending } = parseOrbitUi(`{"type":"nope"}\n${callout}\nlixo`, false)
     expect(blocks).toHaveLength(1)
     expect(pending).toBe(false)
   })
 
-  it("rejeita componente fora do limite do catálogo", () => {
+  it("rejects a component outside the catalog limit", () => {
     const compare = '{"type":"compare","items":[{"title":"A","points":["x"]}]}'
     expect(parseOrbitUi(compare, false).blocks).toHaveLength(0)
   })
 })
 
 describe("blocos interativos", () => {
-  it("lê inputs, normaliza opções e aplica os padrões", () => {
+  it("reads inputs, normalizes options and applies the defaults", () => {
     const { blocks } = parseOrbitUi(
       [
         '{"type":"slider","id":"juros","label":"Juros","min":0,"max":20}',
@@ -52,38 +52,44 @@ describe("blocos interativos", () => {
     expect(blocks[2]).toMatchObject({ showIf: "juros>1" })
   })
 
-  it("rejeita id que não é um nome de variável", () => {
+  it("rejects an id that is not a variable name", () => {
     expect(parseOrbitUi('{"type":"toggle","id":"a b","label":"x"}', false).blocks).toHaveLength(0)
     expect(parseOrbitUi('{"type":"toggle","id":"1a","label":"x"}', false).blocks).toHaveLength(0)
   })
 
-  it("gráfico exige pontos ou funções com x", () => {
+  it("a chart requires points or functions with x", () => {
     expect(parseOrbitUi('{"type":"chart","kind":"line"}', false).blocks).toHaveLength(0)
     expect(parseOrbitUi('{"type":"chart","fns":[{"fn":"x"}]}', false).blocks).toHaveLength(0)
     expect(parseOrbitUi('{"type":"chart","fns":[{"fn":"2*x"}],"x":[0,10]}', false).blocks).toHaveLength(1)
     expect(parseOrbitUi('{"type":"chart","data":[{"label":"a","value":"k*2"}]}', false).blocks).toHaveLength(1)
   })
 
-  it("botões aceitam as três ações", () => {
+  it("buttons accept the three actions", () => {
     const line = '{"type":"buttons","items":[{"label":"a","action":"send","text":"oi"},{"label":"b","action":"set","id":"v","value":"B"}]}'
     expect(parseOrbitUi(line, false).blocks).toHaveLength(1)
     expect(parseOrbitUi('{"type":"buttons","items":[{"label":"a","action":"eval"}]}', false).blocks).toHaveLength(0)
   })
 })
 
-describe("cartão de navegação", () => {
-  it("lê o destino e a nota", () => {
-    const line = '{"type":"nav","destino":"voice","nota":"Leitura em voz alta"}'
+describe("navigation card", () => {
+  it("reads the destination and the note", () => {
+    const line = '{"type":"nav","destination":"voice","note":"Leitura em voz alta"}'
     const { blocks } = parseOrbitUi(line, false)
     expect(blocks).toHaveLength(1)
-    expect(blocks[0]).toMatchObject({ type: "nav", destino: "voice", nota: "Leitura em voz alta" })
+    expect(blocks[0]).toMatchObject({ type: "nav", destination: "voice", note: "Leitura em voz alta" })
   })
 
-  it("não valida o destino aqui: quem resolve é a tela", () => {
-    // Um id inventado precisa chegar ao renderer para ele decidir não desenhar
-    // nada — descartar no parse esconderia o erro do modelo.
-    const { blocks } = parseOrbitUi('{"type":"nav","destino":"nao-existe"}', false)
+  it("still reads a card written with the legacy field names", () => {
+    const { blocks } = parseOrbitUi('{"type":"nav","destino":"voice","nota":"Leitura em voz alta"}', false)
     expect(blocks).toHaveLength(1)
-    expect(blocks[0]).toMatchObject({ destino: "nao-existe" })
+    expect(blocks[0]).toMatchObject({ type: "nav", destination: "voice", note: "Leitura em voz alta" })
+  })
+
+  it("does not validate the destination here: the screen is what resolves it", () => {
+    // An invented id has to reach the renderer so that it decides not to draw
+    // anything — discarding it in the parse would hide the model's error.
+    const { blocks } = parseOrbitUi('{"type":"nav","destination":"nao-existe"}', false)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toMatchObject({ destination: "nao-existe" })
   })
 })

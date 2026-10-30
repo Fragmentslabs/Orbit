@@ -17,8 +17,8 @@ const MODE_ICON: Record<PermissionMode, typeof Shield> = {
   full: ShieldOff,
 }
 
-/** Autonomia do chat aberto (`sessionId` ausente = chat novo, que vira o
- *  padrão ao escolher). Mudar aqui não afeta os outros chats. */
+/** Autonomy of the open chat (`sessionId` absent = new chat, which becomes the
+ *  default when choosing). Changing it here does not affect the other chats. */
 export function PermissionModePicker({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
   const mode = usePermissionMode(sessionId)

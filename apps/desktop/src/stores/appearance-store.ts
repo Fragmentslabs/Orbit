@@ -9,10 +9,10 @@ const DEFAULT_TAB_CLOSE_POSITION: TabClosePosition = "left"
 
 export type ModeLabelStyle = "label" | "icon"
 
-/** Modos que podem aparecer como toggles na barra inferior do input.
- *  "thinking" não está na lista: para modelos com reasoning ele é sempre
- *  ativo e o nível (ou o desligar, quando suportado) é controlado pelo
- *  seletor de reasoning — não é um modo. */
+/** Modes that can show up as toggles in the input's bottom bar.
+ *  "thinking" is not in the list: for models with reasoning it is always
+ *  on and the level (or turning it off, when supported) is controlled by the
+ *  reasoning selector — it is not a mode. */
 export const MODE_IDS = [
   "search",
   "browser",
@@ -26,11 +26,11 @@ export const MODE_IDS = [
   "computer",
 ] as const
 export type ModeId = (typeof MODE_IDS)[number]
-/** "brain" fica fora da barra por padrão: o modo Memória também vem
- *  desativado por padrão nas preferências (model-mode-prefs) — só entra na
- *  barra se o usuário ativá-lo aqui ou no menu "+". "computer" também: além de
- *  opt-in nas Preferências → Computador, controlar o computador não é um modo
- *  do dia a dia, e quem quer o atalho na barra liga em Aparência. */
+/** "brain" stays out of the bar by default: the Memory mode also comes
+ *  disabled by default in the preferences (model-mode-prefs) — it only goes into the
+ *  bar if the user enables it here or in the "+" menu. "computer" too: besides
+ *  being opt-in in Preferences → Computer, controlling the computer is not an
+ *  everyday mode, and whoever wants the shortcut in the bar turns it on in Appearance. */
 export const DEFAULT_MODES_IN_ROW: ModeId[] = [
   "search",
   "browser",
@@ -45,13 +45,13 @@ export const DEFAULT_MODES_IN_ROW: ModeId[] = [
 export type TabClosePosition = "left" | "right"
 
 interface AppearanceState {
-  /** Modos visíveis como toggles na barra inferior (o menu "+" mostra todos) */
+  /** Modes visible as toggles in the bottom bar (the "+" menu shows all of them) */
   modesInRow: ModeId[]
   setModesInRow: (modes: ModeId[]) => void
-  /** Ícone + texto ou somente ícone na barra inferior */
+  /** Icon + text or icon only in the bottom bar */
   modeLabelStyle: ModeLabelStyle
   setModeLabelStyle: (style: ModeLabelStyle) => void
-  /** Onde a persona aparece — ver PersonaVisibility no @shared. */
+  /** Where the persona shows up — see PersonaVisibility in @shared. */
   personaVisibility: PersonaVisibility
   setPersonaVisibility: (visibility: PersonaVisibility) => void
   tabClosePosition: TabClosePosition
@@ -66,7 +66,7 @@ function loadModesInRow(): ModeId[] {
       if (valid.length > 0) return valid
     }
   } catch {
-    /* localStorage corrompido → default */
+    /* corrupted localStorage → default */
   }
   return DEFAULT_MODES_IN_ROW
 }
@@ -82,8 +82,8 @@ export const useAppearanceStore = create<AppearanceState>((set) => ({
     localStorage.setItem(MODE_LABEL_STYLE_KEY, style)
     set({ modeLabelStyle: style })
   },
-  // A chave é a mesma de quando isto era um booleano: personaVisibilityFrom
-  // entende o "false" de quem já tinha desligado e o mantém desligado.
+  // The key is the same as when this was a boolean: personaVisibilityFrom
+  // understands the "false" of whoever had already turned it off and keeps it off.
   personaVisibility: personaVisibilityFrom(localStorage.getItem(PERSONA_VISIBLE_KEY)),
   setPersonaVisibility: (visibility) => {
     localStorage.setItem(PERSONA_VISIBLE_KEY, visibility)

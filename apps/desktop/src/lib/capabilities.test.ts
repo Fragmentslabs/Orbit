@@ -5,9 +5,9 @@ import ptBR from "@/src/i18n/locales/pt-BR.json"
 import { CAPABILITIES } from "@/src/lib/capabilities"
 
 /**
- * O catálogo é dado puro e os textos vivem no i18n. Sem este teste, adicionar
- * uma capacidade nova passa no typecheck, aparece na tela — e mostra a chave
- * crua ("chat.start.items.audio.label") para o usuário.
+ * The catalog is pure data and the texts live in i18n. Without this test, adding
+ * a new capability passes the typecheck, shows up on the screen — and shows the raw
+ * key ("chat.start.items.audio.label") to the user.
  */
 
 function lookup(source: unknown, path: string): unknown {
@@ -22,13 +22,13 @@ const LOCALES = [
   ["en", en],
 ] as const
 
-describe("catálogo de capacidades", () => {
-  it("não repete id", () => {
+describe("capabilities catalog", () => {
+  it("does not repeat an id", () => {
     const ids = CAPABILITIES.map((capability) => capability.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it.each(LOCALES)("tem todos os textos em %s", (_locale, source) => {
+  it.each(LOCALES)("has every text in %s", (_locale, source) => {
     for (const capability of CAPABILITIES) {
       const fields = capability.hasExample ? ["label", "desc", "example"] : ["label", "desc", "howTo"]
       for (const field of fields) {
@@ -39,7 +39,7 @@ describe("catálogo de capacidades", () => {
     }
   })
 
-  it.each(LOCALES)("tem o link, o botão e os grupos em %s", (_locale, source) => {
+  it.each(LOCALES)("has the link, the button and the groups in %s", (_locale, source) => {
     for (const key of ["resume", "link", "title", "subtitle", "tryIt", "howTo", "disabledHint"]) {
       expect(typeof lookup(source, `chat.start.${key}`), key).toBe("string")
     }
@@ -48,10 +48,10 @@ describe("catálogo de capacidades", () => {
     }
   })
 
-  it.each(LOCALES)("tem rótulo para ativar cada recurso em %s", (_locale, source) => {
-    // A chave é montada em tempo de execução (`chat.start.enable.${requisito}`).
-    // Faltando, o painel mostra a chave crua — e só quando alguém desliga o
-    // recurso, que é justamente quando ninguém está olhando a tradução.
+  it.each(LOCALES)("has a label to enable each feature in %s", (_locale, source) => {
+    // The key is built at runtime (`chat.start.enable.${requisito}`).
+    // When missing, the panel shows the raw key — and only when someone turns the
+    // resource off, which is exactly when nobody is looking at the translation.
     const requirements = new Set(
       CAPABILITIES.map((capability) => capability.requires).filter(Boolean),
     )

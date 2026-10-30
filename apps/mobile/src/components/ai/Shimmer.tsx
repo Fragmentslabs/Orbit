@@ -1,6 +1,6 @@
 /**
- * Texto com brilho pulsante — equivalente RN do Shimmer do desktop
- * (usado em "Thinking…", "Pesquisando…", labels de tools em execução).
+ * Text with a pulsing glow — RN equivalent of the desktop Shimmer
+ * (used in "Thinking…", "Searching…", labels of tools in execution).
  */
 import { useEffect, useState } from 'react'
 import { Animated, Easing } from 'react-native'

@@ -19,22 +19,22 @@ import { cn } from '~/lib/utils'
 interface ModelPickerModalProps {
   visible: boolean
   onClose: () => void
-  /** Sessão dona da escolha — undefined/null = chat novo (draft). */
+  /** Session that owns the choice — undefined/null = new chat (draft). */
   sessionId?: string | null
-  /** Seleção exibida (override do modelo por sessão) — usado pelas rotinas,
-   *  que guardam o próprio modelo. undefined = segue o sessionId. */
+  /** Displayed selection (per-session model override) — used by the routines,
+   *  which keep their own model. undefined = follows the sessionId. */
   selected?: { providerId: string; modelId: string } | null
-  /** Callback de seleção — quando presente, substitui o selectModel por
-   *  sessão (o dono da escolha decide o que fazer com ela). */
+  /** Selection callback — when present, it replaces the per-session selectModel
+   *  (the owner of the choice decides what to do with it). */
   onSelect?: (providerId: string, modelId: string) => void
 }
 
-/** Limite de modelos por provedor ao navegar (sem busca) — espelha o desktop
- *  (MAX_MODELS_PER_PROVIDER em model-picker.tsx). Com busca ativa o limite é
- *  ignorado para não esconder modelos pesquisáveis. */
+/** Limit of models per provider when browsing (no search) — mirrors the desktop
+ *  (MAX_MODELS_PER_PROVIDER in model-picker.tsx). With an active search the limit is
+ *  ignored so as not to hide searchable models. */
 const MAX_MODELS_PER_PROVIDER = 40
 
-/** Raio do card que agrupa os modelos (rounded-xl). */
+/** Radius of the card that groups the models (rounded-xl). */
 const CARD_RADIUS = 12
 
 function ModelRowSkeleton({ tokens }: { tokens: Record<string, string> }) {
@@ -66,8 +66,8 @@ interface RotationRowItem {
   rotation: ModelRotation
 }
 
-/** Item de qualquer uma das seções — anotado explicitamente na SectionList,
- *  que senão infere o tipo do primeiro membro da união e recusa os outros. */
+/** Item of any of the sections — annotated explicitly in the SectionList,
+ *  which otherwise infers the type of the first member of the union and rejects the others. */
 type ModelSectionItem = RotationRowItem | RecentRowItem | ModelRowItem
 
 type ModelSection =
@@ -76,9 +76,9 @@ type ModelSection =
   | { kind: 'provider'; provider: CatalogProvider; data: ModelRowItem[] }
 
 /**
- * Linha de modelo. Como a SectionList virtualiza as linhas, cada linha desenha
- * o próprio trecho do card (bordas + raio nas pontas) para o grupo continuar
- * visualmente um card único — equivalente ao card com overflow-hidden original.
+ * Model row. Since the SectionList virtualizes the rows, each row draws
+ * its own piece of the card (borders + radius at the ends) so the group keeps
+ * visually a single card — equivalent to the original card with overflow-hidden.
  */
 const ModelRow = memo(function ModelRow({
   provider,
@@ -98,9 +98,9 @@ const ModelRow = memo(function ModelRow({
   isSelected: boolean
   tokens: Record<string, string>
   onPress: (providerId: string, modelId: string) => void
-  /** Texto abaixo do nome (padrão: id do modelo; recentes: nome do provedor) */
+  /** Text below the name (default: model id; recents: provider name) */
   subtitle?: string
-  /** Botão "x" de remover (recentes) — não dispara a seleção da linha */
+  /** "x" button to remove (recents) — does not trigger the selection of the row */
   onRemove?: () => void
 }) {
   const isFirst = index === 0
@@ -183,9 +183,9 @@ const ModelRow = memo(function ModelRow({
 )
 
 /**
- * Linha de rotação — mesmo desenho de card fatiado da ModelRow, com o ícone
- * de rotação no lugar do logo do provedor e a contagem de modelos no lugar
- * do id. Escolher uma rotação PINA ela no chat, como um modelo.
+ * Rotation row — same sliced-card drawing as ModelRow, with the rotation
+ * icon in place of the provider logo and the model count in place of
+ * the id. Choosing a rotation PINS it in the chat, like a model.
  */
 function RotationRow({
   rotation,
@@ -246,9 +246,9 @@ function RotationRow({
 }
 
 export function ModelPickerModal({ visible, ...props }: ModelPickerModalProps) {
-  // Fechado não monta nada: o componente vive junto do input (e dos formulários
-  // de rotina/esteira), e antes montava o Modal + recalculava as seções do
-  // catálogo em todo render do dono, mesmo fora da tela.
+  // Closed, it mounts nothing: the component lives next to the input (and the routine/pipeline
+  // forms), and before it mounted the Modal + recalculated the sections of the
+  // catalog on every render of the owner, even off screen.
   if (!visible) return null
   return <ModelPickerSheet {...props} />
 }
@@ -262,14 +262,14 @@ function ModelPickerSheet({
   const { t } = useTranslation()
   const catalog = useSettingsStore((s) => s.catalog)
   const sessionModel = useSessionModel(sessionId)
-  // undefined = segue o modelo da sessão (chat); null = nada selecionado;
-  // objeto = modelo do dono da escolha (rotina).
+  // undefined = follows the session model (chat); null = nothing selected;
+  // object = model of the owner of the choice (routine).
   const selectedModel = selectedOverride === undefined ? sessionModel : selectedOverride
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
   const router = useRouter()
-  // Rotações: só no modo não-controlado (a escolha de uma rotina/esteira é de
-  // um modelo, não de uma cadeia) — mesmo critério do `hideRotationOptions`
-  // do desktop, que também evita rotação dentro do editor de rotação.
+  // Rotations: only in the uncontrolled mode (the choice of a routine/pipeline is of
+  // a model, not of a chain) — same criterion as `hideRotationOptions`
+  // on the desktop, which also avoids a rotation inside the rotation editor.
   const rotations = useModelRotationStore((s) => s.rotations)
   const selectRotation = useModelRotationStore((s) => s.selectRotation)
   const activeRotation = useSessionRotation(onSelect ? null : sessionId)
@@ -285,9 +285,9 @@ function ModelPickerSheet({
 
   const isWeb = Platform.OS === 'web'
 
-  // Catálogo ausente (primeiro uso sem cache): abre o drawer na hora com o
-  // skeleton enquanto o fetch roda por baixo. Só na montagem — o componente
-  // agora só existe enquanto aberto.
+  // Catalog missing (first use without a cache): opens the drawer right away with the
+  // skeleton while the fetch runs underneath. Only on mount — the component
+  // now only exists while it is open.
   useEffect(() => {
     if (!catalog && !loading) void fetchCatalog()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -303,9 +303,9 @@ function ModelPickerSheet({
       model.id.toLowerCase().includes(q) ||
       provider.name.toLowerCase().includes(q)
 
-    // Recentes: só modelos ainda no catálogo e de provedores conectados;
-    // ocultos no modo controlado (rotinas) — a escolha ali é da rotina, não
-    // do chat (mesmo critério do desktop).
+    // Recents: only models still in the catalog and from connected providers;
+    // hidden in the controlled mode (routines) — the choice there belongs to the routine, not
+    // to the chat (same criterion as the desktop).
     const recentRows: RecentRowItem[] = onSelect
       ? []
       : recents
@@ -350,7 +350,7 @@ function ModelPickerSheet({
       })
       .filter((section) => section.data.length > 0)
 
-    // Rotações no topo (antes dos recentes), como no seletor do desktop.
+    // Rotations at the top (before the recents), as in the desktop selector.
     const rotationRows: RotationRowItem[] = onSelect
       ? []
       : rotations
@@ -364,7 +364,7 @@ function ModelPickerSheet({
     ]
   }, [catalog, search, connectedProviders, recents, onSelect, rotations])
 
-  // Identidade estável: a linha é memoizada e recebe isto como prop.
+  // Stable identity: the row is memoized and receives this as a prop.
   const handleSelect = useCallback(
     (providerId: string, modelId: string) => {
       if (onSelect) {
@@ -372,19 +372,19 @@ function ModelPickerSheet({
         onClose()
         return
       }
-      // Escolher um modelo desfaz a rotação do chat (e vice-versa) — o engine
-      // resolve a rotação ANTES do modelo pinado, então sem isto o modelo
-      // escolhido aqui não valeria.
+      // Choosing a model undoes the chat rotation (and vice versa) — the engine
+      // resolves the rotation BEFORE the pinned model, so without this the model
+      // chosen here would not apply.
       selectRotation(sessionId ?? null, null)
-      // Por chat: sessão existente ganha override; chat novo (sem sessão) vira
-      // o draft + default global — espelho do desktop.
+      // Per chat: an existing session gets an override; a new chat (no session) becomes
+      // the draft + global default — mirror of the desktop.
       selectModel(sessionId ?? null, providerId, modelId)
       onClose()
     },
     [onSelect, onClose, selectModel, selectRotation, sessionId],
   )
 
-  /** Clicar na rotação pina ela no chat; clicar na que já está pinada desfaz. */
+  /** Clicking the rotation pins it in the chat; clicking the one already pinned undoes it. */
   const handleSelectRotation = useCallback(
     (rotationId: string) => {
       const isActive = activeRotation?.id === rotationId
@@ -565,9 +565,9 @@ function ModelPickerSheet({
             />
           )}
 
-          {/* Rodapé: gerenciar rotações — espelho do botão "Criar rotação" do
-              rodapé do seletor no desktop. Escondido no modo controlado
-              (rotina/esteira/slot de rotação), onde a escolha é de um modelo. */}
+          {/* Footer: manage rotations — mirror of the "Create rotation" button in the
+              footer of the desktop selector. Hidden in the controlled mode
+              (routine/pipeline/rotation slot), where the choice is of a model. */}
           {!onSelect && (
             <Pressable
               onPress={openRotations}

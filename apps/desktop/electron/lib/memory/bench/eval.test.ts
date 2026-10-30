@@ -1,14 +1,14 @@
 /**
- * Benchmark REAL (Fase 6): roda a solução completa com o Bekko a8m e o a25m
- * sobre as fixtures versionadas e grava o resultado em JSON.
+ * REAL benchmark (Phase 6): runs the full solution with Bekko a8m and a25m
+ * over the versioned fixtures and writes the result to JSON.
  *
- * Fica fora da suíte normal porque carrega ~200 MB de ONNX do cache local:
+ * It stays out of the normal suite because it loads ~200 MB of ONNX from the local cache:
  *
  *   MEMORY_BENCH=1 npx vitest run electron/lib/memory/bench/eval.test.ts
  *
- * O cache é o mesmo que o app usa (`apps/desktop/.cache/memory-embed/<id>/`:
- * `onnx/model.onnx` + `tokenizer.json`). Quem não tem o cache vê o teste
- * pulado, com a instrução de como baixar — nunca uma falha.
+ * The cache is the same one the app uses (`apps/desktop/.cache/memory-embed/<id>/`:
+ * `onnx/model.onnx` + `tokenizer.json`). Whoever lacks the cache sees the test
+ * skipped, with instructions on how to download it — never a failure.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -54,7 +54,7 @@ function loadFixture() {
   return { memories: corpus.memories, cases, dialogs: dialogs.dialogs }
 }
 
-/** Caminhos do modelo no cache; compila o tokenizer.bin na primeira vez. */
+/** Model paths in the cache; compiles tokenizer.bin the first time. */
 function modelPaths(id: ModelId) {
   const dir = path.join(CACHE, `bekko-${id}`)
   const modelPath = path.join(dir, 'onnx', 'model.onnx')
@@ -93,9 +93,9 @@ async function runModel(id: ModelId) {
   const rssIndexed = process.memoryUsage().rss
 
   const fusion = calibrateFusion(data, fx, 'full')
-  // A fusão escolhida é a melhor entre os pesos COM apoio lexical (a lista
-  // lexical é o que sustenta identificador e nome próprio que o embedding não
-  // isola). O caso lexWeight=0 fica na tabela como ablação, não como escolha.
+  // The chosen fusion is the best among the weights WITH lexical support (the
+  // lexical list is what props up the identifier and proper name the embedding does not
+  // isolate). The lexWeight=0 case stays in the table as an ablation, not as a choice.
   const withLex = fusion.filter((f) => f.lexWeight > 0 && f.lexMinCoverage > 0)
   const fusionChoice = withLex[0] ?? fusion[0]
   const retrieval = {
@@ -108,8 +108,8 @@ async function runModel(id: ModelId) {
   const diag = cosineDiagnostics(data, fx, 'full')
   const rules = ruleSamples(data, fx, 'full')
   const breakdown = rankingBreakdown(data, fx, 'eval', 'full', 'hybrid', retrieval)
-  // O recorte por categoria TEM de fechar com a linha calibrada do ranking —
-  // já aconteceu de a tabela de recorte ficar presa na fusão ingênua.
+  // The per-category breakdown HAS to match the calibrated ranking line —
+  // it has already happened that the breakdown table got stuck on the naive fusion.
   {
     const pos = fx.cases.filter((c) => c.relevant.length && c.split === 'eval')
     const calibratedTop1 = pos.filter((c) => rankCheck(orderForCheck(data, 'full', c, retrieval), c.relevant) === 1).length
@@ -120,7 +120,7 @@ async function runModel(id: ModelId) {
       )
     }
   }
-  // Calibra SÓ no split dev e escolhe a família com melhor pontuação ali.
+  // Calibrates ONLY on the dev split and chooses the family with the best score there.
   const calibrated = calibrate(data, fx, 'full', 2, retrieval)
   const best = calibrated
     .filter((c) => c.best)
@@ -131,7 +131,7 @@ async function runModel(id: ModelId) {
   const evalMet = evaluatePolicy(data, fx, 'full', policy, useNoise, 'eval', retrieval)
   const contexts = contextExperiments(data, fx, 'full', policy, useNoise, retrieval)
 
-  // Recorte de seleção por idioma e por tipo de memória (só eval).
+  // Selection breakdown by language and by memory type (eval only).
   const memById = new Map(fx.memories.map((m) => [m.id, m]))
   const byLang: Record<string, { inj: number; fp: number; ptr: number; none: number }> = {}
   for (const o of evalMet.outs) {
@@ -143,9 +143,9 @@ async function runModel(id: ModelId) {
     if (!o.injected.length && !o.pointers.length) bucket.none++
   }
 
-  // Seleção recortada por idioma da memória vs idioma da consulta. É a checagem
-  // que importa para multilíngue: a cobertura lexical (que só ACRESCENTA
-  // caminho de injeção, nunca bloqueia) não pode estar derrubando o caso cruzado.
+  // Selection broken down by memory language vs query language. It is the check
+  // that matters for multilingual: lexical coverage (which only ADDS
+  // an injection path, never blocks) cannot be dragging down the cross-language case.
   const evalCases = fx.cases.filter((c) => c.split === 'eval')
   const selByCross = selectionByGroup(evalMet.outs, evalCases, (c) => {
     if (!c.relevant.length) return 'sem memória necessária'
@@ -153,9 +153,9 @@ async function runModel(id: ModelId) {
     return mem && mem.lang !== c.lang ? 'idioma diferente' : 'mesmo idioma'
   })
 
-  // Sensibilidade ao split: calibra no "eval" e mede no "dev". Se o sentido
-  // inverso escolher limiares parecidos e mantiver o desempenho, o resultado
-  // não é artefato de um conjunto específico.
+  // Split sensitivity: calibrate on "eval" and measure on "dev". If the
+  // reverse direction picks similar thresholds and keeps the performance, the result
+  // is not an artifact of one specific set.
   const calibratedSwap = calibrate(data, fx, 'full', 2, retrieval, 'eval')
   const bestSwap = calibratedSwap
     .filter((c) => c.best)
@@ -227,7 +227,7 @@ async function runModel(id: ModelId) {
 gated('benchmark Bekko (real)', () => {
   const fx = loadFixture()
 
-  it('o fixture é coerente (ids, splits, idiomas)', () => {
+  it('the fixture is coherent (ids, splits, languages)', () => {
     const ids = new Set(fx.memories.map((m) => m.id))
     for (const c of [...fx.cases, ...fx.dialogs]) for (const r of c.relevant) expect(ids.has(r)).toBe(true)
     expect(fx.cases.filter((c) => c.split === 'dev').length).toBeGreaterThan(40)

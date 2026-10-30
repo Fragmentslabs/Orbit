@@ -1,12 +1,12 @@
-// Gera os ladrilhos (tiles) do pacote MSIX/AppX a partir de public/icon.png.
+// Generates the tiles of the MSIX/AppX package from public/icon.png.
 //
-// O electron-builder NÃO deriva os assets do AppX do `icon` da config: ele
-// procura por `build/appx/*.png` e, quando não acha, cai nos SampleAppx.*.png
-// do vendor winCodeSign — que são o logo do Electron. Foi assim que o Orbit
-// subiu para a Microsoft Store com o átomo do Electron na listagem.
+// electron-builder does NOT derive the AppX assets from the `icon` of the config: it
+// looks for `build/appx/*.png` and, when it does not find them, falls back to the SampleAppx.*.png
+// of the winCodeSign vendor — which are the Electron logo. That is how Orbit
+// went up to the Microsoft Store with the Electron atom in the listing.
 //
-// Roda antes do `electron-builder` no script build:store; a saída é derivada
-// (fica fora do git), então precisa ser regerada a cada build.
+// Runs before `electron-builder` in the build:store script; the output is derived
+// (stays out of git), so it needs to be regenerated on every build.
 import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,12 +16,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const source = path.join(root, 'public', 'icon.png')
 const outDir = path.join(root, 'build', 'appx')
 
-// Mesmo #18181B do fundo do icon.png: os ladrilhos largos precisam completar a
-// moldura sem emendar com o quadrado do ícone.
+// Same #18181B as the background of icon.png: the wide tiles need to complete the
+// frame without clashing with the square of the icon.
 const background = { r: 24, g: 24, b: 27, alpha: 1 }
 
-// Nomes exatos que o AppxTarget mapeia para o manifesto — renomear quebra o
-// vínculo e o default do Electron volta a entrar no lugar.
+// Exact names that AppxTarget maps to the manifest — renaming breaks the
+// binding and the Electron default comes back in its place.
 const square = {
   'Square44x44Logo.png': 44,
   'StoreLogo.png': 50,
@@ -41,7 +41,7 @@ for (const [name, size] of Object.entries(square)) {
 }
 
 for (const [name, [width, height]] of Object.entries(wide)) {
-  // O ícone entra centralizado e com folga: esticá-lo até 310x150 deformaria o anel.
+  // The icon comes in centered and with clearance: stretching it to 310x150 would deform the ring.
   const inner = Math.round(height * 0.72)
   const icon = await sharp(source).resize(inner, inner, { fit: 'cover' }).png().toBuffer()
   await sharp({ create: { width, height, channels: 4, background } })
@@ -51,4 +51,4 @@ for (const [name, [width, height]] of Object.entries(wide)) {
 }
 
 const generated = [...Object.keys(square), ...Object.keys(wide)]
-console.log(`[generate-appx-assets] ${generated.length} assets em build/appx: ${generated.join(', ')}`)
+console.log(`[generate-appx-assets] ${generated.length} assets in build/appx: ${generated.join(', ')}`)

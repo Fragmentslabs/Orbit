@@ -4,10 +4,10 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Fork clona as mensagens apontando para o MESMO ativo (documentId/mediaUrl
- * inalterado) — o que falta é o registro saber que o ativo agora também
- * pertence à sessão nova, senão "Neste chat" no fork não encontra o que a
- * própria conversa dele já mostra. linkMediaSessions é essa ponte.
+ * Fork clones the messages pointing to the SAME asset (documentId/mediaUrl
+ * unchanged) — what is missing is for the record to know that the asset now also
+ * belongs to the new session, otherwise "In this chat" in the fork does not find what its
+ * own conversation already shows. linkMediaSessions is that bridge.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-media-fork-test-${process.pid}`)
@@ -32,66 +32,66 @@ afterAll(async () => {
 })
 
 describe('linkMediaSessions', () => {
-  it('adiciona a sessão do fork sem mexer na sessão de origem', async () => {
+  it('adds the fork session without touching the origin session', async () => {
     const url = await media.saveMedia(Buffer.from('fake-png'), 'png', {
       source: 'chat',
-      sessionId: 'sessao-original',
-      name: 'grafico.png',
+      sessionId: 'session-original',
+      name: 'chart.png',
     })
     const id = media.mediaIdFromUrl(url)!
 
-    await media.linkMediaSessions([id], 'sessao-fork-1')
+    await media.linkMediaSessions([id], 'session-fork-1')
 
     const entry = await media.getMediaEntry(id)
-    expect(entry?.sessionId).toBe('sessao-original')
-    expect(entry?.linkedSessionIds).toEqual(['sessao-fork-1'])
+    expect(entry?.sessionId).toBe('session-original')
+    expect(entry?.linkedSessionIds).toEqual(['session-fork-1'])
   })
 
-  it('é idempotente — vincular duas vezes não duplica a entrada', async () => {
+  it('is idempotent — linking twice does not duplicate the entry', async () => {
     const url = await media.saveMedia(Buffer.from('fake-png-2'), 'png', {
       source: 'chat',
-      sessionId: 'sessao-original-2',
+      sessionId: 'session-original-2',
     })
     const id = media.mediaIdFromUrl(url)!
 
-    await media.linkMediaSessions([id], 'sessao-fork-2')
-    await media.linkMediaSessions([id], 'sessao-fork-2')
+    await media.linkMediaSessions([id], 'session-fork-2')
+    await media.linkMediaSessions([id], 'session-fork-2')
 
     const entry = await media.getMediaEntry(id)
-    expect(entry?.linkedSessionIds).toEqual(['sessao-fork-2'])
+    expect(entry?.linkedSessionIds).toEqual(['session-fork-2'])
   })
 
-  it('não vincula de volta a sessão que já é a de origem', async () => {
+  it('does not link back the session that is already the origin', async () => {
     const url = await media.saveMedia(Buffer.from('fake-png-3'), 'png', {
       source: 'chat',
-      sessionId: 'sessao-original-3',
+      sessionId: 'session-original-3',
     })
     const id = media.mediaIdFromUrl(url)!
 
-    await media.linkMediaSessions([id], 'sessao-original-3')
+    await media.linkMediaSessions([id], 'session-original-3')
 
     const entry = await media.getMediaEntry(id)
     expect(entry?.linkedSessionIds ?? []).toEqual([])
   })
 
-  it('ignora ids que não existem no registro, em silêncio', async () => {
-    await expect(media.linkMediaSessions(['img_naoexiste.png'], 'sessao-fork-3')).resolves.toBeUndefined()
+  it('ignores ids that do not exist in the registry, silently', async () => {
+    await expect(media.linkMediaSessions(['img_missing.png'], 'session-fork-3')).resolves.toBeUndefined()
   })
 
-  it('listMedia com filtro por sessão enxerga tanto a origem quanto o fork', async () => {
+  it('listMedia with a session filter sees both the origin and the fork', async () => {
     const url = await media.saveMedia(Buffer.from('fake-png-4'), 'png', {
       source: 'chat',
-      sessionId: 'sessao-original-4',
+      sessionId: 'session-original-4',
     })
     const id = media.mediaIdFromUrl(url)!
-    await media.linkMediaSessions([id], 'sessao-fork-4')
+    await media.linkMediaSessions([id], 'session-fork-4')
 
-    const naOrigem = await media.listMedia({ sessionId: 'sessao-original-4' })
-    const noFork = await media.listMedia({ sessionId: 'sessao-fork-4' })
-    const emOutraSessao = await media.listMedia({ sessionId: 'sessao-qualquer' })
+    const inOrigin = await media.listMedia({ sessionId: 'session-original-4' })
+    const noFork = await media.listMedia({ sessionId: 'session-fork-4' })
+    const inAnotherSession = await media.listMedia({ sessionId: 'session-any' })
 
-    expect(naOrigem.some((e) => e.id === id)).toBe(true)
+    expect(inOrigin.some((e) => e.id === id)).toBe(true)
     expect(noFork.some((e) => e.id === id)).toBe(true)
-    expect(emOutraSessao.some((e) => e.id === id)).toBe(false)
+    expect(inAnotherSession.some((e) => e.id === id)).toBe(false)
   })
 })

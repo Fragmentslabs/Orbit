@@ -6,25 +6,25 @@ const SHIFT = 0x20000
 const CTRL = 0x40000
 
 describe('parseKeys', () => {
-  it('atalho com modificadores', () => {
+  it('shortcut with modifiers', () => {
     expect(parseKeys('cmd+shift+t')).toEqual([{ code: 17, flags: CMD | SHIFT }])
     expect(parseKeys('Cmd+S')).toEqual([{ code: 1, flags: CMD }])
   })
 
-  it('teclas nomeadas e sinônimos', () => {
+  it('named keys and synonyms', () => {
     expect(parseKeys('return')).toEqual([{ code: 36, flags: 0 }])
     expect(parseKeys('ArrowDown')).toEqual([{ code: 125, flags: 0 }])
     expect(parseKeys('esc')).toEqual([{ code: 53, flags: 0 }])
   })
 
-  it('espaço separa uma sequência', () => {
+  it('a space separates a sequence', () => {
     expect(parseKeys('ctrl+a ctrl+c')).toEqual([
       { code: 0, flags: CTRL },
       { code: 8, flags: CTRL },
     ])
   })
 
-  it('recusa o que não é tecla — texto vai por type', () => {
+  it('refuses what is not a key — text goes through type', () => {
     expect(() => parseKeys('olá')).toThrow(/Unknown key/)
     expect(() => parseKeys('cmd+shift')).toThrow(/only modifiers/)
     expect(() => parseKeys('a+b')).toThrow(/more than one/)
@@ -40,14 +40,14 @@ describe('parseKeys no Windows', () => {
     expect(parseKeys('win+d', 'win32')).toEqual([{ code: 0x44, flags: 8 }])
   })
 
-  it('teclas nomeadas, dígitos e símbolos', () => {
+  it('named keys, digits and symbols', () => {
     expect(parseKeys('return tab ArrowDown pagedown', 'win32').map((c) => c.code)).toEqual([0x0d, 0x09, 0x28, 0x22])
     expect(parseKeys('ctrl+0', 'win32')).toEqual([{ code: 0x30, flags: 2 }])
     expect(parseKeys('ctrl+.', 'win32')).toEqual([{ code: 0xbe, flags: 2 }])
     expect(parseKeys('delete', 'win32')).toEqual([{ code: 0x2e, flags: 0 }])
   })
 
-  it('o macOS continua com os códigos dele', () => {
+  it('macOS keeps its own codes', () => {
     expect(parseKeys('cmd+s', 'darwin')).toEqual([{ code: 1, flags: 0x100000 }])
   })
 })

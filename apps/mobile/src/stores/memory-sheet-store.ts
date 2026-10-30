@@ -1,17 +1,17 @@
 import { create } from 'zustand'
 
 /**
- * Folha da memória citada na conversa — o equivalente mobile do painel
- * lateral do desktop, onde não há hover nem painel: tocar no chip abre um
- * resumo aqui mesmo, com o caminho para a tela completa.
+ * Sheet of the memory cited in the conversation — the mobile equivalent of the desktop
+ * side panel, where there is no hover and no panel: tapping the chip opens a
+ * summary right here, with the path to the full screen.
  *
- * Mora num store (e não no estado do componente) porque o chip é desenhado
- * DENTRO de um <Text> do markdown: não dá para montar um <Modal> ali, e a
- * folha precisa ser única na tela — vários chips citados numa resposta não
- * podem empilhar vários modais.
+ * It lives in a store (and not in the component state) because the chip is drawn
+ * INSIDE a <Text> of the markdown: a <Modal> cannot be mounted there, and the
+ * sheet needs to be unique on the screen — several chips cited in one answer cannot
+ * stack several modals.
  */
 interface MemorySheetState {
-  /** Memória aberta na folha; null = fechada. */
+  /** Memory open in the sheet; null = closed. */
   memoryId: string | null
   open: (id: string) => void
   close: () => void

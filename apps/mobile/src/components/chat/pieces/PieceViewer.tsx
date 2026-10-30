@@ -9,14 +9,14 @@ import { useThemeStore } from '~/stores/theme-store'
 import { VIEWERS } from './viewers'
 
 /**
- * A peça aberta — o equivalente da aba lateral do desktop.
+ * The open piece — the equivalent of the desktop side panel.
  *
- * No desktop o card e a aba convivem: você olha a peça sem perder a conversa.
- * Numa tela de 6 polegadas não cabe, então a escolha é a camada: a peça cobre o
- * chat, e voltar devolve a conversa onde estava.
+ * On the desktop the card and the panel coexist: you look at the piece without losing the conversation.
+ * On a 6-inch screen that does not fit, so the choice is the layer: the piece covers the
+ * chat, and going back returns the conversation where it was.
  *
- * O WebView só nasce aqui dentro. Fechar esta camada desmonta o viewer, e com
- * ele o processo — é o que faz o card ser barato.
+ * The WebView is only born in here. Closing this layer unmounts the viewer, and with
+ * it the process — that is what makes the card cheap.
  */
 export function PieceViewer({ piece, onClose }: { piece: PieceRef; onClose: () => void }) {
   const { t } = useTranslation()

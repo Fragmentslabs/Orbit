@@ -8,30 +8,30 @@ import { t } from './i18n'
 import { addVideoToGallery } from './video/video-gallery'
 
 /**
- * MATERIAIS da conversa: foto, GIF, áudio e vídeo na aba Fontes.
+ * MATERIALS of the conversation: photo, GIF, audio and video in the Sources tab.
  *
- * Os documentos da aba (PDF, planilha…) têm um pipeline de extração, páginas e
- * busca — nada disso se aplica a um vídeo. O material é só um ARQUIVO que a
- * conversa tem à mão e que o agente alcança por REFERÊNCIA (`img_…`, `aud_…`,
- * `vdo_…`), quando decide usar. Por isso ele reaproveita o que já existe: o item
- * de mídia da galeria, com um escopo — a conversa (`sessionId`) ou a pasta da
- * sidebar (`sharedFolderId`) — em vez de um segundo armazenamento.
+ * The tab's documents (PDF, spreadsheet…) have an extraction, page and
+ * search pipeline — none of that applies to a video. A material is just a FILE that the
+ * conversation has at hand and that the agent reaches by REFERENCE (`img_…`, `aud_…`,
+ * `vdo_…`), when it decides to use it. That is why it reuses what already exists: the
+ * media item of the gallery, with a scope — the conversation (`sessionId`) or the
+ * sidebar folder (`sharedFolderId`) — instead of a second storage.
  *
- * Três consequências desejadas dessa escolha:
- *  - o arquivo é UM: excluí-lo na galeria o tira da aba, e excluí-lo na aba o
- *    tira da galeria, liberando o espaço dos dois;
- *  - a referência nunca muda ao mover o material entre a conversa e a pasta
- *    (os documentos trocam `doc1` por `src1`, e precisam de um rastro para isso);
- *  - o que o usuário anexou numa MENSAGEM também aparece aqui, em "desta
- *    conversa", já que é o mesmo item.
+ * Three consequences desired from this choice:
+ *  - the file is ONE: deleting it in the gallery takes it out of the tab, and deleting it in the tab takes
+ *    it out of the gallery, freeing the space in both;
+ *  - the reference never changes when moving the material between the conversation and the folder
+ *    (documents swap `doc1` for `src1`, and need a trace for that);
+ *  - what the user attached in a MESSAGE also shows up here, in "this
+ *    conversation", since it is the same item.
  */
 
 const MATERIAL_KINDS = new Set(['image', 'audio', 'video'])
 
-/** Teto de uma foto/áudio que chega como bytes; o vídeo de arquivo vem por caminho. */
+/** Ceiling for a photo/audio that arrives as bytes; the video from a file comes by path. */
 const MAX_IMAGE_BYTES = 40 * 1024 * 1024
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024
-/** O maior vídeo que ainda se aceita COMO BYTES (colado, sem arquivo no disco). */
+/** The largest video still accepted AS BYTES (pasted, with no file on disk). */
 const MAX_PASTED_VIDEO_BYTES = 150 * 1024 * 1024
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif)$/i
@@ -44,7 +44,7 @@ const IMAGE_MIME_EXT: Record<string, string> = {
 
 export type MaterialKind = 'image' | 'audio' | 'video'
 
-/** Que tipo de material é um arquivo, ou null quando não é um que a aba guarda. */
+/** What kind of material a file is, or null when it is not one the tab keeps. */
 export function materialKindOf(mime: string, filename: string): MaterialKind | null {
   if (isVideoFile(mime, filename)) return 'video'
   if (isAudioFile(mime, filename)) return 'audio'
@@ -60,7 +60,7 @@ function imageExtOf(mime: string, filename: string): string {
   return ext === 'jpeg' ? 'jpg' : ext
 }
 
-/** Um item de mídia → o que a aba mostra. */
+/** A media item → what the tab shows. */
 export function toMaterialView(entry: MediaEntry): MaterialView {
   const kind = mediaKind(entry) as MaterialKind
   return {
@@ -79,16 +79,16 @@ export function toMaterialView(entry: MediaEntry): MaterialView {
   }
 }
 
-/** O material é desta conversa (não compartilhado com a pasta)? */
+/** Is the material from this conversation (not shared with the folder)? */
 function isOwn(entry: MediaEntry, scope: string): boolean {
   if (entry.sharedFolderId) return false
   return entry.sessionId === scope || (entry.linkedSessionIds ?? []).includes(scope)
 }
 
 /**
- * Os materiais que a conversa alcança, separados como os documentos: os da pasta
- * (compartilhados) e os dela. Só entra o que o USUÁRIO trouxe (`source: 'user'`) —
- * uma imagem que o agente gerou é saída, e fica na galeria.
+ * The materials the conversation reaches, separated like the documents: the folder's
+ * (shared) and its own. Only what the USER brought in enters (`source: 'user'`) —
+ * an image the agent generated is output, and stays in the gallery.
  */
 export async function listSessionMaterials(
   scope: string,
@@ -108,17 +108,17 @@ export async function listSessionMaterials(
 export interface MaterialInput {
   filename: string
   mime?: string
-  /** Bytes em base64 (foto, áudio, vídeo colado). */
+  /** Bytes in base64 (photo, audio, pasted video). */
   data?: string
-  /** Caminho do arquivo no disco (vídeo escolhido ou arrastado): copiado no main. */
+  /** Path of the file on disk (video chosen or dragged): copied in the main. */
   path?: string
 }
 
 export type AddMaterialResult = { ok: true; material: MaterialView } | { ok: false; error: string }
 
 /**
- * Traz um arquivo para a aba. `shared` só vale quando a conversa está numa pasta;
- * sem pasta, não há escopo maior e o material fica na conversa.
+ * Brings a file into the tab. `shared` only counts when the conversation is in a folder;
+ * without a folder, there is no larger scope and the material stays in the conversation.
  */
 export async function addSessionMaterial(scope: string, input: MaterialInput, shared: boolean): Promise<AddMaterialResult> {
   const mime = input.mime ?? ''
@@ -134,7 +134,7 @@ export async function addSessionMaterial(scope: string, input: MaterialInput, sh
       if (!ext) return { ok: false, error: `${input.filename}: unsupported video format` }
       let saved
       if (input.path) {
-        // O caminho vem do renderer: só vale para um arquivo de vídeo de verdade.
+        // The path comes from the renderer: it only counts for a real video file.
         if (videoAttachmentExt('', path.extname(input.path)) === null) return { ok: false, error: `${input.filename}: the path is not a video file` }
         saved = await saveVideoAttachment({ copyFrom: input.path }, ext, { sessionId: scope, name: input.filename })
       } else if (bytes) {
@@ -171,9 +171,9 @@ export async function addSessionMaterial(scope: string, input: MaterialInput, sh
 }
 
 /**
- * Move um material entre a conversa e a pasta. A referência NÃO muda — é o mesmo
- * arquivo, só o escopo troca —, então nada que já foi dito na conversa deixa de
- * apontar para ele.
+ * Moves a material between the conversation and the folder. The reference does NOT change — it is the same
+ * file, only the scope swaps — so nothing already said in the conversation stops
+ * pointing to it.
  */
 export async function setMaterialShared(
   scope: string,
@@ -189,13 +189,13 @@ export async function setMaterialShared(
     if (!folderId) return { ok: false, error: await t('sources.error.noFolder') }
     await updateMediaEntry(id, { sharedFolderId: folderId })
   } else {
-    // Volta para ESTA conversa: ela é a que pediu, e o material não fica órfão.
+    // Back to THIS conversation: it is the one that asked, and the material does not stay orphaned.
     await updateMediaEntry(id, { sharedFolderId: undefined, sessionId: scope })
   }
   return { ok: true }
 }
 
-/** O chat novo ganhou sessão: o que foi trazido no rascunho passa a ser dela. */
+/** The new chat got a session: what was brought into the draft now belongs to it. */
 export async function adoptDraftMaterials(sessionId: string): Promise<number> {
   if (sessionId === DRAFT_SCOPE) return 0
   const draft = (await listMedia({ sessionId: DRAFT_SCOPE })).filter((e) => MATERIAL_KINDS.has(mediaKind(e)))
@@ -203,7 +203,7 @@ export async function adoptDraftMaterials(sessionId: string): Promise<number> {
   return draft.length
 }
 
-/** Uma linha por material para o agente: referência, tipo, nome e o que importa dele. */
+/** One line per material for the agent: reference, type, name and what matters about it. */
 export function describeMaterialsForAgent(list: { shared: MaterialView[]; own: MaterialView[] }): string {
   const line = (m: MaterialView, scope: string) => {
     const facts: string[] = []

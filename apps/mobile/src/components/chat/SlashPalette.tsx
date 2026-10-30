@@ -7,23 +7,23 @@ import type { SlashCommand } from '~/hooks/useSlashCommands'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-const GROUP_ORDER: SlashCommand['group'][] = ['Ações', 'Skills', 'MCP', 'Memória', 'Modos']
+const GROUP_ORDER: SlashCommand['group'][] = ['Actions', 'Skills', 'MCP', 'Memory', 'Modes']
 
 const GROUP_ICON: Record<SlashCommand['group'], typeof Sparkles> = {
-  Modos: Wrench,
+  Modes: Wrench,
   Skills: Sparkles,
   MCP: Layers,
-  Memória: BrainCircuit,
-  Ações: Zap,
+  Memory: BrainCircuit,
+  Actions: Zap,
 }
 
-/** Chave i18n de cada seção: o valor do grupo é identificador, não rótulo. */
+/** i18n key of each section: the value of the group is an identifier, not a label. */
 const GROUP_KEY: Record<SlashCommand['group'], string> = {
-  Ações: 'actions',
+  Actions: 'actions',
   Skills: 'skills',
   MCP: 'mcp',
-  Memória: 'memory',
-  Modos: 'modes',
+  Memory: 'memory',
+  Modes: 'modes',
 }
 
 function matches(command: SlashCommand, query: string): boolean {
@@ -41,15 +41,15 @@ interface SlashPaletteProps {
   setText: (text: string) => void
   commands: SlashCommand[]
   children: ReactNode
-  /** Prefixo que abre a paleta: "/" (comandos) ou "@" (referências) */
+  /** Prefix that opens the palette: "/" (commands) or "@" (references) */
   trigger?: string
 }
 
 export function SlashPalette({ value, setText, commands, children, trigger = '/' }: SlashPaletteProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  // "/" só não abre sobre um comando literal já digitado; "@" fecha quando há
-  // espaço depois dele (a referência já está completa).
+  // "/" alone does not open over an already typed literal command; "@" closes when there is
+  // a space after it (the reference is already complete).
   const open =
     value.startsWith(trigger) &&
     (trigger === '/'

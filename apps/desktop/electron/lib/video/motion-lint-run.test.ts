@@ -24,7 +24,7 @@ afterAll(async () => {
 })
 
 describe('assetStatusIn', () => {
-  it('existe, falta, ou sai da pasta', async () => {
+  it('exists, missing, or leaves the folder', async () => {
     expect(await assetStatusIn(folder, 'img/logo.png')).toBe('ok')
     expect(await assetStatusIn(folder, './img/logo.png?v=2#x')).toBe('ok')
     expect(await assetStatusIn(folder, 'img/nope.png')).toBe('missing')
@@ -32,13 +32,13 @@ describe('assetStatusIn', () => {
     expect(await assetStatusIn(folder, 'img/%E0%A4%A')).toBe('missing')
   })
 
-  it('o caminho com barra inicial é relativo à pasta, como no scheme', async () => {
+  it('a path with a leading slash is relative to the folder, as in the scheme', async () => {
     expect(await assetStatusIn(folder, '/img/logo.png')).toBe('ok')
   })
 })
 
 describe('lintMotionComposition', () => {
-  it('junta HTML, script local e arquivos — e ignora a biblioteca .min.js', async () => {
+  it('joins HTML, local script and files — and ignores the .min.js library', async () => {
     await fsp.writeFile(
       entry,
       html(
@@ -50,12 +50,12 @@ describe('lintMotionComposition', () => {
     const byRule = (rule: string) => findings.filter((f) => f.rule === rule)
     expect(byRule('missing-asset').map((f) => f.message.split(' ')[0])).toEqual(['img/gone.png'])
     expect(byRule('asset-outside-folder')).toHaveLength(1)
-    // Só o main.js (autoral) entra; o gsap.min.js tem Math.random() e fica de fora.
+    // Only main.js (authored) comes in; gsap.min.js has Math.random() and stays out.
     expect(byRule('wall-clock')).toMatchObject([{ file: 'main.js', line: 1 }])
     expect(byRule('random')).toHaveLength(0)
   })
 
-  it('com o que o runtime anunciou, confere as transições e o áudio contra o comprimento', async () => {
+  it('with what the runtime announced, checks the transitions and the audio against the length', async () => {
     await fsp.writeFile(entry, html('<h1>x</h1>'))
     const findings = await lintMotionComposition({
       entry,
@@ -85,7 +85,7 @@ describe('lintMotionComposition', () => {
     expect(findings.map((f) => f.rule).sort()).toEqual(['audio-after-end', 'transition-after-end'])
   })
 
-  it('arquivo ilegível ou ausente não derruba nada: relatório vazio', async () => {
+  it('an unreadable or missing file breaks nothing: empty report', async () => {
     expect(await lintMotionComposition({ entry: path.join(folder, 'nao-existe.html'), folder })).toEqual([])
   })
 })

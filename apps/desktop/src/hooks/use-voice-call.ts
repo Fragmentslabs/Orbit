@@ -19,36 +19,36 @@ import { useSessionStatus, useSessionStore } from "@/src/stores/session-store"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 
 /**
- * Modo chamada: conversa por voz em tempo real, em turnos.
+ * Call mode: voice conversation in real time, in turns.
  *
- *   ouvindo  → o ditado capta com texto ao vivo (prévia); um silêncio de
- *              `voice.call.silenceMs` depois de alguma fala encerra a vez.
- *   pensando → a transcrição vai como mensagem (com `voiceCall`, que pede ao
- *              agente uma resposta curta e falada).
- *   falando  → a resposta é lida FRASE A FRASE enquanto chega em streaming; ao
- *              terminar de ler, volta a ouvir.
+ *   listening → the dictation captures with live text (preview); a silence of
+ *               `voice.call.silenceMs` after some speech ends the turn.
+ *   thinking  → the transcription goes as a message (with `voiceCall`, which asks the
+ *               agent for a short, spoken answer).
+ *   speaking  → the answer is read SENTENCE BY SENTENCE as it arrives in streaming; when
+ *               the reading ends, it goes back to listening.
  *
- * Meio-duplex de propósito: o microfone fica fechado enquanto o agente fala,
- * senão ele ouviria a própria voz pelos alto-falantes. Para cortar a fala, a
- * pessoa toca em "interromper" (volta a ouvir na hora).
+ * Half-duplex on purpose: the microphone stays closed while the agent speaks,
+ * otherwise it would hear its own voice through the speakers. To cut the speech, the
+ * person taps "interrupt" (it goes back to listening right away).
  */
 
 export type CallPhase = "listening" | "thinking" | "speaking"
 
 interface ReplyState {
-  /** Quando a mensagem foi enviada: a resposta é a do assistente criada depois. */
+  /** When the message was sent: the answer is the assistant one created after it. */
   sentAt: number
-  /** Até onde do texto da resposta já foi para a fala. */
+  /** How far into the answer text has already gone to the speech. */
   offset: number
-  /** A fala contínua desta resposta já foi aberta. */
+  /** The continuous speech of this answer has already been opened. */
   streaming: boolean
-  /** O agente já partiu para as ferramentas: a narração dali em diante não é falada. */
+  /** The agent has already moved on to the tools: the narration from there on is not spoken. */
   toolSeen: boolean
   done: boolean
-  /** Interrompida: o resto da resposta não é lido. */
+  /** Interrupted: the rest of the answer is not read. */
   ignore: boolean
-  /** O turno já ficou ocupado: só depois disso um `idle` quer dizer "terminou"
-   *  (logo após o envio a mensagem pode existir vazia com o status ainda idle). */
+  /** The turn is already busy: only after that does an `idle` mean "finished"
+   *  (right after sending, the message may exist empty with the status still idle). */
   sawBusy: boolean
 }
 
@@ -59,7 +59,7 @@ export function useVoiceCall({
   submit,
 }: {
   sessionId?: string
-  /** Envia o que foi dito; `false` = não deu para enviar (a chamada encerra). */
+  /** Sends what was said; `false` = could not send it (the call ends). */
   submit: (text: string) => boolean
 }) {
   const voice = useAppSettings((s) => (s.settings as unknown as { voice?: { call?: { silenceMs?: number } } }).voice)
@@ -86,8 +86,8 @@ export function useVoiceCall({
     setPhaseState(next)
   }, [])
 
-  // Os callbacks do ditado precisam do `listen`, que precisa do ditado: a
-  // volta passa por refs (o hook do ditado guarda os callbacks num ref também).
+  // The dictation callbacks need `listen`, which needs the dictation: the
+  // round trip goes through refs (the dictation hook also keeps the callbacks in a ref).
   const listenRef = useRef<() => void>(() => {})
   const hangUpRef = useRef<() => void>(() => {})
 
@@ -114,12 +114,12 @@ export function useVoiceCall({
 
   const lastPartialRef = useRef("")
   const onPartial = useCallback((text: string) => {
-    // Chamada encerrada: parcial atrasado de uma captura que já foi cancelada.
+    // Call ended: a late partial from a capture that was already cancelled.
     if (!activeRef.current) return
     setPartial(text)
-    // Texto ao vivo é prova de fala, mesmo que o nível tenha ficado baixo: cada
-    // palavra nova que o motor reconhece adia o fim da vez (fala baixa, final
-    // de frase arrastado, respiração no meio).
+    // Live text is proof of speech, even if the level stayed low: every
+    // new word the engine recognizes postpones the end of the turn (low speech, drawn-out
+    // sentence ending, breathing in the middle).
     if (text.trim() && text !== lastPartialRef.current) {
       const vad = vadRef.current
       vad.heard = true
@@ -133,7 +133,7 @@ export function useVoiceCall({
       if (!activeRef.current || phaseRef.current !== "listening") return
       const said = text.trim()
       setPartial("")
-      // Ninguém falou nada de aproveitável: segue ouvindo.
+      // Nobody said anything usable: keep listening.
       if (!said) {
         setTimeout(() => listenRef.current(), 0)
         return
@@ -163,7 +163,7 @@ export function useVoiceCall({
   }, [setPhase])
   listenRef.current = listen
 
-  /** A resposta inteira já foi dita (ou não havia o que dizer): a vez volta para a pessoa. */
+  /** The whole answer has already been said (or there was nothing to say): the turn goes back to the person. */
   const backToListening = useCallback(() => {
     const reply = replyRef.current
     reply.ignore = true
@@ -171,7 +171,7 @@ export function useVoiceCall({
     listen()
   }, [listen])
 
-  // A fala contínua terminou de tocar (ou falhou): volta a ouvir.
+  // The continuous speech finished playing (or failed): back to listening.
   const wasSpeakingRef = useRef(false)
   useEffect(() => {
     const reply = replyRef.current
@@ -179,8 +179,8 @@ export function useVoiceCall({
     wasSpeakingRef.current = speaking
   }, [speaking, backToListening])
 
-  // A resposta chegando: corta em frases e anexa à fala contínua — o main gera
-  // a frase seguinte enquanto a anterior toca, sem silêncio entre elas.
+  // The answer arriving: cut it into sentences and attach it to the continuous speech — main generates
+  // the next sentence while the previous one plays, with no silence between them.
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
   const status = useSessionStatus(sessionId)
   useEffect(() => {
@@ -190,13 +190,13 @@ export function useVoiceCall({
     const message = messages
       ?.slice()
       .reverse()
-      // A compactação grava o resumo como mensagem do assistente, criada no
-      // meio do turno e antes da resposta: ele não é a resposta e não se fala.
+      // Compaction writes the summary as an assistant message, created in the
+      // middle of the turn and before the answer: it is not the answer and is not spoken.
       .find((item) => item.role === "assistant" && !item.summary && item.createdAt >= reply.sentAt)
     if (status === "submitted" || status === "streaming" || status === "fallback") reply.sawBusy = true
     const finished = reply.sawBusy && (status === "idle" || status === "error")
     if (!message) {
-      // Falhou antes de qualquer resposta: avisa e devolve a vez.
+      // Failed before any answer: warns and gives the turn back.
       if (finished && status === "error") {
         setError("reply")
         reply.done = true
@@ -204,9 +204,9 @@ export function useVoiceCall({
       }
       return
     }
-    // Política de fala (ver `callSpeech`): o começo da resposta vai na hora;
-    // com ferramentas, a narração do meio fica de fora e a resposta final vai
-    // quando o turno termina.
+    // Speech policy (see `callSpeech`): the beginning of the answer goes right away;
+    // with tools, the narration in the middle stays out and the final answer goes
+    // when the turn ends.
     const speech = callSpeech(message)
     const say = (raw: string) => {
       const spoken = speechText(raw)
@@ -224,24 +224,24 @@ export function useVoiceCall({
       if (chunk) say(chunk)
     }
     if (speech.hasTool && !reply.toolSeen) {
-      // Partiu para as ferramentas: fica a frase de espera (a que está tocando,
-      // ou a primeira); o resto do que ele narrou antes — às vezes o próprio
-      // raciocínio — sai da fila, gerado ou não. A legenda acompanha o corte
-      // porque o `useSpeak` descarta o texto das frases que saíram.
+      // Moved on to the tools: the waiting sentence stays (the one playing,
+      // or the first one); the rest of what it narrated before — sometimes its own
+      // reasoning — leaves the queue, generated or not. The subtitle follows the cut
+      // because `useSpeak` drops the text of the sentences that left.
       reply.toolSeen = true
       if (reply.streaming) trimSpeech()
     }
     if (finished && !reply.done) {
       reply.done = true
       if (speech.hasTool && speech.final) say(speech.final)
-      // Com fala aberta, ela termina ao tocar o resto (o efeito acima devolve a
-      // vez); sem nada para dizer, a vez volta já.
+      // With the speech open, it ends when the rest plays (the effect above gives the
+      // turn back); with nothing to say, the turn comes back right away.
       if (reply.streaming) endSpeech()
       else backToListening()
     }
   }, [active, messages, status, backToListening, setPhase, speakStream, appendSpeech, endSpeech, trimSpeech, ttsPrefs, ttsEngine])
 
-  // O ditado falhou no meio da chamada: encerra mostrando o motivo.
+  // The dictation failed in the middle of the call: end it showing the reason.
   useEffect(() => {
     if (active && dictation.error) {
       setError(dictation.error)
@@ -256,16 +256,16 @@ export function useVoiceCall({
     setError(null)
     setHeard("")
     replyRef.current = idleReply()
-    // Um erro de um ditado anterior derrubaria a chamada logo ao começar.
+    // An error from a previous dictation would take the call down right at the start.
     dictationRef.current.dismissError()
-    // Rede: uma captura que ficou aberta (não deveria) é descartada, senão o
-    // start() a reaproveitaria — com o texto antigo dentro.
+    // Net: a capture that was left open (it should not have been) is discarded, otherwise
+    // start() would reuse it — with the old text inside.
     dictationRef.current.cancel()
     useVoiceActivity.getState().setInCall(true)
     listen()
   }, [listen])
 
-  /** Corta a fala (ou a espera) e devolve a vez para a pessoa. */
+  /** Cuts the speech (or the wait) and gives the turn back to the person. */
   const interrupt = useCallback(() => {
     if (!activeRef.current) return
     replyRef.current.ignore = true
@@ -287,21 +287,21 @@ export function useVoiceCall({
   }, [setPhase, stopSpeaking])
   hangUpRef.current = hangUp
 
-  // Saiu da tela no meio da chamada: desliga tudo.
+  // Left the screen in the middle of the call: turns everything off.
   useEffect(() => () => hangUpRef.current(), [])
 
-  // A tool `end_call` (o agente ouviu "tchau, Orbit") encerra a conversa em
-  // qualquer janela — inclusive nesta, que pode ser a principal ou o overlay.
-  // O evento vem do main porque o pedido nasce de uma tool, não da UI.
+  // The `end_call` tool (the agent heard "bye, Orbit") ends the conversation in
+  // any window — including this one, which may be the main one or the overlay.
+  // The event comes from main because the request is born from a tool, not from the UI.
   useEffect(() => {
     if (!window.ipcRenderer) return
     const wrapper = window.ipcRenderer.on("voice:hangup", () => hangUpRef.current())
     return () => window.ipcRenderer.off("voice:hangup", wrapper)
   }, [])
 
-  // A legenda da fala acompanha o ÁUDIO, não a geração: as frases já tocadas
-  // ficam, e a que está tocando é revelada pelo relógio do player. Um tick de
-  // 100 ms é o suficiente para as linhas subirem junto com a voz.
+  // The speech subtitle follows the AUDIO, not the generation: the sentences already played
+  // stay, and the one playing is revealed by the player clock. A 100 ms
+  // tick is enough for the lines to come up along with the voice.
   const [, bumpSpeechFrame] = useReducer((frame: number) => frame + 1, 0)
   useEffect(() => {
     if (phase !== "speaking" || segment === null) return
@@ -314,9 +314,9 @@ export function useVoiceCall({
     return [...beforeSegText(segment), segSpokenText(segment)].filter(Boolean).join(" ")
   })()
 
-  // As duas linhas que o painel mostra: a que está sendo dita (o ponto do
-  // áudio) e a próxima, que já foi gerada mas ainda não tocou. O roteiro tem
-  // o texto todo, inclusive o das frases futuras; o `saying` dá a posição.
+  // The two lines the panel shows: the one being said (the audio
+  // point) and the next one, which has already been generated but has not played yet. The script has
+  // the whole text, including that of the future sentences; `saying` gives the position.
   const caption = (() => {
     if (segment === null) return null
     const lines = captionLines(speechScript())
@@ -330,15 +330,15 @@ export function useVoiceCall({
   return {
     active,
     phase,
-    /** Texto ao vivo do que a pessoa está dizendo agora. */
+    /** Live text of what the person is saying now. */
     partial,
-    /** O último turno da pessoa, como foi enviado. */
+    /** The person's last turn, as it was sent. */
     heard,
-    /** O que já foi dito da resposta, até o ponto do áudio — a posição da legenda. */
+    /** What has already been said of the answer, up to the audio point — the subtitle position. */
     saying,
-    /** As duas linhas da legenda: a atual e a próxima. */
+    /** The two subtitle lines: the current one and the next. */
     caption,
-    /** Falando, mas sem som neste instante: o agente ainda trabalha na próxima frase. */
+    /** Speaking, but with no sound at this instant: the agent is still working on the next sentence. */
     waiting: phase === "speaking" && !audible,
     error,
     levels: levelsRef,

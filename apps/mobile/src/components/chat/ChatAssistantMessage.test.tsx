@@ -1,29 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ChatMessage, MessagePart } from '@orbit/shared'
-// Os mocks abaixo são içados pelo vitest acima destes imports — a ordem aqui é
-// só de leitura (o `import/first` reclama de import depois de `vi.mock`).
+// The mocks below are hoisted by vitest above these imports — the order here is
+// only for reading (the `import/first` rule complains about an import after `vi.mock`).
 import { ChatAssistantMessage } from './ChatAssistantMessage'
 import { PieceView } from './PieceView'
 
 /**
- * Parts de mídia e peça na resposta do assistente.
+ * Media and piece parts in the assistant answer.
  *
- * O que se prova: áudio, vídeo, artefato e documento RENDERIZAM (antes áudio e
- * vídeo caíam no `default` do switch e sumiam sem aviso, e artefato/documento
- * viravam um cartão "disponível só no desktop"); uma part com `src` vazio
- * degrada num card, sem crash; e o artefato abre pelo PieceView, com tela cheia.
+ * What is proven: audio, video, artifact and document RENDER (before, audio and
+ * video fell into the `default` of the switch and vanished without warning, and artifact/document
+ * became a card "available only on the desktop"); a part with an empty `src`
+ * degrades into a card, without a crash; and the artifact opens through PieceView, with full screen.
  *
- * Runner: o vitest do app com `react-native` resolvido para `react-native-web`
- * (ver vitest.config.ts), no jsdom — são os mesmos componentes, renderizados no
- * DOM. Só os módulos nativos que o componente toca são substituídos.
+ * Runner: the app vitest with `react-native` resolved to `react-native-web`
+ * (see vitest.config.ts), in jsdom — they are the same components, rendered in the
+ * DOM. Only the native modules the component touches are replaced.
  */
 
-// ── Módulos nativos ─────────────────────────────────────────────────────────
+// ── Native modules ──────────────────────────────────────────────────────────
 
-// O código do Expo (expo-modules-core, arrastado por expo-image/Clipboard) lê
-// `__DEV__`, que existe no bundle do RN e não no Node. Precisa estar definido
-// antes de qualquer import — daí o `hoisted`.
+// The Expo code (expo-modules-core, dragged in by expo-image/Clipboard) reads
+// `__DEV__`, which exists in the RN bundle and not in Node. It needs to be defined
+// before any import — hence the `hoisted`.
 vi.hoisted(() => {
   ;(globalThis as Record<string, unknown>).__DEV__ = false
 })
@@ -56,7 +56,7 @@ vi.mock('expo-video', async () => {
 
 vi.mock('expo', () => ({ useEvent: () => ({ status: 'readyToPlay' }) }))
 
-/** O WebView do PieceView: guarda as props para o teste poder simular falha. */
+/** The WebView of PieceView: stores the props so the test can simulate a failure. */
 const webviews = vi.hoisted(() => ({ props: [] as Record<string, any>[] }))
 
 vi.mock('react-native-webview', async () => {
@@ -93,8 +93,8 @@ vi.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 
-// Ícones: o mock global do test-env é um Proxy, e o vitest valida exports
-// nomeados — aqui os nomes usados por estes componentes são explícitos.
+// Icons: the global mock of test-env is a Proxy, and vitest validates named
+// exports — here the names used by these components are explicit.
 vi.mock('lucide-react-native', async () => {
   const React = await import('react')
   const Icon = () => React.createElement('i')
@@ -102,7 +102,7 @@ vi.mock('lucide-react-native', async () => {
     AlertCircle: Icon,
     Bot: Icon,
     Brain: Icon,
-    // Ícones do card de peça (motion, design, slides).
+    // Icons of the piece card (motion, design, slides).
     Film: Icon,
     Frame: Icon,
     Presentation: Icon,
@@ -124,18 +124,18 @@ vi.mock('lucide-react-native', async () => {
   }
 })
 
-// Rótulos: a tela é pt-BR e o teste não depende do bundle de i18n.
+// Labels: the screen is pt-BR and the test does not depend on the i18n bundle.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }),
 }))
 
-// Tema: o store real toca storage do aparelho.
+// Theme: the real store touches the device storage.
 vi.mock('~/stores/theme-store', () => ({
   useThemeStore: (selector: (state: { resolved: string }) => unknown) => selector({ resolved: 'dark' }),
 }))
 
-// Irmãos da bolha: não fazem parte desta tarefa e arrastariam stores e rede
-// para dentro do teste.
+// Siblings of the bubble: they are not part of this task and would drag stores and network
+// into the test.
 vi.mock('./AssistantMarkdown', () => ({ AssistantMarkdown: () => null }))
 vi.mock('./TodoChecklist', () => ({ TodoChecklist: () => null }))
 vi.mock('./MessageActions', () => ({ MessageActions: () => null }))
@@ -166,10 +166,10 @@ function renderMessage(parts: MessagePart[]) {
 }
 
 const audioPart = (src: string): MessagePart =>
-  ({ id: 'a1', type: 'audio', src, title: 'Resumo em voz', durationMs: 12_000 }) as MessagePart
+  ({ id: 'a1', type: 'audio', src, title: 'Summary as audio', durationMs: 12_000 }) as MessagePart
 
 const videoPart = (src: string): MessagePart =>
-  ({ id: 'v1', type: 'video', src, title: 'Corte final' }) as MessagePart
+  ({ id: 'v1', type: 'video', src, title: 'Final cut' }) as MessagePart
 
 const artifactPart = (src: string): MessagePart =>
   ({
@@ -187,7 +187,7 @@ const documentPart = (previewSrc: string): MessagePart =>
     id: 'doc1',
     type: 'document',
     documentId: 'doc_abc.md',
-    title: 'Relatório trimestral',
+    title: 'Quarterly report',
     previewSrc,
     formats: ['pdf'],
   }) as MessagePart
@@ -201,25 +201,25 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-// ── Áudio e vídeo ───────────────────────────────────────────────────────────
+// ── Audio and video ─────────────────────────────────────────────────────────
 
-describe('ChatAssistantMessage — áudio e vídeo', () => {
-  it('áudio com src vira player inline, com título e botão de tocar', () => {
+describe('ChatAssistantMessage — audio and video', () => {
+  it('audio with src becomes an inline player, with a title and a play button', () => {
     renderMessage([audioPart(AUDIO_SRC)])
 
     expect(screen.getByTestId('audio-part')).toBeTruthy()
-    expect(screen.getByText('Resumo em voz')).toBeTruthy()
+    expect(screen.getByText('Summary as audio')).toBeTruthy()
     expect(screen.getByLabelText('parts.audio.play')).toBeTruthy()
     expect(screen.queryByTestId('audio-part-unavailable')).toBeNull()
   })
 
-  it('o play do áudio chega ao player do expo-audio', () => {
+  it('the audio play reaches the expo-audio player', () => {
     renderMessage([audioPart(AUDIO_SRC)])
     fireEvent.click(screen.getByLabelText('parts.audio.play'))
     expect(audio.player.play).toHaveBeenCalled()
   })
 
-  it('vídeo com src vira player 16:9 com controles nativos', () => {
+  it('video with src becomes a 16:9 player with native controls', () => {
     renderMessage([videoPart(VIDEO_SRC)])
 
     expect(screen.getByTestId('video-part')).toBeTruthy()
@@ -228,20 +228,20 @@ describe('ChatAssistantMessage — áudio e vídeo', () => {
   })
 })
 
-// ── Artefato e documento ────────────────────────────────────────────────────
+// ── Artifact and document ───────────────────────────────────────────────────
 
-describe('ChatAssistantMessage — artefato', () => {
-  it('abre o PieceView com a URL que veio do desktop, sem montar nada', () => {
+describe('ChatAssistantMessage — artifact', () => {
+  it('opens the PieceView with the URL that came from the desktop, assembling nothing', () => {
     renderMessage([artifactPart(ARTIFACT_SRC)])
 
     const host = screen.getByTestId('piece-view')
     expect(host.getAttribute('data-uri')).toBe(ARTIFACT_SRC)
     expect(screen.getByText('Dashboard')).toBeTruthy()
-    // O cartão antigo de "só no desktop" não existe mais.
+    // The old "only on the desktop" card does not exist anymore.
     expect(screen.queryByText('chatAssistant.artifactDesktopOnly')).toBeNull()
   })
 
-  it('expande para tela cheia', () => {
+  it('expands to fullscreen', () => {
     renderMessage([artifactPart(ARTIFACT_SRC)])
 
     expect(screen.queryByTestId('piece-view-fullscreen')).toBeNull()
@@ -249,15 +249,15 @@ describe('ChatAssistantMessage — artefato', () => {
     expect(screen.getByTestId('piece-view-fullscreen')).toBeTruthy()
   })
 
-  it('falha de carga vira erro discreto com "tentar de novo", sem derrubar a bolha', () => {
+  it('a load failure becomes a discreet error with "try again", without taking the bubble down', () => {
     renderMessage([artifactPart(ARTIFACT_SRC)])
 
     act(() => {
-      webviews.props.at(-1)?.onError({ nativeEvent: { description: 'sem rede' } })
+      webviews.props.at(-1)?.onError({ nativeEvent: { description: 'no network' } })
     })
 
     expect(screen.getByText('parts.artifact.error')).toBeTruthy()
-    expect(screen.getByText('sem rede')).toBeTruthy()
+    expect(screen.getByText('no network')).toBeTruthy()
 
     fireEvent.click(screen.getByLabelText('parts.preview.retry'))
     expect(screen.queryByText('parts.artifact.error')).toBeNull()
@@ -265,23 +265,23 @@ describe('ChatAssistantMessage — artefato', () => {
   })
 })
 
-describe('ChatAssistantMessage — documento', () => {
-  it('renderiza a prévia e oferece abrir e baixar o arquivo', () => {
+describe('ChatAssistantMessage — document', () => {
+  it('renders the preview and offers to open and download the file', () => {
     renderMessage([documentPart(DOC_SRC)])
 
     const host = screen.getByTestId('piece-view')
     expect(host.getAttribute('data-uri')).toBe(DOC_SRC)
-    expect(screen.getByText('Relatório trimestral')).toBeTruthy()
+    expect(screen.getByText('Quarterly report')).toBeTruthy()
     expect(screen.getByText('parts.document.open')).toBeTruthy()
     expect(screen.getByText('parts.document.download')).toBeTruthy()
     expect(screen.queryByText('chatAssistant.documentDesktopOnly')).toBeNull()
   })
 
-  it('"Abrir" entrega a URL do preview ao navegador do sistema', async () => {
-    // O runner resolve `react-native` para `react-native-web`, então
-    // Platform.OS é 'web' e o componente abre pela janela do navegador. No
-    // aparelho é o expo-web-browser que recebe a mesma URL — o que se verifica
-    // aqui é que o clique chega nela, sem URL montada no meio.
+  it('"Open" hands the preview URL to the system browser', async () => {
+    // The runner resolves `react-native` to `react-native-web`, so
+    // Platform.OS is 'web' and the component opens through the browser window. On the
+    // device it is expo-web-browser that receives the same URL — what is verified
+    // here is that the click reaches it, with no URL assembled in between.
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     renderMessage([documentPart(DOC_SRC)])
 
@@ -294,10 +294,10 @@ describe('ChatAssistantMessage — documento', () => {
   })
 })
 
-// ── Degradação ──────────────────────────────────────────────────────────────
+// ── Degradation ─────────────────────────────────────────────────────────────
 
-describe('ChatAssistantMessage — part com src vazio', () => {
-  it('áudio e vídeo degradam para um card com o título, sem crash', () => {
+describe('ChatAssistantMessage — part with an empty src', () => {
+  it('audio and video degrade to a card with the title, without crashing', () => {
     renderMessage([audioPart(''), videoPart('')])
 
     expect(screen.getByTestId('audio-part-unavailable')).toBeTruthy()
@@ -306,25 +306,25 @@ describe('ChatAssistantMessage — part com src vazio', () => {
     expect(screen.getByText('parts.video.unavailable')).toBeTruthy()
   })
 
-  it('artefato e documento degradam para o card de prévia indisponível', () => {
+  it('artifact and document degrade to the preview-unavailable card', () => {
     renderMessage([artifactPart(''), documentPart('')])
 
-    // Nenhum WebView montado — não há URL para pedir.
+    // No WebView mounted — there is no URL to request.
     expect(screen.queryByTestId('piece-view')).toBeNull()
     expect(screen.getByText('parts.artifact.empty')).toBeTruthy()
     expect(screen.getByText('parts.document.empty')).toBeTruthy()
-    // O título continua visível: o texto do assistente pode falar dele.
+    // The title stays visible: the assistant text may talk about it.
     expect(screen.getByText('Dashboard')).toBeTruthy()
-    expect(screen.getByText('Relatório trimestral')).toBeTruthy()
+    expect(screen.getByText('Quarterly report')).toBeTruthy()
   })
 })
 
-// ── PieceView isolado ───────────────────────────────────────────────────────
+// ── PieceView on its own ────────────────────────────────────────────────────
 
 describe('PieceView', () => {
-  it('mostra o poster enquanto carrega e o esconde quando a página fica pronta', () => {
+  it('shows the poster while loading and hides it when the page is ready', () => {
     const poster = 'http://192.168.0.10:3848/api/file/artifact/art_abc.png/tok-artifact'
-    render(<PieceView src={ARTIFACT_SRC} title="Peça" poster={poster} />)
+    render(<PieceView src={ARTIFACT_SRC} title="Piece" poster={poster} />)
 
     expect(screen.getByTestId('image').getAttribute('data-source')).toBe(poster)
 
@@ -335,8 +335,8 @@ describe('PieceView', () => {
     expect(screen.queryByTestId('image')).toBeNull()
   })
 
-  it('não deixa a tela cheia nascer aberta', () => {
-    render(<PieceView src={ARTIFACT_SRC} title="Peça" />)
+  it('does not let the fullscreen be born open', () => {
+    render(<PieceView src={ARTIFACT_SRC} title="Piece" />)
     expect(screen.queryByTestId('piece-view-fullscreen')).toBeNull()
   })
 })

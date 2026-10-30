@@ -5,8 +5,8 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * A camada da tool: onde o arquivo nasce, como o resultado é relatado e o que
- * ela recusa. O encode em si é o do compress.test.ts.
+ * The tool's layer: where the file is born, how the result is reported and what
+ * it refuses. The encode itself is compress.test.ts's.
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -47,7 +47,7 @@ function context(canShow: boolean) {
     extraDirectories: [],
     abort: new AbortController().signal,
   })
-  // O execute do AI SDK recebe um ToolCallOptions inteiro; no teste só o signal importa.
+  // The AI SDK's execute receives a whole ToolCallOptions; in the test only the signal matters.
   const execute = tools.media_compress.execute as unknown as (
     input: Record<string, unknown>,
     options: { abortSignal: AbortSignal },
@@ -56,7 +56,7 @@ function context(canShow: boolean) {
 }
 
 describe.skipIf(!hasFfmpeg)('media_compress (tool)', () => {
-  it('grava em media/ ao lado da origem e relata os números', async () => {
+  it('writes to media/ next to the source and reports the numbers', async () => {
     const run = context(false)
     const out = await run({ ref: 'clip.mp4', maxBytes: 120_000 })
     expect(typeof out).toBe('string')
@@ -66,17 +66,17 @@ describe.skipIf(!hasFfmpeg)('media_compress (tool)', () => {
     const file = path.join(work, 'media', 'clip-compressed.mp4')
     expect(fs.existsSync(file)).toBe(true)
     expect((await fsp.stat(file)).size).toBeLessThanOrEqual(120_000)
-    // A origem continua intacta.
+    // The source remains intact.
     expect((await fsp.stat(source)).size).toBeGreaterThan(120_000)
   }, 120_000)
 
-  it('respeita outputPath quando o usuário pede onde salvar', async () => {
+  it('respects outputPath when the user says where to save', async () => {
     const run = context(false)
-    await run({ ref: 'clip.mp4', quality: 60, outputPath: 'saida/pequeno.mp4' })
-    expect(fs.existsSync(path.join(work, 'saida', 'pequeno.mp4'))).toBe(true)
+    await run({ ref: 'clip.mp4', quality: 60, outputPath: 'out/small.mp4' })
+    expect(fs.existsSync(path.join(work, 'out', 'small.mp4'))).toBe(true)
   }, 120_000)
 
-  it('com canShow devolve o player do vídeo', async () => {
+  it('with canShow it returns the video player', async () => {
     const run = context(true)
     const out = await run({ ref: 'clip.mp4', quality: 60 })
     expect(typeof out).toBe('object')
@@ -84,19 +84,19 @@ describe.skipIf(!hasFfmpeg)('media_compress (tool)', () => {
     expect(String((out as Record<string, unknown>).message)).toContain('Compressed')
   }, 120_000)
 
-  it('extrair áudio num contêiner de áudio muda o tipo do resultado', async () => {
+  it('extracting audio into an audio container changes the result type', async () => {
     const run = context(false)
     const out = await run({ ref: 'clip.mp4', format: 'mp3', quality: 70 })
     expect(out as string).toContain('Output: audio mp3')
     expect(fs.existsSync(path.join(work, 'media', 'clip-compressed.mp3'))).toBe(true)
   }, 120_000)
 
-  it('recusa imagem e aponta o image_edit', async () => {
+  it('refuses an image and points to image_edit', async () => {
     const run = context(false)
     await expect(run({ ref: 'img_abc123.png', maxBytes: 1000 })).rejects.toThrow(/image_edit/)
   })
 
-  it('recusa extensão que não é mídia', async () => {
+  it('refuses an extension that is not media', async () => {
     const run = context(false)
     await expect(run({ ref: 'notes.txt', maxBytes: 1000 })).rejects.toThrow(/audio or video/)
   })

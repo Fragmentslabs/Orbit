@@ -1,54 +1,54 @@
 /**
- * O TRATAMENTO do áudio de uma peça de motion: o que se faz com uma faixa além
- * de posicioná-la e ajustar o nível — tirar a região que briga com a voz, segurar
- * a dinâmica, desenhar uma curva de volume ao longo da peça, e travar o resultado
- * final num teto e num volume de entrega.
+ * The TREATMENT of a motion piece's audio: what is done with a track beyond
+ * positioning it and setting the level — removing the region that fights with the voice, holding
+ * the dynamics, drawing a volume curve along the piece, and locking the final
+ * result into a ceiling and a delivery loudness.
  *
- * Mora aparte do motion-audio.ts (que resolve ARQUIVOS e instantes) e do
- * motion-render-args.ts (que monta o ffmpeg): aqui está só o vocabulário do
- * manifest — o que `audio.json` aceita, validado, com os números dentro de
- * limites sãos — e a tradução dele em filtros. Tudo puro, testável sem ffmpeg.
+ * It lives apart from motion-audio.ts (which resolves FILES and instants) and from
+ * motion-render-args.ts (which builds the ffmpeg): here there is only the vocabulary of the
+ * manifest — what `audio.json` accepts, validated, with the numbers inside
+ * sane limits — and its translation into filters. All pure, testable without ffmpeg.
  *
- * Duas decisões de produto:
+ * Two product decisions:
  *
- *  - uma entrada inválida é ERRO com o motivo, não um filtro ignorado. Uma
- *    faixa que o autor tratou e que sai crua, em silêncio, é pior que um render
- *    que diz "eq banda 2: gain 40 está fora de −24…24";
- *  - os PRESETS (voice, bed, phone) são só atalhos para campos que o manifest já
- *    tem. O que a faixa declara por conta própria vence o preset, campo a campo.
+ *  - an invalid entry is an ERROR with the reason, not an ignored filter. A
+ *    track the author treated and that comes out raw, silently, is worse than a render
+ *    that says "eq band 2: gain 40 is outside −24…24";
+ *  - the PRESETS (voice, bed, phone) are only shortcuts for fields the manifest already
+ *    has. What the track declares on its own wins over the preset, field by field.
  *
- * O tratamento só existe no RENDER. A aba toca a faixa crua, como já faz com o
- * nível e as rampas; o agente é avisado disso nas notas do guia.
+ * The treatment only exists in the RENDER. The tab plays the raw track, as it already does with
+ * the level and the ramps; the agent is told about that in the guide's notes.
  */
 
 export interface EqBand {
-  /** Frequência central, Hz. */
+  /** Center frequency, Hz. */
   freq: number
-  /** Ganho em dB (negativo corta). */
+  /** Gain in dB (negative cuts). */
   gain: number
-  /** Largura da banda: menor = mais larga. */
+  /** Band width: smaller = wider. */
   q: number
 }
 
 export interface Compressor {
-  /** Nível acima do qual a compressão age, dB. */
+  /** Level above which compression acts, dB. */
   threshold: number
   ratio: number
   /** ms. */
   attack: number
   /** ms. */
   release: number
-  /** Ganho de compensação depois de comprimir, dB. */
+  /** Makeup gain after compressing, dB. */
   makeup: number
 }
 
-/** Um ponto da curva de volume: o nível em dB naquele segundo DA PEÇA. */
+/** A point of the volume curve: the level in dB at that second OF THE PIECE. */
 export interface AutomationPoint {
   at: number
   db: number
 }
 
-/** O tratamento de UMA faixa. Vazio é o caso normal. */
+/** The treatment of ONE track. Empty is the normal case. */
 export interface TrackFx {
   highpass?: number
   lowpass?: number
@@ -57,9 +57,9 @@ export interface TrackFx {
   automation: AutomationPoint[]
 }
 
-/** Como a cama (`duck`) abaixa sob as faixas de frente. */
+/** How the bed (`duck`) goes down under the front tracks. */
 export interface DuckSettings {
-  /** Nível LINEAR acima do qual a frente aciona a cama (0.02 ≈ −34 dB). */
+  /** LINEAR level above which the front triggers the bed (0.02 ≈ −34 dB). */
   threshold: number
   ratio: number
   /** ms. */
@@ -68,24 +68,24 @@ export interface DuckSettings {
   release: number
 }
 
-/** O acabamento da mixagem inteira. */
+/** The finishing of the whole mix. */
 export interface MasterFx {
-  /** Teto de pico, dBFS: nada passa daqui. */
+  /** Peak ceiling, dBFS: nothing goes past here. */
   limit?: number
-  /** Volume de entrega, LUFS (−16 é o de voz em plataformas, −14 o de música). */
+  /** Delivery loudness, LUFS (−16 is the voice one on platforms, −14 the music one). */
   loudness?: number
 }
 
 export const NO_FX: TrackFx = { eq: [], automation: [] }
 
-/** O duck de sempre — os números que o render de EDL já usa. */
+/** The usual duck — the numbers the EDL render already uses. */
 export const DEFAULT_DUCK: DuckSettings = { threshold: 0.02, ratio: 10, attack: 15, release: 350 }
 
 const DEFAULT_COMPRESSOR: Compressor = { threshold: -18, ratio: 3, attack: 10, release: 250, makeup: 0 }
 
-/** Atalhos: só preenchem o que a faixa não declarou. */
+/** Shortcuts: they only fill in what the track did not declare. */
 const PRESETS: Record<string, Partial<Omit<TrackFx, 'automation'>>> = {
-  // Voz: tira o rumor grave, abre um pouco de presença e segura os picos.
+  // Voice: takes out the low rumble, opens a bit of presence and holds the peaks.
   voice: {
     highpass: 80,
     eq: [
@@ -94,8 +94,8 @@ const PRESETS: Record<string, Partial<Omit<TrackFx, 'automation'>>> = {
     ],
     compress: { threshold: -20, ratio: 3, attack: 8, release: 200, makeup: 3 },
   },
-  // Cama: abre espaço na faixa onde a voz vive, para a música ficar ATRÁS dela
-  // sem precisar ficar baixa demais.
+  // Bed: opens room in the band where the voice lives, so the music sits BEHIND it
+  // without having to be too low.
   bed: {
     lowpass: 14000,
     eq: [
@@ -103,7 +103,7 @@ const PRESETS: Record<string, Partial<Omit<TrackFx, 'automation'>>> = {
       { freq: 2500, gain: -4, q: 0.8 },
     ],
   },
-  // Telefone: a banda estreita de uma ligação.
+  // Phone: the narrow band of a call.
   phone: {
     highpass: 400,
     lowpass: 3400,
@@ -120,7 +120,7 @@ function fail(where: string, message: string): never {
   throw new Error(`${where}: ${message}`)
 }
 
-/** Número finito dentro de [min, max], ou erro com o motivo. */
+/** Finite number inside [min, max], or an error with the reason. */
 function bounded(value: unknown, where: string, label: string, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) fail(where, `${label} must be a number`)
   if (value < min || value > max) fail(where, `${label} ${value} is outside ${min}…${max}`)
@@ -160,7 +160,7 @@ function parseCompress(value: unknown, where: string): Compressor | undefined {
   }
 }
 
-/** Aceita `{ at, db }` e a forma curta `[at, db]`. Devolve em ordem de tempo. */
+/** Accepts `{ at, db }` and the short form `[at, db]`. Returns in time order. */
 function parseAutomation(value: unknown, where: string): AutomationPoint[] {
   if (!Array.isArray(value)) fail(where, '"automation" must be a list of { "at": seconds, "db": level }')
   if (value.length > MAX_AUTOMATION_POINTS) fail(where, `"automation" takes at most ${MAX_AUTOMATION_POINTS} points`)
@@ -180,8 +180,8 @@ function parseAutomation(value: unknown, where: string): AutomationPoint[] {
 }
 
 /**
- * O tratamento de uma faixa a partir do que o manifest declarou. `where` é o
- * prefixo das mensagens ("audio.json: track 2"), para o erro dizer ONDE.
+ * The treatment of a track from what the manifest declared. `where` is the
+ * prefix of the messages ("audio.json: track 2"), so the error says WHERE.
  */
 export function parseTrackFx(spec: Record<string, unknown>, where: string): TrackFx {
   let base: Partial<Omit<TrackFx, 'automation'>> = {}
@@ -208,7 +208,7 @@ export function parseTrackFx(spec: Record<string, unknown>, where: string): Trac
   return fx
 }
 
-/** `duck: true` (os números de sempre) ou um objeto com o que mudar. */
+/** `duck: true` (the usual numbers) or an object with what to change. */
 export function parseDuck(value: unknown, where: string): { duck: boolean; settings?: DuckSettings } {
   if (value === undefined || value === false || value === null) return { duck: false }
   if (value === true) return { duck: true }
@@ -220,7 +220,7 @@ export function parseDuck(value: unknown, where: string): { duck: boolean; setti
     settings: {
       threshold: Math.pow(10, thresholdDb / 20),
       ratio: optional(d.ratio, where, 'duck ratio', 1, 20, DEFAULT_DUCK.ratio),
-      // Segundos no manifest (como o resto dos tempos dele), ms no filtro.
+      // Seconds in the manifest (like the rest of its times), ms in the filter.
       attack: optional(d.attack, where, 'duck attack', 0.001, 2, DEFAULT_DUCK.attack / 1000) * 1000,
       release: optional(d.release, where, 'duck release', 0.01, 9, DEFAULT_DUCK.release / 1000) * 1000,
     },
@@ -238,9 +238,9 @@ export function parseMasterFx(value: unknown): MasterFx | null {
   return master.limit === undefined && master.loudness === undefined ? null : master
 }
 
-// ------------------------------------------------------------------ filtros
+// ------------------------------------------------------------------ filters
 
-/** Número curto e estável para o grafo: sem zeros sobrando, sem notação científica. */
+/** Short, stable number for the graph: no trailing zeros, no scientific notation. */
 function num(value: number): string {
   return String(Number(value.toFixed(4)))
 }
@@ -256,9 +256,9 @@ export function hasMasterFx(master: MasterFx | null | undefined): boolean {
 }
 
 /**
- * O que vem ANTES do nível e das rampas: tirar o que não serve, dar forma ao
- * timbre e segurar a dinâmica — nesta ordem, para o compressor não reagir a uma
- * região que o filtro ia cortar de qualquer jeito.
+ * What comes BEFORE the level and the ramps: taking out what does not help, shaping the
+ * timbre and holding the dynamics — in this order, so the compressor does not react to a
+ * region the filter was going to cut anyway.
  */
 export function toneFilters(fx: TrackFx): string[] {
   const out: string[] = []
@@ -275,12 +275,12 @@ export function toneFilters(fx: TrackFx): string[] {
 }
 
 /**
- * A curva de volume, em dB, interpolada em linha reta entre os pontos e presa nos
- * extremos. Vai DEPOIS do atraso da faixa: ali o `t` do filtro já é o tempo da
- * PEÇA, que é a régua em que o manifest escreve os pontos.
+ * The volume curve, in dB, interpolated in a straight line between the points and pinned at the
+ * extremes. It goes AFTER the track's delay: there the filter's `t` is already the PIECE's
+ * time, which is the ruler in which the manifest writes the points.
  *
- * A expressão fica entre aspas simples — as vírgulas dos `if(…)` não podem ser
- * lidas como separador de filtros. Devolve null sem pontos.
+ * The expression stays inside single quotes — the commas of the `if(…)` cannot be
+ * read as a filter separator. Returns null without points.
  */
 export function automationFilter(points: AutomationPoint[]): string | null {
   if (points.length === 0) return null
@@ -297,15 +297,15 @@ export function automationFilter(points: AutomationPoint[]): string | null {
   return `volume='pow(10,(${expr})/20)':eval=frame`
 }
 
-/** O `sidechaincompress` da cama. Os padrões produzem exatamente o filtro de antes. */
+/** The bed's `sidechaincompress`. The defaults produce exactly the filter from before. */
 export function duckFilter(settings: DuckSettings = DEFAULT_DUCK): string {
   return `sidechaincompress=threshold=${num(settings.threshold)}:ratio=${num(settings.ratio)}:attack=${num(settings.attack)}:release=${num(settings.release)}`
 }
 
 /**
- * O acabamento da mixagem inteira. O volume de entrega vem primeiro e o limitador
- * depois: normalizar pode empurrar um pico acima do teto, e o limitador existe
- * para pegá-lo. O `loudnorm` devolve o áudio em 192 kHz, então volta a 48 kHz.
+ * The finishing of the whole mix. The delivery loudness comes first and the limiter
+ * after: normalizing can push a peak above the ceiling, and the limiter exists
+ * to catch it. `loudnorm` returns the audio at 192 kHz, so it goes back to 48 kHz.
  */
 export function masterFilters(master: MasterFx | null | undefined): string[] {
   if (!master) return []
@@ -318,7 +318,7 @@ export function masterFilters(master: MasterFx | null | undefined): string[] {
   return out
 }
 
-/** O tratamento em poucas palavras, para o relatório (vazio quando não há). */
+/** The treatment in a few words, for the report (empty when there is none). */
 export function describeTrackFx(fx: TrackFx | undefined): string {
   if (!hasTrackFx(fx) || !fx) return ''
   const parts: string[] = []

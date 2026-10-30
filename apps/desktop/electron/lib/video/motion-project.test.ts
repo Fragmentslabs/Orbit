@@ -5,10 +5,10 @@ import { strToU8, unzipSync, zipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Levar uma peça de uma conversa para outra: a pasta inteira num .zip, com um
- * manifesto que a identifica. O que este teste protege é a promessa do
- * "importar": o HTML e os arquivos chegam intactos, NADA é sobrescrito — e o
- * mesmo zip pode voltar duas vezes, cada vez como uma peça independente.
+ * Taking a piece from one conversation to another: the whole folder in a .zip, with a
+ * manifest that identifies it. What this test protects is the promise of
+ * "import": the HTML and the files arrive intact, NOTHING is overwritten — and the
+ * same zip can come back twice, each time as an independent piece.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-motion-project-${process.pid}`)
@@ -59,7 +59,7 @@ async function exportIntro(): Promise<Buffer> {
 }
 
 describe('exportMotionProject', () => {
-  it('leva a peça inteira e um manifesto com nome, formato e a lista de arquivos', async () => {
+  it('takes the whole piece and a manifest with name, format and the file list', async () => {
     const buffer = await exportIntro()
     const entries = unzipSync(new Uint8Array(buffer))
     const manifest = JSON.parse(Buffer.from(entries['orbit.json']).toString('utf8'))
@@ -67,25 +67,25 @@ describe('exportMotionProject', () => {
     expect(manifest.version).toBe(1)
     expect(manifest.name).toBe('intro')
     expect(manifest.entry).toBe('index.html')
-    // O formato sai do <meta> da própria composição.
+    // The format comes from the composition's own <meta>.
     expect(manifest.format).toMatchObject({ width: 1080, height: 1920, fps: 30, durationInFrames: 120 })
     expect(manifest.files).toContain('clipe.mp4')
     expect(manifest.files).toContain('fonts/inter.woff2')
     expect(manifest.files).toContain('orbit.json')
-    // O lixo do sistema não viaja.
+    // The system's junk does not travel.
     expect(Object.keys(entries)).not.toContain('.DS_Store')
     expect(Buffer.from(entries['clipe.mp4']).length).toBe(256)
   })
 
-  it('zip de qualquer outra coisa não é reconhecido como projeto', () => {
-    const outro = zipSync({ 'leiame.txt': strToU8('oi') })
-    expect(project.readMotionProject(Buffer.from(outro))).toBeNull()
-    expect(project.readMotionProject(Buffer.from('nem é zip'))).toBeNull()
+  it('a zip of anything else is not recognized as a project', () => {
+    const other = zipSync({ 'leiame.txt': strToU8('oi') })
+    expect(project.readMotionProject(Buffer.from(other))).toBeNull()
+    expect(project.readMotionProject(Buffer.from('is not even a zip'))).toBeNull()
   })
 })
 
 describe('importMotionProject', () => {
-  it('recria a peça com id novo, HTML e arquivos intactos', async () => {
+  it('recreates the piece with a new id, HTML and files intact', async () => {
     const buffer = await exportIntro()
     const imported = await project.importMotionProject(buffer, { sessionId: TARGET })
     expect(imported.name).toBe('intro')
@@ -93,26 +93,26 @@ describe('importMotionProject', () => {
     expect(await fsp.readFile(path.join(imported.folder, 'index.html'), 'utf8')).toBe(HTML)
     expect((await fsp.readFile(path.join(imported.folder, 'clipe.mp4'))).length).toBe(256)
     expect((await fsp.readFile(path.join(imported.folder, 'fonts', 'inter.woff2'))).length).toBe(32)
-    // O manifesto é do ZIP, não da pasta recriada.
+    // The manifest is the ZIP's, not the recreated folder's.
     await expect(fsp.access(path.join(imported.folder, 'orbit.json'))).rejects.toThrow()
     const registered = await store.getMotion(imported.id)
     expect(registered?.folder).toBe(imported.folder)
     expect(registered?.sessionId).toBe(TARGET)
   })
 
-  it('importar duas vezes não sobrescreve: são duas peças independentes', async () => {
+  it('importing twice does not overwrite: they are two independent pieces', async () => {
     const buffer = await exportIntro()
     const first = await project.importMotionProject(buffer, { sessionId: TARGET })
     const second = await project.importMotionProject(buffer, { sessionId: TARGET })
     expect(second.id).not.toBe(first.id)
     expect(second.folder).not.toBe(first.folder)
-    // O nome ganha sufixo em vez de sobrescrever a peça que já está lá.
+    // The name gets a suffix instead of overwriting the piece that is already there.
     expect(second.name).toMatch(/^intro-\d+$/)
     expect(await store.getMotion(first.id)).toBeDefined()
     expect(await store.getMotion(second.id)).toBeDefined()
   })
 
-  it('recusa zip sem manifesto e zip com caminho que escapa da pasta', async () => {
+  it('refuses a zip with no manifest and a zip with a path that escapes the folder', async () => {
     const plain = zipSync({ 'index.html': strToU8('<html></html>') })
     await expect(
       project.importMotionProject(Buffer.from(plain), { sessionId: TARGET }),
@@ -133,12 +133,12 @@ describe('importMotionProject', () => {
       '../../fora.txt': strToU8('vazou'),
     })
     const imported = await project.importMotionProject(Buffer.from(evil), { sessionId: TARGET })
-    // O que escapa é simplesmente ignorado — e a peça entra certa.
+    // What escapes is simply ignored — and the piece comes in right.
     expect((await fsp.readFile(path.join(imported.folder, 'index.html'), 'utf8')).length).toBeGreaterThan(0)
     await expect(fsp.access(path.join(userData, 'orbit-data', 'fora.txt'))).rejects.toThrow()
   })
 
-  it('recusa manifesto de versão futura em vez de importar pela metade', () => {
+  it('refuses a future-version manifest instead of importing halfway', () => {
     const manifest = {
       kind: 'orbit-motion-project',
       version: 99,
@@ -152,7 +152,7 @@ describe('importMotionProject', () => {
     expect(project.readMotionProject(Buffer.from(zip))).toBeNull()
   })
 
-  it('zip dentro de uma pasta (o Finder às vezes embrulha) entra igual', async () => {
+  it('a zip inside a folder (Finder sometimes wraps it) goes in the same way', async () => {
     const buffer = await exportIntro()
     const entries = unzipSync(new Uint8Array(buffer))
     const wrapped: Record<string, Uint8Array> = {}
@@ -163,7 +163,7 @@ describe('importMotionProject', () => {
 })
 
 describe('safeZipEntry', () => {
-  it('só devolve caminho relativo, sem `..`, sem nome de sistema', () => {
+  it('only returns a relative path, with no `..`, no system name', () => {
     expect(project.safeZipEntry('', 'index.html')).toBe('index.html')
     expect(project.safeZipEntry('pacote/', 'pacote/index.html')).toBe('index.html')
     expect(project.safeZipEntry('', '../fora.txt')).toBeNull()

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_SKILLS } from './index'
 
 describe('skills nativas', () => {
-  it('traz a skill web_recon como builtin', () => {
+  it('brings the web_recon skill as builtin', () => {
     const skill = BUILTIN_SKILLS.find((s) => s.slug === 'web_recon')
     expect(skill).toBeDefined()
     expect(skill?.source).toBe('builtin')
@@ -10,7 +10,7 @@ describe('skills nativas', () => {
     expect(skill?.description).toBeTruthy()
   })
 
-  it('a receita da web_recon traz guardrails e o uso das tools', () => {
+  it('the web_recon recipe brings guardrails and the use of the tools', () => {
     const skill = BUILTIN_SKILLS.find((s) => s.slug === 'web_recon')
     const content = skill?.content ?? ''
     expect(content).toContain('robots.txt')
@@ -18,19 +18,19 @@ describe('skills nativas', () => {
     expect(content).toContain('run_browser_script')
   })
 
-  it('traz a skill media_compress apontando para a tool, não para o ffmpeg solto', () => {
+  it('brings the media_compress skill pointing at the tool, not at bare ffmpeg', () => {
     const skill = BUILTIN_SKILLS.find((s) => s.slug === 'media_compress')
     expect(skill?.source).toBe('builtin')
     const content = skill?.content ?? ''
-    // O caminho determinístico é a tool; o ffmpeg manual é o plano B.
+    // The deterministic path is the tool; manual ffmpeg is plan B.
     expect(content).toContain('media_compress')
     expect(content.indexOf('media_compress')).toBeLessThan(content.indexOf('```bash'))
-    // As armadilhas que o texto precisa carregar para o agente não redescobrir.
+    // The pitfalls the text has to carry so the agent does not rediscover them.
     expect(content).toContain('ffprobe')
     expect(content).toContain('image_edit')
   })
 
-  it('nenhuma skill nativa fica sem slug', () => {
+  it('no built-in skill is left without a slug', () => {
     for (const skill of BUILTIN_SKILLS) {
       expect(skill.slug).toMatch(/^[a-z0-9_]+$/)
     }

@@ -29,7 +29,7 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   )
-  /** Tema aplicado a pedido de OUTRA janela: aplica, mas não devolve ao main. */
+  /** Theme applied at the request of ANOTHER window: applies it, but does not send it back to the main. */
   const fromOtherWindow = useRef(false)
   const currentTheme = useRef(theme)
   currentTheme.current = theme
@@ -37,16 +37,16 @@ export function ThemeProvider({
   useEffect(() => {
     const root = window.document.documentElement
 
-    // Limpa o fundo inline pintado pelo script de boot do index.html (só
-    // cobre o intervalo até o CSS carregar — depois disso viraria cor obsoleta
-    // na troca de tema).
+    // Clears the inline background painted by the boot script of index.html (it only
+    // covers the interval until the CSS loads — after that it would become a stale color
+    // on the theme switch).
     root.style.backgroundColor = ""
 
     root.classList.remove("light", "dark")
 
-    // O tema também vale para o que é NATIVO no main (menu da bandeja,
-    // diálogos do sistema) e para as outras janelas — o main não lê o
-    // localStorage, então ele é publicado a cada troca.
+    // The theme is also worth for what is NATIVE in the main (tray menu,
+    // system dialogs) and for the other windows — the main does not read the
+    // localStorage, so it is published on every switch.
     if (fromOtherWindow.current) fromOtherWindow.current = false
     else window.ipcRenderer?.send("theme:sync", theme)
 
@@ -64,18 +64,18 @@ export function ThemeProvider({
   }, [theme])
 
   /**
-   * O tema é UM para o app inteiro: quando a janela principal troca, as demais
-   * (overlay, painéis do Computer Use) recebem por aqui. Sem isto, a janela
-   * pré-aquecida no boot ficava com o tema do nascimento — painel branco num
-   * app escuro.
+   * The theme is ONE for the whole app: when the main window switches, the others
+   * (overlay, Computer Use panels) receive it from here. Without this, the window
+   * pre-warmed at boot kept the theme of its birth — a white panel in a
+   * dark app.
    */
   useEffect(() => {
     const bridge = window.ipcRenderer
     if (!bridge?.on) return
     const wrapper = bridge.on("theme:apply", (next) => {
       if (next !== "light" && next !== "dark" && next !== "system") return
-      // Mesmo tema: nada a fazer (e o efeito de aplicação não rodaria — o
-      // `false` abaixo ficaria pendente e engoliria a próxima troca local).
+      // Same theme: nothing to do (and the application effect would not run — the
+      // `false` below would stay pending and would swallow the next local switch).
       if (next === currentTheme.current) return
       fromOtherWindow.current = true
       setTheme(next)

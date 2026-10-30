@@ -4,18 +4,18 @@ import { ABSOLUTE_CONTEXT_CAP } from './context-budget'
 import { messageContextText } from './todo-context'
 
 /**
- * Compactação automática de contexto. O histórico enviado ao modelo é só texto
- * (toModelMessages) — o que cresce sem limite é o acúmulo de turnos user/
- * assistant. Quando os tokens REAIS da última resposta (fase de usage) se
- * aproximam do limite do modelo, o trecho antigo é resumido UMA vez e persistido
- * como mensagem sintética `summary: true`; toModelMessages passa a cortar nela.
+ * Automatic context compaction. The history sent to the model is only text
+ * (toModelMessages) — what grows without limit is the accumulation of user/
+ * assistant turns. When the REAL tokens of the last answer (usage phase) get
+ * close to the model's limit, the old stretch is summarized ONCE and persisted
+ * as a synthetic `summary: true` message; toModelMessages then cuts at it.
  */
 
 const RESERVE_OUTPUT_CAP = 16_000
 const RESERVE_PADDING = 4_000
-/** Pares user/assistant preservados intactos no fim do histórico */
+/** user/assistant pairs preserved intact at the end of the history */
 const TAIL_USER_MESSAGES = 2
-/** Guarda-corpo do prompt de resumo (~25k tokens) */
+/** Guard rail of the summary prompt (~25k tokens) */
 const MAX_SUMMARY_INPUT_CHARS = 100_000
 
 export const COMPACT_PROMPT = `You compact a conversation's history to free up context. Produce dense Markdown notes preserving, in this priority order:
@@ -31,9 +31,9 @@ Write the notes in English — they are internal context for the model, not a me
 Omit greetings, discarded attempts, and repetition. Reply with ONLY the summary, no preamble.`
 
 /**
- * Cabeçalho da mensagem de resumo. Em inglês, como todo texto que é do sistema
- * para o modelo; a tela não o mostra (ver SummaryCard), e resumos antigos com o
- * cabeçalho em português continuam valendo.
+ * Header of the summary message. In English, like all text that goes from the system
+ * to the model; the screen does not show it (see SummaryCard), and old summaries with the
+ * header in Portuguese still count.
  */
 export const SUMMARY_PREFIX = 'Summary of the conversation so far:'
 
@@ -45,26 +45,26 @@ export function findLastSummaryIndex(history: ChatMessage[]): number {
 }
 
 /**
- * Quantas compactações a conversa já teve. `compactHistory` INSERE a mensagem
- * de resumo e nunca remove as anteriores (elas ficam no storage e são
- * ignoradas pelo corte do toModelMessages), então cada compactação deixa
- * exatamente um resumo no array — a contagem é o contador de compactações.
+ * How many compactions the conversation has already had. `compactHistory` INSERTS the summary
+ * message and never removes the previous ones (they stay in the storage and are
+ * ignored by the toModelMessages cut), so each compaction leaves
+ * exactly one summary in the array — the count is the compaction counter.
  */
 export function countSummaries(history: ChatMessage[]): number {
   return history.reduce((total, m) => (m.summary ? total + 1 : total), 0)
 }
 
-/** Contexto estimado pelos tokens reais da última resposta — sem tokenizer.
- * Usa `lastTokens.lastStep` (usage da última chamada ao modelo) quando
- * disponível: é o tamanho real do contexto acumulado, ao contrário de
- * `input`/`output` (soma de todos os steps do turno, inflada por
- * idas-e-vindas de tool). Mensagens antigas sem `lastStep` caem no fallback
- * do total, que superestima o contexto mas nunca deixa de compactar. */
+/** Context estimated by the real tokens of the last answer — without a tokenizer.
+ * Uses `lastTokens.lastStep` (usage of the last call to the model) when
+ * available: it is the real size of the accumulated context, unlike
+ * `input`/`output` (sum of all the turn's steps, inflated by
+ * tool round-trips). Old messages without `lastStep` fall back to
+ * the total, which overestimates the context but never fails to compact. */
 export function shouldCompact(
   lastTokens: TokenUsage | undefined,
   model: CatalogModel | undefined,
   estimatedContext = 0,
-  /** Compacta mais cedo: ao passar desta fração da janela (ex: 0.75). */
+  /** Compacts earlier: when passing this fraction of the window (e.g. 0.75). */
   earlyAt?: number,
 ): boolean {
   if (!model?.limit?.context) return false
@@ -76,10 +76,10 @@ export function shouldCompact(
       ? lastTokens.lastStep.input + lastTokens.lastStep.output
       : lastTokens.input + lastTokens.output
     : 0
-  // `estimatedContext` é medido no próprio histórico, sem depender do provedor:
-  // vários gateways não devolvem usage nenhum, e um turno que falhou não grava
-  // `tokens` — nos dois casos a conversa crescia para sempre sem nunca
-  // compactar, porque o gatilho só olhava o que o provedor tinha reportado.
+  // `estimatedContext` is measured on the history itself, without depending on the provider:
+  // several gateways return no usage at all, and a turn that failed does not record
+  // `tokens` — in both cases the conversation grew forever without ever
+  // compacting, because the trigger only looked at what the provider had reported.
   const used = Math.max(reported, estimatedContext)
   if (used === 0) return false
   if (earlyAt && used >= effectiveContext * earlyAt) return true
@@ -92,16 +92,16 @@ function textOf(message: ChatMessage): string {
     .map((p) => p.text)
     .join('\n')
     .trim()
-  // Inclui o estado da TODO (se houver) no que vai pro resumo — senão essa
-  // informação nunca chega ao prompt de compactação (ToolParts são ignorados
-  // acima) e o item 1 do COMPACT_PROMPT ("o que já foi feito, o que falta")
-  // fica sem a fonte mais confiável desse estado.
+  // Includes the TODO state (if any) in what goes to the summary — otherwise that
+  // information never reaches the compaction prompt (ToolParts are ignored
+  // above) and item 1 of COMPACT_PROMPT ("what has already been done, what is left")
+  // is left without the most reliable source of that state.
   return messageContextText(message, text)
 }
 
 /**
- * Define o trecho a resumir: do último summary (inclusive — o resumo anterior
- * é refundido no novo) até antes da cauda preservada. null = nada a compactar.
+ * Defines the stretch to summarize: from the last summary (inclusive — the previous summary
+ * is merged into the new one) up to before the preserved tail. null = nothing to compact.
  */
 export function splitForCompaction(
   history: ChatMessage[],
@@ -118,17 +118,17 @@ export function splitForCompaction(
       }
     }
   }
-  // Precisa sobrar pelo menos um par completo antes da cauda para valer o custo
+  // At least one complete pair has to be left before the tail for the cost to be worth it
   if (cut < start + 2) return null
   return { old: history.slice(start, cut), cutIndex: cut }
 }
 
 /**
- * Texto enviado ao prompt de resumo. O trecho começa no resumo anterior (ver
- * splitForCompaction), e cortar só pelo fim, como antes, descartava esse
- * resumo inteiro assim que o trecho passava do teto — a conversa esquecia
- * tudo o que veio antes da última compactação. O resumo anterior entra sempre
- * completo; o teto vale só para as mensagens novas, das quais fica o fim.
+ * Text sent to the summary prompt. The stretch starts at the previous summary (see
+ * splitForCompaction), and cutting only at the end, as before, discarded that
+ * whole summary as soon as the stretch passed the ceiling — the conversation forgot
+ * everything that came before the last compaction. The previous summary always enters
+ * whole; the ceiling counts only for the new messages, of which the end stays.
  */
 export function buildCompactionTranscript(old: ChatMessage[]): string {
   const render = (m: ChatMessage) => {
@@ -151,8 +151,8 @@ function newId(prefix: string) {
 }
 
 /**
- * Resume o trecho antigo e INSERE a mensagem summary no histórico (mutação).
- * Retorna a mensagem criada, ou null quando não há o que compactar.
+ * Summarizes the old stretch and INSERTS the summary message into the history (mutation).
+ * Returns the created message, or null when there is nothing to compact.
  */
 export async function compactHistory(
   history: ChatMessage[],
@@ -192,10 +192,10 @@ export async function compactHistory(
 }
 
 /**
- * Brief de continuidade: o que um chat NOVO precisa saber para seguir o
- * trabalho sem herdar o contexto inteiro. Diferente do COMPACT_PROMPT, que
- * comprime o passado, este texto é a abertura de outra conversa — precisa
- * fazer sentido sozinho.
+ * Continuity brief: what a NEW chat needs to know to follow the
+ * work without inheriting the whole context. Unlike COMPACT_PROMPT, which
+ * compresses the past, this text is the opening of another conversation — it has to
+ * make sense on its own.
  */
 export const CONTINUATION_PROMPT = `You write the opening note of a NEW chat that continues an older conversation. This note is the only thing the new chat knows about the work so far, so it must stand alone.
 
@@ -209,9 +209,9 @@ Produce dense Markdown with:
 Never greet, never address the user, never mention that this is a summary or that a chat is being continued. Reply with ONLY the note.`
 
 /**
- * Texto enviado ao prompt do brief: do último resumo (inclusive, inteiro) até
- * o fim do histórico. Reaproveita buildCompactionTranscript para o resumo
- * anterior nunca ser cortado pelo teto — o brief perde sentido sem ele.
+ * Text sent to the brief's prompt: from the last summary (inclusive, whole) up to
+ * the end of the history. It reuses buildCompactionTranscript so that the previous summary
+ * is never cut by the ceiling — the brief loses its meaning without it.
  */
 export function buildContinuationTranscript(history: ChatMessage[]): string {
   const start = Math.max(0, findLastSummaryIndex(history))
@@ -219,9 +219,9 @@ export function buildContinuationTranscript(history: ChatMessage[]): string {
 }
 
 /**
- * Gera o brief de continuidade. Retorna o texto puro (sem cabeçalho) ou null
- * quando não há o que transferir. Falha é silenciosa para quem chama — a
- * sugestão de continuar num chat novo simplesmente não aparece.
+ * Generates the continuity brief. Returns the plain text (without a header) or null
+ * when there is nothing to transfer. Failure is silent for whoever calls — the
+ * suggestion to continue in a new chat simply does not show up.
  */
 export async function generateContinuationBrief(
   history: ChatMessage[],

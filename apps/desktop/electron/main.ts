@@ -93,9 +93,10 @@ import {
 } from './lib/session/revert'
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { compactSession, continuationBrief, getRunningSessionIds } from './lib/chat-engine'
+import { startPerf } from './lib/perf'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
-import { approvePlan, getOrchestrationRunningSessionIds, juntarDeNovo, rejectPlan } from './lib/orchestrator'
+import { approvePlan, getOrchestrationRunningSessionIds, mergeAgain, rejectPlan } from './lib/orchestrator'
 import { authorizeMcp, initMcp, listMcpStatus, mcpDescriptionsState, oauthRedirectUrl, optimizeMcpServer, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
@@ -143,7 +144,7 @@ import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from '@shared/companion'
 import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setSessionPrefsCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
-import { definirModosPorSessao } from './lib/permission/modo-global'
+import { setSessionModes } from './lib/permission/global-mode'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents, unregisterPanelWebContents } from './lib/panel-browser'
@@ -184,7 +185,7 @@ import { renderDiagrams } from './lib/mermaid-render'
 import { loadMainLocale, setMainLocale, t as tMain } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
-import { tocarSom, caminhoSom } from './lib/sound'
+import { playSound, soundPath } from './lib/sound'
 import { setupAutoUpdater } from './lib/updater'
 import { destroyBrowserWindow } from './lib/tools'
 import type { QueuedMessage, SendMessageInput } from '@shared/chat'
@@ -192,16 +193,16 @@ import type { ChatEvent } from '@shared/chat'
 import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { pruneMediaJournals } from './lib/session/media-journal'
-import * as esteira from './lib/esteira'
-import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat, validarPastaDosWorktrees } from './lib/worktrees/servico'
-import { pastaNoRepositorioPrincipal } from './lib/worktrees/principal'
-import * as rotinas from './lib/rotinas'
-import { aplicarBackground, estadoBackground } from './lib/rotinas/background'
-import { aprovarRotinaPendente, descartarRotinaPendente, listarRotinasPendentes } from './lib/rotinas/pending'
+import * as pipeline from './lib/pipeline'
+import { createChatWorktree, listWorktrees, removeChatWorktree, validateWorktreesFolder } from './lib/worktrees/service'
+import { folderInMainRepository } from './lib/worktrees/main'
+import * as routines from './lib/routines'
+import { applyBackground, backgroundState } from './lib/routines/background'
+import { approvePendingRoutine, discardPendingRoutine, listPendingRoutines } from './lib/routines/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
-import type { FaseTemplate, NovaEsteiraInput, NovaTaskInput } from '@shared/esteira'
-import type { NovaRotinaInput, Rotina, RotinaModelo } from '@shared/rotinas'
+import type { NewPipelineInput, NewTaskInput, PhaseTemplate } from '@shared/pipeline'
+import type { NewRoutineInput, Routine, RoutineModel } from '@shared/routines'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
@@ -231,39 +232,39 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 /**
- * Ícone da janela.
+ * Window icon.
  *
- * No Windows a barra de tarefas pede o tamanho PEQUENO (16/32px). Com um PNG
- * grande e só ele, o Chromium não tem o que entregar nesse tamanho e cai no
- * ícone padrão do Electron — era o que aparecia no modo dev. O .ico traz os
- * sete tamanhos já rasterizados (build/icon.ico, gerado por
+ * On Windows the taskbar asks for the SMALL size (16/32px). With a large PNG
+ * and only it, Chromium has nothing to deliver at that size and falls back to the
+ * default Electron icon — it was what showed up in dev mode. The .ico brings the
+ * seven sizes already rasterized (build/icon.ico, generated by
  * scripts/make-ico.mjs).
  *
- * No app empacotado o .ico não vai junto (o `files` do builder leva só dist e
- * dist-electron) e nem precisa: ali o próprio executável carrega o ícone. Por
- * isso a escolha é por EXISTÊNCIA do arquivo, não por ambiente.
+ * In the packaged app the .ico does not go along (the builder `files` carries only dist and
+ * dist-electron) and it is not even needed: there the executable itself carries the icon. That is
+ * why the choice is by EXISTENCE of the file, not by environment.
  */
 const PROD_APP_USER_MODEL_ID = 'com.fragmentslabs.orbit.code'
 const DEV_APP_USER_MODEL_ID = 'com.fragmentslabs.orbit.code.dev'
 
 /**
- * O atalho que dá cara ao Orbit em modo dev, na barra de tarefas do Windows.
+ * The shortcut that gives Orbit a face in dev mode, on the Windows taskbar.
  *
- * O Windows desenha o botão de um app pelo ATALHO do Menu Iniciar que tem o
- * mesmo AppUserModelID do processo, e não pelo ícone da janela. Sem nenhum, o
- * Chromium cria o seu na primeira notificação — um "Electron.lnk" apontando
- * para node_modules/electron/dist/electron.exe, com o logo do Electron. O id
- * de dev separado já impede esse atalho de sequestrar o app instalado; mas o
- * dev continuava com a cara do Electron.
+ * Windows draws the button of an app by the Start Menu SHORTCUT that has the
+ * same AppUserModelID as the process, and not by the window icon. Without any, the
+ * Chromium creates its own at the first notification — an "Electron.lnk" pointing
+ * to node_modules/electron/dist/electron.exe, with the Electron logo. The separate dev
+ * id already prevents that shortcut from hijacking the installed app; but the
+ * dev still kept the face of Electron.
  *
- * Então o dev mantém o próprio atalho, com o ícone do Orbit. Existindo ele, o
- * Chromium não cria o dele. E o Electron.lnk que ele já tenha criado sai —
- * mas só quando carrega o NOSSO id de dev: um Electron.lnk de outro projeto
- * na mesma máquina não é nosso para apagar.
+ * So dev keeps its own shortcut, with the Orbit icon. Existing it, the
+ * Chromium does not create its own. And the Electron.lnk it may have created goes away —
+ * but only when it carries OUR dev id: an Electron.lnk from another project
+ * on the same machine is not ours to delete.
  *
- * O atalho fica no Menu Iniciar como "Orbit (Dev)" porque é lá que o Windows
- * procura; abri-lo por ali roda o electron.exe sobre esta pasta, sem o
- * servidor do Vite — ele existe pela identidade, não para ser lançado.
+ * The shortcut stays in the Start Menu as "Orbit (Dev)" because that is where Windows
+ * looks for it; opening it from there runs electron.exe over this folder, without the
+ * Vite server — it exists for the identity, not to be launched.
  */
 function ensureDevShortcut(): void {
   try {
@@ -277,7 +278,7 @@ function ensureDevShortcut(): void {
       appUserModelId: DEV_APP_USER_MODEL_ID,
       icon,
       iconIndex: 0,
-      description: 'Orbit (modo de desenvolvimento)',
+      description: 'Orbit (development mode)',
     })
 
     const chromium = path.join(programs, 'Electron.lnk')
@@ -285,9 +286,9 @@ function ensureDevShortcut(): void {
       unlinkSync(chromium)
     }
   } catch (err) {
-    // Identidade visual do dev: se falhar, o app segue — com o ícone errado,
-    // que é o que já acontecia.
-    console.warn('[dev] não foi possível ajustar o atalho do Orbit (Dev):', err)
+    // Visual identity of dev: if it fails, the app goes on — with the wrong icon,
+    // which is what was already happening.
+    console.warn('[dev] could not adjust the Orbit (Dev) shortcut:', err)
   }
 }
 
@@ -299,31 +300,31 @@ function windowIconPath(): string {
   return path.join(process.env.VITE_PUBLIC, 'logo.png')
 }
 
-// Privilégios de TODOS os schemes do app (artefato, áudio, vídeo, motion,
-// design e fontes) — TEM que acontecer aqui, no topo do módulo: depois de
-// app.whenReady() o Chromium já fixou a tabela de schemes e a página carregaria
-// como origem opaca, sem rodar script. E é UMA chamada só: uma segunda lista
-// anula a primeira (foi assim que o design deixou de carregar). Os protocolos
-// em si são registrados lá embaixo, com o app pronto.
+// Privileges of ALL schemes of the app (artifact, audio, video, motion,
+// design and fonts) — it HAS to happen here, at the top of the module: after
+// app.whenReady() the Chromium has already fixed the scheme table and the page would load
+// as an opaque origin, without running script. And it is a SINGLE call: a second list
+// cancels the first (that is how design stopped loading). The protocols
+// themselves are registered further down, with the app ready.
 registerSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
-// --hidden (LaunchAgent de segundo plano): a janela nasce pronta mas invisível
-// — as rotinas disparam em segundo plano e quem traz a janela de volta é o
-// Dock/menu, como uma janela fechada qualquer.
+// --hidden (background LaunchAgent): the window is ready but invisible — the
+// routines fire in the background and whoever brings the window back is the
+// Dock/menu, like any closed window.
 const oculto = process.argv.includes('--hidden')
 
 /**
- * O app está saindo DE VERDADE? O `close` da janela consulta isto antes de
- * decidir: numa saída real (menu, bandeja, Cmd+Q) o evento segue o caminho
- * normal; fora dela, com "fechar para a bandeja" ligado, o X só esconde.
+ * Is the app really LEAVING? The `close` of the window consults this before
+ * deciding: on a real exit (menu, tray, Cmd+Q) the event follows the normal
+ * path; outside of it, with "close to tray" on, the X only hides.
  */
 let quitting = false
 
-// ─── Bandeja do sistema ──────────────────────────────────────────────────────
+// ─── System tray ──────────────────────────────────────────────────────────────
 
-/** Rótulos da bandeja no idioma do app (o main tem i18n próprio — lib/i18n). */
+/** Tray labels in the app's language (the main has its own i18n — lib/i18n). */
 async function trayLabels() {
   return {
     open: await tMain('tray.open'),
@@ -332,7 +333,7 @@ async function trayLabels() {
   }
 }
 
-/** Traz a janela de volta, recriando-a se ela já não existir. */
+/** Brings the window back, recreating it if it no longer exists. */
 function showMainWindow(): void {
   if (!win || win.isDestroyed()) {
     createWindow()
@@ -343,7 +344,7 @@ function showMainWindow(): void {
   win.focus()
 }
 
-/** Encerra de verdade: marca a saída para o `close` da janela não a esconder. */
+/** Quits for real: marks the exit so the `close` of the window does not hide it. */
 function quitApp(): void {
   quitting = true
   app.quit()
@@ -354,16 +355,16 @@ function trayHandlers() {
 }
 
 /**
- * Liga/desliga a bandeja conforme a preferência. Ela existe exatamente para
- * hospedar o app sem janela: desligada, o X volta a encerrar e o ícone sai
- * junto — deixá-lo seria um ícone de um app que não fica vivo.
+ * Turns the tray on/off according to the preference. It exists exactly to
+ * host the app without a window: off, the X goes back to quitting and the icon goes
+ * with it — leaving it would be an icon of an app that does not stay alive.
  *
- * No macOS ela não existe: fechar a janela já deixa o app vivo no Dock (ver
- * `window-all-closed`), que é o caminho de volta — o ícone seria uma segunda
- * porta para a mesma coisa, ocupando a barra de menus.
+ * On macOS it does not exist: closing the window already leaves the app alive in the Dock (see
+ * `window-all-closed`), which is the way back — the icon would be a second
+ * door to the same thing, occupying the menu bar.
  *
- * Se a bandeja não puder ser criada (sem ícone), `hasTray()` fica falso e o
- * fechar continua encerrando: esconder a janela seria perder o app.
+ * If the tray cannot be created (no icon), `hasTray()` stays false and the
+ * close keeps quitting: hiding the window would be losing the app.
  */
 async function syncTray(): Promise<void> {
   if (process.platform === 'darwin') {
@@ -372,8 +373,8 @@ async function syncTray(): Promise<void> {
   }
   if (!getAppSettings().closeToTray) {
     destroyTray()
-    // Preferência desligada com a janela escondida: sem bandeja não haveria
-    // como voltar, então ela reaparece.
+    // Preference off with the window hidden: without a tray there would be no
+    // way back, so it reappears.
     if (win && !win.isDestroyed() && !win.isVisible()) showMainWindow()
     return
   }
@@ -382,10 +383,10 @@ async function syncTray(): Promise<void> {
   else createTray(labels, trayHandlers())
 }
 
-// ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
-// Registra em HKCU (sem admin) as entradas que fazem o botão direito em uma
-// pasta oferecer "Abrir com Orbit". Ao clicar, o Windows lança o app com o
-// caminho da pasta em argv — o single-instance reencaminha para o renderer.
+// ─── "Open with Orbit" (Explorer context menu) ──────────────────────────────
+// Registers in HKCU (no admin) the entries that make the right button on a
+// folder offer "Open with Orbit". On click, Windows launches the app with the
+// folder path in argv — single-instance forwards it to the renderer.
 const OPEN_WITH_COMMAND = "OpenWithOrbit"
 const OPEN_WITH_KEYS = [
   `Software\\Classes\\Directory\\shell\\${OPEN_WITH_COMMAND}`,
@@ -397,8 +398,8 @@ function openWithLabel(): string {
 }
 
 async function registerOpenWith(): Promise<{ ok: boolean; error?: string }> {
-  // Só na versão instalada: em dev o execPath é o electron.exe e o comando
-  // registrado não abriria o app (faltaria o argumento do diretório do app).
+  // Only in the installed version: in dev the execPath is electron.exe and the command
+  // registered would not open the app (the app directory argument would be missing).
   if (process.platform !== "win32" || !app.isPackaged) {
     return { ok: false, error: "unsupported" }
   }
@@ -437,18 +438,18 @@ async function getOpenWithStatus(): Promise<{ supported: boolean; registered: bo
   }
 }
 
-// ─── Single instance + abertura de pasta via argv ───────────────────────────
-// Em dev o nome do app (package.json dentro do asar) é o mesmo do build, então
-// os dois resolveriam o mesmo userData e o lock derrubaria a segunda instância.
-// Aqui o dev ganha banco, auth e lock próprios, e convive com o app instalado.
+// ─── Single instance + folder opening via argv ──────────────────────────────
+// In dev the app name (package.json inside the asar) is the same as in the build, so
+// both would resolve the same userData and the lock would bring the second instance down.
+// Here dev gets its own database, auth and lock, and coexists with the installed app.
 if (!app.isPackaged) {
   const devProfile = path.join(app.getPath('appData'), 'Orbit Dev')
   mkdirSync(devProfile, { recursive: true })
   app.setPath('userData', devProfile)
 }
 
-// O lock precisa ser pedido antes do ready; a instância secundária repassa o
-// argv (caminho da pasta) para a primária via evento.
+// The lock has to be requested before ready; the secondary instance hands the
+// argv (folder path) to the primary via event.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -460,21 +461,21 @@ async function findFolderArg(argv: string[]): Promise<string | null> {
   for (const raw of argv) {
     if (!raw || raw === "." || raw === ".." || raw.startsWith("-")) continue
     if (!path.isAbsolute(raw)) continue
-    // Em dev o vite-plugin-electron lança o electron com o diretório do app:
-    // isso não é uma abertura de pasta e não deve disparar o fluxo.
+    // In dev vite-plugin-electron launches electron with the app directory:
+    // that is not a folder opening and must not trigger the flow.
     if (!app.isPackaged && path.resolve(raw) === path.resolve(process.env.APP_ROOT ?? "")) continue
     try {
       const stat = await fs.stat(raw)
       if (stat.isDirectory()) return path.resolve(raw)
     } catch {
-      // não é um caminho válido — ignora
+      // is not a valid path — ignore
     }
   }
   return null
 }
 
-/** Encaminha uma pasta ao renderer; se a janela ainda está carregando, deixa
- *  pendente para o renderer buscar via app:consumePendingOpen na montagem. */
+/** Forwards a folder to the renderer; if the window is still loading, leaves it
+ *  pending for the renderer to fetch via app:consumePendingOpen on mount. */
 function queueOpenFolder(directory: string) {
   if (win && !win.isDestroyed() && !win.webContents.isLoading()) {
     win.show()
@@ -482,16 +483,16 @@ function queueOpenFolder(directory: string) {
     win.webContents.send("app:open-folder", directory)
     return
   }
-  // A pasta fica pendente para o renderer buscar ao montar — mas no macOS pode
-  // não haver janela nenhuma para montar: fechada a última, o app segue vivo no
-  // Dock, e quem abre a pasta precisa poder trazê-la de volta.
+  // The folder stays pending for the renderer to fetch on mount — but on macOS there may
+  // be no window at all to mount: once the last one is closed, the app stays alive in the
+  // Dock, and whoever opens the folder must be able to bring it back.
   pendingOpenFolder = directory
   ensureWindow()
 }
 
 app.on("second-instance", (_event, argv) => {
-  // Relançar o app é um pedido por janela: no macOS ela pode ter sido fechada
-  // (o app segue vivo no Dock), e sem isto o relançamento não faria nada.
+  // Relaunching the app is a per-window request: on macOS it may have been closed
+  // (the app stays alive in the Dock), and without this the relaunch would do nothing.
   showMainWindow()
   void findFolderArg(argv).then((dir) => {
     if (dir) queueOpenFolder(dir)
@@ -505,12 +506,12 @@ function createWindow() {
     icon: windowIconPath(),
     minWidth: 720,
     minHeight: 480,
-    // Nasce escondida e só aparece no primeiro frame do renderer (ready-to-
-    // show): o flash branco vinha do conteúdo não pintado + tema claro padrão
-    // do CSS antes de o React aplicar a classe dark.
+    // It is born hidden and only appears on the renderer's first frame (ready-to-
+    // show): the white flash came from the unpainted content + default light theme
+    // of the CSS before React applies the dark class.
     show: false,
-    // Fundo nativo escuro (zinc-950, o --background do tema dark): cobre a
-    // janela antes do primeiro paint e durante resize, nada de branco aparece.
+    // Native dark background (zinc-950, the --background of the dark theme): covers the
+    // window before the first paint and during resize, so no white shows up.
     backgroundColor: '#09090b',
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 10 } as const }
@@ -518,43 +519,43 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       webviewTag: true,
-      // O agente roda no processo main, mas as ferramentas de browser e a
-      // sincronização do renderer não podem ser congeladas quando a janela
-      // perde foco ou fica em segundo plano.
+      // The agent runs in the main process, but the browser tools and the
+      // renderer synchronization cannot be frozen when the window
+      // loses focus or goes to the background.
       backgroundThrottling: false,
     },
   })
 
-  // Frame customizado: some o menu nativo (Alt ainda o invocaria em win/linux)
+  // Custom frame: the native menu is gone (Alt would still invoke it on win/linux)
   win.setMenuBarVisibility(false)
 
-  // O que quebra no renderer aparece no TERMINAL. Antes, um erro de React ou
-  // uma queda do processo da página só existiam no DevTools da janela — o log
-  // que as pessoas colam mostrava o main tranquilo enquanto a tela estava
-  // preta, e não havia como chegar à causa sem abrir o inspetor.
+  // Whatever breaks in the renderer shows up in the TERMINAL. Before, a React error or
+  // a crash of the page process only existed in the window's DevTools — the log
+  // people paste showed the main process calm while the screen was
+  // black, and there was no way to reach the cause without opening the inspector.
   win.webContents.on('console-message', (details) => {
     if (details.level !== 'error') return
-    const onde = details.sourceId ? ` (${details.sourceId}:${details.lineNumber})` : ''
-    console.error(`[renderer] ${details.message}${onde}`)
+    const at = details.sourceId ? ` (${details.sourceId}:${details.lineNumber})` : ''
+    console.error(`[renderer] ${details.message}${at}`)
   })
   win.webContents.on('render-process-gone', (_event, details) => {
-    console.error(`[renderer] processo da janela encerrado: ${details.reason} (código ${details.exitCode})`)
+    console.error(`[renderer] window process exited: ${details.reason} (code ${details.exitCode})`)
   })
 
-  // Abre preenchendo a tela: maximizado (não tela cheia nativa), então menu bar
-  // e semáforos continuam no lugar. O maximize é aplicado ao frame enquanto a
-  // janela ainda está escondida — o primeiro frame já sai no tamanho da área
-  // útil, sem animação de crescimento nem flash no tamanho padrão (800x600).
+  // Opens filling the screen: maximized (not native full screen), so the menu bar
+  // and the traffic lights stay in place. The maximize is applied to the frame while the
+  // window is still hidden — the first frame already comes out at the size of the usable
+  // area, with no growth animation and no flash at the default size (800x600).
   win.maximize()
 
-  // Mostra a janela só quando o renderer já pintou o primeiro frame — sem
-  // flash branco de inicialização. (O som de entrada agora roda no renderer:
-  // agenda a reprodução no mesmo tick do despertar da persona — ver
+  // Shows the window only when the renderer has already painted the first frame — no
+  // white startup flash. (The entrance sound now runs in the renderer:
+  // it schedules playback on the same tick as the persona waking up — see
   // src/lib/entrance-sound.ts.)
   const showWindow = () => {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   }
-  // --hidden: o ready-to-show não mostra nada — o app roda só para as rotinas.
+  // --hidden: ready-to-show shows nothing — the app runs only for the routines.
   if (!oculto) {
     win.once('ready-to-show', showWindow)
     setTimeout(showWindow, 5000)
@@ -563,29 +564,29 @@ function createWindow() {
   win.on('maximize', () => win?.webContents.send('window:maximized-change', true))
   win.on('unmaximize', () => win?.webContents.send('window:maximized-change', false))
 
-  // Tela cheia: no macOS os semáforos somem, então o padding de 80px que os
-  // acomoda na titlebar precisa sair junto — senão sobra um buraco à esquerda.
+  // Full screen: on macOS the traffic lights disappear, so the 80px padding that
+  // accommodates them in the titlebar has to go too — otherwise a hole is left on the left.
   win.on('enter-full-screen', () => win?.webContents.send('window:fullscreen-change', true))
   win.on('leave-full-screen', () => win?.webContents.send('window:fullscreen-change', false))
 
-  // Fechar para a bandeja: o X esconde o app em vez de encerrá-lo — é o que o
-  // mantém vivo servindo os apps conectados por MCP enquanto não há janela à
-  // vista. Sem bandeja criada, o close segue normal: esconder sem ter como
-  // voltar seria perder o app — é o que acontece no macOS, onde não há bandeja
-  // e quem traz a janela de volta é o Dock (ver `window-all-closed`).
+  // Close to tray: the X hides the app instead of quitting it — it is what
+  // keeps it alive serving the apps connected over MCP while there is no window in
+  // sight. Without a tray created, close follows the normal path: hiding with no way
+  // back would be losing the app — which is what happens on macOS, where there is no tray
+  // and the Dock is what brings the window back (see `window-all-closed`).
   win.on('close', (event) => {
     if (quitting || !getAppSettings().closeToTray || !hasTray()) return
     event.preventDefault()
     win?.hide()
   })
 
-  // A janela morreu de verdade (macOS: o X fecha e o app segue vivo no Dock):
-  // a referência precisa morrer junto. Uma `win` destruída faria todo
-  // `win?.webContents.send` do main falar com o vazio, e o `showMainWindow`
-  // deixaria de recriar a janela por achar que ela ainda está lá.
+  // The window really died (macOS: the X closes it and the app stays alive in the Dock):
+  // the reference has to die with it. A destroyed `win` would make every
+  // `win?.webContents.send` of the main process talk to the void, and `showMainWindow`
+  // would stop recreating the window, thinking it was still there.
   const created = win
   created.on('closed', () => {
-    // Reaberta antes disto, já há outra no lugar — essa referência não é dela.
+    // Reopened before this point, there already is another one in place — this reference is not it.
     if (win === created) win = null
   })
 
@@ -594,10 +595,10 @@ function createWindow() {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
-  // Links clicados no app (fontes, citações, markdown) nunca abrem janela
-  // nova: vão para o navegador integrado — o renderer decide a aba, porque é
-  // ele quem sabe qual conversa está aberta — ou para o navegador do sistema,
-  // conforme Preferências → Navegador.
+  // Links clicked in the app (sources, citations, markdown) never open a new
+  // window: they go to the built-in browser — the renderer decides the tab, because it is
+  // the one that knows which conversation is open — or to the system browser,
+  // according to Preferences → Browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       if (getAppSettings().browser.links === 'integrated') win?.webContents.send('link:open', url)
@@ -615,7 +616,7 @@ function createWindow() {
   }
 }
 
-/** A janela viva, recriando-a se não houver. `null` só se a criação falhar. */
+/** The live window, recreating it if there is none. `null` only if creation fails. */
 function ensureWindow(): BrowserWindow | null {
   if (win && !win.isDestroyed()) return win
   createWindow()
@@ -623,11 +624,11 @@ function ensureWindow(): BrowserWindow | null {
 }
 
 /**
- * Entrega um evento do menu ao renderer, criando a janela se preciso. No macOS
- * a barra de menus sobrevive à janela — o X fecha de verdade e o app segue vivo
- * no Dock —, então uma ação dela (Cmd+N, Preferências…) precisa trazer a janela
- * de volta. Recém-criada ela ainda está carregando, e mandar agora perderia a
- * mensagem: daí esperar o load terminar.
+ * Delivers a menu event to the renderer, creating the window if needed. On macOS
+ * the menu bar survives the window — the X really closes it and the app stays alive
+ * in the Dock —, so an action from it (Cmd+N, Preferences…) has to bring the window
+ * back. Just created, it is still loading, and sending now would lose the
+ * message: hence waiting for the load to finish.
  */
 function sendToWindow(channel: string, payload: string): void {
   const target = ensureWindow()
@@ -641,16 +642,16 @@ function sendToWindow(channel: string, payload: string): void {
   target.webContents.send(channel, payload)
 }
 
-// Menu nativo do macOS: no Mac a barra de menus fica no topo da tela, então as
-// ações do hamburger (que o renderer esconde nesse SO) migram para cá, com
-// atalhos nativos (Cmd+N, Cmd+Shift+N, Cmd+O, Cmd+,). Em win/linux nada muda:
-// o menu bar continua escondido e o hamburger segue no app.
+// macOS native menu: on the Mac the menu bar is at the top of the screen, so the
+// hamburger actions (which the renderer hides on that OS) migrate here, with
+// native shortcuts (Cmd+N, Cmd+Shift+N, Cmd+O, Cmd+,). On win/linux nothing changes:
+// the menu bar stays hidden and the hamburger stays in the app.
 function createAppMenu() {
   if (process.platform !== 'darwin') return
   const send = (action: string) => sendToWindow('menu:action', action)
   const openFolder = async () => {
-    // A pasta escolhida precisa de uma janela viva para onde ir — com a janela
-    // fechada, o diálogo é o que a faz nascer.
+    // The chosen folder needs a live window to go to — with the window
+    // closed, the dialog is what makes it come to life.
     const target = ensureWindow()
     if (!target) return
     const result = await dialog.showOpenDialog(target, { properties: ['openDirectory'] })
@@ -661,63 +662,63 @@ function createAppMenu() {
     {
       label: 'Orbit',
       submenu: [
-        { role: 'about', label: 'Sobre o Orbit' },
+        { role: 'about', label: 'About Orbit' },
         { type: 'separator' },
-        { label: 'Preferências…', accelerator: 'Cmd+,', click: () => send('settings') },
+        { label: 'Settings…', accelerator: 'Cmd+,', click: () => send('settings') },
         { type: 'separator' },
-        { role: 'services', label: 'Serviços' },
+        { role: 'services', label: 'Services' },
         { type: 'separator' },
-        { role: 'hide', label: 'Esconder o Orbit' },
-        { role: 'hideOthers', label: 'Esconder Outros' },
-        { role: 'unhide', label: 'Mostrar Tudo' },
+        { role: 'hide', label: 'Hide Orbit' },
+        { role: 'hideOthers', label: 'Hide Others' },
+        { role: 'unhide', label: 'Show All' },
         { type: 'separator' },
-        { role: 'quit', label: 'Sair do Orbit' },
+        { role: 'quit', label: 'Quit Orbit' },
       ],
     },
     {
-      label: 'Arquivo',
+      label: 'File',
       submenu: [
-        { label: 'Novo Chat', accelerator: 'Cmd+N', click: () => send('new-chat') },
-        { label: 'Nova Sessão de Código', accelerator: 'Cmd+Shift+N', click: () => send('new-code') },
-        { label: 'Abrir Pasta…', accelerator: 'Cmd+O', click: openFolder },
+        { label: 'New Chat', accelerator: 'Cmd+N', click: () => send('new-chat') },
+        { label: 'New Code Session', accelerator: 'Cmd+Shift+N', click: () => send('new-code') },
+        { label: 'Open Folder…', accelerator: 'Cmd+O', click: openFolder },
         { type: 'separator' },
-        { role: 'close', label: 'Fechar Janela' },
+        { role: 'close', label: 'Close Window' },
       ],
     },
     {
-      label: 'Editar',
+      label: 'Edit',
       submenu: [
-        { role: 'undo', label: 'Desfazer' },
-        { role: 'redo', label: 'Refazer' },
+        { role: 'undo', label: 'Undo' },
+        { role: 'redo', label: 'Redo' },
         { type: 'separator' },
-        { role: 'cut', label: 'Recortar' },
-        { role: 'copy', label: 'Copiar' },
-        { role: 'paste', label: 'Colar' },
-        { role: 'selectAll', label: 'Selecionar Tudo' },
+        { role: 'cut', label: 'Cut' },
+        { role: 'copy', label: 'Copy' },
+        { role: 'paste', label: 'Paste' },
+        { role: 'selectAll', label: 'Select All' },
       ],
     },
     {
-      label: 'Exibir',
+      label: 'View',
       submenu: [
         { label: 'Chats', click: () => send('view-chats') },
-        { label: 'Memórias', click: () => send('view-memories') },
-        { label: 'Modelos', click: () => send('view-models') },
+        { label: 'Memories', click: () => send('view-memories') },
+        { label: 'Models', click: () => send('view-models') },
         { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Tela Cheia' },
-        { role: 'reload', label: 'Recarregar' },
-        { role: 'toggleDevTools', label: 'Ferramentas do Desenvolvedor' },
+        { role: 'togglefullscreen', label: 'Toggle Full Screen' },
+        { role: 'reload', label: 'Reload' },
+        { role: 'toggleDevTools', label: 'Developer Tools' },
       ],
     },
     {
-      label: 'Janela',
+      label: 'Window',
       submenu: [
-        { role: 'minimize', label: 'Minimizar' },
+        { role: 'minimize', label: 'Minimize' },
         { role: 'zoom', label: 'Zoom' },
       ],
     },
     {
-      label: 'Ajuda',
-      submenu: [{ label: 'Como funciona', click: () => send('how-to') }],
+      label: 'Help',
+      submenu: [{ label: 'How it works', click: () => send('how-to') }],
     },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
@@ -728,8 +729,8 @@ function createAppMenu() {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    // Com a bandeja ativa o app segue vivo sem janela — sair daqui destruiria
-    // o ícone junto e o app ficaria inalcançável.
+    // With the tray active the app stays alive without a window — quitting from here would destroy
+    // the icon along with it and the app would become unreachable.
     if (getAppSettings().closeToTray && hasTray()) return
     app.quit()
     win = null
@@ -737,22 +738,22 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  // No macOS o app segue vivo sem janelas, e o clique no Dock é a porta de
-  // volta. Não serve perguntar ao `getAllWindows()`: as janelas auxiliares
-  // ficam vivas escondidas — o painel do Computer Use continua existindo
-  // depois de usado, e o overlay nasce pré-aquecido no boot — então a lista
-  // nunca volta a ficar vazia. O clique no Dock não trazia janela nenhuma e o
-  // app parecia fechado, estando aberto.
+  // On macOS the app stays alive without windows, and the Dock click is the way
+  // back. Asking `getAllWindows()` is no good: the auxiliary windows
+  // stay alive hidden — the Computer Use panel keeps existing
+  // after being used, and the overlay is born pre-warmed at boot — so the list
+  // never goes back to empty. The Dock click brought no window and the
+  // app looked closed while it was open.
   showMainWindow()
 })
 
 const terminals = new Map<string, NodePty.IPty>()
 
 /**
- * O node-pty@1.1.0 publica o `spawn-helper` (macOS) sem o bit de execução no
- * tarball; sem +x o posix_spawn falha com EACCES e o terminal nunca abre.
- * Ajusta o modo do binário do prebuild atual (idempotente). No app empacotado
- * o binário vive em app.asar.unpacked, então repetimos o dance do node-pty.
+ * node-pty@1.1.0 publishes the `spawn-helper` (macOS) without the execute bit in the
+ * tarball; without +x posix_spawn fails with EACCES and the terminal never opens.
+ * Adjusts the mode of the current prebuild binary (idempotent). In the packaged app
+ * the binary lives in app.asar.unpacked, so we repeat the node-pty dance.
  */
 function ensurePtyHelperExecutable() {
   if (process.platform !== 'darwin') return
@@ -766,7 +767,7 @@ function ensurePtyHelperExecutable() {
     if (helper.includes('app.asar')) helper = helper.replace('app.asar', 'app.asar.unpacked')
     chmodSync(helper, 0o755)
   } catch (err) {
-    console.warn('[terminal] não foi possível ajustar permissões do spawn-helper:', (err as Error).message)
+    console.warn('[terminal] could not fix the spawn-helper permissions:', (err as Error).message)
   }
 }
 
@@ -796,10 +797,10 @@ function createTerminal(id: string, cols = 80, rows = 24, cwd?: string) {
 }
 
 /**
- * A lista do que uma varredura recursiva atravessa vive em `workspace-search`:
- * é o MESMO filtro que a busca do painel, a paleta do `@` e a varredura de
- * texto usam. Duas listas divergiriam, e a que ficasse para trás varreria
- * node_modules ou esconderia o código atrás de `.whisper-build`.
+ * The list of what a recursive scan walks through lives in `workspace-search`:
+ * it is the SAME filter that the panel search, the `@` palette and the text scan
+ * use. Two lists would diverge, and the one lagging behind would scan
+ * node_modules or hide the code behind `.whisper-build`.
  */
 
 interface DirEntryInfo {
@@ -810,10 +811,10 @@ interface DirEntryInfo {
 
 async function listDirectory(dirPath: string): Promise<DirEntryInfo[]> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true })
-  // Tudo aparece, inclusive o que começa com ponto. Esconder "ocultos" tirava
-  // da árvore o .env, o .gitignore e a pasta .github — arquivos que se edita
-  // toda semana. Proteger segredo é papel da permissão do agente (o .env pede
-  // aprovação para ele), não de esconder o arquivo de quem é dono dele.
+  // Everything shows up, including what starts with a dot. Hiding "hidden" ones removed
+  // the .env, the .gitignore and the .github folder from the tree — files that are edited
+  // every week. Protecting a secret is the job of the agent permission (the .env asks
+  // for approval for it), not of hiding the file from its owner.
   const result: DirEntryInfo[] = entries
     .map(e => ({
       name: e.name,
@@ -829,19 +830,19 @@ async function listDirectory(dirPath: string): Promise<DirEntryInfo[]> {
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 
-/** `mtimeMs` volta junto: é a referência que o painel devolve no save para
- *  detectar que o arquivo mudou em disco desde que foi aberto. */
+/** `mtimeMs` comes back too: it is the reference the panel returns on save to
+ *  detect that the file changed on disk since it was opened. */
 async function readTextFile(
   filePath: string,
 ): Promise<{ content: string; mtimeMs: number } | { error: string }> {
   try {
     const stat = await fs.stat(filePath)
     if (stat.size > MAX_FILE_SIZE) {
-      return { error: `Arquivo muito grande (${(stat.size / 1024 / 1024).toFixed(1)}MB)` }
+      return { error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)}MB)` }
     }
     const buffer = await fs.readFile(filePath)
     if (buffer.subarray(0, 8000).includes(0)) {
-      return { error: 'Arquivo binário' }
+      return { error: 'Binary file' }
     }
     return { content: buffer.toString('utf8'), mtimeMs: stat.mtimeMs }
   } catch (err) {
@@ -901,8 +902,8 @@ const MIME_MAP: Record<string, string> = {
 }
 
 /**
- * Extensões de imagem, derivadas do próprio MIME_MAP para as duas listas não
- * se separarem com o tempo.
+ * Image extensions, derived from MIME_MAP itself so the two lists do not
+ * drift apart over time.
  */
 const IMAGE_EXTENSIONS = new Set(
   Object.entries(MIME_MAP)
@@ -910,57 +911,62 @@ const IMAGE_EXTENSIONS = new Set(
     .map(([ext]) => ext),
 )
 
-/** Teto de figuras resolvidas por Markdown — um documento com centenas delas
- *  encheria a memória do renderer de base64 sem ninguém ter pedido. */
+/** Cap of figures resolved per Markdown — a document with hundreds of them
+ *  would fill the renderer memory with base64 without anyone asking. */
 const MAX_MARKDOWN_IMAGES = 60
 
 app.whenReady().then(() => {
-  // WM_CLASS do Electron vem do desktopName do package.json ("orbit.desktop"),
-  // e o electron-builder nomeia o .desktop e o StartupWMClass a partir do
-  // MESMO campo (linux.syncDesktopName). E esse casamento que faz o ambiente
-  // ligar a janela aberta ao atalho instalado — sem ele o dock nao acha o
-  // icone e cai no generico.
+  // Electron's WM_CLASS comes from the package.json desktopName ("orbit.desktop"),
+  // and electron-builder names the .desktop and the StartupWMClass from the
+  // SAME field (linux.syncDesktopName). That match is what makes the environment
+  // tie the open window to the installed shortcut — without it the dock does not
+  // find the icon and falls back to the generic one.
   app.setName('Orbit')
 
-  // Identidade da app no Windows. Sem ela o sistema trata a janela como sendo
-  // do electron.exe em modo dev, e a barra de tarefas mostra o icone dele.
+  // App identity on Windows. Without it the system treats the window as belonging
+  // to electron.exe in dev mode, and the taskbar shows its icon.
   //
-  // Em dev a identidade e OUTRA, de proposito. O Windows resolve o botao da
-  // barra de tarefas pelo AppUserModelID: ele procura um atalho do Menu
-  // Iniciar com esse id e usa o icone e o nome DO ATALHO, nao os da janela. E
-  // a primeira notificacao nativa faz o Chromium criar esse atalho sozinho —
-  // em dev, apontando para node_modules/electron/dist/electron.exe. Com o
-  // mesmo id nos dois lados, aquele "Electron.lnk" sequestra a identidade do
-  // app instalado: o .exe e o icone da janela continuam certos e mesmo assim
-  // a barra de tarefas mostra o logo do Electron.
+  // In dev the identity is ANOTHER one, on purpose. Windows resolves the taskbar
+  // button through the AppUserModelID: it looks for a Start Menu shortcut
+  // with that id and uses the icon and name OF THE SHORTCUT, not the window's. And
+  // the first native notification makes Chromium create that shortcut by itself —
+  // in dev, pointing to node_modules/electron/dist/electron.exe. With the
+  // same id on both sides, that "Electron.lnk" hijacks the identity of the
+  // installed app: the .exe and the window icon stay right and even so
+  // the taskbar shows the Electron logo.
   if (process.platform === 'win32') {
     app.setAppUserModelId(app.isPackaged ? PROD_APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID)
     if (!app.isPackaged) ensureDevShortcut()
   }
 
-  // No macOS o dock de dev mostra o ícone do bundle do Electron. O app
-  // empacotado traz o seu (build/icon.icns); em dev, o ícone entra aqui — já no
-  // formato do macOS (cantos arredondados e margem), senão fica um quadrado
-  // maior que os vizinhos no dock.
+  // On macOS the dev dock shows the Electron bundle icon. The packaged
+  // app brings its own (build/icon.icns); in dev, the icon comes in here — already in
+  // the macOS format (rounded corners and margin), otherwise it becomes a square
+  // larger than its neighbors in the dock.
   if (process.platform === 'darwin' && !app.isPackaged) {
     const dockIcon = path.join(process.env.APP_ROOT, 'build', 'icon-dock.png')
     if (existsSync(dockIcon)) app.dock?.setIcon(dockIcon)
   }
 
-  // Instância secundária: o lock não foi obtido e o app já está saindo.
+  // Secondary instance: the lock was not obtained and the app is already quitting.
   if (!gotSingleInstanceLock) return
 
-  // Idioma persistido do renderer: carrega antes de qualquer aviso nativo, que
-  // pode disparar (rotina agendada) sem nenhum pedido vindo da UI.
+  // Persisted renderer language: loaded before any native notification, which
+  // can fire (scheduled routine) without any request coming from the UI.
   void loadMainLocale()
 
-  // Diários de mídia (o revert de peças e galeria): saem os de conversas
-  // excluídas e os de mais de 30 dias. Em segundo plano — nada depende disso.
+  // Memory/timing instrumentation (ORBIT_PERF=1): samples the main process, the
+  // Electron helpers and the children a check starts (tsc/vitest), which is where
+  // an orchestra night actually spends its gigabytes.
+  startPerf()
+
+  // Media journals (the revert of pieces and gallery): those of deleted conversations
+  // and those older than 30 days come out. In the background — nothing depends on it.
   void pruneMediaJournals(30 * 24 * 60 * 60 * 1000, async (id) => (await readJson(StorageKeys.session(id))) !== null).catch(() => 0)
 
   createAppMenu()
 
-  // Controles da titlebar customizada (frame: false em win/linux)
+  // Custom titlebar controls (frame: false on win/linux)
   ipcMain.handle('window:minimize', () => win?.minimize())
   ipcMain.handle('window:maximize', () => {
     if (!win) return
@@ -986,7 +992,7 @@ app.whenReady().then(() => {
       terminals.set(id, proc)
       return { pid: proc.pid }
     } catch (err) {
-      console.error('[terminal] falha ao criar PTY:', (err as Error).message)
+      console.error('[terminal] failed to create the PTY:', (err as Error).message)
       throw err
     }
   })
@@ -1020,13 +1026,13 @@ app.whenReady().then(() => {
   })
 
   /**
-   * Escrita do painel de arquivos. Único caminho pelo qual o renderer grava em
-   * disco — as tools do agente passam pelo `resolveSafePath`, não por aqui.
+   * Write from the file panel. The only path through which the renderer writes to
+   * disk — the agent tools go through `resolveSafePath`, not through here.
    *
-   * O painel EDITA, não cria: o alvo tem que ser um arquivo de texto que já
-   * existe. Isso, mais a recusa de `.git`, é o que limita o estrago de um
-   * caminho errado — a contenção nas raízes é rede contra bug, já que quem
-   * informa as raízes é o próprio renderer (ver file-write-guard).
+   * The panel EDITS, it does not create: the target has to be a text file that
+   * already exists. That, plus the refusal of `.git`, is what limits the damage of a
+   * wrong path — the containment in the roots is a net against bugs, since the one
+   * that provides the roots is the renderer itself (see file-write-guard).
    */
   ipcMain.handle(
     'fs:writeFile',
@@ -1043,12 +1049,12 @@ app.whenReady().then(() => {
         if (Buffer.byteLength(input.content, 'utf8') > MAX_FILE_SIZE) {
           return { ok: false as const, reason: 'too-large' as const }
         }
-        // Mudou em disco desde que o painel abriu: pode ser o agente, pode ser
-        // outro editor. Sobrescrever aqui apagaria trabalho que ninguém viu,
-        // então devolvemos o conteúdo novo e quem decide é a pessoa.
-        // O alvo é binário? O painel só abre texto (readTextFile recusa
-        // binário), então chegar aqui significa caminho errado — e sobrescrever
-        // um .png com texto é o estrago que essas guardas existem para evitar.
+        // Changed on disk since the panel opened: it may be the agent, it may be
+        // another editor. Overwriting here would erase work nobody saw,
+        // so we return the new content and the person decides.
+        // Is the target binary? The panel only opens text (readTextFile refuses
+        // binary), so getting here means a wrong path — and overwriting
+        // a .png with text is the damage these guards exist to avoid.
         const head = await fs.open(file, 'r')
         try {
           const probe = Buffer.alloc(Math.min(8000, stat.size))
@@ -1069,8 +1075,8 @@ app.whenReady().then(() => {
         }
         await fs.writeFile(file, input.content, 'utf8')
         const after = await fs.stat(file)
-        // O turno em andamento precisa saber que este arquivo é do usuário,
-        // senão o snapshot da pasta o credita ao agente.
+        // The turn in progress has to know this file belongs to the user,
+        // otherwise the folder snapshot credits it to the agent.
         recordManualSave(file)
         return { ok: true as const, mtimeMs: after.mtimeMs }
       } catch (err) {
@@ -1082,8 +1088,8 @@ app.whenReady().then(() => {
   )
 
   /**
-   * Lint do arquivo aberto no painel. O conteúdo vem do BUFFER, não do disco:
-   * o valor está em apontar o erro enquanto se digita, antes de salvar.
+   * Lint of the file open in the panel. The content comes from the BUFFER, not from disk:
+   * the value is in pointing the error out while typing, before saving.
    */
   ipcMain.handle(
     'lint:file',
@@ -1093,7 +1099,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('fs:listFilesRecursive', async (_event, dirPath: string) => {
     try {
-      // O índice compartilhado: mesmo ignore da busca, já ordenado e em cache.
+      // The shared index: same ignore as the search, already sorted and cached.
       const index = await workspaceIndex(dirPath)
       return { ok: true, files: index.files }
     } catch (err) {
@@ -1101,8 +1107,8 @@ app.whenReady().then(() => {
     }
   })
 
-  // ---- Busca do espaço de trabalho: painel, modal e paleta do `@` ----------
-  /** Varreduras de texto vivas, por id de requisição — o que o cancelar aborta. */
+  // ---- Workspace search: panel, modal and the `@` palette -------------------
+  /** Live text scans, by request id — what cancel aborts. */
   const textSearches = new Map<string, AbortController>()
 
   ipcMain.handle(
@@ -1135,8 +1141,8 @@ app.whenReady().then(() => {
         wholeWord?: boolean
       },
     ) => {
-      // Pedido novo no mesmo campo mata o anterior: o que o usuário já
-      // abandonou não pode continuar lendo disco e ocupando a fila.
+      // A new request in the same field kills the previous one: what the user has
+      // abandoned cannot keep reading disk and occupying the queue.
       textSearches.get(input.id)?.abort()
       const controller = new AbortController()
       textSearches.set(input.id, controller)
@@ -1169,9 +1175,9 @@ app.whenReady().then(() => {
   })
 
   /**
-   * Substituição em massa. Os alvos vêm da lista de ocorrências, então o
-   * escopo (o espaço, a pasta) é decisão da UI; aqui só se grava, com a MESMA
-   * guarda de caminho do `fs:writeFile` — inclusive a recusa de `.git`.
+   * Bulk replace. The targets come from the list of occurrences, so the
+   * scope (the workspace, the folder) is a UI decision; here we only write, with the SAME
+   * path guard as `fs:writeFile` — including the refusal of `.git`.
    */
   ipcMain.handle(
     'ws:replace',
@@ -1212,7 +1218,7 @@ app.whenReady().then(() => {
     },
   )
 
-  // Stat de caminho (ex.: validar pasta solta por drag & drop)
+  // Path stat (e.g. validating a loose folder from drag & drop)
   ipcMain.handle('fs:stat', async (_event, filePath: string) => {
     try {
       const stat = await fs.stat(filePath)
@@ -1222,11 +1228,11 @@ app.whenReady().then(() => {
     }
   })
 
-  // Quais destes caminhos ainda são pastas — em lote, uma ida só. Existe para a
-  // revalidação de pastas que sumiram do disco (renomeadas/movidas/apagadas):
-  // cada referência é uma string, e conferir uma a uma custaria uma ida ao main
-  // por caminho. Um caminho ilegível conta como ausente (é o que ele é, para
-  // quem ia usá-lo); quem decide o que fazer com isso é a UI.
+  // Which of these paths are still folders — in batch, a single round trip. It exists for the
+  // revalidation of folders that vanished from disk (renamed/moved/deleted):
+  // each reference is a string, and checking them one by one would cost one round trip to the main
+  // process per path. An unreadable path counts as absent (which is what it is, for
+  // whoever was going to use it); who decides what to do with that is the UI.
   ipcMain.handle('fs:existDirs', async (_event, dirs: string[]) => {
     const result: Record<string, boolean> = {}
     await Promise.all(
@@ -1241,17 +1247,17 @@ app.whenReady().then(() => {
     return result
   })
 
-  // Integração "Abrir com Orbit" no menu de contexto do Explorer
+  // "Open with Orbit" integration in the Explorer context menu
   ipcMain.handle('openwith:status', () => getOpenWithStatus())
   ipcMain.handle('openwith:register', () => registerOpenWith())
   ipcMain.handle('openwith:unregister', () => unregisterOpenWith())
 
-  // Versão do app (package.json empacotado pelo electron-builder) — a tela
-  // Sobre mostra a mesma string que os artefatos e o handshake do companion.
+  // App version (package.json packaged by electron-builder) — the About
+  // screen shows the same string as the artifacts and the companion handshake.
   ipcMain.handle('app:version', () => app.getVersion())
 
-  // Pasta pendente (app iniciado via "Abrir com Orbit"): o renderer busca na
-  // montagem para não perder o evento enviado antes do React subir.
+  // Pending folder (app started via "Open with Orbit"): the renderer fetches it on
+  // mount so as not to lose the event sent before React comes up.
   ipcMain.handle('app:consumePendingOpen', () => {
     const dir = pendingOpenFolder
     pendingOpenFolder = null
@@ -1265,7 +1271,7 @@ app.whenReady().then(() => {
     try {
       const stat = await fs.stat(filePath)
       if (stat.size > MAX_BINARY_SIZE) {
-        return { error: `Arquivo muito grande (${(stat.size / 1024 / 1024).toFixed(1)}MB, max ${MAX_FILE_SIZE_MB}MB)` }
+        return { error: `File too large (${(stat.size / 1024 / 1024).toFixed(1)}MB, max ${MAX_FILE_SIZE_MB}MB)` }
       }
       const buffer = await fs.readFile(filePath)
       const ext = path.extname(filePath).toLowerCase()
@@ -1277,36 +1283,36 @@ app.whenReady().then(() => {
   })
 
   /**
-   * As imagens de um Markdown, resolvidas contra a PASTA DELE.
+   * The images of a Markdown, resolved against ITS OWN FOLDER.
    *
-   * O preview roda no renderer, cuja origem e o app — um `./imagens/x.png`
-   * resolveria contra essa origem, e nao contra o arquivo aberto, entao a
-   * imagem aparecia quebrada em todo documento que referencia figura.
-   * Resolver aqui e o unico lugar onde a pasta do arquivo e conhecida.
+   * The preview runs in the renderer, whose origin is the app — a `./images/x.png`
+   * would resolve against that origin, and not against the open file, so the
+   * image showed up broken in every document that references a figure.
+   * Resolving here is the only place where the file folder is known.
    *
-   * Devolve um mapa do caminho ORIGINAL para o data URL: e o original que o
-   * renderer tem que trocar no texto, e o que nao resolveu simplesmente nao
-   * entra no mapa e continua como estava.
+   * Returns a map from the ORIGINAL path to the data URL: it is the original that the
+   * renderer has to replace in the text, and what did not resolve simply does not
+   * enter the map and stays as it was.
    */
   ipcMain.handle(
     'fs:markdownImages',
     async (_event, markdownPath: string, sources: string[]) => {
       const dir = path.dirname(markdownPath)
       const out: Record<string, string> = {}
-      // Teto de arquivos: um documento com centenas de figuras encheria a
-      // memoria do renderer de base64 sem que ninguem tivesse pedido isso.
+      // File cap: a document with hundreds of figures would fill the
+      // renderer memory with base64 without anyone asking for it.
       for (const src of sources.slice(0, MAX_MARKDOWN_IMAGES)) {
-        // O Markdown escapa espaco como %20; sem decodificar, o caminho nao
-        // existe em disco.
+        // Markdown escapes space as %20; without decoding, the path does not
+        // exist on disk.
         let relative = src
         try {
           relative = decodeURI(src)
         } catch {
-          // caminho com % solto: vale tentar como veio
+          // path with a stray %: worth trying as it came
         }
         const ext = path.extname(relative).toLowerCase()
-        // So imagem: o alvo vem do conteudo do arquivo, entao ele nao pode
-        // servir para ler qualquer coisa do disco e devolver ao renderer.
+        // Image only: the target comes from the file content, so it cannot
+        // serve to read anything from disk and hand it back to the renderer.
         if (!IMAGE_EXTENSIONS.has(ext)) continue
         const resolved = path.resolve(dir, relative)
         try {
@@ -1315,7 +1321,7 @@ app.whenReady().then(() => {
           const buffer = await fs.readFile(resolved)
           out[src] = `data:${MIME_MAP[ext] ?? 'application/octet-stream'};base64,${buffer.toString('base64')}`
         } catch {
-          // figura faltando no repositorio: fica como estava
+          // figure missing in the repository: stays as it was
         }
       }
       return out
@@ -1330,44 +1336,44 @@ app.whenReady().then(() => {
   registerGitIpc()
 
 
-  // Worktrees nos chats (seletor do header): listar com estado, criar e
-  // remover. O mesmo serviço das ferramentas worktree_* do agente.
-  ipcMain.handle('worktree:listar', (_event, pasta: string) => listarWorktrees(pasta))
-  ipcMain.handle('worktree:criar', (_event, pasta: string, nome: string, base?: string) =>
-    criarWorktreeDoChat({ pasta, nome, base }),
+  // Worktrees in the chats (header selector): list with state, create and
+  // remove. The same service as the agent's worktree_* tools.
+  ipcMain.handle('worktree:list', (_event, folder: string) => listWorktrees(folder))
+  ipcMain.handle('worktree:create', (_event, folder: string, name: string, base?: string) =>
+    createChatWorktree({ folder, name, base }),
   )
-  ipcMain.handle('worktree:remover', (_event, pasta: string, caminho: string, apagarBranch?: boolean) =>
-    removerWorktreeDoChat({ pasta, caminho, apagarBranch }),
+  ipcMain.handle('worktree:remove', (_event, folder: string, worktreePath: string, deleteBranch?: boolean) =>
+    removeChatWorktree({ folder, path: worktreePath, deleteBranch }),
   )
-  ipcMain.handle('worktree:principal', (_event, pasta: string) => pastaNoRepositorioPrincipal(pasta))
-  ipcMain.handle('worktree:validarPasta', (_event, pasta: string) => validarPastaDosWorktrees(pasta))
+  ipcMain.handle('worktree:main', (_event, folder: string) => folderInMainRepository(folder))
+  ipcMain.handle('worktree:validateFolder', (_event, folder: string) => validateWorktreesFolder(folder))
 
-  // Sons do produto (entrada do app, notificações)
-  ipcMain.handle('sound:play', (_event, nome: string) => tocarSom(nome))
-  // Bytes do WAV de entrada para o renderer (WebAudio) — a decodificação e o
-  // agendamento acontecem lá, no mesmo tick do despertar da persona.
+  // Product sounds (app entrance, notifications)
+  ipcMain.handle('sound:play', (_event, name: string) => playSound(name))
+  // Bytes of the entrance WAV for the renderer (WebAudio) — decoding and
+  // scheduling happen over there, on the same tick as the persona waking up.
   ipcMain.handle('sound:entrance-data', async () => {
-    const caminho = caminhoSom('entrance')
-    if (!existsSync(caminho)) return null
-    return new Uint8Array(await fs.readFile(caminho))
+    const file = soundPath('entrance')
+    if (!existsSync(file)) return null
+    return new Uint8Array(await fs.readFile(file))
   })
 
-  // Storage genérico (sessões, mensagens, pastas) — padrão opencode
+  // Generic storage (sessions, messages, folders) — opencode default
   ipcMain.handle('storage:read', (_event, key: string) => readJson(key))
   ipcMain.handle('storage:write', (_event, key: string, value: unknown) => writeJson(key, value))
   ipcMain.handle('storage:remove', (_event, key: string) => removeJson(key))
   ipcMain.handle('storage:list', (_event, prefix: string) => listKeys(prefix))
 
   /**
-   * Busca textual entre todas as sessões (título + mensagens).
-   * Retorna hits planos ordenados por recência da sessão.
+   * Text search across all sessions (title + messages).
+   * Returns flat hits ordered by session recency.
    */
   ipcMain.handle('search:sessions', (_event, query: string) => searchSessions(query))
 
-  // Núcleo de voz: TTS local (streaming) e o catálogo/status dos modelos de voz.
+  // Voice core: local TTS (streaming) and the catalog/status of the voice models.
   registerVoiceIpc()
 
-  // Catálogo de provedores/modelos (models.dev)
+  // Provider/model catalog (models.dev)
   ipcMain.handle('catalog:get', () => getCatalog())
   onCatalogRefreshed(() => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -1375,41 +1381,41 @@ app.whenReady().then(() => {
     }
   })
 
-  // Catálogo unificado da aba Models (OpenRouter + Artificial Analysis)
+  // Unified catalog of the Models tab (OpenRouter + Artificial Analysis)
   ipcMain.handle('models:list', () => getModelsSnapshot())
   ipcMain.handle('models:refresh', () => {
     invalidateModelsSnapshot()
     return getModelsSnapshot(true)
   })
 
-  // Revert per-message (snapshots git do modo código)
+  // Per-message revert (git snapshots of code mode)
   ipcMain.handle('session:revert', (_event, sessionId: string, messageId: string) =>
     revertSession(sessionId, messageId))
   ipcMain.handle('session:unrevert', (_event, sessionId: string) => unrevertSession(sessionId))
-  // "Reverter também" os arquivos de autor incerto do revert ativo.
+  // "Revert too" the files of uncertain author of the active revert.
   ipcMain.handle('session:revertUncertain', (_event, sessionId: string) => revertUncertainSession(sessionId))
 
-  // /init — análise do projeto e geração de memórias por área
+  // /init — project analysis and generation of memories by area
   ipcMain.handle('init:run', (_event, input: RunInitInput) => {
-    // runProjectInit lança em falha; o erro já sai via init:event — só evita
-    // rejection não tratada quando disparado por IPC (sem sessão de chat)
+    // runProjectInit throws on failure; the error already leaves via init:event — this only avoids
+    // an unhandled rejection when it is triggered over IPC (no chat session)
     void runProjectInit(input).catch(() => {})
   })
-  // Idioma do app: o renderer publica, o main lê quando dispara algo sem
-  // pedido do renderer (rotinas agendadas).
+  // App language: the renderer publishes it, the main process reads it when it
+  // fires something without a renderer request (scheduled routines).
   ipcMain.handle('app:setLanguage', (_event, language: string) => {
-    // O idioma também vale para as notificações nativas, que nascem aqui
-    // (ver lib/i18n.ts) — e para os rótulos da bandeja, que são texto do main.
+    // The language also applies to the native notifications, which are born here
+    // (see lib/i18n.ts) — and to the tray labels, which are text of the main process.
     setMainLocale(language)
     void syncTray()
     return writeJson(StorageKeys.appLanguage, language)
   })
   ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
-  // Parar a análise disparada pelo card do projeto, que roda fora de qualquer
-  // sessão de chat (a do /init é cancelada junto com a sessão, em chat:abort).
+  // Stops the analysis triggered by the project card, which runs outside any
+  // chat session (the /init one is canceled together with the session, in chat:abort).
   ipcMain.handle('init:stop', (_event, directory: string) => abortProjectInit(directory))
 
-  // Credenciais de provedores (as chaves nunca voltam ao renderer)
+  // Provider credentials (the keys never go back to the renderer)
   ipcMain.handle('auth:set', (_event, providerId: string, key: string) => setCredential(providerId, key))
   ipcMain.handle('auth:remove', (_event, providerId: string) => removeCredential(providerId))
   ipcMain.handle('auth:list', () => listCredentialProviders())
@@ -1420,20 +1426,20 @@ app.whenReady().then(() => {
     await dispatchSend(win, input)
   })
   ipcMain.handle('chat:abort', (_event, sessionId: string) => abortSession(sessionId))
-  // Sessões ainda rodando no main (engine vive aqui) — o renderer consulta
-  // após um reload para re-exibir spinner/botão de parar imediatamente.
+  // Sessions still running in the main process (the engine lives here) — the renderer asks
+  // after a reload to re-show the spinner/stop button immediately.
   ipcMain.handle('chat:running', () => [
     ...getRunningSessionIds(),
     ...getLoopRunningSessionIds(),
     ...getOrchestrationRunningSessionIds(),
   ])
-  // Pedido vivo responde direto; card sobrevivente de uma execução encerrada
-  // volta para a conversa como mensagem (ver ask-resume).
+  // A live request answers directly; a card surviving a finished run
+  // goes back to the conversation as a message (see ask-resume).
   ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) =>
     replyOrResume(win, requestId, value))
-  // "Juntar de novo": o trabalho aceito dos workers que ficou fora do chat
-  // (alteração não commitada no caminho, conflito resolvido depois).
-  ipcMain.handle('chat:juntarOrquestracao', (_event, sessionId: string) => (win ? juntarDeNovo(win, sessionId) : undefined))
+  // "Bring together again": the accepted work of the workers that stayed out of the chat
+  // (uncommitted change on the path, conflict resolved later).
+  ipcMain.handle('chat:mergeOrchestration', (_event, sessionId: string) => (win ? mergeAgain(win, sessionId) : undefined))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)
   })
@@ -1443,8 +1449,8 @@ app.whenReady().then(() => {
   ipcMain.handle('chat:compact', (_event, sessionId: string) => {
     if (win) void compactSession(win, sessionId)
   })
-  // Brief de continuidade para o chat novo (card de compactação). Gera no
-  // modelo auxiliar e devolve o texto já com o cabeçalho de resumo.
+  // Continuity brief for the new chat (compaction card). It is generated in the
+  // auxiliary model and returns the text already with the summary header.
   ipcMain.handle('chat:continuationBrief', (_event, sessionId: string) => continuationBrief(sessionId))
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
   ipcMain.handle('plan:saveFile', async (_event, directory: string, content: string) => {
@@ -1457,26 +1463,26 @@ app.whenReady().then(() => {
     return await readPlanFile(directory)
   })
 
-  // Browser do painel direito: o renderer registra o webContents do <webview>
-  // por sessão de chat (panel:register) — cada chat tem seu próprio browser.
+  // Right panel browser: the renderer registers the webContents of the <webview>
+  // per chat session (panel:register) — each chat has its own browser.
   ipcMain.on('panel:register', (_event, sessionId: string | null, id: number | null) =>
     registerPanelWebContents(sessionId, id),
   )
 
-  // <webview> descartado (aba desmontada): solta o registro só se ele for o
-  // webContents que morreu — o browser do agente da sessão é outro e continua.
+  // Discarded <webview> (tab unmounted): release the record only if it is the
+  // webContents that died — the session agent's browser is another one and stays.
   ipcMain.on('panel:unregister', (_event, sessionId: string | null, id: number | null) =>
     unregisterPanelWebContents(sessionId, id),
   )
 
-  // Snapshot do painel lateral que o renderer empurra a cada mudança de aba
-  // (tool read_open_panel: o que o usuário está vendo agora).
+  // Snapshot of the side panel that the renderer pushes on every tab change
+  // (tool read_open_panel: what the user is looking at right now).
   registerPanelStateIpc()
 
-  // Eventos de sessão/pasta emitidos pelo renderer (novo chat, renomear, pin,
-  // arquivar, mover, deletar...). O remetente já aplicou a mudança no store
-  // local — aqui o evento segue para as OUTRAS janelas e para os companions
-  // (mobile), mantendo a sincronização em tempo real nos dois sentidos.
+  // Session/folder events emitted by the renderer (new chat, rename, pin,
+  // archive, move, delete...). The sender has already applied the change to the local
+  // store — here the event goes on to the OTHER windows and to the companions
+  // (mobile), keeping the real-time sync in both directions.
   ipcMain.on('chat:event:emit', (event, chatEvent: ChatEvent) => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed() && win.webContents.id !== event.sender.id) {
@@ -1486,108 +1492,108 @@ app.whenReady().then(() => {
     forwardChatEvent(chatEvent)
   })
 
-  // Modelos por sessão: o renderer empurra o mapa (seleção em qualquer chat)
-  // e o main mantém o cache HTTP (GET /api/session-models, usado pelo mobile
-  // no connect) + repassa aos companions em tempo real ('session:model-change').
+  // Models per session: the renderer pushes the map (selection in any chat)
+  // and the main process keeps the HTTP cache (GET /api/session-models, used by mobile
+  // on connect) + forwards them to the companions in real time ('session:model-change').
   ipcMain.on('companion:session-models', (_event, overrides: Record<string, { providerId: string; modelId: string }>) => {
     setSessionModelsCache(overrides)
     broadcastSessionModels(overrides)
   })
 
-  // Modos ativos por chat: mesma via dos modelos (cache HTTP para o connect +
-  // evento 'session:mode-change' para quem já está conectado).
+  // Active modes per chat: same path as the models (HTTP cache for the connect +
+  // 'session:mode-change' event for whoever is already connected).
   ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
     setSessionModesCache(overrides)
     broadcastSessionModes(overrides)
   })
 
-  // Thinking e autonomia por chat: mesma via dos modos. Além do cache HTTP e
-  // do evento, o mapa de permissão alimenta o gate das ferramentas — cada
-  // turno consulta o nível do PRÓPRIO chat, não um modo global do app.
+  // Thinking and autonomy per chat: same path as the modes. Besides the HTTP cache and
+  // the event, the permission map feeds the tool gate — each
+  // turn consults the level of its OWN chat, not a global mode of the app.
   ipcMain.on('companion:session-prefs', (_event, prefs: SessionPrefsSnapshot) => {
     setSessionPrefsCache(prefs)
-    definirModosPorSessao(prefs?.permission ?? {})
+    setSessionModes(prefs?.permission ?? {})
     broadcastSessionPrefs(prefs)
   })
 
-  // Thinking por modelo: mesma via (cache HTTP para o connect + evento
-  // 'reasoning:change' para quem já está conectado).
+  // Thinking per model: same path (HTTP cache for the connect + event
+  // 'reasoning:change' for whoever is already connected).
   ipcMain.on('companion:reasoning-prefs', (_event, prefs: ReasoningPrefsMap) => {
     setReasoningPrefsCache(prefs)
     broadcastReasoningPrefs(prefs)
   })
 
-  // Preferências do app (defaults de modo, permissão, pastas automáticas):
-  // mesma via, com o renderer como fonte da verdade.
+  // App preferences (mode defaults, permission, automatic folders):
+  // same path, with the renderer as the source of truth.
   ipcMain.on('companion:preferences', (_event, prefs: AppPreferences) => {
     broadcastAppPreferences(prefs)
   })
 
-  // Fila de mensagens: o renderer é o dono (é ele quem envia o próximo item)
-  // e empurra a fila inteira a cada mudança; o celular lê e opera nela.
+  // Message queue: the renderer owns it (it is the one that sends the next item)
+  // and pushes the whole queue on every change; the phone reads and operates on it.
   ipcMain.on('companion:message-queue', (_event, queues: MessageQueueSnapshot) => {
     broadcastMessageQueue(queues)
   })
 
-  // Config dos modos delegados (workers + visão), pelo mesmo caminho.
+  // Config of the delegated modes (workers + vision), by the same path.
   ipcMain.on('companion:worker-config', (_event, config: WorkerConfigSnapshot) => {
     setWorkerConfigCache(config)
     broadcastWorkerConfig(config)
   })
 
-  // Rotação de modelos: o renderer empurra o estado (lista de rotações +
-  // escolha por chat) e o main guarda em cache — o engine resolve a
-  // sequência do turno na hora da chamada. O mesmo estado alimenta o cache
-  // HTTP (GET /api/rotations, lido pelo celular no connect) e vai aos
-  // companions em tempo real ('rotation:change').
+  // Model rotation: the renderer pushes the state (list of rotations +
+  // choice per chat) and the main process caches it — the engine resolves the
+  // sequence of the turn at call time. The same state feeds the
+  // HTTP cache (GET /api/rotations, read by the phone on connect) and goes to
+  // the companions in real time ('rotation:change').
   ipcMain.on('rotation:sync', (_event, config: RotationConfig) => {
     setRotationConfigCache(config)
     setRotationHttpCache(config)
     broadcastRotationConfig(config)
   })
 
-  // Imagens das respostas do assistente (orbit-media://)
+  // Images of the assistant answers (orbit-media://)
   registerMediaProtocol()
-  // Áudios anexados e gerados (orbit-audio://)
+  // Attached and generated audio (orbit-audio://)
   registerAudioProtocol()
-  // Vídeos que o agente mostrou (orbit-video://) e o ffmpeg do app no PATH
-  // dos shells do agente.
+  // Videos the agent showed (orbit-video://) and the app's ffmpeg in the PATH
+  // of the agent shells.
   registerVideoProtocol()
   registerBundledFfmpeg()
-  // yt-dlp baixado pelo próprio app (ytdlp_install) também entra no PATH dos
-  // shells do agente — é o `bash` que faz o que o EDL não cobre.
+  // yt-dlp downloaded by the app itself (ytdlp_install) also enters the PATH of the
+  // agent shells — it is the `bash` that does what the EDL does not cover.
   registerYtdlpOnPath()
-  // Artefatos HTML das respostas (orbit-artifact://) — os privilégios do
-  // scheme já foram declarados no topo do módulo.
+  // HTML artifacts of the answers (orbit-artifact://) — the privileges of the
+  // scheme were already declared at the top of the module.
   registerArtifactProtocol()
-  // Composições de motion do preview (orbit-motion://, ver video/motion-store):
-  // serve a PASTA registrada e o script do runtime que o render também usa.
+  // Motion compositions of the preview (orbit-motion://, see video/motion-store):
+  // serves the registered FOLDER and the runtime script that the render also uses.
   registerMotionProtocol()
 
-  // Canvas de design (orbit-design://, ver lib/design/design-store): serve a
-  // pasta registrada (canvas.json + artboards), sem runtime injetado — o
-  // conteúdo é HTML estático.
+  // Design canvas (orbit-design://, see lib/design/design-store): serves a
+  // registered folder (canvas.json + artboards), with no runtime injected — the
+  // content is static HTML.
   registerDesignProtocol()
 
-  // Decks de slides (orbit-slides://, ver lib/slides/slides-store): serve a
-  // pasta registrada e injeta o runtime de navegação — o deck em si é conteúdo
-  // estático, sem script próprio.
+  // Slide decks (orbit-slides://, see lib/slides/slides-store): serves a
+  // registered folder and injects the navigation runtime — the deck itself is static
+  // content, with no script of its own.
   registerSlidesProtocol()
 
-  // Fontes instaladas pela tool font_use (orbit-font://<hash>.woff2).
+  // Fonts installed by the font_use tool (orbit-font://<hash>.woff2).
   registerFontProtocol()
 
-  // Reabrir uma peça que já está no registro: o card do chat e o tile da Mídia
-  // mandam só o id. A composição (pasta + entrada) sai do registro do main — o
-  // renderer não tem por que conhecer caminho de projeto nenhum.
+  // Reopening a piece that is already in the registry: the chat card and the Media tile
+  // send only the id. The composition (folder + entry) comes from the main process registry — the
+  // renderer has no reason to know any project path.
   ipcMain.handle(
     'motion:open',
     async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
-      // O card da galeria manda o id (o vínculo dele é o motionId); o card do
-      // chat manda o que a tool deixou no `input` — o caminho da pasta do projeto
-      // (motion_preview, modo código) ou o NOME da composição da conversa
-      // (motion_write/motion_edit, modo chat) — e o registro traduz. Nesta ordem:
-      // o id já é a resposta, o caminho é mais preciso que o nome.
+      // The gallery card sends the id (its link is the motionId); the chat card
+      // sends what the tool left in `input` — the project folder path
+      // (motion_preview, code mode) or the NAME of the conversation composition
+      // (motion_write/motion_edit, chat mode) — and the registry translates. In this order:
+      // the id already is the answer, the path is more precise than the name.
       let id = ref.id ?? null
       if (!id && ref.path) id = await motionIdForPath(ref.path)
       if (!id && ref.sessionId && ref.name) id = await motionIdForName(ref.sessionId, ref.name)
@@ -1595,9 +1601,9 @@ app.whenReady().then(() => {
     },
   )
 
-  // Reabrir um deck pelo id: o card da galeria manda o id; o card do chat manda
-  // o caminho (modo código, slides_preview) ou o NOME do deck com a sessão
-  // (modo chat, slides_write), e o registro traduz.
+  // Reopening a deck by id: the gallery card sends the id; the chat card sends
+  // the path (code mode, slides_preview) or the NAME of the deck with the session
+  // (chat mode, slides_write), and the registry translates.
   ipcMain.handle('slides:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
     let id = ref.id ?? null
     if (!id && ref.path) id = await slidesIdForPath(ref.path)
@@ -1605,10 +1611,10 @@ app.whenReady().then(() => {
     return id ? reopenSlides(id) : false
   })
 
-  // Resolver o deck SEM abrir aba: o card do chat mostra o próprio deck inline
-  // (como o artefato faz com o HTML) e só precisa do id e da entrada relativa
-  // para montar o iframe. Mesma resolução do `slides:open`, sem o efeito de
-  // abrir — quem manda abrir é o botão da sidebar.
+  // Resolve the deck WITHOUT opening a tab: the chat card shows the deck itself inline
+  // (as the artifact does with the HTML) and only needs the id and the relative entry
+  // to build the iframe. Same resolution as `slides:open`, without the effect of
+  // opening — the one that orders it to open is the sidebar button.
   ipcMain.handle('slides:resolve', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
     let id = ref.id ?? null
     if (!id && ref.path) id = await slidesIdForPath(ref.path)
@@ -1619,14 +1625,14 @@ app.whenReady().then(() => {
     return { id, entry: path.relative(deck.folder, deck.entry).split(path.sep).join('/') }
   })
 
-  // Baixar o deck em PDF. A impressão acontece no main (slides-export) — o
-  // renderer não grava arquivo — e o PDF nasce do próprio index.html, sem
-  // formato intermediário. Cancelar no diálogo não é erro.
+  // Download the deck as PDF. The printing happens in the main process (slides-export) — the
+  // renderer does not write files — and the PDF is born from the index.html itself, with no
+  // intermediate format. Canceling in the dialog is not an error.
   ipcMain.handle('slides:export', async (_event, id: string, suggestedName?: string) => {
     const deck = await getSlides(id)
-    if (!deck) return { ok: false as const, error: 'Deck não encontrado.' }
+    if (!deck) return { ok: false as const, error: 'Deck not found.' }
     const pdf = await renderSlidesPdf(id)
-    if (!pdf) return { ok: false as const, error: 'Não foi possível gerar o PDF deste deck.' }
+    if (!pdf) return { ok: false as const, error: 'Could not generate the PDF for this deck.' }
     const name = (suggestedName ?? path.basename(deck.folder)).replace(/\.pdf$/i, '').trim() || 'deck'
     const target = await saveExport(null, {
       fileName: `${name}.pdf`,
@@ -1637,9 +1643,9 @@ app.whenReady().then(() => {
     return { ok: true as const, path: target }
   })
 
-  // Fontes do seletor do inspetor de design: a biblioteca do Orbit (com o CSS
-  // pronto — a janela do app também precisa do @font-face para desenhar a
-  // prévia de cada família) e as famílias instaladas no computador.
+  // Fonts of the design inspector selector: the Orbit library (with the CSS
+  // ready — the app window also needs the @font-face to draw the
+  // preview of each family) and the families installed on the computer.
   ipcMain.handle('fonts:list', async () => {
     const orbit = await listFonts()
     return {
@@ -1656,9 +1662,9 @@ app.whenReady().then(() => {
     }
   })
 
-  // Reabrir um canvas pelo id: o card da galeria manda o id; o card do chat
-  // manda o caminho da pasta (modo código, design_preview) ou o NOME do canvas
-  // com a sessão (modo chat, design_write/design_edit), e o registro traduz.
+  // Reopening a canvas by id: the gallery card sends the id; the chat card
+  // sends the folder path (code mode, design_preview) or the NAME of the canvas
+  // with the session (chat mode, design_write/design_edit), and the registry translates.
   ipcMain.handle('design:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
     let id = ref.id ?? null
     if (!id && ref.path) id = await designIdForPath(ref.path)
@@ -1666,9 +1672,9 @@ app.whenReady().then(() => {
     return id ? reopenDesign(id) : false
   })
 
-  // Edição feita pela PESSOA no canvas (propriedades, texto, código, mover e
-  // redimensionar artboards). O renderer manda id + nome do arquivo; a pasta e
-  // a trava do nome ficam no main (ver design-store).
+  // Edit made by the PERSON in the canvas (properties, text, code, moving and
+  // resizing artboards). The renderer sends the id + file name; the folder and
+  // the name lock stay in the main process (see design-store).
   ipcMain.handle('design:readBoard', (_event, input: { id: string; file: string }) => readDesignBoard(input.id, input.file))
   ipcMain.handle('design:writeBoard', (_event, input: { id: string; file: string; html: string }) =>
     writeDesignBoard(input.id, input.file, input.html),
@@ -1679,36 +1685,36 @@ app.whenReady().then(() => {
       updateDesignBoard(input.id, input.file, input.patch),
   )
 
-  // Render de uma composição REGISTRADA, pedido pela aba de motion do painel. O
-  // renderer manda só o id e o formato; o caminho de entrada é revalidado no
-  // main (resolveSafePath) e o progresso volta por 'motion:render:progress'.
+  // Render of a REGISTERED composition, requested by the motion tab of the panel. The
+  // renderer sends only the id and the format; the entry path is revalidated in the
+  // main process (resolveSafePath) and the progress comes back through 'motion:render:progress'.
   ipcMain.handle('motion:render', async (event, input: { id: string } & MotionRenderRequest) => {
     const { id, ...req } = input
-    // O render da aba é um pedido da PESSOA, não do agente: o arquivo nasce onde
-    // ela disser, já com o nome da composição. Sem este diálogo o vídeo caía
-    // sempre na pasta interna da peça, com um nome fixo, e achá-lo depois virava
-    // caça ao tesouro. O caminho escolhido entra por `saveAs` e por isso NÃO passa
-    // pelo resolveSafePath — é a única saída do render que pode cair fora das
-    // pastas do projeto, e é justamente porque houve uma escolha explícita num
-    // diálogo do sistema.
+    // The render of the tab is a request from the PERSON, not from the agent: the file is born where
+    // they say, already with the name of the composition. Without this dialog the video landed
+    // always in the piece's internal folder, with a fixed name, and finding it later became
+    // treasure hunt. The chosen path enters through `saveAs` and therefore does NOT go
+    // through resolveSafePath — it is the only render output that can land outside the
+    // project folders, and precisely because there was an explicit choice in a
+    // system dialog.
     const fileName = await motionOutputName(id, req.format)
     if (!fileName) {
-      // Composição desconhecida: sem diálogo, para o erro real subir ("unknown
-      // motion composition") em vez de a pessoa escolher um arquivo em vão.
+      // Unknown composition: no dialog, so the real error surfaces ("unknown
+      // motion composition") instead of the person choosing a file in vain.
       return renderRegisteredMotion(id, req, (frame, total) => {
         if (!event.sender.isDestroyed()) event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
       })
     }
     const ext = path.extname(fileName).replace(/^\./, '') || 'mp4'
     const labels: Record<string, string> = {
-      mov: 'QuickTime (ProRes 4444, com alfa)',
-      webm: 'WebM (VP9, com alfa)',
+      mov: 'QuickTime (ProRes 4444, with alpha)',
+      webm: 'WebM (VP9, with alpha)',
     }
     const win = BrowserWindow.fromWebContents(event.sender)
     const picked = await saveExport(win, {
-      title: 'Salvar o vídeo',
+      title: 'Save the video',
       fileName,
-      filters: [{ name: labels[ext] ?? 'Vídeo MP4 (H.264)', extensions: [ext] }],
+      filters: [{ name: labels[ext] ?? 'MP4 video (H.264)', extensions: [ext] }],
     })
     if (!picked) return { canceled: true }
     return renderRegisteredMotion(id, { ...req, saveAs: picked }, (frame, total) => {
@@ -1718,16 +1724,16 @@ app.whenReady().then(() => {
     })
   })
 
-  // Os ARQUIVOS das composições desta conversa, para o card da peça no chat:
-  // nome, tamanho, tipo e se a composição cita cada um (usado / descartado).
-  // A lista sai da PASTA — o renderer não conhece caminho de peça nenhum, e o
-  // card se atualiza quando a pasta muda, sem nada ser gravado na mensagem.
+  // The FILES of the compositions of this conversation, for the piece card in the chat:
+  // name, size, type and whether the composition references each one (used / discarded).
+  // The list comes from the FOLDER — the renderer knows no piece path at all, and the
+  // card updates when the folder changes, without anything being written into the message.
   ipcMain.handle('motion:bundles', async (_event, sessionId: string) => listMotionBundles(sessionId))
 
-  // "Salvar projeto": a pasta da composição inteira num .zip (HTML, mídias,
-  // fontes, audio.json) com um manifesto orbit.json na raiz — é o que o chat
-  // reconhece na volta para importar a peça em outra conversa. O arquivo nasce
-  // onde a pessoa disser, pelo mesmo diálogo do export de deck.
+  // "Save project": the whole composition folder into a .zip (HTML, media,
+  // fonts, audio.json) with an orbit.json manifest at the root — it is what the chat
+  // recognizes on the way back to import the piece into another conversation. The file is born
+  // where the person says, through the same dialog as the deck export.
   ipcMain.handle('motion:export', async (event, id: string) => {
     let project: Awaited<ReturnType<typeof exportMotionProject>>
     try {
@@ -1737,9 +1743,9 @@ app.whenReady().then(() => {
     }
     const win = BrowserWindow.fromWebContents(event.sender)
     const target = await saveExport(win, {
-      title: 'Salvar o projeto da composição',
+      title: 'Save the composition project',
       fileName: project.name,
-      filters: [{ name: 'Projeto do Orbit (zip)', extensions: ['zip'] }],
+      filters: [{ name: 'Orbit project (zip)', extensions: ['zip'] }],
     })
     if (!target) return { ok: false as const, canceled: true as const }
     try {
@@ -1750,20 +1756,20 @@ app.whenReady().then(() => {
     return { ok: true as const, path: target, files: project.files }
   })
 
-  // Camadas da composição (quem entra e sai, e quando), medidas numa janela
-  // offscreen pelo mesmo scheme do preview, e a TRILHA da peça junto delas. A aba
-  // pede ao carregar e a cada mudança do arquivo; um erro aqui é o "não carregou"
-  // com o motivo.
+  // Layers of the composition (who enters and leaves, and when), measured in an
+  // offscreen window through the same scheme as the preview, and the piece TRACK together with them. The tab
+  // asks on load and on every change of the file; an error here is the "did not load"
+  // with the reason.
   ipcMain.handle('motion:layers', async (_event, id: string) => {
     const url = await registeredMotionUrl(id)
     if (!url) throw new Error('this composition is no longer registered — ask the agent to open it again (motion_preview)')
     const measured = await measureMotionLayers(id, url)
     const entry = await getMotion(id)
-    // As faixas saem da MESMA resolução que o render usa (motion-audio): o que a
-    // aba desenha e toca é, por construção, o que o render vai misturar — nos
-    // mesmos instantes. Um manifest quebrado NÃO derruba a medição das camadas:
-    // vira uma faixa de erro, porque uma peça muda sem explicação é pior que uma
-    // que diz o que houve.
+    // The tracks come out of the SAME resolution the render uses (motion-audio): what the
+    // tab draws and plays is, by construction, what the render will mix — at
+    // the same instants. A broken manifest does NOT bring down the layer measurement:
+    // it becomes an error track, because a piece silent with no explanation is worse than one
+    // that says what happened.
     const audio = await (async () => {
       if (!entry) return null
       try {
@@ -1786,100 +1792,100 @@ app.whenReady().then(() => {
     return { ...measured, audio }
   })
 
-  // Modo esteira: board de projetos/esteiras/tasks e o engine de execução.
-  // As mutações voltam ao renderer por 'esteira:event' (o engine emite).
-  ipcMain.handle('esteira:carregar', () => esteira.carregarTudo())
-  ipcMain.handle('esteira:templates', () => esteira.listarTemplates())
-  ipcMain.handle('esteira:salvarTemplate', (_e, template: FaseTemplate) => esteira.salvarTemplate(template))
-  ipcMain.handle('esteira:removerTemplate', (_e, id: string) => esteira.removerTemplate(id))
-  ipcMain.handle('esteira:criarProjeto', (_e, nome: string, pastas: string[]) =>
-    esteira.criarProjeto(nome, pastas),
+  // Pipeline mode: projects/pipelines/tasks board and the execution engine.
+  // Mutations come back to the renderer through 'pipeline:event' (the engine emits).
+  ipcMain.handle('pipeline:load', () => pipeline.loadAll())
+  ipcMain.handle('pipeline:templates', () => pipeline.listTemplates())
+  ipcMain.handle('pipeline:saveTemplate', (_e, template: PhaseTemplate) => pipeline.saveTemplate(template))
+  ipcMain.handle('pipeline:removeTemplate', (_e, id: string) => pipeline.removeTemplate(id))
+  ipcMain.handle('pipeline:createProject', (_e, name: string, folders: string[]) =>
+    pipeline.createProject(name, folders),
   )
-  ipcMain.handle('esteira:atualizarProjeto', (_e, id: string, patch: Record<string, unknown>) =>
-    esteira.atualizarProjeto(id, patch),
+  ipcMain.handle('pipeline:updateProject', (_e, id: string, patch: Record<string, unknown>) =>
+    pipeline.updateProject(id, patch),
   )
-  ipcMain.handle('esteira:removerProjeto', (_e, id: string) => esteira.removerProjeto(id))
-  ipcMain.handle('esteira:criar', (_e, input: NovaEsteiraInput) => esteira.criarEsteira(input))
-  ipcMain.handle('esteira:atualizar', (_e, id: string, patch: Record<string, unknown>) =>
-    esteira.atualizarEsteira(id, patch),
+  ipcMain.handle('pipeline:removeProject', (_e, id: string) => pipeline.removeProject(id))
+  ipcMain.handle('pipeline:create', (_e, input: NewPipelineInput) => pipeline.createPipeline(input))
+  ipcMain.handle('pipeline:update', (_e, id: string, patch: Record<string, unknown>) =>
+    pipeline.updatePipeline(id, patch),
   )
-  ipcMain.handle('esteira:remover', (_e, id: string) => esteira.removerEsteira(id))
-  ipcMain.handle('esteira:criarTask', (_e, input: NovaTaskInput) => esteira.criarTask(input))
-  ipcMain.handle('esteira:atualizarTask', (_e, esteiraId: string, taskId: string, patch: Record<string, unknown>) =>
-    esteira.atualizarTaskCampos(esteiraId, taskId, patch),
+  ipcMain.handle('pipeline:remove', (_e, id: string) => pipeline.removePipeline(id))
+  ipcMain.handle('pipeline:createTask', (_e, input: NewTaskInput) => pipeline.createTask(input))
+  ipcMain.handle('pipeline:updateTask', (_e, pipelineId: string, taskId: string, patch: Record<string, unknown>) =>
+    pipeline.updateTaskFields(pipelineId, taskId, patch),
   )
-  ipcMain.handle('esteira:removerTask', (_e, esteiraId: string, taskId: string) =>
-    esteira.removerTask(esteiraId, taskId),
+  ipcMain.handle('pipeline:removeTask', (_e, pipelineId: string, taskId: string) =>
+    pipeline.removeTask(pipelineId, taskId),
   )
-  ipcMain.handle('esteira:iniciarTask', (_e, esteiraId: string, taskId: string, fase?: number) =>
-    esteira.iniciarTask(esteiraId, taskId, fase ?? 0),
+  ipcMain.handle('pipeline:startTask', (_e, pipelineId: string, taskId: string, phase?: number) =>
+    pipeline.startTask(pipelineId, taskId, phase ?? 0),
   )
-  ipcMain.handle('esteira:pausarTask', (_e, esteiraId: string, taskId: string) =>
-    esteira.pausarTask(esteiraId, taskId),
+  ipcMain.handle('pipeline:pauseTask', (_e, pipelineId: string, taskId: string) =>
+    pipeline.pauseTask(pipelineId, taskId),
   )
-  ipcMain.handle('esteira:retomarTask', (_e, esteiraId: string, taskId: string, instrucao?: string) =>
-    esteira.retomarTask(esteiraId, taskId, instrucao),
+  ipcMain.handle('pipeline:resumeTask', (_e, pipelineId: string, taskId: string, instruction?: string) =>
+    pipeline.resumeTask(pipelineId, taskId, instruction),
   )
-  ipcMain.handle('esteira:devolverTask', (_e, esteiraId: string, taskId: string, texto: string, fase?: number) =>
-    esteira.devolverTask(esteiraId, taskId, texto, fase ?? 0),
+  ipcMain.handle('pipeline:returnTask', (_e, pipelineId: string, taskId: string, text: string, phase?: number) =>
+    pipeline.returnTask(pipelineId, taskId, text, phase ?? 0),
   )
-  ipcMain.handle('esteira:ligarFila', (_e, esteiraId: string, ligar: boolean) => {
-    if (ligar) esteira.ligarFila(esteiraId)
-    else esteira.desligarFila(esteiraId)
-    return esteira.filaLigada(esteiraId)
+  ipcMain.handle('pipeline:toggleQueue', (_e, pipelineId: string, enabled: boolean) => {
+    if (enabled) pipeline.enableQueue(pipelineId)
+    else pipeline.disableQueue(pipelineId)
+    return pipeline.isQueueEnabled(pipelineId)
   })
-  ipcMain.handle('esteira:relatorio', (_e, esteiraId: string) => esteira.relatorio(esteiraId))
-  // `emExecucao` do engine vive em memória: uma task deixada em progresso por
-  // um fechamento abrupto continuaria "rodando" no board para sempre.
-  void esteira.reconciliarExecucoes().catch((err) => console.error('[esteira] reconciliação falhou:', err))
+  ipcMain.handle('pipeline:report', (_e, pipelineId: string) => pipeline.report(pipelineId))
+  // The engine's `running` map lives in memory: a task left in progress by an
+  // abrupt shutdown would keep "running" on the board forever.
+  void pipeline.reconcileExecutions().catch((err) => console.error('[pipeline] reconciliation failed:', err))
 
-  // Rotinas: chats agendados (modos chat e código). O CRUD vive em
-  // orbit-data/rotinas; o disparo reusa o caminho do 'chat:send' acima, e as
-  // mutações voltam ao renderer por 'rotinas:event'.
-  ipcMain.handle('rotinas:carregar', () => rotinas.carregarTudo())
-  ipcMain.handle('rotinas:criar', (_e, input: NovaRotinaInput) => rotinas.criarRotina(input))
-  ipcMain.handle('rotinas:atualizar', (_e, id: string, patch: Partial<Rotina>) =>
-    rotinas.atualizarRotinaCampos(id, patch),
+  // Routines: scheduled chats (chat and code modes). The CRUD lives in
+  // orbit-data/routines; the firing reuses the 'chat:send' path above, and the
+  // mutations go back to the renderer through 'routines:event'.
+  ipcMain.handle('routines:load', () => routines.loadAll())
+  ipcMain.handle('routines:create', (_e, input: NewRoutineInput) => routines.createRoutine(input))
+  ipcMain.handle('routines:update', (_e, id: string, patch: Partial<Routine>) =>
+    routines.updateRoutineFields(id, patch),
   )
-  ipcMain.handle('rotinas:remover', (_e, id: string) => rotinas.removerRotinaCompleta(id))
-  ipcMain.handle('rotinas:executarAgora', (_e, id: string) => rotinas.executarAgora(id))
-  ipcMain.handle('rotinas:podarRuns', (_e, sessionIds: string[]) => rotinas.podarRunsOrfaos(sessionIds))
+  ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
+  ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
+  ipcMain.handle('routines:pruneRuns', (_e, sessionIds: string[]) => routines.pruneOrphanRuns(sessionIds))
   ipcMain.handle(
-    'rotinas:gerar',
-    (_e, descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string, modo?: 'chat' | 'code', visionDisponivel?: boolean) =>
-      rotinas.gerarRotina(descricao, modelo, pastas, idioma, modo, visionDisponivel),
+    'routines:generate',
+    (_e, description: string, model: RoutineModel, folders: string[], language?: string, mode?: 'chat' | 'code', visionAvailable?: boolean) =>
+      routines.generateRoutine(description, model, folders, language, mode, visionAvailable),
   )
-  // Propostas do agente (tool rotinas_manage): o card da conversa lista,
-  // aprova e descarta. A aprovação cria a rotina de verdade (com o id da
-  // proposta) e o evento 'rotina' sai dela, como qualquer criação.
-  ipcMain.handle('rotinas:pendentes', () => listarRotinasPendentes())
-  ipcMain.handle('rotinas:aprovarPendente', (_e, id: string) => aprovarRotinaPendente(id))
-  ipcMain.handle('rotinas:descartarPendente', (_e, id: string) => descartarRotinaPendente(id))
-  // Segundo plano (macOS): LaunchAgent que relança o app com --hidden.
-  ipcMain.handle('rotinas:background:estado', () => estadoBackground())
-  ipcMain.handle('rotinas:background:ativar', (_e, ativo: boolean) => aplicarBackground(ativo))
-  rotinas.iniciarScheduler()
+  // Agent proposals (tool routines_manage): the conversation card lists,
+  // approves and discards them. Approval creates the actual routine (with the
+  // proposal id) and the 'routine' event comes out of it, like any creation.
+  ipcMain.handle('routines:pending', () => listPendingRoutines())
+  ipcMain.handle('routines:approvePending', (_e, id: string) => approvePendingRoutine(id))
+  ipcMain.handle('routines:discardPending', (_e, id: string) => discardPendingRoutine(id))
+  // Background (macOS): LaunchAgent that relaunches the app with --hidden.
+  ipcMain.handle('routines:background:state', () => backgroundState())
+  ipcMain.handle('routines:background:apply', (_e, active: boolean) => applyBackground(active))
+  routines.startScheduler()
 
-  // Galeria de mídia (aba "Mídia" do painel direito)
+  // Media gallery ("Media" tab of the right panel)
   ipcMain.handle('media:list', (_event, filter?: MediaFilter) => listMedia(filter))
   ipcMain.handle('media:usage', () => mediaDiskUsage())
   ipcMain.handle('media:delete', (_event, ids: string[]) => deleteManyMedia(ids))
   ipcMain.handle('media:cleanupScripts', () => cleanupScriptMedia())
-  // Fork: vincula os ativos clonados à sessão nova, para "Neste chat" na
-  // galeria encontrá-los sem duplicar nada em disco (ver linkMediaSessions).
+  // Fork: links the cloned assets to the new session, so that "In this chat" in
+  // the gallery finds them without duplicating anything on disk (see linkMediaSessions).
   ipcMain.handle('media:linkSessions', (_event, ids: string[], sessionId: string) =>
     linkMediaSessions(ids, sessionId),
   )
-  // Indexa imagens anteriores ao registry (roda na primeira abertura da galeria)
+  // Indexes images older than the registry (runs on the first opening of the gallery)
   ipcMain.handle('media:backfill', () => backfillMedia())
 
-  // Fontes da conversa (aba "Fontes" do painel direito). O escopo é resolvido
-  // no main a partir da sessão — o renderer manda só o sessionId e recebe de
-  // volta a pasta, quando houver, para dizer que as fontes são compartilhadas.
+  // Sources of the conversation ("Sources" tab of the right panel). The scope is resolved
+  // in the main process from the session — the renderer sends only the sessionId and gets
+  // the folder back, when there is one, to say that the sources are shared.
   ipcMain.handle('docs:list', (_event, sessionId: string) => listSessionSources(sessionId))
-  // Miniatura por documento, e nao junto do docs:list: a do PDF passa por
-  // rasterizar a pagina, e embutir isso na listagem faria a aba inteira
-  // esperar pelo arquivo mais lento antes de mostrar qualquer linha.
+  // Thumbnail per document, and not together with docs:list: the PDF one goes through
+  // rasterizing the page, and embedding that in the listing would make the whole tab
+  // wait for the slowest file before showing any line.
   ipcMain.handle('docs:thumb', (_event, sessionId: string, docId: string) =>
     sessionDocumentThumb(sessionId, docId),
   )
@@ -1906,8 +1912,8 @@ app.whenReady().then(() => {
       return { added, errors }
     },
   )
-  // Nem toda fonte é arquivo: trecho colado e página da web entram pelo mesmo
-  // caminho, já como texto.
+  // Not every source is a file: a pasted snippet and a web page come in through the same
+  // path, already as text.
   ipcMain.handle(
     'docs:addText',
     (_event, sessionId: string, title: string, text: string, shared: boolean) =>
@@ -1916,19 +1922,19 @@ app.whenReady().then(() => {
   ipcMain.handle('docs:addUrl', (_event, sessionId: string, url: string, shared: boolean) =>
     addSessionUrl(sessionId, url, shared),
   )
-  // Arrastar de uma área para a outra na aba: anexo da conversa vira fonte da
-  // pasta e vice-versa. O id muda junto (docN ↔ srcN), porque é o prefixo que
-  // diz em que escopo o arquivo mora.
+  // Dragging from one area to the other in the tab: a conversation attachment becomes a folder
+  // source and vice versa. The id changes along (docN ↔ srcN), because it is the prefix that
+  // says in which scope the file lives.
   ipcMain.handle('docs:setShared', (_event, sessionId: string, docId: string, shared: boolean) =>
     setSessionDocumentShared(sessionId, docId, shared),
   )
-  // O documento inteiro em texto: o painel ROLA, ao contrario da leitura do
-  // modelo, que e paginada porque cada pagina custa contexto.
+  // The whole document as text: the panel SCROLLS, unlike the model
+  // reading, which is paginated because each page costs context.
   ipcMain.handle('docs:text', (_event, sessionId: string, docId: string) =>
     viewText(sessionId, docId),
   )
-  // Paginas renderizadas com o trecho grifado: o visualizador nativo do
-  // Chromium e fechado, entao grifar dentro do PDF exige desenhar a pagina.
+  // Pages rendered with the snippet highlighted: Chromium's native
+  // viewer is closed, so highlighting inside the PDF requires drawing the page.
   ipcMain.handle(
     'docs:render',
     (
@@ -1943,8 +1949,8 @@ app.whenReady().then(() => {
   ipcMain.handle('docs:print', (_event, sessionId: string, docId: string) =>
     viewPrint(sessionId, docId),
   )
-  // O .docx como documento: o painel não desenha Word, então o arquivo chega
-  // convertido em HTML — com títulos, tabelas e imagens, e sem nada ativo.
+  // The .docx as a document: the panel does not draw Word, so the file arrives
+  // converted to HTML — with headings, tables and images, and nothing active.
   ipcMain.handle('docs:html', (_event, sessionId: string, docId: string) =>
     viewHtml(sessionId, docId),
   )
@@ -1954,23 +1960,23 @@ app.whenReady().then(() => {
   ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
     removeSessionDocument(sessionId, docId),
   )
-  // Limpeza: o chat e a pasta são excluídos pelo renderer, que é quem sabe da
-  // cascata — o que sobra aqui é apagar o que aquele escopo guardava em disco.
-  // Chat novo: a sessao so nasce na primeira mensagem, entao o que foi
-  // anexado antes disso vive num escopo de rascunho e e adotado aqui.
-  // A pasta que o chat novo vai herdar: sem ela o rascunho aberto pelo "+" de
-  // uma pasta mostraria a area compartilhada vazia.
+  // Cleanup: the chat and the folder are deleted by the renderer, which is the one that knows the
+  // cascade — what is left here is deleting what that scope kept on disk.
+  // New chat: the session is only born on the first message, so what was
+  // attached before that lives in a draft scope and is adopted here.
+  // The folder the new chat will inherit: without it the draft opened by the "+" of
+  // a folder would show the shared area empty.
   ipcMain.handle('docs:setDraftFolder', (_event, folderId: string | null) =>
     setDraftFolder(folderId),
   )
   ipcMain.handle('docs:adoptDraft', async (_event, sessionId: string) => {
-    // Os materiais (foto, GIF, áudio, vídeo) trazidos no rascunho passam junto.
+    // The materials (photo, GIF, audio, video) brought in the draft come along.
     const [docs] = await Promise.all([adoptDraftDocuments(sessionId), adoptDraftMaterials(sessionId)])
     return docs
   })
 
-  // Materiais da aba Fontes: foto, GIF, áudio e vídeo. O arquivo é um item da
-  // galeria de mídia; a aba só o lista no escopo certo (conversa ou pasta).
+  // Materials of the Sources tab: photo, GIF, audio and video. The file is an item of the
+  // media gallery; the tab only lists it in the right scope (conversation or folder).
   ipcMain.handle('materials:list', (_event, scope: string) => listSessionMaterials(scope))
   ipcMain.handle('materials:add', async (_event, scope: string, files: MaterialInput[], shared: boolean) => {
     const errors: string[] = []
@@ -1990,54 +1996,54 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('docs:clearFolder', (_event, folderId: string) => deleteFolderDocuments(folderId))
 
-  // Artefatos HTML: o renderer nunca lê o arquivo direto (ele é servido pelo
-  // orbit-artifact://) — só precisa do conteúdo para exportar.
+  // HTML artifacts: the renderer never reads the file directly (it is served by
+  // orbit-artifact://) — it only needs the content to export.
   ipcMain.handle('artifact:read', async (_event, id: string) => {
     const artifact = await readArtifact(id)
     return artifact ? artifact.html : null
   })
-  // Documentos: exportar a renderizacao (PDF/DOCX) para fora do Orbit.
-  // O canvas precisa da REVISÃO junto do texto: é ela que ele devolve ao
-  // gravar, para uma escrita do agente no meio do caminho ser detectada.
+  // Documents: export the rendering (PDF/DOCX) out of Orbit.
+  // The canvas needs the REVISION together with the text: it is what it hands back on
+  // save, so a write by the agent in between can be detected.
   ipcMain.handle('document:source', async (_event, id: string) => {
     const found = await readDocumentSource(id)
     return found ? { markdown: found.markdown, revision: found.entry.revision ?? 1 } : null
   })
-  // Edicao do usuario no canvas do painel. So o fonte e o preview sao
-  // reescritos: PDF/DOCX sao refeitos no proximo download.
+  // User edit in the panel canvas. Only the source and the preview are
+  // rewritten: PDF/DOCX are rebuilt on the next download.
   ipcMain.handle(
     'document:saveSource',
     (_event, id: string, markdown: string, baseRevision?: number) =>
       saveDocumentEdit(id, markdown, baseRevision),
   )
-  // Em que aba o documento abre: arquivo pedido vai para o visualizador,
-  // documento vivo vai para o canvas.
+  // Which tab the document opens in: a requested file goes to the viewer,
+  // a live document goes to the canvas.
   ipcMain.handle('document:info', (_event, id: string) => documentInfo(id))
-  // Promover a fonte da conversa: a saida do agente vira material de leitura
-  // dele. E um ato explicito do usuario, nunca automatico.
+  // Promote the source of the conversation: the agent output becomes reading material
+  // for it. It is an explicit act of the user, never automatic.
   ipcMain.handle('document:useAsSource', (_event, sessionId: string, id: string) =>
     useDocumentAsSource(sessionId, id),
   )
-  // O botao precisa saber o estado ATUAL: a fonte pode ter sido removida na
-  // aba Fontes depois de promovida, e ai promover de novo e o certo.
+  // The button needs to know the CURRENT state: the source may have been removed in the
+  // Sources tab after being promoted, and then promoting again is the right thing.
   ipcMain.handle('document:isSource', (_event, sessionId: string, id: string) =>
     isDocumentSource(sessionId, id),
   )
-  // O caminho de volta: clicar na fonte promovida tem que abrir o documento,
-  // e não o visualizador de arquivo — é o mesmo texto, no lugar onde ele se
-  // edita.
+  // The way back: clicking the promoted source has to open the document,
+  // and not the file viewer — it is the same text, in the place where it
+  // is edited.
   ipcMain.handle('document:forSource', (_event, sourceId: string) =>
     documentForSource(sourceId),
   )
-  // O documento nasce só em Markdown: o PDF/DOCX é renderizado AQUI, no
-  // primeiro download, e fica em cache para os próximos.
+  // The document is born only in Markdown: the PDF/DOCX is rendered HERE, on the
+  // first download, and is cached for the next ones.
   ipcMain.handle('document:export', async (_event, id: string, format: DocumentDownload) => {
     const entry = await getMediaEntry(id)
-    // O .md não se renderiza: ele É o documento, e sai como está em disco.
+    // The .md is not rendered: it IS the document, and it comes out as it is on disk.
     const source =
       format === 'md' ? (entry?.path ?? null) : await ensureDocumentRender(id, format)
     if (!source) {
-      return { ok: false as const, error: `Não foi possível gerar o ${format.toUpperCase()} deste documento.` }
+      return { ok: false as const, error: `Could not generate the ${format.toUpperCase()} for this document.` }
     }
     const target = await saveExport(null, {
       fileName: documentFileName(entry?.name ?? 'documento', format),
@@ -2049,12 +2055,12 @@ app.whenReady().then(() => {
   })
 
   /**
-   * Bytes de uma imagem, seja qual for a forma como o renderer a conhece.
+   * Bytes of an image, whatever the form the renderer knows it by.
    *
-   * Sao tres, e a UI nao deveria ter que saber a diferenca: a URL
-   * orbit-media:// das imagens da galeria, o id cru, e o data URL de um anexo
-   * que ainda nao foi para lugar nenhum. O ultimo caso e o que permite copiar
-   * e salvar a imagem que o usuario acabou de arrastar para o chat.
+   * There are three, and the UI should not have to know the difference: the
+   * orbit-media:// URL of the gallery images, the raw id, and the data URL of an attachment
+   * that has not gone anywhere yet. The last case is what allows copying
+   * and saving the image the user has just dragged into the chat.
    */
   const bytesOfImageRef = async (
     ref: string,
@@ -2068,11 +2074,11 @@ app.whenReady().then(() => {
   }
 
   /**
-   * Extensao a partir do tipo do conteudo.
+   * Extension from the content type.
    *
-   * Nao e so tirar o que vem depois da barra: `image/svg+xml` viraria
-   * ".svg+xml", um arquivo que o sistema nao abre. O mapa cobre o que a
-   * galeria aceita e o resto cai em png, que e o formato de saida padrao.
+   * It is not just taking what comes after the slash: `image/svg+xml` would become
+   * ".svg+xml", a file the system does not open. The map covers what the
+   * gallery accepts and the rest falls back to png, which is the default output format.
    */
   const extensionOf = (contentType: string): string =>
     ({
@@ -2084,14 +2090,14 @@ app.whenReady().then(() => {
     })[contentType] ?? 'png'
 
   /**
-   * Salvar a imagem em disco, pelo dialogo do sistema.
+   * Save the image to disk, through the system dialog.
    *
-   * O renderer nao grava arquivo: a imagem vive no storage do Orbit e sai por
-   * aqui, do mesmo jeito que o artefato e o documento. Aceita a URL
-   * orbit-media:// ou o id cru — e um data URL tambem, que e como chega uma
-   * imagem que ainda nao foi para a galeria.
+   * The renderer does not write files: the image lives in Orbit's storage and comes out
+   * here, the same way as the artifact and the document. Accepts the
+   * orbit-media:// URL or the raw id — and also a data URL, which is how an
+   * image that has not gone to the gallery yet arrives.
    */
-  /** Salvar um áudio do chat (anexado ou gerado) pelo diálogo do sistema. */
+  /** Save a chat audio (attached or generated) through the system dialog. */
   ipcMain.handle('audio:export', async (_event, ref: string, suggestedName?: string) => {
     const id = audioIdFrom(String(ref ?? ''))
     const audio = id ? await readAudio(id) : null
@@ -2109,11 +2115,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('media:export', async (_event, ref: string, suggestedName?: string) => {
     const bytes = await bytesOfImageRef(ref)
-    if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
+    if (!bytes) return { ok: false as const, error: 'Image not found' }
     const ext = bytes.ext || extensionOf(bytes.contentType)
-    // Sem nome sugerido o arquivo sai com o nome da MÍDIA no acervo — o id do
-    // item é o nome do arquivo na galeria. "imagem.png" não dizia de qual
-    // imagem se tratava depois de baixada.
+    // Without a suggested name the file comes out with the MEDIA name in the collection — the id of the
+    // item is the file name in the gallery. "imagem.png" did not say which
+    // image it was after being downloaded.
     const fromRef = ref.startsWith('orbit-media://') ? decodeURIComponent(ref.slice('orbit-media://'.length)) : ''
     const base = (suggestedName || path.parse(fromRef).name || 'imagem').slice(0, 60)
     const target = await saveExport(null, {
@@ -2126,28 +2132,28 @@ app.whenReady().then(() => {
   })
 
   /**
-   * Copiar a imagem para a area de transferencia.
+   * Copy the image to the clipboard.
    *
-   * Passa pelo main porque o clipboard do Electron escreve a imagem no formato
-   * nativo da plataforma — e e isso que faz o Ctrl+V colar a IMAGEM no Word,
-   * no Paint ou num chat, em vez de um caminho de arquivo.
+   * It goes through the main process because the Electron clipboard writes the image in the
+   * platform's native format — and that is what makes Ctrl+V paste the IMAGE in Word,
+   * in Paint or in a chat, instead of a file path.
    *
-   * O PNG e convertido para bitmap antes: o clipboard aceita o blob de PNG,
-   * mas varios apps do Windows so leem o formato de bitmap, e colar "nada"
-   * seria pior do que nao ter o botao.
+   * The PNG is converted to a bitmap first: the clipboard accepts the PNG blob,
+   * but several Windows apps only read the bitmap format, and pasting "nothing"
+   * would be worse than not having the button.
    */
   ipcMain.handle('media:copy', async (_event, ref: string) => {
     const bytes = await bytesOfImageRef(ref)
-    if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
-    // O nativeImage nao le SVG: copiar o vetor cru colaria nada. O sharp
-    // rasteriza num tamanho util para colar em outro app — o arquivo vetorial
-    // continua inteiro na galeria e sai pelo botao de salvar.
+    if (!bytes) return { ok: false as const, error: 'Image not found' }
+    // nativeImage does not read SVG: copying the raw vector would paste nothing. sharp
+    // rasterizes it at a size useful for pasting into another app — the vector file
+    // stays whole in the gallery and comes out through the save button.
     const raw =
       bytes.contentType === 'image/svg+xml'
         ? await sharp(bytes.buffer).resize({ width: 1024, withoutEnlargement: false }).png().toBuffer()
         : bytes.buffer
     const image = nativeImage.createFromBuffer(raw)
-    if (image.isEmpty()) return { ok: false as const, error: 'Formato de imagem nao suportado' }
+    if (image.isEmpty()) return { ok: false as const, error: 'Unsupported image format' }
     await clipboard.write([
       new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) }),
     ])
@@ -2156,7 +2162,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('artifact:export', async (_event, id: string) => {
     const artifact = await readArtifact(id)
-    if (!artifact) return { ok: false as const, error: 'Artefato não encontrado' }
+    if (!artifact) return { ok: false as const, error: 'Artifact not found' }
     const suggested = `${(artifact.entry.name || 'artefato').slice(0, 60)}.html`
     const target = await saveExport(null, {
       fileName: suggested,
@@ -2168,10 +2174,10 @@ app.whenReady().then(() => {
   })
 
   /**
-   * Baixar um diagrama Mermaid mostrado no chat. É o mesmo desenho que sai nos
-   * documentos (renderDiagrams): SVG vetorial, PNG em 2x ou o código `.mmd`.
-   * Fica no main porque o PNG precisa da janela oculta com DOM que o PDF/DOCX
-   * já usam — e porque o diálogo de salvar é daqui.
+   * Download a Mermaid diagram shown in the chat. It is the same drawing that comes out in the
+   * documents (renderDiagrams): vector SVG, 2x PNG or the `.mmd` code.
+   * It lives in the main process because the PNG needs the hidden window with a DOM that PDF/DOCX
+   * already use — and because the save dialog belongs here.
    */
   ipcMain.handle('diagram:export', async (_event, source: string, format: 'svg' | 'png' | 'mmd') => {
     const code = String(source ?? '').trim()
@@ -2184,7 +2190,7 @@ app.whenReady().then(() => {
       data = format === 'svg' ? diagram.svg : diagram.png
     }
     const target = await saveExport(null, {
-      fileName: `diagrama.${format}`,
+      fileName: `diagram.${format}`,
       filters: [{ name: format.toUpperCase(), extensions: [format] }],
     })
     if (!target) return { ok: false as const, canceled: true as const }
@@ -2192,10 +2198,10 @@ app.whenReady().then(() => {
     return { ok: true as const, path: target }
   })
 
-  // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
+  // Brain memory — the UI talks to the service; mutations come back via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())
   ipcMain.handle('memory:get', (_event, id: string) => memoryService.getFull(id))
-  // Criação manual (drop de arquivo no grafo de memórias)
+  // Manual creation (file drop on the memory graph)
   ipcMain.handle('memory:create', (_event, input: memoryService.SaveMemoryInput) =>
     memoryService.save(input))
   ipcMain.handle('memory:update', (_event, id: string, patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight' | 'proposed'>>) =>
@@ -2213,14 +2219,14 @@ app.whenReady().then(() => {
   })
   setupMemoryScheduler()
 
-  // Configurações gerais: o renderer empurra a cada mudança (ver app-settings).
+  // General settings: the renderer pushes on every change (see app-settings).
   ipcMain.on('settings:sync', (_event, raw: unknown) => void setAppSettings(raw))
 
-  // Overlay (⇧⌘espaço): o painel do rodapé. O atalho é global (funciona com o
-  // Orbit atrás), e o renderer do painel abre/fecha pelo mesmo caminho da
-  // Preferências e do menu.
-  // O renderer do painel avisa que montou: só a partir daí um `overlay:open`
-  // pode chegar sem se perder.
+  // Overlay (⇧⌘space): the bottom panel. The shortcut is global (it works with
+  // Orbit behind), and the panel renderer opens/closes through the same path as
+  // Preferences and the menu.
+  // The panel renderer reports that it has mounted: only from then on can an `overlay:open`
+  // arrive without getting lost.
   ipcMain.on('overlay:ready', () => markOverlayReady())
   ipcMain.handle('overlay:toggle', () => toggleOverlay())
   ipcMain.handle('overlay:open', (_event, call?: boolean) => openOverlay({ call }))
@@ -2228,33 +2234,33 @@ app.whenReady().then(() => {
   ipcMain.handle('overlay:resize', (_event, height: number) => resizeOverlay(height))
   ipcMain.handle('overlay:status', () => overlayShortcutStatus())
   ipcMain.handle('overlay:settings', () => getAppSettings().overlay)
-  // "Copiar" do painel: navigator.clipboard depende de gesto/permissão da
-  // página; o main escreve direto.
+  // "Copy" of the panel: navigator.clipboard depends on a gesture/permission of the
+  // page; the main process writes directly.
   ipcMain.handle('clipboard:write', (_event, text: string) => clipboard.writeText(String(text ?? '')))
 
-  // O que depende do SISTEMA reage à preferência, em vez de ser lido no boot:
-  // a bandeja existe enquanto "fechar para a bandeja" estiver ligado, e a
-  // abertura automática é registrada/removida na hora em que a pessoa decide.
+  // What depends on the SYSTEM reacts to the preference, instead of being read at boot:
+  // the tray exists while "close to tray" is on, and the
+  // auto start is registered/removed at the moment the person decides.
   onAppSettingsChange((next, prev) => {
     if (next.closeToTray !== prev.closeToTray) void syncTray()
     if (next.launchAtLogin !== prev.launchAtLogin) void applyLaunchAtLogin(next.launchAtLogin)
-    // Mudança feita NO MAIN — hoje a tool `set_user_name` do agente — precisa
-    // voltar ao renderer, que é a fonte da verdade: sem isto a Preferência
-    // mostraria o nome antigo e o próximo `settings:sync` apagaria o que o
-    // agente gravou. O renderer descarta o eco do que ele mesmo mandou.
+    // A change made IN THE MAIN PROCESS — today the agent's `set_user_name` tool — has to
+    // go back to the renderer, which is the source of truth: without this the Preference
+    // would show the old name and the next `settings:sync` would erase what the
+    // agent wrote. The renderer discards the echo of what it sent itself.
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send('settings:changed', next)
     }
   })
 
-  // Tema do app → aparência NATIVA (menus de bandeja, diálogos do sistema) e
-  // para as OUTRAS janelas. O renderer decide o tema; aqui ele só é espelhado.
+  // App theme → NATIVE appearance (tray menus, system dialogs) and
+  // to the OTHER windows. The renderer decides the theme; here it is only mirrored.
   //
-  // O repasse existe porque cada janela é uma página própria: a do overlay é
-  // pré-aquecida no boot e vive a sessão inteira, então sem este aviso ela
-  // ficaria com a classe de tema do momento em que nasceu — trocar o tema nas
-  // Preferências deixava o painel branco no meio de um app escuro (e a persona
-  // branca sobre ele). Quem mudou não recebe o eco: ele já aplicou.
+  // The forwarding exists because each window is its own page: the overlay one is
+  // pre-warmed at boot and lives the whole session, so without this notice it
+  // would keep the theme class from the moment it was born — changing the theme in
+  // Preferences left the panel white in the middle of a dark app (and the persona
+  // white on top of it). Whoever changed it does not get the echo: it has already applied it.
   ipcMain.on('theme:sync', (event, theme: unknown) => {
     const next = theme === 'light' || theme === 'dark' ? theme : 'system'
     nativeTheme.themeSource = next
@@ -2266,20 +2272,20 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('browser:clear-data', () => clearBrowserData())
-  // Link que o renderer não tinha onde abrir (nenhuma conversa aberta).
+  // Link the renderer had nowhere to open (no conversation open).
   ipcMain.on('link:open-external', (_event, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url)
   })
 
-  // Skills: lista, cria, watcher da pasta global avisa o renderer
+  // Skills: list, create, and the watcher of the global folder notifies the renderer
   ipcMain.handle('skills:list', (_event, directory?: string) => loadSkills(directory))
   ipcMain.handle('skills:create', async (_event, { name, description, content, slug, oldSlug }) => {
     const safeSlug = slug ? sanitizeSlug(slug) : sanitizeSlug(name)
-    if (!safeSlug) return { error: 'Slug inválido — use apenas letras minúsculas, números e underscores' }
+    if (!safeSlug) return { error: 'Invalid slug — use only lowercase letters, numbers and underscores' }
     const dir = globalSkillsDir()
     await fs.mkdir(dir, { recursive: true })
     const filePath = path.join(dir, `${safeSlug}.skill`)
-    // Se o slug mudou na edição, remove o arquivo antigo
+    // If the slug changed on edit, removes the old file
     if (oldSlug && oldSlug !== safeSlug) {
       const oldPath = path.join(dir, `${oldSlug}.skill`)
       await fs.unlink(oldPath).catch(() => {})
@@ -2295,14 +2301,14 @@ app.whenReady().then(() => {
     const dir = globalSkillsDir()
     const safe = sanitizeSlug(slug)
     if (!safe) return
-    // Skill pode ser arquivo plano (.skill/.md) ou bundle (pasta com scripts)
+    // A skill can be a flat file (.skill/.md) or a bundle (folder with scripts)
     await fs.unlink(path.join(dir, `${safe}.skill`)).catch(() => {})
     await fs.unlink(path.join(dir, `${safe}.md`)).catch(() => {})
     await fs.rm(path.join(dir, safe), { recursive: true, force: true }).catch(() => {})
   })
 
-  // Importa skill via dialog: .skill/.md texto (+ extras = bundle) OU .skill
-  // zipado do Claude (SKILL.md + scripts extraídos como bundle)
+  // Imports a skill via dialog: .skill/.md text (+ extras = bundle) OR a zipped
+  // .skill from Claude (SKILL.md + scripts extracted as a bundle)
   ipcMain.handle('skills:import', async () => {
     if (!win) return { imported: false }
     const result = await dialog.showOpenDialog(win, {
@@ -2319,7 +2325,7 @@ app.whenReady().then(() => {
     return outcome
   })
 
-  // Propostas do agente (tool create_skill): staging até o card ser aprovado
+  // Agent proposals (tool create_skill): staging until the card is approved
   ipcMain.handle('skills:pending', () => listPendingSkills())
   ipcMain.handle('skills:approve', async (_event, slug: string) => {
     const ok = await approvePendingSkill(slug)
@@ -2336,7 +2342,7 @@ app.whenReady().then(() => {
     }
   })
 
-  // Export/Import de dados
+  // Export/Import of data
   ipcMain.handle('export:data', async (_event, includeAuth: boolean, localStorage: Record<string, string>) => {
     if (!win) return { cancelled: true }
     const dir = dataDir()
@@ -2352,7 +2358,7 @@ app.whenReady().then(() => {
       if (data !== null) zip.file(`storage/${key}.json`, JSON.stringify(data, null, 2))
     }
 
-    // Auth (chaves de API — opcional)
+    // Auth (API keys — optional)
     if (includeAuth) {
       const authPath = path.join(dir, 'auth.json')
       try {
@@ -2399,9 +2405,9 @@ app.whenReady().then(() => {
     const buffer = await zip.generateAsync({ type: 'nodebuffer' })
 
     const target = await saveExport(win, {
-      title: 'Exportar dados do Orbit',
+      title: 'Export Orbit data',
       fileName: `orbit-backup-${new Date().toISOString().slice(0, 10)}.zip`,
-      filters: [{ name: 'Arquivo ZIP', extensions: ['zip'] }],
+      filters: [{ name: 'ZIP file', extensions: ['zip'] }],
     })
     if (!target) return { cancelled: true }
     await fs.writeFile(target, buffer)
@@ -2411,9 +2417,9 @@ app.whenReady().then(() => {
   ipcMain.handle('import:data', async () => {
     if (!win) return { cancelled: true, error: 'No window' }
     const result = await dialog.showOpenDialog(win, {
-      title: 'Importar dados do Orbit',
+      title: 'Import Orbit data',
       properties: ['openFile'],
-      filters: [{ name: 'Arquivo ZIP', extensions: ['zip'] }],
+      filters: [{ name: 'ZIP file', extensions: ['zip'] }],
     })
     if (result.canceled || result.filePaths.length === 0) return { cancelled: true }
 
@@ -2421,9 +2427,9 @@ app.whenReady().then(() => {
     const buffer = await fs.readFile(zipPath)
     const zip = await JSZip.loadAsync(buffer)
 
-    // Validate manifest — exigimos ao menos um arquivo storage/
+    // Validate manifest — we require at least one file in storage/
     const hasStorage = Object.keys(zip.files).some((f) => f.startsWith('storage/'))
-    if (!hasStorage) return { cancelled: true, error: 'Arquivo ZIP inválido: nenhum dado de storage encontrado.' }
+    if (!hasStorage) return { cancelled: true, error: 'Invalid ZIP file: no storage data found.' }
 
     const dir = dataDir()
 
@@ -2452,25 +2458,25 @@ app.whenReady().then(() => {
     return { cancelled: false, localStorage: localState }
   })
 
-  // Analytics: resumo de uso
+  // Analytics: usage summary
   ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range))
 
-  // MCP: config + status + reconexão (as tools entram via buildToolSet)
+  // MCP: config + status + reconnection (the tools come in via buildToolSet)
   ipcMain.handle('mcp:config', () => readMcpConfig())
   ipcMain.handle('mcp:status', () => listMcpStatus())
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
   ipcMain.handle('mcp:optimize', (_event, name: string) => optimizeMcpServer(name))
   ipcMain.handle('mcp:descriptions', (_event, name: string) => mcpDescriptionsState(name))
-  // Autorização OAuth: abre o navegador para o login e completa o fluxo
+  // OAuth authorization: opens the browser for the login and completes the flow
   ipcMain.handle('mcp:auth', (_event, name: string) => authorizeMcp(name))
-  // redirect_uri do loopback — o usuário precisa cadastrá-lo no app OAuth do provedor
+  // at the loopback redirect_uri — the user has to register it in the provider's OAuth app
   ipcMain.handle('mcp:oauth-redirect', () => oauthRedirectUrl())
-  // Nodara: integração oficial — registra o servidor MCP e mantém o token em dia
+  // Nodara: official integration — registers the MCP server and keeps the token up to date
   ipcMain.handle('nodara:discover', () => discoverNodara())
   ipcMain.handle('nodara:connect', () => connectNodara())
   ipcMain.handle('nodara:disconnect', () => disconnectNodara())
-  // Fracta: integração oficial (beta) — mesmo fluxo, a partir do mcp.json do Fracta
+  // Fracta: official integration (beta) — same flow, from Fracta's mcp.json
   ipcMain.handle('fracta:discover', () => discoverFracta())
   ipcMain.handle('fracta:connect', () => connectFracta())
   ipcMain.handle('fracta:disconnect', () => disconnectFracta())
@@ -2480,16 +2486,16 @@ app.whenReady().then(() => {
   })
   void loadTrustRules()
 
-  // Processos em background
+  // Background processes
   ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))
   ipcMain.handle('process:kill', (_event, pid: number, sessionId?: string) => killProcess(pid, sessionId))
   ipcMain.handle('process:output', (_event, pid: number, sessionId?: string) => getProcessOutput(pid, sessionId))
 
-  // Computer Use: Parar (chip, Preferências ou ⌘⇧.) aborta o turno inteiro —
-  // o abort mata a bridge em andamento e limpa as aprovações da conversa.
+  // Computer Use: Stop (chip, Preferences or ⌘⇧.) aborts the whole turn —
+  // the abort kills the bridge in progress and clears the approvals of the conversation.
   setComputerStopHandler((sessionId) => abortSession(sessionId))
-  // Painéis flutuantes (conversa + ações) enquanto o Orbit está fora de foco:
-  // mesmo preload e mesmo bundle das janelas do app, entrada própria.
+  // Floating panels (conversation + actions) while Orbit is out of focus:
+  // same preload and same bundle as the app windows, their own entry.
   setupComputerPanels({
     preload: path.join(__dirname, 'preload.mjs'),
     load: (panels, query) => {
@@ -2507,10 +2513,10 @@ app.whenReady().then(() => {
   ipcMain.handle('computer:activity', () => getComputerActivity())
   ipcMain.handle('computer:shot', (_event, sessionId: string) => shotView(sessionId))
   ipcMain.handle('computer:focus-app', (_event, sessionId: string) => focusShotApp(sessionId))
-  // Resposta digitada no painel flutuante do Computer Use: entra na fila da
-  // conversa com as opções do último envio dela. A fila mora no renderer da
-  // janela principal (é ele quem envia quando a sessão fica livre) — o mesmo
-  // caminho das mensagens que chegam do celular.
+  // Answer typed in the Computer Use floating panel: it enters the queue of the
+  // conversation with the options of its last send. The queue lives in the renderer of the
+  // main window (it is the one that sends when the session becomes free) — the same
+  // path as the messages that arrive from the phone.
   ipcMain.handle('computer:reply', (_event, sessionId: string, text: string) => {
     const last = lastSendInput(sessionId)
     const body = typeof text === 'string' ? text.trim() : ''
@@ -2540,11 +2546,11 @@ app.whenReady().then(() => {
   )
 
   app.on('before-quit', () => {
-    // A saída real começa aqui: daqui para baixo o `close` da janela não pode
-    // mais ser convertido em esconder.
+    // The real exit starts here: from here on the window `close` can no longer
+    // be converted into hiding.
     quitting = true
-    // Devolve as flags de acessibilidade ligadas nos apps e solta os atalhos
-    // globais (⇧⌘espaço do overlay e o de pânico do Computer Use).
+    // Restores the accessibility flags turned on in the apps and releases the global
+    // shortcuts (⇧⌘space of the overlay and the panic one of Computer Use).
     globalShortcut.unregisterAll()
     disposeOverlay()
     void disposeComputerUse()
@@ -2552,23 +2558,23 @@ app.whenReady().then(() => {
     killAllProcesses()
     stopWatchingNodaraBridge()
     stopWatchingFractaSettings()
-    // Esteira roda fora de qualquer sessão: sem isto, uma fase em execução
-    // continuaria escrevendo no repositório com o app fechando.
-    esteira.abortarTudo()
-    rotinas.pararScheduler()
+    // Pipeline mode runs outside any session: without this, a phase in flight
+    // would keep writing to the repository while the app shuts down.
+    pipeline.abortAll()
+    routines.stopScheduler()
     stopLintWorkers()
   })
 
-  // Provedores locais pré-cadastrados (Ollama, LM Studio)
+  // Pre-registered local providers (Ollama, LM Studio)
   void ensureCustomProvidersSeeded()
 
-  // Companion Server (WebSocket para controle remoto via celular)
+  // Companion Server (WebSocket for remote control from the phone)
   const companion = startCompanionServer()
   ipcMain.handle('companion:status', () => getCompanionStatus())
   ipcMain.handle('companion:pin', () => companion.pin)
   ipcMain.handle('companion:setPairingMode', (_event, active: boolean) => setPairingMode(!!active))
 
-  // Companion preferences (sincronização renderer ↔ HTTP server)
+  // Companion preferences (renderer ↔ HTTP server sync)
   ipcMain.handle('companion:getPreferences', () => readStorageJson('companion/preferences'))
   ipcMain.handle('companion:setPreferences', (_event, prefs: Record<string, unknown>) =>
     writeJson('companion/preferences', prefs))
@@ -2581,55 +2587,55 @@ app.whenReady().then(() => {
   ipcMain.handle('custom-providers:update', (_event, id: string, patch: CustomProviderPatch) =>
     updateCustomProvider(id, patch))
   ipcMain.handle('custom-providers:detect', () => detectLocal())
-  // Descoberta sem gravar: o diálogo mostra os modelos e só persiste no salvar.
-  // Com `providerId`, reaproveita a chave que já está salva no provedor.
+  // Discovery without writing: the dialog shows the models and only persists on save.
+  // With `providerId`, reuses the key already saved in the provider.
   ipcMain.handle('custom-providers:discover', (_event, opts: DiscoverOptions) =>
     opts.providerId ? discoverProviderModels(opts.providerId, opts) : discoverModels(opts))
-  // Descoberta + gravação no provedor (botão "buscar modelos" do card).
+  // Discovery + write to the provider ("fetch models" button of the card).
   ipcMain.handle('custom-providers:refresh', (_event, id: string) =>
     refreshProviderModels(id))
 
-  // Abertura fria via "Abrir com Orbit": a pasta chega em argv e fica pendente
-  // até o renderer montar (a janela ainda está carregando aqui).
+  // Cold start via "Open with Orbit": the folder arrives in argv and stays pending
+  // until the renderer mounts (the window is still loading here).
   void findFolderArg(process.argv).then((dir) => {
     if (dir) queueOpenFolder(dir)
   })
 
-  // O som de entrada é iniciado no did-finish-load, antes de a janela ser
-  // exibida e antes do timer de despertar da persona.
+  // The entrance sound is started on did-finish-load, before the window is
+  // shown and before the persona wake-up timer.
 
-  // Mantém o menu de contexto do Explorer sempre apontando para o exe atual
-  // (o caminho muda a cada instalação/atualização).
+  // Keeps the Explorer context menu always pointing to the current exe
+  // (the path changes on every install/update).
   if (app.isPackaged) void registerOpenWith()
 
-  // Auto-update via GitHub (ignorado em MAS/Windows Store/linux-deb)
+  // Auto-update via GitHub (ignored on MAS/Windows Store/linux-deb)
   setupAutoUpdater()
 
-  // A cópia em disco das configurações vale antes de o renderer empurrar a
-  // dele: "cookies até sair" limpa aqui, antes de qualquer aba do navegador
-  // abrir — limpar ao fechar dependeria de o app sair limpo.
+  // The on-disk copy of the settings is worth before the renderer pushes its
+  // own: "cookies until quit" clears here, before any browser tab
+  // opens — clearing on close would depend on the app quitting cleanly.
   void loadAppSettings().then(async (settings) => {
     if (settings.browser.cookies === 'until-quit') await clearBrowserData().catch(() => {})
     setupAutoArchive()
-    // Bandeja e abertura automática valem antes de qualquer renderer montar —
-    // é o caso do app que subiu no login do sistema, sem ninguém pedir nada.
+    // Tray and auto start are worth before any renderer mounts —
+    // that is the case of the app started at system login, with nobody asking anything.
     void syncTray()
     if (settings.launchAtLogin) await applyLaunchAtLogin(true)
-    // Ditado pelo Whisper: o servidor dele sobe junto com o app.
+    // Dictation through Whisper: its server comes up together with the app.
     syncWhisperServer(settings)
-    // Atalho do overlay e a janela pré-aquecida: só depois das preferências,
-    // porque é nelas que está o interruptor.
+    // Overlay shortcut and the pre-warmed window: only after the preferences,
+    // because that is where the switch is.
     syncOverlayShortcut()
     prewarmOverlay()
   })
 
-  // Câmera, microfone, localização etc. dos sites do navegador integrado:
-  // pergunta ao usuário por site (antes o Electron aprovava tudo calado).
+  // Camera, microphone, location etc. of the built-in browser sites:
+  // asks the user per site (before, Electron approved everything silently).
   setupBrowserPermissions(BROWSER_PARTITION)
 
-  // Overlay (⇧⌘espaço): a janela nasce escondida — o atalho não pode pagar o
-  // carregamento do renderer na primeira vez. É uma página própria (como os
-  // painéis do Computer Use) para não arrastar os sincronizadores da principal.
+  // Overlay (⇧⌘space): the window is born hidden — the shortcut cannot pay for the
+  // renderer loading the first time. It is a page of its own (like the
+  // Computer Use panels) so as not to drag the main window synchronizers along.
   setupOverlay({
     preload: path.join(__dirname, 'preload.mjs'),
     load: (target) => {
@@ -2637,14 +2643,14 @@ app.whenReady().then(() => {
       else void target.loadFile(path.join(RENDERER_DIST, 'overlay.html'))
     },
   })
-  // Opacidade/persona mudando nas Preferências com o painel aberto, e o
-  // atalho seguindo o interruptor.
+  // Opacity/persona changing in Preferences with the panel open, and the
+  // shortcut following the switch.
   watchOverlaySettings()
 
   createWindow()
 })
 
-/** Apaga cookies, logins, localStorage, cache e permissões do navegador integrado. */
+/** Clears cookies, logins, localStorage, cache and permissions of the built-in browser. */
 async function clearBrowserData(): Promise<void> {
   const browser = session.fromPartition(BROWSER_PARTITION)
   await browser.clearStorageData()

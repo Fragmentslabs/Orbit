@@ -2,26 +2,26 @@ import type { ChatModeKey } from '@orbit/shared'
 import { useConnectionStore } from '~/stores/connection-store'
 
 /**
- * Toggle de modo feito no celular → desktop, que é a fonte da verdade dos
- * modos por chat (eles vivem no localStorage do renderer). O desktop aplica no
- * store dele e devolve o mapa inteiro a todos os companions.
+ * Mode toggle made on the phone → desktop, which is the source of truth for the
+ * per-chat modes (they live in the renderer's localStorage). The desktop applies it to its
+ * store and sends the whole map back to all companions.
  *
- * Vive fora dos stores para não criar ciclo de import: os stores de modo
- * importam daqui, e o session-modes-sync importa os stores.
+ * Lives outside the stores so as not to create an import cycle: the mode stores
+ * import from here, and session-modes-sync imports the stores.
  */
 export function pushModeSelect(
   mode: ChatModeKey,
   sessionId: string | null | undefined,
   value: boolean,
 ): void {
-  // Rascunho não viaja: "draft" no celular é um chat novo diferente do "draft"
-  // do desktop. Quando a sessão nasce, o adopt() empurra os modos com o id real.
+  // A draft does not travel: "draft" on the phone is a new chat different from the "draft"
+  // of the desktop. When the session is born, adopt() pushes the modes with the real id.
   if (!sessionId) return
 
   const { wsClient } = useConnectionStore.getState()
-  // Desconectado o send fica na fila do wsClient e sai na reconexão; se falhar
-  // de vez, tudo bem: os modos viajam em cada mensagem enviada (options), então
-  // a execução sai correta — só o desktop fica sem saber do toggle.
+  // Disconnected, the send stays in the wsClient queue and goes out on reconnection; if it fails
+  // for good, that is fine: the modes travel in every message sent (options), so
+  // the execution comes out right — only the desktop is left unaware of the toggle.
   void wsClient
     .send({ type: 'modes:select', mode, value, sessionId: sessionId ?? null })
     .catch(() => {})

@@ -1,10 +1,10 @@
 /**
- * O desktop se identifica com o `hostname()` cru do sistema, que no macOS vem
- * como "MacBook-Air-de-Desknik.local" e no Windows como "DESKTOP-4F2K9". Guardar
- * o valor cru é certo (é o nome real da máquina na rede); o que não presta é
- * mostrá-lo assim.
+ * The desktop identifies itself with the raw system `hostname()`, which on macOS comes
+ * as "MacBook-Air-de-Desknik.local" and on Windows as "DESKTOP-4F2K9". Storing
+ * the raw value is right (it is the real name of the machine on the network); what does not work is
+ * showing it like that.
  *
- * Formata só na exibição: tira o sufixo mDNS e troca os separadores por espaço.
+ * Formats only on display: strips the mDNS suffix and swaps the separators for a space.
  */
 export function prettyDeviceName(name?: string | null): string | undefined {
   if (!name) return undefined

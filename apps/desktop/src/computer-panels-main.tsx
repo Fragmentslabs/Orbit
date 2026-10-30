@@ -7,10 +7,10 @@ import "./i18n"
 import "./index.css"
 
 /**
- * Entrada da janela dos painéis do Computer Use. Fica de fora tudo o que a
- * janela principal liga ao carregar (sincronizadores com o celular, fila de
- * mensagens, configurações): esta janela só espelha a conversa — quem age é a
- * janela principal.
+ * Entry point of the Computer Use panels window. Everything the
+ * main window wires up on load stays out (phone synchronizers, message
+ * queue, settings): this window only mirrors the conversation — the one that acts is the
+ * main window.
  */
 const sessionId = new URLSearchParams(window.location.search).get("session")
 

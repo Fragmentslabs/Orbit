@@ -9,9 +9,9 @@ const WORKER_MODEL_KEY = "orbit-worker-model"
 const WORKER_REASONING_KEY = "orbit-worker-reasoning"
 const ORCHESTRATOR_MODEL_KEY = "orbit-orchestrator-model"
 const ORCHESTRATOR_REASONING_KEY = "orbit-orchestrator-reasoning"
-/** Comportamento do orquestrador (Só orquestrar / Acompanhar / Rigoroso, ajustes, worktrees) */
+/** Orchestrator behavior (Orchestrate only / Supervise / Rigorous, adjustments, worktrees) */
 const ORCHESTRATION_SETTINGS_KEY = "orbit-orchestration-settings"
-/** "Modelo de orquestra" das Preferências antes de ele conduzir a orquestra de fato. */
+/** The Preferences' "orchestra model" before it actually conducts the orchestra. */
 const LEGACY_ORCHESTRA_MODEL_KEY = "orbit-orchestra-model"
 const VISION_MODEL_KEY = "orbit-vision-model"
 
@@ -34,11 +34,11 @@ function loadSelectedModel(): SelectedModel | null {
 }
 
 /**
- * Modelo de visão gravado AGORA, lido direto do storage.
+ * Vision model saved RIGHT NOW, read straight from storage.
  *
- * O overlay é outra janela: a cópia em memória dele não acompanha o que a
- * janela principal grava em localStorage. Sem esta leitura, trocar o modelo de
- * visão nas Preferências só valeria no próximo turno depois de reiniciar.
+ * The overlay is another window: its in-memory copy does not follow what the
+ * main window writes into localStorage. Without this read, changing the vision
+ * model in the Preferences would only apply on the next turn after restarting.
  */
 export function readVisionModel(): SelectedModel | null {
   return loadJson<SelectedModel>(VISION_MODEL_KEY)
@@ -53,19 +53,19 @@ interface ProviderState {
   selectedModel: SelectedModel | null
   workerModel: SelectedModel | null
   workerReasoning: ReasoningConfig | null
-  /** Modelo que conduz a orquestra (planejamento e síntese). null = o modelo do chat. */
+  /** Model that conducts the orchestra (planning and synthesis). null = the chat's model. */
   orchestratorModel: SelectedModel | null
   orchestratorReasoning: ReasoningConfig | null
   orchestrationSettings: OrchestrationSettings
-  /** Modelo de visão delegado (modo Visão) — descreve imagens/screenshots
-   * para modelos sem visão; null = sem modelo configurado.
-   * A ATIVAÇÃO é por chat (mode-overrides): o modelo é global, o toggle é
-   * persistido por sessão com default nas preferências (model-mode-prefs) */
+  /** Delegated vision model (Vision mode) — describes images/screenshots
+   * for models without vision; null = no model configured.
+   * ACTIVATION is per chat (mode-overrides): the model is global, the toggle is
+   * persisted per session with the default in the preferences (model-mode-prefs) */
   visionModel: SelectedModel | null
-  /** Dialog de configuração do modo Visão (aberto pelo toggle, pelo gear ou pelo card de aviso) */
+  /** Vision mode settings dialog (opened by the toggle, by the gear or by the warning card) */
   visionConfigOpen: boolean
   loading: boolean
-  /** Mensagem de erro da última inicialização */
+  /** Error message from the last initialization */
   error: string | null
 
   initialize: () => Promise<void>
@@ -83,10 +83,10 @@ interface ProviderState {
   addCustomProvider: (input: CustomProviderInput) => Promise<void>
   updateCustomProvider: (id: string, patch: CustomProviderPatch) => Promise<void>
   removeCustomProvider: (id: string) => Promise<void>
-  /** Pede ao main para consultar o /models do provedor e gravar o resultado. */
+  /** Asks main to query the provider's /models and write the result. */
   refreshProviderModels: (id: string) => Promise<void>
   refreshCustomProviders: () => Promise<void>
-  /** Recarrega o catálogo do main (ex: depois da atualização em segundo plano) */
+  /** Reloads the catalog from main (e.g.: after the background update) */
   reloadCatalog: () => Promise<void>
 }
 
@@ -99,12 +99,12 @@ function mergeIntoCatalog(catalog: Catalog, custom: CatalogProvider[]): Catalog 
 }
 
 /**
- * Provedor personalizado não tem "conectar": ele existe porque o usuário o
- * criou. O que o habilita no seletor é ter modelo — o seletor descarta grupo
- * sem modelos. Antes só quem tinha chave salva entrava na lista, então Ollama
- * e LM Studio (sem chave por natureza) nunca apareciam, mesmo depois de
- * detectados. Os seeds vazios ficam de fora e não atrapalham a primeira
- * execução (useNoProviderConnected).
+ * A custom provider has no "connect": it exists because the user
+ * created it. What enables it in the selector is having a model — the selector drops a group
+ * without models. Before, only whoever had a saved key got into the list, so Ollama
+ * and LM Studio (keyless by nature) never showed up, even after being
+ * detected. The empty seeds stay out and do not get in the way of the first
+ * run (useNoProviderConnected).
  */
 function connectedWithCustom(credentialProviders: string[], custom: CatalogProvider[]): string[] {
   const withModels = custom.filter((p) => Object.keys(p.models).length > 0).map((p) => p.id)
@@ -148,7 +148,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         }
       }
 
-      // Mesma validação para o condutor da orquestra: sem o modelo, volta ao do chat.
+      // Same validation for the orchestra conductor: without the model, back to the chat's.
       const { orchestratorModel, orchestratorReasoning } = get()
       if (orchestratorModel) {
         const conductor = merged[orchestratorModel.providerId]?.models[orchestratorModel.modelId]
@@ -160,8 +160,8 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         }
       }
 
-      // Modo Visão: modelo configurado precisa existir, estar conectado e ter
-      // visão — senão o modo desliga sozinho (evita delegação quebrada).
+      // Vision mode: the configured model has to exist, be connected and have
+      // vision — otherwise the mode turns itself off (avoids broken delegation).
       const { visionModel } = get()
       if (visionModel) {
         const visionProvider = merged[visionModel.providerId]
@@ -202,8 +202,8 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   removeApiKey: async (providerId) => {
     await authApi.remove(providerId)
     set((state) => ({
-      // Personalizado conectado por modelo continua conectado sem chave
-      // (servidor local); só os do catálogo caem da lista.
+      // A custom one connected by model stays connected without a key
+      // (local server); only the catalog ones drop from the list.
       connectedProviders: connectedWithCustom(
         state.connectedProviders.filter((id) => id !== providerId),
         state.customProviders,
@@ -237,7 +237,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   setOrchestratorModel: (model) => {
     if (model) localStorage.setItem(ORCHESTRATOR_MODEL_KEY, JSON.stringify(model))
     else localStorage.removeItem(ORCHESTRATOR_MODEL_KEY)
-    // A chave antiga só servia de origem da migração.
+    // The old key only served as the source of the migration.
     localStorage.removeItem(LEGACY_ORCHESTRA_MODEL_KEY)
     set({ orchestratorModel: model })
   },
@@ -298,8 +298,8 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         connectedProviders: connectedWithCustom(state.connectedProviders, custom),
       }
     })
-    // O modelo escolhido pode ter saído do servidor — cai para o primeiro que
-    // restou em vez de deixar o chat apontando para um modelo inexistente.
+    // The chosen model may have left the server — it falls back to the first one
+    // left instead of leaving the chat pointing to a nonexistent model.
     const { selectedModel } = get()
     if (selectedModel?.providerId === provider.id && !provider.models[selectedModel.modelId]) {
       const modelId = Object.keys(provider.models)[0]
@@ -351,13 +351,13 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 }))
 
 /**
- * Pré-configuração: nenhum provedor conectado (primeira execução) e o estado
- * de inicialização já é conhecido (sem loading/falha). Enquanto loading/erro,
- * retorna false para a UI não acusar falta de provedor indevidamente.
- * Usado pelo seletor de modelo (destaque de atenção) e pelo bloqueio de envio (card).
+ * Pre-configuration: no provider connected (first run) and the initialization
+ * state is already known (no loading/failure). While loading/error,
+ * it returns false so the UI does not wrongly report a missing provider.
+ * Used by the model selector (attention highlight) and by the send block (card).
  */
-/** Rótulo curto "modelo · provedor" para linhas compactas (ex.: slots de
- *  rotação). Retorna null quando o modelo não está no catálogo. */
+/** Short "model · provider" label for compact rows (e.g.: rotation
+ *  slots). Returns null when the model is not in the catalog. */
 export function useCatalogModelLabel(model: { providerId: string; modelId: string } | null): string | null {
   const catalog = useProviderStore((s) => s.catalog)
   if (!model) return null
@@ -375,9 +375,9 @@ export function useNoProviderConnected(): boolean {
 }
 
 /**
- * Os provedores ainda estão sendo carregados? Enquanto estão, não se sabe
- * se falta algum — a UI que decide entre "primeira entrada" e "uso normal"
- * precisa esperar por isso para não piscar.
+ * Are the providers still loading? While they are, it is not known
+ * whether one is missing — the UI that decides between "first entry" and "normal use"
+ * has to wait for this so it does not flicker.
  */
 export function useProvidersLoading(): boolean {
   return useProviderStore((s) => s.loading)

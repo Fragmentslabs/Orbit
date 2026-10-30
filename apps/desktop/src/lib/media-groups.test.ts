@@ -3,9 +3,9 @@ import type { MediaEntry } from "@shared/media"
 import { expandToGroups, groupMediaByRoot } from "./media-groups"
 
 /**
- * A galeria é o acervo da pessoa, não o rascunho do agente. O que se testa
- * aqui é o que ela vê: quantos itens a grade mostra e o que está empilhado
- * atrás de cada um.
+ * The gallery is the person's collection, not the agent's draft. What is tested
+ * here is what they see: how many items the grid shows and what is stacked
+ * behind each one.
  */
 
 let relogio = 0
@@ -21,79 +21,79 @@ function img(id: string, parentId?: string, source: MediaEntry["source"] = "chat
   }
 }
 
-/** A galeria entrega mais recente primeiro. */
+/** The gallery delivers the most recent first. */
 const grade = (entries: MediaEntry[]) => [...entries].sort((a, b) => b.createdAt - a.createdAt)
 
 describe("groupMediaByRoot", () => {
-  it("uma foto editada em turnos seguidos é um item só", () => {
+  it("a photo edited over consecutive turns is a single item", () => {
     const anexo = img("anexo", undefined, "user")
     const v2 = img("v2", "anexo")
     const v3 = img("v3", "v2")
-    const todas = [anexo, v2, v3]
+    const all = [anexo, v2, v3]
 
-    const { covers, versions } = groupMediaByRoot(todas, grade(todas))
+    const { covers, versions } = groupMediaByRoot(all, grade(all))
     expect(covers.map((c) => c.id)).toEqual(["v3"])
     expect(versions.get("v3")?.map((v) => v.id)).toEqual(["anexo", "v2", "v3"])
   })
 
-  it("duas opções para escolher são v3 e v4 do mesmo item, não dois itens", () => {
-    // "tem essa e essa, qual prefere": as duas saem da mesma base e nenhuma
-    // sucede a outra. Agrupar pela ponta faria dois tiles de uma edição só.
+  it("two options to choose from are v3 and v4 of the same item, not two items", () => {
+    // "you have this one and that one, which do you prefer": both come from the same base and none
+    // succeeds the other. Grouping by the end would make two tiles of a single edit.
     const anexo = img("anexo", undefined, "user")
     const v2 = img("v2", "anexo")
-    const opcaoA = img("opcaoA", "v2")
-    const opcaoB = img("opcaoB", "v2")
-    const todas = [anexo, v2, opcaoA, opcaoB]
+    const optionA = img("optionA", "v2")
+    const optionB = img("optionB", "v2")
+    const all = [anexo, v2, optionA, optionB]
 
-    const { covers, versions } = groupMediaByRoot(todas, grade(todas))
-    expect(covers.map((c) => c.id)).toEqual(["opcaoB"])
-    expect(versions.get("opcaoB")?.map((v) => v.id)).toEqual(["anexo", "v2", "opcaoA", "opcaoB"])
+    const { covers, versions } = groupMediaByRoot(all, grade(all))
+    expect(covers.map((c) => c.id)).toEqual(["optionB"])
+    expect(versions.get("optionB")?.map((v) => v.id)).toEqual(["anexo", "v2", "optionA", "optionB"])
   })
 
-  it("editar o original de novo continua sendo a mesma foto", () => {
+  it("editing the original again is still the same photo", () => {
     const anexo = img("anexo", undefined, "user")
     const v2 = img("v2", "anexo")
     const v3 = img("v3", "anexo")
-    const todas = [anexo, v2, v3]
+    const all = [anexo, v2, v3]
 
-    const { covers } = groupMediaByRoot(todas, grade(todas))
+    const { covers } = groupMediaByRoot(all, grade(all))
     expect(covers.map((c) => c.id)).toEqual(["v3"])
   })
 
-  it("fotos sem parentesco continuam itens separados", () => {
+  it("unrelated photos stay as separate items", () => {
     const a = img("a", undefined, "user")
     const b = img("b", undefined, "user")
-    const todas = [a, b]
+    const all = [a, b]
 
-    const { covers, versions } = groupMediaByRoot(todas, grade(todas))
+    const { covers, versions } = groupMediaByRoot(all, grade(all))
     expect(covers.map((c) => c.id).sort()).toEqual(["a", "b"])
     expect(versions.size).toBe(0)
   })
 
-  it("um elo escondido pelo filtro não parte o grupo em dois", () => {
-    // Filtro "Chat" esconde o anexo do usuário; v2 e v3 seguem juntas.
+  it("a link hidden by the filter does not split the group in two", () => {
+    // The "Chat" filter hides the user's attachment; v2 and v3 stay together.
     const anexo = img("anexo", undefined, "user")
     const v2 = img("v2", "anexo")
     const v3 = img("v3", "v2")
-    const todas = [anexo, v2, v3]
+    const all = [anexo, v2, v3]
 
-    const { covers, versions } = groupMediaByRoot(todas, grade([v2, v3]))
+    const { covers, versions } = groupMediaByRoot(all, grade([v2, v3]))
     expect(covers.map((c) => c.id)).toEqual(["v3"])
     expect(versions.get("v3")?.map((v) => v.id)).toEqual(["v2", "v3"])
   })
 })
 
 describe("expandToGroups", () => {
-  it("apagar o item leva as versões, menos a foto anexada pelo usuário", () => {
+  it("deleting the item takes the versions, except the photo the user attached", () => {
     const anexo = img("anexo", undefined, "user")
     const v2 = img("v2", "anexo")
     const v3 = img("v3", "v2")
-    const outra = img("outra", undefined, "user")
+    const other = img("other", undefined, "user")
 
-    expect(expandToGroups(["v3"], [anexo, v2, v3, outra]).sort()).toEqual(["v2", "v3"])
+    expect(expandToGroups(["v3"], [anexo, v2, v3, other]).sort()).toEqual(["v2", "v3"])
   })
 
-  it("não encosta em grupo que não foi selecionado", () => {
+  it("does not touch a group that was not selected", () => {
     const a1 = img("a1", undefined, "user")
     const a2 = img("a2", "a1")
     const b1 = img("b1", undefined, "user")

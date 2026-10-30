@@ -5,35 +5,35 @@ const viewport = { w: 1000, h: 800 }
 const board = { x: 0, y: 0, w: 400, h: 300 }
 
 describe("isBoardInView", () => {
-  it("enxerga o artboard na origem, com o canvas sem pan nem zoom", () => {
+  it("sees the artboard at the origin, with the canvas without pan or zoom", () => {
     expect(isBoardInView(board, { x: 0, y: 0, zoom: 1 }, viewport)).toBe(true)
   })
 
-  it("sai da vista quando o pan leva o board para longe", () => {
-    // Pan de 2000px para a esquerda: o board começa em -2000.
+  it("goes out of view when the pan takes the board far away", () => {
+    // A pan of 2000px to the left: the board starts at -2000.
     expect(isBoardInView(board, { x: -2000, y: 0, zoom: 1 }, viewport)).toBe(false)
-    // Encostando na borda ainda conta (o board termina em 0).
+    // Touching the edge still counts (the board ends at 0).
     expect(isBoardInView(board, { x: -400, y: 0, zoom: 1 }, viewport)).toBe(false)
     expect(isBoardInView(board, { x: -399, y: 0, zoom: 1 }, viewport)).toBe(true)
   })
 
-  it("a margem traz de volta o que está logo fora", () => {
-    // O board termina em -100: fora da viewport, mas dentro de 200px dela.
+  it("the margin brings back what is just outside", () => {
+    // The board ends at -100: outside the viewport, but within 200px of it.
     const outside = { x: -500, y: 0, zoom: 1 }
     expect(isBoardInView(board, outside, viewport)).toBe(false)
     expect(isBoardInView(board, outside, viewport, 200)).toBe(true)
   })
 
-  it("o zoom encolhe o board na tela: o mesmo pan passa a caber", () => {
+  it("zoom shrinks the board on screen: the same pan now fits", () => {
     const view = { x: -800, y: 0, zoom: 0.5 }
-    // Em 0.5x o board ocupa 200px e começa em -800 → termina em -600.
+    // At 0.5x the board takes 200px and starts at -800 → it ends at -600.
     expect(isBoardInView(board, view, viewport)).toBe(false)
-    // Com o pan em -100 ele termina em 100: a borda aparece.
+    // With the pan at -100 it ends at 100: the edge appears.
     expect(isBoardInView(board, { ...view, x: -100 }, viewport)).toBe(true)
   })
 
-  it("viewport de tamanho zero não afirma nada (a primeira medição)", () => {
-    // Quem chama trata {0,0} como "monta tudo"; aqui o retângulo é só vazio.
+  it("a zero-sized viewport claims nothing (the first measurement)", () => {
+    // The caller treats {0,0} as "mount everything"; here the rectangle is just empty.
     expect(isBoardInView(board, { x: 0, y: 0, zoom: 1 }, { w: 0, h: 0 })).toBe(false)
   })
 })

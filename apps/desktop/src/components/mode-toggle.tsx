@@ -4,17 +4,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils"
 
 /**
- * Botão toggle de modo (Pesquisa, Browser, Plano, Memória, …) para a barra
- * inferior do input: cinza quando desligado, foreground + fundo quando ligado,
- * com tooltip explicativo.
+ * Mode toggle button (Research, Browser, Plan, Memory, …) for the bottom bar
+ * of the input: gray when off, foreground + background when on,
+ * with an explanatory tooltip.
  *
- * `iconOnly` remove o label (configuração "Só ícone"). Mesmo com
- * `iconOnly={false}`, o label só aparece em containers largos (`@lg` — o
- * wrapper do input tem `@container`): em telas/containers estreitos o modo
- * icon-only é forçado para a fileira nunca estourar.
+ * `iconOnly` removes the label ("Icon only" setting). Even with
+ * `iconOnly={false}`, the label only appears in wide containers (`@lg` — the
+ * input wrapper has `@container`): on narrow screens/containers the icon-only
+ * mode is forced so the row never overflows.
  *
- * `onConfig` (modos que têm configuração) abre o modal do modo com o botão
- * DIREITO — o esquerdo continua só ligando/desligando.
+ * `onConfig` (modes that have settings) opens the mode modal with the RIGHT
+ * button — the left one keeps only turning on/off.
  */
 export function ModeToggle({
   icon: Icon,
@@ -31,7 +31,7 @@ export function ModeToggle({
   description: string
   active: boolean
   onToggle: () => void
-  /** Abre a configuração do modo (clique direito) */
+  /** Opens the mode settings (right click) */
   onConfig?: () => void
   disabled?: boolean
   iconOnly?: boolean

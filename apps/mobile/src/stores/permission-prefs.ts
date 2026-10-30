@@ -4,12 +4,12 @@ import { Storage } from '~/lib/storage'
 import { useConnectionStore } from '~/stores/connection-store'
 
 /**
- * Nível de autonomia POR CHAT, espelho do desktop.
+ * Autonomy level PER CHAT, mirror of the desktop.
  *
- * `defaultMode` é o padrão de chat novo (e o fallback de quem nunca escolheu);
- * `modes` guarda a escolha de cada sessão — mudar para Irrestrito num chat não
- * afrouxa os outros. Vive fora do PromptInput porque o card de revisão de plano
- * também lê o nível do chat.
+ * `defaultMode` is the new-chat default (and the fallback of whoever never chose);
+ * `modes` holds the choice of each session — switching to Unrestricted in one chat does not
+ * loosen the others. It lives outside the PromptInput because the plan review card
+ * also reads the level of the chat.
  */
 
 const DEFAULT_KEY = 'orbit-permission-mode'
@@ -25,12 +25,12 @@ interface PermissionPrefsState {
   modes: Record<string, PermissionMode>
   hydrated: boolean
   hydrate: () => Promise<void>
-  /** Escolha feita aqui: avisa o desktop (fonte da verdade) e espera o mapa
-   *  voltar pelo 'session:prefs-change'. O rascunho é por aparelho. */
+  /** Choice made here: notifies the desktop (source of truth) and waits for the map
+   *  to come back through 'session:prefs-change'. The draft is per device. */
   setMode: (sessionId: string | null | undefined, mode: PermissionMode) => void
-  /** Troca que veio do desktop (snapshot ou evento). */
+  /** Change that came from the desktop (snapshot or event). */
   applyRemoteMode: (sessionId: string, mode: PermissionMode) => void
-  /** Preferência do app vinda do desktop: padrão de chat novo. */
+  /** App preference coming from the desktop: new-chat default. */
   setDefaultMode: (mode: PermissionMode) => void
   adopt: (sessionId: string) => void
   clear: (sessionId: string) => void
@@ -59,13 +59,13 @@ export const usePermissionPrefs = create<PermissionPrefsState>((set, get) => ({
       const stored = await Storage.getItem(DEFAULT_KEY)
       if (isMode(stored)) set({ defaultMode: stored })
     } catch {
-      // preferência ilegível — segue no padrão mais conservador (ask)
+      // unreadable preference — goes on with the most conservative default (ask)
     }
     try {
       const raw = await Storage.getItem(STORAGE_KEY)
       if (raw) set({ modes: normalizar(JSON.parse(raw)) })
     } catch {
-      // mapa corrompido — todo chat segue o padrão
+      // corrupted map — every chat follows the default
     }
     set({ hydrated: true })
   },
@@ -82,12 +82,12 @@ export const usePermissionPrefs = create<PermissionPrefsState>((set, get) => ({
       try {
         void wsClient.send({ type: 'session:prefs-select', sessionId, permission: mode }).catch(() => {})
       } catch {
-        // Offline: o turno daqui leva o nível desta sessão.
+        // Offline: the turn from here carries the level of this session.
       }
       return
     }
 
-    // Chat novo: vira também o padrão do aparelho (mesmo contrato do desktop).
+    // New chat: it also becomes the default of the device (same contract as the desktop).
     void Storage.setItem(DEFAULT_KEY, mode)
     set({ modes, defaultMode: mode })
   },
@@ -122,7 +122,7 @@ export const usePermissionPrefs = create<PermissionPrefsState>((set, get) => ({
   },
 }))
 
-/** Nível efetivo do chat: override da sessão > padrão do app. */
+/** Effective level of the chat: session override > app default. */
 export function permissionFor(sessionId?: string | null): PermissionMode {
   const { modes, defaultMode } = usePermissionPrefs.getState()
   return modes[sessionId ?? DRAFT_KEY] ?? defaultMode

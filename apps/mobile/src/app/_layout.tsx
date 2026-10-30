@@ -67,7 +67,7 @@ export default function RootLayout() {
   const resolved = useThemeStore((s) => s.resolved);
   const setPreference = useThemeStore((s) => s.setPreference);
 
-  // Hidrata tema e persona persistidos ao montar
+  // Hydrates the persisted theme and persona on mount
   useEffect(() => {
     hydrateThemePreference().then((pref) => {
       setPreference(pref, systemIsDark);
@@ -82,7 +82,7 @@ export default function RootLayout() {
     hydrateLocale().then((locale) => {
       useLocaleStore.getState().setLocale(locale);
     });
-    // Hidrata os defaults/overrides de modos ativos (por chat) ao montar
+    // Hydrates the defaults/overrides of the active modes (per chat) on mount
     void useModelModePrefs.getState().hydrate();
     void useModeOverrides.getState().hydrate();
     void useSimplePrefs.getState().hydrate();
@@ -90,19 +90,19 @@ export default function RootLayout() {
     void usePermissionPrefs.getState().hydrate();
     void useSessionReasoning.getState().hydrate();
     void useModelRotationStore.getState().hydrate();
-    // Rascunhos do input por chat (o PromptInput também garante antes de ler)
+    // Input drafts per chat (the PromptInput also guarantees them before reading)
     void hydrateInputDrafts();
-    // Hidratação de boot: roda uma vez. Declarar as deps faria o app reidratar
-    // todo estado persistido a cada mudança de tema do sistema.
+    // Boot hydration: runs once. Declaring the deps would make the app rehydrate
+    // all persisted state on every change of the system theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sincroniza mudanças do theme-store com o Appearance API (NativeWind v5)
+  // Syncs changes of the theme-store with the Appearance API (NativeWind v5)
   useEffect(() => {
     setColorScheme(resolved);
   }, [resolved]);
 
-  // Sincroniza mudança de scheme do SO quando preference é "system"
+  // Syncs a change of the OS scheme when the preference is "system"
   useEffect(() => {
     const pref = useThemeStore.getState().preference;
     if (pref === "system") {
@@ -119,24 +119,24 @@ export default function RootLayout() {
   // Inicializa o companion (auto-reconnect + event wiring)
   useCompanion();
 
-  // Configura notificações locais reativas aos eventos WS
+  // Sets up local notifications reactive to the WS events
   useNotifications();
 
   const loadingConfig = useConnectionStore((s) => s.loadingConfig);
   const config = useConnectionStore((s) => s.config);
 
-  // ─── Routing lógico baseado no estado de conexão ──────────────────────
-  // A decisão de rota acontece uma única vez, no primeiro "connected": sem o
-  // ref, uma reconexão do socket no meio da sessão jogava o usuário para a
-  // tela de chat novo mesmo com outro chat aberto.
+  // ─── Logical routing based on the connection state ──────────────────────
+  // The route decision happens a single time, on the first "connected": without the
+  // ref, a socket reconnection in the middle of the session threw the user back to the
+  // new chat screen even with another chat open.
   const routedRef = useRef(false);
   useEffect(() => {
     if (connection.status === "connected") {
       if (routedRef.current) return;
       routedRef.current = true;
       void (async () => {
-        // Volta ao último chat aberto (o rascunho do input vem junto), se ele
-        // ainda existir no desktop; senão cai na tela de chat novo.
+        // Goes back to the last open chat (the input draft comes along), if it
+        // still exists on the desktop; otherwise falls back to the new chat screen.
         const lastId = await loadLastSessionId();
         if (lastId) {
           if (useSessionStore.getState().sessions.length === 0) {
@@ -152,17 +152,17 @@ export default function RootLayout() {
         router.replace("/(main)");
       })();
     } else if (!loadingConfig && connection.status === "disconnected") {
-      // Só decide rota depois que o loadConfig() terminou
+      // Only decides the route after loadConfig() has finished
       if (connection.errorReason || !config) {
-        // Voltou para a tela de pareamento: a próxima conexão decide a rota.
+        // Back to the pairing screen: the next connection decides the route.
         routedRef.current = false;
         router.replace("/(connection)");
       }
-      // Se tem config mas deu erro, a tela de conexão mostra o erro
+      // If there is a config but it errored, the connection screen shows the error
     }
   }, [connection.status, connection.errorReason, loadingConfig, config, router]);
 
-  // Esconde splash só depois da decisão de rota inicial
+  // Hides the splash only after the initial route decision
   useEffect(() => {
     if (!loadingConfig) {
       SplashScreen.hideAsync();
@@ -170,15 +170,15 @@ export default function RootLayout() {
   }, [loadingConfig]);
 
   useEffect(() => {
-    // O que foi escrito sem conexão aparece na fila antes de o socket abrir.
+    // What was typed without a connection shows up in the queue before the socket opens.
     void useMessageQueueStore.getState().initialize();
     void useNotificationPrefsStore.getState().loadPrefs();
-    // Carrega cache de sessões para aparecerem imediatamente
-    // (o fetch real via WS acontece quando conectar)
+    // Loads the session cache so they show up immediately
+    // (the real fetch over WS happens once it connects)
     void useSessionStore.getState().fetchSessions();
   }, []);
 
-  // Enquanto carrega config, não renderiza nada (splash visível)
+  // While the config loads, renders nothing (splash visible)
   if (loadingConfig && connection.status !== "connected") {
     return null;
   }

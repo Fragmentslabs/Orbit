@@ -1,10 +1,10 @@
-// Corrige o bit de execução do `spawn-helper` do node-pty nos prebuilds.
+// Fixes the execution bit of node-pty's `spawn-helper` in the prebuilds.
 //
-// O tarball oficial do node-pty@1.1.0 publica o binário com modo 644 (sem +x).
-// No macOS, o node-pty executa o spawn-helper via posix_spawn, que falha com
-// EACCES ("posix_spawnp failed.") quando o arquivo não é executável — e a aba
-// de terminal do painel nunca abre, sem erro visível. Roda no postinstall do
-// workspace para devs/CI; o main process também faz uma correção defensiva.
+// The official node-pty@1.1.0 tarball publishes the binary with mode 644 (without +x).
+// On macOS, node-pty runs spawn-helper through posix_spawn, which fails with
+// EACCES ("posix_spawnp failed.") when the file is not executable — and the terminal
+// tab of the panel never opens, without a visible error. It runs in the postinstall of the
+// workspace for devs/CI; the main process also does a defensive fix.
 import { chmodSync, existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -15,7 +15,7 @@ let ptyRoot
 try {
   ptyRoot = path.dirname(_require.resolve('node-pty/package.json'))
 } catch {
-  console.warn('[fix-pty-permissions] node-pty não encontrado; pulando.')
+  console.warn('[fix-pty-permissions] node-pty not found; skipping.')
   process.exit(0)
 }
 
@@ -31,5 +31,5 @@ for (const dir of readdirSync(prebuildsDir)) {
   }
 }
 if (fixed > 0) {
-  console.log(`[fix-pty-permissions] spawn-helper (+x) corrigido em ${fixed} prebuild(s)`)
+  console.log(`[fix-pty-permissions] spawn-helper (+x) fixed in ${fixed} prebuild(s)`)
 }

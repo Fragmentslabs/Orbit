@@ -5,15 +5,15 @@ import { useSimplePrefs } from '~/stores/simple-prefs'
 import { useBrainPrefs } from '~/stores/brain-prefs'
 
 /**
- * Modos ativos por chat vindos do desktop (pesquisa, navegador, plano,
- * subagentes, orquestração, visão, simples e brain). O desktop é a fonte da
- * verdade: empurra o mapa inteiro no connect (GET /api/session-modes) e a cada
- * mudança (evento WS 'session:mode-change').
+ * Active modes per chat coming from the desktop (research, browser, plan,
+ * subagents, orchestration, vision, simple and brain). The desktop is the source of
+ * truth: it pushes the whole map on connect (GET /api/session-modes) and on every
+ * change (WS event 'session:mode-change').
  *
- * `authoritative` separa os dois casos: no snapshot do connect a escolha feita
- * no celular vence (só entram chaves que o mobile não tem), como já acontece
- * com o modelo por chat; no evento ao vivo o desktop acabou de mudar, então
- * ele sobrescreve.
+ * `authoritative` separates the two cases: in the connect snapshot the choice made
+ * on the phone wins (only keys the mobile does not have enter), as already happens
+ * with the per-chat model; in the live event the desktop has just changed, so
+ * it overwrites.
  */
 
 const MODE_OVERRIDE_KEYS: OverridableMode[] = [
@@ -25,8 +25,8 @@ const MODE_OVERRIDE_KEYS: OverridableMode[] = [
   'vision',
 ]
 
-/** O rascunho é por aparelho: "draft" no desktop é outro chat que "draft" no
- *  celular, então essa chave nunca viaja (nem daqui, nem de lá). */
+/** The draft is per device: "draft" on the desktop is a different chat from "draft" on
+ *  the phone, so that key never travels (neither from here nor from there). */
 const DRAFT_KEY = 'draft'
 
 function sameMap(a: Record<string, boolean | undefined>, b: Record<string, boolean>): boolean {
@@ -35,11 +35,11 @@ function sameMap(a: Record<string, boolean | undefined>, b: Record<string, boole
   return aKeys.length === bKeys.length && bKeys.every((k) => a[k] === b[k])
 }
 
-/** Mescla um mapa sessionId → ativo; devolve null quando nada mudou.
+/** Merges a map sessionId → active; returns null when nothing changed.
  *
- *  No evento ao vivo o mapa do desktop substitui o local (só assim um modo
- *  desligado lá, que some do mapa, também some aqui); no snapshot do connect
- *  ele só preenche o que falta, para não desfazer escolha feita no celular. */
+ *  In the live event the desktop map replaces the local one (that is the only way a mode
+ *  switched off there, which disappears from the map, also disappears here); in the connect
+ *  snapshot it only fills in what is missing, so as not to undo a choice made on the phone. */
 function merge(
   local: Record<string, boolean | undefined>,
   remote: Record<string, boolean> | undefined,
@@ -93,8 +93,8 @@ export function applyRemoteModes(remote: SessionModeOverrides, authoritative: bo
   if (brain) brainState.applySync(brain)
 }
 
-/** O connect pode chegar antes da hidratação dos stores; aplicar o snapshot
- *  sobre um estado ainda vazio faria a hidratação seguinte desfazer tudo. */
+/** The connect may arrive before the hydration of the stores; applying the snapshot
+ *  over a still empty state would make the next hydration undo everything. */
 async function ensureHydrated(): Promise<void> {
   const pending: Promise<void>[] = []
   if (!useModeOverrides.getState().hydrated) pending.push(useModeOverrides.getState().hydrate())
@@ -103,7 +103,7 @@ async function ensureHydrated(): Promise<void> {
   if (pending.length > 0) await Promise.all(pending)
 }
 
-/** Snapshot dos modos por chat do desktop — chamado no connect. */
+/** Snapshot of the per-chat modes of the desktop — called on connect. */
 export async function fetchSessionModes(): Promise<void> {
   const { http } = useConnectionStore.getState()
   if (!http) return
@@ -115,6 +115,6 @@ export async function fetchSessionModes(): Promise<void> {
       if (remote) applyRemoteModes(remote, false)
     }
   } catch {
-    // Offline — fica com o que já está no aparelho.
+    // Offline — keeps what is already on the device.
   }
 }

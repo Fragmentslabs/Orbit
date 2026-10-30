@@ -14,23 +14,24 @@ import {
 } from './plan'
 
 /**
- * Compressão de mídia com alvo conferido — a parte que TOCA o disco.
+ * Media compression with a checked target — the part that TOUCHES the disk.
  *
- * O contrato é o oposto do "roda ffmpeg e torce": o arquivo de entrada nunca é
- * tocado, o resultado é reaberto com ffprobe e comparado com a origem (tamanho,
- * duração, streams) e, quando o alvo é um teto em bytes, o encoder é refeito com
- * o bitrate corrigido — no máximo três tentativas, sempre medindo o que saiu.
+ * The contract is the opposite of "run ffmpeg and hope": the input file is never
+ * touched, the result is reopened with ffprobe and compared against the source
+ * (size, duration, streams) and, when the target is a ceiling in bytes, the encoder
+ * is redone with the corrected bitrate — at most three attempts, always measuring
+ * what came out.
  *
- * Escreve num arquivo temporário e só renomeia no fim: um encode interrompido
- * (abort, erro do ffmpeg) não deixa um .mp4 pela metade com nome de definitivo.
+ * It writes to a temporary file and only renames at the end: an interrupted encode
+ * (abort, ffmpeg error) does not leave a half-written .mp4 under the final name.
  */
 
-/** Tentativas máximas no modo tamanho-alvo (1 + 2 correções). */
+/** Maximum attempts in size-target mode (1 + 2 corrections). */
 export const MAX_ATTEMPTS = 3
 
 export interface CompressRequest {
   file: string
-  /** Caminho final do arquivo comprimido (nunca igual ao de entrada). */
+  /** Final path of the compressed file (never the same as the input). */
   output: string
   target: CompressTarget
   format?: MediaContainer
@@ -38,7 +39,7 @@ export interface CompressRequest {
   stripAudio?: boolean
   audioBitrate?: number
   preset?: Preset
-  /** Recodifica mesmo quando o arquivo já cabe no alvo. */
+  /** Re-encodes even when the file already fits the target. */
   force?: boolean
   signal?: AbortSignal
 }
@@ -52,9 +53,9 @@ export interface CompressReport {
   attempts: number
   encodeMs: number
   notes: string[]
-  /** O teto em bytes foi cumprido? */
+  /** Was the ceiling in bytes met? */
   withinTarget: boolean
-  /** Nada foi recodificado: o arquivo já cabia no alvo. */
+  /** Nothing was re-encoded: the file already fit the target. */
   skipped: boolean
 }
 
@@ -73,7 +74,7 @@ const SVT_PRESET: Record<Preset, string> = { fast: '10', balanced: '8', slow: '6
 
 function audioEncoderArgs(plan: EncodePlan): string[] {
   const args = ['-c:a', ENCODERS[plan.audioCodec], '-b:a', `${plan.audioBitrate}k`]
-  // Opus em .opus/.webm; o resto é estereofônico de consumo.
+  // Opus in .opus/.webm; the rest is consumer stereo.
   if (plan.audioCodec !== 'opus') args.push('-ac', '2')
   return args
 }
@@ -84,7 +85,7 @@ function videoEncoderArgs(plan: EncodePlan): string[] {
 
   if (codec === 'h264' || codec === 'hevc') args.push('-preset', X264_PRESET[plan.preset])
   if (codec === 'hevc') {
-    // hvc1 = o que o QuickTime/Safari tocam; e o libx265 é verborrágico no stderr.
+    // hvc1 = what QuickTime/Safari play; and libx265 is verbose on stderr.
     args.push('-tag:v', 'hvc1', '-x265-params', 'log-level=error')
   }
   if (codec === 'vp9') args.push('-row-mt', '1', '-cpu-used', plan.preset === 'fast' ? '4' : '2')
@@ -92,16 +93,16 @@ function videoEncoderArgs(plan: EncodePlan): string[] {
 
   if (plan.crf !== null) {
     args.push('-crf', String(plan.crf))
-    // VP9 em CRF precisa do bitrate zerado, senão ele tenta as duas coisas.
+    // VP9 in CRF needs the bitrate zeroed, otherwise it tries both things.
     if (codec === 'vp9') args.push('-b:v', '0')
   } else if (plan.bitrate) {
-    // Bitrate-alvo é uma PROMESSA de tamanho: maxrate impede o pico de estourar.
+    // A target bitrate is a PROMISE of size: maxrate keeps the peak from blowing it.
     args.push('-b:v', `${plan.bitrate}k`, '-maxrate', `${plan.bitrate}k`, '-bufsize', `${plan.bitrate * 2}k`)
   }
   return args
 }
 
-/** Argumentos completos do ffmpeg para um plano. Puro — o teste usa isto. */
+/** Complete ffmpeg arguments for a plan. Pure — the test uses this. */
 export function buildFfmpegArgs(input: string, output: string, plan: EncodePlan): string[] {
   const args = ['-v', 'error', '-i', input]
 
@@ -122,11 +123,11 @@ export function buildFfmpegArgs(input: string, output: string, plan: EncodePlan)
   }
 
   if (plan.pixFmt) args.push('-pix_fmt', plan.pixFmt)
-  // Metadados de origem (data, título, faixa) sobrevivem; legendas embutidas e
-  // trilhas de dados não — elas não fazem sentido no arquivo comprimido.
+  // Source metadata (date, title, track) survives; embedded subtitles and
+  // data tracks do not — they make no sense in the compressed file.
   args.push('-map_metadata', '0', '-sn', '-dn')
   if (plan.container === 'mp4' || plan.container === 'mov' || plan.container === 'm4a') {
-    // Índice na frente: toca/streama antes de baixar inteiro.
+    // Index up front: it plays/streams before downloading the whole thing.
     args.push('-movflags', '+faststart')
   }
   args.push(output)
@@ -145,10 +146,10 @@ function durationAgrees(before: MediaProbe, after: MediaProbe): boolean {
 }
 
 /**
- * Comprime (ou extrai o áudio) um arquivo de mídia.
+ * Compresses (or extracts the audio of) a media file.
  *
- * O `output` é escrito POR ESTA função: o chamador não deve ter já o arquivo
- * aberto nem apontá-lo para a entrada.
+ * `output` is written BY THIS function: the caller must not already have the file
+ * open nor point it at the input.
  */
 export async function compressMedia(req: CompressRequest): Promise<CompressReport> {
   const input = path.resolve(req.file)
@@ -175,7 +176,7 @@ export async function compressMedia(req: CompressRequest): Promise<CompressRepor
     !req.codec &&
     !req.stripAudio
 
-  // Já cabe no teto e nada mais foi pedido: recomprimir só perderia qualidade.
+  // It already fits the ceiling and nothing else was asked: re-encoding would only lose quality.
   if (justFitsInBytes && before.sizeBytes <= req.target.maxBytes! && !req.force) {
     return {
       output,
@@ -256,7 +257,7 @@ export async function compressMedia(req: CompressRequest): Promise<CompressRepor
     output,
     kind: plan.kind,
     before,
-    // O probe é do temporário, mas o arquivo é o MESMO bytes: só o nome muda.
+    // The probe is of the temporary file, but the file is the SAME bytes: only the name changes.
     after: { ...after, file: output },
     plan,
     attempts,

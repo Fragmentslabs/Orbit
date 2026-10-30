@@ -5,12 +5,12 @@ import { WorkspaceSearch } from "@/src/components/workspace-search";
 import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store";
 
 /**
- * A busca do espaço em modal (⌘P).
+ * The workspace search in a modal (⌘P).
  *
- * Mora no App, e não na aba de arquivos: o atalho tem de responder de qualquer
- * aba, inclusive com o painel fechado. O que ela NÃO faz aqui é abrir o
- * arquivo — isso é do visualizador, que vive na aba de arquivos. Por isso o
- * resultado vira um pedido no store (`requestFile`) em vez de navegação direta.
+ * It lives in the App, and not in the files tab: the shortcut has to answer from any
+ * tab, including with the panel closed. What it does NOT do here is open the
+ * file — that belongs to the viewer, which lives in the files tab. That is why the
+ * result becomes a request in the store (`requestFile`) instead of direct navigation.
  */
 export function WorkspaceSearchDialog() {
   const open = useWorkspaceSearchStore((state) => state.open);

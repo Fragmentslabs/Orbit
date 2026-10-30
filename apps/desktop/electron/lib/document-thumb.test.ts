@@ -4,18 +4,18 @@ import { describe, expect, it } from 'vitest'
 import { pageThumb, textThumb, THUMB_HEIGHT, THUMB_WIDTH } from './document-thumb'
 
 /**
- * A miniatura é enfeite, então o que estes testes protegem não é a aparência —
- * é que ela nunca derrube a lista de fontes e nunca saia em branco fingindo
- * ser uma capa.
+ * The thumbnail is decoration, so what these tests protect is not the looks —
+ * it is that it never brings the sources list down and never comes out blank pretending
+ * to be a cover.
  */
 
 /**
- * Pixels com tinta no MIOLO da folha — a moldura fica de fora.
+ * Pixels with ink in the MIDDLE of the sheet — the frame stays out.
  *
- * Mede assim, e não "pixels escuros", porque a capa tem dois desenhos
- * possíveis: o texto (escuro) quando a fonte resolve e as barras (cinza claro)
- * quando não resolve. Contar só o escuro daria a folha por vazia numa máquina
- * sem fonte instalada, que é um ambiente legítimo e não uma falha.
+ * It measures this way, and not "dark pixels", because the cover has two possible
+ * drawings: the text (dark) when the font resolves and the bars (light gray)
+ * when it does not. Counting only the dark ones would take the sheet for empty on a machine
+ * without an installed font, which is a legitimate environment and not a failure.
  */
 async function inkPixels(webp: Buffer): Promise<number> {
   const margin = 3
@@ -35,8 +35,8 @@ async function inkPixels(webp: Buffer): Promise<number> {
 }
 
 describe('textThumb', () => {
-  it('desenha uma folha no tamanho combinado', async () => {
-    const thumb = await textThumb('Contrato de prestação de serviços\nCláusula quarta — do prazo')
+  it('draws a sheet at the agreed size', async () => {
+    const thumb = await textThumb('Service agreement\nClause four — on the term')
     expect(thumb).not.toBeNull()
     const meta = await sharp(thumb!).metadata()
     expect(meta.format).toBe('webp')
@@ -44,51 +44,51 @@ describe('textThumb', () => {
     expect(meta.height).toBe(THUMB_HEIGHT)
   })
 
-  it('a folha sai com conteúdo, e não limpa', async () => {
-    const thumb = await textThumb('Primeira linha do documento\nSegunda linha do documento')
-    // A moldura está fora da conta, então qualquer tinta aqui é conteúdo.
+  it('the sheet comes out with content, and not blank', async () => {
+    const thumb = await textThumb('First line of the document\nSecond line of the document')
+    // The frame is out of the count, so any ink here is content.
     expect(await inkPixels(thumb!)).toBeGreaterThan(100)
   })
 
-  it('dois textos diferentes geram capas diferentes — é o ponto de existir', async () => {
-    const a = await textThumb('Ata da reunião de 12 de março, pauta e encaminhamentos')
-    const b = await textThumb('Lista de compras: café, açúcar, farinha')
+  it('two different texts generate different covers — that is the point of existing', async () => {
+    const a = await textThumb('Minutes of the March 12 meeting, agenda and follow-ups')
+    const b = await textThumb('Shopping list: coffee, sugar, flour')
     expect(Buffer.compare(a!, b!)).not.toBe(0)
   })
 
-  it('texto vazio ou só espaços não vira capa (a linha fica com o ícone)', async () => {
+  it('empty text or only spaces does not become a cover (the row keeps the icon)', async () => {
     expect(await textThumb('')).toBeNull()
     expect(await textThumb('   \n\n  \t ')).toBeNull()
   })
 
-  it('caractere de marcação no texto não quebra o SVG', async () => {
-    // Um `<` solto invalidaria o XML e o sharp recusaria a imagem inteira.
-    const thumb = await textThumb('if (a < b && c > d) { return "x" }\nsegunda linha')
+  it('a markup character in the text does not break the SVG', async () => {
+    // A loose `<` would invalidate the XML and sharp would refuse the whole image.
+    const thumb = await textThumb('if (a < b && c > d) { return "x" }\nsecond line')
     expect(thumb).not.toBeNull()
     expect(await inkPixels(thumb!)).toBeGreaterThan(100)
   })
 
-  it('linha muito longa não vaza da folha', async () => {
-    // Se a linha não fosse cortada, o SVG renderizaria texto fora do quadro —
-    // o tamanho continua o mesmo, então o que se verifica é que não falhou.
+  it('a very long line does not leak out of the sheet', async () => {
+    // If the line were not cut, the SVG would render text outside the frame —
+    // the size stays the same, so what is verified is that it did not fail.
     const thumb = await textThumb('x'.repeat(4000))
     const meta = await sharp(thumb!).metadata()
     expect(meta.width).toBe(THUMB_WIDTH)
   })
 
-  it('documento com espaçamento duplo aproveita a folha toda', async () => {
-    // Linhas em branco puladas: senão metade da capa seria vazio.
-    const espacado = Array.from({ length: 12 }, (_, i) => `linha ${i}\n`).join('\n')
-    const compacto = Array.from({ length: 12 }, (_, i) => `linha ${i}`).join('\n')
-    expect(await inkPixels((await textThumb(espacado))!)).toBe(
-      await inkPixels((await textThumb(compacto))!),
+  it('a double-spaced document uses the whole sheet', async () => {
+    // Blank lines skipped: otherwise half of the cover would be empty.
+    const spaced = Array.from({ length: 12 }, (_, i) => `line ${i}\n`).join('\n')
+    const compact = Array.from({ length: 12 }, (_, i) => `line ${i}`).join('\n')
+    expect(await inkPixels((await textThumb(spaced))!)).toBe(
+      await inkPixels((await textThumb(compact))!),
     )
   })
 })
 
 describe('pageThumb', () => {
-  it('encaixa a página no quadro sem recortar o topo', async () => {
-    // Página "alta" com uma faixa preta no topo: com `cover` ela seria cortada.
+  it('fits the page in the frame without cropping the top', async () => {
+    // A "tall" page with a black band at the top: with `cover` it would be cropped.
     const page = await sharp({
       create: { width: 600, height: 900, channels: 3, background: '#ffffff' },
     })
@@ -113,7 +113,7 @@ describe('pageThumb', () => {
     expect(await inkPixels(thumb!)).toBeGreaterThan(400)
   })
 
-  it('bytes que não são imagem devolvem null em vez de estourar', async () => {
-    expect(await pageThumb(Buffer.from('nem de longe um png'))).toBeNull()
+  it('bytes that are not an image return null instead of blowing up', async () => {
+    expect(await pageThumb(Buffer.from('not even close to a png'))).toBeNull()
   })
 })

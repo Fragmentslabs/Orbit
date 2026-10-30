@@ -8,13 +8,13 @@ type ElectronUpdater = typeof import('electron-updater')
 let started = false
 
 /**
- * Auto-update via GitHub Releases (electron-updater): AppImage no Linux,
- * ZIP assinado+notarizado no macOS, instalador NSIS no Windows.
+ * Auto-update via GitHub Releases (electron-updater): AppImage on Linux,
+ * signed+notarized ZIP on macOS, NSIS installer on Windows.
  *
- * Nunca roda nas variantes de loja (Mac App Store / Microsoft Store): a
- * atualização ali é de responsabilidade da loja, e o sandbox bloquearia o
- * download de qualquer forma. No Linux, apenas AppImage suporta update
- * automático (deb é atualização manual).
+ * It never runs in the store variants (Mac App Store / Microsoft Store): the
+ * update there is the store's responsibility, and the sandbox would block the
+ * download anyway. On Linux, only AppImage supports automatic update
+ * (deb is a manual update).
  */
 export function setupAutoUpdater() {
   if (!app.isPackaged) return
@@ -23,26 +23,26 @@ export function setupAutoUpdater() {
   if (started) return
   started = true
 
-  // CJS no runtime (mesmo padrão do node-pty/jszip no main)
+  // CJS at runtime (same pattern as node-pty/jszip in the main)
   const { autoUpdater } = _require('electron-updater') as ElectronUpdater
 
   autoUpdater.autoDownload = true
-  // Se o usuário escolheu "Depois", instala silenciosamente no próximo quit
+  // If the user chose "Later", it installs silently on the next quit
   autoUpdater.autoInstallOnAppQuit = true
 
-  // Nunca derrubar o app por causa do updater: falha de rede/offline é normal
+  // Never bring the app down because of the updater: network failure/offline is normal
   autoUpdater.on('error', (err) => {
-    console.warn('[updater] erro ao verificar atualização:', (err as Error)?.message ?? err)
+    console.warn('[updater] failed to check for an update:', (err as Error)?.message ?? err)
   })
 
   autoUpdater.on('update-downloaded', (info) => {
     const [win] = BrowserWindow.getAllWindows()
     const options = {
       type: 'info' as const,
-      title: 'Atualização disponível',
-      message: `Orbit ${info.version} foi baixado.`,
-      detail: 'Reiniciar agora para instalar a nova versão?',
-      buttons: ['Reiniciar agora', 'Depois'],
+      title: 'Update available',
+      message: `Orbit ${info.version} has been downloaded.`,
+      detail: 'Restart now to install the new version?',
+      buttons: ['Restart now', 'Later'],
       defaultId: 0,
       cancelId: 1,
     }
@@ -51,17 +51,17 @@ export function setupAutoUpdater() {
         ? await dialog.showMessageBox(win, options)
         : await dialog.showMessageBox(options)
       if (response === 0) {
-        // Sai da pilha atual antes de reiniciar: evita travar o quit
+        // Leaves the current stack before restarting: avoids hanging the quit
         setImmediate(() => autoUpdater.quitAndInstall())
       }
     }
     void show()
   })
 
-  // Atrasada: não compete com a inicialização nem com o som de entrada
+  // Delayed: it does not compete with startup nor with the entrance sound
   setTimeout(() => {
     autoUpdater.checkForUpdatesAndNotify().catch((err: unknown) => {
-      console.warn('[updater] verificação de atualização falhou:', (err as Error)?.message ?? err)
+      console.warn('[updater] update check failed:', (err as Error)?.message ?? err)
     })
   }, 10_000)
 }

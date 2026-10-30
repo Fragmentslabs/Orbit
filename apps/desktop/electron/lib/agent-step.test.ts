@@ -7,10 +7,10 @@ vi.mock('electron', () => ({ app: { getVersion: () => '0.0.0-test' } }))
 import { agentPrepareStep, createStepPreparer } from './agent-step'
 
 /**
- * Todo tool loop do app passa por aqui (agente principal, subagentes,
- * orquestrador, /init, computer_task, esteira): o que é decidido neste módulo
- * vale para todos — antes cada um tinha só a normalização de reasoning, e a
- * esteira nem isso.
+ * Every tool loop in the app goes through here (main agent, subagents,
+ * orchestrator, /init, computer_task, pipeline): what is decided in this module
+ * holds for all of them — before, each one had only the reasoning
+ * normalization, and the pipeline not even that.
  */
 
 const opencodeGo = {
@@ -30,32 +30,32 @@ const opencodeGo = {
   },
 } as unknown as CatalogProvider
 
-const conversa: ModelMessage[] = [
-  { role: 'user', content: 'oi' },
-  { role: 'assistant', content: 'olá' },
-  { role: 'user', content: 'tudo bem?' },
+const conversation: ModelMessage[] = [
+  { role: 'user', content: 'hi' },
+  { role: 'assistant', content: 'hello' },
+  { role: 'user', content: 'how are you?' },
 ]
 
 const cached = (messages: ModelMessage[]) => messages.map((m) => Boolean(m.providerOptions?.anthropic?.cacheControl))
 
 describe('createStepPreparer', () => {
-  it('marca o cache quando o modelo fala o protocolo Anthropic', () => {
-    const prepared = createStepPreparer(opencodeGo, 'claude-haiku-5-5').prepare(conversa)
+  it('marks the cache when the model speaks the Anthropic protocol', () => {
+    const prepared = createStepPreparer(opencodeGo, 'claude-haiku-5-5').prepare(conversation)
     expect(cached(prepared)).toEqual([true, true, true])
   })
 
-  it('não marca nada nos outros — lá o cache de prefixo é automático', () => {
-    const prepared = createStepPreparer(opencodeGo, 'deepseek-v4-pro').prepare(conversa)
+  it('marks nothing in the others — there the prefix cache is automatic', () => {
+    const prepared = createStepPreparer(opencodeGo, 'deepseek-v4-pro').prepare(conversation)
     expect(cached(prepared)).toEqual([false, false, false])
   })
 
-  it('o orçamento é o do modelo, com o teto de trabalho abaixo do de segurança', () => {
+  it('the budget is the model one, with the work ceiling below the safety one', () => {
     const haiku = createStepPreparer(opencodeGo, 'claude-haiku-5-5')
     expect(haiku.budget).toBe(162_000)
     expect(haiku.workingBudget).toBe(100_000)
   })
 
-  it('corta o acúmulo do loop e lembra o corte entre os passos', () => {
+  it('cuts the loop accumulation and remembers the cut between the steps', () => {
     const pair = (id: string, chars: number): ModelMessage[] => [
       { role: 'assistant', content: [{ type: 'tool-call', toolCallId: id, toolName: 'bash', input: { command: `npm run t${id}` } }] },
       { role: 'tool', content: [{ type: 'tool-result', toolCallId: id, toolName: 'bash', output: { type: 'text', value: 'x'.repeat(chars) } }] },
@@ -72,8 +72,8 @@ describe('createStepPreparer', () => {
 })
 
 describe('agentPrepareStep', () => {
-  it('responde {} quando nada muda, para o SDK pular a reescrita', () => {
+  it('answers {} when nothing changes, so the SDK skips the rewrite', () => {
     const step = agentPrepareStep(opencodeGo, 'deepseek-v4-pro')
-    expect(step({ messages: [{ role: 'user', content: 'oi' }] })).toEqual({})
+    expect(step({ messages: [{ role: 'user', content: 'hi' }] })).toEqual({})
   })
 })

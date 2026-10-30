@@ -7,17 +7,17 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
- * Selecionar um trecho num visualizador e mandá-lo para o chat.
+ * Select an excerpt in a viewer and send it to the chat.
  *
- * Fica aqui, e não dentro de cada visualizador, porque o gesto é o mesmo em
- * todos: selecionou, aparece o botão, virou chip no compositor. O que muda de
- * um para o outro é só COMO se descobre a página e a linha do trecho — e isso
- * entra por `resolve`, que cada visualizador implementa do seu jeito (o
- * documento vivo em Markdown não implementa: ele não tem página).
+ * It lives here, and not inside each viewer, because the gesture is the same in
+ * all of them: once selected, the button appears, it became a chip in the composer. What changes from
+ * one to the other is only HOW the page and the line of the excerpt are found — and that
+ * comes in through `resolve`, which each viewer implements its own way (the
+ * living Markdown document does not implement it: it has no page).
  *
- * O botão é renderizado em portal com posição fixa porque a caixa da seleção
- * vem em coordenadas de viewport: dentro do contêiner ele seria cortado pelo
- * overflow do painel, que é justamente onde o texto rola.
+ * The button is rendered in a portal with a fixed position because the selection box
+ * comes in viewport coordinates: inside the container it would be cut by the
+ * overflow of the panel, which is exactly where the text scrolls.
  */
 
 export interface QuoteAnchor {
@@ -37,43 +37,43 @@ export function QuoteSelection({
   readAloud = false,
 }: {
   containerRef: RefObject<HTMLElement | null>
-  /** O que o agente pode fazer com o id — ver DocumentQuotePayload. */
+  /** What the agent can do with the id — see DocumentQuotePayload. */
   kind: "document" | "source"
   docId: string
   name: string
   /**
-   * Onde o trecho está no documento. Ausente = cita só o texto.
+   * Where the excerpt is in the document. Absent = it quotes only the text.
    *
-   * Recebe o texto já extraído da seleção porque nem todo visualizador
-   * descobre a posição pelo DOM: no PDF desenhado a única pista é o próprio
-   * texto, procurado de volta nas linhas da página.
+   * It receives the text already extracted from the selection because not every viewer
+   * finds the position through the DOM: in a drawn PDF the only clue is the text
+   * itself, searched back in the lines of the page.
    */
   resolve?: (range: Range, text: string) => QuoteAnchor
   /**
-   * Oferece "Ler trecho" ao lado do "Citar no chat".
+   * Offers "Read excerpt" next to "Quote in chat".
    *
-   * É opt-in: quem não pede continua com a barra de um botão só. O documento
-   * em Markdown pede, porque lá a leitura em voz alta é o mesmo gesto da
-   * conversa; num visualizador que já tem os seus controles de fala a decisão
-   * é outra.
+   * It is opt-in: whoever does not ask keeps the single-button bar. The Markdown
+   * document asks for it, because there the reading aloud is the same gesture as the
+   * conversation's; in a viewer that already has its own speech controls the decision
+   * is another one.
    */
   readAloud?: boolean
 }) {
   const { t } = useTranslation()
   const addQuote = usePanelStore((s) => s.addQuote)
-  // As mesmas regras do botão de fala da mensagem inteira (messages/speak-action):
-  // some com o TTS desligado nas preferências e, sem o modelo baixado, também
-  // não aparece — aqui não há espaço para o atalho que leva às Preferências, e
-  // um botão que só falha é pior que um botão ausente.
+  // The same rules as the speak button of the whole message (messages/speak-action):
+  // it disappears with TTS off in the preferences and, without the model downloaded, it
+  // does not appear either — here there is no room for the shortcut that leads to Preferences, and
+  // a button that only fails is worse than a missing button.
   const voice = useAppSettings((s) => (s.settings as unknown as { voice?: unknown }).voice)
   const prefs = useMemo(() => readTtsPrefs(voice), [voice])
   const engine = useMemo(() => readTtsEngine(voice), [voice])
   const { ready, known } = useTtsStatus(prefs.enabled, engine)
-  // `known: false` = ninguém respondeu (main antigo ou sem motor): não bloqueia.
+  // `known: false` = nobody answered (old main process or no engine): it does not block.
   const canSpeak = readAloud && prefs.enabled && (!known || ready)
   const { speak, stop, speaking } = useSpeak()
-  // Guardado em ref para o chamador poder passar uma arrow inline sem que o
-  // listener seja reassinado a cada render.
+  // Kept in a ref so the caller can pass an inline arrow without the
+  // listener being re-bound on every render.
   const resolveRef = useRef(resolve)
   resolveRef.current = resolve
   const [pending, setPending] = useState<
@@ -109,12 +109,12 @@ export function QuoteSelection({
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    // O botão nasce quando a seleção TERMINA (mouseup/keyup), não a cada
-    // mexida do cursor: durante o arrasto ele ficaria pulando junto.
+    // The button is born when the selection ENDS (mouseup/keyup), not on every
+    // cursor move: during the drag it would be jumping along.
     container.addEventListener("mouseup", capture)
     container.addEventListener("keyup", capture)
-    // ...e some assim que a seleção se desfaz, por clique ou por rolagem que
-    // a leve para fora da tela.
+    // ...and it disappears as soon as the selection comes undone, by click or by a scroll that
+    // takes it off screen.
     const onSelectionChange = () => {
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed) setPending(null)
@@ -137,9 +137,9 @@ export function QuoteSelection({
       {canSpeak && (
         <button
           type="button"
-          // Sem o preventDefault o clique desfaz a seleção e a barra some no
-          // meio da fala — com ele o mesmo trecho pode ser interrompido logo
-          // em seguida.
+          // Without the preventDefault the click undoes the selection and the bar disappears in
+          // the middle of the speech — with it the same excerpt can be interrupted right
+          // after.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             if (speaking) stop()

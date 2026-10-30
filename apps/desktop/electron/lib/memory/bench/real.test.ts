@@ -1,14 +1,14 @@
 /**
- * Fumação no ACERVO REAL (Fase 7): monta o índice completo com as memórias que
- * o app usa de verdade e responde três perguntas que a fixture sintética não
- * responde — o acervo real cabe no orçamento? a faixa de cosseno bate com a
- * calibrada? o piso de ruído real é o mesmo?
+ * Smoke test on the REAL POOL (Phase 7): builds the complete index with the memories
+ * the app actually uses and answers three questions the synthetic fixture does not
+ * answer — does the real pool fit the budget? does the cosine range match the
+ * calibrated one? is the real noise floor the same?
  *
  *   MEMORY_BENCH_REAL=1 npx vitest run electron/lib/memory/bench/real.test.ts
  *
- * PRIVACIDADE: este teste NUNCA imprime `text`, `title` ou `summary`. Só id,
- * rótulos de classificação (kind/category/area), tempos e cossenos — o
- * suficiente para julgar a calibração sem trazer conteúdo pessoal para o chat.
+ * PRIVACY: this test NEVER prints `text`, `title` or `summary`. Only id,
+ * classification labels (kind/category/area), timings and cosines —
+ * enough to judge the calibration without bringing personal content into the chat.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -31,11 +31,11 @@ import type { Memory } from '@shared/memory'
 const ITEMS = path.join(os.homedir(), 'Library/Application Support/@orbit/desktop/orbit-data/storage/memory/items')
 const MODEL = path.resolve(__dirname, '../../../../.cache/memory-embed/bekko-a8m')
 
-/** Parâmetros de produção, como o benchmark os escolheu no split dev (a8m). */
+/** Production parameters, as the benchmark chose them on the dev split (a8m). */
 const RETRIEVAL = { ...DEFAULT_RETRIEVAL, semWeight: 1, lexWeight: 0.1, lexMinCoverage: 0.5 }
 const PRODUCTION: SelectionParams = {
   ...DEFAULT_SELECTION,
-  threshold: 'acervo',
+  threshold: 'collection',
   noiseQuantile: 1,
   injectDelta: 0.22,
   pointerDelta: 0,
@@ -46,7 +46,7 @@ const PRODUCTION: SelectionParams = {
   maxInjectChars: 600,
 }
 
-/** Sondas genéricas escritas para este teste — não vêm do acervo do usuário. */
+/** Generic probes written for this test — they do not come from the user's pool. */
 const PROBES = [
   'qual banco de dados o projeto usa?',
   'como eu prefiro que o código seja escrito?',
@@ -67,8 +67,8 @@ function cos(a: Float32Array, b: Float32Array): number {
 
 const gated = process.env.MEMORY_BENCH_REAL ? describe : describe.skip
 
-gated('acervo real (fumação)', () => {
-  it('monta o índice e mede a faixa de cosseno', async () => {
+gated('real corpus (smoke)', () => {
+  it('builds the index and measures the cosine range', async () => {
     const files = fs.readdirSync(ITEMS).filter((f) => f.endsWith('.json'))
     const memories: Memory[] = []
     for (const f of files) {
@@ -95,7 +95,7 @@ gated('acervo real (fumação)', () => {
     const vecMap = new Map([...byId].map(([id, x]) => [id, x.v]))
     const lexical = new Bm25Index(memories.map((m) => lexicalDocOf(m)))
 
-    // Piso de ruído do acervo real, exatamente como a produção calcula.
+    // Noise floor of the real pool, exactly as production computes it.
     const probeVecs = await embedder.embed(NOISE_PROBES)
     const noise = noiseFloorOf(probeVecs, vecMap)
     const floor = quantile(noise.tops, PRODUCTION.noiseQuantile)
@@ -116,8 +116,8 @@ gated('acervo real (fumação)', () => {
       }
     })
 
-    // Cosseno da consulta contra o próprio retrievalText de cada memória:
-    // mede se o acervo é internamente redundante (tudo perto de tudo).
+    // Cosine of the query against each memory's own retrievalText:
+    // measures whether the pool is internally redundant (everything close to everything).
     let selfSum = 0
     let pairs = 0
     let maxPair = 0
@@ -130,9 +130,9 @@ gated('acervo real (fumação)', () => {
       }
     }
 
-    // --- Pares quase idênticos: são duplicata, variação complementar ou só tema próximo?
-    // Comparação ESTRUTURAL (sem imprimir texto): Jaccard de tokens, contenção,
-    // rótulos iguais e razão de tamanho.
+    // --- Near-identical pairs: are they a duplicate, a complementary variation or just a nearby theme?
+    // STRUCTURAL comparison (no text printed): token Jaccard, containment,
+    // equal labels and length ratio.
     const toks = (t: string) =>
       new Set(
         t
@@ -178,8 +178,8 @@ gated('acervo real (fumação)', () => {
     }
     nearDupRows.sort((x, y) => (y.cos as number) - (x.cos as number))
 
-    // --- Fila de revisão local (rotulagem humana) ----------------------
-    // Fora do repositório: ~/.orbit-memory-review/. Só o dono do acervo lê.
+    // --- Local review queue (human labelling) --------------------------
+    // Outside the repository: ~/.orbit-memory-review/. Only the pool's owner reads it.
     const reviewDir = path.join(os.homedir(), '.orbit-memory-review')
     fs.mkdirSync(reviewDir, { recursive: true })
     const queue = PROBES.map((q, i) => {
@@ -193,19 +193,19 @@ gated('acervo real (fumação)', () => {
     fs.writeFileSync(path.join(reviewDir, 'queue.json'), JSON.stringify(queue, null, 2))
     const payload = JSON.stringify(queue).replace(/</g, '\\u003c')
     fs.writeFileSync(
-      path.join(reviewDir, 'revisar.html'),
-      `<!doctype html><meta charset="utf-8"><title>Revisão de memórias</title>
+      path.join(reviewDir, 'review.html'),
+      `<!doctype html><meta charset="utf-8"><title>Memory review</title>
 <style>body{font:14px/1.5 system-ui;max-width:900px;margin:2rem auto;padding:0 1rem;background:#111;color:#eee}
 h2{font-size:15px;margin:2rem 0 .5rem;color:#f5c542}.c{border:1px solid #333;border-radius:8px;padding:.6rem .8rem;margin:.5rem 0}
 label{margin-right:1rem;cursor:pointer}.id{color:#888;font-size:12px}button{margin-top:1rem;padding:.6rem 1rem;border-radius:8px;border:0;background:#f5c542;font-weight:600;cursor:pointer}</style>
-<h1>Revisão de memórias</h1><p>Para cada sonda, marque as memórias que <b>ajudariam a responder</b> — não as que apenas falam do mesmo assunto. Isso vira o ground truth do acervo real.</p>
-<div id="app"></div><button id="exp">Exportar rótulos</button>
+<h1>Memory review</h1><p>For each probe, mark the memories that <b>would help answer</b> — not the ones that merely talk about the same subject. This becomes the ground truth of the real collection.</p>
+<div id="app"></div><button id="exp">Export labels</button>
 <script>const Q=${payload};
 document.getElementById('app').innerHTML=Q.map((q,qi)=>'<h2>'+(qi+1)+'. '+q.probe+'</h2>'+q.candidates.map((c,ci)=>
  '<div class="c"><div>'+c.text+'</div><div class="id">'+c.id+' · cos '+c.cos+'</div>'+
- [0,1,2].map(k=>'<label><input type="radio" name="q'+qi+'c'+ci+'" value="'+['nao','talvez','sim'][k]+'"> '+['não ajuda','talvez','ajuda'][k]+'</label>').join('')+'</div>').join('')).join('')
-document.getElementById('exp').onclick=()=>{const out=Q.map((q,qi)=>({probe:q.probe,labels:q.candidates.map((c,ci)=>{const el=document.querySelector('input[name="q'+qi+'c'+ci+'"]:checked');return {id:c.id,label:el?el.value:'nao'}})}));
- const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));a.download='rotulos.json';a.click()}</script>`,
+ [0,1,2].map(k=>'<label><input type="radio" name="q'+qi+'c'+ci+'" value="'+['no','maybe','yes'][k]+'"> '+['does not help','maybe','helps'][k]+'</label>').join('')+'</div>').join('')).join('')
+document.getElementById('exp').onclick=()=>{const out=Q.map((q,qi)=>({probe:q.probe,labels:q.candidates.map((c,ci)=>{const el=document.querySelector('input[name="q'+qi+'c'+ci+'"]:checked');return {id:c.id,label:el?el.value:'no'}})}));
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));a.download='labels.json';a.click()}</script>`,
     )
 
     console.log(

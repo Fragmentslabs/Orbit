@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CatalogModel, CatalogProvider, SendMessageInput } from '@shared/chat'
 
 /**
- * O caso real que motivou estes testes: o models.dev renomeou o DeepSeek V4.1
- * Flash de um gateway de "deepseek-flash" para "deepseek-v4.1-flash" (o id
- * velho virou a família). Os chats salvos com o id velho passaram a sair sem
- * `reasoning_effort` — o modelo respondia sem pensar, com "High" na tela.
+ * The real case that motivated these tests: models.dev renamed a gateway's
+ * DeepSeek V4.1 Flash from "deepseek-flash" to "deepseek-v4.1-flash" (the
+ * old id became the family). Chats saved with the old id started going out without
+ * `reasoning_effort` — the model answered without thinking, with "High" on the screen.
  */
 const model = (id: string, extra: Partial<CatalogModel> = {}): CatalogModel => ({
   id,
@@ -39,7 +39,7 @@ const gateway: CatalogProvider = {
 vi.mock('../catalog', () => ({
   getProvider: async (id: string) => (id === gateway.id ? gateway : undefined),
 }))
-// providers.ts importa o electron; daqui só sai a regra do adaptador.
+// providers.ts imports electron; only the adapter rule comes out of here.
 vi.mock('../providers', () => ({ isServedByOpenAiCompatible: () => true }))
 
 const { buildBaseOptions, buildProviderOptions, generateVariants, toModelInput } = await import('./index')
@@ -58,8 +58,8 @@ const levels = (providerId: string, npm: string, m: CatalogModel, apiUrl?: strin
 
 const compat = '@ai-sdk/openai-compatible'
 
-describe('níveis declarados pelo catálogo', () => {
-  it('oferece só os níveis que o provedor declara', () => {
+describe('levels declared by the catalog', () => {
+  it('offers only the levels the provider declares', () => {
     expect(Object.keys(levels(gateway.id, compat, gateway.models['deepseek-v4.1-flash']))).toEqual([
       'low',
       'high',
@@ -67,7 +67,7 @@ describe('níveis declarados pelo catálogo', () => {
     ])
   })
 
-  it('vale mais que a lista de "sempre pensa"', () => {
+  it('wins over the "always thinks" list', () => {
     const kimi = model('kimi-k2.6', { reasoning_options: [{ type: 'effort', values: ['low', 'high'] }] })
     expect(levels('gateway', compat, kimi)).toEqual({
       low: { reasoningEffort: 'low' },
@@ -75,7 +75,7 @@ describe('níveis declarados pelo catálogo', () => {
     })
   })
 
-  it('cada SDK recebe o nível no próprio formato', () => {
+  it('each SDK gets the level in its own format', () => {
     const declared = model('m', { reasoning_options: [{ type: 'effort', values: ['high'] }] })
     expect(levels('openrouter', '@openrouter/ai-sdk-provider', declared)).toEqual({
       high: { reasoning: { effort: 'high' } },
@@ -85,16 +85,16 @@ describe('níveis declarados pelo catálogo', () => {
     })
   })
 
-  it('SDK sem níveis descarta os níveis em vez de inventar um formato', () => {
+  it('an SDK without levels drops the levels instead of inventing a format', () => {
     const declared = model('command-a', { reasoning_options: [{ type: 'effort', values: ['high'] }] })
     expect(levels('cohere', '@ai-sdk/cohere', declared)).toEqual({})
   })
 
-  it('lista vazia no catálogo = sem controle', () => {
+  it('empty list in the catalog = no control', () => {
     expect(levels('gateway', compat, model('m', { reasoning_options: [] }))).toEqual({})
   })
 
-  it('liga/desliga onde o SDK tem campo para isso', () => {
+  it('on/off where the SDK has a field for it', () => {
     const toggle = model('command-a-reasoning', { reasoning_options: [{ type: 'toggle' }] })
     expect(levels('cohere', '@ai-sdk/cohere', toggle)).toEqual({
       none: { thinking: { type: 'disabled' } },
@@ -102,12 +102,12 @@ describe('níveis declarados pelo catálogo', () => {
     })
   })
 
-  it('liga/desliga sem campo conhecido cai nas regras por nome', () => {
+  it('on/off with no known field falls back to the rules by name', () => {
     const toggle = model('longcat-2.0', { reasoning_options: [{ type: 'toggle' }] })
     expect(Object.keys(levels('gateway', compat, toggle))).toEqual(['low', 'medium', 'high'])
   })
 
-  it('orçamento de tokens vira os níveis high e max', () => {
+  it('a token budget becomes the high and max levels', () => {
     const budget = model('claude-x', { reasoning_options: [{ type: 'budget_tokens', min: 1024 }] })
     expect(levels('anthropic', '@ai-sdk/anthropic', budget)).toEqual({
       high: { thinking: { type: 'enabled', budgetTokens: 16_000 } },
@@ -115,13 +115,13 @@ describe('níveis declarados pelo catálogo', () => {
     })
   })
 
-  it('sem reasoning_options, valem as regras por nome', () => {
+  it('without reasoning_options, the rules by name apply', () => {
     const plain = { ...gateway.models['deepseek-v4.1-flash'], reasoning_options: undefined }
     expect(Object.keys(levels(gateway.id, compat, plain))).toEqual(['low', 'medium', 'high', 'max'])
   })
 })
 
-describe('regras por nome do modelo', () => {
+describe('rules by model name', () => {
   it('MiniMax M3 liga e desliga de verdade', () => {
     expect(levels('minimax', compat, model('minimax-m3'))).toEqual({
       none: { thinking: { type: 'disabled' } },
@@ -133,27 +133,27 @@ describe('regras por nome do modelo', () => {
     })
   })
 
-  it('GLM-5.2 tem níveis; os GLM anteriores só pensam', () => {
+  it('GLM-5.2 has levels; earlier GLMs only think', () => {
     expect(Object.keys(levels('zai', compat, model('glm-5.2')))).toEqual(['high', 'max'])
     expect(levels('zai', compat, model('glm-5.1'))).toEqual({})
   })
 
-  it('Kimi pela interface da Anthropic usa esforço adaptativo', () => {
+  it('Kimi through the Anthropic interface uses adaptive effort', () => {
     const kimi = levels('moonshot', '@ai-sdk/anthropic', model('k2.6'), 'https://api.moonshot.ai/anthropic')
     expect(Object.keys(kimi)).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
     expect(kimi.high).toEqual({ thinking: { type: 'adaptive', display: 'summarized' }, effort: 'high' })
   })
 
-  it('Gemma só liga/desliga', () => {
+  it('Gemma is switch-on/off only', () => {
     expect(Object.keys(levels('google', '@ai-sdk/google', model('gemma-4')))).toEqual(['minimal', 'high'])
   })
 })
 
-describe('opções que pedem o raciocínio ao provedor', () => {
+describe('options that ask the provider for reasoning', () => {
   const base = (providerId: string, m: CatalogModel, npm = compat) =>
     buildBaseOptions(toModelInput(providerId, npm, m), 's1')
 
-  it('Z.ai e Zhipu só pensam com `thinking` no corpo', () => {
+  it('Z.ai and Zhipu only think with `thinking` in the body', () => {
     expect(base('zai', model('glm-5.1')).thinking).toEqual({ type: 'enabled', clear_thinking: false })
   })
 
@@ -162,32 +162,32 @@ describe('opções que pedem o raciocínio ao provedor', () => {
     expect(base('alibaba-cn', model('kimi-k2-thinking')).enable_thinking).toBeUndefined()
   })
 
-  it('modelos servidos por template de chat pedem enable_thinking', () => {
+  it('models served by a chat template ask for enable_thinking', () => {
     expect(base('opencode', model('glm-4.6')).chat_template_args).toEqual({ enable_thinking: true })
     expect(base('opencode', model('glm-5.1')).chat_template_args).toBeUndefined()
   })
 })
 
 describe('buildProviderOptions', () => {
-  it('manda o nível escolhido', async () => {
+  it('sends the chosen level', async () => {
     expect(await buildProviderOptions(input('deepseek-v4.1-flash', 'high'))).toEqual({
       gatewayGo: { reasoningEffort: 'high' },
     })
   })
 
-  it('segue o id renomeado em vez de sair sem reasoning', async () => {
+  it('follows the renamed id instead of leaving without reasoning', async () => {
     expect(await buildProviderOptions(input('deepseek-flash', 'high'))).toEqual({
       gatewayGo: { reasoningEffort: 'high' },
     })
   })
 
-  it('nível que o modelo não tem vira o vizinho mais forte', async () => {
+  it('a level the model does not have becomes the strongest neighbour', async () => {
     expect(await buildProviderOptions(input('deepseek-flash', 'medium'))).toEqual({
       gatewayGo: { reasoningEffort: 'high' },
     })
   })
 
-  it('modelo que sumiu sem sucessor continua sem opções', async () => {
-    expect(await buildProviderOptions(input('modelo-que-nao-existe', 'high'))).toBeUndefined()
+  it('a model that vanished with no successor keeps no options', async () => {
+    expect(await buildProviderOptions(input('model-that-does-not-exist', 'high'))).toBeUndefined()
   })
 })

@@ -18,20 +18,20 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * O card da PEÇA no chat: um lugar só para os arquivos que a composição foi
- * juntando enquanto era construída.
+ * The PIECE card in the chat: a single place for the files the composition kept
+ * gathering while it was being built.
  *
- * Antes, cada áudio gerado e cada imagem trazida virava um player solto na
- * resposta — e o que tinha sido trocado continuava lá, ocupando a conversa com
- * material que a peça já não usa. Aqui eles são LINHAS de um card, com o estado
- * de cada um à vista: usado pela composição, ou descartado.
+ * Before, each generated audio and each brought image became a loose player in the
+ * reply — and what had been swapped kept being there, filling the conversation with
+ * material the piece no longer uses. Here they are LINES of a card, with the state
+ * of each one in view: used by the composition, or discarded.
  *
- * Descartado não é lixo e não some: o arquivo continua na pasta e na galeria,
- * porque é da pessoa também (ela pode querer a narração antiga). O que muda é
- * a etiqueta — e a peça pode voltar a citá-lo a qualquer momento.
+ * Discarded is not trash and does not disappear: the file stays in the folder and in the gallery,
+ * because it belongs to the person too (they may want the old narration). What changes is
+ * the label — and the piece can go back to citing it at any moment.
  *
- * Os bytes ficam onde sempre estiveram; o card lê a PASTA (via main) e por isso
- * se atualiza sozinho quando a mídia é regravada, sem um card novo na conversa.
+ * The bytes stay where they always were; the card reads the FOLDER (through the main process) and that is why
+ * it updates by itself when the media is rewritten, without a new card in the conversation.
  */
 
 const THUMBS = 5
@@ -42,7 +42,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** URL do arquivo DENTRO da peça (o scheme serve a pasta registrada). */
+/** URL of the file INSIDE the piece (the scheme serves the registered folder). */
 function pieceUrl(motionId: string, name: string): string {
   const path = name.split("/").map(encodeURIComponent).join("/")
   return `orbit-motion://${motionId}/${path}`
@@ -57,12 +57,12 @@ function kindIcon(kind: MotionBundleFile["kind"]) {
 }
 
 /**
- * Quantos arquivos o card tinha quando a pessoa olhou para ele pela última vez.
+ * How many files the card had when the person last looked at it.
  *
- * É o que faz o selo "N novos" dizer algo: o card muda no lugar, e sem esta
- * memória uma narração regravada apareceria como se nada tivesse acontecido.
- * Fica no armazenamento local do renderer — é preferência de leitura, não dado
- * da peça.
+ * It is what makes the "N new" badge say something: the card changes in place, and without this
+ * memory a rewritten narration would appear as if nothing had happened.
+ * It stays in the local storage of the renderer — it is a reading preference, not data
+ * of the piece.
  */
 function seenKey(motionId: string): string {
   return `orbit-motion-bundle-seen:${motionId}`
@@ -83,7 +83,7 @@ function writeSeen(motionId: string, count: number): void {
   try {
     window.localStorage.setItem(seenKey(motionId), String(count))
   } catch {
-    // sem localStorage o card continua funcionando — só não lembra do "já vi"
+    // without localStorage the card keeps working — it just does not remember the "seen"
   }
 }
 
@@ -94,9 +94,9 @@ export function MotionBundleCard({ bundle }: { bundle: MotionBundle }) {
   const [gone, setGone] = useState(false)
   const [seen, setSeen] = useState<number | null>(() => readSeen(bundle.motionId))
 
-  // Primeira aparição do card: o que já está nele é o "visto". Sem isto, uma
-  // peça que nasce com seis arquivos abriria com o selo "6 novos", que não
-  // informa nada.
+  // First appearance of the card: what is already in it is the "seen". Without this, a
+  // piece that is born with six files would open with the "6 new" badge, which
+  // informs nothing.
   useEffect(() => {
     if (seen != null) return
     writeSeen(bundle.motionId, bundle.files.length)
@@ -108,7 +108,7 @@ export function MotionBundleCard({ bundle }: { bundle: MotionBundle }) {
   const toggle = useCallback(() => {
     const next = !open
     setOpen(next)
-    // Abriu: daqui em diante estes arquivos já foram vistos.
+    // Opened: from here on these files have already been seen.
     if (next) {
       writeSeen(bundle.motionId, bundle.files.length)
       setSeen(bundle.files.length)
@@ -184,7 +184,7 @@ export function MotionBundleCard({ bundle }: { bundle: MotionBundle }) {
           />
         </button>
 
-        {/* Tira de miniaturas: o card fechado já mostra o que tem dentro. */}
+        {/* Thumbnail strip: the closed card already shows what is inside. */}
         {!open && (
           <div className="flex items-center gap-1.5 px-3 pb-2.5">
             {thumbs.map((file) => (
@@ -236,7 +236,7 @@ export function MotionBundleCard({ bundle }: { bundle: MotionBundle }) {
   )
 }
 
-/** Miniatura de um arquivo: a imagem de verdade quando é imagem. */
+/** Thumbnail of a file: the real image when it is an image. */
 function FileThumb({ motionId, file }: { motionId: string; file: MotionBundleFile }) {
   const [broken, setBroken] = useState(false)
   const Icon = kindIcon(file.kind)

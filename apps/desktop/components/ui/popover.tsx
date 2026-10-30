@@ -2,12 +2,12 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
 import { cn } from "@/lib/utils"
 
 /**
- * Popover sobre o primitivo do base-ui, seguindo o mesmo formato do
+ * Popover on top of the base-ui primitive, following the same format as
  * dropdown-menu (Portal → Positioner → Popup).
  *
- * O Positioner fica em z-[90], acima do Dialog (z-[80]): popover aberto de
- * dentro de um modal precisa ficar na frente dele — mesmo motivo do ajuste
- * feito no dropdown.
+ * The Positioner stays at z-[90], above the Dialog (z-[80]): a popover opened from
+ * inside a modal needs to stay in front of it — same reason as the adjustment
+ * made in the dropdown.
  */
 
 export const Popover = PopoverPrimitive.Root

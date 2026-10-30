@@ -53,12 +53,12 @@ function InputGroupAddon({
       data-align={align}
       className={cn(inputGroupAddonVariants({ align }), className)}
       onClick={(e) => {
-        // Só vale para clique DENTRO do addon no DOM. Um portal renderizado a
-        // partir daqui (o modal do seletor de modelo, um popover, um select)
-        // mora no <body>, mas o evento dele sobe pela árvore do React e
-        // chegava até aqui — e cada clique no campo de busca do modal
-        // devolvia o foco ao input do grupo, atrás do modal. Parecia que o
-        // campo não aceitava foco.
+        // Only worth for a click INSIDE the addon in the DOM. A portal rendered from
+        // here (the model selector modal, a popover, a select)
+        // lives in the <body>, but its event bubbles up through the React tree and
+        // arrived here — and every click on the search field of the modal
+        // gave the focus back to the input of the group, behind the modal. It looked like the
+        // field did not accept focus.
         if (!e.currentTarget.contains(e.target as Node)) {
           return
         }

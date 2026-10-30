@@ -1,14 +1,14 @@
 /**
- * O player de motion no celular.
+ * The motion player on the phone.
  *
- * O que se verifica aqui é o contrato com a página, que é o que faz a peça
- * andar: a sonda que pergunta a duração, o `seek` em QUADROS (a unidade do
- * runtime), o relógio do play derivando o quadro do tempo, o laço e a
- * degradação quando a página não responde ou recusa o seek.
+ * What is verified here is the contract with the page, which is what makes the piece
+ * move: the probe that asks for the duration, the `seek` in FRAMES (the unit of the
+ * runtime), the play clock deriving the frame from the time, the loop and the
+ * degradation when the page does not answer or refuses the seek.
  *
- * O que NÃO se verifica: o arrasto da régua. No jsdom não há layout (a largura
- * da trilha é 0 via `onLayout`), então o gesto não tem geometria para virar
- * quadro — a conta que ele faz, `frameAtX`, é testada direto.
+ * What is NOT verified: dragging the ruler. In jsdom there is no layout (the width
+ * of the track is 0 through `onLayout`), so the gesture has no geometry to become a
+ * frame — the calculation it does, `frameAtX`, is tested directly.
  */
 import type { PieceRef } from '@orbit/shared'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -21,9 +21,9 @@ import {
   resolveSpec,
 } from './motion'
 
-// O WebView real é nativo: aqui ele vira um host inerte que entrega o
-// `onLoadEnd`, guarda as props (para simular as respostas da página) e registra
-// o `injectJavaScript` que o player usa.
+// The real WebView is native: here it becomes an inert host that delivers
+// `onLoadEnd`, stores the props (to simulate the page answers) and records
+// the `injectJavaScript` the player uses.
 const harness = vi.hoisted(() => ({
   inject: vi.fn(),
   web: { current: null as Record<string, any> | null },
@@ -40,13 +40,13 @@ vi.mock('react-native-webview', async () => {
   return { __esModule: true, WebView, default: WebView }
 })
 
-// Os rótulos são as chaves: o teste não depende do bundle de i18n.
+// The labels are the keys: the test does not depend on the i18n bundle.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }),
 }))
 
-// Ícones: o desenho não é o que se verifica. `Repeat` não está no mock global
-// (test-env) — a lista aqui é a do player mais a do `PieceView`.
+// Icons: the drawing is not what is verified. `Repeat` is not in the global mock
+// (test-env) — the list here is the player's plus the one of `PieceView`.
 vi.mock('lucide-react-native', () => {
   const names = ['AlertCircle', 'Maximize2', 'Pause', 'Play', 'Repeat', 'RotateCw', 'X']
   const icons: Record<string, unknown> = { __esModule: true }
@@ -64,7 +64,7 @@ const PIECE: PieceRef = {
   title: 'Intro',
 }
 
-/** A peça de 3 s a 30 fps do exemplo: 90 quadros. */
+/** The 3 s piece at 30 fps from the example: 90 frames. */
 const SPEC = {
   source: SOURCE,
   type: 'spec',
@@ -75,7 +75,7 @@ const SPEC = {
   seek: true,
 }
 
-/** Quadros de todos os `seek` injetados, na ordem. */
+/** Frames of every injected `seek`, in order. */
 function seeks(): number[] {
   const frames: number[] = []
   for (const call of harness.inject.mock.calls as unknown[][]) {
@@ -96,14 +96,14 @@ function injectionsMatching(pattern: RegExp): string[] {
     .filter((js) => pattern.test(js))
 }
 
-/** A página terminou de carregar. */
+/** The page finished loading. */
 function load() {
   act(() => {
     harness.web.current?.onLoadEnd?.()
   })
 }
 
-/** A página falou (postMessage → onMessage). */
+/** The page spoke (postMessage → onMessage). */
 function reply(payload: Record<string, unknown>) {
   act(() => {
     harness.web.current?.onMessage?.({ nativeEvent: { data: JSON.stringify(payload) } })
@@ -119,10 +119,10 @@ function timeLabel(): string {
 }
 
 beforeEach(() => {
-  // O jsdom não tem janela: sem isto `useWindowDimensions` devolve 0x0 e o palco
-  // não tem largura para enquadrar a peça (o teste de `zoom` cairia no vazio).
-  // `visualViewport` é de onde o react-native-web lê o tamanho, e o evento de
-  // resize é o que faz ele reler.
+  // jsdom has no window: without this `useWindowDimensions` returns 0x0 and the stage
+  // has no width to fit the piece (the `zoom` test would fall into the void).
+  // `visualViewport` is where react-native-web reads the size from, and the resize
+  // event is what makes it read again.
   Object.defineProperty(window, 'visualViewport', {
     configurable: true,
     value: { width: 390, height: 844, scale: 1 },
@@ -137,36 +137,36 @@ afterEach(() => {
   harness.web.current = null
 })
 
-describe('contrato da página (puro)', () => {
-  it('a duração em quadros é canônica e vence a duração em segundos', () => {
+describe('page contract (pure)', () => {
+  it('the duration in frames is canonical and beats the duration in seconds', () => {
     const spec = resolveSpec({ fps: 30, durationInFrames: 90, duration: 10, metaDuration: 4 })
     expect(spec).toEqual({ fps: 30, frames: 90, width: 1920, height: 1080, seekable: false })
   })
 
-  it('sem quadros, os segundos viram quadros com o fps resolvido (api > meta > 30)', () => {
+  it('without frames, the seconds become frames with the resolved fps (api > meta > 30)', () => {
     expect(resolveSpec({ fps: 60, duration: 2 })?.frames).toBe(120)
     expect(resolveSpec({ metaFps: 24, metaDuration: 2 })?.frames).toBe(48)
     expect(resolveSpec({ duration: 2 })?.frames).toBe(60)
   })
 
-  it('a timeline do GSAP e o piece.count entram por último, na ordem do runtime', () => {
+  it('the GSAP timeline and piece.count come last, in runtime order', () => {
     expect(resolveSpec({ timeline: 1.5 })?.frames).toBe(45)
     expect(resolveSpec({ metaDuration: 2 }, 10)?.frames).toBe(60)
     expect(resolveSpec({}, 4)?.frames).toBe(120)
   })
 
-  it('sem comprimento nenhum devolve null — não inventa duração', () => {
+  it('with no length at all it returns null — it does not invent a duration', () => {
     expect(resolveSpec({ fps: 30 })).toBeNull()
     expect(resolveSpec({ duration: 0, timeline: 0, metaDuration: 0 }, 0)).toBeNull()
   })
 
-  it('o tamanho do documento cai para 1920x1080 como no runtime', () => {
+  it('the document size falls back to 1920x1080 as in the runtime', () => {
     const spec = resolveSpec({ durationInFrames: 10, metaWidth: 1080, metaHeight: 1080 })
     expect(spec?.width).toBe(1080)
     expect(spec?.height).toBe(1080)
   })
 
-  it('o tempo é m:ss, com segundos de dois dígitos', () => {
+  it('the time is m:ss, with two-digit seconds', () => {
     expect(formatTime(0)).toBe('0:00')
     expect(formatTime(3.9)).toBe('0:04')
     expect(formatTime(2.966)).toBe('0:03')
@@ -185,16 +185,16 @@ describe('contrato da página (puro)', () => {
   })
 })
 
-describe('motion no celular', () => {
-  it('a peça é carregada pela URL que o desktop assinou', () => {
+describe('motion on the phone', () => {
+  it('the piece is loaded from the URL the desktop signed', () => {
     renderPlayer()
     expect(screen.getByTestId('piece-view')).toBeTruthy()
     expect(harness.web.current?.source).toEqual({ uri: URL_PIECE })
-    // Nada é injetado antes de a página existir.
+    // Nothing is injected before the page exists.
     expect(harness.inject).not.toHaveBeenCalled()
   })
 
-  it('ao carregar, sonda o formato e posiciona no quadro 0', () => {
+  it('on load, it probes the format and seeks to frame 0', () => {
     renderPlayer()
     load()
 
@@ -204,20 +204,20 @@ describe('motion no celular', () => {
     expect(lastSeek()).toBe(0)
   })
 
-  it('a duração vem da página e o tempo aparece como 0:00 / 0:03', () => {
+  it('the duration comes from the page and the time shows as 0:00 / 0:03', () => {
     renderPlayer()
     load()
     reply(SPEC)
 
     expect(timeLabel()).toBe('0:00 / 0:03')
-    // A régua fala em quadros, a mesma unidade do `seek`.
+    // The ruler speaks in frames, the same unit as `seek`.
     const track = screen.getByTestId('motion-track')
     expect(track.getAttribute('aria-valuemax')).toBe('89')
     expect(track.getAttribute('aria-valuenow')).toBe('0')
     expect(track.getAttribute('aria-valuetext')).toBe('0:00 / 0:03')
   })
 
-  it('a peça é enquadrada no palco (a composição é um documento de 1920x1080)', () => {
+  it('the piece is fitted to the stage (the composition is a 1920x1080 document)', () => {
     renderPlayer()
     load()
     reply(SPEC)
@@ -229,7 +229,7 @@ describe('motion no celular', () => {
     expect(scale).toBeLessThan(1)
   })
 
-  it('tocar manda um seek por quadro e avança o tempo', () => {
+  it('playing sends one seek per frame and advances the time', () => {
     vi.useFakeTimers()
     renderPlayer()
     load()
@@ -242,12 +242,12 @@ describe('motion no celular', () => {
       vi.advanceTimersByTime(1100)
     })
 
-    // 1100 ms a 30 fps: o relógio da tela já passou do quadro 30.
+    // 1100 ms at 30 fps: the screen clock has already passed frame 30.
     expect(lastSeek()).toBeGreaterThanOrEqual(30)
     expect(timeLabel()).toBe('0:01 / 0:03')
   })
 
-  it('parar no meio congela onde estava', () => {
+  it('stopping in the middle freezes where it was', () => {
     vi.useFakeTimers()
     renderPlayer()
     load()
@@ -267,7 +267,7 @@ describe('motion no celular', () => {
     expect(screen.getByLabelText('pieces.motion.play')).toBeTruthy()
   })
 
-  it('com laço ligado, o fim volta ao começo', () => {
+  it('with loop on, the end goes back to the start', () => {
     vi.useFakeTimers()
     renderPlayer()
     load()
@@ -275,7 +275,7 @@ describe('motion no celular', () => {
 
     fireEvent.click(screen.getByTestId('motion-play'))
     act(() => {
-      // 4 s numa peça de 3 s: passou do fim e recomeçou.
+      // 4 s on a 3 s piece: it went past the end and started over.
       vi.advanceTimersByTime(4000)
     })
 
@@ -283,7 +283,7 @@ describe('motion no celular', () => {
     expect(screen.getByLabelText('pieces.motion.pause')).toBeTruthy()
   })
 
-  it('sem laço, para no último quadro', () => {
+  it('without loop, it stops on the last frame', () => {
     vi.useFakeTimers()
     renderPlayer()
     load()
@@ -300,7 +300,7 @@ describe('motion no celular', () => {
     expect(screen.getByLabelText('pieces.motion.play')).toBeTruthy()
   })
 
-  it('página que responde sem comprimento nenhum: controles desligados', () => {
+  it('a page that answers with no length at all: controls off', () => {
     renderPlayer()
     load()
     reply({ source: SOURCE, type: 'spec', fps: 30, seek: true })
@@ -310,7 +310,7 @@ describe('motion no celular', () => {
     expect(seeks().filter((frame) => frame > 0)).toEqual([])
   })
 
-  it('peça sem seek na página: mostra a duração e não finge que toca', () => {
+  it('a piece with no seek on the page: shows the duration and does not pretend it plays', () => {
     renderPlayer()
     load()
     reply({ ...SPEC, seek: false })
@@ -320,7 +320,7 @@ describe('motion no celular', () => {
     expect(seeks().filter((frame) => frame > 0)).toEqual([])
   })
 
-  it('seek que estoura na página desliga o controle', () => {
+  it('a seek that throws on the page turns the control off', () => {
     renderPlayer()
     load()
     reply(SPEC)
@@ -330,15 +330,15 @@ describe('motion no celular', () => {
     expect(seeks().filter((frame) => frame > 0)).toEqual([])
   })
 
-  it('mensagem de outra origem não mexe em nada', () => {
+  it('a message from another origin touches nothing', () => {
     renderPlayer()
     load()
-    reply({ source: 'qualquer-outra', type: 'spec', durationInFrames: 90, seek: true })
+    reply({ source: 'any-other', type: 'spec', durationInFrames: 90, seek: true })
 
     expect(timeLabel()).toBe('0:00 / –:–')
   })
 
-  it('o piece.count é o último recurso quando a página não declara duração', () => {
+  it('piece.count is the last resort when the page declares no duration', () => {
     renderPlayer({ ...PIECE, count: 4 })
     load()
     reply({ source: SOURCE, type: 'spec', fps: 30, seek: true })

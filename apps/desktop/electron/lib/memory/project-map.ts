@@ -2,36 +2,36 @@ import type { Memory } from '@shared/memory'
 import { isWithinSubproject } from './domain'
 
 /**
- * Mapa da árvore de memórias de um projeto — o recorte que entra no system
- * prompt de todo chat novo de código.
+ * Map of a project's memory tree — the slice that goes into the system
+ * prompt of every new code chat.
  *
- * Antes entrava só o nó raiz, e o agente precisava adivinhar o que buscar; ou
- * então (no modelo anterior a este) as 15 memórias de maior peso, soltas e sem
- * a forma da árvore. O mapa é o meio-termo barato: a raiz, os nós de primeiro
- * nível com uma linha cada e, quando o chat está numa subpasta, o ramo dela.
- * O resto o agente abre sob demanda (memory_open / memory_graph), sabendo
- * pelo mapa que existe e onde está.
+ * It used to be only the root node, and the agent had to guess what to search for; or
+ * else (in the model before this one) the 15 heaviest memories, loose and without
+ * the shape of the tree. The map is the cheap middle ground: the root, the first-level
+ * nodes with one line each and, when the chat is in a subfolder, that folder's branch.
+ * The rest the agent opens on demand (memory_open / memory_graph), knowing
+ * from the map that it exists and where it is.
  */
 
 export interface MapNode {
   id: string
   text: string
   hasDoc: boolean
-  /** Quantos filhos o nó tem na árvore — diz ao agente que vale abrir. */
+  /** How many children the node has in the tree — tells the agent it is worth opening. */
   children: number
 }
 
 export interface ProjectMap {
   root: MapNode
-  /** Filhos diretos da raiz, do mais importante para o menos. */
+  /** Direct children of the root, from most to least important. */
   children: MapNode[]
-  /** Ramo da subpasta em que o chat está, quando um nó de escopo a cobre. */
+  /** Branch of the subfolder the chat is in, when a scope node covers it. */
   branch?: { subproject: string; node: MapNode; children: MapNode[] }
-  /** Nós do projeto fora do recorte — existem e podem ser buscados. */
+  /** Project nodes outside the slice — they exist and can be searched. */
   omitted: number
 }
 
-/** Raiz da árvore: o overview do escopo raiz; sem ele, a memória de maior peso. */
+/** Root of the tree: the overview of the root scope; without it, the memory with the highest weight. */
 export function rootOf(members: Memory[]): Memory | undefined {
   return (
     members.find((m) => m.area === 'overview' && !m.subproject) ??
@@ -40,9 +40,9 @@ export function rootOf(members: Memory[]): Memory | undefined {
 }
 
 /**
- * Filhos de cada nó numa busca em largura a partir da raiz. As ligações são
- * bidirecionais (relatedIds dos dois lados), então a direção pai → filho vem
- * da ordem da busca, como no memory_tree.
+ * Children of each node in a breadth-first walk from the root. The links are
+ * bidirectional (relatedIds on both sides), so the parent → child direction comes
+ * from the walk order, as in memory_tree.
  */
 export function childrenByBfs(
   members: Memory[],
@@ -89,10 +89,10 @@ export function buildProjectMap(members: Memory[], subproject?: string, limit = 
 
   let branch: ProjectMap['branch']
   if (subproject) {
-    // O nó de escopo mais específico que contém a pasta do chat: em
-    // "front/src", vence o nó "front" (e um "front/src" se existisse). Os
-    // filhos do nó "front" herdam a mesma pasta, então no empate vence o mais
-    // raso na árvore — senão um filho criado antes viraria o "ramo".
+    // The most specific scope node that contains the chat folder: in
+    // "front/src", the node "front" wins (and so would a "front/src" if it existed). The
+    // children of the node "front" inherit the same folder, so on a tie the shallowest
+    // one in the tree wins — otherwise a child created earlier would become the "branch".
     const level = (m: Memory) => depth.get(m.id) ?? Number.MAX_SAFE_INTEGER
     const scope = members
       .filter((m) => m.subproject && m.id !== root.id && isWithinSubproject(subproject, m.subproject))

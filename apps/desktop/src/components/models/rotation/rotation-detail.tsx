@@ -12,15 +12,15 @@ import { useRotationDragSort } from "./use-rotation-drag-sort"
 import { RotationSlotRow } from "./rotation-slot-row"
 
 /**
- * Painel de detalhe de uma rotação (lado direito do split-view).
- * - Nome editável: estado local, sincroniza no `onBlur` ou Enter (não a cada
- *   keystroke) para evitar persistência + IPC a cada caractere.
- * - Validação inline de duplicata contra as outras rotações.
- * - Lista de modelos com DnD e botão de adicionar até `MAX_ROTATION_SLOTS`.
- * - Botão de excluir abre o `ConfirmDialog` do shadcn (em vez de window.confirm).
+ * Detail panel of a rotation (right side of the split view).
+ * - Editable name: local state, synced on `onBlur` or Enter (not on every
+ *   keystroke) to avoid persistence + IPC on every character.
+ * - Inline duplicate validation against the other rotations.
+ * - Model list with DnD and an add button up to `MAX_ROTATION_SLOTS`.
+ * - The delete button opens the shadcn `ConfirmDialog` (instead of window.confirm).
  *
- * Não há botão de "voltar": a lista fica sempre visível na coluna da
- * esquerda, então trocar de rotação é um clique nela.
+ * There is no "back" button: the list is always visible in the left
+ * column, so switching rotation is one click on it.
  */
 export function RotationDetail({
   rotation,
@@ -38,8 +38,8 @@ export function RotationDetail({
   const [nameError, setNameError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
 
-  // Reflete mudanças vindas de fora (ex.: renomeado por outro caminho)
-  // SEM mexer no estado local enquanto o usuário está digitando.
+  // Reflects changes coming from outside (e.g. renamed through another path)
+  // WITHOUT touching the local state while the user is typing.
   useEffect(() => {
     if (!editing) setName(rotation.name)
   }, [rotation.name, editing])
@@ -92,9 +92,9 @@ export function RotationDetail({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* O input do nome e os cards de modelo compartilham exatamente a
-          mesma caixa (mesma borda esquerda e direita) — nada divide espaço
-          horizontal com o input. */}
+      {/* The name input and the model cards share exactly the
+          same box (same left and right border) — nothing divides horizontal
+          space with the input. */}
       <div>
         <Input
           value={name}
@@ -137,9 +137,9 @@ export function RotationDetail({
         </div>
       </div>
 
-      {/* Slots + "adicionar" formam uma pilha única de largura total: todos
-          os itens têm a mesma altura de linha (h-10) e as mesmas bordas do
-          input acima. */}
+      {/* Slots + "add" form a single full-width stack: all
+          the items have the same row height (h-10) and the same borders as the
+          input above. */}
       <div className="-mt-1 min-h-0 flex-1 overflow-y-auto">
         <DndContext {...contextProps}>
           <div className="space-y-1.5">

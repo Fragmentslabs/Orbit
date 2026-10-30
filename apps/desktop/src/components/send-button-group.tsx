@@ -14,21 +14,21 @@ import { ScheduleMessageDialog } from "@/src/components/schedule-message-dialog"
 import { blobUrlsToDataUrls } from "@/src/lib/message-utils";
 import { cn } from "@/lib/utils";
 
-/** Anexo do input no momento do clique (url já em data URL, pronta para a
- *  fila/agendamento — blob URLs morrem quando o input é limpo). */
+/** Input attachment at the moment of the click (url already in data URL, ready for the
+ *  queue/schedule — blob URLs die when the input is cleared). */
 export interface QueueAttachment {
   mediaType?: string;
   filename?: string;
   url?: string;
-  /** Anexo que é uma referência à galeria (aba Mídia) — ver FilePart.mediaId. */
+  /** Attachment that is a reference to the gallery (Media tab) — see FilePart.mediaId. */
   mediaId?: string;
-  /** Anexo que é uma FONTE da conversa (aba Fontes) — ver FilePart.sourceId. */
+  /** Attachment that is a conversation SOURCE (Sources tab) — see FilePart.sourceId. */
   sourceId?: string;
 }
 
 interface SendButtonGroupProps {
   busy: boolean;
-  /** Fase de cancelamento: o abort foi pedido mas o engine ainda não confirmou */
+  /** Cancellation phase: the abort was requested but the engine has not confirmed yet */
   cancelling?: boolean;
   onQueue: (text: string, files?: QueueAttachment[]) => void;
   onStopAndSend: (text: string, files?: QueueAttachment[]) => void;
@@ -37,18 +37,18 @@ interface SendButtonGroupProps {
   onStop: () => void;
   disabled?: boolean;
   /**
-   * Modo código sem pasta: agendar e enviar para o painel lateral gravariam a
-   * mensagem sem diretório, então o menu do chevron não abre. Desabilitar só
-   * essa metade não serve — o Enviar e o chevron são uma peça visual só, e
-   * ficariam com duas opacidades. Aqui o clique continua respondendo: quem
-   * sabe o motivo mostra a explicação.
+   * Code mode without a folder: scheduling and sending to the side panel would record the
+   * message without a directory, so the chevron menu does not open. Disabling only
+   * that half is no use — Send and the chevron are a single visual piece, and
+   * they would end up with two opacities. Here the click keeps responding: whoever
+   * knows the reason shows the explanation.
    */
   onOptionsBlocked?: () => void;
   /**
-   * No lugar do "Enviar" quando não há nada para enviar (campo vazio e nenhum
-   * anexo) e o agente está parado (o botão de chamada). Com `emptySlotAlways`
-   * ele fica em qualquer caso — em chamada o slot é o "desligar", que não pode
-   * sumir porque alguém digitou ou o agente está respondendo.
+   * In place of "Send" when there is nothing to send (empty field and no
+   * attachment) and the agent is stopped (the call button). With `emptySlotAlways`
+   * it stays in any case — in a call the slot is "hang up", which cannot
+   * disappear because someone typed or the agent is answering.
    */
   emptySlot?: React.ReactNode;
   emptySlotAlways?: boolean;
@@ -71,24 +71,24 @@ export function SendButtonGroup({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [pendingText, setPendingText] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<QueueAttachment[] | null>(null);
-  // Só um dos dois Selects (fila ou envio normal) está montado por vez, então
-  // o controle de abertura é compartilhado.
+  // Only one of the two Selects (queue or normal send) is mounted at a time, so
+  // the open control is shared.
   const [optionsOpen, setOptionsOpen] = useState(false);
   const { textInput, attachments } = usePromptInputController();
   const text = textInput.value.trim();
   const hasText = text.length > 0;
-  // Anexo TAMBÉM é conteúdo. Com texto grande colado virando arquivo (ou um PDF
-  // anexado sem comentário), o campo fica VAZIO e a mensagem ainda tem o que
-  // enviar: onde antes se lia "sem texto", lê-se "sem texto e sem anexo" —
-  // senão o Enviar nasce desabilitado e o chip não sai daqui.
+  // An attachment is ALSO content. With large pasted text becoming a file (or a PDF
+  // attached with no comment), the field stays EMPTY and the message still has something
+  // to send: where one used to read "no text", one reads "no text and no attachment" —
+  // otherwise Send is born disabled and the chip does not leave here.
   const hasAttachments = attachments.files.length > 0;
   const hasContent = hasText || hasAttachments;
 
   /**
-   * Envia o texto + anexos do input. Converte blob URLs → data URLs ANTES de
-   * limpar (texto e chips): o clear revoga os blob URLs, e a fila/agendamento
-   * guardam a mensagem para enviar depois — sem a conversão o anexo vira um
-   * blob URL morto e a mensagem sai da fila sem o arquivo.
+   * Sends the input text + attachments. Converts blob URLs → data URLs BEFORE
+   * clearing (text and chips): the clear revokes the blob URLs, and the queue/schedule
+   * keep the message to send later — without the conversion the attachment becomes a
+   * dead blob URL and the message leaves the queue without the file.
    */
   const withAttachments = useCallback(
     async (fn: (text: string, files?: QueueAttachment[]) => void) => {
@@ -114,10 +114,10 @@ export function SendButtonGroup({
 
   const handleScheduleConfirm = useCallback(
     (timestamp: number) => {
-      // null = não há nada pendente; "" é uma mensagem só de anexo.
+      // null = there is nothing pending; "" is a message with only an attachment.
       if (pendingText === null) return;
       onSchedule(pendingText, timestamp, pendingFiles ?? undefined);
-      // A conversão já aconteceu no open — seguro revogar os blob URLs agora
+      // The conversion already happened in open — safe to revoke the blob URLs now
       if (pendingFiles && pendingFiles.length > 0) attachments.clear();
       setPendingText(null);
       setPendingFiles(null);
@@ -128,8 +128,8 @@ export function SendButtonGroup({
 
   const handleOptionsOpenChange = useCallback(
     (next: boolean) => {
-      // Bloqueado: não abre (o menu só tem ações que precisam da pasta) e
-      // devolve o clique para quem sabe explicar.
+      // Blocked: it does not open (the menu only has actions that need the folder) and
+      // gives the click back to whoever knows how to explain.
       if (next && onOptionsBlocked) {
         onOptionsBlocked();
         return;
@@ -139,10 +139,10 @@ export function SendButtonGroup({
     [onOptionsBlocked],
   );
 
-  // Nada para enviar, com um botão próprio para esse caso (a chamada de voz).
+  // Nothing to send, with a button of its own for that case (the voice call).
   if (emptySlot && (emptySlotAlways || (!hasContent && !busy))) return <>{emptySlot}</>;
 
-  // Apenas botão de parar (nada para enviar, agente rodando)
+  // Only the stop button (nothing to send, agent running)
   if (busy && !hasContent) {
     return (
       <InputGroupButton
@@ -159,7 +159,7 @@ export function SendButtonGroup({
     );
   }
 
-  // Agente rodando mas com conteúdo no input: "Adicionar à fila" + dropdown
+  // Agent running but with content in the input: "Add to queue" + dropdown
   if (busy && hasContent) {
     return (
       <>
@@ -214,7 +214,7 @@ export function SendButtonGroup({
     );
   }
 
-  // Estado normal: botão "Enviar" (type=submit para o form) + dropdown
+  // Normal state: "Send" button (type=submit for the form) + dropdown
   return (
     <>
       <div className="flex items-center -space-x-px">

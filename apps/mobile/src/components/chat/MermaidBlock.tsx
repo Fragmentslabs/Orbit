@@ -1,11 +1,11 @@
 /**
- * Diagrama mermaid desenhado dentro do chat.
+ * Mermaid diagram drawn inside the chat.
  *
- * O desenho acontece num WebView, que não enxerga o bundle JS do React Native:
- * a lib vai embutida no documento (ver `lib/mermaid-html`), lida do asset do
- * próprio app uma vez por sessão (ver `lib/mermaid-source`). Enquanto ela não
- * chegou — e sempre que o desenho falhar — o bloco é o código-fonte, que é
- * exatamente o que se via antes deste componente existir.
+ * The drawing happens in a WebView, which cannot see the JS bundle of React Native:
+ * the lib goes embedded in the document (see `lib/mermaid-html`), read from the asset of the
+ * app itself once per session (see `lib/mermaid-source`). Until it
+ * arrives — and whenever the drawing fails — the block is the source code, which is
+ * exactly what was seen before this component existed.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -17,19 +17,19 @@ import { loadMermaidSource } from '~/lib/mermaid-source'
 import { useThemeStore } from '~/stores/theme-store'
 
 export interface MermaidBlockProps {
-  /** O texto do diagrama, do jeito que veio na cerca. */
+  /** The diagram text, the way it came in the fence. */
   code: string
-  /** Cerca ainda chegando: desenhar agora daria um diagrama pela metade. */
+  /** Fence still arriving: drawing now would give a half diagram. */
   streaming?: boolean
 }
 
-/** Altura inicial antes de o diagrama dizer de quanto precisa. */
+/** Initial height before the diagram says how much it needs. */
 const INITIAL_HEIGHT = 220
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 720
 
-/** O documento não avisa nada enquanto não termina de montar; sem um prazo, um
- *  desenho travado deixaria o spinner girando para sempre. */
+/** The document warns nothing until it finishes mounting; without a deadline, a
+ *  stuck drawing would leave the spinner spinning forever. */
 const LOAD_TIMEOUT_MS = 10_000
 
 interface WebMessage {
@@ -59,8 +59,11 @@ export function MermaidBlock({ code, streaming = false }: MermaidBlockProps) {
   }, [])
 
   const html = useMemo(
-    () => (lib ? buildMermaidHtml(code, { dark: resolved === 'dark', lib }) : ''),
-    [code, lib, resolved],
+    () =>
+      lib
+        ? buildMermaidHtml(code, { dark: resolved === 'dark', lib, failMessage: t('mermaid.failed') })
+        : '',
+    [code, lib, resolved, t],
   )
 
   useEffect(() => {
@@ -74,7 +77,7 @@ export function MermaidBlock({ code, streaming = false }: MermaidBlockProps) {
     try {
       message = JSON.parse(data) as WebMessage
     } catch {
-      return // mensagem fora do protocolo: não é nossa
+      return // message outside the protocol: not ours
     }
     if (message.type === 'height' && typeof message.height === 'number') {
       setHeight(Math.min(Math.max(Math.ceil(message.height), MIN_HEIGHT), MAX_HEIGHT))
@@ -84,8 +87,8 @@ export function MermaidBlock({ code, streaming = false }: MermaidBlockProps) {
     if (message.type === 'error') setFailed(true)
   }, [])
 
-  // Sem desenho — cerca incompleta no stream, lib indisponível, sintaxe
-  // inválida — o diagrama volta a ser o código-fonte. Nunca some da conversa.
+  // No drawing — incomplete fence in the stream, lib unavailable, invalid
+  // syntax — the diagram goes back to being the source code. It never vanishes from the conversation.
   if (streaming || failed || libFailed || !lib || code.trim() === '') {
     return <CodeBlock code={code} language="mermaid" streaming={streaming} />
   }

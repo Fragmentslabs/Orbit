@@ -5,15 +5,15 @@ import type { ModelReasoningPref } from "@shared/companion"
 import { useReasoningPrefsStore } from "@/src/stores/reasoning-prefs"
 
 /**
- * Thinking POR CHAT (toggle + variante), no mesmo desenho do modelo por chat:
- * `overrides` guarda a escolha de cada sessão, o chat novo usa a chave DRAFT
- * até o primeiro envio (adopt) e, sem override, vale o nível POR MODELO das
- * Preferências (reasoning-prefs) — que continua sendo o default.
+ * Thinking PER CHAT (toggle + variant), in the same design as the per-chat model:
+ * `overrides` keeps each session's choice, the new chat uses the DRAFT key
+ * until the first send (adopt) and, with no override, the PER MODEL level from the
+ * Preferences (reasoning-prefs) applies — which remains the default.
  *
- * Antes o nível era só por modelo: escolher "alto" num chat mudava o thinking
- * de TODOS os chats daquele modelo. Agora a troca no seletor do chat grava
- * aqui; o thinking das Preferências (ModelThinkingMenu) segue sendo o default
- * de quando o chat não escolheu nada.
+ * Before, the level was only per model: choosing "high" in one chat changed the thinking
+ * of ALL the chats of that model. Now the switch in the chat's selector writes
+ * here; the Preferences thinking (ModelThinkingMenu) remains the default
+ * for when the chat has chosen nothing.
  */
 
 const STORAGE_KEY = "orbit-session-reasoning"
@@ -39,7 +39,7 @@ function load(): ReasoningMap {
     }
     return map
   } catch {
-    // prefs corrompidas → sem override (todo chat segue o nível do modelo)
+    // corrupted prefs → no override (every chat follows the model's level)
     return {}
   }
 }
@@ -50,11 +50,11 @@ function persist(bySession: ReasoningMap) {
 
 interface SessionReasoningState {
   overrides: ReasoningMap
-  /** Escolha feita no chat (ou no draft): vale só para ele. */
+  /** Choice made in the chat (or in the draft): applies only to it. */
   setPref: (sessionId: string | null | undefined, pref: ModelReasoningPref) => void
-  /** Transfere a escolha do rascunho para a sessão recém-criada; sem escolha
-   *  no draft, fixa o nível efetivamente usado (o do modelo), para o chat que
-   *  já começou não mudar quando o default mudar. */
+  /** Transfers the draft's choice to the newly created session; with no choice
+   *  in the draft, pins the level actually used (the model's), so the chat that
+   *  has already started does not change when the default changes. */
   adopt: (sessionId: string, fallback?: ModelReasoningPref) => void
   clear: (sessionId: string) => void
 }
@@ -91,7 +91,7 @@ export const useSessionReasoning = create<SessionReasoningState>((set, get) => (
   },
 }))
 
-/** Nível efetivo de um chat: override da sessão > nível do modelo (Preferências). */
+/** Effective level of a chat: session override > model level (Preferences). */
 export function sessionReasoningFor(
   sessionId: string | null | undefined,
   providerId: string | undefined,
@@ -115,8 +115,8 @@ export function useSessionReasoningPref(
   )
   const setPref = useSessionReasoning((s) => s.setPref)
 
-  // A mesma referência nos dois lados evita re-render à toa quando só o outro
-  // store mudou: o override, quando existe, é a única fonte.
+  // The same reference on both sides avoids a needless re-render when only the other
+  // store changed: the override, when it exists, is the only source.
   const pref = override ?? modelPref
 
   const update = useCallback(

@@ -7,7 +7,7 @@ import { getProvider, modelSupportsVision } from '../catalog'
 import { findRecipe, recipeHint, saveRecipe } from '../computer/recipes'
 import { assertCanControl } from '../computer/session'
 import { createToolApproval } from '../permission'
-import { modoGlobal } from '../permission/modo-global'
+import { globalMode } from '../permission/global-mode'
 import { computerSubagentPrompt } from '../prompts'
 import { resolveModel } from '../providers'
 import { buildCheapestReasoningOptions } from '../reasoning'
@@ -15,28 +15,28 @@ import { agentPrepareStep } from '../agent-step'
 import { createComputerTools } from './computer'
 
 /**
- * `computer_task` — subagente de Computer Use. O agente principal manda um
- * objetivo e espera; um agente dedicado roda o laço observar → agir com
- * contexto CURTO (só o objetivo e as próprias observações, nunca a conversa) e
- * um modelo menor. Cada passo fica mais leve: no laço direto, cada clique
- * reenviava a conversa inteira.
+ * `computer_task` — Computer Use subagent. The main agent sends a
+ * goal and waits; a dedicated agent runs the observe → act loop with a
+ * SHORT context (only the goal and its own observations, never the conversation) and
+ * a smaller model. Each step becomes lighter: in the direct loop, each click
+ * resent the whole conversation.
  *
- * O modelo: o das Preferências → Computador; sem ele, o modelo auxiliar (se
- * chama tools); só então o da conversa. Raciocínio no menor nível que o
- * modelo aceita — cada passo é "clicar no que acabei de ver". Quando o laço
- * trava (ações que não mudam nada, erros seguidos), o passo seguinte sobe para
- * o modelo da conversa: o barato faz o caminho, o caro só entra no impasse.
+ * The model: the one from Preferences → Computer; without it, the auxiliary model (if
+ * it calls tools); only then the conversation's. Reasoning at the lowest level the
+ * model accepts — each step is "click what I just saw". When the loop
+ * gets stuck (actions that change nothing, repeated errors), the next step goes up to
+ * the conversation's model: the cheap one does the walking, the expensive one only enters at the impasse.
  *
- * As tools cu_* do subagente usam o MESMO sessionId da conversa: o registro de
- * observações, a faixa amarela, o chip, a miniatura do painel e uma gravação
- * em andamento enxergam o que ele faz. As permissões passam pelo mesmo gate
- * (o pedido aparece na conversa), e a denylist vale igual.
+ * The subagent's cu_* tools use the SAME sessionId as the conversation: the record of
+ * observations, the yellow band, the chip, the panel thumbnail and a recording
+ * in progress see what it does. Permissions go through the same gate
+ * (the request appears in the conversation), and the denylist applies the same.
  */
 
 const COMPUTER_TASK_MAX_STEPS = 40
-/** Só o laço: gravação e permissões ficam com o agente principal. */
+/** The loop only: recording and permissions stay with the main agent. */
 const SUBAGENT_TOOLS = ['cu_apps', 'cu_observe', 'cu_query', 'cu_computer', 'cu_batch']
-/** Resultados de erro seguidos até subir para o modelo da conversa. */
+/** Consecutive error results until it moves up to the conversation's model. */
 const ESCALATE_AFTER_ERRORS = 2
 
 interface Target {
@@ -51,13 +51,13 @@ async function subagentTarget(input: SendMessageInput): Promise<Target> {
   if (auxModel) {
     const provider = await getProvider(auxModel.providerId).catch(() => undefined)
     const found = provider && findCatalogModel({ [provider.id]: provider }, provider.id, auxModel.modelId)
-    // O auxiliar é escolhido para títulos e resumos: só serve aqui se chama tools.
+    // The auxiliary model is picked for titles and summaries: it only serves here if it calls tools.
     if (found?.model.tool_call) return { providerId: auxModel.providerId, modelId: found.modelId, source: 'aux' }
   }
   return { providerId: input.providerId, modelId: input.modelId, source: 'conversation' }
 }
 
-/** Texto de um resultado de tool (string, ou a parte de texto de um com imagem). */
+/** Text of a tool result (a string, or the text part of one with an image). */
 function resultText(output: unknown): string {
   if (typeof output === 'string') return output
   if (output && typeof output === 'object' && 'message' in output && typeof output.message === 'string') return output.message
@@ -74,8 +74,8 @@ export function createComputerTaskTool(input: SendMessageInput, abort?: AbortSig
       goal: z.string().describe('Self-contained goal: app, steps or outcome, constraints'),
     }),
     execute: async ({ goal }, { abortSignal }) => {
-      // Outra conversa controlando: nem sobe o subagente (ele só bateria na
-      // mesma trava a cada ação, gastando passos).
+      // Another conversation in control: the subagent does not even come up (it would only hit the
+      // same lock on every action, spending steps).
       try {
         assertCanControl(input.sessionId)
       } catch (err) {
@@ -84,7 +84,7 @@ export function createComputerTaskTool(input: SendMessageInput, abort?: AbortSig
       const target = await subagentTarget(input)
       const provider = await getProvider(target.providerId)
       const model = await resolveModel(target.providerId, target.modelId)
-      // O modelo da conversa, para o impasse. Igual ao do subagente, não há para onde subir.
+      // The conversation's model, for the impasse. Equal to the subagent's, there is nowhere to go up to.
       const sameAsConversation = target.providerId === input.providerId && target.modelId === input.modelId
       let strong: LanguageModel | null = null
       const signal = abortSignal ?? abort
@@ -101,10 +101,10 @@ export function createComputerTaskTool(input: SendMessageInput, abort?: AbortSig
       })
       const tools: ToolSet = Object.fromEntries(Object.entries(all).filter(([name]) => SUBAGENT_TOOLS.includes(name)))
       const mode = input.options.permissionMode ?? 'ask'
-      // Gate próprio do subagente: os pedidos vão para a conversa (mesmo
-      // sessionId), e "Permitir neste turno" vale pela execução dele.
+      // The subagent's own gate: requests go to the conversation (same
+      // sessionId), and "Allow for this turn" holds for its execution.
       const toolApproval = createToolApproval(
-        input.options.followGlobalPermission ? () => modoGlobal(input.sessionId, mode) : mode,
+        input.options.followGlobalPermission ? () => globalMode(input.sessionId, mode) : mode,
         input.sessionId,
         input.directory ?? null,
         `${input.sessionId}-computer-task`,
@@ -121,8 +121,8 @@ export function createComputerTaskTool(input: SendMessageInput, abort?: AbortSig
         tools,
         toolApproval,
         providerOptions: await buildCheapestReasoningOptions(target.providerId, target.modelId, input.sessionId),
-        // Parar no impasse sem modelo para subir: o relatório volta ao agente
-        // principal, que decide (ou pergunta) — melhor que gastar os 40 passos.
+        // Stopping at the impasse with no model to go up to: the report goes back to the main
+        // agent, which decides (or asks) — better than spending the 40 steps.
         stopWhen: [stepCountIs(COMPUTER_TASK_MAX_STEPS), () => stalled && (sameAsConversation || escalatedAt !== null)],
         abortSignal: signal,
         prepareStep: async ({ messages, steps }) => {
@@ -142,8 +142,8 @@ export function createComputerTaskTool(input: SendMessageInput, abort?: AbortSig
         s.toolResults.filter((r) => r.toolName === 'cu_computer' || r.toolName === 'cu_batch').flatMap((r) => resultText(r.output).split('\n\nApp: ')[0].split('\n')),
       )
       const hitLimit = result.steps.length >= COMPUTER_TASK_MAX_STEPS
-      // Só o que deu certo vira receita: um laço que travou ou bateu no teto
-      // ensinaria o caminho errado na próxima vez.
+      // Only what worked becomes a recipe: a loop that got stuck or hit the ceiling
+      // would teach the wrong path next time.
       if (!hitLimit && !stalled && summaries.length > 0 && !summaries.some(isError)) {
         await saveRecipe(goal, summaries.map((line) => line.replace(/^\d+\. /, ''))).catch(() => undefined)
       }

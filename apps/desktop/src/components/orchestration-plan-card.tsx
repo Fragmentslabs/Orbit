@@ -22,12 +22,12 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Card inline do plano de orquestração no chat principal: lista as tarefas
- * propostas com seus modos, permite excluir tarefas (checkbox) e aprovar ou
- * rejeitar a execução (fluxo semi-auto).
+ * Inline card of the orchestration plan in the main chat: lists the proposed
+ * tasks with their modes, allows excluding tasks (checkbox) and approving or
+ * rejecting the execution (semi-auto flow).
  */
 
-/** Worker de orquestração roda sempre na pasta de trabalho, em modo código. */
+/** An orchestration worker always runs in the working folder, in code mode. */
 function TaskModeIcon() {
   return <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground" />
 }
@@ -128,25 +128,25 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
               <Truncate text={task.title}>
                 <span className="block truncate text-xs">{task.title}</span>
               </Truncate>
-              {/* Ordem que o orquestrador definiu: esta só começa depois
-                  destas serem aceitas. Desmarcar uma delas tira a dependência. */}
+              {/* Order the orchestrator defined: this one only starts after
+                  those are accepted. Unchecking one of them removes the dependency. */}
               {(() => {
-                const deps = (task.dependeDe ?? [])
+                const deps = (task.dependsOn ?? [])
                   .map((id) => plan.tasks.find((x) => x.id === id))
                   .filter((x): x is NonNullable<typeof x> => !!x && !excluded.has(x.id))
                 if (deps.length === 0) return null
                 return (
-                  <Truncate text={t("orchestration.dependsOn", { tarefas: deps.map((x) => x.title).join(", ") })}>
+                  <Truncate text={t("orchestration.dependsOn", { tasks: deps.map((x) => x.title).join(", ") })}>
                     <span className="block truncate text-[10px] text-muted-foreground">
-                      {t("orchestration.dependsOn", { tarefas: deps.map((x) => x.title).join(", ") })}
+                      {t("orchestration.dependsOn", { tasks: deps.map((x) => x.title).join(", ") })}
                     </span>
                   </Truncate>
                 )
               })()}
-              {task.arquivos?.length ? (
-                <Truncate text={t("orchestration.ownsFiles", { arquivos: task.arquivos.join(", ") })}>
+              {task.files?.length ? (
+                <Truncate text={t("orchestration.ownsFiles", { files: task.files.join(", ") })}>
                   <span className="block truncate text-[10px] text-muted-foreground" >
-                    {t("orchestration.ownsFiles", { arquivos: task.arquivos.join(", ") })}
+                    {t("orchestration.ownsFiles", { files: task.files.join(", ") })}
                   </span>
                 </Truncate>
               ) : null}

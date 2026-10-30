@@ -5,9 +5,9 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Edição de vídeo no MODO CHAT, sem pasta: o vídeo anexado é a fonte do corte (pela
- * referência), a saída mora no armazenamento do app e entra na galeria, de onde
- * se exclui. Ffmpeg de verdade; sem ele na máquina, a suíte pula.
+ * Video editing in CHAT MODE, without a folder: the attached video is the cut source (by
+ * reference), the output lives in the app's storage and enters the gallery, from where
+ * it is deleted. Real ffmpeg; without it on the machine, the suite skips.
  */
 
 const desktop = path.resolve(__dirname, '../../..')
@@ -40,34 +40,34 @@ const exists = (target: string) =>
     () => false,
   )
 
-describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
+describe.skipIf(!hasFfmpeg)('video in chat mode (real ffmpeg)', () => {
   let refA = ''
   let refB = ''
 
   beforeAll(async () => {
     await fsp.mkdir(userData, { recursive: true })
-    const a = path.join(userData, 'entrevista.mp4')
-    const b = path.join(userData, 'bruto.mov')
+    const a = path.join(userData, 'interview.mp4')
+    const b = path.join(userData, 'raw.mov')
     await runFfmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=25:duration=3', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', a])
     await runFfmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'smptebars=size=320x240:rate=25:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', b])
-    refA = (await saveVideoAttachment({ copyFrom: a }, 'mp4', { name: 'entrevista.mp4', sessionId: 'chat1' })).id
-    refB = (await saveVideoAttachment({ copyFrom: b }, 'mov', { name: 'bruto.mov', sessionId: 'chat1' })).id
+    refA = (await saveVideoAttachment({ copyFrom: a }, 'mp4', { name: 'interview.mp4', sessionId: 'chat1' })).id
+    refB = (await saveVideoAttachment({ copyFrom: b }, 'mov', { name: 'raw.mov', sessionId: 'chat1' })).id
   }, 60_000)
 
   afterAll(async () => {
     await fsp.rm(userData, { recursive: true, force: true })
   })
 
-  it('o chat ganha video_render e as tools de leitura, que aceitam a referência do anexo', () => {
+  it('the chat gets video_render and the reading tools, which accept the attachment ref', () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
     for (const name of ['video_render', 'video_probe', 'transcribe', 'video_timeline', 'motion_asset', 'motion_render']) {
       expect(tools[name], name).toBeDefined()
     }
-    // Sem render (sem ffmpeg ou modo plano) não há como produzir vídeo.
+    // With no render (no ffmpeg or plan mode) there is no way to produce video.
     expect(createMotionTools({ sessionId: 'chat1', canRender: false }).video_render).toBeUndefined()
   })
 
-  it('video_probe lê um anexo pela referência, sem pasta de trabalho', async () => {
+  it('video_probe reads an attachment by its ref, with no working folder', async () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
     const out = String(await run(tools, 'video_probe', { paths: [refA] }))
     expect(out).toContain(refA)
@@ -76,7 +76,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
     expect(String(await run(tools, 'video_probe', { paths: ['vdo_naoexiste.mp4'] }))).toMatch(/attachment not found/)
   })
 
-  it('video_timeline guarda o sheet na galeria e só o põe na resposta com show: true', async () => {
+  it('video_timeline saves the sheet in the gallery and only puts it in the reply with show: true', async () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
 
     const hidden = (await run(tools, 'video_timeline', { path: refA, start: 0, end: 1.5, frames: 3 })) as {
@@ -84,15 +84,15 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
       mediaUrl: string
       shown: boolean
     }
-    // A imagem existe fora do contexto do modelo: é um item da galeria desta conversa.
+    // The image exists outside the model's context: it is an item of this conversation's gallery.
     expect(hidden.mediaUrl).toMatch(/^orbit-media:\/\//)
     expect(hidden.shown).toBe(false)
     expect(hidden.message).toContain("NOT in the user's chat")
     const entry = await media.getMediaEntry(media.mediaIdFromUrl(hidden.mediaUrl)!)
     expect(entry).toMatchObject({ kind: 'image', source: 'chat', sessionId: 'chat1' })
 
-    // Sem transcrição (trilha sem fala) não se declara silêncio: a janela
-    // inteira era reportada como silenciosa.
+    // With no transcript (a track without speech) silence is not declared: the whole
+    // window was reported as silent.
     expect(hidden.message).toContain('No transcript cached')
     expect(hidden.message).not.toContain('Silences ≥0.4s')
 
@@ -103,11 +103,11 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
     }
     expect(shown.shown).toBe(true)
     expect(shown.message).toContain('attached to your reply')
-    // Cada olhada é um item próprio — a segunda não sobrescreve a primeira.
+    // Each look is its own item — the second one does not overwrite the first.
     expect(shown.mediaUrl).not.toBe(hidden.mediaUrl)
   }, 60_000)
 
-  it('corta e junta dois anexos: a saída vai para o app, entra na galeria e some ao excluir', async () => {
+  it('cuts and joins two attachments: the output goes to the app, enters the gallery and vanishes on delete', async () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
     const result = (await run(tools, 'video_render', {
       edl: {
@@ -122,7 +122,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
 
     expect(result.message).toMatch(/Rendered/)
     expect(result.videoUrl).toMatch(/^orbit-video:\/\//)
-    // A saída fica na pasta desta conversa, e não ao lado do anexo.
+    // The output stays in this conversation's folder, and not next to the attachment.
     const rendersDir = path.join(motionPiecesDir('chat1'), 'renders')
     expect(path.dirname(result.path!)).toBe(rendersDir)
     expect(await exists(result.path!)).toBe(true)
@@ -133,14 +133,14 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
     expect(items[0]).toMatchObject({ source: 'chat', sessionId: 'chat1' })
     expect(items[0].durationMs).toBeGreaterThan(1500)
 
-    // Excluir na galeria apaga o arquivo do disco.
+    // Deleting in the gallery erases the file from disk.
     expect(await media.deleteMedia(items[0].id)).toBe(true)
     expect(await exists(result.path!)).toBe(false)
-    // …e o anexo de origem continua intacto.
+    // …and the source attachment remains intact.
     expect(await exists(await mediaPath(refA))).toBe(true)
   }, 60_000)
 
-  it('cada vídeo final é um item (nome próprio); a prévia é uma só e fica fora da galeria', async () => {
+  it('each final video is an item (its own name); the preview is a single one and stays out of the gallery', async () => {
     const tools = createMotionTools({ sessionId: 'chat2', canRender: true })
     const edl = { sources: { A: refA }, ranges: [{ source: 'A', start: 0, end: 1 }], snap: false }
     const first = (await run(tools, 'video_render', { edl })) as { path: string }
@@ -159,7 +159,7 @@ describe.skipIf(!hasFfmpeg)('vídeo no modo chat (ffmpeg real)', () => {
     expect(paths).not.toContain(previewA.path)
   }, 120_000)
 
-  it('refazer o MESMO arquivo de render não cria um cartão novo na galeria', async () => {
+  it('redoing the SAME render file does not create a new card in the gallery', async () => {
     const file = path.join(motionPiecesDir('chat3'), 'renders', 'peca.mp4')
     await fsp.mkdir(path.dirname(file), { recursive: true })
     await fsp.copyFile(await mediaPath(refA), file)

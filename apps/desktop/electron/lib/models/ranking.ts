@@ -4,22 +4,22 @@ import type { AAModel } from './artificial-analysis'
 import type { OpenRouterModel } from './openrouter'
 
 /**
- * Orbit Ranking Engine — funde OpenRouter + Artificial Analysis + models.dev
- * num catálogo único (OrbitModel[]) com scores normalizados 0→100.
+ * Orbit Ranking Engine — merges OpenRouter + Artificial Analysis + models.dev
+ * into a single catalog (OrbitModel[]) with scores normalized 0→100.
  */
 
-/** Chave de comparação: minúsculas, só alfanumérico ("claude-opus-4.6" ≡ "claude_opus_46") */
+/** Comparison key: lowercase, alphanumeric only ("claude-opus-4.6" ≡ "claude_opus_46") */
 function normalizeKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
-/** Sufixo do id sem o prefixo do provedor ("anthropic/claude-x" → "claude-x") */
+/** Id suffix without the provider prefix ("anthropic/claude-x" → "claude-x") */
 function idSuffix(id: string): string {
   const slash = id.indexOf('/')
   return slash >= 0 ? id.slice(slash + 1) : id
 }
 
-/** Lê o primeiro campo numérico cujo nome contém todos os fragmentos. */
+/** Reads the first numeric field whose name contains every fragment */
 function readEval(evals: Record<string, number | null | undefined> | undefined, ...fragments: string[]): number | undefined {
   if (!evals) return undefined
   for (const key of Object.keys(evals)) {
@@ -56,7 +56,7 @@ interface BuildInput {
   catalog: Catalog
 }
 
-/** Disponibilidade via models.dev: chave normalizada do modelo → ids de provedores */
+/** Availability via models.dev: normalized model key → provider ids */
 function buildAvailabilityIndex(catalog: Catalog): Map<string, Set<string>> {
   const index = new Map<string, Set<string>>()
   for (const providerId in catalog) {
@@ -69,7 +69,7 @@ function buildAvailabilityIndex(catalog: Catalog): Map<string, Set<string>> {
   return index
 }
 
-/** Modalidades de input via models.dev: chave normalizada do modelo → set de modalidades */
+/** Input modalities via models.dev: normalized model key → set of modalities */
 function buildModalitiesIndex(catalog: Catalog): Map<string, Set<string>> {
   const index = new Map<string, Set<string>>()
   for (const providerId in catalog) {
@@ -106,7 +106,7 @@ function fromOpenRouter(m: OpenRouterModel): RawModel {
   const [providerSlug] = m.id.split('/')
   const providerName = m.name.includes(':') ? m.name.split(':')[0].trim() : providerSlug
   const aa = m.benchmarks?.artificial_analysis
-  // Pricing do OpenRouter é USD por token — converte para USD por 1M
+  // OpenRouter pricing is USD per token — convert to USD per 1M
   const input = Number(m.pricing?.prompt ?? 0) * 1_000_000
   const output = Number(m.pricing?.completion ?? 0) * 1_000_000
   return {
@@ -148,7 +148,7 @@ function aaBenchmarks(m: AAModel): ModelBenchmarks {
   }
 }
 
-/** Mescla benchmarks da AA num RawModel vindo do OpenRouter (AA prevalece). */
+/** Merges the AA benchmarks into a RawModel coming from OpenRouter (AA prevails). */
 function mergeAA(target: RawModel, aa: AAModel) {
   const b = aaBenchmarks(aa)
   for (const key of Object.keys(b) as (keyof ModelBenchmarks)[]) {
@@ -182,7 +182,7 @@ function fromAA(m: AAModel): RawModel {
   }
 }
 
-/** Normaliza um valor para 0→100 relativo ao maior valor do dataset. */
+/** Normalizes a value to 0→100 relative to the largest value in the dataset. */
 function normalizeScore(value: number | undefined, max: number): number | undefined {
   if (value === undefined || max <= 0) return undefined
   return Math.round(Math.max(0, Math.min(100, (value / max) * 100)))
@@ -192,7 +192,7 @@ export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): Orbit
   const availabilityIndex = buildAvailabilityIndex(catalog)
   const modalitiesIndex = buildModalitiesIndex(catalog)
 
-  // Base: OpenRouter; índice por chave normalizada para casar com a AA
+  // Base: OpenRouter; index by normalized key to match against the AA
   const raws: RawModel[] = openRouter.map(fromOpenRouter)
   const byKey = new Map<string, RawModel>()
   for (const raw of raws) {
@@ -205,7 +205,7 @@ export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): Orbit
     else raws.push(fromAA(model))
   }
 
-  // Máximos do dataset para normalização 0→100
+  // Dataset maxima for the 0→100 normalization
   const max = {
     intelligence: 0,
     coding: 0,
@@ -225,8 +225,8 @@ export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): Orbit
       coding: normalizeScore(raw.benchmarks.codingIndex, max.coding),
       agentic: normalizeScore(raw.benchmarks.agenticIndex, max.agentic),
       speed: normalizeScore(raw.benchmarks.tokensPerSecond, max.speed),
-      // Vision não tem índice dedicado nas fontes atuais — usa inteligência
-      // como proxy apenas quando o modelo aceita imagem
+      // Vision has no dedicated index in the current sources — intelligence is used
+      // as a proxy, and only when the model accepts images
       vision: raw.vision ? normalizeScore(raw.benchmarks.intelligenceIndex, max.intelligence) : undefined,
     }
 
@@ -238,8 +238,8 @@ export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): Orbit
     }
     if (!raw.sources.includes('openrouter')) availability.shift()
 
-    // Modalidades: union do que o OpenRouter informa com o models.dev (que
-    // cobre video/pdf que o OpenRouter nem sempre lista)
+    // Modalities: union of what OpenRouter reports with models.dev (which
+    // covers video/pdf that OpenRouter does not always list)
     const modalities = [...raw.modalities]
     for (const key of raw.matchKeys) {
       for (const m of modalitiesIndex.get(key) ?? []) {

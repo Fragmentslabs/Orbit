@@ -20,22 +20,22 @@ import { resolveSafePath, type ToolContext } from './context'
 import { recordToolWrite } from '../session/write-journal'
 
 /**
- * Compressão de vídeo e áudio para o agente.
+ * Video and audio compression for the agent.
  *
- * O que a tool entrega não é "um ffmpeg com esteroides": é a resposta a um
- * pedido do usuário ("cabe em 25 MB", "deixa em 720p para o WhatsApp") com o
- * arquivo MEDIDO depois de pronto. O modelo diz o alvo; o código decide codec,
- * bitrate, faixas, refaz o encode se estourar e relata o antes/depois.
+ * What the tool delivers is not "an ffmpeg on steroids": it is the answer to a
+ * user request ("fit in 25 MB", "make it 720p for WhatsApp") with the
+ * file MEASURED once ready. The model states the target; the code decides codec,
+ * bitrate, tracks, redoes the encode if it overshoots and reports the before/after.
  *
- * Imagem não entra aqui de propósito: `image_edit` com `maxBytes` já faz o
- * mesmo trabalho de forma auto-mensurável, e duas portas para a mesma coisa só
- * confundem a escolha.
+ * Image does not come in here on purpose: `image_edit` with `maxBytes` already does the
+ * same work in a self-measuring way, and two doors for the same thing only
+ * confuse the choice.
  *
- * A origem é a mesma das outras tools de mídia — um caminho da pasta de
- * trabalho (modo código) ou a referência `vdo_…`/`aud_…` de um anexo. O
- * resultado NUNCA é a origem: no código vai para `media/` ao lado do arquivo
- * (ou para `outputPath`, quando o usuário pedir), no chat mora no armazenamento
- * do Orbit e aparece na galeria.
+ * The source is the same as the other media tools — a path in the working
+ * folder (code mode) or the `vdo_…`/`aud_…` reference of an attachment. The
+ * result is NEVER the source: in code it goes to `media/` next to the file
+ * (or to `outputPath`, when the user asks), in the chat it lives in Orbit's
+ * storage and appears in the gallery.
  */
 
 const SAFE_SESSION = /^[A-Za-z0-9_-]{1,80}$/
@@ -46,7 +46,7 @@ function chatCompressDir(sessionId: string): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'media-compress', sessionId)
 }
 
-/** "812 KB", "24.3 MB" — o número que o usuário reconhece. */
+/** "812 KB", "24.3 MB" — the number the user recognizes. */
 export function readableBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '0 KB'
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -66,7 +66,7 @@ function containerOf(value: string | undefined): MediaContainer | null {
   return [...VIDEO_CONTAINERS, ...AUDIO_CONTAINERS].includes(clean) ? clean : null
 }
 
-/** Relato curto e concreto: o modelo repassa isto, não inventa números. */
+/** A short, concrete report: the model passes this on, it does not invent numbers. */
 export function describeReport(report: CompressReport, label: string, savedTo: string | null): string {
   const { before, after, plan } = report
   if (report.skipped) {
@@ -104,8 +104,8 @@ export function createMediaTools(
   ctx: ToolContext | null,
 ) {
   /**
-   * Origem: um anexo do chat (`vdo_…`, `aud_…`) ou, no código, um arquivo da
-   * pasta de trabalho. Imagem é recusada com o caminho certo — `image_edit`.
+   * Source: a chat attachment (`vdo_…`, `aud_…`) or, in code, a file from the
+   * working folder. Image is refused with the right path — `image_edit`.
    */
   const resolveInput = async (ref: string): Promise<{ file: string; label: string; attachment: boolean }> => {
     const clean = ref.trim()
@@ -190,9 +190,9 @@ export function createMediaTools(
         const { file, label, attachment } = await resolveInput(input.ref)
 
         const outputPath = (input as { outputPath?: string }).outputPath
-        // O contêiner decide a EXTENSÃO do arquivo, então precisa existir antes
-        // do encode. Sem formato pedido, segue a família da origem — o mesmo
-        // `defaultContainer` que o plano usaria, com um ffprobe a mais.
+        // The container decides the file's EXTENSION, so it has to exist before
+        // the encode. With no format requested, it follows the source's family — the same
+        // `defaultContainer` the plan would use, with one extra ffprobe.
         const probe = await probeMedia(file)
         const container: MediaContainer =
           containerOf(input.format) ??
@@ -206,14 +206,14 @@ export function createMediaTools(
           const wantedExt = path.extname(wanted).slice(1).toLowerCase()
           output = wantedExt === container ? wanted : `${wanted.slice(0, wanted.length - (wantedExt ? wantedExt.length + 1 : 0))}.${container}`
         } else if (ctx) {
-          // Ao lado do arquivo quando ele está no projeto; na pasta de trabalho
-          // quando a origem é um anexo (que mora no armazenamento do app).
+          // Next to the file when it is in the project; in the working folder
+          // when the source is an attachment (which lives in the app's storage).
           const folder = attachment ? ctx.directory : path.dirname(file)
           output = path.join(folder, 'media', `${base}-compressed.${container}`)
         } else {
           output = path.join(chatCompressDir(scope.sessionId), `${base}-${randomBytes(3).toString('hex')}.${container}`)
         }
-        // No código o resultado cai na pasta de trabalho: é escrita do turno.
+        // In code the result lands in the working folder: it is a write of the turn.
         if (ctx) recordToolWrite(output)
 
         const report = await compressMedia({
@@ -239,7 +239,7 @@ export function createMediaTools(
           return describeReport(report, label, null)
         }
 
-        // Caminho como o usuário o vê: relativo à pasta de trabalho no código.
+        // Path as the user sees it: relative to the working folder in code.
         const shown = ctx ? path.relative(ctx.directory, report.output) || report.output : report.output
 
         const title = path.basename(report.output)
@@ -248,8 +248,8 @@ export function createMediaTools(
         if (report.kind === 'video') {
           if (!scope.canShow) return describeReport(report, label, shown)
           if (ctx) {
-            // No código o arquivo é do usuário e fica onde está: só é registrado
-            // para tocar na resposta (como faz o video_render).
+            // In code the file belongs to the user and stays where it is: it is only registered
+            // to play in the response (as video_render does).
             const { url } = await registerVideo(report.output, scope.sessionId)
             return {
               videoUrl: url,
@@ -275,8 +275,8 @@ export function createMediaTools(
         }
 
         if (!scope.canShow) return describeReport(report, label, shown)
-        // Áudio: no chat a cópia compacta vai para o acervo (é ela que aparece
-        // na galeria e no player); no código o arquivo do projeto basta.
+        // Audio: in the chat the compact copy goes to the collection (it is the one that appears
+        // in the gallery and in the player); in code the project file is enough.
         if (ctx) return describeReport(report, label, shown)
         const bytes = await fs.readFile(report.output)
         const ext = path.extname(report.output).slice(1).toLowerCase()

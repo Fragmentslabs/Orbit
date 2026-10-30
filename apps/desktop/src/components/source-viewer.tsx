@@ -25,43 +25,43 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Visualizador de uma fonte no painel lateral, aberto pelo clique no anexo,
- * na aba Fontes ou numa citação da conversa.
+ * Viewer of a source in the side panel, opened by clicking the attachment,
+ * the Sources tab or a citation in the conversation.
  *
- * Dois modos:
+ * Two modes:
  *
- * - Original: as páginas do PDF desenhadas por nós, com o trecho citado (ou a
- *   busca) grifado por cima. Não é o visualizador nativo do Chromium porque
- *   ele é um plugin fechado — dá para apontar a página pela URL, mas não para
- *   alcançar o conteúdo nem a busca dele, e portanto não há como marcar o
- *   trecho. Grifar dentro do PDF exige desenhar o PDF. A página é uma imagem,
- *   e a seleção vem de uma camada de texto transparente posicionada sobre os
- *   glifos (ver PageView).
- * - Texto: o texto extraído com as linhas numeradas — onde se seleciona e
- *   copia, e o mesmo texto que o modelo leu (é o que garante que a linha 28
- *   daqui seja a linha 28 que ele citou).
+ * - Original: the PDF pages drawn by us, with the cited excerpt (or the
+ *   search) marked on top. It is not the Chromium native viewer because
+ *   it is a closed plugin — the page can be pointed at through the URL, but not the
+ *   content nor its search can be reached, and therefore there is no way to mark the
+ *   excerpt. Marking inside the PDF requires drawing the PDF. The page is an image,
+ *   and the selection comes from a transparent text layer positioned over the
+ *   glyphs (see PageView).
+ * - Text: the extracted text with numbered lines — where one selects and
+ *   copies, and the same text the model read (it is what guarantees that line 28
+ *   here is the line 28 it cited).
  *
- * O que o visualizador nativo dava de graça está reimplementado aqui porque
- * ele foi trocado: localizar, sumário, zoom, imprimir e baixar. Imprimir é a
- * exceção e continua indo pelo caminho nativo — é o Chromium que sabe paginar
- * um PDF para papel, e refazer isso a partir das nossas imagens seria pior
- * justamente onde precisa ser fiel.
+ * What the native viewer gave for free is reimplemented here because
+ * it was replaced: find, table of contents, zoom, print and download. Print is the
+ * exception and keeps going through the native path — it is Chromium that knows how to paginate
+ * a PDF for paper, and redoing that from our images would be worse
+ * precisely where it needs to be faithful.
  */
 
-/** Teto de linhas renderizadas de uma vez no modo Texto. */
+/** Ceiling of lines rendered at once in Text mode. */
 const MAX_LINES = 20_000
-/** Páginas por chamada de renderização — o mesmo teto do rasterizador. */
+/** Pages per rendering call — the same ceiling as the rasterizer. */
 const BATCH = 5
 const ZOOM_MIN = 0.75
 const ZOOM_MAX = 3
 const ZOOM_STEP = 0.25
-/** Escala de referência, exibida como 100% no controle de zoom. */
+/** Reference scale, shown as 100% in the zoom control. */
 const ZOOM_BASE = 1.5
 /**
- * A partir desta largura a aba comporta a coluna do sumário (208px) sem esmagar
- * a página — sobram ~470px de leitura. Abaixo disso o sumário desce para o
- * rodapé, em chips. O painel direito é redimensionável, então quem decide é a
- * largura RECEBIDA pela aba, e não a da janela.
+ * From this width on the tab fits the table of contents column (208px) without squashing
+ * the page — ~470px of reading are left. Below that the table of contents goes down to the
+ * footer, in chips. The right panel is resizable, so what decides is the
+ * width RECEIVED by the tab, and not the window's.
  */
 const OUTLINE_SIDE_MIN = 680
 
@@ -72,18 +72,18 @@ interface Match {
 
 interface Focus {
   page: number
-  /** Muda a cada pedido, para clicar duas vezes no mesmo item rolar de novo. */
+  /** Changes on every request, so that clicking the same item twice scrolls again. */
   nonce: number
 }
 
 /**
- * Página e linhas do trecho selecionado, lidas do próprio DOM: cada linha
- * carrega o número que o modelo enxerga, e é esse número que vai na citação
- * (#orbit-source/<doc>/p<página>L<linha>). Seleção que atravessa páginas cita
- * a partir do início e sem linha final — dizer "linha 4 da página 3" quando o
- * trecho termina na página 4 seria uma coordenada falsa.
+ * Page and lines of the selected excerpt, read from the DOM itself: each line
+ * carries the number the model sees, and it is that number that goes in the citation
+ * (#orbit-source/<doc>/p<page>L<line>). A selection that crosses pages cites
+ * from the beginning and without a final line — saying "line 4 of page 3" when the
+ * excerpt ends on page 4 would be a false coordinate.
  *
- * Fora do componente porque não depende de nada dele: é leitura de DOM.
+ * Outside the component because it depends on nothing of it: it is DOM reading.
  */
 function resolveQuoteAnchor(range: Range): QuoteAnchor {
   const at = (node: Node | null) => {
@@ -107,9 +107,9 @@ function resolveQuoteAnchor(range: Range): QuoteAnchor {
 }
 
 /**
- * A fonte é um arquivo Markdown guardado como texto (o .md anexado no chat ou
- * promovido a fonte)? O `.txt` NÃO entra: ali o que se espera é texto puro, e
- * passar ou não por um renderizador de Markdown não muda nada.
+ * Is the source a Markdown file stored as text (the .md attached in the chat or
+ * promoted to a source)? The `.txt` does NOT enter: there what one expects is pure text, and
+ * going or not through a Markdown renderer changes nothing.
  */
 const MARKDOWN_SOURCE = /\.(md|markdown|mdx)$/i
 
@@ -134,11 +134,11 @@ export function SourceViewer({
   const [data, setData] = useState<SourceText | null>(null)
   const [loading, setLoading] = useState(true)
   /**
-   * Como o documento é desenhado. "doc" existe para o que é Markdown (o .md
-   * anexado ou promovido): antes ele abria no Texto, uma lista de linhas
-   * numeradas em fonte monoespaçada — o conteúdo certo com a cara errada, que
-   * é o que fazia um .md parecer um Word quebrado. A fonte do Texto continua
-   * ali para citar trecho com página e linha.
+   * How the document is drawn. "doc" exists for what is Markdown (the .md
+   * attached or promoted): before it opened in Text, a list of numbered lines
+   * in a monospaced font — the right content with the wrong face, which
+   * is what made a .md look like a broken Word. The Text font stays
+   * there for citing an excerpt with page and line.
    */
   const [mode, setMode] = useState<"original" | "text" | "doc">("text")
   const [query, setQuery] = useState("")
@@ -149,12 +149,12 @@ export function SourceViewer({
   const [zoom, setZoom] = useState(ZOOM_BASE)
   const [focus, setFocus] = useState<Focus | null>(null)
   const [busy, setBusy] = useState<"print" | "export" | null>(null)
-  const [erro, setErro] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   /**
-   * O que está aberto é um documento que o AGENTE escreveu (e não uma fonte
-   * anexada)? Os PDF/DOCX dele abrem aqui, e a conversa agora mostra só um
-   * card — então "usar como fonte", que morava no card, tem que morar onde o
-   * documento está. Só o registro de documentos sabe responder.
+   * Is what is open a document the AGENT wrote (and not an attached
+   * source)? Its PDF/DOCX open here, and the conversation now shows only a
+   * card — so "use as source", which lived in the card, has to live where the
+   * document is. Only the document registry knows how to answer.
    */
   const [agentDocument, setAgentDocument] = useState(false)
   useEffect(() => {
@@ -169,24 +169,24 @@ export function SourceViewer({
       alive = false
     }
   }, [docId])
-  // A busca foi preenchida pela citação (e não digitada): é o que mantém o
-  // destaque preso à página citada em vez de marcar a frase onde ela repetir.
+  // The search was filled by the citation (and not typed): it is what keeps the
+  // highlight stuck to the cited page instead of marking the sentence wherever it repeats.
   const [fromCitation, setFromCitation] = useState(false)
-  // Lido na hora de escolher o modo inicial, e não dependência do efeito que
-  // carrega o arquivo: uma citação nova no MESMO documento só troca o trecho,
-  // e recarregar o texto inteiro por isso seria trabalho jogado fora.
-  const citadoRef = useRef(false)
-  citadoRef.current = page !== undefined && fromLine !== undefined
+  // Read at the time of choosing the initial mode, and not a dep of the effect that
+  // loads the file: a new citation in the SAME document only swaps the excerpt,
+  // and reloading the whole text for that would be wasted work.
+  const citedRef = useRef(false)
+  citedRef.current = page !== undefined && fromLine !== undefined
   const anchorRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
   /**
-   * Largura que a aba recebeu AGORA — é ela que decide se o sumário fica em
-   * coluna, ao lado da página, ou deitado no rodapé, em chips. O painel direito
-   * é redimensionável, então nenhum breakpoint de janela responde por ele.
+   * Width the tab received NOW — it is what decides whether the table of contents stays in a
+   * column, next to the page, or lying in the footer, in chips. The right panel
+   * is resizable, so no window breakpoint answers for it.
    *
-   * Ref de callback, e não efeito com ref: o componente sai antes de desenhar
-   * enquanto não há fonte, e um efeito de montagem nunca mediria o elemento que
-   * aparece depois.
+   * Callback ref, and not an effect with a ref: the component returns before drawing
+   * while there is no source, and a mount effect would never measure the element that
+   * appears afterwards.
    */
   const [width, setWidth] = useState(0)
   const observerRef = useRef<ResizeObserver | null>(null)
@@ -201,18 +201,18 @@ export function SourceViewer({
   }, [])
 
   /**
-   * A sessão que acompanha o pedido ao main. Um documento da GALERIA
-   * (`doc_xxx.md`) se lê pelo próprio id — o main nem usa a sessão nesse
-   * caminho —, então o painel sem conversa ativa (a aba de Mídia aberta na tela
-   * inicial, por exemplo) consegue abrir o documento. Só fonte de conversa
-   * (`docN`/`srcN`) precisa da sessão, e essa sempre chega com uma. Antes o
-   * visualizador exigia as duas coisas e desistia com "clique numa citação"
-   * antes de pedir o arquivo: o documento existia e nunca era lido.
+   * The session that accompanies the request to the main process. A GALLERY document
+   * (`doc_xxx.md`) is read by its own id — the main process does not even use the session on that
+   * path —, so the panel with no active conversation (the Media tab open on the start
+   * screen, for example) can open the document. Only a conversation source
+   * (`docN`/`srcN`) needs the session, and that one always arrives with one. Before, the
+   * viewer required both and gave up with "click a citation"
+   * before asking for the file: the document existed and was never read.
    */
   const viewSession = sessionId ?? ""
   const markdown = isMarkdownSource(data)
-  /** Rótulo do tipo no cabeçalho — a extensão quando existe, senão a palavra
-   *  do tipo. Mesma regra da lista da aba Fontes. */
+  /** Label of the type in the header — the extension when it exists, otherwise the type
+   *  word. Same rule as the Sources tab list. */
   const typeLabel = data
     ? (data.kind !== "web"
         ? /\.([a-z][a-z0-9]{0,4})$/i.exec(data.filename.trim())?.[1]?.toUpperCase()
@@ -228,16 +228,16 @@ export function SourceViewer({
       if (!alive) return
       setData(result)
       setLoading(false)
-      // O documento abre como ele é sempre que houver original — inclusive
-      // vindo de uma citação no PDF, onde o destaque também é desenhado. No
-      // .docx o documento em HTML não sabe grifar a linha citada: vindo de
-      // uma citação ele abre no Texto, que sabe.
+      // The document opens as it is whenever there is an original — including
+      // coming from a citation in the PDF, where the highlight is drawn too. In
+      // .docx the HTML document does not know how to mark the cited line: coming from
+      // a citation it opens in Text, which does.
       setMode(
-        result?.hasOriginal && !(citadoRef.current && result.originalKind === "docx")
+        result?.hasOriginal && !(citedRef.current && result.originalKind === "docx")
           ? "original"
-          : // Markdown abre como documento, MENOS vindo de uma citação: a
-            // citação aponta página e linha, e só o Texto sabe marcar a linha.
-            isMarkdownSource(result) && !citadoRef.current
+          : // Markdown opens as a document, EXCEPT when coming from a citation: the
+            // citation points at page and line, and only Text knows how to mark the line.
+            isMarkdownSource(result) && !citedRef.current
             ? "doc"
             : "text",
       )
@@ -248,13 +248,13 @@ export function SourceViewer({
   }, [viewSession, docId])
 
   /**
-   * Citação: a busca já entra preenchida com o trecho citado. É o mesmo
-   * mecanismo que marca a ocorrência no PDF e no texto, então o clique cai
-   * direto no trecho e ainda dá para navegar pelas repetições.
+   * Citation: the search enters already filled with the cited excerpt. It is the same
+   * mechanism that marks the occurrence in the PDF and in the text, so the click lands
+   * straight on the excerpt and one can still navigate the repetitions.
    *
-   * Separado da carga porque o documento não muda quando se clica em OUTRA
-   * citação do mesmo arquivo — só o trecho muda, e reler o texto ali seria
-   * trabalho jogado fora.
+   * Separate from the load because the document does not change when one clicks ANOTHER
+   * citation of the same file — only the excerpt changes, and re-reading the text there would be
+   * wasted work.
    */
   useEffect(() => {
     if (!data) return
@@ -282,25 +282,25 @@ export function SourceViewer({
 
   useEffect(() => setMatchIndex(0), [query])
 
-  // Vindo de citação, a ocorrência atual é a da página citada — a mesma frase
-  // pode aparecer antes no documento, e começar pela primeira levaria o painel
-  // para um lugar que não é o citado.
+  // Coming from a citation, the current occurrence is the one of the cited page — the same sentence
+  // may appear earlier in the document, and starting from the first would take the panel
+  // to a place that is not the cited one.
   useEffect(() => {
     if (!fromCitation || matches.length === 0) return
-    const alvo = matches.findIndex((m) => m.page === (page ?? 0))
-    if (alvo > 0) setMatchIndex(alvo)
+    const targetIndex = matches.findIndex((m) => m.page === (page ?? 0))
+    if (targetIndex > 0) setMatchIndex(targetIndex)
   }, [fromCitation, matches, page])
 
-  // Andar pelas ocorrências leva o modo Original junto: o contador diz 3/12 e
-  // a página à vista tem que ser a da terceira.
+  // Walking through the occurrences takes Original mode along: the counter says 3/12 and
+  // the page in view has to be the one of the third.
   const current = matches[matchIndex]
   useEffect(() => {
     if (current) setFocus({ page: current.page, nonce: Date.now() })
   }, [current])
 
-  // Documento gigante no modo Texto: renderizar tudo seriam dezenas de
-  // milhares de nós. Corta em MAX_LINES, COMEÇANDO na página citada — abrir
-  // uma citação da página 400 e mostrar as primeiras 300 seria pior que nada.
+  // Giant document in Text mode: rendering everything would be dozens of
+  // thousands of nodes. It cuts at MAX_LINES, STARTING at the cited page — opening
+  // a citation from page 400 and showing the first 300 would be worse than nothing.
   const visiblePages = useMemo(() => {
     if (!data) return []
     const start = Math.max(0, data.pages.findIndex((p) => p.num === (page ?? 0)))
@@ -315,21 +315,21 @@ export function SourceViewer({
   }, [data, page])
 
   /**
-   * O Markdown inteiro para o modo Documento.
+   * The whole Markdown for Document mode.
    *
-   * Junta as páginas sintéticas (o `.md` é paginado para a LEITURA do modelo,
-   * ~3k caracteres por página) com uma linha em branco entre elas: sem isso o
-   * último parágrafo de uma página colaria no primeiro da seguinte, e um
-   * documento com página quebrada no meio de uma tabela sairia errado.
+   * It joins the synthetic pages (the `.md` is paginated for the model's READING,
+   * ~3k characters per page) with a blank line between them: without that the
+   * last paragraph of one page would stick to the first of the next, and a
+   * document with a page broken in the middle of a table would come out wrong.
    */
   const markdownBody = useMemo(
     () =>
       data
         ? data.pages
             .map((p) => p.lines.join("\n"))
-            // `\pagebreak` é instrução do renderizador de documentos, não
-            // conteúdo: no visualizador ele sairia como texto solto no meio da
-            // prosa (a página sintética da fonte já não corresponde a ele).
+            // `\pagebreak` is an instruction of the document renderer, not
+            // content: in the viewer it would come out as loose text in the middle of the
+            // prose (the synthetic page of the source no longer corresponds to it).
             .join("\n\n")
             .replace(/^[ \t]*\\pagebreak[ \t]*$/gm, "")
         : "",
@@ -341,7 +341,7 @@ export function SourceViewer({
     anchorRef.current?.scrollIntoView({ block: "center" })
   }, [data, loading, mode, page, fromLine, matchIndex])
 
-  // Sumário clicado no modo Texto: rola até o marcador daquela página.
+  // Table of contents clicked in Text mode: it scrolls to the marker of that page.
   useLayoutEffect(() => {
     if (mode !== "text" || !focus) return
     textRef.current
@@ -360,29 +360,29 @@ export function SourceViewer({
   const citedPage = page ?? 0
   const term = query.trim().toLowerCase()
   const truncated = (data?.pages.length ?? 0) > visiblePages.length
-  // O destaque sai SEMPRE do campo de busca — inclusive na citação, que entra
-  // preenchendo ele. Assim apagar o filtro desmarca, que é o que se espera de
-  // um filtro, em vez de deixar uma marca que não dá mais para tirar.
+  // The highlight ALWAYS comes from the search field — including in the citation, which enters
+  // filling it. That way erasing the filter unmarks, which is what one expects from
+  // a filter, instead of leaving a mark that can no longer be removed.
   const highlight = term.length >= 2 ? query.trim() : ""
-  // Vindo da citação o destaque fica preso à página citada; digitando, vale em
-  // qualquer uma.
+  // Coming from the citation the highlight stays stuck to the cited page; by typing, it counts in
+  // any of them.
   const highlightPage = fromCitation ? citedPage : null
 
   /**
-   * Imprimir e baixar podem falhar (formato sem versão em PDF, arquivo que
-   * sumiu, gravação negada). Antes o resultado era descartado e o botão
-   * simplesmente não fazia nada — o erro precisa chegar em quem clicou.
+   * Printing and downloading can fail (a format without a PDF version, a file that
+   * vanished, a denied write). Before, the result was discarded and the button
+   * simply did nothing — the error needs to reach whoever clicked.
    */
   const run = async (action: "print" | "export") => {
     setBusy(action)
-    setErro(null)
+    setError(null)
     const result =
       action === "print"
         ? await docsApi.print(viewSession, docId)
         : await docsApi.export(viewSession, docId)
-    // Cancelar no diálogo não é erro: o usuário desistiu.
+    // Cancelling in the dialog is not an error: the user gave up.
     if (!result.ok && !("canceled" in result && result.canceled)) {
-      setErro(result.error ?? t("sources.actionFailed"))
+      setError(result.error ?? t("sources.actionFailed"))
     }
     setBusy(null)
   }
@@ -409,15 +409,15 @@ export function SourceViewer({
             <p className="truncate text-xs font-medium text-foreground">{data?.filename ?? docId}</p>
           </Truncate>
           {/*
-            O id mostrado é o de AGORA, não o que foi clicado: arrastar o
-            arquivo entre as áreas troca doc1 por src1, e a citação gravada na
-            conversa continua com o endereço antigo. Dizer "src1 (era doc1)" é
-            o que impede a mudança de parecer o arquivo errado.
+            The id shown is the CURRENT one, not the one that was clicked: dragging the
+            file between the areas swaps doc1 for src1, and the citation recorded in the
+            conversation keeps the old address. Saying "src1 (was doc1)" is
+            what prevents the change from looking like the wrong file.
           */}
           <Truncate>
             <p className="truncate text-[11px] text-muted-foreground">
-            {/* O TIPO antes do id: "src1" não diz o que é o arquivo, e é a
-                primeira coisa que se procura aqui. */}
+            {/* The TYPE before the id: "src1" does not say what the file is, and it is
+                the first thing one looks for here. */}
             {typeLabel && <span className="font-medium text-foreground/75">{typeLabel} · </span>}
             {data?.id ?? docId}
             {data?.movedFrom ? ` · ${t("sources.movedFrom", { id: data.movedFrom })}` : ""}
@@ -484,9 +484,9 @@ export function SourceViewer({
           <button
             type="button"
             onClick={() => {
-              // Localizar trabalha sobre as LINHAS numeradas: no Markdown
-              // renderizado não há o que grifar, então a busca leva junto para
-              // o modo Texto em vez de abrir uma caixa que não acha nada.
+              // Find works over the numbered LINES: in the rendered
+              // Markdown there is nothing to mark, so the search takes one along to
+              // Text mode instead of opening a box that finds nothing.
               if (!findOpen && mode === "doc") setMode("text")
               setFindOpen((open) => !open)
             }}
@@ -496,7 +496,7 @@ export function SourceViewer({
           </button>
         </Hint>
         {agentDocument && sessionId && docId && (
-          <DocumentSourceBadge documentId={docId} sessionId={sessionId} onError={setErro} />
+          <DocumentSourceBadge documentId={docId} sessionId={sessionId} onError={setError} />
         )}
         <Hint label={t("sources.download")}>
           <button
@@ -513,8 +513,8 @@ export function SourceViewer({
           )}
         </button>
         </Hint>
-        {/* Só o PDF: imprimir manda o arquivo ao Chromium, que pagina PDF para
-            papel e não sabe o que fazer com um .docx. */}
+        {/* PDF only: printing sends the file to Chromium, which paginates PDF for
+            paper and does not know what to do with a .docx. */}
         {data?.originalKind === "pdf" && (
           <Hint label={t("sources.print")}>
             <button
@@ -545,13 +545,13 @@ export function SourceViewer({
         )}
       </div>
 
-      {erro && (
+      {error && (
         <div className="flex items-start gap-2 border-b border-border/60 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
-          <p className="min-w-0 flex-1">{erro}</p>
+          <p className="min-w-0 flex-1">{error}</p>
           <Hint label={t("common.dismiss")}>
             <button
               type="button"
-              onClick={() => setErro(null)}
+              onClick={() => setError(null)}
               className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/20"
             >
               <X className="size-3" />
@@ -621,9 +621,9 @@ export function SourceViewer({
       )}
 
       <div className="flex min-h-0 flex-1">
-        {/* Com espaço, o sumário é a coluna da esquerda. Estreito, ele sai
-            daqui e vira o rodapé logo abaixo do conteúdo — ver o fim deste
-            retorno. */}
+        {/* With space, the table of contents is the left column. Narrow, it leaves
+            here and becomes the footer right below the content — see the end of this
+            return. */}
         {outlineOpen && width >= OUTLINE_SIDE_MIN && (
           <OutlinePanel
             outline={outline}
@@ -635,15 +635,15 @@ export function SourceViewer({
         )}
 
         {/*
-          Sem spinner: trocar o documento inteiro por um giro a cada recarga
-          pisca a página que a pessoa está lendo. Enquanto o texto não chegou,
-          `data` ainda é o da leitura anterior (ou null na primeira), e o que
-          aparece é a mensagem de ausente — que é o estado real.
+          No spinner: swapping the whole document for a spin on every reload
+          blinks the page the person is reading. While the text has not arrived,
+          `data` is still the one from the previous read (or null on the first), and what
+          appears is the missing message — which is the real state.
         */}
         {!data ? (
-          // Vazio enquanto a primeira leitura não voltou: dizer "não existe"
-          // antes de ter procurado seria mentira, e um spinner faria o
-          // documento piscar a cada recarga.
+          // Empty while the first read has not come back: saying "it does not exist"
+          // before having looked would be a lie, and a spinner would make the
+          // document blink on every reload.
           <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
             {loading ? "" : t("sources.viewerMissing", { id: docId })}
           </div>
@@ -669,11 +669,11 @@ export function SourceViewer({
             textPages={data.pages}
           />
         ) : mode === "doc" ? (
-          // Markdown como documento: o mesmo desenho da aba de documento do
-          // agente, porque é o mesmo conteúdo. A citação aqui é o TEXTO (sem
-          // resolve): o renderizado não tem página nem linha, e inventar um
-          // endereço mandaria o clique para o trecho errado — quem precisa da
-          // linha exata usa o modo Texto.
+          // Markdown as a document: the same drawing as the agent's document
+          // tab, because it is the same content. The citation here is the TEXT (without
+          // resolve): the rendered one has neither page nor line, and inventing an
+          // address would send the click to the wrong excerpt — whoever needs the
+          // exact line uses Text mode.
           <div
             ref={textRef}
             className="min-h-0 min-w-0 flex-1 overflow-auto px-4 py-4 text-sm text-foreground"
@@ -706,8 +706,8 @@ export function SourceViewer({
                 </div>
                 {p.lines.map((line, i) => {
                   const n = i + 1
-                  // A faixa da citação some junto com o filtro, pelo mesmo
-                  // motivo do destaque no PDF.
+                  // The citation strip disappears along with the filter, for the same
+                  // reason as the highlight in the PDF.
                   const cited =
                     fromCitation &&
                     p.num === citedPage &&
@@ -746,11 +746,11 @@ export function SourceViewer({
         )}
       </div>
 
-      {/* Aba estreita: o sumário desce para o rodapé, em chips, e devolve à
-          página a largura que uma coluna de 208px levaria. É o mesmo desenho da
-          aba de Slides — a lista muda de lugar conforme o espaço, sem botão a
-          mais. `width === 0` é a primeira pintura, antes de medir: não desenha
-          nada para não piscar na posição errada. */}
+      {/* Narrow tab: the table of contents goes down to the footer, in chips, and gives back to the
+          page the width a 208px column would take. It is the same drawing as the
+          Slides tab — the list changes place according to the space, without one more
+          button. `width === 0` is the first paint, before measuring: it draws
+          nothing so as not to blink in the wrong position. */}
       {outlineOpen && width > 0 && width < OUTLINE_SIDE_MIN && (
         <OutlinePanel
           outline={outline}
@@ -764,7 +764,7 @@ export function SourceViewer({
   )
 }
 
-/** Marca as ocorrências do termo dentro de uma linha do modo Texto. */
+/** Marks the occurrences of the term inside a line of Text mode. */
 function Marked({ text, term }: { text: string; term: string }) {
   if (term.length < 2) return <>{text || " "}</>
   const parts: React.ReactNode[] = []
@@ -787,13 +787,13 @@ function Marked({ text, term }: { text: string; term: string }) {
 }
 
 /**
- * Sumário do documento. Quando o PDF não traz um (a maioria dos digitalizados
- * e dos gerados por impressora não traz), cai na lista de páginas — o painel
- * continua servindo para pular, que é para o que se abre um sumário.
+ * Table of contents of the document. When the PDF does not bring one (most scanned
+ * ones and printer-generated ones do not), it falls back to the page list — the panel
+ * keeps serving to jump, which is what a table of contents is opened for.
  *
- * Duas formas: coluna à esquerda quando a aba é larga, faixa deitada no rodapé
- * quando é estreita. Não é preferência guardada — é a largura que decide, então
- * arrastar o divisor do painel troca a forma na hora.
+ * Two forms: column on the left when the tab is wide, a lying strip in the footer
+ * when it is narrow. It is not a stored preference — the width is what decides, so
+ * dragging the panel divider swaps the form right away.
  */
 function OutlinePanel({
   outline,
@@ -806,14 +806,14 @@ function OutlinePanel({
   total: number
   onGo: (page: number) => void
   /**
-   * "side" = coluna à esquerda; "strip" = faixa deitada no rodapé, para quando a
-   * aba é estreita. O MESMO conteúdo em duas formas — quem escolhe é a largura.
+   * "side" = column on the left; "strip" = lying strip in the footer, for when the
+   * tab is narrow. The SAME content in two forms — the width is what chooses.
    */
   layout: "side" | "strip"
   /**
-   * O que a lista numera. Um PDF tem páginas dentro do arquivo; um .docx tem
-   * blocos — a paginação dele é do editor, e escrever "página" ali prometeria
-   * uma coisa que o arquivo não guarda.
+   * What the list numbers. A PDF has pages inside the file; a .docx has
+   * blocks — its pagination belongs to the editor, and writing "page" there would promise
+   * something the file does not keep.
    */
   unit: "page" | "block"
 }) {
@@ -908,21 +908,21 @@ function OutlinePanel({
 }
 
 /**
- * O PDF desenhado por nós, página a página.
+ * The PDF drawn by us, page by page.
  *
- * Três coisas acontecem sobre a mesma imagem, todas a partir dos ITENS DE
- * TEXTO que vêm com ela:
+ * Three things happen over the same image, all of them from the TEXT ITEMS
+ * that come with it:
  *
- * - o destaque, calculado AQUI (locateText) e não no main. Antes cada letra
- *   digitada na busca pedia a página de volta, e o painel piscava
- *   "carregando" a cada tecla;
- * - a camada de seleção, spans transparentes sobre os glifos, que é o que
- *   permite selecionar e copiar num modo onde a página é imagem;
- * - o zoom, que muda a LARGURA exibida na hora e só depois troca a imagem por
- *   uma mais nítida — sem jogar fora a que já está na tela.
+ * - the highlight, calculated HERE (locateText) and not in the main process. Before, every letter
+ *   typed in the search asked for the page back, and the panel blinked
+ *   "loading" on every key;
+ * - the selection layer, transparent spans over the glyphs, which is what
+ *   allows selecting and copying in a mode where the page is an image;
+ * - the zoom, which changes the displayed WIDTH right away and only then swaps the image for
+ *   a sharper one — without throwing away the one already on screen.
  *
- * Os itens vêm em fração da página, então servem a qualquer escala: mudar o
- * zoom não invalida destaque nem seleção.
+ * The items come in a fraction of the page, so they serve any scale: changing the
+ * zoom invalidates neither the highlight nor the selection.
  */
 function OriginalPages({
   sessionId,
@@ -939,22 +939,22 @@ function OriginalPages({
   sessionId: string
   docId: string
   total: number
-  /** Nome exibível, para o chip da citação. */
+  /** Displayable name, for the citation chip. */
   docName: string
-  /** As MESMAS linhas do modo Texto: é nelas que o trecho selecionado é
-   *  reencontrado para virar coordenada. */
+  /** The SAME lines as Text mode: it is in them that the selected excerpt is
+   *  found again to become a coordinate. */
   textPages: { num: number; lines: string[] }[]
   focus: Focus | null
   highlight: string
-  /** Página em que o destaque é esperado; null quando ele é uma busca, que
-   *  pode casar em qualquer uma. */
+  /** Page in which the highlight is expected; null when it is a search, which
+   *  may match in any of them. */
   highlightPage: number | null
   zoom: number
   onOutline: (outline: OutlineItem[]) => void
 }) {
   const { t } = useTranslation()
   const [pages, setPages] = useState<Record<number, RenderedPage>>({})
-  /** Escala já renderizada de cada lote — é o que decide se vale repedir. */
+  /** Scale already rendered for each batch — it is what decides whether it is worth asking again. */
   const renderedAt = useRef(new Map<number, number>())
   const inFlight = useRef(new Set<number>())
   const containerRef = useRef<HTMLDivElement>(null)
@@ -964,8 +964,8 @@ function OriginalPages({
     async (first: number) => {
       const batch = Math.max(1, first - ((first - 1) % BATCH))
       if (inFlight.current.has(batch)) return
-      // Já renderizado NESTA escala: não repete. É o que evita o "carregando"
-      // ao rolar de volta para uma página que já está pronta.
+      // Already rendered AT THIS scale: it does not repeat. It is what avoids the "loading"
+      // when scrolling back to a page that is already ready.
       if (renderedAt.current.get(batch) === zoom) return
       inFlight.current.add(batch)
       try {
@@ -989,9 +989,9 @@ function OriginalPages({
     [sessionId, docId, zoom, onOutline],
   )
 
-  // Trocar de documento zera tudo. Trocar o ZOOM não: as imagens antigas
-  // seguem na tela, esticadas, enquanto as novas chegam — limpar faria o
-  // documento sumir a cada clique no zoom.
+  // Switching document resets everything. Switching the ZOOM does not: the old images
+  // stay on screen, stretched, while the new ones arrive — clearing would make the
+  // document disappear on every zoom click.
   useEffect(() => {
     renderedAt.current.clear()
     inFlight.current.clear()
@@ -1009,8 +1009,8 @@ function OriginalPages({
           if (n) void load(n)
         }
       },
-      // Margem generosa: a página começa a renderizar antes de entrar na tela,
-      // senão a rolagem encontra sempre um retângulo vazio.
+      // Generous margin: the page starts rendering before entering the screen,
+      // otherwise the scroll always meets an empty rectangle.
       { root, rootMargin: "600px" },
     )
     for (const el of root.querySelectorAll("[data-page]")) observer.observe(el)
@@ -1028,11 +1028,11 @@ function OriginalPages({
   return (
     <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
       {/*
-        Aqui a seleção acontece na camada de texto desenhada sobre a imagem:
-        os pedaços são glifos posicionados, sem número de linha no DOM. A
-        página vem do data-page, e a linha sai de procurar o próprio texto de
-        volta na lista de linhas — a mesma que o modelo lê, que é o que faz a
-        citação apontar para o lugar certo.
+        Here the selection happens in the text layer drawn over the image:
+        the pieces are positioned glyphs, with no line number in the DOM. The
+        page comes from the data-page, and the line comes from searching the text itself
+        back in the line list — the same one the model reads, which is what makes the
+        citation point to the right place.
       */}
       <QuoteSelection
         containerRef={containerRef}
@@ -1054,9 +1054,9 @@ function OriginalPages({
       />
       <div
         className="mx-auto flex flex-col gap-3"
-        // O zoom é a largura EXIBIDA. Redesenhar numa escala maior só aumenta a
-        // resolução: sem isto a imagem chegava mais nítida do mesmo tamanho e o
-        // botão parecia não fazer efeito nenhum.
+        // The zoom is the displayed WIDTH. Redrawing at a larger scale only increases the
+        // resolution: without this the image arrived sharper at the same size and the
+        // button seemed to have no effect at all.
         style={{ width: `${(zoom / ZOOM_BASE) * 100}%`, maxWidth: `${48 * (zoom / ZOOM_BASE)}rem` }}
       >
         {Array.from({ length: total }, (_, i) => i + 1).map((n) => (
@@ -1075,17 +1075,17 @@ function OriginalPages({
 }
 
 /**
- * O .docx anexado, como documento.
+ * The attached .docx, as a document.
  *
- * O painel desenha PDF em páginas de imagem; Word ele não sabe desenhar, e por
- * isso o arquivo chega convertido em HTML pelo main (docx-view.ts), já limpo.
- * Aqui ele vira uma folha: fundo branco sobre o cinza do painel, como as
- * páginas do PDF ao lado, porque é assim que um documento anexado se parece —
- * não com o tema do app.
+ * The panel draws PDF in image pages; Word it does not know how to draw, and that is
+ * why the file arrives converted into HTML by the main process (docx-view.ts), already cleaned.
+ * Here it becomes a sheet: white background over the gray of the panel, like the
+ * PDF pages next to it, because that is how an attached document looks —
+ * not like the app theme.
  *
- * Os estilos dos elementos são explícitos porque o reset do Tailwind zera
- * títulos, listas e tabelas: sem eles o documento voltaria a ser um bloco de
- * texto corrido, que é justamente o que se queria deixar para trás.
+ * The element styles are explicit because the Tailwind reset zeroes
+ * headings, lists and tables: without them the document would go back to being a block of
+ * running text, which is exactly what one wanted to leave behind.
  */
 function DocxOriginal({
   sessionId,
@@ -1119,20 +1119,20 @@ function DocxOriginal({
     }
   }, [sessionId, docId])
 
-  const escala = zoom / ZOOM_BASE
+  const zoomScale = zoom / ZOOM_BASE
 
   /**
-   * Uma folha por quebra explícita. O .docx não guarda paginação — só as
-   * quebras que o autor forçou —, então é isso que separa uma página da outra;
-   * o resto do conteúdo continua corrido, como no Word.
+   * One sheet per explicit break. The .docx does not keep pagination — only the
+   * breaks the author forced —, so that is what separates one page from the other;
+   * the rest of the content keeps running, as in Word.
    */
-  const folhas = useMemo(() => (html === null ? [] : splitDocxPages(html)), [html])
+  const sheets = useMemo(() => (html === null ? [] : splitDocxPages(html)), [html])
 
   return (
     <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
-      {/* O trecho selecionado é reencontrado nas linhas extraídas, as mesmas
-          que o modelo lê — é o que dá página e linha à citação de um
-          documento que, desenhado assim, não tem nenhuma das duas. */}
+      {/* The selected excerpt is found again in the extracted lines, the same ones
+          the model reads — it is what gives page and line to the citation of a
+          document that, drawn like this, has neither of the two. */}
       <QuoteSelection
         containerRef={containerRef}
         kind="source"
@@ -1149,7 +1149,7 @@ function DocxOriginal({
       {failed ? (
         <p className="p-6 text-center text-xs text-muted-foreground">{t("sources.docxUnavailable")}</p>
       ) : html === null ? null : (
-        folhas.map((folha, i) => (
+        sheets.map((sheet, i) => (
           <article
             key={i}
             className={cn(
@@ -1167,10 +1167,10 @@ function DocxOriginal({
               "[&_footer]:mt-[1.5em] [&_footer]:border-t [&_footer]:border-neutral-200 [&_footer]:pt-[0.8em]",
               "[&_header_p]:mb-0 [&_footer_p]:mb-0 [&_footer]:text-[0.85em] [&_footer]:text-neutral-600",
             )}
-            style={{ fontSize: `${14 * escala}px`, maxWidth: `${48 * escala}rem` }}
-            // Seguro por construção: o HTML sai do mammoth, que só escreve a
-            // estrutura do documento, e passa pelo sanitizeDocxHtml no main.
-            dangerouslySetInnerHTML={{ __html: folha }}
+            style={{ fontSize: `${14 * zoomScale}px`, maxWidth: `${48 * zoomScale}rem` }}
+            // Safe by construction: the HTML comes out of mammoth, which only writes the
+            // document structure, and goes through sanitizeDocxHtml in the main process.
+            dangerouslySetInnerHTML={{ __html: sheet }}
           />
         ))
       )}
@@ -1178,7 +1178,7 @@ function DocxOriginal({
   )
 }
 
-/** Uma página: a imagem, o destaque e a camada de seleção. */
+/** One page: the image, the highlight and the selection layer. */
 function PageView({
   page,
   rendered,
@@ -1200,38 +1200,38 @@ function PageView({
   const layerRef = useRef<HTMLDivElement>(null)
 
   /**
-   * Ajusta a largura de cada span pela MEDIÇÃO, e não pela estimativa.
+   * Adjusts the width of each span by MEASUREMENT, and not by estimate.
    *
-   * O span tem que ocupar exatamente a largura que aquele texto ocupa na
-   * imagem, senão a marca da seleção sobra ou falta em relação ao glifo. A
-   * estimativa por meia altura chega perto mas erra em fonte condensada,
-   * versalete e número; medir acerta.
+   * The span has to occupy exactly the width that text occupies in the
+   * image, otherwise the selection mark is too wide or too narrow in relation to the glyph. The
+   * estimate by half height comes close but misses in condensed font,
+   * small caps and numbers; measuring gets it right.
    *
-   * `offsetWidth` é a largura de LAYOUT e ignora o transform, então dá para
-   * ler a largura natural mesmo com o scaleX anterior aplicado — sem ter que
-   * zerá-lo antes e provocar um segundo cálculo de layout.
+   * `offsetWidth` is the LAYOUT width and ignores the transform, so it is possible to
+   * read the natural width even with the previous scaleX applied — without having to
+   * zero it first and trigger a second layout calculation.
    */
   useLayoutEffect(() => {
     const layer = layerRef.current
     if (!layer || !rendered) return
-    const ajustar = () => {
+    const adjust = () => {
       const pageWidth = layer.clientWidth
       if (!pageWidth) return
       const spans = layer.children
-      const naturais: number[] = []
-      for (let i = 0; i < spans.length; i += 1) naturais.push((spans[i] as HTMLElement).offsetWidth)
+      const natural: number[] = []
+      for (let i = 0; i < spans.length; i += 1) natural.push((spans[i] as HTMLElement).offsetWidth)
       for (let i = 0; i < spans.length; i += 1) {
         const item = rendered.items[i]
         if (!item) continue
-        const alvo = item.width * pageWidth
-        const escala = naturais[i] > 0 ? alvo / naturais[i] : selectionScaleX(item, aspect)
-        ;(spans[i] as HTMLElement).style.transform = `scaleX(${Math.min(3, Math.max(0.2, escala))})`
+        const target = item.width * pageWidth
+        const scale = natural[i] > 0 ? target / natural[i] : selectionScaleX(item, aspect)
+        ;(spans[i] as HTMLElement).style.transform = `scaleX(${Math.min(3, Math.max(0.2, scale))})`
       }
     }
-    ajustar()
-    // O zoom muda a largura da página: sem reobservar, a camada ficaria na
-    // escala de antes.
-    const observer = new ResizeObserver(ajustar)
+    adjust()
+    // The zoom changes the width of the page: without re-observing, the layer would stay at the
+    // previous scale.
+    const observer = new ResizeObserver(adjust)
     observer.observe(layer)
     return () => observer.disconnect()
   }, [rendered, aspect])
@@ -1242,14 +1242,14 @@ function PageView({
       ref={outerRef}
       className="relative overflow-hidden rounded bg-background shadow-sm"
       style={{
-        // Proporção de A4 enquanto não renderizou: sem uma altura aproximada a
-        // lista colapsaria e tudo entraria na tela de uma vez, disparando o
-        // carregamento do documento inteiro.
+        // A4 proportion while it has not rendered: without an approximate height the
+        // list would collapse and everything would enter the screen at once, firing the
+        // loading of the whole document.
         ...(rendered ? {} : { aspectRatio: "1 / 1.414" }),
-        // Container de LARGURA (não de tamanho): a camada de seleção mede a
-        // fonte em cqw, e assim ela acompanha o zoom sozinha. `size` conteria
-        // também a altura, e a página — que se dimensiona pela imagem —
-        // colapsaria.
+        // WIDTH container (not size): the selection layer measures the
+        // font in cqw, and that way it follows the zoom by itself. `size` would contain
+        // the height too, and the page — which is sized by the image —
+        // would collapse.
         containerType: "inline-size",
       }}
     >
@@ -1268,12 +1268,12 @@ function PageView({
               }}
             />
           ))}
-          {/* Camada de seleção: o texto visível está no pixel da imagem, e
-              estes spans transparentes existem só para dar seleção e cópia.
-              `selection:text-transparent` é o que impede o texto de APARECER
-              ao ser selecionado: sem isso o Chromium pinta o selecionado com
-              a cor de destaque do sistema, ignorando o transparente — e o
-              texto surgia por cima do da imagem, desalinhado. */}
+          {/* Selection layer: the visible text is in the pixel of the image, and
+              these transparent spans exist only to give selection and copy.
+              `selection:text-transparent` is what prevents the text from APPEARING
+              when selected: without it Chromium paints the selected part with
+              the system highlight color, ignoring the transparent one — and the
+              text appeared over the image one, misaligned. */}
           <div ref={layerRef} className="pdf-text-layer absolute inset-0">
             {rendered.items.map((item, i) => (
               <span
@@ -1282,10 +1282,10 @@ function PageView({
                 style={{
                   left: `${item.x * 100}%`,
                   top: `${item.y * 100}%`,
-                  // A altura do item é fração da ALTURA da página, e o cqw
-                  // mede a LARGURA: a proporção converte entre as duas.
+                  // The height of the item is a fraction of the page HEIGHT, and cqw
+                  // measures the WIDTH: the proportion converts between the two.
                   fontSize: `${(item.height / aspect) * 100}cqw`,
-                  // Estimativa inicial; o efeito abaixo a corrige por medição.
+                  // Initial estimate; the effect below corrects it by measurement.
                   transform: `scaleX(${selectionScaleX(item, aspect)})`,
                 }}
               >
@@ -1295,10 +1295,10 @@ function PageView({
           </div>
         </>
       ) : (
-        // Página ainda não rasterizada. Sem giro: numa lista de páginas, cada
-        // uma que entra na tela acenderia o seu, e o documento inteiro fica
-        // nervoso enquanto se rola. O número já diz o que é — uma folha que
-        // ainda não foi desenhada — e ela se preenche sozinha.
+        // Page not rasterized yet. No spin: in a list of pages, each
+        // one that enters the screen would light up its own, and the whole document gets
+        // nervous while one scrolls. The number already says what it is — a sheet that
+        // has not been drawn yet — and it fills itself in.
         <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground/60">
           {label}
         </div>

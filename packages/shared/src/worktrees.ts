@@ -1,68 +1,68 @@
 /**
- * Worktrees nos chats (seletor no header e ferramentas worktree_* do agente).
- * O worktree por task da esteira usa WorktreeDaTask, em esteira.ts.
+ * Worktrees in chats (header selector and the agent's worktree_* tools).
+ * The per-task pipeline worktree uses TaskWorktree, in pipeline.ts.
  */
 
-/** De onde o worktree veio — define o que o seletor deixa fazer com ele. */
-export type OrigemWorktree =
-  /** A cópia de trabalho principal do repositório */
-  | 'principal'
-  /** Criado pelos chats do Orbit (orbit-data/worktrees/chats) */
+/** Where the worktree came from — it defines what the selector lets one do with it. */
+export type WorktreeOrigin =
+  /** The main working copy of the repository */
+  | 'main'
+  /** Created by Orbit's chats (orbit-data/worktrees/chats) */
   | 'chat'
-  /** De uma task da esteira — quem remove é a esteira */
-  | 'esteira'
-  /** Criado fora do Orbit (git worktree add à mão, outra ferramenta) */
-  | 'externo'
+  /** From a pipeline task — the pipeline removes those */
+  | 'pipeline'
+  /** Created outside Orbit (git worktree add by hand, another tool) */
+  | 'external'
 
 export interface WorktreeInfo {
-  /** Raiz do worktree */
-  caminho: string
-  /** Pasta equivalente à do chat dentro dele (mesma subpasta, em monorepo) */
-  pasta: string
-  nome: string
-  /** Ausente em detached HEAD */
+  /** Worktree root */
+  path: string
+  /** Folder equivalent to the chat's inside it (same subfolder, in a monorepo) */
+  folder: string
+  name: string
+  /** Absent on detached HEAD */
   branch?: string
-  /** Commit atual, abreviado */
+  /** Current commit, abbreviated */
   head: string
-  principal: boolean
-  origem: OrigemWorktree
-  /** false quando a pasta sumiu (o git ainda tem o registro) */
-  disponivel: boolean
-  travado: boolean
-  /** Arquivos com alterações não commitadas */
-  alteracoes: number
-  /** Commits no branch dele que o branch do principal ainda não tem */
-  aFrente: number
+  primary: boolean
+  origin: WorktreeOrigin
+  /** false when the folder is gone (git still has the record) */
+  available: boolean
+  locked: boolean
+  /** Files with uncommitted changes */
+  changes: number
+  /** Commits on its branch that the main branch does not have yet */
+  ahead: number
 }
 
-/** Valor de base que significa "branch padrão do origin, depois de um fetch". */
-export const BASE_REMOTO = '@remoto'
+/** Base value that means "default branch of origin, after a fetch". */
+export const BASE_REMOTE = '@remote'
 
-export interface ListaWorktrees {
-  /** Raiz do repositório principal */
+export interface WorktreeList {
+  /** Root of the main repository */
   repo: string
-  /** Branch padrão do remoto (ex.: origin/main), quando há um */
-  remotoPadrao?: string
-  /** Raiz do worktree em que a pasta consultada está */
-  atual: string
-  /** O principal vem primeiro */
+  /** Default branch of the remote (e.g. origin/main), when there is one */
+  defaultRemote?: string
+  /** Root of the worktree in which the queried folder is */
+  current: string
+  /** The main one comes first */
   worktrees: WorktreeInfo[]
 }
 
-export interface CriarWorktreeResultado {
-  caminho: string
-  /** Pasta para o chat usar (a mesma subpasta em que ele estava) */
-  pasta: string
+export interface CreateWorktreeResult {
+  path: string
+  /** Folder for the chat to use (the same subfolder it was in) */
+  folder: string
   branch: string
   base: string
-  dependencias: 'clonadas' | 'vinculadas' | 'nenhuma'
+  dependencies: 'cloned' | 'linked' | 'none'
 }
 
-/** Resultado da conferência da pasta escolhida para os worktrees. */
-export interface ValidacaoPastaWorktrees {
-  existe: boolean
-  /** A pasta está dentro de um repositório git */
-  dentroDeRepositorio: boolean
-  /** Outro disco que o da pasta pessoal: dependências viram links, não clones */
-  outroDisco: boolean
+/** Result of the check of the folder chosen for the worktrees. */
+export interface ValidateWorktreesFolder {
+  exists: boolean
+  /** The folder is inside a git repository */
+  insideRepository: boolean
+  /** A disk other than the home folder: dependencies become links, not clones */
+  otherDisk: boolean
 }

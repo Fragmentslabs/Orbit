@@ -23,29 +23,29 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Arrastar uma conversa da sidebar: o mesmo gesto serve para abrir no painel
- * lateral e para mudar a conversa de lugar (pasta, fixados, conversas,
- * arquivados). Tudo passa pelo DndContext do App, então a animação é uma só —
- * a linha original vira um espaço vazio e um "fantasma" dela segue o cursor.
+ * Dragging a conversation from the sidebar: the same gesture serves to open it in the side
+ * panel and to move the conversation elsewhere (folder, pinned, conversations,
+ * archived). Everything goes through the App's DndContext, so the animation is a single one —
+ * the original row becomes an empty space and a "ghost" of it follows the cursor.
  */
 
 export const RIGHT_PANEL_DROP_ID = "right-panel-drop-zone"
 
-/** Dados que cada linha arrastável da sidebar publica no dnd-kit. */
+/** Data each draggable row of the sidebar publishes to dnd-kit. */
 export interface SessionDragData {
   kind: "session"
   sessionId: string
   title: string
   icon?: React.ElementType
-  /** Workers ficam presos ao orquestrador e os chats de rotina ao grupo
-   *  "Rotinas": os dois ainda abrem no painel, mas não mudam de lugar. */
+  /** Workers stay bound to the orchestrator and routine chats to the
+   *  "Routines" group: both still open in the panel, but do not change place. */
   movable: boolean
 }
 
 export type SidebarDropTarget =
   | { type: "pinned" }
   | { type: "chats" }
-  /** `folderId` presente: agrupamento de arquivados de uma pasta viva. */
+  /** `folderId` present: grouping of archived ones of a live folder. */
   | { type: "archived"; folderId?: string }
   | { type: "folder"; folderId: string; archived: boolean }
 
@@ -65,7 +65,7 @@ function dropId(target: SidebarDropTarget) {
   }
 }
 
-/** O que muda na sessão ao soltá-la no alvo — null quando já está lá. */
+/** What changes in the session when dropping it on the target — null when it is already there. */
 function placementFor(session: SessionInfo, target: SidebarDropTarget) {
   let patch: { folderId?: string | null; pinned?: boolean; archived?: boolean }
   switch (target.type) {
@@ -93,7 +93,7 @@ function draggedSession(data: unknown): SessionDragData | null {
   return d?.kind === "session" ? d : null
 }
 
-/** Conversa móvel sendo arrastada agora (null fora de um arrasto). */
+/** Movable conversation being dragged now (null outside a drag). */
 export function useDraggedMovableSession(): SessionDragData | null {
   const { active } = useDndContext()
   const data = draggedSession(active?.data.current)
@@ -101,9 +101,9 @@ export function useDraggedMovableSession(): SessionDragData | null {
 }
 
 /**
- * Registra um alvo da sidebar. `highlighted` só acende quando soltar ali
- * muda alguma coisa — passar por cima do lugar onde a conversa já está não
- * pode parecer uma ação.
+ * Registers a sidebar target. `highlighted` only lights up when dropping there
+ * changes something — passing over the place where the conversation already is cannot
+ * look like an action.
  */
 export function useSidebarDropTarget(target: SidebarDropTarget) {
   const dragged = useDraggedMovableSession()
@@ -117,8 +117,8 @@ export function useSidebarDropTarget(target: SidebarDropTarget) {
 }
 
 /**
- * Alvos aninhados (pasta arquivada dentro de "Arquivados") disputam o mesmo
- * ponto: vale o menor que contém o cursor, que é o mais específico.
+ * Nested targets (an archived folder inside "Archived") dispute the same
+ * point: the smallest one containing the cursor counts, which is the most specific.
  */
 const sessionCollision: CollisionDetection = (args) => {
   const hits = pointerWithin(args)
@@ -132,7 +132,7 @@ const sessionCollision: CollisionDetection = (args) => {
 
 type DropKind = "panel" | "move" | "cancel"
 
-/** Soltou no painel: o fantasma some ali mesmo, encolhendo no cursor. */
+/** Dropped in the panel: the ghost disappears right there, shrinking into the cursor. */
 const panelDropAnimation: DropAnimation = {
   duration: 180,
   easing: "ease-out",
@@ -146,8 +146,8 @@ const panelDropAnimation: DropAnimation = {
   sideEffects: null,
 }
 
-/** Mudou de lugar ou desistiu: o fantasma desliza até onde a linha está
- *  agora (o novo lugar, ou o espaço vazio de origem). */
+/** Moved or gave up: the ghost slides to where the row is
+ *  now (the new place, or the empty space of origin). */
 const settleDropAnimation: DropAnimation = {
   duration: 220,
   easing: "cubic-bezier(0.2, 0, 0, 1)",
@@ -205,8 +205,8 @@ function SessionDragOverlay({ dropAnimation }: { dropAnimation: DropAnimation })
   const data = draggedSession(active?.data.current)
   const Icon = data?.icon ?? MessageSquare
 
-  // Portal: a sidebar flutuante usa transform, que prenderia o `fixed` do
-  // overlay dentro dela.
+  // Portal: the floating sidebar uses transform, which would trap the `fixed` of the
+  // overlay inside it.
   const ghost = useMemo(
     () =>
       data ? (

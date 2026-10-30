@@ -9,10 +9,10 @@ release
 *.log
 bf2*
 
-# dependências (hoisted na raiz + por app)
+# dependencies (hoisted at the root + per app)
 node_modules
 
-# projetos nativos gerados — EAS roda prebuild (CNG); /ios e /android são gitignored
+# generated native projects — EAS runs prebuild (CNG); /ios and /android are gitignored
 apps/mobile/ios
 apps/mobile/android
 

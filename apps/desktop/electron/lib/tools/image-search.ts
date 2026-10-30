@@ -9,15 +9,15 @@ import type { ImageProvider, ImageResult } from '../image-search/types'
 import { getMediaEntry, mediaIdFromUrl, saveMedia } from '../media'
 
 /**
- * Buscar e importar imagens de fontes abertas (Wikimedia Commons e Openverse).
+ * Searching and importing images from open sources (Wikimedia Commons and Openverse).
  *
- * O agente PESQUISA, olha uma folha de miniaturas e importa as que escolheu; cada
- * uma entra como imagem do app (`img_…`) levando autor e licença. Daí em diante é
- * o fluxo de qualquer anexo: motion_asset a leva para uma peça. O crédito é parte
- * do que ele recebe de volta, porque a licença costuma exigir que apareça.
+ * The agent SEARCHES, looks at a sheet of thumbnails and imports the ones it chose; each
+ * one enters as an app image (`img_…`) carrying author and license. From then on it is
+ * the flow of any attachment: motion_asset takes it into a piece. The credit is part
+ * of what it gets back, because the license usually requires it to appear.
  *
- * Só imagem raster, só de acervos que informam a licença. Nada aqui lê ou baixa
- * de uma página qualquer da web — para isso existe o webfetch.
+ * Raster images only, only from collections that state the license. Nothing here reads or downloads
+ * from any web page — for that there is webfetch.
  */
 
 const sheetStash = new Map<string, string>()
@@ -102,7 +102,7 @@ export function createImageSearchTools(scope: { sessionId: string; modelVision: 
           }
           try {
             const { buffer, ext } = await downloadImage(result)
-            // Confere que decodifica de verdade (e o que o servidor chamou de imagem é imagem).
+            // Checks that it really decodes (and that what the server called an image is an image).
             const meta = await sharp(buffer).metadata()
             if (!meta.width || !meta.height) throw new Error('the file is not a readable image')
             const url = await saveMedia(buffer, ext, {
@@ -125,18 +125,18 @@ export function createImageSearchTools(scope: { sessionId: string; modelVision: 
         )
         return { message: lines.join('\n'), images: imported }
       },
-      // O modelo lê o relatório; as imagens vão para a resposta pelo chat-engine.
+      // The model reads the report; the images go to the response through chat-engine.
       toModelOutput: ({ output }) => ({ type: 'text', value: typeof output === 'string' ? output : (output as { message: string }).message }),
     }),
   }
 }
 
 /**
- * Mostra ao usuário, NA RESPOSTA, uma imagem que já está no app (a que o
- * image_import trouxe, a que ele anexou). O modo chat não tinha como fazer isso:
- * o show_image completo vive no modo código, junto com o navegador do painel. Sem
- * ele o agente escrevia markdown de imagem — que o chat bloqueia — e o usuário via
- * "[Image blocked]" no lugar da foto.
+ * Shows the user, IN THE RESPONSE, an image that is already in the app (the one
+ * image_import brought, the one they attached). Chat mode had no way to do that:
+ * the full show_image lives in code mode, along with the panel browser. Without
+ * it the agent wrote image markdown — which the chat blocks — and the user saw
+ * "[Image blocked]" instead of the photo.
  */
 export function createGalleryShowImageTool(): ToolSet {
   return {

@@ -6,15 +6,15 @@ interface MessageBubbleProps {
   message: ChatMessage
   isLast?: boolean
   isBusy?: boolean
-  /** Recebe o id em vez de uma closure por linha: com `() => onRevert(id)` a
-   *  prop era nova a cada render da lista e o memo abaixo nunca segurava. */
+  /** Receives the id instead of a closure per row: with `() => onRevert(id)` the
+   *  prop was new on every render of the list and the memo below never held. */
   onRevert?: (messageId: string) => void
   onReply?: (message: ChatMessage) => void
 }
 
-// memo: durante o streaming só a mensagem em atualização troca de identidade —
-// as demais bolhas (e seus parses de markdown) não podem re-renderizar a cada
-// flush de delta, senão a thread JS satura e o stream "congela".
+// memo: during streaming only the message being updated changes identity —
+// the other bubbles (and their markdown parses) cannot re-render on every
+// delta flush, otherwise the JS thread saturates and the stream "freezes".
 export const MessageBubble = memo(function MessageBubble({ message, isLast, isBusy, onRevert, onReply }: MessageBubbleProps) {
   const handleRevert = useCallback(() => onRevert?.(message.id), [onRevert, message.id])
   return (

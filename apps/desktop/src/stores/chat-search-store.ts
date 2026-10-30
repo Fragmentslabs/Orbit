@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-/** Estado da busca dentro da conversa ativa — aberta a partir do menu de opções do header. */
+/** State of the search inside the active conversation — opened from the header's options menu. */
 interface ChatSearchState {
   open: boolean
   toggle: () => void

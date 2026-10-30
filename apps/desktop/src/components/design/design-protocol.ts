@@ -1,9 +1,9 @@
 /**
- * O lado do PAINEL da ponte com os artboards (o outro lado é
- * electron/lib/design/design-runtime.ts, injetado em cada artboard). Aqui ficam
- * os tipos das mensagens, a validação delas — o artboard é conteúdo do modelo,
- * nunca confiável — e a edição do FONTE: o painel acha o elemento pelo mesmo
- * caminho de filhos que a ponte usa e reescreve o arquivo.
+ * The PANEL side of the bridge with the artboards (the other side is
+ * electron/lib/design/design-runtime.ts, injected into each artboard). Here live
+ * the message types, their validation — the artboard is model content,
+ * never trustworthy — and the editing of the SOURCE: the panel finds the element by the same
+ * child path the bridge uses and rewrites the file.
  */
 
 export const DESIGN_SOURCE = "orbit-design"
@@ -32,23 +32,23 @@ export interface DesignElementInfo {
   tag: string
   label: string
   kind: DesignNodeKind
-  /** Conteúdo de texto, só quando o elemento é uma folha de texto. */
+  /** Text content, only when the element is a text leaf. */
   text: string | null
   rect: DesignRect | null
-  /** Valor no `style` do elemento (o que o painel edita). */
+  /** Value in the element's `style` (what the panel edits). */
   inline: Record<string, string>
-  /** Valor calculado (o placeholder do campo). */
+  /** Computed value (the field placeholder). */
   computed: Record<string, string>
   attrs: Record<string, string>
   html: string
   /**
-   * Propriedades que DIFEREM entre os elementos selecionados — o painel
-   * mostra "Mixed" nelas em vez de um valor (como no Figma).
+   * Properties that DIFFER among the selected elements — the panel
+   * shows "Mixed" on them instead of a value (as in Figma).
    */
   mixed?: string[]
-  /** Atributos que diferem entre os elementos selecionados. */
+  /** Attributes that differ among the selected elements. */
   mixedAttrs?: string[]
-  /** O TEXTO dos selecionados é diferente entre eles. */
+  /** The TEXT of the selected ones is different among them. */
   mixedText?: boolean
 }
 
@@ -70,18 +70,18 @@ export type RuntimeMessage =
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
 
 /**
- * O caminho termina em índice NEGATIVO quando o alvo é um NÓ DE TEXTO — o
- * texto solto dentro de um elemento (o "posts" de `<span><b>128</b> posts</span>`).
- * O número é o do nó na lista de filhos do elemento, com o sinal trocado;
- * elementos são sempre positivos (o caminho de um elemento é a lista de
- * índices de filhos-ELEMENTO).
+ * The path ends in a NEGATIVE index when the target is a TEXT NODE — the
+ * loose text inside an element (the "posts" of `<span><b>128</b> posts</span>`).
+ * The number is that of the node in the element's children list, with the sign flipped;
+ * elements are always positive (the path of an element is the list of
+ * ELEMENT-child indexes).
  */
 export const isTextPath = (path: ElementPath): boolean => path.length > 0 && path[path.length - 1] < 0
 
 /**
- * Valida um caminho. `allowText` libera o último índice NEGATIVO (o caminho
- * de um nó de texto solto); sem ele, só caminhos de ELEMENTO passam — é o
- * caso de tudo que move ou agrupa (texto solto não se move nem forma grupo).
+ * Validates a path. `allowText` releases the last NEGATIVE index (the path
+ * of a loose text node); without it, only ELEMENT paths pass — which is
+ * the case of everything that moves or groups (loose text does not move nor form a group).
  */
 function asPath(value: unknown, allowText = true): ElementPath | null {
   if (!Array.isArray(value) || value.length > 64) return null
@@ -97,12 +97,12 @@ function asRect(value: unknown): DesignRect | null {
   return isNum(r.x) && isNum(r.y) && isNum(r.w) && isNum(r.h) ? { x: r.x, y: r.y, w: r.w, h: r.h } : null
 }
 
-/** Caminhos válidos de uma seleção múltipla (o que não endereça nada é descartado). */
+/** Valid paths of a multiple selection (what addresses nothing is discarded). */
 function asPathList(value: unknown): ElementPath[] {
   if (!Array.isArray(value)) return []
   const out: ElementPath[] = []
   for (const item of value) {
-    // O grupo é um conjunto de irmãos que se movem juntos: só elementos.
+    // The group is a set of siblings that move together: elements only.
     const path = asPath(item, false)
     if (path && path.length > 0) out.push(path)
     if (out.length >= 500) break
@@ -110,7 +110,7 @@ function asPathList(value: unknown): ElementPath[] {
   return out
 }
 
-/** Retângulos válidos dos demais membros da seleção múltipla. */
+/** Valid rectangles of the other members of the multiple selection. */
 function asRectList(value: unknown): DesignRect[] {
   if (!Array.isArray(value)) return []
   const out: DesignRect[] = []
@@ -172,14 +172,14 @@ function asInfo(value: unknown): DesignElementInfo | null {
   }
 }
 
-/** Valida uma mensagem artboard → painel. O que não casa é descartado. */
+/** Validates an artboard → panel message. What does not match is discarded. */
 export function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
   const m = raw as Record<string, unknown> | null
   if (!m || typeof m !== "object" || m.source !== DESIGN_SOURCE) return null
   switch (m.type) {
     case "ready":
-      // A árvore é OPCIONAL: a ponte só a manda quando as Camadas pedem (a
-      // mensagem `tree`), não no load do documento.
+      // The tree is OPTIONAL: the bridge only sends it when the Layers ask for it (the
+      // `tree` message), not on the document load.
       return {
         type: "ready",
         tree: asTree(m.tree),
@@ -241,7 +241,7 @@ export function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
       const paths: ElementPath[] = []
       const seen = new Set<string>()
       for (const item of raw) {
-        // Mover é coisa de ELEMENTO: texto solto não sai do lugar.
+        // Moving is an ELEMENT thing: loose text does not leave its place.
         const path = asPath(item, false)
         if (!path || path.length === 0) return null
         const key = path.join(",")
@@ -260,9 +260,9 @@ export function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
 }
 
 /**
- * O artboard que um `href` relativo aponta, entre os do canvas (ou null).
- * Ignora query/hash e o prefixo `./`; compara sem diferenciar caixa, porque o
- * agente escreve `pricing.html` para o arquivo `Pricing.html`.
+ * The artboard a relative `href` points to, among the ones of the canvas (or null).
+ * It ignores query/hash and the `./` prefix; it compares case-insensitively, because the
+ * agent writes `pricing.html` for the file `Pricing.html`.
  */
 export function boardForHref(href: string, files: string[]): string | null {
   let target = href.split("#")[0].split("?")[0]
@@ -280,9 +280,9 @@ export function boardForHref(href: string, files: string[]): string | null {
 export const samePath = (a: ElementPath | null | undefined, b: ElementPath | null | undefined) =>
   Boolean(a && b && a.length === b.length && a.every((n, i) => n === b[i]))
 
-// ------------------------------------------------------------------ fonte
+// ------------------------------------------------------------------ source
 
-/** O elemento do caminho dentro do <body> de um documento. */
+/** The element of the path inside the <body> of a document. */
 export function elementAt(doc: Document, path: ElementPath): Element | null {
   let el: Element | null = doc.body
   for (const index of path) {
@@ -293,9 +293,9 @@ export function elementAt(doc: Document, path: ElementPath): Element | null {
 }
 
 /**
- * O nó de TEXTO do caminho (o caminho termina em índice negativo). É o texto
- * solto dentro de um elemento — uma camada que não tem tag nem estilo, só
- * conteúdo.
+ * The TEXT node of the path (the path ends in a negative index). It is the loose
+ * text inside an element — a layer that has neither tag nor style, only
+ * content.
  */
 export function textNodeAt(doc: Document, path: ElementPath): Text | null {
   if (!isTextPath(path)) return null
@@ -306,9 +306,9 @@ export function textNodeAt(doc: Document, path: ElementPath): Text | null {
 }
 
 /**
- * Aplica `mutate` ao elemento do caminho no FONTE do artboard e devolve o HTML
- * novo. O DOMParser não executa nada do documento (scripts ficam inertes) e o
- * resultado só vira texto — nada disso entra no DOM do app.
+ * Applies `mutate` to the element of the path in the SOURCE of the artboard and returns the new
+ * HTML. The DOMParser executes nothing of the document (scripts stay inert) and the
+ * result only becomes text — none of it enters the app DOM.
  */
 export function editHtml(html: string, path: ElementPath, mutate: (el: Element, doc: Document) => void): string {
   const doc = new DOMParser().parseFromString(html, "text/html")
@@ -324,12 +324,12 @@ function serializeHtml(doc: Document, source: string): string {
 }
 
 /**
- * Move os elementos de `fromPaths` para dentro do pai de `parentPath`, na
- * posição `index` entre os filhos-ELEMENTO (antes do elemento que hoje está lá;
- * no fim, se não houver). Caminhos no MESMO documento antes de qualquer mutação
- * — todos os elementos são resolvidos primeiro, então mover dentro/para fora de
- * um ramo afetado não desalinha os endereços. Os elementos precisam ser irmãos:
- * um grupo da seleção múltipla se move como bloco, na ordem em que está no DOM.
+ * Moves the elements of `fromPaths` into the parent of `parentPath`, at the
+ * `index` position among the ELEMENT children (before the element that is there today;
+ * at the end, if there is none). Paths in the SAME document before any mutation
+ * — all the elements are resolved first, so moving into/out of an
+ * affected branch does not misalign the addresses. The elements need to be siblings:
+ * a group of the multiple selection moves as a block, in the order it is in the DOM.
  */
 export function moveElements(html: string, fromPaths: ElementPath[], parentPath: ElementPath, index: number): string {
   const doc = new DOMParser().parseFromString(html, "text/html")
@@ -355,10 +355,10 @@ export function moveElements(html: string, fromPaths: ElementPath[], parentPath:
 }
 
 /**
- * Reordena os FILHOS-ELEMENTO de `parent` segundo `order`: a posição `k` passa
- * a ser ocupada pelo filho que estava em `order[k]`. Os nós de texto ficam nos
- * mesmos lugares (é assim que o arraste ao vivo na ponte mexe no DOM), então o
- * fonte reescrito reproduz exatamente o que estava na tela.
+ * Reorders the ELEMENT children of `parent` according to `order`: the position `k`
+ * becomes occupied by the child that was at `order[k]`. The text nodes stay in the
+ * same places (that is how the live drag in the bridge touches the DOM), so the
+ * rewritten source reproduces exactly what was on screen.
  */
 export function reorderChildren(parent: Element, order: number[]): void {
   const nodes = Array.from(parent.childNodes)
@@ -372,28 +372,28 @@ export function reorderChildren(parent: Element, order: number[]): void {
 }
 
 /**
- * Onde o elemento cai quando é solto sobre um alvo: ANTES dele, DEPOIS dele ou
- * DENTRO dele (vira filho).
+ * Where the element lands when it is dropped over a target: BEFORE it, AFTER it or
+ * INSIDE it (becomes a child).
  */
 export type DropMode = "before" | "after" | "inside"
 
 export interface LayerMovePlan {
-  /** O pai de destino. */
+  /** The destination parent. */
   parent: ElementPath
-  /** A posição entre os filhos-ELEMENTO do pai. */
+  /** The position among the ELEMENT children of the parent. */
   index: number
   /**
-   * A nova ordem dos filhos do pai (posição → índice original) — só quando o
-   * drop é entre irmãos. `null` quando o elemento muda de pai.
+   * The new order of the parent's children (position → original index) — only when the
+   * drop is between siblings. `null` when the element changes parent.
    */
   order: number[] | null
 }
 
 /**
- * A nova ordem dos filhos depois de mover o filho `fromIndex` para a posição
- * `toIndex` (posição dada na lista ANTES de tirar o elemento: depois dele, os
- * irmãos escorrem um lugar). A ordem é "posição → índice original", a mesma
- * coisa que o `reorder` da ponte e o `reorderChildren` do fonte falam.
+ * The new order of the children after moving the child `fromIndex` to the position
+ * `toIndex` (position given in the list BEFORE taking the element out: after it, the
+ * siblings slide one place). The order is "position → original index", the same
+ * thing the bridge's `reorder` and the source's `reorderChildren` speak.
  */
 export function orderAfterMove(count: number, fromIndex: number, toIndex: number): number[] {
   const order = Array.from({ length: count }, (_, i) => i)
@@ -405,21 +405,21 @@ export function orderAfterMove(count: number, fromIndex: number, toIndex: number
 }
 
 /**
- * Planeja o arrasto de uma camada na lista de Camadas: diz para onde o
- * elemento vai e o que o painel precisa escrever no fonte. O cálculo sai do
- * FONTE (e não da árvore da tela) porque é o fonte que manda nos índices — e
- * é nele que a mudança será gravada.
+ * Plans the drag of a layer in the Layers list: it says where the
+ * element goes and what the panel needs to write to the source. The calculation comes from the
+ * SOURCE (and not from the tree on screen) because it is the source that rules the indexes — and
+ * it is in it that the change will be recorded.
  *
- * No mesmo pai, o drop vira uma NOVA ORDEM dos filhos (os nós de texto ficam
- * onde estão — é assim que o arraste ao vivo mexe no DOM). Em outro pai, vira
- * pai + índice.
+ * In the same parent, the drop becomes a NEW ORDER of the children (the text nodes stay
+ * where they are — that is how the live drag touches the DOM). In another parent, it becomes
+ * parent + index.
  */
 export function planLayerMove(html: string, fromPath: ElementPath, targetPath: ElementPath, mode: DropMode): LayerMovePlan | null {
   const doc = new DOMParser().parseFromString(html, "text/html")
   const from = elementAt(doc, fromPath)
   const target = elementAt(doc, targetPath)
   if (!from || !target || from === target) return null
-  // Não entra dentro de si mesmo (nem de um descendente seu).
+  // It does not enter inside itself (nor inside a descendant of its own).
   if (from.contains(target)) return null
   const sourceParent = from.parentElement
   if (!sourceParent) return null
@@ -432,7 +432,7 @@ export function planLayerMove(html: string, fromPath: ElementPath, targetPath: E
   const targetIndex = targetPath[targetPath.length - 1]
   const index = mode === "before" ? targetIndex : targetIndex + 1
   if (parent !== sourceParent) return { parent: parentPath, index, order: null }
-  // Mesmo pai: a nova ordem dos filhos, com o elemento trocado de lugar.
+  // Same parent: the new order of the children, with the element swapped in place.
   const kids = Array.from(parent.children)
   const fromIndex = kids.indexOf(from)
   if (fromIndex < 0) return null
@@ -441,8 +441,8 @@ export function planLayerMove(html: string, fromPath: ElementPath, targetPath: E
 }
 
 /**
- * Troca o conteúdo de um nó de TEXTO solto (o caminho termina em índice
- * negativo). Texto solto não tem tag nem estilo — só conteúdo.
+ * Swaps the content of a loose TEXT node (the path ends in a negative
+ * index). Loose text has neither tag nor style — only content.
  */
 export function setTextNode(html: string, path: ElementPath, value: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html")
@@ -453,9 +453,9 @@ export function setTextNode(html: string, path: ElementPath, value: string): str
 }
 
 /**
- * Apaga vários nós de uma vez (a seleção múltipla): elementos e textos
- * soltos. Os endereços são resolvidos ANTES de qualquer remoção — senão apagar
- * o primeiro mudaria o caminho do segundo.
+ * Deletes several nodes at once (the multiple selection): elements and loose
+ * texts. The addresses are resolved BEFORE any removal — otherwise deleting
+ * the first would change the path of the second.
  */
 export function removeNodes(html: string, paths: ElementPath[]): string {
   const doc = new DOMParser().parseFromString(html, "text/html")
@@ -471,8 +471,8 @@ export function removeNodes(html: string, paths: ElementPath[]): string {
 }
 
 /**
- * Onde o grupo de camadas vai caber: o pai, a posição do wrapper entre os
- * filhos e os elementos que entram nele (na ordem do DOM).
+ * Where the layer group is going to fit: the parent, the position of the wrapper among the
+ * children and the elements that enter it (in DOM order).
  */
 export interface WrapPlan {
   parent: ElementPath
@@ -481,9 +481,9 @@ export interface WrapPlan {
 }
 
 /**
- * Planeja o "envolver": os elementos selecionados viram filhos de um div novo,
- * que entra no lugar do primeiro deles. Só funciona entre irmãos (o grupo da
- * seleção múltipla sempre é).
+ * Plans the "wrap": the selected elements become children of a new div,
+ * which enters in the place of the first of them. It only works among siblings (the group of the
+ * multiple selection always is).
  */
 export function planWrap(html: string, paths: ElementPath[]): WrapPlan | null {
   const doc = new DOMParser().parseFromString(html, "text/html")
@@ -508,8 +508,8 @@ export function planWrap(html: string, paths: ElementPath[]): WrapPlan | null {
 }
 
 /**
- * Aplica o "envolver" no fonte: o div novo entra no lugar do primeiro
- * elemento e leva os outros para dentro dele.
+ * Applies the "wrap" in the source: the new div enters in the place of the first
+ * element and takes the others inside it.
  */
 export function applyWrap(html: string, plan: WrapPlan, style: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html")
@@ -529,8 +529,8 @@ export function applyWrap(html: string, plan: WrapPlan, style: string): string {
 }
 
 /**
- * Divide um `style="…"` em declarações, respeitando `;` dentro de parênteses
- * (`url(data:image/png;base64,…)`). Puro.
+ * Splits a `style="…"` into declarations, respecting `;` inside parentheses
+ * (`url(data:image/png;base64,…)`). Pure.
  */
 export function splitDeclarations(style: string): { prop: string; value: string }[] {
   const out: { prop: string; value: string }[] = []
@@ -561,9 +561,9 @@ export function splitDeclarations(style: string): { prop: string; value: string 
 }
 
 /**
- * Troca (ou tira, com valor vazio) uma declaração num `style="…"`, mexendo só
- * nela: o resto fica como o autor escreveu — o CSSOM normalizaria tudo (um
- * `#7c3aed` virava `rgb(124, 58, 237)` no arquivo). Puro.
+ * Swaps (or removes, with an empty value) a declaration in a `style="…"`, touching only
+ * it: the rest stays as the author wrote it — the CSSOM would normalize everything (a
+ * `#7c3aed` became `rgb(124, 58, 237)` in the file). Pure.
  */
 export function withDeclaration(style: string, prop: string, value: string): string {
   const name = prop.trim().toLowerCase()
@@ -580,16 +580,16 @@ export function withDeclaration(style: string, prop: string, value: string): str
   return declarations.map((d) => `${d.prop}: ${d.value}`).join("; ")
 }
 
-/** Grava (ou tira, com valor vazio) uma propriedade no `style` do elemento. */
+/** Writes (or removes, with an empty value) a property in the element's `style`. */
 export function setInlineStyle(el: Element, prop: string, value: string): void {
   const next = withDeclaration(el.getAttribute("style") ?? "", prop, value)
   if (next) el.setAttribute("style", next)
   else el.removeAttribute("style")
 }
 
-// ------------------------------------------------------------------ cores
+// ------------------------------------------------------------------ colors
 
-/** `rgb(…)`/`rgba(…)`/`#abc` → `#aabbcc` (para o <input type="color">). */
+/** `rgb(…)`/`rgba(…)`/`#abc` → `#aabbcc` (for the <input type="color">). */
 export function toHex(color: string): string | null {
   const value = color.trim()
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value)
@@ -619,7 +619,7 @@ export interface Hsv {
   v: number
 }
 
-/** "#rgb"/"#rrggbb" → {r,g,b} (0-255). null quando não é um hex. */
+/** "#rgb"/"#rrggbb" → {r,g,b} (0-255). null when it is not a hex. */
 export function hexToRgb(hex: string): Rgb | null {
   const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())
   if (!m) return null
@@ -633,7 +633,7 @@ export function rgbToHex({ r, g, b }: Rgb): string {
   return `#${part(r)}${part(g)}${part(b)}`
 }
 
-/** RGB → HSV (h em graus, s e v de 0 a 1). */
+/** RGB → HSV (h in degrees, s and v from 0 to 1). */
 export function rgbToHsv({ r, g, b }: Rgb): Hsv {
   const rn = r / 255
   const gn = g / 255

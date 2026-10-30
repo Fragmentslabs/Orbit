@@ -1,16 +1,16 @@
 /**
- * Documento autorado pelo agente (tool create_document / update_document).
+ * Document authored by the agent (tool create_document / update_document).
  *
- * O preview é HTML (`previewSrc`) e abre no mesmo host de WebView do artefato —
- * o desktop gera o PDF A PARTIR desse HTML, então o que se vê é o que sai
- * impresso.
+ * The preview is HTML (`previewSrc`) and opens in the same WebView host as the artifact —
+ * the desktop generates the PDF FROM that HTML, so what is seen is what comes out
+ * printed.
  *
- * O "arquivo original": a part NÃO carrega URL do .md nem do PDF/DOCX — o
- * desktop só reescreve `previewSrc` e `thumb` (companion-media). Então os dois
- * botões agem sobre a única URL que existe: abrir no navegador do sistema (onde
- * dá para salvar/imprimir em PDF) e baixar/compartilhar o HTML. Construir a URL
- * do PDF aqui seria adivinhar o caminho do store do desktop — e a fase 1 deixou
- * claro que URL não se monta no celular.
+ * The "original file": the part does NOT carry a URL for the .md nor for the PDF/DOCX — the
+ * desktop only rewrites `previewSrc` and `thumb` (companion-media). So both
+ * buttons act on the only URL that exists: open in the system browser (where
+ * it can be saved/printed as PDF) and download/share the HTML. Building the URL
+ * of the PDF here would be guessing the path of the desktop store — and phase 1 made it
+ * clear that URL is not assembled on the phone.
  */
 import { useCallback, useState } from 'react'
 import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native'
@@ -24,13 +24,13 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { PieceView } from '../PieceView'
 
-/** Nome de arquivo seguro a partir do título — o share sheet usa o nome. */
+/** Safe file name from the title — the share sheet uses the name. */
 function fileNameFor(part: DocumentPart): string {
-  const base = (part.title || part.documentId || 'documento')
+  const base = (part.title || part.documentId || 'document')
     .replace(/[^\w.\- ]+/g, '')
     .trim()
     .replace(/\s+/g, '-')
-  const safe = base || 'documento'
+  const safe = base || 'document'
   return safe.toLowerCase().endsWith('.html') ? safe : `${safe}.html`
 }
 
@@ -69,8 +69,8 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
       const dir = FileSystem.cacheDirectory
       if (!dir) throw new Error('sem cache')
       const target = `${dir}${fileNameFor(part)}`
-      // Download em vez de shareAsync(url): o share sheet nativo só aceita
-      // arquivo local, e o documento precisa chegar inteiro no app de destino.
+      // Download instead of shareAsync(url): the native share sheet only accepts a
+      // local file, and the document must arrive whole in the target app.
       const downloaded = await FileSystem.downloadAsync(part.previewSrc, target)
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(downloaded.uri, {

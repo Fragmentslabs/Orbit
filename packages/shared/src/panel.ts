@@ -1,10 +1,10 @@
 /**
- * Estado do painel lateral, espelhado do renderer para o main.
+ * State of the side panel, mirrored from the renderer to the main.
  *
- * As abas vivem no store do renderer (por sessão de chat). O agente roda no
- * main e não alcança esse store, então o renderer empurra um snapshot pequeno
- * a cada mudança e a tool `read_open_panel` lê o último. É estado do próprio
- * app — nenhuma permissão de SO, nenhuma captura de tela.
+ * The tabs live in the renderer store (per chat session). The agent runs in the
+ * main and cannot reach that store, so the renderer pushes a small snapshot
+ * on every change and the `read_open_panel` tool reads the last one. It is state of the app
+ * itself — no OS permission, no screen capture.
  */
 
 export type PanelSnapshotTabType =

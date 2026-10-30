@@ -3,10 +3,10 @@ import { StringDecoder } from 'node:string_decoder'
 import { ComputerError } from './types'
 
 /**
- * Executa uma operação da bridge num processo filho e devolve o JSON dela.
- * A bridge nunca pode travar o turno: timeout por operação, kill no abort e
- * qualquer falha do processo vira ComputerError com mensagem acionável —
- * nunca uma exceção crua do child_process.
+ * Runs a bridge operation in a child process and returns its JSON. The bridge can
+ * never hang the turn: timeout per operation, kill on abort and any process failure
+ * becomes a ComputerError with an actionable message — never a raw child_process
+ * exception.
  */
 
 export interface BridgeSpawn {
@@ -24,7 +24,7 @@ export interface RunOptions {
   signal?: AbortSignal
 }
 
-/** Saída máxima aceita (árvore grande com textos longos cabe folgada). */
+/** Maximum accepted output (a big tree with long texts fits comfortably). */
 const MAX_OUTPUT = 32 * 1024 * 1024
 
 export function createBridgeRunner(command: string, baseArgs: () => Promise<string[]>, spawnFn: BridgeSpawn = spawn) {
@@ -43,8 +43,8 @@ export function createBridgeRunner(command: string, baseArgs: () => Promise<stri
         options.signal?.removeEventListener('abort', onAbort)
         fn()
       }
-      // O desfecho é registrado ANTES do kill: o `close` que o kill provoca não
-      // pode trocar "timeout"/"parado" por "saiu sem resposta".
+      // The outcome is recorded BEFORE the kill: the `close` the kill causes cannot
+      // swap "timeout"/"stopped" for "exited without answering".
       const timer = setTimeout(() => {
         finish(() =>
           reject(
@@ -95,16 +95,15 @@ export function createBridgeRunner(command: string, baseArgs: () => Promise<stri
 }
 
 /**
- * Host persistente (Windows): UM processo que lê um pedido JSON por linha no
- * stdin e responde uma linha por pedido no stdout, correlacionada por `id`. O
- * custo de subir o PowerShell e compilar o C# (~1–2 s) é pago uma vez, não a
- * cada operação. A assinatura de `run` é a mesma do `createBridgeRunner`: o
- * driver não sabe qual dos dois está usando.
+ * Persistent host (Windows): ONE process that reads one JSON request per line on
+ * stdin and answers one line per request on stdout, correlated by `id`. The cost of
+ * starting PowerShell and compiling the C# (~1–2 s) is paid once, not on every
+ * operation. The signature of `run` is the same as `createBridgeRunner`'s: the driver
+ * does not know which of the two it is using.
  *
- * O host é sequencial (os pedidos esperam na fila do stdin). Timeout ou abort
- * de uma operação matam o host — não há como interromper uma chamada da UIA
- * presa — e os outros pedidos pendentes falham com "reiniciado"; o próximo uso
- * sobe um host novo.
+ * The host is sequential (the requests wait in stdin's queue). A timeout or abort of
+ * one operation kills the host — there is no way to interrupt a stuck UIA call — and
+ * the other pending requests fail with "restarted"; the next use starts a new host.
  */
 
 export interface PersistentChild {
@@ -121,15 +120,15 @@ export interface PersistentSpawn {
 }
 
 export interface PersistentOptions {
-  /** Prazo extra do primeiro pedido de cada host (partida + compilação) */
+  /** Extra deadline for the first request of each host (start + compilation) */
   startupGraceMs?: number
 }
 
 export interface PersistentRunner {
   <T>(op: string, args: unknown, options: RunOptions): Promise<T>
-  /** Encerra o host (fim do app); o próximo uso sobe outro */
+  /** Shuts the host down (app exit); the next use starts another one */
   dispose(): void
-  /** Há um host vivo agora? (testes e diagnóstico) */
+  /** Is there a live host right now? (tests and diagnostics) */
   alive(): boolean
 }
 
@@ -143,7 +142,7 @@ interface Pending {
 interface Host {
   child: PersistentChild
   pending: Map<number, Pending>
-  /** Ainda não respondeu nada: o primeiro pedido paga a partida */
+  /** It has not answered anything yet: the first request pays for the start */
   fresh: boolean
   stderr: string
   dead: boolean
@@ -161,8 +160,8 @@ export function createPersistentRunner(
   let starting: Promise<Host> | null = null
   let seq = 0
 
-  // Mata o host e falha o que ainda espera. `host = null` vem antes do kill: o
-  // `close` dele não pode mexer num host novo, e o próximo uso já sobe outro.
+  // Kills the host and fails whoever is still waiting. `host = null` comes before the
+  // kill: its `close` cannot touch a new host, and the next use already starts another.
   function kill(target: Host, reason: ComputerError): void {
     if (target.dead) return
     target.dead = true
@@ -175,7 +174,7 @@ export function createPersistentRunner(
     try {
       target.child.kill('SIGKILL')
     } catch {
-      // já morreu
+      // already dead
     }
   }
 
@@ -185,7 +184,7 @@ export function createPersistentRunner(
       const argv = await baseArgs()
       const child = spawnFn(command, argv)
       const h: Host = { child, pending: new Map(), fresh: true, stderr: '', dead: false }
-      // StringDecoder: um caractere UTF-8 pode chegar partido entre dois chunks.
+      // StringDecoder: a UTF-8 character can arrive split between two chunks.
       const decoder = new StringDecoder('utf8')
       let buffer = ''
       child.stdout.on('data', (chunk: Buffer | string) => {
@@ -221,7 +220,7 @@ export function createPersistentRunner(
     try {
       parsed = JSON.parse(line)
     } catch {
-      // Linha que não é do protocolo (aviso do PowerShell): guarda como stderr.
+      // A line that is not from the protocol (PowerShell warning): keep it as stderr.
       h.stderr = (h.stderr + line + '\n').slice(-STDERR_TAIL)
       return
     }
@@ -242,8 +241,8 @@ export function createPersistentRunner(
     return new Promise<T>((resolve, reject) => {
       const timeoutMs = opts.timeoutMs + (h.fresh ? (options.startupGraceMs ?? 0) : 0)
       const restarted = new ComputerError('bridgeError', `The Windows host was restarted while ${op} waited (another operation timed out or was stopped) — try again.`)
-      // O desfecho deste pedido é registrado ANTES do kill: o `close` que o
-      // kill provoca não pode trocar "timeout"/"parado" por "saiu sem resposta".
+      // The outcome of this request is recorded BEFORE the kill: the `close` the
+      // kill causes cannot swap "timeout"/"stopped" for "exited without answering".
       const settle = (err: ComputerError) => {
         const p = h.pending.get(id)
         if (!p) return

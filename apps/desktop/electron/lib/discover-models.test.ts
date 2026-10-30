@@ -9,38 +9,38 @@ afterEach(() => {
 })
 
 describe('parseModelList', () => {
-  it('lê o formato OpenAI/gateway', () => {
+  it('reads the OpenAI/gateway format', () => {
     expect(parseModelList({ data: [{ id: 'gpt-4o' }, { id: 'o3-mini' }] })).toEqual([
       { id: 'gpt-4o' },
       { id: 'o3-mini' },
     ])
   })
 
-  it('lê o formato nativo do Ollama e tira o ":latest"', () => {
+  it('reads the native Ollama format and strips the ":latest"', () => {
     const models = parseModelList({
       models: [{ name: 'llama3.2:latest', details: { context_length: 131072 } }],
     })
     expect(models).toEqual([{ id: 'llama3.2', contextWindow: 131072 }])
   })
 
-  it('lê o formato da Anthropic (display_name)', () => {
+  it('reads the Anthropic format (display_name)', () => {
     expect(parseModelList({ data: [{ id: 'claude-x', display_name: 'Claude X' }] })).toEqual([
       { id: 'claude-x', name: 'Claude X' },
     ])
   })
 
-  it('ignora item sem id e duplicata', () => {
+  it('ignores an item without id and duplicates', () => {
     expect(parseModelList({ data: [{ id: 'a' }, { id: 'a' }, { foo: 'bar' }] })).toEqual([{ id: 'a' }])
   })
 
-  it('resposta sem lista devolve vazio', () => {
+  it('a response without a list returns empty', () => {
     expect(parseModelList({ error: 'nope' })).toEqual([])
     expect(parseModelList(null)).toEqual([])
   })
 })
 
 describe('discoverModels', () => {
-  it('consulta {base}/models e devolve os modelos', async () => {
+  it('queries {base}/models and returns the models', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ data: [{ id: 'a' }, { id: 'b' }] }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -52,7 +52,7 @@ describe('discoverModels', () => {
     expect(url).toBe('https://gw.example.com/v1/models')
   })
 
-  it('cai no /api/tags do Ollama quando o /v1/models não existe', async () => {
+  it('falls back to the Ollama /api/tags when /v1/models does not exist', async () => {
     const fetchMock = vi.fn(async (url: string) =>
       url.endsWith('/api/tags')
         ? jsonResponse({ models: [{ name: 'qwen3:8b' }] })
@@ -66,17 +66,17 @@ describe('discoverModels', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('servidor que responde sem modelos devolve lista vazia (não é erro)', async () => {
+  it('a server that answers without models returns an empty list (not an error)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ data: [] })))
     await expect(discoverModels({ baseURL: 'http://localhost:1234/v1' })).resolves.toEqual([])
   })
 
-  it('todas as URLs falhando lança com o status', async () => {
+  it('all URLs failing throws with the status', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'unauthorized' }, 401)))
     await expect(discoverModels({ baseURL: 'https://gw.example.com/v1' })).rejects.toThrow(/HTTP 401/)
   })
 
-  it('usa bearer no protocolo OpenAI e x-api-key no Anthropic', async () => {
+  it('uses bearer in the OpenAI protocol and x-api-key in Anthropic', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ data: [{ id: 'a' }] }))
     vi.stubGlobal('fetch', fetchMock)
 

@@ -8,10 +8,10 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Lista de rotações (coluna esquerda do split-view). Cada linha é um botão
- * inteiro — sem ações inline na linha (sem trash na lista): as ações vivem
- * no painel de detalhe. Isso evita acionar o menu errado por engano e
- * mantém a lista densa.
+ * Rotation list (left column of the split view). Each row is a whole
+ * button — no inline actions in the row (no trash in the list): the actions live
+ * in the detail panel. That avoids triggering the wrong menu by mistake and
+ * keeps the list dense.
  */
 export function RotationList({
   rotations,

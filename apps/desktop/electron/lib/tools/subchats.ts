@@ -10,32 +10,32 @@ import { createSubchatRecord, findSubchat, readSubchatMessages } from '../subcha
 import { detachFromTurn } from '../session/write-journal'
 
 /**
- * Primeira mensagem do chat novo, na voz de quem autorizou a abertura: o filho
- * começa a trabalhar sozinho, então o resumo (o brief) é o contexto e esta
- * linha só manda seguir.
+ * First message of the new chat, in the voice of whoever authorized the opening: the child
+ * starts working on its own, so the summary (the brief) is the context and this
+ * line only says to go ahead.
  */
 const KICKOFF = {
   pt: 'Pode começar. Trabalhe até concluir — o resumo acima tem o contexto, então não pare para perguntar o que ele já responde.',
   en: "Go ahead. Work through to the end — the summary above has the context, so don't stop to ask what it already answers.",
 }
 
-type Idioma = keyof typeof KICKOFF
+type Language = keyof typeof KICKOFF
 
-function idiomaDe(language?: string): Idioma {
+function languageOf(language?: string): Language {
   return (language ?? '').toLowerCase().startsWith('port') ? 'pt' : 'en'
 }
 
-/** Cabeçalho da instrução do pai: no chat do filho a mensagem não parece do usuário. */
+/** Header of the parent's instruction: in the child's chat the message does not look like the user's. */
 const FROM_PARENT = {
   pt: 'Mensagem do chat principal: ',
   en: 'Message from the main chat: ',
 }
 
 /**
- * Dispara um turno no filho, em paralelo ao do pai e sem esperar por ele. O
- * filho é OUTRA conversa na mesma pasta, com revert próprio: roda fora do
- * escopo de escrita do pai, senão o que ele grava contaria como obra do turno
- * do pai.
+ * Fires a turn in the child, in parallel to the parent's and without waiting for it. The
+ * child is ANOTHER conversation in the same folder, with its own revert: it runs outside the
+ * parent's write scope, otherwise what it writes would count as the work of the parent's
+ * turn.
  */
 function startChildTurn(input: SendMessageInput, win: BrowserWindow, child: SessionInfo, text: string): void {
   void detachFromTurn(() => runChat(win, {
@@ -53,14 +53,14 @@ function startChildTurn(input: SendMessageInput, win: BrowserWindow, child: Sess
     extraDirectories: child.extraDirectories,
     visionModel: input.visionModel,
     language: input.language,
-  })).catch((err) => console.error('[subchat] turno do filho falhou:', err))
+  })).catch((err) => console.error('[subchat] child turn failed:', err))
 }
 
 /**
- * Cria o filho e dispara o turno dele, em paralelo ao turno do pai. Devolve o
- * texto que a tool entrega ao modelo.
+ * Creates the child and fires its turn, in parallel to the parent's turn. Returns the
+ * text the tool delivers to the model.
  */
-async function abrirEIniciar(
+async function openAndStart(
   input: SendMessageInput,
   win: BrowserWindow | undefined,
   title: string,
@@ -69,7 +69,7 @@ async function abrirEIniciar(
   const child = await createSubchatRecord({ parentId: input.sessionId, title, body: brief })
   if (!child) return 'Error: the current conversation could not be found, so no subchat was opened.'
   broadcastSessionEvent({ type: 'session', sessionId: child.id, session: child })
-  if (win) startChildTurn(input, win, child, KICKOFF[idiomaDe(input.language)])
+  if (win) startChildTurn(input, win, child, KICKOFF[languageOf(input.language)])
   return `Subchat opened: "${child.title}" (#${child.id}). It is attached to this conversation, starts from your brief and is already working on it in parallel.`
 }
 
@@ -89,7 +89,7 @@ const BRIEF_INPUT = z
   )
 
 export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow): ToolSet {
-  // Instruções do mesmo passo ao mesmo filho: a segunda recusa (ver send_to_subchat).
+  // Instructions of the same step to the same child: the second one refuses (see send_to_subchat).
   const inFlight = new Set<string>()
 
   return {
@@ -113,11 +113,11 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
             abortSignal,
           )
         } catch {
-          // Turno abortado (stop) ou app fechado: ninguém respondeu. Não abre
-          // nada — o agente não pode decidir no lugar da pessoa.
+          // Turn aborted (stop) or app closed: nobody answered. It opens
+          // nothing — the agent cannot decide in the person's place.
           return 'The suggestion was cancelled before the user answered — do not open a chat and leave that work aside.'
         }
-        if (answer === 'new') return abrirEIniciar(input, win, title, brief)
+        if (answer === 'new') return openAndStart(input, win, title, brief)
         if (answer === 'here') {
           return 'The user chose to do it in THIS conversation. Do it here now, without opening a chat.'
         }
@@ -133,7 +133,7 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         'on your own initiative.',
       ].join(' '),
       inputSchema: z.object({ title: TITLE_INPUT, brief: BRIEF_INPUT }),
-      execute: async ({ title, brief }) => abrirEIniciar(input, win, title, brief),
+      execute: async ({ title, brief }) => openAndStart(input, win, title, brief),
     }),
 
     read_subchat: tool({
@@ -185,11 +185,11 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         if (inFlight.has(child.id) || getRunningSessionIds().includes(child.id)) {
           return `Subchat "${child.title}" is busy right now (running a turn). Do not send anything yet — read it with read_subchat or try again later.`
         }
-        // Marca antes de disparar: duas chamadas paralelas no mesmo passo
-        // disputariam o chat do filho. Solta logo — o turno em si vive no engine.
+        // It marks before firing: two parallel calls in the same step
+        // would compete for the child's chat. It releases right away — the turn itself lives in the engine.
         inFlight.add(child.id)
         try {
-          startChildTurn(input, win, child, FROM_PARENT[idiomaDe(input.language)] + message.trim())
+          startChildTurn(input, win, child, FROM_PARENT[languageOf(input.language)] + message.trim())
         } finally {
           setTimeout(() => inFlight.delete(child.id), 1_000)
         }

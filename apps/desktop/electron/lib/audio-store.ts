@@ -9,15 +9,15 @@ import { SAFE_AUDIO_ID, audioMediaId, getMediaEntry, registerAudioMedia } from '
 export { AUDIO_SCHEME }
 
 /**
- * Áudios das conversas: os anexados pelo usuário e os que o agente gera
- * (tool audio_generate). Entram no ACERVO de mídia do chat (kind "audio" no
- * índice de media.ts — galeria, "Neste chat", uso de disco, excluir), mas o
- * arquivo mora numa pasta própria: a reconstrução do índice varre media/ e
- * registraria tudo lá como imagem.
+ * Conversation audio: the ones attached by the user and the ones the agent generates
+ * (audio_generate tool). They enter the chat's media COLLECTION (kind "audio" in
+ * the media.ts index — gallery, "In this chat", disk usage, delete), but the
+ * file lives in a folder of its own: the index rebuild scans media/ and
+ * would register everything there as an image.
  *
- * Servidos por `orbit-audio://`, um scheme com o privilégio `stream` (sem ele
- * o <audio> do Chromium não toca, nem busca posição) — registrado junto com o
- * dos artefatos, antes de o app ficar pronto (ver registerSchemePrivileges).
+ * Served by `orbit-audio://`, a scheme with the `stream` privilege (without it
+ * Chromium's <audio> neither plays nor seeks) — registered along with
+ * the artifacts', before the app is ready (see registerSchemePrivileges).
  */
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -32,7 +32,7 @@ const CONTENT_TYPES: Record<string, string> = {
   flac: 'audio/flac',
 }
 
-/** MIME de áudio → extensão aceita aqui (o resto cai na extensão do nome). */
+/** Audio MIME → extension accepted here (the rest falls back to the name's extension). */
 const MIME_EXT: Record<string, string> = {
   'audio/wav': 'wav',
   'audio/x-wav': 'wav',
@@ -52,32 +52,32 @@ const MIME_EXT: Record<string, string> = {
 const AUDIO_EXT = /\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac)$/i
 
 /**
- * Pasta dos áudios. Exportada porque a fala sob demanda (`voice/speech-file`)
- * grava ali um WAV de CACHE que de propósito não entra no índice de mídia — e
- * `resolveAudioFile` serve qualquer id com formato válido, registrado ou não.
+ * Audio folder. Exported because on-demand speech (`voice/speech-file`)
+ * writes a CACHE WAV there that on purpose does not enter the media index — and
+ * `resolveAudioFile` serves any id with a valid format, registered or not.
  */
 export function audioDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'audio')
 }
 
-/** Caminho do arquivo de um áudio guardado — é o que o agente recebe pelo anexo. */
+/** File path of a stored audio — it is what the agent receives through the attachment. */
 export function audioFilePath(id: string): string {
   return path.join(audioDir(), id)
 }
 
-/** Caminho de um áudio guardado, com o id validado (`null` = id inválido).
- *  Para quem serve o arquivo por Range sem passar pelo readAudio — o protocolo
- *  orbit-audio:// e o servidor HTTP do companion. */
+/** Path of a stored audio, with the id validated (`null` = invalid id).
+ *  For whoever serves the file by Range without going through readAudio — the
+ *  orbit-audio:// protocol and the companion's HTTP server. */
 export function resolveAudioFile(id: string): string | null {
   return SAFE_AUDIO_ID.test(id) ? audioFilePath(id) : null
 }
 
-/** O anexo é um áudio? Pelo MIME, ou pela extensão quando o MIME vem vazio. */
+/** Is the attachment an audio? By the MIME, or by the extension when the MIME comes empty. */
 export function isAudioFile(mime: string, filename = ''): boolean {
   return mime.startsWith('audio/') || AUDIO_EXT.test(filename)
 }
 
-/** Extensão para gravar um áudio de MIME/nome dados (`null` = formato que não servimos). */
+/** Extension to write an audio of the given MIME/name (`null` = a format we do not serve). */
 export function audioExt(mime: string, filename = ''): string | null {
   const fromMime = MIME_EXT[mime.split(';')[0].trim().toLowerCase()]
   if (fromMime) return fromMime
@@ -85,14 +85,14 @@ export function audioExt(mime: string, filename = ''): string | null {
   return match ? match[1].toLowerCase() : null
 }
 
-/** Grava o áudio, registra no acervo do chat e devolve o id e a URL orbit-audio://. */
+/** Writes the audio, registers it in the chat's collection and returns the id and the orbit-audio:// URL. */
 export async function saveAudio(
   buffer: Buffer,
   ext: string,
   meta: { sessionId?: string; messageId?: string; name?: string; source: MediaSource },
 ): Promise<{ id: string; url: string; path: string }> {
   const id = `aud_${Date.now().toString(36)}${randomBytes(4).toString('hex')}.${ext.toLowerCase()}`
-  if (!SAFE_AUDIO_ID.test(id)) throw new Error(`formato de áudio não suportado: ${ext}`)
+  if (!SAFE_AUDIO_ID.test(id)) throw new Error(`unsupported audio format: ${ext}`)
   await fs.mkdir(audioDir(), { recursive: true })
   const file = audioFilePath(id)
   await fs.writeFile(file, buffer)
@@ -101,9 +101,9 @@ export async function saveAudio(
 }
 
 /**
- * Id de um áudio guardado a partir do que o agente passar: o id cru, a URL
- * orbit-audio:// ou o CAMINHO do arquivo na pasta de áudio (o que a nota do
- * anexo entrega).
+ * Id of a stored audio from whatever the agent passes: the raw id, the orbit-audio://
+ * URL or the file's PATH in the audio folder (what the attachment's note
+ * delivers).
  */
 export function audioIdFrom(ref: string): string | null {
   const clean = ref.trim().replace(/^ref\s+/i, '')
@@ -115,7 +115,7 @@ export function audioIdFrom(ref: string): string | null {
   return null
 }
 
-/** Bytes e nome de um áudio guardado (`null` se não existe). */
+/** Bytes and name of a stored audio (`null` if it does not exist). */
 export async function readAudio(id: string): Promise<{ buffer: Buffer; name: string } | null> {
   if (!SAFE_AUDIO_ID.test(id)) return null
   try {
@@ -128,8 +128,8 @@ export async function readAudio(id: string): Promise<{ buffer: Buffer; name: str
 }
 
 /**
- * Serve orbit-audio://<id> com suporte a Range: o <audio> pede pedaços para
- * buscar uma posição e para saber a duração de formatos sem cabeçalho.
+ * Serves orbit-audio://<id> with Range support: <audio> requests chunks to
+ * seek a position and to know the duration of formats without a header.
  */
 export function registerAudioProtocol(): void {
   protocol.handle(AUDIO_SCHEME, async (request) => {

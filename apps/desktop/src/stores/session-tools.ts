@@ -1,22 +1,22 @@
 import { create } from "zustand"
 
 /**
- * Servidores MCP por conversa.
+ * MCP servers per conversation.
  *
- * As ferramentas não têm liga/desliga: elas existem sempre que há servidor
- * ligado no app. O que muda de conversa para conversa é QUAIS servidores
- * entram no contexto — daí este store ser só a seleção, e morar separado dos
- * overrides de modo (que guardam booleano e não serviriam para um recorte).
+ * The tools have no on/off: they exist whenever there is a server
+ * on in the app. What changes from conversation to conversation is WHICH servers
+ * enter the context — hence this store being only the selection, and living apart from the
+ * mode overrides (which keep booleans and would not serve for a subset).
  *
- * - `null`   = todos os servidores ligados no app
- * - `[...]`  = só esses (lista vazia = nenhum nesta conversa)
+ * - `null`   = all servers on in the app
+ * - `[...]`  = only those (empty list = none in this conversation)
  *
- * Desligar um SERVIDOR de verdade é na página MCP & Skills (`config.enabled`),
- * que vale para todas as conversas. Aqui é só o recorte local.
+ * Turning a SERVER off for real happens in the MCP & Skills page (`config.enabled`),
+ * which applies to all conversations. Here it is only the local subset.
  */
 
 const STORAGE_KEY = "orbit-session-tools"
-/** Rascunho por aparelho, como em mode-overrides */
+/** Draft per device, as in mode-overrides */
 const DRAFT_KEY = "draft"
 
 type ToolsMap = Record<string, string[] | null>
@@ -34,8 +34,8 @@ function load(): ToolsMap {
     if (!parsed || typeof parsed !== "object") return {}
     const map: ToolsMap = {}
     for (const [key, value] of Object.entries(parsed)) {
-      // Formato antigo (`{ enabled, servers }`), de quando o controle tinha um
-      // interruptor geral: aproveita só o recorte e descarta o booleano.
+      // Old format (`{ enabled, servers }`), from when the control had a
+      // general switch: it keeps only the subset and discards the boolean.
       if (Array.isArray(value)) map[key] = toStringList(value)
       else if (value && typeof value === "object" && "servers" in value) {
         map[key] = toStringList((value as { servers?: unknown }).servers)
@@ -43,7 +43,7 @@ function load(): ToolsMap {
     }
     return map
   } catch {
-    // prefs corrompidas → sem recorte (todos os servidores ligados)
+    // corrupted prefs → no subset (all servers on)
     return {}
   }
 }
@@ -54,9 +54,9 @@ function persist(bySession: ToolsMap) {
 
 interface SessionToolsState {
   bySession: ToolsMap
-  /** Recorte explícito; `null` volta para "todos os ligados no app". */
+  /** Explicit subset; `null` goes back to "all the ones on in the app". */
   setServers: (sessionId: string | null | undefined, servers: string[] | null) => void
-  /** Transfere a preferência do rascunho para a sessão recém-criada */
+  /** Transfers the draft's preference to the newly created session */
   adopt: (sessionId: string) => void
 }
 
@@ -83,7 +83,7 @@ export const useSessionTools = create<SessionToolsState>((set) => ({
   },
 }))
 
-/** `null` = todos os servidores ligados no app. */
+/** `null` = all servers on in the app. */
 export function useToolsServers(sessionId: string | null | undefined): string[] | null {
   return useSessionTools((s) => s.bySession[sessionId ?? DRAFT_KEY] ?? null)
 }

@@ -46,7 +46,7 @@ type SourceFilter = 'all' | MediaSource
 type PeriodFilter = 'all' | 'today' | 'week' | 'month'
 type KindFilter = 'all' | MediaKind
 
-/** Filtro de projeto: 'all' = todos; '__none__' = mídia sem projeto conhecido. */
+/** Project filter: 'all' = everything; '__none__' = media with no known project. */
 const PROJECT_ALL = 'all'
 const PROJECT_NONE = '__none__'
 
@@ -77,7 +77,7 @@ function formatClock(seconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-/** O ícone de cada tipo no cartão do tile (imagem sai na miniatura). */
+/** The icon of each type on the tile card (images come out in the thumbnail). */
 const KIND_ICON: Record<MediaKind, typeof ImageIcon> = {
   image: ImageIcon,
   artifact: FileCode2,
@@ -89,17 +89,17 @@ const KIND_ICON: Record<MediaKind, typeof ImageIcon> = {
   slides: Presentation,
 }
 
-// ─── Visualizadores por tipo ─────────────────────────────────────────────────
+// ─── Viewers per type ────────────────────────────────────────────────────────
 
-/** Página (artefato, documento, peça): o WebView carrega a URL já com o token. */
+/** Page (artifact, document, piece): the WebView loads the URL already with the token. */
 function PageViewer({ url }: { url: string }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   return (
     <WebView
       source={{ uri: url }}
       style={s.pageViewer}
-      // O artefato vem do desktop, num http local: só http/https navegam aqui,
-      // nada de esquema externo (tel:, intent:) virando ação do sistema.
+      // The artifact comes from the desktop, on a local http: only http/https navigate
+      // here, no external scheme (tel:, intent:) becoming a system action.
       originWhitelist={['http://*', 'https://*']}
       startInLoadingState
       renderLoading={() => (
@@ -107,25 +107,25 @@ function PageViewer({ url }: { url: string }) {
           <ActivityIndicator color={tokens.primary} />
         </View>
       )}
-      // Links dentro da página abrem nela mesma (o token do caminho é herdado
-      // pelos relativos: é assim que `base.css` e as fontes carregam).
+      // Links inside the page open in the page itself (the path token is inherited
+      // by the relative ones: that is how `base.css` and the fonts load).
       setSupportMultipleWindows={false}
     />
   )
 }
 
-/** Vídeo: o player nativo do expo-video, com os controles do sistema. */
+/** Video: the native expo-video player, with the system controls. */
 function VideoViewer({ url }: { url: string }) {
   const player = useVideoPlayer(url)
   return <VideoView player={player} style={s.mediaFill} contentFit="contain" nativeControls />
 }
 
-/** Áudio: não há imagem para mostrar, então o cartão vira o player mínimo. */
+/** Audio: there is no image to show, so the card becomes a minimal player. */
 function AudioViewer({ url, title }: { url: string; title: string }) {
   const player = useAudioPlayer(url)
   const status = useAudioPlayerStatus(player)
   useEffect(() => {
-    // No iOS o interruptor de silêncio mutaria o player — a galeria é para ouvir.
+    // On iOS the silent switch would mute the player — the gallery is for listening.
     void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {})
   }, [])
   return (
@@ -146,12 +146,12 @@ function AudioViewer({ url, title }: { url: string; title: string }) {
   )
 }
 
-/** O que abre no lugar da prévia, escolhido pelo tipo da entrada. */
+/** What opens in place of the preview, chosen by the type of the entry. */
 function EntryViewer({ entry, onExpand }: { entry: MediaEntry; onExpand: () => void }) {
   const { t } = useTranslation()
   const kind = kindOf(entry)
   if (!canOpen(entry)) {
-    // Peça fora do registro do desktop: o item está no índice mas o arquivo não.
+    // Piece missing from the desktop registry: the item is in the index but the file is not.
     return (
       <View style={s.pageLoading}>
         <ImageOff size={28} color="#fff" />
@@ -172,7 +172,7 @@ function EntryViewer({ entry, onExpand }: { entry: MediaEntry; onExpand: () => v
   }
   if (kind === 'video') return <VideoViewer url={url} />
   if (kind === 'audio') return <AudioViewer url={url} title={entryTitle(entry)} />
-  // O resto é página: artefato, documento (prévia .html) e as peças.
+  // The rest is page: artifact, document (.html preview) and the pieces.
   return <PageViewer url={url} />
 }
 
@@ -201,21 +201,21 @@ export default function MediaScreen() {
   const [source, setSource] = useState<SourceFilter>('all')
   const [kind, setKind] = useState<KindFilter>('all')
   const [period, setPeriod] = useState<PeriodFilter>('all')
-  /** Filtro explícito do usuário; null = segue o padrão (projeto da pasta selecionada). */
+  /** Explicit user filter; null = follow the default (project of the selected folder). */
   const [projectOverride, setProjectOverride] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
   const [preview, setPreview] = useState<MediaEntry | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
-  // Referência de tempo para o filtro de período, atualizada a cada refresh —
-  // evita chamar Date.now() durante o render (react-hooks/purity).
+  // Time reference for the period filter, updated on every refresh —
+  // it avoids calling Date.now() during the render (react-hooks/purity).
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     if (http) void refresh()
   }, [http, refresh])
 
-  // Pastas recentes (a "pasta selecionada" do app) — alimenta o filtro padrão.
+  // Recent folders (the "selected folder" of the app) — feeds the default filter.
   useEffect(() => {
     void hydrateFolders()
   }, [hydrateFolders])
@@ -225,17 +225,17 @@ export default function MediaScreen() {
     void refresh()
   }, [refresh])
 
-  /** Sessões do modo atual — escopo da galeria (chat mostra só chat, etc). */
+  /** Sessions of the current mode — scope of the gallery (chat shows only chat, etc). */
   const modeSessionIds = useMemo(
     () => new Set(sessions.filter((s) => s.mode === mode).map((s) => s.id)),
     [sessions, mode],
   )
 
   /**
-   * Projeto de uma entrada: o diretório da sessão que a originou, normalizado
-   * com a MESMA regra das pastas da sidebar (folderKey/normalizeFolderName).
-   * Entrada sem sessão conhecida (órfã do backfill) ou sessão sem diretório
-   * (modo chat) não tem projeto.
+   * Project of an entry: the directory of the session that originated it, normalized
+   * with the SAME rule as the sidebar folders (folderKey/normalizeFolderName).
+   * An entry with no known session (orphan of the backfill) or a session with no directory
+   * (chat mode) has no project.
    */
   const sessionById = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions])
   const projectOf = useCallback((entry: MediaEntry): { key: string; label: string } | null => {
@@ -246,19 +246,19 @@ export default function MediaScreen() {
     return { key: folderKey(label), label }
   }, [sessionById])
 
-  /** Entradas no escopo do modo atual (aplica o filtro de sessão uma vez só). */
+  /** Entries in the scope of the current mode (applies the session filter once only). */
   const scopedEntries = useMemo(
     () => entries.filter((entry) => !entry.sessionId || modeSessionIds.has(entry.sessionId)),
     [entries, modeSessionIds],
   )
 
-  /** Tipos presentes no escopo — só os que têm item viram chip. */
+  /** Types present in the scope — only those that have an item become a chip. */
   const kindOptions = useMemo(() => {
     const present = new Set(scopedEntries.map((entry) => kindOf(entry)))
     return KIND_ORDER.filter((value) => present.has(value))
   }, [scopedEntries])
 
-  /** Projetos com mídia no escopo — os chips do filtro. */
+  /** Projects with media in the scope — the filter chips. */
   const projectOptions = useMemo(() => {
     const byKey = new Map<string, string>()
     for (const entry of scopedEntries) {
@@ -275,7 +275,7 @@ export default function MediaScreen() {
     [scopedEntries, projectOf],
   )
 
-  /** Projeto da pasta selecionada (folders[0]) — o filtro padrão. */
+  /** Project of the selected folder (folders[0]) — the default filter. */
   const defaultProjectKey = useMemo(() => {
     if (!folders[0]) return null
     return folderKey(normalizeFolderName(folders[0]))
@@ -289,10 +289,10 @@ export default function MediaScreen() {
   const projectOptionKeys = useMemo(() => new Set(projectOptions.map((p) => p.key)), [projectOptions])
 
   /**
-   * Filtro efetivo: o escolhido pelo usuário quando é válido; se ele saiu do
-   * escopo (ex.: trocou de modo e o projeto não tem mídia aqui) ou nada foi
-   * escolhido, cai no padrão — o projeto da pasta selecionada, quando tem
-   * mídia — e só então "todos". Tudo derivado: nada de setState em effect.
+   * Effective filter: the one chosen by the user when it is valid; if it left the
+   * scope (e.g. changed mode and the project has no media here) or nothing was
+   * chosen, it falls back to the default — the project of the selected folder, when it has
+   * media — and only then to "all". All derived: no setState in effect.
    */
   const project = useMemo(() => {
     if (projectOverride === PROJECT_ALL || projectOverride === PROJECT_NONE) return projectOverride
@@ -348,7 +348,7 @@ export default function MediaScreen() {
     setPreview((current) => (current && ids.includes(current.id) ? null : current))
   }, [selected, remove, exitSelection])
 
-  /** Abre o chat de origem da imagem, trocando o modo se necessário. */
+  /** Opens the source chat of the image, switching the mode if needed. */
   const openInChat = useCallback(
     (entry: MediaEntry) => {
       if (!entry.sessionId) return
@@ -367,8 +367,8 @@ export default function MediaScreen() {
   const renderThumb = ({ item }: { item: MediaEntry }) => {
     const isSelected = selected.has(item.id)
     const kind = kindOf(item)
-    // Só a imagem vira miniatura: o resto não tem o que desenhar num <Image>
-    // (era o tile quebrado da galeria), então vira cartão com ícone e título.
+    // Only the image becomes a thumbnail: the rest has nothing to draw in an <Image>
+    // (it was the broken tile of the gallery), so it becomes a card with icon and title.
     const KindIcon = KIND_ICON[kind]
     return (
       <Pressable
@@ -429,7 +429,7 @@ export default function MediaScreen() {
         )}
       </View>
 
-      {/* Busca + refresh */}
+      {/* Search + refresh */}
       <View style={s.searchRow}>
         <View style={[s.searchBox, { backgroundColor: tokens.border }]}>
           <Search size={15} color={tokens.mutedForeground} />
@@ -446,7 +446,7 @@ export default function MediaScreen() {
         </Pressable>
       </View>
 
-      {/* Filtros — origem e período, com divisor como no desktop */}
+      {/* Filters — source and period, with a divider like on the desktop */}
       <View style={s.filtersWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtersContent}>
           {(projectOptions.length > 0 || hasProjectless) && (
@@ -497,8 +497,8 @@ export default function MediaScreen() {
             </Pressable>
           ))}
           <View style={[s.filtersDivider, { backgroundColor: tokens.border }]} />
-          {/* Tipo: a galeria guarda imagem, artefato, documento, vídeo, áudio e
-              peça — o chip é o que deixa achar um sem rolar a lista inteira. */}
+          {/* Type: the gallery holds image, artifact, document, video, audio and
+              piece — the chip is what lets you find one without scrolling the whole list. */}
           <Pressable
             key="kind-all"
             onPress={() => setKind('all')}
@@ -534,7 +534,7 @@ export default function MediaScreen() {
         </ScrollView>
       </View>
 
-      {/* Barra de seleção */}
+      {/* Selection bar */}
       {selecting && (
         <View style={[s.selectionBar, { backgroundColor: tokens.muted }]}>
           <Text style={[s.selectionCount, { color: tokens.foreground }]}>
@@ -577,7 +577,7 @@ export default function MediaScreen() {
         />
       )}
 
-      {/* Rodapé de uso */}
+      {/* Usage footer */}
       <View style={[s.footer, { borderTopColor: tokens.border }]}>
         <HardDrive size={13} color={tokens.mutedForeground} />
         <Text style={[s.footerText, { color: tokens.mutedForeground }]}>
@@ -585,7 +585,7 @@ export default function MediaScreen() {
         </Text>
       </View>
 
-      {/* Preview (detalhe + ações) */}
+      {/* Preview (detail + actions) */}
       <Modal visible={!!preview} transparent animationType="fade" onRequestClose={() => setPreview(null)} statusBarTranslucent>
         <View style={[s.previewWrap, { backgroundColor: 'rgba(0,0,0,0.92)' }]}>
           <View style={{ height: insets.top }} />
@@ -627,8 +627,8 @@ export default function MediaScreen() {
         </View>
       </Modal>
 
-      {/* Fullscreen com zoom (mesmo viewer do chat) — só a imagem tem o que
-          ampliar; página, vídeo e áudio já ocupam a prévia inteira. */}
+      {/* Fullscreen with zoom (same viewer as the chat) — only the image has something
+          to zoom; page, video and audio already fill the whole preview. */}
       {preview?.url && kindOf(preview) === 'image' && (
         <ImageLightbox src={preview.url} alt={preview.name} open={fullscreen} onOpenChange={setFullscreen} />
       )}
@@ -688,7 +688,7 @@ const s = StyleSheet.create({
   },
   thumbImg: { flex: 1 },
   thumbEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  /** Cartão do tile para o que não é imagem: ícone + tipo + título. */
+  /** Tile card for what is not an image: icon + type + title. */
   cardBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 10 },
   cardKind: { fontSize: 9, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
   cardTitle: { fontSize: 11, fontWeight: '500', textAlign: 'center' },

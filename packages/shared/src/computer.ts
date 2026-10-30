@@ -1,38 +1,38 @@
 /**
- * Computer Use: o que o main conta ao renderer sobre o controle do computador
- * (chip no header, painel das Preferências).
+ * Computer Use: what the main tells the renderer about computer control
+ * (chip in the header, Preferences panel).
  */
 
-/** Plataformas com driver de Computer Use (macOS e Windows; ver docs/computer-use-windows.md). */
+/** Platforms with a Computer Use driver (macOS and Windows; see docs/computer-use-windows.md). */
 export function isComputerPlatform(platform: string): boolean {
   return platform === "darwin" || platform === "win32"
 }
 
-/** O atalho global que para o controle na hora, como aparece na faixa e nas Preferências. */
+/** The global shortcut that stops the control on the spot, as it appears in the bar and in the Preferences. */
 export function computerStopShortcut(platform: string): string {
   return platform === "win32" ? "Ctrl+Shift+." : "⌘⇧."
 }
 
-/** Uma sessão de chat que está controlando (ou acabou de controlar) um app. */
+/** A chat session that is controlling (or has just controlled) an app. */
 export interface ComputerActivity {
   sessionId: string
-  /** Nome do app alvo da última ação */
+  /** Name of the app targeted by the last action */
   app: string
-  /** Início do controle contínuo (ms) */
+  /** Start of the continuous control (ms) */
   startedAt: number
-  /** Última ação/observação (ms) */
+  /** Last action/observation (ms) */
   lastAt: number
-  /** Última ação, legível ("click em Salvar") */
+  /** Last action, readable ("click on Save") */
   lastAction: string | null
 }
 
 export type ComputerEvent =
   | { type: "active"; activity: ComputerActivity }
   | { type: "idle"; sessionId: string }
-  /** Screenshot (ou marcador) novo da conversa — a miniatura busca por computer:shot */
+  /** New screenshot (or marker) of the conversation — the thumbnail fetches by computer:shot */
   | { type: "shot"; sessionId: string; at: number }
 
-/** Último screenshot da conversa, com o marcador da última ação (espaço da imagem). */
+/** Last screenshot of the conversation, with the marker of the last action (image space). */
 export interface ComputerShot {
   dataUrl: string
   width: number
@@ -42,33 +42,33 @@ export interface ComputerShot {
   marker: { x: number; y: number; w: number; h: number; label: string } | null
 }
 
-/** Estado da capacidade nesta máquina (Preferências → Computador). */
+/** State of the capability on this machine (Preferences → Computer). */
 export interface ComputerStatus {
-  /** A plataforma tem driver e o build não é da Mac App Store */
+  /** The platform has a driver and the build is not from the Mac App Store */
   available: boolean
-  /** Motivo quando indisponível: "mas", "platform" */
+  /** Reason when unavailable: "mas", "platform" */
   reason: "mas" | "platform" | null
   platform: string
-  /** Acessibilidade concedida ao Orbit (Windows: o host de UI Automation sobe) */
+  /** Accessibility granted to Orbit (Windows: the UI Automation host comes up) */
   accessibility: boolean
-  /** Gravação de Tela: "granted" | "denied" | "not-determined" | "restricted" | "unknown" */
+  /** Screen Recording: "granted" | "denied" | "not-determined" | "restricted" | "unknown" */
   screen: string
-  /** Em dev a permissão é do binário do Electron, não do Orbit */
+  /** In dev the permission belongs to the Electron binary, not to Orbit */
   dev: boolean
   /**
-   * App que o macOS considera dono das permissões, quando não é o próprio
-   * Orbit: em dev, quem rodou `npm run dev` (Terminal, iTerm, VS Code…). null =
-   * o próprio app.
+   * App that macOS considers the owner of the permissions, when it is not Orbit
+   * itself: in dev, whoever ran `npm run dev` (Terminal, iTerm, VS Code…). null =
+   * the app itself.
    */
   responsible: string | null
-  /** O que mais limita o controle nesta máquina (Windows: PowerShell restrito, integridade) */
+  /** What else limits the control on this machine (Windows: restricted PowerShell, integrity) */
   notes?: string[]
 }
 
-/** Resultado do botão "Testar" (uma chamada real à bridge). */
+/** Result of the "Test" button (a real call to the bridge). */
 export interface ComputerTestResult {
   ok: boolean
-  /** Tempo da lista de apps + árvore do app da frente */
+  /** Time of the app list + tree of the front app */
   ms: number
   message: string
 }

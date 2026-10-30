@@ -9,8 +9,8 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Imagem enviada pelo assistente na resposta (tool show_image → ImagePart).
- * Preview emoldurado no fluxo da mensagem; clique abre o lightbox.
+ * Image sent by the assistant in the reply (tool show_image → ImagePart).
+ * Framed preview in the flow of the message; a click opens the lightbox.
  */
 export function Image({ src, alt, className }: {
   src: string
@@ -64,13 +64,13 @@ export interface LightboxImage {
 }
 
 /**
- * Lightbox de imagem em dialog — mesmo padrão da galeria de mídia (painel
- * lateral). Usado pelas imagens do assistente e pelos anexos do chat/input.
+ * Image lightbox in a dialog — same pattern as the media gallery (side
+ * panel). Used by the assistant images and by the chat/input attachments.
  *
- * `images`/`index`/`onNavigate` são opcionais: quando presentes (mais de uma
- * imagem no grupo), habilitam setas prev/next, contador e as setas do
- * teclado — a mesma navegação que a galeria de mídia oferece. Sem eles o
- * comportamento é o de sempre, uma imagem só.
+ * `images`/`index`/`onNavigate` are optional: when present (more than one
+ * image in the group), they enable prev/next arrows, a counter and the
+ * keyboard arrows — the same navigation the media gallery offers. Without them the
+ * behavior is the usual one, a single image.
  */
 export function ImageLightbox({
   src,
@@ -101,8 +101,8 @@ export function ImageLightbox({
     onNavigate(((next % total) + total) % total)
   }
 
-  // Setas do teclado — só quando o lightbox está aberto num grupo de verdade,
-  // senão rouba o ←/→ de qualquer outro atalho da janela.
+  // Keyboard arrows — only when the lightbox is open on a real group,
+  // otherwise it steals the ←/→ from any other shortcut in the window.
   useEffect(() => {
     if (!open || !hasGroup) return
     const handler = (e: KeyboardEvent) => {
@@ -128,9 +128,9 @@ export function ImageLightbox({
 
   const save = async () => {
     setBusy(true)
-    // O arquivo baixado leva o nome da mídia NO ORBIT: a legenda, quando existe,
-    // senão o nome do arquivo na galeria. Um rótulo genérico não serve para
-    // reencontrar a imagem depois.
+    // The downloaded file takes the media's name IN ORBIT: the caption, when it exists,
+    // otherwise the file name in the gallery. A generic label is no use for
+    // finding the image again later.
     const fileName = src.startsWith("orbit-media://") ? src.slice("orbit-media://".length) : ""
     const result = await mediaApi.exportImage(src, alt || fileName || t("images.assistantImage"))
       .catch(() => ({ ok: false as const }))
@@ -143,9 +143,9 @@ export function ImageLightbox({
       <DialogContent className="max-w-5xl p-2">
         <DialogTitle className="sr-only">{alt ?? t("images.assistantImage")}</DialogTitle>
         {/*
-          Xadrez atrás da imagem: num PNG com fundo recortado, sem ele não dá
-          para distinguir "ficou transparente" de "ficou preto" — que é
-          exatamente a pergunta que se faz ao ampliar um recorte.
+          Checkerboard behind the image: in a PNG with a cut-out background, without it one cannot
+          tell "it became transparent" from "it became black" — which is
+          exactly the question one asks when enlarging a cut-out.
         */}
         <div className="relative overflow-hidden rounded-md bg-[length:16px_16px] bg-[position:0_0,8px_8px] bg-[image:linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%),linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%)]">
           <img
@@ -207,17 +207,17 @@ export function ImageLightbox({
   )
 }
 
-/** Direto de uma ImagePart única. */
+/** Straight from a single ImagePart. */
 export function ImagePartView({ part }: { part: ImagePart }) {
   return <Image src={part.src} alt={part.alt} />
 }
 
 /**
- * Filmstrip de miniaturas para quando a resposta traz mais de uma imagem —
- * várias fotos pedidas de uma vez, ou os passos de uma edição em cadeia. Uma
- * imagem só cai no caso normal (figura em largura cheia); mais de uma vira
- * uma tira compacta, todas abrindo o MESMO lightbox com setas prev/next, em
- * vez de empilhar N figuras inteiras e enterrar o resultado no meio delas.
+ * Thumbnail filmstrip for when the reply brings more than one image —
+ * several photos asked for at once, or the steps of a chained edit. A single
+ * image falls into the normal case (full-width figure); more than one becomes
+ * a compact strip, all of them opening the SAME lightbox with prev/next arrows, in
+ * stead of stacking N whole figures and burying the result among them.
  */
 export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
   const { t } = useTranslation()

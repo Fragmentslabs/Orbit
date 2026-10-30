@@ -49,9 +49,9 @@ function ConnectionDot({ state }: { state: McpConnectionState }) {
 }
 
 /**
- * Servidor OAuth que ainda depende do usuário: nunca foi autorizado no desktop
- * ou o servidor voltou a pedir autorização. Conectado/desabilitado não têm o
- * que autorizar, então a ação some.
+ * OAuth server that still depends on the user: it was never authorized on the desktop
+ * or the server went back to asking for authorization. Connected/disabled have nothing
+ * to authorize, so the action goes away.
  */
 function needsAuth(server: McpServerStatus): boolean {
   if (!server.usesOAuth) return false
@@ -59,7 +59,7 @@ function needsAuth(server: McpServerStatus): boolean {
   return !server.authorized || server.state === 'unauthorized'
 }
 
-/** Menu "..." ancorado no trigger de cada card. */
+/** "..." menu anchored to the trigger of each card. */
 function McpServerCard({
   server,
   onEdit,
@@ -137,8 +137,8 @@ function McpServerCard({
               {server.authorized ? t('toolsScreen.reauthorize') : t('toolsScreen.authorize')}
             </Text>
           </Pressable>
-          {/* O redirect do OAuth é o loopback do desktop: o login acontece
-              obrigatoriamente no navegador do computador. */}
+          {/* The OAuth redirect is the loopback of the desktop: the login happens
+              necessarily in the computer's browser. */}
           <Text style={[s.authHint, { color: tokens.mutedForeground }]}>
             {t('toolsScreen.authorizeHint')}
           </Text>
@@ -210,8 +210,8 @@ function SkillCard({
 
   const menuItems: ActionMenuItem[] = [
     { icon: Eye, label: t('toolsScreen.view'), onPress: () => onView(skill) },
-    // Skills nativas do app são somente leitura: para customizar, o usuário
-    // cria uma skill própria com o mesmo slug.
+    // Native skills of the app are read-only: to customize, the user
+    // creates a skill of their own with the same slug.
     ...(skill.source === 'builtin'
       ? []
       : [
@@ -469,10 +469,10 @@ export default function ToolsScreen() {
     ])
   }
 
-  // Uma SectionList no lugar do ScrollView com três .map() aninhados: antes
-  // todos os cards (skills, servidores MCP, propostas) montavam de uma vez ao
-  // abrir a tela. Cada card carrega a própria borda e há um gap de 8 entre
-  // eles, então virtualizar não quebra o agrupamento visual.
+  // A SectionList instead of the ScrollView with three nested .map(): before
+  // all the cards (skills, MCP servers, proposals) mounted at once when
+  // opening the screen. Each card carries its own border and there is a gap of 8 between
+  // them, so virtualizing does not break the visual grouping.
   const sections = useMemo<ToolsSection[]>(() => {
     if (isEmpty) return []
     const out: ToolsSection[] = []
@@ -490,8 +490,8 @@ export default function ToolsScreen() {
         data: mcpServers.map((server) => ({ kind: 'mcp', server })),
       })
     }
-    // Skills sempre aparece (cabeçalho com o botão de criar); vazio vira uma
-    // linha de placeholder, como no ScrollView anterior.
+    // Skills always appears (header with the create button); empty becomes a
+    // placeholder row, as in the previous ScrollView.
     out.push({
       kind: 'skills',
       title: t('toolsScreen.skills', { count: skills.length }),
@@ -536,7 +536,7 @@ export default function ToolsScreen() {
         )
       return <View style={s.itemRow}>{card}</View>
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers estáveis o bastante para a lista
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers are stable enough for the list
     [tokens, t],
   )
 

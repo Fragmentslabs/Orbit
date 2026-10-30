@@ -7,20 +7,20 @@ import { resolveModel } from './providers'
 import { buildProviderOptions } from './reasoning'
 
 /**
- * Modelo das tarefas auxiliares: título da conversa, compactação do histórico
- * e sugestão da próxima mensagem. Sem modelo auxiliar escolhido — ou com um que
- * não resolve (provedor desconectado, modelo fora do catálogo) —, vale o modelo
- * da própria conversa, que era o comportamento antes da opção existir.
+ * Model for the auxiliary tasks: conversation title, history compaction
+ * and next-message suggestion. Without an auxiliary model chosen — or with one that
+ * does not resolve (disconnected provider, model outside the catalog) —, the
+ * conversation's own model counts, which was the behavior before the option existed.
  */
 
 export interface AuxModel {
   model: LanguageModel
   providerOptions?: Record<string, Record<string, JSONValue>>
-  /** true quando caiu no modelo da conversa */
+  /** true when it fell back to the conversation's model */
   fallback: boolean
 }
 
-/** A compactação manda até ~30 mil tokens de transcrição (MAX_SUMMARY_INPUT_CHARS). */
+/** Compaction sends up to ~30k tokens of transcript (MAX_SUMMARY_INPUT_CHARS). */
 export const MIN_COMPACTION_CONTEXT = 40_000
 
 export async function resolveAuxModel(
@@ -48,7 +48,7 @@ export async function resolveAuxModel(
         return { model, providerOptions, fallback: false }
       }
     } catch (err) {
-      console.warn('[aux-model] modelo auxiliar indisponível, usando o da conversa:', err)
+      console.warn('[aux-model] auxiliary model unavailable, using the conversation one:', err)
     }
   }
   const model = await resolveModel(conversation.providerId, conversation.modelId, { sessionId: opts.sessionId })

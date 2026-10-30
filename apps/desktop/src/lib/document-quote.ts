@@ -2,55 +2,55 @@ import { DOCUMENT_QUOTE_MIME, motionTimecode, type FilePart, type QuotePayload }
 import type { DocumentQuote, PanelQuote } from "@/src/stores/panel-store"
 
 /**
- * Citação → anexo da mensagem.
+ * Citation → message attachment.
  *
- * Os dois compositores (chat e código) precisam disso na hora de enviar, e o
- * formato tem que ser idêntico nos dois: quem lê do outro lado é um `if` só no
- * preprocessAttachment do engine. Duplicar a serialização seria a forma mais
- * fácil de eles divergirem sem ninguém perceber.
+ * The two composers (chat and code) need this at send time, and the
+ * format has to be identical in both: whoever reads it on the other side is a single `if` in the
+ * engine's preprocessAttachment. Duplicating the serialization would be the easiest
+ * way for them to diverge without anyone noticing.
  *
- * Vale para as duas origens: o trecho de documento (página/linhas) e o instante
- * de motion (arquivo/quadro/fps). O `kind` do payload diz qual é.
+ * It holds for both origins: the document stretch (page/lines) and the motion
+ * instant (file/frame/fps). The payload `kind` says which one it is.
  */
 
-/** Onde o trecho está, no formato curto que o chip e o nome do anexo usam. */
+/** Where the stretch is, in the short format the chip and the attachment name use. */
 export function quoteLocationLabel(quote: DocumentQuote): string {
   if (!quote.page) return ""
   if (!quote.fromLine) return ` p${quote.page}`
-  const ate = quote.toLine && quote.toLine > quote.fromLine ? `-${quote.toLine}` : ""
-  return ` p${quote.page}L${quote.fromLine}${ate}`
+  const to = quote.toLine && quote.toLine > quote.fromLine ? `-${quote.toLine}` : ""
+  return ` p${quote.page}L${quote.fromLine}${to}`
 }
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
-/** O rótulo do chip: `contrato.pdf p3L10-14` ou `Motion · index.html @ 00:02:09`.
- *  "Motion" é o nome do produto (o mesmo rótulo da aba), não uma palavra a
- *  traduzir. */
+/** The chip label: `contrato.pdf p3L10-14` or `Motion · index.html @ 00:02:09`.
+ *  "Motion" is the product name (the same label as the tab), not a word to
+ *  translate. */
 export function quoteChipLabel(quote: PanelQuote): string {
   if (quote.kind === "design") {
     const what = quote.elementPath?.length ? `<${quote.tag ?? "?"}>${quote.label ? ` ${quote.label}` : ""}` : (quote.boardTitle ?? quote.file)
     return `Design · ${quote.file} · ${what}`
   }
   if (quote.kind === "motion") {
-    // O foco da peça pode ser uma camada (elemento do DOM) ou uma faixa de som:
-    // os dois se selecionam do mesmo jeito, e o chip mostra o nome que foi
-    // clicado sem precisar dizer qual dos dois é.
+    // The piece focus may be a layer (a DOM element) or a sound track:
+    // both are selected the same way, and the chip shows the name that was
+    // clicked without having to say which of the two it is.
     const focused = quote.layer ?? quote.audio
     return `Motion · ${baseName(quote.file)} @ ${motionTimecode(quote.frame, quote.fps)}${focused ? ` · ${focused}` : ""}`
   }
   return `${quote.name}${quoteLocationLabel(quote)}`
 }
 
-/** O que o cursor parado sobre o chip mostra: o trecho citado ou o caminho da
- *  composição — o que a pessoa precisa para saber O QUE está anexado. */
+/** What the cursor stopped over the chip shows: the quoted stretch or the
+ *  composition path — what the person needs to know WHAT is attached. */
 export function quoteChipTitle(quote: PanelQuote): string {
   if (quote.kind === "design") return quote.text || quote.html || quote.file
   return quote.kind === "motion" ? quote.file : quote.text
 }
 
-/** O payload como ele viaja no data URL. Cada tipo leva SÓ os seus campos: a
- *  citação de motion não tem página nem linha, e emitir as chaves vazias faria
- *  o texto do modelo nascer com campos órfãos. */
+/** The payload as it travels in the data URL. Each type carries ONLY its own fields: the
+ *  motion citation has no page or line, and emitting the empty keys would make
+ *  the model text be born with orphan fields. */
 function quotePayload(quote: PanelQuote): QuotePayload {
   if (quote.kind === "design") {
     return {
@@ -104,18 +104,18 @@ export function quotesToFileParts(quotes: PanelQuote[]): FilePart[] {
 }
 
 /**
- * Em que linhas da página está o trecho selecionado.
+ * On which lines of the page the selected stretch is.
  *
- * Serve ao modo Original do PDF, onde a seleção acontece sobre a camada de
- * texto desenhada por cima da imagem: ali os pedaços são posições de glifos,
- * não linhas, e não existe número de linha no DOM para ler. O caminho é achar
- * o texto de volta na MESMA lista de linhas que o modelo enxerga — que é o
- * que garante que a citação leve à linha certa.
+ * It serves the PDF Original mode, where the selection happens over the text layer
+ * drawn on top of the image: there the pieces are glyph positions,
+ * not lines, and there is no line number in the DOM to read. The path is to find
+ * the text back in the SAME line list the model sees — which is what
+ * guarantees the citation leads to the right line.
  *
- * A comparação ignora espaços pelo mesmo motivo do `locateText` do PDF: o
- * arquivo quebra a frase em pedaços e a posição dos espaços entre eles não é
- * confiável. Junta tudo, procura junto, e traduz o deslocamento de volta em
- * número de linha.
+ * The comparison ignores spaces for the same reason as the PDF `locateText`: the
+ * file breaks the sentence into pieces and the position of the spaces between them is not
+ * reliable. Join everything, search together, and translate the offset back into a
+ * line number.
  */
 export function locateLines(
   lines: string[],

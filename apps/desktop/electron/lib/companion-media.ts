@@ -1,31 +1,31 @@
 import type { ChatMessage, MessagePart, PieceKind, ToolPart } from '@shared/chat'
 
 /**
- * Endereços de arquivo reescritos para o app mobile.
+ * File addresses rewritten for the mobile app.
  *
- * O celular não conhece os schemes do Electron — `orbit-media://` para imagem,
- * `orbit-audio://` para áudio, `orbit-video://` para vídeo, `orbit-artifact://`
- * para artefato e documento. Todos são registrados só no main, então tudo que
- * sai daqui vira uma URL HTTP assinada que o app alcança pelo mesmo host que
- * ele usou para conectar.
+ * The phone does not know Electron's schemes — `orbit-media://` for images,
+ * `orbit-audio://` for audio, `orbit-video://` for video, `orbit-artifact://`
+ * for artifact and document. All of them are registered only in the main, so everything that
+ * leaves here becomes a signed HTTP URL that the app reaches through the same host it
+ * used to connect.
  *
- * Módulo separado do servidor, e sem Electron dentro, porque esta é uma costura
- * que quebra CALADA: basta uma part nova carregar endereço de um scheme novo e
- * ninguém reescrever para ela sumir no celular sem nenhum erro no desktop. A
- * fábrica de token entra por parâmetro para o módulo continuar testável.
+ * A module separate from the server, and without Electron inside, because this is a seam
+ * that breaks SILENTLY: a new part carrying an address of a new scheme and
+ * nobody rewriting it is enough for it to vanish on the phone with no error on the desktop. The
+ * token factory comes in as a parameter so the module stays testable.
  */
 
-/** Só os ids que nós mesmos geramos, e só formatos de imagem. */
+/** Only the ids we generate ourselves, and only image formats. */
 const MEDIA_URL_RE = /^orbit-media:\/\/([a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif))$/
-/** Mesmo padrão de SAFE_AUDIO_ID (media.ts) — o id É o nome do arquivo. */
+/** Same pattern as SAFE_AUDIO_ID (media.ts) — the id IS the file name. */
 const AUDIO_URL_RE = /^orbit-audio:\/\/(aud_[a-z0-9]+\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac))$/
-/** Mesmo padrão de SAFE_VIDEO_ID (video/store.ts). */
+/** Same pattern as SAFE_VIDEO_ID (video/store.ts). */
 const VIDEO_URL_RE = /^orbit-video:\/\/(vid_[a-z0-9]+)$/
-/** Mesmo padrão de SAFE_ARTIFACT_ID (media.ts): página, miniatura, fonte e
- *  renderizações de documento. */
+/** Same pattern as SAFE_ARTIFACT_ID (media.ts): page, thumbnail, font and
+ *  document renderings. */
 const ARTIFACT_URL_RE = /^orbit-artifact:\/\/([a-zA-Z0-9_-]+\.(html|png|md|pdf|docx))$/
 
-/** Escopos que o celular busca por HTTP (ver companion-assets.ts). */
+/** Scopes the phone fetches over HTTP (see companion-assets.ts). */
 export type AssetScope =
   | 'media'
   | 'artifact'
@@ -36,9 +36,9 @@ export type AssetScope =
   | 'slides'
 
 /**
- * Tools que escrevem peça. O que elas devolvem não é mídia: é uma UI interativa
- * que mora numa pasta do desktop, e o celular só consegue desenhar depois de
- * saber onde ela está — daí a URL viajar no part, e não ser montada lá.
+ * Tools that write a piece. What they return is not media: it is an interactive UI
+ * that lives in a folder on the desktop, and the phone can only draw it after
+ * knowing where it is — hence the URL traveling in the part, instead of being assembled there.
  */
 const PIECE_TOOLS: Record<string, PieceKind> = {
   motion_write: 'motion',
@@ -49,7 +49,7 @@ const PIECE_TOOLS: Record<string, PieceKind> = {
   slides_edit: 'slides',
 }
 
-/** Id da peça no resultado da tool — JSON quando dá, regex quando vem solto. */
+/** Piece id in the tool result — JSON when possible, regex when it comes loose. */
 const PIECE_ID_RE = /\b((?:mv|dsg|sld)_[a-z0-9]+)\b/
 
 function pieceIdOf(part: ToolPart): string | undefined {
@@ -60,7 +60,7 @@ function pieceIdOf(part: ToolPart): string | undefined {
     const candidate = parsed.piece?.id ?? parsed.id
     if (typeof candidate === 'string') return candidate
   } catch {
-    // saída em texto corrido: cai no regex abaixo
+    // output in running text: falls into the regex below
   }
   return PIECE_ID_RE.exec(output)?.[1]
 }
@@ -68,12 +68,12 @@ function pieceIdOf(part: ToolPart): string | undefined {
 export type MediaTokenFactory = (scope: AssetScope, id: string) => string
 
 /**
- * A URL HTTP assinada, ou null quando não é endereço de mídia (fica como está).
+ * The signed HTTP URL, or null when it is not a media address (it stays as it is).
  *
- * Imagem mantém a rota histórica (`/api/media/<id>?t=`), que já está entregue e
- * funcionando no celular. Os outros escopos nascem com o token no CAMINHO
- * (`/api/file/<escopo>/<id>/<token>`), que é o que faz o `base.css` de uma peça
- * e o thumbnail de um artefato herdarem a autorização sem reescrita.
+ * Image keeps the historical route (`/api/media/<id>?t=`), which is already delivered and
+ * working on the phone. The other scopes are born with the token in the PATH
+ * (`/api/file/<scope>/<id>/<token>`), which is what makes a piece's `base.css`
+ * and an artifact's thumbnail inherit the authorization without rewriting.
  */
 export function rewriteMediaUrl(
   url: string | undefined,
@@ -84,7 +84,7 @@ export function rewriteMediaUrl(
   return id ? `${base}/api/media/${id}?t=${token('media', id)}` : null
 }
 
-/** URL de um arquivo servido pelo escopo dado, com o token no caminho. */
+/** URL of a file served by the given scope, with the token in the path. */
 export function assetUrl(
   scope: AssetScope,
   id: string,
@@ -106,18 +106,18 @@ function rewriteScopedUrl(
 }
 
 /**
- * As parts que carregam endereço de arquivo, cada uma por um motivo diferente.
+ * The parts that carry a file address, each one for a different reason.
  *
- * - `image` é a imagem que o assistente pôs na resposta.
- * - `file` é o chip de anexo: a `url` é um thumbnail embutido e o `mediaUrl`
- *   aponta para a foto original na galeria — é o que o visualizador amplia.
- * - `audio` é o áudio do `audio_generate`: o player toca pelo HTTP.
- * - `video` é o vídeo do `video_render`/`show_video`, que continua no projeto
- *   do usuário e é servido por Range.
- * - `artifact` é a página do `create_artifact`; o `thumb` é a miniatura que a
- *   galeria e o card usam.
- * - `document` mostra o preview HTML (`previewSrc`), não o Markdown — no
- *   celular, é o que dá para renderizar.
+ * - `image` is the image the assistant put in the answer.
+ * - `file` is the attachment chip: the `url` is an embedded thumbnail and the `mediaUrl`
+ *   points to the original photo in the gallery — it is what the viewer zooms into.
+ * - `audio` is the audio from `audio_generate`: the player plays it over HTTP.
+ * - `video` is the video from `video_render`/`show_video`, which stays in the user's
+ *   project and is served by Range.
+ * - `artifact` is the `create_artifact` page; the `thumb` is the thumbnail that the
+ *   gallery and the card use.
+ * - `document` shows the HTML preview (`previewSrc`), not the Markdown — on the
+ *   phone, it is what can be rendered.
  */
 export function rewriteMediaPart(
   part: MessagePart,
@@ -157,9 +157,9 @@ export function rewriteMediaPart(
     if (!kind) return null
     const id = pieceIdOf(part)
     if (!id) return null
-    // Design não tem um HTML único: é um canvas com várias telas. O celular
-    // recebe o `canvas.json` e escolhe qual abrir; motion e slides desenham o
-    // `index.html` direto (o companion resolve a entrada padrão do escopo).
+    // Design has no single HTML: it is a canvas with several screens. The phone
+    // receives the `canvas.json` and chooses which one to open; motion and slides draw
+    // `index.html` directly (the companion resolves the scope's default entry).
     const url =
       kind === 'design'
         ? `${assetUrl('design', id, base, token)}/canvas.json`
@@ -170,7 +170,7 @@ export function rewriteMediaPart(
   return null
 }
 
-/** null quando nada mudou — quem chama reaproveita o objeto original. */
+/** null when nothing changed — whoever calls reuses the original object. */
 export function rewriteMessage(
   msg: ChatMessage,
   base: string,

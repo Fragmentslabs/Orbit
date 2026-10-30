@@ -60,9 +60,9 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { Truncate } from "@/components/ui/truncated-text"
 
 import { Hint } from "@/components/ui/hint"
-/** Peças de mensagem compartilhadas entre os modos chat e código. */
+/** Message pieces shared between the chat and code modes. */
 
-/** Teto por provedor no menu de troca de modelo do card de erro. */
+/** Ceiling per provider in the model switch menu of the error card. */
 const MAX_SWITCH_MODELS = 20
 
 function childrenToText(children: ReactNode): string {
@@ -74,16 +74,19 @@ function childrenToText(children: ReactNode): string {
 
 
 
-/** Citação de documento: abre a fonte no painel, no trecho citado. */
+/** Document citation: it opens the source in the panel, at the quoted excerpt. */
 function SourceCitation({ source, label, sessionId }: {
   source: SourceRef
   label: string
   sessionId?: string
 }) {
+  const { t } = useTranslation()
   const openSourceTab = usePanelStore((s) => s.openSourceTab)
   const where = source.fromLine
-    ? `p. ${source.page}, linha ${source.fromLine}${source.toLine && source.toLine > source.fromLine ? `-${source.toLine}` : ""}`
-    : `p. ${source.page}`
+    ? source.toLine && source.toLine > source.fromLine
+      ? t("chat.citationLineRange", { page: source.page, from: source.fromLine, to: source.toLine })
+      : t("chat.citationLine", { page: source.page, from: source.fromLine })
+    : t("chat.citationPage", { page: source.page })
   return (
     <Hint label={`${source.docId} — ${where}`}>
       <button
@@ -103,13 +106,13 @@ function SourceCitation({ source, label, sessionId }: {
 }
 
 /**
- * Links markdown cujo texto é apenas um número ([1](url)) viram citações
- * inline com hover card; os demais abrem como links normais.
+ * Markdown links whose text is only a number ([1](url)) become inline
+ * citations with a hover card; the others open as normal links.
  */
 function makeMarkdownLink(sessionId?: string): Components["a"] {
   return function MarkdownLink({ href, children, ...props }) {
     const text = childrenToText(children).trim()
-    // A decisão (e o porquê dela) mora em classifyMarkdownLink, com teste.
+    // The decision (and its why) lives in classifyMarkdownLink, with a test.
     const link = classifyMarkdownLink(href, text)
     if (link.kind === "source") {
       return <SourceCitation source={link.source} label={text} sessionId={sessionId} />
@@ -144,13 +147,13 @@ function makeMarkdownLink(sessionId?: string): Components["a"] {
 }
 
 /**
- * Markdown do assistente com suporte a citações inline. `muted` marca a
- * narração intermediária (texto que o modelo escreve entre ferramentas,
- * "pensando alto") para não se confundir com a resposta final.
+ * Assistant Markdown with support for inline citations. `muted` marks the
+ * intermediate narration (text the model writes between tools,
+ * "thinking out loud") so as not to be confused with the final answer.
  *
- * `sessionId` existe por causa da citação de documento: abrir a fonte no
- * painel precisa saber de qual conversa ela é (o id `doc1` de um chat é outro
- * arquivo em outro chat). Sem ele a citação ainda aparece, mas inerte.
+ * `sessionId` exists because of the document citation: opening the source in the
+ * panel needs to know which conversation it belongs to (the `doc1` id of one chat is another
+ * file in another chat). Without it the citation still appears, but inert.
  */
 export function AssistantMarkdown({ children, muted = false, sessionId }: {
   children: string
@@ -158,17 +161,17 @@ export function AssistantMarkdown({ children, muted = false, sessionId }: {
   sessionId?: string
 }) {
   const components = useMemo(() => ({ a: makeMarkdownLink(sessionId) }), [sessionId])
-  // Os botões dos blocos orbit-ui falam com a sessão desta resposta.
+  // The buttons of the orbit-ui blocks talk to the session of this reply.
   const host = useMemo(() => ({ sessionId }), [sessionId])
-  // Respostas gravadas antes da mudanca de formato guardam a citacao antiga,
-  // que o sanitizador derruba; a reescrita aqui devolve o clique a elas sem
-  // mexer no historico em disco. O mesmo vale para o id de memória escrito
-  // solto: vira chip na renderização, inclusive nas respostas antigas.
+  // Replies recorded before the format change keep the old citation,
+  // which the sanitizer takes down; the rewrite here gives the click back to them without
+  // touching the history on disk. The same goes for the memory id written
+  // loose: it becomes a chip in the rendering, including in old replies.
   const text = useMemo(() => linkifyMemoryIds(rescueLegacyCitations(children)), [children])
   return (
     <div
       className={cn(
-        // Herança de cor (sem [&_*]) para o Shiki poder colorir tokens nos code blocks
+        // Color inheritance (without [&_*]) so Shiki can color tokens in the code blocks
         muted ? "text-sm text-muted-foreground" : "text-foreground",
         "[&_[data-streamdown=code-block]]:text-foreground",
       )}
@@ -191,14 +194,14 @@ export function VisionWorkingRow() {
 }
 
 export function ReasoningPartView({ part, flat }: { part: ReasoningPart; flat?: boolean }) {
-  // Só nasce aberto o raciocínio que está chegando agora (e fecha sozinho ao
-  // terminar). O já concluído nasce FECHADO: aberto, cada bloco montava o
-  // markdown inteiro só para fechar 1s depois — num chat com centenas de
-  // raciocínios, eram segundos de render ao abrir a conversa. Decidido na
-  // montagem: o fim do streaming não pode mudar o defaultOpen no meio.
+  // Only the reasoning that is arriving now is born open (and it closes by itself on
+  // finishing). The already finished one is born CLOSED: open, each block mounted the
+  // whole markdown only to close 1s later — in a chat with hundreds of
+  // reasonings, that was seconds of render when opening the conversation. Decided at
+  // mount: the end of the streaming cannot change defaultOpen in the middle.
   const [openAtMount] = useState(part.state === "streaming")
   if (!part.text) return null
-  // Modo detalhado: o raciocínio por extenso, sem acordeon.
+  // Detailed mode: the reasoning at length, without an accordion.
   if (flat) {
     return (
       <div className="w-full border-l-2 border-border pl-3 text-sm whitespace-pre-wrap text-muted-foreground">
@@ -219,8 +222,8 @@ export function ReasoningPartView({ part, flat }: { part: ReasoningPart; flat?: 
   )
 }
 
-/** Cabeçalho do acordeon de agente: ícone por papel + label + estado.
- * Componente interno para ler isOpen do contexto do Reasoning (chevron). */
+/** Header of the agent accordion: icon per role + label + state.
+ * Internal component to read isOpen from the Reasoning context (chevron). */
 function AgentTriggerBody({ part }: { part: AgentPart }) {
   const { t } = useTranslation()
   const { isOpen } = useReasoning()
@@ -250,10 +253,10 @@ function AgentTriggerBody({ part }: { part: AgentPart }) {
   )
 }
 
-/** Acordeon de agente do /init (estilo thinking): auto-abre enquanto o
- * agente trabalha (streaming do que ele está fazendo) e fecha ao concluir. */
+/** /init agent accordion (thinking style): it auto-opens while the
+ * agent works (streaming of what it is doing) and closes on completion. */
 export function AgentPartView({ part }: { part: AgentPart }) {
-  // Mesmo motivo do ReasoningPartView: concluído nasce fechado.
+  // Same reason as ReasoningPartView: finished is born closed.
   const [openAtMount] = useState(part.state === "running")
   return (
     <Reasoning
@@ -272,12 +275,12 @@ export function AgentPartView({ part }: { part: AgentPart }) {
   )
 }
 
-/** Fallback genérico para ferramentas sem visual dedicado. */
+/** Generic fallback for tools without a dedicated view. */
 export function GenericToolView({ part, label, subtitle, sessionId }: {
   part: ToolPart
   label: string
   subtitle?: string
-  /** Onde abrir a memória citada: a aba do painel pertence a esta sessão. */
+  /** Where to open the cited memory: the panel tab belongs to this session. */
   sessionId?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -319,10 +322,10 @@ export function GenericToolView({ part, label, subtitle, sessionId }: {
 }
 
 /**
- * Menu de troca de modelo oferecido no card de erro. Existe porque falhas de
- * moderação e de modelo indisponível são do provedor, não do request: repetir a
- * mesma chamada reproduz o mesmo erro — só outro modelo resolve. Seleciona o
- * modelo e reenvia o turno em um clique.
+ * Model switch menu offered in the error card. It exists because moderation and
+ * model unavailable failures belong to the provider, not to the request: repeating the
+ * same call reproduces the same error — only another model solves it. It selects the
+ * model and resends the turn in one click.
  */
 function SwitchModelMenu({
   sessionId,
@@ -344,8 +347,8 @@ function SwitchModelMenu({
         .filter((id) => catalog[id])
         .map((id) => ({
           provider: catalog[id],
-          // Modelos que aceitam imagem primeiro: o gatilho mais comum desses
-          // bloqueios é justamente um turno com imagem no contexto.
+          // Models that accept images first: the most common trigger of these
+          // blocks is precisely a turn with an image in the context.
           models: Object.values(catalog[id].models)
             .filter((m) => !(id === failedModel?.providerId && m.id === failedModel?.modelId))
             .sort((a, b) => {
@@ -419,25 +422,25 @@ export function MessageError({
   sessionId?: string
   error: string
   kind?: MessageErrorKind
-  /** Tentativas feitas em segundo plano antes de desistir (só quando > 1) */
+  /** Attempts made in the background before giving up (only when > 1) */
   attempts?: number
   failedModel?: { providerId?: string; modelId?: string }
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
-  // Falha classificada tem explicação própria (chat.errorKind.*); o texto cru
-  // vira detalhe secundário (nunca é descartado — é o que permite
-  // diagnosticar). Só `unknown` não tem explicação e mostra o texto cru.
+  // A classified failure has its own explanation (chat.errorKind.*); the raw text
+  // becomes a secondary detail (it is never discarded — it is what allows
+  // diagnosing). Only `unknown` has no explanation and shows the raw text.
   const explained = kind !== undefined && kind !== "unknown"
-  // Contexto estourado é a única falha classificada em que trocar de modelo
-  // não é saída: o request gigante vai igual para o próximo. Oferecer o menu
-  // aqui mandaria a pessoa tentar de novo pelo caminho que não funciona — o
-  // que resolve é encolher a conversa.
+  // Overflowed context is the only classified failure in which switching models
+  // is not a way out: the giant request goes the same to the next one. Offering the menu
+  // here would send the person to try again through the path that does not work — what
+  // solves it is shrinking the conversation.
   const overflowed = kind === "context-length"
-  // Estouro no meio do turno: o histórico cabia, quem passou da janela foi o
-  // trabalho da própria resposta. Nem compactar nem trocar de modelo ajudam —
-  // a explicação orienta a pedir para continuar (o turno novo não reenvia os
-  // resultados de ferramenta deste).
+  // Overflow in the middle of the turn: the history fit, what went past the window was the
+  // work of the reply itself. Neither compacting nor switching models helps —
+  // the explanation guides to ask to continue (the new turn does not resend the
+  // tool results of this one).
   const turnOverflowed = kind === "context-length-turn"
 
   return (
@@ -482,8 +485,8 @@ export function MessageError({
   )
 }
 
-/** Resposta parou por atingir o teto de passos, não por decisão do modelo —
- * sem isso, fica indistinguível de uma conclusão normal (ver message.truncated). */
+/** The reply stopped for reaching the step ceiling, not by the model's decision —
+ * without this, it is indistinguishable from a normal conclusion (see message.truncated). */
 export function MessageTruncated() {
   const { t } = useTranslation()
   return (
@@ -505,7 +508,7 @@ export function MessageTimestamp({ timestamp }: { timestamp: number }) {
   )
 }
 
-/** Tempo entre o início e a conclusão da resposta do assistant (createdAt → completedAt). */
+/** Time between the start and the completion of the assistant reply (createdAt → completedAt). */
 export function MessageDuration({ startedAt, completedAt }: { startedAt: number; completedAt: number }) {
   const { t } = useTranslation()
   return (
@@ -538,12 +541,12 @@ export function CopyAction({ text }: { text: string }) {
 }
 
 /**
- * Responder: marca a mensagem como contexto no compositor.
+ * Reply: marks the message as context in the composer.
  *
- * O trecho entra no TEXTO do próximo envio (ver formatMessageReply), então o
- * que sai daqui é só o recorte — quem monta e limpa é o compositor. Mensagem
- * sem texto (uma resposta só de ferramentas, por exemplo) não oferece a ação:
- * não haveria o que citar.
+ * The excerpt enters the TEXT of the next send (see formatMessageReply), so what
+ * comes out of here is only the cut — the composer is what builds and clears it. A message
+ * without text (a reply of tools only, for example) does not offer the action:
+ * there would be nothing to quote.
  */
 export function ReplyAction({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   const { t } = useTranslation()
@@ -563,12 +566,12 @@ export function ReplyAction({ message, sessionId }: { message: ChatMessage; sess
 }
 
 /**
- * Barra de ações do assistente: copiar + responder + falar + horário +
- * tokens/custo à esquerda, e o selo de diff (+N -N) no canto direito.
+ * Assistant action bar: copy + reply + speak + time +
+ * tokens/cost on the left, and the diff badge (+N -N) in the right corner.
  *
- * O selo fica aqui, e não no cabeçalho do acordeon de ações, porque esta linha
- * é a única que está sempre lá depois que o turno termina: recolhido, o
- * acordeon esconde justamente o balanço do que mudou em disco.
+ * The badge stays here, and not in the header of the actions accordion, because this row
+ * is the only one that is always there after the turn ends: collapsed, the
+ * accordion hides precisely the balance of what changed on disk.
  */
 export function AssistantMessageActions({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
@@ -576,8 +579,8 @@ export function AssistantMessageActions({ message, sessionId }: { message: ChatM
       <div className="flex items-center gap-1">
         <CopyAction text={messageText(message)} />
         <ReplyAction message={message} sessionId={sessionId} />
-        {/* A fala lê a RESPOSTA FINAL (ver speakableText), não o conteúdo todo
-            que o copiar leva — anexo, raciocínio e narração ficam de fora. */}
+        {/* The speech reads the FINAL ANSWER (see speakableText), not all the content
+            the copy takes — attachment, reasoning and narration stay out. */}
         <SpeakAction text={speakableText(message)} />
         <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
         {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
@@ -589,15 +592,15 @@ export function AssistantMessageActions({ message, sessionId }: { message: ChatM
 }
 
 /**
- * Escala de BOLHA para o markdown do usuário.
+ * BUBBLE scale for the user markdown.
  *
- * O streamdown foi desenhado para a resposta inteira (h1 a `text-3xl`, 16px
- * entre blocos); numa mensagem de duas linhas isso fica desproporcional. Aqui
- * os títulos descem para a escala do corpo e os blocos se aproximam.
+ * streamdown was designed for the whole reply (h1 at `text-3xl`, 16px
+ * between blocks); in a two-line message that becomes disproportionate. Here
+ * the headings go down to the body scale and the blocks come closer.
  *
- * As classes vão LITERAIS numa string só: o Tailwind varre o texto do fonte,
- * e variante montada em runtime não chega ao CSS gerado — a regra sumiria sem
- * erro nenhum (mesmo motivo do IMAGE_LAYOUT em components/ai/message.tsx).
+ * The classes go in LITERAL form in a single string: Tailwind scans the source text,
+ * and a variant built at runtime does not reach the generated CSS — the rule would disappear with
+ * no error at all (same reason as IMAGE_LAYOUT in components/ai/message.tsx).
  */
 const USER_MARKDOWN_LAYOUT = [
   "space-y-2",
@@ -608,20 +611,20 @@ const USER_MARKDOWN_LAYOUT = [
 ].join(" ")
 
 /**
- * Markdown da mensagem do USUÁRIO.
+ * Markdown of the USER message.
  *
- * O composer continua cru de propósito — quem digita vê os caracteres que
- * digitou —, mas a bolha entrega o texto lido: bloco de código com highlight,
- * tabela, lista e link. É o MESMO motor da resposta (streamdown) de propósito:
- * o mesmo trecho colado pela pessoa e pelo modelo tem que sair igual.
+ * The composer stays raw on purpose — whoever types sees the characters they
+ * typed —, but the bubble delivers the read text: code block with highlight,
+ * table, list and link. It is the SAME engine as the reply (streamdown) on purpose:
+ * the same excerpt pasted by the person and by the model has to come out the same.
  *
- * Duas diferenças em relação ao AssistantMarkdown:
- * - nada de citação de fonte/memória — link digitado pelo usuário é só link;
- * - nada de reparo de markdown de streaming (`mode="static"`): a mensagem já
- *   está inteira, e "consertar" um `**` solto mudaria o que a pessoa escreveu.
+ * Two differences from AssistantMarkdown:
+ * - no source/memory citation — a link typed by the user is just a link;
+ * - no repair of streaming markdown (`mode="static"`): the message is already
+ *   whole, and "fixing" a loose `**` would change what the person wrote.
  *
- * A quebra de linha simples continua valendo (ver remark-line-breaks): uma
- * ideia por linha sai uma ideia por linha.
+ * The simple line break keeps counting (see remark-line-breaks): one
+ * idea per line comes out one idea per line.
  */
 function UserMessageMarkdown({ text }: { text: string }) {
   return (
@@ -637,10 +640,10 @@ function UserMessageMarkdown({ text }: { text: string }) {
 }
 
 /**
- * Texto da mensagem do usuário, com a citação da mensagem respondida em
- * destaque (como no WhatsApp). O texto gravado guarda a citação junto do
- * corpo — é o que faz o modelo e a cópia da mensagem receberem as duas coisas
- * —, e aqui ela é separada só para a leitura.
+ * Text of the user message, with the quote of the replied message
+ * highlighted (as in WhatsApp). The recorded text keeps the quote together with the
+ * body — it is what makes the model and the copy of the message receive both
+ * —, and here it is separated only for the reading.
  */
 export function UserMessageText({ text }: { text: string }) {
   const label = useReplyLabel()
@@ -659,9 +662,9 @@ export function UserMessageText({ text }: { text: string }) {
 }
 
 /**
- * Revert oferecido na mensagem do USUÁRIO: descarta esse turno e tudo depois
- * dele (no modo código, também desfaz as alterações em disco) e devolve o texto
- * e os anexos ao input, como se a mensagem estivesse sendo editada.
+ * Revert offered in the USER message: it discards that turn and everything after
+ * it (in code mode, it also undoes the changes on disk) and gives the text
+ * and the attachments back to the input, as if the message were being edited.
  */
 export function RevertAction({ messageId, sessionId }: {
   messageId: string
@@ -685,7 +688,7 @@ export function RevertAction({ messageId, sessionId }: {
   )
 }
 
-/** Mensagem do usuário: texto + ações (copiar + responder + horário de envio). */
+/** User message: text + actions (copy + reply + send time). */
 export function UserMessageBody({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
     <div className="group/user-msg flex flex-col gap-0.5">

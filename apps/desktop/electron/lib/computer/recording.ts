@@ -10,16 +10,16 @@ import { buildFilter, DEFAULT_PLAN, formatTimeline, planRecording, type Recorded
 import { ComputerError, type AppInfo, type Frame, type WindowInfo } from './types'
 
 /**
- * Gravação de uma janela durante o Computer Use. A captura é do próprio
- * Electron: `desktopCapturer` acha a janela pelo CGWindowID e uma janela
- * oculta grava o stream com o MediaRecorder (ScreenCaptureKit por baixo — a
- * janela sai inteira mesmo coberta por outras; medido na Fase 0). O arquivo
- * bruto cresce em disco a cada segundo; no fim, o ffmpeg corta o tempo ocioso
- * (ver recording-plan.ts) e desenha o pulso de clique no alvo de cada ação.
+ * Recording of a window during Computer Use. The capture is Electron's own:
+ * `desktopCapturer` finds the window by CGWindowID and a hidden window records the
+ * stream with MediaRecorder (ScreenCaptureKit underneath — the window comes out whole
+ * even when covered by others; measured in Phase 0). The raw file grows on disk every
+ * second; at the end, ffmpeg cuts the idle time (see recording-plan.ts) and draws the
+ * click pulse on the target of each action.
  */
 
 const PARTITION = 'orbit-computer-recorder'
-/** Tempo máximo de uma gravação: a janela oculta não pode gravar para sempre. */
+/** Maximum duration of a recording: the hidden window cannot record forever. */
 const MAX_RECORDING_MS = 20 * 60_000
 
 interface ActiveRecording {
@@ -29,7 +29,7 @@ interface ActiveRecording {
   recorder: BrowserWindow
   raw: string
   name: string
-  /** Relógio do main quando o MediaRecorder começou */
+  /** Clock of the main process when the MediaRecorder started */
   startedAt: number
   video: { width: number; height: number }
   pointer: 'directed' | 'global'
@@ -48,7 +48,7 @@ function recordingsDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'recordings')
 }
 
-/** Página do gravador: precisa ser arquivo — uma página data: não é contexto seguro e não tem mediaDevices. */
+/** Recorder page: it has to be a file — a data: page is not a secure context and has no mediaDevices. */
 const RECORDER_HTML = `<!doctype html><html><head><meta charset="utf-8"></head><body><script>
 let recorder = null, stream = null, chunks = []
 async function toBase64(blobs) {
@@ -91,8 +91,8 @@ function ensureRecorderPage(): Promise<string> {
 function ensureHandler(): void {
   if (handlerReady) return
   handlerReady = true
-  // Quem decide QUAL janela é o main (a fonte escolhida no start): a página só
-  // pede "a tela", sem seletor do sistema.
+  // The main process decides WHICH window it is (the source chosen in start): the page
+  // just asks for "the screen", without a system picker.
   session.fromPartition(PARTITION).setDisplayMediaRequestHandler((_request, callback) => {
     if (pendingSource) callback({ video: pendingSource })
     else callback({})
@@ -113,7 +113,7 @@ export async function startRecording(input: {
   window: WindowInfo
   name?: string
   fps?: number
-  /** Ponteiro do momento: no global o cursor real já aparece no vídeo; no dirigido, o Orbit desenha um */
+  /** Cursor of the moment: in global mode the real cursor already shows in the video; in directed mode, Orbit draws one */
   pointer?: 'directed' | 'global'
 }): Promise<{ width: number; height: number }> {
   if (active.has(input.sessionId)) throw new ComputerError('badRequest', 'A recording is already running in this conversation — call cu_record_stop first.')
@@ -151,7 +151,7 @@ export async function startRecording(input: {
       actions: [],
       marks: [],
       writing: Promise.resolve(),
-      // O bruto vai para o disco a cada segundo: uma gravação longa não fica na memória.
+      // The raw goes to disk every second: a long recording does not stay in memory.
       poll: setInterval(() => {
         rec.writing = rec.writing.then(() => flush(rec)).catch(() => undefined)
       }, 1000),
@@ -173,7 +173,7 @@ async function flush(rec: ActiveRecording, final = false): Promise<void> {
   if (b64) await fsp.appendFile(rec.raw, Buffer.from(b64, 'base64'))
 }
 
-/** Ação do agente durante a gravação, no relógio do main. */
+/** Agent action during the recording, on the main process clock. */
 export function noteRecordedAction(
   sessionId: string,
   action: { startedAt: number; endedAt: number; label: string; hold?: boolean; pulse?: boolean; target?: RecordedAction['target']; window?: Frame },
@@ -207,8 +207,8 @@ export interface FinishedRecording {
 }
 
 /**
- * Seta de cursor no estilo do macOS (preta com borda branca), no tamanho da
- * escala da janela — num monitor Retina o vídeo tem 2× pixels, e a seta acompanha.
+ * macOS-style cursor arrow (black with a white border), at the window's scale — on a
+ * Retina monitor the video has 2× the pixels, and the arrow follows it.
  */
 async function cursorImage(scale: number): Promise<string> {
   const k = Math.max(1, Math.min(3, scale)) * 1.25
@@ -232,8 +232,8 @@ function run(command: string, args: string[]): Promise<void> {
 }
 
 /**
- * Para a gravação e monta o vídeo final: trechos das ações (com respiro),
- * sem o tempo ocioso, com o pulso de clique no alvo de cada ação.
+ * Stops the recording and builds the final video: stretches of the actions (with
+ * breath), without the idle time, with the click pulse on the target of each action.
  */
 export async function stopRecording(sessionId: string, options: { keepIdle?: boolean; pulses?: boolean } = {}): Promise<FinishedRecording> {
   const rec = active.get(sessionId)
@@ -254,9 +254,9 @@ export async function stopRecording(sessionId: string, options: { keepIdle?: boo
   const ff = resolveFfmpeg()
   if (!ff) throw new ComputerError('unavailable', 'Recording needs the bundled ffmpeg, which is missing from this build.')
   const output = rec.raw.replace(/\.raw\.(mp4|webm)$/, '.mp4')
-  // Cursor desenhado só no modo dirigido: lá o cursor real não se move, e sem
-  // ele o vídeo mostra coisas mudando sozinhas. No global o cursor real já
-  // aparece (e dois cursores confundem).
+  // Drawn cursor only in directed mode: there the real cursor does not move, and
+  // without it the video shows things changing on their own. In global mode the real
+  // cursor already shows (and two cursors are confusing).
   const scale = rec.video.width / rec.window.frame[2]
   const cursorPng = rec.pointer === 'directed' && plan.cursor.length > 0 ? await cursorImage(scale).catch(() => null) : null
   const { filter, output: label } = buildFilter(plan, 30, cursorPng ? { cursorInput: 1 } : {})
@@ -276,8 +276,8 @@ export async function stopRecording(sessionId: string, options: { keepIdle?: boo
 }
 
 /**
- * Fim do controle sem cu_record_stop (fim do turno, Parar, ⌘⇧.): monta assim
- * mesmo e guarda na galeria — o que foi gravado não se perde.
+ * End of the control without cu_record_stop (end of the turn, Stop, ⌘⇧.): it builds it
+ * anyway and stores it in the gallery — what was recorded is not lost.
  */
 export async function finishOrphanRecording(sessionId: string): Promise<void> {
   if (!active.has(sessionId)) return
@@ -285,7 +285,7 @@ export async function finishOrphanRecording(sessionId: string): Promise<void> {
     const done = await stopRecording(sessionId)
     await addVideoToGallery({ file: done.file, name: path.basename(done.file, '.mp4'), sessionId, source: 'script' })
   } catch (err) {
-    console.warn('[computer] gravação sem cu_record_stop não pôde ser montada:', err)
+    console.warn('[computer] recording without cu_record_stop could not be assembled:', err)
   }
 }
 

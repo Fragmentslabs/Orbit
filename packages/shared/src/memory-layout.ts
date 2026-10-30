@@ -1,79 +1,79 @@
 /**
- * Layout do canvas de memórias — grafo orgânico no estilo Obsidian,
- * compartilhado entre desktop e mobile.
+ * Layout of the memories canvas — organic graph in the Obsidian style,
+ * shared between desktop and mobile.
  *
- * A árvore cresce para TODOS os lados a partir da raiz, sem direção fixa e sem
- * anel: as posições saem de uma simulação de forças (repulsão entre todos os
- * nós + molas nas arestas), semeada por uma distribuição radial com jitter.
- * Isso dá o aspecto "espalhado mas organizado" — cada ramo ocupa a sua região,
- * a distância até o pai varia de nó para nó, e nada fica alinhado em grade.
+ * The tree grows to ALL sides from the root, with no fixed direction and no
+ * ring: the positions come out of a force simulation (repulsion between all
+ * nodes + springs on the edges), seeded by a radial distribution with jitter.
+ * That gives the "spread out but organized" look — each branch occupies its region,
+ * the distance to the parent varies from node to node, and nothing is aligned in a grid.
  *
- * A única regra dura é o ESPAÇO MÍNIMO: depois da simulação, um passe de
- * separação resolve sobreposição usando a caixa do RÓTULO, não só o círculo do
- * nó. Quando uma vizinhança fica apertada demais para caber, os nós são
- * empurrados radialmente para longe da raiz — é o "vai para um nível mais
- * distante" em vez de amontoar texto sobre texto.
+ * The only hard rule is the MINIMUM SPACING: after the simulation, a pass of
+ * separation resolves overlapping using the box of the LABEL, not only the circle of the
+ * node. When a neighborhood gets too tight to fit, the nodes are
+ * pushed radially away from the root — it is the "go to a farther level"
+ * instead of piling text over text.
  *
- * O layout é determinístico: o gerador aleatório é semeado pelo id do grupo,
- * então a mesma memória cai sempre no mesmo lugar entre renders e entre as
- * duas plataformas.
+ * The layout is deterministic: the random generator is seeded by the group id,
+ * so the same memory always lands in the same place across renders and across the
+ * two platforms.
  */
 
 import type { Memory } from './memory'
 import { jaccard, normalizeText, PROJECT_AREAS } from './memory'
 
-/** Distância base entre pai e filho — a mola relaxa em torno deste valor. */
+/** Base distance between parent and child — the spring relaxes around this value. */
 export const BASE_LINK_DISTANCE = 90
-/** Folga livre exigida entre as caixas de dois nós quaisquer. */
+/** Free clearance required between the boxes of any two nodes. */
 export const MIN_GAP = 14
-/** Altura da linha de rótulo, usada na caixa de colisão. */
+/** Height of the label line, used in the collision box. */
 export const LABEL_HEIGHT = 14
-/** Distância do rótulo abaixo do círculo do nó. */
+/** Distance of the label below the node circle. */
 export const LABEL_OFFSET = 6
-/** Largura média de caractere no tamanho de fonte dos rótulos. */
+/** Average character width at the font size of the labels. */
 const CHAR_WIDTH = 5.6
-/** Corte do rótulo — mesmo limite usado no desenho das duas plataformas. */
+/** Label cut — the same limit used in the drawing on both platforms. */
 export const MAX_LABEL_CHARS = 34
-/** Respiro entre duas árvores (projetos) diferentes. */
+/** Clearance between two different trees (projects). */
 export const GROUP_GAP = 120
 
 const INFERRED_JACCARD = 0.5
 const MAX_INFERRED_EDGES = 30
 
-/** Grupo sintético das memórias que não nasceram em nenhum projeto. */
+/** Synthetic group of the memories that were not born in any project. */
 export const GLOBAL_GROUP = '__global__'
 
 export interface LayoutNode {
   memory: Memory
   x: number
   y: number
-  /** Distância em saltos até a raiz do grupo. */
+  /** Distance in hops to the root of the group. */
   depth: number
-  /** Raiz da árvore do grupo (o overview do projeto). */
+  /** Root of the group tree (the overview of the project). */
   isRoot: boolean
-  /** Pai efetivo na árvore de cobertura (undefined na raiz e nos flutuantes). */
+  /** Effective parent in the coverage tree (undefined at the root and for the floating ones). */
   parentId?: string
   /**
-   * Nó sem nenhum vínculo com o resto do grupo. Desenhado solto, sem aresta —
-   * e é o primeiro a ceder espaço quando a vizinhança satura.
+   * Node with no link to the rest of the group. Drawn loose, without an edge —
+   * and it is the first to give up space when the neighborhood saturates.
    */
   floating: boolean
-  /** Filhos diretos presentes no pool — inclui os ocultos por colapso. */
+  /** Direct children present in the pool — includes the ones hidden by collapse. */
   childCount: number
   collapsed: boolean
   groupId: string
-  /** Raio do círculo desenhado — o layout o possui porque a colisão depende dele. */
+  /** Radius of the drawn circle — the layout owns it because the collision depends on it. */
   r: number
-  /** Meia-largura da caixa do rótulo, para colisão e enquadramento. */
+  /** Half width of the label box, for collision and framing. */
   labelHalfWidth: number
 }
 
 export type LayoutEdgeKind =
-  /** Aresta pai→filho da árvore de cobertura — traço cheio. */
+  /** Parent→child edge of the coverage tree — solid stroke. */
   | 'tree'
-  /** Relação real que não virou aresta de árvore (segundo pai, "related"). */
+  /** Real relation that did not become a tree edge (second parent, "related"). */
   | 'cross'
-  /** Deduzida por similaridade de tags — sempre dentro do mesmo grupo. */
+  /** Inferred by tag similarity — always inside the same group. */
   | 'inferred'
 
 export interface LayoutEdge {
@@ -99,17 +99,17 @@ export interface MemoryLayout {
 }
 
 // ---------------------------------------------------------------------------
-// Geometria do nó
+// Node geometry
 // ---------------------------------------------------------------------------
 
-/** Raio do círculo: raiz maior, área intermediária, fato comum por peso. */
+/** Radius of the circle: bigger root, intermediate area, ordinary fact by weight. */
 export function nodeRadius(memory: Memory, isRoot: boolean): number {
   if (isRoot) return 22
   if (memory.area) return 14
   return 7 + memory.weight * 4
 }
 
-/** Texto do rótulo com o corte padrão — o mesmo nas duas plataformas. */
+/** Label text with the standard cut — the same on both platforms. */
 export function nodeLabelText(memory: Memory, isRoot: boolean): string {
   if (isRoot && memory.projectName) return memory.projectName
   if (memory.area) return PROJECT_AREAS[memory.area]?.label ?? memory.text
@@ -123,9 +123,9 @@ function labelHalfWidthOf(text: string): number {
 }
 
 /**
- * Caixa de colisão do nó: o círculo unido ao rótulo centrado logo abaixo dele.
- * É esta caixa — e não o raio — que a separação usa, porque o que não pode
- * encavalar é o texto.
+ * Collision box of the node: the circle joined to the label centered right below it.
+ * It is this box — and not the radius — that the separation uses, because what cannot
+ * pile up is the text.
  */
 function boxOf(node: { r: number; labelHalfWidth: number }): {
   halfW: number
@@ -140,10 +140,10 @@ function boxOf(node: { r: number; labelHalfWidth: number }): {
 }
 
 // ---------------------------------------------------------------------------
-// Aleatoriedade determinística
+// Deterministic randomness
 // ---------------------------------------------------------------------------
 
-/** Hash de string para semente — determinismo por grupo. */
+/** String hash for the seed — determinism per group. */
 function seedOf(text: string): number {
   let h = 2166136261
   for (let i = 0; i < text.length; i++) {
@@ -153,7 +153,7 @@ function seedOf(text: string): number {
   return h >>> 0
 }
 
-/** mulberry32 — PRNG pequeno e determinístico, suficiente para o jitter. */
+/** mulberry32 — small and deterministic PRNG, enough for the jitter. */
 function makeRng(seed: number): () => number {
   let a = seed || 1
   return () => {
@@ -166,13 +166,13 @@ function makeRng(seed: number): () => number {
 }
 
 // ---------------------------------------------------------------------------
-// Agrupamento e árvore de cobertura
+// Grouping and coverage tree
 // ---------------------------------------------------------------------------
 
 /**
- * Grupo (árvore) a que uma memória pertence no canvas. Memórias de projeto vão
- * para o próprio projeto; as demais, para o projeto onde nasceram — caindo no
- * grupo global quando não há origem registrada.
+ * Group (tree) a memory belongs to on the canvas. Project memories go
+ * to the project itself; the others, to the project where they were born — falling back to
+ * the global group when there is no recorded origin.
  */
 export function groupIdOf(memory: Memory): string {
   if (memory.kind === 'project' && memory.projectId) return memory.projectId
@@ -184,21 +184,21 @@ function groupLabelOf(memory: Memory): string | undefined {
   return memory.originProjectName
 }
 
-/** true quando a relação declarada de `parent` para `child` é hierárquica. */
+/** true when the declared relation from `parent` to `child` is hierarchical. */
 function isParentEdge(parent: Memory, childId: string): boolean {
   const types = parent.relationTypes
-  // Dados antigos não têm relationTypes — nesse caso qualquer vínculo serve
-  // como candidato a aresta de árvore, senão o grafo legado vira só órfãos.
+  // Old data has no relationTypes — in that case any link serves
+  // as a tree edge candidate, otherwise the legacy graph becomes only orphans.
   if (!types) return true
   return types[childId] === 'parent'
 }
 
 /**
- * Escolhe a raiz de um grupo entre os nós que REALMENTE têm vínculo: o overview
- * do escopo raiz e, na falta dele, o nó mais conectado. Um grupo em que ninguém
- * está ligado a ninguém não tem raiz — devolve undefined, e todos os nós
- * flutuam. Sem essa condição, o nó de maior peso virava um hub artificial com
- * uma aresta para cada órfão do grupo.
+ * Chooses the root of a group among the nodes that REALLY have a link: the overview
+ * of the root scope and, without it, the most connected node. A group in which nobody
+ * is linked to anybody has no root — it returns undefined, and all nodes
+ * float. Without that condition, the heaviest node became an artificial hub with
+ * an edge to every orphan of the group.
  */
 function pickRoot(members: Memory[], connected: Set<string>): Memory | undefined {
   const candidates = members.filter((m) => connected.has(m.id))
@@ -215,22 +215,22 @@ function pickRoot(members: Memory[], connected: Set<string>): Memory | undefined
 interface TreeShape {
   parentOf: Map<string, string>
   childrenOf: Map<string, string[]>
-  /** undefined quando nenhum nó do grupo tem vínculo com outro. */
+  /** undefined when no node of the group has a link to another. */
   rootId?: string
-  /** Nós sem vínculo nenhum — desenhados soltos, sem aresta inventada. */
+  /** Nodes with no link at all — drawn loose, with no invented edge. */
   floating: string[]
 }
 
 /**
- * Extrai uma árvore de cobertura do subgrafo do grupo. BFS a partir da raiz
- * seguindo primeiro as relações "parent" declaradas e só depois as livres —
- * assim a hierarquia informada pelo agente vence, e os "related" viram
- * arestas cross em vez de distorcerem a árvore.
+ * Extracts a coverage tree from the group subgraph. BFS from the root
+ * following the declared "parent" relations first and only then the free ones —
+ * so the hierarchy informed by the agent wins, and the "related" become
+ * cross edges instead of distorting the tree.
  */
 function spanningTree(members: Memory[]): TreeShape {
   const byId = new Map(members.map((m) => [m.id, m]))
-  // "Conectado" é ter pelo menos um vínculo com outro membro DESTE grupo —
-  // relatedIds apontando para fora não conta.
+  // "Connected" means having at least one link to another member OF THIS group —
+  // relatedIds pointing outside do not count.
   const connected = new Set(
     members.filter((m) => m.relatedIds.some((rel) => rel !== m.id && byId.has(rel))).map((m) => m.id),
   )
@@ -250,7 +250,7 @@ function spanningTree(members: Memory[]): TreeShape {
     seen.add(childId)
   }
 
-  // Passe 1 — só hierarquia declarada, camada a camada.
+  // Pass 1 — declared hierarchy only, layer by layer.
   let frontier = [root.id]
   while (frontier.length) {
     const next: string[] = []
@@ -267,7 +267,7 @@ function spanningTree(members: Memory[]): TreeShape {
     frontier = next
   }
 
-  // Passe 2 — vínculos livres puxam para a árvore quem ficou de fora.
+  // Pass 2 — free links pull into the tree whoever was left out.
   let progress = true
   while (progress) {
     progress = false
@@ -281,9 +281,9 @@ function spanningTree(members: Memory[]): TreeShape {
     }
   }
 
-  // Passe 3 — quem sobrou não tem vínculo nenhum. Fica FLUTUANDO: pendurá-lo
-  // na raiz criaria uma aresta que não existe e faria o grupo virar uma
-  // estrela em volta de um nó qualquer.
+  // Pass 3 — whoever is left has no link at all. It stays FLOATING: hanging it
+  // on the root would create an edge that does not exist and would turn the group into a
+  // star around some arbitrary node.
   const floating: string[] = []
   for (const node of members) {
     if (seen.has(node.id)) continue
@@ -293,7 +293,7 @@ function spanningTree(members: Memory[]): TreeShape {
   return { parentOf, childrenOf, rootId: root.id, floating }
 }
 
-/** Descendentes de nós recolhidos — o próprio nó recolhido continua visível. */
+/** Descendants of collapsed nodes — the collapsed node itself stays visible. */
 function hiddenDescendants(shape: TreeShape, collapsedIds: Set<string>): Set<string> {
   const hidden = new Set<string>()
   if (collapsedIds.size === 0) return hidden
@@ -310,17 +310,17 @@ function hiddenDescendants(shape: TreeShape, collapsedIds: Set<string>): Set<str
 }
 
 // ---------------------------------------------------------------------------
-// Simulação de forças
+// Force simulation
 // ---------------------------------------------------------------------------
 
 interface SimNode extends LayoutNode {
   vx: number
   vy: number
-  /** Quantos nós descem desta subárvore — ramos pesados repelem mais. */
+  /** How many nodes descend from this subtree — heavy branches repel more. */
   subtreeSize: number
   /**
-   * Caixa de colisão já resolvida. Ela depende só do raio e do rótulo, que não
-   * mudam depois da montagem — e a separação consulta isto milhões de vezes.
+   * Collision box already resolved. It depends only on the radius and the label, which do not
+   * change after assembly — and the separation reads this millions of times.
    */
   halfW: number
   top: number
@@ -329,28 +329,28 @@ interface SimNode extends LayoutNode {
 
 const ITERATIONS = 320
 const ALPHA_DECAY = 0.016
-/** Intensidade da repulsão entre pares — é o que abre o grafo. */
+/** Intensity of the repulsion between pairs — it is what opens the graph. */
 const REPULSION = 3400
-/** Rigidez das molas pai→filho. */
+/** Stiffness of the parent→child springs. */
 const SPRING = 0.09
-/** Atração fraca ao centro do grupo, para o conjunto não se dispersar. */
+/** Weak attraction to the group center, so the whole does not scatter. */
 const GRAVITY = 0.012
 
 /**
- * Semeia as posições em anéis por profundidade, herdando o ângulo do pai com
- * abertura e jitter. Sem esta semente a simulação parte de um emaranhado e
- * converge para algo torcido; com ela cada ramo já nasce apontando para o seu
- * próprio setor, e a simulação apenas relaxa o desenho.
+ * Seeds the positions in rings by depth, inheriting the parent angle with
+ * spread and jitter. Without this seed the simulation starts from a tangle and
+ * converges to something twisted; with it each branch is already born pointing to its
+ * own sector, and the simulation only relaxes the drawing.
  */
 function seedPositions(
   nodes: Map<string, SimNode>,
   shape: TreeShape,
   rng: () => number,
-  escala = 1,
+  scale = 1,
 ): void {
   const root = shape.rootId ? nodes.get(shape.rootId) : undefined
   if (!root) {
-    scatterFloating(nodes, [...nodes.keys()], 0, rng, 0, escala)
+    scatterFloating(nodes, [...nodes.keys()], 0, rng, 0, scale)
     return
   }
   root.x = 0
@@ -366,15 +366,15 @@ function seedPositions(
     { id: root.memory.id, angle: rng() * Math.PI * 2, spread: Math.PI * 2, depth: 0 },
   ]
 
-  for (let cabeca = 0; cabeca < queue.length; cabeca++) {
-    const slot = queue[cabeca]
+  for (let head = 0; head < queue.length; head++) {
+    const slot = queue[head]
     const children = (shape.childrenOf.get(slot.id) ?? []).filter((id) => nodes.has(id))
     if (children.length === 0) continue
     const parent = nodes.get(slot.id)!
 
-    // O setor do pai é repartido entre os filhos proporcionalmente ao tamanho
-    // da subárvore de cada um — ramo grande recebe mais abertura e não espreme
-    // o vizinho.
+    // The parent sector is split among the children proportionally to the size
+    // of each subtree — a large branch gets more spread and does not squeeze
+    // its neighbour.
     const weights = children.map((id) => Math.sqrt(nodes.get(id)!.subtreeSize))
     const total = weights.reduce((a, b) => a + b, 0) || 1
     let cursor = slot.angle - slot.spread / 2
@@ -382,16 +382,16 @@ function seedPositions(
     children.forEach((id, i) => {
       const child = nodes.get(id)!
       const share = (weights[i] / total) * slot.spread
-      // Jitter dentro da fatia: tira o aspecto de leque perfeito sem deixar o
-      // filho invadir a fatia do irmão.
+      // Jitter inside the slice: removes the perfect fan look without letting the
+      // child invade the sibling's slice.
       const angle = cursor + share * (0.3 + rng() * 0.4)
-      // A distância também varia — é o que quebra o padrão de anéis concêntricos.
+      // The distance also varies — it is what breaks the pattern of concentric rings.
       const distance =
-        BASE_LINK_DISTANCE * escala * (0.8 + rng() * 0.6) * (1 + slot.depth * 0.15)
+        BASE_LINK_DISTANCE * scale * (0.8 + rng() * 0.6) * (1 + slot.depth * 0.15)
       child.x = parent.x + Math.cos(angle) * distance
       child.y = parent.y + Math.sin(angle) * distance
-      // Filho nunca recebe o círculo inteiro: no máximo a fatia do pai, e
-      // sempre com folga para não fechar sobre si mesmo.
+      // A child never gets the whole circle: at most the parent's slice, and
+      // always with slack so as not to close over itself.
       queue.push({
         id,
         angle,
@@ -402,41 +402,41 @@ function seedPositions(
     })
   }
 
-  // Flutuantes ficam NA FAIXA da árvore, não fora dela: uma memória geral criada
-  // dentro do projeto X é conhecimento do X e tem que orbitar os nós do X, não
-  // formar uma casca distante. A separação depois acomoda cada uma numa brecha.
+  // Floating nodes stay IN the tree band, not outside it: a general memory created
+  // inside project X is knowledge of X and has to orbit the nodes of X, not
+  // form a distant shell. The separation afterwards fits each one into a gap.
   const floatingSet = new Set(shape.floating)
   let treeRadius = 0
   for (const [id, node] of nodes) {
     if (floatingSet.has(id)) continue
     treeRadius = Math.max(treeRadius, Math.hypot(node.x, node.y))
   }
-  scatterFloating(nodes, shape.floating, treeRadius * 0.45, rng, treeRadius * 0.75, escala)
+  scatterFloating(nodes, shape.floating, treeRadius * 0.45, rng, treeRadius * 0.75, scale)
 }
 
 /**
- * Espalha nós sem vínculo pelo ângulo áureo (girassol): θ = i × 137.5°, raio
- * proporcional a √i. Enche o plano por igual sem criar anéis nem raios
- * perceptíveis — é o que faz a nuvem de órfãos parecer natural.
+ * Spreads unlinked nodes over the golden angle (sunflower): θ = i × 137.5°, radius
+ * proportional to √i. Fills the plane evenly without creating visible rings or spokes
+ * — it is what makes the orphan cloud look natural.
  */
 function scatterFloating(
   nodes: Map<string, SimNode>,
   ids: string[],
   startRadius: number,
   rng: () => number,
-  /** Faixa em que os primeiros nós se acomodam antes do raio crescer. */
+  /** Band where the first nodes settle before the radius grows. */
   band = 0,
-  escala = 1,
+  scale = 1,
 ): void {
   const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-  const spacing = BASE_LINK_DISTANCE * escala * 1.6
+  const spacing = BASE_LINK_DISTANCE * scale * 1.6
   const phase = rng() * Math.PI * 2
   ids.forEach((id, i) => {
     const node = nodes.get(id)
     if (!node) return
     const angle = phase + i * GOLDEN_ANGLE
-    // √i mantém a densidade constante conforme o raio cresce; a faixa inicial
-    // é sorteada para os primeiros nós já nascerem misturados à árvore.
+    // √i keeps the density constant as the radius grows; the initial band
+    // is drawn at random so the first nodes are already born mixed into the tree.
     const radius = startRadius + band * rng() + spacing * Math.sqrt(i) * (0.85 + rng() * 0.3)
     node.x = Math.cos(angle) * radius
     node.y = Math.sin(angle) * radius
@@ -444,118 +444,118 @@ function scatterFloating(
 }
 
 // ---------------------------------------------------------------------------
-// Execução em fatias
+// Execution in slices
 // ---------------------------------------------------------------------------
 //
-// As três fases pesadas (repulsão, separação e desempate radial) varrem todos
-// os pares do grupo — juntas, ~470 varreduras O(n²). Rodadas de uma tacada só
-// elas prendem a thread de JS por segundos: nada pinta e nada responde ao
-// toque, que é exatamente a travada ao abrir o grafo.
+// The three heavy phases (repulsion, separation and radial tie-break) sweep all
+// the pairs of the group — together, ~470 O(n²) sweeps. Running them in a single go
+// holds the JS thread for seconds: nothing paints and nothing responds to
+// touch, which is exactly the freeze when opening the graph.
 //
-// Por isso cada uma vive num cursor retomável: o laço externo pode parar no
-// meio de uma varredura e continuar na chamada seguinte. A ORDEM das operações
-// é a mesma da versão de uma tacada só — cada par continua lendo as posições
-// que os pares anteriores deixaram —, então o resultado é idêntico; o que muda
-// é apenas quem decide a hora de devolver o controle.
+// That is why each one lives in a resumable cursor: the outer loop can stop in
+// the middle of a sweep and continue on the next call. The ORDER of the operations
+// is the same as the single-go version — each pair keeps reading the positions
+// left by the previous pairs —, so the result is identical; what changes
+// is only who decides when to hand control back.
 
 const SEPARATE_PASSES = 90
 const PUSH_ROUNDS = 60
 
 /**
- * Passes de separação e rodadas de desempate por tamanho de grupo. No caminho
- * exato cada passe é O(n²) e 90 já é caro; no da grade ele é O(n · vizinhos),
- * barato o bastante para dar bem mais — e é disso que a vizinhança saturada de
- * um grafo grande precisa para não deixar rótulo sobre rótulo.
+ * Separation passes and tie-break rounds per group size. On the exact path each pass is O(n²) and 90 is already expensive;
+ * on the grid one it is O(n · neighbors),
+ * cheap enough to give much more — and that is what the saturated neighborhood of
+ * a large graph needs so as not to leave label over label.
  */
-function passesDe(n: number): number {
-  return n > GRADE_MINIMA ? 240 : SEPARATE_PASSES
+function separationPassesFor(n: number): number {
+  return n > GRID_MIN_SIZE ? 240 : SEPARATE_PASSES
 }
-function rodadasDe(n: number): number {
-  return n > GRADE_MINIMA ? 120 : PUSH_ROUNDS
+function roundsFor(n: number): number {
+  return n > GRID_MIN_SIZE ? 120 : PUSH_ROUNDS
 }
 /**
- * Pares avaliados entre duas leituras do relógio. O passo tem que ser contado
- * em PARES, não em índices do laço externo: num grupo de 3 mil nós cada índice
- * externo vale milhares de pares, e um passo fixo de 32 índices estourava o
- * orçamento da fatia em mais de um segundo. Contando pares, a fatia passa do
- * orçamento por no máximo o custo de um bloco — alguns milissegundos.
+ * Pairs evaluated between two clock reads. The step has to be counted
+ * in PAIRS, not in indices of the outer loop: in a group of 3 thousand nodes each outer
+ * index is worth thousands of pairs, and a fixed step of 32 indices blew the
+ * slice budget by more than a second. Counting pairs, the slice goes over the
+ * budget by at most the cost of one block — a few milliseconds.
  */
-const PARES_POR_CHECAGEM = 2048
+const PAIRS_PER_CHECK = 2048
 
 /**
- * Acima deste tamanho o grupo troca as varreduras de todos os pares por uma
- * GRADE ESPACIAL. Abaixo dele nada muda: o caminho exato de sempre continua
- * valendo, e nenhum grafo que já existe hoje muda de desenho.
+ * Above this size the group swaps the all-pairs sweeps for a SPATIAL
+ * GRID. Below it nothing changes: the exact path of always keeps
+ * applying, and no graph that exists today changes its drawing.
  *
- * O corte é onde o O(n²) ainda cabe num piscar — 250 nós são 31 mil pares por
- * varredura, ~15 milhões no pipeline inteiro.
+ * The cut is where O(n²) still fits in a blink — 250 nodes are 31 thousand pairs per
+ * sweep, ~15 million in the whole pipeline.
  */
-const GRADE_MINIMA = 250
+const GRID_MIN_SIZE = 250
 /**
- * Raio além do qual a repulsão é desprezada no caminho da grade. A força cai
- * com 1/d², então a partir de uma vizinhança e meia o que sobra é ruído — e é
- * ele que custa O(n²). O formato do grafo passa a vir das molas, da semente
- * radial e do passe de separação, que são os que realmente desenham.
+ * Radius beyond which the repulsion is disregarded on the grid path. The force falls
+ * with 1/d², so from a neighborhood and a half on what is left is noise — and it is
+ * what costs O(n²). The graph shape then comes from the springs, the radial seed
+ * and the separation pass, which are the ones that really draw.
  */
 const CUTOFF = BASE_LINK_DISTANCE * 1.5
 /**
- * Gravidade no caminho da grade. Sem a repulsão de longe empurrando para fora,
- * a atração ao centro precisa cair junto — senão o grupo colapsa num nó só e
- * sobra tudo para a separação resolver.
+ * Gravity on the grid path. Without the far repulsion pushing outward,
+ * the attraction to the center has to fall along — otherwise the group collapses into a single node and
+ * everything is left for the separation to solve.
  */
-const GRAVITY_GRADE = 0.004
-/** Deslocamento médio por nó abaixo do qual a simulação já assentou. */
-const CONVERGIU = 0.08
+const GRID_GRAVITY = 0.004
+/** Average displacement per node below which the simulation has settled. */
+const CONVERGED = 0.08
 /**
- * Teto do passo de um nó numa iteração.
+ * Ceiling of the step of a node in one iteration.
  *
- * A repulsão cresce com 1/d², então um par quase coincidente gera uma força
- * enorme — e sem teto ela vira um arremesso. Num grupo denso isso encadeia: a
- * cada iteração alguém é jogado para longe, e o grupo inteiro sai de escala.
- * Com mil memórias num projeto só, as posições chegavam a 10²⁶ e o desenho
- * virava lixo; o passe de separação depois não tinha o que salvar.
+ * The repulsion grows with 1/d², so a nearly coincident pair generates an enormous
+ * force — and without a ceiling it becomes a throw. In a dense group this chains: at
+ * every iteration someone is thrown far away, and the whole group goes out of scale.
+ * With a thousand memories in a single project, the positions reached 10²⁶ and the drawing
+ * became garbage; the separation pass afterwards had nothing to save.
  *
- * O teto é o remédio clássico de layout por forças (o "resfriamento" do
- * Fruchterman-Reingold): a direção da força continua valendo, só o tamanho do
- * passo é limitado.
+ * The ceiling is the classic remedy of force layout (the "cooling" of
+ * Fruchterman-Reingold): the direction of the force still applies, only the size of the
+ * step is limited.
  *
- * Vale SÓ no caminho da grade. Medindo o algoritmo antigo, grupo por grupo: até
- * ~500 nós ele era saudável (raio máximo na casa dos milhares) e só a partir de
- * ~700 saía de escala — e nenhum teto serve para os dois casos, porque mesmo um
- * grafo sadio de 150 nós dá passos grandes nas primeiras iterações, que o
- * desenho depois absorve. Como o caminho exato só roda em grupo de até 250, ele
- * fica sem teto e continua bit a bit igual ao de hoje; a trava entra onde a
- * densidade realmente quebra.
+ * It applies ONLY on the grid path. Measuring the old algorithm, group by group: up to
+ * ~500 nodes it was healthy (maximum radius in the thousands) and only from
+ * ~700 on did it go out of scale — and no ceiling serves both cases, because even a
+ * healthy 150-node graph takes large steps in the first iterations, which the
+ * drawing absorbs afterwards. Since the exact path only runs on groups of up to 250, it
+ * stays without a ceiling and remains bit by bit identical to today's; the clamp comes in where
+ * density really breaks.
  */
-const MAX_PASSO = BASE_LINK_DISTANCE * 2
+const MAX_STEP = BASE_LINK_DISTANCE * 2
 
-/** Iterações da simulação por tamanho de grupo — grafo grande assenta com
- *  menos, e cada iteração dele custa muito mais. */
-function iteracoesDe(n: number): number {
-  if (n <= GRADE_MINIMA) return ITERATIONS
+/** Simulation iterations per group size — a large graph settles with
+ *  fewer, and each iteration of it costs much more. */
+function iterationsFor(n: number): number {
+  if (n <= GRID_MIN_SIZE) return ITERATIONS
   if (n <= 1500) return 240
   return 160
 }
 
 /**
- * Grade uniforme sobre as posições, em formato CSR (um array de índices e um
- * de deslocamentos). Sem array por célula: com milhares de nós, alocar e
- * coletar milhares de arrays a cada varredura custaria mais que a própria
- * conta.
+ * Uniform grid over the positions, in CSR format (one array of indices and one
+ * of offsets). No array per cell: with thousands of nodes, allocating and
+ * collecting thousands of arrays on every sweep would cost more than the
+ * calculation itself.
  */
-interface Grade {
+interface Grid {
   cell: number
   minX: number
   minY: number
   cols: number
   rows: number
-  /** Deslocamento inicial de cada célula em `itens` (tamanho cols*rows+1). */
-  inicio: Int32Array
-  /** Índices dos nós, agrupados por célula. */
-  itens: Int32Array
+  /** Starting offset of each cell in `items` (size cols*rows+1). */
+  start: Int32Array
+  /** Indices of the nodes, grouped by cell. */
+  items: Int32Array
 }
 
-function montarGrade(list: SimNode[], celulaMinima: number): Grade {
+function buildGrid(list: SimNode[], minCell: number): Grid {
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity
@@ -566,58 +566,58 @@ function montarGrade(list: SimNode[], celulaMinima: number): Grade {
     if (node.y < minY) minY = node.y
     if (node.y > maxY) maxY = node.y
   }
-  const largura = Math.max(1, maxX - minX)
-  const altura = Math.max(1, maxY - minY)
-  // Teto de células: num grupo espalhado a grade fina gastaria mais memória
-  // que o próprio grupo. Dobrar a célula só aumenta a vizinhança varrida — o
-  // corte por distância continua sendo quem decide de verdade.
-  let cell = celulaMinima
-  const teto = 8 * list.length + 1024
-  while ((Math.ceil(largura / cell) + 1) * (Math.ceil(altura / cell) + 1) > teto) cell *= 2
-  const cols = Math.ceil(largura / cell) + 1
-  const rows = Math.ceil(altura / cell) + 1
+  const width = Math.max(1, maxX - minX)
+  const height = Math.max(1, maxY - minY)
+  // Cell ceiling: in a spread-out group a fine grid would spend more memory
+  // than the group itself. Doubling the cell only enlarges the neighborhood swept — the
+  // distance cut is still what really decides.
+  let cell = minCell
+  const cap = 8 * list.length + 1024
+  while ((Math.ceil(width / cell) + 1) * (Math.ceil(height / cell) + 1) > cap) cell *= 2
+  const cols = Math.ceil(width / cell) + 1
+  const rows = Math.ceil(height / cell) + 1
 
   const total = cols * rows
-  const inicio = new Int32Array(total + 1)
-  const celulaDe = new Int32Array(list.length)
+  const start = new Int32Array(total + 1)
+  const cellOf = new Int32Array(list.length)
   for (let i = 0; i < list.length; i++) {
     const node = list[i]
     const c = Math.min(cols - 1, Math.max(0, Math.floor((node.x - minX) / cell)))
     const l = Math.min(rows - 1, Math.max(0, Math.floor((node.y - minY) / cell)))
     const cel = l * cols + c
-    celulaDe[i] = cel
-    inicio[cel + 1]++
+    cellOf[i] = cel
+    start[cel + 1]++
   }
-  for (let cel = 0; cel < total; cel++) inicio[cel + 1] += inicio[cel]
-  const itens = new Int32Array(list.length)
-  const cursor = inicio.slice(0, total)
-  for (let i = 0; i < list.length; i++) itens[cursor[celulaDe[i]]++] = i
-  return { cell, minX, minY, cols, rows, inicio, itens }
+  for (let cel = 0; cel < total; cel++) start[cel + 1] += start[cel]
+  const items = new Int32Array(list.length)
+  const cursor = start.slice(0, total)
+  for (let i = 0; i < list.length; i++) items[cursor[cellOf[i]]++] = i
+  return { cell, minX, minY, cols, rows, start, items }
 }
 
-/** Índices dos nós nas 9 células ao redor de `i`, escritos em `buffer`. */
-function vizinhosDe(grade: Grade, list: SimNode[], i: number, buffer: Int32Array): number {
+/** Indices of the nodes in the 9 cells around `i`, written into `buffer`. */
+function neighborsOf(grid: Grid, list: SimNode[], i: number, buffer: Int32Array): number {
   const node = list[i]
-  const c = Math.min(grade.cols - 1, Math.max(0, Math.floor((node.x - grade.minX) / grade.cell)))
-  const l = Math.min(grade.rows - 1, Math.max(0, Math.floor((node.y - grade.minY) / grade.cell)))
+  const c = Math.min(grid.cols - 1, Math.max(0, Math.floor((node.x - grid.minX) / grid.cell)))
+  const l = Math.min(grid.rows - 1, Math.max(0, Math.floor((node.y - grid.minY) / grid.cell)))
   const c0 = c > 0 ? c - 1 : 0
-  const c1 = c + 1 < grade.cols ? c + 1 : grade.cols - 1
+  const c1 = c + 1 < grid.cols ? c + 1 : grid.cols - 1
   const l0 = l > 0 ? l - 1 : 0
-  const l1 = l + 1 < grade.rows ? l + 1 : grade.rows - 1
-  let qtd = 0
+  const l1 = l + 1 < grid.rows ? l + 1 : grid.rows - 1
+  let count = 0
   for (let ll = l0; ll <= l1; ll++) {
-    const base = ll * grade.cols
+    const base = ll * grid.cols
     for (let cc = c0; cc <= c1; cc++) {
       const cel = base + cc
-      const fim = grade.inicio[cel + 1]
-      for (let p = grade.inicio[cel]; p < fim; p++) buffer[qtd++] = grade.itens[p]
+      const end = grid.start[cel + 1]
+      for (let p = grid.start[cel]; p < end; p++) buffer[count++] = grid.items[p]
     }
   }
-  return qtd
+  return count
 }
 
-/** Lado da célula que garante achar toda caixa capaz de encavalar com outra. */
-function celulaDeSeparacao(list: SimNode[]): number {
+/** Cell side that guarantees finding every box able to pile up with another. */
+function separationCellSize(list: SimNode[]): number {
   let maxHalfW = 0
   let maxTop = 0
   let maxBottom = 0
@@ -627,12 +627,12 @@ function celulaDeSeparacao(list: SimNode[]): number {
     if (box.top > maxTop) maxTop = box.top
     if (box.bottom > maxBottom) maxBottom = box.bottom
   }
-  // A folga de 1.5 cobre o quanto um nó anda DENTRO de uma varredura: a grade
-  // é montada no começo dela e as posições mudam enquanto ela roda.
+  // The 1.5 slack covers how far a node moves WITHIN a sweep: the grid
+  // is built at its start and the positions change while it runs.
   return Math.max(2 * maxHalfW + MIN_GAP, maxTop + maxBottom + MIN_GAP) * 1.5
 }
 
-const relogio: () => number =
+const clock: () => number =
   typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? () => performance.now()
     : () => Date.now()
@@ -643,119 +643,119 @@ interface SimLink {
   rest: number
 }
 
-type FaseGrupo = 'sim' | 'sep' | 'push' | 'ok'
+type GroupPhase = 'simulation' | 'separation' | 'push' | 'done'
 
-interface GrupoSim {
+interface SimGroup {
   id: string
   list: SimNode[]
   links: SimLink[]
-  fase: FaseGrupo
-  /** Grupo grande: varreduras por grade em vez de todos os pares. */
-  usaGrade: boolean
-  /** Iterações da simulação — menos nos grupos grandes. */
-  iteracoes: number
-  /** Passes de separação e rodadas de desempate deste grupo. */
+  phase: GroupPhase
+  /** Large group: grid sweeps instead of all pairs. */
+  usesGrid: boolean
+  /** Simulation iterations — fewer in large groups. */
+  iterations: number
+  /** Separation passes and tie-break rounds of this group. */
   passes: number
-  rodadas: number
-  /** Grade da varredura em curso, refeita a cada volta. */
-  grade: Grade | null
-  /** Lado da célula usado nas fases de separação. */
-  celulaSep: number
+  rounds: number
+  /** Grid of the sweep in progress, rebuilt on every round. */
+  grid: Grid | null
+  /** Cell side used in the separation phases. */
+  separationCell: number
   /**
-   * Escala do grupo. A distância natural entre pai e filho (90) é MENOR que a
-   * largura de uma caixa de rótulo (até 190): num grupo grande a simulação
-   * entrega um emaranhado, e a separação recebe centenas de vizinhos por nó
-   * para desfazer sozinha. Esticar molas, semente e alcance da repulsão pelo
-   * tamanho médio da caixa faz a simulação já entregar o espaçamento certo —
-   * é a diferença entre a grade valer a pena e não valer.
+   * Scale of the group. The natural parent-child distance (90) is SMALLER than the
+   * width of a label box (up to 190): in a large group the simulation
+   * delivers a tangle, and the separation receives hundreds of neighbors per node
+   * to undo on its own. Stretching springs, seed and repulsion reach by the
+   * average box size makes the simulation already deliver the right spacing —
+   * it is the difference between the grid being worth it and not.
    */
-  escala: number
-  /** Alcance da repulsão ao quadrado e força, escalados junto. */
+  scale: number
+  /** Repulsion reach squared and force, scaled along. */
   cutoff2: number
-  repulsao: number
-  /** Rascunho dos vizinhos — um por grupo, reaproveitado a cada consulta. */
+  repulsion: number
+  /** Neighbor scratch buffer — one per group, reused on every query. */
   buffer: Int32Array
-  /** Deslocamento somado na iteração em curso, para detectar convergência. */
-  movimento: number
-  /** Resfriamento da simulação — sobrevive entre fatias. */
+  /** Displacement summed in the iteration in progress, to detect convergence. */
+  movement: number
+  /** Cooling of the simulation — survives across slices. */
   alpha: number
-  /** Iteração (sim), passe (sep) ou rodada (push) em curso. */
-  volta: number
-  /** Índice do laço externo onde a varredura parou. */
+  /** Iteration (sim), pass (sep) or round (push) in progress. */
+  turn: number
+  /** Index of the outer loop where the sweep stopped. */
   cursor: number
-  /** Alguém se moveu na varredura em curso? Quando ninguém se move, a fase
-   *  termina antes do limite — é o `break` das versões de uma tacada só. */
-  ativo: boolean
+  /** Did anyone move in the sweep in progress? When nobody moves, the phase
+   *  ends before the limit — it is the `break` of the single-go versions. */
+  active: boolean
 }
 
 /**
- * Unidade de progresso: um nó varrido. Serve para os dois caminhos — dentro de
- * um grupo o custo por nó é uniforme, então a barra anda linear.
+ * Unit of progress: one node swept. It serves both paths — inside a
+ * group the cost per node is uniform, so the bar moves linearly.
  */
-function varredurasDe(n: number): number {
-  return iteracoesDe(n) + passesDe(n) + rodadasDe(n)
+function sweepsFor(n: number): number {
+  return iterationsFor(n) + separationPassesFor(n) + roundsFor(n)
 }
 
 /**
- * Penetração das caixas de a e b nos dois eixos (incluindo a folga mínima), ou
- * null quando elas não se tocam.
+ * Penetration of the boxes of a and b on both axes (including the minimum slack), or
+ * null when they do not touch.
  *
- * O objeto de retorno é REAPROVEITADO: a separação chama isto milhões de vezes
- * e alocar três objetos por chamada — as duas caixas e o resultado — era a
- * conta mais cara da fase. Quem chama lê os dois campos na hora e não guarda a
- * referência.
+ * The return object is REUSED: the separation calls this millions of times
+ * and allocating three objects per call — the two boxes and the result — was the
+ * most expensive calculation of the phase. Callers read the two fields right away and do not keep the
+ * reference.
  */
-const penetracao = { x: 0, y: 0 }
+const penetration = { x: 0, y: 0 }
 function overlapOf(a: SimNode, b: SimNode): { x: number; y: number } | null {
   const x = a.halfW + b.halfW + MIN_GAP - Math.abs(b.x - a.x)
   if (x <= 0) return null
-  // Vertical assimétrico: a caixa desce mais do que sobe (o rótulo fica abaixo
-  // do círculo), então o teste depende de quem está por cima.
+  // Asymmetric vertical: the box goes down more than up (the label sits below
+  // the circle), so the test depends on who is on top.
   const dy = b.y - a.y
   const y = dy >= 0 ? a.bottom + b.top + MIN_GAP - dy : b.bottom + a.top + MIN_GAP + dy
   if (y <= 0) return null
-  penetracao.x = x
-  penetracao.y = y
-  return penetracao
+  penetration.x = x
+  penetration.y = y
+  return penetration
 }
 
 // ---------------------------------------------------------------------------
-// Montagem do canvas
+// Canvas assembly
 // ---------------------------------------------------------------------------
 
 export interface LayoutOptions {
-  /** Ids com a subárvore recolhida. */
+  /** Ids with the collapsed subtree. */
   collapsedIds?: Set<string>
-  /** Desenha arestas deduzidas por tags (sempre dentro do mesmo grupo). */
+  /** Draws edges inferred from tags (always within the same group). */
   inferEdges?: boolean
   /**
-   * Rótulo efetivamente desenhado, quando a plataforma traduz o texto (as
-   * áreas aparecem no idioma da UI). Só afeta a largura usada na colisão.
+   * Label actually drawn, when the platform translates the text (the
+   * areas appear in the UI language). It only affects the width used in the collision.
    */
   labelOf?: (memory: Memory, isRoot: boolean) => string
 }
 
 /**
- * Layout em andamento — o mesmo trabalho de `layoutMemoryGraph`, só que
- * entregue em fatias para quem não pode bloquear a thread.
+ * Layout in progress — the same work as `layoutMemoryGraph`, only
+ * delivered in slices to whoever cannot block the thread.
  */
 export interface MemoryGraphJob {
-  /** Trabalha por até `budgetMs` e devolve `true` quando terminou. Com
-   *  `Infinity` roda tudo numa chamada só. */
+  /** Works for up to `budgetMs` and returns `true` when finished. With
+   *  `Infinity` it runs everything in a single call. */
   step(budgetMs: number): boolean
   readonly done: boolean
-  /** 0..1, monotônico — alimenta a barra de progresso. */
+  /** 0..1, monotonic — feeds the progress bar. */
   readonly progress: number
   /**
-   * Layout com as posições ATUAIS. Enquanto `done` for falso ele é parcial: é
-   * o que permite mostrar o grafo se assentando em vez de um spinner opaco.
+   * Layout with the CURRENT positions. While `done` is false it is partial: it is
+   * what allows showing the graph settling instead of an opaque spinner.
    */
   snapshot(): MemoryLayout
 }
 
 /**
- * Monta o canvas inteiro: um grafo orgânico por projeto, empacotados lado a
- * lado sem se tocarem — em fatias, para caber entre dois frames.
+ * Assembles the whole canvas: one organic graph per project, packed side by
+ * side without touching — in slices, to fit between two frames.
  */
 export function createMemoryGraphJob(
   pool: Memory[],
@@ -775,41 +775,41 @@ export function createMemoryGraphJob(
     if (label && !labels.has(gid)) labels.set(gid, label)
   }
 
-  // Projetos maiores primeiro; o grupo global fecha a lista.
+  // Larger projects first; the global group closes the list.
   const groupIds = [...byGroup.keys()].sort((a, b) => {
     if (a === GLOBAL_GROUP) return 1
     if (b === GLOBAL_GROUP) return -1
     return byGroup.get(b)!.length - byGroup.get(a)!.length
   })
 
-  const grupos: GrupoSim[] = []
+  const simGroups: SimGroup[] = []
   const treeEdges: LayoutEdge[] = []
 
-  // O progresso é dominado pelas varreduras de pares, então o peso de cada
-  // grupo é o número de pares vezes as varreduras que ele ainda vai levar. A
-  // preparação entra fora da conta: ao lado disso ela é ruído.
-  let totalUnidades = 0
+  // Progress is dominated by the pair sweeps, so the weight of each
+  // group is the number of pairs times the sweeps it still has to take. The
+  // preparation is out of the count: next to that it is noise.
+  let totalUnits = 0
   for (const gid of groupIds) {
     const n = byGroup.get(gid)!.length
-    totalUnidades += n * varredurasDe(n)
+    totalUnits += n * sweepsFor(n)
   }
-  totalUnidades = Math.max(1, totalUnidades)
-  let unidades = 0
+  totalUnits = Math.max(1, totalUnits)
+  let units = 0
 
-  let fase: 'prep' | 'grupos' | 'done' = 'prep'
+  let phase: 'prep' | 'groups' | 'done' = 'prep'
   let prepIdx = 0
-  let grupoIdx = 0
+  let simGroupIdx = 0
 
-  /** Árvore, semente e molas de um grupo — tudo que a simulação precisa. */
-  function prepararGrupo(gid: string): GrupoSim | null {
+  /** Tree, seed and springs of a group — everything the simulation needs. */
+  function prepareGroup(gid: string): SimGroup | null {
     const members = byGroup.get(gid)!
     const shape = spanningTree(members)
     const hidden = hiddenDescendants(shape, collapsedIds)
     const floatingIds = new Set(shape.floating)
 
-    // Profundidade e tamanho de subárvore — alimentam a semeadura e a repulsão.
-    // Sem raiz (grupo totalmente desconectado) não há travessia: todo mundo
-    // flutua e recebe a profundidade default logo abaixo.
+    // Depth and subtree size — they feed the seeding and the repulsion.
+    // Without a root (fully disconnected group) there is no traversal: everyone
+    // floats and gets the default depth right below.
     const depth = new Map<string, number>(shape.rootId ? [[shape.rootId, 0]] : [])
     const order: string[] = shape.rootId ? [shape.rootId] : []
     for (let i = 0; i < order.length; i++) {
@@ -832,8 +832,8 @@ export function createMemoryGraphJob(
       if (hidden.has(memory.id)) continue
       const isRoot = memory.id === shape.rootId
       const children = shape.childrenOf.get(memory.id) ?? []
-      const raio = nodeRadius(memory, isRoot)
-      const meiaLargura = labelHalfWidthOf(labelOf(memory, isRoot))
+      const radius = nodeRadius(memory, isRoot)
+      const halfLabelWidth = labelHalfWidthOf(labelOf(memory, isRoot))
       nodes.set(memory.id, {
         memory,
         x: 0,
@@ -847,38 +847,38 @@ export function createMemoryGraphJob(
         childCount: children.length,
         collapsed: collapsedIds.has(memory.id),
         groupId: gid,
-        r: raio,
-        labelHalfWidth: meiaLargura,
+        r: radius,
+        labelHalfWidth: halfLabelWidth,
         subtreeSize: subtreeSize.get(memory.id) ?? 1,
-        halfW: Math.max(raio, meiaLargura),
-        top: raio,
-        bottom: raio + LABEL_OFFSET + LABEL_HEIGHT,
+        halfW: Math.max(radius, halfLabelWidth),
+        top: radius,
+        bottom: radius + LABEL_OFFSET + LABEL_HEIGHT,
       })
     }
     if (nodes.size === 0) return null
 
-    const lista = [...nodes.values()]
-    const usaGrade = lista.length > GRADE_MINIMA
-    // Caixa média do grupo (largura cheia + folga) contra a distância natural
-    // de uma aresta: o quociente é o quanto o grupo precisa esticar.
-    let somaHalfW = 0
-    for (const node of lista) somaHalfW += node.halfW
-    const caixaMedia = (2 * somaHalfW) / lista.length + MIN_GAP
-    const escala = usaGrade ? Math.max(1, caixaMedia / BASE_LINK_DISTANCE) : 1
+    const list = [...nodes.values()]
+    const usesGrid = list.length > GRID_MIN_SIZE
+    // Average box of the group (full width + slack) against the natural distance
+    // of an edge: the quotient is how much the group needs to stretch.
+    let halfWSum = 0
+    for (const node of list) halfWSum += node.halfW
+    const averageBox = (2 * halfWSum) / list.length + MIN_GAP
+    const scale = usesGrid ? Math.max(1, averageBox / BASE_LINK_DISTANCE) : 1
 
-    seedPositions(nodes, shape, makeRng(seedOf(gid)), escala)
+    seedPositions(nodes, shape, makeRng(seedOf(gid)), scale)
 
     const links: SimLink[] = []
     for (const node of nodes.values()) {
       const parent = node.parentId ? nodes.get(node.parentId) : undefined
       if (!parent) continue
-      // Pai com muitos filhos precisa de mais raio para todos caberem ao redor.
+      // A parent with many children needs a larger radius for all to fit around.
       const siblings = parent.childCount || 1
       const rest =
         BASE_LINK_DISTANCE *
         (0.85 + Math.sqrt(siblings) * 0.22) *
         (1 + Math.min(node.depth, 5) * 0.06)
-      links.push({ a: parent, b: node, rest: rest * escala })
+      links.push({ a: parent, b: node, rest: rest * scale })
       treeEdges.push({
         from: parent.memory.id,
         to: node.memory.id,
@@ -889,34 +889,34 @@ export function createMemoryGraphJob(
 
     return {
       id: gid,
-      list: lista,
+      list: list,
       links,
-      fase: 'sim',
-      usaGrade,
-      iteracoes: iteracoesDe(lista.length),
-      passes: passesDe(lista.length),
-      rodadas: rodadasDe(lista.length),
-      grade: null,
-      celulaSep: celulaDeSeparacao(lista),
-      escala,
-      // A força cresce com o quadrado da distância para o equilíbrio entre
-      // mola e repulsão cair no mesmo ponto, só que na escala nova.
-      cutoff2: (CUTOFF * escala) ** 2,
-      repulsao: REPULSION * escala * escala,
-      buffer: new Int32Array(lista.length),
-      movimento: 0,
+      phase: 'simulation',
+      usesGrid,
+      iterations: iterationsFor(list.length),
+      passes: separationPassesFor(list.length),
+      rounds: roundsFor(list.length),
+      grid: null,
+      separationCell: separationCellSize(list),
+      scale,
+      // The force grows with the square of the distance so the balance between
+      // spring and repulsion lands at the same point, only on the new scale.
+      cutoff2: (CUTOFF * scale) ** 2,
+      repulsion: REPULSION * scale * scale,
+      buffer: new Int32Array(list.length),
+      movement: 0,
       alpha: 1,
-      volta: 0,
+      turn: 0,
       cursor: 0,
-      ativo: false,
+      active: false,
     }
   }
 
   /**
-   * Repulsão de `i` contra todos os pares seguintes — o caminho exato, com o
-   * empurrão aplicado nos dois nós de uma vez. Devolve os pares avaliados.
+   * Repulsion of `i` against all following pairs — the exact path, with the
+   * push applied to both nodes at once. Returns the pairs evaluated.
    */
-  function repulsaoExata(list: SimNode[], i: number): number {
+  function repulsionExact(list: SimNode[], i: number): number {
     const n = list.length
     const a = list[i]
     for (let j = i + 1; j < n; j++) {
@@ -925,12 +925,12 @@ export function createMemoryGraphJob(
       let dy = b.y - a.y
       let d2 = dx * dx + dy * dy
       if (d2 < 1) {
-        // Coincidentes: desempata com um empurrão determinístico.
+        // Coincident: tie-break with a deterministic push.
         dx = (i % 7) - 3 + 0.5
         dy = (j % 7) - 3 + 0.5
         d2 = dx * dx + dy * dy
       }
-      // Nós de ramos maiores empurram mais forte, abrindo espaço para eles.
+      // Nodes of larger branches push harder, opening room for them.
       const strength =
         (REPULSION * (1 + Math.log2(1 + a.subtreeSize + b.subtreeSize) * 0.35)) / d2
       const d = Math.sqrt(d2)
@@ -945,15 +945,15 @@ export function createMemoryGraphJob(
   }
 
   /**
-   * Repulsão de `i` contra a vizinhança da grade — só o que está dentro do
-   * corte. Aqui a força é aplicada SÓ em `i`: cada par acaba avaliado duas
-   * vezes, uma de cada lado, e a soma das forças é a mesma do caminho exato.
+   * Repulsion of `i` against the grid neighborhood — only what is inside the
+   * cut. Here the force is applied ONLY to `i`: each pair ends up evaluated twice,
+   * once from each side, and the sum of the forces is the same as on the exact path.
    */
-  function repulsaoVizinha(g: GrupoSim, i: number): number {
+  function repulsionNeighbor(g: SimGroup, i: number): number {
     const { list, buffer } = g
     const a = list[i]
-    const qtd = vizinhosDe(g.grade!, list, i, buffer)
-    for (let p = 0; p < qtd; p++) {
+    const count = neighborsOf(g.grid!, list, i, buffer)
+    for (let p = 0; p < count; p++) {
       const j = buffer[p]
       if (j === i) continue
       const b = list[j]
@@ -962,49 +962,49 @@ export function createMemoryGraphJob(
       let d2 = dx * dx + dy * dy
       if (d2 > g.cutoff2) continue
       if (d2 < 1) {
-        // Coincidentes: mesmo desempate do caminho exato, orientado do par
-        // menor para o maior, para os dois lados se empurrarem em sentidos
-        // opostos em vez de na mesma direção.
-        const menor = i < j ? i : j
-        const maior = i < j ? j : i
-        dx = (menor % 7) - 3 + 0.5
-        dy = (maior % 7) - 3 + 0.5
-        if (i !== menor) {
+        // Coincident: same tie-break as the exact path, oriented from the
+        // smaller pair to the larger, so both sides push in opposite
+        // opposite directions instead of the same one.
+        const lo = i < j ? i : j
+        const hi = i < j ? j : i
+        dx = (lo % 7) - 3 + 0.5
+        dy = (hi % 7) - 3 + 0.5
+        if (i !== lo) {
           dx = -dx
           dy = -dy
         }
         d2 = dx * dx + dy * dy
       }
       const strength =
-        (g.repulsao * (1 + Math.log2(1 + a.subtreeSize + b.subtreeSize) * 0.35)) / d2
+        (g.repulsion * (1 + Math.log2(1 + a.subtreeSize + b.subtreeSize) * 0.35)) / d2
       const d = Math.sqrt(d2)
       a.vx -= (dx / d) * strength
       a.vy -= (dy / d) * strength
     }
-    return qtd
+    return count
   }
 
-  /** Molas + repulsão + gravidade, com resfriamento progressivo. */
-  function simular(g: GrupoSim, estourou: () => boolean): boolean {
+  /** Springs + repulsion + gravity, with progressive cooling. */
+  function simulate(g: SimGroup, overBudget: () => boolean): boolean {
     const { list, links } = g
     const n = list.length
-    const gravidade = g.usaGrade ? GRAVITY_GRADE : GRAVITY
-    while (g.volta < g.iteracoes) {
-      // A grade vale por uma iteração: na seguinte as posições já são outras.
-      // Montá-la custa O(n), contra os O(n · vizinhos) da varredura.
-      if (g.usaGrade && g.cursor === 0) {
-        g.grade = montarGrade(list, CUTOFF * g.escala)
-        g.movimento = 0
+    const gravity = g.usesGrid ? GRID_GRAVITY : GRAVITY
+    while (g.turn < g.iterations) {
+      // The grid is worth one iteration: in the next one the positions are already different.
+      // Building it costs O(n), against the O(n · neighbors) of the sweep.
+      if (g.usesGrid && g.cursor === 0) {
+        g.grid = buildGrid(list, CUTOFF * g.scale)
+        g.movement = 0
       }
-      // Repulsão — o laço externo é o ponto de retomada.
+      // Repulsion — the outer loop is the resume point.
       while (g.cursor < n) {
-        let restante = PARES_POR_CHECAGEM
-        while (g.cursor < n && restante > 0) {
+        let remaining = PAIRS_PER_CHECK
+        while (g.cursor < n && remaining > 0) {
           const i = g.cursor++
-          restante -= g.usaGrade ? repulsaoVizinha(g, i) : repulsaoExata(list, i)
-          unidades++
+          remaining -= g.usesGrid ? repulsionNeighbor(g, i) : repulsionExact(list, i)
+          units++
         }
-        if (estourou()) return false
+        if (overBudget()) return false
       }
 
       for (const link of links) {
@@ -1022,80 +1022,80 @@ export function createMemoryGraphJob(
 
       for (const node of list) {
         if (node.isRoot) {
-          // A raiz fica presa no centro: é o âncora visual do grupo.
+          // The root stays pinned at the center: it is the visual anchor of the group.
           node.vx = 0
           node.vy = 0
           node.x = 0
           node.y = 0
           continue
         }
-        node.vx -= node.x * gravidade
-        node.vy -= node.y * gravidade
+        node.vx -= node.x * gravity
+        node.vy -= node.y * gravity
         let px = node.vx * g.alpha
         let py = node.vy * g.alpha
-        if (g.usaGrade) {
-          const passo = Math.hypot(px, py)
-          const teto = MAX_PASSO * g.escala
-          if (passo > teto) {
-            // Corta o passo E a velocidade: só encurtar o passo deixaria a
-            // energia guardada na velocidade para estourar na iteração seguinte.
-            const freio = teto / passo
-            px *= freio
-            py *= freio
-            node.vx *= freio
-            node.vy *= freio
+        if (g.usesGrid) {
+          const step = Math.hypot(px, py)
+          const cap = MAX_STEP * g.scale
+          if (step > cap) {
+            // Cuts the step AND the velocity: only shortening the step would leave the
+            // energy stored in the velocity to blow up in the next iteration.
+            const brake = cap / step
+            px *= brake
+            py *= brake
+            node.vx *= brake
+            node.vy *= brake
           }
         }
         node.x += px
         node.y += py
-        if (g.usaGrade) g.movimento += Math.abs(px) + Math.abs(py)
-        // Amortecimento: sem ele o sistema oscila em vez de assentar.
+        if (g.usesGrid) g.movement += Math.abs(px) + Math.abs(py)
+        // Damping: without it the system oscillates instead of settling.
         node.vx *= 0.6
         node.vy *= 0.6
       }
 
       g.alpha *= 1 - ALPHA_DECAY
-      g.volta++
+      g.turn++
       g.cursor = 0
-      // Assentou: as iterações que faltam não mexem mais no desenho, e num
-      // grupo grande cada uma delas custa caro.
-      // O limiar acompanha a escala do grupo: num grupo esticado, "parado" é
-      // proporcionalmente maior em unidades de mundo.
-      if (g.usaGrade && g.movimento / n < CONVERGIU * g.escala) {
-        unidades += (g.iteracoes - g.volta) * n
+      // Settled: the remaining iterations no longer change the drawing, and in a
+      // large group each of them is expensive.
+      // The threshold follows the scale of the group: in a stretched group, "stopped" is
+      // proportionally larger in world units.
+      if (g.usesGrid && g.movement / n < CONVERGED * g.scale) {
+        units += (g.iterations - g.turn) * n
         return true
       }
-      if (estourou()) return false
+      if (overBudget()) return false
     }
     return true
   }
 
   /**
-   * Passe de separação — a regra dura do espaço mínimo. Resolve sobreposição
-   * das CAIXAS DE RÓTULO empurrando o par pelo eixo de menor penetração, que é
-   * o deslocamento mínimo capaz de abrir a folga.
+   * Separation pass — the hard rule of minimum space. Resolves overlap of the
+   * LABEL BOXES by pushing the pair along the axis of least penetration, which is
+   * the minimum displacement able to open the slack.
    */
-  function separar(g: GrupoSim, estourou: () => boolean): boolean {
+  function separate(g: SimGroup, overBudget: () => boolean): boolean {
     const { list, buffer } = g
     const n = list.length
-    while (g.volta < g.passes) {
-      if (g.usaGrade && g.cursor === 0) g.grade = montarGrade(list, g.celulaSep)
+    while (g.turn < g.passes) {
+      if (g.usesGrid && g.cursor === 0) g.grid = buildGrid(list, g.separationCell)
       while (g.cursor < n) {
-        let restante = PARES_POR_CHECAGEM
-        while (g.cursor < n && restante > 0) {
+        let remaining = PAIRS_PER_CHECK
+        while (g.cursor < n && remaining > 0) {
           const i = g.cursor++
           const a = list[i]
-          // Na grade só as 9 células ao redor entram; no caminho exato, todos
-          // os índices seguintes. Nos dois casos cada par é tratado uma vez só
-          // e na mesma ordem.
-          const qtd = g.usaGrade ? vizinhosDe(g.grade!, list, i, buffer) : n
-          for (let p = g.usaGrade ? 0 : i + 1; p < qtd; p++) {
-            const j = g.usaGrade ? buffer[p] : p
+          // On the grid only the 9 cells around it come in; on the exact path, all
+          // following indices. In both cases each pair is handled only once
+          // and in the same order.
+          const count = g.usesGrid ? neighborsOf(g.grid!, list, i, buffer) : n
+          for (let p = g.usesGrid ? 0 : i + 1; p < count; p++) {
+            const j = g.usesGrid ? buffer[p] : p
             if (j <= i) continue
             const b = list[j]
             const overlap = overlapOf(a, b)
             if (!overlap) continue
-            g.ativo = true
+            g.active = true
             if (overlap.x < overlap.y) {
               const dir = b.x >= a.x ? 1 : -1
               const push = (overlap.x / 2) * dir
@@ -1108,52 +1108,52 @@ export function createMemoryGraphJob(
               if (!b.isRoot) b.y += push
             }
           }
-          restante -= qtd
-          unidades++
+          remaining -= count
+          units++
         }
-        if (estourou()) return false
+        if (overBudget()) return false
       }
-      const moveu = g.ativo
-      g.ativo = false
+      const moved = g.active
+      g.active = false
       g.cursor = 0
-      g.volta++
-      if (!moveu) {
-        // Assentou antes do limite: o que sobrou da fase entra no progresso de
-        // uma vez, senão a barra ficaria presa esperando um trabalho que não
-        // vai acontecer.
-        unidades += (g.passes - g.volta) * n
+      g.turn++
+      if (!moved) {
+        // Settled before the limit: what is left of the phase enters the progress
+        // at once, otherwise the bar would stay stuck waiting for work that is not
+        // is going to happen.
+        units += (g.passes - g.turn) * n
         return true
       }
-      if (estourou()) return false
+      if (overBudget()) return false
     }
     return true
   }
 
   /**
-   * Rede de segurança: se depois da separação ainda houver caixa encavalada
-   * (vizinhança saturada), empurra o nó mais profundo radialmente para fora até
-   * abrir espaço. É o "vai para um nível mais distante" literal.
+   * Safety net: if after the separation there is still a piled-up box
+   * (saturated neighborhood), pushes the deepest node radially outward until
+   * opening room. It is the literal "go one level farther".
    */
-  function empurrar(g: GrupoSim, estourou: () => boolean): boolean {
+  function pushApart(g: SimGroup, overBudget: () => boolean): boolean {
     const { list, buffer } = g
     const n = list.length
-    while (g.volta < g.rodadas) {
-      if (g.usaGrade && g.cursor === 0) g.grade = montarGrade(list, g.celulaSep)
+    while (g.turn < g.rounds) {
+      if (g.usesGrid && g.cursor === 0) g.grid = buildGrid(list, g.separationCell)
       while (g.cursor < n) {
-        let restante = PARES_POR_CHECAGEM
-        while (g.cursor < n && restante > 0) {
+        let remaining = PAIRS_PER_CHECK
+        while (g.cursor < n && remaining > 0) {
           const i = g.cursor++
           const a = list[i]
-          const qtd = g.usaGrade ? vizinhosDe(g.grade!, list, i, buffer) : n
-          for (let p = g.usaGrade ? 0 : i + 1; p < qtd; p++) {
-            const j = g.usaGrade ? buffer[p] : p
+          const count = g.usesGrid ? neighborsOf(g.grid!, list, i, buffer) : n
+          for (let p = g.usesGrid ? 0 : i + 1; p < count; p++) {
+            const j = g.usesGrid ? buffer[p] : p
             if (j <= i) continue
             const b = list[j]
             const overlap = overlapOf(a, b)
             if (!overlap) continue
-            g.ativo = true
-            // Cede quem tem menos vínculo: flutuante antes de quem está na
-            // árvore e, entre dois da árvore, o mais profundo. A raiz nunca se
+            g.active = true
+            // The one with fewer links gives way: floating before whoever is in the
+            // tree and, between two from the tree, the deepest. The root never
             // move.
             const rank = (node: SimNode) => (node.isRoot ? -1 : node.floating ? 1e6 : node.depth)
             const victim = a.isRoot ? b : b.isRoot ? a : rank(a) >= rank(b) ? a : b
@@ -1162,62 +1162,62 @@ export function createMemoryGraphJob(
             victim.x += (victim.x / dist) * step
             victim.y += (victim.y / dist) * step
           }
-          restante -= qtd
-          unidades++
+          remaining -= count
+          units++
         }
-        if (estourou()) return false
+        if (overBudget()) return false
       }
-      const colidiu = g.ativo
-      g.ativo = false
+      const collided = g.active
+      g.active = false
       g.cursor = 0
-      g.volta++
-      if (!colidiu) {
-        unidades += (g.rodadas - g.volta) * n
+      g.turn++
+      if (!collided) {
+        units += (g.rounds - g.turn) * n
         return true
       }
-      if (estourou()) return false
+      if (overBudget()) return false
     }
     return true
   }
 
-  /** Avança um grupo pelas suas três fases; false quando o orçamento acabou. */
-  function passoGrupo(g: GrupoSim, estourou: () => boolean): boolean {
-    if (g.fase === 'sim') {
-      if (!simular(g, estourou)) return false
-      g.fase = 'sep'
-      g.volta = 0
+  /** Advances a group through its three phases; false when the budget ran out. */
+  function advanceGroup(g: SimGroup, overBudget: () => boolean): boolean {
+    if (g.phase === 'simulation') {
+      if (!simulate(g, overBudget)) return false
+      g.phase = 'separation'
+      g.turn = 0
       g.cursor = 0
-      g.ativo = false
+      g.active = false
     }
-    if (g.fase === 'sep') {
-      if (!separar(g, estourou)) return false
-      g.fase = 'push'
-      g.volta = 0
+    if (g.phase === 'separation') {
+      if (!separate(g, overBudget)) return false
+      g.phase = 'push'
+      g.turn = 0
       g.cursor = 0
-      g.ativo = false
+      g.active = false
     }
-    if (g.fase === 'push') {
-      if (!empurrar(g, estourou)) return false
-      g.fase = 'ok'
+    if (g.phase === 'push') {
+      if (!pushApart(g, overBudget)) return false
+      g.phase = 'done'
     }
     return true
   }
 
   /**
-   * Dispersão dos grupos + montagem do resultado. Empacotar em linhas produzia
-   * fileiras visíveis de projetos lado a lado; a espiral de ângulo áureo
-   * espalha as ilhas sem alinhamento perceptível, e a separação garante que
-   * duas nunca se toquem.
+   * Spreading of the groups + assembly of the result. Packing in rows produced
+   * visible rows of projects side by side; the golden-angle spiral
+   * spreads the islands with no perceptible alignment, and the separation guarantees that
+   * two never touch.
    *
-   * Roda a partir das posições atuais, então serve tanto para o resultado final
-   * quanto para as prévias do meio do caminho.
+   * It runs from the current positions, so it serves both the final result
+   * and the mid-way previews.
    */
-  function montar(): MemoryLayout {
+  function assemble(): MemoryLayout {
     const nodes: LayoutNode[] = []
     const groups: LayoutGroup[] = []
 
     interface Island {
-      grupo: GrupoSim
+      simGroup: SimGroup
       minX: number
       minY: number
       maxX: number
@@ -1226,13 +1226,13 @@ export function createMemoryGraphJob(
       cy: number
       radius: number
     }
-    // Raio do círculo que envolve o grupo — meia diagonal da sua caixa.
-    const islands: Island[] = grupos.map((grupo) => {
+    // Radius of the circle around the group — half the diagonal of its box.
+    const islands: Island[] = simGroups.map((simGroup) => {
       let minX = Infinity
       let minY = Infinity
       let maxX = -Infinity
       let maxY = -Infinity
-      for (const node of grupo.list) {
+      for (const node of simGroup.list) {
         const box = boxOf(node)
         minX = Math.min(minX, node.x - box.halfW)
         maxX = Math.max(maxX, node.x + box.halfW)
@@ -1240,7 +1240,7 @@ export function createMemoryGraphJob(
         maxY = Math.max(maxY, node.y + box.bottom)
       }
       return {
-        grupo,
+        simGroup,
         minX,
         minY,
         maxX,
@@ -1250,17 +1250,17 @@ export function createMemoryGraphJob(
         radius: Math.hypot(maxX - minX, maxY - minY) / 2,
       }
     })
-    // Maiores primeiro para ocuparem o miolo; o id desempata para o resultado
-    // não depender da ordem de iteração do Map.
-    islands.sort((a, b) => b.radius - a.radius || a.grupo.id.localeCompare(b.grupo.id))
+    // Larger first so they take the middle; the id breaks ties so the result
+    // does not depend on the Map iteration order.
+    islands.sort((a, b) => b.radius - a.radius || a.simGroup.id.localeCompare(b.simGroup.id))
 
     const groupRng = makeRng(seedOf('memory-graph-islands'))
     const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
     let reach = 0
     islands.forEach((island, i) => {
       if (i === 0) return
-      // O raio acumula o tamanho das ilhas já colocadas, então grupos grandes
-      // afastam os seguintes em vez de serem atropelados por eles.
+      // The radius accumulates the size of the islands already placed, so large groups
+      // push the following ones away instead of being run over by them.
       reach += island.radius * 0.85
       const angle = i * GOLDEN_ANGLE + groupRng() * 0.4
       island.cx = Math.cos(angle) * reach
@@ -1292,11 +1292,11 @@ export function createMemoryGraphJob(
     }
 
     for (const island of islands) {
-      // Desloca pelo CENTRO da caixa, não pelo canto — é o centro que a espiral
-      // posicionou.
+      // Shifts by the CENTER of the box, not by the corner — it is the center the spiral
+      // positioned it.
       const dx = island.cx - (island.minX + island.maxX) / 2
       const dy = island.cy - (island.minY + island.maxY) / 2
-      for (const node of island.grupo.list) {
+      for (const node of island.simGroup.list) {
         nodes.push({
           memory: node.memory,
           x: node.x + dx,
@@ -1313,8 +1313,8 @@ export function createMemoryGraphJob(
         })
       }
       groups.push({
-        id: island.grupo.id,
-        label: labels.get(island.grupo.id) ?? '',
+        id: island.simGroup.id,
+        label: labels.get(island.simGroup.id) ?? '',
         minX: island.minX + dx,
         minY: island.minY + dy,
         maxX: island.maxX + dx,
@@ -1328,12 +1328,12 @@ export function createMemoryGraphJob(
     )
     const seen = new Set(edges.map((e) => [e.from, e.to].sort().join(':')))
 
-    // Relações reais que a árvore não absorveu (segundo pai, "related").
+    // Real relations the tree did not absorb (second parent, "related").
     for (const node of nodes) {
       for (const rel of node.memory.relatedIds) {
         const other = visibleById.get(rel)
         if (!other) continue
-        // Ligação entre grupos é sempre ruído: projetos distintos não se cruzam.
+        // Linking between groups is always noise: distinct projects do not cross.
         if (other.groupId !== node.groupId) continue
         const key = [node.memory.id, rel].sort().join(':')
         if (seen.has(key)) continue
@@ -1387,67 +1387,67 @@ export function createMemoryGraphJob(
   }
 
   function step(budgetMs: number): boolean {
-    if (fase === 'done') return true
-    const inicio = relogio()
-    const estourou = () => relogio() - inicio >= budgetMs
+    if (phase === 'done') return true
+    const start = clock()
+    const overBudget = () => clock() - start >= budgetMs
 
     for (;;) {
-      if (fase === 'prep') {
+      if (phase === 'prep') {
         while (prepIdx < groupIds.length) {
-          const grupo = prepararGrupo(groupIds[prepIdx++])
-          if (grupo) grupos.push(grupo)
-          if (estourou()) return false
+          const simGroup = prepareGroup(groupIds[prepIdx++])
+          if (simGroup) simGroups.push(simGroup)
+          if (overBudget()) return false
         }
-        fase = 'grupos'
-        grupoIdx = 0
+        phase = 'groups'
+        simGroupIdx = 0
         continue
       }
-      if (grupoIdx >= grupos.length) {
-        fase = 'done'
+      if (simGroupIdx >= simGroups.length) {
+        phase = 'done'
         return true
       }
-      if (!passoGrupo(grupos[grupoIdx], estourou)) return false
-      grupoIdx++
+      if (!advanceGroup(simGroups[simGroupIdx], overBudget)) return false
+      simGroupIdx++
     }
   }
 
   return {
     step,
     get done() {
-      return fase === 'done'
+      return phase === 'done'
     },
     get progress() {
-      return fase === 'done' ? 1 : Math.min(0.999, unidades / totalUnidades)
+      return phase === 'done' ? 1 : Math.min(0.999, units / totalUnits)
     },
-    snapshot: montar,
+    snapshot: assemble,
   }
 }
 
 /**
- * Layout completo numa chamada — a forma síncrona, para quem pode bloquear
- * (o desktop, os testes). No mobile use `createMemoryGraphJob`.
+ * Full layout in one call — the synchronous form, for whoever can block
+ * (the desktop, the tests). On mobile use `createMemoryGraphJob`.
  */
 export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): MemoryLayout {
   const job = createMemoryGraphJob(pool, options)
-  // Com orçamento infinito o step nunca devolve o controle no meio; o laço é
-  // só rede de segurança.
+  // With an infinite budget the step never hands control back midway; the loop is
+  // only a safety net.
   while (!job.step(Infinity)) {
-    /* vazio */
+    /* empty */
   }
   return job.snapshot()
 }
 
 /**
- * Regra de visibilidade do filtro de projeto — usada pelas duas plataformas.
+ * Visibility rule of the project filter — used by both platforms.
  *
- * Selecionar um projeto mostra SÓ o que pertence a ele: as memórias do projeto
- * e as gerais que nasceram ali. Memórias gerais de outros projetos (ou sem
- * origem registrada, caso das criadas antes deste campo existir) ficam de fora
- * — elas poluíam a vista de todo projeto sem ter relação com nenhum. Para vê-las
- * basta voltar o seletor para "todos os projetos".
+ * Selecting a project shows ONLY what belongs to it: the project memories
+ * and the general ones that were born there. General memories of other projects (or without a
+ * recorded origin, as with those created before this field existed) stay out
+ * — they polluted every project view without having a relation to any. To see them
+ * one only has to set the selector back to "all projects".
  *
- * Isto é filtro de VISUALIZAÇÃO apenas: o contexto injetado no prompt continua
- * carregando as preferências gerais em qualquer projeto (loadPromptContext).
+ * This is a DISPLAY filter only: the context injected into the prompt keeps
+ * loading the general preferences in any project (loadPromptContext).
  */
 export function matchesProjectFilter(memory: Memory, projectId: string): boolean {
   if (memory.kind === 'project') return memory.projectId === projectId

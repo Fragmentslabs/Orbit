@@ -7,11 +7,11 @@
 
 /* ============================================
    Orbit Mobile Theme — NativeWind v5 / Tailwind v4
-   Tema dinâmico via CSS variables + @theme inline.
+   Dynamic theme via CSS variables + @theme inline.
 
-   @theme inline mapeia utilidades (--color-*) para
-   variáveis CSS (--*). Os valores das variáveis são
-   definidos em :root (light) e @media (prefers-color-scheme: dark).
+   @theme inline maps utilities (--color-*) to
+   CSS variables (--*). The values of the variables are
+   defined in :root (light) and @media (prefers-color-scheme: dark).
    NativeWind v5 usa Appearance.setColorScheme() para alternar.
    ============================================ */
 

@@ -1,15 +1,15 @@
 import type { WebContents } from 'electron'
 
 /**
- * Entrada "de verdade" para os browsers do agente (webview do painel e janela
- * oculta do run_browser_script): mouse via `sendInputEvent`, console da página
- * e avaliação de JS.
+ * "Real" input for the agent's browsers (the panel's webview and the hidden
+ * window of run_browser_script): mouse via `sendInputEvent`, the page's console
+ * and JS evaluation.
  *
- * O `el.click()` do panel_click basta para botões, mas arrastar (dnd-kit,
- * sortables, sliders) e hover dependem de pointer events confiáveis numa
- * sequência — down, vários moves, up. `sendInputEvent` entra pelo mesmo
- * caminho do mouse físico (isTrusted = true), então as bibliotecas reagem como
- * reagiriam a um usuário.
+ * panel_click's `el.click()` is enough for buttons, but dragging (dnd-kit,
+ * sortables, sliders) and hover depend on reliable pointer events in a
+ * sequence — down, several moves, up. `sendInputEvent` enters through the same
+ * path as the physical mouse (isTrusted = true), so the libraries react as
+ * they would to a user.
  */
 
 export type BrowserTarget = { ref?: number; selector?: string; x?: number; y?: number }
@@ -31,7 +31,7 @@ function delay(ms: number): Promise<void> {
 
 // ─── Console ────────────────────────────────────────────────────────────────
 
-/** Buffer circular de mensagens do console de um WebContents. */
+/** Circular buffer of a WebContents' console messages. */
 export class ConsoleBuffer {
   private entries: ConsoleEntry[] = []
 
@@ -69,16 +69,16 @@ export function formatConsoleEntries(entries: ConsoleEntry[]): string {
     .join('\n')
 }
 
-/** Página inline (data:/blob:) traria o HTML inteiro como "arquivo" da mensagem. */
+/** Inline page (data:/blob:) would bring the whole HTML as the message's "file". */
 function shortSource(source: string): string {
   if (source.startsWith('data:')) return 'data:…'
   return source.length > 160 ? `…${source.slice(-160)}` : source
 }
 
 /**
- * Liga o console (e as falhas de carga/crash) do WebContents ao buffer. Erros
- * não capturados e promises rejeitadas chegam aqui também: o Chromium os
- * registra no console como `error`.
+ * Connects the WebContents' console (and load/crash failures) to the buffer. Uncaught
+ * errors and rejected promises arrive here too: Chromium logs them
+ * to the console as `error`.
  */
 export function attachConsole(wc: WebContents, sink: () => ConsoleBuffer | undefined): void {
   wc.on('console-message', (event) => {
@@ -89,7 +89,7 @@ export function attachConsole(wc: WebContents, sink: () => ConsoleBuffer | undef
     })
   })
   wc.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
-    // ERR_ABORTED (-3) é redirect/SPA, não falha
+    // ERR_ABORTED (-3) is a redirect/SPA, not a failure
     if (code === -3) return
     sink()?.push({
       level: 'error',
@@ -112,10 +112,10 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as
 ) => unknown
 
 /**
- * Semântica de REPL: uma expressão sozinha devolve o próprio valor; código com
- * várias instruções precisa de `return`. O teste só PARSEIA o código aqui no
- * main (construir a função não a executa) — rodar `new Function` dentro da
- * página esbarraria na CSP de muitos sites.
+ * REPL semantics: a lone expression returns its own value; code with
+ * several statements needs a `return`. The test only PARSES the code here in the
+ * main (building the function does not run it) — running `new Function` inside the
+ * page would hit many sites' CSP.
  */
 function asFunctionBody(code: string): string {
   const expression = `return (${code}\n)`
@@ -127,7 +127,7 @@ function asFunctionBody(code: string): string {
   }
 }
 
-/** Roda JS na página e devolve o resultado serializado (ou o erro, com stack). */
+/** Runs JS in the page and returns the serialized result (or the error, with a stack). */
 export async function evaluateInPage(wc: WebContents, code: string): Promise<string> {
   const script = `(async () => {
   let __value
@@ -177,9 +177,9 @@ ${asFunctionBody(code)}
 // ─── Mouse ──────────────────────────────────────────────────────────────────
 
 /**
- * Converte o alvo (ref do panel_read, seletor CSS ou coordenadas) num ponto da
- * viewport, em px CSS. `scroll` traz o elemento para a tela antes — só vale
- * para o ponto de partida: rolar no meio de um arrasto mudaria o destino.
+ * Converts the target (panel_read ref, CSS selector or coordinates) into a point of the
+ * viewport, in CSS px. `scroll` brings the element on screen first — it only counts
+ * for the starting point: scrolling in the middle of a drag would change the destination.
  */
 export async function resolveTarget(
   wc: WebContents,
@@ -207,7 +207,7 @@ export async function resolveTarget(
   return point
 }
 
-/** px CSS → coordenadas do sendInputEvent (que respeitam o zoom da página). */
+/** CSS px → sendInputEvent coordinates (which respect the page's zoom). */
 function toInput(wc: WebContents, p: { x: number; y: number }) {
   const zoom = wc.getZoomFactor() || 1
   return { x: Math.round(p.x * zoom), y: Math.round(p.y * zoom) }
@@ -230,10 +230,10 @@ export function mouseUp(wc: WebContents, p: { x: number; y: number }): void {
 }
 
 /**
- * Arrasta com o botão esquerdo. `from` ausente continua um arrasto anterior
- * que ficou com o botão pressionado (release: false) — é assim que o agente
- * pausa no meio para tirar print do estado "arrastando".
- * Devolve onde o ponteiro terminou.
+ * Drags with the left button. A missing `from` continues a previous drag
+ * that was left with the button pressed (release: false) — that is how the agent
+ * pauses in the middle to take a screenshot of the "dragging" state.
+ * Returns where the pointer ended.
  */
 export async function dragBetween(
   wc: WebContents,
@@ -258,11 +258,11 @@ export async function dragBetween(
     mouseMove(wc, { x: start.x + (to.x - start.x) * t, y: start.y + (to.y - start.y) * t }, true)
     await delay(16)
   }
-  // Muitas libs só confirmam o alvo no frame seguinte ao último move
+  // Many libs only confirm the target on the frame after the last move
   await delay(80)
   if (options.release !== false) {
     mouseUp(wc, to)
-    await delay(250) // animação de soltar / re-render
+    await delay(250) // drop animation / re-render
   }
   return to
 }

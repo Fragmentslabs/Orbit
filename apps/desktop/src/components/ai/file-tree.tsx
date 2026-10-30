@@ -195,9 +195,9 @@ export type FileTreeFileProps = HTMLAttributes<HTMLDivElement> & {
   path: string;
   name: string;
   icon?: ReactNode;
-  /** Status git do arquivo — renderiza o indicador (M/D/A/U/R) à direita. */
+  /** Git status of the file — renders the indicator (M/D/A/U/R) on the right. */
   status?: GitFileStatus;
-  /** Linhas adicionadas/removidas — o "+N -N" da lista de alterações. */
+  /** Lines added/removed — the "+N -N" of the changes list. */
   stat?: { added: number; deleted: number };
 };
 
@@ -266,7 +266,7 @@ export const FileTreeFile = ({
               <span
                 className={cn(
                   "shrink-0 pl-2 font-mono text-[10px] font-semibold",
-                  // Sem o +N/-N é o indicador que empurra para a direita.
+                  // Without the +N/-N it is the indicator that pushes to the right.
                   !stat && "ml-auto",
                   GIT_STATUS_STYLE[status],
                 )}

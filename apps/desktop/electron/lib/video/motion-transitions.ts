@@ -1,56 +1,56 @@
 /**
- * TRANSIÇÕES de uma composição de motion: a troca de uma cena por outra (ou a
- * entrada/saída de uma só) como um ato da própria peça, e não como animação
- * escrita à mão a cada vez.
+ * TRANSITIONS of a motion composition: the swap of one scene for another (or the
+ * entrance/exit of a single one) as an act of the piece itself, and not as an animation
+ * written by hand every time.
  *
- * A composição declara — `orbitMotion.transition({ out, in, at, duration, type })`
- * — e o runtime transforma isso em animações Web Animations PAUSADAS, uma por
- * elemento. É o que as faz determinísticas sem código novo no caminho do quadro:
- * o `applyFrame` do runtime já posiciona TODO `document.getAnimations()` em
- * `t * 1000`, então a transição é buscada exatamente como um @keyframes — no
- * preview, na medição de camadas e no render. Nada de timer, nada de estado entre
- * quadros: o progresso em `t` é função pura de `t`.
+ * The composition declares — `orbitMotion.transition({ out, in, at, duration, type })`
+ * — and the runtime turns that into PAUSED Web Animations, one per
+ * element. That is what makes them deterministic without new code in the frame path:
+ * the runtime's `applyFrame` already positions EVERY `document.getAnimations()` at
+ * `t * 1000`, so the transition is fetched exactly like a @keyframes — in the
+ * preview, in the layer measurement and in the render. No timers, no state between
+ * frames: the progress at `t` is a pure function of `t`.
  *
- * As animações só usam propriedades que COMPÕEM com o que a composição já
- * escreveu (`translate` e `scale` individuais, que não pisam no `transform`;
- * `opacity`, `filter`, `clip-path`) e deixam o elemento como estava fora do
- * intervalo: a entrada usa `fill: backwards` (escondida até `at`, solta depois) e
- * a saída `fill: forwards` (escondida depois do fim).
+ * The animations only use properties that COMPOSE with what the composition already
+ * wrote (`translate` and `scale` individually, which do not step on the `transform`;
+ * `opacity`, `filter`, `clip-path`) and leave the element as it was outside the
+ * interval: the entrance uses `fill: backwards` (hidden until `at`, released afterwards) and
+ * the exit `fill: forwards` (hidden after the end).
  *
- * Este módulo é só o CÉREBRO, em JS de página: validar o pedido e montar os
- * keyframes. A string é embutida no runtime (que roda na janela, sem import) e
- * os testes a executam direto — nenhum DOM é necessário para checá-la.
+ * This module is only the BRAIN, in page JS: validating the request and assembling the
+ * keyframes. The string is embedded in the runtime (which runs in the window, without importing) and
+ * the tests execute it directly — no DOM is needed to check it.
  */
 
-/** Os tipos de transição que o runtime sabe montar. */
+/** The transition types the runtime knows how to assemble. */
 export const MOTION_TRANSITION_TYPES = ['fade', 'push', 'cover', 'reveal', 'wipe', 'zoom', 'blur', 'iris'] as const
 export type MotionTransitionType = (typeof MOTION_TRANSITION_TYPES)[number]
 
-/** Para onde o movimento vai. `in`/`out` valem só para o zoom. */
+/** Where the movement goes. `in`/`out` only apply to the zoom. */
 export type MotionTransitionDirection = 'left' | 'right' | 'up' | 'down' | 'in' | 'out'
 
-/** O que o runtime anuncia de cada transição registrada (lint e relatório). */
+/** What the runtime announces about each registered transition (lint and report). */
 export interface MotionTransitionInfo {
   type: MotionTransitionType
   direction: MotionTransitionDirection | null
-  /** Segundo da peça em que começa. */
+  /** Second of the piece at which it starts. */
   at: number
   duration: number
-  /** Como a composição chamou cada ponta (seletor ou etiqueta); null = ausente. */
+  /** How the composition named each end (selector or label); null = absent. */
   out: string | null
   in: string | null
 }
 
 /**
- * O script. Sem crases, sem `${` e sem barra invertida DE PROPÓSITO: ele é
- * interpolado dentro do template do runtime, onde qualquer um deles viraria
- * outra coisa.
+ * The script. No backticks, no `${` and no backslash ON PURPOSE: it is
+ * interpolated inside the runtime's template, where any of them would become
+ * something else.
  */
 export const MOTION_TRANSITIONS_SCRIPT = `
   const ORBIT_TRANSITION_TYPES = ${JSON.stringify(MOTION_TRANSITION_TYPES)}
   const ORBIT_TRANSITION_VECTORS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }
-  // O que está TOTALMENTE escondido em cada direção do wipe (insets do clip-path):
-  // a entrada começa assim, e a saída termina no inset do lado oposto.
+  // What is TOTALLY hidden in each wipe direction (clip-path insets):
+  // the entrance starts like this, and the exit ends at the opposite side inset.
   const ORBIT_WIPE_HIDDEN = {
     left: '0% 0% 0% 100%',
     right: '0% 100% 0% 0%',
@@ -66,8 +66,8 @@ export const MOTION_TRANSITIONS_SCRIPT = `
     return call && value.charAt(value.length - 1) === ')' && value.indexOf(';') < 0
   }
 
-  // Valida o pedido e preenche os padrões. Devolve { spec } ou { error } — nunca
-  // lança: quem chama decide se o erro derruba a composição.
+  // Validates the request and fills in the defaults. Returns { spec } or { error } — it never
+  // throws: the caller decides whether the error takes the composition down.
   function orbitNormalizeTransition(raw) {
     if (!raw || typeof raw !== 'object') return { error: 'expected an object like { out, in, at, duration, type }' }
     if (!raw.out && !raw.in) return { error: 'give at least one of "out" (leaving) and "in" (entering)' }
@@ -75,7 +75,7 @@ export const MOTION_TRANSITIONS_SCRIPT = `
     if (ORBIT_TRANSITION_TYPES.indexOf(type) < 0) {
       return { error: 'unknown type "' + type + '" (use ' + ORBIT_TRANSITION_TYPES.join(', ') + ')' }
     }
-    // Fade, blur e iris não têm lado: a direção, se vier, é ignorada.
+    // Fade, blur and iris have no side: the direction, if given, is ignored.
     let direction = null
     if (type === 'zoom') {
       direction = raw.direction === undefined ? 'in' : String(raw.direction)
@@ -110,9 +110,9 @@ export const MOTION_TRANSITIONS_SCRIPT = `
   function orbitPct(n) { return (Math.round(n * 10000) / 100) + '%' }
   function orbitShift(x, y) { return orbitPct(x) + ' ' + orbitPct(y) }
 
-  // Os keyframes de cada ponta: { out, in }. A visibilidade vai em TODA ponta —
-  // é ela que esconde a entrada até o começo e a saída depois do fim, sem tocar no
-  // que a composição escreveu para o elemento.
+  // The keyframes of each end: { out, in }. Visibility goes in EVERY end —
+  // it is what hides the entrance until the start and the exit after the end, without touching what
+  // the composition wrote for the element.
   function orbitTransitionKeyframes(spec) {
     const dir = spec.direction
     const v = ORBIT_TRANSITION_VECTORS[dir] || [0, 0]
@@ -129,22 +129,22 @@ export const MOTION_TRANSITIONS_SCRIPT = `
           in: [mix(inHidden, { translate: orbitShift(-v[0], -v[1]) }), mix(inShown, { translate: rest })],
         }
       case 'cover':
-        // A entrada desliza POR CIMA de uma saída que quase não se mexe (um quarto
-        // do caminho: a profundidade). Exige que a entrada esteja acima no empilhamento.
+        // The entrance slides OVER an exit that hardly moves (a quarter
+        // of the way: the depth). It requires the entrance to be above in the stacking.
         return {
           out: [mix(outShown, { translate: rest }), mix(outGone, { translate: orbitShift(v[0] * 0.25, v[1] * 0.25) })],
           in: [mix(inHidden, { translate: orbitShift(-v[0], -v[1]) }), mix(inShown, { translate: rest })],
         }
       case 'reveal':
-        // O oposto: a saída escorrega para fora e descobre uma entrada que já
-        // estava lá embaixo. Exige que a saída esteja acima.
+        // The opposite: the exit slides out and uncovers an entrance that was already
+        // down there. It requires the exit to be above.
         return {
           out: [mix(outShown, { translate: rest }), mix(outGone, { translate: orbitShift(v[0], v[1]) })],
           in: [mix(inHidden, { translate: orbitShift(-v[0] * 0.25, -v[1] * 0.25) }), mix(inShown, { translate: rest })],
         }
       case 'wipe': {
-        // Os dois lados são recortados em partes COMPLEMENTARES, então a ordem de
-        // empilhamento não importa: onde a entrada aparece, a saída já foi.
+        // Both sides are clipped into COMPLEMENTARY parts, so the stacking
+        // order does not matter: where the entrance shows up, the exit is already gone.
         const full = 'inset(0% 0% 0% 0%)'
         return {
           out: [
@@ -178,8 +178,8 @@ export const MOTION_TRANSITIONS_SCRIPT = `
         }
       }
       case 'iris':
-        // 75% do raio de referência cobre o canto mais distante de qualquer
-        // proporção. A saída só some no fim: a entrada, acima, a vai cobrindo.
+        // 75% of the reference radius covers the farthest corner of any
+        // aspect ratio. The exit only vanishes at the end: the entrance, above, keeps covering it.
         return {
           out: [outShown, outGone],
           in: [
@@ -196,7 +196,7 @@ export const MOTION_TRANSITIONS_SCRIPT = `
   }
 `
 
-/** Forma que o script devolve — a mesma que os testes e o lint esperam. */
+/** Shape the script returns — the same one the tests and the lint expect. */
 export interface NormalizedTransition {
   type: MotionTransitionType
   direction: MotionTransitionDirection | null
@@ -206,7 +206,7 @@ export interface NormalizedTransition {
   amount?: number
 }
 
-/** Uma linha por transição para o relatório que o agente lê (tempo da PEÇA, em segundos). */
+/** One line per transition for the report the agent reads (time of the PIECE, in seconds). */
 export function describeTransitions(transitions: MotionTransitionInfo[]): string {
   if (transitions.length === 0) return ''
   const sec = (n: number) => `${Number(n.toFixed(2))}s`

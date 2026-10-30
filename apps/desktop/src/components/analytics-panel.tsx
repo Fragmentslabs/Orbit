@@ -57,7 +57,7 @@ interface ChartEntry {
   opacity: number;
 }
 
-/** Botãozinho de alternância do cabeçalho do gráfico. */
+/** Little toggle button of the chart header. */
 function ChartToggle<T extends string>({
   options,
   value,
@@ -104,9 +104,9 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
         key: `${m.providerId}/${m.modelId}`,
         label: m.modelId,
         providerId: m.providerId,
-        // Custo NÃO é arredondado aqui: com duas casas, tudo abaixo de meio
-        // centavo virava barra de altura zero e o gráfico parecia vazio num
-        // período inteiro de modelos baratos. Quem arredonda é o formatador.
+        // Cost is NOT rounded here: with two decimals, everything below half
+        // a cent became a zero-height bar and the chart looked empty over an
+        // entire period of cheap models. The formatter is what rounds.
         value: metric === "cost" ? m.cost : metric === "tokens" ? m.tokens : Math.round(m.hours * 100) / 100,
         tokens: m.tokens,
         hours: Math.round(m.hours * 100) / 100,
@@ -340,7 +340,7 @@ export function AnalyticsPanel() {
   const { t, i18n } = useTranslation();
   const { data, range, loading, load, setRange } = useAnalyticsStore();
   const [heatmapBreakdown, setHeatmapBreakdown] = useState<"model" | "project">("model");
-  // O dia guarda só o projectId; o nome exibível vive no resumo do período.
+  // The day keeps only the projectId; the displayable name lives in the period summary.
   const projectNames = useMemo(() => {
     const map: Record<string, string> = {};
     for (const p of data?.byProject ?? []) {

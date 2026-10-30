@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils"
 type Side = "top" | "right" | "bottom" | "left"
 
 /**
- * Mede um elemento de uma linha e diz se o texto está cortado.
+ * Measures a single-line element and tells whether the text is cut.
  *
- * A decisão vem de scrollWidth/clientWidth e é reavaliada no resize — nunca
- * do tamanho da string, que depende da fonte e do idioma.
+ * The decision comes from scrollWidth/clientWidth and is re-evaluated on resize — never
+ * from the size of the string, which depends on the font and the language.
  */
 function useTruncated(text?: string) {
   const ref = useRef<HTMLElement>(null)
@@ -22,8 +22,8 @@ function useTruncated(text?: string) {
     const measure = () =>
       setState({
         truncated: element.scrollWidth > element.clientWidth + 1,
-        // Sem `text` explícito, o rótulo é o próprio conteúdo do elemento —
-        // que é o que o usuário não conseguiu ler.
+        // Without an explicit `text`, the label is the content of the element itself —
+        // which is what the user could not read.
         text: text ?? (element.textContent ?? "").trim(),
       })
     measure()
@@ -37,21 +37,21 @@ function useTruncated(text?: string) {
 }
 
 interface TruncateProps {
-  /** Opcional: sem ele, o rótulo é o `textContent` do elemento. */
+  /** Optional: without it, the label is the `textContent` of the element. */
   text?: string
   side?: Side
-  /** O elemento que já corta — ele mesmo é medido, o layout não muda. */
+  /** The element that already cuts — it is the one measured, the layout does not change. */
   children: ReactElement<Record<string, unknown>>
 }
 
 /**
- * Envolve um elemento que JÁ corta (`truncate`) e só abre o tooltip quando o
- * texto está de fato cortado.
+ * Wraps an element that ALREADY cuts (`truncate`) and only opens the tooltip when the
+ * text is in fact cut.
  *
- * É o caminho para o que já existe: nada é reescrito, só envolvido, e a medida
- * sai do próprio elemento. Exige que ele aceite `ref` — tag do DOM ou
- * componente que repassa (Badge, Button). Componente que não repassa degrada
- * em silêncio: nenhum ref, nenhum tooltip.
+ * It is the path for what already exists: nothing is rewritten, only wrapped, and the measurement
+ * comes from the element itself. It requires the element to accept `ref` — DOM tag or
+ * component that forwards it (Badge, Button). A component that does not forward degrades
+ * silently: no ref, no tooltip.
  */
 function Truncate({ text, side = "top", children }: TruncateProps) {
   const { ref, truncated, text: label } = useTruncated(text)
@@ -70,11 +70,11 @@ interface TruncatedTextProps {
 }
 
 /**
- * Texto de uma linha que ganha tooltip **só quando está cortado**.
+ * Single-line text that gets a tooltip **only when it is cut**.
  *
- * Título de aba, nome de arquivo, nome de sessão: o `max-w` é o que mantém a
- * lista respirando, mas o pedaço que sobra na tela deixa de identificar o item.
- * Para um elemento que já existe e não pode ser trocado, use `Truncate`.
+ * Tab title, file name, session name: the `max-w` is what keeps the
+ * list breathing, but the snippet left on the screen stops identifying the item.
+ * For an element that already exists and cannot be swapped, use `Truncate`.
  */
 function TruncatedText({ text, className, side = "top" }: TruncatedTextProps) {
   return (

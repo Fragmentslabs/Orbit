@@ -10,15 +10,16 @@ import { buildProviderOptions } from '../reasoning'
 import { agentPrepareStep } from '../agent-step'
 import type { ToolContext } from './context'
 import { buildToolSet } from './index'
-import { modoGlobal } from '../permission/modo-global'
-import { disputasDeArquivo, esperaPor, normalizarCaminho } from '../orquestra/posse'
+import { globalMode } from '../permission/global-mode'
+import { fileDisputes, normalizePath, waitsFor } from '../orchestration/ownership'
 
 /**
- * Ferramentas de delegação:
- * - subagent: worker efêmero em background (modo Subagents) — roda uma geração
- *   isolada com o modelo worker e devolve o texto como tool-result.
- * - create_task: registra tarefas do plano (usada apenas pelo OrchestratorEngine
- *   na fase de planejamento do modo Orchestra).
+ * Delegation tools:
+ * - subagent: ephemeral worker in the background (Subagents mode) — runs an
+ *   isolated generation with the worker model and returns the text as a
+ *   tool-result.
+ * - create_task: registers plan tasks (used only by the OrchestratorEngine in
+ *   the planning phase of Orchestra mode).
  */
 
 export const SUBAGENT_MAX_STEPS = 25
@@ -28,22 +29,22 @@ function newTaskId() {
 }
 
 /**
- * `maxSteps` limita o trabalho de CADA subagente. Durante o PLANEJAMENTO da
- * orquestração a pesquisa deve ser leve (o objetivo é embasar a divisão, não
- * resolver a tarefa), então o orquestrador passa um teto baixo.
+ * `maxSteps` limits the work of EACH subagent. During the orchestration's
+ * PLANNING the research must stay light (the goal is to ground the split, not
+ * to solve the task), so the orchestrator passes a low ceiling.
  *
- * `maxCalls` limita QUANTAS VEZES o modelo pode chamar esta tool no total —
- * sem isso, um texto de prompt pedindo "no máximo 2-3 chamadas" é só uma
- * sugestão que o modelo pode ignorar (era o que acontecia: 17 chamadas só
- * para planejar). Passado o limite, a tool recusa em vez de rodar mais um
- * subagente completo (que sozinho já custa vários passos e tokens).
+ * `maxCalls` limits HOW MANY TIMES the model may call this tool in total —
+ * without it, a prompt text asking for "at most 2-3 calls" is only a suggestion
+ * the model may ignore (that is what happened: 17 calls just to plan). Past the
+ * limit, the tool refuses instead of running one more full subagent (which by
+ * itself already costs several steps and tokens).
  */
 export function createSubagentTool(
   input: SendMessageInput,
   ctx: ToolContext | null,
   maxSteps = SUBAGENT_MAX_STEPS,
   maxCalls?: number,
-  /** Mesma mecânica com outro propósito (ex.: a mudança pequena do orquestrador). */
+  /** Same mechanics for another purpose (e.g. the orchestrator's small change). */
   description = 'Delegates a subtask to a worker that runs in the background and returns the result as text. Use for parallel or isolated work: research, file analysis, focused tasks. The worker does not see this conversation — include all necessary context in the task.',
 ) {
   let calls = 0
@@ -65,7 +66,7 @@ export function createSubagentTool(
       const worker = input.workerModel ?? { providerId: input.providerId, modelId: input.modelId }
       const codeUnavailable = code === true && !input.directory
       const workerInput: SendMessageInput = {
-        // ID sintético: isola o browser nativo do worker do da sessão principal
+        // Synthetic id: isolates the worker's native browser from the main session's
         sessionId: `${input.sessionId}-sub-${newTaskId()}`,
         text: task,
         providerId: worker.providerId,
@@ -77,12 +78,12 @@ export function createSubagentTool(
           brain: brain ?? true,
           simple: simple ?? true,
           reasoning: worker.reasoning,
-          // Gatekeeping: worker herda o modo de permissões do pai — e, se o
-          // pai segue o seletor global, a troca no meio vale para ele também
+          // Gatekeeping: the worker inherits the parent's permission mode — and,
+          // if the parent follows the global selector, a change mid-way applies to it too
           permissionMode: input.options.permissionMode,
           followGlobalPermission: input.options.followGlobalPermission,
-          // O recorte de servidores MCP também é do pai: o worker não decide
-          // sozinho quais servidores vê (undefined = todos os ligados).
+          // The MCP server selection is the parent's too: the worker does not
+          // decide on its own which servers it sees (undefined = all enabled).
           toolsServers: input.options.toolsServers,
         },
         directory: input.directory,
@@ -99,18 +100,18 @@ export function createSubagentTool(
           : null
 
       const model = await resolveModel(worker.providerId, worker.modelId)
-      // provider do worker p/ o preparo de cada passo do tool loop (corte de
-      // contexto, reasoning, cache) — o mesmo do agente principal.
+      // the worker's provider for preparing each step of the tool loop (context
+      // trimming, reasoning, cache) — the same as the main agent's.
       const workerProvider = await getProvider(worker.providerId)
-      // A visão é a do MODELO DO WORKER, não a do pai: é o parâmetro (e não o
-      // ctx) que o ramo de chat consulta, e o worker pode estar noutro modelo.
+      // Vision is the WORKER MODEL's, not the parent's: it is the parameter
+      // (not ctx) that the chat branch consults, and the worker may be on another model.
       const tools = buildToolSet(workerInput, workerCtx, undefined, modelSupportsVision(workerProvider, worker.modelId))
       const modoWorker = workerInput.options.permissionMode ?? 'ask'
       const toolApproval = createToolApproval(
-        // O nível que vale é o do CHAT que pediu o worker: o id do worker é
-        // uma sessão filha, que não tem entrada própria no mapa.
+        // The level that counts is the CHAT's that asked for the worker: the
+        // worker id is a child session with no entry of its own in the map.
         workerInput.options.followGlobalPermission
-          ? () => modoGlobal(workerInput.parentSessionId ?? workerInput.sessionId, modoWorker)
+          ? () => globalMode(workerInput.parentSessionId ?? workerInput.sessionId, modoWorker)
           : modoWorker,
         workerInput.sessionId,
         ctx?.directory ?? null,
@@ -150,44 +151,44 @@ export interface CreateTaskArgs {
   dependsOn?: string[]
 }
 
-/** "Tela de Login " e "tela de login" são o mesmo nome na sidebar. */
-function tarefaPeloTitulo(tarefas: OrchestrationTask[], title: string): OrchestrationTask | undefined {
-  const chave = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
-  return tarefas.find((t) => chave(t.title) === chave(title))
+/** "Login Screen " and "login screen" are the same name in the sidebar. */
+function taskByTitle(tasks: OrchestrationTask[], title: string): OrchestrationTask | undefined {
+  const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
+  return tasks.find((t) => key(t.title) === key(title))
 }
 
 /**
- * Teto de modos: o que a sessão do usuário permite. O orquestrador escolhe
- * DENTRO disso — pedir acima do teto não falha, é rebaixado com aviso no
- * resultado da tool (o modelo precisa saber que não recebeu o que pediu).
+ * Mode ceiling: what the user's session allows. The orchestrator chooses
+ * WITHIN it — asking above the ceiling does not fail, it is downgraded with a
+ * notice in the tool result (the model must know it did not get what it asked for).
  */
 export interface TaskModeCeiling {
   research: boolean
   browser: boolean
   vision: boolean
   subagents: boolean
-  /** Recorte de servidores MCP escolhido na conversa (undefined = todos).
-   *  As ferramentas não têm liga/desliga: o recorte vale para os workers. */
+  /** MCP server selection chosen in the conversation (undefined = all).
+   *  The tools have no on/off switch: the selection applies to the workers. */
   toolsServers?: string[]
 }
 
 /**
- * Tool de planejamento do orquestrador: cada chamada vira uma OrchestrationTask.
- * Chamar de novo com o título de uma tarefa DESTE plano a substitui (mesmo id,
- * então quem depende dela continua dependendo) — é como o orquestrador corrige
- * uma divisão depois do aviso de arquivos em disputa.
+ * The orchestrator's planning tool: each call becomes an OrchestrationTask.
+ * Calling it again with the title of a task in THIS plan replaces it (same id,
+ * so whoever depends on it keeps depending) — that is how the orchestrator fixes
+ * a split after the files-in-dispute notice.
  */
 export function createTaskTool(
-  /** `substitui`: id da tarefa deste plano que a nova toma o lugar. */
-  register: (task: OrchestrationTask, substitui?: string) => boolean,
+  /** `replaces`: id of the task in this plan the new one takes the place of. */
+  register: (task: OrchestrationTask, replaces?: string) => boolean,
   ceiling: TaskModeCeiling,
-  /** O título já é de um worker de um plano ANTERIOR? Na sidebar o título é
-   *  a única coisa que separa um worker do outro. */
+  /** Is the title already a worker's from a PREVIOUS plan? In the sidebar the
+   *  title is the only thing that tells one worker from another. */
   titleTaken: (title: string) => boolean = () => false,
-  /** Tarefas já registradas neste plano (dependsOn, substituição, disputas). */
+  /** Tasks already registered in this plan (dependsOn, replacement, disputes). */
   planTasks: () => OrchestrationTask[] = () => [],
 ) {
-  const doPlano = (title: string) => tarefaPeloTitulo(planTasks(), title)
+  const inPlan = (title: string) => taskByTitle(planTasks(), title)
   return tool({
     description: [
       'Registers a subtask in the orchestration plan. Each task becomes an independent worker session',
@@ -200,8 +201,8 @@ export function createTaskTool(
     inputSchema: z.object({
       title: z.string().describe(
         'Worker name shown in the sidebar, in the user\'s language. 2-5 words naming the concrete area or deliverable, '
-        + 'so the user tells workers apart at a glance — e.g. "Webhook de pagamentos", "Tela de login: validação", "Testes do parser CSV". '
-        + 'Never generic ("Implementação", "Análise", "Tarefa 1", "Backend") and never the same as another worker.',
+        + 'so the user tells workers apart at a glance — e.g. "Payments webhook", "Login screen: validation", "CSV parser tests". '
+        + 'Never generic ("Implementation", "Analysis", "Task 1", "Backend") and never the same as another worker.',
       ),
       prompt: z.string().describe('Self-contained prompt for the worker, with all necessary context'),
       files: z
@@ -224,25 +225,25 @@ export function createTaskTool(
         .describe('Titles of tasks ALREADY registered in this plan that must be accepted before this one starts. Only for real order (tests after the feature, integration after its parts).'),
     }),
     execute: async ({ title, prompt, files, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn }: CreateTaskArgs) => {
-      const anterior = doPlano(title)
-      // Dependência só de tarefa já registrada: além de dar o id, isso torna
-      // ciclo impossível (ninguém depende de quem ainda não existe). Na
-      // substituição vale o mesmo, menos depender de si mesma.
-      const dependeDe: string[] = []
-      for (const titulo of dependsOn ?? []) {
-        const id = doPlano(titulo)?.id
-        if (!id || id === anterior?.id) {
-          return `Task "${title}" was NOT registered: "${titulo}" is not another task already registered in this plan. Register the prerequisites first and try again, using the exact title in dependsOn.`
+      const previous = inPlan(title)
+      // A dependency only on an already registered task: besides giving the id,
+      // this makes a cycle impossible (nobody depends on what does not exist
+      // yet). On a replacement the same holds, except depending on itself.
+      const dependsOnIds: string[] = []
+      for (const prerequisite of dependsOn ?? []) {
+        const id = inPlan(prerequisite)?.id
+        if (!id || id === previous?.id) {
+          return `Task "${title}" was NOT registered: "${prerequisite}" is not another task already registered in this plan. Register the prerequisites first and try again, using the exact title in dependsOn.`
         }
-        if (anterior && esperaPor(planTasks().find((t) => t.id === id)!, anterior.id, planTasks())) {
-          return `Task "${title}" was NOT registered: "${titulo}" already waits for it, so depending on it would be a cycle.`
+        if (previous && waitsFor(planTasks().find((t) => t.id === id)!, previous.id, planTasks())) {
+          return `Task "${title}" was NOT registered: "${prerequisite}" already waits for it, so depending on it would be a cycle.`
         }
-        if (!dependeDe.includes(id)) dependeDe.push(id)
+        if (!dependsOnIds.includes(id)) dependsOnIds.push(id)
       }
-      if (!anterior && titleTaken(title)) {
+      if (!previous && titleTaken(title)) {
         return `A worker named "${title}" already exists in this conversation — the task was NOT registered. Call create_task again with a title that sets it apart (the specific area or deliverable), or use message_worker if the work continues that worker's.`
       }
-      // Rebaixa o que passa do teto e conta para avisar o modelo.
+      // Downgrades whatever is above the ceiling and counts it to warn the model.
       const denied: string[] = []
       const clamp = (want: boolean | undefined, allowed: boolean, name: string) => {
         if (want && !allowed) {
@@ -251,9 +252,9 @@ export function createTaskTool(
         }
         return want
       }
-      const arquivos = [...new Set((files ?? []).map(normalizarCaminho).filter((f) => f.length > 0))]
+      const owned = [...new Set((files ?? []).map(normalizePath).filter((f) => f.length > 0))]
       const task: OrchestrationTask = {
-        id: anterior?.id ?? newTaskId(),
+        id: previous?.id ?? newTaskId(),
         title,
         prompt,
         options: {
@@ -262,39 +263,39 @@ export function createTaskTool(
           plan: readOnly,
           simple,
           subagents: clamp(subagents, ceiling.subagents, 'subagents'),
-          // Não é escolha do orquestrador: o recorte de servidores MCP vale
-          // para a conversa inteira e acompanha os workers.
+          // Not the orchestrator's choice: the MCP server selection applies to
+          // the whole conversation and follows the workers.
           toolsServers: ceiling.toolsServers,
         },
         vision: clamp(vision, ceiling.vision, 'vision'),
         status: 'idle',
-        ...(dependeDe.length > 0 ? { dependeDe } : {}),
-        ...(arquivos.length > 0 ? { arquivos } : {}),
+        ...(dependsOnIds.length > 0 ? { dependsOn: dependsOnIds } : {}),
+        ...(owned.length > 0 ? { files: owned } : {}),
       }
-      if (!register(task, anterior?.id)) return 'Plan task limit reached — do not register more tasks.'
-      const avisos: string[] = []
+      if (!register(task, previous?.id)) return 'Plan task limit reached — do not register more tasks.'
+      const notices: string[] = []
       if (denied.length > 0) {
-        avisos.push(`It runs without ${denied.join(', ')}: the user did not enable ${denied.length > 1 ? 'those modes' : 'that mode'} in this conversation. Adjust the task prompt if it depended on it.`)
+        notices.push(`It runs without ${denied.join(', ')}: the user did not enable ${denied.length > 1 ? 'those modes' : 'that mode'} in this conversation. Adjust the task prompt if it depended on it.`)
       }
-      // Aviso, não trava: às vezes dividir o mesmo arquivo é o certo. Mas o
-      // orquestrador precisa saber que essas duas vão se pisar (ou esperar).
-      const disputas = disputasDeArquivo(task, planTasks())
-      if (disputas.length > 0) {
-        avisos.push(
+      // A notice, not a lock: sometimes sharing the same file is the right call.
+      // But the orchestrator must know these two will step on each other (or wait).
+      const disputes = fileDisputes(task, planTasks())
+      if (disputes.length > 0) {
+        notices.push(
           'It shares files with tasks that would run at the same time: '
-          + disputas.map((d) => `"${d.task.title}" (${d.arquivos.join(', ')})`).join('; ')
+          + disputes.map((d) => `"${d.task.title}" (${d.files.join(', ')})`).join('; ')
           + '. Parallel workers editing the same files step on each other. Unless that is really intended, fix it now by '
           + 're-registering with the same title: narrow the files so they no longer overlap, add dependsOn so one runs '
           + 'after the other, or merge the work into one task (and remove_task the other).',
         )
       }
-      const feito = anterior ? `Task "${title}" replaced in the plan.` : `Task "${title}" registered in the plan.`
-      return avisos.length > 0 ? `${feito} ${avisos.join(' ')}` : feito
+      const done = previous ? `Task "${title}" replaced in the plan.` : `Task "${title}" registered in the plan.`
+      return notices.length > 0 ? `${done} ${notices.join(' ')}` : done
     },
   })
 }
 
-/** Tira uma tarefa do plano em montagem — o par do create_task para juntar duas. */
+/** Takes a task out of the plan being assembled — create_task's pair for merging two. */
 export function createRemoveTaskTool(
   planTasks: () => OrchestrationTask[],
   remove: (id: string) => void,
@@ -305,16 +306,16 @@ export function createRemoveTaskTool(
       title: z.string().describe('Exact title of the task to remove'),
     }),
     execute: async ({ title }: { title: string }) => {
-      const alvo = tarefaPeloTitulo(planTasks(), title)
-      if (!alvo) return `No task titled "${title}" in this plan.`
-      remove(alvo.id)
+      const target = taskByTitle(planTasks(), title)
+      if (!target) return `No task titled "${title}" in this plan.`
+      remove(target.id)
       for (const t of planTasks()) {
-        if (!t.dependeDe?.includes(alvo.id)) continue
-        const resto = t.dependeDe.filter((id) => id !== alvo.id)
-        if (resto.length > 0) t.dependeDe = resto
-        else delete t.dependeDe
+        if (!t.dependsOn?.includes(target.id)) continue
+        const rest = t.dependsOn.filter((id) => id !== target.id)
+        if (rest.length > 0) t.dependsOn = rest
+        else delete t.dependsOn
       }
-      return `Task "${alvo.title}" removed from the plan.`
+      return `Task "${target.title}" removed from the plan.`
     },
   })
 }

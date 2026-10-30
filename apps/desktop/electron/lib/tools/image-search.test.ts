@@ -6,9 +6,9 @@ import sharp from 'sharp'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * image_search + image_import de ponta a ponta, com as respostas REAIS das APIs
- * gravadas e uma rede falsa: o resultado vira uma imagem do app com o crédito, que
- * o motion_asset leva até a peça.
+ * image_search + image_import end to end, with the APIs' REAL responses
+ * recorded and a fake network: the result becomes an app image with the credit, which
+ * motion_asset carries into the piece.
  */
 
 const userData = path.join(os.tmpdir(), `orbit-image-search-${process.pid}`)
@@ -39,11 +39,11 @@ const call = async (tools: Record<string, unknown>, name: string, input: unknown
 
 let photo: Buffer
 
-/** image_import devolve { message, images }: o texto é para o modelo, as imagens vão para a resposta. */
+/** image_import returns { message, images }: the text is for the model, the images go to the response. */
 type Imported = { message: string; images: Array<{ mediaUrl: string; alt: string }> }
 const importIds = async (tools: Record<string, unknown>, ids: string[]) => (await call(tools, 'image_import', { ids })) as Imported | string
 
-/** A rede falsa: as duas APIs, miniaturas e os arquivos das imagens. */
+/** The fake network: both APIs, thumbnails and the image files. */
 function installNetwork(opts: { failDownload?: boolean } = {}): string[] {
   const urls: string[] = []
   vi.stubGlobal(
@@ -73,7 +73,7 @@ afterAll(async () => {
 })
 
 describe('image_search', () => {
-  it('lista os candidatos com id, licença e tamanho — e já filtra o que a licença comercial não permite', async () => {
+  it('lists the candidates with id, license and size — and already filters what the commercial license does not allow', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
     const out = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
@@ -82,24 +82,24 @@ describe('image_search', () => {
     expect(out).toContain('CC BY-SA 4.0')
     expect(out).toContain('Openverse via flickr')
     expect(out).not.toContain('NC-ND')
-    // Sem visão, diz que a escolha é pelo título.
+    // Without vision, it says the choice is by title.
     expect(out).toContain('You cannot see the thumbnails')
   })
 
-  it('com visão, a folha de miniaturas segue junto, como imagem', async () => {
+  it('with vision, the thumbnail sheet comes along, as an image', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: true })
     await call(tools, 'image_search', { query: 'lion', minWidth: 500 }, 'sheet1')
     const toModel = (tools.image_search as unknown as { toModelOutput: Output }).toModelOutput
-    const modelOutput = toModel({ toolCallId: 'sheet1', output: 'texto' }) as { type: string; value: Array<{ type: string; mediaType?: string }> }
+    const modelOutput = toModel({ toolCallId: 'sheet1', output: 'text' }) as { type: string; value: Array<{ type: string; mediaType?: string }> }
     expect(modelOutput.type).toBe('content')
     expect(modelOutput.value.map((v) => v.type)).toEqual(['text', 'image-data'])
     expect(modelOutput.value[1].mediaType).toBe('image/webp')
-    // A folha é consumida uma vez: a segunda leitura volta só ao texto.
-    expect(toModel({ toolCallId: 'sheet1', output: 'texto' })).toEqual({ type: 'text', value: 'texto' })
+    // The sheet is consumed once: the second read returns only the text.
+    expect(toModel({ toolCallId: 'sheet1', output: 'text' })).toEqual({ type: 'text', value: 'text' })
   })
 
-  it('sem resultados, diz o que tentar', async () => {
+  it('with no results, says what to try', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { headers: { 'content-type': 'application/json' } })))
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
     const out = String(await call(tools, 'image_search', { query: 'zzzz' }))
@@ -107,7 +107,7 @@ describe('image_search', () => {
     expect(out).toContain('Try other words')
   })
 
-  it('o aviso de um provedor limitado aparece, sem esconder os resultados do outro', async () => {
+  it('a limited provider warning shows up without hiding the other\'s results', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) =>
@@ -122,7 +122,7 @@ describe('image_search', () => {
 })
 
 describe('image_import', () => {
-  it('traz a escolhida para o app como imagem com autor e licença, e devolve a linha de crédito', async () => {
+  it('brings the chosen one into the app as an image with author and license, and returns the credit line', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
@@ -141,7 +141,7 @@ describe('image_import', () => {
     expect(entry?.credit?.sourceUrl).toMatch(/commons\.wikimedia\.org\/wiki\/File:/)
   })
 
-  it('o crédito acompanha a imagem até a peça: motion_asset o exige no relatório', async () => {
+  it('the credit follows the image into the piece: motion_asset requires it in the report', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's2', modelVision: false })
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500, provider: 'openverse' }))
@@ -157,12 +157,12 @@ describe('image_import', () => {
     expect(fs.existsSync(path.join(piece, imported.name))).toBe(true)
   })
 
-  it('id que não está na última busca: pede para buscar de novo', async () => {
+  it('an id that is not in the last search: asks to search again', async () => {
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
     expect(((await importIds(tools, ['wc:404'])) as Imported).message).toContain('not in the last search results')
   })
 
-  it('o download recusado não derruba os outros; o erro vem com o motivo', async () => {
+  it('a refused download does not take the others down; the error comes with the reason', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
     await call(tools, 'image_search', { query: 'lion', minWidth: 500 })
@@ -174,14 +174,14 @@ describe('image_import', () => {
     expect(out).toContain('answered 403')
   })
 
-  it('um arquivo que o servidor chama de imagem mas não decodifica é recusado', async () => {
+  it('a file the server calls an image but that does not decode is refused', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
         const u = String(url)
         if (u.startsWith('https://commons.wikimedia.org')) return new Response(commonsJson, { headers: { 'content-type': 'application/json' } })
         if (u.startsWith('https://api.openverse.org')) return new Response('{}', { headers: { 'content-type': 'application/json' } })
-        return new Response('isto não é uma imagem', { headers: { 'content-type': 'image/jpeg' } })
+        return new Response('this is not an image', { headers: { 'content-type': 'image/jpeg' } })
       }),
     )
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
@@ -191,8 +191,8 @@ describe('image_import', () => {
   })
 })
 
-describe('as imagens aparecem na resposta', () => {
-  it('image_import devolve as imagens para o chat-engine mostrar, e diz ao modelo para não reincorporar', async () => {
+describe('the images show up in the reply', () => {
+  it('image_import returns the images for the chat-engine to show, and tells the model not to re-embed them', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's5', modelVision: false })
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
@@ -203,14 +203,14 @@ describe('as imagens aparecem na resposta', () => {
     for (const image of out.images) {
       expect(image.mediaUrl).toMatch(/^orbit-media:\/\/img_[a-z0-9]+\.jpg$/)
       expect(image.alt).toMatch(/^Lion/)
-      // Cada uma é um item do app, que o "abrir no chat" e a galeria enxergam.
+      // Each one is an app item, which "open in chat" and the gallery can see.
       expect(await media.getMediaEntry(image.mediaUrl.replace('orbit-media://', ''))).not.toBeNull()
     }
     expect(out.message).toContain('already appear in your reply')
     expect(out.message).toContain('do NOT embed them again with markdown')
   })
 
-  it('o modelo recebe só o relatório em texto (as imagens não entram no contexto dele)', async () => {
+  it('the model gets only the text report (the images do not enter its context)', async () => {
     installNetwork()
     const tools = createImageSearchTools({ sessionId: 's5', modelVision: false })
     const toModel = (tools.image_import as unknown as { toModelOutput: Output }).toModelOutput
@@ -218,7 +218,7 @@ describe('as imagens aparecem na resposta', () => {
     expect(result).toEqual({ type: 'text', value: 'relatório' })
   })
 
-  it('nada importado: lista vazia e a mensagem diz isso', async () => {
+  it('nothing imported: empty list and the message says so', async () => {
     const tools = createImageSearchTools({ sessionId: 's5', modelVision: false })
     const out = (await importIds(tools, ['wc:404'])) as Imported
     expect(out.images).toEqual([])
@@ -226,8 +226,8 @@ describe('as imagens aparecem na resposta', () => {
   })
 })
 
-describe('show_image no modo chat', () => {
-  it('mostra uma imagem do app na resposta, pelo ref ou pela URL', async () => {
+describe('show_image in chat mode', () => {
+  it('shows an app image in the reply, by ref or by URL', async () => {
     installNetwork()
     const search = createImageSearchTools({ sessionId: 's6', modelVision: false })
     const found = String(await call(search, 'image_search', { query: 'lion', minWidth: 500 }))
@@ -235,11 +235,11 @@ describe('show_image no modo chat', () => {
     const ref = imported.images[0].mediaUrl.replace('orbit-media://', '')
 
     const show = createGalleryShowImageTool()
-    expect(await call(show, 'show_image', { media: ref, alt: 'um leão' })).toMatchObject({ mediaUrl: `orbit-media://${ref}`, alt: 'um leão' })
+    expect(await call(show, 'show_image', { media: ref, alt: 'a lion' })).toMatchObject({ mediaUrl: `orbit-media://${ref}`, alt: 'a lion' })
     expect(await call(show, 'show_image', { media: `orbit-media://${ref}` })).toMatchObject({ mediaUrl: `orbit-media://${ref}` })
   })
 
-  it('referência inválida ou inexistente volta como texto, sem derrubar', async () => {
+  it('an invalid or missing ref comes back as text, without breaking', async () => {
     const show = createGalleryShowImageTool()
     expect(String(await call(show, 'show_image', { media: 'https://example.com/a.png' }))).toContain('Invalid media reference')
     expect(String(await call(show, 'show_image', { media: 'img_naoexiste.png' }))).toContain('not found')

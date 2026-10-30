@@ -9,7 +9,7 @@ interface ModeToggleDef {
   label: string
   active: boolean
   onChange: (value: boolean) => void
-  /** Abre a configuração do modo (gear no item) — sem alternar o toggle */
+  /** Opens the mode settings (gear in the item) — without toggling the switch */
   onConfig?: () => void
 }
 

@@ -3,7 +3,7 @@ import { buildDeckHtml } from './deck-template'
 import { readDeckSummary } from './slides-deck'
 
 describe('buildDeckHtml', () => {
-  it('monta um <section class="slide"> por slide, na ordem', () => {
+  it('builds one <section class="slide"> per slide, in order', () => {
     const html = buildDeckHtml({
       title: 'Meu deck',
       slides: [
@@ -17,14 +17,14 @@ describe('buildDeckHtml', () => {
     expect(html.indexOf('<h2>Um</h2>')).toBeLessThan(html.indexOf('<h2>Dois</h2>'))
   })
 
-  it('declara o palco 16:9 e o título do documento', () => {
+  it('declares the 16:9 stage and the document title', () => {
     const html = buildDeckHtml({ title: 'Deck do produto', slides: [{ html: '<h1>x</h1>' }] })
     expect(html).toContain('<meta name="orbit-slides" content="width=1280,height=720">')
     expect(html).toContain('<title>Deck do produto</title>')
     expect(html).toContain('<html lang="pt-BR">')
   })
 
-  it('escapa título e notas, mas deixa o conteúdo do slide como HTML', () => {
+  it('escapes title and notes, but leaves the slide content as HTML', () => {
     const html = buildDeckHtml({
       title: 'A & B',
       slides: [{ title: 'Capa "1"', html: '<h1>Orbit & cia</h1>', notes: 'diga <forte> e 5 > 3' }],
@@ -35,14 +35,14 @@ describe('buildDeckHtml', () => {
     expect(html).toContain('<aside class="notes">diga &lt;forte&gt; e 5 &gt; 3</aside>')
   })
 
-  it('não traz script nem runtime — navegação é do app', () => {
+  it('brings no script and no runtime — navigation belongs to the app', () => {
     const html = buildDeckHtml({ title: 't', slides: [{ html: '<h1>x</h1>' }] })
     expect(html).not.toContain('<script')
     expect(html).not.toContain('__orbit_slides_runtime')
     expect(html).not.toContain('orbit-motion')
   })
 
-  it('o que ele monta é o que o leitor do main entende', () => {
+  it('what it builds is what the main reader understands', () => {
     const html = buildDeckHtml({
       title: 'Round trip',
       slides: [
@@ -58,7 +58,7 @@ describe('buildDeckHtml', () => {
     ])
   })
 
-  it('deck com um slide só continua válido', () => {
+  it('a deck with a single slide stays valid', () => {
     const html = buildDeckHtml({ title: 'Um', slides: [{ html: '<p>único</p>' }] })
     expect(readDeckSummary(html).slides).toHaveLength(1)
   })

@@ -2,21 +2,21 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron'
 import { floatAboveFullScreen } from '../float-above-fullscreen'
 
 /**
- * Painéis flutuantes do Computer Use: enquanto o agente controla outro app e
- * o Orbit está fora de foco, a conversa fica na borda esquerda da tela e as
- * ações do agente na direita — o mesmo desenho da tela cheia do navegador
- * (alça recolhida que abre no hover).
+ * Floating panels of Computer Use: while the agent controls another app and Orbit is
+ * out of focus, the conversation stays on the left edge of the screen and the agent's
+ * actions on the right — the same design as the browser's full screen (a collapsed
+ * handle that opens on hover).
  *
- * É uma janela transparente do tamanho da área útil da tela, acima das outras
- * e atravessável pelo mouse: só os painéis capturam clique (o renderer avisa
- * quando o mouse entra/sai deles). Nunca recebe foco — o teclado continua com
- * o app que o agente está usando — e nunca sai no screenshot, que é da janela
- * alvo, não da tela.
+ * It is a transparent window the size of the usable screen area, above the others and
+ * transparent to the mouse: only the panels capture clicks (the renderer says when the
+ * mouse enters/leaves them). It never receives focus — the keyboard stays with the app
+ * the agent is using — and it never shows up in the screenshot, which is of the target
+ * window, not of the screen.
  */
 
 export interface PanelsLoader {
   preload: string
-  /** Carrega o renderer da janela (dev server ou arquivo), com a query */
+  /** Loads the window renderer (dev server or file), with the query */
   load: (win: BrowserWindow, query: Record<string, string>) => void
 }
 
@@ -24,31 +24,31 @@ let loader: PanelsLoader | null = null
 let win: BrowserWindow | null = null
 let sessionId: string | null = null
 let focusCheck: NodeJS.Timeout | null = null
-/** Mouse sobre um painel agora */
+/** Mouse over a panel right now */
 let interactive = false
 
-/** O main injeta como carregar o renderer (o mesmo preload e o mesmo bundle das janelas do app). */
+/** The main process injects how to load the renderer (the same preload and the same bundle as the app windows). */
 export function setupComputerPanels(next: PanelsLoader): void {
   loader = next
   ipcMain.on('computer-panels:interactive', (event, over: boolean) => {
     if (!win || win.isDestroyed() || event.sender !== win.webContents) return
     interactive = over
     win.setIgnoreMouseEvents(!over, { forward: true })
-    // Saiu do painel: se o Orbit ganhou foco enquanto isso, agora esconde.
+    // Left the panel: if Orbit gained focus meanwhile, now it hides.
     if (!over) refresh()
   })
-  // O campo de resposta precisa de teclado, e a janela nasce sem foco (o
-  // teclado é do app que o agente controla). Ela recebe foco só enquanto o
-  // campo está em uso — é um NSPanel não ativador, então o Orbit não vem para
-  // a frente — e devolve ao sair dele.
+  // The answer field needs a keyboard, and the window is born without focus (the
+  // keyboard belongs to the app the agent controls). It receives focus only while the
+  // field is in use — it is a non-activating NSPanel, so Orbit does not come to
+  // the front — and gives it back on leaving it.
   ipcMain.on('computer-panels:keyboard', (event, wants: boolean) => {
     if (!win || win.isDestroyed() || event.sender !== win.webContents) return
     win.setFocusable(wants)
     if (wants) win.focus()
     else win.blur()
   })
-  // Foco entre janelas do Orbit: o blur chega antes do focus da próxima, então
-  // a decisão espera um instante para não piscar ao trocar de janela.
+  // Focus between Orbit windows: the blur arrives before the focus of the next one, so
+  // the decision waits a moment to avoid a flash when switching windows.
   app.on('browser-window-focus', () => refresh())
   app.on('browser-window-blur', () => {
     if (focusCheck) clearTimeout(focusCheck)
@@ -65,15 +65,15 @@ function orbitFocused(): boolean {
   return Boolean(focused && focused !== win)
 }
 
-/** Sessão controlando agora (null = ninguém): mostra ou esconde conforme o foco. */
+/** Session controlling right now (null = nobody): shows or hides according to the focus. */
 export function setComputerPanelsSession(next: string | null): void {
   sessionId = next
   refresh()
 }
 
 function refresh(): void {
-  // Com o mouse sobre um painel, não some: se o clique ainda assim ativar o
-  // Orbit, o painel não pode desaparecer embaixo do cursor.
+  // With the mouse over a panel, it does not go away: if the click still activates
+  // Orbit, the panel cannot disappear under the cursor.
   if (sessionId && interactive && win && !win.isDestroyed() && win.isVisible()) return
   if (!sessionId || orbitFocused() || !loader) {
     hide()
@@ -92,9 +92,9 @@ function show(id: string): void {
   const area = screen.getPrimaryDisplay().workArea
   win = new BrowserWindow({
     ...area,
-    // NSPanel não ativador: clicar no pin ou num card não traz o Orbit para a
-    // frente. Janela comum ativava o app no clique — o Orbit ganhava foco e os
-    // painéis sumiam no mesmo instante (relatado no primeiro teste).
+    // Non-activating NSPanel: clicking the pin or a card does not bring Orbit to the
+    // front. A common window activated the app on click — Orbit gained focus and the
+    // panels went away at the same instant (reported in the first test).
     ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
     frame: false,
     transparent: true,
@@ -108,7 +108,7 @@ function show(id: string): void {
     show: false,
     webPreferences: { preload: loader.preload, backgroundThrottling: false },
   })
-  // Abaixo da faixa "Orbit está controlando" (screen-saver), acima dos apps.
+  // Below the "Orbit is controlling" band (screen-saver), above the apps.
   win.setAlwaysOnTop(true, 'floating')
   floatAboveFullScreen(win)
   win.setIgnoreMouseEvents(true, { forward: true })

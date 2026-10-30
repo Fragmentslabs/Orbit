@@ -4,9 +4,9 @@ import mediaCompress from './media-compress.md?raw'
 import webRecon from './web-recon.md?raw'
 
 /**
- * Skills nativas do app: leem o mesmo formato das do usuário (frontmatter +
- * markdown), mas são somente leitura e não ocupam espaço no disco do usuário.
- * Uma skill global ou de projeto com o mesmo slug sobrescreve a nativa.
+ * Built-in skills of the app: they read the same format as the user's skills
+ * (frontmatter + markdown), but they are read-only and take no space on the
+ * user's disk. A global or project skill with the same slug overrides the built-in.
  */
 
 interface BuiltinSource {
@@ -22,7 +22,7 @@ const SOURCES: BuiltinSource[] = [
 export const BUILTIN_SKILLS: Skill[] = SOURCES.flatMap(({ raw, path }) => {
   const skill = parseSkill(raw, 'builtin', path)
   if (!skill) {
-    console.error(`[skills] skill nativa inválida: ${path}`)
+    console.error(`[skills] invalid built-in skill: ${path}`)
     return []
   }
   return [skill]

@@ -2,20 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { selectDraftImages } from './image-drafts'
 
 /**
- * O que está em jogo: de um lado, a galeria do usuário virando o rascunho do
- * agente; do outro, apagar uma imagem que ele queria. Os dois casos reais
- * estão aqui — a escada, que a primeira versão já pegava, e o leque, que ela
- * deixava passar inteiro.
+ * What is at stake: on one side, the user's gallery becoming the agent's
+ * draft; on the other, deleting an image it wanted. Both real cases
+ * are here — the ladder, which the first version already caught, and the fan, which it
+ * let pass whole.
  */
 
-const cadeia = (pares: [string, string][]) => new Map(pares)
+const chain = (pares: [string, string][]) => new Map(pares)
 
 describe('selectDraftImages', () => {
-  it('descarta o degrau da escada e mantém o topo', () => {
+  it('discards the step of the ladder and keeps the top', () => {
     const drafts = selectDraftImages({
       produced: ['b', 'c', 'd'],
-      parents: cadeia([
-        ['b', 'anexo'],
+      parents: chain([
+        ['b', 'attachment'],
         ['c', 'b'],
         ['d', 'c'],
       ]),
@@ -24,59 +24,59 @@ describe('selectDraftImages', () => {
     expect(drafts.sort()).toEqual(['b', 'c'])
   })
 
-  it('descarta as tentativas anteriores feitas da mesma base', () => {
-    // "tira melhor o verde": quatro recortes do MESMO original, com tolerâncias
-    // diferentes. Nenhum é pai do outro — era o caso que passava inteiro.
+  it('discards the earlier attempts made from the same base', () => {
+    // "that takes the green out better": four crops of the SAME original, with different
+    // tolerances. None is the parent of another — it was the case that passed whole.
     const drafts = selectDraftImages({
       produced: ['t1', 't2', 't3', 't4'],
-      parents: cadeia([
-        ['t1', 'anexo'],
-        ['t2', 'anexo'],
-        ['t3', 'anexo'],
-        ['t4', 'anexo'],
+      parents: chain([
+        ['t1', 'attachment'],
+        ['t2', 'attachment'],
+        ['t3', 'attachment'],
+        ['t4', 'attachment'],
       ]),
       keep: new Set(),
     })
     expect(drafts.sort()).toEqual(['t1', 't2', 't3'])
   })
 
-  it('nunca descarta o que o agente marcou como entrega', () => {
-    // Variantes para o usuário escolher: mesma base, todas sobrevivem.
+  it('never discards what the agent marked as a delivery', () => {
+    // Variants for the user to choose from: same base, all survive.
     const drafts = selectDraftImages({
       produced: ['v1', 'v2', 'v3'],
-      parents: cadeia([
-        ['v1', 'anexo'],
-        ['v2', 'anexo'],
-        ['v3', 'anexo'],
+      parents: chain([
+        ['v1', 'attachment'],
+        ['v2', 'attachment'],
+        ['v3', 'attachment'],
       ]),
       keep: new Set(['v1', 'v2', 'v3']),
     })
     expect(drafts).toEqual([])
   })
 
-  it('não toca no anexo do usuário nem na base de um turno anterior', () => {
-    // 'anexo' é pai de tudo e não está em produced: não é desta resposta.
+  it('does not touch the user attachment nor the base of a previous turn', () => {
+    // 'attachment' is the parent of everything and is not in produced: it is not from this answer.
     const drafts = selectDraftImages({
       produced: ['b'],
-      parents: cadeia([['b', 'anexo']]),
+      parents: chain([['b', 'attachment']]),
       keep: new Set(),
     })
     expect(drafts).toEqual([])
   })
 
-  it('mistura os dois formatos: refez duas vezes e depois seguiu editando', () => {
-    // t1 e t2 saem do anexo (t1 é tentativa descartada); de t2 sai o texto,
-    // que por sua vez vira a versão comprimida. Sobra só a última.
+  it('mixes the two formats: redid it twice and then kept editing', () => {
+    // t1 and t2 come out of the attachment (t1 is a discarded attempt); out of t2 comes the text,
+    // which in turn becomes the compressed version. Only the last one is left.
     const drafts = selectDraftImages({
-      produced: ['t1', 't2', 'texto', 'final'],
-      parents: cadeia([
-        ['t1', 'anexo'],
-        ['t2', 'anexo'],
-        ['texto', 't2'],
-        ['final', 'texto'],
+      produced: ['t1', 't2', 'text', 'final'],
+      parents: chain([
+        ['t1', 'attachment'],
+        ['t2', 'attachment'],
+        ['text', 't2'],
+        ['final', 'text'],
       ]),
       keep: new Set(),
     })
-    expect(drafts.sort()).toEqual(['t1', 't2', 'texto'])
+    expect(drafts.sort()).toEqual(['t1', 't2', 'text'])
   })
 })

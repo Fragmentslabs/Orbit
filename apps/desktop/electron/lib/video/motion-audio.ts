@@ -11,67 +11,67 @@ import {
 import { isMotionAudioFile } from './motion-render-args'
 
 /**
- * O ÁUDIO de uma composição de motion: QUAIS arquivos são, quando cada um entra e
- * como o preview os alcança.
+ * The AUDIO of a motion composition: WHICH files they are, when each one enters and
+ * how the preview reaches them.
  *
- * A captura de quadros não pega som (janela offscreen + rawvideo no stdin), então
- * as trilhas entram numa passada final do render (motion.ts), que as posiciona e
- * mistura com o grafo de filtros do motion-render-args. Para que o que o usuário
- * ouve na aba seja o que sai no arquivo, quem escolhe o áudio é só este módulo: o
- * render, as faixas que a aba desenha e o que o agente lê no motion_preview saem
- * todos daqui.
+ * The frame capture does not pick up sound (offscreen window + rawvideo on stdin), so
+ * the tracks enter on a final pass of the render (motion.ts), which positions them and
+ * mixes them with the filter graph of motion-render-args. So that what the user
+ * hears in the tab is what comes out in the file, this module alone chooses the audio: the
+ * render, the tracks the tab draws and what the agent reads in motion_preview all come
+ * from here.
  *
- * Três portas, nesta ordem:
- *  1. caminho explícito (a tool manda o arquivo que acabou de gerar) — uma faixa,
- *     a peça inteira;
- *  2. `audio.json` na pasta da composição — o manifest, com quantas faixas quiser,
- *     cada uma no seu instante (música de fundo, efeito pontual, narração);
- *  3. o nome convencional solto na pasta (`audio.mp3`, `audio.wav`…) — uma faixa.
+ * Three doors, in this order:
+ *  1. explicit path (the tool sends the file it just generated) — one track,
+ *     the whole piece;
+ *  2. `audio.json` in the composition's folder — the manifest, with as many tracks as it wants,
+ *     each one at its instant (background music, one-off effect, narration);
+ *  3. the conventional loose name in the folder (`audio.mp3`, `audio.wav`…) — one track.
  */
 
-/** O manifest da pasta: é ele que declara as faixas e os instantes. */
+/** The folder's manifest: it is what declares the tracks and the instants. */
 export const MOTION_AUDIO_MANIFEST = 'audio.json'
 
 export interface MotionAudioTrack {
-  /** Caminho absoluto — é o que o ffmpeg do render abre. */
+  /** Absolute path — it is what the render's ffmpeg opens. */
   file: string
-  /** Nome para a interface: o rótulo do manifest, ou o nome do arquivo. */
+  /** Name for the interface: the manifest's label, or the file name. */
   name: string
   /**
-   * Caminho relativo à pasta, já escapado (`voz.mp3`, `audio/voz.mp3`): é o que
-   * o scheme serve em `orbit-motion://<id>/<path>`. `null` quando o arquivo está
-   * FORA da pasta — o render o muxa (o ffmpeg abre o caminho absoluto), mas o
-   * scheme não serve nada fora da composição, então o preview não o toca.
+   * Path relative to the folder, already escaped (`voz.mp3`, `audio/voz.mp3`): it is what
+   * the scheme serves at `orbit-motion://<id>/<path>`. `null` when the file is
+   * OUTSIDE the folder — the render muxes it (ffmpeg opens the absolute path), but the
+   * scheme serves nothing outside the composition, so the preview does not play it.
    */
   path: string | null
-  /** Segundo da peça em que a faixa ENTRA. */
+  /** Second of the piece at which the track comes IN. */
   start: number
-  /** Segundo da peça em que ela SAI; ausente = até o fim do arquivo. */
+  /** Second of the piece at which it goes OUT; absent = to the end of the file. */
   end?: number
-  /** Nível em dB (0 = como está). */
+  /** Level in dB (0 = as it is). */
   gainDb: number
-  /** Rampas de entrada e saída, em segundos. */
+  /** In and out ramps, in seconds. */
   fadeIn: number
   fadeOut: number
-  /** Cama que abaixa sozinha enquanto as outras faixas estão tocando. */
+  /** Bed that goes down by itself while the other tracks are playing. */
   duck: boolean
-  /** Como ela abaixa, quando o manifest personalizou; ausente = os números de sempre. */
+  /** How it goes down, when the manifest customized it; absent = the usual numbers. */
   duckSettings?: DuckSettings
-  /** Tratamento de timbre, dinâmica e curva de volume (motion-audio-fx.ts). */
+  /** Timbre, dynamics and volume-curve treatment (motion-audio-fx.ts). */
   fx: TrackFx
-  /** Segundo DO ARQUIVO em que o som começa (o `data-in` de um vídeo). */
+  /** Second OF THE FILE at which the sound starts (the `data-in` of a video). */
   offset?: number
-  /** Repete o arquivo até a faixa acabar (um vídeo com `loop`). */
+  /** Repeats the file until the track ends (a video with `loop`). */
   loop?: boolean
 }
 
-/** O que o render mistura: as faixas e o acabamento da mixagem inteira. */
+/** What the render mixes: the tracks and the finishing of the whole mix. */
 export interface MotionAudioPlan {
   tracks: MotionAudioTrack[]
   master: MasterFx | null
 }
 
-/** O que o manifest aceita por faixa: só `file` é obrigatório. */
+/** What the manifest accepts per track: only `file` is required. */
 interface ManifestTrack {
   file: string
   name?: string
@@ -80,9 +80,9 @@ interface ManifestTrack {
   gain?: number
   fadeIn?: number
   fadeOut?: number
-  /** `true`, ou `{ threshold, ratio, attack, release }` para personalizar. */
+  /** `true`, or `{ threshold, ratio, attack, release }` to customize. */
   duck?: boolean | Record<string, unknown>
-  /** Atalho de tratamento (voice, bed, phone) e os campos de motion-audio-fx.ts. */
+  /** Treatment shortcut (voice, bed, phone) and the motion-audio-fx.ts fields. */
   preset?: string
   highpass?: number
   lowpass?: number
@@ -92,18 +92,18 @@ interface ManifestTrack {
 }
 
 /**
- * As faixas da composição, na ordem em que o manifest as declarou (a ordem não
- * muda o som, mas muda a lista que a aba desenha).
+ * The tracks of the composition, in the order the manifest declared them (the order does not
+ * change the sound, but it changes the list the tab draws).
  *
- * O caminho explícito manda — e PRECISA existir: pedir um áudio que não está lá é
- * erro, não silêncio. O manifest também: faixa sem `file`, arquivo que não existe
- * ou JSON quebrado são erro com o motivo. Uma trilha declarada que some em
- * silêncio é pior que um render que falha dizendo o que houve.
+ * The explicit path wins — and it MUST exist: asking for an audio that is not there is an
+ * error, not silence. So is the manifest: a track without `file`, a file that does not exist
+ * or broken JSON are an error with the reason. A declared track that vanishes into
+ * silence is worse than a render that fails saying what happened.
  */
 export async function motionAudioPlan(
   folder: string,
   explicit?: string,
-  /** Faixas que não vêm do manifest — o som dos `<video>` da página (motion-video-audio.ts). */
+  /** Tracks that do not come from the manifest — the sound of the page's `<video>`s (motion-video-audio.ts). */
   extra: MotionAudioTrack[] = [],
 ): Promise<MotionAudioPlan> {
   const plan = await declaredAudioPlan(folder, explicit)
@@ -134,7 +134,7 @@ async function declaredAudioPlan(folder: string, explicit?: string): Promise<Mot
   return { tracks: loose ? [await one(root, loose, path.basename(loose), {}, 'audio')] : [], master: null }
 }
 
-/** Só as faixas — quem não precisa do acabamento (a aba, o relatório). */
+/** Only the tracks — for whoever does not need the finishing (the tab, the report). */
 export async function motionAudioTracks(
   folder: string,
   explicit?: string,
@@ -143,15 +143,15 @@ export async function motionAudioTracks(
   return (await motionAudioPlan(folder, explicit, extra)).tracks
 }
 
-/** Uma faixa: arquivo conferido, caminho servível calculado, defaults aplicados. */
+/** One track: file checked, servable path computed, defaults applied. */
 async function one(
   root: string,
   file: string,
   name: string,
-  // Sem `file`: o caminho já veio resolvido por quem chamou (o manifest só
-  // declara o resto).
+  // Without `file`: the path already came resolved from the caller (the manifest only
+  // declares the rest).
   spec: Omit<ManifestTrack, 'file'>,
-  // Prefixo das mensagens de erro do tratamento: diz QUAL faixa do manifest.
+  // Prefix of the treatment's error messages: it says WHICH track of the manifest.
   where: string,
 ): Promise<MotionAudioTrack> {
   const stat = await fsp.stat(file).catch(() => null)
@@ -165,9 +165,9 @@ async function one(
     name,
     path: inside ? relative.split(path.sep).map((segment) => encodeURIComponent(segment)).join('/') : null,
     start,
-    // Fim que não é depois do começo seria uma faixa que nunca toca: quem escreveu
-    // se enganou, e o mais útil é tocar o arquivo inteiro a partir do `start` do
-    // que sumir com a faixa sem dizer nada.
+    // An end that is not after the start would be a track that never plays: whoever wrote it
+    // made a mistake, and the most useful thing is to play the whole file from `start`
+    // rather than make the track vanish without saying anything.
     ...(isAfter(spec.end, start) ? { end: spec.end as number } : {}),
     gainDb: number(spec.gain, 0),
     fadeIn: Math.max(0, seconds(spec.fadeIn, 0)),
@@ -179,8 +179,8 @@ async function one(
 }
 
 /**
- * O manifest da pasta, ou null quando não existe. Aceita `{ "tracks": [...] }` e a
- * lista solta; `file` é o único campo obrigatório, e o resto tem padrão.
+ * The folder's manifest, or null when it does not exist. Accepts `{ "tracks": [...] }` and the
+ * loose list; `file` is the only required field, and the rest has a default.
  */
 async function manifest(root: string): Promise<{ tracks: ManifestTrack[]; master: MasterFx | null } | null> {
   const raw = await fsp.readFile(path.join(root, MOTION_AUDIO_MANIFEST), 'utf8').catch(() => null)
@@ -201,12 +201,12 @@ async function manifest(root: string): Promise<{ tracks: ManifestTrack[]; master
     if (!file) throw new Error(`${MOTION_AUDIO_MANIFEST}: track ${index + 1} has no "file"`)
     return { ...track, file }
   })
-  // O acabamento só existe na forma de objeto (a lista solta não tem onde pô-lo).
+  // The finishing only exists in object form (the loose list has nowhere to put it).
   const master = Array.isArray(parsed) ? null : parseMasterFx((parsed as { master?: unknown } | null)?.master)
   return { tracks, master }
 }
 
-/** O `audio.<ext>` da pasta, se houver (ordem estável quando há mais de um). */
+/** The folder's `audio.<ext>`, if there is one (stable order when there is more than one). */
 async function conventionalAudio(folder: string): Promise<string | null> {
   const entries = await fsp.readdir(folder).catch(() => null)
   const name = entries?.filter((entry) => isMotionAudioFile(entry)).sort()[0]

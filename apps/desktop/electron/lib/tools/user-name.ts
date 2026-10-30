@@ -4,17 +4,17 @@ import { USER_NAME_MAX } from '@shared/user-name'
 import { getAppSettings, setAppSettings } from '../app-settings'
 
 /**
- * Grava o nome pelo qual a pessoa quer ser chamada — o MESMO campo das
- * Preferências → Geral (`userName`), que nasce vazio.
+ * Saves the name the person wants to be called by — the SAME field as
+ * Preferences → General (`userName`), which is born empty.
  *
- * A detecção automática ("meu nome é X", "me chama de X") roda no renderer a
- * cada mensagem enviada; esta tool cobre o que ela não pega: "sou o Rafael",
- * "aqui é a Bia", uma correção ("não, é Rafa") ou o pedido explícito para
- * esquecer o nome.
+ * The automatic detection ("my name is X", "call me X") runs in the renderer on
+ * every message sent; this tool covers what it does not catch: "I am Rafael",
+ * "this is Bia", a correction ("no, it is Rafa") or the explicit request to
+ * forget the name.
  *
- * A escrita passa por `setAppSettings`, que normaliza (trim, teto de
- * `USER_NAME_MAX`, vazio = null) e avisa os renderers — a Preferência e o
- * título da tela inicial refletem na hora.
+ * The write goes through `setAppSettings`, which normalizes (trim, `USER_NAME_MAX`
+ * cap, empty = null) and notifies the renderers — the Preference and the
+ * title of the start screen reflect it right away.
  */
 export function createUserNameTool() {
   return tool({

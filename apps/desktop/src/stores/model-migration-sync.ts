@@ -7,26 +7,26 @@ import { copyReasoningPrefs, reasoningPrefKeys } from "@/src/stores/reasoning-pr
 import { useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 
 /**
- * Acompanha renomeações de modelo no models.dev. Quando um id some do
- * catálogo e tem sucessor da mesma família (ex: "deepseek-flash" →
- * "deepseek-v4.1-flash"), tudo o que guardava o id velho passa para o novo:
- * modelo de cada chat, default global, recentes, worker, Visão, rotações e o
- * nível de reasoning escolhido para ele.
+ * Follows model renames in models.dev. When an id disappears from the
+ * catalog and has a successor of the same family (e.g.: "deepseek-flash" →
+ * "deepseek-v4.1-flash"), everything that kept the old id moves to the new one:
+ * each chat's model, the global default, recents, worker, Vision, rotations and the
+ * reasoning level chosen for it.
  *
- * Sem isto, a escolha salva apontava para um modelo inexistente: o seletor
- * mostrava "Selecionar modelo" e, pior, o engine mandava a requisição sem
- * nível de reasoning — o modelo passava a responder sem pensar.
+ * Without this, the saved choice pointed to a nonexistent model: the selector
+ * showed "Select model" and, worse, the engine sent the request without a
+ * reasoning level — the model started answering without thinking.
  *
- * Roda a cada troca de catálogo (abertura e atualização em segundo plano).
- * O subscribe do zustand é síncrono, então o default global já está migrado
- * quando o initialize do provider-store valida a escolha logo em seguida —
- * sem cair no "primeiro modelo do primeiro provedor".
+ * It runs on every catalog change (startup and background update).
+ * The zustand subscribe is synchronous, so the global default is already migrated
+ * when the provider-store initialize validates the choice right after —
+ * without falling into the "first model of the first provider".
  */
 function migrate(catalog: Catalog) {
   if (Object.keys(catalog).length === 0) return
   const next = <T extends { providerId: string; modelId: string }>(ref: T | null | undefined) => renamedRef(catalog, ref)
 
-  // Antes de trocar os modelos: as chaves velhas ainda estão lá para copiar.
+  // Before swapping the models: the old keys are still there to copy.
   copyReasoningPrefs(renamedPrefKeys(catalog, reasoningPrefKeys()))
 
   const provider = useProviderStore.getState()
@@ -50,9 +50,9 @@ useProviderStore.subscribe((state, prev) => {
   if (state.catalog !== prev.catalog) migrate(state.catalog)
 })
 
-// A interface carregava o catálogo só ao abrir: depois da atualização em
-// segundo plano do main, seguia mostrando modelo e nível do catálogo velho
-// enquanto o engine já usava o novo. Recarregar dispara a migração acima.
+// The interface only loaded the catalog on startup: after main's background
+// update, it kept showing the model and level from the old catalog
+// while the engine was already using the new one. Reloading triggers the migration above.
 if (typeof window !== "undefined" && window.ipcRenderer) {
   catalogApi.onUpdated(() => void useProviderStore.getState().reloadCatalog())
 }

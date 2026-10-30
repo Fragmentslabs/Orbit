@@ -1,29 +1,29 @@
 /**
- * O deck de slides no celular.
+ * The slide deck on the phone.
  *
- * O que se prova aqui é o que decide se a pessoa vê o deck ou um buraco:
+ * What is proven here is what decides whether the person sees the deck or a hole:
  *
- * - o deck é carregado pela URL assinada (`src`), e o PALCO é injetado por
- *   `onReady` — o script é EXECUTADO num documento de verdade, com as seções do
- *   deck no lugar, e é ele que pagina (setas do app por `orbitSlides.go`, swipe
- *   dentro do documento, índice publicado em `onMessage`);
- * - as setas laterais e o contador acompanham o slide que está na tela;
- * - os três estados de falha (carregando, erro de rede/token, deck vazio).
+ * - the deck is loaded through the signed URL (`src`), and the STAGE is injected by
+ *   `onReady` — the script is EXECUTED in a real document, with the sections of the
+ *   deck in place, and it is what paginates (arrows of the app through `orbitSlides.go`, swipe
+ *   inside the document, index published in `onMessage`);
+ * - the side arrows and the counter follow the slide that is on screen;
+ * - the three failure states (loading, network/token error, empty deck).
  *
- * O `WebView` não existe no jsdom: aqui ele é um host que guarda as props e
- * entrega o `injectJavaScript` do ref (é o que o `onReady` do `PieceView`
- * repassa), para o teste poder falar com o deck pela mesma via do aparelho.
+ * The `WebView` does not exist in jsdom: here it is a host that stores the props and
+ * delivers the `injectJavaScript` of the ref (which is what the `onReady` of `PieceView`
+ * forwards), so the test can talk to the deck through the same path as the device.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Rótulos de verdade: o contador é interpolado (`{{index}} / {{count}}`).
+// Real labels: the counter is interpolated (`{{index}} / {{count}}`).
 import '~/i18n'
 
 import { deckStageSource, readSlidesMessage, SlidesViewer } from './slides'
 
-// O `ChevronLeft` não está na lista de ícones do setup global (que é explícita
-// de propósito): este arquivo declara os próprios, incluindo os do `PieceView`.
+// `ChevronLeft` is not in the icon list of the global setup (which is explicit
+// on purpose): this file declares its own, including the ones of `PieceView`.
 vi.mock('lucide-react-native', () => {
   const names = ['AlertCircle', 'ChevronLeft', 'ChevronRight', 'Maximize2', 'Presentation', 'RotateCw', 'X']
   const icons: Record<string, unknown> = { __esModule: true }
@@ -33,9 +33,9 @@ vi.mock('lucide-react-native', () => {
 
 const host = vi.hoisted(() => ({
   props: {} as Record<string, unknown>,
-  /** Tudo o que o app mandou para dentro da página pela ponte do `onReady`. */
+  /** Everything the app sent into the page through the `onReady` bridge. */
   injected: [] as string[],
-  /** Quantos WebViews estão montados (0 = o viewer tirou o deck de cena). */
+  /** How many WebViews are mounted (0 = the viewer took the deck out of the scene). */
   mounted: 0,
 }))
 
@@ -47,8 +47,8 @@ vi.mock('react-native-webview', async () => {
       React.useImperativeHandle(ref, () => ({
         injectJavaScript: (js: string) => host.injected.push(js),
       }))
-      // A página carregou: é o que dispara o `onReady` do `PieceView`. Uma vez
-      // por montagem — como o `onLoadEnd` do nativo, não a cada render.
+      // The page loaded: it is what fires the `onReady` of `PieceView`. Once per
+      // mount — like the native `onLoadEnd`, not on every render.
       const loaded = React.useRef(props.onLoadEnd as (() => void) | undefined)
       React.useEffect(() => {
         host.mounted += 1
@@ -69,15 +69,15 @@ const DECK = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="orbit-slides" content="width=1280,height=720">
-<title>Orbit em 3 slides</title>
+<title>Orbit in 3 slides</title>
 <style>.slide{height:100%}</style>
 </head>
 <body>
-<section class="slide"><h1>Um</h1></section>
+<section class="slide"><h1>One</h1></section>
 
-<section class="slide cover"><h1>Dois</h1></section>
+<section class="slide cover"><h1>Two</h1></section>
 
-<section class="slide"><h1>Três</h1></section>
+<section class="slide"><h1>Three</h1></section>
 </body>
 </html>
 `
@@ -86,24 +86,24 @@ const PIECE = {
   kind: 'slides' as const,
   id: 'sld_abc',
   url: 'http://192.168.0.10:4321/api/file/slides/sld_abc/tok-abc/index.html',
-  title: 'Orbit em 3 slides',
+  title: 'Orbit in 3 slides',
 }
 
 const BACKGROUND = 'hsl(240, 11%, 4%)'
 
-/** Entrega uma mensagem como o documento entrega (`PieceView` repassa o data). */
+/** Delivers a message the way the document does (`PieceView` forwards the data). */
 function say(data: unknown) {
   const onMessage = host.props.onMessage as
     | ((event: { nativeEvent: { data: string } }) => void)
     | undefined
-  if (!onMessage) throw new Error('o deck não montou: sem onMessage')
+  if (!onMessage) throw new Error('the deck did not mount: no onMessage')
   act(() => onMessage({ nativeEvent: { data: JSON.stringify(data) } }))
 }
 
-/** O último JS que o app mandou para a página. */
+/** The last JS the app sent to the page. */
 function lastInjection(): string {
   const js = host.injected.at(-1)
-  if (!js) throw new Error('nada foi injetado no deck')
+  if (!js) throw new Error('nothing was injected into the deck')
   return js
 }
 
@@ -115,8 +115,8 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-describe('mensagens do deck', () => {
-  it('só aceita mensagem do deck, e nunca um índice inválido', () => {
+describe('deck messages', () => {
+  it('only accepts a message from the deck, and never an invalid index', () => {
     expect(readSlidesMessage('{"source":"orbit-slides","type":"change","index":2,"total":5}')).toEqual({
       type: 'change',
       index: 2,
@@ -126,10 +126,10 @@ describe('mensagens do deck', () => {
       type: 'ready',
       total: 5,
     })
-    expect(readSlidesMessage('lixo')).toBeNull()
-    expect(readSlidesMessage('{"source":"outra-coisa","type":"change","index":1}')).toBeNull()
-    expect(readSlidesMessage('{"source":"orbit-slides","type":"desconhecido"}')).toBeNull()
-    // Total zero ou negativo não é total: o contador não pode dizer "1 / 0".
+    expect(readSlidesMessage('junk')).toBeNull()
+    expect(readSlidesMessage('{"source":"something-else","type":"change","index":1}')).toBeNull()
+    expect(readSlidesMessage('{"source":"orbit-slides","type":"unknown"}')).toBeNull()
+    // Zero or negative total is not a total: the counter cannot say "1 / 0".
     expect(readSlidesMessage('{"source":"orbit-slides","type":"change","index":-3,"total":0}')).toEqual({
       type: 'change',
       index: 0,
@@ -137,19 +137,19 @@ describe('mensagens do deck', () => {
   })
 })
 
-describe('palco injetado', () => {
-  it('leva o CSS, a cor do app e o script, num texto único', () => {
+describe('injected stage', () => {
+  it('carries the CSS, the app color and the script in a single text', () => {
     const source = deckStageSource(BACKGROUND)
 
     expect(source).toContain('__orbitSlidesMobile')
     expect(source).toContain('orbit-slides-stage')
     expect(source).toContain(`--orbit-bg:${BACKGROUND}`)
     expect(source).toContain('window.orbitSlides')
-    // Não há tag de script para o JSON fechar por acidente.
+    // There is no script tag for the JSON to close by accident.
     expect(source).not.toContain('</script')
   })
 
-  /** Executa o documento do deck com o palco injetado, como no WebView. */
+  /** Runs the deck document with the injected stage, as in the WebView. */
   function runDeck(html: string) {
     const deck = window.document.implementation.createHTMLDocument('deck')
     deck.documentElement.innerHTML = html
@@ -176,26 +176,26 @@ describe('palco injetado', () => {
     return event
   }
 
-  it('sobrepõe as seções e começa no primeiro slide', () => {
+  it('overlays the sections and starts on the first slide', () => {
     const { deck, messages } = runDeck(DECK)
 
     expect(deck.querySelectorAll('.orbit-slides-stage > .orbit-slide').length).toBe(3)
     expect(deck.querySelectorAll('.orbit-slide.is-current').length).toBe(1)
-    expect(deck.querySelector('.orbit-slide.is-current')?.textContent).toContain('Um')
+    expect(deck.querySelector('.orbit-slide.is-current')?.textContent).toContain('One')
     expect(deck.querySelector('.orbit-slide')?.getAttribute('data-index')).toBe('1')
-    // O documento volta a aparecer: esconder era só a troca para o palco.
+    // The document shows up again: hiding it was only the swap to the stage.
     expect(deck.documentElement.style.visibility).toBe('')
     expect(messages.at(-1)).toEqual({ source: 'orbit-slides', type: 'ready', index: 0, total: 3 })
   })
 
-  it('a seta do app pagina pelo window.orbitSlides e publica o índice', () => {
+  it('the app arrow pages through window.orbitSlides and publishes the index', () => {
     const { deck, messages, scope } = runDeck(DECK)
 
     scope.orbitSlides?.go(1)
-    expect(deck.querySelector('.orbit-slide.is-current')?.textContent).toContain('Dois')
+    expect(deck.querySelector('.orbit-slide.is-current')?.textContent).toContain('Two')
     expect(messages.at(-1)).toEqual({ source: 'orbit-slides', type: 'change', index: 1, total: 3 })
 
-    // Os limites são do palco: pedir -5 ou 99 não sai da faixa.
+    // The limits belong to the stage: asking for -5 or 99 does not leave the range.
     scope.orbitSlides?.go(99)
     expect(messages.at(-1)).toEqual({ source: 'orbit-slides', type: 'change', index: 2, total: 3 })
     scope.orbitSlides?.go(0)
@@ -204,7 +204,7 @@ describe('palco injetado', () => {
     expect(messages.at(-1)).toEqual({ source: 'orbit-slides', type: 'change', index: 0, total: 3 })
   })
 
-  it('o swipe horizontal troca de slide, o vertical não', () => {
+  it('a horizontal swipe changes the slide, a vertical one does not', () => {
     const { deck, messages } = runDeck(DECK)
     const root = deck.getElementById('orbit-slides-root') as HTMLElement
 
@@ -221,13 +221,13 @@ describe('palco injetado', () => {
     expect(messages.at(-1)).toEqual({ source: 'orbit-slides', type: 'change', index: 0, total: 3 })
   })
 
-  it('deck sem slide nenhum avisa em vez de montar palco vazio', () => {
-    const { deck, messages } = runDeck('<html><body><p>nada</p></body></html>')
+  it('a deck with no slide at all reports it instead of mounting an empty stage', () => {
+    const { deck, messages } = runDeck('<html><body><p>nothing</p></body></html>')
     expect(messages.at(-1)).toEqual({ source: 'orbit-slides', type: 'empty' })
     expect(deck.getElementById('orbit-slides-root')).toBeNull()
   })
 
-  it('um segundo inject na mesma página não monta um segundo palco', () => {
+  it('a second inject on the same page does not mount a second stage', () => {
     const deck = window.document.implementation.createHTMLDocument('deck')
     deck.documentElement.innerHTML = DECK
     const fakeWindow = {
@@ -245,23 +245,23 @@ describe('palco injetado', () => {
 })
 
 describe('SlidesViewer', () => {
-  it('carrega o deck pela URL assinada e injeta o palco quando a página abre', async () => {
+  it('loads the deck from the signed URL and injects the stage when the page opens', async () => {
     render(<SlidesViewer piece={PIECE} />)
 
-    // `src` é o documento do deck: assets relativos e token seguem intactos.
+    // `src` is the deck document: relative assets and token stay intact.
     const source = host.props.source as { uri?: string }
     expect(source.uri).toBe(PIECE.url)
-    // Já estamos em tela cheia: nada de botão de ampliar.
-    expect(screen.queryByLabelText('Ampliar')).toBeNull()
+    // We are already in full screen: no zoom button.
+    expect(screen.queryByLabelText('Enlarge')).toBeNull()
 
     await waitFor(() => expect(host.injected.length).toBe(1))
     expect(lastInjection()).toContain('__orbitSlidesMobile')
-    // Antes de o deck dizer que carregou não há seta nem contador para mentir.
+    // Before the deck says it loaded there is no arrow or counter to lie.
     expect(screen.queryByTestId('slides-counter')).toBeNull()
     expect(screen.queryByTestId('slides-next')).toBeNull()
   })
 
-  it('setas laterais e contador seguem o slide que o deck publica', async () => {
+  it('side arrows and counter follow the slide the deck publishes', async () => {
     render(<SlidesViewer piece={PIECE} />)
     await waitFor(() => expect(host.injected.length).toBe(1))
 
@@ -271,21 +271,21 @@ describe('SlidesViewer', () => {
     expect(screen.getByTestId('slides-previous').getAttribute('aria-disabled')).toBe('true')
     expect(screen.getByTestId('slides-next').getAttribute('aria-disabled')).not.toBe('true')
 
-    // A seta do app fala com o palco pelo inject — é assim que o slide vira.
+    // The arrow of the app talks to the stage through the inject — that is how the slide flips.
     fireEvent.click(screen.getByTestId('slides-next'))
     expect(lastInjection()).toContain('window.orbitSlides && window.orbitSlides.go(1)')
 
-    // E o palco devolve o índice; o contador acompanha.
+    // And the stage reports the index back; the counter follows.
     say({ source: 'orbit-slides', type: 'change', index: 2, total: 3 })
     expect(screen.getByTestId('slides-counter').textContent).toBe('3 / 3')
     expect(screen.getByTestId('slides-next').getAttribute('aria-disabled')).toBe('true')
 
-    // Mensagem de outra peça não mexe em nada.
+    // A message from another piece changes nothing.
     say({ source: 'orbit-motion', type: 'change', index: 0, total: 9 })
     expect(screen.getByTestId('slides-counter').textContent).toBe('3 / 3')
   })
 
-  it('deck de um slide só não ganha setas', async () => {
+  it('a single-slide deck gets no arrows', async () => {
     render(<SlidesViewer piece={PIECE} />)
     await waitFor(() => expect(host.injected.length).toBe(1))
 
@@ -295,7 +295,7 @@ describe('SlidesViewer', () => {
     expect(screen.queryByTestId('slides-previous')).toBeNull()
   })
 
-  it('token vencido (HTTP 401) vira o erro do host, sem setas', async () => {
+  it('an expired token (HTTP 401) becomes the host error, with no arrows', async () => {
     render(<SlidesViewer piece={PIECE} />)
     await waitFor(() => expect(host.injected.length).toBe(1))
 
@@ -309,7 +309,7 @@ describe('SlidesViewer', () => {
     expect(screen.queryByTestId('slides-next')).toBeNull()
   })
 
-  it('deck sem slides mostra o vazio, sem deixar o WebView na tela', async () => {
+  it('a deck with no slides shows the empty state, without leaving the WebView on screen', async () => {
     render(<SlidesViewer piece={PIECE} />)
     await waitFor(() => expect(host.injected.length).toBe(1))
 
@@ -317,11 +317,11 @@ describe('SlidesViewer', () => {
 
     expect(screen.getByTestId('slides-empty')).toBeTruthy()
     expect(screen.queryByTestId('slides-counter')).toBeNull()
-    // O WebView sai de cena: um deck que não é deck não fica ocupando a tela.
+    // The WebView leaves the scene: a deck that is not a deck does not keep the screen.
     expect(host.mounted).toBe(0)
   })
 
-  it('sem endereço (part antiga) é a prévia indisponível do host', () => {
+  it('without an address (an old part) it is the host preview unavailable', () => {
     render(<SlidesViewer piece={{ ...PIECE, url: '' }} />)
 
     expect(screen.getByText('Prévia indisponível')).toBeTruthy()

@@ -11,15 +11,15 @@ import { useThemeStore } from '~/stores/theme-store'
 import { PieceViewer } from './PieceViewer'
 
 /**
- * O card de peça — um só, para motion, design e slides.
+ * The piece card — a single one, for motion, design and slides.
  *
- * A geometria é fixa de propósito (72 de altura, capa 56×56): uma resposta com
- * os três tipos empilhados não pode virar uma escadinha de alturas diferentes.
- * O que muda entre eles é o ícone e a pílula com o nome do tipo, não o formato.
+ * The geometry is fixed on purpose (72 tall, cover 56×56): an answer with
+ * the three types stacked cannot become a staircase of different heights.
+ * What changes between them is the icon and the pill with the type name, not the shape.
  *
- * Nada aqui carrega WebView. O card é imagem, texto e um toque — a peça só é
- * montada quando a pessoa abre (`PieceViewer`). É o que mantém uma conversa
- * longa com dez peças custando o mesmo que uma com nenhuma.
+ * Nothing here loads a WebView. The card is image, text and a tap — the piece is only
+ * mounted when the person opens it (`PieceViewer`). That is what keeps a long
+ * conversation with ten pieces costing the same as one with none.
  */
 
 const KIND_ICON = { motion: Film, design: Frame, slides: Presentation } as const
@@ -35,8 +35,8 @@ export function PieceCard({ piece }: { piece: PieceRef }) {
   const kindLabel = t(`pieces.kind.${piece.kind}`)
   const title = piece.title?.trim() || kindLabel
 
-  // Motion conta em segundos, design em telas, slides em slides — o mesmo campo
-  // do protocolo, três unidades.
+  // Motion counts in seconds, design in screens, slides in slides — the same field
+  // of the protocol, three units.
   const meta =
     piece.kind === 'motion'
       ? piece.count
@@ -69,9 +69,9 @@ export function PieceCard({ piece }: { piece: PieceRef }) {
             accessibilityIgnoresInvertColors
           />
         ) : (
-          // Sem capa (peça antiga, ou o desktop não gerou frame): o ícone do
-          // tipo num quadrado tingido. Melhor que um buraco, e o card continua
-          // com a mesma medida.
+          // No cover (an old piece, or the desktop did not generate a frame): the icon of the
+          // type in a tinted square. Better than a hole, and the card keeps
+          // the same size.
           <View
             className="items-center justify-center rounded-[10px]"
             style={{ width: 56, height: 56, backgroundColor: tokens.muted }}

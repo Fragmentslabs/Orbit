@@ -1,4 +1,4 @@
-/** Tipos do tokenizer compacto (tokenizer.mjs). */
+/** Types of the compact tokenizer (tokenizer.mjs). */
 export interface LoadedTokenizer {
   bytes: number
   encode(text: string, maxTokens: number): number[]

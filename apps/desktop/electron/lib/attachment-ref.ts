@@ -10,29 +10,29 @@ import { getMediaEntry, mediaIdFromUrl, setMediaDeleteHook } from './media'
 import { unregisterVideosFor } from './video/store'
 
 /**
- * ANEXOS do chat que o agente usa como material de trabalho: o vídeo que o
- * usuário mandou, a foto, o áudio, o GIF.
+ * Chat ATTACHMENTS that the agent uses as working material: the video the
+ * user sent, the photo, the audio, the GIF.
  *
- * O princípio é o que o áudio já seguia: o agente recebe só uma REFERÊNCIA e uns
- * poucos metadados (nome, duração, tamanho), nunca o conteúdo. O conteúdo entra
- * no contexto quando ele decide ler — transcrever, olhar um instante, descrever —
- * e vai para uma peça quando ele decide usar (motion_asset). Um vídeo de 30
- * minutos custa uma linha no contexto, não a transcrição dele.
+ * The principle is the one audio already followed: the agent receives only a REFERENCE and a few
+ * metadata (name, duration, size), never the content. The content enters
+ * the context when it decides to read — transcribe, look at an instant, describe —
+ * and goes into a piece when it decides to use it (motion_asset). A 30-minute
+ * video costs one line in the context, not its transcription.
  *
- * Três famílias, três prefixos, todos gerados aqui (então confiáveis):
- *   - `vdo_…`  vídeo anexado (guardado nesta pasta);
- *   - `aud_…`  áudio (audio-store.ts);
- *   - `img_…`  imagem ou GIF (media.ts).
- * `resolveAttachmentRef` é a ÚNICA porta de volta: a referência vira um arquivo
- * do próprio app, e nada que o agente escreva abre caminho arbitrário — é o que
- * mantém `motion_asset` e as tools de leitura presas aos anexos da conversa.
+ * Three families, three prefixes, all generated here (so trustworthy):
+ *   - `vdo_…`  attached video (stored in this folder);
+ *   - `aud_…`  audio (audio-store.ts);
+ *   - `img_…`  image or GIF (media.ts).
+ * `resolveAttachmentRef` is the ONLY way back: the reference becomes a file
+ * of the app itself, and nothing the agent writes opens an arbitrary path — it is what
+ * keeps `motion_asset` and the reading tools tied to the conversation's attachments.
  */
 
 const VIDEO_EXTENSIONS = ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi'] as const
 const VIDEO_EXT = new RegExp(`\\.(${VIDEO_EXTENSIONS.join('|')})$`, 'i')
 export const SAFE_VIDEO_ATTACHMENT = new RegExp(`^vdo_[a-z0-9]+\\.(${VIDEO_EXTENSIONS.join('|')})$`)
 
-/** Acima disto um vídeo anexado não é copiado: o agente é avisado, não o disco. */
+/** Above this an attached video is not copied: the agent is warned, not the disk. */
 export const MAX_VIDEO_ATTACHMENT_BYTES = 2 * 1024 ** 3
 
 const MIME_EXT: Record<string, string> = {
@@ -48,12 +48,12 @@ export function videoAttachmentDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'video-attachments')
 }
 
-/** O anexo é um vídeo? Pelo MIME, ou pela extensão quando o MIME vem vazio. */
+/** Is the attachment a video? By the MIME, or by the extension when the MIME comes empty. */
 export function isVideoFile(mime: string, filename = ''): boolean {
   return mime.startsWith('video/') || VIDEO_EXT.test(filename)
 }
 
-/** Extensão para guardar um vídeo (`null` = formato que não guardamos). */
+/** Extension to store a video (`null` = a format we do not store). */
 export function videoAttachmentExt(mime: string, filename = ''): string | null {
   const fromMime = MIME_EXT[mime.split(';')[0].trim().toLowerCase()]
   if (fromMime) return fromMime
@@ -62,10 +62,10 @@ export function videoAttachmentExt(mime: string, filename = ''): string | null {
 }
 
 /**
- * O caminho de disco de um anexo que o renderer mandou como `file://…` (um vídeo
- * escolhido ou arrastado). O caminho vem do renderer, então só vale se a extensão
- * REAL for de vídeo: o nome declarado no anexo não pode servir de desculpa para
- * copiar qualquer arquivo. `null` quando não é um file:// utilizável.
+ * The disk path of an attachment the renderer sent as `file://…` (a video
+ * chosen or dragged). The path comes from the renderer, so it only counts if the REAL
+ * extension is a video one: the name declared in the attachment cannot serve as an excuse to
+ * copy any file. `null` when it is not a usable file://.
  */
 export function videoPathFromFileUrl(url: string): string | null {
   if (!url.startsWith('file://')) return null
@@ -85,11 +85,11 @@ export interface SavedVideoAttachment {
 }
 
 /**
- * Guarda o vídeo anexado. Os bytes vêm da mensagem (colar da área de
- * transferência) ou de um ARQUIVO no disco (arrastar/escolher): o segundo caso
- * é uma cópia por clone quando o sistema de arquivos suporta (APFS, btrfs), que
- * custa zero espaço e zero memória; sem clone, uma cópia comum. Em nenhum dos
- * dois o vídeo passa inteiro pela memória do renderer.
+ * Stores the attached video. The bytes come from the message (pasting from the
+ * clipboard) or from a FILE on disk (drag/choose): the second case
+ * is a clone copy when the filesystem supports it (APFS, btrfs), which
+ * costs zero space and zero memory; without clone, a regular copy. In neither of
+ * the two does the video go wholly through the renderer's memory.
  */
 export async function saveVideoAttachment(
   source: { bytes: Buffer } | { copyFrom: string },
@@ -115,9 +115,15 @@ export async function saveVideoAttachment(
   return { id, file, size }
 }
 
-// ------------------------------------------------------------------ nomes
-// O nome original do arquivo é só para o agente e para a mensagem de erro: o id
-// é o que manda. Fica num índice pequeno ao lado dos vídeos.
+/**
+ * Stores the attached video. The bytes come from the message (pasting from the
+ * clipboard) or from a FILE on disk (drag/choose): the second case
+ * is a clone copy when the filesystem supports it (APFS, btrfs), which
+ * costs zero space and zero memory; without clone, a regular copy. In neither of
+ * the two does the video go wholly through the renderer's memory.
+ */
+// The file's original name is only for the agent and for the error message: the id
+// is what rules. It stays in a small index next to the videos.
 
 function indexPath(): string {
   return path.join(videoAttachmentDir(), 'index.json')
@@ -143,7 +149,7 @@ function rememberName(id: string, name: string | undefined, sessionId: string | 
   return writing.catch(() => {})
 }
 
-/** Tira o nome do vídeo do índice de anexos (o arquivo sai por quem apaga). */
+/** Removes the video's name from the attachments index (the file leaves through whoever deletes it). */
 function forgetName(id: string): Promise<void> {
   writing = writing.then(async () => {
     const names = await readNames()
@@ -156,41 +162,41 @@ function forgetName(id: string): Promise<void> {
   return writing.catch(() => {})
 }
 
-// Excluir o vídeo na galeria apaga o arquivo (deleteMedia) e, aqui, o que mais o
-// aponta: a URL do player e o nome no índice de anexos. Sem isto sobrariam
-// registros apontando para um arquivo que não existe mais.
+// Deleting the video in the gallery deletes the file (deleteMedia) and, here, whatever else
+// points to it: the player URL and the name in the attachments index. Without this there would be
+// records pointing to a file that no longer exists.
 setMediaDeleteHook('video', async (entry) => {
   await unregisterVideosFor(entry.path)
   await forgetName(entry.id)
-  // A transcrição em cache mora ao lado do arquivo (transcribe): sem o
-  // vídeo ela não serve para nada e ocuparia espaço para sempre.
+  // The cached transcription lives next to the file (transcribe): without the
+  // video it is good for nothing and would take up space forever.
   await fsp.rm(path.join(path.dirname(entry.path), 'edit', 'transcripts', `${path.basename(entry.path)}.json`), { force: true })
 })
 
-// ------------------------------------------------------------ referências
+// ------------------------------------------------------------ references
 
 export type AttachmentKind = 'video' | 'audio' | 'image'
 
 export interface ResolvedAttachment {
   kind: AttachmentKind
   id: string
-  /** Arquivo do app (absoluto). */
+  /** App file (absolute). */
   file: string
-  /** Nome para mostrar e para dar ao arquivo dentro de uma peça. */
+  /** Name to show and to give the file inside a piece. */
   name: string
-  /** Autor e licença, quando a imagem veio de uma busca na web. */
+  /** Author and license, when the image came from a web search. */
   credit?: MediaCredit
 }
 
-/** A string parece uma referência de anexo (e não um caminho do projeto)? */
+/** Does the string look like an attachment reference (and not a project path)? */
 export function looksLikeAttachmentRef(ref: string): boolean {
   return /^(?:ref\s+)?(?:orbit-(?:audio|media):\/\/)?(?:vdo|aud|img)_[a-z0-9]/i.test(ref.trim())
 }
 
 /**
- * A referência que o agente passou → o anexo. Aceita o id, a URL do scheme ou o
- * caminho que a nota do anexo entrega; recusa tudo o mais (inclusive um caminho
- * de dentro do app que não seja o de um anexo).
+ * The reference the agent passed → the attachment. It accepts the id, the scheme URL or the
+ * path the attachment's note delivers; it refuses everything else (including a path
+ * from inside the app that is not an attachment's).
  */
 export async function resolveAttachmentRef(raw: string): Promise<ResolvedAttachment | null> {
   const ref = raw.trim().replace(/^ref\s+/i, '')

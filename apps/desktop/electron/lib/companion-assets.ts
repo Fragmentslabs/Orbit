@@ -1,20 +1,20 @@
 /**
- * Arquivos servidos ao app mobile por HTTP.
+ * Files served to the mobile app over HTTP.
  *
- * O celular não tem os protocols do Electron, então cada coisa que ele precisa
- * ver (imagem, áudio, vídeo, artefato, documento, peça de motion/design/slides
- * e a fonte da biblioteca) sai por uma rota só:
+ * The phone has no Electron protocols, so everything it needs
+ * to see (image, audio, video, artifact, document, motion/design/slides piece
+ * and the font from the library) comes out through a single route:
  *
- *     /api/file/<escopo>/<id>/<token>/<caminho-relativo>
+ *     /api/file/<scope>/<id>/<token>/<relative-path>
  *
- * O token vai num SEGMENTO do caminho, e não na query, porque uma peça
- * referencia as suas dependências por caminho relativo (`base.css`, `clip.mp4`,
- * `Pricing.html`). Resolvido contra o documento, o relativo herda o diretório
- * do token — é o que faz `/api/file/design/dsg_x/<token>/base.css` funcionar
- * sem reescrever nada dentro da peça.
+ * The token goes in a SEGMENT of the path, and not in the query, because a piece
+ * references its dependencies by relative path (`base.css`, `clip.mp4`,
+ * `Pricing.html`). Resolved against the document, the relative one inherits the
+ * token's directory — that is what makes `/api/file/design/dsg_x/<token>/base.css` work
+ * without rewriting anything inside the piece.
  *
- * O alias `/api/media/<id>?t=` continua valendo para imagens: ele já está
- * entregue e funcionando no celular, e não há por que mexer no que não quebrou.
+ * The `/api/media/<id>?t=` alias still holds for images: it is already
+ * delivered and working on the phone, and there is no reason to touch what has not broken.
  */
 
 import fs from 'node:fs'
@@ -33,8 +33,8 @@ import { isAssetScope, createAssetToken, validateAssetToken, type AssetScope } f
 import { FONT_SCHEME } from '@shared/media'
 
 /**
- * Tipos por extensão para os arquivos que passam por aqui. Cobre o que aparece
- * dentro de uma peça (html/css/js/fontes/mídia) e o que os players pedem.
+ * Types by extension for the files that pass through here. It covers what shows up
+ * inside a piece (html/css/js/fonts/media) and what the players ask for.
  */
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -80,14 +80,14 @@ function contentTypeOf(file: string): string {
 }
 
 /**
- * Sem cache por padrão. Todo arquivo daqui pode ser REESCRITO no lugar mantendo
- * o mesmo id — `update_artifact` reescreve a página, `motion_edit` reescreve a
- * composição, `image_edit` pode regravar a imagem. Cachear serviria a revisão
- * antiga, e o sintoma seria "editei e não mudou no celular".
+ * No cache by default. Every file here can be REWRITTEN in place keeping
+ * the same id — `update_artifact` rewrites the page, `motion_edit` rewrites the
+ * composition, `image_edit` may overwrite the image. Caching would serve the
+ * old revision, and the symptom would be "I edited it and it did not change on the phone".
  */
 const CACHE_REWRITABLE = 'no-store'
 
-/** O arquivo pedido, já resolvido para um buffer (pequenos) ou um caminho. */
+/** The requested file, already resolved to a buffer (small ones) or a path. */
 interface ResolvedAsset {
   buffer?: Buffer
   file?: string
@@ -95,36 +95,36 @@ interface ResolvedAsset {
   cache: string
 }
 
-/** Caminho relativo da entrada de uma peça (motion/slides), com `/`. */
+/** Relative path of a piece's entry (motion/slides), with `/`. */
 function entryRelative(folder: string, entry: string): string {
   return path.relative(folder, entry).split(path.sep).join('/')
 }
 
-/** `text/html` e `text/css` — os dois tipos que podem citar uma fonte. */
+/** `text/html` and `text/css` — the two types that can cite a font. */
 function isTextualAsset(contentType: string): boolean {
   return /^text\/(?:html|css)/.test(contentType)
 }
 
 /**
- * As URLs de fonte que o `<style>` do `font_use` (e o `fontFacesForFamily` do
- * design) gravam no documento: `orbit-font://f/<arquivo>`.
+ * The font URLs that the `<style>` of `font_use` (and design's `fontFacesForFamily`)
+ * write into the document: `orbit-font://f/<file>`.
  *
- * O `FONT_SCHEME` não tem metacaractere, então não precisa de escape na regex.
+ * `FONT_SCHEME` has no metacharacter, so it needs no escape in the regex.
  */
 const FONT_URL_RE = new RegExp(`${FONT_SCHEME}://f/([A-Za-z0-9._-]+)`, 'g')
 
 /**
- * Troca `orbit-font://f/<arquivo>` pela URL HTTP assinada.
+ * Swaps `orbit-font://f/<file>` for the signed HTTP URL.
  *
- * O scheme da fonte só existe DENTRO do Electron: num artefato carregado pelo
- * WebView do celular ele não resolve e a fonte cai para a do sistema, em
- * silêncio — o sintoma é "no telefone o layout usa outra fonte". Como o arquivo
- * da fonte tem nome validado (`<hash>.<ext>`, o mesmo do armazém), o token sai
- * por arquivo e no escopo `font`.
+ * The font scheme only exists INSIDE Electron: in an artifact loaded by the
+ * phone's WebView it does not resolve and the font falls back to the system one, in
+ * silence — the symptom is "on the phone the layout uses another font". Since the font
+ * file has a validated name (`<hash>.<ext>`, the same as the store's), the token comes out
+ * per file and in the `font` scope.
  *
- * Isto vale SÓ no caminho HTTP do companion: o handler do protocolo
- * (handleFontRequest, e o HTML que o desktop carrega) continua vendo a URL
- * original — o `orbit-font://` precisa seguir funcionando na janela.
+ * This counts ONLY in the companion's HTTP path: the protocol's handler
+ * (handleFontRequest, and the HTML the desktop loads) keeps seeing the original
+ * URL — the `orbit-font://` has to keep working in the window.
  */
 function rewriteFontUrls(text: string, base: string): string {
   if (!text.includes(`${FONT_SCHEME}://f/`)) return text
@@ -134,7 +134,7 @@ function rewriteFontUrls(text: string, base: string): string {
   })
 }
 
-/** Resposta a partir de um buffer, reescrevendo as fontes quando ele é textual. */
+/** Response from a buffer, rewriting the fonts when it is textual. */
 function bufferAsset(
   buffer: Buffer,
   contentType: string,
@@ -151,10 +151,10 @@ function bufferAsset(
 }
 
 /**
- * Um arquivo do disco, com a mesma reescrita das fontes quando é HTML/CSS.
+ * A file from disk, with the same font rewriting when it is HTML/CSS.
  *
- * Texto sai do BUFFER (é pequeno e o Range não serve para nada nele); o resto
- * continua saindo pelo caminho e é transmitido com Range pelo serveAsset.
+ * Text comes out of the BUFFER (it is small and Range is useless on it); the rest
+ * keeps coming out through the path and is streamed with Range by serveAsset.
  */
 async function fileAsset(file: string, base: string): Promise<ResolvedAsset | null> {
   const contentType = contentTypeOf(file)
@@ -167,20 +167,20 @@ async function fileAsset(file: string, base: string): Promise<ResolvedAsset | nu
 }
 
 /**
- * Traduz (escopo, id, relativo) no arquivo que existe no disco. `null` = não
- * existe, id inválido ou caminho que escapa da raiz da peça — quem chama
- * responde 404 sem distinguir os casos, para não virar sonda de disco.
+ * Translates (scope, id, relative) into the file that exists on disk. `null` = it does not
+ * exist, invalid id or a path that escapes the piece's root — whoever calls
+ * answers 404 without distinguishing the cases, so as not to become a disk probe.
  *
- * O `relativo` chega PERCENT-ENCODED e quem decodifica é o `resolve*File` de
- * cada store (o mesmo contrato dos handlers de scheme). Decodificar aqui
- * decodificaria duas vezes.
+ * The `relative` arrives PERCENT-ENCODED and what decodes it is each store's
+ * `resolve*File` (the same contract as the scheme handlers). Decoding here
+ * would decode twice.
  */
 async function resolveAsset(
   scope: AssetScope,
   id: string,
   relative: string,
-  /** `http://host:porta` como o celular enxerga o desktop — a base das URLs
-   *  de fonte reescritas dentro do HTML/CSS. */
+  /** `http://host:port` as the phone sees the desktop — the base of the font URLs
+   *  rewritten inside the HTML/CSS. */
   base: string,
 ): Promise<ResolvedAsset | null> {
   switch (scope) {
@@ -239,8 +239,8 @@ async function resolveAsset(
     case 'font': {
       const file = resolveFontFile(id)
       if (!file) return null
-      // O nome é o hash do conteúdo: o mesmo byte nunca é regravado com outro
-      // nome, então aqui o cache imutável é seguro (ao contrário do resto).
+      // The name is the hash of the content: the same byte is never rewritten under another
+      // name, so here the immutable cache is safe (unlike the rest).
       return {
         file,
         contentType: contentTypeOf(file),
@@ -250,7 +250,7 @@ async function resolveAsset(
   }
 }
 
-/** O `Range` como o `<video>`/`<audio>` pedem: início e fim em bytes. */
+/** The `Range` as `<video>`/`<audio>` ask for it: start and end in bytes. */
 function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/.exec(header ?? '')
   if (!match) return null
@@ -260,11 +260,11 @@ function parseRange(header: string | undefined, size: number): { start: number; 
 }
 
 /**
- * Serve um arquivo do desktop para o celular.
+ * Serves a desktop file to the phone.
  *
- * Range é obrigatório aqui: sem ele o vídeo não toca e o áudio não busca
- * posição — os players perguntam o tamanho e pedem pedaços, e o `<video>` do
- * WebView também. Quem decide é o header, e a resposta é 206 quando vem.
+ * Range is mandatory here: without it the video does not play and the audio does not seek
+ * position — the players ask for the size and request chunks, and the WebView's `<video>`
+ * does too. The header decides, and the answer is 206 when it comes.
  */
 export async function serveAsset(
   req: IncomingMessage,
@@ -282,7 +282,7 @@ export async function serveAsset(
 
   if (!isAssetScope(scope) || !validateAssetToken(scope, id, token)) {
     res.writeHead(401, headers({ 'Content-Type': 'application/json' }))
-    res.end(JSON.stringify({ error: 'Token inválido ou expirado' }))
+    res.end(JSON.stringify({ error: 'Invalid or expired token' }))
     return
   }
 

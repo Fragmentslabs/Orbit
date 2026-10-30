@@ -8,7 +8,7 @@ function load(): Record<string, boolean | undefined> {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch {
-    // prefs corrompidas — volta ao default (desativado)
+    // corrupted prefs — back to the default (disabled)
   }
   return {}
 }

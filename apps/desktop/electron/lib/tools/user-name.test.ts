@@ -5,7 +5,7 @@ vi.mock('../storage', () => ({ readJson: vi.fn(async () => null), writeJson: vi.
 const { createUserNameTool } = await import('./user-name')
 const { getAppSettings, onAppSettingsChange } = await import('../app-settings')
 
-/** O SDK tipa `execute` como opcional; aqui ele existe (a tool declara). */
+/** The SDK types `execute` as optional; here it exists (the tool declares it). */
 function run(name: string): Promise<unknown> {
   const execute = createUserNameTool().execute as unknown as (
     input: { name: string },
@@ -15,19 +15,19 @@ function run(name: string): Promise<unknown> {
 }
 
 describe('set_user_name', () => {
-  it('grava o nome no mesmo campo das Preferências, já normalizado', async () => {
+  it('writes the name into the same field as Preferences, already normalized', async () => {
     await run('  Ana Clara  ')
     expect(getAppSettings().userName).toBe('Ana Clara')
   })
 
-  it('nome vazio esquece o nome salvo (o campo volta a null)', async () => {
+  it('an empty name forgets the saved name (the field goes back to null)', async () => {
     await run('Rafa')
     expect(getAppSettings().userName).toBe('Rafa')
     await run('   ')
     expect(getAppSettings().userName).toBeNull()
   })
 
-  it('avisa os listeners — é o que leva a mudança ao renderer', async () => {
+  it('notifies the listeners — that is what carries the change to the renderer', async () => {
     const seen: (string | null)[] = []
     const off = onAppSettingsChange((next) => seen.push(next.userName))
     await run('Bia')

@@ -14,14 +14,14 @@ const TAG = motionRuntimeTag('orbit-motion', 'mv_abc')
 
 describe('MOTION_RUNTIME', () => {
   it('is valid JavaScript and carries the frozen frame contract', () => {
-    // Compila o texto: um erro de sintaxe na string só apareceria na janela de
-    // render, com o usuário esperando o vídeo.
+    // Compiles the text: a syntax error in the string would only show up in the render
+    // window, with the user waiting for the video.
     expect(() => new Function(MOTION_RUNTIME)).not.toThrow()
     expect(MOTION_RUNTIME).toContain(`const FPS = ${MOTION_FPS}`)
     expect(MOTION_RUNTIME).toContain('window.orbitMotion')
     expect(MOTION_RUNTIME).toContain('delayRender')
     expect(MOTION_RUNTIME).toContain('postMessage')
-    // Quadro inteiro: o seek converte por fps.
+    // Whole frame: the seek converts by fps.
     expect(MOTION_RUNTIME).toContain('frame / resolved.fps')
   })
 })
@@ -36,20 +36,20 @@ describe('parseMotionCommand (host → iframe)', () => {
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'loop', on: false })).toEqual({ type: 'loop', on: false })
   })
 
-  it('aceita o realce: o endereço do elemento, com o rótulo para conferir', () => {
+  it('accepts the highlight: the element address, with the label to check', () => {
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'highlight', index: 12, name: '.caption' })).toEqual({
       type: 'highlight',
       index: 12,
       name: '.caption',
     })
-    // O nome é opcional (serve de conferência, não de endereço).
+    // The name is optional (it serves as a check, not as an address).
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'highlight', index: 12.4 })).toEqual({
       type: 'highlight',
       index: 12,
       name: null,
     })
-    // Desmarcar é um COMANDO (índice -1), não a ausência dele: sem isso a marca
-    // ficaria na tela até a próxima seleção.
+    // Unmarking is a COMMAND (index -1), not its absence: without that the mark
+    // would stay on screen until the next selection.
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'highlight', index: null })).toEqual({
       type: 'highlight',
       index: -1,
@@ -60,12 +60,12 @@ describe('parseMotionCommand (host → iframe)', () => {
   it('rejects anything that is not one of ours', () => {
     expect(parseMotionCommand(null)).toBeNull()
     expect(parseMotionCommand('seek')).toBeNull()
-    expect(parseMotionCommand({ type: 'seek', frame: 1 })).toBeNull() // sem source
+    expect(parseMotionCommand({ type: 'seek', frame: 1 })).toBeNull() // no source
     expect(parseMotionCommand({ source: 'chat', type: 'seek', frame: 1 })).toBeNull()
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'seek' })).toBeNull()
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'seek', frame: Number.NaN })).toBeNull()
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'seek', frame: '3' })).toBeNull()
-    expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'ready', durationInFrames: 10 })).toBeNull() // é do outro lado
+    expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'ready', durationInFrames: 10 })).toBeNull() // from the other side
   })
 })
 
@@ -94,20 +94,20 @@ describe('parseMotionMessage (iframe → host)', () => {
   })
 
   it('falls back to sensible defaults and rejects malformed messages', () => {
-    // Sem fps na mensagem (runtime antigo), vale o padrão do contrato: 30.
+    // Without fps in the message (old runtime), the contract default counts: 30.
     const ready = parseMotionMessage({ source: MOTION_SOURCE, type: 'ready', durationInFrames: 90 })
     expect(ready).toEqual({ type: 'ready', durationInFrames: 90, width: 1920, height: 1080, fps: 30, version: 0 })
     expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'ready' })).toBeNull()
     expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'error', message: 42 })).toBeNull()
-    expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'seek', frame: 1 })).toBeNull() // é do outro lado
+    expect(parseMotionMessage({ source: MOTION_SOURCE, type: 'seek', frame: 1 })).toBeNull() // from the other side
     expect(parseMotionMessage({ source: 'chat', type: 'time', frame: 1 })).toBeNull()
   })
 })
 
 // ---------------------------------------------------------------------------
-// O runtime roda NA página. Aqui ele roda contra uma página falsa mínima, para
-// travar o que só apareceria numa janela de verdade: o quadro inteiro, a espera
-// do delayRender e o descarte de seeks velhos.
+// The runtime runs ON the page. Here it runs against a minimal fake page, to
+// lock down what would only show up in a real window: the whole frame, the wait
+// for delayRender and the discarding of stale seeks.
 // ---------------------------------------------------------------------------
 
 interface FakeApi {
@@ -135,9 +135,9 @@ function makePage(
     meta?: string | null
     predeclared?: Record<string, unknown>
     manual?: boolean
-    /** Elementos que o `querySelector` encontra, por seletor. */
+    /** Elements that `querySelector` finds, per selector. */
     elements?: Record<string, unknown>
-    /** Listas que o `querySelectorAll` devolve, por seletor (os <video>, por exemplo). */
+    /** Lists that `querySelectorAll` returns, per selector (the <video>s, for example). */
     lists?: Record<string, unknown[]>
   } = {},
 ) {
@@ -175,9 +175,9 @@ function makePage(
     getAnimations: () => [animation],
     fonts: Object.assign([] as unknown[], { ready: Promise.resolve() }),
   }
-  // O play é um laço de rAF com o relógio de performance: para olhar quadro a
-  // quadro, o teste controla os dois. No modo `manual` os callbacks ficam numa
-  // fila que o teste esvazia e o relógio é o `clock`.
+  // The play is a rAF loop with the performance clock: to look frame by
+  // frame, the test controls both. In `manual` mode the callbacks stay in a
+  // queue that the test drains and the clock is `clock`.
   const clock = { t: 0 }
   const queue: Array<() => void> = []
   const raf = options.manual
@@ -202,20 +202,20 @@ function makePage(
 
 type FakePage = ReturnType<typeof makePage>
 
-/** Comando do host, como o runtime o recebe (mesma ponte do preview). */
+/** Host command, as the runtime receives it (the same bridge as the preview). */
 function send(page: FakePage, type: string, extra: Record<string, unknown> = {}): void {
   page.listeners[0]({ data: { source: MOTION_SOURCE, type, ...extra }, source: page.parent })
 }
 
-/** Quadros que o play mandou pintar, na ordem. */
+/** Frames that the play told to paint, in order. */
 function timeFrames(page: FakePage): number[] {
   return page.posted.filter((m) => m.type === 'time').map((m) => m.frame as number)
 }
 
 /**
- * Um passo do play com o relógio controlado: o relógio anda `ms` e os callbacks
- * de rAF pendentes rodam até um quadro novo ser pintado (é o que o lote de rAF
- * do runtime faz, contando com os do nextFrame do seek).
+ * One step of play with the controlled clock: the clock advances `ms` and the pending
+ * rAF callbacks run until a new frame is painted (it is what the runtime's rAF
+ * batch does, counting on the seek's nextFrame ones).
  */
 async function step(page: FakePage, ms: number): Promise<void> {
   const before = timeFrames(page).length
@@ -229,7 +229,7 @@ async function step(page: FakePage, ms: number): Promise<void> {
   }
 }
 
-describe('MOTION_RUNTIME na página', () => {
+describe('MOTION_RUNTIME in the page', () => {
   it('anuncia o ready em QUADROS e o formato resolvido', () => {
     const { api, posted } = makePage({ meta: 'width=1080,height=1920,fps=30,duration=3' })
     expect(api.version).toBe(1)
@@ -247,24 +247,24 @@ describe('MOTION_RUNTIME na página', () => {
     })
   })
 
-  it('seek recebe QUADRO e converte para segundos lá dentro', async () => {
+  it('seek receives a FRAME and converts it to seconds in there', async () => {
     const { api, writes } = makePage({ meta: 'fps=30,duration=1' })
     await api.seek(15)
     expect(writes).toEqual([500]) // 15/30 s
   })
 
-  it('espera os delayRender abertos antes de aplicar o quadro', async () => {
+  it('waits for the open delayRender before applying the frame', async () => {
     const { api, writes } = makePage({ meta: 'fps=30,duration=1' })
     const handle = api.delayRender()
     const pending = api.seek(6)
     await tick()
-    expect(writes).toEqual([]) // ainda esperando o handle
+    expect(writes).toEqual([]) // still waiting for the handle
     api.continueRender(handle)
     await pending
     expect(writes).toEqual([200])
   })
 
-  it('estoura em erro em vez de pendurar quando o handle não é liberado', async () => {
+  it('blows up into an error instead of hanging when the handle is not released', async () => {
     vi.useFakeTimers()
     try {
       const { api } = makePage({ meta: 'fps=30,duration=1' })
@@ -279,7 +279,7 @@ describe('MOTION_RUNTIME na página', () => {
     }
   })
 
-  it('nunca enfileira seeks sobrepostos: o mais novo vence e o velho é descartado', async () => {
+  it('never queues overlapping seeks: the newest wins and the old one is dropped', async () => {
     const { api, writes } = makePage({ meta: 'fps=30,duration=1' })
     const handle = api.delayRender()
     const first = api.seek(1)
@@ -291,7 +291,7 @@ describe('MOTION_RUNTIME na página', () => {
     expect(writes[0]).toBeCloseTo((2 / 30) * 1000, 2)
   })
 
-  it('usa o seek da composição (canvas etc.) passando o QUADRO, sem perder a API', async () => {
+  it('uses the composition seek (canvas etc.) passing the FRAME, without losing the API', async () => {
     const seen: number[] = []
     const { api, writes } = makePage({
       meta: 'fps=30,duration=1',
@@ -299,30 +299,30 @@ describe('MOTION_RUNTIME na página', () => {
     })
     await api.seek(4)
     expect(seen).toEqual([4])
-    // As animações CSS/vídeos continuam sendo buscados, como no render antigo.
+    // CSS animations/videos keep being fetched, like in the old render.
     expect(writes[0]).toBeCloseTo((4 / 30) * 1000, 2)
     expect(typeof api.delayRender).toBe('function')
   })
 
-  it('aplica um comando do host vindo do parent', async () => {
+  it('applies a host command coming from the parent', async () => {
     const { listeners, writes, parent } = makePage({ meta: 'fps=30,duration=1' })
     expect(listeners).toHaveLength(1)
     listeners[0]({ data: { source: MOTION_SOURCE, type: 'seek', frame: 4 }, source: parent })
     await tick()
     expect(writes[0]).toBeCloseTo((4 / 30) * 1000, 2)
 
-    // De outra origem/comando desconhecido, ignora.
+    // From another origin/unknown command, it ignores it.
     listeners[0]({ data: { source: 'chat', type: 'seek', frame: 9 }, source: parent })
     listeners[0]({ data: { source: MOTION_SOURCE, type: 'ready' }, source: parent })
     await tick()
     expect(writes).toHaveLength(1)
   })
 
-  it('aceita a declaração antiga window.orbitMotion = { … } sem apagar a API', async () => {
+  it('accepts the old window.orbitMotion = { … } declaration without erasing the API', async () => {
     const { win, api, posted } = makePage({})
     expect(api.durationInFrames).toBeUndefined()
-    // A composição declara DEPOIS do runtime: faz merge (os números entram na
-    // API, delayRender/seek continuam de pé) e o ready sai com o novo tamanho.
+    // The composition declares AFTER the runtime: it merges (the numbers enter the
+    // API, delayRender/seek stay up) and ready comes out with the new size.
     win.orbitMotion = { duration: 2, fps: 30 }
     await tick(2)
     expect(api.durationInFrames).toBe(60)
@@ -331,8 +331,8 @@ describe('MOTION_RUNTIME na página', () => {
   })
 
   it('aceita o comprimento declarado em QUADROS (durationInFrames)', () => {
-    // O contrato novo: a composição declara o comprimento em quadros, junto do
-    // próprio seek (é o esqueleto que a skill de motion ensina).
+    // The new contract: the composition declares the length in frames, together with
+    // the seek itself (it is the skeleton the motion skill teaches).
     const { api, posted } = makePage({
       predeclared: { width: 1920, height: 1080, fps: 30, durationInFrames: 120, seek: () => {} },
     })
@@ -348,7 +348,7 @@ describe('MOTION_RUNTIME na página', () => {
     })
   })
 
-  it('aceita durationInFrames atribuído depois do runtime', async () => {
+  it('accepts durationInFrames assigned after the runtime', async () => {
     const { win, api } = makePage({ meta: 'fps=30' })
     expect(api.durationInFrames).toBeUndefined()
     win.orbitMotion.durationInFrames = 90
@@ -356,47 +356,47 @@ describe('MOTION_RUNTIME na página', () => {
     expect(api.durationInFrames).toBe(90)
   })
 
-  it('captura o seek que a composição atribui depois do runtime', async () => {
+  it('captures the seek the composition assigns after the runtime', async () => {
     const { win, api, writes } = makePage({ meta: 'fps=30,duration=1' })
     const seen: number[] = []
     win.orbitMotion.seek = (frame: number) => void seen.push(frame)
-    expect(api.seek).not.toBe(writes) // a API continua com o seek do runtime
+    expect(api.seek).not.toBe(writes) // the API keeps the runtime's seek
     await api.seek(9)
     expect(seen).toEqual([9])
   })
 })
 
-describe('play do runtime (relógio e rAF controlados pelo teste)', () => {
-  // 3 quadros a 30 fps: o fim chega rápido e o último quadro é o caso do bug.
+describe('runtime play (clock and rAF controlled by the test)', () => {
+  // 3 frames at 30 fps: the end arrives fast and the last frame is the bug's case.
   const make3 = () => makePage({ meta: 'fps=30,duration=0.1', manual: true })
 
-  it('com loop ligado o play dá a volta em vez de parar no último quadro', async () => {
+  it('with loop on, play wraps around instead of stopping on the last frame', async () => {
     const page = make3()
     send(page, 'loop', { on: true })
     send(page, 'play')
     await step(page, 1000 / 30)
     await step(page, 1000 / 30)
-    // Chegou ao último quadro (2) e NÃO parou: o quadro seguinte já está agendado.
+    // Reached the last frame (2) and did NOT stop: the next frame is already scheduled.
     expect(timeFrames(page)).toEqual([1, 2])
     await step(page, 1000 / 30)
-    // Passou do fim e voltou ao início.
+    // Went past the end and came back to the start.
     expect(timeFrames(page)).toEqual([1, 2, 0])
-    // E continua andando depois da volta.
+    // And keeps going after the return.
     await step(page, 1000 / 30)
     expect(timeFrames(page)).toEqual([1, 2, 0, 1])
   })
 
-  it('sem loop, para no último quadro e não anda mais', async () => {
+  it('with no loop, it stops on the last frame and goes no further', async () => {
     const page = make3()
     send(page, 'play')
     for (let i = 0; i < 5; i++) await step(page, 1000 / 30)
-    // Prende no último quadro (não num quadro que não existe) e pausa.
+    // Clamps to the last frame (not to a frame that does not exist) and pauses.
     expect(timeFrames(page)).toEqual([1, 2, 2])
     await step(page, 1000 / 30)
     expect(timeFrames(page)).toEqual([1, 2, 2])
   })
 
-  it('pause para o play', async () => {
+  it('pause to play', async () => {
     const page = make3()
     send(page, 'play')
     await step(page, 1000 / 30)
@@ -414,7 +414,7 @@ describe('injectMotionRuntime', () => {
     expect(out).toContain(TAG)
     expect(out.indexOf(TAG)).toBeGreaterThan(out.indexOf('<head>'))
     expect(out.indexOf(TAG)).toBeLessThan(out.indexOf('<meta'))
-    // A URL servida pelo scheme é o caminho reservado.
+    // The URL served by the scheme is the reserved path.
     expect(TAG).toContain(`orbit-motion://mv_abc${MOTION_RUNTIME_PATH}`)
   })
 
@@ -439,7 +439,7 @@ describe('injectMotionRuntime', () => {
 })
 
 describe('orbitMotion.transition', () => {
-  /** Um elemento falso: guarda cada `animate()` e devolve uma animação que registra o tempo. */
+  /** A fake element: stores every `animate()` and returns an animation that records the time. */
   function fakeElement(id?: string) {
     const calls: Array<{ frames: Array<Record<string, string>>; timing: Record<string, unknown> }> = []
     const animations: Array<{ paused: boolean; currentTime: number }> = []
@@ -473,7 +473,7 @@ describe('orbitMotion.transition', () => {
     const api = page.api as TransitionApi
     const done = api.transition({ out: '.a', in: '.b', at: 1.5, duration: 0.5, type: 'push', direction: 'up' })
     expect(done).toMatchObject({ end: 2, type: 'push', direction: 'up', out: '.a', in: '.b' })
-    // A saída fica escondida DEPOIS do fim; a entrada, ANTES do começo.
+    // The exit stays hidden AFTER the end; the entrance, BEFORE the start.
     expect(a.calls[0].timing).toEqual({ delay: 1500, duration: 500, easing: 'ease-in-out', fill: 'forwards' })
     expect(b.calls[0].timing).toEqual({ delay: 1500, duration: 500, easing: 'ease-in-out', fill: 'backwards' })
     expect(a.animations[0].paused).toBe(true)
@@ -485,9 +485,9 @@ describe('orbitMotion.transition', () => {
     const page = makePage({ meta: 'fps=30,duration=4', elements: { '.a': a } })
     ;(page.api as TransitionApi).transition({ out: '.a', at: 1, type: 'fade' })
     await page.api.seek(45)
-    // A página falsa só lista a animação dela: a da transição NÃO está em
-    // document.getAnimations() (é o que acontece com uma que já terminou) e mesmo
-    // assim é posicionada — sem isso, voltar no tempo a deixaria presa no fim.
+    // The fake page only lists its own animation: the transition's is NOT in
+    // document.getAnimations() (it is what happens with one that already ended) and even
+    // so it is positioned — without that, going back in time would leave it stuck at the end.
     expect(page.writes).toEqual([1500])
     expect(a.animations[0].currentTime).toBe(1500)
     await page.api.seek(0)
@@ -526,8 +526,8 @@ describe('orbitMotion.transition', () => {
   })
 })
 
-describe('<video> na página', () => {
-  /** Um <video> falso: guarda cada posição que o runtime pede e responde `seeked`. */
+describe('<video> in the page', () => {
+  /** A fake <video>: stores every position the runtime asks for and answers `seeked`. */
   function fakeVideo(attrs: Record<string, string> = {}, over: { duration?: number; loop?: boolean } = {}) {
     const seen: number[] = []
     const video = {
@@ -553,13 +553,13 @@ describe('<video> na página', () => {
     return video
   }
 
-  it('silencia o vídeo da página: o som dele entra pela mixagem, não pela janela', () => {
+  it('mutes the page video: its sound enters through the mix, not the window', () => {
     const v = fakeVideo()
     makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })
     expect(v.muted).toBe(true)
   })
 
-  it('silencia também o vídeo que a página cria DEPOIS do runtime (o caso real: o runtime é o primeiro script)', async () => {
+  it('also mutes the video the page creates AFTER the runtime (the real case: the runtime is the first script)', async () => {
     const list: unknown[] = []
     const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: list } })
     const v = fakeVideo()
@@ -569,27 +569,27 @@ describe('<video> na página', () => {
     expect(v.muted).toBe(true)
   })
 
-  it('sem atributos o vídeo anda com o tempo da peça, como sempre', async () => {
+  it('with no attributes the video moves with the piece time, as always', async () => {
     const v = fakeVideo()
     const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })
     await api.seek(45)
     expect(v.seen).toEqual([1.5])
   })
 
-  it('data-start, data-in e data-end mandam na posição do arquivo', async () => {
+  it('data-start, data-in and data-end rule the file position', async () => {
     const v = fakeVideo({ 'data-start': '1', 'data-in': '5', 'data-end': '2' })
     const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })
-    await api.seek(15) // 0,5 s: antes do start → parado em data-in
-    await api.seek(60) // 2 s: 1 s depois do start → 6
-    await api.seek(105) // 3,5 s: passou do data-end (2) → preso no mesmo 6: nada novo a pedir
+    await api.seek(15) // 0.5 s: before the start → stopped at data-in
+    await api.seek(60) // 2 s: 1 s after the start → 6
+    await api.seek(105) // 3.5 s: past the data-end (2) → stuck at the same 6: nothing new to ask for
     expect(v.seen).toEqual([5, 6])
   })
 
-  it('publica o retrato dos vídeos para o host montar a faixa de áudio', () => {
-    const calado = fakeVideo({ muted: '' })
-    const comSom = fakeVideo({ 'data-start': '2', 'data-in': '1', 'data-end': '6', 'data-gain': '-4' }, { loop: true })
+  it('publishes the snapshot of the videos for the host to build the audio track', () => {
+    const silent = fakeVideo({ muted: '' })
+    const withSound = fakeVideo({ 'data-start': '2', 'data-in': '1', 'data-end': '6', 'data-gain': '-4' }, { loop: true })
     const optOut = fakeVideo({ 'data-audio': 'false' })
-    const page = makePage({ meta: 'fps=30,duration=4', lists: { video: [calado, comSom, optOut] } })
+    const page = makePage({ meta: 'fps=30,duration=4', lists: { video: [silent, withSound, optOut] } })
     const spec = (page.win as unknown as { __orbitMotionSpec(): { videos: unknown[] } }).__orbitMotionSpec()
     expect(spec.videos).toEqual([
       { src: 'orbit-motion://mv_x/clip.mp4', muted: true, loop: false, gain: 0, start: 0, in: 0, end: undefined },

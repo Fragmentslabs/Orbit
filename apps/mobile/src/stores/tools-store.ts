@@ -12,7 +12,7 @@ interface ToolsState {
   skills: Skill[]
   mcpServers: McpServerStatus[]
   pending: SkillProposal[]
-  /** Slugs recusados pelo usuário (não inferidos pela ausência em pending) */
+  /** Slugs refused by the user (not inferred from the absence in pending) */
   discarded: string[]
   loading: boolean
 
@@ -32,10 +32,10 @@ interface ToolsState {
   authorizeMcp: (name: string) => Promise<void>
 }
 
-/** Enquanto o usuário conclui o login no navegador do desktop, o servidor
- *  fica em "connecting" — o app acompanha o desfecho por polling. */
+/** While the user completes the login in the desktop browser, the server
+ *  stays in "connecting" — the app follows the outcome by polling. */
 const AUTH_POLL_INTERVAL_MS = 3_000
-const AUTH_POLL_ATTEMPTS = 40 // ~2 minutos
+const AUTH_POLL_ATTEMPTS = 40 // ~2 minutes
 
 export const useToolsStore = create<ToolsState>((set, get) => ({
   skills: [],
@@ -178,9 +178,9 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
   },
 
   /**
-   * Pede ao desktop para abrir o fluxo OAuth do servidor. O navegador abre no
-   * computador (o redirect é o loopback de lá), então aqui só resta acompanhar:
-   * o desktop responde na hora e o status é consultado até sair de "connecting".
+   * Asks the desktop to open the OAuth flow of the server. The browser opens on the
+   * computer (the redirect is its loopback), so here all that is left is to follow it:
+   * the desktop answers right away and the status is polled until it leaves "connecting".
    */
   authorizeMcp: async (name) => {
     const { http } = useConnectionStore.getState()

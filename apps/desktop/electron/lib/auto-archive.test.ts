@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionInfo } from '@shared/chat'
 
-// O módulo puxa o engine e o servidor do companion; aqui só a regra importa.
+// The module pulls the engine and the companion server; here only the rule matters.
 vi.mock('./chat-engine', () => ({ getRunningSessionIds: () => [] }))
 vi.mock('./companion-server', () => ({ broadcastSessionEvent: vi.fn() }))
 vi.mock('./storage', () => ({ listKeys: vi.fn(), readJson: vi.fn(), writeJson: vi.fn() }))
@@ -15,21 +15,21 @@ const session = (id: string, daysIdle: number, extra: Partial<SessionInfo> = {})
 
 describe('staleSessions', () => {
   const sessions = [
-    session('velha', 40),
+    session('old one', 40),
     session('recente', 5),
     session('fixada', 40, { pinned: true }),
-    session('ja-arquivada', 40, { archived: true }),
-    session('rotina', 40, { routineId: 'r1' }),
+    session('already-archived', 40, { archived: true }),
+    session('routine', 40, { routineId: 'r1' }),
     session('worker', 40, { parentId: 'pai' }),
-    session('rodando', 40),
+    session('running', 40),
   ]
 
-  it('só arquiva o que o usuário deixou de lado', () => {
-    const stale = staleSessions(sessions, 30, now, new Set(['rodando']))
-    expect(stale.map((s) => s.id)).toEqual(['velha'])
+  it('only archives what the user set aside', () => {
+    const stale = staleSessions(sessions, 30, now, new Set(['running']))
+    expect(stale.map((s) => s.id)).toEqual(['old one'])
   })
 
-  it('o prazo escolhido decide', () => {
+  it('the chosen deadline decides', () => {
     expect(staleSessions(sessions, 3, now, new Set()).map((s) => s.id)).toContain('recente')
   })
 })

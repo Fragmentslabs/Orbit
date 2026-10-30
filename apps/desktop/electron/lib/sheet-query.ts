@@ -1,16 +1,16 @@
 /**
- * Consulta declarativa sobre linhas de planilha: filtrar, agrupar, somar.
+ * Declarative query over spreadsheet rows: filter, group, sum.
  *
- * Existe porque ler a planilha e somar "na cabeça" é caro E ERRADO. O modelo
- * percorrendo 5.000 linhas gasta contexto proporcional ao tamanho do arquivo
- * e erra a aritmética de um jeito silencioso — a resposta sai com a mesma cara
- * de confiança de uma resposta certa. Aqui o número é calculado, não estimado.
+ * It exists because reading the spreadsheet and adding "in your head" is expensive AND WRONG. The model
+ * walking 5,000 rows spends context proportional to the file size
+ * and gets the arithmetic wrong in a silent way — the answer comes out with the same
+ * confident face as a correct one. Here the number is computed, not estimated.
  *
- * É DECLARATIVO de propósito, e não "execute este código": no modo chat não há
- * sandbox, e rodar código arbitrário no processo main é outro modelo de ameaça
- * inteiro. Quem precisa de código arbitrário está no modo código e já tem bash.
+ * It is DECLARATIVE on purpose, and not "run this code": in chat mode there is no
+ * sandbox, and running arbitrary code in the main process is a whole other threat
+ * model. Whoever needs arbitrary code is in code mode and already has bash.
  *
- * Módulo puro (sem Electron, sem IO) para ser testável — mesma divisão do
+ * Pure module (no Electron, no IO) to be testable — the same split as
  * document-pages.ts.
  */
 
@@ -31,7 +31,7 @@ export type CompareOp =
 export interface Condition {
   column: string
   op: CompareOp
-  /** Dispensado em `empty`/`notEmpty`. */
+  /** Not needed in `empty`/`notEmpty`. */
   value?: string | number | boolean
 }
 
@@ -39,9 +39,9 @@ export type AggregateFn = 'sum' | 'avg' | 'min' | 'max' | 'count'
 
 export interface Aggregate {
   fn: AggregateFn
-  /** Coluna a agregar. Dispensada em `count`. */
+  /** Column to aggregate. Not used in `count`. */
   column?: string
-  /** Nome da coluna no resultado (default: "fn(coluna)"). */
+  /** Column name in the result (default: "fn(column)"). */
   as?: string
 }
 
@@ -49,7 +49,7 @@ export interface SheetQuery {
   where?: Condition[]
   groupBy?: string[]
   aggregate?: Aggregate[]
-  /** Colunas devolvidas quando NÃO há agregação (default: todas). */
+  /** Columns returned when there is NO aggregation (default: all). */
   select?: string[]
   orderBy?: { column: string; direction?: 'asc' | 'desc' }
   limit?: number
@@ -58,20 +58,20 @@ export interface SheetQuery {
 export interface QueryResult {
   columns: string[]
   rows: CellValue[][]
-  /** Linhas de dados na aba (sem o cabeçalho). */
+  /** Data rows in the sheet (without the header). */
   scanned: number
-  /** Linhas de dados que passaram no `where` — SEMPRE linhas, nunca grupos:
-   *  numa consulta agregada, dizer "3 após o filtro" faria o modelo relatar
-   *  que 3 linhas foram consideradas, quando foram 8000 em 3 grupos. */
+  /** Data rows that passed `where` — ALWAYS rows, never groups:
+   *  in an aggregated query, saying "3 after the filter" would make the model report
+   *  that 3 rows were considered, when there were 8000 in 3 groups. */
   matched: number
-  /** Grupos formados, quando a consulta agrega. */
+  /** Groups formed, when the query aggregates. */
   groups?: number
-  /** Linhas devolvidas (pode ser menor que `matched` por causa do limit). */
+  /** Rows returned (may be fewer than `matched` because of the limit). */
   returned: number
   /**
-   * Células que uma agregação numérica teve que IGNORAR por não serem número
-   * (texto, vazio, "n/a"). Sem isto, uma soma que pulou metade da coluna
-   * chegaria ao usuário com a mesma cara de uma soma completa.
+   * Cells that a numeric aggregation had to IGNORE for not being a number
+   * (text, empty, "n/a"). Without this, a sum that skipped half the column
+   * would reach the user with the same face as a complete sum.
    */
   skippedCells: number
   truncated: boolean
@@ -82,19 +82,19 @@ export class SheetQueryError extends Error {}
 const MAX_RETURNED_ROWS = 200
 
 /**
- * Separador da chave composta de groupBy: US (unit separator, ASCII 31), o
- * caractere que existe exatamente para separar campos.
+ * Separator of the groupBy composite key: US (unit separator, ASCII 31), the
+ * character that exists exactly to separate fields.
  *
- * Um separador visível — espaço, vírgula, pipe — quebraria a chave quando o
- * próprio valor contivesse um: agrupar por cidade faria "São Paulo" virar
- * dois grupos. Construído com fromCharCode para não deixar byte de controle
- * literal no fonte, que tornaria este arquivo "binário" para grep e diff.
+ * A visible separator — space, comma, pipe — would break the key when the
+ * value itself contained one: grouping by city would turn "New York" into
+ * two groups. Built with fromCharCode so as not to leave a literal control byte
+ * in the source, which would make this file "binary" to grep and diff.
  */
 const GROUP_KEY_SEP = String.fromCharCode(31)
 
-/** Índice da coluna pelo nome do cabeçalho (case-insensitive, sem espaços nas
- *  pontas). Erro explícito quando não existe — o modelo chuta nome de coluna,
- *  e um índice -1 silencioso viraria resultado vazio "válido". */
+/** Column index by header name (case-insensitive, without leading/trailing
+ *  spaces). Explicit error when it does not exist — the model guesses column names,
+ *  and a silent -1 index would become a "valid" empty result. */
 function columnIndex(header: string[], name: string): number {
   const wanted = name.trim().toLowerCase()
   const index = header.findIndex((h) => String(h ?? '').trim().toLowerCase() === wanted)
@@ -111,10 +111,10 @@ function isEmpty(value: CellValue): boolean {
 }
 
 /**
- * Número a partir de uma célula, tolerando os formatos que aparecem quando a
- * coluna foi digitada como texto: "1.234,56" (pt-BR), "1,234.56" (en), "R$
- * 1.234", "45%". Devolve null quando não dá — e o chamador CONTA esses casos
- * em vez de tratá-los como zero, porque zero mentiria na soma.
+ * Number from a cell, tolerating the formats that show up when the
+ * column was typed as text: "1.234,56" (pt-BR), "1,234.56" (en), "R$
+ * 1.234", "45%". It returns null when it cannot — and the caller COUNTS those cases
+ * instead of treating them as zero, because zero would lie in the sum.
  */
 export function toNumber(value: CellValue): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
@@ -124,21 +124,21 @@ export function toNumber(value: CellValue): number | null {
 
   const raw = String(value).trim()
   if (raw === '') return null
-  // Tira moeda, espaços e o sinal de porcentagem, preservando o sinal negativo
+  // Strips currency, spaces and the percentage sign, preserving the negative sign
   let cleaned = raw.replace(/[^\d,.\-+]/g, '')
   if (cleaned === '' || cleaned === '-' || cleaned === '+') return null
 
   const lastComma = cleaned.lastIndexOf(',')
   const lastDot = cleaned.lastIndexOf('.')
   if (lastComma >= 0 && lastDot >= 0) {
-    // O separador decimal é o que aparece POR ÚLTIMO; o outro é de milhar.
+    // The decimal separator is the one that appears LAST; the other one is the thousands one.
     cleaned =
       lastComma > lastDot
         ? cleaned.replace(/\./g, '').replace(',', '.')
         : cleaned.replace(/,/g, '')
   } else if (lastComma >= 0) {
-    // Só vírgula: decimal em pt-BR ("1234,5"), a menos que agrupe de 3 em 3
-    // ("1,234" é mil em en) — o padrão de 3 dígitos desempata.
+    // Comma only: decimal in pt-BR ("1234,5"), unless it groups in threes
+    // ("1,234" is a thousand in en) — the 3-digit pattern breaks the tie.
     cleaned = /,\d{3}(?:\D|$)/.test(cleaned) ? cleaned.replace(/,/g, '') : cleaned.replace(',', '.')
   }
 
@@ -152,8 +152,8 @@ function text(value: CellValue): string {
   return String(value).trim()
 }
 
-/** Comparação: numérica quando os dois lados são números, textual (sem
- *  diferenciar maiúscula) caso contrário. */
+/** Comparison: numeric when both sides are numbers, textual (case-insensitive)
+ *  otherwise. */
 function matches(cell: CellValue, condition: Condition): boolean {
   if (condition.op === 'empty') return isEmpty(cell)
   if (condition.op === 'notEmpty') return !isEmpty(cell)
@@ -181,7 +181,7 @@ function matches(cell: CellValue, condition: Condition): boolean {
     case 'startsWith':
       return text(cell).toLowerCase().startsWith(text(expected as CellValue).toLowerCase())
     default:
-      throw new SheetQueryError(`Operador desconhecido: ${condition.op}`)
+      throw new SheetQueryError(`Unknown operator: ${condition.op}`)
   }
 }
 
@@ -189,8 +189,8 @@ function aggregateLabel(agg: Aggregate): string {
   return agg.as ?? (agg.fn === 'count' && !agg.column ? 'count' : `${agg.fn}(${agg.column})`)
 }
 
-/** Aplica uma agregação sobre as linhas de um grupo. Retorna o valor e quantas
- *  células foram ignoradas por não serem número. */
+/** Applies an aggregation over a group's rows. Returns the value and how many
+ *  cells were ignored for not being numbers. */
 function applyAggregate(
   agg: Aggregate,
   rows: CellValue[][],
@@ -207,7 +207,7 @@ function applyAggregate(
   let skipped = 0
   for (const row of rows) {
     const cell = row[index]
-    if (isEmpty(cell)) continue // vazio não é "erro de tipo", é ausência
+    if (isEmpty(cell)) continue // empty is not a "type error", it is absence
     const n = toNumber(cell)
     if (n === null) skipped += 1
     else numbers.push(n)
@@ -229,8 +229,8 @@ function applyAggregate(
 }
 
 /**
- * Executa a consulta. `rows[0]` é o cabeçalho — é a convenção da planilha
- * usada como tabela, e a que o resto da camada de documentos já assume.
+ * Runs the query. `rows[0]` is the header — it is the convention of the spreadsheet
+ * used as a table, and the one the rest of the document layer already assumes.
  */
 export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResult {
   if (rows.length === 0) {
@@ -239,7 +239,7 @@ export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResu
   const header = rows[0].map((h) => text(h))
   const data = rows.slice(1)
 
-  // ── filtro ────────────────────────────────────────────────────────────
+  // ── filter ────────────────────────────────────────────────────────────
   const conditions = (query.where ?? []).map((c) => ({ ...c, index: columnIndex(header, c.column) }))
   const filtered = data.filter((row) => conditions.every((c) => matches(row[c.index], c)))
 
@@ -253,7 +253,7 @@ export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResu
     const aggLabels = query.aggregate.map(aggregateLabel)
     columns = [...groupCols, ...aggLabels]
 
-    // Sem groupBy, o conjunto inteiro é um grupo só — é o caso "some a coluna".
+    // Without groupBy, the whole set is a single group — it is the "sum the column" case.
     const groups = new Map<string, CellValue[][]>()
     if (groupIndexes.length === 0) {
       groups.set('', filtered)
@@ -284,7 +284,7 @@ export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResu
     resultRows = filtered.map((row) => indexes.map((i) => row[i] ?? null))
   }
 
-  // ── ordenação ─────────────────────────────────────────────────────────
+  // ── sorting ─────────────────────────────────────────────────────────
   if (query.orderBy) {
     const index = columns.findIndex(
       (c) => c.trim().toLowerCase() === query.orderBy!.column.trim().toLowerCase(),
@@ -320,7 +320,7 @@ export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResu
   }
 }
 
-/** Resultado como texto compacto para o modelo — tabela + o que foi coberto. */
+/** Result as compact text for the model — table + what was covered. */
 export function formatQueryResult(result: QueryResult): string {
   if (result.columns.length === 0) return '(empty spreadsheet)'
 
@@ -332,8 +332,8 @@ export function formatQueryResult(result: QueryResult): string {
   }
   const table = [result.columns.join(' | '), ...result.rows.map((r) => r.map(cell).join(' | '))].join('\n')
 
-  // O rodapé é o que torna o número auditável: sem ele, uma soma que ignorou
-  // 300 células não numéricas chega com a mesma cara de uma soma completa.
+  // The footer is what makes the number auditable: without it, a sum that ignored
+  // 300 non-numeric cells arrives with the same face as a complete sum.
   const notes = [`${result.scanned} rows in the sheet`, `${result.matched} considered`]
   if (result.groups !== undefined) notes.push(`${result.groups} group(s)`)
   if (result.truncated) notes.push(`showing ${result.returned} (use limit/groupBy to narrow)`)

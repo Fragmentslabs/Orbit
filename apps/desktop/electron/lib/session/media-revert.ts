@@ -33,20 +33,20 @@ import {
 } from './media-journal'
 
 /**
- * Aplica o diário de mídia (media-journal.ts) no revert e no unrevert da
- * mensagem. Vale nos DOIS modos: as peças e a galeria moram no armazenamento
- * do app, não na pasta de trabalho — o snapshot do modo código não as alcança.
+ * Applies the media journal (media-journal.ts) on the revert and the unrevert of the
+ * message. It holds in BOTH modes: the pieces and the gallery live in the app
+ * storage, not in the working folder — the snapshot of code mode does not reach them.
  *
- * Revert: junta os diários dos turnos descartados e, para CADA caminho/entrada,
- * compara o estado atual com o estado FINAL que o turno deixou. Só desfaz o
- * que ainda está como o turno deixou; o que mudou depois (outra conversa,
- * edição no painel, arquivo mexido por fora) fica intacto e é reportado como
- * conflito. Guarda o estado atual como redo (com o estado pós-revert) e
- * reconcilia o que aponta para os caminhos (registro das peças, watcher, capa,
- * player de vídeo, abas).
+ * Revert: joins the journals of the discarded turns and, for EACH path/entry,
+ * compares the current state with the FINAL state the turn left. It only undoes
+ * what is still as the turn left it; what changed afterwards (another conversation,
+ * an edit in the panel, a file touched from outside) stays intact and is reported as
+ * a conflict. It stores the current state as the redo (with the post-revert state) and
+ * reconciles whatever points at the paths (piece registry, watcher, cover,
+ * video player, tabs).
  *
- * Unrevert: aplica o redo com a MESMA regra — se algo mudou entre o revert e
- * o unrevert, aquele item é preservado e vira conflito.
+ * Unrevert: applies the redo with the SAME rule — if something changed between the revert and
+ * the unrevert, that item is preserved and becomes a conflict.
  */
 
 const PIECE_KINDS: PieceKind[] = ['motion', 'design', 'slides']
@@ -80,16 +80,16 @@ function labelOfRecord(record: RestoreRecord): string {
   return record.path
 }
 
-/** Id da peça numa entrada da galeria (capa), ou null num ativo comum. */
+/** Id of the piece in a gallery entry (cover), or null in an ordinary asset. */
 function entryPieceId(entry: MediaEntry | null | undefined): string | null {
   if (!entry) return null
   return entry.motionId ?? entry.designId ?? entry.slidesId ?? null
 }
 
 /**
- * Uma entrada da galeria é a CAPA de uma peça cuja pasta é um registro
- * separado. Se a pasta foi preservada (edição à mão depois do turno), a capa
- * também não pode sumir — senão a peça fica no disco sem tile na galeria.
+ * A gallery entry is the COVER of a piece whose folder is a separate
+ * record. If the folder was preserved (an edit by hand after the turn), the cover
+ * cannot vanish either — otherwise the piece sits on disk with no tile in the gallery.
  */
 function propagatePieceConflicts(part: Partition): void {
   const conflictedPieces = new Set<string>()
@@ -114,10 +114,10 @@ function propagatePieceConflicts(part: Partition): void {
 }
 
 /**
- * Campos que dizem o que um ativo É. Capa (`thumb`/`thumbDark`), `url`,
- * `messageId` e `linkedSessionIds` ficam de fora: são cosméticos/bookkeeping e
- * mudam em segundo plano (a capa da peça é refeita depois do turno) — comparar
- * por eles faria todo revert de peça virar conflito falso.
+ * Fields that say what an asset IS. Cover (`thumb`/`thumbDark`), `url`,
+ * `messageId` and `linkedSessionIds` stay out: they are cosmetic/bookkeeping and
+ * change in the background (the cover of the piece is redone after the turn) — comparing
+ * by them would turn every revert of a piece into a false conflict.
  */
 function stableFields(entry: MediaEntry): Array<keyof MediaEntry> {
   const kind = mediaKind(entry)
@@ -134,7 +134,7 @@ function stableFields(entry: MediaEntry): Array<keyof MediaEntry> {
   return ['kind', 'path', 'name', 'size', 'parentId', 'source', 'createdAt']
 }
 
-/** Mesma identidade e mesmo estado de conteúdo — não o mesmo objeto. */
+/** Same identity and same content state — not the same object. */
 function sameAssetState(a: MediaEntry | null, b: MediaEntry | null): boolean {
   if (!a || !b) return a === b
   if (a.id !== b.id) return false
@@ -150,13 +150,13 @@ async function currentEntry(id: string): Promise<MediaEntry | null> {
 }
 
 /**
- * Decide, registro por registro, o que pode ser desfeito.
+ * Decides, record by record, what can be undone.
  *
- * Entrada da galeria: `after` é o que o turno gravou; se o atual bate, é
- * seguro; se bate com o `before`, já está desfeito; senão é conflito.
- * Arquivo: o mesmo, com hash. Arquivo que pertence a uma entrada (artefato,
- * documento) NÃO é julgado sozinho — quem manda é a entrada; a capa pode ser
- * regerada em segundo plano sem ser edição.
+ * Gallery entry: `after` is what the turn wrote; if the current one matches, it is
+ * safe; if it matches `before`, it is already undone; otherwise it is a conflict.
+ * File: the same, with a hash. A file that belongs to an entry (artifact,
+ * document) is NOT judged on its own — the entry decides; the cover may be
+ * regenerated in the background without that being an edit.
  */
 async function partition(records: RestoreRecord[]): Promise<Partition> {
   const statusById = new Map<string, Status>()
@@ -170,10 +170,10 @@ async function partition(records: RestoreRecord[]): Promise<Partition> {
   )
   const mediaById = new Map(mediaRecords.map((r) => [r.id, r]))
   /**
-   * O arquivo PRINCIPAL de cada entrada (o HTML do artefato, o .md do
-   * documento). A revisão sozinha não basta: depois de um revert a revisão
-   * volta, e uma escrita externa seguinte pode reusar o mesmo número com outro
-   * conteúdo. O hash do arquivo é a prova que a revisão não dá.
+   * The MAIN file of each entry (the HTML of the artifact, the .md of the
+   * document). The revision alone is not enough: after a revert the revision
+   * goes back, and a later external write may reuse the same number with another
+   * content. The hash of the file is the proof the revision does not give.
    */
   const primaryPath = new Map<string, Extract<RestoreRecord, { type: 'path' }>>()
   for (const record of records) {
@@ -192,7 +192,7 @@ async function partition(records: RestoreRecord[]): Promise<Partition> {
     const fileState = file ? await hashPath(file.path) : null
     const fileMatches = (state: PathState | undefined): boolean => {
       if (!file) return true
-      // Sem estado final do arquivo (diário antigo/crash), não há como provar.
+      // Without a final state of the file (old journal/crash), there is no way to prove it.
       if (!state) return false
       return samePathState(fileState!, state)
     }
@@ -204,8 +204,8 @@ async function partition(records: RestoreRecord[]): Promise<Partition> {
 
     let status: Status
     if (record.after === undefined) {
-      // Diário antigo/crashado: sem estado final não há como provar que o
-      // turno ainda é o dono do estado atual.
+      // Old/crashed journal: without a final state there is no way to prove that the
+      // turn still owns the current state.
       status = 'conflict'
     } else if (
       sameAssetState(current, record.after) &&
@@ -231,7 +231,7 @@ async function partition(records: RestoreRecord[]): Promise<Partition> {
 
   for (const record of records) {
     if (record.type !== 'path') continue
-    // Arquivo de uma entrada conhecida: a entrada decide.
+    // File of a known entry: the entry decides.
     if (record.owner && statusById.has(record.owner)) {
       const ownerStatus = statusById.get(record.owner)!
       if (ownerStatus === 'safe') safe.push(record)
@@ -271,9 +271,9 @@ async function inGallery(kind: PieceKind, id: string): Promise<boolean> {
 }
 
 /**
- * Depois de a pasta voltar (ou sumir): a peça que existe volta ao registro com
- * o watcher religado e a capa refeita; a que não existe mais sai do registro e
- * tem as abas fechadas.
+ * After the folder comes back (or vanishes): the piece that exists goes back to the registry with
+ * the watcher reconnected and the cover redone; the one that no longer exists leaves the registry and
+ * has its tabs closed.
  */
 async function reconcilePieces(pieces: PieceRef[]): Promise<void> {
   const removed: Record<PieceKind, string[]> = { motion: [], design: [], slides: [] }
@@ -309,7 +309,7 @@ async function reconcilePieces(pieces: PieceRef[]): Promise<void> {
         }
       }
     } catch (err) {
-      console.error(`[media-revert] reconciliar ${piece.kind} ${piece.id} falhou:`, err)
+      console.error(`[media-revert] reconciliar ${piece.kind} ${piece.id} failed:`, err)
     }
   }
   panelPiecesRemoved(removed)
@@ -326,9 +326,9 @@ function conflictCount(records: RestoreRecord[], partition: Partition): number {
   let count = 0
   for (const record of partition.conflicts) {
     if (record.type === 'media') count += 1
-    // Arquivo de uma entrada conflitante já contado pela entrada.
+    // File of a conflicting entry already counted by the entry.
     else if (record.owner && mediaIds.has(record.owner)) continue
-    // Pasta de peça conflitante já contada pela capa (mesma peça).
+    // Folder of a conflicting piece already counted by the cover (same piece).
     else if (record.piece && pieceIds.has(record.piece.id)) continue
     else count += 1
   }
@@ -336,11 +336,11 @@ function conflictCount(records: RestoreRecord[], partition: Partition): number {
 }
 
 /**
- * Aplica um conjunto de registros com a regra de conflito.
+ * Applies a set of records with the conflict rule.
  *
- * `redoDir` (só no revert): antes de aplicar, guarda o estado atual dos itens
- * seguros — é o que o unrevert devolve. Depois de aplicar, grava o estado
- * final (o que o unrevert vai exigir encontrar para poder desfazer).
+ * `redoDir` (revert only): before applying, it stores the current state of the safe
+ * items — it is what the unrevert gives back. After applying, it writes the final
+ * state (what the unrevert will require to find so that it can undo).
  */
 async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise<SessionMediaRevert> {
   const part = await partition(records)
@@ -350,9 +350,9 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
     (r): r is Extract<RestoreRecord, { type: 'media' }> => r.type === 'media',
   )
 
-  // Arquivos que a entrada segura tem AGORA e não tinha antes (capa nova,
-  // render novo de documento, artefato criado no turno): saem junto com ela.
-  // Os que já estavam antes são restaurados pelos próprios registros.
+  // Files the safe entry has NOW and did not have before (new cover,
+  // new document render, artifact created in the turn): they go away with it.
+  // The ones that were already there are restored by their own records.
   for (const record of safeMedia) {
     const now = await currentEntry(record.id)
     if (!now) continue
@@ -365,8 +365,8 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
         path: file,
         backupFile: null,
         owner: record.id,
-        // O estado atual é o que o turno deixou (a entrada é segura); o
-        // registro só precisa existir para o redo guardar os bytes.
+        // The current state is what the turn left (the entry is safe); the
+        // record only needs to exist so that the redo stores the bytes.
         after: await hashPath(file),
       })
     }
@@ -374,10 +374,10 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
 
   if (redoDir) await captureJournal(redoDir, safe, currentEntry)
 
-  // A partição leu o estado no começo; outra conversa pode ter gravado no
-  // meio. Cada item é revalidado logo antes de trocar — a entrada dentro da
-  // trava do índice, a pasta da peça dentro da trava da peça — e o que mudou
-  // nesse intervalo fica como está e conta como conflito.
+  // The partition read the state at the start; another conversation may have written in
+  // between. Each item is revalidated right before swapping — the entry inside the
+  // index lock, the piece folder inside the piece lock — and what changed
+  // in that interval stays as it is and counts as a conflict.
   const beforeApply = new Map<string, MediaEntry | null>()
   for (const record of safeMedia) beforeApply.set(record.id, await currentEntry(record.id))
   const afterById = new Map(safeMedia.map((r) => [r.id, r.after ?? null]))
@@ -394,10 +394,10 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
   const plain: RestoreRecord[] = []
   for (const record of safe) {
     if (record.type !== 'path') continue
-    // Os arquivos de uma entrada que perdeu a corrida ficam com ela.
+    // The files of an entry that lost the race stay with it.
     if (record.owner && lateEntries.has(record.owner)) continue
     if (record.piece) {
-      // A pasta da peça troca sob o MESMO lock das tools que a escrevem.
+      // The folder of the piece is swapped under the SAME lock as the tools that write it.
       const skipped = await withAssetLock(`${record.piece.kind}:${record.piece.folder}`, () =>
         restorePaths([record], stillSafe),
       )
@@ -409,8 +409,8 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
   }
   late += (await restorePaths(plain, stillSafe)).length
 
-  // O player do vídeo tem registro próprio (videos.json): volta com o mesmo id
-  // que a entrada guarda, ou sai com o arquivo que deixou de existir.
+  // The video player has its own registry (videos.json): it comes back with the same id
+  // the entry stores, or goes away with the file that no longer exists.
   let items = 0
   for (const record of media) {
     const now = beforeApply.get(record.id) ?? null
@@ -440,9 +440,9 @@ async function applyJournal(records: RestoreRecord[], redoDir?: string): Promise
 }
 
 /**
- * Revert da mídia dos turnos descartados (`assistantIds`, em ordem). Devolve o
- * resumo para a barra de revert, ou `undefined` quando nenhum deles tocou em
- * mídia. Nunca lança: a falha vira `restored: false`.
+ * Revert of the media of the discarded turns (`assistantIds`, in order). Returns the
+ * summary for the revert bar, or `undefined` when none of them touched
+ * media. Never throws: the failure becomes `restored: false`.
  */
 export async function revertMedia(
   sessionId: string,
@@ -463,7 +463,7 @@ export async function revertMedia(
       path.join(sessionJournalDir(sessionId), REDO_DIR),
     )
   } catch (err) {
-    console.error('[media-revert] revert falhou:', err)
+    console.error('[media-revert] revert failed:', err)
     return {
       restored: false,
       pieces: 0,
@@ -474,7 +474,7 @@ export async function revertMedia(
   }
 }
 
-/** Unrevert: põe de volta o que o último revert desfez, com a mesma regra de conflito. */
+/** Unrevert: puts back what the last revert undid, with the same conflict rule. */
 export async function unrevertMedia(sessionId: string): Promise<SessionMediaRevert | undefined> {
   const redo = await readRedoJournal(sessionId).catch(() => null)
   if (!redo) return undefined
@@ -483,7 +483,7 @@ export async function unrevertMedia(sessionId: string): Promise<SessionMediaReve
     await deleteRedoJournal(sessionId)
     return summary
   } catch (err) {
-    console.error('[media-revert] unrevert falhou:', err)
+    console.error('[media-revert] unrevert failed:', err)
     return {
       restored: false,
       pieces: 0,
@@ -495,8 +495,8 @@ export async function unrevertMedia(sessionId: string): Promise<SessionMediaReve
 }
 
 /**
- * O revert virou definitivo (nova mensagem enviada): os turnos descartados não
- * voltam mais, então os diários deles e o redo deixam de servir.
+ * The revert has become definitive (new message sent): the discarded turns do not
+ * come back anymore, so their journals and the redo stop being useful.
  */
 export async function discardMediaRevert(sessionId: string, discardedAssistantIds: string[]): Promise<void> {
   await deleteRedoJournal(sessionId).catch(() => {})

@@ -6,34 +6,34 @@ import { motionBundleKey, type MotionBundle, type MotionBundleFile } from '@shar
 import { motionPiecesForSession } from './motion-store'
 
 /**
- * Os ARQUIVOS de cada composição, do jeito que o chat precisa vê-los.
+ * The FILES of each composition, the way the chat needs to see them.
  *
- * Uma peça de motion é uma PASTA: o HTML de entrada, as mídias que entraram por
- * `motion_asset`, as fontes, o acervo que o agente baixou, o `audio.json` das
- * trilhas. No chat, cada áudio ou imagem trazida para dentro virava um player
- * solto na mensagem — e o que foi gerado e depois trocado continuava lá,
- * ocupando a conversa com material que a peça não usa mais (ou nunca usou).
+ * A motion piece is a FOLDER: the entry HTML, the media that came in through
+ * `motion_asset`, the fonts, the material the agent downloaded, the `audio.json` of the
+ * tracks. In the chat, every audio or image brought in became a loose
+ * player in the message — and what was generated and then replaced stayed there,
+ * filling the conversation with material the piece no longer uses (or never used).
  *
- * Aqui mora o que o card da peça lê: a LISTA DA PASTA (essa é a verdade — nada
- * é apagado, o arquivo que ficou de fora continua no disco) cruzada com o
- * registro de ORIGEM de cada arquivo, gravado no momento em que ele entrou
- * (`motion_asset`). Com a origem, o chat reconhece o player de um áudio gerado
- * como sendo da peça e o recolhe no card em vez de mostrá-lo solto.
+ * Here lives what the piece card reads: the FOLDER LISTING (that is the truth — nothing
+ * is deleted, the file left out stays on disk) crossed with the
+ * ORIGIN record of each file, written at the moment it came in
+ * (`motion_asset`). With the origin, the chat recognizes the player of a generated audio
+ * as belonging to the piece and folds it into the card instead of showing it loose.
  *
- * "Usado" não é uma etiqueta gravada: é DERIVADO — o arquivo é citado no
- * HTML/CSS/JS da composição ou no `audio.json` dela. Assim a conta nunca fica
- * velha: quando o agente troca a narração no `audio.json`, o arquivo antigo
- * passa a "descartado" sozinho, sem ninguém precisar marcá-lo.
+ * "Used" is not a stored label: it is DERIVED — the file is cited in the
+ * composition's HTML/CSS/JS or in its `audio.json`. That way the count never goes
+ * stale: when the agent swaps the narration in `audio.json`, the old file
+ * becomes "discarded" by itself, with nobody having to mark it.
  */
 
 export interface MotionFileRecord {
-  /** Caminho relativo dentro da pasta da peça, sempre com `/`. */
+  /** Relative path inside the piece's folder, always with `/`. */
   name: string
-  /** Referências de anexo de onde o arquivo veio (`aud_…`, `img_…`, `vdo_…`). */
+  /** Attachment references the file came from (`aud_…`, `img_…`, `vdo_…`). */
   refs: string[]
-  /** Caminhos de origem (modo código: um arquivo da pasta de trabalho). */
+  /** Source paths (code mode: a file of the working folder). */
   sources: string[]
-  /** Quando entrou na peça (ms). */
+  /** When it entered the piece (ms). */
   addedAt: number
 }
 
@@ -46,20 +46,20 @@ interface BundleEntry {
 type FileIndex = Record<string, BundleEntry>
 
 const SAFE_MOTION_ID = /^mv_[a-z0-9]+$/
-/** Teto de arquivos listados por peça: uma composição é uma pasta pequena. */
+/** Cap on files listed per piece: a composition is a small folder. */
 const MAX_FILES = 400
-/** Até onde a listagem desce (uma peça usa no máximo um nível de subpasta). */
+/** How far the listing goes down (a piece uses at most one level of subfolder). */
 const MAX_DEPTH = 3
-/** Arquivo de texto maior que isto não entra na varredura de citações. */
+/** A text file larger than this does not enter the citation scan. */
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024
-/** Quantos arquivos a varredura de citações lê, no máximo. */
+/** How many files the citation scan reads, at most. */
 const MAX_SOURCE_FILES = 40
-/** O que a varredura de "usado" lê: o que a composição pode citar um arquivo. */
+/** What the "used" scan reads: what the composition may cite a file in. */
 const SOURCE_EXTENSIONS = new Set(['.html', '.htm', '.css', '.js', '.mjs', '.json', '.svg', '.srt', '.vtt', '.txt'])
 /**
- * Arquivos da pasta que NÃO entram na lista: o HTML de entrada (a peça em si) e
- * os manifestos internos. `audio.json` continua sendo LIDO — mas como fonte de
- * citações, não como item da lista.
+ * Files of the folder that do NOT enter the list: the entry HTML (the piece itself) and
+ * the internal manifests. `audio.json` is still READ — but as a source of
+ * citations, not as an item of the list.
  */
 const INTERNAL_FILES = new Set(['index.html', 'audio.json', 'orbit.json'])
 
@@ -102,7 +102,7 @@ async function load(fresh = false): Promise<FileIndex> {
   if (index && !fresh) return index
   try {
     const disk = JSON.parse(await fsp.readFile(indexFile(), 'utf8')) as FileIndex
-    // Releitura: o que está em memória e ainda não foi gravado não pode sumir.
+    // Re-read: what is in memory and not yet written cannot vanish.
     index = fresh && index ? { ...disk, ...index } : disk
   } catch {
     index = index ?? {}
@@ -119,13 +119,13 @@ function persist(): Promise<void> {
       await fsp.writeFile(file, snapshot, 'utf8')
     })
     .catch(() => {
-      // Índice de origem é conveniência do card: se o disco recusar a gravação,
-      // a peça continua funcionando — só não haverá a que card ligar o arquivo.
+      // The origin index is a convenience of the card: if the disk refuses the write,
+      // the piece keeps working — there will just be no card to connect the file to.
     })
   return writing
 }
 
-/** Nome relativo dentro da pasta, com `/` e sem escapar dela. */
+/** Relative name inside the folder, with `/` and without escaping it. */
 export function pieceFileName(folder: string, file: string): string | null {
   const rel = path.relative(path.resolve(folder), path.resolve(file))
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null
@@ -133,13 +133,13 @@ export function pieceFileName(folder: string, file: string): string | null {
 }
 
 /**
- * Registra de ONDE veio um arquivo que acabou de entrar na peça.
+ * Records WHERE a file that just entered the piece came from.
  *
- * Chamado por `motion_asset`, logo depois da cópia — é o que liga `narracao.wav`
- * dentro da pasta ao `aud_…` que o chat mostrou como player. O mesmo arquivo
- * pode receber origens diferentes ao longo da vida (a narração regravada que
- * caiu no mesmo nome por ter o mesmo tamanho): as duas ficam guardadas, porque
- * as duas mensagens continuam na conversa.
+ * Called by `motion_asset`, right after the copy — it is what links `narracao.wav`
+ * inside the folder to the `aud_…` the chat showed as a player. The same file
+ * may receive different origins over its life (the re-recorded narration that
+ * landed on the same name for having the same size): both are kept, because
+ * both messages are still in the conversation.
  */
 export async function recordMotionFile(
   piece: { id: string; folder: string; sessionId?: string },
@@ -155,15 +155,15 @@ export async function recordMotionFile(
   const record = entry.files.find((f) => f.name === name) ?? { name, refs: [], sources: [], addedAt: 0 }
   if (file.ref && !record.refs.includes(file.ref)) record.refs.push(file.ref)
   if (file.source && !record.sources.includes(file.source)) record.sources.push(file.source)
-  // Reimportar o mesmo arquivo (o mesmo nome, o mesmo conteúdo) não é novidade:
-  // a data só anda quando o arquivo realmente entra pela primeira vez.
+  // Re-importing the same file (the same name, the same content) is nothing new:
+  // the date only moves when the file really enters for the first time.
   if (!record.addedAt) record.addedAt = Date.now()
   if (!entry.files.some((f) => f.name === name)) entry.files.push(record)
   entries[piece.id] = entry
   await persist()
 }
 
-/** A peça saiu do registro: o que sabíamos das origens dela não serve mais. */
+/** The piece left the registry: what we knew of its origins is no longer of use. */
 export async function forgetMotionFiles(id: string): Promise<void> {
   const entries = await load()
   if (!entries[id]) return
@@ -171,7 +171,7 @@ export async function forgetMotionFiles(id: string): Promise<void> {
   await persist()
 }
 
-/** Um arquivo da pasta, já com o que a lista do card mostra. */
+/** A file of the folder, already with what the card's list shows. */
 interface ListedFile {
   name: string
   size: number
@@ -188,7 +188,7 @@ async function listFolder(root: string, dir = root, depth = 0, out: ListedFile[]
   }
   for (const item of items) {
     if (out.length >= MAX_FILES) break
-    // Ponto na frente é arquivo de sistema (o `.motion-*` do editor, o `.DS_Store`).
+    // A leading dot is a system file (the editor's `.motion-*`, `.DS_Store`).
     if (item.name.startsWith('.')) continue
     const abs = path.join(dir, item.name)
     if (item.isDirectory()) {
@@ -198,8 +198,8 @@ async function listFolder(root: string, dir = root, depth = 0, out: ListedFile[]
     if (!item.isFile()) continue
     const stat = await fsp.stat(abs).catch(() => null)
     if (!stat || !stat.size) continue
-    // O nome é SEMPRE relativo à raiz da peça (`fonts/inter.woff2`), mesmo
-    // quando o arquivo está numa subpasta.
+    // The name is ALWAYS relative to the piece's root (`fonts/inter.woff2`), even
+    // when the file is in a subfolder.
     const rel = pieceFileName(root, abs)
     if (!rel) continue
     if (depth === 0 && INTERNAL_FILES.has(rel.toLowerCase())) continue
@@ -209,8 +209,8 @@ async function listFolder(root: string, dir = root, depth = 0, out: ListedFile[]
 }
 
 /**
- * Todo o texto que pode CITAR um arquivo da peça: o HTML de entrada, o
- * `audio.json` e os CSS/JS que ele carrega. É a fonte do "usado".
+ * All the text that can CITE a file of the piece: the entry HTML, the
+ * `audio.json` and the CSS/JS it loads. It is the source of "used".
  */
 async function readCompositionSources(folder: string, entry: string | null): Promise<string> {
   const parts: string[] = []
@@ -224,13 +224,13 @@ async function readCompositionSources(folder: string, entry: string | null): Pro
     try {
       parts.push(await fsp.readFile(abs, 'utf8'))
     } catch {
-      // ilegível/ binário: fica de fora
+      // unreadable/binary: left out
     }
   }
   if (entry) await add(entry)
   const walk = async (dir: string, depth: number): Promise<void> => {
-    // Teto de arquivos lidos: uma peça cita meia dúzia; o resto (um
-    // node_modules que caísse na pasta) não muda a resposta e custa caro.
+    // Cap on files read: a piece cites half a dozen; the rest (a
+    // node_modules that fell into the folder) does not change the answer and costs a lot.
     if (depth > 1 || parts.length >= MAX_SOURCE_FILES) return
     let items: Dirent[]
     try {
@@ -247,8 +247,8 @@ async function readCompositionSources(folder: string, entry: string | null): Pro
       }
       if (!item.isFile()) continue
       if (!SOURCE_EXTENSIONS.has(path.extname(item.name).toLowerCase())) continue
-      // O manifesto exportado lista todos os arquivos — se ele entrasse na
-      // varredura, todo arquivo pareceria "usado".
+      // The exported manifest lists every file — if it entered the
+      // scan, every file would look "used".
       if (item.name.toLowerCase() === 'orbit.json') continue
       await add(abs)
     }
@@ -258,9 +258,9 @@ async function readCompositionSources(folder: string, entry: string | null): Pro
 }
 
 /**
- * O nome aparece no texto como ARQUIVO, não como pedaço de outra palavra
- * (`a.wav` dentro de `data.wav` não conta). Vale o caminho e o nome solto, e
- * também a forma percent-encoded, que é como um nome com espaço viaja numa URL.
+ * The name appears in the text as a FILE, not as a piece of another word
+ * (`a.wav` inside `data.wav` does not count). Both the path and the bare name count, and
+ * also the percent-encoded form, which is how a name with a space travels in a URL.
  */
 export function mentionsFile(text: string, name: string): boolean {
   const base = name.split('/').pop() ?? name
@@ -272,7 +272,7 @@ export function mentionsFile(text: string, name: string): boolean {
       const encoded = encodeURI(candidate)
       if (encoded !== candidate) needles.add(encoded)
     } catch {
-      // nome com % solto: vale só a forma crua
+      // name with a stray %: only the raw form counts
     }
   }
   for (const needle of needles) {
@@ -282,8 +282,8 @@ export function mentionsFile(text: string, name: string): boolean {
       if (at < 0) break
       const before = at === 0 ? '' : text[at - 1]
       const after = text[at + needle.length] ?? ''
-      // `./narracao.wav`, `"narracao.wav"`, `src=narracao.wav` passam; `x-narracao.wav`
-      // (outro arquivo) não.
+      // `./narracao.wav`, `"narracao.wav"`, `src=narracao.wav` pass; `x-narracao.wav`
+      // (another file) does not.
       if (!/[A-Za-z0-9_-]/.test(before) && !/[A-Za-z0-9_.-]/.test(after)) return true
       from = at + 1
     }
@@ -335,12 +335,12 @@ async function bundleFor(
 }
 
 /**
- * Os cards de peça de uma conversa — um por composição que tenha arquivo na
- * pasta. A lista sai da UNIÃO de duas fontes: o registro do que entrou por
- * `motion_asset` (que traz as origens) e o registro das composições da sessão
- * (que traz a entrada de cada uma). Nenhuma das duas basta sozinha: a peça pode
- * ter arquivos que nunca passaram pelo `motion_asset`, e pode ter sido
- * registrada antes de o primeiro arquivo entrar.
+ * The piece cards of a conversation — one per composition that has a file in the
+ * folder. The list comes from the UNION of two sources: the registry of what entered through
+ * `motion_asset` (which brings the origins) and the registry of the session's compositions
+ * (which brings each one's entry). Neither is enough alone: the piece may
+ * have files that never went through `motion_asset`, and may have been
+ * registered before the first file came in.
  */
 export async function listMotionBundles(sessionId: string): Promise<MotionBundle[]> {
   const pieces = new Map<string, { id: string; folder: string; entry: string | null }>()
@@ -350,7 +350,7 @@ export async function listMotionBundles(sessionId: string): Promise<MotionBundle
     pieces.set(id, { id, folder: entry.folder, entry: null })
   }
   for (const piece of await motionPiecesForSession(sessionId)) {
-    // A entrada vem do registro: é ela que fica de fora da lista.
+    // The entry comes from the registry: it is what stays out of the list.
     pieces.set(piece.id, { id: piece.id, folder: piece.folder, entry: piece.entry })
   }
   const bundles: MotionBundle[] = []

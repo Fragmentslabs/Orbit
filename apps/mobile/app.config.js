@@ -1,5 +1,5 @@
-// Variante do app: APP_VARIANT=development => "Orbit (Dev)" / com.fragmentslabs.orbit.dev
-// Sem APP_VARIANT (ou "production")        => "Orbit" / com.fragmentslabs.orbit
+// App variant: APP_VARIANT=development => "Orbit (Dev)" / com.fragmentslabs.orbit.dev
+// Without APP_VARIANT (or "production")      => "Orbit" / com.fragmentslabs.orbit
 const IS_DEV = process.env.APP_VARIANT === "development";
 
 const applyVariant = (id) => (IS_DEV ? `${id}.dev` : id);

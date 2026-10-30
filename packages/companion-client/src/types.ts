@@ -1,59 +1,59 @@
 /**
- * Tipos internos do companion-client.
- * Re-exporta tipos de @orbit/shared e adiciona configurações de conexão.
+ * Internal types of companion-client.
+ * Re-exports types from @orbit/shared and adds connection settings.
  */
 
 import type { AuthRejectReason } from '@orbit/shared'
 
-/** Configuração necessária para conectar ao desktop. */
+/** Configuration required to connect to the desktop. */
 export interface ConnectionConfig {
   host: string
   port: number
-  /** PIN de pareamento — necessário apenas no primeiro pareamento. */
+  /** Pairing PIN — required only on the first pairing. */
   pin: string
-  /** Token persistente emitido pelo desktop no primeiro pareamento —
-   *  quando presente, autentica sem PIN. */
+  /** Persistent token issued by the desktop on the first pairing —
+   *  when present, it authenticates without a PIN. */
   token?: string
-  /** Nome do device (para exibição no desktop). */
+  /** Device name (for display on the desktop). */
   deviceName?: string
 }
 
 /**
- * Motivo estruturado da falha de conexão.
+ * Structured reason of the connection failure.
  *
- * Os três primeiros vêm do `auth:error` do desktop (pareamento); os demais são
- * falhas do próprio cliente. O texto exibido é responsabilidade do app (i18n) —
- * este pacote só transporta o código.
+ * The first three come from the desktop `auth:error` (pairing); the rest are
+ * failures of the client itself. The displayed text is the app's responsibility (i18n) —
+ * this package only carries the code.
  */
 export type ConnectionErrorReason =
   | AuthRejectReason
-  /** Esgotou as tentativas de reconexão (o desktop provavelmente está fechado). */
+  /** Ran out of reconnection attempts (the desktop is probably closed). */
   | 'connect_failed'
-  /** O socket não chegou a abrir (endereço/porta inválidos, WebSocket indisponível). */
+  /** The socket did not even open (invalid address/port, WebSocket unavailable). */
   | 'socket_error'
-  /** Falha que o app não sabe nomear (ex.: desktop mais novo mandou um motivo novo). */
+  /** Failure the app cannot name (e.g. a newer desktop sent a new reason). */
   | 'unknown'
 
-/** Estado da conexão WebSocket. */
+/** State of the WebSocket connection. */
 export interface ConnectionState {
   status: 'disconnected' | 'connecting' | 'authenticating' | 'connected'
-  /** Código do motivo da falha — é o que a UI deve traduzir. Presente em
-   *  qualquer estado de falha. */
+  /** Code of the failure reason — it is what the UI must translate. Present in
+   *  any failure state. */
   errorReason?: ConnectionErrorReason
-  /** Detalhe técnico cru (texto de exceção do runtime). Não exibir direto: só
-   *  serve de diagnóstico quando `errorReason` é 'socket_error'/'unknown'. */
+  /** Raw technical detail (runtime exception text). Do not display it directly: it only
+   *  serves as a diagnostic when `errorReason` is 'socket_error'/'unknown'. */
   error?: string
-  /** Versão do servidor reportada no handshake. */
+  /** Server version reported in the handshake. */
   serverVersion?: string
-  /** Nome do desktop conectado. */
+  /** Name of the connected desktop. */
   deviceName?: string
-  /** Token persistente emitido/confirmado pelo desktop no auth:ok —
-   *  o app deve salvar e reutilizar nas próximas conexões. */
+  /** Persistent token issued/confirmed by the desktop in auth:ok —
+   *  the app must save it and reuse it in the next connections. */
   deviceToken?: string
-  /** Timestamp da última atividade (heartbeat). */
+  /** Timestamp of the last activity (heartbeat). */
   lastActivity?: number
-  /** Latência estimada em ms. */
+  /** Estimated latency in ms. */
   latency?: number
-  /** Tentativas de reconexão desde o último connect(). */
+  /** Reconnection attempts since the last connect(). */
   reconnectAttempt?: number
 }

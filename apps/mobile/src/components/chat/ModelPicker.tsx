@@ -16,11 +16,11 @@ export function ModelPicker({ sessionId }: { sessionId?: string | null }) {
   const resolved = useThemeStore((s) => s.resolved)
   const tokens = getThemeTokens(resolved)
   const catalog = useSettingsStore((s) => s.catalog)
-  // Modelo da sessão (override por chat > último chat > default global) —
-  // mesmo comportamento do picker do desktop.
+  // Session model (per-chat override > last chat > global default) —
+  // same behavior as the desktop picker.
   const selected = useSessionModel(sessionId)
-  // Rotação pinada no chat vence o modelo no gatilho — é ela que o engine
-  // resolve primeiro (espelho do trigger do desktop).
+  // Rotation pinned in the chat wins over the model in the trigger — it is the one the engine
+  // resolves first (mirror of the desktop trigger).
   const rotation = useSessionRotation(sessionId)
 
   const selectedModelInfo = selected && catalog

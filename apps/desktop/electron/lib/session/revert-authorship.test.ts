@@ -6,11 +6,11 @@ import type { AssistantSnapshot, ChatMessage, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 
 /**
- * Revert com autoria: o que as tools do turno gravaram é desfeito; o que
- * mudou na pasta por outra via (bash, MCP, algo de fora) fica à parte, como
- * "autor incerto", até a pessoa pedir; o que outra conversa gravou no mesmo
- * intervalo nunca entra. E vários turnos descartados voltam do último para o
- * primeiro.
+ * Revert with authorship: what the tools of the turn wrote is undone; what
+ * changed in the folder another way (bash, MCP, something external) stays apart, as
+ * "uncertain author", until the person asks for it; what another conversation wrote in the same
+ * interval never comes in. And several discarded turns come back from the last to the
+ * first.
  */
 const userData = path.join(os.tmpdir(), `orbit-revert-autoria-${process.pid}`)
 
@@ -31,11 +31,11 @@ let counter = 0
 const roots: string[] = []
 
 interface TurnSpec {
-  /** O que o turno fez (null apaga). */
+  /** What the turn did (null deletes). */
   writes: Record<string, string | null>
-  /** Caminhos gravados pelas tools do turno; ausente = turno anterior ao diário. */
+  /** Paths written by the tools of the turn; absent = turn from before the journal. */
   authored?: string[]
-  /** Caminhos gravados por tools de outra conversa durante o turno. */
+  /** Paths written by tools of another conversation during the turn. */
   others?: string[]
 }
 
@@ -50,7 +50,7 @@ async function apply(dir: string, writes: Record<string, string | null>): Promis
   }
 }
 
-/** Monta a conversa: um par user/assistant por turno, com o snapshot de cada um. */
+/** Assembles the conversation: one user/assistant pair per turn, with the snapshot of each one. */
 async function setup(initial: Record<string, string>, turns: TurnSpec[]): Promise<{ dir: string; sessionId: string }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbit-revert-autoria-proj-'))
   roots.push(dir)
@@ -105,11 +105,11 @@ afterAll(async () => {
   await fs.rm(userData, { recursive: true, force: true })
 })
 
-describe('vários turnos descartados', () => {
-  it('voltam do último para o primeiro: nada fica de fora, e editar o mesmo arquivo não é conflito', async () => {
+describe('several discarded turns', () => {
+  it('they come back from the last to the first: nothing stays out, and editing the same file is not a conflict', async () => {
     const { dir, sessionId } = await setup({ 'a.txt': 'v0' }, [
       { writes: { 'a.txt': 'v1' }, authored: ['a.txt'] },
-      { writes: { 'a.txt': 'v2', 'so-do-2.txt': 'novo' }, authored: ['a.txt', 'so-do-2.txt'] },
+      { writes: { 'a.txt': 'v2', 'so-do-2.txt': 'new' }, authored: ['a.txt', 'so-do-2.txt'] },
     ])
 
     const state = await revert(sessionId, 'u1')
@@ -120,7 +120,7 @@ describe('vários turnos descartados', () => {
     expect(await exists(dir, 'so-do-2.txt')).toBe(false)
   })
 
-  it('revert a partir do segundo turno não mexe no primeiro', async () => {
+  it('a revert from the second turn does not touch the first', async () => {
     const { dir, sessionId } = await setup({ 'a.txt': 'v0' }, [
       { writes: { 'a.txt': 'v1' }, authored: ['a.txt'] },
       { writes: { 'b.txt': 'do 2' }, authored: ['b.txt'] },
@@ -134,9 +134,9 @@ describe('vários turnos descartados', () => {
 })
 
 describe('autoria', () => {
-  it('o que as tools não gravaram vira "autor incerto" e não é revertido', async () => {
-    const { dir, sessionId } = await setup({ 'a.txt': 'antes' }, [
-      // `gerado.js` mudou no turno, mas por bash/codegen: sem autoria.
+  it('what the tools did not record becomes "uncertain author" and is not reverted', async () => {
+    const { dir, sessionId } = await setup({ 'a.txt': 'before' }, [
+      // `gerado.js` changed in the turn, but through bash/codegen: no authorship.
       { writes: { 'a.txt': 'turno', 'gerado.js': 'build' }, authored: ['a.txt'] },
     ])
 
@@ -144,13 +144,13 @@ describe('autoria', () => {
 
     expect(state?.files).toEqual(['a.txt'])
     expect(state?.uncertain).toEqual(['gerado.js'])
-    expect(await read(dir, 'a.txt')).toBe('antes')
+    expect(await read(dir, 'a.txt')).toBe('before')
     expect(await read(dir, 'gerado.js')).toBe('build')
   })
 
-  it('o que outra conversa gravou no intervalo nem entra no revert', async () => {
-    const { dir, sessionId } = await setup({ 'a.txt': 'antes' }, [
-      { writes: { 'a.txt': 'turno', 'da-outra.ts': 'outra' }, authored: ['a.txt'], others: ['da-outra.ts'] },
+  it('what another conversation wrote in between does not even enter the revert', async () => {
+    const { dir, sessionId } = await setup({ 'a.txt': 'before' }, [
+      { writes: { 'a.txt': 'turno', 'da-outra.ts': 'other' }, authored: ['a.txt'], others: ['da-outra.ts'] },
     ])
 
     const state = await revert(sessionId, 'u1')
@@ -158,10 +158,10 @@ describe('autoria', () => {
     expect(state?.files).toEqual(['a.txt'])
     expect(state?.uncertain).toBeUndefined()
     expect(state?.conflicts).toEqual([])
-    expect(await read(dir, 'da-outra.ts')).toBe('outra')
+    expect(await read(dir, 'da-outra.ts')).toBe('other')
   })
 
-  it('pasta registrada (downloads) cobre os arquivos de dentro', async () => {
+  it('a registered folder (downloads) covers the files inside it', async () => {
     const { dir, sessionId } = await setup({}, [
       { writes: { 'downloads/video.mp4': 'bytes' }, authored: ['downloads'] },
     ])
@@ -172,20 +172,20 @@ describe('autoria', () => {
     expect(await exists(dir, 'downloads')).toBe(false)
   })
 
-  it('turno anterior ao diário (sem authored): todo o diff conta como dele', async () => {
-    const { dir, sessionId } = await setup({ 'a.txt': 'antes' }, [{ writes: { 'a.txt': 'turno', 'b.txt': 'novo' } }])
+  it('a turn before the journal (no authored): the whole diff counts as its own', async () => {
+    const { dir, sessionId } = await setup({ 'a.txt': 'before' }, [{ writes: { 'a.txt': 'turno', 'b.txt': 'new' } }])
 
     const state = await revert(sessionId, 'u1')
 
     expect(state?.files).toEqual(['a.txt', 'b.txt'])
     expect(state?.uncertain).toBeUndefined()
-    expect(await read(dir, 'a.txt')).toBe('antes')
+    expect(await read(dir, 'a.txt')).toBe('before')
   })
 })
 
-describe('reverter também os incertos', () => {
-  it('desfaz os incertos com a mesma regra, e o unrevert devolve tudo', async () => {
-    const { dir, sessionId } = await setup({ 'a.txt': 'antes' }, [
+describe('revert the uncertain ones too', () => {
+  it('undoes the uncertain ones by the same rule, and the unrevert gives everything back', async () => {
+    const { dir, sessionId } = await setup({ 'a.txt': 'before' }, [
       { writes: { 'a.txt': 'turno', 'gerado.js': 'build' }, authored: ['a.txt'] },
     ])
     await revert(sessionId, 'u1')
@@ -204,21 +204,21 @@ describe('reverter também os incertos', () => {
     expect(await read(dir, 'gerado.js')).toBe('build')
   })
 
-  it('incerto mexido depois do turno continua preservado', async () => {
+  it('an uncertain one touched after the turn stays preserved', async () => {
     const { dir, sessionId } = await setup({}, [
       { writes: { 'a.txt': 'turno', 'gerado.js': 'build' }, authored: ['a.txt'] },
     ])
     await revert(sessionId, 'u1')
-    await fs.writeFile(path.join(dir, 'gerado.js'), 'editado depois', 'utf8')
+    await fs.writeFile(path.join(dir, 'gerado.js'), 'edited later', 'utf8')
 
     const state = await revertUncertain(sessionId)
 
     expect(state?.conflicts).toEqual(['gerado.js'])
-    expect(await read(dir, 'gerado.js')).toBe('editado depois')
+    expect(await read(dir, 'gerado.js')).toBe('edited later')
   })
 
-  it('caminho confirmado que deu conflito por causa de um incerto do turno seguinte volta junto', async () => {
-    // Turno 1 edita a.txt pela tool; turno 2 mexe em a.txt por bash.
+  it('a confirmed path that conflicted because of an uncertain one from the next turn comes back too', async () => {
+    // Turn 1 edits a.txt through the tool; turn 2 touches a.txt through bash.
     const { dir, sessionId } = await setup({ 'a.txt': 'v0' }, [
       { writes: { 'a.txt': 'v1' }, authored: ['a.txt'] },
       { writes: { 'a.txt': 'v2-bash' }, authored: [] },

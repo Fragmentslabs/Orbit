@@ -7,7 +7,7 @@ import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/setti
 import { appSettingsApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
 
-/** Preferências → Navegador: o navegador integrado e o que o agente pode fazer nele. */
+/** Preferences → Browser: the built-in browser and what the agent can do in it. */
 export function BrowserPanel() {
   const { t } = useTranslation()
   const browser = useAppSettings((s) => s.settings.browser)

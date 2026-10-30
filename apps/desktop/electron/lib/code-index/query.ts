@@ -4,9 +4,9 @@ import type { SymbolDef } from './extract'
 import { parseKey, symbolKey, type CodeGraph, type CodeIndex, type Edge, type SymbolKey } from './store'
 
 /**
- * As consultas que viram tools. Todas devolvem texto compacto e com
- * `arquivo:linha` exato — o objetivo é o agente chegar ao trecho certo sem
- * a rodada de grep → read → read que ele faria sozinho.
+ * The queries that become tools. All of them return compact text with an exact
+ * `file:line` — the goal is for the agent to reach the right excerpt without
+ * the grep → read → read round trip it would do on its own.
  */
 
 const STOPWORDS = new Set([
@@ -29,14 +29,14 @@ export function tokenize(text: string): string[] {
     .map(stem)
 }
 
-/** Plural simples (tools → tool, entries → entry): o suficiente para nome de código. */
+/** Simple plural (tools → tool, entries → entry): enough for code names. */
 function stem(token: string): string {
   if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`
   if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1)
   return token
 }
 
-/** Teste e mock respondem à mesma busca que o código real, mas raramente são o que se procura. */
+/** Tests and mocks answer the same search as real code, but are rarely what is being looked for. */
 export const isTestFile = (file: string) => /(^|\/)(__tests__|tests?|__mocks__)\/|\.(test|spec)\.[^.]+$/.test(file)
 
 interface SearchDoc {
@@ -46,11 +46,11 @@ interface SearchDoc {
   name: Set<string>
   where: Set<string>
   about: Set<string>
-  /** Nomes que a definição usa no corpo (`model.limit.context` → limit, context). */
+  /** Names the definition uses in its body (`model.limit.context` → limit, context). */
   body: Set<string>
 }
 
-/** Os documentos de busca vivem junto do grafo: ambos mudam só quando o índice muda. */
+/** The search documents live next to the graph: both change only when the index changes. */
 const docsCache = new WeakMap<CodeGraph, SearchDoc[]>()
 
 function searchDocs(index: CodeIndex, graph: CodeGraph): SearchDoc[] {
@@ -82,7 +82,7 @@ function searchDocs(index: CodeIndex, graph: CodeGraph): SearchDoc[] {
   return docs
 }
 
-/** Casa termo e token; prefixo comum (≥4) vale parcial — `index` acha `indexer`, `pars` acha `parse`. */
+/** Matches term and token; a common prefix (≥4) counts partially — `index` finds `indexer`, `pars` finds `parse`. */
 function overlap(term: string, tokens: Set<string>): number {
   if (tokens.has(term)) return 1
   if (term.length < 4) return 0
@@ -94,9 +94,9 @@ function overlap(term: string, tokens: Set<string>): number {
 
 const KIND_WEIGHT: Record<string, number> = { variable: 0.75, module: 0.8 }
 /**
- * O corpo pesa pouco e conta meio termo na cobertura: liga "limite de
- * contexto" a quem lê `model.limit.context`, sem deixar uma função de 1.000
- * linhas (que usa de tudo) casar com qualquer busca.
+ * The body weighs little and counts as half a term in the coverage: it connects "context
+ * limit" to whoever reads `model.limit.context`, without letting a 1,000-line
+ * function (which uses everything) match any search.
  */
 const BODY_WEIGHT = 0.5
 
@@ -110,7 +110,7 @@ export function searchSymbols(index: CodeIndex, query: string, opts: { limit?: n
   const terms = [...new Set(tokenize(query).filter((t) => !STOPWORDS.has(t)))]
   if (terms.length === 0) return []
   const docs = searchDocs(index, graph).filter((d) => !opts.scope || inScope(d.file, opts.scope))
-  // IDF: um termo que aparece em todo símbolo (ex.: o nome do projeto) não discrimina nada.
+  // IDF: a term that appears in every symbol (e.g. the project name) discriminates nothing.
   const df = terms.map((t) =>
     docs.reduce((n, d) => n + (overlap(t, d.name) || overlap(t, d.where) || overlap(t, d.about) || overlap(t, d.body) ? 1 : 0), 0),
   )
@@ -143,7 +143,7 @@ export function searchSymbols(index: CodeIndex, query: string, opts: { limit?: n
   return hits.slice(0, opts.limit ?? 6)
 }
 
-/** Prefixo de pasta por segmento: `src/a` cobre `src/a/x.ts`, não `src/ab.ts`. */
+/** Folder prefix by segment: `src/a` covers `src/a/x.ts`, not `src/ab.ts`. */
 function inScope(file: string, scope: string): boolean {
   const clean = scope.replace(/^\.\/?/, '').replace(/\/+$/, '')
   return !clean || file === clean || file.startsWith(`${clean}/`)
@@ -165,8 +165,8 @@ function describe(def: SymbolDef): string {
 }
 
 /**
- * Até 3 quem-usa, com a linha da CHAMADA (não a da definição de quem chama):
- * é a linha que o agente vai abrir.
+ * Up to 3 who-uses, with the line of the CALL (not the line of the definition of the caller):
+ * that is the line the agent is going to open.
  */
 function usersLine(graph: CodeGraph, key: SymbolKey, index: CodeIndex): string {
   const firstCall = new Map<SymbolKey, number>()
@@ -175,9 +175,9 @@ function usersLine(graph: CodeGraph, key: SymbolKey, index: CodeIndex): string {
     if (known === undefined || edge.line < known) firstCall.set(edge.from, edge.line)
   }
   if (firstCall.size === 0) return ''
-  // "quem → arquivo:linha da chamada": o formato diz sozinho que a linha é a
-  // do uso — no benchmark o agente leu "(arquivo:linha)" como a definição de
-  // quem chama e foi atrás do call site com grep.
+  // "who → file:line of the call": the format says on its own that the line is the one
+  // of the use — in the benchmark the agent read "(file:line)" as the definition of
+  // the caller and went after the call site with grep.
   const shown = [...firstCall].slice(0, 3).map(([from, line]) => `${nameOf(index, from)} → ${parseKey(from).file}:${line}`)
   const more = firstCall.size > 3 ? ` +${firstCall.size - 3}` : ''
   return `called at: ${shown.join(', ')}${more}`
@@ -188,7 +188,7 @@ function nameOf(index: CodeIndex, key: SymbolKey): string {
   return def < 0 ? '(top level)' : index.files.get(file)?.defs[def]?.qual ?? '?'
 }
 
-/** `137, 293, 306 +8`: as linhas de um quem-usa, compactas. */
+/** `137, 293, 306 +8`: the lines of one who-uses, compact. */
 function lineList(lines: number[], max = 6): string {
   const sorted = [...new Set(lines)].sort((a, b) => a - b)
   return sorted.slice(0, max).join(', ') + (sorted.length > max ? ` +${sorted.length - max}` : '')
@@ -202,14 +202,14 @@ function labelFor(index: CodeIndex, key: SymbolKey): string {
   return `${d.qual} (${file}:${d.line})`
 }
 
-/** Resultados que vêm com código; os demais só com cabeçalho e assinatura. */
+/** Results that come with code; the others only with a header and a signature. */
 const EXCERPT_HITS = 3
 const EXCERPT_LINES = 8
 
 /**
- * Os primeiros resultados trazem o começo do código; o resto, só onde está e
- * a assinatura. Código de resultado que o agente não vai usar é contexto
- * pago em todos os passos seguintes do turno.
+ * The first results bring the beginning of the code; the rest, only where it is and
+ * the signature. Code in a result the agent will not use is context
+ * paid for in every following step of the turn.
  */
 export async function renderSearch(index: CodeIndex, hits: SearchHit[], opts: { full?: boolean } = {}): Promise<string> {
   const graph = index.getGraph()
@@ -233,7 +233,7 @@ export async function renderSearch(index: CodeIndex, hits: SearchHit[], opts: { 
   return blocks.join('\n\n')
 }
 
-/** Assinaturas de um arquivo com o intervalo de linhas — o arquivo sem os corpos. */
+/** Signatures of a file with the line range — the file without the bodies. */
 export function renderOutline(index: CodeIndex, file: string): string | null {
   const entry = index.files.get(file)
   if (!entry) return null
@@ -245,15 +245,15 @@ export function renderOutline(index: CodeIndex, file: string): string | null {
     return `${'  '.repeat(depth(i))}L${def.line}-${def.end} ${def.kind} ${def.sig || def.name}${usedBy}`
   })
   const header = `${file} — ${entry.lines} lines, ${entry.defs.length} symbols (← N = used by N symbols)`
-  // A API pública numa linha: "o que este arquivo exporta" sem grep ^export.
+  // The public API on one line: "what this file exports" without a ^export grep.
   const exported = entry.defs.filter((d) => d.exported).map((d) => d.qual)
   const api = exported.length > 0 ? `\nExported (${exported.length}): ${exported.join(', ')}` : ''
   return rows.length > 0 ? `${header}${api}\n${rows.join('\n')}` : `${header}\n(no symbols found)`
 }
 
 /**
- * Orientação num repositório: pastas com contagem e os símbolos mais usados de
- * cada uma, mais os hotspots globais. Sai do grafo, sem LLM, em ~1-2k tokens.
+ * Orientation in a repository: folders with their count and the most used symbols of
+ * each one, plus the global hotspots. Comes out of the graph, with no LLM, in ~1-2k tokens.
  */
 export function renderRepoMap(index: CodeIndex, opts: { maxDirs?: number; scope?: string } = {}): string {
   const graph = index.getGraph()
@@ -261,8 +261,8 @@ export function renderRepoMap(index: CodeIndex, opts: { maxDirs?: number; scope?
   const files = [...index.files.keys()].filter((f) => !opts.scope || inScope(f, opts.scope))
   if (files.length === 0) return 'No indexed source files here.'
 
-  // Expande a pasta mais cheia até caber no orçamento: monorepo vira
-  // apps/desktop/electron/lib, não "apps (2.000 arquivos)".
+  // Expand the fullest folder until it fits the budget: a monorepo becomes
+  // apps/desktop/electron/lib, not "apps (2,000 files)".
   const countUnder = (dir: string) => files.filter((f) => inScope(f, dir)).length
   const childDirs = (dir: string) => {
     const prefix = dir ? `${dir}/` : ''
@@ -315,7 +315,7 @@ export function renderRepoMap(index: CodeIndex, opts: { maxDirs?: number; scope?
   ].join('\n')
 }
 
-/** Resolve o que o agente passou: arquivo, `Classe.metodo` ou nome simples. */
+/** Resolves what the agent passed: file, `Class.method` or a plain name. */
 export function resolveSymbol(index: CodeIndex, query: string, scope?: string): SymbolKey[] {
   const graph = index.getGraph()
   const clean = query.trim().replace(/\(\)$/, '').replace(/::/g, '.')
@@ -341,9 +341,9 @@ export interface RefsOptions {
 }
 
 /**
- * Quem usa (in) ou o que é usado (out). Profundidade 1 lista cada aresta com
- * a linha; mais fundo vira o raio de impacto agrupado por arquivo — é a lista
- * de arquivos para conferir antes de um refactor.
+ * Who uses (in) or what is used (out). Depth 1 lists each edge with
+ * the line; deeper becomes the blast radius grouped by file — it is the list
+ * of files to check before a refactor.
  */
 export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptions): string {
   const graph = index.getGraph()
@@ -352,7 +352,7 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
   const other = (e: Edge) => (opts.direction === 'in' ? e.from : e.to)
   const startSet = new Set(start)
 
-  // Linhas de cada vizinho direto (a linha é sempre a do uso, no arquivo de quem usa).
+  // Lines of each direct neighbor (the line is always the one of the use, in the file of whoever uses it).
   const direct = new Map<SymbolKey, { lines: number[]; sure: boolean; at: string }>()
   for (const key of start) {
     for (const edge of edgesOf(key)) {
@@ -370,8 +370,8 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
 
   if (opts.depth <= 1) {
     if (direct.size === 0) return opts.direction === 'in' ? 'No uses found in the index.' : 'Uses nothing else in the index.'
-    // Agrupado por quem usa, com TODAS as linhas: uma linha por vizinho, e
-    // nenhuma chamada some (createVideoTools → 11 linhas, não só a primeira).
+    // Grouped by who uses it, with ALL the lines: one line per neighbor, and
+    // no call goes missing (createVideoTools → 11 lines, not just the first).
     const rows = [...direct]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([target, { lines, sure, at }]) => `  ${nameOf(index, target)} — ${at}:${lineList(lines, 12)}${sure ? '' : '  (~ same name elsewhere)'}`)
@@ -393,8 +393,8 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
         const target = other(edge)
         if (startSet.has(target) || level.has(target)) continue
         level.set(target, d)
-        // O topo de um arquivo não propaga: "o arquivo importa X" não faz de
-        // todo o resto do arquivo um dependente.
+        // The top of a file does not propagate: "the file imports X" does not make
+        // all the rest of the file a dependent.
         if (parseKey(target).def >= 0) next.push(target)
       }
     }
@@ -405,7 +405,7 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
   const byFile = new Map<string, Array<{ name: string; d: number }>>()
   for (const [key, d] of level) {
     const { file } = parseKey(key)
-    // Vizinho direto leva as linhas do uso: dá para abrir sem outro code_refs.
+    // A direct neighbor brings the lines of the use: enough to open it without another code_refs.
     const lines = d === 1 && opts.direction === 'in' ? direct.get(key)?.lines : undefined
     const name = nameOf(index, key) + (lines ? `:${lineList(lines, 4)}` : '')
     const list = byFile.get(file)
@@ -428,9 +428,9 @@ export function renderRefs(index: CodeIndex, start: SymbolKey[], opts: RefsOptio
 }
 
 /**
- * Depois de um edit: se a assinatura de algo mudou (ou sumiu), quem o usa em
- * OUTRO arquivo. Silencioso no caso comum — editar corpo de função não gera
- * aviso nenhum, então não custa token à toa.
+ * After an edit: whether the signature of something changed (or vanished), and who uses it in
+ * ANOTHER file. Silent in the common case — editing a function body generates
+ * no warning at all, so it does not cost tokens for nothing.
  */
 export function signatureChanges(
   index: CodeIndex,

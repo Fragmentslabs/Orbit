@@ -8,7 +8,7 @@ export type ResolvedTheme = 'light' | 'dark'
 
 interface ThemeState {
   preference: ThemePreference
-  /** Tema resolvido (system → cor real do SO). */
+  /** Resolved theme (system → real color of the OS). */
   resolved: ResolvedTheme
   setPreference: (p: ThemePreference, systemIsDark?: boolean) => void
 }
@@ -23,10 +23,10 @@ function resolvePreference(p: ThemePreference, systemIsDark?: boolean): Resolved
 
 function getSystemColorSchemeSync(): ResolvedTheme {
   try {
-    // Carregamento condicional de módulo opcional: import estático não
-    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-    // build sem o nativo) e é justamente por isso que o require está
-    // dentro do try/if.
+    // Conditional loading of an optional module: a static import does not
+    // work here (the module may not exist at runtime — Expo Go, web,
+    // build without the native part) and that is exactly why the require is
+    // inside the try/if.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Appearance } = require('react-native')
     return Appearance.getColorScheme() ?? 'dark'
@@ -42,12 +42,12 @@ export const useThemeStore = create<ThemeState>((set) => ({
   setPreference: (p, systemIsDark) => {
     const resolved = resolvePreference(p, systemIsDark)
     set({ preference: p, resolved })
-    // Persistência
+    // Persistence
     void Storage.setItem(THEME_KEY, p)
   },
 }))
 
-/** Hydrate async (chamar no root layout antes do primeiro render). */
+/** Async hydrate (call in the root layout before the first render). */
 export async function hydrateThemePreference(): Promise<ThemePreference> {
   const raw = await Storage.getItem(THEME_KEY)
   if (raw === 'light' || raw === 'dark' || raw === 'system') return raw

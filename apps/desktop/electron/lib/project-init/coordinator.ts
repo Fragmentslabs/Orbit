@@ -19,41 +19,41 @@ import {
 } from './draft'
 
 /**
- * O coordenador do /init: um agente com o projeto inteiro na cabeça, que lê o
- * que precisa, decide a forma da árvore, chama exploradores quando uma parte
- * pede verificação no código e monta o rascunho das memórias.
+ * The /init coordinator: an agent that holds the whole project in its head, reads
+ * what it needs, decides the shape of the tree, calls explorers when a part
+ * asks for verification in the code, and assembles the draft of the memories.
  *
- * Nada aqui é fixo — nem as áreas, nem quantos exploradores, nem se haverá
- * algum. O código só impõe os limites (orçamento de exploradores, passos,
- * tempo) e a forma da árvore (draft.ts). Quem decide o conteúdo é o agente.
+ * Nothing here is fixed — neither the areas, nor how many explorers, nor whether
+ * there will be any. The code only enforces the limits (explorer budget, steps,
+ * time) and the shape of the tree (draft.ts). The agent decides the content.
  */
 
-/** Teto de exploradores por análise, somando todas as rodadas. */
+/** Cap of explorers per analysis, counting every round. */
 export const DEFAULT_EXPLORER_BUDGET = 8
 const MAX_TASKS_PER_CALL = 4
 const COORDINATOR_MAX_STEPS = 90
 const EXPLORER_MAX_STEPS = 20
 const EXPLORER_TIMEOUT_MS = 5 * 60 * 1000
-/** Relatório maior que isso é cortado antes de voltar ao coordenador. */
+/** A report larger than this is cut before going back to the coordinator. */
 const REPORT_MAX_CHARS = 14_000
 
 export interface CoordinatorHooks {
-  /** Narração do coordenador (o acordeon de cima). */
+  /** Coordinator narration (the accordion at the top). */
   onMainDelta?: (delta: string) => void
   onAgentStart?: (key: string, label: string) => void
   onAgentDelta?: (key: string, delta: string) => void
   onAgentDone?: (key: string, ok: boolean) => void
-  /** Exploradores concluídos / disparados até agora. */
+  /** Explorers finished / started so far. */
   onProgress?: (done: number, total: number) => void
 }
 
 export interface CoordinatorInput {
   directory: string
   scanDescription: string
-  /** Árvore já existente (re-init), como texto para o coordenador. */
+  /** Existing tree (re-init), as text for the coordinator. */
   existingTreeText?: string
   existing: ExistingTree
-  /** Subpasta de onde o /init foi pedido, quando o projeto já cobria a pasta. */
+  /** Subfolder the /init was requested from, when the project already covered the folder. */
   focus?: string
   model: LanguageModel
   providerId: string
@@ -70,9 +70,9 @@ export interface CoordinatorInput {
 
 export interface CoordinatorResult {
   draft: Draft
-  /** O coordenador chamou finish com o rascunho válido. */
+  /** The coordinator called finish with a valid draft. */
   finished: boolean
-  /** Palavra final do coordenador (por que gravou o que gravou, ou nada). */
+  /** Final word from the coordinator (why it saved what it saved, or nothing). */
   note?: string
   explorersUsed: number
 }
@@ -87,10 +87,10 @@ function readOnlyTools(directory: string, abort: AbortSignal): ToolSet {
   }
 }
 
-/** Linha curta de uma chamada de ferramenta, para a narração. */
+/** Short line of a tool call, for the narration. */
 function toolCallLine(toolName: string, input: unknown): string {
   const obj = (input ?? {}) as Record<string, unknown>
-  if (toolName === 'draft_node') return `\n\`→ rascunho: ${String(obj.title ?? obj.key ?? '')}\`\n\n`
+  if (toolName === 'draft_node') return `\n\`→ draft: ${String(obj.title ?? obj.key ?? '')}\`\n\n`
   if (toolName === 'explore') {
     const tasks = Array.isArray(obj.tasks) ? obj.tasks.length : 0
     return `\n\`→ ${tasks} explorador(es)\`\n\n`
@@ -145,7 +145,7 @@ ${input.existingTreeText}
 Build on it. To rewrite an existing node, create a draft node with "updates" set to its id (keep what is still right). New nodes may hang from an existing node by using its id as "parent". Retire existing nodes that are obsolete, generic or duplicated with draft_retire_existing (never retire a specific decision the user recorded unless it is clearly wrong). Nodes you do not touch stay as they are.
 ` : ''}${input.focus ? `The user asked for this analysis from the subfolder "${input.focus}". Focus your effort on that part of the project, but keep it connected to the whole tree.
 ` : ''}
-Language: write every memory text (titles, summaries, documents, learnings) in ${lang}. Narrate your progress to the user in ${lang}, one short line before each phase ("Lendo a documentação…", "Disparando 3 exploradores: …", "Montando a árvore…") — no long explanations in the narration.`
+Language: write every memory text (titles, summaries, documents, learnings) in ${lang}. Narrate your progress to the user in ${lang}, one short line before each phase ("Reading the documentation…", "Dispatching 3 explorers: …", "Building the tree…") — no long explanations in the narration.`
 }
 
 interface ExplorerTask {
@@ -194,16 +194,16 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
         }
       }
       hooks.onAgentDone?.(key, true)
-      return buffer.trim() || '(o explorador terminou sem relatório)'
+      return buffer.trim() || '(the explorer finished with no report)'
     } catch (err) {
       if (signal.aborted) {
         hooks.onAgentDone?.(key, false)
         throw err
       }
-      hooks.onAgentDelta?.(key, `\n_(interrompido: ${errorToText(err)})_`)
+      hooks.onAgentDelta?.(key, `\n_(interrupted: ${errorToText(err)})_`)
       hooks.onAgentDone?.(key, false)
-      // Relatório parcial ainda serve: o coordenador decide o que aproveitar.
-      return `${buffer.trim()}\n\n(EXPLORADOR INTERROMPIDO: ${errorToText(err)} — relatório incompleto)`
+      // A partial report is still useful: the coordinator decides what to use.
+      return `${buffer.trim()}\n\n(EXPLORER INTERRUPTED: ${errorToText(err)} — incomplete report)`
     } finally {
       clearTimeout(timeout)
       signal.removeEventListener('abort', onAbort)
@@ -212,9 +212,9 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
     }
   }
 
-  // Sem "context": essa categoria EXPIRA (é para o estado passageiro de um
-  // trabalho em andamento). O que o /init grava é para durar — o contexto de
-  // negócio de um projeto só com docs/ sumiria meses depois.
+  // No "context": that category EXPIRES (it is for the transient state of work
+  // in progress). What /init writes is meant to last — the business context of a
+  // project with only docs/ would vanish months later.
   const categories = ['preference', 'convention', 'structure', 'decision', 'database', 'standard'] as const
 
   const tools: ToolSet = {
@@ -227,7 +227,7 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
         tasks: z
           .array(
             z.object({
-              label: z.string().describe('Short label shown to the user, e.g. "Backend · regras de cobrança"'),
+              label: z.string().describe('Short label shown to the user, e.g. "Backend · billing rules"'),
               mission: z.string().describe('What to find out: concrete questions, what to verify, where to look'),
               folder: z.string().optional().describe('Folder (relative) where the explorer should start'),
             }),
@@ -237,7 +237,7 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
       }),
       execute: async ({ tasks }) => {
         const left = input.explorerBudget - explorersUsed
-        if (left <= 0) return 'Orçamento de exploradores esgotado. Termine com o que já tem (ou verifique pontos pequenos você mesmo).'
+        if (left <= 0) return 'Explorer budget exhausted. Finish with what you already have (or check small points yourself).'
         const accepted = tasks.slice(0, left)
         explorersUsed += accepted.length
         hooks.onProgress?.(explorersDone, explorersUsed)
@@ -248,14 +248,14 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
             const { task, index } = queue.shift()!
             const report = await runExplorer(task)
             reports[index] =
-              `## ${task.label}\n${report.length > REPORT_MAX_CHARS ? `${report.slice(0, REPORT_MAX_CHARS)}\n…(cortado)` : report}`
+              `## ${task.label}\n${report.length > REPORT_MAX_CHARS ? `${report.slice(0, REPORT_MAX_CHARS)}\n…(truncated)` : report}`
           }
         })
         await Promise.all(workers)
         const skipped = tasks.length - accepted.length
         return [
           ...reports,
-          skipped > 0 ? `(${skipped} missão(ões) não rodaram: orçamento esgotado.)` : '',
+          skipped > 0 ? `(${skipped} mission(s) did not run: budget exhausted.)` : '',
           `Exploradores restantes: ${input.explorerBudget - explorersUsed}.`,
         ]
           .filter(Boolean)
@@ -268,7 +268,7 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
         'Creates or replaces (same key) a node of the memory tree draft. Nothing is saved until finish. Parents must exist before children (draft key or existing memory id).',
       inputSchema: z.object({
         key: z.string().describe('Unique id in the draft, e.g. "root", "front", "billing-rules"'),
-        title: z.string().describe('Short name of the node, e.g. "Frontend", "Regras de cobrança"'),
+        title: z.string().describe('Short name of the node, e.g. "Frontend", "Billing rules"'),
         summary: z.string().describe(`1–3 sentences, max ${SUMMARY_MAX} chars, useful on its own in a prompt`),
         document: z.string().optional().describe('Markdown with the details: paths, commands, rules, flows'),
         category: z.enum(categories),
@@ -293,14 +293,14 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
           weight: node.weight,
           updates: node.updates,
         })
-        return error ? `Erro: ${error}` : `Nó "${node.key}" no rascunho (${draft.nodes.size} nós).`
+        return error ? `Error: ${error}` : `Node "${node.key}" in the draft (${draft.nodes.size} nodes).`
       },
     }),
 
     draft_remove_node: tool({
       description: 'Removes a node from the draft (it must have no children in the draft).',
       inputSchema: z.object({ key: z.string() }),
-      execute: async ({ key }) => removeNode(draft, key) ?? `Nó "${key}" removido.`,
+      execute: async ({ key }) => removeNode(draft, key) ?? `Node "${key}" removed.`,
     }),
 
     draft_learning: tool({
@@ -311,9 +311,9 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
         tags: z.array(z.string()).describe('Technology names'),
       }),
       execute: async ({ text, tags }) => {
-        if (text.trim().length < 20) return 'Erro: aprendizado curto demais para se sustentar sozinho.'
+        if (text.trim().length < 20) return 'Error: learning too short to stand on its own.'
         draft.learnings.push({ text: text.trim(), tags: tags.map((t) => t.toLowerCase()) })
-        return 'Aprendizado registrado no rascunho.'
+        return 'Learning recorded in the draft.'
       },
     }),
 
@@ -327,7 +327,7 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
               reason: z.string().min(10),
             }),
             execute: async ({ id, reason }) =>
-              retireExisting(draft, existing, id, reason) ?? `#${id} será aposentada ao gravar.`,
+              retireExisting(draft, existing, id, reason) ?? `#${id} will be retired on save.`,
           }),
         }
       : {}),
@@ -348,10 +348,10 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
       }),
       execute: async ({ note: finalNote }) => {
         const issues = validateDraft(draft, existing)
-        if (issues.length) return `O rascunho tem problemas:\n${issues.map((i) => `- ${i}`).join('\n')}`
+        if (issues.length) return `The draft has problems:\n${issues.map((i) => `- ${i}`).join('\n')}`
         finished = true
         note = finalNote.trim()
-        return 'Rascunho aceito. Encerre aqui.'
+        return 'Draft accepted. Finish here.'
       },
     }),
   }

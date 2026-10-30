@@ -3,10 +3,10 @@ import type { SendMessageInput } from '@shared/chat'
 import { readJson, writeJson } from './storage'
 
 /**
- * Cópia no main das configurações gerais (a fonte da verdade é o renderer —
- * ver app-settings.ts no shared). Fica em disco porque parte delas vale antes
- * de qualquer janela abrir: a limpeza de cookies do navegador e o arquivamento
- * automático rodam na inicialização.
+ * Main-process copy of the general settings (the source of truth is the renderer —
+ * see app-settings.ts in shared). It stays on disk because part of them counts before
+ * any window opens: the browser cookie cleanup and the automatic archiving
+ * run at startup.
  */
 
 const STORAGE_KEY = 'app-settings'
@@ -18,13 +18,13 @@ export function getAppSettings(): AppSettings {
   return current
 }
 
-/** Lê a cópia do disco. Chamado uma vez na inicialização, antes de usar as configurações. */
+/** Reads the copy from disk. Called once at startup, before using the settings. */
 export async function loadAppSettings(): Promise<AppSettings> {
   current = normalizeAppSettings(await readJson<unknown>(STORAGE_KEY))
   return current
 }
 
-/** Aplica o que o renderer enviou; grava e avisa só quando algo mudou. */
+/** Applies what the renderer sent; it writes and notifies only when something changed. */
 export async function setAppSettings(raw: unknown): Promise<void> {
   const next = normalizeAppSettings(raw)
   if (JSON.stringify(next) === JSON.stringify(current)) return
@@ -35,20 +35,20 @@ export async function setAppSettings(raw: unknown): Promise<void> {
 }
 
 /**
- * O agente pode usar o navegador do painel neste turno? Com as ferramentas de
- * navegador desligadas, só quando o usuário abriu o navegador e pediu pelo
- * chat dele, em tela cheia — em qualquer outro caso, nem com o navegador
- * aberto à vista.
+ * Can the agent use the panel browser in this turn? With the browser tools
+ * off, only when the user opened the browser and asked through its chat, in
+ * full screen — in any other case, not even with the browser open in
+ * plain sight.
  */
 export function agentMayUseBrowser(input: SendMessageInput): boolean {
   return current.browser.agentTools || input.options.fromBrowser === true
 }
 
 /**
- * O agente pode controlar o computador neste turno? Exige as duas chaves: o
- * interruptor das Preferências e o modo ligado nesta conversa. Workers ficam
- * de fora — quem age na tela do usuário é a sessão que fala com ele.
- * `available` é a plataforma (macOS fora da App Store), resolvida por quem chama.
+ * Can the agent control the computer in this turn? It requires both keys: the
+ * Preferences switch and the mode on in this conversation. Workers stay
+ * out — whoever acts on the user's screen is the session that talks to them.
+ * `available` is the platform (macOS outside the App Store), resolved by the caller.
  */
 export function agentMayControlComputer(input: SendMessageInput, available: boolean): boolean {
   return available && current.computer.enabled && input.options.computer === true && input.orchestrationRole !== 'worker'

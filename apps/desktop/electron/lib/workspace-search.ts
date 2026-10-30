@@ -3,31 +3,31 @@ import type { Dirent } from 'node:fs'
 import path from 'node:path'
 
 /**
- * A busca do espaço de trabalho: um índice de nomes e uma varredura de texto.
+ * The workspace search: an index of names and a text scan.
  *
- * É o motor de UM lugar só, usado por quem procura arquivo pelo nome (a paleta
- * do `@`, o campo do painel, o modal) e por quem procura dentro do código. O
- * índice é a peça que os dois compartilham: quem quer nomes filtra memória;
- * quem quer ocorrências percorre a MESMA lista, sem uma segunda caminhada.
+ * It is the engine of a single place, used by whoever looks for a file by name (the `@`
+ * palette, the panel field, the modal) and by whoever looks inside the code. The
+ * index is the piece the two share: whoever wants names filters memory;
+ * whoever wants occurrences walks the SAME list, without a second walk.
  *
- * A camada de ignore é o ponto crítico. Sem ela o custo deixa de ser o texto do
- * projeto e passa a ser o que existe em volta dele: num checkout real deste
- * repo, 56 mil arquivos (524 ms só para listar) contra 1,1 mil de código (14
- * ms) — e os primeiros 2.000 que a paleta do `@` via eram 1.985 arquivos de
- * CMake dentro de `.whisper-build`. Ignorar saída de build não é otimização:
- * é o que faz a busca enxergar o projeto.
+ * The ignore layer is the critical point. Without it the cost stops being the project's
+ * text and becomes what exists around it: in a real checkout of this
+ * repo, 56 thousand files (524 ms just to list) against 1.1 thousand of code (14
+ * ms) — and the first 2,000 that the `@` palette saw were 1,985 CMake files inside
+ * `.whisper-build`. Ignoring build output is not optimization: it
+ * is what makes the search see the project.
  */
 
 /**
- * Pastas que nenhuma varredura atravessa — por custo, não por segredo.
+ * Folders that no scan goes through — for cost, not for secrecy.
  *
- * A árvore do painel continua mostrando todas (lá cada pasta só é lida quando
- * alguém a abre); esta lista vale só para o que percorre o espaço inteiro.
+ * The panel tree still shows all of them (there each folder is only read when
+ * someone opens it); this list counts only for what walks the whole space.
  */
 const SKIPPED_DIRS = new Set([
   'node_modules',
   '.git',
-  // caches e ambientes isolados
+  // caches and isolated environments
   '.venv',
   'venv',
   '__pycache__',
@@ -44,9 +44,9 @@ const SKIPPED_DIRS = new Set([
   '.mypy_cache',
   '.cxx',
   '.idea',
-  // Saída de build — é aqui que mora o grosso do custo. `build` inclusive:
-  // no projeto mobile ele guarda 6,4 GB e ~30 mil arquivos intermediários do
-  // Xcode, e sozinho respondia por 94% do índice.
+  // Build output — that is where the bulk of the cost lives. `build` included:
+  // in the mobile project it holds 6.4 GB and ~30 thousand intermediate Xcode
+  // files, and alone accounted for 94% of the index.
   'build',
   'dist',
   'dist-electron',
@@ -55,13 +55,13 @@ const SKIPPED_DIRS = new Set([
   'coverage',
   'target',
   'vendor',
-  // builds nativos: Pods do iOS, artefatos de swift/cmake e DerivedData
+  // native builds: iOS Pods, swift/cmake artifacts and DerivedData
   'Pods',
   'DerivedData',
   '.whisper-build',
 ])
 
-/** Nomes que não são tamanho fixo de diretório, mas prefixo (`cmake-build-debug`). */
+/** Names that are not a fixed directory size, but a prefix (`cmake-build-debug`). */
 const SKIPPED_PREFIXES = ['cmake-build', 'build-']
 
 function isSkippedDir(name: string): boolean {
@@ -69,9 +69,9 @@ function isSkippedDir(name: string): boolean {
   return SKIPPED_PREFIXES.some((prefix) => name.startsWith(prefix))
 }
 
-/** Teto do índice. Um workspace maior que isto está fora do que a UI promete. */
+/** Index ceiling. A workspace bigger than this is outside what the UI promises. */
 const MAX_INDEX_FILES = 40_000
-/** O índice é barato de refazer (14 ms medidos), então vive pouco no cache. */
+/** The index is cheap to rebuild (14 ms measured), so it lives briefly in the cache. */
 const INDEX_TTL_MS = 2_000
 
 interface WorkspaceIndex {
@@ -88,10 +88,10 @@ export interface WorkspaceIndexResult {
 }
 
 /**
- * A lista de arquivos do espaço, relativa à raiz e ordenada.
+ * The workspace's file list, relative to the root and sorted.
  *
- * Caminhada iterativa de propósito: recursão com `push(...await ...)` estoura a
- * pilha em pasta funda e monta um array intermediário por diretório.
+ * Iterative walk on purpose: recursion with `push(...await ...)` blows the
+ * stack on a deep folder and builds an intermediate array per directory.
  */
 export async function workspaceIndex(
   root: string,
@@ -135,19 +135,19 @@ export async function workspaceIndex(
 }
 
 export interface NameHit {
-  /** Caminho relativo à raiz — o que a UI mostra e devolve ao abrir. */
+  /** Path relative to the root — what the UI shows and returns when opening. */
   path: string
   name: string
   dir: string
 }
 
 /**
- * Nomes de arquivo que contêm a consulta.
+ * File names that contain the query.
  *
- * O ranqueamento é o que separa "achei" de "achei o que eu queria": nome que
- * COMEÇA com a consulta vem antes de nome que a contém no meio, e o nome exato
- * antes de tudo. Sem isso, procurar `files` devolve `files.test.ts` na frente
- * de `files.ts`.
+ * The ranking is what separates "found" from "found what I wanted": a name that
+ * STARTS with the query comes before a name that contains it in the middle, and the exact name
+ * before everything. Without this, searching for `files` returns `files.test.ts` ahead
+ * of `files.ts`.
  */
 export function matchNames(files: string[], query: string, limit = 60): NameHit[] {
   const q = query.trim().toLowerCase()
@@ -172,7 +172,7 @@ export function matchNames(files: string[], query: string, limit = 60): NameHit[
 }
 
 export interface LineHit {
-  /** 1-based, como o editor conta. */
+  /** 1-based, as the editor counts. */
   line: number
   column: number
   text: string
@@ -181,36 +181,36 @@ export interface LineHit {
 
 export interface FileHits {
   path: string
-  /** Todas as ocorrências do arquivo, mesmo as que não voltam em `lines`. */
+  /** All occurrences in the file, even the ones that do not come back in `lines`. */
   count: number
   lines: LineHit[]
 }
 
 export interface TextSearchResult {
   occurrences: FileHits[]
-  /** Arquivos de texto realmente lidos. */
+  /** Text files actually read. */
   scanned: number
   matches: number
   truncated: boolean
-  /** Regex inválida: não é falha da busca, é consulta pela metade. */
+  /** Invalid regex: it is not a search failure, it is a half-typed query. */
   invalidPattern?: boolean
 }
 
 export interface MatchOptions {
   caseSensitive?: boolean
   regex?: boolean
-  /** A ocorrência só vale isolada: `file` não casa dentro de `walkFiles`. */
+  /** The occurrence only counts in isolation: `file` does not match inside `walkFiles`. */
   wholeWord?: boolean
   /**
-   * Herda o formato do texto encontrado na substituição — `File` vira
-   * `Document`, `FILE` vira `DOCUMENT`. Sem isso, renomear um símbolo em
-   * arquivos que o usam em constantes e em classes estraga a convenção.
+   * It inherits the format of the text found in the replacement — `File` becomes
+   * `Document`, `FILE` becomes `DOCUMENT`. Without this, renaming a symbol in
+   * files that use it in constants and in classes breaks the convention.
    */
   preserveCase?: boolean
 }
 
-/** Extensões que valem varrer. Lista branca, não negra: binário desconhecido
- *  fica de fora sem precisar abrir para descobrir. */
+/** Extensions worth scanning. An allow list, not a deny list: unknown binary
+ *  stays out without having to open it to find out. */
 const TEXT_EXTENSIONS = new Set([
   'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts',
   'json', 'jsonc', 'json5',
@@ -225,24 +225,24 @@ const TEXT_EXTENSIONS = new Set([
   'tf', 'tfvars', 'dockerfile', 'gitignore', 'env', 'editorconfig',
 ])
 
-/** Nomes sem extensão que são texto (e que a lista de extensões não pega). */
+/** Names without an extension that are text (and that the extension list does not catch). */
 const TEXT_NAMES = new Set([
   'dockerfile', 'makefile', 'procfile', 'gemfile', 'rakefile',
   'cmakelists.txt', 'license', 'notice', 'readme',
 ])
 
-/** Acima disto o arquivo é bundle, minificado ou dado — não é fonte. */
+/** Above this the file is a bundle, minified or data — it is not source. */
 const MAX_SEARCH_BYTES = 1024 * 1024
-/** Quantas linhas de um mesmo arquivo voltam para a UI. */
+/** How many lines of the same file come back to the UI. */
 const MAX_LINES_PER_FILE = 12
-/** Teto de ocorrências contadas na varredura inteira. */
+/** Ceiling of occurrences counted in the whole scan. */
 const MAX_MATCHES = 2_000
 
 function isTextCandidate(relPath: string): boolean {
   const cut = relPath.lastIndexOf('/')
   const name = (cut === -1 ? relPath : relPath.slice(cut + 1)).toLowerCase()
   const dot = name.lastIndexOf('.')
-  // `dot > 0` deixa `.env` cair na regra de dotfile em vez de virar "sem ext".
+  // `dot > 0` lets `.env` fall into the dotfile rule instead of becoming "no ext".
   if (dot > 0) return TEXT_EXTENSIONS.has(name.slice(dot + 1))
   if (name.startsWith('.')) return true
   return TEXT_NAMES.has(name)
@@ -261,13 +261,13 @@ function buildRegExp(query: string, options: MatchOptions): RegExp | null {
 }
 
 /**
- * O casador final da busca: consulta literal, literal com fronteira de palavra
- * ou regex.
+ * The final matcher of the search: literal query, literal with word boundary
+ * or regex.
  *
- * `\b` sozinho erraria onde a busca mais importa — em `snake_case` e depois de
- * dígito o `\b` não separa nada, porque `_` conta como letra. As fronteiras vão
- * explícitas (`\w` nas laterais) para que "file" não case em "walkFiles" nem
- * "file_2", mas case em "the file.".
+ * `\b` alone would fail where the search matters most — in `snake_case` and after a
+ * digit `\b` separates nothing, because `_` counts as a letter. The boundaries go
+ * explicit (`\w` on the sides) so that "file" does not match in "walkFiles" nor
+ * "file_2", but does match in "the file.".
  */
 function buildMatcher(query: string, options: MatchOptions): RegExp | null {
   if (options.regex) return buildRegExp(query, options)
@@ -275,12 +275,12 @@ function buildMatcher(query: string, options: MatchOptions): RegExp | null {
   return buildRegExp(options.wholeWord ? `(?<!\\w)${escaped}(?!\\w)` : escaped, options)
 }
 
-/** Devolve a substituição no formato do texto que ela está trocando. */
+/** Returns the replacement in the format of the text it is replacing. */
 function applyCase(matched: string, replacement: string): string {
   if (replacement === '' || matched === '') return replacement
   const upper = matched.toUpperCase()
   const lower = matched.toLowerCase()
-  // Só tem caixa quando mudar de forma muda o texto (`123` não tem).
+  // It only has case when changing the form changes the text (`123` does not).
   if (upper === lower) return replacement
   if (matched === upper) return replacement.toUpperCase()
   if (matched === lower) return replacement.toLowerCase()
@@ -292,13 +292,13 @@ function applyCase(matched: string, replacement: string): string {
 }
 
 /**
- * Varre o texto dos arquivos do índice atrás da consulta.
+ * Scans the text of the index's files for the query.
  *
- * O custo é lido antes de ser pago: só entram candidatos de texto, menores que
- * 1 MB, e a função devolve resultado PARCIAL — as primeiras ocorrências valem
- * mais que a contagem completa, e a UI mostra o que chegou. `signal` é checado
- * a cada arquivo: uma tecla nova cancela a varredura anterior no meio, em vez
- * de enfileirar trabalho que ninguém vai ver.
+ * The cost is read before it is paid: only text candidates enter, smaller than
+ * 1 MB, and the function returns a PARTIAL result — the first occurrences are worth
+ * more than the complete count, and the UI shows what arrived. `signal` is checked
+ * on every file: a new keypress cancels the previous scan midway, instead
+ * of queueing work nobody will see.
  */
 export async function searchText(
   root: string,
@@ -311,8 +311,8 @@ export async function searchText(
   const result: TextSearchResult = { occurrences: [], scanned: 0, matches: 0, truncated: false }
   if (q === '') return result
 
-  // Com palavra inteira o caminho rápido do `indexOf` não serve — a fronteira
-  // precisa ser olhada —, então os dois casos passam pelo mesmo casador.
+  // With a whole word the `indexOf` fast path does not serve — the boundary
+  // has to be looked at —, so both cases go through the same matcher.
   const usePattern = options.regex === true || options.wholeWord === true
   const pattern = usePattern ? buildMatcher(q, options) : null
   if (usePattern && !pattern) {
@@ -334,7 +334,7 @@ export async function searchText(
     } catch {
       continue
     }
-    // Binário disfarçado de texto (extensão mentirosa): o NUL denuncia.
+    // Binary disguised as text (lying extension): the NUL gives it away.
     if (buffer.subarray(0, 8000).includes(0)) continue
 
     result.scanned += 1
@@ -352,7 +352,7 @@ export async function searchText(
           if (hits.length < MAX_LINES_PER_FILE) {
             hits.push({ line: i + 1, column: match.index + 1, text: line, length: match[0].length })
           }
-          // Regex que casa vazio (`a*`) entraria em laço infinito.
+          // A regex that matches empty (`a*`) would enter an infinite loop.
           if (match[0].length === 0) pattern.lastIndex += 1
           if (fileCount >= MAX_MATCHES) break
         }
@@ -383,8 +383,8 @@ export async function searchText(
     }
   }
 
-  // Mais ocorrências primeiro: quem procura um símbolo quer o arquivo que fala
-  // dele, não o que o cita de passagem.
+  // More occurrences first: whoever looks for a symbol wants the file that talks
+  // about it, not the one that cites it in passing.
   result.occurrences.sort((a, b) => b.count - a.count)
   return result
 }
@@ -392,17 +392,17 @@ export async function searchText(
 export interface ReplaceResult {
   files: number
   replacements: number
-  /** Caminhos absolutos gravados — quem chama registra como save manual. */
+  /** Absolute paths written — whoever calls registers them as a manual save. */
   written: string[]
   errors: { path: string; error: string }[]
 }
 
 /**
- * Substitui em arquivos já escolhidos (a lista de ocorrências da busca).
+ * Replaces in already chosen files (the search's list of occurrences).
  *
- * Grava só o que mudou, e só depois de o arquivo inteiro ter sido lido: um erro
- * no meio de um arquivo deixa os outros intactos em vez de gravar metade. Quem
- * chama decide QUAIS arquivos — o escopo é decisão da UI, não do motor.
+ * It writes only what changed, and only after the whole file has been read: an error
+ * midway through one file leaves the others intact instead of writing half. Whoever
+ * calls decides WHICH files — the scope is the UI's decision, not the engine's.
  */
 export async function replaceInFiles(
   root: string,
@@ -453,8 +453,8 @@ export async function replaceInFiles(
   return result
 }
 
-/** Depois de uma substituição o índice envelheceu (nomes são os mesmos, o
- *  conteúdo não — mas o próximo pedido pode ser de outro canto). */
+/** After a replacement the index has gone stale (names are the same, the
+ *  content is not — but the next request may come from somewhere else). */
 export function invalidateIndex(root: string): void {
   indexes.delete(root)
 }

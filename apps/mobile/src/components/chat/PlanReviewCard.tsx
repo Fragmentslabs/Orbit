@@ -34,7 +34,7 @@ interface Props {
   review: PlanReview
 }
 
-/** Uma linha de texto — mesma altura do botão de enviar ao lado. */
+/** One line of text — same height as the send button next to it. */
 const REVIEW_MIN_HEIGHT = 40
 const REVIEW_MAX_HEIGHT = 120
 
@@ -56,7 +56,7 @@ function useModeLabel(): Record<PermissionMode, string> {
   }
 }
 
-/** Botão secundário compacto — divide a largura por igual na linha de ações. */
+/** Compact secondary button — splits the width evenly in the actions row. */
 function GhostButton({
   label,
   icon,
@@ -103,17 +103,17 @@ export function PlanReviewCard({ sessionId, review }: Props) {
   const reviewPlanReview = useSessionStore((s) => s.reviewPlanReview)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [modesOpen, setModesOpen] = useState(false)
-  // Conteúdo do próprio evento de plano: o PLAN.md em disco é opcional, então
-  // sem esse fallback o "ver plano" abria vazio na maioria das sessões.
+  // Content of the plan event itself: the PLAN.md on disk is optional, so
+  // without this fallback "view plan" opened empty in most sessions.
   const [content, setContent] = useState<string | null>(review.content ?? null)
   const [loading, setLoading] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewText, setReviewText] = useState('')
-  // Começa com uma linha (mesma altura do botão de enviar) e só cresce quando
-  // o texto passa da linha ou o Enter quebra linha.
+  // Starts with one line (same height as the send button) and only grows when
+  // the text goes past the line or Enter breaks the line.
   const [reviewHeight, setReviewHeight] = useState(REVIEW_MIN_HEIGHT)
-  // Sugere o modo de permissão selecionado agora (igual ao desktop); num
-  // plano já aceito, o modo com que ele foi aceito.
+  // Suggests the permission mode selected now (same as the desktop); on an
+  // already accepted plan, the mode with which it was accepted.
   const activeMode = usePermissionMode(sessionId)
   const currentMode: PermissionMode = review.permissionMode ?? activeMode
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
@@ -131,17 +131,17 @@ export function PlanReviewCard({ sessionId, review }: Props) {
     }
   }, [sessionId])
 
-  // Conteúdo do plano vindo do store: sincroniza no render (estado derivado),
-  // sem o commit extra do efeito.
+  // Plan content coming from the store: synchronizes during render (derived state),
+  // without the extra commit of the effect.
   const [lastReviewContent, setLastReviewContent] = useState(review.content)
   if (review.content !== lastReviewContent) {
     setLastReviewContent(review.content)
     if (review.content) setContent(review.content)
   }
 
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [review.status, load])
 
@@ -267,7 +267,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
               placeholder={t('planReview.reviewPlaceholder')}
               placeholderTextColor={tokens.mutedForeground}
               multiline
-              // Enter quebra linha — o envio é só pelo botão ao lado.
+              // Enter breaks the line — sending only happens through the button next to it.
               submitBehavior="newline"
               onContentSizeChange={(e) =>
                 setReviewHeight(
@@ -322,8 +322,8 @@ export function PlanReviewCard({ sessionId, review }: Props) {
   )
 }
 
-/** Opções extras de aceite — em bottom sheet, que na tela estreita cabe melhor
- *  que o dropdown do desktop (antes essas ações vazavam para fora do card). */
+/** Extra accept options — in a bottom sheet, which on a narrow screen fits better
+ *  than the desktop dropdown (before, these actions leaked out of the card). */
 function ModesSheet({
   visible,
   onClose,
@@ -443,9 +443,9 @@ function PlanDialog({
             </Pressable>
           </View>
 
-          {/* flexShrink em vez de flex:1: a folha se ajusta a planos curtos e
-              para de crescer no maxHeight — com flex:1 o scroll ficava com
-              altura zero e o markdown não aparecia. */}
+          {/* flexShrink instead of flex:1: the sheet adjusts to short plans and
+              stops growing at maxHeight — with flex:1 the scroll ended up with
+              zero height and the markdown did not show. */}
           <ScrollView
             style={{ flexShrink: 1 }}
             contentContainerStyle={{ paddingBottom: 12 }}
@@ -481,8 +481,8 @@ function PlanDialog({
 const s = StyleSheet.create({
   card: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  // flex + numberOfLines: sem isso o título era espremido pelos botões e
-  // quebrava letra a letra, esticando o card por meia tela.
+  // flex + numberOfLines: without this the title was squeezed by the buttons and
+  // broke letter by letter, stretching the card by half a screen.
   title: { flex: 1, fontSize: 12, fontWeight: '500' },
   counter: { fontSize: 11 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

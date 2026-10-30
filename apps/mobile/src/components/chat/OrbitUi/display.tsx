@@ -19,9 +19,9 @@ type Of<T extends OrbitUiBlock['type']> = Extract<OrbitUiBlock, { type: T }>
 // ── stats ──────────────────────────────────────────────────────────────────
 
 /**
- * Tamanho do número conforme o comprimento do texto já resolvido: o card tem
- * meia largura de tela, então "R$ 1.234.567,89" não cabe no corpo de "R$ 12k".
- * Em vez de cortar, a fonte desce um degrau por faixa — igual ao desktop.
+ * Size of the number according to the length of the resolved text: the card is
+ * half a screen wide, so "R$ 1.234.567,89" does not fit in the body of "R$ 12k".
+ * Instead of cutting it, the font steps down one level per range — same as the desktop.
  */
 function statSize(value: string): number {
   const n = value.length
@@ -194,8 +194,8 @@ export function Steps({ items }: Of<'steps'>) {
 
 // ── table ──────────────────────────────────────────────────────────────────
 
-/** Tabela do bloco. Células com largura mínima e rolagem horizontal: com 5
- *  colunas num celular, espremer tudo em `flex: 1` deixaria o texto ilegível. */
+/** Table of the block. Cells with a minimum width and horizontal scroll: with 5
+ *  columns on a phone, squeezing everything into `flex: 1` would leave the text illegible. */
 export function DataTable({ columns, rows }: Of<'table'>) {
   const tx = useText()
   const tokens = useTokens()

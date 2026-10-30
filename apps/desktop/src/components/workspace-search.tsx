@@ -1,25 +1,25 @@
 "use client";
 
 /**
- * A busca unificada do espaço de trabalho.
+ * The unified workspace search.
  *
- * Um campo, dois grupos: os arquivos cujo NOME casa com a consulta e as
- * OCORRÊNCIAS dentro do texto deles. Os dois vêm do mesmo índice no main, mas
- * custam de formas diferentes — nomes são memória (décimos de milissegundo) e
- * ocorrências leem disco (~100 ms por passada neste repo). Por isso eles não
- * esperam um pelo outro: os nomes aparecem na primeira tecla, e as ocorrências
- * chegam depois, com debounce e cancelamento.
+ * One field, two groups: the files whose NAME matches the query and the
+ * OCCURRENCES inside their text. The two come from the same index in the main process, but
+ * they cost differently — names are memory (tenths of a millisecond) and
+ * occurrences read the disk (~100 ms per pass in this repo). That is why they do not
+ * wait for each other: the names appear on the first key, and the occurrences
+ * arrive later, with debounce and cancellation.
  *
- * O grupo colapsado NÃO busca — mas também não perde o que já achou: fechar
- * "Ocorrências" cancela a varredura e mantém a lista debaixo do cabeçalho, que
- * continua ali para reabrir. Sumir com o grupo seria destruir o resultado e a
- * única porta de volta.
+ * The collapsed group does NOT search — but it also does not lose what it already found: closing
+ * "Occurrences" cancels the scan and keeps the list under the header, which
+ * stays there to reopen. Making the group disappear would destroy the result and the
+ * only way back.
  *
- * A barra é a mesma no painel e no modal (⌘P). O que muda é o alcance da
- * substituição: no painel só "substituir em todos" (a lista é o espaço
- * inteiro); no modal, que abre com um arquivo em foco, também "neste arquivo",
- * que troca no BUFFER do editor — passa pelo desfazer e pelo salvamento
- * automático em vez de escrever por baixo de um rascunho.
+ * The bar is the same in the panel and in the modal (⌘P). What changes is the reach of the
+ * replacement: in the panel only "replace in all" (the list is the whole
+ * workspace); in the modal, which opens with a file in focus, also "in this file",
+ * which swaps in the editor BUFFER — it goes through undo and the automatic
+ * saving instead of writing underneath a draft.
  */
 
 import {
@@ -57,16 +57,16 @@ import { previewLine } from "@/src/lib/text-match";
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Espera depois da última tecla. */
+/** Wait after the last key. */
 const NAME_DEBOUNCE_MS = 90;
 const TEXT_DEBOUNCE_MS = 220;
-/** Abaixo disto a varredura de texto custa mais do que entrega. */
+/** Below this the text scan costs more than it delivers. */
 const MIN_TEXT_QUERY = 2;
 
 interface NameRow {
-  /** Caminho absoluto — é o que o visualizador abre. */
+  /** Absolute path — it is what the viewer opens. */
   path: string;
-  /** Caminho relativo à raiz, para exibir. */
+  /** Path relative to the root, for display. */
   rel: string;
   name: string;
   dir: string;
@@ -82,42 +82,42 @@ interface OccurrenceRow {
 }
 
 export interface WorkspaceSearchProps {
-  /** As pastas do workspace — a busca cobre todas. */
+  /** The workspace folders — the search covers all of them. */
   roots: string[];
-  /** Arquivo aberto no visualizador, alvo do "substituir neste arquivo". */
+  /** File open in the viewer, target of "replace in this file". */
   openFile?: string | null;
-  /** Abre um resultado; `line` é 1-based quando veio de uma ocorrência. */
+  /** Opens a result; `line` is 1-based when it came from an occurrence. */
   onOpen: (path: string, line?: number) => void;
-  /** Substitui no BUFFER do arquivo aberto (nunca no disco por baixo dele). */
+  /** Replaces in the BUFFER of the open file (never on disk underneath it). */
   onReplaceInFile?: (
     query: string,
     replacement: string,
     options: WsMatchOptions,
   ) => number;
-  /** Avisa quais arquivos mudaram em disco, para o painel recarregar. */
+  /** Tells which files changed on disk, for the panel to reload. */
   onReplaced?: (written: string[]) => void;
   /**
-   * A consulta daqui também grifa o arquivo aberto no visualizador. Vazio
-   * limpa o grifo — o campo é a mesma busca, só que apontada no texto.
+   * The query here also marks the file open in the viewer. Empty
+   * clears the mark — the field is the same search, only pointed at the text.
    */
   onHighlightQuery?: (query: string, options: WsMatchOptions) => void;
   variant?: "panel" | "dialog";
   autoFocus?: boolean;
   /**
-   * O que aparece quando não há consulta — no painel, a árvore. Digitar troca
-   * isto pelos resultados; apagar traz de volta. É o que faz a busca ser um
-   * campo NO índice, e não uma tela paralela.
+   * What appears when there is no query — in the panel, the tree. Typing swaps
+   * it for the results; erasing brings it back. It is what makes the search a
+   * field IN the index, and not a parallel screen.
    */
   children?: ReactNode;
   className?: string;
 }
 
-/** Caminho absoluto a partir da raiz e do relativo que o main devolve. */
+/** Absolute path from the root and the relative one the main process returns. */
 function absolutePath(root: string, rel: string): string {
   return `${root.replace(/[\\/]+$/, "")}/${rel}`;
 }
 
-/** Trecho da linha recortado pelo começo, com o intervalo realçado. */
+/** Excerpt of the line cut from the beginning, with the range highlighted. */
 function CodeLine({
   text,
   start,
@@ -132,8 +132,8 @@ function CodeLine({
   const before = text.slice(0, start);
   const mid = text.slice(start, start + length);
   const after = text.slice(start + length);
-  // Linha longa: mostra a cauda do que vem antes, e não o começo — o trecho
-  // realçado é a única parte que precisa estar na tela.
+  // Long line: it shows the tail of what comes before, and not the beginning — the
+  // highlighted excerpt is the only part that needs to be on screen.
   const lead = before.length > 30 ? `…${before.slice(-30)}` : before;
 
   return (
@@ -144,8 +144,8 @@ function CodeLine({
           <span
             className={cn(
               "rounded-[3px] px-px",
-              // Antes em vermelho, depois em verde — a convenção do diff, para a
-              // prévia se ler sem explicação.
+              // Before in red, after in green — the diff convention, so the
+              // preview reads without explanation.
               tone === "match"
                 ? "bg-destructive/20 text-destructive"
                 : "bg-emerald-500/20 text-emerald-500",
@@ -160,11 +160,11 @@ function CodeLine({
 }
 
 /**
- * A linha como ela ficaria depois da substituição, logo abaixo da atual.
+ * The line as it would be after the replacement, right below the current one.
  *
- * É o que transforma "5 ocorrências em 2 arquivos" em uma decisão: o usuário
- * vê o texto antes e depois no próprio lugar, com a parte trocada realçada —
- * sem precisar aplicar para descobrir, e sem desfazer depois.
+ * It is what turns "5 occurrences in 2 files" into a decision: the user
+ * sees the text before and after in the place itself, with the swapped part highlighted —
+ * without needing to apply to find out, and without undoing afterwards.
  */
 function PreviewRow({
   hit,
@@ -189,7 +189,7 @@ function PreviewRow({
   );
 }
 
-/** Botão de estado pequeno — hoje só o "preservar caixa", no substituir. */
+/** Small state button — today only the "preserve case", in replace. */
 function IconToggle({
   active,
   title,
@@ -220,9 +220,9 @@ function IconToggle({
 }
 
 /**
- * Uma opção do popover de filtros: ícone, rótulo e o visto quando ligada.
- * O popover NÃO fecha a cada clique — os filtros combinam entre si, e fechar
- * obrigaria a reabrir para ligar o segundo.
+ * An option of the filters popover: icon, label and the check when on.
+ * The popover does NOT close on every click — the filters combine with each other, and closing
+ * would force reopening to turn the second one on.
  */
 function FilterOption({
   active,
@@ -254,7 +254,7 @@ function FilterOption({
   );
 }
 
-/** Cabeçalho de grupo: o clique só fecha — a lista continua existindo. */
+/** Group header: the click only closes — the list keeps existing. */
 function GroupHead({
   open,
   label,
@@ -315,22 +315,22 @@ export function WorkspaceSearch({
   const [busy, setBusy] = useState(false);
   const [invalidPattern, setInvalidPattern] = useState(false);
 
-  /** Grupos abertos. Fechar "Ocorrências" cancela a varredura de texto. */
+  /** Open groups. Closing "Occurrences" cancels the text scan. */
   const [namesOpen, setNamesOpen] = useState(true);
   const [occurrencesOpen, setOccurrencesOpen] = useState(true);
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** Muda a cada substituição para a busca rodar de novo. */
+  /** Changes on every replacement so the search runs again. */
   const [reload, setReload] = useState(0);
 
   const requestSeq = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const rootsKey = roots.join("\n");
   /**
-   * A lista de raízes é lida por ref dentro dos efeitos: `rootsKey` é quem diz
-   * que ela mudou. Sem isso, cada render com um array novo (mesmo conteúdo)
-   * reagendaria a varredura de texto e jogaria fora o resultado na tela.
+   * The list of roots is read by ref inside the effects: `rootsKey` is what says
+   * that it changed. Without that, every render with a new array (same content)
+   * would reschedule the text scan and throw away the result on screen.
    */
   const rootsRef = useRef(roots);
   rootsRef.current = roots;
@@ -344,15 +344,15 @@ export function WorkspaceSearch({
     if (autoFocus) searchRef.current?.focus();
   }, [autoFocus]);
 
-  // Nomes: memória, sem debounce longo. O que aparece aqui é a lista do índice
-  // filtrada no main — a mesma que a paleta do `@` usa.
+  // Names: memory, with no long debounce. What appears here is the index list
+  // filtered in the main process — the same one the `@` palette uses.
   useEffect(() => {
     const q = query.trim();
     if (q === "") {
       setNames([]);
       return;
     }
-    // Colapsado não busca; e o que já foi achado fica, para reabrir.
+    // Collapsed does not search; and what was already found stays, to reopen.
     if (!namesOpen) return;
     let alive = true;
     const timer = window.setTimeout(() => {
@@ -378,9 +378,9 @@ export function WorkspaceSearch({
     };
   }, [query, namesOpen, rootsKey]);
 
-  // Ocorrências: disco. Só com consulta suficiente, e só com o grupo aberto.
-  // Consulta curta LIMPA (resultado de uma letra não diz nada); grupo fechado
-  // apenas para de buscar e mantém a lista anterior.
+  // Occurrences: disk. Only with a sufficient query, and only with the group open.
+  // A short query CLEARS it (a one-letter result says nothing); a closed group
+  // only stops searching and keeps the previous list.
   useEffect(() => {
     const q = query.trim();
     if (q === "" || q.length < MIN_TEXT_QUERY) {
@@ -444,14 +444,14 @@ export function WorkspaceSearch({
     return () => {
       alive = false;
       window.clearTimeout(timer);
-      // Cada tecla nova aborta a varredura anterior: trabalho que ninguém vai
-      // ver não pode seguir lendo disco.
+      // Every new key aborts the previous scan: work nobody is going to
+      // see cannot keep reading the disk.
       for (const id of ids) void workspaceApi.cancel(id);
     };
   }, [query, options, occurrencesOpen, rootsKey, reload]);
 
-  // O grifo no arquivo aberto segue a consulta, sem debounce: é decoração de
-  // texto, não leitura de disco.
+  // The mark in the open file follows the query, without debounce: it is text
+  // decoration, not disk reading.
   useEffect(() => {
     onHighlightQuery?.(query.trim(), options);
   }, [query, options, onHighlightQuery]);
@@ -557,18 +557,18 @@ export function WorkspaceSearch({
   }, [roots]);
 
   const showNames = !replaceOpen;
-  /** Quantos filtros estão ligados — o botão do popover se acende com algum. */
+  /** How many filters are on — the popover button lights up with any. */
   const activeFilters =
     Number(caseSensitive) + Number(wholeWord) + Number(regex);
   const nothingFound =
     trimmed !== "" && !busy && names.length === 0 && matches === 0;
-  // No painel o campo é só contorno: a sidebar já é a superfície, e um fundo
-  // mais escuro aqui abriria uma segunda caixa dentro da mesma coluna. No
-  // modal a superfície é o popover — ali o campo precisa se anunciar como
-  // campo, senão vira texto solto no topo.
+  // In the panel the field is only an outline: the sidebar already is the surface, and a
+  // darker background here would open a second box inside the same column. In the
+  // modal the surface is the popover — there the field needs to announce itself as a
+  // field, otherwise it becomes loose text at the top.
   const fieldClass = variant === "panel" ? "bg-transparent" : "bg-background";
-  // O modal não tem a moldura do painel: o respiro vem daqui, senão o campo
-  // encosta na borda do popover.
+  // The modal does not have the panel frame: the breathing room comes from here, otherwise the field
+  // touches the popover edge.
   const pad = variant === "panel" ? "px-2" : "";
 
   return (
@@ -579,7 +579,7 @@ export function WorkspaceSearch({
         className,
       )}
     >
-      {/* Barra: consulta, os três filtros e o abre-substituir. */}
+      {/* Bar: query, the three filters and the replace opener. */}
       <div className={cn("shrink-0", pad, "pb-2")}>
         <div
           className={cn(
@@ -624,8 +624,8 @@ export function WorkspaceSearch({
               </button>
             </Hint>
           )}
-          {/* Os três filtros num popover: a barra é estreita, e três botões
-              permanentes roubavam largura do próprio texto pesquisado. */}
+          {/* The three filters in a popover: the bar is narrow, and three
+              permanent buttons stole width from the searched text itself. */}
           <Popover>
             <PopoverTrigger
               title={t("workspaceSearch.filters")}
@@ -683,7 +683,7 @@ export function WorkspaceSearch({
         </div>
       </div>
 
-      {/* Substituir: o campo novo e o botão que o alcance permite. */}
+      {/* Replace: the new field and the button the reach allows. */}
       {replaceOpen && (
         <div className={cn("shrink-0", pad, "pb-2")}>
           <div className="flex flex-col gap-1.5">
@@ -710,8 +710,8 @@ export function WorkspaceSearch({
               </IconToggle>
             </div>
             <div className="flex min-w-0 flex-col gap-1.5">
-              {/* No painel a lista é o espaço inteiro — substituir "aqui" não
-                  tem aqui. O arquivo em foco só existe no modal (⌘P). */}
+              {/* In the panel the list is the whole workspace — replacing "here" has
+                  no here. The focused file only exists in the modal (⌘P). */}
               {variant === "dialog" && (
                 <Hint label={canReplaceInFile
                       ? t("workspaceSearch.replaceInFileHint")
@@ -773,8 +773,8 @@ export function WorkspaceSearch({
               </p>
             )}
 
-            {/* Arquivos — o grupo sai do caminho quando se está substituindo:
-                o assunto lá é onde o texto aparece, não nomes de arquivo. */}
+            {/* Files — the group gets out of the way when one is replacing:
+                the subject there is where the text appears, not file names. */}
             {showNames && trimmed !== "" && (
               <section className="flex flex-col">
                 <GroupHead
@@ -812,7 +812,7 @@ export function WorkspaceSearch({
               </section>
             )}
 
-            {/* Ocorrências */}
+            {/* Occurrences */}
             <section className="mt-1 flex flex-col">
               <GroupHead
                 open={occurrencesOpen}

@@ -6,20 +6,21 @@ export function ChatInputDraft({ sessionId, draftKey }: { sessionId?: string; dr
   const controller = usePromptInputController()
   const key = draftKey ?? sessionId ?? "draft"
 
-  // Chave em que o texto atual foi digitado. O save-on-change usa ela (não a
-  // chave do render): numa troca de sessão o valor ainda pertence ao chat
-  // anterior quando a key já mudou — salvar na key nova corromperia o rascunho.
+  // Key in which the current text was typed. save-on-change uses it (not the
+  // render key): on a session switch the value still belongs to the previous
+  // chat when the key has already changed — saving under the new key would corrupt the draft.
   const prevKeyRef = useRef(key)
 
-  // Restaura o rascunho ao montar (volta de outra tela ou reabertura do chat)
+  // Restores the draft on mount (coming back from another screen or reopening the chat)
   useEffect(() => {
     const saved = getInputDraft(key)
     if (saved) controller.textInput.setInput(saved)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Salva o texto continuamente: o rascunho sobrevive a desmontagens (troca de
-  // tela/esteira/memórias, chat ↔ código), não só à troca de chat. Vazio limpa
-  // o rascunho (a mensagem foi enviada ou apagada).
+  // Saves the text continuously: the draft survives unmounts (switching
+  // screen/pipeline/memories, chat ↔ code), not only switching chats. Empty
+  // clears
+  // the draft (the message was sent or deleted).
   useEffect(() => {
     const text = controller.textInput.value
     if (text) {
@@ -29,8 +30,8 @@ export function ChatInputDraft({ sessionId, draftKey }: { sessionId?: string; dr
     }
   }, [controller.textInput.value])
 
-  // Troca de chat: salva o texto da sessão anterior (ou limpa o rascunho
-  // obsoleto se o input saiu vazio) e restaura o da nova sessão.
+  // Chat switch: saves the text of the previous session (or clears the draft
+  // obsolete if the input left empty) and restores the one of the new session.
   useEffect(() => {
     const prev = prevKeyRef.current
     if (prev !== key) {
@@ -38,9 +39,9 @@ export function ChatInputDraft({ sessionId, draftKey }: { sessionId?: string; dr
       if (text) {
         setInputDraft(prev, text)
       } else {
-        // O input saiu vazio da sessão anterior: qualquer rascunho salvo dela
-        // está obsoleto (a mensagem foi enviada ou apagada). Sem essa limpeza,
-        // o texto enviado voltaria ao input ao reabrir o chat.
+        // The input left the previous session empty: any draft saved from it
+        // is obsolete (the message was sent or deleted). Without that cleanup,
+        // the sent text would come back to the input when reopening the chat.
         clearInputDraft(prev)
       }
       const saved = getInputDraft(key)

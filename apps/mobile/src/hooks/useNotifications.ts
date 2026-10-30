@@ -18,34 +18,34 @@ import {
 } from '../lib/notifications'
 
 /**
- * Hook que configura notificações locais reativas aos eventos WS.
+ * Hook that sets up local notifications reactive to the WS events.
  *
- * - Notifica quando há pending ask
- * - Notifica quando há nova mensagem (em sessão inativa)
- * - Notifica em erros de chat
- * - Limpa badge ao abrir o app
+ * - Notifies when there is a pending ask
+ * - Notifies when there is a new message (in an inactive session)
+ * - Notifies on chat errors
+ * - Clears the badge when the app opens
  */
 export function useNotifications() {
   const { t } = useTranslation()
 
-  // ─── Configura handler de exibição ───────────────────────────────────────
+  // ─── Sets up the display handler ─────────────────────────────────────────
 
   useEffect(() => {
     configureNotifications()
   }, [])
 
-  // ─── Limpa badge ao montar ──────────────────────────────────────────────
+  // ─── Clears the badge on mount ──────────────────────────────────────────
 
   useEffect(() => {
     void clearBadge()
   }, [])
 
-  // ─── Escuta eventos WS e dispara notificações ───────────────────────────
+  // ─── Listens to WS events and fires notifications ───────────────────────
 
   useEffect(() => {
     const conn = useConnectionStore.getState()
 
-    // notify:pending-ask → notificação de pergunta pendente
+    // notify:pending-ask → notification of a pending question
     const unsubAsk = conn.onEvent('notify:pending-ask', (event) => {
       const prefs = useNotificationPrefsStore.getState().prefs
       if (!prefs.pendingAsk) return
@@ -54,9 +54,9 @@ export function useNotifications() {
       const sessions = useSessionStore.getState().sessions
       const session = sessions.find((s) => s.id === ask.sessionId)
       const sessionTitle = session?.title ?? t('notifications.defaultSessionTitle')
-      // O desktop manda `title` vazio quando o pedido não traz texto próprio
-      // (claim/pergunta) — o fallback é nosso, no idioma do celular.
-      const pedido =
+      // The desktop sends an empty `title` when the request brings no text of its own
+      // (claim/question) — the fallback is ours, in the phone's language.
+      const request =
         ask.title ||
         (ask.kind === 'permission'
           ? t('notifications.permissionFallback')
@@ -64,12 +64,12 @@ export function useNotifications() {
 
       void scheduleLocalNotification({
         title: t('notifications.pendingQuestionTitle'),
-        body: `${sessionTitle}: ${pedido}`,
+        body: `${sessionTitle}: ${request}`,
         data: { type: 'pending-ask', sessionId: ask.sessionId },
       })
     })
 
-    // notify:new-message → notificação de nova mensagem (se não estiver na sessão ativa)
+    // notify:new-message → notification of a new message (if not in the active session)
     const unsubMsg = conn.onEvent('notify:new-message', (event) => {
       const prefs = useNotificationPrefsStore.getState().prefs
       if (!prefs.newMessage) return
@@ -89,7 +89,7 @@ export function useNotifications() {
       })
     })
 
-    // chat:event com status=error → notificação de erro
+    // chat:event with status=error → error notification
     const unsubChat = conn.onEvent('chat:event', (event) => {
       const prefs = useNotificationPrefsStore.getState().prefs
       if (!prefs.chatError) return
@@ -103,8 +103,8 @@ export function useNotifications() {
         errorKind?: MessageErrorKind
       } | null
       if (chatEvent?.type === 'status' && chatEvent.status === 'error') {
-        // Kind conhecido → explicação traduzida e curta; o texto cru de
-        // `error` (provedor ou engine) é diagnóstico e não se traduz.
+        // Known kind → short translated explanation; the raw text of
+        // `error` (provider or engine) is diagnostic and is not translated.
         const body =
           chatEvent.errorKind && chatEvent.errorKind !== 'unknown'
             ? t(`notifications.chatErrorKind.${chatEvent.errorKind}`)
@@ -124,13 +124,13 @@ export function useNotifications() {
     }
   }, [t])
 
-  // ─── Handle notificação tocada ──────────────────────────────────────────
+  // ─── Handles a tapped notification ──────────────────────────────────────
 
   useEffect(() => {
-    // Carregamento condicional de módulo opcional: import estático não
-    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
-    // build sem o nativo) e é justamente por isso que o require está
-    // dentro do try/if.
+    // Conditional loading of an optional module: a static import does not
+    // work here (the module may not exist at runtime — Expo Go, web,
+    // build without the native part) and that is exactly why the require is
+    // inside the try/if.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { router } = require('expo-router')
 

@@ -18,14 +18,14 @@ async function saveSession(session: SessionInfo): Promise<void> {
 }
 
 /**
- * Trunca a lista a partir do turno que contém `messageId`, retornando
+ * Truncates the list from the turn that contains `messageId`, returning
  * [truncated, discarded].
  *
- * O revert é acionado pela mensagem do USUÁRIO: corta nela mesma, descartando
- * ela e tudo que veio depois. Um id de mensagem de assistente continua aceito
- * (companion em versão antiga) e corta no par user+resposta — mas só quando a
- * anterior é mesmo do usuário, senão duas mensagens de usuário seguidas (envio
- * que falhou, fila) fariam o corte engolir o turno anterior.
+ * The revert is triggered by the USER message: it cuts at that message itself, discarding
+ * it and everything that came after. An assistant message id is still accepted
+ * (its counterpart on an older version) and cuts at the user+answer pair — but only when the
+ * previous one really is from the user, otherwise two user messages in a row (a send
+ * that failed, the queue) would make the cut swallow the previous turn.
  */
 function truncateAt(messages: ChatMessage[], messageId: string): [ChatMessage[], ChatMessage[]] {
   const idx = messages.findIndex((m) => m.id === messageId)
@@ -41,15 +41,15 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
   const session = await loadSession(sessionId)
   if (!session) return null
 
-  // A pasta é o workspace: a trava impede que um turno de OUTRA conversa na
-  // mesma pasta escreva entre a leitura das mensagens e a transição S/E/C.
-  // Sem pasta (modo chat), só há mensagens e mídia.
+  // The folder is the workspace: the lock stops a turn of ANOTHER conversation in the
+  // same folder from writing between reading the messages and the S/E/C transition.
+  // With no folder (chat mode), there are only messages and media.
   const work = async (): Promise<SessionRevert | null> => {
     const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
     const targetIdx = messages.findIndex((m) => m.id === messageId)
     if (targetIdx < 0) return null
 
-    // Ambos os modos truncam as mensagens imediatamente
+    // Both modes truncate the messages immediately
     const [truncated, discarded] = truncateAt(messages, messageId)
     if (discarded.length === 0) return null
 
@@ -58,12 +58,12 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
 
     const revertState: SessionRevert = session.directory
       ? await revertFiles(session.directory, messageId, discarded)
-      : // Modo chat: a conversa não tem pasta de trabalho
+      : // Chat mode: the conversation has no working folder
         { messageId, discardedMessages: discarded }
 
-    // Mídia (peças e galeria): nos DOIS modos — mora no armazenamento do app,
-    // que o snapshot da pasta de trabalho não alcança. Desfaz o que os turnos
-    // descartados produziram, do primeiro ao último.
+    // Media (pieces and gallery): in BOTH modes — it lives in the app storage,
+    // which the working folder snapshot does not reach. Undoes what the discarded
+    // turns produced, from the first to the last.
     const media = await revertMedia(sessionId, assistantIdsOf(discarded))
     if (media) revertState.media = media
 
@@ -81,17 +81,17 @@ function assistantIdsOf(messages: ChatMessage[]): string[] {
 type FileTurns = { turns: RevertFileTurn[] } | { reason: 'no-snapshot' | 'no-end-snapshot' }
 
 /**
- * Os turnos descartados que mexeram na pasta, do ÚLTIMO para o primeiro — a
- * ordem em que precisam ser desfeitos: o turno 2 volta ao começo dele (que é
- * o fim do turno 1), e só então o turno 1 volta ao começo dele. Desfazer só o
- * primeiro deixava de fora o que o segundo criou, e um arquivo que os dois
- * editaram virava conflito falso.
+ * The discarded turns that touched the folder, from the LAST to the first — the
+ * order in which they have to be undone: turn 2 goes back to its own start (which is
+ * the end of turn 1), and only then does turn 1 go back to its start. Undoing only the
+ * first one left out what the second created, and a file both of them edited became a
+ * false conflict.
  *
- * Os caminhos de autoria confirmada são os que as tools do turno gravaram
- * (`snapshot.authored`); os que outra conversa gravou no intervalo
- * (`snapshot.others`) ficam fora; o resto do diff é de autor incerto (bash,
- * MCP, algo de fora). Turno anterior ao diário (sem `authored`): todo o diff
- * conta como dele, como antes.
+ * The paths of confirmed authorship are the ones the tools of the turn wrote
+ * (`snapshot.authored`); the ones another conversation wrote in the interval
+ * (`snapshot.others`) stay out; the rest of the diff is of uncertain authorship (bash,
+ * MCP, something external). A turn from before the journal (no `authored`): the whole diff
+ * counts as its own, as before.
  */
 async function fileTurnsOf(directory: string, discarded: ChatMessage[]): Promise<FileTurns> {
   const withSnapshot = discarded.filter((m) => m.role === 'assistant' && m.snapshot)
@@ -100,15 +100,15 @@ async function fileTurnsOf(directory: string, discarded: ChatMessage[]): Promise
   for (const message of [...withSnapshot].reverse()) {
     const snapshot = message.snapshot!
     const { start, end } = snapshot
-    // Sem `start` não há estado a que voltar.
+    // Without `start` there is no state to go back to.
     if (!start) return { reason: 'no-snapshot' }
-    // Turno sem escrita: nada a desfazer, e a pasta não é tocada. Com `end`,
-    // a pasta mudou por save manual ou por outra conversa: a transição roda e
-    // separa o que é do turno.
+    // Turn without writes: nothing to undo, and the folder is not touched. With `end`,
+    // the folder changed through a manual save or another conversation: the transition runs and
+    // separates what belongs to the turn.
     if (snapshot.verified === 'unchanged' && !end) continue
-    // O turno pode ter escrito, mas o estado final não foi registrado (captura
-    // falhou, crash). Sem E não há como distinguir a escrita do turno da de
-    // outra pessoa — restaurar seria adivinhar.
+    // The turn may have written, but the final state was not recorded (capture
+    // failed, crash). Without E there is no way to tell the turn's write from someone
+    // else's — restoring would be guessing.
     if (!end) return { reason: 'no-end-snapshot' }
     if (end === start) continue
 
@@ -136,15 +136,15 @@ interface AppliedTurns {
   conflicts: string[]
 }
 
-/** Aplica os turnos em ordem (do último para o primeiro) com a regra S/E/C. */
+/** Applies the turns in order (from the last to the first) with the S/E/C rule. */
 async function applyTurns(directory: string, turns: RevertFileTurn[], withUncertain: boolean): Promise<AppliedTurns> {
   const applied = new Set<string>()
   const conflicts = new Set<string>()
   for (const turn of turns) {
     const paths = withUncertain ? [...turn.paths, ...turn.uncertain] : turn.paths
     if (paths.length === 0) continue
-    // Saves manuais do painel durante o turno não são obra do agente: entram
-    // como conflito (preservados), nunca como revertidos.
+    // Manual saves from the panel during the turn are not the agent's work: they come in
+    // as a conflict (preserved), never as reverted.
     const result = await transition(directory, turn.from, turn.to, { skip: new Set(turn.manual), paths })
     for (const rel of result.applied) applied.add(rel)
     for (const rel of result.conflicts) conflicts.add(rel)
@@ -157,7 +157,7 @@ function uniqueUncertain(turns: RevertFileTurn[]): string[] {
   return [...new Set(turns.flatMap((t) => t.uncertain))].sort()
 }
 
-/** Estado pós-revert e o diff do que foi desfeito. Sem nada aplicado, o pós é o pré. */
+/** Post-revert state and the diff of what was undone. With nothing applied, the post is the pre. */
 async function afterAndDiff(
   directory: string,
   current: string,
@@ -165,10 +165,10 @@ async function afterAndDiff(
 ): Promise<{ after?: string; diff: string }> {
   if (applied.length === 0) return { after: current, diff: '' }
   const after = await capture(directory).catch((err) => {
-    console.error('[revert] captura do estado pós-revert falhou (unrevert ficará sem arquivos):', err)
+    console.error('[revert] post-revert state capture failed (unrevert will have no files):', err)
     return undefined
   })
-  // De depois para antes do revert: é o que os turnos tinham feito nesses caminhos.
+  // From after to before the revert: that is what the turns had done to these paths.
   const changes = after
     ? await diffPaths(directory, after, current, applied).catch(() => ({ files: applied, patch: '' }))
     : { files: applied, patch: '' }
@@ -176,20 +176,20 @@ async function afterAndDiff(
 }
 
 /**
- * Modo código: desfaz APENAS os caminhos que os turnos descartados mudaram e
- * que as tools deles gravaram, comparando o estado atual (C) com o fim (E) e
- * o começo (S) de cada turno.
+ * Code mode: undoes ONLY the paths the discarded turns changed and
+ * that their tools wrote, comparing the current state (C) with the end (E) and
+ * the start (S) of each turn.
  *
- * - C == E: o caminho ainda é o que o turno deixou → volta para S;
- * - C == S: já está desfeito → não faz nada;
- * - qualquer outro: alguém mexeu depois (outra conversa na mesma pasta, o
- *   usuário fora do Orbit) → preserva e reporta conflito.
+ * - C == E: the path is still what the turn left → it goes back to S;
+ * - C == S: it is already undone → do nothing;
+ * - anything else: someone touched it afterwards (another conversation in the same folder, the
+ *   user outside Orbit) → preserve it and report a conflict.
  *
- * Os caminhos de autor incerto ficam como estão e vão para `uncertain`.
+ * The paths of uncertain authorship stay as they are and go to `uncertain`.
  *
- * O truncamento já foi persistido por quem chama — se a restauração falhar, a
- * exceção NÃO pode subir: as mensagens ficariam cortadas sem barra de revert
- * nem unrevert. Devolve filesRestored:false com o motivo para a UI avisar.
+ * The truncation was already persisted by the caller — if the restore fails, the
+ * exception must NOT bubble up: the messages would stay cut with no revert bar
+ * and no unrevert. Returns filesRestored:false with the reason for the UI to warn.
  */
 async function revertFiles(
   directory: string,
@@ -204,10 +204,10 @@ async function revertFiles(
     const { turns } = found
     if (turns.length === 0) return { messageId, filesRestored: true, discardedMessages: discarded }
 
-    // Estado imediatamente antes do revert — é o que o unrevert devolve. Sem
-    // ele, NADA é tocado: aplicar a transição mesmo assim deixaria arquivos
-    // desfeitos sem caminho de volta (e o unrevert, sem `snapshot`, não
-    // avisaria). A falha sobe para o catch abaixo → 'capture-failed'.
+    // State immediately before the revert — it is what the unrevert gives back. Without
+    // it, NOTHING is touched: applying the transition anyway would leave files
+    // undone with no way back (and the unrevert, without `snapshot`, would not
+    // warn). The failure goes up to the catch below → 'capture-failed'.
     const current = await capture(directory)
     const result = await applyTurns(directory, turns, false)
     const { after, diff } = await afterAndDiff(directory, current, result.applied)
@@ -225,18 +225,18 @@ async function revertFiles(
       discardedMessages: discarded,
     }
   } catch (err) {
-    console.error('[revert] falha ao restaurar o filesystem (truncamento já salvo):', err)
+    console.error('[revert] failed to restore the filesystem (truncation already saved):', err)
     return { messageId, filesRestored: false, reason: 'capture-failed', discardedMessages: discarded }
   }
 }
 
 /**
- * "Reverter também" os caminhos de autor incerto do revert ativo. Refaz a
- * cadeia de turnos inteira com eles incluídos: o que já foi desfeito volta
- * como "já está" (nada a fazer), e um caminho de autoria confirmada que tinha
- * dado conflito por causa de um incerto (o bash do turno seguinte mexeu nele)
- * agora pode voltar também. A mesma regra S/E/C vale: o que mudou depois do
- * turno continua preservado.
+ * "Revert also" the paths of uncertain authorship of the active revert. It redoes the
+ * whole chain of turns with them included: what was already undone comes back
+ * as "already there" (nothing to do), and a path of confirmed authorship that had
+ * conflicted because of an uncertain one (the bash of the next turn touched it)
+ * can now go back too. The same S/E/C rule holds: what changed after the
+ * turn stays preserved.
  */
 export async function revertUncertain(sessionId: string): Promise<SessionRevert | null> {
   const before = await loadSession(sessionId)
@@ -259,7 +259,7 @@ export async function revertUncertain(sessionId: string): Promise<SessionRevert 
       await saveSession({ ...session, revert: next })
       return next
     } catch (err) {
-      console.error('[revert] revert dos caminhos incertos falhou:', err)
+      console.error('[revert] revert of the uncertain paths failed:', err)
       return state
     }
   })
@@ -270,14 +270,14 @@ export async function unrevert(sessionId: string): Promise<UnrevertResult> {
   if (!before?.revert) return { done: false }
 
   const work = async (): Promise<UnrevertResult> => {
-    // Relê SOB a trava: um turno que entrou na frente pode ter consolidado o
-    // revert (cleanupRevert) — aí não há mais o que desfazer, e usar o estado
-    // lido antes da fila ressuscitaria mensagens que já foram descartadas.
+    // Re-reads UNDER the lock: a turn that got in first may have consolidated the
+    // revert (cleanupRevert) — then there is nothing left to undo, and using the state
+    // read before the queue would resurrect messages that were already discarded.
     const session = await loadSession(sessionId)
     if (!session?.revert) return { done: false }
     const revertState = session.revert
 
-    // Restaura mensagens descartadas (ambos os modos)
+    // Restores the discarded messages (both modes)
     if (revertState.discardedMessages) {
       const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
       const restored = [...messages, ...revertState.discardedMessages]
@@ -285,9 +285,9 @@ export async function unrevert(sessionId: string): Promise<UnrevertResult> {
       broadcastChatEvent({ type: 'messages', sessionId, messages: restored })
     }
 
-    // Modo código: devolve os arquivos com a MESMA regra de conflito. O
-    // `after` é o estado que o revert deixou; se algo mudou desde então, o
-    // caminho é preservado.
+    // Code mode: gives the files back with the SAME conflict rule. `after`
+    // is the state the revert left; if something changed since then, the
+    // path is preserved.
     let files: UnrevertResult['files']
     if (session.directory && revertState.snapshot) {
       try {
@@ -295,18 +295,18 @@ export async function unrevert(sessionId: string): Promise<UnrevertResult> {
           const result = await transition(session.directory, revertState.after, revertState.snapshot)
           files = { restored: result.applied.length, conflicts: result.conflicts }
         } else {
-          // Sem o estado pós-revert não dá para saber o que mudou depois dele.
+          // Without the post-revert state there is no way to know what changed after it.
           files = { restored: 0, conflicts: [], error: 'no-after' }
         }
       } catch (err) {
-        // As mensagens já voltaram; os arquivos ficam como estão e a falha
-        // vira conflito visível em vez de uma promise rejeitada.
-        console.error('[revert] unrevert dos arquivos falhou:', err)
+        // The messages are already back; the files stay as they are and the failure
+        // becomes a visible conflict instead of a rejected promise.
+        console.error('[revert] unrevert of the files failed:', err)
         files = { restored: 0, conflicts: [], error: 'failed' }
       }
     }
 
-    // Mídia: o redo guardado pelo revert (nos dois modos), com a mesma regra.
+    // Media: the redo stored by the revert (in both modes), with the same rule.
     const media = await unrevertMedia(sessionId)
 
     const next = { ...session }
@@ -319,9 +319,9 @@ export async function unrevert(sessionId: string): Promise<UnrevertResult> {
 }
 
 /**
- * Chamado ao enviar nova mensagem com revert ativo: se as mensagens ainda
- * não foram truncadas (ex: revert foi salvo mas algo falhou), trunca agora.
- * Remove o estado de revert da sessão.
+ * Called when sending a new message with an active revert: if the messages were not
+ * truncated yet (e.g. the revert was saved but something failed), truncate them now.
+ * Removes the revert state from the session.
  */
 export async function cleanupRevert(sessionId: string): Promise<ChatMessage[] | null> {
   const session = await loadSession(sessionId)
@@ -333,8 +333,8 @@ export async function cleanupRevert(sessionId: string): Promise<ChatMessage[] | 
     await writeJson(StorageKeys.messages(sessionId), truncated)
     broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
   }
-  // Os turnos descartados não voltam mais: os diários de mídia deles e o redo
-  // deixam de servir.
+  // The discarded turns do not come back anymore: their media journals and the redo
+  // stop being useful.
   await discardMediaRevert(sessionId, assistantIdsOf(session.revert.discardedMessages ?? []))
 
   const next = { ...session }

@@ -3,41 +3,41 @@ import path from 'node:path'
 import { registerMotion } from './motion-store'
 
 /**
- * Preparo do preview de uma composição de motion — o degrau entre ESCREVER a
- * composição e renderizá-la: o agente escreve o HTML, esta aqui registra e
- * avisa a aba Motion do painel (o usuário confere com play/pause e slider) e só
- * depois de aprovada a composição vai para `motion_render`. Nada é renderizado
- * nem escrito na pasta de trabalho aqui.
+ * Preparing the preview of a motion composition — the step between WRITING the
+ * composition and rendering it: the agent writes the HTML, this one registers it and
+ * tells the Motion tab of the panel (the user checks with play/pause and slider) and only
+ * after the composition is approved does it go to `motion_render`. Nothing is rendered
+ * nor written to the working folder here.
  *
- * O alvo que o agente passa (o `.html` de entrada, ou a pasta dele) vira (pasta
- * servida, arquivo de entrada) e a composição entra no registro
- * (video/motion-store), de onde a aba Motion a carrega pelo scheme
+ * The target the agent passes (the entry `.html`, or its folder) becomes (served
+ * folder, entry file) and the composition enters the registry
+ * (video/motion-store), from where the Motion tab loads it through the scheme
  * `orbit-motion://`.
  *
- * Vive fora da tool para que a derivação seja PURA: dá para testá-la sem
- * Electron, como o resto do video/.
+ * It lives outside the tool so that the derivation is PURE: it can be tested without
+ * Electron, like the rest of video/.
  */
 
-/** Entrada assumida quando o alvo é uma PASTA. */
+/** Entry assumed when the target is a FOLDER. */
 export const MOTION_ENTRY_FILE = 'index.html'
 
 export interface MotionTarget {
-  /** Pasta raiz: o scheme não serve nada fora dela (dependências ficam ao lado). */
+  /** Root folder: the scheme serves nothing outside it (dependencies stay next to it). */
   folder: string
-  /** Arquivo de entrada (absoluto), sempre dentro de `folder`. */
+  /** Entry file (absolute), always inside `folder`. */
   file: string
   /**
-   * Caminho da entrada DENTRO da pasta, com `/` — é o que a aba junta em
-   * `orbit-motion://<id>/<entry>`. Como a pasta é sempre a que contém o
-   * arquivo, isto é o nome do arquivo (`index.html`, quase sempre).
+   * Path of the entry INSIDE the folder, with `/` — it is what the tab joins in
+   * `orbit-motion://<id>/<entry>`. Since the folder is always the one containing the
+   * file, this is the file name (`index.html`, almost always).
    */
   entry: string
 }
 
 /**
- * (pasta, entrada) a partir do alvo já em caminho absoluto. Puro: `isDir` diz
- * se o alvo é uma pasta — pasta usa o `index.html` dela, arquivo é a própria
- * entrada (e a pasta servida é a que o contém).
+ * (folder, entry) from the target already in an absolute path. Pure: `isDir` says
+ * whether the target is a folder — a folder uses its `index.html`, a file is the entry
+ * itself (and the served folder is the one that contains it).
  */
 export function motionTargetFrom(abs: string, isDir: boolean): MotionTarget {
   const resolved = path.resolve(abs)
@@ -54,16 +54,16 @@ async function isFile(p: string): Promise<boolean> {
 }
 
 export interface MotionPreview extends MotionTarget {
-  /** Id do registro — a aba o usa para assinar a recarga ao vivo. */
+  /** Registry id — the tab uses it to subscribe to live reload. */
   id: string
-  /** URL do scheme que a aba carrega: `orbit-motion://<id>/<entry>`. */
+  /** Scheme URL the tab loads: `orbit-motion://<id>/<entry>`. */
   url: string
 }
 
 /**
- * Resolve a pasta/entrada do alvo, confere que a entrada EXISTE (a aba abriria
- * num 404 silencioso, e o erro cedo vale mais) e registra a composição. Só o
- * registro toca o disco; a derivação acima é pura.
+ * Resolves the target's folder/entry, checks that the entry EXISTS (the tab would open
+ * on a silent 404, and an early error is worth more) and registers the composition. Only the
+ * registry touches the disk; the derivation above is pure.
  */
 export async function prepareMotionPreview(
   target: string,

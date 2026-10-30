@@ -17,12 +17,12 @@ import { formatContext, formatPrice, SCORE_CATEGORIES } from "./meta"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Sistema de comparação: card flutuante que aparece ao selecionar modelos na
- * tabela e dialog com barras por categoria (Simplified) ou benchmarks crus
+ * Comparison system: floating card that appears when selecting models in the
+ * table and a dialog with bars per category (Simplified) or raw benchmarks
  * (Technical: SWE-Bench, GPQA, HLE, TTFT, tokens/s…).
  */
 
-/** Cores por posição para distinguir os modelos nas barras empilhadas */
+/** Colors per position to distinguish the models in the stacked bars */
 const MODEL_COLORS = ["bg-sky-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500"]
 
 export function CompareFloatingCard() {
@@ -69,7 +69,7 @@ function formatBenchmark(value: number | undefined, unit: "percent" | "index" | 
   if (value === undefined) return "—"
   switch (unit) {
     case "percent": {
-      // A AA reporta benchmarks como fração 0-1
+      // AA reports benchmarks as a 0-1 fraction
       const pct = value <= 1 ? value * 100 : value
       return `${pct.toFixed(1)}%`
     }

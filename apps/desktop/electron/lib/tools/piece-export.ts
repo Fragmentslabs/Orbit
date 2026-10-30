@@ -10,12 +10,12 @@ import { resolveSafePath, type ToolContext } from './context'
 import { pieceSlug, piecesDir } from './piece-common'
 
 /**
- * A única porta de uma peça do Orbit para o repositório do usuário (modo
- * código): copia a pasta inteira — a composição, o canvas, o deck, com os
- * assets — para um caminho da pasta de trabalho. Só quando ele PEDE a peça
- * como arquivo do projeto; o resto do tempo ela vive no Orbit, onde as tools
- * dela a editam e o revert a desfaz. A cópia é do projeto: entra no snapshot
- * do turno como qualquer outro arquivo escrito.
+ * The only door from an Orbit piece to the user's repository (code
+ * mode): it copies the whole folder — the composition, the canvas, the deck, with the
+ * assets — to a path in the working folder. Only when they ASK for the piece
+ * as a project file; the rest of the time it lives in Orbit, where its
+ * tools edit it and the revert undoes it. The copy belongs to the project: it enters the turn's
+ * snapshot like any other written file.
  */
 export function createPieceExportTool(ctx: ToolContext, scope: { sessionId: string }) {
   return tool({

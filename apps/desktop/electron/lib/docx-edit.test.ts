@@ -7,15 +7,15 @@ const _require = createRequire(import.meta.url)
 const { DOMParser, XMLSerializer } = _require('@xmldom/xmldom') as typeof import('@xmldom/xmldom')
 
 /**
- * O risco desta camada é a FRAGMENTAÇÃO DE RUNS: o Word quebra uma frase em
- * vários <w:r> por marcas de revisão e corretor, então a frase que se lê no
- * documento quase nunca existe como string contígua no XML. Uma busca ingênua
- * não acha nada — e o agente reportaria "editado" sem ter editado.
+ * The risk of this layer is RUN FRAGMENTATION: Word breaks a sentence into
+ * several <w:r> because of revision marks and spell checker, so the sentence you read in the
+ * document almost never exists as a contiguous string in the XML. A naive search
+ * finds nothing — and the agent would report "edited" without having edited.
  */
 
-/** Monta um parágrafo com um <w:r> por pedaço — imita a fragmentação real. */
-function paragraph(...pedacos: string[]): string {
-  const runs = pedacos
+/** Builds a paragraph with one <w:r> per piece — imitates the real fragmentation. */
+function paragraph(...pieces: string[]): string {
+  const runs = pieces
     .map((t) => `<w:r><w:t xml:space="preserve">${t}</w:t></w:r>`)
     .join('')
   return `<w:document xmlns:w="w"><w:body><w:p>${runs}</w:p></w:body></w:document>`
@@ -25,203 +25,203 @@ function run(xml: string, replacements: Replacement[]) {
   const doc = new DOMParser().parseFromString(xml, 'text/xml')
   const applied = applyReplacements(doc as never, replacements)
   const out = new XMLSerializer().serializeToString(doc as never)
-  // Um <w:t> que ficou vazio é serializado autofechado (<w:t/>); ignorar esse
-  // caso faria a regex casar através da tag e "vazar" XML para o texto.
-  const texto = [...out.matchAll(/<w:t[^>]*\/>|<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+  // A <w:t> left empty is serialized self-closed (<w:t/>); ignoring that
+  // case would make the regex match across the tag and "leak" XML into the text.
+  const text = [...out.matchAll(/<w:t[^>]*\/>|<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
     .map((m) => m[1] ?? '')
     .join('')
-  return { applied, texto, xml: out }
+  return { applied, text, xml: out }
 }
 
 describe('applyReplacements', () => {
-  it('troca texto contido num run só', () => {
-    const r = run(paragraph('O prazo e de noventa dias.'), [
-      { find: 'noventa dias', replace: 'cento e vinte dias' },
+  it('replaces text contained in a single run', () => {
+    const r = run(paragraph('The deadline is ninety days.'), [
+      { find: 'ninety days', replace: 'one hundred and twenty days' },
     ])
     expect(r.applied).toEqual([1])
-    expect(r.texto).toBe('O prazo e de cento e vinte dias.')
+    expect(r.text).toBe('The deadline is one hundred and twenty days.')
   })
 
-  it('troca texto QUEBRADO entre runs — o caso que a busca ingênua perde', () => {
-    const r = run(paragraph('O prazo e de nov', 'enta', ' dias.'), [
-      { find: 'noventa dias', replace: 'cento e vinte dias' },
+  it('replaces text SPLIT across runs — the case a naive search misses', () => {
+    const r = run(paragraph('The deadline is nin', 'ety', ' days.'), [
+      { find: 'ninety days', replace: 'one hundred and twenty days' },
     ])
     expect(r.applied).toEqual([1])
-    expect(r.texto).toBe('O prazo e de cento e vinte dias.')
+    expect(r.text).toBe('The deadline is one hundred and twenty days.')
   })
 
-  it('o texto novo entra no PRIMEIRO run, herdando a formatação dali', () => {
+  it('the new text goes into the FIRST run, inheriting its formatting', () => {
     const xml = `<w:document xmlns:w="w"><w:body><w:p>` +
-      `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">nov</w:t></w:r>` +
-      `<w:r><w:t xml:space="preserve">enta dias</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">nin</w:t></w:r>` +
+      `<w:r><w:t xml:space="preserve">ety days</w:t></w:r>` +
       `</w:p></w:body></w:document>`
-    const r = run(xml, [{ find: 'noventa dias', replace: 'cento e vinte dias' }])
-    // O run em negrito é o que passa a carregar o texto inteiro.
-    expect(r.xml).toMatch(/<w:b\/><\/w:rPr><w:t[^>]*>cento e vinte dias<\/w:t>/)
-    expect(r.texto).toBe('cento e vinte dias')
+    const r = run(xml, [{ find: 'ninety days', replace: 'one hundred and twenty days' }])
+    // The bold run is the one that starts carrying the whole text.
+    expect(r.xml).toMatch(/<w:b\/><\/w:rPr><w:t[^>]*>one hundred and twenty days<\/w:t>/)
+    expect(r.text).toBe('one hundred and twenty days')
   })
 
-  it('sem `all`, troca só a primeira ocorrência', () => {
-    const r = run(paragraph('ACME e ACME'), [{ find: 'ACME', replace: 'BETA' }])
+  it('without `all`, replaces only the first occurrence', () => {
+    const r = run(paragraph('ACME and ACME'), [{ find: 'ACME', replace: 'BETA' }])
     expect(r.applied).toEqual([1])
-    expect(r.texto).toBe('BETA e ACME')
+    expect(r.text).toBe('BETA and ACME')
   })
 
-  it('com `all`, troca todas', () => {
-    const r = run(paragraph('ACME e ACME e ACME'), [{ find: 'ACME', replace: 'BETA', all: true }])
+  it('with `all`, replaces every one', () => {
+    const r = run(paragraph('ACME and ACME and ACME'), [{ find: 'ACME', replace: 'BETA', all: true }])
     expect(r.applied).toEqual([3])
-    expect(r.texto).toBe('BETA e BETA e BETA')
+    expect(r.text).toBe('BETA and BETA and BETA')
   })
 
-  it('substituição que contém o procurado não entra em laço infinito', () => {
-    // "X" -> "XY" com all: encontrar de novo o próprio resultado repetiria
-    // para sempre. O teste falha por timeout se a proteção sumir.
-    const r = run(paragraph('valor X aqui'), [{ find: 'X', replace: 'XY', all: true }])
-    expect(r.texto).toBe('valor XY aqui')
+  it('a replacement containing the searched text does not loop forever', () => {
+    // "X" -> "XY" with all: finding the result itself again would repeat
+    // forever. The test fails by timeout if the protection disappears.
+    const r = run(paragraph('value X here'), [{ find: 'X', replace: 'XY', all: true }])
+    expect(r.text).toBe('value XY here')
   })
 
-  it('substituir por vazio apaga o trecho', () => {
-    const r = run(paragraph('texto [RASCUNHO] final'), [{ find: ' [RASCUNHO]', replace: '' }])
-    expect(r.texto).toBe('texto final')
+  it('replacing with empty deletes the stretch', () => {
+    const r = run(paragraph('text [DRAFT] final'), [{ find: ' [DRAFT]', replace: '' }])
+    expect(r.text).toBe('text final')
   })
 
-  it('trecho ausente devolve zero em vez de falhar', () => {
-    const r = run(paragraph('nada aqui'), [{ find: 'inexistente', replace: 'x' }])
+  it('a missing stretch returns zero instead of failing', () => {
+    const r = run(paragraph('nothing here'), [{ find: 'inexistente', replace: 'x' }])
     expect(r.applied).toEqual([0])
-    expect(r.texto).toBe('nada aqui')
+    expect(r.text).toBe('nothing here')
   })
 
-  it('conta cada substituição separadamente, na ordem recebida', () => {
-    const r = run(paragraph('A e B'), [
+  it('counts each replacement separately, in the order received', () => {
+    const r = run(paragraph('A and B'), [
       { find: 'A', replace: '1' },
-      { find: 'ausente', replace: 'x' },
+      { find: 'missing', replace: 'x' },
       { find: 'B', replace: '2' },
     ])
     expect(r.applied).toEqual([1, 0, 1])
-    expect(r.texto).toBe('1 e 2')
+    expect(r.text).toBe('1 and 2')
   })
 
-  it('preserva xml:space quando o texto novo tem espaço nas pontas', () => {
+  it('preserves xml:space when the new text has leading or trailing spaces', () => {
     const r = run(paragraph('a', 'b'), [{ find: 'ab', replace: ' c ' }])
     expect(r.xml).toContain('xml:space="preserve"')
-    expect(r.texto).toBe(' c ')
+    expect(r.text).toBe(' c ')
   })
 
-  it('busca vazia não faz nada — evitaria inserir em todo lugar', () => {
-    const r = run(paragraph('texto'), [{ find: '', replace: 'x', all: true }])
+  it('an empty search does nothing — it would insert everywhere', () => {
+    const r = run(paragraph('text'), [{ find: '', replace: 'x', all: true }])
     expect(r.applied).toEqual([0])
-    expect(r.texto).toBe('texto')
+    expect(r.text).toBe('text')
   })
 })
 
 /**
- * Estrutura: o que a troca de texto não alcança. O que está em jogo é o
- * mesmo — a formatação do documento do usuário —, e a garantia vem de clonar
- * XML que já existe em vez de escrever XML novo.
+ * Structure: what the text swap cannot reach. What is at stake is the
+ * same — the formatting of the user's document —, and the guarantee comes from cloning
+ * XML that already exists instead of writing new XML.
  */
-function estrutura(body: string, edits: StructuralEdits) {
+function structure(body: string, edits: StructuralEdits) {
   const xml = `<w:document xmlns:w="w"><w:body>${body}</w:body></w:document>`
   const doc = new DOMParser().parseFromString(xml, 'text/xml')
   const result = applyStructural(doc as never, edits)
   const out = new XMLSerializer().serializeToString(doc as never)
-  const paragrafos = [...out.matchAll(/<w:p[ >][\s\S]*?<\/w:p>|<w:p\/>/g)].map((m) =>
+  const paragraphs = [...out.matchAll(/<w:p[ >][\s\S]*?<\/w:p>|<w:p\/>/g)].map((m) =>
     [...m[0].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((t) => t[1]).join(''),
   )
-  return { result, xml: out, paragrafos }
+  return { result, xml: out, paragraphs }
 }
 
-const ITEM = (texto: string) =>
-  `<w:p><w:pPr><w:pStyle w:val="ListaNumerada"/><w:numPr><w:numId w:val="3"/></w:numPr></w:pPr>` +
-  `<w:r><w:rPr><w:rFonts w:ascii="Calibri"/></w:rPr><w:t>${texto}</w:t></w:r></w:p>`
+const ITEM = (text: string) =>
+  `<w:p><w:pPr><w:pStyle w:val="NumberedList"/><w:numPr><w:numId w:val="3"/></w:numPr></w:pPr>` +
+  `<w:r><w:rPr><w:rFonts w:ascii="Calibri"/></w:rPr><w:t>${text}</w:t></w:r></w:p>`
 
-const CELULA = (texto: string) =>
+const CELL = (text: string) =>
   `<w:tc><w:tcPr><w:tcBorders><w:top w:val="single"/></w:tcBorders></w:tcPr>` +
-  `<w:p><w:r><w:t>${texto}</w:t></w:r></w:p></w:tc>`
+  `<w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`
 
 describe('applyStructural', () => {
-  it('o item novo herda estilo, numeração e fonte do item âncora', () => {
-    const r = estrutura(ITEM('Volume e capacidade') + ITEM('Equações'), {
-      insert: [{ after: 'Volume e capacidade', text: 'Fração geratriz' }],
+  it('the new item inherits style, numbering and font from the anchor item', () => {
+    const r = structure(ITEM('Volume and capacity') + ITEM('Equations'), {
+      insert: [{ after: 'Volume and capacity', text: 'Generating fraction' }],
     })
     expect(r.result.insert).toEqual([1])
-    expect(r.paragrafos).toEqual(['Volume e capacidade', 'Fração geratriz', 'Equações'])
-    // Três parágrafos na lista numerada, com a mesma fonte: o novo é clone.
+    expect(r.paragraphs).toEqual(['Volume and capacity', 'Generating fraction', 'Equations'])
+    // Three paragraphs in the numbered list, with the same font: the new one is a clone.
     expect(r.xml.match(/w:numId w:val="3"/g)).toHaveLength(3)
     expect(r.xml.match(/w:ascii="Calibri"/g)).toHaveLength(3)
   })
 
-  it('várias linhas viram vários itens, na ordem escrita', () => {
-    const r = estrutura(ITEM('A') + ITEM('D'), {
+  it('several lines become several items, in the written order', () => {
+    const r = structure(ITEM('A') + ITEM('D'), {
       insert: [{ after: 'A', text: 'B\nC' }],
     })
-    expect(r.paragrafos).toEqual(['A', 'B', 'C', 'D'])
+    expect(r.paragraphs).toEqual(['A', 'B', 'C', 'D'])
   })
 
-  it('like escolhe outro parágrafo como molde', () => {
-    const titulo = '<w:p><w:pPr><w:pStyle w:val="Titulo1"/></w:pPr><w:r><w:t>Planejamento</w:t></w:r></w:p>'
-    const r = estrutura(titulo + ITEM('Item'), {
-      insert: [{ after: 'Item', text: 'Novo título', like: 'Planejamento' }],
+  it('like picks another paragraph as the template', () => {
+    const title = '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Planning</w:t></w:r></w:p>'
+    const r = structure(title + ITEM('Item'), {
+      insert: [{ after: 'Item', text: 'New heading', like: 'Planning' }],
     })
-    expect(r.paragrafos).toEqual(['Planejamento', 'Item', 'Novo título'])
-    expect(r.xml.match(/w:val="Titulo1"/g)).toHaveLength(2)
+    expect(r.paragraphs).toEqual(['Planning', 'Item', 'New heading'])
+    expect(r.xml.match(/w:val="Heading1"/g)).toHaveLength(2)
   })
 
-  it('célula vazia recebe o texto com a formatação da marca de parágrafo', () => {
-    // O caso real: a linha de um formulário com a coluna ainda em branco. Não
-    // há run para herdar, e sem cuidado o texto novo nasceria sem formatação.
-    const vazia = '<w:tc><w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr></w:p></w:tc>'
-    const tabela = `<w:tbl><w:tr>${CELULA('23/09')}${vazia}</w:tr></w:tbl>`
-    const r = estrutura(tabela, { rows: [{ after: '23/09', cells: ['24/09', 'Em negrito'] }] })
-    expect(r.paragrafos).toContain('Em negrito')
-    expect(r.xml).toMatch(/<w:r><w:rPr><w:b\/><\/w:rPr><w:t>Em negrito<\/w:t><\/w:r>/)
+  it('an empty cell receives the text with the paragraph mark formatting', () => {
+    // The real case: a form line with the column still blank. There is no
+    // run to inherit, and without care the new text would be born without formatting.
+    const emptyCell = '<w:tc><w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr></w:p></w:tc>'
+    const table = `<w:tbl><w:tr>${CELL('23/09')}${emptyCell}</w:tr></w:tbl>`
+    const r = structure(table, { rows: [{ after: '23/09', cells: ['24/09', 'In bold'] }] })
+    expect(r.paragraphs).toContain('In bold')
+    expect(r.xml).toMatch(/<w:r><w:rPr><w:b\/><\/w:rPr><w:t>In bold<\/w:t><\/w:r>/)
   })
 
-  it('remove o parágrafo pedido', () => {
-    const r = estrutura(ITEM('fica') + ITEM('sai') + ITEM('fica também'), {
-      remove: [{ containing: 'sai' }],
+  it('removes the requested paragraph', () => {
+    const r = structure(ITEM('stays') + ITEM('goes') + ITEM('also stays'), {
+      remove: [{ containing: 'goes' }],
     })
     expect(r.result.remove).toEqual([1])
-    expect(r.paragrafos).toEqual(['fica', 'fica também'])
+    expect(r.paragraphs).toEqual(['stays', 'also stays'])
   })
 
-  it('não apaga o último parágrafo de uma célula — só esvazia', () => {
-    // Célula sem parágrafo é arquivo que o Word chama de corrompido.
-    const tabela = `<w:tbl><w:tr>${CELULA('única')}</w:tr></w:tbl>`
-    const r = estrutura(tabela, { remove: [{ containing: 'única' }] })
+  it('does not delete the last paragraph of a cell — only empties it', () => {
+    // A cell without a paragraph is a file Word calls corrupted.
+    const table = `<w:tbl><w:tr>${CELL('only')}</w:tr></w:tbl>`
+    const r = structure(table, { remove: [{ containing: 'only' }] })
     expect(r.result.remove).toEqual([1])
     expect(r.xml).toContain('<w:tc>')
     expect(r.xml.match(/<w:p>/g)?.length).toBe(1)
-    expect(r.paragrafos).toEqual([''])
+    expect(r.paragraphs).toEqual([''])
   })
 
-  it('linha nova na tabela herda as bordas e recebe os valores por coluna', () => {
-    const tabela =
-      `<w:tbl><w:tr>${CELULA('23/09')}${CELULA('Volume')}</w:tr>` +
-      `<w:tr>${CELULA('24/09')}${CELULA('Equações')}</w:tr></w:tbl>`
-    const r = estrutura(tabela, { rows: [{ after: '23/09', cells: ['25/09', 'Fração'] }] })
+  it('a new row in the table inherits the borders and gets values per column', () => {
+    const table =
+      `<w:tbl><w:tr>${CELL('23/09')}${CELL('Volume')}</w:tr>` +
+      `<w:tr>${CELL('24/09')}${CELL('Equations')}</w:tr></w:tbl>`
+    const r = structure(table, { rows: [{ after: '23/09', cells: ['25/09', 'Fraction'] }] })
     expect(r.result.rows).toEqual([1])
-    expect(r.paragrafos).toEqual(['23/09', 'Volume', '25/09', 'Fração', '24/09', 'Equações'])
-    // Seis células, todas com a borda: a nova linha é clone de uma de verdade.
+    expect(r.paragraphs).toEqual(['23/09', 'Volume', '25/09', 'Fraction', '24/09', 'Equations'])
+    // Six cells, all with the border: the new row is a clone of a real one.
     expect(r.xml.match(/<w:top w:val="single"\/>/g)).toHaveLength(6)
   })
 
-  it('remove uma linha, mas nunca a última da tabela', () => {
-    const duas = `<w:tbl><w:tr>${CELULA('a')}</w:tr><w:tr>${CELULA('b')}</w:tr></w:tbl>`
-    expect(estrutura(duas, { removeRows: [{ containing: 'a' }] }).paragrafos).toEqual(['b'])
+  it('removes a row, but never the last one in the table', () => {
+    const two = `<w:tbl><w:tr>${CELL('a')}</w:tr><w:tr>${CELL('b')}</w:tr></w:tbl>`
+    expect(structure(two, { removeRows: [{ containing: 'a' }] }).paragraphs).toEqual(['b'])
 
-    const uma = `<w:tbl><w:tr>${CELULA('só')}</w:tr></w:tbl>`
-    const r = estrutura(uma, { removeRows: [{ containing: 'só' }] })
+    const only = `<w:tbl><w:tr>${CELL('solo')}</w:tr></w:tbl>`
+    const r = structure(only, { removeRows: [{ containing: 'solo' }] })
     expect(r.result.removeRows).toEqual([0])
-    expect(r.paragrafos).toEqual(['só'])
+    expect(r.paragraphs).toEqual(['solo'])
   })
 
-  it('âncora que não existe é reportada como zero, sem mexer em nada', () => {
-    const r = estrutura(ITEM('A'), {
+  it('a missing anchor is reported as zero, without touching anything', () => {
+    const r = structure(ITEM('A'), {
       insert: [{ after: 'inexistente', text: 'X' }],
-      rows: [{ after: 'A', cells: ['fora de tabela'] }],
+      rows: [{ after: 'A', cells: ['outside the table'] }],
     })
     expect(r.result.insert).toEqual([0])
     expect(r.result.rows).toEqual([0])
-    expect(r.paragrafos).toEqual(['A'])
+    expect(r.paragraphs).toEqual(['A'])
   })
 })

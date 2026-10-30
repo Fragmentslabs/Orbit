@@ -12,34 +12,34 @@ import { DESIGN_RUNTIME, DESIGN_RUNTIME_PATH, injectDesignRuntime } from './desi
 import { journalPath } from '../session/media-journal'
 
 /**
- * Registro dos canvas de design (uma PASTA do app: `canvas.json` + um .html por
- * artboard) e o scheme `orbit-design://` que a serve.
+ * Registry of the design canvases (an app FOLDER: `canvas.json` + one .html per
+ * artboard) and the `orbit-design://` scheme that serves it.
  *
- * Espelha video/motion-store.ts: o registro guarda id → pasta, nada é copiado, e
- * todo arquivo servido é resolvido DENTRO da pasta registrada. Diferente do
- * motion, não há runtime injetado (o artboard é estático: sem linha do tempo,
- * sem seek) nem faixa de mídia — por isso o scheme aqui é bem mais simples.
+ * Mirrors video/motion-store.ts: the registry holds id → folder, nothing is copied,
+ * and every served file is resolved INSIDE the registered folder. Unlike motion,
+ * there is no injected runtime (the artboard is static: no timeline, no seek) nor a
+ * media track — which is why the scheme here is a lot simpler.
  */
 
 const SAFE_DESIGN_ID = /^dsg_[a-z0-9]+$/
 
-/** Canal do renderer para a recarga ao vivo. */
+/** Renderer channel for the live reload. */
 export const DESIGN_CHANGED_CHANNEL = 'design:changed'
 
-/** Debounce do fs.watch: o editor grava em rajada e não queremos N eventos. */
+/** fs.watch debounce: the editor writes in bursts and we do not want N events. */
 const WATCH_DEBOUNCE_MS = 150
 /**
- * Teto do debounce. Numa geração o agente escreve uma tela atrás da outra sem
- * pausa suficiente para o debounce "fechar": sem teto, o aviso só sairia no
- * fim da rajada (ou sairia N vezes). Com ele, o canvas atualiza no máximo a
- * cada WATCH_MAX_WAIT_MS contados da PRIMEIRA mudança.
+ * Debounce ceiling. During a generation the agent writes one screen after the other
+ * without enough pause for the debounce to "close": without a ceiling, the notice
+ * would only go out at the end of the burst (or would go out N times). With it, the
+ * canvas refreshes at most every WATCH_MAX_WAIT_MS counted from the FIRST change.
  */
 const WATCH_MAX_WAIT_MS = 400
 
 export interface DesignEntry {
-  /** Pasta raiz do canvas: o scheme não serve nada fora dela. */
+  /** Root folder of the canvas: the scheme serves nothing outside of it. */
   folder: string
-  /** Pasta de trabalho que registrou (reservado — hoje só o modo chat registra). */
+  /** Working folder that registered it (reserved — today only chat mode registers). */
   root?: string
   sessionId?: string
   createdAt: number
@@ -82,14 +82,14 @@ async function load(fresh = false): Promise<Record<string, DesignEntry>> {
   return index
 }
 
-/** Id do canvas: derivado da pasta, não sorteado — registrar de novo o mesmo
- *  canvas devolve o MESMO id, e a aba aberta continua válida. */
+/** Canvas id: derived from the folder, not drawn at random — registering the same
+ *  canvas again returns the SAME id, and the open tab stays valid. */
 export function designIdFor(folder: string): string {
   const key = path.resolve(folder).toLowerCase()
   return `dsg_${createHash('sha1').update(key).digest('hex').slice(0, 16)}`
 }
 
-/** O canvas registrado a partir do NOME que ele tem na conversa (modo chat). */
+/** The canvas registered from the NAME it has in the conversation (chat mode). */
 export async function designIdForName(sessionId: string, name: string): Promise<string | null> {
   const wanted = name.trim().toLowerCase()
   if (!wanted) return null
@@ -101,16 +101,16 @@ export async function designIdForName(sessionId: string, name: string): Promise<
   return null
 }
 
-/** Caminho comparável: separador normalizado, sem `./` na frente, minúsculo. */
+/** Comparable path: normalized separator, no leading `./`, lowercase. */
 function normalize(value: string): string {
   return value.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase()
 }
 
 /**
- * O canvas registrado a partir do CAMINHO que o agente usou no preview (modo
- * código: a tool design_preview recebe a pasta do canvas). Espelha
- * motionIdForPath — mesmo fallback pelo FIM do caminho quando o agente manda
- * um relativo que não resolve contra o cwd do app.
+ * The canvas registered from the PATH the agent used in the preview (code mode:
+ * the design_preview tool receives the canvas folder). Mirrors motionIdForPath —
+ * same fallback by the END of the path when the agent sends a relative one that does
+ * not resolve against the app cwd.
  */
 export async function designIdForPath(target: string): Promise<string | null> {
   const wanted = path.resolve(target).toLowerCase()
@@ -144,9 +144,9 @@ function isInside(root: string, target: string): boolean {
 }
 
 /**
- * Resolve o caminho de uma URL `orbit-design://<id>/<caminho>` dentro da pasta
- * do canvas. Puro. Recusa caminho vazio, absoluto, com `..` ou que escape da
- * pasta depois de normalizado — o mesmo contrato do resolveMotionFile.
+ * Resolves the path of an `orbit-design://<id>/<path>` URL inside the canvas
+ * folder. Pure. Refuses an empty path, an absolute one, one with `..` or one that
+ * escapes the folder after normalization — the same contract as resolveMotionFile.
  */
 export function resolveDesignFile(folder: string, relative: string): string | null {
   let rel = relative ?? ''
@@ -164,7 +164,7 @@ export function resolveDesignFile(folder: string, relative: string): string | nu
   return isInside(root, target) ? target : null
 }
 
-/** Registra (ou reaproveita) um canvas e devolve a URL do índice. */
+/** Registers (or reuses) a canvas and returns the index URL. */
 export async function registerDesign(
   folder: string,
   opts: { root?: string; sessionId?: string } = {},
@@ -215,8 +215,8 @@ export async function unregisterDesign(id: string): Promise<void> {
   unwatchDesign(id)
 }
 
-/** Pastas de canvas que o próprio Orbit guarda (o modo chat) — apagáveis sem
- *  pedir licença a projeto nenhum. */
+/** Canvas folders that Orbit itself keeps (chat mode) — deletable without
+ *  asking permission from any project. */
 function chatDesignsRoot(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'design')
 }
@@ -232,9 +232,9 @@ export interface DesignDeletion {
 }
 
 /**
- * Apaga um canvas: a pasta, o registro e o watcher. Mesma trava do motion — só
- * apaga a pasta quando ela é do armazenamento do Orbit (hoje, sempre, já que só
- * o modo chat registra), nunca a pasta de trabalho de um projeto.
+ * Deletes a canvas: the folder, the registry entry and the watcher. Same lock as
+ * motion — the folder is only deleted when it belongs to Orbit's storage (today,
+ * always, since only chat mode registers), never a project's working folder.
  */
 export async function deleteDesignCanvas(id: string): Promise<DesignDeletion> {
   const entry = await getDesign(id)
@@ -246,15 +246,15 @@ export async function deleteDesignCanvas(id: string): Promise<DesignDeletion> {
   if (!stat?.isDirectory()) {
     keptBecause = 'the folder no longer exists'
   } else if (isStrictlyInside(chatDesignsRoot(), folder)) {
-    // do Orbit
+    // of Orbit's own storage
   } else if (entry.root && isStrictlyInside(entry.root, folder)) {
-    // dentro do projeto que o registrou, e não o projeto em si
+    // inside the project that registered it, and not the project itself
   } else {
     keptBecause = 'the folder is outside the app storage it was registered from'
   }
 
   if (!keptBecause) {
-    // No turno do agente (design_delete), a pasta vai para o diário antes.
+    // In the agent's turn (design_delete), the folder goes to the journal first.
     await journalPath(folder, { kind: 'design', id, folder, root: entry.root, sessionId: entry.sessionId })
     await fsp.rm(folder, { recursive: true, force: true })
   }
@@ -262,11 +262,11 @@ export async function deleteDesignCanvas(id: string): Promise<DesignDeletion> {
   return keptBecause ? { removedFolder: false, keptBecause } : { removedFolder: true }
 }
 
-// ------------------------------------------------------------ edição (IPC)
-// O que a aba Design grava quando a PESSOA edita no canvas: o fonte de um
-// artboard (propriedades, texto, código) e o arranjo dele no canvas.json. O
-// renderer manda só o id e o nome do arquivo — a pasta sai do registro, e o
-// nome passa pela mesma trava das tools (plano, .html, sem caminho).
+// ------------------------------------------------------------ editing (IPC)
+// What the Design tab writes when the PERSON edits in the canvas: the source of an
+// artboard (properties, text, code) and its layout in canvas.json. The
+// renderer sends only the id and the file name — the folder comes from the registry,
+// and the name goes through the same lock as the tools (flat, .html, no path).
 
 async function boardTarget(id: string, file: string): Promise<{ folder: string; target: string }> {
   const entry = await getDesign(id)
@@ -277,21 +277,21 @@ async function boardTarget(id: string, file: string): Promise<{ folder: string; 
   return { folder: entry.folder, target }
 }
 
-/** Reescreve o fonte de um artboard. */
+/** Rewrites the source of an artboard. */
 export async function writeDesignBoard(id: string, file: string, html: string): Promise<void> {
   const { folder, target } = await boardTarget(id, file)
-  // Mesmo lock/escrita atômica das tools de design: a edição da PESSOA no canvas
-  // e um design_edit do agente no mesmo artboard não se intercalam.
+  // Same lock/atomic write as the design tools: the PERSON's edit in the canvas
+  // and a design_edit from the agent on the same artboard do not interleave.
   await withAssetLock(`design:${folder}`, () => writeFileAtomic(target, html))
 }
 
-/** Lê o fonte de um artboard (sem a ponte). */
+/** Reads the source of an artboard (without the bridge). */
 export async function readDesignBoard(id: string, file: string): Promise<string> {
   const { target } = await boardTarget(id, file)
   return fsp.readFile(target, 'utf8')
 }
 
-/** Muda o arranjo (posição, tamanho, título) de um artboard no canvas.json. */
+/** Changes the layout (position, size, title) of an artboard in canvas.json. */
 export async function updateDesignBoard(
   id: string,
   file: string,
@@ -320,10 +320,10 @@ export async function updateDesignBoard(
 const watchers = new Map<string, fs.FSWatcher>()
 
 /**
- * Mudanças pendentes por canvas. O debounce junta os nomes que o fs.watch
- * mandou e manda UMA mensagem — com a LISTA de arquivos: é ela que deixa a aba
- * Design recarregar só o artboard que mudou, em vez de remontar todos os
- * iframes a cada gravação (ver design-tab.tsx).
+ * Pending changes per canvas. The debounce gathers the names fs.watch sent and sends
+ * ONE message — with the LIST of files: it is what lets the Design tab reload only
+ * the artboard that changed, instead of remounting all the iframes on every write
+ * (see design-tab.tsx).
  */
 const pendingChanges = new Map<
   string,
@@ -338,11 +338,11 @@ function notifyChanged(id: string, file?: string | null): void {
     pendingChanges.set(id, pending)
   } else {
     clearTimeout(pending.timer)
-    // Espera o silêncio, mas nunca além do teto contado da primeira mudança.
+    // Waits for silence, but never beyond the ceiling counted from the first change.
     const wait = Math.max(0, Math.min(WATCH_DEBOUNCE_MS, pending.firstAt + WATCH_MAX_WAIT_MS - now))
     pending.timer = setTimeout(() => flushChanged(id), wait)
   }
-  // Separador normalizado: o renderer compara com os nomes do canvas.json.
+  // Normalized separator: the renderer compares it with the names in canvas.json.
   if (file) pending.files.add(file.replace(/\\/g, '/'))
 }
 
@@ -358,10 +358,10 @@ function flushChanged(id: string): void {
 }
 
 /**
- * O watcher é a fonte da verdade sobre o que mudou: esquecer o documento
- * injetado aqui cobre o caso em que `mtime` e tamanho repetem (disco com
- * resolução de milissegundo e a mesma contagem de bytes). Sem nomes, esquece
- * tudo o que é daquela pasta.
+ * The watcher is the source of truth about what changed: forgetting the injected
+ * document here covers the case where `mtime` and size repeat (a disk with
+ * millisecond resolution and the same byte count). Without names, it forgets
+ * everything that belongs to that folder.
  */
 function forgetInjectedDocuments(id: string, files: string[]): void {
   const folder = index?.[id]?.folder
@@ -378,9 +378,9 @@ function forgetInjectedDocuments(id: string, files: string[]): void {
 
 function watchDesign(id: string, folder: string): void {
   unwatchDesign(id)
-  // O nome vem relativo à pasta (recursivo) e é o que permite a recarga
-  // cirúrgica; sem ele (ou fora do macOS, quando o watcher não informa), a
-  // mensagem sai sem lista e a aba recarrega tudo, como antes.
+  // The name comes relative to the folder (recursive) and it is what allows the surgical
+  // reload; without it (or outside macOS, when the watcher does not report it), the
+  // message goes out without a list and the tab reloads everything, as before.
   const listener = (_event: string, filename: string | Buffer | null) => {
     notifyChanged(id, filename ? filename.toString() : null)
   }
@@ -390,12 +390,12 @@ function watchDesign(id: string, folder: string): void {
     try {
       watchers.set(id, fs.watch(folder, listener))
     } catch {
-      // pasta sumiu desde o registro — o protocolo devolve 404 na hora.
+      // folder gone since registration — the protocol returns 404 right away.
     }
   }
 }
 
-/** Religa o watcher e recarrega a aba depois que a pasta foi trocada inteira (revert). */
+/** Reconnects the watcher and reloads the tab after the folder was swapped entirely (revert). */
 export async function rewatchDesign(id: string): Promise<void> {
   const entry = await getDesign(id)
   if (!entry) return
@@ -409,7 +409,7 @@ export function unwatchDesign(id: string): void {
     try {
       watcher.close()
     } catch {
-      // já fechado
+      // already closed
     }
     watchers.delete(id)
   }
@@ -424,10 +424,10 @@ export function unwatchDesign(id: string): void {
 const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*' } as const
 
 /**
- * Documento já com a ponte injetada, por arquivo. Cada montagem de artboard
- * custava reler o disco, reinjetar a ponte e remontar o CSS das fontes; numa
- * aba com várias telas isso se multiplica. A validade é `mtime`/tamanho + a
- * versão do CSS de fontes (que muda quando a biblioteca muda).
+ * Document already with the bridge injected, per file. Each artboard mount cost
+ * re-reading the disk, re-injecting the bridge and rebuilding the font CSS; in a tab
+ * with several screens that multiplies. The validity is `mtime`/size + the version
+ * of the font CSS (which changes when the library changes).
  */
 interface InjectedDocument {
   mtimeMs: number
@@ -438,7 +438,7 @@ interface InjectedDocument {
 }
 
 const injectedDocuments = new Map<string, InjectedDocument>()
-/** Teto do cache: um canvas grande não pode virar memória presa. */
+/** Cache ceiling: a big canvas cannot become memory held forever. */
 const INJECTED_DOCUMENTS_LIMIT = 64
 
 async function injectedDocument(file: string, fontCss: string): Promise<InjectedDocument | null> {
@@ -446,7 +446,7 @@ async function injectedDocument(file: string, fontCss: string): Promise<Injected
   if (!stat?.isFile()) return null
   const cached = injectedDocuments.get(file)
   if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size && cached.fontCss === fontCss) {
-    // Reinserir mantém a ordem de uso: o primeiro do Map é o mais antigo.
+    // Re-inserting keeps the use order: the first in the Map is the oldest.
     injectedDocuments.delete(file)
     injectedDocuments.set(file, cached)
     return cached
@@ -459,8 +459,8 @@ async function injectedDocument(file: string, fontCss: string): Promise<Injected
     size: stat.size,
     fontCss,
     body,
-    // ETag do documento JÁ injetado: muda com o fonte e com a biblioteca de
-    // fontes, que é tudo o que entra nele.
+    // ETag of the document ALREADY injected: it changes with the source and with the font
+    // library, which is everything that goes into it.
     etag: `"${createHash('sha1').update(body).digest('base64url')}"`,
   }
   injectedDocuments.delete(file)
@@ -479,8 +479,8 @@ function respond(body: BodyInit | null, type: string, status = 200, extra: Recor
     headers: {
       ...CORS_HEADERS,
       'Content-Type': type,
-      // O canvas é editado com o preview aberto: cache serviria a versão
-      // antiga e a recarga ao vivo pareceria não funcionar.
+      // The canvas is edited with the preview open: the cache would serve the old
+      // version and the live reload would look like it is not working.
       'Cache-Control': 'no-store',
       ...(length === null ? {} : { 'Content-Length': String(length) }),
       ...extra,
@@ -488,7 +488,7 @@ function respond(body: BodyInit | null, type: string, status = 200, extra: Recor
   })
 }
 
-/** Registra o protocolo dos canvas de design (chamar após app.whenReady). */
+/** Registers the protocol of the design canvases (call after app.whenReady). */
 export function registerDesignProtocol(): void {
   protocol.handle(DESIGN_SCHEME, async (request) => {
     let url: URL
@@ -501,10 +501,10 @@ export function registerDesignProtocol(): void {
     if (!SAFE_DESIGN_ID.test(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
     const entry = await getDesign(id)
     if (!entry) return respond('not found', 'text/plain; charset=utf-8', 404)
-    // Caminho reservado: a ponte de seleção/edição (ver design-runtime.ts). O
-    // conteúdo é uma constante do build do app e o URL carrega a versão dele
-    // (`?v=`, ver injectDesignRuntime): pode ser guardado para sempre, e o
-    // iframe reaproveita o script já compilado entre remontagens.
+    // Reserved path: the selection/editing bridge (see design-runtime.ts). The
+    // content is a build constant of the app and the URL carries its version
+    // (`?v=`, see injectDesignRuntime): it can be stored forever, and
+    // the iframe reuses the script already compiled across remounts.
     if (url.pathname === DESIGN_RUNTIME_PATH) {
       return respond(DESIGN_RUNTIME, 'text/javascript; charset=utf-8', 200, {
         'Cache-Control': 'public, max-age=31536000, immutable',
@@ -514,16 +514,16 @@ export function registerDesignProtocol(): void {
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)
     const ext = path.extname(file).toLowerCase()
     const type = CONTENT_TYPES[ext] ?? 'application/octet-stream'
-    // O artboard sai com a ponte no <head>; `?raw` é o FONTE, como está no disco
-    // — é o que a aba de código mostra e o que a edição reescreve.
+    // The artboard comes out with the bridge in the <head>; `?raw` is the SOURCE, as it is
+    // on disk — it is what the code tab shows and what editing rewrites.
     if ((ext === '.html' || ext === '.htm') && !url.searchParams.has('raw')) {
-      // A biblioteca de fontes do Orbit entra em TODO artboard (ver
-      // injectDesignRuntime): a família instalada é usada pelo nome.
+      // Orbit's font library goes into EVERY artboard (see
+      // injectDesignRuntime): the installed family is used by name.
       const artboard = await injectedDocument(file, await allFontFacesCss())
       if (!artboard) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
-      // `no-cache` = pode guardar, mas revalida sempre: o canvas é editado com a
-      // aba aberta e servir a versão antiga pareceria a recarga não funcionar.
-      // Com o ETag do documento injetado, uma remontagem sem mudança vira 304.
+      // `no-cache` = may store, but always revalidates: the canvas is edited with the
+      // tab open and serving the old version would look like the reload is not working.
+      // With the ETag of the injected document, a remount without changes becomes a 304.
       const headers = { ETag: artboard.etag, 'Cache-Control': 'no-cache' }
       if (request.headers.get('if-none-match') === artboard.etag) return respond(null, type, 304, headers)
       return respond(artboard.body, type, 200, headers)

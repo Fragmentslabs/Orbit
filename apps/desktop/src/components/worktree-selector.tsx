@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, FolderGit2, LoaderIcon, PlusIcon, XIcon } from "lucide-react"
-import { BASE_REMOTO, type WorktreeInfo } from "@shared/worktrees"
+import { BASE_REMOTE, type WorktreeInfo } from "@shared/worktrees"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
@@ -13,97 +13,97 @@ import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Nome mostrado: o principal aparece como "Principal", não pelo nome da pasta. */
-export function useRotuloWorktreeAtual(pasta: string | undefined): string | null {
+/** Shown name: the main one appears as "Main", not by the folder name. */
+export function useCurrentWorktreeLabel(folder: string | undefined): string | null {
   const { t } = useTranslation()
-  const lista = useWorktreeStore((s) => (pasta ? s.porPasta[pasta] : undefined))
-  if (!lista) return null
-  const atual = lista.worktrees.find((w) => w.caminho === lista.atual)
-  if (!atual) return null
-  return atual.principal ? t("worktree.principal") : atual.nome
+  const list = useWorktreeStore((s) => (folder ? s.byFolder[folder] : undefined))
+  if (!list) return null
+  const current = list.worktrees.find((w) => w.path === list.current)
+  if (!current) return null
+  return current.primary ? t("worktree.main") : current.name
 }
 
 /**
- * Seletor de worktree do chat (header): em que cópia de trabalho do
- * repositório este chat trabalha. Lista os worktrees — inclusive os criados
- * fora do Orbit e os das tasks da esteira —, troca a pasta do chat, cria e
- * remove. Escondido quando a pasta não é um repositório git.
+ * Chat worktree picker (header): which working copy of the repository this chat
+ * works in. Lists the worktrees — including the ones created outside Orbit and
+ * the pipeline tasks' —, switches the chat's folder, creates and removes.
+ * Hidden when the folder is not a git repository.
  *
- * Trocar só muda a pasta principal deste chat (as extras ficam): a próxima
- * mensagem já roda lá.
+ * Switching only changes this chat's main folder (the extra ones stay): the
+ * next message already runs there.
  */
 export function WorktreeSelector({
-  pasta,
-  onTrocar,
-  sugestaoNome,
+  folder,
+  onSwitch,
+  suggestedName,
   open: openProp,
   onOpenChange,
   hideTrigger,
 }: {
-  /** Pasta principal do chat */
-  pasta: string
-  /** Troca a pasta principal do chat para esta */
-  onTrocar: (pasta: string) => void
-  /** Sugestão de nome para um worktree novo (ex.: título do chat) */
-  sugestaoNome?: string
+  /** Main folder of the chat */
+  folder: string
+  /** Swaps the main folder of the chat to this one */
+  onSwitch: (folder: string) => void
+  /** Name suggestion for a new worktree (e.g. chat title) */
+  suggestedName?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  /** Sem botão próprio — aberto pelo seletor compacto */
+  /** No button of its own — opened by the compact selector */
   hideTrigger?: boolean
 }) {
   const { t } = useTranslation()
-  const lista = useWorktreeStore((s) => s.porPasta[pasta])
-  const carregando = useWorktreeStore((s) => s.carregando[pasta] ?? false)
-  const carregar = useWorktreeStore((s) => s.carregar)
-  const [abertoInterno, setAbertoInterno] = useState(false)
-  const aberto = openProp ?? abertoInterno
-  const setAberto = onOpenChange ?? setAbertoInterno
-  const [criando, setCriando] = useState(false)
-  const [removendo, setRemovendo] = useState<WorktreeInfo | null>(null)
+  const list = useWorktreeStore((s) => s.byFolder[folder])
+  const loading = useWorktreeStore((s) => s.loading[folder] ?? false)
+  const load = useWorktreeStore((s) => s.load)
+  const [openInternal, setInternalOpen] = useState(false)
+  const open = openProp ?? openInternal
+  const setOpen = onOpenChange ?? setInternalOpen
+  const [creating, setCreating] = useState(false)
+  const [removing, setRemoving] = useState<WorktreeInfo | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    void carregar(pasta)
-  }, [pasta, carregar])
+    void load(folder)
+  }, [folder, load])
 
-  // Estado (alterações, commits à frente) muda enquanto se trabalha: recarrega
-  // ao abrir, para a lista não mostrar o retrato de quando o chat abriu.
+  // The state (changes, commits ahead) changes while one works: it reloads
+  // on opening, so the list does not show the snapshot from when the chat opened.
   useEffect(() => {
-    if (aberto) void carregar(pasta)
-  }, [aberto, pasta, carregar])
+    if (open) void load(folder)
+  }, [open, folder, load])
 
-  // hideTrigger: dropdown manual ancorado no wrapper, com fechamento por
-  // clique fora — o mesmo arranjo do BranchSelector no seletor compacto.
+  // hideTrigger: manual dropdown anchored in the wrapper, with closing on
+  // outside click — the same arrangement as the BranchSelector in the compact selector.
   useEffect(() => {
-    if (!hideTrigger || !aberto) return
-    const fechar = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+    if (!hideTrigger || !open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener("mousedown", fechar)
-    return () => document.removeEventListener("mousedown", fechar)
-  }, [hideTrigger, aberto, setAberto])
+    document.addEventListener("mousedown", close)
+    return () => document.removeEventListener("mousedown", close)
+  }, [hideTrigger, open, setOpen])
 
-  if (!lista) return null
-  const atual = lista.worktrees.find((w) => w.caminho === lista.atual)
-  const rotuloAtual = !atual || atual.principal ? t("worktree.principal") : atual.nome
+  if (!list) return null
+  const current = list.worktrees.find((w) => w.path === list.current)
+  const currentLabel = !current || current.primary ? t("worktree.main") : current.name
 
-  const itens = (
+  const items = (
     <>
       <p className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {t("worktree.titulo")}
+        {t("worktree.title")}
       </p>
-      {lista.worktrees.map((w) => (
-        <LinhaWorktree
-          key={w.caminho}
+      {list.worktrees.map((w) => (
+        <WorktreeRow
+          key={w.path}
           worktree={w}
-          atual={w.caminho === lista.atual}
-          onEscolher={() => {
-            setAberto(false)
-            if (w.caminho !== lista.atual) onTrocar(w.pasta)
+          current={w.path === list.current}
+          onChoose={() => {
+            setOpen(false)
+            if (w.path !== list.current) onSwitch(w.folder)
           }}
-          onRemover={() => {
-            setAberto(false)
-            setRemovendo(w)
+          onRemove={() => {
+            setOpen(false)
+            setRemoving(w)
           }}
         />
       ))}
@@ -111,13 +111,13 @@ export function WorktreeSelector({
         <button
           type="button"
           onClick={() => {
-            setAberto(false)
-            setCriando(true)
+            setOpen(false)
+            setCreating(true)
           }}
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
         >
           <PlusIcon className="size-3.5 shrink-0" />
-          {t("worktree.novo")}
+          {t("worktree.new")}
         </button>
       </div>
     </>
@@ -127,111 +127,112 @@ export function WorktreeSelector({
     <>
       {hideTrigger ? (
         <div className="relative" ref={ref}>
-          {aberto && (
+          {open && (
             <div className="absolute left-0 top-full z-[60] mt-1 w-72 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
-              {itens}
+              {items}
             </div>
           )}
         </div>
       ) : (
-        <DropdownMenu open={aberto} onOpenChange={setAberto}>
+        <DropdownMenu open={open} onOpenChange={setOpen}>
           <DropdownMenuTrigger
             render={
-              <Hint label={t("worktree.tituloAtual", { nome: rotuloAtual })}>
+              <Hint label={t("worktree.currentTitle", { name: currentLabel })}>
                 <button
                   type="button"
 
                   className={cn(
                     "flex h-7 items-center gap-1 rounded-md border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
-                    atual && !atual.principal ? "border-primary/40 bg-primary/5" : "border-border",
+                    current && !current.primary ? "border-primary/40 bg-primary/5" : "border-border",
                   )}
                 />
               </Hint>
             }
           >
-            {carregando && !lista ? (
+            {loading && !list ? (
               <LoaderIcon className="size-3 animate-spin" />
             ) : (
-              <FolderGit2 className={cn("size-3", atual && !atual.principal ? "text-primary" : "text-muted-foreground")} />
+              <FolderGit2 className={cn("size-3", current && !current.primary ? "text-primary" : "text-muted-foreground")} />
             )}
             <Truncate>
-                <span className="max-w-24 truncate">{rotuloAtual}</span>
+                <span className="max-w-24 truncate">{currentLabel}</span>
             </Truncate>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-72 p-1">
-            {itens}
+            {items}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
 
-      <CriarWorktreeDialog
-        aberto={criando}
-        onOpenChange={setCriando}
-        pasta={pasta}
-        repo={lista.repo}
-        remotoPadrao={lista.remotoPadrao}
-        sugestaoNome={sugestaoNome}
-        onCriado={(novaPasta) => onTrocar(novaPasta)}
+      <CreateWorktreeDialog
+        open={creating}
+        onOpenChange={setCreating}
+        folder={folder}
+        repo={list.repo}
+        defaultRemote={list.defaultRemote}
+        suggestedName={suggestedName}
+        onCreated={(newFolder) => onSwitch(newFolder)}
       />
-      <RemoverWorktreeDialog worktree={removendo} pasta={pasta} onOpenChange={(v) => !v && setRemovendo(null)} />
+      <RemoveWorktreeDialog worktree={removing} folder={folder} onOpenChange={(v) => !v && setRemoving(null)} />
     </>
   )
 }
 
-function LinhaWorktree({
+function WorktreeRow({
   worktree: w,
-  atual,
-  onEscolher,
-  onRemover,
+  current,
+  onChoose,
+  onRemove,
 }: {
   worktree: WorktreeInfo
-  atual: boolean
-  onEscolher: () => void
-  onRemover: () => void
+  current: boolean
+  onChoose: () => void
+  onRemove: () => void
 }) {
   const { t } = useTranslation()
-  // O principal não sai (não é um worktree removível) e os da esteira são
-  // dela; o atual também não — o chat precisa ir para outro antes.
-  const removivel = !w.principal && w.origem !== "esteira" && !atual
-  const detalhes = [
+  // The main one does not go (it is not a removable worktree) and the pipeline
+  // ones belong to the pipeline; neither does the current one — the chat has to
+  // move to another one first.
+  const removable = !w.primary && w.origin !== "pipeline" && !current
+  const details = [
     w.branch ?? t("worktree.detached", { head: w.head }),
-    w.alteracoes > 0 ? t("worktree.alteracoes", { count: w.alteracoes }) : null,
-    w.aFrente > 0 ? t("worktree.aFrente", { count: w.aFrente }) : null,
-    w.origem === "esteira" ? t("worktree.daEsteira") : w.origem === "externo" ? t("worktree.externo") : null,
-    w.disponivel ? null : t("worktree.ausente"),
+    w.changes > 0 ? t("worktree.changes", { count: w.changes }) : null,
+    w.ahead > 0 ? t("worktree.ahead", { count: w.ahead }) : null,
+    w.origin === "pipeline" ? t("worktree.pipelineName") : w.origin === "external" ? t("worktree.external") : null,
+    w.available ? null : t("worktree.missing"),
   ].filter(Boolean)
 
   return (
     <div
       className={cn(
         "group flex items-center gap-1 rounded-md transition-colors",
-        atual ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
+        current ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
       )}
     >
-      <Hint label={w.caminho}>
+      <Hint label={w.path}>
         <button
           type="button"
-          disabled={!w.disponivel}
-          onClick={onEscolher}
+          disabled={!w.available}
+          onClick={onChoose}
           className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
         >
        
        <FolderGit2 className="size-3 shrink-0" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs">{w.principal ? t("worktree.principal") : w.nome}</span>
-          <span className={cn("block truncate text-[10px]", atual ? "text-primary/70" : "text-muted-foreground")}>
-            {detalhes.join(" · ")}
+          <span className="block truncate text-xs">{w.primary ? t("worktree.main") : w.name}</span>
+          <span className={cn("block truncate text-[10px]", current ? "text-primary/70" : "text-muted-foreground")}>
+            {details.join(" · ")}
           </span>
         </span>
-        {atual && <Check className="size-3 shrink-0" />}
+        {current && <Check className="size-3 shrink-0" />}
       </button>
       </Hint>
-      {removivel && (
-        <Hint label={t("worktree.remover")}>
+      {removable && (
+        <Hint label={t("worktree.remove")}>
           <button
             type="button"
-            onClick={onRemover}
-            aria-label={t("worktree.remover")}
+            onClick={onRemove}
+            aria-label={t("worktree.remove")}
 
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
           >
@@ -243,82 +244,82 @@ function LinhaWorktree({
   )
 }
 
-function CriarWorktreeDialog({
-  aberto,
+function CreateWorktreeDialog({
+  open,
   onOpenChange,
-  pasta,
+  folder,
   repo,
-  remotoPadrao,
-  sugestaoNome,
-  onCriado,
+  defaultRemote,
+  suggestedName,
+  onCreated,
 }: {
-  aberto: boolean
-  onOpenChange: (aberto: boolean) => void
-  pasta: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  folder: string
   repo: string
-  /** Branch padrão do origin (ex.: origin/main) — a base "remoto atualizado" */
-  remotoPadrao?: string
-  sugestaoNome?: string
-  onCriado: (pasta: string) => void
+  /** Default branch of origin (e.g. origin/main) — the "updated remote" base */
+  defaultRemote?: string
+  suggestedName?: string
+  onCreated: (folder: string) => void
 }) {
   const { t } = useTranslation()
-  const criar = useWorktreeStore((s) => s.criar)
+  const create = useWorktreeStore((s) => s.create)
   const branches = useBranchStore((s) => s.byDir[repo])
   const fetchBranches = useBranchStore((s) => s.fetchBranches)
-  const [nome, setNome] = useState("")
+  const [name, setName] = useState("")
   const [base, setBase] = useState("")
-  const [trocar, setTrocar] = useState(true)
-  const [enviando, setEnviando] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
+  const [switchTo, setSwitchTo] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!aberto) return
-    setNome(sugestaoNome && !/^nova sess/i.test(sugestaoNome) ? sugestaoNome : "")
+    if (!open) return
+    setName(suggestedName && !/^nova sess/i.test(suggestedName) ? suggestedName : "")
     setBase("")
-    setTrocar(true)
-    setErro(null)
+    setSwitchTo(true)
+    setError(null)
     void fetchBranches(repo)
-  }, [aberto, sugestaoNome, repo, fetchBranches])
+  }, [open, suggestedName, repo, fetchBranches])
 
-  const confirmar = async () => {
-    if (!nome.trim() || enviando) return
-    setEnviando(true)
-    setErro(null)
+  const confirm = async () => {
+    if (!name.trim() || submitting) return
+    setSubmitting(true)
+    setError(null)
     try {
-      const criado = await criar(pasta, nome.trim(), base || undefined)
+      const created = await create(folder, name.trim(), base || undefined)
       onOpenChange(false)
-      if (trocar) onCriado(criado.pasta)
+      if (switchTo) onCreated(created.folder)
     } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err))
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setEnviando(false)
+      setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={(v) => !enviando && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !submitting && onOpenChange(v)}>
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{t("worktree.criarTitulo")}</DialogTitle>
-          <DialogDescription>{t("worktree.criarDescricao")}</DialogDescription>
+          <DialogTitle>{t("worktree.createTitle")}</DialogTitle>
+          <DialogDescription>{t("worktree.createDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="space-y-1">
-            <p className="text-xs font-medium">{t("worktree.nome")}</p>
+            <p className="text-xs font-medium">{t("worktree.name")}</p>
             <Input
-              value={nome}
+              value={name}
               autoFocus
               onChange={(e) => {
-                setNome(e.target.value)
-                setErro(null)
+                setName(e.target.value)
+                setError(null)
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void confirmar()
+                if (e.key === "Enter") void confirm()
               }}
-              placeholder={t("worktree.nomePlaceholder")}
+              placeholder={t("worktree.namePlaceholder")}
             />
-            <p className="text-[11px] text-muted-foreground">{t("worktree.nomeDica")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("worktree.nameHint")}</p>
           </div>
 
           <div className="space-y-1">
@@ -329,13 +330,13 @@ function CriarWorktreeDialog({
               className="h-8 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
             >
               <option value="" className="bg-popover text-popover-foreground">
-                {t("worktree.baseAtual", { branch: branches?.current ?? "HEAD" })}
+                {t("worktree.currentBase", { branch: branches?.current ?? "HEAD" })}
               </option>
-              {/* O "fresh" do Claude Code: parte do remoto depois de um fetch,
-                  sem levar commits locais que ainda não subiram. */}
-              {remotoPadrao && (
-                <option value={BASE_REMOTO} className="bg-popover text-popover-foreground">
-                  {t("worktree.baseRemoto", { remoto: remotoPadrao })}
+              {/* The Claude Code "fresh": it starts from the remote after a fetch,
+                  without taking local commits that have not been pushed yet. */}
+              {defaultRemote && (
+                <option value={BASE_REMOTE} className="bg-popover text-popover-foreground">
+                  {t("worktree.remoteBase", { remote: defaultRemote })}
                 </option>
               )}
               {(branches?.branches ?? [])
@@ -349,25 +350,25 @@ function CriarWorktreeDialog({
           </div>
 
           <label className="flex cursor-pointer items-center gap-2">
-            <Switch checked={trocar} onCheckedChange={setTrocar} />
-            <span className="text-xs">{t("worktree.trocarParaEle")}</span>
+            <Switch checked={switchTo} onCheckedChange={setSwitchTo} />
+            <span className="text-xs">{t("worktree.switchToIt")}</span>
           </label>
 
-          {enviando && (
+          {submitting && (
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <LoaderIcon className="size-3 animate-spin" />
-              {t("worktree.preparando")}
+              {t("worktree.preparing")}
             </p>
           )}
-          {erro && <p className="break-words font-mono text-xs text-destructive">{erro}</p>}
+          {error && <p className="break-words font-mono text-xs text-destructive">{error}</p>}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={enviando}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={() => void confirmar()} disabled={!nome.trim() || enviando}>
-            {t("worktree.criar")}
+          <Button onClick={() => void confirm()} disabled={!name.trim() || submitting}>
+            {t("worktree.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -375,83 +376,83 @@ function CriarWorktreeDialog({
   )
 }
 
-function RemoverWorktreeDialog({
+function RemoveWorktreeDialog({
   worktree,
-  pasta,
+  folder,
   onOpenChange,
 }: {
   worktree: WorktreeInfo | null
-  pasta: string
-  onOpenChange: (aberto: boolean) => void
+  folder: string
+  onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const remover = useWorktreeStore((s) => s.remover)
-  const [apagarBranch, setApagarBranch] = useState(false)
-  const [enviando, setEnviando] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
+  const remove = useWorktreeStore((s) => s.remove)
+  const [deleteBranch, setDeleteBranch] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setApagarBranch(false)
-    setErro(null)
-  }, [worktree?.caminho])
+    setDeleteBranch(false)
+    setError(null)
+  }, [worktree?.path])
 
   if (!worktree) return null
 
-  const confirmar = async () => {
-    setEnviando(true)
-    setErro(null)
+  const confirm = async () => {
+    setSubmitting(true)
+    setError(null)
     try {
-      await remover(pasta, worktree.caminho, apagarBranch)
+      await remove(folder, worktree.path, deleteBranch)
       onOpenChange(false)
     } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err))
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setEnviando(false)
+      setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !enviando && onOpenChange(v)}>
+    <Dialog open onOpenChange={(v) => !submitting && onOpenChange(v)}>
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{t("worktree.removerTitulo", { nome: worktree.nome })}</DialogTitle>
-          <DialogDescription>{t("worktree.removerDescricao")}</DialogDescription>
+          <DialogTitle>{t("worktree.removeTitle", { name: worktree.name })}</DialogTitle>
+          <DialogDescription>{t("worktree.removeDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2 text-xs">
-          {worktree.alteracoes > 0 && (
+          {worktree.changes > 0 && (
             <p className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-destructive">
-              {t("worktree.removerAlteracoes", { count: worktree.alteracoes })}
+              {t("worktree.removeChanges", { count: worktree.changes })}
             </p>
           )}
-          {worktree.origem === "externo" && (
+          {worktree.origin === "external" && (
             <p className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-2 text-yellow-700 dark:text-yellow-300">
-              {t("worktree.removerExterno", { caminho: worktree.caminho })}
+              {t("worktree.removeExternal", { path: worktree.path })}
             </p>
           )}
           {worktree.branch && (
             <label className="flex cursor-pointer items-center gap-2">
-              <Switch checked={apagarBranch} onCheckedChange={setApagarBranch} />
+              <Switch checked={deleteBranch} onCheckedChange={setDeleteBranch} />
               <span>
-                {t("worktree.apagarBranch", { branch: worktree.branch })}
-                {worktree.aFrente > 0 && apagarBranch && (
+                {t("worktree.deleteBranch", { branch: worktree.branch })}
+                {worktree.ahead > 0 && deleteBranch && (
                   <span className="block text-[11px] text-destructive">
-                    {t("worktree.apagarBranchAviso", { count: worktree.aFrente })}
+                    {t("worktree.deleteBranchWarning", { count: worktree.ahead })}
                   </span>
                 )}
               </span>
             </label>
           )}
-          {erro && <p className="break-words font-mono text-destructive">{erro}</p>}
+          {error && <p className="break-words font-mono text-destructive">{error}</p>}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={enviando}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             {t("common.cancel")}
           </Button>
-          <Button variant="destructive" onClick={() => void confirmar()} disabled={enviando}>
-            {enviando ? <LoaderIcon className="size-3.5 animate-spin" /> : null}
-            {t("worktree.remover")}
+          <Button variant="destructive" onClick={() => void confirm()} disabled={submitting}>
+            {submitting ? <LoaderIcon className="size-3.5 animate-spin" /> : null}
+            {t("worktree.remove")}
           </Button>
         </DialogFooter>
       </DialogContent>

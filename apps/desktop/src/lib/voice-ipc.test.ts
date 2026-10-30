@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { voiceApi } from "./voice-ipc"
 
 /**
- * Ponte de mentira com a mesma forma do preload: `on` registra o listener e
- * devolve o wrapper que o `off` precisa receber de volta.
+ * Fake bridge with the same shape as the preload: `on` registers the listener and
+ * returns the wrapper that `off` needs to get back.
  */
 function fakeBridge() {
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
@@ -47,7 +47,7 @@ afterEach(() => {
 })
 
 describe("voiceApi.onStatusChanged", () => {
-  it("escuta o canal de mudança de estado e entrega o payload", () => {
+  it("listens to the state-change channel and delivers the payload", () => {
     const seen: unknown[] = []
     const unsubscribe = voiceApi.onStatusChanged((status) => seen.push(status))
 
@@ -66,7 +66,7 @@ describe("voiceApi.onStatusChanged", () => {
     expect(seen).toEqual([{ ttsReady: true }])
   })
 
-  it("não confunde os canais: o progresso do download segue separado", () => {
+  it("does not confuse the channels: the download progress stays separate", () => {
     const status: unknown[] = []
     const progress: unknown[] = []
     voiceApi.onStatusChanged((raw) => status.push(raw))
@@ -79,7 +79,7 @@ describe("voiceApi.onStatusChanged", () => {
     expect(status).toEqual([{ ttsReady: true }])
   })
 
-  it("o `status()` continua sendo um invoke no canal de sempre", async () => {
+  it("`status()` is still an invoke on the usual channel", async () => {
     await voiceApi.status()
 
     expect(bridge.invoke).toHaveBeenCalledWith("voice:status")

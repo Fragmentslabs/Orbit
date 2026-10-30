@@ -3,12 +3,12 @@ import { dueActions, extractJson, tokenSimilarity } from './routine'
 
 const H = 60 * 60 * 1000
 
-describe('rotina de memória', () => {
-  it('desligada não faz nada, mesmo depois de dias', () => {
+describe('memory routine', () => {
+  it('off it does nothing, even after days', () => {
     expect(dueActions('off', {}, 1000 * H)).toEqual({ capture: false, consolidate: false })
   })
 
-  it('diária captura a cada 20h e nunca consolida', () => {
+  it('daily captures every 20h and never consolidates', () => {
     const now = 100 * H
     expect(dueActions('daily', {}, now)).toEqual({ capture: true, consolidate: false })
     expect(dueActions('daily', { lastCaptureAt: now - 19 * H }, now).capture).toBe(false)
@@ -16,14 +16,14 @@ describe('rotina de memória', () => {
     expect(dueActions('daily', { lastConsolidateAt: now - 90 * H }, now).consolidate).toBe(false)
   })
 
-  it('semanal só consolida', () => {
+  it('weekly only consolidates', () => {
     const now = 200 * H
     expect(dueActions('weekly', {}, now)).toEqual({ capture: false, consolidate: true })
     expect(dueActions('weekly', { lastConsolidateAt: now - 5 * 24 * H }, now).consolidate).toBe(false)
     expect(dueActions('weekly', { lastConsolidateAt: now - 7 * 24 * H }, now).consolidate).toBe(true)
   })
 
-  it('diária + semanal roda as duas quando cada uma vence', () => {
+  it('daily + weekly runs both when each one is due', () => {
     const now = 500 * H
     const state = { lastCaptureAt: now - 25 * H, lastConsolidateAt: now - 2 * 24 * H }
     expect(dueActions('daily+weekly', state, now)).toEqual({ capture: true, consolidate: false })
@@ -35,7 +35,7 @@ describe('rotina de memória', () => {
 })
 
 describe('tokenSimilarity', () => {
-  it('reconhece a mesma preferência escrita de outro jeito', () => {
+  it('recognizes the same preference written another way', () => {
     expect(
       tokenSimilarity(
         'Prefere ver um artefato antes de implementar a tela',
@@ -52,14 +52,15 @@ describe('tokenSimilarity', () => {
 })
 
 describe('extractJson', () => {
-  it('lê o JSON mesmo cercado de prosa e cerca', () => {
-    const raw = 'Claro:\n```json\n{"memorias":[{"texto":"Prefere artefato antes de implementar","categoria":"preference"}]}\n```'
+  it('reads the JSON even surrounded by prose and fences', () => {
+    const raw =
+      'Claro:\n```json\n{"memories":[{"text":"Prefere artefato antes de implementar","category":"preference"}]}\n```'
     expect(extractJson(raw)).toEqual({
-      memorias: [{ texto: 'Prefere artefato antes de implementar', categoria: 'preference' }],
+      memories: [{ text: 'Prefere artefato antes de implementar', category: 'preference' }],
     })
   })
 
-  it('devolve null quando não há JSON', () => {
+  it('returns null when there is no JSON', () => {
     expect(extractJson('sem nada aqui')).toBeNull()
   })
 })

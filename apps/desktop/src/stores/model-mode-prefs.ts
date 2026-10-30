@@ -8,8 +8,8 @@ const CODE_ACTIVE_MODES_KEY = "orbit-code-active-modes"
 const CHAT_PERM_MODE_KEY = "orbit-chat-perm-mode"
 const CODE_PERM_MODE_KEY = "orbit-code-perm-mode"
 const AUTO_FOLDERS_KEY = "orbit-auto-folders"
-// Chaves legadas do modo Visão global (provider-store) — usadas só na migração
-// para os defaults por modo; o modo virou per-chat (mode-overrides)
+// Legacy keys of the global Vision mode (provider-store) — used only in the migration
+// to the per-mode defaults; the mode became per-chat (mode-overrides)
 const LEGACY_VISION_ENABLED_KEY = "orbit-vision-enabled"
 const LEGACY_VISION_MODEL_KEY = "orbit-vision-model"
 
@@ -30,8 +30,8 @@ export interface ActiveModeDefaults {
   vision: boolean
 }
 
-/** Migração do modo Visão: o flag global antigo vira o default dos dois modos.
- *  Sem flag, um modelo de visão configurado também contava como ativo. */
+/** Vision mode migration: the old global flag becomes the default of both modes.
+ *  Without the flag, a configured vision model also counted as on. */
 function legacyVisionDefault(): boolean {
   try {
     const raw = localStorage.getItem(LEGACY_VISION_ENABLED_KEY)
@@ -44,10 +44,10 @@ function legacyVisionDefault(): boolean {
 
 function loadModes(key: string, fallback: ActiveModeDefaults): ActiveModeDefaults {
   const stored = loadJson<Partial<ActiveModeDefaults>>(key, fallback)
-  // O merge com o fallback é o que faz um campo NOVO nascer com o default em
-  // vez de undefined para quem já tinha prefs gravadas.
+  // The merge with the fallback is what makes a NEW field be born with the default
+  // instead of undefined for whoever already had saved prefs.
   if (stored && typeof stored === "object" && "vision" in stored) return { ...fallback, ...stored }
-  // Prefs gravadas antes do campo vision existir → aplica o default legado
+  // Prefs saved before the vision field existed → applies the legacy default
   return { ...fallback, ...stored, vision: legacyVisionDefault() }
 }
 

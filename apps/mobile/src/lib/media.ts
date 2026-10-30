@@ -1,18 +1,18 @@
 import { mediaKind, type MediaEntry, type MediaKind } from '@orbit/shared'
 
 /**
- * A galeria do celular mostra TUDO o que o desktop produz, e cada tipo pede um
- * tratamento diferente: só a imagem tem miniatura (o <Image> resolve), áudio e
- * vídeo abrem em player, e artefato/documento/peça são PÁGINAS (WebView). No
- * tile, nenhum deles tem o que desenhar — vira cartão com ícone + título, que
- * era o que faltava quando tudo era renderizado como <Image> e quebrava.
+ * The phone gallery shows EVERYTHING the desktop produces, and each type asks for a
+ * different treatment: only the image has a thumbnail (the <Image> handles it), audio and
+ * video open in a player, and artifact/document/piece are PAGES (WebView). In the
+ * tile, none of them has anything to draw — it becomes a card with icon + title, which
+ * was what was missing when everything was rendered as <Image> and broke.
  *
- * O `url` de cada entrada já vem pronto do desktop (`GET /api/media`): cada tipo
- * com o token do seu escopo em `/api/file/<escopo>/<id>/<token>`. Aqui não se
- * monta URL nenhuma — só se decide COMO mostrar o que veio.
+ * The `url` of each entry already comes ready from the desktop (`GET /api/media`): each type
+ * with the token of its scope in `/api/file/<scope>/<id>/<token>`. Here no
+ * URL is assembled — it is only decided HOW to show what came.
  */
 
-/** A ordem dos chips do filtro de tipo — a mesma do desktop, mídia primeiro. */
+/** The order of the type filter chips — same as the desktop, media first. */
 export const KIND_ORDER: readonly MediaKind[] = [
   'image',
   'artifact',
@@ -24,15 +24,15 @@ export const KIND_ORDER: readonly MediaKind[] = [
   'slides',
 ]
 
-/** O tipo da entrada (registro antigo não tem `kind` = imagem). */
+/** The type of the entry (an old record has no `kind` = image). */
 export function kindOf(entry: MediaEntry): MediaKind {
   return mediaKind(entry)
 }
 
 /**
- * Chave do rótulo do tipo, para o cartão do tile e para o chip do filtro. Fica a
- * chave e não o texto porque este módulo não chama hook: quem renderiza resolve
- * com `t(KIND_KEY[kind])`.
+ * Key of the type label, for the tile card and for the filter chip. It is the
+ * key and not the text because this module does not call hooks: whoever renders resolves it
+ * with `t(KIND_KEY[kind])`.
  */
 export const KIND_KEY: Record<MediaKind, string> = {
   image: 'media.kind.image',
@@ -45,16 +45,16 @@ export const KIND_KEY: Record<MediaKind, string> = {
   slides: 'media.kind.slides',
 }
 
-/** Título do item: o rótulo do registro ou, sem ele, o nome do arquivo. */
+/** Title of the item: the label of the record or, without one, the file name. */
 export function entryTitle(entry: MediaEntry): string {
   const name = entry.name?.trim()
   return name && name.length > 0 ? name : entry.id
 }
 
 /**
- * A entrada tem para onde abrir. Falso quando a peça saiu do registro do desktop
- * (a pasta sumiu, o registro foi limpo): o tile continua na galeria — o item
- * existe no índice — mas não há documento para carregar.
+ * The entry has somewhere to open. False when the piece left the desktop registry
+ * (the folder vanished, the registry was cleaned): the tile stays in the gallery — the item
+ * exists in the index — but there is no document to load.
  */
 export function canOpen(entry: MediaEntry): boolean {
   return typeof entry.url === 'string' && entry.url.length > 0

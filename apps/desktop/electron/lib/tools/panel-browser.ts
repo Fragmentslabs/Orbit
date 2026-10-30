@@ -23,16 +23,16 @@ import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { describeImage } from '../vision'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
-/** Limite de tamanho para imagem enviada ao modelo via toModelOutput (300KB). */
+/** Size limit for an image sent to the model via toModelOutput (300KB). */
 const MAX_MODEL_IMAGE_BYTES = 300_000
-/** Timeout total da tool (captura + descrição de visão + save): a tool nunca
- *  pode travar o turno — sem `ver`, não há chamada de LLM nenhuma. */
+/** Total timeout of the tool (capture + vision description + save): the tool can never
+ *  hang the turn — without `see`, there is no LLM call at all. */
 const SCREENSHOT_TIMEOUT_MS = 45_000
 
-/** Presets de viewport para teste de responsividade. */
-/** Entrada do panel_screenshot. Declarado aqui (e não inline) para que o
- *  `execute` continue com parâmetros tipados mesmo quando o campo `ver` é
- *  removido do schema anunciado ao modelo — ver o comentário no uso. */
+/** Viewport presets for responsiveness testing. */
+/** panel_screenshot input. Declared here (and not inline) so that
+ *  `execute` keeps typed parameters even when the `see` field is
+ *  removed from the schema announced to the model — see the comment at the usage. */
 const SCREENSHOT_SCHEMA = z.object({
   savePath: z
     .string()
@@ -54,7 +54,7 @@ const SCREENSHOT_SCHEMA = z.object({
     .max(3840)
     .optional()
     .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
-  ver: z
+  see: z
     .boolean()
     .optional()
     .describe(
@@ -62,7 +62,7 @@ const SCREENSHOT_SCHEMA = z.object({
     ),
 })
 
-/** Alvo de mouse: ref do panel_read, seletor CSS ou coordenadas da viewport. */
+/** Mouse target: a panel_read ref, a CSS selector or viewport coordinates. */
 const TARGET_SCHEMA = z.object({
   ref: z.number().int().optional().describe('Numeric ref from panel_read'),
   selector: z.string().optional().describe('CSS selector (alternative to ref)'),
@@ -74,17 +74,17 @@ const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | 
   mobile: { width: 390, height: 844, label: 'mobile (390×844)' },
   tablet: { width: 834, height: 1112, label: 'tablet (834×1112)' },
   desktop: { width: 1440, height: 900, label: 'desktop (1440×900)' },
-  fit: { width: null, height: null, label: 'ajustado ao painel' },
+  fit: { width: null, height: null, label: 'fit to panel' },
 }
 
 /**
- * Ferramentas do browser do painel direito (modo código). O browser roda no
- * webview da sessão — visível na aba Browser ou NO HOST OCULTO quando o painel
- * está fechado (a UI nunca abre sozinha; o usuário clica no indicador
- * "testando…" para ver). O screenshot por padrão volta apenas como URL
- * (orbit-media://) — a imagem só é carregada no modelo via toModelOutput
- * (content file) quando o agente pede `ver: true` num modelo com visão; o
- * base64 fica num stash por toolCallId para não inflar o histórico persistido.
+ * Right panel browser tools (code mode). The browser runs in the session's
+ * webview — visible in the Browser tab or IN THE HIDDEN HOST when the panel
+ * is closed (the UI never opens on its own; the user clicks the "testing…"
+ * indicator to see it). The screenshot by default comes back only as a URL
+ * (orbit-media://) — the image is only loaded into the model via toModelOutput
+ * (content file) when the agent asks for `see: true` on a model with vision; the
+ * base64 stays in a stash per toolCallId so as not to inflate the persisted history.
  */
 
 const screenshotStash = new Map<
@@ -197,24 +197,24 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_screenshot: tool({
       description:
-        'Takes a screenshot of the panel page. By default it returns only the media URL (orbit-media://...) — the image is NOT loaded into your context (saves image tokens). Pass ver: true to load the image so you can actually SEE it — natively if you have vision, or via the configured vision model when the Vision mode is ON (in that case the vision model DESCRIBES the image and only the description enters your context, even if you have native vision). With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
-      // O schema é montado em runtime porque `ver` só pode EXISTIR quando há
-      // visão disponível — anunciar o campo sem ela faria o modelo pedir uma
-      // imagem que ninguém consegue ler. O `omit` preserva o tipo estático da
-      // forma completa (com `ver` opcional), que é exatamente o que o execute
-      // abaixo consome; sem isso os parâmetros dele viriam como `any`.
+        'Takes a screenshot of the panel page. By default it returns only the media URL (orbit-media://...) — the image is NOT loaded into your context (saves image tokens). Pass see: true to load the image so you can actually SEE it — natively if you have vision, or via the configured vision model when the Vision mode is ON (in that case the vision model DESCRIBES the image and only the description enters your context, even if you have native vision). With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
+      // The schema is built at runtime because `see` can only EXIST when there is
+      // vision available — announcing the field without it would make the model ask for an
+      // image nobody can read. The `omit` preserves the static type of the
+      // complete form (with optional `see`), which is exactly what the execute
+      // below consumes; without that its parameters would come as `any`.
       inputSchema: (ctx.modelVision || ctx.visionModel
         ? SCREENSHOT_SCHEMA
-        : SCREENSHOT_SCHEMA.omit({ ver: true })) as typeof SCREENSHOT_SCHEMA,
-      execute: async ({ savePath, fullscreen, fullPage, format, maxWidth, ver }, { toolCallId }) => {
+        : SCREENSHOT_SCHEMA.omit({ see: true })) as typeof SCREENSHOT_SCHEMA,
+      execute: async ({ savePath, fullscreen, fullPage, format, maxWidth, see }, { toolCallId }) => {
         const outFormat: 'webp' | 'png' = format === 'png' ? 'png' : 'webp'
         const run = async (): Promise<string> => {
           let image: Buffer
           let fallbackNote = ''
           if (fullPage) {
-            // Página inteira: nunca redimensionamos o webview visível (piscaria a
-            // UI). Capturamos numa janela oculta com a MESMA URL e sessão — e no
-            // mesmo viewport do panel_resize (responsividade vale também aqui).
+            // Full page: we never resize the visible webview (it would blink the
+            // UI). We capture in a hidden window with the SAME URL and session — and in
+            // the same viewport as panel_resize (responsiveness counts here too).
             const url = panelCurrentUrl(ctx.sessionId)
             if (!url) return 'The panel browser has no page open — use panel_navigate first.'
             image = await captureUrl({
@@ -233,9 +233,9 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
               })
             } catch (err) {
               if (!(err instanceof PanelCaptureError)) throw err
-              // Webview do painel sem pintura (oculto/0×0) ou travado: em vez de
-              // falhar a tool, captura a MESMA URL na janela oculta (que pinta
-              // mesmo escondida) — o print sai do mesmo jeito, no mesmo viewport.
+              // Panel webview without paint (hidden/0×0) or stuck: instead of
+              // failing the tool, it captures the SAME URL in the hidden window (which paints
+              // even when hidden) — the shot comes out the same way, in the same viewport.
               const url = panelCurrentUrl(ctx.sessionId)
               if (!url || url.startsWith('about:')) throw err
               image = await captureUrl({
@@ -255,27 +255,27 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
             name: savePath ?? (fullPage ? 'fullPage' : 'panel'),
           })
           let loaded = ''
-          if (ver === true) {
+          if (see === true) {
             if (ctx.visionModel) {
-              // Modo Visão ativo: delega SEMPRE (mesmo para modelo com visão
-              // nativa) — apenas a descrição entra no contexto, a imagem nunca
-              // (economia de tokens no histórico; o agente não muda de jeito).
+              // Vision mode on: always delegates (even for a model with native
+              // vision) — only the description enters the context, the image never
+              // (token savings in the history; the agent does not behave differently).
               const desc = await describeImage({
                 model: ctx.visionModel,
                 imageDataUrl: `data:image/${outFormat};base64,${image.toString('base64')}`,
               })
               if (desc) {
                 screenshotStash.set(toolCallId, { text: desc })
-                loaded = ` Description generated by the vision model (${ctx.visionModel.modelId}) loaded into your context (ver: true).`
+                loaded = ` Description generated by the vision model (${ctx.visionModel.modelId}) loaded into your context (see: true).`
               } else {
-                loaded = ' (ver: true — the configured vision model could not describe the image; no description was loaded.)'
+                loaded = ' (see: true — the configured vision model could not describe the image; no description was loaded.)'
               }
             } else if (ctx.modelVision) {
-              // Visão nativa, modo Visão desligado: imagem no contexto.
+              // Native vision, Vision mode off: image in the context.
               screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
-              loaded = ' Image loaded into your context (ver: true).'
+              loaded = ' Image loaded into your context (see: true).'
             } else {
-              loaded = ' (ver: true ignored — this model has no vision; the image was NOT loaded into the context.)'
+              loaded = ' (see: true ignored — this model has no vision; the image was NOT loaded into the context.)'
             }
           }
           let saved = ''
@@ -303,7 +303,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         screenshotStash.delete(toolCallId)
         if (!stashed) return { type: 'text', value: String(output) }
         if ('text' in stashed) {
-          // Delegação de visão: a descrição entra como texto, sem imagem
+          // Vision delegation: the description enters as text, without an image
           return { type: 'text', value: `${String(output)}\n\n[Image description (vision model)]: ${stashed.text}` }
         }
         const { base64, format } = stashed
@@ -338,8 +338,8 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         alt: z.string().optional().describe('Short caption shown under the image'),
       }),
       execute: async ({ fromPanel, media, path: imagePath, alt }) => {
-        // Imagem já registrada (capturada por script/lote): reaproveita a URL,
-        // sem duplicar o arquivo no disco.
+        // Image already registered (captured by script/batch): reuses the URL,
+        // without duplicating the file on disk.
         if (media) {
           const entry = mediaIdFromUrl(media)
           if (!entry) return `Invalid media URL: ${media}`

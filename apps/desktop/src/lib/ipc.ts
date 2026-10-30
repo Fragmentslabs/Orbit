@@ -17,31 +17,31 @@ import type {
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
-import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
+import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
 import type {
-  Esteira,
-  EsteiraEvent,
-  FaseEscolhida,
-  FaseTemplate,
-  NovaTaskInput,
-  Projeto,
-  RelatorioEsteira,
+  NewTaskInput,
+  PhaseChoice,
+  PhaseTemplate,
+  Pipeline,
+  PipelineEvent,
+  PipelineReport,
+  Project,
   Task,
-} from "@shared/esteira"
+} from "@shared/pipeline"
 import type { ModelsSnapshot } from "@shared/models"
 import type { NodaraStatus } from "@shared/nodara"
 import type { FractaStatus } from "@shared/fracta"
 import type {
-  NovaRotinaInput,
-  ResultadoGeracao,
-  Rotina,
-  RotinaEvent,
-  RotinaModelo,
-  RotinaPendente,
-  RotinaRun,
-} from "@shared/rotinas"
+  GenerationResult,
+  NewRoutineInput,
+  PendingRoutine,
+  Routine,
+  RoutineEvent,
+  RoutineModel,
+  RoutineRun,
+} from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
@@ -50,7 +50,7 @@ import type { PanelEvent } from "@/src/stores/panel-store"
 
 export type { SearchHit }
 
-/** Ações acionadas pelo menu nativo do macOS (menu:action). */
+/** Actions triggered by the native macOS menu (menu:action). */
 export type MenuAction =
   | "settings"
   | "new-chat"
@@ -60,11 +60,11 @@ export type MenuAction =
   | "view-models"
   | "how-to"
 
-/** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
+/** Typed wrapper over the IPC bridge exposed by the preload. */
 
 export const windowApi = {
   platform: window.platform,
-  /** Seletor nativo de pasta (main). `null` quando a pessoa cancela. */
+  /** Native folder picker (main). `null` when the person cancels. */
   selectFolder: () =>
     (window.ipcRenderer?.invoke("select-folder") ?? Promise.resolve(null)) as Promise<string | null>,
   minimize: () => window.ipcRenderer?.invoke("window:minimize"),
@@ -86,18 +86,18 @@ export const windowApi = {
     const wrapper = window.ipcRenderer.on("window:maximized-change", (maximized) => listener(maximized as boolean))
     return () => window.ipcRenderer.off("window:maximized-change", wrapper)
   },
-  /** Pasta aberta via "Abrir com Orbit" (Explorer) ou segunda instância */
+  /** Folder opened via "Open with Orbit" (Explorer) or a second instance */
   onOpenFolder: (listener: (directory: string) => void) => {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("app:open-folder", (directory) => listener(directory as string))
     return () => window.ipcRenderer.off("app:open-folder", wrapper)
   },
-  /** Versão do app (mesma do package.json/artefatos) — exibida em Sobre */
+  /** App version (the same as package.json/artifacts) — shown in About */
   version: () => (window.ipcRenderer?.invoke("app:version") ?? Promise.resolve("")) as Promise<string>,
-  /** Busca pasta pendente da abertura fria (app iniciado pelo Explorer) */
+  /** Fetches the pending folder from the cold start (app started from Explorer) */
   consumePendingOpen: () =>
     (window.ipcRenderer?.invoke("app:consumePendingOpen") ?? Promise.resolve(null)) as Promise<string | null>,
-  /** Ações do menu nativo do macOS (menu bar do topo da tela) */
+  /** Native macOS menu actions (the menu bar at the top of the screen) */
   onMenuAction: (listener: (action: MenuAction) => void) => {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("menu:action", (action) => listener(action as MenuAction))
@@ -105,7 +105,7 @@ export const windowApi = {
   },
 }
 
-/** Integração "Abrir com Orbit" no menu de contexto do Explorer (Windows) */
+/** "Open with Orbit" integration in the Explorer context menu (Windows) */
 export const openWithApi = {
   status: () =>
     window.ipcRenderer.invoke("openwith:status") as Promise<{ supported: boolean; registered: boolean; error?: string }>,
@@ -116,23 +116,23 @@ export const openWithApi = {
 }
 
 /**
- * Overlay do atalho global (⇧⌘espaço). A janela é do main; o renderer do painel
- * pede para fechar, redimensionar (a altura acompanha o conteúdo) e escuta o
- * contexto que o main monta ao abrir — a seleção já vem lida de lá, porque
- * depois do foco o app da frente passa a ser o Orbit.
+ * Global shortcut overlay (⇧⌘space). The window belongs to main; the panel renderer
+ * asks to close, to resize (the height follows the content) and listens to the
+ * context main assembles on open — the selection is already read over there, because
+ * after the focus the front app becomes Orbit.
  */
 export const overlayApi = {
-  /** O renderer montou: o main só manda `overlay:open` depois disto. */
+  /** The renderer mounted: main only sends `overlay:open` after this. */
   ready: () => window.ipcRenderer.send("overlay:ready"),
   toggle: () => window.ipcRenderer.invoke("overlay:toggle"),
   open: (call?: boolean) => window.ipcRenderer.invoke("overlay:open", call),
   close: () => window.ipcRenderer.invoke("overlay:close"),
-  /** Altura do conteúdo; a janela mantém a borda de baixo ancorada. */
+  /** Content height; the window keeps the bottom edge anchored. */
   resize: (height: number) => window.ipcRenderer.invoke("overlay:resize", height),
   status: () =>
     window.ipcRenderer.invoke("overlay:status") as Promise<{ shortcut: string; ok: boolean; error?: string }>,
   settings: () => window.ipcRenderer.invoke("overlay:settings") as Promise<OverlaySettings>,
-  /** Copiar a resposta (a área de transferência do renderer exige gesto/permite). */
+  /** Copy the answer (the renderer clipboard requires a gesture/allows it). */
   copy: (text: string) => window.ipcRenderer.invoke("clipboard:write", text) as Promise<void>,
   onOpen: (listener: (context: OverlayContext) => void) => {
     const wrapper = window.ipcRenderer.on("overlay:open", (payload) => listener(payload as OverlayContext))
@@ -147,8 +147,8 @@ export const overlayApi = {
 export const sound = {
   play: (name: string) =>
     (window.ipcRenderer?.invoke("sound:play", name) ?? Promise.resolve(false)) as Promise<boolean>,
-  /** Bytes do WAV de entrada — decodificados no renderer (WebAudio), que agenda
-   *  a reprodução no mesmo tick do despertar da persona. */
+  /** Bytes of the input WAV — decoded in the renderer (WebAudio), which schedules
+   *  the playback in the same tick as the persona wake-up. */
   entranceData: () =>
     (window.ipcRenderer?.invoke("sound:entrance-data") ?? Promise.resolve(null)) as Promise<Uint8Array | null>,
 }
@@ -163,18 +163,18 @@ export const storage = {
 export const appSettingsApi = {
   sync: (settings: AppSettings) => window.ipcRenderer?.send("settings:sync", settings),
   /**
-   * Mudança feita NO MAIN — hoje só a tool `set_user_name` do agente, que grava
-   * o nome no mesmo campo da Preferência. O renderer é a fonte da verdade,
-   * então sem isto o nome novo seria apagado no próximo `sync`.
+   * Change made IN MAIN — today only the agent's `set_user_name` tool, which writes
+   * the name into the same field as the Preference. The renderer is the source of truth,
+   * so without this the new name would be erased on the next `sync`.
    */
   onChange: (listener: (settings: AppSettings) => void) => {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("settings:changed", (raw) => listener(normalizeAppSettings(raw)))
     return () => window.ipcRenderer.off("settings:changed", wrapper)
   },
-  /** Apaga cookies, logins e cache do navegador integrado */
+  /** Erases cookies, logins and cache of the built-in browser */
   clearBrowserData: () => window.ipcRenderer.invoke("browser:clear-data") as Promise<void>,
-  /** Link clicado no app que deve abrir no navegador integrado */
+  /** Link clicked in the app that should open in the built-in browser */
   onLinkOpen: (listener: (url: string) => void) => {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("link:open", (url) => listener(url as string))
@@ -183,22 +183,22 @@ export const appSettingsApi = {
   openExternal: (url: string) => window.ipcRenderer?.send("link:open-external", url),
 }
 
-/** Controle do computador (Computer Use): estado, permissões e o botão Parar. */
+/** Computer control (Computer Use): state, permissions and the Stop button. */
 export const computerApi = {
   status: () => window.ipcRenderer.invoke("computer:status") as Promise<ComputerStatus>,
   test: () => window.ipcRenderer.invoke("computer:test") as Promise<ComputerTestResult>,
-  /** Último screenshot da conversa com o marcador da última ação (só em memória no main) */
+  /** Last screenshot of the conversation with the marker of the last action (main memory only) */
   shot: (sessionId: string) => window.ipcRenderer.invoke("computer:shot", sessionId) as Promise<ComputerShot | null>,
-  /** Traz para a frente o app da miniatura (o botão do popover do chip) */
+  /** Brings the thumbnail's app to the front (the chip popover's button) */
   focusApp: (sessionId: string) => window.ipcRenderer.invoke("computer:focus-app", sessionId) as Promise<boolean>,
-  /** Resposta digitada no painel flutuante: entra na fila da conversa com as opções do último envio dela */
+  /** Answer typed in the floating panel: it enters the conversation queue with the options of its last send */
   reply: (sessionId: string, text: string) => window.ipcRenderer.invoke("computer:reply", sessionId, text) as Promise<boolean>,
-  /** Sessões controlando agora (para o chip depois de um reload) */
+  /** Sessions controlling right now (for the chip after a reload) */
   activity: () => window.ipcRenderer.invoke("computer:activity") as Promise<ComputerActivity[]>,
-  /** Para o controle (e o turno) de uma sessão — sem id, de todas */
+  /** Stops the control (and the turn) of a session — without an id, of all of them */
   stop: (sessionId?: string) => window.ipcRenderer.invoke("computer:stop", sessionId) as Promise<void>,
   requestAccessibility: () => window.ipcRenderer.invoke("computer:request-accessibility") as Promise<boolean>,
-  /** Cria a entrada do app em Gravação de Tela e abre o painel */
+  /** Creates the app entry in Screen Recording and opens the panel */
   requestScreen: () => window.ipcRenderer.invoke("computer:request-screen") as Promise<{ granted: boolean }>,
   openPane: (pane: "accessibility" | "screen") => window.ipcRenderer.invoke("computer:open-pane", pane) as Promise<void>,
   onEvent: (listener: (event: ComputerEvent) => void) => {
@@ -210,7 +210,7 @@ export const computerApi = {
 
 export const catalogApi = {
   get: () => window.ipcRenderer.invoke("catalog:get") as Promise<Catalog>,
-  /** O main atualizou o catálogo em segundo plano (models.dev, a cada 24h) */
+  /** Main updated the catalog in the background (models.dev, every 24h) */
   onUpdated: (listener: () => void) => {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("catalog:updated", () => listener())
@@ -246,15 +246,15 @@ export const customProvidersApi = {
   update: (id: string, patch: CustomProviderPatch) =>
     window.ipcRenderer.invoke("custom-providers:update", id, patch) as Promise<CatalogProvider>,
   detect: () => window.ipcRenderer.invoke("custom-providers:detect") as Promise<DetectResult[]>,
-  /** Consulta o /models do servidor sem gravar nada (o diálogo só salva no fim). */
+  /** Queries the server's /models without saving anything (the dialog only saves at the end). */
   discover: (opts: {
     baseURL: string
     apiKey?: string
     protocol?: ProviderProtocol
-    /** Em edição: reaproveita a chave já salva do provedor. */
+    /** Editing: reuses the provider's already saved key. */
     providerId?: string
   }) => window.ipcRenderer.invoke("custom-providers:discover", opts) as Promise<DiscoveredModel[]>,
-  /** Consulta o /models e grava no provedor (card: "buscar modelos"). */
+  /** Queries /models and saves it into the provider (card: "fetch models"). */
   refreshModels: (id: string) =>
     window.ipcRenderer.invoke("custom-providers:refresh", id) as Promise<CatalogProvider>,
 }
@@ -267,9 +267,9 @@ export interface ProcessInfo {
   startTime: number
   status: "running" | "exited" | "killed"
   exitCode?: number
-  /** Sessão de chat que iniciou o processo (filtro do footer e das tools bash_*). */
+  /** Chat session that started the process (footer filter and the bash_* tools). */
   sessionId?: string
-  /** URLs de servidor local anunciadas no output (ex.: http://localhost:5173). */
+  /** Local server URLs announced in the output (e.g.: http://localhost:5173). */
   urls?: string[]
 }
 
@@ -290,18 +290,18 @@ export const sessionApi = {
 
 export const chatApi = {
   send: (input: SendMessageInput) => window.ipcRenderer.invoke("chat:send", input),
-  /** Emite um ChatEvent (sessão/pasta criada ou alterada na UI) para o main,
-   *  que o repassa às outras janelas e aos companions (mobile) em tempo real. */
+  /** Emits a ChatEvent (session/folder created or changed in the UI) to main,
+   *  which forwards it to the other windows and to the companions (mobile) in real time. */
   emit: (event: ChatEvent) => {
     window.ipcRenderer?.send("chat:event:emit", event)
   },
   abort: (sessionId: string) => window.ipcRenderer.invoke("chat:abort", sessionId),
-  /** Sessões ainda rodando no main (após reload do renderer, para re-emitir
-   *  o status de streaming sem esperar o próximo evento). */
+  /** Sessions still running in main (after a renderer reload, to re-emit
+   *  the streaming status without waiting for the next event). */
   running: () => window.ipcRenderer.invoke("chat:running") as Promise<string[]>,
   compact: (sessionId: string) => window.ipcRenderer.invoke("chat:compact", sessionId),
-  /** Brief de continuidade para um chat novo (card de compactação): o main lê
-   *  o histórico e gera o texto no modelo auxiliar, já com o cabeçalho de resumo. */
+  /** Continuity brief for a new chat (compaction card): main reads
+   *  the history and generates the text with the auxiliary model, already with the summary header. */
   continuationBrief: (sessionId: string) =>
     window.ipcRenderer.invoke("chat:continuationBrief", sessionId) as Promise<{
       title: string
@@ -309,8 +309,8 @@ export const chatApi = {
     } | null>,
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
-  /** Tenta de novo juntar no chat o trabalho aceito dos workers (worktrees) */
-  juntarOrquestracao: (sessionId: string) => window.ipcRenderer.invoke("chat:juntarOrquestracao", sessionId) as Promise<void>,
+  /** Tries again to join into the chat the accepted work of the workers (worktrees) */
+  mergeOrchestration: (sessionId: string) => window.ipcRenderer.invoke("chat:mergeOrchestration", sessionId) as Promise<void>,
   rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),
   savePlanFile: (directory: string, content: string) =>
     window.ipcRenderer.invoke("plan:saveFile", directory, content),
@@ -327,10 +327,10 @@ export const chatApi = {
   },
 }
 
-/** Modelo por sessão: o renderer empurra o mapa de overrides para o main
- *  (cache HTTP + repasse aos companions) e escuta seleções vindas dos
- *  companions (WS 'models:select' / HTTP PUT selected) para aplicá-las no
- *  store local — mantém o mesmo modelo por chat entre desktop e mobile. */
+/** Model per session: the renderer pushes the overrides map to main
+ *  (HTTP cache + forwarding to the companions) and listens for selections coming from the
+ *  companions (WS 'models:select' / HTTP PUT selected) to apply them in the
+ *  local store — it keeps the same model per chat between desktop and mobile. */
 export const sessionModelsApi = {
   sync: (overrides: Record<string, { providerId: string; modelId: string }>) => {
     window.ipcRenderer?.send("companion:session-models", overrides)
@@ -345,11 +345,11 @@ export const sessionModelsApi = {
   },
 }
 
-/** Rotação de modelos: o renderer empurra o estado inteiro (lista +
- *  escolha por chat) para o main, que guarda em cache, resolve a sequência
- *  do turno e repassa aos companions. No sentido inverso, escuta o que foi
- *  feito no celular (WS 'rotation:select' / 'rotation:set') — o renderer é a
- *  fonte da verdade, então é aqui que a mudança é persistida. */
+/** Model rotation: the renderer pushes the whole state (list +
+ *  per-chat choice) to main, which caches it, resolves the turn's
+ *  sequence and forwards it to the companions. In the reverse direction, it listens to what was
+ *  done on the phone (WS 'rotation:select' / 'rotation:set') — the renderer is the
+ *  source of truth, so this is where the change is persisted. */
 export const rotationApi = {
   sync: (config: RotationConfig) => {
     window.ipcRenderer?.send("rotation:sync", config)
@@ -368,8 +368,8 @@ export const rotationApi = {
   },
 }
 
-/** Thinking por modelo: mesma via do sessionModelsApi. O renderer empurra o
- *  mapa de reasoning-prefs e escuta os toggles feitos nos companions
+/** Thinking per model: same path as sessionModelsApi. The renderer pushes the
+ *  reasoning-prefs map and listens to the toggles made in the companions
  *  (WS 'reasoning:select'). */
 export const reasoningApi = {
   sync: (prefs: ReasoningPrefsMap) => {
@@ -385,8 +385,8 @@ export const reasoningApi = {
   },
 }
 
-/** Fila de mensagens compartilhada com os companions: o renderer empurra a
- *  fila inteira e aplica as operações feitas no celular (WS 'queue:op'). */
+/** Message queue shared with the companions: the renderer pushes the
+ *  whole queue and applies the operations done on the phone (WS 'queue:op'). */
 export const messageQueueApi = {
   sync: (queues: MessageQueueSnapshot) => {
     window.ipcRenderer?.send("companion:message-queue", queues)
@@ -397,8 +397,8 @@ export const messageQueueApi = {
   },
 }
 
-/** Modos por chat: mesma via do sessionModelsApi. O renderer empurra o mapa
- *  inteiro (mode-overrides + simples + brain) e escuta os toggles feitos nos
+/** Modes per chat: same path as sessionModelsApi. The renderer pushes the whole
+ *  map (mode-overrides + simple + brain) and listens to the toggles made in the
  *  companions (WS 'modes:select'). */
 export const sessionModesApi = {
   sync: (overrides: SessionModeOverrides) => {
@@ -414,9 +414,9 @@ export const sessionModesApi = {
   },
 }
 
-/** Thinking e permissão POR CHAT: mesma via do sessionModelsApi. O renderer
- *  empurra o snapshot (reasoning + permissão por sessão) e escuta o que foi
- *  escolhido num companion (WS 'session:prefs-select'). */
+/** Thinking and permission PER CHAT: same path as sessionModelsApi. The renderer
+ *  pushes the snapshot (reasoning + permission per session) and listens to what was
+ *  chosen in a companion (WS 'session:prefs-select'). */
 export const sessionPrefsApi = {
   sync: (prefs: SessionPrefsSnapshot) => {
     window.ipcRenderer?.send("companion:session-prefs", prefs)
@@ -435,9 +435,9 @@ export const sessionPrefsApi = {
   },
 }
 
-/** Config dos modos delegados (modelo/thinking dos workers e modelo de visão):
- *  global, empurrada para o main como as demais e aplicada de volta quando o
- *  celular muda. */
+/** Config of the delegated modes (workers' model/thinking and vision model):
+ *  global, pushed to main like the others and applied back when the
+ *  phone changes. */
 export const workerConfigApi = {
   sync: (config: WorkerConfigSnapshot) => {
     window.ipcRenderer?.send("companion:worker-config", config)
@@ -450,9 +450,9 @@ export const workerConfigApi = {
   },
 }
 
-/** Preferências do app (defaults de modo por tipo de chat, modo de permissão e
- *  pastas automáticas): mesma via do workerConfigApi. O renderer é a fonte da
- *  verdade e o celular espelha. */
+/** App preferences (mode defaults per chat type, permission mode and
+ *  automatic folders): same path as workerConfigApi. The renderer is the source of
+ *  truth and the phone mirrors. */
 export const appPreferencesApi = {
   sync: (prefs: AppPreferences) => {
     window.ipcRenderer?.send("companion:preferences", prefs)
@@ -488,14 +488,14 @@ export const skillsApi = {
 
 export const nodaraApi = {
   discover: () => window.ipcRenderer.invoke("nodara:discover") as Promise<NodaraStatus>,
-  /** Registra/repara o servidor MCP do Nodara e devolve o estado pós-conexão */
+  /** Registers/repairs the Nodara MCP server and returns the post-connection state */
   connect: () => window.ipcRenderer.invoke("nodara:connect") as Promise<NodaraStatus>,
   disconnect: () => window.ipcRenderer.invoke("nodara:disconnect") as Promise<NodaraStatus>,
 }
 
 export const fractaApi = {
   discover: () => window.ipcRenderer.invoke("fracta:discover") as Promise<FractaStatus>,
-  /** Registra/repara o servidor MCP do Fracta e devolve o estado pós-conexão */
+  /** Registers/repairs the Fracta MCP server and returns the post-connection state */
   connect: () => window.ipcRenderer.invoke("fracta:connect") as Promise<FractaStatus>,
   disconnect: () => window.ipcRenderer.invoke("fracta:disconnect") as Promise<FractaStatus>,
 }
@@ -507,19 +507,19 @@ export const mcpApi = {
     window.ipcRenderer.invoke("mcp:save", config) as Promise<McpServerStatus[]>,
   reconnect: (name?: string) =>
     window.ipcRenderer.invoke("mcp:reconnect", name) as Promise<McpServerStatus[]>,
-  /** Inicia o fluxo OAuth do servidor (abre o navegador e completa a autorização) */
+  /** Starts the server's OAuth flow (opens the browser and completes the authorization) */
   auth: (name: string) =>
     window.ipcRenderer.invoke("mcp:auth", name) as Promise<McpServerStatus[]>,
-  /** redirect_uri do loopback OAuth, para cadastrar no app do provedor */
+  /** redirect_uri of the OAuth loopback, to register in the provider's app */
   oauthRedirect: () => window.ipcRenderer.invoke("mcp:oauth-redirect") as Promise<string>,
-  /** Estado das descrições reescritas do servidor (botão "Otimizar") */
+  /** State of the server's rewritten descriptions ("Optimize" button) */
   descriptions: (name: string) =>
     window.ipcRenderer.invoke("mcp:descriptions", name) as Promise<{
       optimized: boolean
       count: number
       tools: number
     }>,
-  /** Reescreve as descrições das tools do servidor com o modelo auxiliar */
+  /** Rewrites the server's tool descriptions with the auxiliary model */
   optimize: (name: string) =>
     window.ipcRenderer.invoke("mcp:optimize", name) as Promise<{
       updated: number
@@ -535,11 +535,11 @@ export const analyticsApi = {
 }
 
 export const panelApi = {
-  /** Registra (ou limpa, com null) o webContents do <webview> do painel — por sessão de chat */
+  /** Registers (or clears, with null) the webContents of the panel <webview> — per chat session */
   register: (sessionId: string | null, webContentsId: number | null) =>
     window.ipcRenderer.send("panel:register", sessionId, webContentsId),
-  /** Solta o registro SÓ se ele for o webContents informado (o <webview> que
-   *  acabou de morrer). Não derruba o registro de outro webview vivo. */
+  /** Releases the registration ONLY if it is the given webContents (the <webview> that
+   *  just died). It does not drop the registration of another live webview. */
   unregister: (sessionId: string | null, webContentsId: number | null) =>
     window.ipcRenderer.send("panel:unregister", sessionId, webContentsId),
   onEvent: (listener: (event: PanelEvent) => void) => {
@@ -548,141 +548,141 @@ export const panelApi = {
   },
 }
 
-/** Worktrees nos chats: o seletor do header e a sidebar. */
+/** Worktrees in the chats: the header selector and the sidebar. */
 export const worktreeApi = {
-  /** null quando a pasta não está num repositório git */
-  listar: (pasta: string) => window.ipcRenderer.invoke("worktree:listar", pasta) as Promise<ListaWorktrees | null>,
-  criar: (pasta: string, nome: string, base?: string) =>
-    window.ipcRenderer.invoke("worktree:criar", pasta, nome, base) as Promise<CriarWorktreeResultado>,
-  /** `pasta`: a do chat (viva) — o worktree a remover pode ser um cuja pasta sumiu */
-  remover: (pasta: string, caminho: string, apagarBranch?: boolean) =>
-    window.ipcRenderer.invoke("worktree:remover", pasta, caminho, apagarBranch) as Promise<void>,
-  /** Pasta equivalente no repositório principal (a própria pasta fora de worktree) */
-  principal: (pasta: string) => window.ipcRenderer.invoke("worktree:principal", pasta) as Promise<string>,
-  /** Confere a pasta escolhida nas Preferências para guardar os worktrees */
-  validarPasta: (pasta: string) =>
-    window.ipcRenderer.invoke("worktree:validarPasta", pasta) as Promise<ValidacaoPastaWorktrees>,
+  /** null when the folder is not in a git repository */
+  list: (folder: string) => window.ipcRenderer.invoke("worktree:list", folder) as Promise<WorktreeList | null>,
+  create: (folder: string, name: string, base?: string) =>
+    window.ipcRenderer.invoke("worktree:create", folder, name, base) as Promise<CreateWorktreeResult>,
+  /** `folder`: the chat's (live) one — the worktree to remove may be one whose folder is gone */
+  remove: (folder: string, path: string, deleteBranch?: boolean) =>
+    window.ipcRenderer.invoke("worktree:remove", folder, path, deleteBranch) as Promise<void>,
+  /** Equivalent folder in the main repository (the folder itself when outside a worktree) */
+  main: (folder: string) => window.ipcRenderer.invoke("worktree:main", folder) as Promise<string>,
+  /** Checks the folder chosen in the Preferences to store the worktrees */
+  validateFolder: (folder: string) =>
+    window.ipcRenderer.invoke("worktree:validateFolder", folder) as Promise<ValidateWorktreesFolder>,
 }
 
-/** Modo esteira — board de projetos/esteiras/tasks (orbit-data/esteira). */
-export const esteiraApi = {
-  carregar: () =>
-    window.ipcRenderer.invoke("esteira:carregar") as Promise<{
-      projetos: Projeto[]
-      esteiras: Esteira[]
-      tasksPorEsteira: Record<string, Task[]>
+/** Pipeline mode — project/pipeline/task board (orbit-data/pipeline). */
+export const pipelineApi = {
+  load: () =>
+    window.ipcRenderer.invoke("pipeline:load") as Promise<{
+      projects: Project[]
+      pipelines: Pipeline[]
+      tasksPerPipeline: Record<string, Task[]>
     }>,
-  templates: () => window.ipcRenderer.invoke("esteira:templates") as Promise<FaseTemplate[]>,
-  salvarTemplate: (template: FaseTemplate) =>
-    window.ipcRenderer.invoke("esteira:salvarTemplate", template) as Promise<FaseTemplate[]>,
-  removerTemplate: (id: string) =>
-    window.ipcRenderer.invoke("esteira:removerTemplate", id) as Promise<FaseTemplate[]>,
-  criarProjeto: (nome: string, pastas: string[]) =>
-    window.ipcRenderer.invoke("esteira:criarProjeto", nome, pastas) as Promise<Projeto>,
-  atualizarProjeto: (id: string, patch: Partial<Pick<Projeto, "nome" | "pastas">>) =>
-    window.ipcRenderer.invoke("esteira:atualizarProjeto", id, patch) as Promise<Projeto | null>,
-  removerProjeto: (id: string) => window.ipcRenderer.invoke("esteira:removerProjeto", id) as Promise<void>,
-  criar: (input: NovaEsteiraInput) => window.ipcRenderer.invoke("esteira:criar", input) as Promise<Esteira>,
-  atualizar: (id: string, patch: Partial<Esteira>) =>
-    window.ipcRenderer.invoke("esteira:atualizar", id, patch) as Promise<Esteira | null>,
-  remover: (id: string) => window.ipcRenderer.invoke("esteira:remover", id) as Promise<void>,
-  criarTask: (input: NovaTaskInput) => window.ipcRenderer.invoke("esteira:criarTask", input) as Promise<Task>,
-  atualizarTask: (esteiraId: string, taskId: string, patch: Partial<Task>) =>
-    window.ipcRenderer.invoke("esteira:atualizarTask", esteiraId, taskId, patch) as Promise<Task | null>,
-  removerTask: (esteiraId: string, taskId: string) =>
-    window.ipcRenderer.invoke("esteira:removerTask", esteiraId, taskId) as Promise<void>,
-  iniciarTask: (esteiraId: string, taskId: string, fase?: number) =>
-    window.ipcRenderer.invoke("esteira:iniciarTask", esteiraId, taskId, fase) as Promise<void>,
-  pausarTask: (esteiraId: string, taskId: string) =>
-    window.ipcRenderer.invoke("esteira:pausarTask", esteiraId, taskId) as Promise<void>,
-  /** `instrucao`: o que a fase deve fazer diferente ao retomar (task pausada) */
-  retomarTask: (esteiraId: string, taskId: string, instrucao?: string) =>
-    window.ipcRenderer.invoke("esteira:retomarTask", esteiraId, taskId, instrucao) as Promise<void>,
-  /** Devolve uma task concluída com o comentário da revisão (abre uma rodada nova) */
-  devolverTask: (esteiraId: string, taskId: string, texto: string, fase?: number) =>
-    window.ipcRenderer.invoke("esteira:devolverTask", esteiraId, taskId, texto, fase) as Promise<void>,
-  ligarFila: (esteiraId: string, ligar: boolean) =>
-    window.ipcRenderer.invoke("esteira:ligarFila", esteiraId, ligar) as Promise<boolean>,
-  relatorio: (esteiraId: string) =>
-    window.ipcRenderer.invoke("esteira:relatorio", esteiraId) as Promise<RelatorioEsteira>,
-  onEvent: (listener: (event: EsteiraEvent) => void) => {
-    const wrapper = window.ipcRenderer.on("esteira:event", (event) => listener(event as EsteiraEvent))
-    return () => window.ipcRenderer.off("esteira:event", wrapper)
+  templates: () => window.ipcRenderer.invoke("pipeline:templates") as Promise<PhaseTemplate[]>,
+  saveTemplate: (template: PhaseTemplate) =>
+    window.ipcRenderer.invoke("pipeline:saveTemplate", template) as Promise<PhaseTemplate[]>,
+  removeTemplate: (id: string) =>
+    window.ipcRenderer.invoke("pipeline:removeTemplate", id) as Promise<PhaseTemplate[]>,
+  createProject: (name: string, folders: string[]) =>
+    window.ipcRenderer.invoke("pipeline:createProject", name, folders) as Promise<Project>,
+  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "folders">>) =>
+    window.ipcRenderer.invoke("pipeline:updateProject", id, patch) as Promise<Project | null>,
+  removeProject: (id: string) => window.ipcRenderer.invoke("pipeline:removeProject", id) as Promise<void>,
+  create: (input: NewPipelineInput) => window.ipcRenderer.invoke("pipeline:create", input) as Promise<Pipeline>,
+  update: (id: string, patch: Partial<Pipeline>) =>
+    window.ipcRenderer.invoke("pipeline:update", id, patch) as Promise<Pipeline | null>,
+  remove: (id: string) => window.ipcRenderer.invoke("pipeline:remove", id) as Promise<void>,
+  createTask: (input: NewTaskInput) => window.ipcRenderer.invoke("pipeline:createTask", input) as Promise<Task>,
+  updateTask: (pipelineId: string, taskId: string, patch: Partial<Task>) =>
+    window.ipcRenderer.invoke("pipeline:updateTask", pipelineId, taskId, patch) as Promise<Task | null>,
+  removeTask: (pipelineId: string, taskId: string) =>
+    window.ipcRenderer.invoke("pipeline:removeTask", pipelineId, taskId) as Promise<void>,
+  startTask: (pipelineId: string, taskId: string, phase?: number) =>
+    window.ipcRenderer.invoke("pipeline:startTask", pipelineId, taskId, phase) as Promise<void>,
+  pauseTask: (pipelineId: string, taskId: string) =>
+    window.ipcRenderer.invoke("pipeline:pauseTask", pipelineId, taskId) as Promise<void>,
+  /** `instruction`: what the phase should do differently on resume (paused task) */
+  resumeTask: (pipelineId: string, taskId: string, instruction?: string) =>
+    window.ipcRenderer.invoke("pipeline:resumeTask", pipelineId, taskId, instruction) as Promise<void>,
+  /** Returns a completed task with the review comment (opens a new round) */
+  returnTask: (pipelineId: string, taskId: string, text: string, phase?: number) =>
+    window.ipcRenderer.invoke("pipeline:returnTask", pipelineId, taskId, text, phase) as Promise<void>,
+  toggleQueue: (pipelineId: string, enabled: boolean) =>
+    window.ipcRenderer.invoke("pipeline:toggleQueue", pipelineId, enabled) as Promise<boolean>,
+  report: (pipelineId: string) =>
+    window.ipcRenderer.invoke("pipeline:report", pipelineId) as Promise<PipelineReport>,
+  onEvent: (listener: (event: PipelineEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("pipeline:event", (event) => listener(event as PipelineEvent))
+    return () => window.ipcRenderer.off("pipeline:event", wrapper)
   },
 }
 
-/** Entrada de criação de esteira (espelha NovaEsteiraInput do main). */
-export interface NovaEsteiraInput {
-  projetoId: string
-  nome: string
-  /** Fases resolvidas (podem ter sido editadas só para esta esteira) */
-  fases?: FaseEscolhida[]
-  /** Alternativa simples: ids de template na ordem desejada */
+/** Pipeline creation input (mirrors NewPipelineInput in the main process). */
+export interface NewPipelineInput {
+  projectId: string
+  name: string
+  /** Resolved phases (may have been edited just for this pipeline) */
+  phases?: PhaseChoice[]
+  /** Simpler alternative: template ids in the desired order */
   templateIds?: string[]
   providerId: string
   modelId: string
-  thinkingNivel?: number
-  /** Raciocínio padrão das fases (cada fase pode trazer o seu) */
+  thinkingLevel?: number
+  /** Default reasoning of the phases (each phase may bring its own) */
   reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
-  /** Cada task num git worktree próprio */
-  worktreePorTask?: boolean
-  pushAoFinal?: boolean
-  /** Commit final do engine ao concluir a última fase (padrão true) */
-  commitAoFinal?: boolean
-  /** Prompt da mensagem do commit final (ausente = ESTEIRA_COMMIT_PROMPT_PADRAO) */
+  /** Each task in its own git worktree */
+  worktreePerTask?: boolean
+  pushAtEnd?: boolean
+  /** Engine's final commit when the last phase completes (default true) */
+  commitAtEnd?: boolean
+  /** Final commit message prompt (absent = PIPELINE_COMMIT_PROMPT_DEFAULT) */
   commitPrompt?: string
-  /** Instrui as fases a capturarem prints do resultado visual */
-  printsDoResultado?: boolean
-  modoOperacao?: "manual" | "automatico"
+  /** Tells the phases to capture screenshots of the visual result */
+  resultScreenshots?: boolean
+  operationMode?: "manual" | "automatic"
 }
 
-/** Rotinas — chats agendados dos modos chat e código (orbit-data/rotinas). */
-export const rotinasApi = {
-  carregar: () =>
-    window.ipcRenderer.invoke("rotinas:carregar") as Promise<{ rotinas: Rotina[]; runs: RotinaRun[] }>,
-  criar: (input: NovaRotinaInput) => window.ipcRenderer.invoke("rotinas:criar", input) as Promise<Rotina>,
-  atualizar: (id: string, patch: Partial<Rotina>) =>
-    window.ipcRenderer.invoke("rotinas:atualizar", id, patch) as Promise<Rotina | null>,
-  remover: (id: string) => window.ipcRenderer.invoke("rotinas:remover", id) as Promise<void>,
-  executarAgora: (id: string) =>
-    window.ipcRenderer.invoke("rotinas:executarAgora", id) as Promise<string | null>,
-  /** Descarta métricas de execuções cujo chat já foi excluído. */
-  podarRuns: (sessionIds: string[]) =>
-    window.ipcRenderer.invoke("rotinas:podarRuns", sessionIds) as Promise<number>,
-  /** Propostas do agente (tool rotinas_manage) aguardando o card. */
-  pendentes: () => window.ipcRenderer.invoke("rotinas:pendentes") as Promise<RotinaPendente[]>,
-  aprovarPendente: (id: string) =>
-    window.ipcRenderer.invoke("rotinas:aprovarPendente", id) as Promise<Rotina | null>,
-  descartarPendente: (id: string) =>
-    window.ipcRenderer.invoke("rotinas:descartarPendente", id) as Promise<void>,
-  /** Segundo plano (macOS): LaunchAgent que relança o app com --hidden. */
-  backgroundEstado: () =>
-    window.ipcRenderer.invoke("rotinas:background:estado") as Promise<{ ativo: boolean; suportado: boolean }>,
-  backgroundAtivar: (ativo: boolean) =>
-    window.ipcRenderer.invoke("rotinas:background:ativar", ativo) as Promise<{ ok: boolean; error?: string }>,
-  gerar: (
-    descricao: string,
-    modelo: RotinaModelo,
-    pastas: string[],
-    idioma?: string,
-    modo?: "chat" | "code",
-    visionDisponivel?: boolean,
+/** Routines — scheduled chats of the chat and code modes (orbit-data/routines). */
+export const routinesApi = {
+  load: () =>
+    window.ipcRenderer.invoke("routines:load") as Promise<{ routines: Routine[]; runs: RoutineRun[] }>,
+  create: (input: NewRoutineInput) => window.ipcRenderer.invoke("routines:create", input) as Promise<Routine>,
+  update: (id: string, patch: Partial<Routine>) =>
+    window.ipcRenderer.invoke("routines:update", id, patch) as Promise<Routine | null>,
+  remove: (id: string) => window.ipcRenderer.invoke("routines:remove", id) as Promise<void>,
+  runNow: (id: string) =>
+    window.ipcRenderer.invoke("routines:runNow", id) as Promise<string | null>,
+  /** Discards metrics of executions whose chat has already been deleted. */
+  pruneRuns: (sessionIds: string[]) =>
+    window.ipcRenderer.invoke("routines:pruneRuns", sessionIds) as Promise<number>,
+  /** Agent proposals (tool routines_manage) waiting for the card. */
+  pending: () => window.ipcRenderer.invoke("routines:pending") as Promise<PendingRoutine[]>,
+  approvePending: (id: string) =>
+    window.ipcRenderer.invoke("routines:approvePending", id) as Promise<Routine | null>,
+  discardPending: (id: string) =>
+    window.ipcRenderer.invoke("routines:discardPending", id) as Promise<void>,
+  /** Background (macOS): LaunchAgent that relaunches the app with --hidden. */
+  backgroundState: () =>
+    window.ipcRenderer.invoke("routines:background:state") as Promise<{ active: boolean; supported: boolean }>,
+  applyBackground: (active: boolean) =>
+    window.ipcRenderer.invoke("routines:background:apply", active) as Promise<{ ok: boolean; error?: string }>,
+  generate: (
+    description: string,
+    model: RoutineModel,
+    folders: string[],
+    language?: string,
+    mode?: "chat" | "code",
+    visionAvailable?: boolean,
   ) =>
-    window.ipcRenderer.invoke("rotinas:gerar", descricao, modelo, pastas, idioma, modo, visionDisponivel) as Promise<ResultadoGeracao>,
-  onEvent: (listener: (event: RotinaEvent) => void) => {
-    const wrapper = window.ipcRenderer.on("rotinas:event", (event) => listener(event as RotinaEvent))
-    return () => window.ipcRenderer.off("rotinas:event", wrapper)
+    window.ipcRenderer.invoke("routines:generate", description, model, folders, language, mode, visionAvailable) as Promise<GenerationResult>,
+  onEvent: (listener: (event: RoutineEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("routines:event", (event) => listener(event as RoutineEvent))
+    return () => window.ipcRenderer.off("routines:event", wrapper)
   },
 }
 
 /**
- * Artefatos HTML (orbit-data/artifacts). O conteúdo NÃO passa por aqui para
- * renderizar — o iframe carrega direto de orbit-artifact://. Estas chamadas
- * existem só para tirar o artefato do Orbit (exportar/copiar).
+ * HTML artifacts (orbit-data/artifacts). The content does NOT go through here to
+ * render — the iframe loads straight from orbit-artifact://. These calls
+ * exist only to get the artifact out of Orbit (export/copy).
  */
-/** Diagramas Mermaid do chat: o main desenha (SVG/PNG, como nos documentos) e salva. */
+/** Mermaid diagrams of the chat: main draws them (SVG/PNG, as in documents) and saves them. */
 export const diagramApi = {
   export: (source: string, format: "svg" | "png" | "mmd") =>
     window.ipcRenderer.invoke("diagram:export", source, format) as Promise<
@@ -692,8 +692,8 @@ export const diagramApi = {
 
 export const artifactApi = {
   read: (id: string) => window.ipcRenderer.invoke("artifact:read", id) as Promise<string | null>,
-  /** update_artifact reescreveu o arquivo: quem já está renderizando aquele
-   *  id precisa recarregar (a URL não muda, então nada dispara sozinho). */
+  /** update_artifact rewrote the file: whoever is already rendering that
+   *  id has to reload (the URL does not change, so nothing fires on its own). */
   onUpdated: (listener: (payload: { artifactId: string; revision: number }) => void) => {
     const wrapper = window.ipcRenderer.on("artifact:updated", (payload) =>
       listener(payload as { artifactId: string; revision: number }),
@@ -707,49 +707,49 @@ export const artifactApi = {
 }
 
 /**
- * Composição de motion do preview (orbit-motion://). Quem registra a pasta é a
- * tool do agente; aqui fica só o que a aba do painel precisa: pedir o render,
- * acompanhar o progresso e recarregar quando o arquivo muda no disco (fs.watch
- * do main). O render devolve o caminho do arquivo gerado.
+ * Motion composition of the preview (orbit-motion://). The agent's tool is
+ * what registers the folder; here is only what the panel tab needs: ask for the render,
+ * follow the progress and reload when the file changes on disk (main's fs.watch).
+ * The render returns the path of the generated file.
  */
 export const motionApi = {
-  /** Contrato do render: `format` já diz se o arquivo sai com alfa (mov/webm),
-   *  então o renderer nunca manda `transparent` — a escolha do usuário no modal
-   *  é o formato, e só ele, para a transparência. `quality`, `fps` e
-   *  `separateAudio` são as outras decisões do mesmo modal. */
+  /** Render contract: `format` already says whether the file comes out with alpha (mov/webm),
+   *  so the renderer never sends `transparent` — the user's choice in the modal
+   *  is the format, and only it, for transparency. `quality`, `fps` and
+   *  `separateAudio` are the other decisions of the same modal. */
   render: (id: string, options: MotionRenderOptions = {}) =>
     window.ipcRenderer.invoke("motion:render", { id, ...options }) as Promise<
       MotionRenderResult | MotionRenderCanceled
     >,
   /**
-   * Reabre uma peça já registrada. O card da galeria manda o `id` (o vínculo
-   * dele é o motionId); o card do chat manda o que a tool deixou no `input` — o
-   * `path` que o agente usou no preview (modo código) ou o `name` da composição
-   * com a `sessionId` (modo chat, onde não existe caminho) —, e o main traduz
-   * pelo registro. `false` quando a peça saiu do registro: o projeto pode ter
-   * sido apagado, ou a composição da conversa, removida.
+   * Reopens an already registered piece. The gallery card sends the `id` (its
+   * link is the motionId); the chat card sends what the tool left in the `input` — the
+   * `path` the agent used in the preview (code mode) or the composition `name`
+   * with the `sessionId` (chat mode, where there is no path) —, and main translates it
+   * through the registry. `false` when the piece left the registry: the project may have
+   * been deleted, or the conversation's composition, removed.
    */
   open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
     window.ipcRenderer.invoke("motion:open", ref) as Promise<boolean>,
-  /** Um evento por quadro renderizado: a linha fina do cabeçalho. */
+  /** One event per rendered frame: the header's thin line. */
   onProgress: (listener: (payload: { id: string; frame: number; total: number }) => void) => {
     const wrapper = window.ipcRenderer.on("motion:render:progress", (payload) =>
       listener(payload as { id: string; frame: number; total: number }),
     )
     return () => window.ipcRenderer.off("motion:render:progress", wrapper)
   },
-  /** Quem entra e sai de cena, e quando (medido no main, offscreen). */
+  /** Who enters and leaves the scene, and when (measured in main, offscreen). */
   layers: (id: string) => window.ipcRenderer.invoke("motion:layers", id) as Promise<MotionLayersResult>,
-  /** A pasta da composição mudou no disco: remonta o iframe. */
+  /** The composition's folder changed on disk: remounts the iframe. */
   onChanged: (listener: (payload: { id: string }) => void) => {
     const wrapper = window.ipcRenderer.on("motion:changed", (payload) => listener(payload as { id: string }))
     return () => window.ipcRenderer.off("motion:changed", wrapper)
   },
-  /** Os ARQUIVOS das composições da conversa — o que o card da peça no chat
-   *  lista. Sai da pasta da peça; `used` é derivado do que a composição cita. */
+  /** The FILES of the conversation's compositions — what the piece card in the chat
+   *  lists. It comes from the piece's folder; `used` is derived from what the composition cites. */
   bundles: (sessionId: string) =>
     window.ipcRenderer.invoke("motion:bundles", sessionId) as Promise<MotionBundle[]>,
-  /** "Salvar projeto": a pasta da peça inteira num .zip com manifesto. */
+  /** "Save project": the piece's whole folder in a .zip with a manifest. */
   exportProject: (id: string) =>
     window.ipcRenderer.invoke("motion:export", id) as Promise<
       { ok: true; path: string; files: number } | { ok: false; canceled?: boolean; error?: string }
@@ -757,11 +757,11 @@ export const motionApi = {
 }
 
 /**
- * Canvas de design do preview (orbit-design://). Espelha motionApi, bem mais
- * enxuto: não há render nem camadas — o artboard é HTML estático, e a aba só
- * precisa reabrir e recarregar ao vivo.
+ * Design canvas of the preview (orbit-design://). Mirrors motionApi, much
+ * leaner: there is no render or layers — the artboard is static HTML, and the tab only
+ * needs to reopen and reload live.
  */
-/** Uma família instalada na biblioteca do Orbit (ver electron/lib/fonts/store). */
+/** A family installed in Orbit's library (see electron/lib/fonts/store). */
 export interface OrbitFontInfo {
   id: string
   family: string
@@ -772,11 +772,11 @@ export interface OrbitFontInfo {
 }
 
 export interface FontChoices {
-  /** Baixadas pela tool font_use — valem no design, no motion e nos artefatos. */
+  /** Downloaded by the font_use tool — they count in design, motion and artifacts. */
   orbit: OrbitFontInfo[]
-  /** Instaladas no computador: o Chromium já as carrega, basta o nome. */
+  /** Installed on the computer: Chromium already loads them, the name is enough. */
   system: string[]
-  /** @font-face das fontes do Orbit — a janela do app precisa dele para a prévia. */
+  /** @font-face of Orbit's fonts — the app window needs it for the preview. */
   css: string
 }
 
@@ -785,53 +785,53 @@ export const fontsApi = {
 }
 
 export const designApi = {
-  /** Reabre um canvas já registrado. O card da galeria manda o `id`; o card do
-   *  chat manda o que a tool deixou no `input` — o `path` da pasta (modo
-   *  código, design_preview) ou o `name` do canvas com a `sessionId` (modo
-   *  chat, design_write/design_edit) — e o main traduz pelo registro. `false`
-   *  quando o canvas saiu do registro. */
+  /** Reopens an already registered canvas. The gallery card sends the `id`; the chat
+   *  card sends what the tool left in the `input` — the folder `path` (code
+   *  mode, design_preview) or the canvas `name` with the `sessionId` (chat
+   *  mode, design_write/design_edit) — and main resolves it through the registry. `false`
+   *  when the canvas has left the registry. */
   open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
     window.ipcRenderer.invoke("design:open", ref) as Promise<boolean>,
-  /** A pasta do canvas mudou no disco: recarrega só os artboards que mudaram.
-   *  `files` são os nomes relativos à pasta (como no canvas.json); vazio ou
-   *  ausente = não deu para saber, recarregue tudo. */
+  /** The canvas folder changed on disk: reloads only the artboards that changed.
+   *  `files` are the names relative to the folder (as in canvas.json); empty or
+   *  absent = could not tell, reload everything. */
   onChanged: (listener: (payload: { id: string; files?: string[] }) => void) => {
     const wrapper = window.ipcRenderer.on("design:changed", (payload) => listener(payload as { id: string; files?: string[] }))
     return () => window.ipcRenderer.off("design:changed", wrapper)
   },
-  /** O fonte de um artboard, como está no disco (sem a ponte do editor). */
+  /** The source of an artboard, as it is on disk (without the editor's bridge). */
   readBoard: (id: string, file: string) => window.ipcRenderer.invoke("design:readBoard", { id, file }) as Promise<string>,
-  /** Reescreve o fonte de um artboard — edição feita pela pessoa no canvas. */
+  /** Rewrites the source of an artboard — an edit made by the person in the canvas. */
   writeBoard: (id: string, file: string, html: string) =>
     window.ipcRenderer.invoke("design:writeBoard", { id, file, html }) as Promise<void>,
-  /** Move, redimensiona ou renomeia um artboard no canvas.json. */
+  /** Moves, resizes or renames an artboard in canvas.json. */
   updateBoard: (id: string, file: string, patch: { title?: string; x?: number; y?: number; w?: number; h?: number }) =>
     window.ipcRenderer.invoke("design:updateBoard", { id, file, patch }) as Promise<void>,
 }
 
 /**
- * Decks de slides do palco (`orbit-slides://`). Espelha o designApi, ainda mais
- * enxuto: o deck é UM arquivo e não há edição pela aba — quem escreve é o
- * agente, e a aba apresenta.
+ * Slide decks of the stage (`orbit-slides://`). Mirrors designApi, even leaner:
+ * the deck is ONE file and there is no editing through the tab — whoever writes is the
+ * agent, and the tab presents.
  */
 export const slidesApi = {
-  /** Reabre um deck já registrado. O card manda o `id`, ou o `path` do arquivo
-   *  (modo código) / o `name` do deck com a `sessionId` (modo chat) — o main
-   *  traduz pelo registro. `false` quando o deck saiu do registro. */
+  /** Reopens an already registered deck. The card sends the `id`, or the file `path`
+   *  (code mode) / the deck `name` with the `sessionId` (chat mode) — main
+   *  resolves it through the registry. `false` when the deck has left the registry. */
   open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
     window.ipcRenderer.invoke("slides:open", ref) as Promise<boolean>,
-  /** O id e a entrada do deck SEM abrir aba — é com isso que o card do chat
-   *  monta o palco inline (`orbit-slides://<id>/<entrada>`). `null` quando o
-   *  deck saiu do registro. */
+  /** The deck's id and entry WITHOUT opening a tab — it is with this that the chat card
+   *  mounts the stage inline (`orbit-slides://<id>/<entry>`). `null` when the
+   *  deck left the registry. */
   resolve: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
     window.ipcRenderer.invoke("slides:resolve", ref) as Promise<{ id: string; entry: string } | null>,
-  /** O arquivo do deck mudou no disco: remonta o palco. */
+  /** The deck's file changed on disk: remounts the stage. */
   onChanged: (listener: (payload: { id: string }) => void) => {
     const wrapper = window.ipcRenderer.on("slides:changed", (payload) => listener(payload as { id: string }))
     return () => window.ipcRenderer.off("slides:changed", wrapper)
   },
-  /** Baixa o deck em PDF. A impressão é do main, sobre o próprio index.html;
-   *  `canceled` é o usuário desistindo no diálogo, não uma falha. */
+  /** Downloads the deck as PDF. The printing is main's, over the index.html itself;
+   *  `canceled` is the user giving up in the dialog, not a failure. */
   exportPdf: (id: string, suggestedName?: string) =>
     window.ipcRenderer.invoke("slides:export", id, suggestedName) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
@@ -839,24 +839,24 @@ export const slidesApi = {
 }
 
 /**
- * Formatos de saída do render de motion. `-alpha` é o arquivo com transparência:
- * mov (ProRes 4444) para edição, webm (VP9) para web/overlay. Mesma união do
- * `MotionRenderRequest.format` do main — mudar aqui sem mudar lá quebra o IPC.
+ * Output formats of the motion render. `-alpha` is the file with transparency:
+ * mov (ProRes 4444) for editing, webm (VP9) for web/overlay. Same union as
+ * main's `MotionRenderRequest.format` — changing it here without changing it there breaks the IPC.
  */
 export type MotionRenderFormat = "mp4" | "mov-alpha" | "webm-alpha"
 
-/** Espelho do MotionLayers do main (electron/lib/video/motion-layers.ts). */
+/** Mirror of main's MotionLayers (electron/lib/video/motion-layers.ts). */
 export interface MotionLayersResult {
   width: number
   height: number
   fps: number
   durationInFrames: number
   /**
-   * Ordem do documento (de trás para a frente). Intervalos em quadros, inclusivos.
-   * `index` é a posição do elemento na caminhada da página: o rótulo NÃO
-   * identifica um elemento (dois podem se chamar ".caption"), então é por ele que
-   * o preview reencontra o elemento para contorná-lo quando a camada é
-   * selecionada na aba. `kind` é o que ele é, medido no DOM.
+   * Document order (back to front). Ranges in frames, inclusive.
+   * `index` is the element's position in the page walk: the label does NOT
+   * identify an element (two may be called ".caption"), so it is through it that
+   * the preview finds the element again to outline it when the layer is
+   * selected in the tab. `kind` is what it is, measured in the DOM.
    */
   layers: {
     name: string
@@ -867,14 +867,14 @@ export interface MotionLayersResult {
   }[]
   failedFonts: string[]
   /**
-   * As faixas da peça, quando ela tem alguma (o manifest `audio.json` da pasta, o
-   * arquivo convencional, ou o caminho que a tool passou). `url` é o arquivo
-   * servido pelo scheme — a aba toca junto com o preview — e vem null quando o
-   * áudio está FORA da pasta da composição: o render o muxa, o preview não o
-   * alcança. `start`/`end` são os segundos da peça em que a faixa entra e sai
-   * (`end` null = até o fim do arquivo); `error` é o manifest que não deu para
-   * ler, e nesse caso a peça toca muda e a aba diz por quê. `offset` é o segundo
-   * DO ARQUIVO em que o som começa (o corte inicial de um vídeo da página).
+   * The piece's tracks, when it has any (the folder's `audio.json` manifest, the
+   * conventional file, or the path the tool passed). `url` is the file
+   * served by the scheme — the tab plays it along with the preview — and comes null when the
+   * audio is OUTSIDE the composition's folder: the render muxes it, the preview does not
+   * reach it. `start`/`end` are the piece's seconds at which the track enters and leaves
+   * (`end` null = until the end of the file); `error` is the manifest that could not be
+   * read, and in that case the piece plays muted and the tab says why. `offset` is the
+   * second OF THE FILE at which the sound starts (the initial cut of a page video).
    */
   audio: {
     tracks: { name: string; url: string | null; start: number; end: number | null; offset?: number }[]
@@ -883,63 +883,63 @@ export interface MotionLayersResult {
 }
 
 /**
- * O render da aba começa por um diálogo de salvar do SISTEMA, para o arquivo
- * nascer onde a pessoa quiser. Cancelar não é erro: é ela desistindo, e a aba
- * volta ao repouso em vez de mostrar uma falha que não houve.
+ * The tab's render starts with a SYSTEM save dialog, so the file is
+ * born wherever the person wants. Cancelling is not an error: it is them giving up, and the tab
+ * goes back to rest instead of showing a failure that did not happen.
  */
 export interface MotionRenderCanceled {
   canceled: true
 }
 
-/** Espelho do MotionRenderResult do main (electron/lib/video/motion-store.ts). */
+/** Mirror of main's MotionRenderResult (electron/lib/video/motion-store.ts). */
 export interface MotionRenderResult {
   id: string
-  /** Caminho absoluto do arquivo renderizado. */
+  /** Absolute path of the rendered file. */
   path: string
   width: number
   height: number
   fps: number
   duration: number
   frames: number
-  /** WAV da trilha, quando o render pediu áudio separado e a peça tem som. */
+  /** WAV of the track, when the render asked for separate audio and the piece has sound. */
   audioPath?: string
 }
 
-/** O peso do arquivo (CRF/preset do encoder) — espelho do main. */
+/** The file's weight (encoder CRF/preset) — mirror of main. */
 export type MotionRenderQuality = "high" | "balanced" | "small"
 
 /**
- * O que o modal de render escolhe. O caminho e o nome do arquivo continuam
- * sendo do main (diálogo do sistema); aqui vai só o que é decisão de quem
- * renderiza: formato, peso, fps e se o áudio sai também sozinho.
+ * What the render modal chooses. The path and the file name remain
+ * main's (system dialog); only what is the decision of whoever renders goes here:
+ * format, weight, fps and whether the audio also comes out on its own.
  */
 export interface MotionRenderOptions {
   format?: MotionRenderFormat
   quality?: MotionRenderQuality
-  /** fps do arquivo; ausente = o da composição. */
+  /** fps of the file; absent = the composition's. */
   fps?: number
-  /** Escrever a trilha também sozinha, em WAV, ao lado do vídeo. */
+  /** Also write the track on its own, in WAV, next to the video. */
   separateAudio?: boolean
 }
 
-/** Documentos do agente (orbit-data/documents). O fonte é Markdown: o canvas
- *  do painel lê e grava por aqui, e o export renderiza o arquivo na hora. */
+/** Agent documents (orbit-data/documents). The source is Markdown: the panel's
+ *  canvas reads and writes through here, and the export renders the file on the spot. */
 export const documentApi = {
-  /** Baixa o documento. "md" copia o fonte; "pdf"/"docx" renderizam na hora
-   *  quando ainda não existem em disco. */
+  /** Downloads the document. "md" copies the source; "pdf"/"docx" render on the spot
+   *  when they do not exist on disk yet. */
   export: (id: string, format: DocumentDownload) =>
     window.ipcRenderer.invoke("document:export", id, format) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
     >,
-  /** O Markdown e a revisão em que ele está — a revisão volta na gravação. */
+  /** The Markdown and the revision it is based on — the revision comes back on save. */
   source: (id: string) =>
     window.ipcRenderer.invoke("document:source", id) as Promise<{
       markdown: string
       revision: number
     } | null>,
-  /** Grava a edição do usuário sobre a revisão em que ela se baseou. Recusa
-   *  quando o agente escreveu no meio do caminho, em vez de apagar o que ele
-   *  produziu; a revisão devolvida distingue o aviso do eco da nossa gravação. */
+  /** Saves the user's edit over the revision it was based on. It refuses
+   *  when the agent wrote in the meantime, instead of erasing what it
+   *  produced; the returned revision tells the notice apart from the echo of our save. */
   saveSource: (id: string, markdown: string, baseRevision?: number) =>
     window.ipcRenderer.invoke("document:saveSource", id, markdown, baseRevision) as Promise<
       | { ok: true; revision: number }
@@ -948,66 +948,66 @@ export const documentApi = {
     >,
   info: (id: string) =>
     window.ipcRenderer.invoke("document:info", id) as Promise<DocumentInfo | null>,
-  /** O documento que originou esta fonte, quando ela veio de uma promoção. */
+  /** The document this source came from, when it came from a promotion. */
   forSource: (sourceId: string) =>
     window.ipcRenderer.invoke("document:forSource", sourceId) as Promise<
       { documentId: string; title: string } | null
     >,
-  /** Promove o documento a fonte da conversa. Idempotente: se ele já virou
-   *  fonte e ela continua lá, devolve a mesma com `already`. */
+  /** Promotes the document to a conversation source. Idempotent: if it has already become
+   *  a source and it is still there, it returns the same one with `already`. */
   useAsSource: (sessionId: string, id: string) =>
     window.ipcRenderer.invoke("document:useAsSource", sessionId, id) as Promise<
       { ok: true; sourceId: string; already: boolean } | { ok: false; error: string }
     >,
-  /** É fonte desta conversa AGORA — o usuário pode tê-la removido depois. */
+  /** Is it a source of this conversation NOW — the user may have removed it afterwards. */
   isSource: (sessionId: string, id: string) =>
     window.ipcRenderer.invoke("document:isSource", sessionId, id) as Promise<boolean>,
 }
 
-/** O suficiente para decidir em que aba o documento abre e como intitulá-la. */
+/** Enough to decide which tab the document opens in and how to title it. */
 export type DocumentInfo = Pick<
   MediaEntry,
   "id" | "name" | "delivery" | "derived" | "formats" | "revision"
 >
 
-/** Galeria de mídia — ativos produzidos pelo agente (imagens, artefatos e documentos). */
+/** Media gallery — assets produced by the agent (images, artifacts and documents). */
 export const mediaApi = {
   list: (filter?: MediaFilter) => window.ipcRenderer.invoke("media:list", filter) as Promise<MediaEntry[]>,
   usage: () => window.ipcRenderer.invoke("media:usage") as Promise<MediaUsage>,
   remove: (ids: string[]) => window.ipcRenderer.invoke("media:delete", ids) as Promise<number>,
   cleanupScripts: () => window.ipcRenderer.invoke("media:cleanupScripts") as Promise<number>,
-  /** Vincula ativos (imagem/artefato/documento) a uma sessão adicional — usado
-   *  pelo fork, para "Neste chat" na galeria enxergar o que foi herdado. */
+  /** Links assets (image/artifact/document) to an additional session — used
+   *  by the fork, so that "In this chat" in the gallery sees what was inherited. */
   linkSessions: (ids: string[], sessionId: string) =>
     window.ipcRenderer.invoke("media:linkSessions", ids, sessionId) as Promise<void>,
-  /** Indexa imagens anteriores ao registry — idempotente, roda na 1ª abertura. */
+  /** Indexes images from before the registry — idempotent, runs on the 1st open. */
   backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
-  /** O acervo mudou (imagem salva ou apagada por qualquer caminho). A galeria
-   *  aberta não descobre sozinha: ela lê o índice uma vez. */
+  /** The collection changed (image saved or deleted by any path). The open
+   *  gallery does not find out on its own: it reads the index once. */
   onChanged: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on("media:changed", () => listener())
     return () => window.ipcRenderer.off("media:changed", wrapper)
   },
-  /** Salva um áudio do chat (orbit-audio:// ou o id) pelo diálogo do sistema. */
+  /** Saves an audio from the chat (orbit-audio:// or the id) through the system dialog. */
   exportAudio: (ref: string, suggestedName?: string) =>
     window.ipcRenderer.invoke("audio:export", ref, suggestedName) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
     >,
-  /** Salva a imagem em disco pelo diálogo do sistema. Aceita orbit-media://,
-   *  o id cru ou um data URL (anexo que ainda não foi para a galeria). */
+  /** Saves the image to disk through the system dialog. Accepts orbit-media://,
+   *  the raw id or a data URL (an attachment that has not gone to the gallery yet). */
   exportImage: (ref: string, suggestedName?: string) =>
     window.ipcRenderer.invoke("media:export", ref, suggestedName) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
     >,
-  /** Copia a imagem para a área de transferência como bitmap nativo — é o que
-   *  faz o Ctrl+V colar a IMAGEM em outro app, e não um caminho de arquivo. */
+  /** Copies the image to the clipboard as a native bitmap — it is what
+   *  makes Ctrl+V paste the IMAGE into another app, and not a file path. */
   copyImage: (ref: string) =>
     window.ipcRenderer.invoke("media:copy", ref) as Promise<
       { ok: true } | { ok: false; error?: string }
     >,
 }
 
-/** Um documento que a conversa lê: anexo dela (`docN`) ou fonte da pasta (`srcN`). */
+/** A document the conversation reads: its attachment (`docN`) or a folder source (`srcN`). */
 export interface SourceDocument {
   id: string
   sessionId: string
@@ -1024,52 +1024,52 @@ export interface SourceDocument {
 
 import type { PdfTextItem } from "@/src/lib/pdf-text"
 
-/** Entrada do sumario do PDF, ja achatada com o nivel de indentacao. */
+/** Table of contents entry of the PDF, already flattened with the indentation level. */
 export interface OutlineItem {
   title: string
   page: number | null
   level: number
 }
 
-/** Uma pagina do PDF desenhada por nos, com onde marcar o trecho citado. */
+/** A PDF page drawn by us, with where to mark the cited stretch. */
 export interface RenderedPage {
   page: number
   dataUrl: string
   width: number
   height: number
-  /** Texto posicionado em FRACAO da pagina (0 a 1): serve a qualquer zoom, e
-   *  e dele que saem o destaque e a camada de selecao, sem nova renderizacao. */
+  /** Text positioned as a FRACTION of the page (0 to 1): it works at any zoom, and
+   *  the highlight and the selection layer come out of it, with no new rendering. */
   items: PdfTextItem[]
 }
 
-/** O documento inteiro em texto, para o painel rolar e grifar o trecho. */
+/** The whole document as text, for the panel to scroll and highlight the stretch. */
 export interface SourceText {
-  /** Onde o pedido foi parar. Pode diferir do id pedido quando o arquivo
-   *  mudou de area depois da citacao. */
+  /** Where the request ended up. It may differ from the requested id when the file
+   *  moved to another area after the citation. */
   id: string
-  /** O id antigo, quando houve desvio — o painel mostra os dois. */
+  /** The old id, when there was a redirect — the panel shows both. */
   movedFrom?: string
   filename: string
   kind: SourceDocument["kind"]
   totalPages: number
   pages: { num: number; label?: string; lines: string[] }[]
   sourceUrl?: string
-  /** true quando existe arquivo original servivel (PDF/DOCX) — o modo
-   *  "original" do painel só aparece nesse caso. */
+  /** true when a serviceable original file exists (PDF/DOCX) — the panel's
+   *  "original" mode only shows up in that case. */
   hasOriginal: boolean
-  /** Como o original é desenhado: páginas (PDF) ou documento em HTML (.docx). */
+  /** How the original is drawn: pages (PDF) or the document in HTML (.docx). */
   originalKind?: "pdf" | "docx"
 }
 
 /**
- * Fontes da conversa — os documentos com que se conversa, não o que o agente
- * produziu (isso é a galeria de mídia).
+ * Conversation sources — the documents you converse with, not what the agent
+ * produced (that is the media gallery).
  *
- * Dois escopos: `own` são os anexos desta conversa e `shared` são as fontes da
- * pasta, declaradas de propósito e válidas para todas as conversas dela. Nada
- * passa de um para o outro sozinho — quem move é o usuário, na aba.
+ * Two scopes: `own` are this conversation's attachments and `shared` are the
+ * folder's sources, declared on purpose and valid for all its conversations. Nothing
+ * goes from one to the other on its own — the user is the one who moves it, in the tab.
  */
-/** Foto, GIF, áudio e vídeo da aba Fontes (o arquivo é um item da galeria). */
+/** Photo, GIF, audio and video of the Sources tab (the file is a gallery item). */
 export const materialsApi = {
   list: (scope: string) =>
     window.ipcRenderer.invoke("materials:list", scope) as Promise<{
@@ -1077,7 +1077,7 @@ export const materialsApi = {
       own: MaterialView[]
       bytes: number
     }>,
-  /** Vídeo de arquivo vai por `path` (o main copia); o resto, em `data` base64. */
+  /** A file video goes by `path` (main copies it); the rest, in base64 `data`. */
   add: (
     scope: string,
     files: { filename: string; mime: string; data?: string; path?: string }[],
@@ -1087,7 +1087,7 @@ export const materialsApi = {
       added: number
       errors: string[]
     }>,
-  /** Move entre a conversa e a pasta. A referência não muda. */
+  /** Moves between the conversation and the folder. The reference does not change. */
   setShared: (scope: string, id: string, shared: boolean) =>
     window.ipcRenderer.invoke("materials:setShared", scope, id, shared) as Promise<
       { ok: true } | { ok: false; error: string }
@@ -1107,31 +1107,31 @@ export const docsApi = {
       added: number
       errors: string[]
     }>,
-  /** Trecho colado como fonte — nem toda fonte é arquivo. */
+  /** Stretch pasted as a source — not every source is a file. */
   addText: (sessionId: string, title: string, text: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:addText", sessionId, title, text, shared) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
-  /** Página da web como fonte: baixa e guarda o texto (fotografia do
-   *  momento, não link vivo — a citação precisa continuar valendo). */
+  /** Web page as a source: it downloads and stores the text (a snapshot of
+   *  the moment, not a live link — the citation has to keep being valid). */
   addUrl: (sessionId: string, url: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:addUrl", sessionId, url, shared) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
-  /** A pasta que o chat novo vai herdar. O rascunho nao tem sessao de onde
-   *  ler isso, e sem ela a area compartilhada da aba sai vazia num chat
-   *  aberto pelo "+" de uma pasta. */
+  /** The folder the new chat will inherit. The draft has no session to
+   *  read it from, and without it the tab's shared area comes out empty in a chat
+   *  opened from a folder's "+". */
   setDraftFolder: (folderId: string | null) =>
     window.ipcRenderer.invoke("docs:setDraftFolder", folderId) as Promise<void>,
-  /** Miniatura da primeira pagina (data URL webp), ou null quando nao da para
-   *  gerar — a linha cai no icone do tipo. Pedida por linha, sob demanda. */
+  /** Thumbnail of the first page (webp data URL), or null when it cannot be
+   *  generated — the row falls back to the type icon. Requested per row, on demand. */
   thumb: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:thumb", sessionId, docId) as Promise<string | null>,
-  /** O documento inteiro em texto, para o painel rolar. */
+  /** The whole document as text, for the panel to scroll. */
   text: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:text", sessionId, docId) as Promise<SourceText | null>,
-  /** Paginas do PDF renderizadas, com os retangulos do trecho a grifar. */
-  /** O .docx anexado convertido em HTML, para o modo Original. */
+  /** Rendered PDF pages, with the rectangles of the stretch to highlight. */
+  /** The attached .docx converted into HTML, for the Original mode. */
   html: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:html", sessionId, docId) as Promise<{ html: string } | null>,
   render: (
@@ -1146,41 +1146,41 @@ export const docsApi = {
       outline: OutlineItem[]
       pages: RenderedPage[]
     } | null>,
-  /** Manda para a impressora, pelo dialogo do sistema. */
+  /** Sends it to the printer, through the system dialog. */
   print: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:print", sessionId, docId) as Promise<{
       ok: boolean
       error?: string
     }>,
-  /** Salva a fonte em disco (copia do original, quando existe). */
+  /** Saves the source to disk (a copy of the original, when there is one). */
   export: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:export", sessionId, docId) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: true; error?: string }
     >,
-  /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
+  /** Moves between the scopes (the id changes along: docN ↔ srcN). */
   setShared: (sessionId: string, docId: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<
       { ok: true; id: string } | { ok: false; error: string }
     >,
   remove: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:remove", sessionId, docId) as Promise<boolean>,
-  /** Chat novo virou sessão: as fontes do rascunho passam a ser dela. */
+  /** New chat became a session: the draft's sources become its own. */
   adoptDraft: (sessionId: string) =>
     window.ipcRenderer.invoke("docs:adoptDraft", sessionId) as Promise<number>,
-  /** Chat excluído: apaga só o escopo próprio dele (nunca o da pasta). */
+  /** Deleted chat: deletes only its own scope (never the folder's). */
   clearSession: (sessionId: string) =>
     window.ipcRenderer.invoke("docs:clearSession", sessionId) as Promise<void>,
   clearFolder: (folderId: string) =>
     window.ipcRenderer.invoke("docs:clearFolder", folderId) as Promise<void>,
-  /** O anexo pode chegar pela conversa enquanto a aba está aberta ao lado. */
+  /** The attachment may arrive through the conversation while the tab is open next to it. */
   onChanged: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on("documents:changed", () => listener())
     return () => window.ipcRenderer.off("documents:changed", wrapper)
   },
 }
 
-/** Publica o idioma efetivo para o main — quem dispara sem o renderer no laço
- *  (scheduler de rotinas) precisa lê-lo de algum lugar. */
+/** Publishes the effective language to the main process — whoever fires without
+ *  the renderer in the loop (routine scheduler) needs to read it somewhere. */
 export const appApi = {
   setLanguage: (language: string) => window.ipcRenderer.invoke("app:setLanguage", language),
 }
@@ -1197,7 +1197,7 @@ export const initApi = {
   }) => window.ipcRenderer.invoke("init:run", input),
   status: (directory: string) =>
     window.ipcRenderer.invoke("init:status", directory) as Promise<InitStatus>,
-  /** Cancela a análise em andamento. Devolve false se não havia nenhuma. */
+  /** Cancels the analysis in progress. Returns false if there was none. */
   stop: (directory: string) =>
     window.ipcRenderer.invoke("init:stop", directory) as Promise<boolean>,
   onEvent: (listener: (event: InitEvent) => void) => {
@@ -1206,7 +1206,7 @@ export const initApi = {
   },
 }
 
-/** Recusa do `fs:writeFile`, com o que a UI precisa para oferecer a saída. */
+/** Refusal from `fs:writeFile`, with what the UI needs to offer the way out. */
 export type WriteFileResult =
   | { ok: true; mtimeMs: number }
   | { ok: false; reason: "stale"; content?: string; mtimeMs?: number }
@@ -1216,7 +1216,7 @@ export type WriteFileResult =
       error?: string
     }
 
-/** Uma mensagem do eslint do projeto, como o main a entrega. */
+/** A message from the project's eslint, as main delivers it. */
 export interface LintMessage {
   line: number
   column: number
@@ -1224,15 +1224,15 @@ export interface LintMessage {
   endColumn?: number
   message: string
   ruleId: string | null
-  /** 1 = aviso, 2 = erro (o mesmo do eslint). */
+  /** 1 = warning, 2 = error (the same as eslint). */
   severity: number
 }
 
 export const lintApi = {
   /**
-   * Passa o BUFFER pelo eslint do projeto — não o arquivo em disco, porque o
-   * valor está em apontar o erro antes de salvar. `unavailable` significa
-   * projeto sem eslint utilizável: quem chama para de pedir.
+   * Runs the BUFFER through the project's eslint — not the file on disk, because the
+   * value is in pointing out the error before saving. `unavailable` means
+   * a project without a usable eslint: the caller stops asking.
    */
   file: (input: { root: string; filePath: string; content: string }) =>
     window.ipcRenderer.invoke("lint:file", input) as Promise<
@@ -1242,9 +1242,9 @@ export const lintApi = {
 
 export const fsApi = {
   /**
-   * Salva o arquivo aberto no painel. `roots` são as pastas do workspace e
-   * `expectedMtimeMs` é o mtime de quando o arquivo foi aberto — sem ele o
-   * save sobrescreve o que o agente (ou outro editor) tiver escrito no meio.
+   * Saves the file open in the panel. `roots` are the workspace folders and
+   * `expectedMtimeMs` is the mtime from when the file was opened — without it the
+   * save overwrites whatever the agent (or another editor) wrote in the meantime.
    */
   writeFile: (input: {
     filePath: string
@@ -1260,21 +1260,21 @@ export const fsApi = {
     window.ipcRenderer.invoke("fs:stat", filePath) as Promise<
       { ok: true; isDirectory: boolean; isFile: boolean; size: number } | { ok: false; error: string }
     >,
-  /** Quais destes caminhos ainda são pastas existentes. Vai tudo numa ida só:
-   *  é o que a revalidação de pastas que sumiram do disco pergunta. */
+  /** Which of these paths are still existing folders. It all goes in a single round trip:
+   *  it is what the revalidation of folders that vanished from disk asks. */
   existingDirs: (dirs: string[]) =>
     window.ipcRenderer.invoke("fs:existDirs", dirs) as Promise<Record<string, boolean>>,
 }
 
-/** Um arquivo cujo NOME casa com a consulta. */
+/** A file whose NAME matches the query. */
 export interface WsNameHit {
-  /** Caminho relativo à raiz do espaço. */
+  /** Path relative to the workspace root. */
   path: string
   name: string
   dir: string
 }
 
-/** Uma linha onde a consulta aparece. */
+/** A line where the query shows up. */
 export interface WsLineHit {
   line: number
   column: number
@@ -1282,7 +1282,7 @@ export interface WsLineHit {
   length: number
 }
 
-/** Ocorrências de um arquivo — `count` é o total, `lines` só as primeiras. */
+/** Occurrences in a file — `count` is the total, `lines` only the first ones. */
 export interface WsFileHits {
   path: string
   count: number
@@ -1300,9 +1300,9 @@ export interface WsTextResult {
 export interface WsMatchOptions {
   caseSensitive?: boolean
   regex?: boolean
-  /** Só casa a palavra isolada: `file` não entra em `walkFiles`. */
+  /** Only matches the whole word: `file` does not get into `walkFiles`. */
   wholeWord?: boolean
-  /** Na substituição, herda o formato do texto encontrado (File → Document). */
+  /** In the replacement, it inherits the format of the text found (File → Document). */
   preserveCase?: boolean
 }
 
@@ -1314,10 +1314,10 @@ export interface WsReplaceResult {
 }
 
 /**
- * A busca do espaço de trabalho — uma para o painel, o modal e a paleta do `@`.
+ * The workspace search — one for the panel, the modal and the `@` palette.
  *
- * `names` responde da memória (o índice do main); `text` lê disco e por isso
- * tem id e cancelamento: cada tecla nova aborta a varredura anterior.
+ * `names` answers from memory (main's index); `text` reads the disk and therefore
+ * has an id and cancellation: every new keystroke aborts the previous scan.
  */
 export const workspaceApi = {
   names: (input: { root: string; query: string; refresh?: boolean }) =>
@@ -1367,7 +1367,7 @@ export interface CompanionStatus {
   httpRunning: boolean
   ip: string
   pin: string | null
-  /** Erro de bind do servidor WS (ex.: porta ocupada por outra instância). */
+  /** Bind error of the WS server (e.g.: port taken by another instance). */
   bindError: string | null
   connectedClients: { deviceName: string; connectedAt: number }[]
 }
@@ -1376,8 +1376,8 @@ export const companionApi = {
   status: () => window.ipcRenderer.invoke("companion:status") as Promise<CompanionStatus>,
   setPairingMode: (active: boolean) =>
     window.ipcRenderer.invoke("companion:setPairingMode", active) as Promise<void>,
-  /** "Organizar" disparado pelo mobile: a reorganização mora aqui (o mapa de
-   *  pastas automáticas está no localStorage), então o companion só avisa. */
+  /** "Organize" fired by the mobile: the reorganization lives here (the automatic
+   *  folder map is in localStorage), so the companion only notifies. */
   onOrganizeSidebar: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on("companion:organize-sidebar", () => listener())
     return () => window.ipcRenderer.off("companion:organize-sidebar", wrapper)

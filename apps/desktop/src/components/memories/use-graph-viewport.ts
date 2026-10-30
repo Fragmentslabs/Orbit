@@ -1,22 +1,22 @@
 /**
- * Viewport do canvas de memórias — pan e zoom.
+ * Viewport of the memory canvas — pan and zoom.
  *
- * O transform vive num ref e é escrito direto no <g> da cena: durante um
- * arraste ou uma pinça o React não re-renderiza nada, então a cena inteira
- * (centenas de nós, com ícone em foreignObject cada um) não é reconciliada a
- * cada frame. Quem precisa do valor — o rótulo de % e o retângulo do minimapa
- * — assina via `subscribe`, e só esses pedacinhos redesenham.
+ * The transform lives in a ref and is written straight into the scene <g>: during a
+ * drag or a pinch React re-renders nothing, so the whole scene
+ * (hundreds of nodes, each with an icon in foreignObject) is not reconciled on
+ * every frame. Whoever needs the value — the % label and the minimap
+ * rectangle — subscribes through `subscribe`, and only those little pieces redraw.
  *
- * A roda é ouvida num listener nativo não-passivo: o onWheel do React é
- * passivo, o preventDefault não pegava e a janela dava o próprio zoom por
- * cima do nosso — daí o travamento e os saltos.
+ * The wheel is heard on a native non-passive listener: React's onWheel is
+ * passive, the preventDefault did not take and the window applied its own zoom
+ * over ours — hence the freezing and the jumps.
  *
- * Mapa dos gestos:
- *   roda / dois dedos      → anda nos dois eixos, 1:1 com o gesto
- *   shift + roda           → anda de lado
- *   ctrl (ou cmd) + roda   → zoom no ponteiro; a pinça do trackpad no macOS
- *                            chega exatamente assim, só que em deltas finos
- *   arrastar               → anda nos dois eixos, 1:1 com o cursor
+ * Map of the gestures:
+ *   wheel / two fingers    → moves on both axes, 1:1 with the gesture
+ *   shift + wheel          → moves sideways
+ *   ctrl (or cmd) + wheel  → zoom at the pointer; the trackpad pinch on macOS
+ *                            arrives exactly like this, only in fine deltas
+ *   drag                   → moves on both axes, 1:1 with the cursor
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
@@ -26,48 +26,48 @@ export interface Transform {
   k: number
 }
 
-/** Deltas em "linhas" (Firefox e algumas rodas) — passo padrão do Chromium. */
+/** Deltas in "lines" (Firefox and some wheels) — Chromium's default step. */
 const LINE_PX = 16
 /**
- * Fronteira entre delta fino (pinça de trackpad, que chega em passos pequenos
- * e contínuos) e o degrau grosso de um clique de roda (~100px de uma vez).
+ * Boundary between a fine delta (trackpad pinch, which arrives in small and
+ * continuous steps) and the coarse step of a wheel click (~100px at once).
  */
 const COARSE_DELTA = 40
 /**
- * Ganho do zoom por pixel de delta. A pinça soma uns ~200px ao longo do gesto
- * inteiro, então precisa de um ganho bem maior que a roda para um movimento
- * confortável dar um zoom perceptível (~4,5x aqui).
+ * Zoom gain per pixel of delta. The pinch adds up to ~200px along the whole
+ * gesture, so it needs a much bigger gain than the wheel for a comfortable
+ * movement to give a noticeable zoom (~4.5x here).
  */
 const ZOOM_SPEED_FINE = 0.0075
 const ZOOM_SPEED_COARSE = 0.0022
-/** Folga em px antes de um pointerdown virar arraste em vez de clique. */
+/** Slack in px before a pointerdown becomes a drag instead of a click. */
 const DRAG_SLOP = 3
-/** Duração das transições discretas (botões de zoom, centralizar). */
+/** Duration of the discrete transitions (zoom buttons, center). */
 const ANIM_MS = 220
 
 interface DragState {
   id: number
-  /** Ponteiro no início e na última amostra (esta reancora o zoom no meio). */
+  /** Pointer at the start and at the last sample (this one re-anchors the zoom in the middle). */
   startX: number
   startY: number
   lastX: number
   lastY: number
-  /** Transform no instante em que o arraste começou. */
+  /** Transform at the instant the drag started. */
   originX: number
   originY: number
   moved: boolean
 }
 
 export interface CanvasViewport {
-  /** Elemento que recebe roda e ponteiro. */
+  /** Element that receives the wheel and the pointer. */
   surfaceRef: React.MutableRefObject<SVGSVGElement | null>
-  /** Grupo que carrega o transform. */
+  /** Group that carries the transform. */
   sceneRef: React.MutableRefObject<SVGGElement | null>
   subscribe: (fn: () => void) => () => void
   getTransform: () => Transform
   setViewport: (next: Transform, animate?: boolean) => void
   zoomBy: (factor: number) => void
-  /** Verdadeiro quando o clique que está chegando é só o fim de um arraste. */
+  /** True when the click that is arriving is only the end of a drag. */
   wasDragged: () => boolean
   onPointerDown: (e: React.PointerEvent) => void
 }
@@ -83,7 +83,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
   const commitRaf = useRef(0)
   const animRaf = useRef(0)
   const drag = useRef<DragState | null>(null)
-  /** Sobrevive ao pointerup para o click seguinte poder consultá-lo. */
+  /** Survives the pointerup so the next click can consult it. */
   const dragged = useRef(false)
 
   const subscribe = useCallback((fn: () => void) => {
@@ -99,7 +99,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
     [minZoom, maxZoom],
   )
 
-  /** Escreve o transform no DOM. É o caminho quente: nada de React aqui. */
+  /** Writes the transform into the DOM. It is the hot path: no React here. */
   const paint = useCallback(() => {
     const g = sceneRef.current
     if (!g) return
@@ -107,7 +107,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
     g.setAttribute("transform", `translate(${x}, ${y}) scale(${k})`)
   }, [])
 
-  /** Avisa os assinantes no máximo uma vez por frame. */
+  /** Warns the subscribers at most once per frame. */
   const notify = useCallback(() => {
     if (commitRaf.current) return
     commitRaf.current = requestAnimationFrame(() => {
@@ -155,7 +155,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
     apply({ ...next, k: clampK(next.k) })
   }, [animateTo, apply, clampK, stopAnimation])
 
-  /** Zoom mantendo fixo o ponto (cx, cy), em coordenadas do container. */
+  /** Zoom keeping the point (cx, cy) fixed, in container coordinates. */
   const zoomAround = useCallback((k: number, cx: number, cy: number, animate = false) => {
     const t = transformRef.current
     const next = clampK(k)
@@ -164,8 +164,8 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
       x: cx - ((cx - t.x) / t.k) * next,
       y: cy - ((cy - t.y) / t.k) * next,
     }
-    // Zoom no meio de um arraste: reancora no ponteiro, senão o próximo
-    // pointermove devolveria o conteúdo para onde ele estava antes.
+    // Zoom in the middle of a drag: re-anchors on the pointer, otherwise the next
+    // pointermove would return the content to where it was before.
     const d = drag.current
     if (d) {
       d.originX = target.x
@@ -192,8 +192,8 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
     const el = surfaceRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
-      // Segura o zoom/scroll da própria janela — sem isto o gesto era
-      // disputado entre o canvas e o Chromium, e daí vinham os saltos.
+      // Holds the zoom/scroll of the window itself — without this the gesture was
+      // disputed between the canvas and Chromium, and that is where the jumps came from.
       e.preventDefault()
       stopAnimation()
       const rect = el.getBoundingClientRect()
@@ -219,8 +219,8 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
 
       const t = transformRef.current
       if (e.shiftKey && dx === 0) {
-        // Alguns navegadores já trocam os eixos sozinhos com shift (aí dx vem
-        // preenchido e cai no caso geral); nos outros a troca é aqui.
+        // Some browsers already swap the axes by themselves with shift (then dx comes
+        // filled and falls into the general case); in the others the swap is here.
         apply({ ...t, x: t.x - dy })
         return
       }
@@ -231,7 +231,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
   }, [apply, zoomAround, stopAnimation])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    // Botão esquerdo ou do meio; o direito fica para o menu de contexto.
+    // Left or middle button; the right one stays for the context menu.
     if (e.button !== 0 && e.button !== 1) return
     if (e.button === 1) e.preventDefault()
     stopAnimation()
@@ -258,7 +258,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
       if (!state.moved && Math.abs(dx) + Math.abs(dy) <= DRAG_SLOP) return
       state.moved = true
       dragged.current = true
-      // 1:1 com o cursor, nos dois eixos, desde o primeiro pixel.
+      // 1:1 with the cursor, on both axes, from the first pixel.
       apply({ ...transformRef.current, x: state.originX + dx, y: state.originY + dy })
     }
     const onUp = (ev: PointerEvent) => {
@@ -268,9 +268,9 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
       window.removeEventListener("pointerup", onUp)
       window.removeEventListener("pointercancel", onUp)
     }
-    // Escutar na window em vez de capturar o ponteiro: a captura reencaminha
-    // também o click para o elemento capturado, e aí clicar num nó deixaria
-    // de selecioná-lo.
+    // Listening on the window instead of capturing the pointer: the capture forwards
+    // the click to the captured element too, and then clicking a node would stop
+    // selecting it.
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
     window.addEventListener("pointercancel", onUp)
@@ -278,8 +278,8 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
 
   const wasDragged = useCallback(() => dragged.current, [])
 
-  // Sem lista de dependências de propósito: reafirma o transform depois de
-  // qualquer render, para o React nunca devolver o <g> à identidade.
+  // Without a dependency list on purpose: it reasserts the transform after
+  // any render, so React never returns the <g> to identity.
   useLayoutEffect(paint)
 
   useEffect(() => () => {
@@ -287,7 +287,7 @@ export function useCanvasViewport({ minZoom, maxZoom }: {
     if (animRaf.current) cancelAnimationFrame(animRaf.current)
   }, [])
 
-  // Identidade estável: o objeto entra nas dependências de quem consome.
+  // Stable identity: the object enters the deps of whoever consumes it.
   return useMemo(
     () => ({ surfaceRef, sceneRef, subscribe, getTransform, setViewport, zoomBy, wasDragged, onPointerDown }),
     [subscribe, getTransform, setViewport, zoomBy, wasDragged, onPointerDown],

@@ -11,11 +11,11 @@ const SWIPE_THRESHOLD = 60
 interface RevertBarProps {
   session: SessionInfo
   onUnrevert: (sessionId: string) => void
-  /** "Reverter também" os arquivos de autor incerto. */
+  /** "Revert as well" the files of uncertain authorship. */
   onRevertUncertain?: (sessionId: string) => void
   onDismiss: (sessionId: string) => void
-  /** Dentro da conversa o arrasto vertical (dy > 10) briga com a rolagem da
-   *  lista: lá a barra fecha só pelo X. Fora dela o gesto continua valendo. */
+  /** Inside the conversation the vertical drag (dy > 10) fights with the scroll of the
+   *  list: there the bar only closes through the X. Outside it the gesture still works. */
   swipeToDismiss?: boolean
 }
 
@@ -29,16 +29,16 @@ export function RevertBar({
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [dismissed, setDismissed] = useState(false)
-  // useState com inicializador lazy no lugar de `useRef(new ...).current`:
-  // valor igualmente estável, legível no render (react-hooks/refs proíbe ler
-  // ref aqui) e alocado uma única vez.
+  // useState with a lazy initializer instead of `useRef(new ...).current`:
+  // an equally stable value, readable during render (react-hooks/refs forbids reading a
+  // ref here) and allocated only once.
   const [translateY] = useState(() => new Animated.Value(0))
 
   const revert = session.revert
 
-  // O early return NÃO pode vir antes deste useRef: ao arrastar a barra,
-  // setDismissed(true) provoca um render que pularia o hook e o React
-  // derrubaria a árvore com "Rendered fewer hooks than expected".
+  // The early return CANNOT come before this useRef: when dragging the bar,
+  // setDismissed(true) triggers a render that would skip the hook and React
+  // would take the tree down with "Rendered fewer hooks than expected".
   const [panResponder] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) => gs.dy > 10,
@@ -67,7 +67,7 @@ export function RevertBar({
     }),
   )
 
-  // Agora sim: todos os hooks já rodaram.
+  // Now yes: all the hooks have already run.
   if (!revert || dismissed) return null
 
   const isCode = Boolean(revert.files || revert.diff)
@@ -86,7 +86,7 @@ export function RevertBar({
         ? t('revertBar.filesRevertedNone')
         : t('revertBar.filesReverted', { count })
       : t('revertBar.conversationReverted')
-  // Peças e galeria: o desktop desfaz nos dois modos e manda só as contagens.
+  // Pieces and gallery: the desktop undoes in both modes and sends only the counters.
   const media = revert.media
   const mediaParts = [
     media?.pieces ? t('revertBar.mediaPieces', { count: media.pieces }) : null,
@@ -98,7 +98,7 @@ export function RevertBar({
       : mediaParts.length > 0
         ? t('revertBar.mediaReverted', { what: mediaParts.join(', ') })
         : ''
-  // O que mudou depois do turno e ficou intacto.
+  // What changed after the turn and stayed intact.
   const filesKept = revert.conflicts?.length ?? 0
   const mediaKept = media?.conflicts ?? 0
   const keptParts = [
@@ -114,8 +114,8 @@ export function RevertBar({
       : null,
   ].filter(Boolean)
   const keptLabel = keptParts.length > 0 ? ` · ${keptParts.join(', ')}` : ''
-  // Mudou durante o turno por outra via (bash, MCP, algo de fora): não foi
-  // revertido — a pessoa decide.
+  // Changed during the turn by another path (bash, MCP, something from outside): it was not
+  // reverted — the person decides.
   const uncertainCount = revert.uncertain?.length ?? 0
   const uncertainLabel = uncertainCount > 0 ? ` · ${t('revertBar.uncertain', { count: uncertainCount })}` : ''
 

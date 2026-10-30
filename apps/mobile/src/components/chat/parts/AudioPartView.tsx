@@ -1,15 +1,15 @@
 /**
- * Áudio produzido pelo agente (tool audio_generate): player inline na bolha.
+ * Audio produced by the agent (tool audio_generate): inline player in the bubble.
  *
- * O `src` chega pronto do desktop — URL http absoluta com token no caminho
- * (fase 1, companion-assets). Aqui não se monta URL nenhuma: usa-se o que veio,
- * e quando não veio nada a part degrada para um card em vez de sumir (era o que
- * acontecia antes: `case 'audio'` não existia e caía no `default`).
+ * The `src` arrives ready from the desktop — absolute http URL with the token in the path
+ * (phase 1, companion-assets). Here no URL is assembled: what came is used,
+ * and when nothing came the part degrades to a card instead of vanishing (that was what
+ * happened before: `case 'audio'` did not exist and it fell into `default`).
  *
- * Player: `expo-audio`, o mesmo módulo do ditado. `useAudioPlayer` já libera o
- * player nativo ao desmontar; o pause explícito no cleanup existe porque
- * desmontar não é o mesmo que parar — sem ele o áudio continuava tocando depois
- * de sair da tela.
+ * Player: `expo-audio`, the same module as the dictation. `useAudioPlayer` already releases the
+ * native player on unmount; the explicit pause in the cleanup exists because
+ * unmounting is not the same as stopping — without it the audio kept playing after
+ * leaving the screen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -22,7 +22,7 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { UnavailablePart } from './UnavailablePart'
 
-/** `mm:ss` — o mesmo formato do player do desktop. */
+/** `mm:ss` — the same format as the desktop player. */
 export function formatClock(seconds: number): string {
   const total = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0
   const minutes = Math.floor(total / 60)
@@ -35,12 +35,12 @@ function clamp01(value: number): number {
 }
 
 /**
- * Barra de progresso arrastável sem dependência nova.
+ * Draggable progress bar without a new dependency.
  *
- * O responder do próprio RN resolve o gesto: `locationX` já vem relativo à
- * barra, então o arrasto vira uma fração de 0..1 sem medir a página. Durante o
- * arrasto o valor exibido vem do dedo (não do player) — senão a barra voltaria
- * para a posição antiga a cada atualização de status.
+ * The RN responder itself handles the gesture: `locationX` already comes relative to the
+ * bar, so the drag becomes a fraction of 0..1 without measuring the page. During the
+ * drag the displayed value comes from the finger (not from the player) — otherwise the bar would
+ * go back to the old position on every status update.
  */
 function SeekBar({
   progress,
@@ -66,7 +66,7 @@ function SeekBar({
   return (
     <View
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      // Altura maior que a barra: o alvo do dedo é o que importa, não a linha.
+      // Height greater than the bar: the finger target is what matters, not the line.
       style={styles.seekHitArea}
       accessibilityRole="adjustable"
       accessibilityLabel={label}
@@ -104,14 +104,14 @@ function SeekBar({
 function AudioPlayerCard({ part, src }: { part: AudioPart; src: string }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  // 250ms: barra fluida sem um render por quadro.
+  // 250ms: fluid bar without a render per frame.
   const player = useAudioPlayer({ uri: src }, { updateInterval: 250 })
   const status = useAudioPlayerStatus(player)
   const [scrub, setScrub] = useState<number | null>(null)
   const released = useRef(false)
 
-  // Sair da tela para o áudio: o player nativo é liberado pelo hook, mas antes
-  // disso ele segue tocando — pausar é o que o usuário espera.
+  // Leaving the screen with the audio playing: the native player is released by the hook, but before
+  // that it keeps playing — pausing is what the user expects.
   useEffect(() => {
     released.current = false
     return () => {
@@ -120,7 +120,7 @@ function AudioPlayerCard({ part, src }: { part: AudioPart; src: string }) {
       try {
         player.pause()
       } catch {
-        // Já liberado — nada a fazer.
+        // Already released — nothing to do.
       }
     }
   }, [player])
@@ -142,7 +142,7 @@ function AudioPlayerCard({ part, src }: { part: AudioPart; src: string }) {
       return
     }
     claimAudioFocus(player)
-    // Terminou: tocar de novo começa do início, como qualquer player.
+    // Finished: playing again starts from the beginning, like any player.
     if (status.didJustFinish) void player.seekTo(0)
     player.play()
   }, [player, status.playing, status.didJustFinish])

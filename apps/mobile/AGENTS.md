@@ -2,17 +2,18 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
 
-# Mobile x Desktop: feature gaps (rastreado)
+# Mobile x Desktop: feature gaps (tracked)
 
-## Pendente (fazer)
-1. **Filtros do catálogo de modelos** — desktop ModelsView filtra por provider, capacidade, preço, velocidade, contexto
-2. **Aba Fontes** — no desktop o usuário declara as fontes da conversa (arquivo, texto colado, site) e elas viram `srcN`/`docN` para o agente. No mobile não há como declarar nem listar: as fontes existem e o agente as usa, mas só dá para gerenciá-las no desktop
-3. **Visualizador de documento** — PDF/DOCX/planilha abrem no painel do desktop (com sumário, localizar, zoom, imprimir). No mobile o documento gerado é só anunciado, e a citação `#orbit-source/...` não tem para onde levar
+## Pending (to do)
+1. **Model catalog filters** — the desktop ModelsView filters by provider, capability, price, speed, context
+2. **Sources tab** — on the desktop the user declares the conversation's sources (file, pasted text, site) and they become `srcN`/`docN` for the agent. On mobile there is no way to declare or list them: the sources exist and the agent uses them, but they can only be managed on the desktop
+3. **Document viewer** — PDF/DOCX/spreadsheet open in the desktop panel (with outline, find, zoom, print). On mobile the generated document is only announced, and the `#orbit-source/...` citation has nowhere to lead
 
-## Concluído
-- Horas, tokens e custo por projeto na tela de uso (o `byProject` do resumo já vinha do companion e era descartado no app)
-- Rotação de modelos no mobile (tela de rotações + grupo no seletor), sincronizada com o desktop pelo companion (`GET /api/rotations`, WS `rotation:change` / `rotation:select` / `rotation:set`); quem roda a sequência continua sendo o engine do desktop
-- FilePart nas mensagens do assistente (`case 'file'` em ChatAssistantMessage.tsx)
-- DocumentPart anunciada em vez de virar buraco na mensagem (`case 'document'`) — mesmo tratamento que o artefato já tinha
-- Imagem anexada abre o ORIGINAL da galeria ao ampliar, não o thumbnail de 320px da bolha. Depende do desktop reescrever `FilePart.mediaUrl` para HTTP assinado (companion-media.ts): o app não conhece `orbit-media://`
-- MCP/Skills CRUD completo no mobile (criar, editar, excluir, importar skills; adicionar, editar, excluir, reconectar servidores MCP)
+## Done
+- Hours, tokens and cost per project on the usage screen (the summary's `byProject` already came from the companion and was discarded in the app)
+- Model rotation on mobile (rotations screen + group in the selector), synced with the desktop through the companion (`GET /api/rotations`, WS `rotation:change` / `rotation:select` / `rotation:set`); the desktop engine is still the one running the sequence
+- FilePart in the assistant messages (`case 'file'` in ChatAssistantMessage.tsx)
+- DocumentPart announced instead of leaving a hole in the message (`case 'document'`) — the same treatment the artifact already had
+- An attached image opens the gallery ORIGINAL on zoom, not the 320px thumbnail of the bubble. It depends on the desktop rewriting `FilePart.mediaUrl` to signed HTTP (companion-media.ts): the app does not know `orbit-media://`
+- Full MCP/Skills CRUD on mobile (create, edit, delete, import skills; add, edit, delete, reconnect MCP servers)
+

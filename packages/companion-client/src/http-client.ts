@@ -1,8 +1,8 @@
 /**
- * Cliente HTTP para o REST API do Orbit Desktop.
+ * HTTP client for the REST API of Orbit Desktop.
  *
- * Usado para operações simples de configuração (preferences, models, catalog)
- * que não precisam de streaming. Autenticação via Bearer token (PIN).
+ * Used for simple configuration operations (preferences, models, catalog)
+ * that do not need streaming. Authentication via Bearer token (PIN).
  */
 
 import type { ConnectionConfig } from './types'
@@ -35,17 +35,17 @@ export class CompanionHttp {
 
   constructor(config: ConnectionConfig) {
     this.baseUrl = `http://${config.host}:${config.port + 1}`
-    // Usa o token persistente quando disponível (não expira como o PIN)
+    // Uses the persistent token when available (it does not expire like the PIN)
     this.token = config.token ?? config.pin
   }
 
-  /** Atualiza a configuração (host/port/pin) após reconexão. */
+  /** Updates the configuration (host/port/pin) after reconnection. */
   updateConfig(config: ConnectionConfig): void {
     this.baseUrl = `http://${config.host}:${config.port + 1}`
     this.token = config.token ?? config.pin
   }
 
-  /** Substitui o token usado na autenticação (ex: após WS emitir token persistente). */
+  /** Replaces the token used in the authentication (e.g. after the WS issues a persistent token). */
   setToken(token: string): void {
     this.token = token
   }
@@ -60,7 +60,8 @@ export class CompanionHttp {
     return this.request('PATCH', '/api/preferences', patch)
   }
 
-  // ─── Models ──────────────────────────────────────────────────────────────
+  /** Model overrides per session (map sessionId → model) kept by the
+   *  desktop renderer. Used so the mobile inherits the model per chat. */
 
   async getSelectedModel(): Promise<HttpResult<{ providerId: string; modelId: string; workerModelId?: string }>> {
     return this.get('/api/models/selected')
@@ -74,42 +75,42 @@ export class CompanionHttp {
     return this.get('/api/catalog')
   }
 
-  /** Overrides de modelo por sessão (mapa sessionId → modelo) mantidos pelo
-   *  renderer do desktop. Usado para o mobile herdar o modelo por chat. */
+  /** Active modes per chat (search, browser, plan, subagents,
+   *  orchestration, vision, simple and brain) kept by the desktop renderer.
+   *  The mobile inherits the chat state when connecting. */
   async getSessionModels(): Promise<HttpResult<{ overrides: Record<string, { providerId: string; modelId: string }> }>> {
     return this.get('/api/session-models')
   }
 
-  /** Modos ativos por chat (pesquisa, navegador, plano, subagentes,
-   *  orquestração, visão, simples e brain) mantidos pelo renderer do desktop.
-   *  O mobile herda o estado do chat ao conectar. */
+  /** Thinking and autonomy PER CHAT (maps sessionId → preference) kept
+   *  by the desktop renderer. The mobile inherits on connect and then follows
+   *  through the WS event 'session:prefs-change'. */
   async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
     return this.get('/api/session-modes')
   }
 
-  /** Thinking e autonomia POR CHAT (mapas sessionId → preferência) mantidos
-   *  pelo renderer do desktop. O mobile herda no connect e depois acompanha
-   *  pelo evento WS 'session:prefs-change'. */
+  /** Thinking per model (toggle + variant) kept by the desktop renderer.
+   *  The mobile inherits the state when connecting and then follows through the WS event
+   *  'reasoning:change'. */
   async getSessionPrefs(): Promise<HttpResult<SessionPrefsSnapshot>> {
     return this.get('/api/session-prefs')
   }
 
-  /** Thinking por modelo (toggle + variante) mantido pelo renderer do desktop.
-   *  O mobile herda o estado ao conectar e depois acompanha pelo evento WS
-   *  'reasoning:change'. */
+  /** Model rotation of the desktop: list of rotations + which one is chosen
+   *  in each chat. The phone inherits the state when connecting and then follows
+   *  through the WS event 'rotation:change'. */
   async getReasoningPrefs(): Promise<HttpResult<{ prefs: ReasoningPrefsMap }>> {
     return this.get('/api/reasoning-prefs')
   }
 
-  /** Rotação de modelos do desktop: lista de rotações + qual está escolhida
-   *  em cada chat. O celular herda o estado ao conectar e depois acompanha
-   *  pelo evento WS 'rotation:change'. */
+  /** Global config of the delegated modes (model/thinking of the subagent and
+   *  orchestration workers, and model of the Vision mode) of the desktop. */
   async getRotations(): Promise<HttpResult<{ config: RotationConfig }>> {
     return this.get('/api/rotations')
   }
 
-  /** Config global dos modos delegados (modelo/thinking dos workers de
-   *  subagentes e orquestração, e modelo do modo Visão) do desktop. */
+  /** Global config of the delegated modes (model/thinking of the subagent and
+   *  orchestration workers, and model of the Vision mode) of the desktop. */
   async getWorkerConfig(): Promise<HttpResult<{ config: WorkerConfigSnapshot }>> {
     return this.get('/api/worker-config')
   }
@@ -177,20 +178,20 @@ export class CompanionHttp {
   }
 
   /**
-   * Dispara o fluxo OAuth do servidor no desktop. Responde na hora (202) —
-   * o navegador abre no computador e o desfecho aparece no /api/mcp/status.
+   * Triggers the server OAuth flow on the desktop. Answers right away (202) —
+   * the browser opens on the computer and the outcome appears in /api/mcp/status.
    */
   async authorizeMcp(name: string): Promise<HttpResult> {
     return this.request('POST', `/api/mcp/servers/${encodeURIComponent(name)}/authorize`)
   }
 
-  // ─── Voz (ditado) ────────────────────────────────────────────────────────
-  // O celular não roda modelo de voz: grava, converte para PCM16 mono e manda
-  // o base64 para o desktop transcrever (nenhum áudio sai para a nuvem).
+  // ─── Voice (dictation) ───────────────────────────────────────────────────
+  // The phone does not run a voice model: it records, converts to mono PCM16 and sends
+  // the base64 to the desktop to transcribe (no audio goes out to the cloud).
 
   /**
-   * Transcreve áudio PCM16 (base64, little-endian) no desktop.
-   * `sampleRate` é a taxa do PCM enviado (o app grava a 16 kHz, mono).
+   * Transcribes PCM16 audio (base64, little-endian) on the desktop.
+   * `sampleRate` is the rate of the PCM sent (the app records at 16 kHz, mono).
    */
   async transcribePcm(
     pcm: string,
@@ -201,11 +202,11 @@ export class CompanionHttp {
   }
 
   /**
-   * Lê o texto em voz alta: o desktop sintetiza e devolve a URL assinada do
-   * WAV. O caminho inverso do ditado — lá o áudio vai e o texto volta.
+   * Reads the text aloud: the desktop synthesizes it and returns the signed URL of the
+   * WAV. The opposite path of dictation — there the audio goes and the text comes back.
    *
-   * `voice`/`lang`/`speed` omitidos usam as preferências de voz do desktop,
-   * que é o que se quer no toque simples do botão.
+   * `voice`/`lang`/`speed` omitted use the desktop voice preferences,
+   * which is what one wants on a simple button tap.
    */
   async speak(
     text: string,
@@ -214,7 +215,7 @@ export class CompanionHttp {
     return this.request('POST', '/api/voice/speak', { text, ...opts })
   }
 
-  /** Estado dos motores de voz do desktop (ready + installed por motor). */
+  /** State of the desktop voice engines (ready + installed per engine). */
   async getVoiceStatus(): Promise<HttpResult<VoiceStatusResponse>> {
     return this.get('/api/voice/status')
   }
@@ -236,8 +237,8 @@ export class CompanionHttp {
   }
 
   // ─── Media ───────────────────────────────────────────────────────────────
-  // O registry de mídia vive no desktop (orbit-data/media). O servidor devolve
-  // as entradas com `url` já assinada (token na query) para o <Image> nativo.
+  // The media registry lives on the desktop (orbit-data/media). The server returns
+  // the entries with `url` already signed (token in the query) for the native <Image>.
 
   async listMedia(): Promise<HttpResult<MediaEntry[]>> {
     return this.get('/api/media')

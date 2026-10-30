@@ -1,26 +1,26 @@
-// Bridge macOS do Computer Use: JXA (osascript -l JavaScript) com a ponte
-// ObjC. Uma invocação = uma operação: o JSON de entrada chega em argv[0] e a
-// resposta sai como o retorno de run() (stdout). Nada aqui guarda estado entre
-// chamadas — AXUIElementRef não sobrevive ao processo, por isso o elemento é
-// re-encontrado pelo caminho (índices de AXChildren a partir da janela).
+// macOS bridge of Computer Use: JXA (osascript -l JavaScript) with the ObjC
+// bridge. One invocation = one operation: the input JSON arrives in argv[0] and the
+// answer comes out as the return of run() (stdout). Nothing here keeps state between
+// calls — AXUIElementRef does not survive the process, which is why the element is
+// found again by the path (AXChildren indices from the window).
 //
-// Este arquivo é importado com ?raw pelo driver e também lido pela probe da
-// Fase 0 (scripts/cu-probe.mjs): o código medido é o mesmo que roda no app.
+// This file is imported with ?raw by the driver and also read by the Phase 0 probe
+// (scripts/cu-probe.mjs): the code measured is the same one that runs in the app.
 
 ObjC.import('AppKit')
 ObjC.import('ApplicationServices')
 ObjC.import('CoreGraphics')
 
-// A assinatura padrão pede UniChar*, e o JXA não converte string JS para isso:
-// passada direto, a string some e o evento digita a tecla 0 ("a") — Fase 0.
-// Religada com void*, aceita os bytes UTF-16 de um NSData.
+// The default signature asks for UniChar*, and JXA does not convert a JS string to
+// that: passed straight through, the string vanishes and the event types key 0 ("a")
+// — Phase 0. Rebound with void*, it accepts the UTF-16 bytes of an NSData.
 ObjC.bindFunction('CGEventKeyboardSetUnicodeString', ['void', ['void*', 'unsigned long', 'void*']])
 var UTF16LE = 0x94000100
 
-// Intervalo de texto (CFRange) para AXSelectedTextRange: o JXA não monta o
-// struct sozinho (um objeto { location, length } chega zerado). Os bytes reais
-// — dois inteiros de 64 bits — vão num NSData, e o valor volta embrulhado com
-// castRefToObject; sem o embrulho o set responde OK e não seleciona nada.
+// Text range (CFRange) for AXSelectedTextRange: JXA does not build the struct on its
+// own (an object { location, length } arrives zeroed). The real bytes — two 64-bit
+// integers — go in an NSData, and the value comes back wrapped with castRefToObject;
+// without the wrapper the set answers OK and selects nothing.
 ObjC.bindFunction('AXValueCreate', ['void*', ['int', 'void*']])
 var AX_VALUE_CFRANGE = 4
 var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -46,17 +46,18 @@ var AX_OK = 0
 var AX_API_DISABLED = -25211
 var AX_CANNOT_COMPLETE = -25204
 
-// Uma ida ao app por nó: AXUIElementCopyMultipleAttributeValues traz tudo de
-// uma vez. A ordem importa — read() lê por posição. AXURL fica de fora: só
-// links e áreas web têm, e pedi-la em todo nó custava uma conversão por nó.
+// One trip to the app per node: AXUIElementCopyMultipleAttributeValues brings
+// everything at once. The order matters — read() reads by position. AXURL stays out:
+// only links and web areas have it, and asking for it on every node cost a conversion
+// per node.
 var ATTRS = [
   'AXRole', 'AXSubrole', 'AXTitle', 'AXValue', 'AXDescription', 'AXPosition', 'AXSize',
   'AXEnabled', 'AXFocused', 'AXChildren', 'AXPlaceholderValue', 'AXHelp', 'AXSelected',
 ]
 var URL_ROLES = { AXLink: 1, AXWebArea: 1 }
 
-// Papéis que nunca têm ação útil: pular a CopyActionNames economiza uma ida
-// ao app por nó, que é o custo dominante da árvore.
+// Roles that never have a useful action: skipping CopyActionNames saves one trip to
+// the app per node, which is the dominant cost of the tree.
 var NO_ACTION_ROLES = { AXStaticText: 1, AXScrollArea: 1, AXSplitter: 1, AXLayoutArea: 1, AXUnknown: 1 }
 
 function fail(code, message) {
@@ -73,8 +74,8 @@ function nsString(o) {
   return null
 }
 
-// Converte o que veio do AX para JS. AXValue (ponto, tamanho, erro) não tem
-// conversão direta no JXA — a descrição textual dele é estável e basta.
+// Converts what came from AX to JS. AXValue (point, size, error) has no direct
+// conversion in JXA — its textual description is stable and is enough.
 function toJs(o) {
   if (!o || o.isNil && o.isNil()) return null
   var s = nsString(o)
@@ -111,13 +112,13 @@ function clip(text, limit) {
 function actionNames(el) {
   var out = Ref()
   if ($.AXUIElementCopyActionNames(el, out) !== AX_OK) return []
-  // Só strings: o deepUnwrap converte o array inteiro numa chamada.
+  // Strings only: deepUnwrap converts the whole array in a single call.
   var names = ObjC.deepUnwrap(ObjC.castRefToObject(out[0]))
   return Array.isArray(names) ? names : []
 }
 
-// Ponto/tamanho chegam como AXValue, que o JXA não converte: a descrição
-// textual dele é estável ("x:120 y:80", "w:300 h:20").
+// Point/size arrive as AXValue, which JXA does not convert: its textual description
+// is stable ("x:120 y:80", "w:300 h:20").
 function struct(o) {
   if (o === null || o === undefined || typeof o === 'string' || typeof o === 'number' || typeof o === 'boolean') return null
   var d = ''
@@ -128,13 +129,13 @@ function struct(o) {
   return null
 }
 
-// Lê os atributos de um elemento numa única chamada. Campo seguro nunca tem o
-// valor devolvido — nem para o driver, nem para o modelo.
+// Reads the attributes of an element in a single call. A secure field never has its
+// value returned — neither to the driver nor to the model.
 //
-// Conversão: um unwrap raso do array e um unwrap por item. Strings, números,
-// booleanos e a lista de filhos saem prontos; o que sobra objeto é AXValue
-// (ponto, tamanho ou atributo ausente). Medido na Fase 0: 4x mais rápido do que
-// testar a classe de cada valor, que era 65% do tempo da árvore.
+// Conversion: a shallow unwrap of the array and one unwrap per item. Strings,
+// numbers, booleans and the children list come out ready; what remains an object is
+// AXValue (point, size or a missing attribute). Measured in Phase 0: 4x faster than
+// testing the class of each value, which was 65% of the tree time.
 function read(el, textLimit, withActions) {
   var out = Ref()
   var err = $.AXUIElementCopyMultipleAttributeValues(el, $(ATTRS), 0, out)
@@ -154,7 +155,7 @@ function read(el, textLimit, withActions) {
   else if (typeof value === 'number' || typeof value === 'boolean') value = String(value)
   else if (typeof value === 'string') value = clip(value, textLimit)
   else value = clip(value ? nsString(raw[3]) : null, textLimit)
-  // Do valor bruto: o unwrap de um AXValue não é undefined, é um {} vazio.
+  // From the raw value: the unwrap of an AXValue is not undefined, it is an empty {}.
   var pos = struct(raw[5])
   var size = struct(raw[6])
   var children = Array.isArray(v[9]) ? v[9] : null
@@ -187,15 +188,16 @@ function appElement(pid) {
   return $.AXUIElementCreateApplication(pid)
 }
 
-// Sem a permissão, o AX devolve erros diferentes conforme a chamada (-25211,
-// -25204): a checagem explícita dá um erro só, que o driver sabe explicar.
+// Without the permission, AX returns different errors depending on the call (-25211,
+// -25204): the explicit check gives a single error, which the driver knows how to
+// explain.
 function requireTrust() {
   var trusted = $.AXIsProcessTrusted()
   if (!(trusted === true || trusted === 1)) fail('axDenied', 'Accessibility permission is not granted to Orbit.')
 }
 
-// Timeout de mensageria: sem isto um app travado segura CADA chamada AX por
-// ~6 s (padrão do sistema). No elemento system-wide vale para todos.
+// Messaging timeout: without this a stuck app holds EACH AX call for ~6 s (system
+// default). On the system-wide element it applies to all of them.
 function setGlobalTimeout(seconds) {
   try { $.AXUIElementSetMessagingTimeout($.AXUIElementCreateSystemWide(), seconds) } catch (_) {}
 }
@@ -210,8 +212,8 @@ function windowsOf(app) {
   return list
 }
 
-// A janela AX que corresponde à janela do CGWindowList: os dois usam o mesmo
-// espaço (pontos, origem no topo do monitor principal), então o frame casa.
+// The AX window that corresponds to the CGWindowList window: both use the same space
+// (points, origin at the top of the main monitor), so the frame matches.
 function findWindow(pid, target) {
   var app = appElement(pid)
   var wins = windowsOf(app)
@@ -243,8 +245,8 @@ function childAt(el, index) {
   return r.value.array.objectAtIndex(index)
 }
 
-// Re-caminha o path e confere a identidade: um índice de uma observação velha
-// que hoje aponta para outro elemento vira erro, nunca um clique no lugar errado.
+// Walks the path again and checks the identity: an index from an old observation that
+// today points at another element becomes an error, never a click in the wrong place.
 function resolvePath(pid, target, path, expect) {
   var found = findWindow(pid, target)
   var el = found.window
@@ -263,12 +265,12 @@ function resolvePath(pid, target, path, expect) {
   return { app: found.app, el: el }
 }
 
-// ---------------------------------------------------------------- operações
+// ---------------------------------------------------------------- operations
 
-// Pedido de Gravação de Tela pelo caminho oficial do macOS. Roda num filho do
-// Orbit, então o pedido sai em nome do Orbit (processo responsável). O
-// desktopCapturer sozinho não bastou no build instalado: o macOS negava "por
-// política" sem diálogo e sem pôr o Orbit na lista.
+// Screen Recording request through the official macOS path. It runs in a child of
+// Orbit, so the request goes out on behalf of Orbit (responsible process). The
+// desktopCapturer alone was not enough in the installed build: macOS denied "by
+// policy" without a dialog and without putting Orbit in the list.
 function opRequestScreen() {
   ObjC.bindFunction('CGPreflightScreenCaptureAccess', ['bool', []])
   ObjC.bindFunction('CGRequestScreenCaptureAccess', ['bool', []])
@@ -290,7 +292,7 @@ function opApps() {
   var apps = []
   for (var i = 0; i < running.count; i++) {
     var a = running.objectAtIndex(i)
-    // activationPolicy chega como string pela ponte.
+    // activationPolicy arrives as a string through the bridge.
     if (Number(a.activationPolicy) !== 0) continue
     apps.push({
       pid: a.processIdentifier,
@@ -300,7 +302,7 @@ function opApps() {
       hidden: a.hidden === true,
     })
   }
-  // Na tela, excluindo elementos da área de trabalho, em ordem de frente para trás.
+  // On screen, excluding desktop elements, in front-to-back order.
   var list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1 | 16, 0))
   var windows = []
   for (var j = 0; j < list.count; j++) {
@@ -315,7 +317,7 @@ function opApps() {
     windows.push({
       id: ObjC.unwrap(d.objectForKey('kCGWindowNumber')),
       pid: ObjC.unwrap(d.objectForKey('kCGWindowOwnerPID')),
-      // O título só vem com Gravação de Tela concedida; sem ela, null.
+      // The title only comes with Screen Recording granted; without it, null.
       title: ObjC.unwrap(d.objectForKey('kCGWindowName')) || null,
       frame: [ObjC.unwrap(b.objectForKey('X')), ObjC.unwrap(b.objectForKey('Y')), w, h],
     })
@@ -323,11 +325,11 @@ function opApps() {
   return { apps: apps, windows: windows }
 }
 
-// Liga a árvore de acessibilidade de apps Chromium/Electron, que por padrão
-// expõem quase nada. AXManualAccessibility é o pedido do Electron e vale para
-// qualquer app (os nativos só recusam). AXEnhancedUserInterface é o do Chrome,
-// mas mexe em animação de janela de app nativo — só com `full` (navegadores
-// Chromium, decididos pelo driver).
+// Turns on the accessibility tree of Chromium/Electron apps, which by default expose
+// almost nothing. AXManualAccessibility is Electron's request and holds for any app
+// (native ones just refuse). AXEnhancedUserInterface is Chrome's, but it messes with
+// window animation in a native app — only with `full` (Chromium browsers, decided by
+// the driver).
 function enhance(app, full) {
   var yes = $.NSNumber.numberWithBool(true)
   var a = $.AXUIElementSetAttributeValue(app, $('AXManualAccessibility'), yes)
@@ -345,9 +347,9 @@ function opRestore(args) {
   return { restored: (args.pids || []).length }
 }
 
-// Árvore por BFS com orçamento (nós, profundidade, filhos por nó e prazo): o
-// orçamento cobre a janela por camadas, em vez de uma barra lateral grande
-// consumir tudo antes do conteúdo. A ordem de exibição (DFS) é feita no driver.
+// BFS tree with a budget (nodes, depth, children per node and deadline): the budget
+// covers the window in layers, instead of one big sidebar consuming everything before
+// the content. The display order (DFS) is done in the driver.
 function opTree(args) {
   requireTrust()
   var started = Date.now()
@@ -359,9 +361,9 @@ function opTree(args) {
   setGlobalTimeout(args.axTimeout || 0.5)
   var app = appElement(args.pid)
   var enhanced = args.enhance ? enhance(app, args.enhanceFull === true) : false
-  // O Chromium monta a árvore de forma assíncrona depois do pedido: lida na
-  // hora, ela ainda tem só a moldura (Fase 0: 13 nós → 250+ depois de ~300 ms).
-  // Quem chama só pede a espera na primeira vez em cada app.
+  // Chromium builds the tree asynchronously after the request: read right away, it
+  // still has only the chrome (Phase 0: 13 nodes → 250+ after ~300 ms). The caller
+  // only asks for the wait the first time in each app.
   if (enhanced && args.enhanceWaitMs) pause(args.enhanceWaitMs)
   var found = findWindow(args.pid, args.window)
   var nodes = []
@@ -416,12 +418,12 @@ function opTree(args) {
   }
 }
 
-// ------------------------------------------------------------- entrada
+// ------------------------------------------------------------- input
 
 var EV = { leftDown: 1, leftUp: 2, rightDown: 3, rightUp: 4, moved: 5, leftDragged: 6, otherDown: 25, otherUp: 26 }
 var FIELD_CLICK_STATE = 1
-// Janela sob o ponteiro: com estes campos, o evento entregue por pid acha a
-// janela certa mesmo com o app em segundo plano.
+// Window under the pointer: with these fields, the event delivered by pid finds the
+// right window even with the app in the background.
 var FIELD_WINDOW_UNDER = 91
 var FIELD_WINDOW_CAN_HANDLE = 92
 
@@ -442,9 +444,9 @@ function mouseEvent(type, x, y, button, windowId, clicks) {
 
 function pause(ms) { delay(ms / 1000) }
 
-// Deslize do cursor REAL até o alvo (só no ponteiro global): em vez de pular,
-// percorre uma curva suavizada (ease-in-out) em ~16 ms por passo — a pessoa
-// acompanha com os olhos onde o agente vai agir. Abaixo de 4 px não anima.
+// Slide of the REAL cursor to the target (global pointer only): instead of jumping,
+// it travels an eased curve (ease-in-out) at ~16 ms per step — the person follows with
+// their eyes where the agent is going to act. Below 4 px it does not animate.
 var GLIDE_MS = 240
 function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }
 function glide(x, y, ms) {
@@ -498,7 +500,7 @@ function opDrag(args) {
 
 function opScroll(args) {
   requireTrust()
-  // A roda age onde o cursor está: no global, ele desliza até lá primeiro.
+  // The wheel acts where the cursor is: in global mode, it slides there first.
   if ((args.mode || 'pid') === 'global') {
     glide(args.x, args.y, args.glideMs)
     $.CGEventPost(0, mouseEvent(EV.moved, args.x, args.y, 0, 0, 0))
@@ -509,8 +511,8 @@ function opScroll(args) {
   return { done: 'scroll' }
 }
 
-// Teclas: códigos virtuais e flags resolvidos no driver (TS). Texto vai como
-// Unicode, um grapheme por evento — acentos e emoji chegam inteiros.
+// Keys: virtual codes and flags resolved in the driver (TS). Text goes as Unicode, one
+// grapheme per event — accents and emoji arrive whole.
 function opKeys(args) {
   requireTrust()
   var mode = args.mode || 'pid'
@@ -536,7 +538,7 @@ function opKeys(args) {
     for (var j = 0; j < parts.length; j++) {
       var kd = $.CGEventCreateKeyboardEvent($(), 0, true)
       var ku = $.CGEventCreateKeyboardEvent($(), 0, false)
-      // length em unidades UTF-16 — o mesmo que String.length no JS.
+      // length in UTF-16 units — the same as String.length in JS.
       var bytes = $(parts[j]).dataUsingEncoding(UTF16LE).bytes
       $.CGEventKeyboardSetUnicodeString(kd, parts[j].length, bytes)
       $.CGEventKeyboardSetUnicodeString(ku, parts[j].length, bytes)
@@ -555,10 +557,10 @@ function opActivate(args) {
   return { done: 'activate' }
 }
 
-// Executa uma ação AX. "Não completou" (-25204) não é falha: a ação que abre
-// animação ou diálogo costuma rodar e só a resposta atrasar (Fase 0: o botão de
-// tela cheia entrou em tela cheia e respondeu -25204). Tratar como falha faria
-// tentar outra ação — ou o ancestral — e disparar duas coisas.
+// Runs an AX action. "Did not complete" (-25204) is not a failure: the action that
+// opens an animation or a dialog usually runs and only the answer is late (Phase 0:
+// the full screen button went full screen and answered -25204). Treating it as a
+// failure would make it try another action — or the ancestor — and fire two things.
 function perform(el, action) {
   var err = $.AXUIElementPerformAction(el, $(action))
   if (err === AX_OK) return 'ok'
@@ -566,7 +568,7 @@ function perform(el, action) {
   return 'failed'
 }
 
-// Ações por elemento: tudo que o AX resolve sem mexer no ponteiro do usuário.
+// Actions by element: everything AX resolves without touching the user's pointer.
 function opElement(args) {
   requireTrust()
   setGlobalTimeout(args.axTimeout || 1)
@@ -600,8 +602,8 @@ function opElement(args) {
     return { done: 'setValue', node: node, readBack: after }
   }
   if (args.kind === 'select') {
-    // O valor INTEIRO (o da árvore vem cortado): os índices do AX são UTF-16,
-    // os mesmos do String do JS.
+    // The WHOLE value (the one from the tree comes clipped): AX indices are UTF-16,
+    // the same as the JS String's.
     var full = copyAttr(el, 'AXValue').value
     if (typeof full !== 'string') fail('badRequest', 'The element has no text to select.')
     var start = 0
@@ -626,11 +628,11 @@ function opElement(args) {
   fail('badRequest', 'Unknown element action: ' + args.kind)
 }
 
-// Clique por coordenada no modo dirigido. Evento de mouse entregue por pid é
-// ignorado pelo AppKit (Fase 0: nem com o app na frente) — então o ponto vira
-// elemento pelo hit-test do AX e a ação vai pela acessibilidade: AXPress (ou a
-// pedida), menu de contexto, ou foco em campo de texto. Sobe até 4 ancestrais
-// porque o hit-test costuma cair num texto ou imagem dentro do botão.
+// Click by coordinate in directed mode. A mouse event delivered by pid is ignored by
+// AppKit (Phase 0: not even with the app in front) — so the point becomes an element
+// through the AX hit-test and the action goes through accessibility: AXPress (or the
+// requested one), context menu, or focus on a text field. It goes up to 4 ancestors
+// because the hit-test usually lands on a text or image inside the button.
 var TEXT_ROLES = { AXTextField: 1, AXTextArea: 1, AXComboBox: 1, AXSearchField: 1 }
 function opHit(args) {
   requireTrust()
@@ -661,9 +663,9 @@ function opHit(args) {
   return { done: null, node: first }
 }
 
-// Rolagem no modo dirigido: a roda do mouse entregue por pid também é
-// ignorada (Fase 0). Acha a área de rolagem sob o ponto e move a barra dela
-// pelo AXValue (0..1), convertendo os pixels pedidos em fração do conteúdo.
+// Scroll in directed mode: the mouse wheel delivered by pid is ignored too (Phase 0).
+// It finds the scroll area under the point and moves its bar through AXValue (0..1),
+// converting the requested pixels into a fraction of the content.
 function opScrollAx(args) {
   requireTrust()
   setGlobalTimeout(args.axTimeout || 1)
@@ -688,7 +690,7 @@ function opScrollAx(args) {
       var total = content ? (vertical ? content.h : content.w) : 0
       var range = total - visible
       if (!(range > 0)) return { done: null, reason: 'nothingToScroll' }
-      // Roda positiva = conteúdo desce = barra sobe (valor menor).
+      // Positive wheel = content goes down = bar goes up (smaller value).
       var delta = -(vertical ? args.dy : args.dx) / range
       var next = Math.min(1, Math.max(0, current + delta))
       var err = $.AXUIElementSetAttributeValue(bar.element, $('AXValue'), $.NSNumber.numberWithDouble(next))
@@ -700,9 +702,9 @@ function opScrollAx(args) {
   return { done: null, reason: 'noScrollArea' }
 }
 
-// Seleção de texto no elemento com foco do app: o retorno de arrastar e de
-// clique duplo/triplo. Sem isto, "arrastei" saía mesmo quando o arrasto não
-// selecionou nada (Fase 0: arrasto abaixo da linha de texto).
+// Text selection in the app's focused element: the return of dragging and of a
+// double/triple click. Without it, "I dragged" came out even when the drag selected
+// nothing (Phase 0: a drag below the text line).
 function opSelection(args) {
   requireTrust()
   setGlobalTimeout(0.5)
@@ -720,9 +722,9 @@ function opSelection(args) {
   return { selection: { location: raw.location, length: raw.length, text: clip(text, 120) } }
 }
 
-// Texto selecionado no app, SEM o corte de 120 caracteres do opSelection: é o
-// que o overlay (⇧⌘espaço) entrega ao modelo quando a pessoa pede "traduz
-// isso". Devolve null quando não há seleção — nunca o texto inteiro do campo.
+// Text selected in the app, WITHOUT the 120-character cut of opSelection: it is what
+// the overlay (⇧⌘space) delivers to the model when the person asks "translate this".
+// Returns null when there is no selection — never the whole text of the field.
 function opReadSelection(args) {
   requireTrust()
   setGlobalTimeout(0.8)
@@ -732,13 +734,13 @@ function opReadSelection(args) {
   if (picked === null || picked === undefined) return { selection: null }
   var text = String(picked)
   if (!text.trim()) return { selection: null }
-  // 20k é teto de contexto, não de seleção: um documento inteiro selecionado
-  // por acidente não pode virar a mensagem.
+  // 20k is a context ceiling, not a selection one: a whole document selected by
+  // accident cannot become the message.
   return { selection: { location: 0, length: text.length, text: text.slice(0, 20000) } }
 }
 
-// O elemento com foco de um app (ou do sistema, sem pid): é o que recebe a
-// digitação — o driver confere aqui que não é um campo de senha.
+// The focused element of an app (or of the system, without a pid): it is what receives
+// the typing — the driver checks here that it is not a password field.
 function opFocused(args) {
   requireTrust()
   setGlobalTimeout(0.5)

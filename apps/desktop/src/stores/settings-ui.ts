@@ -3,13 +3,13 @@ import { create } from "zustand"
 import type { SettingsTab } from "@shared/ui-destinations"
 
 /**
- * Estado global do SettingsDialog: permite abrir de qualquer ponto da UI
- * (menu da sidebar, engrenagem do PermissionModePicker, cartão `nav` do chat)
- * já na aba certa.
+ * Global state of the SettingsDialog: it allows opening from any point of the UI
+ * (sidebar menu, PermissionModePicker gear, the chat's `nav` card)
+ * already on the right tab.
  */
 
-// A união mora em @shared/ui-destinations porque o registro de destinos precisa
-// nomear as abas; reexportada aqui para quem já importava deste módulo.
+// The union lives in @shared/ui-destinations because the destination registry has to
+// name the tabs; re-exported here for whoever already imported from this module.
 export type { SettingsTab }
 
 interface SettingsUiState {

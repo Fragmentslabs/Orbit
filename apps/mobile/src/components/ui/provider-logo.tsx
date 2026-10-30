@@ -3,9 +3,9 @@ import { View } from 'react-native'
 import { SvgXml } from 'react-native-svg'
 
 /**
- * Cache de módulo dos SVGs já baixados (por providerId) + notificação para o
- * useSyncExternalStore: o catálogo re-renderiza as linhas com frequência
- * (busca, scroll virtualizado) e os logos são minúsculos e imutáveis.
+ * Module cache of the SVGs already downloaded (by providerId) + notification to
+ * useSyncExternalStore: the catalog re-renders the rows often
+ * (search, virtualized scroll) and the logos are tiny and immutable.
  */
 const cache = new Map<string, string>()
 const listeners = new Set<() => void>()
@@ -36,12 +36,12 @@ function fetchLogo(providerId: string) {
 }
 
 /**
- * Logo do provedor (models.dev) com cor controlada.
+ * Provider logo (models.dev) with a controlled color.
  *
- * Os SVGs do models.dev usam `fill="currentColor"`. O expo-image não resolve
- * `currentColor` no native e o `tintColor` não é aplicado a SVG — resultado:
- * logo preto em qualquer tema. O react-native-svg resolve `currentColor`
- * através da prop `color` do Svg, então o logo assume a cor pedida.
+ * The models.dev SVGs use `fill="currentColor"`. expo-image does not resolve
+ * `currentColor` on native and `tintColor` is not applied to SVG — result:
+ * a black logo in any theme. react-native-svg resolves `currentColor`
+ * through the `color` prop of Svg, so the logo takes on the requested color.
  */
 export function ProviderLogo({
   providerId,

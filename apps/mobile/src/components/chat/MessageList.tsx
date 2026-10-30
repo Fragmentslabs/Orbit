@@ -15,9 +15,9 @@ interface MessageListProps {
   onReply?: (message: ChatMessage) => void
   ListFooterComponent?: React.ReactElement
   onLoadOlder?: () => void
-  /** Avisa quando a lista sai/volta ao fim — quem mostra o chip de pendência
-   *  usa isso para saber se o card do pedido está fora de vista. Só dispara
-   *  na MUDANÇA (o scroll é contínuo e não pode re-renderizar a tela). */
+  /** Notifies when the list leaves/returns to the end — whoever shows the pending
+   *  chip uses this to know whether the request card is out of view. It only fires
+   *  on the CHANGE (the scroll is continuous and cannot re-render the screen). */
   onAtBottomChange?: (atBottom: boolean) => void
 }
 
@@ -26,10 +26,10 @@ export interface MessageListHandle {
   scrollToEnd: () => void
 }
 
-// memo: a lista não pode re-renderizar quando o modo chat/código troca (o
-// delay da troca de aba era em parte o FlatList inteiro reconciliando). Com
-// props estáveis (messages por referência, footer via useMemo no ChatScreen),
-// o memo segura e a lista fica intocada.
+// memo: the list cannot re-render when the chat/code mode changes (the
+// delay of the tab switch was partly the whole FlatList reconciling). With
+// stable props (messages by reference, footer via useMemo in ChatScreen),
+// the memo holds and the list stays untouched.
 export const MessageList = memo(
   forwardRef<MessageListHandle, MessageListProps>(function MessageList(
     { messages, isStreaming, onRevert, onReply, ListFooterComponent, onLoadOlder, onAtBottomChange },
@@ -38,9 +38,9 @@ export const MessageList = memo(
     const listRef = useRef<FlatList<ChatMessage>>(null)
     const [isAtBottom, setIsAtBottom] = useState(true)
     const loadingOlderRef = useRef(false)
-    // guia o autoscroll pelo crescimento real do conteúdo durante o streaming.
+    // guides the autoscroll by the real growth of the content during streaming.
     const pinnedRef = useRef(true)
-    /** Último valor avisado ao pai — evita um setState por evento de scroll. */
+    /** Last value notified to the parent — avoids a setState per scroll event. */
     const lastAtBottomRef = useRef(true)
     const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
@@ -54,7 +54,7 @@ export const MessageList = memo(
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
       const atBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 60
       setIsAtBottom(atBottom)
-      // Subir acima do limite desancora; chegar no fundo re-ancora.
+      // Going above the limit unanchors; reaching the bottom re-anchors.
       pinnedRef.current = atBottom
       if (atBottom !== lastAtBottomRef.current) {
         lastAtBottomRef.current = atBottom
@@ -77,7 +77,7 @@ export const MessageList = memo(
 
     }, [])
 
-    // Auto-scroll quando o teclado abre (mantém últimas mensagens visíveis)
+    // Auto-scroll when the keyboard opens (keeps the last messages visible)
     useEffect(() => {
       const show = Keyboard.addListener('keyboardDidShow', () => {
         if (isAtBottom) {
@@ -94,22 +94,22 @@ export const MessageList = memo(
         try {
           listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.35 })
         } catch {
-          // ignora — item ainda não medido, o fallback abaixo cobre esse caso
+          // ignore — item not measured yet, the fallback below covers that case
         }
       },
       scrollToEnd: () => {
-        // Re-ancora antes de rolar: sem isso o primeiro evento de scroll
-        // durante a animação desancoraria de novo e o chip não sumiria.
+        // Re-anchors before scrolling: without this the first scroll event
+        // during the animation would unanchor again and the chip would not go away.
         pinnedRef.current = true
         setIsAtBottom(true)
         listRef.current?.scrollToEnd({ animated: true })
       },
     }), [messages])
 
-    // renderItem estável: inline, ele era recriado a cada render da lista e as
-    // props das linhas vinham novas junto — o memo do MessageBubble não segurava
-    // nada, então TODA a janela visível re-renderizava a cada flush de delta do
-    // streaming. `onRevert` recebe o id, e não uma closure por linha.
+    // stable renderItem: inline, it was recreated on every render of the list and the
+    // props of the rows came in new along with it — the memo of MessageBubble held
+    // nothing, so the WHOLE visible window re-rendered on every delta flush of the
+    // streaming. `onRevert` receives the id, and not a closure per row.
     const renderItem = useCallback(
       ({ item, index }: { item: ChatMessage; index: number }) => (
         <View className="py-1">
@@ -152,8 +152,8 @@ export const MessageList = memo(
           onScroll={handleScroll}
 
           onContentSizeChange={(_width, height) => {
-            // Usa a altura medida do conteúdo (== offset do rodapé) em vez de
-            // scrollToEnd, que adivinha a posição e "pula" errado no streaming.
+            // Uses the measured height of the content (== footer offset) instead of
+            // scrollToEnd, which guesses the position and "jumps" wrongly during streaming.
             if (pinnedRef.current) {
               requestAnimationFrame(() => {
                 listRef.current?.scrollToEnd({ animated: false })

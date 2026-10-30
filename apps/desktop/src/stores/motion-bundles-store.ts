@@ -11,21 +11,21 @@ import {
 } from "@/src/lib/motion-bundle"
 
 /**
- * Os cards de peça de motion da conversa, do lado de quem desenha o chat.
+ * The conversation's motion piece cards, on the side of whoever draws the chat.
  *
- * A lista de arquivos é do MAIN (a pasta da peça é dele): aqui ficam o cache
- * por conversa, o mapa que liga um `aud_…`/`img_…` à peça dona e o endereço do
- * card — a PRIMEIRA mensagem que mostrou mídia daquela peça, que é onde ele
- * mora para sempre. Quem decide o que fazer com cada parte é `motion-bundle`.
+ * The file list is MAIN's (the piece folder is his): here live the per-conversation
+ * cache, the map that links an `aud_…`/`img_…` to the piece that owns it and the card's
+ * address — the FIRST message that showed media of that piece, which is where it
+ * lives forever. Whoever decides what to do with each part is `motion-bundle`.
  *
- * Por que um store e não estado da mensagem: o card precisa se atualizar quando
- * a PASTA muda (uma narração regravada, um arquivo novo), e a mensagem antiga
- * não é re-renderizada por isso — ela é memoizada. Quem assina o store é o card.
+ * Why a store and not message state: the card has to update when
+ * the FOLDER changes (a re-recorded narration, a new file), and the old message
+ * is not re-rendered because of that — it is memoized. Whoever subscribes to the store is the card.
  */
 
 interface SessionBundles {
   bundles: MotionBundle[]
-  /** motionId → id da mensagem onde o card mora. */
+  /** motionId → id of the message where the card lives. */
   anchors: Record<string, string>
 }
 
@@ -36,9 +36,9 @@ interface MotionBundlesState {
 }
 
 const EMPTY: SessionBundles = { bundles: [], anchors: {} }
-/** Uma carga por vez por conversa: a pasta avisa a cada arquivo copiado. */
+/** One load at a time per conversation: the folder reports every file copied. */
 const inFlight = new Set<string>()
-/** Pedidos que chegaram durante uma carga: a última roda quando ela termina. */
+/** Requests that arrived during a load: the last one runs when it finishes. */
 const queued = new Set<string>()
 
 async function loadBundles(
@@ -47,20 +47,20 @@ async function loadBundles(
   get: () => MotionBundlesState,
 ): Promise<void> {
   if (inFlight.has(sessionId)) {
-    // Não perde o aviso: sem a repetição, o fim de um turno que coincidisse
-    // com uma carga em curso deixaria o card com a lista de antes.
+    // It does not lose the notice: without the repetition, the end of a turn that coincided
+    // with a load in progress would leave the card with the previous list.
     queued.add(sessionId)
     return
   }
   inFlight.add(sessionId)
   try {
     const bundles = await motionApi.bundles(sessionId)
-    // Preserva os endereços já calculados: são das MENSAGENS, não da pasta.
+    // Keeps the addresses already computed: they belong to the MESSAGES, not to the folder.
     const anchors = get().bySession[sessionId]?.anchors ?? {}
     set((state) => ({ bySession: { ...state.bySession, [sessionId]: { bundles, anchors } } }))
   } catch {
-    // Sem a lista o chat continua exatamente como era (os players soltos):
-    // o card é uma melhora da conversa, não uma dependência dela.
+    // Without the list the chat stays exactly as it was (the loose players):
+    // the card is an improvement of the conversation, not a dependency of it.
   } finally {
     inFlight.delete(sessionId)
     if (queued.delete(sessionId)) void loadBundles(sessionId, set, get)
@@ -89,12 +89,12 @@ export const useMotionBundlesStore = create<MotionBundlesState>((set, get) => ({
   },
 }))
 
-/** Os dados de uma conversa (identidade estável enquanto nada muda). */
+/** A conversation's data (stable identity while nothing changes). */
 export function useSessionBundles(sessionId?: string): SessionBundles {
   return useMotionBundlesStore((state) => (sessionId ? state.bySession[sessionId] ?? EMPTY : EMPTY))
 }
 
-/** O mapa chave → peça + onde cada card mora, pronto para as partes. */
+/** The key → piece map + where each card lives, ready for the parts. */
 export function useMotionBundleIndexes(sessionId?: string): MotionBundleIndexes {
   const data = useSessionBundles(sessionId)
   return useMemo(
@@ -104,13 +104,13 @@ export function useMotionBundleIndexes(sessionId?: string): MotionBundleIndexes 
 }
 
 /**
- * Mantém a lista e os endereços em dia para a conversa aberta.
+ * Keeps the list and the addresses up to date for the open conversation.
  *
- * Três gatilhos, e nenhum deles é "a cada delta do stream": ao abrir a conversa,
- * quando o turno TERMINA (foi quando a pasta cresceu) e quando o main avisa que
- * a pasta de alguma peça mudou (o arquivo foi reescrito, a mídia entrou). Os
- * endereços são recalculados quando as mensagens mudam, a custo de uma varredura
- * de partes — só as de mídia dão trabalho.
+ * Three triggers, and none of them is "on every stream delta": on opening the conversation,
+ * when the turn ENDS (that is when the folder grew) and when main reports that
+ * some piece's folder changed (the file was rewritten, the media came in). The
+ * addresses are recalculated when the messages change, at the cost of one sweep
+ * of parts — only the media ones take work.
  */
 export function useMotionBundleAnchors(
   sessionId: string | undefined,
@@ -143,10 +143,10 @@ export function useMotionBundleAnchors(
     if (finished && sessionId) void load(sessionId)
   }, [isBusy, sessionId, load])
 
-  // A varredura das mensagens é O(partes): refazê-la a cada token do stream
-  // seria trabalho jogado fora. Âncora só nasce quando aparece mídia nova — e
-  // mídia nova muda a ÚLTIMA mensagem (é nela que o stream escreve). O id entra
-  // na impressão digital porque regerar troca a mensagem por outra.
+  // The message sweep is O(parts): redoing it on every stream token
+  // would be wasted work. An anchor is only born when new media shows up — and
+  // new media changes the LAST message (it is where the stream writes). The id goes
+  // into the fingerprint because regenerating swaps the message for another one.
   const last = messages[messages.length - 1]
   const fingerprint = `${messages.length}:${last?.id ?? ""}:${last?.parts.length ?? 0}`
   const latest = useRef(messages)

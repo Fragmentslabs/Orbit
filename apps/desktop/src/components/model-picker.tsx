@@ -29,35 +29,35 @@ import { Truncate } from "@/components/ui/truncated-text"
 const MAX_MODELS_PER_PROVIDER = 40
 
 /**
- * Seletor de modelos real: lista os modelos dos provedores conectados
- * (catálogo models.dev), agrupados por provedor, com indicador de reasoning.
- * O modelo é POR CHAT: `sessionId` decide qual override ler/escrever
- * (undefined = chat novo, usa o draft até o primeiro envio).
+ * Real model selector: it lists the models of the connected providers
+ * (models.dev catalog), grouped by provider, with a reasoning indicator.
+ * The model is PER CHAT: `sessionId` decides which override to read/write
+ * (undefined = new chat, uses the draft until the first send).
  *
- * Modo controlado (dialogs — ex.: worker/visão): quando `value` é passado,
- * a seleção vem de props, recents da sessão são ocultados e `filter` pode
- * restringir os modelos listados (ex.: só visão, só tool_call).
+ * Controlled mode (dialogs — e.g. worker/vision): when `value` is passed,
+ * the selection comes from props, the session recents are hidden and `filter` can
+ * restrict the listed models (e.g. vision only, tool_call only).
  */
 export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenChangeProp, hideTrigger, triggerClassName, value, onValueChange, filter, nullLabel, hideRotationOptions }: {
   sessionId?: string
-  /** Controle externo do diálogo (usado pelo menu de configurações rápidas) */
+  /** External control of the dialog (used by the quick settings menu) */
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  /** Oculta o trigger — útil quando outro elemento abre o diálogo */
+  /** Hides the trigger — useful when another element opens the dialog */
   hideTrigger?: boolean
-  /** Classes extras no trigger (ex.: estilizá-lo como campo de formulário) */
+  /** Extra classes on the trigger (e.g. styling it as a form field) */
   triggerClassName?: string
-  /** Modo controlado: seleção vinda de props (dialogs de configuração) */
+  /** Controlled mode: selection coming from props (settings dialogs) */
   value?: SelectedModel | null
   onValueChange?: (model: SelectedModel | null) => void
-  /** Filtro por modelo (ex.: apenas modelos com visão) */
+  /** Filter by model (e.g. only vision models) */
   filter?: (provider: CatalogProvider, model: CatalogModel) => boolean
-  /** Rótulo do item "nenhum" no topo (só no modo controlado) */
+  /** Label of the "none" item at the top (only in controlled mode) */
   nullLabel?: string
   /**
-   * Oculta TUDO de rotação (grupo "Rotações" e o footer "Criar rotação"):
-   * usado quando o seletor é aberto DENTRO do editor de rotações (escolha de
-   * modelo de um slot) — mostrar opções de rotação ali seria um loop.
+   * Hides EVERYTHING of rotation (the "Rotations" group and the "Create rotation" footer):
+   * used when the selector is opened INSIDE the rotation editor (choice of
+   * model for a slot) — showing rotation options there would be a loop.
    */
   hideRotationOptions?: boolean
 }) {
@@ -65,8 +65,8 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const [internalOpen, setInternalOpen] = useState(false)
   const [skipFinalFocus, setSkipFinalFocus] = useState(false)
   const pendingSettings = useRef(false)
-  // Handoff do item/footer de rotação: marca a intenção e abre o modal no
-  // onOpenChangeComplete (mesmo padrão do botão de provedores, :247-255).
+  // Handoff of the rotation item/footer: it marks the intention and opens the modal in
+  // onOpenChangeComplete (same pattern as the providers button, :247-255).
   const pendingRotation = useRef<{ id: string | null } | null>(null)
   const openSettings = useSettingsUi((s) => s.openSettings)
   const openRotation = useRotationUi((s) => s.openRotation)
@@ -77,7 +77,7 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const rotations = useModelRotationStore((s) => s.rotations)
   const sessionRotationId = useModelRotationStore((s) => s.sessionOverrides[sessionId ?? ROTATION_DRAFT_KEY])
   const selectRotation = useModelRotationStore((s) => s.selectRotation)
-  // Rotação escolhida para este chat (trigger e destaque no grupo)
+  // Rotation chosen for this chat (trigger and highlight in the group)
   const activeRotation = sessionRotationId ? rotations.find((r) => r.id === sessionRotationId) ?? null : null
   const sessionSelected = useSessionModel(sessionId)
   const recents = useSessionModelPrefs((s) => s.recents)
@@ -86,9 +86,9 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const loading = useProviderStore((s) => s.loading)
   const error = useProviderStore((s) => s.error)
-  // Sem provedor configurado (primeira execução): o trigger adota a mesma
-  // linguagem visual do ProviderHintCard (ícone Plug em primary + tint de
-  // fundo) e aponta para o footer do seletor ("Configurar um provedor")
+  // No provider configured (first run): the trigger adopts the same
+  // visual language of the ProviderHintCard (Plug icon in primary + background
+  // tint) and points to the selector footer ("Configure a provider")
   const noProvider = useNoProviderConnected()
 
   const controlled = value !== undefined
@@ -112,8 +112,8 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
     [catalog, connectedProviders, filter],
   )
 
-  // Recents: só modelos ainda no catálogo e de provedores conectados
-  // (ocultos no modo controlado — a escolha ali é de worker/visão, não do chat)
+  // Recents: only models still in the catalog and from connected providers
+  // (hidden in controlled mode — the choice there belongs to worker/vision, not to the chat)
   const recentModels = useMemo(
     () =>
       controlled
@@ -127,9 +127,9 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   )
 
   const selectedModel = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  // Modelo salvo que saiu do catálogo sem sucessor (renomeações já foram
-  // migradas): avisa, em vez de um "Selecionar modelo" que parece só vazio —
-  // o envio seguiria para um id que o provedor talvez nem atenda mais.
+  // A saved model that left the catalog without a successor (renames were already
+  // migrated): it warns, instead of a "Select model" that just looks empty —
+  // the send would go on to an id the provider may not even serve anymore.
   const unavailable = !loading && !error && !isKnownModel(catalog, selected)
 
   const pick = (providerId: string, modelId: string) => {
@@ -137,7 +137,7 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
       onValueChange?.({ providerId, modelId })
     } else {
       selectModel(sessionId, providerId, modelId)
-      // Modelo e rotação são mutuamente exclusivos no chat
+      // Model and rotation are mutually exclusive in the chat
       selectRotation(sessionId, null)
     }
     onOpenChange(false)
@@ -166,8 +166,8 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
           <ModelSelectorTrigger render={<Button className={cn("h-7 gap-1 px-1.5 text-xs", noProvider && "border-primary/30 bg-primary/10 hover:bg-primary/15 aria-expanded:bg-primary/15 dark:bg-primary/15 dark:hover:bg-primary/20", triggerClassName)} variant="ghost" />}>
             {noProvider ? (
               <>
-                {/* Estado de atenção: mesmo idioma do ProviderHintCard — ícone
-                    Plug em primary + label em foreground, sem animação */}
+                {/* Attention state: same language as the ProviderHintCard — Plug
+                    icon in primary + label in foreground, no animation */}
                 <Plug className="size-3.5 shrink-0 text-primary" aria-hidden />
                 <ModelSelectorName className="text-foreground/80">{t("modelPicker.noProvider")}</ModelSelectorName>
               </>
@@ -227,8 +227,8 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
                     <ModelSelectorItem
                       key={rotation.id}
                       onSelect={() => {
-                        // Escolher a rotação pina o chat nela, como um modelo
-                        // (limpando o modelo pinado); clicar de novo desfaz.
+                        // Choosing the rotation pins the chat to it, like a model
+                        // (clearing the pinned model); clicking again undoes it.
                         const isSelected = sessionRotationId === rotation.id
                         if (!isSelected) clearModel(sessionId ?? ROTATION_DRAFT_KEY)
                         selectRotation(sessionId, isSelected ? null : rotation.id)
@@ -337,10 +337,10 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
               variant="ghost"
               className="w-full justify-start gap-2 text-xs"
               onClick={() => {
-                // Handoff determinístico: marca a intenção e fecha o seletor. O
-                // settings só abre no onOpenChangeComplete, quando este dialog
-                // terminou de sair — o setTimeout de 120ms disputava com a
-                // animação de saída de 100ms.
+                // Deterministic handoff: it marks the intention and closes the selector. The
+                // settings only opens in onOpenChangeComplete, when this dialog
+                // has finished leaving — the 120ms setTimeout disputed with the
+                // 100ms exit animation.
                 setSkipFinalFocus(true)
                 pendingSettings.current = true
                 onOpenChange(false)

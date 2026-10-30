@@ -1,11 +1,11 @@
 /**
- * Onde a pessoa estava quando chamou o painel: app e janela da frente. Vai no
- * prompt do overlay para "o que diz esse erro?" não começar com uma ida às
- * tools só para descobrir o app — e para o agente escolher entre ler a janela
- * em texto ou olhar a tela.
+ * Where the person was when they called the panel: the app and the front window. It
+ * goes into the overlay prompt so that "what does this error say?" does not start
+ * with a trip to the tools just to find out the app — and so the agent can choose
+ * between reading the window as text or looking at the screen.
  *
- * Fora de overlay/window.ts de propósito: o prompt lê isto, e ele não pode
- * puxar o Electron junto (os testes do prompt rodam sem ele).
+ * Outside overlay/window.ts on purpose: the prompt reads this, and it cannot pull
+ * Electron along (the prompt tests run without it).
  */
 
 export interface OverlayOpenContext {
@@ -16,7 +16,7 @@ export interface OverlayOpenContext {
   at: number
 }
 
-/** Depois disso o app anotado na abertura já não é "onde a pessoa está". */
+/** After that, the app noted at the opening is no longer "where the person is". */
 export const OPEN_CONTEXT_TTL_MS = 10 * 60_000
 
 let current: OverlayOpenContext | null = null
@@ -30,8 +30,8 @@ export function overlayOpenContext(now = Date.now()): OverlayOpenContext | null 
 }
 
 /**
- * A linha do prompt. O título da janela vem do app (um assunto de e-mail, o
- * nome de uma página) — é dado da tela, nunca instrução, e vai marcado assim.
+ * The prompt line. The window title comes from the app (an email subject, the name of
+ * a page) — it is screen data, never an instruction, and it goes marked as such.
  */
 export function overlayOpenContextLine(context: OverlayOpenContext | null): string | null {
   if (!context) return null

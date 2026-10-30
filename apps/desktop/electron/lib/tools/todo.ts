@@ -2,9 +2,9 @@ import { tool } from 'ai'
 import { z } from 'zod'
 
 /**
- * Tool todowrite: TODO viva da tarefa em andamento. O estado mora na própria
- * chamada (o modelo reenvia a lista completa) — o ToolPart persistido já é o
- * registro, e a UI renderiza a última chamada como checklist viva.
+ * todowrite tool: the live TODO of the task in progress. The state lives in the
+ * call itself (the model resends the whole list) — the persisted ToolPart is already the
+ * record, and the UI renders the last call as a live checklist.
  */
 export function createTodoTool() {
   return tool({

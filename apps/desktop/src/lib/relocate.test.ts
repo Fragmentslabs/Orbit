@@ -12,26 +12,26 @@ import {
 } from "@/src/lib/relocate"
 
 /**
- * A revalidação de pastas é o que sobra quando o caminho é só uma string: o
- * usuário renomeia a pasta no Finder e as referências continuam apontando para
- * o vazio. O que se testa aqui é o julgamento — o que conta como sumido, o que
- * deve ser religado e o que NÃO deve ser tocado. Errar para o lado de mexer
- * demais é pior do que não mexer: os dados das sessões não têm backup.
+ * Folder revalidation is what is left when the path is only a string: the
+ * user renames the folder in Finder and the references keep pointing at
+ * nothing. What is tested here is the judgment — what counts as gone, what
+ * should be relinked and what must NOT be touched. Erring on the side of touching
+ * too much is worse than not touching: the session data has no backup.
  */
 
 describe("folderBaseName", () => {
-  it("devolve o último segmento do caminho", () => {
+  it("returns the last segment of the path", () => {
     expect(folderBaseName("/Users/me/Projects/meu-app")).toBe("meu-app")
   })
 
-  it("tolera barra no fim e separador do Windows", () => {
+  it("tolerates a trailing slash and the Windows separator", () => {
     expect(folderBaseName("/Users/me/Projects/meu-app/")).toBe("meu-app")
     expect(folderBaseName("C:\\Users\\me\\meu-app")).toBe("meu-app")
   })
 })
 
 describe("sessionFolderPaths", () => {
-  it("lista a principal antes das extras e ignora vazios", () => {
+  it("lists the main one before the extras and ignores empties", () => {
     expect(
       sessionFolderPaths({ directory: "/a", extraDirectories: ["/b", "/c"] }),
     ).toEqual(["/a", "/b", "/c"])
@@ -41,7 +41,7 @@ describe("sessionFolderPaths", () => {
 })
 
 describe("collectFolderPaths", () => {
-  it("junta workspace e sessões sem repetir, preservando a ordem", () => {
+  it("joins workspace and sessions without repeating, preserving the order", () => {
     const sessions = [
       { directory: "/proj/a", extraDirectories: ["/proj/shared"] },
       { directory: "/proj/a" },
@@ -53,92 +53,92 @@ describe("collectFolderPaths", () => {
     ])
   })
 
-  it("ignora sessões sem pasta", () => {
+  it("ignores sessions with no folder", () => {
     expect(collectFolderPaths(["/proj/a"], [{}, { extraDirectories: [] }])).toEqual(["/proj/a"])
   })
 })
 
 describe("missingFolders", () => {
-  it("acusa só o que foi checado e não existe", () => {
+  it("reports only what was checked and does not exist", () => {
     const existing = { "/viva": true, "/morta": false }
     expect(missingFolders(["/viva", "/morta", "/nao-checada"], existing)).toEqual([
       { path: "/morta", name: "morta" },
     ])
   })
 
-  it("caminho não checado é dúvida, não ausência", () => {
+  it("an unchecked path is a doubt, not an absence", () => {
     expect(missingFolders(["/sumiu"], {})).toEqual([])
   })
 })
 
 describe("relocateSessionFolders", () => {
-  const session = { directory: "/antigo", extraDirectories: ["/outra", "/antigo"] }
+  const session = { directory: "/old", extraDirectories: ["/another", "/old"] }
 
-  it("religa o diretório principal", () => {
-    expect(relocateSessionFolders({ directory: "/antigo" }, "/antigo", "/novo")).toEqual({
-      directory: "/novo",
+  it("reconnects the main directory", () => {
+    expect(relocateSessionFolders({ directory: "/old" }, "/old", "/new")).toEqual({
+      directory: "/new",
     })
   })
 
-  it("religa a pasta extra na posição em que estava", () => {
-    expect(relocateSessionFolders(session, "/antigo", "/novo")).toEqual({
-      directory: "/novo",
-      extraDirectories: ["/outra", "/novo"],
+  it("reconnects the extra folder in the position it was in", () => {
+    expect(relocateSessionFolders(session, "/old", "/new")).toEqual({
+      directory: "/new",
+      extraDirectories: ["/another", "/new"],
     })
   })
 
-  it("não toca em sessão que não referencia o caminho", () => {
-    expect(relocateSessionFolders({ directory: "/outro" }, "/antigo", "/novo")).toBeNull()
+  it("leaves sessions that do not reference the path untouched", () => {
+    expect(relocateSessionFolders({ directory: "/other" }, "/old", "/new")).toBeNull()
   })
 
-  it("não muda a sessão original", () => {
-    const original = { directory: "/antigo", extraDirectories: ["/antigo"] }
-    relocateSessionFolders(original, "/antigo", "/novo")
-    expect(original).toEqual({ directory: "/antigo", extraDirectories: ["/antigo"] })
+  it("does not change the original session", () => {
+    const original = { directory: "/old", extraDirectories: ["/old"] }
+    relocateSessionFolders(original, "/old", "/new")
+    expect(original).toEqual({ directory: "/old", extraDirectories: ["/old"] })
   })
 })
 
 describe("relocateAutoFolderEntry", () => {
-  it("move a entrada para o caminho novo", () => {
-    expect(relocateAutoFolderEntry({ "/antigo": "f1" }, "/antigo", "/novo")).toEqual({
-      "/novo": "f1",
+  it("moves the entry to the new path", () => {
+    expect(relocateAutoFolderEntry({ "/old": "f1" }, "/old", "/new")).toEqual({
+      "/new": "f1",
     })
   })
 
-  it("não rouba o dono quando o destino já tem pasta", () => {
+  it("does not steal the owner when the destination already has a folder", () => {
     expect(
-      relocateAutoFolderEntry({ "/antigo": "f1", "/novo": "f2" }, "/antigo", "/novo"),
-    ).toEqual({ "/novo": "f2" })
+      relocateAutoFolderEntry({ "/old": "f1", "/new": "f2" }, "/old", "/new"),
+    ).toEqual({ "/new": "f2" })
   })
 
-  it("devolve null quando não havia entrada", () => {
-    expect(relocateAutoFolderEntry({ "/outro": "f1" }, "/antigo", "/novo")).toBeNull()
+  it("returns null when there was no entry", () => {
+    expect(relocateAutoFolderEntry({ "/other": "f1" }, "/old", "/new")).toBeNull()
   })
 })
 
 describe("relocatedFolderName", () => {
-  it("segue o nome do projeto quando o nome ainda é o derivado", () => {
+  it("follows the project name while the name is still the derived one", () => {
     expect(relocatedFolderName("Meu App", "/x/meu-app", "/y/app-novo")).toBe("App Novo")
   })
 
-  it("não toca em nome editado à mão", () => {
+  it("leaves a hand-edited name untouched", () => {
     expect(relocatedFolderName("Cliente X", "/x/meu-app", "/y/app-novo")).toBeNull()
   })
 
-  it("não devolve nada quando o nome não mudaria", () => {
+  it("returns nothing when the name would not change", () => {
     expect(relocatedFolderName("Meu App", "/x/meu-app", "/y/meu-app")).toBeNull()
   })
 })
 
 describe("relocateFolderWorkspace", () => {
-  it("troca o caminho antigo pelo novo, na posição em que estava", () => {
+  it("swaps the old path for the new one, in the position it was in", () => {
     expect(relocateFolderWorkspace(["/old/app", "/api"], "/old/app", "/new/app")).toEqual([
       "/new/app",
       "/api",
     ])
   })
 
-  it("null quando a memória não referencia o caminho (não se mexe no que não tem a ver)", () => {
+  it("null when the memory does not reference the path (nothing unrelated is touched)", () => {
     expect(relocateFolderWorkspace(["/api"], "/old/app", "/new/app")).toBeNull()
     expect(relocateFolderWorkspace(undefined, "/old/app", "/new/app")).toBeNull()
   })

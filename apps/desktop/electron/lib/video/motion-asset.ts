@@ -6,16 +6,16 @@ import { describeVideoFacts } from './attachment-note'
 import { probeMedia } from './ffmpeg'
 
 /**
- * Levar um ANEXO do chat para dentro de uma peça: o vídeo que o usuário mandou,
- * a foto, o GIF, o áudio. É a ponte entre "o agente tem uma referência" e "o
- * arquivo está ao lado do index.html, onde a peça o enxerga".
+ * Bringing an ATTACHMENT from the chat into a piece: the video the user sent,
+ * the photo, the GIF, the audio. It is the bridge between "the agent has a reference" and "the
+ * file sits next to index.html, where the piece sees it".
  *
- * O agente só chama isto quando decide USAR o material — anexar não copia nada
- * para peça nenhuma. E a referência é a única entrada: o caminho de origem nunca
- * vem do agente, só do anexo que a referência nomeia.
+ * The agent only calls this when it decides to USE the material — attaching copies nothing
+ * into any piece. And the reference is the only input: the source path never
+ * comes from the agent, only from the attachment the reference names.
  */
 
-/** Nome seguro para um arquivo dentro da pasta da peça (sem separadores, sem espaço). */
+/** Safe name for a file inside the piece's folder (no separators, no spaces). */
 export function assetFileName(wanted: string | undefined, original: string, fallbackExt: string): string {
   const source = path.basename((wanted?.trim() || original || '').replace(/\\/g, '/'))
   const ext = (path.extname(source) || path.extname(original) || fallbackExt).toLowerCase()
@@ -29,7 +29,7 @@ export function assetFileName(wanted: string | undefined, original: string, fall
   return `${stem || 'asset'}${ext}`
 }
 
-/** Um nome que não pisa em outro arquivo da pasta; o mesmo conteúdo reaproveita o nome. */
+/** A name that does not step on another file in the folder; the same content reuses the name. */
 async function freeName(folder: string, name: string, size: number): Promise<{ name: string; reuse: boolean }> {
   const ext = path.extname(name)
   const stem = path.basename(name, ext)
@@ -43,16 +43,16 @@ async function freeName(folder: string, name: string, size: number): Promise<{ n
 }
 
 export interface ImportedAsset {
-  /** `file`: não é mídia (um script, uma fonte) — veio da pasta de trabalho. */
+  /** `file`: not media (a script, a font) — it came from the working folder. */
   kind: AttachmentKind | 'file'
-  /** Nome do arquivo na pasta — é o que vai no `src` do HTML. */
+  /** File name inside the folder — it is what goes into the HTML `src`. */
   name: string
   file: string
-  /** O texto que o agente lê: o que foi copiado, e como usar na peça. */
+  /** The text the agent reads: what was copied, and how to use it in the piece. */
   report: string
 }
 
-/** Como usar cada tipo dentro de uma composição, em poucas linhas. */
+/** How to use each type inside a composition, in a few lines. */
 function usage(kind: AttachmentKind, name: string, isGif: boolean, hasSound: boolean): string {
   if (kind === 'video') {
     return (
@@ -72,9 +72,9 @@ function usage(kind: AttachmentKind, name: string, isGif: boolean, hasSound: boo
 }
 
 /**
- * Copia o anexo da referência para `folder` e devolve o relatório. Idempotente: o
- * mesmo anexo duas vezes dá o mesmo arquivo, sem duplicar. `usageNote` troca a
- * linha de uso (design_asset fala em artboard; aqui dentro é linguagem de peça).
+ * Copies the attachment of the reference into `folder` and returns the report. Idempotent: the
+ * same attachment twice gives the same file, without duplicating. `usageNote` swaps the
+ * usage line (design_asset talks about artboard; in here it is piece language).
  */
 export async function importAttachmentInto(
   folder: string,
@@ -96,10 +96,10 @@ const AUDIO_EXT = /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac)$/i
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|avif)$/i
 
 /**
- * Copia um arquivo da PASTA DE TRABALHO (modo código) para dentro da peça: a
- * foto do projeto, o vídeo da filmagem, uma biblioteca local (gsap.min.js), uma
- * fonte. O caminho já vem resolvido e autorizado por quem chama; o tipo sai da
- * extensão, e o que não é mídia entra como arquivo comum.
+ * Copies a file from the WORKING FOLDER (code mode) into the piece: the
+ * project's photo, the footage, a local library (gsap.min.js), a
+ * font. The path already comes resolved and authorized by the caller; the type comes from the
+ * extension, and what is not media goes in as an ordinary file.
  */
 export async function importFileInto(
   folder: string,
@@ -160,7 +160,7 @@ async function importSourceInto(
     report: [
       `${reuse ? 'Already in the folder' : 'Copied'}: ${label} "${resolved.name}" → ${name}${facts ? ` (${facts})` : ''}.`,
       typeof opts.usageNote === 'function' ? opts.usageNote(resolved.kind, name) : (opts.usageNote ?? usage(resolved.kind, name, isGif, hasSound)),
-      // A licença costuma exigir o crédito junto da imagem: ele viaja com ela até a peça.
+      // The license usually requires the credit next to the image: it travels with it into the piece.
       resolved.credit
         ? `CREDIT REQUIRED by the license (${resolved.credit.license}) — show it in the piece (a caption, or a credits card at the end): ${resolved.credit.attribution}`
         : '',

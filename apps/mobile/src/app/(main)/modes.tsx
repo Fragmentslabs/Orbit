@@ -8,8 +8,8 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 
-/** Agrupamento dos modos por contexto de uso nos inputs — espelho do painel
- *  de aparência do desktop. */
+/** Grouping of the modes by usage context in the inputs — mirror of the appearance
+ *  panel of the desktop. */
 const MODE_GROUPS: { key: 'both' | 'chat' | 'code'; ids: ModeId[] }[] = [
   { key: 'both', ids: ['search', 'plan', 'simple', 'brain', 'vision'] },
   { key: 'code', ids: ['subagents', 'orchestra', 'loop'] },

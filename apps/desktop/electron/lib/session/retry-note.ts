@@ -1,38 +1,38 @@
 import type { ChatMessage, TextPart } from '@shared/chat'
 
-/** Quantos caminhos citar antes de resumir: a nota é contexto, não um log. */
+/** How many paths to cite before summarizing: the note is context, not a log. */
 const WRITE_LIMIT = 12
 
-/** Quanto do texto interrompido cabe na nota. O fim é o que mostra onde parou. */
+/** How much of the interrupted text fits in the note. The end is what shows where it stopped. */
 const TEXT_LIMIT = 240
 
-/** Uma linha, sem "]" — o formato que ENGINE_MARKER_LINE reconhece. */
+/** One line, without "]" — the format ENGINE_MARKER_LINE recognizes. */
 function flat(text: string): string {
   return text.replace(/[[\]\n\r]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /**
- * Nota de engine para um turno REFEITO ("tentar novamente").
+ * Engine note for a REDONE turn ("retry").
  *
- * Vai no request e nunca na tela: é anexada à última mensagem do usuário (ver
- * `withMemoryBlock` no chat-engine) e o `stripEngineMarkers` garante que ela não
- * vaze para a resposta visível.
+ * It goes in the request and never on screen: it is appended to the last user message
+ * (see `withMemoryBlock` in chat-engine) and `stripEngineMarkers` guarantees that it does
+ * not leak into the visible answer.
  *
- * Sem ela o modelo recomeça como se fosse a primeira vez. A resposta que falhou
- * sai do histórico, então ele não tem como saber que já houve uma tentativa: ou
- * reescreve o que já está no disco, ou trata como pronto o que ficou pela
- * metade. Com a nota ele entra sabendo o que falhou, o que pode ter ficado
- * quebrado e que o certo é conferir antes de continuar.
+ * Without it the model starts over as if it were the first time. The answer that failed
+ * leaves the history, so it has no way of knowing there was already an attempt: it either
+ * rewrites what is already on disk, or treats as done what was left
+ * half-way. With the note it goes in knowing what failed, what may have been left
+ * broken and that the right thing is to check before continuing.
  *
- * Uma linha só e sem "]" no meio: é o formato que ENGINE_MARKER_LINE
- * (todo-context.ts) reconhece e remove.
+ * A single line and no "]" in the middle: that is the format
+ * ENGINE_MARKER_LINE (todo-context.ts) recognizes and removes.
  */
 export function retryContextNote(failed: ChatMessage): string {
-  // O texto do erro é diagnóstico do provedor: pode ter colchetes, quebras de
-  // linha e centenas de caracteres. A nota é uma linha, então cabe só o começo.
+  // The error text is provider diagnostics: it may have brackets, line
+  // breaks and hundreds of characters. The note is one line, so only the beginning fits.
   const error = flat(failed.error ?? '').slice(0, 240)
-  // ToolParts nunca voltam ao modelo, então o texto que a tentativa anterior
-  // chegou a escrever é o único fio da narrativa dela — e o fim é onde parou.
+  // ToolParts never go back to the model, so the text the previous attempt
+  // got to write is the only thread of its narrative — and the end is where it stopped.
   const written = flat(
     failed.parts
       .filter((p): p is TextPart => p.type === 'text')
@@ -54,9 +54,9 @@ export function retryContextNote(failed: ChatMessage): string {
     said.push(toolErrors > 0 ? `after ${calls} (${toolErrors} of them ended in error)` : `after ${calls}`)
   }
   if (writes.length > 0) {
-    // Colchete num caminho (src/[id].tsx) quebraria a linha única do marcador:
-    // a nota inteira deixaria de casar com ENGINE_MARKER_LINE e vazaria para a
-    // resposta visível. O caminho fica sem os colchetes, e só aqui.
+    // A bracket in a path (src/[id].tsx) would break the single line of the marker:
+    // the whole note would stop matching ENGINE_MARKER_LINE and would leak into the
+    // visible answer. The path keeps no brackets, and only here.
     const shown = writes
       .slice(0, WRITE_LIMIT)
       .map((rel) => rel.replace(/[[\]]/g, ''))

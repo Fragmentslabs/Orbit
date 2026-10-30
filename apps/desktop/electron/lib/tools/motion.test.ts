@@ -21,20 +21,20 @@ describe('motionSlug', () => {
 
 describe('motionPiecesDir', () => {
   it('refuses a session id that could escape the folder', () => {
-    expect(() => motionPiecesDir('../outro')).toThrow(/invalid session/)
+    expect(() => motionPiecesDir('../other')).toThrow(/invalid session/)
     expect(motionPiecesDir('JwGoW05wNYfnaOkdxxpcR')).toContain('JwGoW05wNYfnaOkdxxpcR')
   })
 })
 
 describe('applyTextEdits', () => {
-  const html = '<h1 class="t">Oi</h1>\n<style>.t{animation:in .4s}</style>'
+  const html = '<h1 class="t">Hi</h1>\n<style>.t{animation:in .4s}</style>'
 
   it('applies exact replacements in order', () => {
     const out = applyTextEdits(html, [
-      { oldText: 'Oi', newText: 'Oi, eu sou o Orbit' },
+      { oldText: 'Hi', newText: 'Hi, I am Orbit' },
       { oldText: 'in .4s', newText: 'in .6s cubic-bezier(.2,.8,.2,1)' },
     ])
-    expect(out).toBe('<h1 class="t">Oi, eu sou o Orbit</h1>\n<style>.t{animation:in .6s cubic-bezier(.2,.8,.2,1)}</style>')
+    expect(out).toBe('<h1 class="t">Hi, I am Orbit</h1>\n<style>.t{animation:in .6s cubic-bezier(.2,.8,.2,1)}</style>')
   })
 
   it('refuses a missing or ambiguous oldText instead of editing the wrong place', () => {

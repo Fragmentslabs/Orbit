@@ -211,8 +211,8 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
   const { setView, setMode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
 
-  // Em tela cheia o macOS esconde os semáforos; sem isso o pl-[80px] que os
-  // acomoda vira um vão vazio e joga busca/título para o meio da barra.
+  // In fullscreen macOS hides the traffic lights; without this the pl-[80px] that
+  // accommodates them becomes an empty gap and throws search/title to the middle of the bar.
   const [fullscreen, setFullscreen] = useState(false)
   useEffect(() => {
     if (!isMac) return
@@ -220,8 +220,8 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
     return windowApi.onFullscreenChange(setFullscreen)
   }, [isMac])
 
-  // No Mac as ações vivem no menu nativo do topo (ver createAppMenu no main);
-  // aqui só despachamos para os stores/estados do renderer.
+  // On the Mac the actions live in the native top menu (see createAppMenu in the main process);
+  // here we only dispatch to the stores/states of the renderer.
   useEffect(() => {
     if (!isMac) return
     return windowApi.onMenuAction((action) => {

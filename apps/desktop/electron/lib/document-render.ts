@@ -1,18 +1,18 @@
 /**
- * Documento autorado pelo agente: um fonte em Markdown que vira três saídas.
+ * Document authored by the agent: a Markdown source that becomes three outputs.
  *
- * Por que Markdown e não HTML, sendo que os artefatos já são HTML? Porque o
- * destino aqui é DOCX e PDF, e HTML→DOCX é intratável: CSS arbitrário não tem
- * equivalente em OOXML. Markdown tem um vocabulário pequeno e fechado —
- * título, parágrafo, lista, tabela — que mapeia direto para os dois formatos,
- * e é o que o modelo escreve melhor. Artefato HTML continua sendo o caminho
- * para dashboard e protótipo; documento é outro objeto.
+ * Why Markdown and not HTML, since the artifacts are already HTML? Because the
+ * destination here is DOCX and PDF, and HTML→DOCX is intractable: arbitrary CSS has no
+ * equivalent in OOXML. Markdown has a small, closed vocabulary —
+ * heading, paragraph, list, table — that maps directly to both formats,
+ * and it is what the model writes best. The HTML artifact remains the way
+ * for dashboard and prototype; a document is another object.
  *
- * O mesmo fonte gera:
- *   - HTML  → preview na conversa (e a origem do PDF, via printToPDF)
- *   - OOXML → o .docx
+ * The same source generates:
+ *   - HTML  → preview in the conversation (and the origin of the PDF, via printToPDF)
+ *   - OOXML → the .docx
  *
- * Módulo puro (sem Electron, sem IO) para ser testável.
+ * Pure module (no Electron, no IO) to be testable.
  */
 
 export type CellAlign = 'left' | 'center' | 'right'
@@ -23,17 +23,17 @@ export type Block =
   | { type: 'listItem'; text: string; ordered: boolean }
   | { type: 'quote'; text: string }
   | { type: 'table'; header: string[]; rows: string[][]; align: CellAlign[] }
-  /** Bloco de código cercado por ``` — as linhas vão CRUAS, sem juntar nem
-   *  aparar, porque indentação e quebra são o conteúdo. */
+  /** Code block surrounded by ``` — the lines go RAW, without joining or
+   *  trimming, because indentation and line breaks are the content. */
   | { type: 'code'; lines: string[]; lang?: string }
   | { type: 'rule' }
   | { type: 'pageBreak' }
 
-// ─── Diagramas ───────────────────────────────────────────────────────────
+// ─── Diagrams ────────────────────────────────────────────────────────────
 
 /**
- * Um diagrama Mermaid já desenhado (ver mermaid-render.ts): o SVG vai para o
- * HTML/PDF e o PNG para o .docx. Largura e altura em px CSS (96 dpi).
+ * A Mermaid diagram already drawn (see mermaid-render.ts): the SVG goes to the
+ * HTML/PDF and the PNG to the .docx. Width and height in CSS px (96 dpi).
  */
 export interface RenderedDiagram {
   svg: string
@@ -43,44 +43,44 @@ export interface RenderedDiagram {
 }
 
 /**
- * Encontra o diagrama de uma fonte Mermaid. Quem renderiza não sabe desenhar
- * — isso exige DOM e vive no main —, só pergunta. Fonte sem resposta cai para
- * o bloco de código, e o documento sai inteiro mesmo com um diagrama quebrado.
+ * Finds the diagram of a Mermaid source. Whoever renders does not know how to draw
+ * — that requires DOM and lives in the main —, it only asks. A source with no answer falls
+ * back to the code block, and the document comes out whole even with a broken diagram.
  */
 export type DiagramLookup = (source: string) => RenderedDiagram | undefined
 
 export const isMermaid = (block: Block): block is Extract<Block, { type: 'code' }> =>
   block.type === 'code' && block.lang?.toLowerCase() === 'mermaid'
 
-/** A fonte de um bloco ```mermaid, do jeito que o renderer do diagrama recebe. */
+/** The source of a ```mermaid block, the way the diagram renderer receives it. */
 export const mermaidSource = (block: Extract<Block, { type: 'code' }>) =>
   block.lines.join('\n').trim()
 
-/** As fontes Mermaid do documento, na ordem em que aparecem. */
+/** The document's Mermaid sources, in the order they appear. */
 export function mermaidSourcesOf(blocks: Block[]): string[] {
   return blocks.filter(isMermaid).map(mermaidSource).filter((src) => src.length > 0)
 }
 
-// ─── Estilo do documento ─────────────────────────────────────────────────
+// ─── Document style ──────────────────────────────────────────────────────
 
 /**
- * Personalização do documento. É um conjunto FECHADO de opções, e não CSS
- * livre, por uma razão dura: tudo aqui precisa existir também em OOXML. CSS
- * arbitrário renderizaria um PDF bonito e um .docx quebrado, e o usuário só
- * descobriria ao abrir o arquivo no Word.
+ * Document customization. It is a CLOSED set of options, and not free CSS,
+ * for a hard reason: everything here has to exist in OOXML too. Arbitrary CSS
+ * would render a beautiful PDF and a broken .docx, and the user would only
+ * find out when opening the file in Word.
  */
 export interface DocumentStyle {
-  /** Família da fonte. Um nome que não exista na máquina do leitor cai no
-   *  fallback — tanto no navegador quanto no Word. */
+  /** Font family. A name that does not exist on the reader's machine falls back
+   *  to the fallback — both in the browser and in Word. */
   fontFamily?: string
-  /** Corpo do texto em pontos. Títulos escalam proporcionalmente. */
+  /** Body text in points. Headings scale proportionally. */
   fontSize?: number
-  /** Cor de destaque (hex): títulos, cabeçalho de tabela e réguas. */
+  /** Accent color (hex): headings, table header and rules. */
   accentColor?: string
-  /** Margem da página em centímetros (vale para o PDF; na tela a margem é de
-   *  leitura). */
+  /** Page margin in centimeters (counts for the PDF; on screen the margin is for
+   *  reading). */
   marginCm?: number
-  /** Colunas do texto. Vale para o documento inteiro. */
+  /** Text columns. Counts for the whole document. */
   columns?: number
   align?: 'left' | 'justify'
 }
@@ -103,22 +103,22 @@ const DEFAULT_STYLE: ResolvedStyle = {
   align: 'justify',
 }
 
-/** Escala dos títulos sobre o corpo — mantém a proporção original (11pt →
- *  20/15/12.5pt) em qualquer tamanho base. */
+/** Scale of the headings over the body — keeps the original proportion (11pt →
+ *  20/15/12.5pt) at any base size. */
 const HEADING_SCALE = [1.82, 1.36, 1.14]
 
 /**
- * O estilo vem do MODELO, então cada campo é validado antes de virar CSS ou
- * atributo XML. Um nome de fonte com `;}` injetaria regra no CSS do documento;
- * uma cor com aspas quebraria o XML e o .docx nem abriria.
+ * The style comes from the MODEL, so every field is validated before becoming CSS or an
+ * XML attribute. A font name with `;}` would inject a rule into the document's CSS;
+ * a color with quotes would break the XML and the .docx would not even open.
  */
 export function normalizeStyle(style?: DocumentStyle): ResolvedStyle {
-  // O modelo costuma mandar uma PILHA de CSS ("Inter, Segoe UI, sans-serif")
-  // onde o esquema pede um nome. Sem separar, a limpeza abaixo apagava as
-  // vírgulas e sobrava "Inter Segoe UI sans-serif" — uma fonte que não existe
-  // em máquina nenhuma, então o documento caía no fallback em silêncio.
+  // The model usually sends a CSS STACK ("Inter, Segoe UI, sans-serif")
+  // where the schema asks for a name. Without splitting it, the cleanup below erased the
+  // commas and left "Inter Segoe UI sans-serif" — a font that does not exist
+  // on any machine, so the document fell back silently.
   const first = (style?.fontFamily ?? '').split(',')[0].replace(/["']/g, '')
-  // O hífen fica por último na classe, onde é literal — sem precisar de escape.
+  // The hyphen comes last in the class, where it is literal — no escape needed.
   const family = first.replace(/[^a-zA-Z0-9 -]/g, '').trim().slice(0, 40)
   const hex = (style?.accentColor ?? '').replace(/^#/, '')
   return {
@@ -140,9 +140,9 @@ export function headingSize(style: ResolvedStyle, level: 1 | 2 | 3): number {
   return Math.round(style.fontSize * HEADING_SCALE[level - 1] * 10) / 10
 }
 
-/** Pilha de fallback: a fonte pedida, depois um genérico compatível. Sem isto,
- *  um nome inexistente deixaria o documento na fonte padrão do sistema, que
- *  pode ser bem diferente do que o agente quis. */
+/** Fallback stack: the requested font, then a compatible generic. Without this,
+ *  a nonexistent name would leave the document in the system default font, which
+ *  can be quite different from what the agent wanted. */
 export function fontStack(style: ResolvedStyle): string {
   const monoish = /courier|mono|consolas/i.test(style.fontFamily)
   const sansish = /arial|helvetica|calibri|verdana|tahoma|segoe|roboto|inter|open sans|sans-serif/i.test(style.fontFamily)
@@ -150,15 +150,15 @@ export function fontStack(style: ResolvedStyle): string {
   return `'${style.fontFamily}', ${generic}`
 }
 
-/** Quebra de página explícita no fonte — o Markdown não tem sintaxe para isso
- *  e um documento de várias páginas precisa. */
+/** Explicit page break in the source — Markdown has no syntax for that
+ *  and a multi-page document needs one. */
 const PAGE_BREAK = /^\\pagebreak\s*$/i
 
 /**
- * Cerca de bloco de código. Sem isto, ``` caía no ramo de parágrafo e as
- * linhas eram JUNTADAS POR ESPAÇO — o código chegava ao documento numa linha
- * só, com os marcadores crus à mostra. É a sintaxe que mais aparece em
- * documentação técnica, que é o uso mais comum do documento.
+ * Code block fence. Without this, ``` fell into the paragraph branch and the
+ * lines were JOINED BY A SPACE — the code reached the document in a single
+ * line, with the raw markers showing. It is the syntax that appears most in
+ * technical documentation, which is the most common use of the document.
  */
 const FENCE = /^(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/
 
@@ -178,11 +178,11 @@ function tableCells(line: string): string[] {
 }
 
 /**
- * Alinhamento a partir da linha divisória (`|:---|:---:|---:|`).
+ * Alignment from the divider line (`|:---|:---:|---:|`).
  *
- * A divisória sempre foi ACEITA com `:` e o alinhamento, descartado — uma
- * tabela de valores pedida à direita saía toda à esquerda, sem aviso. Ler
- * aqui é o que torna a sintaxe honesta.
+ * The divider was always ACCEPTED with `:` and the alignment discarded — a
+ * table of values requested right-aligned came out all left, without warning. Reading it
+ * here is what makes the syntax honest.
  */
 function tableAlign(divider: string, columns: number): CellAlign[] {
   const marks = tableCells(divider)
@@ -197,9 +197,9 @@ function tableAlign(divider: string, columns: number): CellAlign[] {
 }
 
 /**
- * Markdown → blocos. É um SUBCONJUNTO deliberado: o que existe nos dois
- * formatos de destino. Sintaxe não reconhecida cai como parágrafo em vez de
- * ser descartada — perder texto do usuário seria pior que formatá-lo mal.
+ * Markdown → blocks. It is a deliberate SUBSET: what exists in both
+ * destination formats. Unrecognized syntax falls back as a paragraph instead of
+ * being discarded — losing the user's text would be worse than formatting it badly.
  */
 export function parseMarkdown(markdown: string): Block[] {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n')
@@ -231,8 +231,8 @@ export function parseMarkdown(markdown: string): Block[] {
       continue
     }
 
-    // A cerca é testada ANTES da régua e do resto: dentro dela nada é
-    // interpretado, senão um `# comentário` de shell viraria título.
+    // The fence is tested BEFORE the rule and the rest: inside it nothing is
+    // interpreted, otherwise a shell `# comment` would become a heading.
     const fence = FENCE.exec(trimmed)
     if (fence) {
       flushParagraph()
@@ -242,14 +242,14 @@ export function parseMarkdown(markdown: string): Block[] {
       i += 1
       while (i < lines.length) {
         const closing = FENCE.exec(lines[i].trim())
-        // Fecha só com o MESMO caractere e pelo menos o mesmo comprimento: é o
-        // que deixa um bloco de Markdown conter uma cerca menor por dentro.
+        // It only closes with the SAME character and at least the same length: it is what
+        // lets a Markdown block contain a smaller fence inside.
         if (closing && closing[1][0] === marker && closing[1].length >= size) break
         code.push(lines[i])
         i += 1
       }
-      // Cerca não fechada: o bloco entra assim mesmo, até o fim do texto.
-      // Descartar seria perder o conteúdo por causa de um marcador faltando.
+      // Unclosed fence: the block enters anyway, up to the end of the text.
+      // Discarding would be losing the content because of a missing marker.
       blocks.push({ type: 'code', lines: code, ...(fence[2] ? { lang: fence[2] } : {}) })
       continue
     }
@@ -265,13 +265,13 @@ export function parseMarkdown(markdown: string): Block[] {
       continue
     }
 
-    // Tabela: linha de cabeçalho seguida da linha divisória. Sem a divisória
-    // não é tabela — é texto com barras verticais, e tratar como tabela
-    // destruiria o conteúdo.
+    // Table: header line followed by the divider line. Without the divider
+    // it is not a table — it is text with vertical bars, and treating it as a table
+    // would destroy the content.
     if (TABLE_ROW.test(trimmed) && i + 1 < lines.length && TABLE_DIVIDER.test(lines[i + 1].trim())) {
       flushParagraph()
       const header = tableCells(trimmed)
-      i += 1 // consome a divisória, mas lê o alinhamento dela antes
+      i += 1 // consumes the divider, but reads its alignment before
       const align = tableAlign(lines[i].trim(), header.length)
       const rows: string[][] = []
       while (i + 1 < lines.length && TABLE_ROW.test(lines[i + 1].trim())) {
@@ -314,36 +314,36 @@ export interface InlineRun {
   bold?: boolean
   italic?: boolean
   code?: boolean
-  /** Quebra de linha dentro do parágrafo (veio de um <br> no fonte). */
+  /** Line break inside the paragraph (came from a <br> in the source). */
   br?: boolean
 }
 
 /**
- * Ênfase SÓ com asterisco e crase — `_` e `__` ficaram deliberadamente de
- * fora.
+ * Emphasis ONLY with asterisk and backtick — `_` and `__` were deliberately left
+ * out.
  *
- * Num documento, sequência de underscore quase nunca é ênfase: é linha de
- * preencher ("Nome: ______"), que é o pão de cada dia de formulário, prova e
- * ficha. Com a regra de underscore ativa, `__ **Data:** __` casava como um
- * itálico único e ENGOLIA o `**Data:**` no meio — o documento saía com o
- * marcador cru visível. O modelo sempre pode usar * e **; a linha de
- * preencher não tem alternativa.
+ * In a document, a run of underscores is almost never emphasis: it is a fill-in
+ * line ("Name: ______"), which is the daily bread of forms, exams and
+ * cards. With the underscore rule active, `__ **Date:** __` matched as a single
+ * italic and SWALLOWED the `**Date:**` in the middle — the document came out with the
+ * raw marker visible. The model can always use * and **; the fill-in
+ * line has no alternative.
  */
 const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/
-/** <br>, <br/> e <br /> — o que o modelo escreve para abrir espaço de resposta. */
+/** <br>, <br/> and <br /> — what the model writes to open up space for an answer. */
 const LINE_BREAK = /<br\s*\/?>/gi
 
 /**
- * Caracteres que a barra invertida neutraliza, como manda o Markdown.
+ * Characters that the backslash neutralizes, as Markdown dictates.
  *
- * Aqui o motivo é concreto: o modelo escreve `\\_\\_\\_\\_/\\_\\_\\_\\_` para desenhar um
- * campo de data que não vire negrito na TELA (onde o underscore é ênfase), e
- * esse mesmo texto vira o PDF. Sem tratar o escape, o documento saía com a
- * barra invertida à mostra — o problema trocava de lugar em vez de sumir.
+ * Here the reason is concrete: the model writes `\\_\\_\\_\\_/\\_\\_\\_\\_` to draw a
+ * date field that does not become bold ON SCREEN (where the underscore is emphasis), and
+ * that same text becomes the PDF. Without handling the escape, the document came out with the
+ * backslash showing — the problem changed places instead of going away.
  */
 const ESCAPABLE = /\\([\\`*_{}[\]()#+\-.!|>~])/g
-/** Marcador do caractere escapado enquanto a ênfase é separada. Nunca aparece
- *  num documento de verdade, que é o requisito para servir de marcador. */
+/** Marker of the escaped character while the emphasis is split. It never shows up
+ *  in a real document, which is the requirement to serve as a marker. */
 const MASK = '\u0000'
 
 function maskEscapes(text: string): string {
@@ -358,19 +358,19 @@ function unmaskEscapes(text: string): string {
 }
 
 /**
- * Quebra o texto em trechos com marcação. Um passo só, sem aninhamento:
- * negrito dentro de itálico é raro num documento gerado e o custo de suportar
- * (um parser de verdade) não se paga aqui.
+ * Splits the text into runs with markup. A single pass, without nesting:
+ * bold inside italic is rare in a generated document and the cost of supporting it
+ * (a real parser) does not pay for itself here.
  */
 export function parseInline(text: string): InlineRun[] {
   const runs: InlineRun[] = []
-  // O <br> é tratado ANTES da ênfase: ele é estrutura, não estilo, e precisa
-  // sobreviver ao escape de HTML que o resto do conteúdo sofre.
+  // The <br> is handled BEFORE the emphasis: it is structure, not style, and it has to
+  // survive the HTML escape that the rest of the content goes through.
   const segments = text.split(LINE_BREAK)
   segments.forEach((segment, index) => {
     if (index > 0) runs.push({ text: '', br: true })
-    // O caractere escapado sai de cena antes da separação da ênfase: é isso
-    // que faz `\*` ser um asterisco no texto, e não o começo de um itálico.
+    // The escaped character leaves the scene before the emphasis split: that is what
+    // makes `\*` an asterisk in the text, and not the start of an italic.
     for (const part of maskEscapes(segment).split(INLINE)) {
       if (part === '') continue
       const push = (run: InlineRun) => runs.push({ ...run, text: unmaskEscapes(run.text) })
@@ -386,7 +386,7 @@ export function parseInline(text: string): InlineRun[] {
 const escapeXml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-// ─── HTML (preview e origem do PDF) ──────────────────────────────────────
+// ─── HTML (preview and origin of the PDF) ──────────────────────────────
 
 function inlineHtml(text: string): string {
   return parseInline(text)
@@ -402,23 +402,23 @@ function inlineHtml(text: string): string {
 }
 
 /**
- * CSS de documento impresso, não de página web: medidas em centímetro, fonte
- * do estilo escolhido, quebra de página controlada. É o mesmo HTML que vira
- * PDF, então o conteúdo do preview é o do arquivo.
+ * CSS of a printed document, not of a web page: measurements in centimeters, font
+ * from the chosen style, controlled page break. It is the same HTML that becomes
+ * the PDF, so the preview's content is the file's.
  */
 function documentCss(style: ResolvedStyle): string {
   const accent = `#${style.accentColor}`
-  // Cabeçalho de tabela e régua usam a cor de destaque com transparência, para
-  // um destaque forte não virar uma faixa sólida ilegível.
+  // Table header and rules use the accent color with transparency, so that
+  // a strong accent does not become an illegible solid band.
   const columns =
     style.columns > 1
       ? `column-count: ${style.columns}; column-gap: 1cm;`
       : ''
   return `
   /*
-   * Margem SÓ no padding do body. Com @page margin também definida, as duas
-   * somavam: o PDF saía com 5cm no topo em vez de 2.5cm, e cabiam 25 linhas
-   * onde cabem 30.
+   * Margin ONLY in the body padding. With @page margin also set, the two
+   * added up: the PDF came out with 5cm at the top instead of 2.5cm, and 25 lines
+   * fit where 30 fit.
    */
   @page { size: A4; margin: 0; }
   :root { color-scheme: light }
@@ -434,20 +434,20 @@ function documentCss(style: ResolvedStyle): string {
   blockquote { margin: 0 0 .7em; padding-left: 1em; border-left: 3px solid ${accent}; color: #444; }
   code { font-family: 'Courier New', monospace; font-size: .92em; background: #f3f3f3; padding: .1em .3em; }
   /*
-   * Bloco de código. O pre-wrap não é enfeite: numa folha A4 a linha longa
-   * sem quebra sai CORTADA no PDF, e o que passa da margem simplesmente não
-   * é impresso. E o alinhamento volta a ser à esquerda porque o corpo do
-   * documento pode estar justificado, o que em código espaça os símbolos.
+   * Code block. The pre-wrap is not decoration: on an A4 sheet a long line
+   * with no break comes out CUT in the PDF, and whatever crosses the margin simply
+   * is not printed. And the alignment goes back to the left because the body of the
+   * document may be justified, which in code spaces the symbols out.
    */
   pre { margin: 0 0 .8em; padding: .6em .8em; background: #f6f7f9;
         border: 1px solid #e4e6ea; border-left: 3px solid ${accent};
         font-family: 'Courier New', monospace; font-size: ${Math.max(7, style.fontSize - 1.5)}pt;
         line-height: 1.45; text-align: left; white-space: pre-wrap;
         overflow-wrap: break-word; break-inside: avoid; }
-  /* Dentro do bloco o <code> não repete o fundo nem o respiro do inline. */
+  /* Inside the block the <code> does not repeat the background or the padding of the inline. */
   pre code { background: none; padding: 0; font-size: 1em; }
-  /* Diagrama Mermaid: o SVG vem com a largura natural e encolhe para caber na
-     coluna, sem nunca ser partido entre duas páginas. */
+  /* Mermaid diagram: the SVG comes with its natural width and shrinks to fit the
+     column, never being split between two pages. */
   .diagram { margin: .4em 0 1em; text-align: center; break-inside: avoid; }
   .diagram svg { max-width: 100%; height: auto; }
   hr { border: 0; border-top: 1px solid ${accent}; margin: 1.2em 0; opacity: .35; }
@@ -455,22 +455,22 @@ function documentCss(style: ResolvedStyle): string {
           font-size: ${Math.max(7, style.fontSize - 1)}pt; }
   th, td { border: 1px solid #bbb; padding: .35em .5em; vertical-align: top; }
   th { background: ${accent}; color: #fff; font-weight: bold; }
-  /* Alinhamento vindo da divisória da tabela (|:---:|) */
+  /* Alignment coming from the table divider (|:---:|) */
   .c { text-align: center; } .r { text-align: right; } .l { text-align: left; }
-  /* Uma tabela partida entre colunas fica ilegível; a coluna quebra antes. */
+  /* A table split between columns becomes unreadable; the column breaks before it. */
   table, blockquote { break-inside: avoid; }
-  /* break-before e o nome moderno; page-break-before fica como fallback.
-     A classe vai no bloco seguinte a quebra, nunca num elemento vazio. */
+  /* break-before is the modern name; page-break-before stays as a fallback.
+     The class goes on the block that follows the break, never on an empty element. */
   .page-break { break-before: page; page-break-before: always; }
 
   /*
-   * NA TELA o documento usa margem de leitura, não de impressão. O preview
-   * cabe na largura do card e renderiza no tamanho natural — sem reduzir por
-   * transform, que é o que deixava o texto pequeno e mole. Com 2.5cm de
-   * margem numa coluna de chat sobraria pouco texto por linha.
+   * ON SCREEN the document uses a reading margin, not a printing one. The preview
+   * fits the card width and renders at natural size — without shrinking by
+   * transform, which is what left the text small and soft. With 2.5cm of
+   * margin in a chat column little text would be left per line.
    *
-   * O printToPDF respeita @media print e ignora @media screen (verificado),
-   * então o arquivo entregue mantém a margem de documento.
+   * printToPDF respects @media print and ignores @media screen (verified),
+   * so the delivered file keeps the document margin.
    */
   @media screen {
     body { padding: 1.2cm 1.4cm; }
@@ -482,17 +482,17 @@ function documentCss(style: ResolvedStyle): string {
 }
 
 /**
- * Os blocos em HTML, sem página nem estilo — é o que o documento impresso e a
- * miniatura nativa têm em comum. Cada um põe o seu CSS em volta.
+ * The blocks in HTML, without page or style — it is what the printed document and the
+ * native thumbnail have in common. Each one puts its own CSS around it.
  */
 function htmlBody(blocks: Block[], diagrams?: DiagramLookup): string {
   const parts: string[] = []
   let list: { ordered: boolean; items: string[] } | null = null
   /**
-   * A quebra é aplicada ao bloco SEGUINTE, nunca como elemento próprio: um
-   * `<div class="page-break">` vazio é colapsado pelo Chromium e o
-   * page-break-before simplesmente não acontece — o PDF saía com uma página
-   * só. Mesma estratégia do renderOoxmlBody.
+   * The break is applied to the FOLLOWING block, never as an element of its own: an empty
+   * `<div class="page-break">` is collapsed by Chromium and
+   * page-break-before simply does not happen — the PDF came out with a single
+   * page. Same strategy as renderOoxmlBody.
    */
   let pendingBreak = false
   const breakClass = () => {
@@ -541,7 +541,7 @@ function htmlBody(blocks: Block[], diagrams?: DiagramLookup): string {
         pendingBreak = true
         break
       case 'table': {
-        // Classe de alinhamento por COLUNA, vinda da divisória do Markdown.
+        // Alignment class per COLUMN, coming from the Markdown divider.
         const cls = (i: number) => {
           const a = block.align[i] ?? 'left'
           return a === 'center' ? ' class="c"' : a === 'right' ? ' class="r"' : ''
@@ -574,10 +574,10 @@ export function renderHtml(
   style?: DocumentStyle,
   diagrams?: DiagramLookup,
   /**
-   * `@font-face` de uma fonte da biblioteca do Orbit. Vai antes do CSS do
-   * documento porque o PDF e impresso de uma janela propria (orbit-artifact://)
-   * e so assim o Chromium conhece a familia: nome sem declaracao cai no
-   * fallback, e o PDF sairia com a fonte trocada sem avisar ninguem.
+   * `@font-face` of a font from Orbit's library. It goes before the document's CSS
+   * because the PDF is printed from its own window (orbit-artifact://)
+   * and that is the only way Chromium knows the family: a name without a declaration falls
+   * back, and the PDF would come out with the wrong font without telling anyone.
    */
   fontFaces?: string,
 ): string {
@@ -593,21 +593,21 @@ ${htmlBody(blocks, diagrams)}
 }
 
 /**
- * A MINIATURA de um documento vivo em Markdown.
+ * The THUMBNAIL of a live document in Markdown.
  *
- * O tile da galeria é a capa do documento, então ele tem que parecer o que o
- * usuário vê ao abrir: a tela nativa no tema do Orbit, e não a folha A4 branca
- * — essa é a cara do PDF, e só quem foi pedido como arquivo merece.
+ * The gallery tile is the document's cover, so it has to look like what the
+ * user sees when opening: the native screen in Orbit's theme, and not the white A4 sheet
+ * — that is the face of the PDF, and only what was requested as a file deserves it.
  *
- * Sai com as DUAS paletas na mesma página, trocadas por uma classe no
- * <html>: a captura carrega a página uma vez e fotografa os dois temas, o que
- * evita uma segunda janela do Chromium e deixa o tile certo mesmo quando o
- * usuário troca o tema depois.
+ * It comes out with BOTH palettes on the same page, swapped by a class on the
+ * <html>: the capture loads the page once and photographs both themes, which
+ * avoids a second Chromium window and keeps the tile right even when the
+ * user switches the theme later.
  *
- * As cores são os tokens do app (index.css), em oklch — o Chromium entende, e
- * copiar os valores é o que faz o tile combinar com a grade em volta dele. A
- * fonte não: a Geist é empacotada pelo renderer e não existe nesta janela, daí
- * a pilha de sistema.
+ * The colors are the app tokens (index.css), in oklch — Chromium understands them, and
+ * copying the values is what makes the tile match the grid around it. The
+ * font does not: Geist is bundled by the renderer and does not exist in this window, hence
+ * the system stack.
  */
 export function renderThumbHtml(
   blocks: Block[],
@@ -649,8 +649,8 @@ export function renderThumbHtml(
   th, td { border: 1px solid var(--border); padding: .35em .5em; text-align: left; }
   th { background: var(--muted); font-weight: 600; }
   .c { text-align: center; } .r { text-align: right; }
-  /* O diagrama é desenhado em fundo claro; no tema escuro ele vira um cartão
-     branco em vez de linhas escuras sumindo no fundo. */
+  /* The diagram is drawn on a light background; in the dark theme it becomes a white
+     card instead of dark lines fading into the background. */
   .diagram { margin: 0 0 .8em; padding: .6em; background: #fff; border-radius: 8px;
              text-align: center; }
   .diagram svg { max-width: 100%; height: auto; }
@@ -660,12 +660,12 @@ ${body}
 </body></html>`
 }
 
-// ─── OOXML (o .docx) ─────────────────────────────────────────────────────
+// ─── OOXML (the .docx) ─────────────────────────────────────────────
 
 function inlineOoxml(text: string): string {
   return parseInline(text)
     .map((run) => {
-      // No OOXML a quebra dentro do parágrafo é um run só com <w:br/>.
+      // In OOXML the break inside the paragraph is a single run with <w:br/>.
       if (run.br) return '<w:r><w:br/></w:r>'
       const props: string[] = []
       if (run.bold) props.push('<w:b/>')
@@ -677,7 +677,7 @@ function inlineOoxml(text: string): string {
     .join('')
 }
 
-/** numId das definições de lista declaradas em numbering.xml. */
+/** numId of the list definitions declared in numbering.xml. */
 const NUM_BULLET = 1
 const NUM_ORDERED = 2
 
@@ -686,7 +686,7 @@ function paragraphOoxml(
   opts: { style?: string; numId?: number; pageBreak?: boolean; after?: number } = {},
 ): string {
   const pPr: string[] = []
-  // Na ordem do schema do pPr: pStyle, pageBreakBefore, numPr, spacing.
+  // In the schema order of pPr: pStyle, pageBreakBefore, numPr, spacing.
   if (opts.style) pPr.push(`<w:pStyle w:val="${opts.style}"/>`)
   if (opts.pageBreak) pPr.push('<w:pageBreakBefore/>')
   if (opts.numId) pPr.push(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${opts.numId}"/></w:numPr>`)
@@ -701,15 +701,15 @@ function tableOoxml(
   align: CellAlign[],
   style: ResolvedStyle,
 ): string {
-  /** No OOXML o alinhamento é do PARÁGRAFO dentro da célula (w:jc), não da
-   *  célula — alinhar a célula não move o texto. */
+  /** In OOXML the alignment belongs to the PARAGRAPH inside the cell (w:jc), not to the
+   *  cell — aligning the cell does not move the text. */
   const jc = (i: number) => {
     const a = align[i] ?? 'left'
     return a === 'left' ? '' : `<w:jc w:val="${a}"/>`
   }
   const cell = (text: string, i: number, isHeader: boolean) => {
-    // Cabeçalho com a cor de destaque preenchida e texto branco, espelhando o
-    // CSS — sem w:shd o Word desenha o cabeçalho igual ao corpo.
+    // Header with the accent color filled in and white text, mirroring the
+    // CSS — without w:shd Word draws the header like the body.
     const shading = isHeader
       ? `<w:shd w:val="clear" w:color="auto" w:fill="${style.accentColor}"/>`
       : ''
@@ -722,7 +722,7 @@ function tableOoxml(
   const bodyRows = rows
     .map((row) => `<w:tr>${row.map((c, i) => cell(c, i, false)).join('')}</w:tr>`)
     .join('')
-  // Bordas explícitas: sem tblBorders o Word desenha a tabela sem linha nenhuma.
+  // Explicit borders: without tblBorders Word draws the table with no lines at all.
   const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
     .map((side) => `<w:${side} w:val="single" w:sz="4" w:color="999999"/>`)
     .join('')
@@ -730,8 +730,8 @@ function tableOoxml(
 }
 
 /**
- * Uma imagem já registrada no pacote: o rId aponta para o PNG em word/media,
- * e o tamanho é o natural do diagrama em px CSS.
+ * An image already registered in the package: the rId points to the PNG in word/media,
+ * and the size is the diagram's natural one in CSS px.
  */
 export interface DocxImage {
   rId: string
@@ -739,15 +739,15 @@ export interface DocxImage {
   height: number
 }
 
-/** EMU por px CSS (96 dpi) e por cm — as unidades de desenho do OOXML. */
+/** EMU per CSS px (96 dpi) and per cm — OOXML's drawing units. */
 const EMU_PER_PX = 9525
 const EMU_PER_CM = 360000
-/** Teto de altura: um diagrama mais alto que isso não cabe numa folha A4. */
+/** Height ceiling: a diagram taller than this does not fit on an A4 sheet. */
 const MAX_IMAGE_HEIGHT_CM = 22
 
 /**
- * O parágrafo centralizado com a imagem inline. Encolhe (sem distorcer) para
- * a largura útil da coluna — o PNG é 2x, então o encolhimento não perde nitidez.
+ * The centered paragraph with the inline image. It shrinks (without distorting) to
+ * the usable width of the column — the PNG is 2x, so shrinking loses no sharpness.
  */
 function imageOoxml(
   image: DocxImage,
@@ -760,7 +760,7 @@ function imageOoxml(
   const k = Math.min(1, maxWidthEmu / cx, (MAX_IMAGE_HEIGHT_CM * EMU_PER_CM) / cy)
   cx = Math.round(cx * k)
   cy = Math.round(cy * k)
-  const name = `Diagrama ${drawingId}`
+  const name = `Diagram ${drawingId}`
   const A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
   const drawing =
     `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">` +
@@ -774,19 +774,19 @@ function imageOoxml(
     `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
     `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
     `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
-  // jc no próprio parágrafo: o corpo pode estar justificado, e imagem
-  // "justificada" encosta na margem esquerda.
-  // A ordem dentro do pPr é a do schema (pageBreakBefore, spacing, jc): o
-  // Word recusa o arquivo quando ela vem trocada.
+  // jc on the paragraph itself: the body may be justified, and an image
+  // "justified" stays against the left margin.
+  // The order inside pPr is the schema's (pageBreakBefore, spacing, jc): the
+  // Word refuses the file when it comes swapped.
   return `<w:p><w:pPr>${
     pageBreak ? '<w:pageBreakBefore/>' : ''
   }<w:spacing w:before="120" w:after="200"/><w:jc w:val="center"/></w:pPr>${drawing}</w:p>`
 }
 
 /**
- * Corpo do document.xml a partir dos blocos. `images` responde, pela fonte
- * Mermaid, a imagem que o pacote já registrou; o documento que a usa precisa
- * declarar os namespaces wp e r (ver buildDocx).
+ * Body of document.xml from the blocks. `images` answers, by Mermaid source,
+ * the image the package already registered; the document that uses it needs to
+ * declare the wp and r namespaces (see buildDocx).
  */
 export function renderOoxmlBody(
   blocks: Block[],
@@ -797,8 +797,8 @@ export function renderOoxmlBody(
   const parts: string[] = []
   let pendingBreak = false
   let drawingId = 0
-  // Largura útil de UMA coluna: A4 menos as margens laterais (as mesmas do
-  // buildDocx), dividida pelas colunas descontado o espaço entre elas.
+  // Usable width of ONE column: A4 minus the side margins (the same as in
+  // buildDocx), divided by the columns discounting the space between them.
   const sideCm = Math.max(0.5, resolved.marginCm - 0.5)
   const columnCm = (21 - 2 * sideCm - (resolved.columns - 1) * 0.75) / resolved.columns
   const maxWidthEmu = Math.round(columnCm * EMU_PER_CM)
@@ -824,8 +824,8 @@ export function renderOoxmlBody(
         )
         break
       case 'table':
-        // A quebra de página não se aplica a tabela (não existe
-        // pageBreakBefore em w:tbl): entra como parágrafo vazio antes.
+        // The page break does not apply to a table (there is no
+        // pageBreakBefore in w:tbl): it enters as an empty paragraph before it.
         if (pendingBreak) parts.push(paragraphOoxml('', { pageBreak: true }))
         parts.push(tableOoxml(block.header, block.rows, block.align, resolved))
         break
@@ -835,18 +835,18 @@ export function renderOoxmlBody(
           parts.push(imageOoxml(image, ++drawingId, maxWidthEmu, pendingBreak))
           break
         }
-        // Uma linha por PARÁGRAFO: o OOXML não tem elemento de bloco
-        // pré-formatado, e um parágrafo só com <w:br/> perderia o fundo
-        // cinza linha a linha. Bloco vazio ainda rende um parágrafo, senão
-        // ``` ``` sumiria sem deixar rastro.
+        // One line per PARAGRAPH: OOXML has no pre-formatted block
+        // element, and a paragraph with only <w:br/> would lose the gray
+        // background line by line. An empty block still yields a paragraph, otherwise
+        // ``` ``` would disappear without leaving a trace.
         const lines = block.lines.length > 0 ? block.lines : ['']
         lines.forEach((line, idx) => {
           parts.push(
             paragraphOoxml(`<w:r><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`, {
               style: 'CodeBlock',
               pageBreak: pendingBreak && idx === 0,
-              // O estilo zera o espaço entre as linhas do bloco; a última
-              // devolve o respiro, senão o texto seguinte cola no código.
+              // The style zeroes the spacing between the block's lines; the last
+              // one gives the breathing room back, otherwise the following text sticks to the code.
               ...(idx === lines.length - 1 ? { after: 160 } : {}),
             }),
           )

@@ -2,20 +2,20 @@ import v8 from 'node:v8'
 import vm from 'node:vm'
 
 /**
- * Coleta de lixo forçada no main — para quando um addon NATIVO acabou de ser
- * solto.
+ * Forced garbage collection in the main — for when a NATIVE addon has just been
+ * released.
  *
- * O caso que motivou: o recognizer do Parakeet (sherpa-onnx) segura ~700 MB de
- * memória nativa atrás de um objeto JS minúsculo. Soltar a referência não
- * devolve nada: para o V8 aquele objeto não pesa, então o GC não tem pressa de
- * coletá-lo, e o finalizador que libera o ONNX Runtime não roda. Medido no
- * Electron: 825 MB com o modelo, 825 MB depois de soltar, 151 MB depois de uma
- * coleta forçada.
+ * The case that motivated it: the Parakeet recognizer (sherpa-onnx) holds ~700 MB of
+ * native memory behind a tiny JS object. Releasing the reference returns
+ * nothing: for V8 that object does not weigh anything, so the GC is in no hurry to
+ * collect it, and the finalizer that frees the ONNX Runtime does not run. Measured on
+ * Electron: 825 MB with the model, 825 MB after releasing it, 151 MB after a
+ * forced collection.
  *
- * O `gc()` só existe com `--expose-gc`; ligar a flag em runtime e pegar a
- * função num contexto novo é o caminho documentado pelo próprio V8 para isso.
- * Custa uma pausa de dezenas de ms — chame só depois de soltar algo grande,
- * nunca num caminho quente.
+ * `gc()` only exists with `--expose-gc`; enabling the flag at runtime and grabbing the
+ * function in a new context is the path documented by V8 itself for that.
+ * It costs a pause of tens of ms — call it only after releasing something big,
+ * never on a hot path.
  */
 let gcFn: (() => void) | null | undefined
 
@@ -31,13 +31,13 @@ export function collectGarbage(): void {
   try {
     gcFn?.()
   } catch {
-    // melhor-esforço: sem GC forçado, a memória volta quando o V8 quiser
+    // best-effort: without a forced GC, the memory comes back when V8 wants it
   }
 }
 
 /**
- * Coleta logo e de novo um pouco depois: o finalizador do addon pode só ficar
- * pronto na segunda passada (o primeiro ciclo marca, o segundo libera).
+ * Collects right away and again a bit later: the addon's finalizer may only become
+ * ready on the second pass (the first cycle marks, the second frees).
  */
 export function collectGarbageSoon(): void {
   collectGarbage()

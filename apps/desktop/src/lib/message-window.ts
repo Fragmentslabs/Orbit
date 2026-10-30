@@ -1,16 +1,16 @@
 /**
- * Janela de mensagens montadas no chat: só os últimos turnos entram no DOM, e
- * o resto é montado ao rolar para cima (ou ao pular para uma mensagem antiga).
- * Abrir um chat longo montava o histórico inteiro — markdown, highlight e
- * acordeões de centenas de mensagens — para mostrar só a última tela.
+ * Window of messages mounted in the chat: only the last turns go into the DOM, and
+ * the rest is mounted when scrolling up (or when jumping to an old message).
+ * Opening a long chat mounted the whole history — markdown, highlight and
+ * accordions of hundreds of messages — to show only the last screen.
  *
- * A janela sempre começa numa mensagem do usuário: cortar no meio de um turno
- * abriria a tela com meia resposta do agente, sem a pergunta.
+ * The window always starts at a user message: cutting in the middle of a turn
+ * would open the screen with half an answer from the agent, without the question.
  */
 
-/** Turnos montados ao abrir o chat. */
+/** Turns mounted when opening the chat. */
 export const INITIAL_TURNS = 12
-/** Turnos acrescentados a cada "carregar anteriores". */
+/** Turns added on each "load earlier". */
 export const PAGE_TURNS = 10
 
 interface WindowMessage {
@@ -18,9 +18,9 @@ interface WindowMessage {
 }
 
 /**
- * Índice de onde a janela começa para incluir `turns` turnos antes de
- * `endIndex` (exclusivo): a `turns`-ésima mensagem do usuário contando para
- * trás. Sem turnos suficientes, começa do zero.
+ * Index where the window starts to include `turns` turns before
+ * `endIndex` (exclusive): the `turns`-th user message counting
+ * backwards. Without enough turns, it starts from zero.
  */
 export function turnStart(messages: readonly WindowMessage[], endIndex: number, turns: number): number {
   let seen = 0
@@ -33,12 +33,12 @@ export function turnStart(messages: readonly WindowMessage[], endIndex: number, 
   return 0
 }
 
-/** Início da janela ao abrir o chat. */
+/** Start of the window when opening the chat. */
 export function defaultWindowStart(messages: readonly WindowMessage[]): number {
   return turnStart(messages, messages.length, INITIAL_TURNS)
 }
 
-/** Início da janela para que a mensagem em `index` apareça com o turno dela. */
+/** Start of the window so that the message at `index` shows up with its turn. */
 export function windowStartFor(messages: readonly WindowMessage[], index: number): number {
   return turnStart(messages, index + 1, 1)
 }

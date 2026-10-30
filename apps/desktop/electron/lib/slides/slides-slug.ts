@@ -1,13 +1,13 @@
 /**
- * O slug de um deck — o nome da pasta dele no armazenamento do Orbit.
+ * The slug of a deck — the name of its folder in the Orbit storage.
  *
- * Vive num módulo próprio porque DUAS pontas precisam concordar: quem ESCREVE
- * (`slides_write` cria `orbit-data/slides/<sessão>/<slug>/`) e quem PROCURA
- * (`slidesIdForName`, quando o card da conversa manda o título do deck e não o
- * caminho). Sem a mesma função nos dois lados, o card de um deck escrito no
- * chat não reabriria nada.
+ * It lives in a module of its own because TWO ends have to agree: the one that
+ * WRITES (`slides_write` creates `orbit-data/slides/<session>/<slug>/`) and the one
+ * that LOOKS IT UP (`slidesIdForName`, when the conversation card sends the deck
+ * title and not the path). Without the same function on both sides, the card of a
+ * deck written in the chat would reopen nothing.
  *
- * "Orbit em 12 slides" → "orbit-em-12-slides". Mesmo algoritmo do designSlug.
+ * "Orbit em 12 slides" → "orbit-em-12-slides". Same algorithm as designSlug.
  */
 export function slidesSlug(name: string): string {
   const slug = name

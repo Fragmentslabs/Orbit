@@ -40,47 +40,47 @@ import { cn } from "@/lib/utils"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Aba Fontes: os documentos com que se CONVERSA.
+ * Sources tab: the documents one CONVERSES with.
  *
- * É o outro lado da galeria de mídia. Lá ficam as saídas do agente (imagens,
- * artefatos, documentos gerados); aqui ficam as entradas — e os dois ciclos
- * de vida são opostos: apagar um artefato libera espaço, apagar uma fonte
- * muda as respostas seguintes. Por isso a exclusão em lote e a limpeza
- * automática da galeria não alcançam nada desta lista.
+ * It is the other side of the media gallery. There go the outputs of the agent (images,
+ * artifacts, generated documents); here go the inputs — and the two life
+ * cycles are opposite: deleting an artifact frees space, deleting a source
+ * changes the following answers. That is why the bulk deletion and the automatic
+ * cleanup of the gallery reach nothing in this list.
  *
- * Duas áreas, porque a diferença é de INTENÇÃO:
+ * Two areas, because the difference is one of INTENTION:
  *
- * - "Fontes da pasta" é o corpus declarado, válido para todas as conversas
- *   daquela pasta.
- * - "Desta conversa" são os anexos que você jogou no chat para perguntar uma
- *   coisa — o que é a maioria dos anexos, e não vira corpus sozinho.
+ * - "Folder sources" is the declared corpus, valid for all the conversations
+ *   of that folder.
+ * - "From this conversation" are the attachments you threw into the chat to ask one
+ *   thing — which is most of the attachments, and does not become corpus by itself.
  *
- * Nada escorre de baixo para cima automaticamente: fonte errada é silenciosa
- * e muda respostas em OUTRAS conversas, enquanto o clique a mais é visível na
- * hora. Mas o anexo aparece aqui assim que chega, com o botão do lado — o
- * problema de um gesto que ninguém adivinha se resolve mostrando, não
- * compartilhando por padrão. Arrastar entre as áreas faz o mesmo, e soltar o
- * arquivo direto na área certa já decide o escopo.
+ * Nothing flows from the bottom up automatically: a wrong source is silent
+ * and changes answers in OTHER conversations, while the extra click is visible on
+ * the spot. But the attachment appears here as soon as it arrives, with the button next to it — the
+ * problem of a gesture nobody guesses is solved by showing, not
+ * by sharing by default. Dragging between the areas does the same, and dropping the
+ * file straight into the right area already decides the scope.
  *
- * Vale nos dois modos. No código o repositório já é o corpus dos ARQUIVOS —
- * `read` e `grep` abrem PDF, DOCX e planilha de lá paginando igual, então um
- * documento commitado não precisa ser declarado fonte. O que não está no
- * repositório é o resto: a doc de uma lib, uma RFC, o ticket colado, o PDF de
- * spec que o cliente mandou e que ninguém quer commitar. Para esse material a
- * pasta automática do projeto vira o que seria um `docs/` não versionado,
- * disponível em toda conversa daquele repositório.
+ * It counts in both modes. In code the repository already is the corpus of the FILES —
+ * `read` and `grep` open PDF, DOCX and spreadsheet from there paginating the same, so a
+ * committed document does not need to be declared a source. What is not in the
+ * repository is the rest: the doc of a lib, an RFC, the pasted ticket, the spec
+ * PDF the client sent and nobody wants to commit. For that material the
+ * automatic folder of the project becomes what would be an unversioned `docs/`,
+ * available in every conversation of that repository.
  */
 
-// Markdown e texto puro entram como fonte de TEXTO (ver addSessionDocument):
-// são o material de leitura mais comum num repositório, e sem eles a única
-// forma de trazer um .md era anexá-lo numa mensagem primeiro.
+// Markdown and plain text enter as a TEXT source (see addSessionDocument):
+// they are the most common reading material in a repository, and without them the only
+// way to bring a .md was to attach it to a message first.
 const ACCEPT =
   ".pdf,.docx,.xlsx,.xls,.ods,.csv,.md,.markdown,.mdx,.txt,image/*,video/*,audio/*,.gif,.mp4,.mov,.m4v,.webm,.mkv,.avi"
 
-/** Arrasto interno de um MATERIAL (foto, GIF, áudio, vídeo) entre as áreas. */
+/** Internal drag of a MATERIAL (photo, GIF, audio, video) between the areas. */
 const DRAG_MIME_MATERIAL = "application/x-orbit-material"
 
-/** Foto, GIF, áudio e vídeo não são documentos: seguem pelo caminho dos materiais. */
+/** Photo, GIF, audio and video are not documents: they follow the path of materials. */
 function materialKindOf(file: File): "image" | "audio" | "video" | null {
   const type = file.type.toLowerCase()
   if (type.startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name)) return "video"
@@ -97,13 +97,13 @@ function formatDuration(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`
 }
 
-/** Tipo de arrasto interno — distingue mover um documento entre as áreas de
- *  um arquivo vindo de fora do app. */
+/** Type of internal drag — it distinguishes moving a document between the areas from
+ *  a file coming from outside the app. */
 const DRAG_MIME = "application/x-orbit-document"
 
-/** Teto por arquivo — barreira contra arquivo patológico, não limite de uso. */
+/** Ceiling per file — a barrier against a pathological file, not a usage limit. */
 const MAX_FILE_BYTES = 100 * 1024 * 1024
-/** Vídeo SEM arquivo no disco (colado) só existe como bytes na memória. */
+/** A video WITHOUT a file on disk (pasted) only exists as bytes in memory. */
 const MAX_PASTED_VIDEO_BYTES = 150 * 1024 * 1024
 
 function formatBytes(bytes: number): string {
@@ -120,42 +120,42 @@ const KIND_ICONS = {
   web: Globe,
 } as const
 
-/** Markdown guardado como `text` (o caminho do .md anexado) — é um documento,
- *  não um trecho colado, e o ícone diz isso. */
+/** Markdown stored as `text` (the path of the attached .md) — it is a document,
+ *  not a pasted excerpt, and the icon says so. */
 const MARKDOWN_FILE = /\.(md|markdown|mdx)$/i
 
-/** Ícone do TIPO da fonte. O `.md` ganha ícone próprio porque é o caso em que
- *  o conteúdo é texto mas o arquivo é um documento. */
+/** Icon of the TYPE of the source. The `.md` gets its own icon because it is the case in which
+ *  the content is text but the file is a document. */
 function docIcon(doc: SourceDocument) {
   if (doc.kind === "text" && MARKDOWN_FILE.test(doc.filename)) return FileCode2
   return KIND_ICONS[doc.kind] ?? FileText
 }
 
 /**
- * Tipo da fonte como a lista o mostra.
+ * Type of the source as the list shows it.
  *
- * A extensão em maiúsculas quando o nome tem uma — é o rótulo que a pessoa
- * reconhece ("PDF", "MD", "XLSX") e que faltava: a linha dizia só
- * "src1 · 12 páginas", então um .md ao lado de um .pdf ficava indistinguível
- * até abrir. Sem extensão (texto colado, site) vale a palavra do tipo.
+ * The extension in uppercase when the name has one — it is the label the person
+ * recognizes ("PDF", "MD", "XLSX") and that was missing: the row said only
+ * "src1 · 12 pages", so a .md next to a .pdf was indistinguishable
+ * until opening. Without an extension (pasted text, site) the type word counts.
  */
 function sourceType(doc: SourceDocument): string | null {
-  // Um site não tem extensão: o "nome" dele é o título da página, e um título
-  // como "Exemplo.com" sairia rotulado "COM". Aí vale a palavra do tipo.
+  // A site has no extension: its "name" is the page title, and a title
+  // like "Example.com" would come out labeled "COM". Then the type word counts.
   if (doc.kind === "web") return null
-  // Extensão de verdade: começa com letra. "Vendas 2026.1" terminaria em "1"
-  // e o tipo apareceria como um número solto.
+  // A real extension: it starts with a letter. "Sales 2026.1" would end in "1"
+  // and the type would appear as a loose number.
   const ext = /\.([a-z][a-z0-9]{0,4})$/i.exec(doc.filename.trim())?.[1]
   return ext ? ext.toUpperCase() : null
 }
 
 /**
- * Capa do documento na lista.
+ * Cover of the document in the list.
  *
- * Carrega sob demanda e começa pelo ícone: a do PDF é renderizada no main, e
- * fazer a lista esperar por ela deixaria a aba em branco no primeiro desenho.
- * Quando não há miniatura (falha, ou um tipo sem nada para desenhar) o ícone
- * simplesmente fica — é o estado que existia antes desta capa.
+ * It loads on demand and starts with the icon: the PDF one is rendered in the main process, and
+ * making the list wait for it would leave the tab blank on the first drawing.
+ * When there is no thumbnail (failure, or a type with nothing to draw) the icon
+ * simply stays — it is the state that existed before this cover.
  */
 function DocumentThumb({ scope, doc }: { scope: string; doc: SourceDocument }) {
   const [src, setSrc] = useState<string | null>(null)
@@ -181,8 +181,8 @@ function DocumentThumb({ scope, doc }: { scope: string; doc: SourceDocument }) {
       {src ? (
         <>
           <img src={src} alt="" className="size-full object-cover object-top" draggable={false} />
-          {/* Com capa, o tipo ainda precisa ser lido — o selo é o mesmo desenho
-              do tile da galeria e do vídeo na linha de material. */}
+          {/* With a cover, the type still needs to be read — the badge is the same drawing
+              as the gallery tile and the video in the material row. */}
           <Icon className="absolute bottom-0.5 right-0.5 size-3 rounded-sm bg-background/85 p-0.5 text-foreground" />
         </>
       ) : (
@@ -200,16 +200,16 @@ function hostOf(url: string): string {
   }
 }
 
-/** Lê o arquivo como base64 — é o formato que o IPC do anexo já usa. */
+/** Reads the file as base64 — it is the format the attachment IPC already uses. */
 function readAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const result = String(reader.result ?? "")
-      // O data URL vem como "data:<mime>;base64,<dados>"; o main só quer os dados.
+      // The data URL comes as "data:<mime>;base64,<data>"; the main process only wants the data.
       resolve(result.slice(result.indexOf(",") + 1))
     }
-    reader.onerror = () => reject(reader.error ?? new Error("falha ao ler o arquivo"))
+    reader.onerror = () => reject(reader.error ?? new Error("failed to read the file"))
     reader.readAsDataURL(file)
   })
 }
@@ -246,10 +246,10 @@ function DocumentRow({
     <li
       draggable
       onDragStart={(e) => {
-        // Dois destinos no MESMO arrasto, como no tile da galeria: soltar na
-        // outra área move a fonte (docs:setShared), soltar no composer anexa a
-        // referência a esta mensagem (ver SOURCE_DND_MIME). Quem lê o payload
-        // é o destino — a linha não precisa saber para onde está indo.
+        // Two destinations in the SAME drag, as in the gallery tile: dropping in
+        // the other area moves the source (docs:setShared), dropping in the composer attaches the
+        // reference to this message (see SOURCE_DND_MIME). Whoever reads the payload
+        // is the destination — the row does not need to know where it is going.
         e.dataTransfer.setData(SOURCE_DND_MIME, JSON.stringify({ id: doc.id, name: doc.filename, kind: doc.kind, type }))
         e.dataTransfer.setData(DRAG_MIME, doc.id)
         e.dataTransfer.effectAllowed = "copyMove"
@@ -257,8 +257,8 @@ function DocumentRow({
       className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
     >
       <DocumentThumb scope={scope} doc={doc} />
-      {/* O corpo da linha abre o arquivo; os botões da direita ficam fora dele
-          para o clique de remover não abrir o que está sendo removido. */}
+      {/* The body of the row opens the file; the buttons on the right stay outside it
+          so the remove click does not open what is being removed. */}
       <div
         role="button"
         tabIndex={0}
@@ -316,9 +316,9 @@ function DocumentRow({
 const MATERIAL_ICON = { image: ImageIcon, audio: AudioLines, video: Film } as const
 
 /**
- * Uma linha de MATERIAL: foto, GIF, áudio ou vídeo. Mostra a capa (um quadro, no
- * vídeo), o nome, a referência que o agente usa e o tamanho. Excluir apaga o
- * arquivo de verdade — é o mesmo item da galeria de mídia.
+ * A MATERIAL row: photo, GIF, audio or video. It shows the cover (a frame, in the
+ * video), the name, the reference the agent uses and the size. Deleting erases the
+ * file for real — it is the same item of the media gallery.
  */
 function MaterialRow({
   material,
@@ -341,9 +341,9 @@ function MaterialRow({
     <li
       draggable
       onDragStart={(e) => {
-        // O material É um item da galeria, então o arrasto para o composer é o
-        // MESMO da aba Mídia: a referência vai como anexo e nada é copiado.
-        // Sem isto, o material era o único arquivo da aba que não virava chip.
+        // The material IS a gallery item, so the drag to the composer is the
+        // SAME one as the Media tab: the reference goes as an attachment and nothing is copied.
+        // Without this, the material was the only file of the tab that did not become a chip.
         e.dataTransfer.setData(
           MEDIA_DND_MIME,
           JSON.stringify({
@@ -383,7 +383,7 @@ function MaterialRow({
         </Truncate>
         <Truncate>
           <p className="truncate text-[11px] text-muted-foreground">
-          {material.id} · {t(`sources.materialKind.${material.animated ? "gif" : material.kind}`)}
+          {material.id} · {t(`media.kind.${material.animated ? "gif" : material.kind}`)}
           {material.durationMs ? ` · ${formatDuration(material.durationMs)}` : ""}
           {material.width && material.height ? ` · ${material.width}×${material.height}` : ""}
           {` · ${formatBytes(material.sizeBytes)}`}
@@ -416,7 +416,7 @@ function MaterialRow({
   )
 }
 
-/** O visor de um material: a foto/GIF ampliada, o vídeo e o áudio com controles. */
+/** The viewer of a material: the enlarged photo/GIF, the video and the audio with controls. */
 function MaterialViewer({ material, onClose }: { material: MaterialView | null; onClose: () => void }) {
   if (!material?.playUrl) return null
   return (
@@ -441,16 +441,16 @@ function MaterialViewer({ material, onClose }: { material: MaterialView | null; 
 }
 
 /**
- * Escopo do chat que ainda nao virou sessao. Precisa bater com o DRAFT_SCOPE
- * do main: e a mesma pasta em disco, e o rascunho e adotado pela sessao na
- * primeira mensagem.
+ * Scope of the chat that has not become a session yet. It needs to match the DRAFT_SCOPE
+ * of the main process: it is the same folder on disk, and the draft is adopted by the session on the
+ * first message.
  */
 const DRAFT_SCOPE = "draft"
 
 export function SourcesTab({ sessionId }: { sessionId?: string }) {
-  // Sem sessao ainda (chat novo): as fontes vao para o escopo do rascunho, em
-  // vez de a aba ficar inerte pedindo que o usuario mande uma mensagem antes
-  // de poder trazer o material.
+  // With no session yet (new chat): the sources go to the draft scope, in-
+  // stead of the tab staying inert asking the user to send a message before
+  // being able to bring the material.
   const scope = sessionId ?? DRAFT_SCOPE
   const isDraft = !sessionId
   const { t } = useTranslation()
@@ -472,36 +472,36 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const openSourceTab = usePanelStore((s) => s.openSourceTab)
 
   /**
-   * Clicar numa fonte abre o que ela É.
+   * Clicking a source opens what it IS.
    *
-   * Uma fonte promovida a partir de um documento do agente continua sendo
-   * aquele documento: tem que abrir no canvas, com o alternador de edição,
-   * como quando se clica nele no chat. Abrir o visualizador de arquivo ali
-   * mostrava um Markdown paginado como se fosse um PDF. Quem decide é o
-   * openDocumentInPanel, o mesmo ponto que a galeria e o card da conversa
-   * usam — e ele sabe mandar de volta ao visualizador o documento que foi
-   * pedido como arquivo.
+   * A source promoted from an agent document keeps being
+   * that document: it has to open in the canvas, with the edit toggle,
+   * as when one clicks it in the chat. Opening the file viewer there
+   * showed a paginated Markdown as if it were a PDF. What decides is
+   * openDocumentInPanel, the same point the gallery and the conversation card
+   * use — and it knows how to send back to the viewer the document that was
+   * requested as a file.
    *
-   * No CHAT NOVO ainda não há sessão, e é justamente onde a fonte mais se abre
-   * — o material é trazido antes da primeira pergunta. A aba cai no balde
-   * órfão, o mesmo das outras do rascunho, e o main resolve o escopo do
-   * rascunho a partir do sessionId vazio (ver scopesOf em session-documents).
+   * In the NEW CHAT there is no session yet, and that is precisely where the source is opened most
+   * — the material is brought before the first question. The tab falls into the orphan
+   * bucket, the same as the other draft ones, and the main process resolves the draft
+   * scope from the empty sessionId (see scopesOf in session-documents).
    */
-  const abrir = useCallback(
+  const openSource = useCallback(
     async (doc: SourceDocument) => {
       const key = sessionId ?? ORPHAN_KEY
-      const origem = await documentApi.forSource(doc.id)
-      if (origem) {
-        const info = await documentApi.info(origem.documentId)
-        // Mesma decisão do openDocumentInPanel — documento vivo no canvas,
-        // documento pedido como arquivo no visualizador —, mas o caminho do
-        // arquivo continua sendo a FONTE, cujo id está aqui na mão. Mandar o
-        // id do documento seria depender de uma resolução que esta tela não
-        // precisa fazer.
+      const origin = await documentApi.forSource(doc.id)
+      if (origin) {
+        const info = await documentApi.info(origin.documentId)
+        // Same decision as openDocumentInPanel — living document in the canvas,
+        // document requested as a file in the viewer —, but the path of the
+        // file keeps being the SOURCE, whose id is at hand here. Sending the
+        // document id would be depending on a resolution this screen does not
+        // need to do.
         if (info && !documentOpensAsFile(info)) {
           usePanelStore
             .getState()
-            .openDocumentTab(key, { documentId: origem.documentId, title: origem.title })
+            .openDocumentTab(key, { documentId: origin.documentId, title: origin.title })
           return
         }
       }
@@ -511,8 +511,8 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   )
   const folders = useSessionStore((s) => s.folders)
   const sessions = useSessionStore((s) => s.sessions)
-  // A pasta que o chat novo vai herdar, escolhida no "+" da sidebar. Só
-  // importa no rascunho: depois de a sessão nascer, a pasta vem dela.
+  // The folder the new chat is going to inherit, chosen in the sidebar "+". It only
+  // matters in the draft: after the session is born, the folder comes from it.
   const pendingFolderId = useSessionStore((s) => s.pendingFolderId)
   const folderName = useMemo(
     () => folders.find((f) => f.id === folderId)?.name ?? null,
@@ -520,9 +520,9 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   )
 
   const refresh = useCallback(async () => {
-    // O rascunho não tem sessão de onde ler a pasta: ele a anota antes de
-    // listar, senão a área compartilhada sairia vazia num chat aberto pelo
-    // "+" de uma pasta — justamente onde ela mais deveria aparecer.
+    // The draft has no session to read the folder from: it notes it down before
+    // listing, otherwise the shared area would come out empty in a chat opened through the
+    // "+" of a folder — precisely where it should appear the most.
     if (isDraft) await docsApi.setDraftFolder(pendingFolderId)
     const [result, materials] = await Promise.all([docsApi.list(scope), materialsApi.list(scope)])
     setShared(result.shared)
@@ -538,11 +538,11 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     void refresh()
   }, [refresh])
 
-  // O anexo também chega pela conversa (e por outro chat da mesma pasta): sem
-  // este aviso, a aba aberta ao lado mostraria a lista de antes.
+  // The attachment also arrives through the conversation (and from another chat of the same folder): without
+  // this notice, the tab open alongside would show the previous list.
   useEffect(() => docsApi.onChanged(() => void refresh()), [refresh])
-  // Um material é um item da galeria: excluído de lá (ou trazido por uma mensagem),
-  // a lista desta aba muda junto.
+  // A material is a gallery item: deleted from there (or brought by a message),
+  // the list of this tab changes along.
   useEffect(() => mediaApi.onChanged(() => void refresh()), [refresh])
 
   const addFiles = useCallback(
@@ -557,8 +557,8 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
         const materialKind = materialKindOf(file)
         if (materialKind) {
           try {
-            // Um vídeo de arquivo vai por CAMINHO: o main o copia, e o filme nunca
-            // passa inteiro pela memória do renderer.
+            // A file video goes BY PATH: the main process copies it, and the film never
+            // goes whole through the renderer memory.
             const diskPath = materialKind === "video" ? window.getPathForFile?.(file) || undefined : undefined
             if (materialKind === "video" && !diskPath && file.size > MAX_PASTED_VIDEO_BYTES) {
               failed.push(t("attachments.errorPastedVideo", { name: file.name }))
@@ -647,7 +647,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     [scope, refresh],
   )
 
-  /** Excluir um material apaga o ARQUIVO (é o item da galeria): libera o espaço. */
+  /** Deleting a material erases the FILE (it is the gallery item): it frees the space. */
   const removeMaterial = useCallback(
     async (id: string) => {
       await mediaApi.remove([id])
@@ -656,8 +656,8 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     [refresh],
   )
 
-  /** Soltar na área decide o escopo: arquivo de fora entra ali, documento
-   *  arrastado da outra área muda de lado. */
+  /** Dropping in the area decides the scope: a file from outside enters there, a document
+   *  dragged from the other area changes side. */
   const handleDrop = useCallback(
     (e: React.DragEvent, toShared: boolean) => {
       e.preventDefault()
@@ -756,7 +756,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 moveLabel={isShared ? t("sources.unshare") : t("sources.share")}
                 MoveIcon={isShared ? ArrowDownToLine : ArrowUpToLine}
                 onMove={folderId ? () => void move(doc.id, !isShared) : undefined}
-                onOpen={() => void abrir(doc)}
+                onOpen={() => void openSource(doc)}
                 onRemove={() => void remove(doc.id)}
               />
             ))}
@@ -802,10 +802,10 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
 
       <div className="flex-1 overflow-y-auto p-2">
         {/*
-          Sem estado de carregando: a lista chega em milissegundos e trocá-la
-          por um spinner faz ela SUMIR e voltar a cada recarga — e a aba recarrega
-          sozinha quando um anexo chega. Enquanto não há resposta ainda, o que
-          aparece é o vazio, que é o que a aba mostra mesmo quando não há fonte.
+          No loading state: the list arrives in milliseconds and swapping it
+          for a spinner makes it DISAPPEAR and come back on every reload — and the tab reloads
+          by itself when an attachment arrives. While there is no answer yet, what
+          appears is the empty one, which is what the tab shows even when there is no source.
         */}
         {(
           <div className="flex flex-col gap-1">
@@ -859,9 +859,9 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
 }
 
 /**
- * Colar um trecho ou apontar um endereço — as duas fontes que não vêm de
- * arquivo. O mesmo diálogo serve aos dois porque a diferença é só o campo; o
- * destino (pasta ou conversa) já veio decidido de onde o menu foi aberto.
+ * Paste an excerpt or point at an address — the two sources that do not come from
+ * a file. The same dialog serves both because the difference is only the field; the
+ * destination (folder or conversation) already came decided from where the menu was opened.
  */
 function AddSourceDialog({
   request,
@@ -880,8 +880,8 @@ function AddSourceDialog({
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
 
-  // Limpa ao abrir: o diálogo é reaproveitado entre os dois tipos e entre as
-  // duas áreas, e reaparecer com o texto anterior seria confuso.
+  // Clears on opening: the dialog is reused between the two types and between the
+  // two areas, and reappearing with the previous text would be confusing.
   useEffect(() => {
     if (request) {
       setTitle("")

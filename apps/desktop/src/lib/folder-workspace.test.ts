@@ -5,9 +5,9 @@ import type { FolderInfo, SessionInfo } from "@shared/chat"
 import { firstSessionOfFolder, sessionWorkspace, workspaceOfFolder } from "@/src/lib/folder-workspace"
 
 /**
- * O caso real: a pasta Nodara estava VAZIA (todos os chats dela apagados) e o
- * "+" abria o chat novo no repositório do último chat aberto — o Orbit. O mapa
- * automático ainda dizia qual projeto era o da pasta; é ele que resolve.
+ * The real case: the Nodara folder was EMPTY (all of its chats deleted) and the
+ * "+" opened the new chat in the repository of the last chat opened — Orbit. The automatic
+ * map still said which project was the folder's; it is what resolves it.
  */
 
 const NODARA_DIR = "/Users/desknik/Projects/Nodara"
@@ -36,7 +36,7 @@ const session = (over: Partial<SessionInfo> = {}): SessionInfo => ({
 })
 
 describe("workspaceOfFolder", () => {
-  it("pasta vazia: o mapa automático decide (o '+' não herda o repositório do último chat)", () => {
+  it("empty folder: the automatic map decides (the '+' does not inherit the last chat's repository)", () => {
     expect(
       workspaceOfFolder({
         folder: folder(),
@@ -46,35 +46,35 @@ describe("workspaceOfFolder", () => {
     ).toEqual([NODARA_DIR])
   })
 
-  it("com chats na pasta, o mais recente decide — inclusive as pastas extras dele", () => {
-    const maisNovo = session({
+  it("with chats in the folder, the most recent one decides — its extra folders included", () => {
+    const newest = session({
       id: "novo",
       folderId: "f-nodara",
       directory: "/Projects/Nodara-worktree",
       extraDirectories: ["/Projects/api"],
       updatedAt: 20,
     })
-    const maisVelho = session({ id: "velho", folderId: "f-nodara", directory: NODARA_DIR, updatedAt: 10 })
+    const oldest = session({ id: "velho", folderId: "f-nodara", directory: NODARA_DIR, updatedAt: 10 })
     expect(
       workspaceOfFolder({
         folder: folder(),
-        sessions: [maisVelho, maisNovo],
+        sessions: [oldest, newest],
         autoFolderMap: { [NODARA_DIR]: "f-nodara" },
       }),
     ).toEqual(["/Projects/Nodara-worktree", "/Projects/api"])
   })
 
-  it("o chat mais recente vence o mapa (a pasta segue o uso, não o cadastro)", () => {
+  it("the most recent chat beats the map (the folder follows usage, not registration)", () => {
     expect(
       workspaceOfFolder({
         folder: folder(),
-        sessions: [session({ folderId: "f-nodara", directory: "/Projects/outro" })],
+        sessions: [session({ folderId: "f-nodara", directory: "/Projects/other" })],
         autoFolderMap: { [NODARA_DIR]: "f-nodara" },
       }),
-    ).toEqual(["/Projects/outro"])
+    ).toEqual(["/Projects/other"])
   })
 
-  it("chat arquivado também conta: a pasta agrupa os dois estados", () => {
+  it("an archived chat also counts: the folder groups both states", () => {
     expect(
       workspaceOfFolder({
         folder: folder(),
@@ -84,7 +84,7 @@ describe("workspaceOfFolder", () => {
     ).toEqual([NODARA_DIR])
   })
 
-  it("chat da pasta sem diretório (modo conversa) não decide nada", () => {
+  it("a chat in the folder with no directory (chat mode) decides nothing", () => {
     expect(
       workspaceOfFolder({
         folder: folder(),
@@ -94,7 +94,7 @@ describe("workspaceOfFolder", () => {
     ).toEqual([NODARA_DIR])
   })
 
-  it("ignora chats de outras pastas", () => {
+  it("ignores chats from other folders", () => {
     expect(
       workspaceOfFolder({
         folder: folder(),
@@ -104,7 +104,7 @@ describe("workspaceOfFolder", () => {
     ).toEqual([NODARA_DIR])
   })
 
-  it("vários diretórios no mesmo mapa: o nome da pasta desempata", () => {
+  it("several directories in the same map: the folder name breaks the tie", () => {
     expect(
       workspaceOfFolder({
         folder: folder(),
@@ -114,7 +114,7 @@ describe("workspaceOfFolder", () => {
     ).toEqual([NODARA_DIR])
   })
 
-  it("pasta vazia: a memória dela (workspace do primeiro chat) vence o mapa e traz as extras", () => {
+  it("empty folder: its memory (the first chat's workspace) beats the map and brings the extras", () => {
     expect(
       workspaceOfFolder({
         folder: folder({ workspace: [NODARA_DIR, "/Projects/api"] }),
@@ -124,17 +124,17 @@ describe("workspaceOfFolder", () => {
     ).toEqual([NODARA_DIR, "/Projects/api"])
   })
 
-  it("a memória é fallback: com chat na pasta, o mais recente ainda decide", () => {
+  it("the memory is a fallback: with a chat in the folder, the most recent one still decides", () => {
     expect(
       workspaceOfFolder({
         folder: folder({ workspace: [NODARA_DIR] }),
-        sessions: [session({ folderId: "f-nodara", directory: "/Projects/outro" })],
+        sessions: [session({ folderId: "f-nodara", directory: "/Projects/other" })],
         autoFolderMap: {},
       }),
-    ).toEqual(["/Projects/outro"])
+    ).toEqual(["/Projects/other"])
   })
 
-  it("pasta sem projeto conhecido devolve undefined (quem chama não mexe no workspace)", () => {
+  it("a folder with no known project returns undefined (the caller leaves the workspace alone)", () => {
     expect(
       workspaceOfFolder({ folder: folder(), sessions: [], autoFolderMap: { [ORBIT_DIR]: "f-orbit" } }),
     ).toBeUndefined()
@@ -142,22 +142,22 @@ describe("workspaceOfFolder", () => {
 })
 
 describe("firstSessionOfFolder", () => {
-  it("a MAIS ANTIGA da pasta é a que ensina o workspace — não a mais recente", () => {
-    const primeira = session({ id: "a", folderId: "f-nodara", directory: NODARA_DIR, createdAt: 1 })
-    const recente = session({ id: "b", folderId: "f-nodara", directory: ORBIT_DIR, createdAt: 9 })
-    expect(firstSessionOfFolder("f-nodara", [recente, primeira])?.id).toBe("a")
+  it("the OLDEST one in the folder is the one that teaches the workspace — not the most recent", () => {
+    const first = session({ id: "a", folderId: "f-nodara", directory: NODARA_DIR, createdAt: 1 })
+    const recent = session({ id: "b", folderId: "f-nodara", directory: ORBIT_DIR, createdAt: 9 })
+    expect(firstSessionOfFolder("f-nodara", [recent, first])?.id).toBe("a")
   })
 
-  it("ignora chats de outras pastas, do modo conversa e sem diretório", () => {
-    const barulho = [
-      session({ id: "outro", folderId: "f-orbit", directory: ORBIT_DIR, createdAt: 0 }),
+  it("ignores chats from other folders, from chat mode and with no directory", () => {
+    const noise = [
+      session({ id: "other", folderId: "f-orbit", directory: ORBIT_DIR, createdAt: 0 }),
       session({ id: "conversa", folderId: "f-nodara", mode: "chat", createdAt: 0 }),
       session({ id: "sem-dir", folderId: "f-nodara", directory: undefined, createdAt: 0 }),
     ]
-    expect(firstSessionOfFolder("f-nodara", barulho)).toBeUndefined()
+    expect(firstSessionOfFolder("f-nodara", noise)).toBeUndefined()
     expect(
       firstSessionOfFolder("f-nodara", [
-        ...barulho,
+        ...noise,
         session({ id: "valido", folderId: "f-nodara", directory: NODARA_DIR, createdAt: 5 }),
       ])?.id,
     ).toBe("valido")
@@ -165,7 +165,7 @@ describe("firstSessionOfFolder", () => {
 })
 
 describe("sessionWorkspace", () => {
-  it("principal + extras, na ordem; undefined sem diretório", () => {
+  it("main + extras, in order; undefined with no directory", () => {
     expect(sessionWorkspace(session({ directory: "/a", extraDirectories: ["/b"] }))).toEqual(["/a", "/b"])
     expect(sessionWorkspace(session())).toBeUndefined()
   })

@@ -22,32 +22,32 @@ import {
 } from './video/record-profile'
 
 /**
- * Gravação de um ROTEIRO no browser oculto (tool `browser_record`).
+ * Recording of a SCRIPT in the hidden browser (the `browser_record` tool).
  *
- * A ideia: em vez de filmar o agente trabalhando (que espera o modelo pensar
- * entre cada passo), o roteiro é uma lista de ações que o main executa em
- * sequência — clicar, digitar, rolar, esperar — enquanto o framebuffer da
- * janela oculta é capturado e vira um MP4. O vídeo é determinístico e curto:
- * dura o tempo das ações, não o tempo do raciocínio.
+ * The idea: instead of filming the agent working (which waits for the model to think
+ * between each step), the script is a list of actions that the main executes in
+ * sequence — click, type, scroll, wait — while the framebuffer of the hidden
+ * window is captured and becomes an MP4. The video is deterministic and short: it
+ * lasts as long as the actions, not as long as the reasoning.
  *
- * Captura em dois modos, escolhidos em tempo de execução:
+ * Capture in two modes, chosen at runtime:
  *
- * - `screencast` (preferido): CDP `Page.startScreencast` no webContents. O
- *   Chromium emite um JPEG por quadro pintado, com ack obrigatório — é o mesmo
- *   mecanismo do DevTools, barato e com o timing real das animações.
- * - `capturePage` (fallback): se nenhum quadro chegar (janela oculta que não
- *   compõe), um laço chama `webContents.capturePage()` no ritmo do fps. Mais
- *   caro, mas conhecido por funcionar com `paintWhenInitiallyHidden`.
+ * - `screencast` (preferred): CDP `Page.startScreencast` on the webContents. The
+ *   Chromium emits a JPEG per painted frame, with a mandatory ack — it is the same
+ *   mechanism as DevTools, cheap and with the real timing of the animations.
+ * - `capturePage` (fallback): if no frame arrives (a hidden window that does not
+ *   composite), a loop calls `webContents.capturePage()` at the fps pace. More
+ *   expensive, but known to work with `paintWhenInitiallyHidden`.
  *
- * Nos dois casos o que se grava são quadros com TIMESTAMP. O vídeo é montado
- * depois: cada quadro vira uma entrada com `duration` no concat demuxer do
- * ffmpeg, que normaliza para fps constante — quadro repetido não custa nada e
- * um trecho parado mantém a última imagem pelo tempo real que durou.
+ * In both cases what is recorded are frames with a TIMESTAMP. The video is assembled
+ * afterwards: each frame becomes an entry with a `duration` in ffmpeg's concat demuxer,
+ * which normalizes to a constant fps — a repeated frame costs nothing and
+ * a still stretch holds the last image for the real time it lasted.
  *
- * O cursor é um elemento injetado NA PÁGINA, posicionado com a MESMA
- * coordenada que o clique usa (`pointFor`): não há conversão entre o desenho e
- * o evento, então ele cai exatamente sobre o alvo por construção. Nas telas em
- * que a página navega, o elemento é reinjetado na ação seguinte.
+ * The cursor is an element injected IN THE PAGE, positioned with the SAME
+ * coordinate that the click uses (`pointFor`): there is no conversion between the drawing and
+ * the event, so it lands exactly on the target by construction. On the screens
+ * where the page navigates, the element is reinjected on the next action.
  */
 
 export type RecordStep =
@@ -74,28 +74,28 @@ export type RecordStep =
 
 export interface RecordOptions {
   sessionId: string
-  /** Página inicial — carregada ANTES de começar a gravar (o vídeo abre nela pronta). */
+  /** Start page — loaded BEFORE starting to record (the video opens on it already). */
   url?: string
   steps: RecordStep[]
   viewport?: { width: number; height: number }
   /**
-   * Perfil de qualidade. `auto` (padrão) segue a máquina — forte grava a 60 fps
-   * em qualidade alta. Um nível explícito SEMPRE vence o tier.
+   * Quality profile. `auto` (default) follows the machine — a strong one records at 60 fps
+   * in high quality. An explicit level ALWAYS beats the tier.
    */
   quality?: RecordQuality
-  /** Quadros por segundo (10-60). Vence o perfil. */
+  /** Frames per second (10-60). Beats the profile. */
   fps?: number
-  /** Largura final do vídeo (par, em px). Ausente = tamanho capturado. */
+  /** Final width of the video (even, in px). Absent = captured size. */
   width?: number
-  /** Cursor desenhado na página (padrão: true). */
+  /** Cursor drawn on the page (default: true). */
   cursor?: boolean
-  /** Quadros parados no fim, para a última transição terminar dentro do vídeo. */
+  /** Still frames at the end, so the last transition finishes inside the video. */
   tailMs?: number
-  /** Nome do arquivo (vira o título na galeria). */
+  /** File name (becomes the title in the gallery). */
   name?: string
-  /** Qualidade do x264 (menor = melhor/maior arquivo). Vence o perfil. */
+  /** x264 quality (lower = better/bigger file). Beats the profile. */
   crf?: number
-  /** Preserva a pasta dos quadros (depuração). */
+  /** Preserves the frames folder (debugging). */
   keepFrames?: boolean
   timeoutMs?: number
   signal?: AbortSignal
@@ -106,19 +106,19 @@ export interface RecordResult {
   durationMs: number
   frames: number
   engine: 'screencast' | 'capturePage'
-  /** fps do vídeo final (o que foi pedido/perfil). */
+  /** fps of the final video (what was requested/the profile). */
   fps: number
   /**
-   * Quadros distintos por segundo que a página produziu. NÃO é a capacidade da
-   * máquina: o Chromium só emite quadro quando algo muda, então uma tela
-   * parada dá um número baixo e um vídeo perfeito (o fps final é `fps`, com os
-   * quadros repetidos pelo encoder).
+   * Distinct frames per second that the page produced. It is NOT the machine's
+   * capacity: Chromium only emits a frame when something changes, so a still screen
+   * gives a low number and a perfect video (the final fps is `fps`, with the frames
+   * repeated by the encoder).
    */
   capturedFps: number
-  /** Perfil resolvido (quality nunca é `auto`). */
+  /** Resolved profile (quality is never `auto`). */
   quality: Exclude<RecordQuality, 'auto'>
   crf: number
-  /** Tier da máquina usado quando a qualidade foi `auto`. */
+  /** Tier of the machine used when the quality was `auto`. */
   tier: 'weak' | 'balanced' | 'strong'
   steps: number
   logs: string[]
@@ -126,29 +126,29 @@ export interface RecordResult {
 
 export interface FrameMark {
   file: string
-  /** Quando o quadro foi recebido (ms, relógio do main). */
+  /** When the frame was received (ms, main's clock). */
   at: number
 }
 
-/** Uma entrada do concat demuxer: arquivo + quanto tempo ele fica na tela. */
+/** One concat demuxer entry: file + how long it stays on screen. */
 export interface TimelineEntry {
   file: string
   durationMs: number
 }
 
 export interface TimelineOptions {
-  /** Fim da gravação (ms) — alimenta a duração do último quadro. */
+  /** End of the recording (ms) — feeds the duration of the last frame. */
   endedAt: number
-  /** Espera extra no último quadro (a transição final precisa caber no vídeo). */
+  /** Extra wait on the last frame (the final transition has to fit in the video). */
   tailMs?: number
 }
 
 /**
- * Converte quadros com timestamp numa timeline de durações.
+ * Converts frames with a timestamp into a timeline of durations.
  *
- * O vídeo COMEÇA no primeiro quadro (o tempo gasto para a página carregar antes
- * dele não entra) e cada quadro dura até o próximo. Quadros que chegaram
- * juntos ganham o mínimo de 1ms para não gerar `duration 0` no concat.
+ * The video STARTS at the first frame (the time spent loading the page before
+ * it does not enter) and each frame lasts until the next one. Frames that arrived
+ * together get a minimum of 1ms so as not to generate `duration 0` in the concat.
  */
 export function frameTimeline(frames: FrameMark[], options: TimelineOptions): TimelineEntry[] {
   if (frames.length === 0) return []
@@ -166,8 +166,8 @@ export function timelineDurationMs(entries: TimelineEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.durationMs, 0)
 }
 
-/** Concat demuxer: `file` + `duration` por quadro, com o último repetido
- *  (senão o ffmpeg descarta a duração da última entrada). */
+/** Concat demuxer: `file` + `duration` per frame, with the last one repeated
+ *  (otherwise ffmpeg discards the duration of the last entry). */
 export function concatList(entries: TimelineEntry[]): string {
   const lines = ['ffconcat version 1.0']
   for (const entry of entries) {
@@ -194,14 +194,14 @@ function safeName(raw?: string): string {
   return cleaned || `rec-${Date.now().toString(36)}`
 }
 
-/** Seta do cursor, preta/branca para aparecer em qualquer fundo. */
+/** Cursor arrow, black/white to show up on any background. */
 const CURSOR_SVG =
   '<svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
   '<path d="M5 3.2 L5 19.6 L9.3 15.3 L12.2 21.3 L15 20 L12.1 14.2 L18 14.2 Z" ' +
   'fill="#ffffff" stroke="#111111" stroke-width="1.4" stroke-linejoin="round"/></svg>'
 
-/** Cria (se preciso) e move o cursor. `ripple` acende a onda do clique.
- *  Exportado para o teste executar o MESMO código dentro de uma página. */
+/** Creates (if needed) and moves the cursor. `ripple` lights up the click wave.
+ *  Exported so the test can run the SAME code inside a page. */
 export function cursorScript(point: { x: number; y: number }, ripple: boolean, enabled: boolean): string {
   const x = Math.round(point.x)
   const y = Math.round(point.y)
@@ -218,8 +218,8 @@ export function cursorScript(point: { x: number; y: number }, ripple: boolean, e
     cursor.innerHTML = ${JSON.stringify(CURSOR_SVG)}
     root.appendChild(cursor)
   }
-  // -4.6/-2.9 é a ponta da seta dentro do viewBox 24×24 desenhado em 22px:
-  // assim a PONTA cai no ponto clicado, não o canto do div.
+  // -4.6/-2.9 is the arrow tip inside the 24×24 viewBox drawn at 22px:
+  // that way the TIP lands on the clicked point, not the corner of the div.
   cursor.style.transform = 'translate3d(' + (${x} - 4.6) + 'px,' + (${y} - 2.9) + 'px,0)'
   if (${ripple}) {
     const ring = document.createElement('div')
@@ -247,9 +247,9 @@ interface PointTarget {
 }
 
 /**
- * Ponto (px CSS da viewport) de um alvo: coordenadas cruas, seletor CSS ou
- * texto visível. Rola o elemento para o centro ANTES de medir — a medida e o
- * clique usam exatamente o mesmo número.
+ * Point (CSS px of the viewport) of a target: raw coordinates, a CSS selector or
+ * visible text. It scrolls the element to the center BEFORE measuring — the measurement and the
+ * click use exactly the same number.
  */
 export function pointScript(target: PointTarget): string {
   const t = JSON.stringify(target)
@@ -302,7 +302,7 @@ export function pointScript(target: PointTarget): string {
 })()`
 }
 
-/** Texto curto para o log/atividade: "click «Entrar»". */
+/** Short text for the log/activity: "click «Sign in»". */
 function describeStep(step: RecordStep): string {
   switch (step.do) {
     case 'goto':
@@ -326,7 +326,7 @@ function describeStep(step: RecordStep): string {
   }
 }
 
-/** Espera o carregamento terminar e dá um tempo para SPA hidratar. */
+/** Waits for the load to finish and gives the SPA time to hydrate. */
 async function settle(win: BrowserWindow, graceMs = 300): Promise<void> {
   const deadline = Date.now() + 15_000
   while (win.webContents.isLoading() && Date.now() < deadline) await delay(120)
@@ -351,8 +351,8 @@ async function scrollSettle(win: BrowserWindow): Promise<void> {
 }
 
 /**
- * Gravador de quadros. Um dos dois modos, escolhido na partida: se o screencast
- * não entregar o primeiro quadro em `PROBE_MS`, cai no laço de `capturePage`.
+ * Frame recorder. One of the two modes, chosen at the start: if the screencast
+ * does not deliver the first frame within `PROBE_MS`, it falls back to the `capturePage` loop.
  */
 class FrameRecorder {
   private frames: FrameMark[] = []
@@ -391,7 +391,7 @@ class FrameRecorder {
       if (works) return
       await this.stopScreencast()
     } catch {
-      // CDP indisponível nesta página/Electron: segue para o capturePage
+      // CDP unavailable on this page/Electron: goes on to capturePage
     }
     this.mode = 'capturePage'
     this.startCaptureLoop()
@@ -406,8 +406,8 @@ class FrameRecorder {
       const at = Date.now()
       const file = path.join(this.dir, `f${String(++this.seq).padStart(5, '0')}.jpg`)
       this.frames.push({ file, at })
-      // Grava em série e faz o ack imediatamente: esperar o disco antes do ack
-      // faz o Chromium parar de emitir quadros.
+      // Records serially and acks immediately: waiting for the disk before the ack
+      // makes Chromium stop emitting frames.
       this.writing = this.writing
         .then(() => fsp.writeFile(file, Buffer.from(frame.data, 'base64')))
         .catch(() => undefined)
@@ -439,7 +439,7 @@ class FrameRecorder {
     try {
       dbg.detach()
     } catch {
-      // já desanexado
+      // already detached
     }
   }
 
@@ -455,7 +455,7 @@ class FrameRecorder {
         this.frames.push({ file, at: Date.now() })
         this.failing = 0
       } catch {
-        // Janela destruída/fechando: duas falhas seguidas encerram o laço.
+        // Window destroyed/closing: two failures in a row end the loop.
         this.failing += 1
         if (this.failing >= 2) return
       }
@@ -473,7 +473,7 @@ class FrameRecorder {
     await this.writing
   }
 
-  /** Timeline final, já com a cauda pedida. */
+  /** Final timeline, already with the requested tail. */
   timeline(tailMs: number): TimelineEntry[] {
     return frameTimeline(this.frames, { endedAt: this.stoppedAt || Date.now(), tailMs })
   }
@@ -482,13 +482,13 @@ class FrameRecorder {
     return this.frames[0]?.at ?? this.startedAt
   }
 
-  /** Quando a gravação parou — ancora a duração do último quadro. */
+  /** When the recording stopped — anchors the duration of the last frame. */
   get endedAt(): number {
     return this.stoppedAt
   }
 }
 
-/** Codifica os quadros em MP4 (H.264, yuv420p, faststart). */
+/** Encodes the frames into MP4 (H.264, yuv420p, faststart). */
 async function encodeFrames(
   entries: TimelineEntry[],
   output: string,
@@ -497,11 +497,11 @@ async function encodeFrames(
   const listFile = `${output}.concat.txt`
   await fsp.writeFile(listFile, concatList(entries), 'utf8')
   const width = opts.width && opts.width > 0 ? Math.round(opts.width / 2) * 2 : 0
-  // `in_range=full:out_range=tv` é obrigatório, não enfeite: os quadros vêm de
-  // JPEG/PNG, que são faixa COMPLETA (0-255). Sem a conversão, o ffmpeg marca o
-  // H.264 como `yuvj420p` e players que ignoram essa flag (QuickTime entre
-  // eles) mostram o vídeo lavado. O `-pix_fmt yuv420p` sozinho NÃO resolve —
-  // quem manda é a conversão de range no scale.
+  // `in_range=full:out_range=tv` is mandatory, not decoration: the frames come from
+  // JPEG/PNG, which are FULL range (0-255). Without the conversion, ffmpeg tags the
+  // H.264 as `yuvj420p` and players that ignore that flag (QuickTime among
+  // them) show the video washed out. The `-pix_fmt yuv420p` alone does NOT solve it —
+  // what rules is the range conversion in the scale.
   const range = 'in_range=full:out_range=tv'
   const scale = width
     ? `scale=${width}:-2:flags=lanczos:${range},format=yuv420p`
@@ -532,8 +532,8 @@ async function encodeFrames(
         '-an',
         output,
       ],
-      // Sem `signal`: o encode de poucos segundos não deve ser abortado no meio
-      // (o sinal já foi consumido no roteiro, e um MP4 truncado seria pior).
+      // Without `signal`: the encode of a few seconds must not be aborted midway
+      // (the signal was already consumed in the script, and a truncated MP4 would be worse).
     )
   } finally {
     await fsp.rm(listFile, { force: true })
@@ -541,12 +541,12 @@ async function encodeFrames(
 }
 
 /**
- * Roda o roteiro e devolve o MP4. Diferente de `runBrowserScript`, o script
- * NÃO é JS livre: são passos declarativos, para o vídeo ser previsível.
+ * Runs the script and returns the MP4. Unlike `runBrowserScript`, the script
+ * is NOT free JS: they are declarative steps, so that the video is predictable.
  */
 export async function recordBrowserScript(options: RecordOptions): Promise<RecordResult> {
   const viewport = options.viewport ?? DEFAULT_VIEWPORT
-  // A máquina decide o PADRÃO; um nível pedido explicitamente manda mais que ela.
+  // The machine decides the DEFAULT; an explicitly requested level beats it.
   const machine = detectMachine()
   const profile = resolveRecordProfile(
     { quality: options.quality, fps: options.fps, crf: options.crf },
@@ -596,13 +596,13 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
     try {
       await Promise.race([win.loadURL(url), delay(20_000)])
     } catch (err) {
-      // ERR_ABORTED (-3) é normal em SPA/redirect
+      // ERR_ABORTED (-3) is normal in an SPA/redirect
       if ((err as { errno?: number }).errno !== -3) throw err
     }
     await settle(win, 400)
   }
 
-  /** Põe o cursor no canto de descanso para a primeira ação ser um movimento. */
+  /** Puts the cursor in the resting corner so the first action is a movement. */
   const restCursor = async () => {
     if (options.cursor === false) return
     await showCursor({ x: viewport.width * 0.68, y: viewport.height * 0.64 })
@@ -619,8 +619,8 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
   let error: string | undefined
 
   try {
-    // Preparação FORA do vídeo: carregar a página inicial e um `goto` que seja
-    // o primeiro passo. O vídeo abre na página pronta, sem tela branca.
+    // Preparation OUTSIDE the video: loading the start page and a `goto` that is
+    // the first step. The video opens on the page ready, without a white screen.
     if (options.url) await goto(options.url)
     let start = 0
     if (options.steps[0]?.do === 'goto') {
@@ -629,9 +629,9 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
     }
     await restCursor()
 
-    // Teto do screencast = o do perfil, limitado pelo tamanho real da janela em
-    // pixels de device (2x num Retina). A altura acompanha o aspecto para o
-    // Chromium não cortar a imagem ao reduzir.
+    // Screencast ceiling = the profile's, limited by the real size of the window in
+    // device pixels (2x on a Retina). The height follows the aspect so that
+    // Chromium does not crop the image when reducing.
     const capWidth = Math.min(profile.maxWidth, Math.round(viewport.width * 2))
     const capHeight = Math.min(
       Math.round(capWidth / (viewport.width / viewport.height)),
@@ -648,7 +648,7 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
     panelActivity(tNow('panel.activity.recordStart', { url: win.webContents.getURL() || 'about:blank' }))
     pushLog(`engine: ${recorder.engine} · ${describeProfile(profile, machine.tier)}`)
     pushLog(
-      `máquina: ${machine.tier} · ${machine.cpus} núcleos · ${machine.totalMemGb} GB · ${machine.arch}`,
+      `machine: ${machine.tier} · ${machine.cpus} cores · ${machine.totalMemGb} GB · ${machine.arch}`,
     )
 
     for (let index = start; index < options.steps.length; index += 1) {
@@ -664,7 +664,7 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
         case 'click': {
           const point = await pointFor(step)
           await showCursor(point)
-          await delay(230) // a transição do cursor termina antes do clique
+          await delay(230) // the cursor transition ends before the click
           await showCursor(point, true)
           mouseDown(win.webContents, point)
           await delay(60)
@@ -754,7 +754,7 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
       ran += 1
     }
 
-    // Segura o último quadro para a animação final caber no vídeo.
+    // Holds the last frame so the final animation fits in the video.
     await delay(Math.max(0, options.tailMs ?? 500))
     checkAbort()
   } catch (err) {
@@ -764,7 +764,7 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
       try {
         await recorder.stop()
       } catch {
-        // janela fechando
+        // window closing
       }
     }
     if (!win.isDestroyed()) win.destroy()
@@ -774,11 +774,11 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
     if (!options.keepFrames) await fsp.rm(framesDir, { recursive: true, force: true })
     throw new Error(error ?? 'no frames were captured — the page may never have painted')
   }
-  if (error) pushLog(`aviso: ${error}`)
+  if (error) pushLog(`warning: ${error}`)
 
-  // A cauda JÁ está nos quadros: o `delay` acima manteve a gravação rodando
-  // depois da última ação, e a timeline mede isso por `endedAt`. Somar a cauda
-  // de novo aqui daria o dobro do tempo parado no fim.
+  // The tail IS already in the frames: the `delay` above kept the recording running
+  // after the last action, and the timeline measures that through `endedAt`. Adding the tail
+  // again here would double the still time at the end.
   const entries = recorder.timeline(0)
   if (entries.length === 0) throw new Error('no frames were captured')
 
@@ -794,10 +794,10 @@ export async function recordBrowserScript(options: RecordOptions): Promise<Recor
   if (!options.keepFrames) await fsp.rm(framesDir, { recursive: true, force: true })
 
   const pageErrors = pageConsole.query({ level: 'error', limit: 10 })
-  if (pageErrors.length > 0) pushLog(`[página] ${pageErrors.length} erro(s) no console:\n${formatConsoleEntries(pageErrors)}`)
+  if (pageErrors.length > 0) pushLog(`[page] ${pageErrors.length} error(s) in the console:\n${formatConsoleEntries(pageErrors)}`)
 
-  // Quanto a máquina entregou de fato: `count` sobre o intervalo em que os
-  // quadros chegaram (não sobre a duração do vídeo, que inclui as repetições).
+  // How much the machine actually delivered: `count` over the interval in which the
+  // frames arrived (not over the video duration, which includes the repetitions).
   const span = Math.max(1, recorder.endedAt - recorder.firstAt)
   return {
     file: output,

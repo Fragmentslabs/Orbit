@@ -1,20 +1,20 @@
 import { Storage } from '~/lib/storage'
 
 /**
- * Último chat aberto no aparelho. Ao reabrir o app (ou reconectar), a rota
- * inicial volta para ele em vez de cair num chat novo — o `activeSessionId`
- * do session-store é só memória e morria junto com o processo.
+ * Last chat opened on the device. When reopening the app (or reconnecting), the initial
+ * route goes back to it instead of falling into a new chat — the `activeSessionId`
+ * of the session-store is only memory and died with the process.
  */
 
 const LAST_SESSION_KEY = 'orbit_last_session'
 
-/** null (chat novo aberto) limpa a chave. */
+/** null (new chat opened) clears the key. */
 export async function saveLastSessionId(sessionId: string | null): Promise<void> {
   try {
     if (sessionId) await Storage.setItem(LAST_SESSION_KEY, sessionId)
     else await Storage.removeItem(LAST_SESSION_KEY)
   } catch {
-    // Persistência é oportunista.
+    // Persistence is opportunistic.
   }
 }
 

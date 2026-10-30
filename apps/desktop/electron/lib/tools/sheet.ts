@@ -7,16 +7,16 @@ import { readSessionDocumentBytes, readSessionDocument } from '../session-docume
 import { resolveSafePath, type ToolContext } from './context'
 
 /**
- * Consulta sobre planilha: filtrar, agrupar, somar.
+ * Spreadsheet query: filter, group, sum.
  *
- * Ler a planilha e somar "de cabeça" é caro e ERRADO — o modelo percorrendo
- * milhares de linhas gasta contexto proporcional ao arquivo e erra a
- * aritmética de um jeito que não aparece na resposta. Aqui o número é
- * calculado pelo runtime.
+ * Reading the spreadsheet and adding it up "in your head" is expensive and WRONG — the model going
+ * through thousands of rows spends context proportional to the file and gets the
+ * arithmetic wrong in a way that does not show in the answer. Here the number is
+ * computed by the runtime.
  *
- * A tool aceita as duas fontes que o Orbit tem: `filePath` (planilha do
- * repositório, só no modo código, onde existe pasta de trabalho) e `docId`
- * (planilha anexada na conversa, nos dois modos).
+ * The tool accepts the two sources Orbit has: `filePath` (a spreadsheet from the
+ * repository, only in code mode, where there is a working folder) and `docId`
+ * (a spreadsheet attached to the conversation, in both modes).
  */
 
 const conditionSchema = z.object({
@@ -54,7 +54,7 @@ export function createSheetQueryTool(sessionId: string, ctx: ToolContext | null)
       limit: z.number().optional().describe('Max rows returned (capped at 200)'),
     }),
     execute: async ({ filePath, docId, sheet, ...query }) => {
-      // ── fonte ───────────────────────────────────────────────────────────
+      // ── source ──────────────────────────────────────────────────────────
       let bytes: Buffer
       let label: string
       if (filePath) {
@@ -76,8 +76,8 @@ export function createSheetQueryTool(sessionId: string, ctx: ToolContext | null)
         }
         const stored = await readSessionDocumentBytes(sessionId, docId)
         if (!stored) {
-          // Anexo anterior a esta cópia: melhor avisar do que calcular sobre o
-          // texto formatado e devolver um número silenciosamente errado.
+          // Attachment older than this copy: better to warn than to compute over the
+          // formatted text and return a silently wrong number.
           return `The spreadsheet ${found.doc.filename} was attached before query support existed and no longer has the original file. Attach it again to be able to aggregate; for now it can be read with doc_read.`
         }
         bytes = stored
@@ -86,7 +86,7 @@ export function createSheetQueryTool(sessionId: string, ctx: ToolContext | null)
         return 'Provide filePath (spreadsheet in the working folder) or docId (attached spreadsheet).'
       }
 
-      // ── consulta ────────────────────────────────────────────────────────
+      // ── query ───────────────────────────────────────────────────────────
       try {
         const { rows, sheetName, sheetNames } = readSheetRows(bytes, sheet)
         const result = runSheetQuery(rows, query as SheetQuery)
@@ -94,8 +94,8 @@ export function createSheetQueryTool(sessionId: string, ctx: ToolContext | null)
           sheetNames.length > 1 ? ` · outras abas: ${sheetNames.filter((n) => n !== sheetName).join(', ')}` : ''
         return `${label} · aba "${sheetName}"${other}\n\n${formatQueryResult(result)}`
       } catch (err) {
-        // Erro de consulta (coluna inexistente, aba errada) é informação útil
-        // para o modelo corrigir a chamada, não falha da tool.
+        // A query error (nonexistent column, wrong sheet) is useful information
+        // for the model to correct the call, not a tool failure.
         if (err instanceof SheetQueryError) return err.message
         return `Failed to query ${label}: ${(err as Error).message}`
       }

@@ -6,11 +6,11 @@ interface ModelRef {
 }
 
 /**
- * O sucessor de um modelo salvo cujo id o models.dev renomeou, ou `undefined`
- * quando não há o que trocar (o id ainda existe, ou não há sucessor).
+ * The successor of a saved model whose id models.dev renamed, or `undefined`
+ * when there is nothing to swap (the id still exists, or there is no successor).
  *
- * Preserva os demais campos do objeto: quem chama grava de volta o mesmo
- * formato que leu.
+ * Preserves the other fields of the object: whoever calls it writes back the same
+ * format it read.
  */
 export function renamedRef<T extends ModelRef>(catalog: Catalog, ref: T | null | undefined): T | undefined {
   if (!ref) return undefined
@@ -18,17 +18,17 @@ export function renamedRef<T extends ModelRef>(catalog: Catalog, ref: T | null |
   return found?.renamed ? { ...ref, modelId: found.modelId } : undefined
 }
 
-/** O modelo salvo existe no catálogo (pelo id ou por renomeação)? Com o
- *  catálogo ainda vazio, a resposta é sim: não há como saber ainda. */
+/** Does the saved model exist in the catalog (by id or by renaming)? With the
+ *  catalog still empty, the answer is yes: there is no way to know yet. */
 export function isKnownModel(catalog: Catalog, ref: ModelRef | null | undefined): boolean {
   if (!ref || Object.keys(catalog).length === 0) return true
-  if (!catalog[ref.providerId]) return true // provedor custom ainda carregando
+  if (!catalog[ref.providerId]) return true // custom provider still loading
   return findCatalogModel(catalog, ref.providerId, ref.modelId) !== undefined
 }
 
 /**
- * Chaves "provedor/modelo" de preferências por modelo (ex: nível de reasoning)
- * que precisam de cópia sob o id novo: devolve pares [velha, nova].
+ * "provider/model" keys of per-model preferences (e.g.: reasoning level)
+ * that need a copy under the new id: returns pairs [old, new].
  */
 export function renamedPrefKeys(catalog: Catalog, keys: string[]): Array<[string, string]> {
   const pairs: Array<[string, string]> = []

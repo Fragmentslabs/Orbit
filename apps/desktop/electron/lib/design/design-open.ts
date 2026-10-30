@@ -6,9 +6,9 @@ import { refreshDesignCover } from './design-gallery'
 import { getDesign, registerDesign } from './design-store'
 
 /**
- * Reabre um canvas que JÁ está no registro — o card do chat, o tile da Mídia.
- * Sem sessionId de propósito: o renderer resolve o balde pelo chat ATIVO (ver
- * reopenMotion, o mesmo raciocínio).
+ * Reopens a canvas that is ALREADY in the registry — the chat card, the Media tile.
+ * No sessionId on purpose: the renderer resolves the bucket from the ACTIVE chat
+ * (see reopenMotion, same reasoning).
  */
 export async function reopenDesign(id: string): Promise<boolean> {
   const entry = await getDesign(id)
@@ -19,13 +19,14 @@ export async function reopenDesign(id: string): Promise<boolean> {
 }
 
 /**
- * Abre um canvas na aba Design e conta ao agente como ele ficou — o passo
- * comum de design_write/design_edit. Registra a pasta, manda o painel abrir (ou
- * focar) a aba, e valida o canvas.json (sem renderizar nada: ao contrário do
- * motion, o artboard é HTML estático — o próprio iframe sandbox valida o resto).
+ * Opens a canvas in the Design tab and tells the agent how it turned out — the
+ * common step of design_write/design_edit. Registers the folder, tells the panel to
+ * open (or focus) the tab, and validates canvas.json (without rendering anything:
+ * unlike motion, the artboard is static HTML — the sandboxed iframe validates the
+ * rest).
  */
 export async function openDesignAndReport(input: {
-  /** Pasta do canvas, já resolvida e autorizada. */
+  /** Folder of the canvas, already resolved and authorized. */
   target: string
   root?: string
   sessionId: string
@@ -38,18 +39,18 @@ export async function openDesignAndReport(input: {
   try {
     const canvas = await readDesignCanvas(input.target)
     if (canvas.order.length === 0) throw new Error('canvas.json has no artboards in "order"')
-    // A capa sai em BACKGROUND: o canvas já está aberto no painel, e o
-    // resultado da tool não tem por que esperar a janela offscreen carregar,
-    // fotografar e o sharp redimensionar (ver design-gallery.ts).
+    // The cover goes out in BACKGROUND: the canvas is already open in the panel, and the
+    // tool result has no reason to wait for the offscreen window to load,
+    // take the shot and sharp to resize (see design-gallery.ts).
     refreshDesignCover(reg.id, { sessionId: input.sessionId })
     const boards = canvas.order.map((file) => {
       const b = canvas.boards[file]
       if (!b) return `"${file}" (missing from boards!)`
       return `"${b.title ?? file}" (${file}, ${Math.round(b.w)}×${Math.round(b.h)} at ${Math.round(b.x)},${Math.round(b.y)})`
     })
-    // As folhas de estilo compartilhadas não estão no canvas.json (o índice é só
-    // o ARRANJO): sem esta linha o agente esquece que base.css existe e volta a
-    // repetir o CSS dentro de cada documento.
+    // The shared style sheets are not in canvas.json (the index is only
+    // the LAYOUT): without this line the agent forgets that base.css exists and goes back
+    // to repeating the CSS inside every document.
     const styles = (await fsp.readdir(input.target).catch(() => [] as string[]))
       .filter((file) => file.toLowerCase().endsWith('.css'))
       .sort()

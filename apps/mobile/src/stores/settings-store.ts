@@ -9,15 +9,15 @@ import type {
 import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
 
-/** Guarda ou apaga a chave conforme o valor — os três campos da config de
- *  workers/visão são anuláveis ("usar o modelo principal"). */
+/** Stores or clears the key according to the value — the three fields of the
+ *  workers/vision config are nullable ("use the main model"). */
 async function persistOrRemove(key: string, value: unknown): Promise<void> {
   if (value) await Storage.setItem(key, JSON.stringify(value))
   else await Storage.removeItem(key)
 }
 
-/** Manda a config inteira para o desktop, que é quem a guarda de verdade e
- *  repassa aos demais aparelhos. */
+/** Sends the whole config to the desktop, which is what really stores it and
+ *  passes it on to the other devices. */
 function pushWorkerConfig(state: {
   workerModel: WorkerModelConfig | null
   workerReasoning: ReasoningConfig | null
@@ -36,8 +36,8 @@ function pushWorkerConfig(state: {
     .catch(() => {})
 }
 
-/** Vira true assim que a config de workers/visão do desktop chega (fetch na
- *  conexão ou evento). Enquanto for false, o cache do aparelho preenche. */
+/** Becomes true as soon as the workers/vision config of the desktop arrives (fetch on
+ *  connection or event). While it is false, the device cache fills in. */
 let configDoDesktopAplicada = false
 
 const CATALOG_CACHE_KEY = 'orbit_catalog_cache'
@@ -68,68 +68,68 @@ interface SelectedModel {
 }
 
 interface SettingsState {
-  /** Modelo ativo no desktop. */
+  /** Model active on the desktop. */
   selectedModel: SelectedModel | null
-  /** Catálogo de modelos do desktop. */
+  /** Model catalog of the desktop. */
   catalog: Catalog | null
-  /** Provedores conectados no desktop. */
+  /** Providers connected on the desktop. */
   connectedProviders: string[]
-  /** Preferências do desktop. */
+  /** Preferences of the desktop. */
   preferences: Record<string, unknown> | null
   /** Loading state. */
   loading: boolean
 
-  /** Busca modelo selecionado via HTTP. */
+  /** Fetches the selected model via HTTP. */
   fetchSelectedModel: () => Promise<void>
-  /** Seleciona modelo via HTTP. */
+  /** Selects a model via HTTP. */
   selectModel: (providerId: string, modelId: string) => Promise<void>
-  /** Busca catálogo via HTTP. */
+  /** Fetches the catalog via HTTP. */
   fetchCatalog: () => Promise<void>
-  /** Busca provedores conectados via HTTP. */
+  /** Fetches the connected providers via HTTP. */
   fetchConnectedProviders: () => Promise<void>
-  /** Busca preferências via HTTP. */
+  /** Fetches the preferences via HTTP. */
   fetchPreferences: () => Promise<void>
-  /** Busca a config de workers/visão do desktop (fonte da verdade). */
+  /** Fetches the workers/vision config of the desktop (source of truth). */
   fetchWorkerConfig: () => Promise<void>
-  /** Atualiza preferências via HTTP. */
+  /** Updates the preferences via HTTP. */
   updatePreferences: (patch: Record<string, unknown>) => Promise<void>
-  /** Carrega o catálogo em cache (se houver) — pinta a UI instantaneamente
-   *  enquanto o fetchCatalog() real roda por baixo. */
+  /** Loads the catalog from the cache (if any) — paints the UI instantly
+   *   while the real fetchCatalog() runs underneath. */
   hydrateCatalogCache: () => Promise<void>
 
-  /** Modelo dos workers (subagentes/orquestração) — configurado no app. */
+  /** Model of the workers (subagents/orchestration) — configured in the app. */
   workerModel: WorkerModelConfig | null
-  /** Define (ou limpa) o modelo dos workers. */
+  /** Sets (or clears) the model of the workers. */
   setWorkerModel: (model: WorkerModelConfig | null) => Promise<void>
 
-  /** Configuração de thinking dos workers. */
+  /** Thinking configuration of the workers. */
   workerReasoning: ReasoningConfig | null
-  /** Define (ou limpa) o thinking dos workers. */
+  /** Sets (or clears) the thinking of the workers. */
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => Promise<void>
 
-  /** Aplica a config de workers/visão vinda do desktop (sem devolver para lá). */
+  /** Applies the workers/vision config coming from the desktop (without sending it back there). */
   applyWorkerConfigSync: (config: WorkerConfigSnapshot) => void
 
-  /** Modelo de visão delegado (modo Visão) — descreve imagens no desktop. */
+  /** Delegated vision model (Vision mode) — describes images on the desktop. */
   visionModel: WorkerModelConfig | null
-  /** Define (ou limpa) o modelo de visão. */
+  /** Sets (or clears) the vision model. */
   setVisionModel: (model: WorkerModelConfig | null) => Promise<void>
-  /** Modal de configuração do modelo de visão aberto. */
+  /** Vision model configuration modal open. */
   visionConfigOpen: boolean
-  /** Abre/fecha o modal de configuração do modo Visão. */
+  /** Opens/closes the configuration modal of the Vision mode. */
   setVisionConfigOpen: (open: boolean) => void
 
-  /** Configuração do modo loop. */
+  /** Configuration of the loop mode. */
   loopConfig: LoopConfig
-  /** Define a configuração do loop. */
+  /** Sets the loop configuration. */
   setLoopConfig: (config: LoopConfig) => Promise<void>
 
-  /** Pastas automáticas: agrupa sessions de código por diretório. */
+  /** Automatic folders: groups code sessions by directory. */
   autoCreateFolders: boolean
-  /** Define o toggle de pastas automáticas. */
+  /** Sets the automatic folders toggle. */
   setAutoCreateFolders: (value: boolean) => Promise<void>
 
-  /** Retorna modelo como lista plana (catálogo). */
+  /** Returns the model as a flat list (catalog). */
   getModelList: () => CatalogModel[]
 }
 
@@ -187,8 +187,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hydrateCatalogCache: async () => {
     try {
-      // Catálogo + provedores conectados + modelo selecionado: sem os três o
-      // picker cacheado abre vazio (o filtro exige provider conectado).
+      // Catalog + connected providers + selected model: without the three the
+      // cached picker opens empty (the filter requires a connected provider).
       const [rawCatalog, rawProviders, rawSelected] = await Promise.all([
         Storage.getItem(CATALOG_CACHE_KEY),
         Storage.getItem(PROVIDERS_CACHE_KEY),
@@ -203,8 +203,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (rawSelected && !get().selectedModel) {
         set({ selectedModel: JSON.parse(rawSelected) as SelectedModel })
       }
-      // Worker/visão só saem do cache enquanto o desktop não respondeu: ele é
-      // a fonte da verdade e pode ter limpado a config (ver applyWorkerConfigSync).
+      // Worker/vision only come from the cache while the desktop has not answered: it is
+      // the source of truth and may have cleared the config (see applyWorkerConfigSync).
       if (!configDoDesktopAplicada) {
         const rawWorker = await Storage.getItem(WORKER_MODEL_KEY)
         if (rawWorker && !get().workerModel) {
@@ -224,7 +224,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         set({ autoCreateFolders: JSON.parse(rawAutoFolders) as boolean })
       }
     } catch {
-      // Cache corrompido ou ausente — ignora, os fetches reais resolvem
+      // Corrupted or missing cache — ignore it, the real fetches resolve it
     }
   },
 
@@ -260,9 +260,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   applyWorkerConfigSync: (config) => {
     if (!config || typeof config !== 'object') return
-    // A partir daqui a config do desktop é a verdade: o cache local não pode
-    // mais ressuscitar um worker/visão que o desktop limpou, mesmo que a
-    // hidratação do disco termine depois da conexão.
+    // From here on the desktop config is the truth: the local cache can no
+    // longer resurrect a worker/vision that the desktop cleared, even if the
+    // disk hydration finishes after the connection.
     configDoDesktopAplicada = true
     const { workerModel, workerReasoning, visionModel } = get()
     const next = {
@@ -324,7 +324,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         if (config) get().applyWorkerConfigSync(config)
       }
     } catch {
-      // Offline — segue com o que está guardado no aparelho.
+      // Offline — goes on with what is stored on the device.
     }
   },
 
@@ -344,7 +344,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     const res = await http.updatePreferences(patch)
     if (res.ok) {
-      // Atualiza localmente (merge)
+      // Updates locally (merge)
       set((state) => ({
         preferences: { ...state.preferences, ...patch },
       }))

@@ -10,13 +10,13 @@ export interface SlashCommand {
   label: string
   description?: string
   keywords?: string[]
-  group: 'Ações' | 'Skills' | 'MCP' | 'Memória' | 'Modos'
+  group: 'Actions' | 'Skills' | 'MCP' | 'Memory' | 'Modes'
   active?: boolean
   run: (ctx: { setText: (text: string) => void }) => void
 }
 
-/** Comandos da paleta "/" — o que se EXECUTA (pipelines) e o que se age na
- *  UI. As referências (skills, MCP) ficam na paleta "@". */
+/** Commands of the "/" palette — what gets EXECUTED (pipelines) and what acts on the
+ *  UI. The references (skills, MCP) stay in the "@" palette. */
 export function useSlashCommands(): SlashCommand[] {
   const { t } = useTranslation()
   const mode = useWorkspaceStore((s) => s.mode) as SessionMode
@@ -34,27 +34,27 @@ export function useSlashCommands(): SlashCommand[] {
 
     const items: SlashCommand[] = []
 
-    // A "/" é de COMANDOS: o que se executa. As REFERÊNCIAS (skills, MCP)
-    // ficam na paleta "@" — ver useReferenceCommands.
+    // "/" is for COMMANDS: what gets executed. The REFERENCES (skills, MCP)
+    // stay in the "@" palette — see useReferenceCommands.
     items.push(
       ...actionsForMode(mode).map((action) => ({
         id: `action-${action.id}`,
         label: action.command,
         description: action.description,
         keywords: action.keywords,
-        group: 'Ações' as const,
+        group: 'Actions' as const,
         run: ({ setText }: { setText: (t: string) => void }) =>
           setText(action.kind === 'insert' && action.insertText ? action.insertText : `${action.command} `),
       })),
     )
 
-    // Modos - toggles simples
+    // Modes - simple toggles
     items.push({
-      id: 'novo-chat',
+      id: 'new-chat',
       label: t('slashCommands.newConversation'),
       description: t('slashCommands.newConversationDesc'),
       keywords: ['clear', 'limpar', 'novo', 'new'],
-      group: 'Ações',
+      group: 'Actions',
       run: toggle(() => {}),
     })
 
@@ -62,9 +62,9 @@ export function useSlashCommands(): SlashCommand[] {
   }, [mode, t])
 }
 
-/** Referências da paleta "@": skills e servidores MCP — o que entra no
- *  contexto do pedido. No mobile não há pasta de trabalho, então não há
- *  arquivos para citar. */
+/** References of the "@" palette: skills and MCP servers — what goes into
+ *  the request context. On mobile there is no working folder, so there are no
+ *  files to cite. */
 export function useReferenceCommands(): SlashCommand[] {
   const { t } = useTranslation()
   const skills = useToolsStore((s) => s.skills)

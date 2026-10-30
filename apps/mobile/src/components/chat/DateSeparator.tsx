@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-/** true quando `curr` cai em um dia civil diferente de `prev` (ou é a primeira mensagem). */
+/** true when `curr` falls on a different calendar day from `prev` (or is the first message). */
 export function isNewDay(prev: number | undefined, curr: number): boolean {
   if (prev === undefined) return true
   const a = new Date(prev)
@@ -12,13 +12,13 @@ export function isNewDay(prev: number | undefined, curr: number): boolean {
   return a.getFullYear() !== b.getFullYear() || a.getMonth() !== b.getMonth() || a.getDate() !== b.getDate()
 }
 
-/** Badge de data estilo WhatsApp: "Hoje" / "Ontem" / data completa. */
+/** WhatsApp-style date badge: "Today" / "Yesterday" / full date. */
 export function DateSeparator({ timestamp }: { timestamp: number }) {
   const { t, i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  // Congelado na montagem: o rótulo não precisa virar "Ontem" sozinho no meio
-  // da sessão, e ler o relógio no render quebra a pureza do componente.
+  // Frozen on mount: the label does not need to become "Yesterday" by itself in the middle
+  // of the session, and reading the clock during render breaks the purity of the component.
   const [now] = useState(() => Date.now())
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)

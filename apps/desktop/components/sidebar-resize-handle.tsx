@@ -4,27 +4,27 @@ import { SIDEBAR_DEFAULT_WIDTH, clampSidebarWidth } from "@shared/app-settings"
 import { useAppSettings } from "@/src/stores/app-settings"
 
 /**
- * Alça de arrasto da borda direita da sidebar.
+ * Drag handle of the right edge of the sidebar.
  *
- * A largura é uma configuração (`AppSettings.sidebarWidth`) e quem a aplica é
- * este componente: escreve direto na variável CSS `--sidebar-width` do wrapper
- * do sidebar, que é o que dimensiona o vão (o espaço reservado no layout) e o
- * painel fixo. Durante o arrasto isso evita um render por quadro — o valor
- * final só então vai para as configurações.
+ * The width is a setting (`AppSettings.sidebarWidth`) and the one that applies it is
+ * this component: it writes straight into the CSS variable `--sidebar-width` of the sidebar
+ * wrapper, which is what sizes the gap (the space reserved in the layout) and the
+ * fixed panel. During the drag this avoids a render per frame — the final
+ * value only then goes to the settings.
  *
- * O componente fica MONTADO mesmo quando não é arrastável: é ele que aplica a
- * largura salva, e a sidebar precisa abrir já no tamanho escolhido.
+ * The component stays MOUNTED even when it is not draggable: it is the one that applies the
+ * saved width, and the sidebar needs to open already at the chosen size.
  */
 
-/** O wrapper do sidebar é o dono da variável CSS (data-slot do ui/sidebar). */
+/** The sidebar wrapper owns the CSS variable (data-slot of ui/sidebar). */
 function findWrapper(el: HTMLElement): HTMLElement | null {
   return el.closest<HTMLElement>('[data-slot="sidebar-wrapper"]')
 }
 
 interface SidebarResizeHandleProps {
   /**
-   * Arrastável só com a sidebar fixada. Em modo hover ela se fecha ao tirar o
-   * mouse e o arrasto se perderia no meio.
+   * Draggable only with the sidebar pinned. In hover mode it closes when the mouse
+   * leaves and the drag would be lost in the middle.
    */
   active?: boolean
 }
@@ -35,8 +35,8 @@ export function SidebarResizeHandle({ active = true }: SidebarResizeHandleProps)
   const handleRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
 
-  // A largura salva vale já na primeira pintura — com um efeito comum a sidebar
-  // apareceria no padrão e só depois encolheria para o tamanho escolhido.
+  // The saved width applies already on the first paint — with an ordinary effect the sidebar
+  // would show up at the default and only then shrink to the chosen size.
   useLayoutEffect(() => {
     const handle = handleRef.current
     if (!handle) return
@@ -53,9 +53,9 @@ export function SidebarResizeHandle({ active = true }: SidebarResizeHandleProps)
       handle.setPointerCapture(e.pointerId)
       dragging.current = true
 
-      // O vão e o painel animam a largura em 200ms (abrir/fechar): durante o
-      // arrasto cada quadro viraria uma animação atrasada, então a transição
-      // sai de cena e volta no fim.
+      // The gap and the panel animate the width in 200ms (open/close): during the
+      // drag every frame would become a delayed animation, so the transition
+      // leaves the scene and comes back at the end.
       const animated = [
         wrapper.querySelector<HTMLElement>('[data-slot="sidebar-gap"]'),
         wrapper.querySelector<HTMLElement>('[data-slot="sidebar-container"]'),
@@ -65,9 +65,9 @@ export function SidebarResizeHandle({ active = true }: SidebarResizeHandleProps)
       document.body.style.cursor = "col-resize"
 
       const startX = e.clientX
-      // A largura de partida é a da SIDEBAR (o vão que ela reserva no layout),
-      // não a do wrapper — ele envolve o app inteiro, e medir nele fazia o
-      // primeiro movimento saltar para o teto, como se a largura fosse fixa.
+      // The starting width is the one of the SIDEBAR (the gap it reserves in the layout),
+      // not the one of the wrapper — it wraps the whole app, and measuring it made the
+      // first movement jump to the ceiling, as if the width were fixed.
       const gap = wrapper.querySelector<HTMLElement>('[data-slot="sidebar-gap"]')
       const startWidth =
         gap?.getBoundingClientRect().width ||
@@ -89,8 +89,8 @@ export function SidebarResizeHandle({ active = true }: SidebarResizeHandleProps)
         if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId)
         for (const node of animated) node.style.transitionProperty = ""
         document.body.style.cursor = previousCursor
-        // O React volta a mandar na variável (efeito acima) e o valor final
-        // passa a ser a fonte da verdade — igual na próxima abertura.
+        // React takes over the variable again (effect above) and the final value
+        // becomes the source of truth — the same on the next opening.
         useAppSettings.getState().update({ sidebarWidth: widthAt(ev.clientX) })
       }
 
@@ -101,7 +101,7 @@ export function SidebarResizeHandle({ active = true }: SidebarResizeHandleProps)
     [active],
   )
 
-  // Duplo clique volta ao tamanho de sempre: sem isso não haveria como desfazer.
+  // Double click goes back to the usual size: without that there would be no way to undo it.
   const onDoubleClick = useCallback(() => {
     useAppSettings.getState().update({ sidebarWidth: SIDEBAR_DEFAULT_WIDTH })
   }, [])

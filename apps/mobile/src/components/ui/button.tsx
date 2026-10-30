@@ -12,15 +12,15 @@ type ButtonProps = React.ComponentPropsWithoutRef<typeof Pressable> & {
 };
 
 /**
- * Conteúdo do botão: strings/numbers viram <Text> com a cor do variante;
- * elementos (ícones, Spin, etc.) são mantidos como estão. Renderizar tudo numa
- * <View> row evita o problema de SVG dentro de <Text> — que alinha o ícone pela
- * baseline do texto em vez do centro vertical do botão.
+ * Button content: strings/numbers become <Text> with the color of the variant;
+ * elements (icons, Spin, etc.) are kept as they are. Rendering everything in a
+ * row <View> avoids the problem of SVG inside <Text> — which aligns the icon by the
+ * text baseline instead of the vertical center of the button.
  */
 function renderContent(children: ReactNode, textColor: string, disabled: boolean): ReactNode {
   return Children.map(children, (child) => {
-    // JSX preserva espaços literais entre elementos (`<Icon /> {t('...')}`) como
-    // nós de texto " " — ignorá-los evita um vão fantasma entre ícone e label.
+    // JSX preserves literal spaces between elements (`<Icon /> {t('...')}`) as
+    // " " text nodes — ignoring them avoids a ghost gap between icon and label.
     if (typeof child === 'string' && child.trim() === '') return null;
     if (typeof child === 'string' || typeof child === 'number') {
       return <Text style={[s.text, { color: textColor }, disabled && s.textDisabled]}>{child}</Text>;

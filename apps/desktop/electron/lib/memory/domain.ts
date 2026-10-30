@@ -4,13 +4,13 @@ import type { Memory, MemoryKind, ProjectCategory } from '@shared/memory'
 import { normalizeText } from '@shared/memory'
 
 /**
- * Regras puras do sistema de memória (zero I/O): identificação de projeto,
- * expiração, promoção automática e hashing de dedup. Testável sem Electron.
+ * Pure rules of the memory system (zero I/O): project identification,
+ * expiry, automatic promotion and dedup hashing. Testable without Electron.
  */
 
 const DAY = 24 * 60 * 60 * 1000
 
-/** TTL base de memórias que expiram (seasonal e project/context). */
+/** Base TTL of memories that expire (seasonal and project/context). */
 const BASE_TTL = 30 * DAY
 
 export function sha1(text: string): string {
@@ -18,15 +18,15 @@ export function sha1(text: string): string {
 }
 
 /**
- * Identidade estável de um projeto a partir do directory. No Windows os paths
- * são case-insensitive, então normalizamos para lowercase completo — só a
- * letra do drive ainda deixaria "C:/Projects" e "C:/projects" duplicados.
+ * Stable identity of a project from its directory. On Windows paths are
+ * case-insensitive, so we normalize to full lowercase — lowercasing the drive
+ * letter alone would still leave "C:/Projects" and "C:/projects" as duplicates.
  */
 export function projectIdOf(directory: string): string {
   return sha1(normalizeDirectory(directory))
 }
 
-/** Pasta na forma em que projetos são comparados: absoluta, com "/", sem barra final e, no Windows, minúscula. */
+/** Folder in the form projects are compared in: absolute, with "/", no trailing slash and, on Windows, lowercase. */
 export function normalizeDirectory(directory: string): string {
   const normalized = path.resolve(directory).replace(/\\/g, '/').replace(/\/+$/, '')
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized
@@ -34,21 +34,21 @@ export function normalizeDirectory(directory: string): string {
 
 export interface ProjectRoot {
   projectId: string
-  /** Pasta como foi gravada na memória raiz — é a que vira `directory` de novas memórias. */
+  /** Folder as stored in the root memory — this is what becomes `directory` on new memories. */
   directory: string
 }
 
 /**
- * Projeto que cobre uma pasta: ela mesma, ou a pasta acima mais próxima que já
- * tem árvore de memórias.
+ * Project that covers a folder: the folder itself, or the nearest folder above it
+ * that already has a memory tree.
  *
- * O /init roda na pasta mãe ("app/", com "front/" e "backend/" dentro) e grava
- * tudo sob o projectId dela. Sem esta subida, um chat aberto direto em
- * "app/front" calculava o projectId de "front", não achava nada e começava do
- * zero — exatamente o contexto que o /init existe para não pedir de novo.
+ * /init runs in the parent folder ("app/", with "front/" and "backend/" inside) and writes
+ * everything under its projectId. Without this walk up, a chat opened directly in
+ * "app/front" computed the projectId of "front", found nothing and started from
+ * scratch — exactly the context /init exists to avoid asking for again.
  *
- * `subproject` é o caminho relativo até a pasta pedida ("front", "front/src"),
- * em "/" e com a caixa original; undefined quando a pasta é a própria raiz.
+ * `subproject` is the relative path to the requested folder ("front", "front/src"),
+ * with "/" and the original casing; undefined when the folder is the root itself.
  */
 export function pickProjectRoot(
   roots: ProjectRoot[],
@@ -63,27 +63,27 @@ export function pickProjectRoot(
   }
   if (!best) return null
   if (target === best.normalized) return { root: best.root }
-  // O relativo sai do caminho real (não do normalizado) para manter a caixa
-  // com que a pasta existe — é o que aparece no rótulo do subprojeto.
+  // The relative path comes from the real path (not the normalized one) to keep the
+  // casing the folder actually has — that is what shows up in the subproject label.
   const relative = path.relative(path.resolve(best.root.directory), path.resolve(directory)).replace(/\\/g, '/')
   return { root: best.root, subproject: relative || undefined }
 }
 
-/** `child` é `scope` ou fica dentro dele ("front/src" está em "front"; "frontend" não). Sem caixa. */
+/** `child` is `scope` or sits inside it ("front/src" is in "front"; "frontend" is not). Case-insensitive. */
 export function isWithinSubproject(child: string, scope: string): boolean {
   const c = child.toLowerCase().replace(/\/+$/, '')
   const s = scope.toLowerCase().replace(/\/+$/, '')
   return c === s || c.startsWith(`${s}/`)
 }
 
-/** Hash do texto normalizado — chave de dedup exata. */
+/** Hash of the normalized text — the exact dedup key. */
 export function hashText(text: string): string {
   return sha1(normalizeText(text))
 }
 
 /**
- * TTL por tipo: seasonal e project/context expiram em 30d × (1 + weight × 6);
- * os demais tipos são permanentes (null).
+ * TTL per kind: seasonal and project/context expire in 30d × (1 + weight × 6);
+ * every other kind is permanent (null).
  */
 export function ttlFor(kind: MemoryKind, weight: number, category?: ProjectCategory): number | null {
   const expires = kind === 'seasonal' || (kind === 'project' && category === 'context')
@@ -92,8 +92,8 @@ export function ttlFor(kind: MemoryKind, weight: number, category?: ProjectCateg
 }
 
 /**
- * Cada hit de busca estende a expiração levemente (+7d), com teto de 2× o TTL
- * original a partir da criação — memórias usadas vivem mais, mas não para sempre.
+ * Each search hit extends expiry slightly (+7d), capped at 2× the original TTL
+ * counted from creation — memories that get used live longer, but not forever.
  */
 export function extendedExpiry(memory: Memory): number | null | undefined {
   if (memory.expiresAt == null) return memory.expiresAt
@@ -113,14 +113,14 @@ export interface Promotion {
 }
 
 /**
- * Promoção automática (aplicada pelo scheduler, como rede de segurança para
- * quando o agente não chegou a perguntar):
- * - seasonal → general quando hits >= 5 OU weight >= 0.85
- * - project/context → decision quando hits >= 3 e ainda não expirou
- * Retorna o destino da promoção ou null.
+ * Automatic promotion (applied by the scheduler, as a safety net for
+ * when the agent never got around to asking):
+ * - seasonal → general when hits >= 5 OR weight >= 0.85
+ * - project/context → decision when hits >= 3 and it has not expired yet
+ * Returns the promotion target or null.
  *
- * `general` e não `core`: core só é injetado no prompt do chat, e um padrão que
- * se repete vale sobretudo no código, onde core não chega.
+ * `general` and not `core`: core is only injected into the chat prompt, and a pattern
+ * that keeps repeating matters mostly in the code, where core never reaches.
  */
 export function shouldPromote(memory: Memory, now: number): Promotion | null {
   if (isExpired(memory, now)) return null
@@ -133,7 +133,7 @@ export function shouldPromote(memory: Memory, now: number): Promotion | null {
   return null
 }
 
-/** Peso default quando o agente não informa: baixo para o que expira, alto para o resto. */
+/** Default weight when the agent does not provide one: low for what expires, high for the rest. */
 export function defaultWeight(kind: MemoryKind, category?: ProjectCategory): number {
   return kind === 'seasonal' || (kind === 'project' && category === 'context') ? 0.3 : 0.7
 }

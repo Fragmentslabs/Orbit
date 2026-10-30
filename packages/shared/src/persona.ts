@@ -1,29 +1,29 @@
 /**
- * Como o Orbit fala (Preferências → Comportamento).
+ * How Orbit speaks (Preferences → Behavior).
  *
- * Vive no pacote compartilhado de propósito: a tela de Preferências mostra o
- * texto LITERAL que vai no prompt ("ver o texto exato"), então a fonte é uma
- * só — se o texto morasse apenas no prompts.ts, a tela exibiria uma cópia que
- * envelhece na primeira mudança.
+ * It lives in the shared package on purpose: the Preferences screen shows the
+ * LITERAL text that goes into the prompt ("see the exact text"), so the source is a
+ * single one — if the text lived only in prompts.ts, the screen would display a copy that
+ * ages at the first change.
  *
- * Comportamento não é memória. Nada aqui é aprendido pelo agente: o estilo é
- * escolhido, o ajuste é escrito pelo usuário, e o espelhamento do registro
- * acontece na conversa, sem gravar nada.
+ * Behavior is not memory. Nothing here is learned by the agent: the style is
+ * chosen, the adjustment is written by the user, and the mirroring of the register
+ * happens in the conversation, without recording anything.
  */
 
-/** Estilos oferecidos. `default` = sem instrução de estilo (o tom de sempre). */
+/** Styles offered. `default` = no style instruction (the usual tone). */
 export type PersonaStyle = 'default' | 'direct' | 'mentor' | 'technical'
 
 /**
- * Teto do ajuste livre. Curto o bastante para ser um complemento ao estilo —
- * se couber num briefing, virou prompt, e prompt editável à mão é o que a
- * tela evita.
+ * Ceiling of the free adjustment. Short enough to be a complement to the style —
+ * if it fits in a briefing, it has become a prompt, and a hand-editable prompt is what the
+ * screen avoids.
  */
 export const PERSONA_NOTE_MAX = 400
 
 /**
- * Texto de cada estilo (em inglês, como o resto do prompt). A descrição que o
- * usuário lê na tela é outra, traduzida — esta aqui é a que o modelo recebe.
+ * Text of each style (in English, like the rest of the prompt). The description the
+ * user reads on the screen is another one, translated — this one is what the model receives.
  */
 export const PERSONA_STYLE_PROMPTS: Record<Exclude<PersonaStyle, 'default'>, string> = {
   direct:
@@ -37,10 +37,10 @@ export const PERSONA_STYLE_PROMPTS: Record<Exclude<PersonaStyle, 'default'>, str
 }
 
 /**
- * Espelhamento calibrado — vai no `identity()`, valendo nos dois modos mesmo
- * sem estilo escolhido. É o que faz o agente acompanhar o registro da
- * conversa (o que as pessoas percebem como "aprendeu a falar como eu"), com
- * dois freios: nunca mais informal que o usuário, e forma sim, opinião não.
+ * Calibrated mirroring — it goes into `identity()`, applying in both modes even
+ * without a chosen style. It is what makes the agent follow the register of the
+ * conversation (what people perceive as "it learned to talk like me"), with
+ * two brakes: never more informal than the user, and form yes, opinion no.
  */
 export const PERSONA_MIRROR =
   "Match the user's register and language level: if they write informally, do the same; never be " +
@@ -48,8 +48,8 @@ export const PERSONA_MIRROR =
   'only concision and directness. Mirror form, never opinions — agreeing is not style.'
 
 /**
- * Linhas injetadas no system prompt. Vazio quando não há estilo nem ajuste:
- * sem escolha do usuário, o prompt fica exatamente como era antes.
+ * Lines injected into the system prompt. Empty when there is neither style nor adjustment:
+ * without a user choice, the prompt stays exactly as it was before.
  */
 export function personaPromptLines(
   style: PersonaStyle,
@@ -60,14 +60,14 @@ export function personaPromptLines(
   if (style !== 'default') lines.push(PERSONA_STYLE_PROMPTS[style])
   const trimmed = note.trim()
   if (trimmed) {
-    // A ordem importa: o que o usuário escreveu vence a caixinha que ele marcou.
+    // The order matters: what the user wrote beats the box he ticked.
     lines.push(
       `The user wrote this about how you should talk — it takes precedence over the style above: ${trimmed}`,
     )
   }
   if (!lines.length) return []
-  // No código o registro continua profissional: o estilo rende concisão e
-  // diretude, não coloquialismo.
+  // In code the register stays professional: the style yields concision and
+  // directness, not colloquialism.
   if (mode === 'code') {
     lines.push('In code mode keep the register professional: apply only concision and directness.')
   }

@@ -3,19 +3,19 @@ import { promisify } from 'node:util'
 import { userShellEnv } from './shell-env'
 
 /**
- * Criação do repositório remoto no GitHub a partir de uma pasta que ainda não
- * tem remote — o caso em que `git push` falha com kind "noRemote".
+ * Creation of the remote repository on GitHub from a folder that does not yet
+ * have a remote — the case where `git push` fails with kind "noRemote".
  *
- * O token NÃO é pedido ao usuário nem guardado por nós: é lido do credential
- * helper que o próprio git já usa para autenticar os pushes (Git Credential
- * Manager no Windows, keychain no macOS) e, na falta dele, do `gh auth token`.
+ * The token is NOT requested from the user nor stored by us: it is read from the credential
+ * helper that git itself already uses to authenticate pushes (Git Credential
+ * Manager on Windows, keychain on macOS) and, in its absence, from `gh auth token`.
  *
- * Quem autentica por SSH não tem credencial HTTPS nenhuma — o push funciona
- * pelas chaves, mas a API do GitHub exige token, e chave SSH não vira token.
- * Nesse caso o `gh` é a fonte que resta — e o erro aponta a instalação e a
- * autenticação dele em vez de pedir token digitado. O remote criado segue o
- * protocolo que a máquina sabe usar: HTTPS quando há credencial HTTPS, SSH
- * caso contrário — senão o push logo após a criação falharia.
+ * Whoever authenticates over SSH has no HTTPS credential at all — the push works
+ * through the keys, but the GitHub API requires a token, and an SSH key does not become a token.
+ * In that case `gh` is the source that remains — and the error points to installing and
+ * authenticating it instead of asking for a typed token. The remote created follows the
+ * protocol the machine knows how to use: HTTPS when there is an HTTPS credential, SSH
+ * otherwise — otherwise the push right after creation would fail.
  */
 
 const execFileAsync = promisify(execFile)
@@ -23,10 +23,10 @@ const execFileAsync = promisify(execFile)
 const API = 'https://api.github.com'
 
 /**
- * PATH completo do usuário, não o sanitizado que o macOS entrega a apps de
- * GUI. Sem isto o `gh` do Homebrew (/opt/homebrew/bin) fica invisível — o
- * `git` escapa porque mora em /usr/bin, que está no PATH mínimo.
- * userShellEnv lê o disco, então o resultado é memoizado.
+ * Full user PATH, not the sanitized one macOS hands to GUI
+ * apps. Without this the Homebrew `gh` (/opt/homebrew/bin) is invisible —
+ * `git` escapes because it lives in /usr/bin, which is in the minimal PATH.
+ * userShellEnv reads the disk, so the result is memoized.
  */
 let envCache: NodeJS.ProcessEnv | undefined
 function gitEnv(): NodeJS.ProcessEnv {
@@ -40,32 +40,32 @@ export type CreateRepoResult =
       ok: false
       kind: 'noCredential'
       hint: CredentialHint
-      // Dados crus das duas tentativas — a UI monta o texto no idioma ativo.
-      detalhe: { git: GitCredDetalhe; gh: GhCredDetalhe }
+      // Raw data of both attempts — the UI assembles the text in the active language.
+      detail: { git: GitCredDetail; gh: GhCredDetail }
     }
   | { ok: false; kind: Exclude<CreateRepoErrorKind, 'noCredential'>; message: string }
 
 /**
- * Instrução que a UI mostra para desbloquear a criação de repositório:
- * `ghMissing` = o `gh` não está instalado (instalar e autenticar);
- * `ghOther` = o `gh` existe mas não forneceu token (autenticar).
+ * Instruction that the UI shows to unlock repository creation:
+ * `ghMissing` = `gh` is not installed (install and authenticate);
+ * `ghOther` = `gh` exists but provided no token (authenticate).
  */
 export type CredentialHint = 'ghMissing' | 'ghOther'
 
 export type CreateRepoErrorKind =
-  /** Sem credencial do GitHub no helper do git — nada a reaproveitar. */
+  /** No GitHub credential in the git helper — nothing to reuse. */
   | 'noCredential'
-  /** Token existe mas foi recusado ou não tem escopo para criar repositório. */
+  /** Token exists but was refused or has no scope to create a repository. */
   | 'auth'
-  /** Já existe um repositório com esse nome na conta. */
+  /** A repository with that name already exists in the account. */
   | 'nameTaken'
-  /** Nome fora das regras do GitHub. */
+  /** Name outside GitHub's rules. */
   | 'invalidName'
-  /** A pasta ainda não tem nenhum commit — não há o que publicar. */
+  /** The folder has no commit yet — there is nothing to publish. */
   | 'noCommits'
   | 'other'
 
-/** Regras do GitHub para nome de repositório: letras, números, `.`, `-` e `_`. */
+/** GitHub's rules for a repository name: letters, numbers, `.`, `-` and `_`. */
 export function isValidRepoName(name: string): boolean {
   return /^[A-Za-z0-9._-]{1,100}$/.test(name) && name !== '.' && name !== '..'
 }
@@ -73,36 +73,36 @@ export function isValidRepoName(name: string): boolean {
 interface TokenLookup {
   token: string | null
   /**
-   * Existe credencial HTTPS no helper do git. Decide o protocolo do remote:
-   * sem ela, a máquina autentica por SSH e um origin HTTPS não daria push.
+   * There is an HTTPS credential in the git helper. It decides the remote's protocol:
+   * without it, the machine authenticates over SSH and an HTTPS origin would not push.
    */
   hasHttpsCredential: boolean
-  /** Quando não veio token, como a leitura falhou — a UI traduz a partir disto. */
-  detalhe: GitCredDetalhe | null
+  /** When no token came, how the read failed — the UI translates from this. */
+  detail: GitCredDetail | null
 }
 
 /**
- * Como o `git credential fill` terminou sem token. `saida` é a saída crua da
- * ferramenta (stderr — nunca traduzida); `modo` e `codigo` viram texto
- * localizado na UI.
+ * How `git credential fill` ended without a token. `output` is the tool's raw output
+ * (stderr — never translated); `mode` and `code` become localized text
+ * in the UI.
  */
-export type GitCredDetalhe = {
-  modo: 'exit' | 'spawn' | 'timeout'
-  /** Código de saída do git (modo 'exit'); null nos demais modos. */
-  codigo: number | null
-  saida: string
+export type GitCredDetail = {
+  mode: 'exit' | 'spawn' | 'timeout'
+  /** Git exit code ('exit' mode); null in the other modes. */
+  code: number | null
+  output: string
 }
 
-/** Estado do `gh auth token` quando não veio token — a UI localiza, `saida` crua à parte. */
-export type GhCredDetalhe = {
-  estado: 'missing' | 'other'
-  saida: string
+/** State of `gh auth token` when no token came — the UI localizes it, `output` raw apart. */
+export type GhCredDetail = {
+  status: 'missing' | 'other'
+  output: string
 }
 
-/** Token do GitHub CLI, quando instalado e autenticado. */
+/** GitHub CLI token, when installed and authenticated. */
 async function readGhToken(
   cwd: string,
-): Promise<{ token: string | null; estado: 'ok' | 'missing' | 'other'; saida: string }> {
+): Promise<{ token: string | null; status: 'ok' | 'missing' | 'other'; output: string }> {
   try {
     const { stdout } = await execFileAsync('gh', ['auth', 'token'], {
       cwd,
@@ -111,28 +111,28 @@ async function readGhToken(
     })
     const token = stdout.trim()
     return token
-      ? { token, estado: 'ok', saida: '' }
-      : { token: null, estado: 'other', saida: '' }
+      ? { token, status: 'ok', output: '' }
+      : { token: null, status: 'other', output: '' }
   } catch (err) {
     const e = err as { code?: string; stderr?: string }
-    // ENOENT = binário ausente; qualquer outra saída = gh existe mas recusou.
-    // A saída crua do gh vai para a UI sem tradução — só a moldura é localizada.
+    // ENOENT = binary missing; any other output = gh exists but refused.
+    // The gh raw output goes to the UI untranslated — only the frame is localized.
     const missing = e.code === 'ENOENT'
     return {
       token: null,
-      estado: missing ? 'missing' : 'other',
-      saida: missing ? '' : (e.stderr ?? '').trim().slice(0, 200) || String(err).slice(0, 200),
+      status: missing ? 'missing' : 'other',
+      output: missing ? '' : (e.stderr ?? '').trim().slice(0, 200) || String(err).slice(0, 200),
     }
   }
 }
 
 /**
- * Lê a credencial do github.com pelo helper do git.
+ * Reads the github.com credential through the git helper.
  *
- * Roda com stdin explícito porque `git credential fill` espera a consulta por
- * lá. Toda saída sem token devolve o MOTIVO: um "sem credencial" seco não
- * distingue helper ausente, tempo esgotado e git não encontrado, e sem essa
- * distinção não há como o usuário agir.
+ * It runs with explicit stdin because `git credential fill` expects the query
+ * there. Every output without a token returns the REASON: a bare "no credential" does not
+ * distinguish a missing helper, a timeout and git not found, and without that
+ * distinction there is no way for the user to act.
  */
 async function readGitHubToken(cwd: string): Promise<TokenLookup> {
   return new Promise((resolve) => {
@@ -143,7 +143,7 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
       resolve({
         token: null,
         hasHttpsCredential: false,
-        detalhe: { modo: 'spawn', codigo: null, saida: err instanceof Error ? err.message : String(err) },
+        detail: { mode: 'spawn', code: null, output: err instanceof Error ? err.message : String(err) },
       })
       return
     }
@@ -157,10 +157,10 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
       child.kill()
       resolve(result)
     }
-    // 20s: o Git Credential Manager é uma app .NET e a primeira invocação num
-    // processo frio passa dos 10s que eu usava antes.
+    // 20s: Git Credential Manager is a .NET app and the first invocation in a
+    // cold process goes past the 10s I used before.
     const timer = setTimeout(
-      () => finish({ token: null, hasHttpsCredential: false, detalhe: { modo: 'timeout', codigo: null, saida: '' } }),
+      () => finish({ token: null, hasHttpsCredential: false, detail: { mode: 'timeout', code: null, output: '' } }),
       20_000,
     )
 
@@ -172,7 +172,7 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
     })
     child.on('error', (err) => {
       clearTimeout(timer)
-      finish({ token: null, hasHttpsCredential: false, detalhe: { modo: 'spawn', codigo: null, saida: err.message } })
+      finish({ token: null, hasHttpsCredential: false, detail: { mode: 'spawn', code: null, output: err.message } })
     })
     child.on('close', (code) => {
       clearTimeout(timer)
@@ -182,18 +182,18 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
         ?.slice('password='.length)
         .trim()
       if (password) {
-        finish({ token: password, hasHttpsCredential: true, detalhe: null })
+        finish({ token: password, hasHttpsCredential: true, detail: null })
         return
       }
-      // Qualquer saída sem `password=` significa a mesma coisa: não há
-      // credencial HTTPS. Numa máquina só-SSH o git chega a tentar perguntar
-      // o usuário e sai 128 com "terminal prompts disabled". A cauda crua do
-      // stderr vai para a UI; a moldura textual é montada lá, no idioma ativo.
-      const saida = errOut.trim().split(/\r?\n/).slice(-2).join(' ').slice(0, 300)
+      // Any output without `password=` means the same thing: there is no
+      // HTTPS credential. On an SSH-only machine git even tries to ask
+      // the user and exits 128 with "terminal prompts disabled". The raw tail of the
+      // stderr goes to the UI; the textual frame is assembled there, in the active language.
+      const output = errOut.trim().split(/\r?\n/).slice(-2).join(' ').slice(0, 300)
       finish({
         token: null,
         hasHttpsCredential: false,
-        detalhe: { modo: 'exit', codigo: code, saida },
+        detail: { mode: 'exit', code: code, output },
       })
     })
 
@@ -247,7 +247,7 @@ async function createOnGitHub(
     return { ok: false, kind: 'auth', message: detail }
   }
   if (response.status === 422) {
-    // O GitHub devolve 422 tanto para nome repetido quanto para nome inválido.
+    // GitHub returns 422 for both a repeated name and an invalid name.
     const kind: CreateRepoErrorKind = /already exists/i.test(detail) ? 'nameTaken' : 'invalidName'
     return { ok: false, kind, message: detail }
   }
@@ -255,10 +255,10 @@ async function createOnGitHub(
 }
 
 /**
- * Cria o repositório no GitHub, aponta o remote `origin` para ele e publica a
- * branch atual. Devolve `pushed: false` quando o repositório foi criado mas o
- * push falhou — o remote fica configurado, então o usuário pode tentar de novo
- * pelo próprio botão de enviar.
+ * Creates the repository on GitHub, points the `origin` remote to it and publishes the
+ * current branch. It returns `pushed: false` when the repository was created but the
+ * push failed — the remote stays configured, so the user can try again
+ * through the send button itself.
  */
 export async function createRemoteRepo(
   repoPath: string,
@@ -270,34 +270,34 @@ export async function createRemoteRepo(
     return { ok: false, kind: 'invalidName', message: trimmed }
   }
 
-  // Publicar exige ao menos um commit: sem HEAD, o push não tem o que enviar e
-  // o repositório remoto nasceria órfão do local.
+  // Publishing requires at least one commit: without HEAD, the push has nothing to send and
+  // the remote repository would be born orphaned from the local one.
   try {
     await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoPath, env: gitEnv(), timeout: 15_000 })
   } catch {
-    return { ok: false, kind: 'noCommits', message: 'HEAD ausente' }
+    return { ok: false, kind: 'noCommits', message: 'HEAD is missing' }
   }
 
-  // A leitura define também o protocolo do remote: sem credencial HTTPS a
-  // máquina autentica por SSH e o origin nasce com a URL SSH.
-  const lido = await readGitHubToken(repoPath)
-  let token = lido.token
+  // The read also defines the remote's protocol: without an HTTPS credential the
+  // machine authenticates over SSH and the origin is born with the SSH URL.
+  const lookup = await readGitHubToken(repoPath)
+  let token = lookup.token
   if (!token) {
-    // Sem credencial HTTPS (típico de quem usa SSH) o gh é a única fonte que
-    // resta — o hint diz à UI se é preciso instalar ou só autenticar.
+    // Without an HTTPS credential (typical of SSH users) gh is the only source that
+    // remains — the hint tells the UI whether it is necessary to install or just authenticate.
     const gh = await readGhToken(repoPath)
     token = gh.token
     if (!token) {
-      // As duas tentativas entram no detalhe: saber qual delas falhou e por quê
-      // é o que permite ao usuário corrigir em vez de adivinhar. A UI recebe
-      // os dados crus e monta o texto no idioma ativo.
+      // Both attempts go into the detail: knowing which one failed and why
+      // is what allows the user to correct instead of guessing. The UI receives
+      // the raw data and assembles the text in the active language.
       return {
         ok: false,
         kind: 'noCredential',
-        hint: gh.estado === 'missing' ? 'ghMissing' : 'ghOther',
-        detalhe: {
-          git: lido.detalhe ?? { modo: 'exit', codigo: null, saida: '' },
-          gh: { estado: gh.estado === 'ok' ? 'other' : gh.estado, saida: gh.saida },
+        hint: gh.status === 'missing' ? 'ghMissing' : 'ghOther',
+        detail: {
+          git: lookup.detail ?? { mode: 'exit', code: null, output: '' },
+          gh: { status: gh.status === 'ok' ? 'other' : gh.status, output: gh.output },
         },
       }
     }
@@ -306,9 +306,9 @@ export async function createRemoteRepo(
   const created = await createOnGitHub(trimmed, isPrivate, token)
   if (!created.ok) return created
 
-  // Protocolo que esta máquina consegue autenticar: com credencial HTTPS vai
-  // de HTTPS; sem ela o push só funciona pelas chaves SSH.
-  const remoteUrl = lido.hasHttpsCredential ? created.repo.clone_url : created.repo.ssh_url
+  // Protocol this machine can authenticate: with an HTTPS credential it goes
+  // over HTTPS; without it the push only works through the SSH keys.
+  const remoteUrl = lookup.hasHttpsCredential ? created.repo.clone_url : created.repo.ssh_url
 
   try {
     await execFileAsync('git', ['remote', 'add', 'origin', remoteUrl], {
@@ -331,7 +331,7 @@ export async function createRemoteRepo(
       timeout: 15_000,
     })
     const branch = stdout.trim()
-    if (!branch) throw new Error('sem branch atual')
+    if (!branch) throw new Error('no current branch')
     await execFileAsync('git', ['push', '-u', 'origin', branch], {
       cwd: repoPath,
       env: gitEnv(),
@@ -339,7 +339,7 @@ export async function createRemoteRepo(
     })
     return { ok: true, url: created.repo.html_url, fullName: created.repo.full_name, pushed: true }
   } catch {
-    // O repositório existe e o origin está configurado; só o envio falhou.
+    // The repository exists and the origin is configured; only the send failed.
     return { ok: true, url: created.repo.html_url, fullName: created.repo.full_name, pushed: false }
   }
 }

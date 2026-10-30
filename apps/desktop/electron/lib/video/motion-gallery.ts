@@ -7,24 +7,24 @@ import { capturePageReliably } from './capture'
 import { deleteMotionComposition, getMotion, registeredMotionUrl } from './motion-store'
 
 /**
- * A CAPA de uma peça de motion, e o registro dela na galeria.
+ * The COVER of a motion piece, and its registration in the gallery.
  *
- * É o que transforma a composição em algo que se reabre depois: sem isto a peça
- * só existia enquanto a aba do painel estivesse aberta — fechou, e não havia
- * onde clicar para voltar, porque nada a listava. A composição em si continua
- * onde sempre esteve (uma pasta do projeto, com o registro em `motion.json`); o
- * que passa a existir é um item na galeria apontando para ela.
+ * It is what turns the composition into something that is reopened later: without this the piece
+ * only existed while the panel's tab was open — close it, and there was no
+ * place to click to come back, because nothing listed it. The composition itself keeps
+ * where it always was (a project folder, with the record in `motion.json`); what
+ * comes into existence is an item in the gallery pointing at it.
  *
- * A miniatura sai da MESMA janela offscreen que mede as camadas (o scheme
- * `orbit-motion://`, no session default, é quem serve a composição), com um seek
- * a um quadro só — mais barato que um vídeo, e suficiente para o tile.
+ * The thumbnail comes out of the SAME offscreen window that measures the layers (the
+ * `orbit-motion://` scheme, in the default session, is what serves the composition), with a seek
+ * to a single frame — cheaper than a video, and enough for the tile.
  */
 
-/** Em que ponto da peça a capa é tirada, em fração da duração.
- *  Não é o quadro 0: a abertura de uma peça costuma ser preta ou quase, e a
- *  capa ficaria vazia. Um pouco além da metade pega a peça em movimento. */
+/** At what point of the piece the cover is taken, as a fraction of the duration.
+ *  Not frame 0: the opening of a piece is usually black or nearly so, and the
+ *  cover would be empty. A bit past the middle catches the piece in motion. */
 const COVER_AT = 0.6
-/** Largura da capa gravada — o mesmo tamanho de tile dos artefatos. */
+/** Width of the stored cover — the same tile size as artifacts. */
 const COVER_WIDTH = 640
 const LOAD_TIMEOUT_MS = 20000
 
@@ -35,11 +35,11 @@ interface CoverShot {
 }
 
 /**
- * Carrega a composição offscreen e fotografa um quadro dela.
+ * Loads the composition offscreen and photographs one frame of it.
  *
- * Best-effort por inteiro: qualquer falha devolve `null` e a peça entra na
- * galeria sem capa (o tile cai no ícone, exatamente como um artefato cuja
- * captura falhou). Registrar a peça nunca pode depender de a captura dar certo.
+ * Best-effort all the way: any failure returns `null` and the piece enters the
+ * gallery without a cover (the tile falls back to the icon, exactly like an artifact whose
+ * capture failed). Registering the piece can never depend on the capture working.
  */
 async function captureCover(url: string): Promise<CoverShot | null> {
   const win = new BrowserWindow({
@@ -70,18 +70,18 @@ async function captureCover(url: string): Promise<CoverShot | null> {
     if (!spec) return null
     const width = Math.round(spec.width ?? 1920)
     const height = Math.round(spec.height ?? 1080)
-    // O quadro tem de ser fotografado no tamanho da composição: um viewport
-    // diferente pega o layout de outro jeito (o mesmo cuidado do render).
+    // The frame must be photographed at the composition's size: a
+    // different viewport catches the layout differently (the same care as the render).
     win.setContentSize(width, height)
     const total = spec.durationInFrames ?? 0
     const frame = total > 0 ? Math.min(total - 1, Math.round(total * COVER_AT)) : 0
-    // Um seek é função pura do número do quadro (é o mesmo contrato do render);
-    // o `catch` é porque a composição pode não expor `seek`, e aí a capa sai da
-    // cena que estiver montada.
+    // A seek is a pure function of the frame number (it is the same contract as the render);
+    // the `catch` is because the composition may not expose `seek`, and then the cover comes out of the
+    // scene that happens to be mounted.
     await win.webContents
       .executeJavaScript(`window.orbitMotion && window.orbitMotion.seek(${frame})`, true)
       .catch(() => {})
-    // Um quadro para o Chromium pintar depois do seek.
+    // One frame for Chromium to paint after the seek.
     await new Promise((resolve) => setTimeout(resolve, 150))
     const image = await capturePageReliably(win.webContents)
     const png = await sharp(image.toPNG())
@@ -96,11 +96,11 @@ async function captureCover(url: string): Promise<CoverShot | null> {
 }
 
 /**
- * Põe (ou atualiza) a peça na galeria, com a capa tirada agora.
+ * Puts (or updates) the piece in the gallery, with the cover taken now.
  *
- * Devolve o item registrado, ou `null` se a composição não está mais no
- * registro. Idempotente: registrar a mesma peça de novo cai no MESMO item — é o
- * `motionId` que manda, não o momento.
+ * Returns the registered item, or `null` if the composition is no longer in the
+ * registry. Idempotent: registering the same piece again lands on the SAME item — it is the
+ * `motionId` that rules, not the moment.
  */
 export async function registerMotionCover(
   id: string,
@@ -112,9 +112,9 @@ export async function registerMotionCover(
   const shot = await captureCover(url).catch(() => null)
   await saveMotionMedia(shot?.png ?? null, {
     motionId: id,
-    title: opts.title ?? (entry ? path.basename(entry.folder) : 'Peça'),
-    // A pasta de trabalho que registrou a peça é o projeto dela — é por aqui que
-    // a Mídia agrupa, e é o que faz o item sobreviver à conversa que o criou.
+    title: opts.title ?? (entry ? path.basename(entry.folder) : 'Piece'),
+    // The working folder that registered the piece is its project — it is through here that
+    // Media groups, and it is what makes the item survive the conversation that created it.
     directory: entry?.root,
     sessionId: opts.sessionId ?? entry?.sessionId,
     width: shot?.width,
@@ -123,9 +123,9 @@ export async function registerMotionCover(
   return true
 }
 
-// Excluir a peça na galeria apaga a composição de verdade (a pasta, o registro e
-// o watcher), e não só a capa: excluir é liberar espaço. As travas de segurança
-// ficam em deleteMotionComposition.
+// Deleting the piece in the gallery really deletes the composition (the folder, the record and
+// the watcher), and not only the cover: deleting is freeing space. The safety
+// locks stay in deleteMotionComposition.
 setMediaDeleteHook('motion', async (entry) => {
   if (entry.motionId) await deleteMotionComposition(entry.motionId)
 })

@@ -3,8 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
-// O módulo registra a composição — e o registro toca `app`/`protocol` (é do
-// main). O índice cai numa pasta temporária e nenhum protocolo é registrado.
+// The module registers the composition — and the registry touches `app`/`protocol` (it is from
+// the main). The index falls in a temporary folder and no protocol is registered.
 vi.mock('electron', async () => {
   const nodePath = await import('node:path')
   const nodeOs = await import('node:os')
@@ -24,8 +24,8 @@ afterAll(async () => {
   await rm(tempRoot, { recursive: true, force: true })
 })
 
-describe('derivação da pasta e da entrada', () => {
-  it('um arquivo é a entrada e a pasta servida é a que o contém', () => {
+describe('folder and entry derivation', () => {
+  it('a file is the entry and the served folder is the one that contains it', () => {
     const target = path.join('proj', 'edit', 'animations', 'title', 'title.html')
     expect(motionTargetFrom(target, false)).toEqual({
       folder: path.resolve('proj', 'edit', 'animations', 'title'),
@@ -34,7 +34,7 @@ describe('derivação da pasta e da entrada', () => {
     })
   })
 
-  it('uma pasta usa o index.html dela', () => {
+  it('a folder uses its own index.html', () => {
     const folder = path.join('proj', 'edit', 'animations', 'title')
     expect(motionTargetFrom(folder, true)).toEqual({
       folder: path.resolve(folder),
@@ -43,7 +43,7 @@ describe('derivação da pasta e da entrada', () => {
     })
   })
 
-  it('normaliza o caminho antes de derivar (`.` e `..`)', () => {
+  it('normalizes the path before deriving (`.` and `..`)', () => {
     const dir = path.join('proj', 'edit', 'animations')
     expect(motionTargetFrom(path.join(dir, 'title', '..', 'title'), true).folder).toBe(path.resolve(dir, 'title'))
     expect(motionTargetFrom(path.join(dir, '..', 'animations', 'title.html'), false).folder).toBe(path.resolve(dir))
@@ -51,7 +51,7 @@ describe('derivação da pasta e da entrada', () => {
 })
 
 describe('prepareMotionPreview', () => {
-  it('registra a entrada de uma pasta de composição', async () => {
+  it('registers the entry of a composition folder', async () => {
     const folder = await mkdtemp(path.join(os.tmpdir(), 'orbit-motion-preview-'))
     await writeFile(path.join(folder, 'index.html'), '<head></head>')
     const preview = await prepareMotionPreview(folder, { root: os.tmpdir(), sessionId: 's1' })
@@ -61,7 +61,7 @@ describe('prepareMotionPreview', () => {
     await rm(folder, { recursive: true, force: true })
   })
 
-  it('recusa um caminho que não existe e uma pasta sem index.html', async () => {
+  it('refuses a path that does not exist and a folder with no index.html', async () => {
     await expect(prepareMotionPreview(path.join(os.tmpdir(), 'orbit-motion-inexistente'))).rejects.toThrow(/not found/)
     const folder = await mkdtemp(path.join(os.tmpdir(), 'orbit-motion-preview-'))
     await expect(prepareMotionPreview(folder)).rejects.toThrow(new RegExp(MOTION_ENTRY_FILE))
@@ -69,7 +69,7 @@ describe('prepareMotionPreview', () => {
   })
 })
 
-describe('caminho fora da pasta permitida', () => {
+describe('path outside the allowed folder', () => {
   const ctx = {
     sessionId: 's1',
     directory: path.resolve(os.tmpdir(), 'proj'),
@@ -77,7 +77,7 @@ describe('caminho fora da pasta permitida', () => {
     abort: new AbortController().signal,
   }
 
-  it('resolveSafePath aceita o que está dentro e recusa o que escapa', () => {
+  it('resolveSafePath accepts what is inside and refuses what escapes', () => {
     expect(resolveSafePath(ctx, 'edit/animations/title/index.html')).toBe(
       path.resolve(ctx.directory, 'edit/animations/title/index.html'),
     )

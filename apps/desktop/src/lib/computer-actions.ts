@@ -2,8 +2,8 @@ import type { TFunction } from "i18next"
 import type { ToolPart } from "@shared/chat"
 
 /**
- * Frase curta do que uma tool do Computer Use fez, para o painel de ações:
- * "Clicar no elemento 12 · TextEdit", "Digitar “oi”", "Observar Safari".
+ * Short sentence of what a Computer Use tool did, for the actions panel:
+ * "Click element 12 · TextEdit", "Type “hi”", "Observe Safari".
  */
 export function describeAction(part: ToolPart, t: TFunction): string {
   const input = part.input ?? {}
@@ -53,7 +53,7 @@ export function describeAction(part: ToolPart, t: TFunction): string {
   return part.tool
 }
 
-/** Saída da tool em texto: as tools que devolvem objeto (cu_record_stop) trazem o texto em `message`. */
+/** Tool output as text: the tools that return an object (cu_record_stop) bring the text in `message`. */
 function outputText(part: ToolPart): string {
   const out = part.output ?? ""
   if (out.trimStart().startsWith("{")) {
@@ -61,16 +61,16 @@ function outputText(part: ToolPart): string {
       const parsed = JSON.parse(out) as { message?: unknown }
       if (typeof parsed.message === "string") return parsed.message
     } catch {
-      /* não era JSON: segue como texto */
+      /* it was not JSON: it goes on as text */
     }
   }
   return out
 }
 
 /**
- * O que aconteceu, em uma ou duas linhas, para o chat mostrar embaixo da ação:
- * o resumo do cu_computer (sem a observação seguinte, que é longa), a linha do
- * app no cu_observe, o total de resultados no cu_query. Erro vem inteiro.
+ * What happened, in one or two lines, for the chat to show under the action:
+ * the cu_computer summary (without the following observation, which is long), the app
+ * line in cu_observe, the total of results in cu_query. An error comes whole.
  */
 export function computerActionSummary(part: ToolPart): string | null {
   if (part.state === "error") return part.error ?? null
@@ -79,17 +79,17 @@ export function computerActionSummary(part: ToolPart): string | null {
   const lines = text.split("\n")
   switch (part.tool) {
     case "cu_computer":
-      // Resumo + avisos ("nada mudou") vêm antes da linha em branco que abre a observação.
+      // Summary + warnings ("nothing changed") come before the blank line that opens the observation.
       return text.split("\n\n")[0].trim()
     case "cu_observe":
       return lines.find((l) => l.startsWith("App:")) ?? lines[0]
     case "cu_query":
       return lines.find((l) => /match/.test(l)) ?? lines[0]
     case "computer_task":
-      // Primeira linha do relatório do agente (a de cima é só o cabeçalho).
+      // First line of the agent report (the one above is only the header).
       return lines.slice(1).find((l) => l.trim()) ?? lines[0]
     case "cu_batch": {
-      // O passo que parou, ou o último que rodou.
+      // The step that stopped, or the last one that ran.
       const steps = text.split("\n\n")[0].split("\n")
       return steps.find((l) => l.includes("STOPPED")) ?? steps[steps.length - 1]
     }

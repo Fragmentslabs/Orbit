@@ -8,10 +8,10 @@ import { designRefOf } from "@/src/lib/design-part-ref"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Card do canvas de design (design_write/design_edit): o caminho de volta para
- * a aba — espelha motion-part.tsx. Fechar a aba do painel não pode significar
- * perder o canvas de vista: este card vem da PRÓPRIA tool part, então já está
- * no histórico quando a conversa é reaberta.
+ * Design canvas card (design_write/design_edit): the way back to
+ * the tab — mirrors motion-part.tsx. Closing the panel tab cannot mean
+ * losing sight of the canvas: this card comes from the tool part ITSELF, so it is already
+ * in the history when the conversation is reopened.
  */
 export function DesignPartView({ part, sessionId }: { part: ToolPart; sessionId?: string }) {
   const { t } = useTranslation()
@@ -21,8 +21,8 @@ export function DesignPartView({ part, sessionId }: { part: ToolPart; sessionId?
   const id = ref?.id
   const path = ref?.path
   const name = ref?.name
-  // Canvas do projeto (modo código) se resolve pelo caminho sozinho; canvas da
-  // conversa (modo chat) precisa da sessão para ser encontrado.
+  // The project canvas (code mode) resolves itself through the path; the conversation
+  // canvas (chat mode) needs the session to be found.
   const canOpen = Boolean(id || path || (name && sessionId))
 
   const open = useCallback(() => {

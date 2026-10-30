@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MessagePart } from '@shared/chat'
 
 /**
- * `companion-http` importa o electron (app, BrowserWindow) e sobe servidor —
- * nada disso existe aqui. O único ponto que o model-rotation usa dele é o
- * cache de modelos por sessão, então é ele que o mock expõe.
+ * `companion-http` imports electron (app, BrowserWindow) and brings up a server —
+ * none of that exists here. The only point model-rotation uses from it is the
+ * per-session model cache, so that is what the mock exposes.
  */
 const sessionModelsCache = vi.hoisted(() => ({ current: {} as Record<string, { providerId: string; modelId: string }> }))
 
@@ -33,20 +33,20 @@ beforeEach(() => {
 })
 
 describe('resolveRotation', () => {
-  it('sem rotação e sem modelo pinado, usa o modelo que o renderer resolveu', () => {
+  it('without rotation and without a pinned model, uses the model the renderer resolved', () => {
     expect(resolveRotation('s1', fallback)).toEqual([fallback])
   })
 
-  it('modelo pinado no chat vence o fallback global', () => {
-    sessionModelsCache.current = { s1: model('pinado') }
-    expect(resolveRotation('s1', fallback)).toEqual([model('pinado')])
+  it('a model pinned in the chat beats the global fallback', () => {
+    sessionModelsCache.current = { s1: model('pinned') }
+    expect(resolveRotation('s1', fallback)).toEqual([model('pinned')])
   })
 
-  it('rotação escolhida no chat vence o modelo pinado', () => {
-    // A precedência importa: o engine resolve a rotação ANTES do pino, então
-    // escolher um modelo precisa limpar a rotação do chat (é o que o seletor
-    // faz nos dois apps). Se isto inverter, o modelo escolhido não vale.
-    sessionModelsCache.current = { s1: model('pinado') }
+  it('the rotation chosen in the chat beats the pinned model', () => {
+    // The precedence matters: the engine resolves the rotation BEFORE the pin, so
+    // choosing a model has to clear the chat's rotation (it is what the selector
+    // does in both apps). If this flips, the chosen model does not count.
+    sessionModelsCache.current = { s1: model('pinned') }
     setRotationConfigCache({
       rotations: [{ id: 'r1', name: 'A', models: [model('a'), model('b')] }],
       sessionOverrides: { s1: 'r1' },
@@ -54,7 +54,7 @@ describe('resolveRotation', () => {
     expect(resolveRotation('s1', fallback)).toEqual([model('a'), model('b')])
   })
 
-  it('a rotação vale só no chat que a escolheu', () => {
+  it('the rotation applies only to the chat that chose it', () => {
     setRotationConfigCache({
       rotations: [{ id: 'r1', name: 'A', models: [model('a')] }],
       sessionOverrides: { s1: 'r1' },
@@ -62,7 +62,7 @@ describe('resolveRotation', () => {
     expect(resolveRotation('s2', fallback)).toEqual([fallback])
   })
 
-  it('chat novo (sem sessionId) usa a chave draft', () => {
+  it('a new chat (no sessionId) uses the draft key', () => {
     setRotationConfigCache({
       rotations: [{ id: 'r1', name: 'A', models: [model('a')] }],
       sessionOverrides: { draft: 'r1' },
@@ -70,7 +70,7 @@ describe('resolveRotation', () => {
     expect(resolveRotation(undefined, fallback)).toEqual([model('a')])
   })
 
-  it('corta a sequência no teto de tentativas', () => {
+  it('cuts the sequence at the attempt ceiling', () => {
     const models = ['a', 'b', 'c', 'd'].map(model)
     setRotationConfigCache({
       rotations: [{ id: 'r1', name: 'A', models }],
@@ -81,9 +81,9 @@ describe('resolveRotation', () => {
     expect(seq).toEqual(models.slice(0, MAX_ROTATION_ATTEMPTS))
   })
 
-  it('rotação vazia cai no comportamento normal em vez de sequência vazia', () => {
-    // Uma rotação recém-criada, ainda sem slot, não pode zerar a sequência do
-    // turno — seria um chat que simplesmente não responde.
+  it('an empty rotation falls back to normal behavior instead of an empty sequence', () => {
+    // A freshly created rotation, still without a slot, cannot zero the turn's
+    // sequence — it would be a chat that simply does not answer.
     setRotationConfigCache({
       rotations: [{ id: 'r1', name: 'A', models: [] }],
       sessionOverrides: { s1: 'r1' },
@@ -91,19 +91,19 @@ describe('resolveRotation', () => {
     expect(resolveRotation('s1', fallback)).toEqual([fallback])
   })
 
-  it('escolha apontando para rotação removida cai no comportamento normal', () => {
+  it('a choice pointing to a removed rotation falls back to normal behavior', () => {
     setRotationConfigCache({ rotations: [], sessionOverrides: { s1: 'sumiu' } })
     expect(resolveRotation('s1', fallback)).toEqual([fallback])
   })
 
-  it('cache limpo (null) não derruba a resolução', () => {
+  it('a cleared cache (null) does not break the resolution', () => {
     setRotationConfigCache(null)
     expect(resolveRotation('s1', fallback)).toEqual([fallback])
   })
 })
 
 describe('selectNext', () => {
-  it('anda pela sequência e devolve undefined ao esgotar', () => {
+  it('walks the sequence and returns undefined when exhausted', () => {
     const seq = [model('a'), model('b')]
     expect(selectNext(seq, 0)).toEqual(model('a'))
     expect(selectNext(seq, 1)).toEqual(model('b'))
@@ -117,29 +117,29 @@ describe('hasStreamedContent', () => {
     ({ type: 'reasoning', id: 'r1', state: 'done', text: value }) as MessagePart
   const tool = (): MessagePart => ({ type: 'tool', tool: 'read', state: 'done' }) as MessagePart
 
-  // A v1 só rotaciona ANTES do primeiro token de saída: reenviar um turno que
-  // já entregou conteúdo cobraria os tokens de novo.
-  it('turno ainda sem saída pode rotacionar', () => {
+  // v1 only rotates BEFORE the first output token: resending a turn that
+  // already delivered content would charge the tokens again.
+  it('a turn still without output may rotate', () => {
     expect(hasStreamedContent([])).toBe(false)
     expect(hasStreamedContent([text('')])).toBe(false)
   })
 
-  it('texto, raciocínio ou tool já emitidos travam a rotação', () => {
-    expect(hasStreamedContent([text('oi')])).toBe(true)
-    expect(hasStreamedContent([reasoning('pensando')])).toBe(true)
+  it('text, reasoning or tool already emitted lock the rotation', () => {
+    expect(hasStreamedContent([text('hi')])).toBe(true)
+    expect(hasStreamedContent([reasoning('thinking')])).toBe(true)
     expect(hasStreamedContent([tool()])).toBe(true)
   })
 })
 
-describe('rodadas extras do turno', () => {
-  it('a espera cresce a cada rodada e para no último degrau', () => {
+describe('extra rounds of the turn', () => {
+  it('the wait grows on every round and stops at the last step', () => {
     expect(retryDelay(1)).toBe(RETRY_DELAYS_MS[0])
     expect(retryDelay(2)).toBe(RETRY_DELAYS_MS[1])
     expect(retryDelay(3)).toBe(RETRY_DELAYS_MS[2])
     expect(retryDelay(9)).toBe(RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1])
   })
 
-  it('parar o turno corta a espera na hora', async () => {
+  it('stopping the turn cuts the wait immediately', async () => {
     vi.useFakeTimers()
     try {
       const controller = new AbortController()

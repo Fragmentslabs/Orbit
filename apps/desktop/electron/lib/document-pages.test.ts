@@ -14,13 +14,13 @@ import {
 } from './document-pages'
 
 /**
- * A camada de documentos existe para que um PDF de 300 páginas NUNCA entre
- * inteiro no contexto. Duas falhas aqui são silenciosas e caras:
+ * The documents layer exists so that a 300-page PDF NEVER enters
+ * whole into the context. Two failures here are silent and expensive:
  *
- * 1. A janela devolver mais do que o pedido — o custo volta a explodir sem
- *    ninguém perceber, porque a resposta continua "certa".
- * 2. O cabeçalho não anunciar que há mais documento — o modelo responde como
- *    se tivesse lido o todo, que é o erro exato que a paginação evita.
+ * 1. The window returning more than what was asked for — the cost blows up again without
+ *    anyone noticing, because the answer remains "right".
+ * 2. The header not announcing that there is more document — the model answers as
+ *    if it had read the whole thing, which is the exact mistake pagination avoids.
  */
 
 const doc = (pages: DocumentPage[], over: Partial<ExtractedDocument> = {}): ExtractedDocument => ({
@@ -32,62 +32,62 @@ const doc = (pages: DocumentPage[], over: Partial<ExtractedDocument> = {}): Extr
   ...over,
 })
 
-const page = (num: number, text = `texto ${num}`): DocumentPage => ({ num, text })
+const page = (num: number, text = `text ${num}`): DocumentPage => ({ num, text })
 
 describe('documentKindOf', () => {
-  it('reconhece os formatos suportados, sem depender de maiúscula', () => {
+  it('recognizes the supported formats, without depending on case', () => {
     expect(documentKindOf('spec.pdf')).toBe('pdf')
-    expect(documentKindOf('REQUISITOS.PDF')).toBe('pdf')
-    expect(documentKindOf('contrato.docx')).toBe('docx')
-    expect(documentKindOf('custos.xlsx')).toBe('spreadsheet')
-    expect(documentKindOf('dados.csv')).toBe('spreadsheet')
+    expect(documentKindOf('REQUIREMENTS.PDF')).toBe('pdf')
+    expect(documentKindOf('contract.docx')).toBe('docx')
+    expect(documentKindOf('costs.xlsx')).toBe('spreadsheet')
+    expect(documentKindOf('data.csv')).toBe('spreadsheet')
   })
 
-  it('não captura arquivo de código — o read de texto continua sendo o caminho deles', () => {
+  it('does not capture code files — plain text read is still their path', () => {
     expect(documentKindOf('index.ts')).toBeNull()
     expect(documentKindOf('README.md')).toBeNull()
     expect(isDocumentPath('app/main.rs')).toBe(false)
   })
 
-  it('não confunde extensão no meio do nome', () => {
-    expect(isDocumentPath('relatorio.pdf.bak')).toBe(false)
+  it('does not confuse an extension in the middle of the name', () => {
+    expect(isDocumentPath('report.pdf.bak')).toBe(false)
   })
 })
 
 describe('paginateText', () => {
-  it('quebra em parágrafo, nunca no meio de uma frase', () => {
-    const paragrafo = 'a'.repeat(400)
-    const pages = paginateText([paragrafo, paragrafo, paragrafo].join('\n\n'), 500)
+  it('breaks at a paragraph, never in the middle of a sentence', () => {
+    const paragraph = 'a'.repeat(400)
+    const pages = paginateText([paragraph, paragraph, paragraph].join('\n\n'), 500)
     expect(pages.length).toBeGreaterThan(1)
     for (const p of pages) expect(p.text).not.toMatch(/^a{1,399}$/)
   })
 
-  it('numera a partir de 1 e em sequência', () => {
+  it('numbers from 1 and in sequence', () => {
     const pages = paginateText(Array.from({ length: 6 }, () => 'x'.repeat(300)).join('\n\n'), 400)
     expect(pages.map((p) => p.num)).toEqual(pages.map((_, i) => i + 1))
   })
 
-  it('texto vazio ainda devolve uma página — o chamador nunca recebe lista vazia', () => {
+  it('empty text still returns one page — the caller never gets an empty list', () => {
     expect(paginateText('')).toHaveLength(1)
   })
 
-  it('parágrafo maior que o alvo não é partido (vira uma página grande)', () => {
-    const gigante = 'z'.repeat(5000)
-    const pages = paginateText(gigante, 1000)
+  it('a paragraph larger than the target is not split (it becomes one big page)', () => {
+    const giant = 'z'.repeat(5000)
+    const pages = paginateText(giant, 1000)
     expect(pages).toHaveLength(1)
     expect(pages[0].text).toHaveLength(5000)
   })
 })
 
 describe('capPages', () => {
-  it('corta preservando páginas inteiras e sinaliza o corte', () => {
+  it('cuts preserving whole pages and signals the cut', () => {
     const result = capPages([page(1, 'aaaa'), page(2, 'bbbb'), page(3, 'cccc')], 'pdf', 9)
     expect(result.pages).toHaveLength(2)
     expect(result.truncated).toBe(true)
     expect(result.pages.at(-1)!.text).toBe('bbbb')
   })
 
-  it('documento dentro do limite não é marcado como cortado', () => {
+  it('a document within the limit is not marked as cut', () => {
     const result = capPages([page(1, 'aa'), page(2, 'bb')], 'pdf', 100)
     expect(result.truncated).toBe(false)
     expect(result.totalPages).toBe(2)
@@ -97,31 +97,31 @@ describe('capPages', () => {
 describe('pageWindow', () => {
   const d = doc(Array.from({ length: 50 }, (_, i) => page(i + 1)))
 
-  it('sem offset começa na primeira página e respeita o padrão', () => {
+  it('without offset it starts at the first page and respects the default', () => {
     const { from, to, pages } = pageWindow(d, undefined, undefined, 3, 20)
     expect(from).toBe(1)
     expect(to).toBe(3)
     expect(pages).toHaveLength(3)
   })
 
-  it('limit acima do teto é cortado — é o que impede o documento inteiro de vir numa chamada', () => {
+  it('a limit above the ceiling is cut — that is what keeps the whole document from coming in one call', () => {
     expect(pageWindow(d, 1, 999, 3, 20).pages).toHaveLength(20)
   })
 
-  it('offset além do fim cai na última página em vez de devolver vazio', () => {
+  it('an offset past the end lands on the last page instead of returning empty', () => {
     const { from, pages } = pageWindow(d, 999, 2, 3, 20)
     expect(from).toBe(50)
     expect(pages).toHaveLength(1)
   })
 
-  it('offset 0 ou negativo é normalizado para a primeira página', () => {
+  it('offset 0 or negative is normalized to the first page', () => {
     expect(pageWindow(d, 0, 2, 3, 20).from).toBe(1)
     expect(pageWindow(d, -5, 2, 3, 20).from).toBe(1)
   })
 })
 
 describe('documentHeader', () => {
-  it('anuncia que há mais documento e como continuar', () => {
+  it('announces that there is more document and how to continue', () => {
     const header = documentHeader('spec.pdf', doc(Array.from({ length: 40 }, (_, i) => page(i + 1))), {
       from: 1,
       to: 3,
@@ -130,58 +130,58 @@ describe('documentHeader', () => {
     expect(header).toContain('offset=4')
   })
 
-  it('na última página não sugere continuar', () => {
+  it('on the last page it does not suggest continuing', () => {
     const header = documentHeader('spec.pdf', doc([page(1), page(2)]), { from: 1, to: 2 })
     expect(header).not.toContain('offset=')
   })
 
-  it('planilha é anunciada em abas, não em páginas', () => {
-    const planilha = doc([{ num: 1, text: 'a', label: 'Custos' }], { kind: 'spreadsheet' })
-    expect(documentHeader('c.xlsx', planilha, { from: 1, to: 1 })).toContain('sheets="1"')
+  it('a spreadsheet is announced in sheets, not pages', () => {
+    const sheet = doc([{ num: 1, text: 'a', label: 'Costs' }], { kind: 'spreadsheet' })
+    expect(documentHeader('c.xlsx', sheet, { from: 1, to: 1 })).toContain('sheets="1"')
   })
 
-  it('documento cortado avisa o corte', () => {
-    const cortado = doc([page(1)], { truncated: true })
-    expect(documentHeader('g.pdf', cortado, { from: 1, to: 1 })).toContain('truncated')
+  it('a cut document warns about the cut', () => {
+    const truncatedDoc = doc([page(1)], { truncated: true })
+    expect(documentHeader('g.pdf', truncatedDoc, { from: 1, to: 1 })).toContain('truncated')
   })
 })
 
 describe('pageLabel', () => {
-  it('usa o nome da aba quando existe', () => {
-    expect(pageLabel({ num: 2, text: '', label: 'Custos' }, 'spreadsheet')).toBe('sheet "Custos"')
+  it('uses the sheet name when it exists', () => {
+    expect(pageLabel({ num: 2, text: '', label: 'Costs' }, 'spreadsheet')).toBe('sheet "Costs"')
   })
 
-  it('DOCX fala em bloco, porque a paginação ali é sintética', () => {
+  it('DOCX speaks of blocks, because the pagination there is synthetic', () => {
     expect(pageLabel({ num: 2, text: '' }, 'docx')).toBe('block 2')
   })
 
-  it('PDF fala em página, que é a paginação real do arquivo', () => {
+  it('PDF speaks of pages, which is the real pagination of the file', () => {
     expect(pageLabel({ num: 12, text: '' }, 'pdf')).toBe('p. 12')
   })
 })
 
 /**
- * O localizador é o que o agente CITA para o usuário e o que ele usa como
- * offset. Dizer "p12" num DOCX faria o modelo apontar uma página que o Word
- * não tem (a paginação ali é sintética), e numa planilha faria "página 3"
- * significar a terceira aba.
+ * The locator is what the agent CITES to the user and what it uses as
+ * the offset. Saying "p12" in a DOCX would make the model point to a page Word
+ * does not have (the pagination there is synthetic), and in a spreadsheet it would make "page 3"
+ * mean the third sheet.
  */
 describe('pageLocator', () => {
-  it('PDF usa página, que é a paginação real do arquivo', () => {
+  it('PDF uses pages, which is the real pagination of the file', () => {
     expect(pageLocator({ num: 12, text: '' }, 'pdf')).toBe('p12')
   })
 
-  it('DOCX não finge ter página do Word', () => {
+  it('DOCX does not pretend to have a Word page', () => {
     const locator = pageLocator({ num: 12, text: '' }, 'docx')
     expect(locator).toBe('block12')
     expect(locator).not.toMatch(/^p\d/)
   })
 
-  it('planilha leva o nome da aba junto do offset', () => {
-    expect(pageLocator({ num: 3, text: '', label: 'Custos' }, 'spreadsheet')).toBe('sheet3 (Custos)')
+  it('a spreadsheet carries the sheet name along with the offset', () => {
+    expect(pageLocator({ num: 3, text: '', label: 'Costs' }, 'spreadsheet')).toBe('sheet3 (Costs)')
   })
 
-  it('sempre carrega o número que serve de offset na leitura', () => {
+  it('always carries the number that serves as the read offset', () => {
     for (const kind of ['pdf', 'docx', 'spreadsheet'] as const) {
       expect(pageLocator({ num: 7, text: '' }, kind)).toContain('7')
     }

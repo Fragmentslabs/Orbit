@@ -1,17 +1,17 @@
-// Acoes do host do Computer Use no Windows (continuacao de windows-host.cs).
+// Actions of the Computer Use host on Windows (continuation of windows-host.cs).
 //
-// Regras que este arquivo segue:
-//  - o modo dirigido age SO pela UI Automation (Invoke, Toggle, Value, Text,
-//    Scroll...). Nada de mensagens de janela postadas nem truques com a fila de
-//    entrada de outro app: falham sem avisar em Chromium/UWP/WPF;
-//  - SetFocus nunca: focar um controle de outro app ativa a janela dele. O
-//    "focus" so guarda o elemento como alvo da proxima digitacao;
-//  - SendInput so no ponteiro global (opt-in do usuario), e SEMPRE depois de
-//    trazer o app para a frente e conferir que a janela certa esta sob o
-//    ponto: entrada real no app errado e o pior erro possivel aqui;
-//  - toda acao confere a identidade (papel e nome) do elemento antes de agir.
+// Rules this file follows:
+//  - the directed mode acts ONLY through UI Automation (Invoke, Toggle, Value, Text,
+//    Scroll...). No posted window messages and no tricks with another app's input
+//    queue: they fail silently in Chromium/UWP/WPF;
+//  - SetFocus never: focusing a control of another app activates its window. "focus"
+//    only keeps the element as the target of the next typing;
+//  - SendInput only on the global pointer (user opt-in), and ALWAYS after bringing the
+//    app to the front and checking that the right window is under the point: real
+//    input into the wrong app is the worst possible mistake here;
+//  - every action checks the element's identity (role and name) before acting.
 //
-// C# 5, como o resto.
+// C# 5, like the rest.
 
 using System;
 using System.Collections.Generic;
@@ -26,7 +26,7 @@ using Microsoft.Win32;
 
 public static partial class OrbitHost
 {
-    // ------------------------------------------------------- Win32 de entrada
+// ------------------------------------------------------- Win32 of input
 
     [StructLayout(LayoutKind.Sequential)]
     struct MOUSEINPUT { public int dx, dy, mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
@@ -91,10 +91,10 @@ public static partial class OrbitHost
     const int KEYEVENTF_KEYUP = 0x0002;
     const int KEYEVENTF_UNICODE = 0x0004;
     const int DefaultGlideMs = 240;
-    /// <summary>Quanto tempo um "focus" vale como alvo da proxima digitacao.</summary>
+/// <summary>How long a "focus" holds as the target of the next typing.</summary>
     const int FocusTargetSeconds = 10;
 
-    // Flags do combo (as mesmas de keys.ts): shift=1, ctrl=2, alt=4, win=8.
+// Combo flags (the same as keys.ts): shift=1, ctrl=2, alt=4, win=8.
     const int FlagShift = 1, FlagCtrl = 2, FlagAlt = 4, FlagWin = 8;
 
     class FocusRef
@@ -105,7 +105,7 @@ public static partial class OrbitHost
 
     static readonly Dictionary<int, FocusRef> Targets = new Dictionary<int, FocusRef>();
 
-    // ---------------------------------------------------------------- despacho
+// ---------------------------------------------------------------- dispatch
 
     static object DispatchAction(string op, Dictionary<string, object> a)
     {
@@ -122,7 +122,7 @@ public static partial class OrbitHost
             case "scroll": return OpScroll(a);
             case "activate": return OpActivate(a);
             case "openApp": return OpOpenApp(a);
-            // Operacoes do probe do Stage 0 (scripts/cu-probe-win.mjs).
+// Operations of the Stage 0 probe (scripts/cu-probe-win.mjs).
             case "displays": return OpDisplays();
             case "foreground": return OpForeground();
             case "cursor": return OpCursor();
@@ -146,7 +146,7 @@ public static partial class OrbitHost
         return d.TryGetValue(key, out v) ? v as Dictionary<string, object> : null;
     }
 
-    // ---------------------------------------------------------------- padroes
+// ---------------------------------------------------------------- patterns
 
     static bool TryPattern<T>(AutomationElement e, AutomationPattern pattern, out T result) where T : class
     {
@@ -160,10 +160,10 @@ public static partial class OrbitHost
         return result != null;
     }
 
-    /// <summary>
-    /// Roda a chamada numa thread com prazo. Um Invoke que abre um dialogo
-    /// modal pode so voltar quando o dialogo fecha: o host nao pode ficar preso.
-    /// </summary>
+/// <summary>
+/// Runs the call on a thread with a deadline. An Invoke that opens a modal dialog may
+/// only come back when the dialog closes: the host cannot get stuck.
+/// </summary>
     static bool RunWithTimeout(Action action, int ms, out Exception error)
     {
         Exception captured = null;
@@ -180,7 +180,7 @@ public static partial class OrbitHost
         return true;
     }
 
-    /// <summary>true = rodou; unconfirmed = o app nao respondeu a tempo (provavelmente rodou).</summary>
+/// <summary>true = it ran; unconfirmed = the app did not answer in time (it probably ran).</summary>
     static bool Guarded(Action action, out bool unconfirmed)
     {
         Exception err;
@@ -189,7 +189,7 @@ public static partial class OrbitHost
         if (!finished) return true;
         if (err == null) return true;
         if (err is ElementNotAvailableException) throw new HostError("staleRef", "The element is gone - call cu_observe again.");
-        // Desabilitado, ou o padrao nao vale agora: tenta a proxima opcao.
+// Disabled, or the pattern does not apply right now: try the next option.
         return false;
     }
 
@@ -239,7 +239,7 @@ public static partial class OrbitHost
         return false;
     }
 
-    // ---------------------------------------------------------------- elemento
+// ---------------------------------------------------------------- element
 
     static string RoleLive(AutomationElement e)
     {
@@ -287,11 +287,11 @@ public static partial class OrbitHost
         return path;
     }
 
-    /// <summary>
-    /// O elemento de um ref (mapa da ultima arvore) ou, sem ele, do path. Em
-    /// qualquer caso confere papel e nome: se nao bate, e "indice velho" - nunca
-    /// o elemento errado.
-    /// </summary>
+/// <summary>
+/// The element of a ref (map of the last tree) or, without it, of the path. In either
+/// case it checks role and name: if they do not match, it is a "stale index" - never
+/// the wrong element.
+/// </summary>
     static AutomationElement Resolve(int pid, Dictionary<string, object> a)
     {
         Dictionary<string, object> window = Dict(a, "window");
@@ -389,7 +389,7 @@ public static partial class OrbitHost
                     return Obj("done", null, "node", Snapshot(el));
                 }
             case "focus":
-                // Sem SetFocus: so guarda o alvo da proxima digitacao.
+// No SetFocus: it only keeps the target of the next typing.
                 if (!IsTextEntry(el) && !el.Current.IsKeyboardFocusable) return Obj("done", null, "node", Snapshot(el));
                 RememberTarget(pid, el);
                 return Obj("done", "focus", "node", Snapshot(el));
@@ -424,9 +424,9 @@ public static partial class OrbitHost
         return Obj("done", null, "node", Snapshot(el));
     }
 
-    // ------------------------------------------------------------------ texto
+// ------------------------------------------------------------------ text
 
-    /// <summary>Selecao do TextPattern como (inicio, tamanho, texto), contada em caracteres.</summary>
+/// <summary>TextPattern selection as (start, length, text), counted in characters.</summary>
     static bool SelectionOffsets(TextPattern tp, out int location, out int length, out string text)
     {
         location = 0;
@@ -452,7 +452,7 @@ public static partial class OrbitHost
             TextPatternRange target = doc;
             if (!string.IsNullOrEmpty(find))
             {
-                // A n-esima ocorrencia: depois de cada achado, busca de novo a partir do fim dele.
+// The n-th occurrence: after each hit, search again from the end of it.
                 TextPatternRange scope = doc.Clone();
                 target = null;
                 for (int i = 0; i < Math.Max(1, occurrence); i++)
@@ -472,7 +472,7 @@ public static partial class OrbitHost
                 return Obj("done", "select", "node", Snapshot(el), "selection", Obj("location", loc, "length", len, "text", Clip(txt, 120)));
             return Obj("done", "select", "node", Snapshot(el), "selection", null);
         }
-        // Edit Win32 sem TextPattern: o proprio controle seleciona (EM_SETSEL nao ativa janela nenhuma).
+// Win32 Edit without TextPattern: the control itself selects (EM_SETSEL does not activate any window).
         int handle = 0;
         try { handle = el.Current.NativeWindowHandle; } catch (Exception) { }
         ValuePattern vp;
@@ -499,7 +499,7 @@ public static partial class OrbitHost
         return Obj("done", null, "node", Snapshot(el));
     }
 
-    /// <summary>O elemento que recebe a digitacao do app: o foco da UIA, ou o foco da thread da janela (app em segundo plano).</summary>
+/// <summary>The element that receives the app's typing: the UIA focus, or the window thread's focus (app in the background).</summary>
     static AutomationElement FocusedOf(int pid)
     {
         AutomationElement f = null;
@@ -510,8 +510,8 @@ public static partial class OrbitHost
             if (f != null && f.Current.ProcessId == pid) return f;
         }
         catch (Exception) { }
-        // App em segundo plano: o foco "do sistema" e de outro app. A thread da
-        // janela guarda o proprio controle com foco.
+// App in the background: the "system" focus belongs to another app. The window thread
+// keeps its own focused control.
         IntPtr hwnd = WindowOfPid(pid);
         if (hwnd == IntPtr.Zero) return null;
         GUITHREADINFO info = new GUITHREADINFO();
@@ -544,11 +544,11 @@ public static partial class OrbitHost
         return before + text;
     }
 
-    /// <summary>
-    /// Texto em segundo plano: Edit/RichEdit nativo troca a selecao pelo proprio
-    /// controle (EM_REPLACESEL); o resto vai pelo ValuePattern. Nada de teclado
-    /// sintetico: nao ha como garantir qual janela o recebe.
-    /// </summary>
+/// <summary>
+/// Text in the background: a native Edit/RichEdit swaps the selection through the
+/// control itself (EM_REPLACESEL); the rest goes through ValuePattern. No synthetic
+/// keyboard: there is no way to guarantee which window receives it.
+/// </summary>
     static object InsertText(int pid, string text)
     {
         AutomationElement target = null;
@@ -586,7 +586,7 @@ public static partial class OrbitHost
         throw new HostError("unavailable", "That element does not accept text in the background (no editable value). Use the global pointer to type for real.");
     }
 
-    // ------------------------------------------------------------------- hit
+// ------------------------------------------------------------------- hit
 
     static bool OwnedBy(IntPtr top, int pid)
     {
@@ -605,7 +605,7 @@ public static partial class OrbitHost
         pt.X = (int)Math.Round(x);
         pt.Y = (int)Math.Round(y);
         IntPtr top = GetAncestor(WindowFromPoint(pt), GA_ROOT);
-        // Janela de outro app por cima do ponto: a UIA devolveria o elemento DELA.
+// Window of another app on top of the point: UIA would return ITS element.
         if (!OwnedBy(top, pid)) return Obj("done", null, "reason", "covered");
         AutomationElement hit = AutomationElement.FromPoint(new System.Windows.Point(x, y));
         if (hit == null) return Obj("done", null, "reason", "nothingAtPoint");
@@ -660,7 +660,7 @@ public static partial class OrbitHost
                 bool horizontal = dx != 0 && sp.Current.HorizontallyScrollable;
                 if (vertical || horizontal)
                 {
-                    // Roda positiva = conteudo desce (rolar para cima): dy < 0 e rolar PARA BAIXO.
+// Positive wheel = content goes down (scroll up): dy < 0 is scrolling DOWN.
                     ScrollAmount v = !vertical ? ScrollAmount.NoAmount : (dy < 0 ? ScrollAmount.SmallIncrement : ScrollAmount.SmallDecrement);
                     ScrollAmount h = !horizontal ? ScrollAmount.NoAmount : (dx < 0 ? ScrollAmount.SmallIncrement : ScrollAmount.SmallDecrement);
                     for (int i = 0; i < ticks; i++) sp.Scroll(h, v);
@@ -693,7 +693,7 @@ public static partial class OrbitHost
         return Obj("selection", Obj("location", loc, "length", len, "text", Clip(txt, 120)));
     }
 
-    // ------------------------------------------------------- janelas e foco
+// ------------------------------------------------------- windows and focus
 
     static IntPtr WindowOfPid(int pid)
     {
@@ -716,7 +716,7 @@ public static partial class OrbitHost
         return byPid;
     }
 
-    /// <summary>Traz a janela para a frente (so no ponteiro global, que o usuario ligou) e confirma.</summary>
+/// <summary>Brings the window to the front (global pointer only, which the user turned on) and confirms it.</summary>
     static void EnsureFront(IntPtr hwnd)
     {
         if (!IsWindow(hwnd)) throw new HostError("windowNotFound", "The window is gone - call cu_apps again.");
@@ -728,7 +728,7 @@ public static partial class OrbitHost
         }
         if (!InFront(hwnd))
         {
-            // O Windows so deixa trocar o foco a quem acabou de receber entrada: um toque na tecla Alt libera.
+// Windows only lets whoever just received input change the focus: a tap on the Alt key releases it.
             Send(KeyInput(0x12, 0), KeyInput(0x12, KEYEVENTF_KEYUP));
             SetForegroundWindow(hwnd);
             WaitFront(hwnd);
@@ -755,7 +755,7 @@ public static partial class OrbitHost
         return Obj("done", "activate");
     }
 
-    // ------------------------------------------------------------- SendInput
+// ------------------------------------------------------------- SendInput
 
     static void Send(params INPUT[] inputs)
     {
@@ -809,7 +809,7 @@ public static partial class OrbitHost
         return t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
     }
 
-    /// <summary>O cursor desliza ate o alvo em vez de saltar: a pessoa acompanha o que o agente faz.</summary>
+/// <summary>The cursor slides to the target instead of jumping: the person follows what the agent does.</summary>
     static void Glide(int x, int y, int ms)
     {
         POINT start;
@@ -832,7 +832,7 @@ public static partial class OrbitHost
             throw new HostError("unavailable", what + " needs the global pointer on Windows (it moves the real cursor and brings the app to the front). In directed mode only UI Automation actions work: element indices, set_value, select_text, invoke, and type into a text field.");
     }
 
-    /// <summary>A janela certa esta mesmo sob o ponto? Entrada real no app errado e o pior erro aqui.</summary>
+/// <summary>Is the right window really under the point? Real input into the wrong app is the worst mistake here.</summary>
     static void CheckPointOwned(IntPtr hwnd, int x, int y)
     {
         POINT pt = new POINT();
@@ -918,8 +918,8 @@ public static partial class OrbitHost
         EnsureFront(hwnd);
         CheckPointOwned(hwnd, x, y);
         Glide(x, y, DefaultGlideMs);
-        // act.ts manda pixels (60 por passo) com roda positiva = rolar para cima; o Windows usa 120 por passo
-        // e, na horizontal, positivo = direita (o contrario do contrato).
+// act.ts sends pixels (60 per step) with a positive wheel = scroll up; Windows uses 120 per step
+// and, horizontally, positive = right (the opposite of the contract).
         if (dy != 0) Send(MouseInput(MOUSEEVENTF_WHEEL, 0, 0, (int)Math.Round(dy * 2)));
         if (dx != 0) Send(MouseInput(MOUSEEVENTF_HWHEEL, 0, 0, (int)Math.Round(-dx * 2)));
         return Obj("done", "scroll");
@@ -964,7 +964,7 @@ public static partial class OrbitHost
 
         if (Str(a, "mode") != "global")
         {
-            // Dirigido: so texto, e so em campo editavel. Atalho de teclado precisaria de entrada real.
+// Directed: text only, and only in an editable field. A keyboard shortcut would need real input.
             if (hasCombos)
                 throw new HostError("unavailable", "Keyboard shortcuts need the global pointer on Windows (they are real key presses and bring the app to the front). In directed mode use set_value, select_text, invoke or an element index instead.");
             if (string.IsNullOrEmpty(text)) return Obj("done", "keys");
@@ -972,8 +972,8 @@ public static partial class OrbitHost
         }
 
         EnsureFront(WindowArg(a, pid));
-        // No ponteiro global o app ja esta na frente por escolha do usuario: aqui o
-        // alvo guardado pelo "focus" ganha o foco de verdade, para a digitacao cair nele.
+// On the global pointer the app is already in front by the user's choice: here the target
+// kept by "focus" really gets the focus, so the typing lands on it.
         FocusRef pending;
         if (Targets.TryGetValue(pid, out pending) && (DateTime.UtcNow - pending.At).TotalSeconds < FocusTargetSeconds)
         {
@@ -993,7 +993,7 @@ public static partial class OrbitHost
         return Obj("done", "keys");
     }
 
-    // ------------------------------------------------------------- abrir app
+// ------------------------------------------------------------- open app
 
     static bool NameMatches(WinRow row, string query)
     {
@@ -1046,7 +1046,7 @@ public static partial class OrbitHost
         return best;
     }
 
-    /// <summary>Apps empacotados (Calculadora, Fotos...) nao tem atalho: o Get-StartApps do Windows conhece o AUMID.</summary>
+    /// <summary>Packed apps (Calculator, Photos...) have no shortcut: Windows' Get-StartApps knows the AUMID.</summary>
     static string StartAppsId(string query)
     {
         try
@@ -1093,9 +1093,9 @@ public static partial class OrbitHost
     }
 
     /// <summary>
-    /// So abre o que e app de verdade: AUMID, exe/atalho por caminho absoluto, App
-    /// Paths, programas conhecidos do sistema, atalhos do Menu Iniciar e apps
-    /// empacotados. Nunca "executa a string que o modelo mandou".
+    /// It only opens what really is an app: AUMID, exe/shortcut by absolute path, App
+    /// Paths, programs known to the system, Start Menu shortcuts and packed apps. It
+    /// never "runs the string the model sent".
     /// </summary>
     static bool Launch(string query)
     {
@@ -1147,7 +1147,7 @@ public static partial class OrbitHost
 
         if (!Launch(query)) throw new HostError("appNotFound", "Could not open \"" + query + "\" - check the app name (an executable name, a Start Menu name or an app id).");
 
-        // Abrir leva um instante ate a janela existir.
+        // Opening takes a moment until the window exists.
         for (int i = 0; i < 40; i++)
         {
             Thread.Sleep(200);
@@ -1190,7 +1190,7 @@ public static partial class OrbitHost
         return Obj("monitors", monitors);
     }
 
-    /// <summary>A mesma varredura da arvore SEM CacheRequest (uma chamada por propriedade), para comparar.</summary>
+    /// <summary>The same tree sweep WITHOUT CacheRequest (one call per property), for comparison.</summary>
     static object OpTreeBench(Dictionary<string, object> a)
     {
         DateTime started = DateTime.UtcNow;
@@ -1218,11 +1218,11 @@ public static partial class OrbitHost
         return Obj("nodes", count, "ms", (int)(DateTime.UtcNow - started).TotalMilliseconds);
     }
 
-    // ---- Experimentos do probe: mensagens de janela postadas.
+    // ---- Probe experiments: posted window messages.
     //
-    // NAO sao usados pelo driver nem pelas acoes (o modo dirigido e so UIA, ver
-    // o cabecalho). Existem para o Stage 0 medir, por tipo de app, se uma
-    // mensagem de mouse/caractere chega de verdade com a janela em segundo plano.
+    // They are NOT used by the driver nor by the actions (the directed mode is UIA only,
+    // see the header). They exist so that Stage 0 measures, per app type, whether a
+    // mouse/character message really arrives with the window in the background.
 
     static object OpPostMouse(Dictionary<string, object> a)
     {

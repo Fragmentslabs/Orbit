@@ -1,40 +1,40 @@
 import path from 'node:path'
 
 /**
- * Reconhece o `bash` que só LÊ ou BUSCA — `cat`, `sed -n`, `head`, `grep`,
- * `rg`, `find`, `ls` — para que ele receba o mesmo tratamento do `read` e do
- * `grep` no corte de contexto (context-budget.ts) e para a tool apontar o
- * índice de símbolos quando a busca é por um nome.
+ * Recognizes the `bash` that only READS or SEARCHES — `cat`, `sed -n`, `head`, `grep`,
+ * `rg`, `find`, `ls` — so that it gets the same treatment as `read` and
+ * `grep` in the context cut (context-budget.ts) and so that the tool points to the
+ * symbol index when the search is for a name.
  *
- * Nos dados reais, depois do code-index, 62% das chamadas de bash eram
- * leitura ou busca: passavam por fora do índice e, como bash não é
- * idempotente, nenhum desses resultados era descartado quando repetido.
+ * In real data, after the code-index, 62% of the bash calls were
+ * reading or searching: they went around the index and, since bash is not
+ * idempotent, none of those results was discarded when repeated.
  *
- * Conservador de propósito: qualquer coisa que possa escrever (redirecionamento,
- * `sed -i`, `find -exec`, encadeamento com `;`/`&&`, substituição de comando)
- * não é inspeção. Errar para "não é" só mantém o comportamento de antes.
- * Módulo puro, sem IO.
+ * Conservative on purpose: anything that can write (redirection,
+ * `sed -i`, `find -exec`, chaining with `;`/`&&`, command substitution)
+ * is not inspection. Erring toward "is not" only keeps the previous behavior.
+ * Pure module, no IO.
  */
 
-/** Comandos que, sozinhos ou num pipe entre eles, só leem. */
+/** Commands that, alone or in a pipe among themselves, only read. */
 const INSPECT_COMMANDS = new Set(['cat', 'sed', 'head', 'tail', 'nl', 'wc', 'grep', 'rg', 'find', 'ls', 'sort', 'uniq', 'cut', 'tr'])
 
-/** `cd dir && ` no começo: o resto roda a partir de `dir`. */
+/** `cd dir && ` at the start: the rest runs from `dir`. */
 const LEADING_CD = /^cd\s+("[^"]*"|'[^']*'|[^\s;&|]+)\s*&&\s*/
 
 const STDERR_ONLY = /\s2>(\/dev\/null|&1)(?=\s|\||$)/g
 
 export interface InspectCommand {
-  /** Pasta onde o comando roda, absoluta */
+  /** Folder where the command runs, absolute */
   cwd: string
-  /** O comando sem o `cd` inicial, com espaços normalizados */
+  /** The command without the leading `cd`, with normalized spaces */
   command: string
 }
 
 export interface FileView {
-  /** Caminho absoluto do arquivo lido */
+  /** Absolute path of the file read */
   path: string
-  /** Primeira e última linha mostradas (1-indexed, inclusivas) */
+  /** First and last line shown (1-indexed, inclusive) */
   from: number
   to: number
 }
@@ -46,14 +46,14 @@ function unquote(token: string): string {
   return token
 }
 
-/** Divide em palavras respeitando aspas simples e duplas. */
+/** Splits into words respecting single and double quotes. */
 function words(command: string): string[] {
   return command.match(/"[^"]*"|'[^']*'|\S+/g) ?? []
 }
 
 /**
- * O comando, quando ele é só leitura/busca; null quando pode ter efeito
- * colateral ou não dá para ter certeza.
+ * The command, when it is read/search only; null when it may have a side
+ * effect or it is not possible to be sure.
  */
 export function parseInspection(command: string, directory: string): InspectCommand | null {
   let rest = command.trim()
@@ -62,10 +62,10 @@ export function parseInspection(command: string, directory: string): InspectComm
     cwd = path.resolve(cwd, unquote(match[1]))
     rest = rest.slice(match[0].length)
   }
-  // Sem aspas no meio, para os testes abaixo não confundirem um `>` dentro de
-  // um padrão de grep com redirecionamento — o que sobra é a estrutura.
-  // `2>/dev/null` e `2>&1` são o único redirecionamento aceito: só calam ou
-  // juntam o stderr, nunca escrevem arquivo.
+  // No quotes in the middle, so the tests below do not mistake a `>` inside a
+  // grep pattern for a redirection — what is left is the structure.
+  // `2>/dev/null` and `2>&1` are the only accepted redirection: they only silence or
+  // merge stderr, never write a file.
   const bare = rest.replace(/"[^"]*"|'[^']*'/g, '""').replace(STDERR_ONLY, '')
   if (!rest || /[;&><`\n]|\$\(/.test(bare)) return null
   for (const segment of bare.split('|')) {
@@ -78,9 +78,9 @@ export function parseInspection(command: string, directory: string): InspectComm
 }
 
 /**
- * O trecho de arquivo que um `cat`/`nl`/`head`/`sed -n 'A,Bp'` mostra, quando
- * é um comando só, sobre um arquivo só. `tail` fica de fora: a faixa depende
- * do tamanho do arquivo, que daqui não se sabe.
+ * The file stretch that a `cat`/`nl`/`head`/`sed -n 'A,Bp'` shows, when
+ * it is a single command, over a single file. `tail` stays out: the range depends
+ * on the file size, which cannot be known from here.
  */
 export function parseFileView(inspection: InspectCommand): FileView | null {
   if (inspection.command.includes('|')) return null
@@ -120,8 +120,8 @@ export function parseFileView(inspection: InspectCommand): FileView | null {
 }
 
 /**
- * O padrão de um `grep`/`rg` que procura um NOME (identificador, `a.b`), não
- * texto livre — é a busca que o code_search/code_refs respondem melhor.
+ * The pattern of a `grep`/`rg` searching for a NAME (identifier, `a.b`), not
+ * free text — it is the search that code_search/code_refs answer better.
  */
 export function symbolSearchPattern(inspection: InspectCommand): string | null {
   const [name, ...args] = words(inspection.command.split('|')[0].trim()).map(unquote)

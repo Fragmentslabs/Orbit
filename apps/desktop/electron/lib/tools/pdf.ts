@@ -12,17 +12,17 @@ import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
- * Manipulação de PDFs existentes: juntar, recortar, girar, carimbar e
- * preencher formulário.
+ * Manipulation of existing PDFs: merge, crop, rotate, stamp and
+ * fill a form.
  *
- * Toda saída é um arquivo NOVO no storage do Orbit, que aparece na conversa
- * como documento e sai pelo botão de baixar — mesma regra da edição de .docx:
- * o usuário anexou o documento, não autorizou mexer nele. Gravar no projeto
- * só com `savePath`, e só quando ele pedir.
+ * Every output is a NEW file in Orbit's storage, which appears in the conversation
+ * as a document and leaves through the download button — same rule as .docx editing:
+ * the user attached the document, they did not authorize touching it. Writing to the project
+ * only with `savePath`, and only when they ask.
  */
 
 export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | null) {
-  /** Resolve um PDF por anexo ou por caminho na pasta de trabalho. */
+  /** Resolves a PDF by attachment or by a path in the working folder. */
   const load = async (ref: string): Promise<{ bytes: Buffer; name: string } | string> => {
     if (/^(doc|src)[0-9]+$/.test(ref)) {
       const found = await readSessionDocument(scope.sessionId, ref)
@@ -42,7 +42,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
     }
   }
 
-  /** Grava a saída: sempre no Orbit; no projeto só quando pedido. */
+  /** Writes the output: always in Orbit; in the project only when asked. */
   const deliver = async (
     bytes: Buffer,
     title: string,
@@ -146,8 +146,8 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         const src = await load(source)
         if (typeof src === 'string') return src
         try {
-          // O total só é conhecido depois de abrir, então a faixa é expandida
-          // aqui e não no schema.
+          // The total is only known after opening, so the range is expanded
+          // here and not in the schema.
           const probe = await transformPdf(src.bytes, {})
           const selected = pages ? parsePageRange(pages, probe.total) : undefined
           if (pages && (!selected || selected.length === 0)) {
@@ -224,7 +224,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           }
           const out = await deliver(
             result.bytes,
-            title || `${src.name.replace(/\.pdf$/i, '')} preenchido`,
+            title || `${src.name.replace(/\.pdf$/i, '')} filled`,
             src.name,
             savePath,
           )
@@ -250,11 +250,11 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         if (typeof src === 'string') return src
         try {
           const meta = await readMetadata(src.bytes)
-          const linhas = Object.entries(meta)
+          const lines = Object.entries(meta)
             .filter(([, v]) => v !== undefined && v !== '')
             .map(([k, v]) => `${k}: ${v}`)
-          return linhas.length > 0
-            ? `${src.name}\n${linhas.join('\n')}`
+          return lines.length > 0
+            ? `${src.name}\n${lines.join('\n')}`
             : `${src.name} declares no metadata.`
         } catch (err) {
           return `Failed to read the metadata of ${src.name}: ${(err as Error).message}`
@@ -280,8 +280,8 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         const src = await load(source)
         if (typeof src === 'string') return src
         try {
-          // O total só é conhecido depois de abrir; 10000 é um teto folgado
-          // apenas para a faixa ser expandida sem truncar nada de verdade.
+          // The total is only known after opening; 10000 is a loose ceiling
+          // only so the range can be expanded without really truncating anything.
           const wanted = pages ? parsePageRange(pages, 10_000) : undefined
           const floor = minSize ?? DEFAULT_IMAGE_MIN_SIZE
           const images = await extractPdfImages(new Uint8Array(src.bytes), {
@@ -290,8 +290,8 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
             minSize: floor,
           })
           if (images.length === 0) {
-            // Dizer só "não encontrei" seria enganoso: o piso descarta em
-            // silêncio, e a saída é justamente baixá-lo.
+            // Saying only "I did not find it" would be misleading: the floor discards silently,
+            // and the way out is precisely to lower it.
             return `No image larger than ${floor}px found in ${src.name}${
               pages ? ` on pages ${pages}` : ''
             }.${

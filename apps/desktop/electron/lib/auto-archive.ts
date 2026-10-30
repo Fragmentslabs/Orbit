@@ -6,12 +6,12 @@ import { broadcastSessionEvent } from './companion-server'
 import { listKeys, readJson, writeJson } from './storage'
 
 /**
- * Arquivamento automático de conversas inativas (Preferências → Geral).
+ * Automatic archiving of inactive conversations (Preferences → General).
  *
- * Arquivar é reversível: a conversa sai da lista principal e vai para o grupo
- * de arquivados, com a pasta preservada. Ficam de fora o que o usuário marcou
- * para ficar (fixadas), o que não é uma conversa dele (execuções de rotina e
- * sub-sessões de orquestração) e o que está respondendo agora.
+ * Archiving is reversible: the conversation leaves the main list and goes to
+ * the archived group, with its folder preserved. Left out are what the user
+ * marked to stay (pinned), what is not one of their conversations (routine
+ * executions and orchestration sub-sessions) and what is answering right now.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -44,20 +44,20 @@ export async function archiveInactiveSessions(now = Date.now()): Promise<number>
   )
   const stale = staleSessions(sessions, days, now, new Set(getRunningSessionIds()))
   for (const session of stale) {
-    // updatedAt fica como estava: arquivar não é atividade, e mexer nele
-    // reordenaria a lista de arquivados.
+    // updatedAt stays as it was: archiving is not activity, and touching it
+    // would reorder the archived list.
     const next = setArchivedState(session, true, now)
     await writeJson(StorageKeys.session(session.id), next)
     broadcastSessionEvent({ type: 'session', sessionId: session.id, session: next })
   }
-  if (stale.length > 0) console.log(`[auto-archive] ${stale.length} conversa(s) inativa(s) arquivada(s)`)
+  if (stale.length > 0) console.log(`[auto-archive] ${stale.length} inactive conversation(s) archived`)
   return stale.length
 }
 
 export function setupAutoArchive(): void {
-  const run = () => void archiveInactiveSessions().catch((err) => console.error('[auto-archive] falhou:', err))
+  const run = () => void archiveInactiveSessions().catch((err) => console.error('[auto-archive] failed:', err))
   setInterval(run, INTERVAL_MS)
-  // Ligar a opção (ou encurtar o prazo) vale na hora, não só na próxima rodada.
+  // Turning the option on (or shortening the window) counts right away, not only on the next round.
   onAppSettingsChange((next, prev) => {
     if (next.autoArchiveDays && next.autoArchiveDays !== prev.autoArchiveDays) run()
   })

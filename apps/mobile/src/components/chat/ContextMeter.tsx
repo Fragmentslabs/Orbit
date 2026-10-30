@@ -7,11 +7,11 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { TokenUsage } from '@orbit/shared'
 
-// Mesma conta do context-meter do desktop: o usage do ULTIMO step e o tamanho
-// real do contexto atual. `input`/`output` no topo somam todos os steps do
-// turno (inflados pelas idas-e-vindas de tool) e so servem de fallback para
-// mensagens gravadas antes de lastStep existir — era por isso que o mesmo chat
-// mostrava 72,7K no desktop e 1,3M aqui.
+// Same calculation as the desktop context-meter: the usage of the LAST step and the real
+// size of the current context. `input`/`output` at the top sum all the steps of the
+// turn (inflated by the tool round trips) and only serve as a fallback for
+// messages recorded before lastStep existed — that was why the same chat
+// showed 72.7K on the desktop and 1.3M here.
 function sumTokens(u: TokenUsage): number {
   if (u.lastStep) return (u.lastStep.input ?? 0) + (u.lastStep.output ?? 0)
   return (u.input ?? 0) + (u.output ?? 0)
@@ -49,9 +49,9 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
 
   if (used === 0) return null
 
-  // Indicador, nao botao: o contador do desktop tambem so informa (tooltip).
-  // Aqui ele disparava /compact no toque — um envio de mensagem a um toque de
-  // distancia, que parecia bug (o chat entrava em "rodando" do nada).
+  // Indicator, not a button: the desktop counter only informs as well (tooltip).
+  // Here it fired /compact on tap — a message send one touch
+  // away, which looked like a bug (the chat went into "running" out of nowhere).
   return (
     <View className="flex-row items-center gap-1 rounded-md px-1.5 py-1">
       <Svg width={16} height={16} viewBox="0 0 16 16">

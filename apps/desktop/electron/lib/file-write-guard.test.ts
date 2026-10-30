@@ -4,55 +4,55 @@ import { describe, expect, it } from 'vitest'
 import { checkWritePath } from './file-write-guard'
 
 /**
- * Esta é a única porta pela qual o renderer grava em disco. Um furo aqui não
- * aparece como bug na tela — aparece como arquivo sobrescrito fora do projeto,
- * ou como repositório corrompido.
+ * This is the only door through which the renderer writes to disk. A hole here does not
+ * show up as a bug on screen — it shows up as a file overwritten outside the project,
+ * or as a corrupted repository.
  */
 
 const root = path.resolve('/repo')
 
 describe('checkWritePath', () => {
-  it('aceita arquivo dentro da raiz', () => {
+  it('accepts a file inside the root', () => {
     const verdict = checkWritePath(path.join(root, 'src', 'app.ts'), [root])
     expect(verdict.ok).toBe(true)
   })
 
-  it('aceita quando o alvo está em uma das várias raízes', () => {
-    const outra = path.resolve('/outra')
-    expect(checkWritePath(path.join(outra, 'a.ts'), [root, outra]).ok).toBe(true)
+  it('accepts when the target is in one of several roots', () => {
+    const other = path.resolve('/other')
+    expect(checkWritePath(path.join(other, 'a.ts'), [root, other]).ok).toBe(true)
   })
 
-  it('recusa fora da raiz', () => {
+  it('refuses outside the root', () => {
     const verdict = checkWritePath(path.resolve('/etc', 'hosts'), [root])
     expect(verdict).toEqual({ ok: false, reason: 'outside-workspace' })
   })
 
-  it('recusa escapar por ..', () => {
-    const verdict = checkWritePath(path.join(root, '..', 'vizinho', 'a.ts'), [root])
+  it('refuses to escape via ..', () => {
+    const verdict = checkWritePath(path.join(root, '..', 'neighbor', 'a.ts'), [root])
     expect(verdict).toEqual({ ok: false, reason: 'outside-workspace' })
   })
 
-  it('não aceita pasta irmã de prefixo parecido', () => {
-    // `/repo-legado` começa com `/repo` como TEXTO, mas não está dentro dele.
-    const verdict = checkWritePath(path.resolve('/repo-legado', 'a.ts'), [root])
+  it('does not accept a sibling folder with a similar prefix', () => {
+    // `/repo-legacy` starts with `/repo` as TEXT, but it is not inside it.
+    const verdict = checkWritePath(path.resolve('/repo-legacy', 'a.ts'), [root])
     expect(verdict).toEqual({ ok: false, reason: 'outside-workspace' })
   })
 
-  it('recusa o diretório do git, mesmo dentro da raiz', () => {
-    // Um save aqui corrompe o repositório, e nada que o painel abre para ler
-    // precisa ser reescrito dentro de .git.
+  it('refuses the git directory, even inside the root', () => {
+    // A save here corrupts the repository, and nothing the panel opens to read
+    // needs to be rewritten inside .git.
     const verdict = checkWritePath(path.join(root, '.git', 'config'), [root])
     expect(verdict).toEqual({ ok: false, reason: 'git-internal' })
   })
 
-  it('recusa .git em qualquer profundidade', () => {
+  it('refuses .git at any depth', () => {
     const verdict = checkWritePath(path.join(root, 'sub', '.git', 'HEAD'), [root])
     expect(verdict).toEqual({ ok: false, reason: 'git-internal' })
   })
 
-  it('recusa quando não há raiz nenhuma', () => {
-    // Workspace sem pasta aberta não pode virar permissão para escrever em
-    // qualquer lugar.
-    expect(checkWritePath(path.resolve('/qualquer', 'a.ts'), []).ok).toBe(false)
+  it('refuses when there is no root at all', () => {
+    // A workspace with no open folder cannot become permission to write
+    // anywhere.
+    expect(checkWritePath(path.resolve('/anywhere', 'a.ts'), []).ok).toBe(false)
   })
 })

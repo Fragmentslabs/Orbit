@@ -4,9 +4,9 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * Edição de artefato como FILA: dois chats no mesmo artifactId são
- * serializados, cada um aplicando sobre o resultado do outro. Uma edição cujo
- * oldText já não existe falha em vez de sobrescrever — é o "rejeitar stale".
+ * Artifact editing as a QUEUE: two chats on the same artifactId are
+ * serialized, each applying over the other's result. An edit whose
+ * oldText no longer exists fails instead of overwriting — it is the "reject stale".
  */
 
 const userData = path.join(os.tmpdir(), `orbit-artifact-edit-test-${process.pid}`)
@@ -56,8 +56,8 @@ describe('mutateArtifact', () => {
       media.mutateArtifact(ref.id, slow('[A]', '[A2]')),
       media.mutateArtifact(ref.id, slow('[B]', '[B2]')),
     ])
-    // Cada edição leu DENTRO do lock, então a segunda viu o resultado da
-    // primeira: as duas trocas sobrevivem (uma fila, não um "último vence").
+    // Each edit read INSIDE the lock, so the second saw the
+    // first one's result: both swaps survive (a queue, not a "last one wins").
     expect(await readArtifact(ref.id)).toBe('<p>[A2][B2]</p>')
   })
 

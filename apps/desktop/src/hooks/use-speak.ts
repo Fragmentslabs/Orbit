@@ -7,19 +7,19 @@ import { voiceApi } from "@/src/lib/voice-ipc"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 
 /**
- * FALAR: pede a síntese ao main (`voice:tts:*`) e toca os pedaços PCM16 em
- * sequência, emendando um no outro.
+ * SPEAK: asks main for the synthesis (`voice:tts:*`) and plays the PCM16 chunks
+ * in sequence, splicing one onto the next.
  *
- * O áudio chega em streaming — cada pedaço é agendado como um
- * AudioBufferSourceNode no mesmo AudioContext, com o início no fim do
- * anterior. Não há <audio> nem blob por pedaço: montar um blob por chunk
- * introduziria uma pausa audível entre eles.
+ * The audio arrives in streaming — each chunk is scheduled as an
+ * AudioBufferSourceNode on the same AudioContext, with its start at the end of the
+ * previous one. There is no <audio> and no blob per chunk: building a blob per chunk
+ * would introduce an audible pause between them.
  */
 
-/** Taxa dos pedaços do motor (mesma que o main manda em `sr`). */
+/** Rate of the engine chunks (the same one main sends in `sr`). */
 export const TTS_SAMPLE_RATE = 24000
 
-/** Canais da fala (`voice:tts:*`); o `voice:status` sai do `voiceApi`. */
+/** Speech channels (`voice:tts:*`); `voice:status` comes from `voiceApi`. */
 const CHANNEL = {
   start: "voice:tts:start",
   chunk: "voice:tts:chunk",
@@ -31,21 +31,21 @@ const CHANNEL = {
   streamClear: "voice:tts:stream-clear",
 } as const
 
-/** Folga entre pedaços que chegam atrasados e o agendamento em si. */
+/** Slack between chunks that arrive late and the scheduling itself. */
 const SCHEDULE_LEAD_SECONDS = 0.02
 
 /**
- * Quanto esperar, depois do fim previsto do áudio agendado, por um `done`.
+ * How long to wait, after the predicted end of the scheduled audio, for a `done`.
  *
- * O motor local pode levar MAIS que o tempo real para sintetizar a frase
- * seguinte (RTF > 1 em máquinas sem aceleração). Cinco segundos cortavam a
- * continuação no meio: o primeiro pedaço tocava, o segundo ainda estava sendo
- * gerado, e a rede de segurança encerrava a fala. É uma rede para um `done`
- * perdido, não um limite de latência — o motor já tem o próprio timeout.
+ * The local engine can take MORE than real time to synthesize the next
+ * sentence (RTF > 1 on machines without acceleration). Five seconds cut the
+ * continuation in the middle: the first chunk played, the second was still being
+ * generated, and the safety net ended the speech. It is a net for a lost
+ * `done`, not a latency limit — the engine already has its own timeout.
  */
 const DONE_GRACE_SECONDS = 60
 
-/** Preferências de voz (bloco `voice.tts` do AppSettings) já resolvidas. */
+/** Voice preferences (the `voice.tts` block of AppSettings) already resolved. */
 export interface TtsPrefs {
   enabled: boolean
   voice: string
@@ -57,33 +57,33 @@ export interface SpeakRequest {
   voice?: string
   lang?: string
   speed?: number
-  /** Prioridade de áudio desta fala; sem ela, vale a das configurações. */
+  /** Audio priority for this speech; without it, the one from settings applies. */
   engine?: VoiceTtsEngine
 }
 
-/** O que o main manda em `voice:tts:chunk`. */
+/** What main sends in `voice:tts:chunk`. */
 interface ChunkPayload {
   id?: string
   pcm?: string
   sr?: number
   i?: number
   n?: number
-  /** Nº da frase, só na fala contínua (o modo chamada mostra a que está tocando). */
+  /** Sentence number, only in continuous speech (call mode shows the one playing). */
   seg?: number
-  /** Texto deste pedaço do áudio (o motor local manda; a rota do modelo, não). */
+  /** Text of this audio chunk (the local engine sends it; the model route does not). */
   text?: string
 }
 
-/** O que o main manda em `voice:tts:done` (com `error` quando a síntese falhou). */
+/** What main sends in `voice:tts:done` (with `error` when the synthesis failed). */
 interface DonePayload {
   id?: string
   error?: string
 }
 
 /**
- * Lê o bloco `voice.tts` de forma defensiva: o tipo compartilhado pode ainda
- * não trazê-lo (chega em outro worker), e a UI não pode depender disso para
- * abrir. Sem nada no localStorage, valem os padrões do app.
+ * Reads the `voice.tts` block defensively: the shared type may not
+ * carry it yet (it arrives from another worker), and the UI cannot depend on that to
+ * open. With nothing in localStorage, the app defaults apply.
  */
 export function readTtsPrefs(voice: unknown): TtsPrefs {
   const tts = (voice as { tts?: Record<string, unknown> } | null | undefined)?.tts
@@ -98,16 +98,16 @@ export function readTtsPrefs(voice: unknown): TtsPrefs {
 }
 
 /**
- * Prioridade de áudio do bloco `voice.tts`: `model` (rota pelo provedor, o
- * padrão) ou `local` (motor do Supertonic). Valor ausente ou fora do domínio
- * cai no padrão — a fala nunca fica sem motor.
+ * Audio priority from the `voice.tts` block: `model` (route through the provider, the
+ * default) or `local` (Supertonic engine). A missing value or one outside the domain
+ * falls back to the default — the speech never ends up without an engine.
  */
 export function readTtsEngine(voice: unknown): VoiceTtsEngine {
   const engine = (voice as { tts?: { engine?: unknown } } | null | undefined)?.tts?.engine
   return engine === "local" ? "local" : "model"
 }
 
-/** base64 de PCM16LE -> amostras Float32 em -1..1. Entrada inválida vira vazio. */
+/** base64 of PCM16LE -> Float32 samples in -1..1. Invalid input becomes empty. */
 export function decodePcm16(pcm: string): Float32Array {
   let binary: string
   try {
@@ -124,20 +124,20 @@ export function decodePcm16(pcm: string): Float32Array {
   return samples
 }
 
-/** Resposta de `voice:status` no que o botão precisa saber. */
+/** `voice:status` response reduced to what the button needs to know. */
 export interface TtsStatus {
   ready: boolean
-  /** `false` = ninguém respondeu (main antigo ou sem motor) — não bloqueia o botão. */
+  /** `false` = nobody answered (old main or no engine) — does not block the button. */
   known: boolean
 }
 
 /**
- * Interpreta o `voice:status` sem confiar na forma: só `ttsReady` é obrigatório.
+ * Parses `voice:status` without trusting its shape: only `ttsReady` is required.
  *
- * Com a prioridade em `model`, a rota do provedor (`modelTts.available`) já
- * destrava o botão mesmo sem o modelo local no disco — é essa metade que a
- * preferência acrescentou. Sem rota, vale a leitura local (o pipeline cai no
- * motor local, então é ele que manda no estado do botão).
+ * With the priority on `model`, the provider route (`modelTts.available`) already
+ * unlocks the button even without the local model on disk — that is the half the
+ * preference added. Without a route, the local reading applies (the pipeline falls back to
+ * the local engine, so that is what rules the button state).
  */
 export function readTtsStatus(raw: unknown, engine: VoiceTtsEngine = "model"): TtsStatus {
   const status = raw as
@@ -168,7 +168,7 @@ function createAudioContext(): AudioContext {
   }
 }
 
-/** Pede ao main que abandone a síntese. Best-effort: sem canal, não há o que fazer. */
+/** Asks main to drop the synthesis. Best-effort: without a channel, there is nothing to do. */
 function cancelRequest(id: string) {
   const call = window.ipcRenderer?.invoke(CHANNEL.cancel, { id })
   void Promise.resolve(call).catch(() => {})
@@ -177,22 +177,22 @@ function cancelRequest(id: string) {
 export type AudioContextFactory = () => AudioContext
 
 /**
- * Fila de reprodução: agenda os pedaços emendados e guarda o que ainda está
- * tocando. Vive fora do React (e recebe a fábrica de AudioContext de fora)
- * para poder ser testada com um AudioContext de mentira — o hook só cuida do
- * id da fala e do ciclo de vida.
+ * Playback queue: schedules the spliced chunks and keeps what is still
+ * playing. Lives outside React (and receives the AudioContext factory from outside)
+ * so it can be tested with a fake AudioContext — the hook only handles the
+ * speech id and the lifecycle.
  */
 export class ChunkPlayer {
   onEnded: (() => void) | null = null
   private readonly createContext: AudioContextFactory
   private context: AudioContext | null = null
   private sources: AudioBufferSourceNode[] = []
-  /** Frase (fala contínua) e fim, no relógio do contexto, de cada pedaço agendado. */
+  /** Sentence (continuous speech) and end, on the context clock, of each scheduled chunk. */
   private meta = new Map<AudioBufferSourceNode, { seg?: number; end: number }>()
   /**
-   * Pedaços de cada frase com o texto e a janela de áudio: é o que permite
-   * revelar a legenda junto com o som. Fica fora do `meta` porque o `meta` some
-   * quando o pedaço termina — e a legenda precisa do que já tocou.
+   * Chunks of each sentence with the text and the audio window: it is what allows
+   * revealing the subtitle along with the sound. It stays outside `meta` because `meta` disappears
+   * when the chunk ends — and the subtitle needs what has already played.
    */
   private pieces = new Map<number, { text: string; start: number; end: number }[]>()
   private nextAt = 0
@@ -201,31 +201,31 @@ export class ChunkPlayer {
     this.createContext = createContext
   }
 
-  /** Cria o AudioContext sob demanda — no gesture do clique, quando possível. */
+  /** Creates the AudioContext on demand — in the click gesture, when possible. */
   ensure(): AudioContext {
     if (this.context && this.context.state !== "closed") return this.context
     this.context = this.createContext()
     return this.context
   }
 
-  /** Fim do áudio já agendado, no relógio do contexto. */
+  /** End of the audio already scheduled, on the context clock. */
   get scheduledEnd(): number {
     return this.nextAt
   }
 
-  /** Relógio do contexto (0 se ele ainda nem existe). */
+  /** Context clock (0 if it does not even exist yet). */
   get clock(): number {
     return this.context?.currentTime ?? 0
   }
 
-  /** Pedaços agendados que ainda não chegaram ao fim. */
+  /** Scheduled chunks that have not reached their end yet. */
   get pending(): number {
     return this.sources.length
   }
 
   /**
-   * Agenda um pedaço emendado no fim do anterior e devolve em quantos segundos
-   * ele começa a tocar. Um pedaço vazio não agenda nada (devolve `null`).
+   * Schedules a chunk spliced onto the end of the previous one and returns in how many seconds
+   * it starts playing. An empty chunk schedules nothing (returns `null`).
    */
   schedule(samples: Float32Array, sampleRate: number, seg?: number, text?: string): number | null {
     if (samples.length === 0) return null
@@ -236,13 +236,13 @@ export class ChunkPlayer {
     const source = context.createBufferSource()
     source.buffer = buffer
     source.connect(context.destination)
-    // Emenda no pedaço anterior; se a reprodução atrasou, volta para "agora".
+    // Splices onto the previous chunk; if playback fell behind, goes back to "now".
     const at = Math.max(this.nextAt, context.currentTime + SCHEDULE_LEAD_SECONDS)
     source.start(at)
     this.nextAt = at + buffer.duration
     this.sources.push(source)
     this.meta.set(source, { seg, end: this.nextAt })
-    // Sem texto não há legenda para este pedaço — mas o anterior já foi dito.
+    // Without text there is no subtitle for this chunk — but the previous one has already been said.
     if (typeof seg === "number" && text?.trim()) {
       const pieces = this.pieces.get(seg) ?? []
       pieces.push({ text: text.trim(), start: at, end: this.nextAt })
@@ -258,8 +258,8 @@ export class ChunkPlayer {
   }
 
   /**
-   * O que já tocou da frase `seg`, em texto: os pedaços concluídos mais o
-   * começo do que está tocando agora — a legenda cresce junto com o áudio.
+   * What has already played of sentence `seg`, as text: the finished chunks plus the
+   * beginning of the one playing now — the subtitle grows along with the audio.
    */
   spokenText(seg: number): string {
     const pieces = this.pieces.get(seg)
@@ -275,15 +275,15 @@ export class ChunkPlayer {
         const total = piece.end - piece.start
         parts.push(spokenPrefix(piece.text, total > 0 ? (now - piece.start) / total : 1))
       }
-      // O próximo pedaço ainda não começou: a legenda para aqui.
+      // The next chunk has not started yet: the subtitle stops here.
       break
     }
     return parts.filter(Boolean).join(" ")
   }
 
   /**
-   * Tira da fila o áudio das frases DEPOIS de `seg` (a que está tocando segue
-   * até o fim). Os pedaços seguintes passam a emendar no fim do que ficou.
+   * Removes from the queue the audio of the sentences AFTER `seg` (the one playing goes
+   * on to the end). The following chunks then splice onto the end of what is left.
    */
   dropAfter(seg: number): void {
     const keep: AudioBufferSourceNode[] = []
@@ -295,7 +295,7 @@ export class ChunkPlayer {
         try {
           source.stop()
         } catch {
-          // Já tinha terminado sozinho.
+          // It had already finished on its own.
         }
         source.disconnect()
         this.meta.delete(source)
@@ -311,14 +311,14 @@ export class ChunkPlayer {
     if (dropped) this.onEnded?.()
   }
 
-  /** Interrompe o que está agendado — o que já tocou não volta atrás. */
+  /** Stops what is scheduled — what has already played does not come back. */
   stopAll(): void {
     for (const source of this.sources) {
       source.onended = null
       try {
         source.stop()
       } catch {
-        // Já tinha terminado sozinho.
+        // It had already finished on its own.
       }
       source.disconnect()
     }
@@ -328,7 +328,7 @@ export class ChunkPlayer {
     this.nextAt = 0
   }
 
-  /** Fecha o AudioContext: no unmount, para não deixar saída de áudio viva. */
+  /** Closes the AudioContext: on unmount, so as not to leave a live audio output behind. */
   close(): void {
     this.stopAll()
     void this.context?.close().catch(() => {})
@@ -337,36 +337,36 @@ export class ChunkPlayer {
 }
 
 /**
- * A ponte mínima que o observador de estado precisa — o `voiceApi` real, na
- * prática, e uma ponte de mentira nos testes. Tipada por `unknown` de
- * propósito: quem lê o payload é que normaliza, não esta interface.
+ * The minimal bridge the state observer needs — the real `voiceApi`, in
+ * practice, and a fake bridge in tests. Typed as `unknown` on
+ * purpose: whoever reads the payload is the one who normalizes it, not this interface.
  */
 export interface VoiceStatusSource {
   status: () => Promise<unknown>
-  /** Assina o canal de mudança de estado e devolve o unsubscribe. */
+  /** Subscribes to the state change channel and returns the unsubscribe. */
   onStatusChanged: (listener: () => void) => () => void
 }
 
 export interface VoiceStatusSubscription {
-  /** Relê `voice:status` sob demanda (o `focus` da janela usa isto). */
+  /** Re-reads `voice:status` on demand (the window `focus` uses this). */
   read: () => void
-  /** Cancela a assinatura do canal — sai no unmount, sem listener órfão. */
+  /** Cancels the channel subscription — leaves on unmount, with no orphan listener. */
   unsubscribe: () => void
 }
 
 /**
- * Observa o estado de voz do main: lê `voice:status` agora e reconsulta a cada
- * `voice:status-changed`. Vive fora do React para poder ser testado com uma
- * ponte de mentira (mesmo motivo do `ChunkPlayer`).
+ * Watches the voice state in main: reads `voice:status` now and re-queries on every
+ * `voice:status-changed`. Lives outside React so it can be tested with a
+ * fake bridge (same reason as `ChunkPlayer`).
  *
- * O evento é tratado como SINAL, não como a fonte da verdade: o payload pode
- * vir inteiro (retrato novo) ou só com o que mudou, e a semântica dos campos
- * ainda está mudando no main. Por isso o evento dispara uma nova consulta em
- * vez de ser interpretado aqui — quem lê o payload (`readTtsStatus` e
- * `parseVoiceStatus`) já tolera mapa por id, lista e `installed`/`downloaded`.
+ * The event is treated as a SIGNAL, not as the source of truth: the payload may
+ * come whole (a new snapshot) or only with what changed, and the semantics of the fields
+ * is still changing in main. That is why the event triggers a new query instead
+ * of being interpreted here — whoever reads the payload (`readTtsStatus` and
+ * `parseVoiceStatus`) already tolerates a map by id, a list and `installed`/`downloaded`.
  *
- * Main que não respondeu (sem canal, erro, ponte quebrada) vira `undefined`:
- * ninguém é bloqueado por um status que não soubemos ler.
+ * A main that did not answer (no channel, error, broken bridge) becomes `undefined`:
+ * nobody is blocked by a status we could not read.
  */
 export function subscribeVoiceStatus(
   source: VoiceStatusSource,
@@ -387,24 +387,24 @@ export function subscribeVoiceStatus(
   return { read, unsubscribe }
 }
 
-/** Estado de voz que a UI consome: o retrato do ditado e o do TTS. */
+/** Voice state the UI consumes: the dictation snapshot and the TTS one. */
 export interface VoiceStatusState {
-  /** Payload normalizado para o `voiceTargetReady`; `null` = não deu para ler. */
+  /** Payload normalized for `voiceTargetReady`; `null` = could not read it. */
   status: VoiceStatus | null
-  /** O que o botão de fala precisa saber do TTS. */
+  /** What the speech button needs to know about TTS. */
   tts: TtsStatus
-  /** Força uma nova consulta (os eventos já reconsultam sozinhos). */
+  /** Forces a new query (the events already re-query on their own). */
   refresh: () => void
 }
 
 /**
- * Estado de voz reativo, compartilhado pelo botão de fala e pelo de ditado:
- * consulta `voice:status` ao montar e reconsulta a cada `voice:status-changed`
- * (download, extração, remoção, falha). O `focus` da janela fica só como
- * reforço — o download acontece nas Preferências, um modal DENTRO desta janela,
- * então o foco raramente dispara (era o bug: o botão só destravava ao remontar).
+ * Reactive voice state, shared by the speech button and the dictation one:
+ * queries `voice:status` on mount and re-queries on every `voice:status-changed`
+ * (download, extraction, removal, failure). The window `focus` is only there as
+ * a reinforcement — the download happens in Settings, a modal INSIDE this window,
+ * so focus rarely fires (that was the bug: the button only unlocked on remount).
  *
- * `enabled: false` desliga tudo — nada de consulta nem de assinatura.
+ * `enabled: false` turns everything off — no query and no subscription.
  */
 export function useVoiceStatus(enabled = true, engine: VoiceTtsEngine = "model"): VoiceStatusState {
   const [raw, setRaw] = useState<unknown>(undefined)
@@ -440,25 +440,25 @@ export function useVoiceStatus(enabled = true, engine: VoiceTtsEngine = "model")
   )
 }
 
-/** Estado do botão de fala para a prioridade de áudio escolhida. */
+/** Speech button state for the chosen audio priority. */
 export function useTtsStatus(enabled: boolean, engine: VoiceTtsEngine = "model"): TtsStatus {
   return useVoiceStatus(enabled, engine).tts
 }
 
 /**
- * Hook de fala: `speak(texto)` sintetiza e toca, `stop()` interrompe. Só uma
- * fala por vez — um `speak` novo corta a anterior, e nada dela sobrevive.
+ * Speech hook: `speak(text)` synthesizes and plays, `stop()` interrupts. Only one
+ * speech at a time — a new `speak` cuts the previous one, and nothing of it survives.
  */
 export function useSpeak() {
   const [speaking, setSpeaking] = useState(false)
-  /** Pediu a fala e nenhum pedaço chegou ainda: o motor está gerando o áudio. */
+  /** Speech was requested and no chunk has arrived yet: the engine is generating the audio. */
   const [generating, setGenerating] = useState(false)
-  /** Frase da fala contínua que está tocando AGORA (`seg` dos pedaços). */
+  /** Sentence of the continuous speech playing RIGHT NOW (`seg` of the chunks). */
   const [segment, setSegment] = useState<number | null>(null)
-  /** Texto da frase que está tocando (o que foi anexado com aquele `seg`). */
+  /** Text of the sentence playing (what was attached with that `seg`). */
   const [segmentText, setSegmentText] = useState<string | null>(null)
   const segTextsRef = useRef(new Map<number, string>())
-  /** Há som saindo neste instante (na fala contínua pode haver vãos entre frases). */
+  /** Sound is going out at this instant (in continuous speech there may be gaps between sentences). */
   const [audible, setAudible] = useState(false)
   const lastSegRef = useRef<number | null>(null)
   const segTimersRef = useRef<{ seg: number; timer: ReturnType<typeof setTimeout> }[]>([])
@@ -483,22 +483,22 @@ export function useSpeak() {
 
   const playerRef = useRef<ChunkPlayer | null>(null)
   const idRef = useRef<string | null>(null)
-  /** `voice:tts:start` ainda não devolveu o id (pedaços podem ter chegado antes). */
+  /** `voice:tts:start` has not returned the id yet (chunks may have arrived first). */
   const awaitingRef = useRef(false)
   const earlyRef = useRef<ChunkPayload[]>([])
-  /** `done` que chegou antes do id: sem guardá-lo, um erro imediato do main se
-   *  perdia e o botão ficava "falando" (vermelho, pulsando) para sempre. */
+  /** A `done` that arrived before the id: without storing it, an immediate error from main
+   *  got lost and the button stayed "speaking" (red, pulsing) forever. */
   const earlyDoneRef = useRef<DonePayload | null>(null)
-  /** Fala contínua ainda aberta (chegam mais frases): a rede do `done` espera. */
+  /** Continuous speech still open (more sentences coming): the `done` net waits. */
   const streamOpenRef = useRef(false)
-  /** Frases anexadas antes de o main devolver o id; e se o fim também já veio. */
+  /** Sentences attached before main returned the id; and whether the end has already come too. */
   const pendingAppendRef = useRef<string[]>([])
   const pendingEndRef = useRef(false)
-  /** Frases já mandadas ao main nesta fala contínua (= o `seg` da próxima). */
+  /** Sentences already sent to main in this continuous speech (= the `seg` of the next one). */
   const sentCountRef = useRef(0)
-  /** Depois de um corte: pedaços com `seg` em (keep, até] chegam mortos. */
+  /** After a cut: chunks with `seg` in (keep, up to] arrive dead. */
   const droppedRef = useRef<{ keep: number; upTo: number } | null>(null)
-  /** Frase tocando agora, para o corte saber o que preservar. */
+  /** Sentence playing now, so the cut knows what to preserve. */
   const playingSegRef = useRef<number | null>(null)
   const doneRef = useRef(false)
   const cancelledRef = useRef(false)
@@ -516,7 +516,7 @@ export function useSpeak() {
     }
   }, [])
 
-  /** Zera o estado da fala em curso (sem tocar no `error`). */
+  /** Resets the state of the speech in progress (without touching `error`). */
   const reset = useCallback(() => {
     clearGuard()
     getPlayer().stopAll()
@@ -534,12 +534,12 @@ export function useSpeak() {
     clearSegments()
   }, [clearGuard, clearSegments, getPlayer, setGen])
 
-  /** Fim normal: o áudio acabou e o main confirmou a fala. */
+  /** Normal end: the audio ran out and main confirmed the speech. */
   const finish = useCallback(() => {
     reset()
   }, [reset])
 
-  /** Fim com erro: corta o que estava agendado e avisa a UI. */
+  /** End with error: cuts what was scheduled and tells the UI. */
   const finishWithError = useCallback(
     (message: string) => {
       reset()
@@ -553,14 +553,14 @@ export function useSpeak() {
   }, [finish, getPlayer])
 
   /**
-   * Rede de segurança para um `done` que nunca chega: dispara depois do fim do
-   * áudio já agendado com uma folga larga, e é re-armada a cada pedaço (o prazo
-   * acompanha a fila). A folga larga é de propósito: enquanto o motor sintetiza
-   * a próxima frase, o silêncio é esperado e não pode virar corte.
+   * Safety net for a `done` that never arrives: fires after the end of the audio
+   * already scheduled with a wide slack, and is re-armed on every chunk (the deadline
+   * follows the queue). The wide slack is on purpose: while the engine synthesizes
+   * the next sentence, the silence is expected and cannot become a cut.
    */
   const armGuard = useCallback(() => {
-    // Fala contínua aberta: o agente pode demorar a mandar a próxima frase, e
-    // isso não é um `done` perdido. A rede só arma depois do fim.
+    // Continuous speech open: the agent may take a while to send the next sentence, and
+    // that is not a lost `done`. The net only arms after the end.
     if (streamOpenRef.current) {
       clearGuard()
       return
@@ -574,15 +574,15 @@ export function useSpeak() {
   const playChunk = useCallback(
     (chunk: ChunkPayload) => {
       const samples = decodePcm16(chunk.pcm ?? "")
-      // Pedaço vazio não agenda nada — mas não pode quebrar o encadeamento.
+      // An empty chunk schedules nothing — but it cannot break the chaining.
       if (samples.length === 0) return
       const sampleRate = typeof chunk.sr === "number" && chunk.sr > 0 ? chunk.sr : TTS_SAMPLE_RATE
       const seg = chunk.seg
-      // Frase descartada por um corte que ainda estava sendo gerada: chega morta.
+      // Sentence dropped by a cut while it was still being generated: arrives dead.
       const dropped = droppedRef.current
       if (typeof seg === "number" && dropped && seg > dropped.keep && seg <= dropped.upTo) return
-      // Texto deste pedaço: o motor local manda o dele; a rota do modelo manda
-      // só o áudio, então a fatia sai da frase inteira pela posição do pedaço.
+      // Text of this chunk: the local engine sends its own; the model route sends
+      // only the audio, so the slice comes from the whole sentence by the chunk position.
       const text =
         typeof chunk.text === "string" && chunk.text.trim()
           ? chunk.text.trim()
@@ -592,8 +592,8 @@ export function useSpeak() {
       const startsIn = getPlayer().schedule(samples, sampleRate, seg, text)
       setGen(false)
       setAudible(true)
-      // Frase nova na fala contínua: ela passa a ser "a que está tocando" no
-      // instante em que o áudio dela começa, não quando chega (chega antes).
+      // New sentence in the continuous speech: it becomes "the one playing" at
+      // the instant its audio starts, not when it arrives (it arrives earlier).
       if (typeof seg === "number" && seg !== lastSegRef.current && startsIn !== null) {
         lastSegRef.current = seg
         const timer = setTimeout(() => {
@@ -611,7 +611,7 @@ export function useSpeak() {
   useEffect(() => {
     const player = getPlayer()
     player.onEnded = () => {
-      // Fila de áudio vazia: silêncio (na fala contínua, à espera da próxima frase).
+      // Empty audio queue: silence (in continuous speech, waiting for the next sentence).
       if (player.pending === 0) setAudible(false)
       maybeFinish()
     }
@@ -629,7 +629,7 @@ export function useSpeak() {
       if (!payload || typeof payload !== "object") return
       const id = idRef.current
       if (id === null) {
-        // Chegou antes de o main devolver o id: guarda para tocar na ordem.
+        // Arrived before main returned the id: store it to play in order.
         if (awaitingRef.current && !cancelledRef.current) earlyRef.current.push(payload)
         return
       }
@@ -663,7 +663,7 @@ export function useSpeak() {
 
   const stop = useCallback(() => {
     const id = idRef.current
-    // Também derruba um start ainda em voo: o id que voltar será cancelado.
+    // Also takes down a start still in flight: the id that comes back will be cancelled.
     cancelledRef.current = true
     clearGuard()
     getPlayer().stopAll()
@@ -683,9 +683,9 @@ export function useSpeak() {
   }, [clearGuard, clearSegments, getPlayer, setGen])
 
   /**
-   * Abre uma fala: corta a anterior, prepara o áudio no gesto e pede o id ao
-   * main (`invoke`). Os pedaços que chegarem antes do id são guardados e tocados
-   * na ordem; o mesmo vale para um `done` precoce.
+   * Opens a speech: cuts the previous one, prepares the audio in the gesture and asks main
+   * for the id (`invoke`). Chunks that arrive before the id are stored and played
+   * in order; the same goes for an early `done`.
    */
   const open = useCallback(
     (invoke: (ipc: NonNullable<typeof window.ipcRenderer>) => Promise<unknown>, onId?: (id: string) => void) => {
@@ -694,15 +694,15 @@ export function useSpeak() {
         setError(i18n.t("voice.tts.noChannel"))
         return false
       }
-      // Uma fala por vez: o clique repetido cai no stop() do botão.
+      // One speech at a time: a repeated click lands in the button's stop().
       stop()
-      // stop() marcou a fala como cancelada — esta é nova.
+      // stop() marked the speech as cancelled — this is a new one.
       cancelledRef.current = false
       setError(null)
       setSpeaking(true)
       setGen(true)
       awaitingRef.current = true
-      // O contexto nasce no gesto do clique — é ele que libera o áudio no Chromium.
+      // The context is created in the click gesture — it is what unlocks audio in Chromium.
       try {
         void getPlayer().ensure().resume()
       } catch (reason) {
@@ -766,10 +766,10 @@ export function useSpeak() {
   )
 
   /**
-   * Fala CONTÍNUA: abre uma fala sem texto, que recebe frases com
-   * `appendSpeech` e termina com `endSpeech`. O main gera a próxima frase
-   * enquanto a anterior toca — é o que tira o silêncio entre as frases de uma
-   * resposta que chega aos pedaços (modo chamada).
+   * CONTINUOUS speech: opens a speech without text, which receives sentences with
+   * `appendSpeech` and ends with `endSpeech`. Main generates the next sentence
+   * while the previous one plays — that is what removes the silence between the sentences of an
+   * answer that arrives in pieces (call mode).
    */
   const speakStream = useCallback(
     (request: SpeakRequest = {}) => {
@@ -794,36 +794,36 @@ export function useSpeak() {
           if (pendingEndRef.current) void ipc?.invoke(CHANNEL.streamEnd, { id })
         },
       )
-      // Depois do open: o stop() lá dentro zera esta marca.
+      // After the open: the stop() in there resets this mark.
       if (opened) streamOpenRef.current = true
     },
     [open],
   )
 
-  /** Próxima frase da fala contínua (na ordem em que deve ser dita). */
+  /** Next sentence of the continuous speech (in the order it should be said). */
   const appendSpeech = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed || !streamOpenRef.current) return
     const id = idRef.current
     if (id) {
-      // Mesma numeração do main: a frase N mandada é o `seg` N dos pedaços.
+      // Same numbering as main: the sentence N sent is the `seg` N of the chunks.
       segTextsRef.current.set(sentCountRef.current++, trimmed)
       void window.ipcRenderer?.invoke(CHANNEL.streamAppend, { id, text: trimmed })
     } else if (awaitingRef.current) pendingAppendRef.current.push(trimmed)
   }, [])
 
   /**
-   * Corta a fala contínua depois da frase que está tocando (ou da primeira, se
-   * nada tocou ainda): o que já foi gerado e agendado sai do player, o que
-   * ainda espera síntese sai da fila do main, e a fala continua aberta para
-   * frases novas. É o "agente partiu para as ferramentas" do modo chamada.
+   * Cuts the continuous speech after the sentence playing (or the first one, if
+   * nothing has played yet): what was already generated and scheduled leaves the player, what
+   * still awaits synthesis leaves the main queue, and the speech stays open for
+   * new sentences. It is the "agent moved on to the tools" of call mode.
    */
   const trimSpeech = useCallback(() => {
     if (!streamOpenRef.current) return
     const keep = Math.max(playingSegRef.current ?? 0, 0)
     const id = idRef.current
     if (!id) {
-      // Nada saiu ainda: fica só a primeira frase pedida.
+      // Nothing has gone out yet: only the first requested sentence stays.
       pendingAppendRef.current = pendingAppendRef.current.slice(0, 1)
       return
     }
@@ -836,25 +836,25 @@ export function useSpeak() {
     getPlayer().dropAfter(keep)
   }, [getPlayer])
 
-  /** Não vêm mais frases: a fala acaba quando o que já foi pedido terminar de tocar. */
+  /** No more sentences: the speech ends when what has already been requested finishes playing. */
   const endSpeech = useCallback(() => {
     if (!streamOpenRef.current) return
     streamOpenRef.current = false
     const id = idRef.current
     if (id) void window.ipcRenderer?.invoke(CHANNEL.streamEnd, { id })
     else if (awaitingRef.current) pendingEndRef.current = true
-    // Agora sim vale a rede para um `done` que não chegue.
+    // Now the net for a `done` that does not arrive does apply.
     if (getPlayer().pending > 0) armGuard()
   }, [armGuard, getPlayer])
 
-  // A persona reage ao áudio que está SAINDO, e ela vive em outro ramo da
-  // árvore: o sinal vai por um store global (ver stores/voice-activity).
+  // The persona reacts to the audio that is going OUT, and it lives in another branch of
+  // the tree: the signal goes through a global store (see stores/voice-activity).
   useEffect(() => {
     useVoiceActivity.getState().setSpeaking(speaking)
   }, [speaking])
   useEffect(() => () => useVoiceActivity.getState().setSpeaking(false), [])
 
-  // Desmontou: sem listeners (efeitos acima), sem fala pendente e sem AudioContext.
+  // Unmounted: no listeners (effects above), no pending speech and no AudioContext.
   useEffect(() => {
     return () => {
       const id = idRef.current
@@ -868,17 +868,17 @@ export function useSpeak() {
     }
   }, [clearGuard])
 
-  /** Some com o aviso de erro sem tocar em fala nenhuma (o botão volta ao normal). */
+  /** Hides the error notice without touching any speech (the button goes back to normal). */
   const dismissError = useCallback(() => setError(null), [])
 
   /**
-   * Texto da frase `seg` que já tocou — os pedaços concluídos mais o começo do
-   * que está tocando. Lê o relógio do áudio na hora: quem mostra a legenda
-   * precisa re-renderizar enquanto a fala corre (o modo chamada faz isso).
+   * Text of sentence `seg` that has already played — the finished chunks plus the beginning of
+   * the one playing. Reads the audio clock on the spot: whoever shows the subtitle
+   * needs to re-render while the speech runs (call mode does that).
    */
   const segSpokenText = useCallback((seg: number) => playerRef.current?.spokenText(seg) ?? "", [])
 
-  /** Textos das frases ANTERIORES a `seg`, na ordem em que foram faladas. */
+  /** Texts of the sentences BEFORE `seg`, in the order they were spoken. */
   const beforeSegText = useCallback((seg: number) => {
     const out: { seg: number; text: string }[] = []
     for (const [key, text] of segTextsRef.current) if (key < seg) out.push({ seg: key, text })
@@ -886,8 +886,8 @@ export function useSpeak() {
   }, [])
 
   /**
-   * Todo o texto já pedido para a fala, na ordem das frases — inclusive o que
-   * ainda não tocou. É o roteiro de onde a legenda tira a próxima linha.
+   * All the text already requested for the speech, in sentence order — including what
+   * has not played yet. It is the script the subtitle takes the next line from.
    */
   const speechScript = useCallback(() => {
     const entries = [...segTextsRef.current.entries()].sort((a, b) => a[0] - b[0])

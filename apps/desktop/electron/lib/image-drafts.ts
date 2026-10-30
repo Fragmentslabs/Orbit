@@ -1,55 +1,55 @@
 /**
- * Quais imagens de um turno eram rascunho.
+ * Which images of a turn were drafts.
  *
- * Função pura, separada do chat-engine, porque a regra é a parte sutil: a
- * primeira versão dela só enxergava ESCADA — `edit(edit(x))`, cada imagem
- * virando entrada da próxima — e deixava passar inteiro o caso que de fato
- * acontece, que é LEQUE: o agente olha o resultado, não gosta, e refaz a
- * mesma edição a partir da MESMA base com outro parâmetro. Nenhuma tentativa
- * é pai da seguinte, então nenhuma parecia descartável, e a galeria enchia
- * com quatro recortes do mesmo original.
+ * A pure function, separated from the chat-engine, because the rule is the subtle part: the
+ * first version of it only saw a LADDER — `edit(edit(x))`, each image
+ * becoming the next one's input — and let the case that actually
+ * happens pass whole, which is the FAN: the agent looks at the result, does not like it, and redoes the
+ * same edit from the SAME base with another parameter. No attempt
+ * is the parent of the following one, so none looked disposable, and the gallery filled up
+ * with four crops of the same original.
  */
 
 export interface DraftSelection {
-  /** URLs produzidas neste turno, na ordem em que entraram na resposta. */
+  /** URLs produced in this turn, in the order they entered the answer. */
   produced: Iterable<string>
-  /** Filho → base de onde ele saiu, na ordem das chamadas. */
+  /** Child → base it came from, in the order of the calls. */
   parents: Map<string, string>
-  /** O que o agente marcou como entrega (keep), e que nunca é rascunho. */
+  /** What the agent marked as a delivery (keep), and which is never a draft. */
   keep: Set<string>
 }
 
 /**
- * Devolve as URLs a descartar. São dois formatos:
+ * Returns the URLs to discard. There are two formats:
  *
- * - DEGRAU: a imagem virou entrada de outra imagem do mesmo turno. Só o topo
- *   da escada interessa.
- * - TENTATIVA: duas ou mais imagens saíram da mesma base neste turno. Fica a
- *   última; as anteriores foram as que não deram certo.
+ * - RUNG: the image became the input of another image of the same turn. Only the top
+ *   of the ladder matters.
+ * - ATTEMPT: two or more images came out of the same base in this turn. The
+ *   last one stays; the previous ones were the ones that did not work out.
  *
- * O anexo do usuário não aparece aqui por construção — ele nunca entra em
- * `produced`, que só lista o que o turno gerou.
+ * The user's attachment does not appear here by construction — it never enters
+ * `produced`, which only lists what the turn generated.
  */
 export function selectDraftImages({ produced, parents, keep }: DraftSelection): string[] {
-  const doTurno = new Set(produced)
-  const rascunhos = new Set<string>()
+  const fromThisTurn = new Set(produced)
+  const drafts = new Set<string>()
 
   for (const base of parents.values()) {
-    if (doTurno.has(base)) rascunhos.add(base)
+    if (fromThisTurn.has(base)) drafts.add(base)
   }
 
-  const porBase = new Map<string, string[]>()
-  for (const [filho, base] of parents) {
-    const irmas = porBase.get(base) ?? []
-    irmas.push(filho)
-    porBase.set(base, irmas)
+  const byBase = new Map<string, string[]>()
+  for (const [child, base] of parents) {
+    const siblings = byBase.get(base) ?? []
+    siblings.push(child)
+    byBase.set(base, siblings)
   }
-  for (const irmas of porBase.values()) {
-    for (const url of irmas.slice(0, -1)) rascunhos.add(url)
+  for (const siblings of byBase.values()) {
+    for (const url of siblings.slice(0, -1)) drafts.add(url)
   }
 
-  for (const url of keep) rascunhos.delete(url)
-  // Só descarta o que este turno produziu: uma base de turno anterior é
-  // história já aceita pelo usuário, não rascunho desta resposta.
-  return [...rascunhos].filter((url) => doTurno.has(url))
+  for (const url of keep) drafts.delete(url)
+  // It only discards what this turn produced: a base from a previous turn is
+  // history already accepted by the user, not a draft of this answer.
+  return [...drafts].filter((url) => fromThisTurn.has(url))
 }

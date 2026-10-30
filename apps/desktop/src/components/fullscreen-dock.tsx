@@ -15,19 +15,19 @@ import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Peças compartilhadas das telas cheias (browser, Motion e Design): o composer
- * que só aparece no hover da borda inferior e as sidebars flutuantes que
- * copiam a aparência da sidebar padrão do app.
+ * Shared pieces of the fullscreen screens (browser, Motion and Design): the composer
+ * that only appears on the hover of the bottom edge and the floating sidebars that
+ * copy the look of the app's standard sidebar.
  */
 
-/** Delays de hover das barras da tela cheia — mesma convenção da sidebar do
- *  app (App.tsx: SIDEBAR_SHOW_DELAY=100 / SIDEBAR_HIDE_DELAY=300). */
+/** Hover delays of the fullscreen bars — same convention as the app
+ *  sidebar (App.tsx: SIDEBAR_SHOW_DELAY=100 / SIDEBAR_HIDE_DELAY=300). */
 const EDGE_SHOW_DELAY = 100
 const EDGE_HIDE_DELAY = 300
 
-/** Hover com delay simétrico: abre rápido (100ms) ao encostar na borda e fecha
- *  com folga (300ms) ao sair — evita expandir ao cruzar a borda de passagem e
- *  colapsar ao mover o mouse para a página. */
+/** Hover with symmetric delay: it opens fast (100ms) when touching the edge and closes
+ *  with slack (300ms) on leaving — it avoids expanding when crossing the edge in passing and
+ *  collapsing when moving the mouse to the page. */
 export function useEdgeHover() {
   const [hovered, setHovered] = useState(false)
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -51,15 +51,15 @@ export function useEdgeHover() {
 }
 
 /**
- * Composer da tela cheia: é o MESMO input do chat de código (CodeInput) — com
- * modelo, modo de permissão, toggles, comandos "/", anexos e os badges de
- * elemento selecionado. Antes era um textarea próprio, que ia ficando para trás
- * a cada recurso novo do input principal.
+ * Fullscreen composer: it is the SAME input as the code chat (CodeInput) — with
+ * model, permission mode, toggles, "/" commands, attachments and the selected
+ * element badges. Before it was its own textarea, which kept falling behind
+ * with every new feature of the main input.
  *
- * Recolhido por padrão: só a alça na borda inferior fica visível. O hover na
- * parte de baixo abre o composer; "fixar" o mantém aberto. O container externo
- * não captura o mouse (pointer-events-none) — só o painel, para o hover não
- * disparar na área da página acima dele.
+ * Collapsed by default: only the handle on the bottom edge stays visible. The hover on the
+ * bottom part opens the composer; "pinning" keeps it open. The outer container
+ * does not capture the mouse (pointer-events-none) — only the panel, so the hover does not
+ * fire in the page area above it.
  */
 export function FullscreenComposer({
   pinned,
@@ -70,8 +70,8 @@ export function FullscreenComposer({
   pinned: boolean
   onTogglePin: () => void
   onSent?: () => void
-  /** Pedido feito do próprio navegador: o agente pode usá-lo mesmo com as
-   *  ferramentas de navegador desligadas nas Preferências. */
+  /** Request made from the browser itself: the agent can use it even with the
+   *  browser tools turned off in Preferences. */
   fromBrowser?: boolean
 }) {
   const { t } = useTranslation()
@@ -117,7 +117,7 @@ export function FullscreenComposer({
       <div
         className={cn(
           "pointer-events-auto w-full max-w-2xl rounded-t-xl border border-b-0 bg-background/95 shadow-lg backdrop-blur transition-transform duration-300 ease-out",
-          // A alça (h-7) é o que sobra visível quando recolhido
+          // The handle (h-7) is what stays visible when collapsed
           expanded ? "translate-y-0" : "translate-y-[calc(100%-1.75rem)]",
         )}
       >
@@ -137,8 +137,8 @@ export function FullscreenComposer({
           </button>
           </Hint>
         </div>
-        {/* Fundo opaco próprio: o InputGroup do CodeInput é semitransparente e,
-            sobre a página em tela cheia, ficaria ilegível. */}
+        {/* Its own opaque background: the CodeInput InputGroup is semi-transparent and,
+            over the fullscreen page, would become illegible. */}
         <div className="px-3">
           <CodeInput
             onSubmit={handleSubmit}
@@ -155,17 +155,17 @@ export function FullscreenComposer({
 }
 
 /**
- * Sidebar flutuante da tela cheia, com a aparência da sidebar padrão do app
- * (variant="floating": cantos arredondados, `bg-sidebar`, sombra e anel
- * `sidebar-border`, 8px de respiro das bordas, 200ms linear).
+ * Floating sidebar of fullscreen, with the look of the app's standard sidebar
+ * (variant="floating": rounded corners, `bg-sidebar`, shadow and ring
+ * `sidebar-border`, 8px of breathing room from the edges, 200ms linear).
  *
- * - `open` = fixada aberta; o botão flutuante ao LADO do painel alterna.
- * - O painel ocupa toda a altura (top-2/bottom-2) e o botão fica ao lado dele,
- *   alinhado ao topo, encostado na borda interna quando aberta; fechada, ele
- *   recua para a borda da tela (continua clicável para reabrir).
- * - Fechada, encostar na borda (faixa de 6px) abre sob hover e sair fecha —
- *   igual à sidebar padrão no modo "hover".
- * O container externo não captura o mouse: só a faixa, o botão e o painel.
+ * - `open` = pinned open; the floating button NEXT to the panel toggles it.
+ * - The panel takes the whole height (top-2/bottom-2) and the button stays next to it,
+ *   aligned to the top, touching the inner edge when open; closed, it
+ *   retreats to the screen edge (it stays clickable to reopen).
+ * - Closed, touching the edge (6px strip) opens under hover and leaving closes —
+ *   just like the standard sidebar in "hover" mode.
+ * The outer container does not capture the mouse: only the strip, the button and the panel.
  */
 export function FloatingSidebar({
   side,
@@ -181,7 +181,7 @@ export function FloatingSidebar({
   onToggle: () => void
   openLabel: string
   closeLabel: string
-  /** Largura do painel em px (o botão se posiciona a partir dela). */
+  /** Width of the panel in px (the button positions itself from it). */
   width?: number
   children: ReactNode
 }) {
@@ -189,8 +189,8 @@ export function FloatingSidebar({
   const visible = open || hovered
   const left = side === "left"
   const ToggleIcon = left ? SidebarLeftIcon : SidebarRightIcon
-  // Botão ao lado do painel: 8px de respiro da tela + a largura da sidebar +
-  // 6px de folga. Fechado, ele volta para a borda (8px).
+  // Button next to the panel: 8px of breathing room from the screen + the sidebar width +
+  // 6px of slack. Closed, it goes back to the edge (8px).
   const toggleOffset = visible ? 8 + width + 6 : 8
 
   return (
@@ -199,7 +199,7 @@ export function FloatingSidebar({
       onMouseLeave={handleLeave}
       className={cn("pointer-events-none absolute inset-y-0 z-30 w-0", left ? "left-0" : "right-0")}
     >
-      {/* Faixa de hover na borda: só enquanto a sidebar está fechada */}
+      {/* Hover strip on the edge: only while the sidebar is closed */}
       {!visible && <div className={cn("pointer-events-auto absolute inset-y-0 w-1.5", left ? "left-0" : "right-0")} />}
       <Hint label={open ? closeLabel : openLabel}>
         <button
@@ -230,7 +230,7 @@ export function FloatingSidebar({
   )
 }
 
-/** Ícones de sidebar com o estado: "fechar" quando aberta, "abrir" quando não. */
+/** Sidebar icons with the state: "close" when open, "open" when not. */
 function SidebarLeftIcon({ open, className }: { open: boolean; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -251,15 +251,15 @@ function SidebarRightIcon({ open, className }: { open: boolean; className?: stri
   )
 }
 
-/** Listas estáveis para os seletores do zustand (evitam re-render por referência nova). */
+/** Stable lists for the zustand selectors (they avoid a re-render for a new reference). */
 const NO_MSGS: ChatMessage[] = []
 const NO_ASKS: PendingAskUI[] = []
 
-/** Conversa ao vivo — painel recolhido na borda esquerda das telas cheias
- *  (navegador, Motion) e dos painéis do Computer Use. Mostra o streaming do
- *  agente em tempo real. Sem `sessionId`, segue a sessão de código ativa.
- *  `onHoverChange` avisa quando o mouse entra/sai (a janela dos painéis do
- *  Computer Use só captura clique sobre eles). */
+/** Live conversation — panel collapsed on the left edge of the fullscreen screens
+ *  (browser, Motion) and of the Computer Use panels. It shows the agent's streaming
+ *  in real time. Without `sessionId`, it follows the active code session.
+ *  `onHoverChange` warns when the mouse enters/leaves (the window of the
+ *  Computer Use panels only captures clicks over them). */
 export function FullscreenChatFeed({
   pinned,
   onTogglePin,
@@ -273,7 +273,7 @@ export function FullscreenChatFeed({
   sessionId?: string
   title?: string
   onHoverChange?: (over: boolean) => void
-  /** Embaixo da conversa, quando aberta (o input compacto dos painéis do Computer Use) */
+  /** Below the conversation, when open (the compact input of the Computer Use panels) */
   footer?: ReactNode
 }) {
   const { t } = useTranslation()
@@ -288,19 +288,19 @@ export function FullscreenChatFeed({
   const expanded = pinned || hovered
   const hasAsks = pendingAsks.length > 0
 
-  // Carrega o histórico da sessão (a tela cheia pode abrir antes do chat)
+  // Loads the session history (the fullscreen may open before the chat)
   useEffect(() => {
     if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
   }, [sessionId])
 
-  // Mensagens renderizáveis (ignora resumos) — base para a janela virtualizada.
+  // Renderable messages (ignores summaries) — basis for the virtualized window.
   const visibleMessages = useMemo(() => messages.filter((m) => !m.summary), [messages])
 
-  // Virtualização "invertida": mostra a janela dos mais recentes e carrega os
-  // antigos em chunks conforme o usuário rola para o topo (infinite scroll reverso).
+  // "Inverted" virtualization: it shows the window of the most recent ones and loads the
+  // old ones in chunks as the user scrolls to the top (reverse infinite scroll).
   const MIN_WINDOW = 40
   const CHUNK = 40
-  /** Pixels estimados por mensagem antiga ainda não renderizada (placeholder superior). */
+  /** Estimated pixels per old message not rendered yet (top placeholder). */
   const OLDER_PX = 52
   const [startOffset, setStartOffset] = useState(0)
   const inited = useRef(false)
@@ -309,7 +309,7 @@ export function FullscreenChatFeed({
   const rendered = visibleMessages.slice(startOffset)
   const hasOlder = startOffset > 0
 
-  // No primeiro render, ancora no fim: mostra apenas os MIN_WINDOW mais recentes.
+  // On the first render, it anchors at the end: it shows only the MIN_WINDOW most recent ones.
   useEffect(() => {
     if (inited.current) return
     inited.current = true
@@ -322,41 +322,41 @@ export function FullscreenChatFeed({
     if (el) el.scrollTop = el.scrollHeight
   }
 
-  // Ao abrir (hover/pin), posiciona no fim para exibir as mensagens mais recentes.
+  // On opening (hover/pin), it positions at the end to show the most recent messages.
   useEffect(() => {
     if (expanded && !prevExpanded.current) scrollToBottom()
     prevExpanded.current = expanded
-    // Só a abertura importa aqui — scrollToBottom é estável.
+    // Only the opening matters here — scrollToBottom is stable.
   }, [expanded])
 
-  // Auto-scroll: novas mensagens / deltas do streaming / asks mudam a lista
+  // Auto-scroll: new messages / streaming deltas / asks change the list
   useEffect(() => {
     if (visibleMessages.length > prevLength.current) scrollToBottom()
     prevLength.current = visibleMessages.length
-    // Depende do tamanho, não da identidade da lista (que muda a cada delta).
+    // It depends on the length, not on the list identity (which changes on every delta).
   }, [visibleMessages.length])
 
-  // Carrega um chunk de mensagens antigas, preservando a posição de rolagem.
+  // Loads a chunk of old messages, preserving the scroll position.
   const loadOlder = useCallback(() => {
     const el = scrollRef.current
     if (!el || startOffset <= 0) return
     const prevHeight = el.scrollHeight
     setStartOffset((s) => Math.max(0, s - CHUNK))
     requestAnimationFrame(() => {
-      // Compensa a altura adicionada no topo para o viewport não "pular".
+      // Compensates the height added at the top so the viewport does not "jump".
       if (el) el.scrollTop += el.scrollHeight - prevHeight
     })
   }, [startOffset, CHUNK])
 
-  // Ao chegar perto do topo, expande a janela para os mais antigos.
+  // On getting near the top, it expands the window to the older ones.
   const handleScroll = () => {
     const el = scrollRef.current
     if (!el || startOffset <= 0) return
     if (el.scrollTop < 60) loadOlder()
   }
 
-  // Auto-expande (fixa) quando chega um pedido de permissão/pergunta novo,
-  // para o usuário conseguir responder sem sair da tela cheia
+  // Auto-expands (pins) when a new permission request/question arrives,
+  // so the user can answer without leaving fullscreen
   const prevAsks = useRef(0)
   useEffect(() => {
     if (pendingAsks.length > prevAsks.current && pendingAsks.length > 0 && !pinned) onTogglePin()
@@ -387,7 +387,7 @@ export function FullscreenChatFeed({
           expanded ? "h-[min(70vh,540px)] w-96" : "h-12 w-9",
         )}
       >
-        {/* Alça: sempre visível; ponto pulsante = agente ativo (verde) ou ask pendente (âmbar) */}
+        {/* Handle: always visible; pulsing dot = agent active (green) or ask pending (amber) */}
         <Hint label={expanded ? t("browser.hideChatFeed") : t("browser.showChatFeed")}>
           <button
             type="button"
@@ -450,8 +450,8 @@ export function FullscreenChatFeed({
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">{t("browser.emptyConversation")}</p>
               ) : (
                 <div className="flex flex-col">
-                  {/* Placeholder de mensagens antigas ainda não carregadas —
-                      ao rolar para o topo, `loadOlder` as materializa em chunks. */}
+                  {/* Placeholder of old messages not loaded yet —
+                      on scrolling to the top, `loadOlder` materializes them in chunks. */}
                   {hasOlder && (
                     <div
                       aria-hidden
@@ -468,9 +468,9 @@ export function FullscreenChatFeed({
                       return (
                         <Message from="user" key={msg.id} data-msg-id={msg.id}>
                           <MessageContent>
-                            {/* Mesmo corpo do chat principal: a citação da
-                                mensagem respondida não pode sair como texto
-                                cru (`> [assistant] …`) na tela cheia. */}
+                            {/* Same body as the main chat: the quote of the
+                                replied message cannot come out as raw
+                                text (`> [assistant] …`) in fullscreen. */}
                             <div className="text-sm">
                               <UserMessageText text={visibleMessageText(msg)} />
                             </div>
@@ -487,8 +487,8 @@ export function FullscreenChatFeed({
                       </Message>
                     )
                   })}
-                  {/* Pedidos de permissão de tools / perguntas aguardando resposta —
-                      mesmo comportamento do chat de código (chat-view). */}
+                  {/* Tool permission requests / questions waiting for an answer —
+                      same behavior as the code chat (chat-view). */}
                   {hasAsks && (
                     <div className="flex flex-col gap-2 border-t pt-2">
                       {pendingAsks
@@ -513,17 +513,17 @@ export function FullscreenChatFeed({
   )
 }
 
-/** Uma ação do agente no feed: a tool, o rótulo legível e o resumo da saída. */
+/** One agent action in the feed: the tool, the readable label and the summary of the output. */
 export interface FeedAction {
   part: ToolPart
   label: string
 }
 
 /**
- * Ações do agente — painel recolhido na borda direita das telas cheias e dos
- * painéis do Computer Use, com pin como o da conversa. Lista as tools da
- * sessão, da mais recente para a mais antiga: estado, rótulo e a primeira linha
- * da saída (clique mostra a saída inteira).
+ * Agent actions — panel collapsed on the right edge of the fullscreen screens and of
+ * the Computer Use panels, with a pin like the conversation's. It lists the session
+ * tools, from the most recent to the oldest: state, label and the first line
+ * of the output (a click shows the whole output).
  */
 export function ActionsFeed({
   sessionId: fixedSessionId,
@@ -543,12 +543,12 @@ export function ActionsFeed({
   onTogglePin: () => void
   title: string
   icon: LucideIcon
-  /** Quais tools entram (padrão: todas) */
+  /** Which tools enter (default: all) */
   filter?: (part: ToolPart) => boolean
-  /** Rótulo legível da ação (padrão: o título da tool ou o nome dela) */
+  /** Readable label of the action (default: the tool title or its name) */
   describe?: (part: ToolPart) => string
   headerExtra?: ReactNode
-  /** Conteúdo fixo acima da lista (a miniatura do Computer Use) */
+  /** Fixed content above the list (the Computer Use thumbnail) */
   top?: ReactNode
   onHoverChange?: (over: boolean) => void
   limit?: number
@@ -636,7 +636,7 @@ export function ActionsFeed({
 function ActionRow({ part, label, latest }: { part: ToolPart; label: string; latest: boolean }) {
   const [open, setOpen] = useState(false)
   const detail = part.state === "error" ? part.error : part.output
-  // A primeira linha da saída é o resumo ("Pressed element 2 (button "Salvar") via AXPress.").
+  // The first line of the output is the summary ("Pressed element 2 (button "Salvar") via AXPress.").
   const summary = detail?.split("\n").find((line) => line.trim())?.trim()
   return (
     <button
@@ -668,7 +668,7 @@ function ActionRow({ part, label, latest }: { part: ToolPart; label: string; lat
   )
 }
 
-/** Pin dos feeds laterais: fixa o painel aberto (o hover só abre enquanto o mouse está nele). */
+/** Pin of the side feeds: it pins the panel open (the hover only opens while the mouse is on it). */
 export function FeedPinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
   const { t } = useTranslation()
   return (

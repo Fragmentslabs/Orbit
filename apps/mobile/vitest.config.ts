@@ -2,16 +2,16 @@ import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 
 /**
- * Testes de COMPONENTE do app mobile.
+ * COMPONENT tests of the mobile app.
  *
- * O app roda no Metro, mas o componente é React puro — o que se testa aqui
- * (parse do fence, fórmulas, estado das entradas, envio) não depende do
- * runtime nativo. Por isso `react-native` resolve para `react-native-web`
- * (que já é dependência do projeto e é o alvo web do app) dentro do jsdom: os
- * mesmos componentes, com DOM de verdade para interrogarmos.
+ * The app runs on Metro, but the component is pure React — what is tested here
+ * (fence parsing, formulas, state of the inputs, sending) does not depend on the
+ * native runtime. That is why `react-native` resolves to `react-native-web`
+ * (which is already a dependency of the project and is the web target of the app) inside jsdom: the
+ * same components, with a real DOM to interrogate.
  *
- * Os aliases são os do tsconfig do app — os módulos testados importam
- * `~/…` e `@orbit/shared`.
+ * The aliases are the ones of the app's tsconfig — the modules under test import
+ * `~/…` and `@orbit/shared`.
  */
 const root = path.resolve(__dirname, '../..')
 
@@ -23,8 +23,8 @@ export default defineConfig({
       '@orbit/shared': path.resolve(root, 'packages/shared/src/index.ts'),
       react: path.resolve(root, 'node_modules/react'),
       'react-dom': path.resolve(root, 'node_modules/react-dom'),
-      // Antes de `react-native`, de propósito: o alias é por prefixo, e
-      // `react-native` casaria com `react-native-webview` antes desta linha.
+      // Before `react-native`, on purpose: the alias is by prefix, and
+      // `react-native` would match `react-native-webview` before this line.
       'react-native-webview': path.resolve(__dirname, 'src/test/webview-stub.tsx'),
       'react-native': path.resolve(root, 'node_modules/react-native-web'),
     },

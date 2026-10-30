@@ -1,8 +1,8 @@
 /**
- * Card de memória — espelho do memory-card do desktop: texto, badges por
- * kind/categoria/projeto, tags, barra de peso, usos/data, conectadas e ações
- * (doc, promover, editar, excluir). No mobile as ações ficam sempre visíveis
- * (não há hover).
+ * Memory card — mirror of the desktop memory-card: text, badges per
+ * kind/category/project, tags, weight bar, uses/date, connected and actions
+ * (doc, promote, edit, delete). On mobile the actions are always visible
+ * (there is no hover).
  */
 import { memo, useEffect, useState } from 'react'
 import { View, Text, Pressable, TextInput, Modal, ScrollView, Alert, StyleSheet } from 'react-native'
@@ -29,8 +29,8 @@ function EditModal({ memory, visible, onClose }: {
   const [weight, setWeight] = useState(memory.weight)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  // Semeia o formulário na ABERTURA, ajustando no render em vez de num
-  // efeito: evita o render extra em que os campos apareceriam vazios.
+  // Seeds the form on OPEN, adjusting during render instead of in an
+  // effect: it avoids the extra render in which the fields would appear empty.
   const [wasVisible, setWasVisible] = useState(visible)
   if (visible !== wasVisible) {
     setWasVisible(visible)
@@ -119,9 +119,9 @@ function DocModal({ memory, visible, onClose }: {
 
   useEffect(() => {
     if (visible) {
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
       setDoc(null)
       void openDoc(memory.id).then(setDoc)
@@ -154,13 +154,13 @@ function DocModal({ memory, visible, onClose }: {
 }
 
 /**
- * Memoizado: na lista, rolar re-renderiza o pai e sem isto cada card visível
- * era refeito — com markdown, badges e modais dentro. O `related` precisa vir
- * com referência estável do pai para o memo segurar (ver `relacionadasDe`).
+ * Memoized: in the list, scrolling re-renders the parent and without this every visible card
+ * was redone — with markdown, badges and modals inside. `related` must come
+ * with a stable reference from the parent for the memo to hold (see `relacionadasDe`).
  */
 export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRelated }: {
   memory: Memory
-  /** Memórias em relatedIds já resolvidas pelo pai */
+  /** Memories in relatedIds already resolved by the parent */
   related: Memory[]
   onSelectRelated?: (id: string) => void
 }) {
@@ -218,7 +218,7 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
         ))}
       </View>
 
-      {/* Peso / usos / datas */}
+      {/* Weight / uses / dates */}
       <View style={s.metaRow}>
         <View style={s.weightMeta}>
           <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{t('memoryCard.weightMeta')}</Text>
@@ -231,7 +231,7 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
         {memory.expiresAt != null && <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{t('memoryCard.expires', { date: formatDate(memory.expiresAt) })}</Text>}
       </View>
 
-      {/* Conectadas */}
+      {/* Connected */}
       {related.length > 0 && (
         <View style={[s.relatedBox, { borderTopColor: tokens.border }]}>
           <View style={s.relatedHeader}>
@@ -246,7 +246,7 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
         </View>
       )}
 
-      {/* Ações — sempre visíveis no mobile */}
+      {/* Actions — always visible on mobile */}
       <View style={[s.actionsRow, { borderTopColor: tokens.border }]}>
         {memory.hasDoc && (
           <Pressable onPress={() => setDocOpen(true)} style={s.actionBtn}>

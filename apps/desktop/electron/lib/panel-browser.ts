@@ -14,29 +14,29 @@ import {
 } from './browser-input'
 
 /**
- * Browser do painel direito controlado pelo agente. O renderer monta um
- * <webview> na aba Browser e registra o webContentsId aqui (panel:register);
- * as operações (navegar, ler, clicar, digitar, screenshot) rodam direto no
- * WebContents. Quando o agente precisa do browser e o painel está fechado,
- * broadcastamos "panel:event" e aguardamos o registro — o painel abre sozinho.
+ * Panel browser controlled by the agent. The renderer mounts a
+ * <webview> on the Browser tab and registers the webContentsId here (panel:register);
+ * the operations (navigate, read, click, type, screenshot) run directly on the
+ * WebContents. When the agent needs the browser and the panel is closed, we
+ * broadcast "panel:event" and wait for the registration — the panel opens on its own.
  *
- * O registro é POR SESSÃO de chat (Map sessionId → webContentsId): cada chat
- * tem sua própria aba/instância de browser, e as tools de um agente agem no
- * webview da SUA sessão — dois agentes em chats diferentes navegam/capturam
- * simultaneamente, cada um no seu browser, sem se atropelar.
+ * The registration is PER CHAT SESSION (Map sessionId → webContentsId): each chat
+ * has its own browser tab/instance, and an agent's tools act on the
+ * webview of ITS session — two agents in different chats navigate/capture
+ * simultaneously, each in its own browser, without stepping on each other.
  */
 
 const REGISTER_TIMEOUT_MS = 10_000
 const LOAD_TIMEOUT_MS = 20_000
-/** Tempo máximo que um capturePage pode levar (renderer ocupado/travado). */
+/** Maximum time a capturePage may take (renderer busy/stuck). */
 const CAPTURE_TIMEOUT_MS = 10_000
-/** Tentativas de captura antes de desistir (o webview pode estar em repaint). */
+/** Capture attempts before giving up (the webview may be repainting). */
 const CAPTURE_ATTEMPTS = 3
 const CAPTURE_RETRY_DELAY_MS = 500
 
 /**
- * Falha de captura do webview do painel (vazio ou timeout). A tool
- * panel_screenshot usa o `reason` para decidir o fallback (janela oculta).
+ * Capture failure of the panel webview (empty or timeout). The
+ * panel_screenshot tool uses `reason` to decide the fallback (hidden window).
  */
 export class PanelCaptureError extends Error {
   constructor(
@@ -50,11 +50,11 @@ export class PanelCaptureError extends Error {
 const panelWcs = new Map<string, number>()
 
 /**
- * Último viewport pedido pelo agente (panel_resize). O renderer aplica no
- * host oculto do webview; aqui serve para as capturas de FALLBACK na janela
- * oculta (captureUrl) saírem no MESMO tamanho — sem isso, um print mobile
- * viraria desktop quando o webview do painel falha. null = "preenche o
- * painel" (janela oculta usa o default 1280×800).
+ * Last viewport requested by the agent (panel_resize). The renderer applies it to the
+ * webview's hidden host; here it serves so that the FALLBACK captures in the hidden
+ * window (captureUrl) come out in the SAME size — without this, a mobile screenshot
+ * would become desktop when the panel webview fails. null = "fills the
+ * panel" (the hidden window uses the 1280×800 default).
  */
 let lastViewport: { width: number; height: number } | null = null
 
@@ -63,12 +63,12 @@ export function panelLastViewport(): { width: number; height: number } | null {
 }
 
 /**
- * Console de cada sessão. Vive por SESSÃO, não por webContents: o guest é
- * recriado quando a aba troca de lugar, e o histórico (o erro que derrubou a
- * página) não pode sumir junto.
+ * Console of each session. It lives per SESSION, not per webContents: the guest is
+ * recreated when the tab changes place, and the history (the error that brought the
+ * page down) cannot disappear along with it.
  */
 const consoleBySession = new Map<string, ConsoleBuffer>()
-/** webContents já ligados ao console → sessão dona deles agora. */
+/** webContents already linked to the console → session that owns them now. */
 const consoleOwners = new Map<number, string>()
 
 function consoleOf(sessionId: string): ConsoleBuffer {
@@ -80,7 +80,7 @@ function consoleOf(sessionId: string): ConsoleBuffer {
   return buffer
 }
 
-/** Ponteiro com o botão ainda pressionado (panel_drag com release: false). */
+/** Pointer with the button still pressed (panel_drag with release: false). */
 const heldPointer = new Map<string, { x: number; y: number }>()
 
 export function registerPanelWebContents(sessionId: string | null, id: number | null): void {
@@ -103,9 +103,9 @@ export function registerPanelWebContents(sessionId: string | null, id: number | 
 }
 
 /**
- * Solta o registro de um <webview> que morreu — mas SÓ se o registro for
- * aquele webContents. Sem essa condição, fechar uma aba derrubaria o browser
- * do agente da sessão (que é outro webview, ainda vivo).
+ * Releases the registration of a <webview> that died — but ONLY if the registration is
+ * that webContents. Without this condition, closing a tab would take down the agent's
+ * browser of the session (which is another webview, still alive).
  */
 export function unregisterPanelWebContents(sessionId: string | null, id: number | null): void {
   if (!sessionId || id == null) return
@@ -125,31 +125,31 @@ export type PanelEvent =
   | { type: 'ensure'; url?: string; sessionId: string }
   | { type: 'resize'; width: number | null; height: number | null; label: string }
   | { type: 'fullscreen'; on: boolean }
-  // Abre (ou foca) a aba Motion do painel para uma composição de motion já
-  // registrada — quem emite é a tool motion_preview, logo depois de escrever a
-  // composição e antes de qualquer render. `id` identifica a composição no
-  // registro (video/motion-store) e `entry` é o caminho da entrada DENTRO da
-  // pasta da composição, como ele aparece na URL do scheme (`index.html`, quase
-  // sempre): o painel guarda os dois (`motionId`/`motionEntry`) e monta
-  // `orbit-motion://<id>/<entry>`. O mesmo id volta à MESMA aba; quem serve o
-  // conteúdo é o scheme, não este canal.
+  // Opens (or focuses) the panel's Motion tab for a motion composition already
+  // registered — the motion_preview tool is what emits it, right after writing the
+  // composition and before any render. `id` identifies the composition in the
+  // registry (video/motion-store) and `entry` is the path of the entry INSIDE the
+  // composition folder, as it appears in the scheme URL (`index.html`, almost
+  // always): the panel keeps both (`motionId`/`motionEntry`) and mounts
+  // `orbit-motion://<id>/<entry>`. The same id comes back to the SAME tab; whoever serves
+  // the content is the scheme, not this channel.
   | { type: 'motion'; id: string; entry: string; title: string }
-  // Abre (ou foca) a aba Design do painel para um canvas já registrado — quem
-  // emite é design_write/design_edit, logo depois de escrever o canvas. `id`
-  // identifica o canvas no registro (design/design-store); diferente do
-  // motion não há `entry` (o canvas não tem UM arquivo de entrada — a aba lê
-  // `canvas.json` e desenha todos os artboards).
+  // Opens (or focuses) the panel's Design tab for an already registered canvas — whoever
+  // emits it is design_write/design_edit, right after writing the canvas. `id`
+  // identifies the canvas in the registry (design/design-store); unlike
+  // motion there is no `entry` (the canvas has no single entry file — the tab reads
+  // `canvas.json` and draws every artboard).
   | { type: 'design'; id: string; title: string; sessionId?: string; path?: string }
-  // Abre (ou foca) a aba Slides do painel para um deck já registrado — quem
-  // emite é slides_preview/slides_write. `entry` é o arquivo de entrada dentro
-  // da pasta do deck (quase sempre `index.html`), como aparece na URL do
-  // scheme: o painel guarda `slidesId`/`slidesEntry` e monta
-  // `orbit-slides://<id>/<entry>`. O mesmo id volta à MESMA aba.
+  // Opens (or focuses) the panel's Slides tab for an already registered deck — whoever
+  // emits it is slides_preview/slides_write. `entry` is the entry file inside
+  // the deck folder (almost always `index.html`), as it appears in the
+  // scheme URL: the panel keeps `slidesId`/`slidesEntry` and mounts
+  // `orbit-slides://<id>/<entry>`. The same id comes back to the SAME tab.
   | { type: 'slides'; id: string; entry: string; title: string; sessionId?: string; path?: string }
   | { type: 'activity'; label: string; sessionId?: string }
-  // Peças que deixaram de existir — excluídas pelo agente (motion_delete,
-  // design_delete, slides_delete) ou desfeitas pelo revert da mensagem que as
-  // criou. O painel fecha as abas delas em todos os chats.
+  // Pieces that no longer exist — deleted by the agent (motion_delete,
+  // design_delete, slides_delete) or undone by the revert of the message that
+  // created them. The panel closes their tabs in every chat.
   | { type: 'pieces-removed'; motion: string[]; design: string[]; slides: string[] }
 
 function broadcastPanelEvent(event: PanelEvent): void {
@@ -159,42 +159,42 @@ function broadcastPanelEvent(event: PanelEvent): void {
 }
 
 /**
- * Anuncia à UI o que o agente está fazendo no browser (feed de atividade).
- * `sessionId` identifica de qual chat veio — o renderer usa para manter o
- * indicador "testando…" fresco naquela sessão (badge do header e chip na
- * conversa).
+ * Announces to the UI what the agent is doing in the browser (activity feed).
+ * `sessionId` identifies which chat it came from — the renderer uses it to keep the
+ * "testing…" indicator fresh on that session (header badge and chip in the
+ * conversation).
  */
 function activity(label: string, sessionId?: string): void {
   broadcastPanelEvent({ type: 'activity', label, sessionId })
 }
 
-/** Mesmo feed, para quem captura fora do painel (engine oculta de scripts). */
+/** Same feed, for whoever captures outside the panel (hidden script engine). */
 export function panelActivity(label: string): void {
   activity(label)
 }
 
 /**
- * Abre (ou foca) a aba Motion do painel para uma composição já registrada —
- * `motion_preview` é o único chamador. Não valida nem carrega nada aqui (o
- * registro e o scheme fazem isso): só avisa a UI, que resolve o resto pelo id
- * recebido — chamar de novo com o mesmo id traz a MESMA aba ao foco.
+ * Opens (or focuses) the panel's Motion tab for an already registered composition —
+ * `motion_preview` is the only caller. It validates and loads nothing here (the
+ * registry and the scheme do that): it only tells the UI, which resolves the rest by the
+ * received id — calling again with the same id brings the SAME tab to focus.
  */
 export function panelMotionPreview(event: { id: string; entry: string; title: string; path?: string; sessionId?: string }): void {
   broadcastPanelEvent({ type: 'motion', ...event })
 }
 
 /**
- * Abre (ou foca) a aba Design do painel para um canvas já registrado —
- * design_write/design_edit são os únicos chamadores. Espelha panelMotionPreview.
+ * Opens (or focuses) the panel's Design tab for an already registered canvas —
+ * design_write/design_edit are the only callers. It mirrors panelMotionPreview.
  */
 export function panelDesignPreview(event: { id: string; title: string; path?: string; sessionId?: string }): void {
   broadcastPanelEvent({ type: 'design', ...event })
 }
 
 /**
- * Abre (ou foca) a aba Slides do painel para um deck já registrado —
- * slides_preview/slides_write são os únicos chamadores. Espelha
- * panelMotionPreview: só avisa a UI, que resolve o resto pelo id.
+ * Opens (or focuses) the panel's Slides tab for an already registered deck —
+ * slides_preview/slides_write are the only callers. It mirrors
+ * panelMotionPreview: it only tells the UI, which resolves the rest by the id.
  */
 export function panelSlidesPreview(event: {
   id: string
@@ -206,14 +206,14 @@ export function panelSlidesPreview(event: {
   broadcastPanelEvent({ type: 'slides', ...event })
 }
 
-/** Fecha as abas das peças que deixaram de existir (ver o evento 'pieces-removed'). */
+/** Closes the tabs of the pieces that no longer exist (see the 'pieces-removed' event). */
 export function panelPiecesRemoved(removed: { motion?: string[]; design?: string[]; slides?: string[] }): void {
   const event = { type: 'pieces-removed' as const, motion: removed.motion ?? [], design: removed.design ?? [], slides: removed.slides ?? [] }
   if (event.motion.length + event.design.length + event.slides.length === 0) return
   broadcastPanelEvent(event)
 }
 
-/** URL atual do browser do painel — vazia quando a sessão não tem webview. */
+/** Current URL of the panel browser — empty when the session has no webview. */
 export function panelCurrentUrl(sessionId: string): string {
   const wc = getWc(sessionId)
   if (!wc) return ''
@@ -226,12 +226,12 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Garante o webview da sessão registrado (criando-o no host oculto se
- * preciso) e retorna o WebContents DAQUELA sessão. `sessionId` identifica de
- * qual chat/task veio o pedido — o renderer cria o <webview> escondido e o
- * registro por sessão garante que as tools de um agente nunca agem no browser
- * de outro chat. O painel NUNCA abre sozinho: a UI só mostra o browser quando
- * o usuário clica no indicador.
+ * Ensures the session's webview is registered (creating it in the hidden host if
+ * needed) and returns the WebContents OF THAT session. `sessionId` identifies which
+ * chat/task the request came from — the renderer creates the hidden <webview> and the
+ * per-session registration guarantees that an agent's tools never act on another chat's
+ * browser. The panel NEVER opens on its own: the UI only shows the browser when
+ * the user clicks the indicator.
  */
 export async function ensurePanelBrowser(sessionId: string, url?: string): Promise<WebContents> {
   const existing = getWc(sessionId)
@@ -249,10 +249,10 @@ export async function ensurePanelBrowser(sessionId: string, url?: string): Promi
 async function waitForLoad(wc: WebContents): Promise<void> {
   const deadline = Date.now() + LOAD_TIMEOUT_MS
   while (wc.isLoading() && Date.now() < deadline) await delay(150)
-  await delay(400) // deixa SPAs hidratarem
+  await delay(400) /** Resizes the browser viewport (responsiveness). null = fills the panel. */
 }
 
-/** Redimensiona o viewport do browser (responsividade). null = preenche o painel. */
+/** Resizes the browser viewport (responsiveness). null = fills the panel. */
 export async function panelResize(
   sessionId: string,
   width: number | null,
@@ -263,13 +263,13 @@ export async function panelResize(
   activity(tNow('panel.activity.resize', { label }), sessionId)
   lastViewport = width && height ? { width, height } : null
   broadcastPanelEvent({ type: 'resize', width, height, label })
-  await delay(700) // deixa o layout refluir na nova largura
+  await delay(700) // lets the layout reflow at the new width
   return width
     ? `Viewport set to ${label} (${width}×${height}px). Use panel_screenshot to see the result.`
     : `Viewport set to ${label} (fills the panel).`
 }
 
-/** Liga/desliga a tela cheia do browser do painel. */
+/** Turns the panel browser's fullscreen on/off. */
 export async function panelFullscreen(on: boolean): Promise<void> {
   broadcastPanelEvent({ type: 'fullscreen', on })
   await delay(350)
@@ -281,7 +281,7 @@ export async function panelNavigate(sessionId: string, url: string): Promise<{ t
   try {
     await Promise.race([wc.loadURL(url), delay(LOAD_TIMEOUT_MS)])
   } catch (err) {
-    // ERR_ABORTED (-3) é comum em SPAs/redirects — não é falha real
+    // ERR_ABORTED (-3) is common in SPAs/redirects — it is not a real failure
     const code = (err as { errno?: number }).errno
     if (code !== -3) throw err
   }
@@ -290,8 +290,8 @@ export async function panelNavigate(sessionId: string, url: string): Promise<{ t
 }
 
 /**
- * Script de leitura: marca elementos interativos visíveis com data-orbit-ref
- * e devolve título, URL, texto visível e a lista de interativos rotulados.
+ * Read script: marks visible interactive elements with data-orbit-ref
+ * and returns the title, URL, visible text and the list of labeled interactive elements.
  */
 const READ_SCRIPT = `(() => {
   const interactiveSelector = 'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [onclick]'
@@ -397,14 +397,14 @@ export async function panelType(
 }
 
 /**
- * Screenshot do viewport, reduzido para ≤1024px de largura por padrão
- * (economia de tokens — `maxWidth` sobe isso para documentação). Com
- * fullscreen, entra em tela cheia para capturar a tela toda e volta à visão
- * lateral logo depois (o print sai maior e a UI retorna ao normal).
+ * Screenshot of the viewport, reduced to ≤1024px of width by default
+ * (token saving — `maxWidth` raises that for documentation). With
+ * fullscreen, it goes full screen to capture the whole screen and returns to the side
+ * view right after (the screenshot comes out bigger and the UI goes back to normal).
  *
- * Para a PÁGINA INTEIRA (além do viewport) o caminho é outro: captureUrl em
- * browser-script.ts, numa janela oculta — redimensionar o webview visível
- * faria a UI piscar.
+ * For the WHOLE PAGE (beyond the viewport) the path is another: captureUrl in
+ * browser-script.ts, in a hidden window — resizing the visible webview
+ * would make the UI blink.
  */
 export async function panelScreenshot(
   sessionId: string,
@@ -415,10 +415,10 @@ export async function panelScreenshot(
   activity(tNow('panel.activity.screenshot'), sessionId)
 
   /**
-   * Captura com proteções: o capturePage do webview oculto do painel devolve
-   * imagem VAZIA quando o webview não está pintado (host oculto, 0×0 após
-   * resize) e pode nunca resolver quando o renderer está ocupado — os dois
-   * casos viravam "Input buffer is empty" do sharp ou travavam a tool.
+   * Capture with protections: the capturePage of the panel's hidden webview returns an
+   * EMPTY image when the webview is not painted (hidden host, 0×0 after
+   * resize) and may never resolve when the renderer is busy — both
+   * cases became sharp's "Input buffer is empty" or hung the tool.
    */
   const capture = async (defaultWidth: number) => {
     const maxWidth = options?.maxWidth ?? defaultWidth
@@ -462,7 +462,7 @@ export async function panelScreenshot(
   }
 }
 
-/** Mensagens do console da página do painel (erros, warnings, logs). */
+/** Messages from the console of the panel page (errors, warnings, logs). */
 export function panelConsole(
   sessionId: string,
   options: { level?: 'all' | 'warning' | 'error'; pattern?: string; limit?: number; clear?: boolean },
@@ -475,19 +475,19 @@ export function panelConsole(
   }
   const entries = buffer.query(options)
   if (options.clear) buffer.clear()
-  const filtro = options.level && options.level !== 'all' ? ` (level ${options.level}+)` : ''
-  if (entries.length === 0) return `No messages${filtro}${options.pattern ? ` containing "${options.pattern}"` : ''}.`
-  return `${entries.length} message(s)${filtro}${options.clear ? ' — console cleared afterwards' : ''}:\n${formatConsoleEntries(entries)}`
+  const filter = options.level && options.level !== 'all' ? ` (level ${options.level}+)` : ''
+  if (entries.length === 0) return `No messages${filter}${options.pattern ? ` containing "${options.pattern}"` : ''}.`
+  return `${entries.length} message(s)${filter}${options.clear ? ' — console cleared afterwards' : ''}:\n${formatConsoleEntries(entries)}`
 }
 
-/** Roda JS na página do painel (a mesma que o usuário vê) e devolve o resultado. */
+/** Runs JS on the panel page (the same one the user sees) and returns the result. */
 export async function panelEval(sessionId: string, code: string): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
   activity(tNow('panel.activity.eval'), sessionId)
   return evaluateInPage(wc, code)
 }
 
-/** Passa o mouse sobre um elemento (menus, tooltips, estados :hover). */
+/** Hovers the mouse over an element (menus, tooltips, :hover states). */
 export async function panelHover(sessionId: string, target: BrowserTarget): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
   const point = await resolveTarget(wc, target, true)
@@ -499,9 +499,9 @@ export async function panelHover(sessionId: string, target: BrowserTarget): Prom
 }
 
 /**
- * Arrasta com eventos de mouse reais. Com release: false o botão continua
- * pressionado — o agente tira o print do meio do gesto e chama de novo (sem
- * from) para continuar ou soltar.
+ * Drags with real mouse events. With release: false the button stays
+ * pressed — the agent takes the screenshot in the middle of the gesture and calls again (without
+ * from) to continue or release.
  */
 export async function panelDrag(
   sessionId: string,
@@ -510,7 +510,7 @@ export async function panelDrag(
   const wc = await ensurePanelBrowser(sessionId)
   const held = heldPointer.get(sessionId) ?? null
   if (options.from && held) {
-    // Um arrasto pendente com o botão pressionado: solta antes de começar outro
+    // A pending drag with the button pressed: it releases before starting another one
     mouseUp(wc, held)
     heldPointer.delete(sessionId)
     await delay(150)

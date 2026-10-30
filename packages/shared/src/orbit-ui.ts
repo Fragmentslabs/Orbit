@@ -1,39 +1,39 @@
 import { z } from "zod"
 
 /**
- * Contrato dos blocos inline que o assistente desenha no meio da resposta
- * (fence ```orbit-ui).
+ * Contract of the inline blocks the assistant draws in the middle of the answer
+ * (```orbit-ui fence).
  *
- * O formato é JSON Lines — um componente por linha — e não um array: uma linha
- * completa já é um componente completo, então a tela consegue desenhar cada
- * peça assim que ela termina de chegar, enquanto o modelo ainda escreve a
- * próxima. Com um array único, nada seria válido até o colchete final.
+ * The format is JSON Lines — one component per line — and not an array: one
+ * complete line is already a complete component, so the screen can draw each
+ * piece as soon as it finishes arriving, while the model still writes the
+ * next one. With a single array, nothing would be valid until the final bracket.
  *
- * O modelo escolhe entre componentes NOSSOS (catálogo fechado): nunca manda
- * código, só dados. O visual vem inteiro do design system do Orbit, e uma linha
- * inválida é descartada em vez de quebrar a resposta.
+ * The model chooses among OUR components (closed catalog): it never sends
+ * code, only data. The visuals come entirely from the Orbit design system, and an invalid
+ * line is discarded instead of breaking the answer.
  *
- * Interatividade é declarativa, e também só dados: componentes de entrada
- * (slider, select…) têm um `id` e guardam um valor; qualquer texto pode
- * referenciar esses ids com `{expr}` e números aceitam expressões (ver
- * orbit-expr.ts); `showIf` mostra/esconde um bloco; botões enviam uma
- * mensagem, copiam um texto ou mudam um valor. O cartão `nav` leva a uma tela
- * do próprio app — quem clica é o usuário, e nada abre sozinho.
+ * Interactivity is declarative, and also data only: input components
+ * (slider, select…) have an `id` and store a value; any text can
+ * reference those ids with `{expr}` and numbers accept expressions (see
+ * orbit-expr.ts); `showIf` shows/hides a block; buttons send a
+ * message, copy a text or change a value. The `nav` card leads to a screen
+ * of the app itself — whoever clicks is the user, and nothing opens on its own.
  */
 
 const text = (max: number) => z.string().max(max)
-/** Número ou texto; sai sempre como texto, que é o que a tela imprime. */
+/** Number or text; it always comes out as text, which is what the screen prints. */
 const cell = z.union([z.string().max(300), z.number()]).transform(String)
 
-/** Id de um valor interativo — também é o nome da variável nas expressões. */
+/** Id of an interactive value — it is also the variable name in the expressions. */
 const inputId = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,31}$/)
-/** Número, ou expressão que resulta em número (`"=capital*2"`). */
+/** Number, or expression that results in a number (`"=capital*2"`). */
 const numExpr = z.union([z.number(), z.string().max(200)])
 const option = z.union([
   z.string().max(60).transform((label) => ({ label, value: label as string | number })),
   z.object({ label: text(60), value: z.union([z.string().max(60), z.number()]) }),
 ])
-/** Mostra o bloco só quando a expressão é verdadeira (abas, cenários). */
+/** Shows the block only when the expression is true (tabs, scenarios). */
 const showIf = { showIf: z.string().max(200).optional() }
 
 const stats = z.object({
@@ -81,7 +81,7 @@ const table = z.object({
 
 const chartFn = z.object({
   name: text(40).optional(),
-  /** Expressão em `x` (e nos ids interativos): `capital*(1+juros/100)^x`. */
+  /** Expression in `x` (and in the interactive ids): `capital*(1+rate/100)^x`. */
   fn: z.string().max(200),
 })
 
@@ -91,9 +91,9 @@ const chart = z
     kind: z.enum(["bar", "line", "area", "pie"]).default("bar"),
     title: text(100).optional(),
     unit: text(12).optional(),
-    /** Pontos prontos; o valor pode ser uma expressão sobre os ids interativos. */
+    /** Ready points; the value can be an expression over the interactive ids. */
     data: z.array(z.object({ label: text(40), value: numExpr })).min(1).max(24).optional(),
-    /** Ou: uma ou mais funções amostradas de x[0] a x[1]. */
+    /** Or: one or more functions sampled from x[0] to x[1]. */
     fns: z.array(chartFn).min(1).max(4).optional(),
     x: z.tuple([z.number(), z.number()]).optional(),
     steps: z.number().int().min(2).max(120).optional(),
@@ -197,7 +197,7 @@ const buttons = z.object({
     .array(
       z.object({
         label: text(60),
-        /** send: manda `text` como mensagem do usuário; copy: copia `text`; set: grava `value` em `id`. */
+        /** send: sends `text` as a user message; copy: copies `text`; set: writes `value` into `id`. */
         action: z.enum(["send", "copy", "set"]),
         text: text(600).optional(),
         id: inputId.optional(),
@@ -210,21 +210,21 @@ const buttons = z.object({
 })
 
 /**
- * Convite para uma tela do app ("onde fica isso?").
+ * Invitation to a screen of the app ("where is this?").
  *
- * O modelo manda apenas o `destino` — um id do registro compartilhado
- * (@shared/ui-destinations) —, nunca o caminho escrito à mão: o rótulo sai das
- * mesmas chaves de i18n que a tela usa. Destino desconhecido não vira cartão, e
- * tela que não existe na superfície vira uma explicação, não um botão morto.
+ * The model sends only the `destination` — an id from the shared registry
+ * (@shared/ui-destinations) —, never the hand-written path: the label comes from the
+ * same i18n keys the screen uses. An unknown destination does not become a card, and a
+ * screen that does not exist on the surface becomes an explanation, not a dead button.
  */
 const nav = z.object({
   type: z.literal("nav"),
-  destino: z.string().max(40),
-  /** Uma linha dizendo o que se resolve ali. */
-  nota: text(160).optional(),
+  destination: z.string().max(40),
+  /** One line saying what is solved there. */
+  note: text(160).optional(),
 })
 
-/** Os tipos que guardam um valor e entram no escopo das expressões. */
+/** The types that store a value and enter the scope of the expressions. */
 export const INPUT_TYPES = ["slider", "number", "select", "tabs", "toggle", "text"] as const
 
 export const orbitUiBlock = z.discriminatedUnion("type", [
@@ -251,7 +251,7 @@ export type OrbitUiBlock = z.infer<typeof orbitUiBlock>
 
 export type OrbitUiParse = {
   blocks: OrbitUiBlock[]
-  /** Há uma linha ainda chegando — a tela mostra um esqueleto no lugar dela. */
+  /** There is a line still arriving — the screen shows a skeleton in its place. */
   pending: boolean
 }
 
@@ -262,14 +262,20 @@ function parseLine(line: string): OrbitUiBlock | null {
   } catch {
     return null
   }
+  // `destino`/`nota` are the legacy field names of the nav block, kept in the history of
+  // conversations written before the standard was English.
+  if (raw && typeof raw === "object" && (raw as { type?: unknown }).type === "nav") {
+    const nav = raw as Record<string, unknown>
+    raw = { ...nav, destination: nav.destination ?? nav.destino, note: nav.note ?? nav.nota }
+  }
   const parsed = orbitUiBlock.safeParse(raw)
   return parsed.success ? parsed.data : null
 }
 
 /**
- * Lê o conteúdo do fence. Linha completa e válida vira bloco; inválida é
- * descartada. A ÚLTIMA linha de um fence ainda aberto pode estar pela metade:
- * se ainda não fecha como JSON válido, é `pending`, não erro.
+ * Reads the content of the fence. A complete and valid line becomes a block; an invalid one is
+ * discarded. The LAST line of a still open fence may be half written:
+ * if it does not close as valid JSON yet, it is `pending`, not an error.
  */
 export function parseOrbitUi(code: string, isIncomplete: boolean): OrbitUiParse {
   const lines = code.split("\n").map((line) => line.trim()).filter(Boolean)

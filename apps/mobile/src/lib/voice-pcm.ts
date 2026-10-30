@@ -1,19 +1,19 @@
 /**
- * Helpers do ditado (STT) no aparelho.
+ * Dictation (STT) helpers on the device.
  *
- * O celular NÃO roda modelo de voz: o expo-audio entrega os buffers de PCM
- * int16 já na taxa pedida (16 kHz, mono) e aqui eles são juntados num único
- * buffer e codificados em base64 para a rota `POST /api/voice/transcribe` do
- * desktop (ver docs/voz.md). Nada de áudio sai para a nuvem.
+ * The phone does NOT run a voice model: expo-audio delivers the PCM
+ * int16 buffers already at the requested rate (16 kHz, mono) and here they are joined into a single
+ * buffer and encoded in base64 for the `POST /api/voice/transcribe` route of the
+ * desktop (see docs/voice.md). No audio leaves for the cloud.
  *
- * O base64 é feito à mão porque o Hermes não traz `btoa`/`Buffer` e o áudio
- * nunca passa por arquivo — não vale a pena gastar disco só para usar o
- * `expo-file-system` como codificador.
+ * The base64 is done by hand because Hermes does not ship `btoa`/`Buffer` and the audio
+ * never goes through a file — it is not worth spending disk just to use
+ * `expo-file-system` as an encoder.
  */
 
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
-/** Junta os pedaços de PCM recebidos do microfone num único buffer contíguo. */
+/** Joins the PCM chunks received from the microphone into a single contiguous buffer. */
 export function concatPcm(chunks: Uint8Array[]): Uint8Array {
   let total = 0
   for (const chunk of chunks) total += chunk.length
@@ -26,7 +26,7 @@ export function concatPcm(chunks: Uint8Array[]): Uint8Array {
   return out
 }
 
-/** Codifica bytes em base64 (3 bytes → 4 caracteres, com padding). */
+/** Encodes bytes in base64 (3 bytes → 4 characters, with padding). */
 export function bytesToBase64(bytes: Uint8Array): string {
   const len = bytes.length
   const groups: string[] = []
@@ -46,7 +46,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return groups.join('')
 }
 
-/** Duração, em milissegundos, de um PCM16 mono na taxa dada. */
+/** Duration, in milliseconds, of a mono PCM16 at the given rate. */
 export function pcmDurationMs(byteLength: number, sampleRate: number): number {
   if (sampleRate <= 0) return 0
   const samples = byteLength / 2

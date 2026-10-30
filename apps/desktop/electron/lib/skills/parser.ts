@@ -23,8 +23,8 @@ export function parseSkill(
     if (idx <= 0) continue
     const key = line.slice(0, idx).trim().toLowerCase()
     let value = line.slice(idx + 1).trim()
-    // Blocos YAML multiline (description: > / >- / | / |-): consome as linhas
-    // indentadas seguintes — folded (>) junta com espaço, literal (|) com \n
+    // Multiline YAML blocks (description: > / >- / | / |-): consumes the following
+    // indented lines — folded (>) joins with a space, literal (|) with \n
     if (/^[>|][+-]?$/.test(value)) {
       const block: string[] = []
       while (i + 1 < lines.length && (!lines[i + 1].trim() || /^\s/.test(lines[i + 1]))) {
@@ -52,7 +52,7 @@ export function parseSkill(
   }
 }
 
-/** snake_case seguro para referência @slug */
+/** snake_case safe for the @slug reference */
 export function sanitizeSlug(slug: string): string {
   return slug
     .toLowerCase()
@@ -63,7 +63,7 @@ export function sanitizeSlug(slug: string): string {
     .slice(0, 60)
 }
 
-/** Serializa uma skill para o formato .skill (frontmatter + corpo) */
+/** Serializes a skill to the .skill format (frontmatter + body) */
 export function serializeSkill(skill: Pick<Skill, 'name' | 'description' | 'slug' | 'content'>): string {
   const lines = [
     '---',

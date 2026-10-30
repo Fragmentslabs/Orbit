@@ -9,17 +9,17 @@ import { FIELD_SHELL } from "./design-controls"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Seletor de família tipográfica do inspetor.
+ * Typographic family picker of the inspector.
  *
- * Duas listas, uma busca: as famílias INSTALADAS NO COMPUTADOR (o Chromium já as
- * carrega, basta o nome) e as da BIBLIOTECA DO ORBIT (baixadas pela tool
- * `font_use`). Cada linha é desenhada na própria fonte — é o jeito mais rápido de
- * escolher. O campo do topo filtra as duas; o que sobra no texto e não casa com
- * nada vira um valor livre ("Minha Fonte, serif"), para quem tem uma fonte que
- * não está em nenhuma das listas.
+ * Two lists, one search: the families INSTALLED ON THE COMPUTER (Chromium already
+ * loads them, the name is enough) and the ones from the ORBIT LIBRARY (downloaded by the
+ * `font_use` tool). Each row is drawn in its own font — it is the fastest way to
+ * choose. The field at the top filters both; what is left in the text and matches
+ * nothing becomes a free value ("My Font, serif"), for whoever has a font that
+ * is not in either list.
  *
- * A biblioteca do Orbit chega por IPC com o `@font-face` junto: a prévia aqui é a
- * MESMA fonte que o artboard vai usar, servida pelo scheme `orbit-font://`.
+ * The Orbit library arrives over IPC with the `@font-face` along: the preview here is the
+ * SAME font the artboard is going to use, served by the `orbit-font://` scheme.
  */
 
 /** `'Inter', sans-serif` → `Inter`. */
@@ -28,7 +28,7 @@ export function firstFamily(value: string): string {
   return first.replace(/^["']+|["']+$/g, "").trim()
 }
 
-/** Só uma busca por painel: a lista muda raramente e o popover abre toda hora. */
+/** Only one search per panel: the list rarely changes and the popover opens all the time. */
 let cached: FontChoices | null = null
 
 function commitFaces(css: string): void {
@@ -49,9 +49,9 @@ export function FontPicker({
   computed,
   onCommit,
 }: {
-  /** O valor no `style` do elemento (vazio quando ele herda). */
+  /** The value in the element's `style` (empty when it inherits). */
   value: string
-  /** O valor calculado — o cinza do campo quando não há inline. */
+  /** The computed value — the gray of the field when there is no inline one. */
   computed: string
   onCommit: (value: string) => void
 }) {
@@ -61,8 +61,8 @@ export function FontPicker({
   const [data, setData] = useState<FontChoices | null>(cached)
   const input = useRef<HTMLInputElement>(null)
 
-  // Carrega ao montar (para a prévia da família atual) e de novo a cada abertura:
-  // o agente pode ter instalado uma fonte no meio da conversa.
+  // Loads on mount (for the preview of the current family) and again on every opening:
+  // the agent may have installed a font in the middle of the conversation.
   useEffect(() => {
     let alive = true
     fontsApi
@@ -102,7 +102,7 @@ export function FontPicker({
     setQuery("")
   }
 
-  /** Enter: a primeira opção se só houver uma; senão o texto digitado vira valor. */
+  /** Enter: the first option if there is only one; otherwise the typed text becomes the value. */
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
       setOpen(false)
@@ -212,7 +212,7 @@ export function FontPicker({
             <p className="px-2 py-2 text-[10px] text-muted-foreground/60">{t("design.props.fontsNone")}</p>
           )}
 
-          {/* A biblioteca do Orbit nasce vazia: a linha ensina como enchê-la. */}
+          {/* The Orbit library is born empty: the row teaches how to fill it. */}
           {data && data.orbit.length === 0 && !typed && (
             <p className="border-t border-border/40 px-2 pb-1.5 pt-2 text-[9px] leading-snug text-muted-foreground/60">
               {t("design.props.fontsOrbitEmpty")}

@@ -7,35 +7,35 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Quanto o aviso de erro fica à vista antes de o botão voltar ao normal. */
+/** How long the error notice stays in view before the button goes back to normal. */
 const ERROR_VISIBLE_MS = 6000
 
 /**
- * FALAR: lê o texto em voz alta pelo motor do main, em streaming. Fica ao lado
- * do copiar e vira "parar" enquanto fala — clicar de novo interrompe. Só é
- * montado nas respostas do assistente, com o texto da resposta final
- * (`speakableText`); sem nada para ler, não aparece.
+ * SPEAK: reads the text aloud through the main process engine, in streaming. It sits next to
+ * copy and becomes "stop" while speaking — clicking again interrupts. It is only
+ * mounted in the assistant replies, with the text of the final answer
+ * (`speakableText`); with nothing to read, it does not appear.
  *
- * Desligado nas preferências (`voice.tts.enabled`), o botão nem aparece. Sem o
- * modelo baixado ele CONTINUA visível, mas em vez de ficar morto leva às
- * Preferências na aba de voz — onde o download acontece.
+ * Turned off in the preferences (`voice.tts.enabled`), the button does not even appear. Without the
+ * model downloaded it STAYS visible, but instead of being dead it leads to
+ * Preferences on the voice tab — where the download happens.
  */
 export function SpeakAction({ text }: { text: string }) {
   const { t } = useTranslation()
-  // O tipo compartilhado pode ainda não trazer o bloco `voice` (outro worker):
-  // lê defensivamente do store, com os padrões do app.
+  // The shared type may not carry the `voice` block yet (another worker):
+  // it reads defensively from the store, with the app defaults.
   const voice = useAppSettings((s) => (s.settings as unknown as { voice?: unknown }).voice)
   const prefs = useMemo(() => readTtsPrefs(voice), [voice])
-  // Prioridade de áudio: o botão reflete o motor que VAI falar — a rota do
-  // modelo quando ela existe; o motor local quando não.
+  // Audio priority: the button reflects the engine that IS GOING TO speak — the model route
+  // when it exists; the local engine when not.
   const engine = useMemo(() => readTtsEngine(voice), [voice])
   const { ready, known } = useTtsStatus(prefs.enabled, engine)
   const openSettings = useSettingsUi((s) => s.openSettings)
   const { speak, stop, speaking, generating, error, dismissError } = useSpeak()
 
-  // O erro era só a cor do botão + um tooltip que aparecia no hover, e não
-  // saía mais: o botão ficava vermelho até a próxima tentativa. Agora o motivo
-  // aparece ao lado e some sozinho, devolvendo o botão ao normal.
+  // The error was only the button color + a tooltip that appeared on hover, and did not
+  // go away anymore: the button stayed red until the next attempt. Now the reason
+  // appears next to it and goes away by itself, returning the button to normal.
   useEffect(() => {
     if (!error) return
     const timer = setTimeout(dismissError, ERROR_VISIBLE_MS)
@@ -43,7 +43,7 @@ export function SpeakAction({ text }: { text: string }) {
   }, [error, dismissError])
 
   if (!prefs.enabled) return null
-  // Resposta sem texto (só ferramentas, por exemplo): não há o que ler.
+  // Reply without text (tools only, for example): there is nothing to read.
   if (!text.trim()) return null
 
   if (known && !ready) {
@@ -69,7 +69,7 @@ export function SpeakAction({ text }: { text: string }) {
         tooltip={label}
         label={label}
         className={
-          // Falando, o hover não "desliga" o vermelho: clicar ainda é parar.
+          // While speaking, the hover does not "turn off" the red: clicking is still stopping.
           generating
             ? "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
             : speaking

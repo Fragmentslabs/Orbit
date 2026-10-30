@@ -1,17 +1,17 @@
 import type { ITheme } from "@xterm/xterm"
 
 /**
- * Paleta do terminal do painel (xterm).
+ * Palette of the panel terminal (xterm).
  *
- * O xterm não lê CSS vars — ele quer hex —, então as cores moram aqui, num par
- * dark/light. No escuro o fundo é transparente e quem aparece é o `bg-sidebar`
- * da aba (como sempre foi); no claro o terminal pinta o próprio fundo num cinza
- * uma linha acima do branco, para não estourar ao lado do painel quase branco,
- * e escreve com a paleta github-light — a mesma família do editor de código
- * ([code-editor-theme.ts]), que divide o painel com ele.
+ * xterm does not read CSS vars — it wants hex —, so the colors live here, in a dark/light
+ * pair. In the dark the background is transparent and what shows up is the tab's
+ * `bg-sidebar` (as it always was); in the light the terminal paints its own background in a gray
+ * one line above white, so as not to glare next to the almost white panel,
+ * and writes with the github-light palette — the same family as the code editor
+ * ([code-editor-theme.ts]), which shares the panel with it.
  */
 
-/** VS Code dark+ — a paleta que o terminal sempre usou no escuro. */
+/** VS Code dark+ — the palette the terminal always used in the dark. */
 const DARK: ITheme = {
   background: "#00000000",
   foreground: "#cccccc",
@@ -37,16 +37,16 @@ const DARK: ITheme = {
 }
 
 /**
- * github-light (ANSI do primer) sobre `--muted` do tema claro (#f4f4f5), que é
- * a superfície que a aba pinta por baixo (`bg-muted`). O fundo fica
- * transparente aqui também: assim a cor vem do token (tema customizado
- * acompanha) e o padding do host não desenha uma moldura mais clara em volta
- * do canvas.
+ * github-light (primer's ANSI) over the light theme's `--muted` (#f4f4f5), which is
+ * the surface the tab paints underneath (`bg-muted`). The background stays
+ * transparent here too: that way the color comes from the token (a custom theme
+ * follows along) and the host's padding does not draw a lighter frame around
+ * the canvas.
  *
- * No escuro "bright" clareia; no claro isso joga a cor para dentro do fundo —
- * brightBlue, brightCyan, brightMagenta e brightWhite do primer ficam entre
- * 2,7:1 e 3,3:1 sobre #f4f4f5, então encostam no valor normal (>= 4:1). O resto
- * é o primer puro, com o texto em 13,3:1.
+ * In the dark "bright" lightens; in the light that pushes the color into the background —
+ * primer's brightBlue, brightCyan, brightMagenta and brightWhite sit between
+ * 2.7:1 and 3.3:1 over #f4f4f5, so they come close to the normal value (>= 4:1). The rest
+ * is pure primer, with the text at 13.3:1.
  */
 const LIGHT: ITheme = {
   background: "#00000000",
@@ -73,8 +73,8 @@ const LIGHT: ITheme = {
 }
 
 /**
- * Devolve sempre um objeto NOVO: o xterm compara `options.theme` por referência
- * e ignora a atribuição quando é o mesmo objeto.
+ * Always returns a NEW object: xterm compares `options.theme` by reference
+ * and ignores the assignment when it is the same object.
  */
 export function terminalTheme(dark: boolean): ITheme {
   return { ...(dark ? DARK : LIGHT) }

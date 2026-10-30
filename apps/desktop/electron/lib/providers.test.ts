@@ -27,12 +27,12 @@ vi.mock('./catalog', () => ({
 import { resolveModel } from './providers'
 
 /**
- * O bug de origem: o OpenCode Go declara openai-compatible no provedor, mas o
- * Claude Haiku só existe pelo protocolo Anthropic, em /go/anthropic/v1. O
- * Orbit mandava tudo pelo endpoint OpenAI e o gateway respondia "Model does
+ * The original bug: OpenCode Go declares openai-compatible in the provider, but
+ * Claude Haiku only exists through the Anthropic protocol, at /go/anthropic/v1. Orbit
+ * sent everything through the OpenAI endpoint and the gateway answered "Model does
  * not support this protocol.".
  */
-describe('resolveModel — protocolo por modelo', () => {
+describe('resolveModel — protocol per model', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   async function requestUrl(modelId: string): Promise<string> {
@@ -42,15 +42,15 @@ describe('resolveModel — protocolo por modelo', () => {
       return new Response('{}', { status: 500 })
     })
     const model = await resolveModel('opencode-go', modelId, { sessionId: 's1' })
-    await generateText({ model, prompt: 'oi', maxRetries: 0 }).catch(() => undefined)
+    await generateText({ model, prompt: 'hi', maxRetries: 0 }).catch(() => undefined)
     return url
   }
 
-  it('o Claude vai pelo protocolo Anthropic, no endpoint do modelo', async () => {
+  it('Claude goes through the Anthropic protocol, at the model endpoint', async () => {
     expect(await requestUrl('claude-haiku-5-5')).toBe('https://opencode.ai/inference/go/anthropic/v1/messages')
   })
 
-  it('o resto continua no endpoint openai-compatible do provedor', async () => {
+  it('the rest stays on the provider openai-compatible endpoint', async () => {
     expect(await requestUrl('deepseek-v4-pro')).toBe('https://opencode.ai/inference/go/openai/v1/chat/completions')
   })
 })

@@ -43,5 +43,5 @@ example
 /ios
 /android
 
-# backup do hist�rico aninhado (redundante com o monorepo)
+# backup of the nested history (redundant with the monorepo)
 mobile-history.bundle

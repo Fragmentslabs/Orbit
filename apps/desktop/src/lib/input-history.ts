@@ -2,45 +2,45 @@ import { parseMessageReply, type ChatMessage, type MessageReplyQuote } from "@sh
 import { visibleMessageText } from "@/src/lib/message-utils"
 
 /**
- * Histórico de ↑/↓ do compositor: os textos que a pessoa já enviou nesta
- * conversa, do mais recente para o mais antigo.
+ * Composer ↑/↓ history: the texts the person already sent in this
+ * conversation, from the most recent to the oldest.
  *
- * A fonte é `messages` da sessão — a mesma lista que a bolha desenha. É por isso
- * que mensagem revertida não entra: o revert TRUNCA a lista e guarda o
- * descartado em `SessionRevert.discardedMessages` (ver revertToMessage), que
- * daqui não é lido. Desfazer o revert devolve as mensagens e elas voltam a
- * contar, como qualquer outra.
+ * The source is the session's `messages` — the same list the bubble draws. That is why
+ * a reverted message does not get in: revert TRUNCATES the list and keeps the
+ * discarded one in `SessionRevert.discardedMessages` (see revertToMessage), which
+ * is not read from here. Undoing the revert gives the messages back and they count
+ * again, like any other.
  *
- * A única decisão de UX mora aqui, e é pura para poder ser testada: a seta é do
- * CARET enquanto ele tem para onde ir. Só na ponta do campo (↑ na primeira
- * posição, ↓ na última) ela vira histórico — é o que deixa um prompt de várias
- * linhas ser navegado linha a linha antes de trocar de mensagem.
+ * The only UX decision lives here, and it is pure so it can be tested: the arrow belongs to the
+ * CARET while it has somewhere to go. Only at the edge of the field (↑ at the first
+ * position, ↓ at the last one) does it become history — that is what lets a multi-line
+ * prompt be navigated line by line before switching messages.
  */
 
 export interface HistoryEntry {
-  /** O que a pessoa escreveu, sem a citação da resposta. */
+  /** What the person wrote, without the reply citation. */
   text: string
-  /** A resposta armada que acompanhava o envio, se havia. */
+  /** The armed reply that came with the send, if there was one. */
   reply: MessageReplyQuote | null
 }
 
 export interface HistoryCursor {
-  /** Posição na lista (0 = a mais recente); null = fora da navegação. */
+  /** Position in the list (0 = the most recent); null = outside the navigation. */
   index: number | null
-  /** O que estava no campo quando a navegação começou. */
+  /** What was in the field when the navigation started. */
   draft: string
-  /** A citação que estava armada nesse momento. */
+  /** The citation that was armed at that moment. */
   reply: MessageReplyQuote | null
 }
 
 export const NO_HISTORY: HistoryCursor = { index: null, draft: "", reply: null }
 
 export interface HistoryInput {
-  /** O que está no campo agora. */
+  /** What is in the field now. */
   text: string
-  /** O caret está na primeira posição — só aí ↑ é do histórico. */
+  /** The caret is at the first position — only then does ↑ belong to the history. */
   atStart: boolean
-  /** O caret está na última posição — só aí ↓ é do histórico. */
+  /** The caret is at the last position — only then does ↓ belong to the history. */
   atEnd: boolean
 }
 
@@ -50,17 +50,17 @@ export interface HistoryStep {
 }
 
 /**
- * O que o CAMPO informa para a navegação: o texto e onde o caret está. `null`
- * quando a seta não é do histórico — com um trecho selecionado ela substitui a
- * seleção, como em qualquer campo.
+ * What the FIELD tells the navigation: the text and where the caret is. `null`
+ * when the arrow does not belong to the history — with a selection it replaces the
+ * selection, as in any field.
  *
- * A regra é só de PONTA, e vale para todo texto, de uma linha ou de várias: um
- * texto comprido QUEBRA em várias linhas na tela sem ter um "\n" sequer, e ali
- * ↑ no meio tem que subir uma linha visual, não trocar de mensagem. Por isso a
- * decisão olha a posição do caret, nunca o número de linhas do valor.
+ * The rule is about the EDGE only, and it holds for any text, single-line or multi-line: a
+ * long text WRAPS into several lines on screen without a single "\n", and there
+ * ↑ in the middle has to go up one visual line, not switch messages. That is why the
+ * decision looks at the caret position, never at the number of lines in the value.
  *
- * Recebe o textarea e lê `value`/`selectionStart` DELE, não o estado do React:
- * o que vale é o que está na tela.
+ * Receives the textarea and reads `value`/`selectionStart` FROM IT, not the React state:
+ * what counts is what is on screen.
  */
 export function historyKeyInput(field: {
   value: string
@@ -76,14 +76,14 @@ export function historyKeyInput(field: {
 }
 
 /**
- * Textos enviados pela pessoa nesta sessão, do mais recente para o mais antigo.
+ * Texts sent by the person in this session, from the most recent to the oldest.
  *
- * - só `role: "user"` — o que o modelo disse não é histórico de composição;
- * - só o que a pessoa digitou: `visibleMessageText` deixa de fora o texto
- *   extraído de anexo, e `parseMessageReply` separa a citação do corpo (o
- *   `> [assistant] …` voltaria cru para o campo);
- * - mensagem sem texto (só anexo) não entra, e nem texto repetido em sequência:
- *   subir duas vezes tem que trazer coisas diferentes.
+ * - only `role: "user"` — what the model said is not composition history;
+ * - only what the person typed: `visibleMessageText` leaves out the text
+ *   extracted from an attachment, and `parseMessageReply` separates the citation from the body (the
+ *   `> [assistant] …` would come back raw into the field);
+ * - a message without text (attachment only) does not get in, nor does text repeated in sequence:
+ *   going up twice has to bring different things.
  */
 export function inputHistory(messages: ChatMessage[] | undefined): HistoryEntry[] {
   if (!messages?.length) return []
@@ -101,9 +101,9 @@ export function inputHistory(messages: ChatMessage[] | undefined): HistoryEntry[
 }
 
 /**
- * Um passo na navegação. `null` quando a tecla não é do histórico — e aí o
- * caret segue o seu caminho normal: sem nada para trazer, ↑ no topo da lista,
- * ↓ fora da navegação, ou uma seta no meio de um texto com várias linhas.
+ * One step in the navigation. `null` when the key is not part of the history — and then the
+ * caret goes its normal way: with nothing to bring, ↑ at the top of the list,
+ * ↓ outside the navigation, or an arrow in the middle of a multi-line text.
  */
 export function historyStep(
   history: HistoryEntry[],
@@ -115,10 +115,10 @@ export function historyStep(
   if (history.length === 0) return null
 
   if (direction === "older") {
-    // ↑ no meio do texto move o caret; o histórico só começa na primeira posição.
+    // ↑ in the middle of the text moves the caret; the history only starts at the first position.
     if (!input.atStart) return null
     if (cursor.index === null) {
-      // A navegação começa: o que estava digitado vira o rascunho do fim da lista.
+      // The navigation starts: what was typed becomes the draft at the end of the list.
       return {
         cursor: { index: 0, draft: input.text, reply: currentReply },
         entry: history[0],
@@ -129,10 +129,10 @@ export function historyStep(
     return { cursor: { ...cursor, index }, entry: history[index] }
   }
 
-  // ↓ só na última posição, e só de dentro da navegação.
+  // ↓ only at the last position, and only from inside the navigation.
   if (!input.atEnd || cursor.index === null) return null
   const index = cursor.index - 1
-  // Desceu além da mais recente: devolve o que estava sendo digitado.
+  // Went past the most recent one: returns what was being typed.
   if (index < 0) {
     return {
       cursor: NO_HISTORY,

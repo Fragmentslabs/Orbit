@@ -8,21 +8,21 @@ import { designApi } from "@/src/lib/ipc"
 import type { DesignBoardView } from "./design-properties"
 
 /**
- * O FONTE de um artboard, editável — o mesmo editor do painel de arquivos. O
- * que se salva aqui é o arquivo inteiro, e o canvas recarrega com ele.
+ * The SOURCE of an artboard, editable — the same editor as the files panel. What
+ * is saved here is the whole file, and the canvas reloads with it.
  *
- * Mudança no disco (o agente editou, ou a pessoa mexeu numa propriedade)
- * recarrega o editor só se não houver rascunho: com rascunho, avisa e deixa a
- * pessoa escolher, em vez de jogar fora o que ela digitou.
+ * A change on disk (the agent edited, or the person touched a property)
+ * reloads the editor only if there is no draft: with a draft, it warns and lets the
+ * person choose, instead of throwing away what they typed.
  */
 
 interface Props {
   designId: string
   boards: DesignBoardView[]
   file: string | null
-  /** Caminho do elemento selecionado no canvas, quando é DESTE arquivo. */
+  /** Path of the element selected on the canvas, when it is from THIS file. */
   selectionPath: number[] | null
-  /** Sobe a cada mudança no disco — é o sinal para reler o arquivo. */
+  /** Goes up on every change on disk — it is the signal to re-read the file. */
   version: number
   onFileChange: (file: string) => void
   onSave: (file: string, html: string) => Promise<void>
@@ -64,9 +64,9 @@ export function DesignCode({ designId, boards, file, selectionPath, version, onF
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version])
 
-  // Seleção no canvas -> realça e rola até o elemento no fonte. Depende da
-  // CHAVE do caminho (não do array) para não rerolar a cada render, e só age
-  // quando o conteúdo já carregou (antes disso o editor nem está montado).
+  // Selection on the canvas -> highlights and scrolls to the element in the source. It depends on the
+  // KEY of the path (not of the array) so as not to re-scroll on every render, and it only acts
+  // when the content has already loaded (before that the editor is not even mounted).
   const pathKey = selectionPath ? selectionPath.join(".") : ""
   const ready = content !== null
   useEffect(() => {

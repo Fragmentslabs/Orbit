@@ -21,37 +21,37 @@ import {
 import { describeMaterialsForAgent, listSessionMaterials } from '../session-materials'
 
 /**
- * Consulta aos documentos anexados na conversa (modo chat).
+ * Query of the documents attached to the conversation (chat mode).
  *
- * O modo chat não tem `read` nem `grep`, então estas tools são o equivalente
- * do que o modo código ganhou nos arquivos do repositório: localizar o trecho
- * e ler só ele. O anexo passa a entrar na mensagem com um trecho de abertura,
- * e o resto do documento fica aqui — cobrado por página lida, não por turno.
+ * Chat mode has neither `read` nor `grep`, so these tools are the equivalent
+ * of what code mode gained on the repository files: locating the excerpt
+ * and reading only it. The attachment now enters the message with an opening excerpt,
+ * and the rest of the document stays here — charged per page read, not per turn.
  */
 
 const DEFAULT_DOC_PAGES = 3
 const MAX_DOC_PAGES = 20
 const MAX_HITS = 40
-/** Teto da imagem enviada ao modelo — acima disso o provedor recusa. */
+/** Cap of the image sent to the model — above that the provider refuses it. */
 const MAX_MODEL_IMAGE_BYTES = 300 * 1024
 
 /**
- * Os documentos que o AGENTE escreveu nesta conversa, que são outra lista.
+ * The documents the AGENT wrote in this conversation, which are another list.
  *
- * Um documento produzido aqui não é anexo nem fonte — a menos que o usuário o
- * promova —, então ele não aparece no doc_list. E aí o modelo listava as
- * fontes, via só a prova de matemática e respondia que o documento citado não
- * existia, com ele salvo a um id de distância. O lembrete é curto de
- * propósito: quem lê o conteúdo é o read_document, não esta lista.
+ * A document produced here is neither an attachment nor a source — unless the user
+ * promotes it —, so it does not appear in doc_list. And then the model listed the
+ * sources, saw only the math proof and answered that the cited document did not
+ * exist, with it saved an id away. The reminder is short on
+ * purpose: what reads the content is read_document, not this list.
  */
-async function produzidosAqui(sessionId: string): Promise<string | null> {
-  const escritos = await listMedia({ kind: 'document', sessionId })
-  if (escritos.length === 0) return null
-  const nomes = escritos
+async function writtenHere(sessionId: string): Promise<string | null> {
+  const written = await listMedia({ kind: 'document', sessionId })
+  if (written.length === 0) return null
+  const names = written
     .slice(0, 10)
     .map((entry) => `${entry.id} (${entry.name ?? 'untitled'})`)
     .join(', ')
-  return `Besides these, ${escritos.length} document(s) written by you in this conversation — use read_document/update_document with the id: ${nomes}.`
+  return `Besides these, ${written.length} document(s) written by you in this conversation — use read_document/update_document with the id: ${names}.`
 }
 
 export function createDocumentTools(sessionId: string) {
@@ -75,16 +75,16 @@ export function createDocumentTools(sessionId: string) {
       inputSchema: z.object({}),
       execute: async () => {
         const docs = await listSessionDocuments(sessionId)
-        const escritos = await produzidosAqui(sessionId)
-        if (docs.length === 0 && !escritos) return 'No documents available in this conversation.'
-        const linhas = docs.map((d) => {
+        const written = await writtenHere(sessionId)
+        if (docs.length === 0 && !written) return 'No documents available in this conversation.'
+        const lines = docs.map((d) => {
           const unit = d.kind === 'spreadsheet' ? 'sheets' : d.kind === 'docx' ? 'blocks' : 'pages'
           const escopo = d.shared ? 'folder source' : 'attached in this conversation'
           return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}, ${escopo}${d.truncated ? ', truncated at the size limit' : ''})`
         })
-        if (docs.length === 0) linhas.push('No documents ATTACHED in this conversation.')
-        if (escritos) linhas.push(escritos)
-        return linhas.join('\n')
+        if (docs.length === 0) lines.push('No documents ATTACHED in this conversation.')
+        if (written) lines.push(written)
+        return lines.join('\n')
       },
     }),
 
@@ -111,7 +111,7 @@ export function createDocumentTools(sessionId: string) {
         if (hits.length === 0) {
           return 'No matches. Try other terms (synonyms, the term in another language) or doc_read to go through the document.'
         }
-        const suffix = hits.length >= MAX_HITS ? '\n… (resultados truncados)' : ''
+        const suffix = hits.length >= MAX_HITS ? '\n… (results truncated)' : ''
         return (
           hits
             .map((h) => {
@@ -139,8 +139,8 @@ export function createDocumentTools(sessionId: string) {
           return `<document name="${doc.filename}">\n(no extractable text — probably a scanned PDF. Use pdf_view_page to SEE the page: with no text layer, looking is the only way to read it.)\n</document>`
         }
         const { from, to, pages } = pageWindow(extracted, offset, limit, DEFAULT_DOC_PAGES, MAX_DOC_PAGES)
-        // As linhas vêm numeradas para a citação poder apontar o trecho, e não
-        // só a página — é o número daqui que vai no link da resposta.
+        // The lines come numbered so the citation can point at the excerpt, and not
+        // only the page — it is the number from here that goes in the answer's link.
         const body = pages
           .map(
             (page) =>
@@ -156,17 +156,17 @@ export function createDocumentTools(sessionId: string) {
 }
 
 /**
- * Ver uma página do PDF como IMAGEM.
+ * Seeing a PDF page as an IMAGE.
  *
- * Existe por dois motivos que o texto extraído não cobre:
+ * It exists for two reasons the extracted text does not cover:
  *
- * 1. PDF digitalizado não tem camada de texto — doc_read devolve vazio, e a
- *    única forma de ler é o modelo olhar a página.
- * 2. Perguntas de LAYOUT (onde fica o campo, como está diagramado, o carimbo
- *    está na página certa) não se respondem pelo texto.
+ * 1. A scanned PDF has no text layer — doc_read returns empty, and the
+ *    only way to read is for the model to look at the page.
+ * 2. LAYOUT questions (where the field is, how it is laid out, whether the stamp
+ *    is on the right page) are not answered by the text.
  *
- * Rasteriza numa janela oculta (ver pdf-raster.ts) — sem depender de
- * LibreOffice ou Poppler instalados na máquina do usuário.
+ * It rasterizes in a hidden window (see pdf-raster.ts) — without depending on
+ * LibreOffice or Poppler installed on the user's machine.
  */
 export function createPdfViewTool(sessionId: string, ctx: ToolContext | null, modelVision: boolean) {
   return tool({
@@ -218,8 +218,8 @@ export function createPdfViewTool(sessionId: string, ctx: ToolContext | null, mo
           return `Page ${wanted} does not exist in ${label} — the document has ${rendered.total}.`
         }
 
-        // Acima do teto o provedor rejeita a imagem; reduzir a escala é a saída
-        // que o modelo tem, então a mensagem diz isso em vez de só falhar.
+        // Above the cap the provider rejects the image; reducing the scale is the way out
+        // the model has, so the message says that instead of just failing.
         if (first.png.length > MAX_MODEL_IMAGE_BYTES) {
           return `Rendered page ${wanted} is ${Math.round(first.png.length / 1024)}KB, above the ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB limit. Retry with a smaller scale (e.g. 1).`
         }

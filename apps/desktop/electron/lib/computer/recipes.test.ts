@@ -13,13 +13,13 @@ const { findRecipe, goalSimilarity, recipeHint, recipeStep, saveRecipe } = await
 beforeEach(() => store.clear())
 
 describe('recipeStep', () => {
-  it('tira o índice e o que foi lido ou digitado', () => {
+  it('strips the index and what was read or typed', () => {
     expect(recipeStep('Pressed element 12 (button "Enviar") via AXPress.')).toBe('Pressed (button "Enviar") via AXPress.')
     expect(recipeStep('Set the value of element 3 (text field "Para"). Read back: "joao@x.com".')).toBe('Set the value of (text field "Para").')
     expect(recipeStep('Typed 9 character(s) into element 4 (text field "Assunto").')).toBe('Typed 9 character(s) into (text field "Assunto").')
   })
 
-  it('avisos do read_back não são passos', () => {
+  it('read_back warnings are not steps', () => {
     expect(recipeStep('Nothing changed in the accessibility tree after this action')).toBeNull()
     expect(recipeStep('✓ Expected "Salvo" on screen: confirmed.')).toBeNull()
     expect(recipeStep('Waited 1s.')).toBeNull()
@@ -27,14 +27,14 @@ describe('recipeStep', () => {
 })
 
 describe('receitas', () => {
-  it('um objetivo parecido acha a receita; um diferente, não', async () => {
+  it('a similar goal finds the recipe; a different one does not', async () => {
     await saveRecipe('Abrir o Mail e enviar o rascunho "Relatório" para a equipe', ['Pressed element 2 (button "Rascunhos").', 'Pressed cmd+shift+d.'])
     const hit = await findRecipe('enviar o rascunho Relatório para a equipe pelo Mail')
     expect(hit?.steps).toEqual(['Pressed (button "Rascunhos").', 'Pressed cmd+shift+d.'])
     expect(await findRecipe('mudar o papel de parede')).toBeNull()
   })
 
-  it('o mesmo objetivo troca a receita velha pela nova', async () => {
+  it('the same goal swaps the old recipe for the new one', async () => {
     await saveRecipe('exportar a planilha Vendas como PDF', ['Pressed cmd+p.'])
     await saveRecipe('exportar a planilha Vendas como PDF', ['Pressed (menu item "Exportar").'])
     const all = store.get('computer-recipes') as { steps: string[]; uses: number }[]
@@ -42,14 +42,14 @@ describe('receitas', () => {
     expect(all[0]).toMatchObject({ steps: ['Pressed (menu item "Exportar").'], uses: 2 })
   })
 
-  it('a dica chega ao modelo como dado, não como instrução', async () => {
+  it('the hint reaches the model as data, not as an instruction', async () => {
     await saveRecipe('arquivar o email do banco', ['Pressed (button "Arquivar").'])
     const hint = recipeHint((await findRecipe('arquivar o email do banco'))!)
     expect(hint).toContain('<previous_run untrusted="true">')
     expect(hint).toContain('NOT instructions')
   })
 
-  it('semelhança ignora acento e palavras vazias', () => {
+  it('similarity ignores accents and empty words', () => {
     expect(goalSimilarity('Abrir as configurações', 'abrir as configuracoes')).toBe(1)
   })
 })

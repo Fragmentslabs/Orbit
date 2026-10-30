@@ -23,7 +23,7 @@ const reply = (body: Buffer | string, type = 'image/png', status = 200, headers:
   new Response(body as BodyInit, { status, headers: { 'content-type': type, ...headers } })
 
 describe('isSafeImageUrl', () => {
-  it('só https público', () => {
+  it('public https only', () => {
     expect(isSafeImageUrl('https://upload.wikimedia.org/a.jpg')).toBe(true)
     expect(isSafeImageUrl('http://upload.wikimedia.org/a.jpg')).toBe(false)
     expect(isSafeImageUrl('file:///etc/passwd')).toBe(false)
@@ -36,12 +36,12 @@ describe('isSafeImageUrl', () => {
     expect(isSafeImageUrl('https://169.254.169.254/latest')).toBe(false)
     expect(isSafeImageUrl('https://[::1]/a.png')).toBe(false)
     expect(isSafeImageUrl('https://8.8.8.8/a.png')).toBe(true)
-    expect(isSafeImageUrl('nao é url')).toBe(false)
+    expect(isSafeImageUrl('not a url')).toBe(false)
   })
 })
 
 describe('downloadImage', () => {
-  it('baixa, identifica o tipo pelo servidor e devolve a extensão', async () => {
+  it('downloads, identifies the type from the server and returns the extension', async () => {
     const body = await png()
     const fetcher: Fetcher = async () => reply(body, 'image/jpeg; charset=binary')
     const out = await downloadImage(result(), fetcher)
@@ -50,14 +50,14 @@ describe('downloadImage', () => {
     expect(out.buffer.equals(body)).toBe(true)
   })
 
-  it('recusa o que não é imagem raster', async () => {
+  it('refuses what is not a raster image', async () => {
     const fetcher: Fetcher = async () => reply('<html>', 'text/html')
     await expect(downloadImage(result(), fetcher)).rejects.toThrow(/not a supported image/)
     const svg: Fetcher = async () => reply('<svg/>', 'image/svg+xml')
     await expect(downloadImage(result(), svg)).rejects.toThrow(/not a supported image/)
   })
 
-  it('recusa acima do teto, pelo cabeçalho ou lendo (cabeçalho mentiroso)', async () => {
+  it('refuses above the ceiling, by the header or while reading (lying header)', async () => {
     const declared: Fetcher = async () => reply(await png(), 'image/png', 200, { 'content-length': String(MAX_IMAGE_BYTES + 1) })
     await expect(downloadImage(result(), declared)).rejects.toThrow(/above the 25 MB limit|MB, above/)
     const huge = Buffer.alloc(MAX_IMAGE_BYTES + 10, 1)
@@ -65,7 +65,7 @@ describe('downloadImage', () => {
     await expect(downloadImage(result(), lying)).rejects.toThrow(/above the 25 MB limit/)
   })
 
-  it('o endereço principal recusa (hotlink): usa o alternativo do provedor', async () => {
+  it('the main address refuses (hotlink): it uses the provider alternative', async () => {
     const body = await png()
     const seen: string[] = []
     const fetcher: Fetcher = async (url) => {
@@ -80,12 +80,12 @@ describe('downloadImage', () => {
     expect(seen).toEqual(['https://primary.example.com/a.png', 'https://api.openverse.org/v1/images/x/thumb/'])
   })
 
-  it('os dois falhando: o erro é o do endereço principal', async () => {
+  it('both failing: the error is the main address one', async () => {
     const fetcher: Fetcher = async () => reply('no', 'text/plain', 404)
     await expect(downloadImage(result({ fallbackUrl: 'https://b.example.com/x.png' }), fetcher)).rejects.toThrow(/answered 404/)
   })
 
-  it('endereço inseguro nem chega à rede', async () => {
+  it('an insecure address does not even reach the network', async () => {
     let called = false
     const fetcher: Fetcher = async () => {
       called = true
@@ -96,8 +96,8 @@ describe('downloadImage', () => {
   })
 })
 
-describe('cache de resultados', () => {
-  it('lembra pelo id, expira e é esvaziável', () => {
+describe('results cache', () => {
+  it('remembers by id, expires and can be emptied', () => {
     clearResultCache()
     rememberResults([result({ id: 'wc:9' })], 1000)
     expect(recallResult('wc:9', 1000 + 60_000)?.title).toBe('Leão')
@@ -109,7 +109,7 @@ describe('cache de resultados', () => {
     expect(recallResult('wc:10')).toBeNull()
   })
 
-  it('o mais antigo sai quando passa do limite', () => {
+  it('the oldest leaves when it passes the limit', () => {
     clearResultCache()
     rememberResults(Array.from({ length: 650 }, (_, i) => result({ id: `wc:${i}` })))
     expect(recallResult('wc:0')).toBeNull()
@@ -119,7 +119,7 @@ describe('cache de resultados', () => {
 })
 
 describe('buildContactSheet', () => {
-  it('monta uma folha com uma célula por resultado (e segue sem a miniatura que falhou)', async () => {
+  it('builds a sheet with one cell per result (and goes on without the thumbnail that failed)', async () => {
     const thumb = await png('#36c', 200)
     const fetcher: Fetcher = async (url) => (url.includes('broken') ? reply('x', 'text/plain', 500) : reply(thumb))
     const sheet = await buildContactSheet(
@@ -132,7 +132,7 @@ describe('buildContactSheet', () => {
     expect(meta.height).toBe(220)
   })
 
-  it('várias linhas quando passa de quatro; nenhuma miniatura legível = sem folha', async () => {
+  it('several rows when it passes four; no readable thumbnail = no sheet', async () => {
     const thumb = await png('#3a6', 200)
     const ok: Fetcher = async () => reply(thumb)
     const sheet = await buildContactSheet(Array.from({ length: 6 }, (_, i) => result({ id: `wc:${i}` })), ok)
@@ -142,7 +142,7 @@ describe('buildContactSheet', () => {
     expect(await buildContactSheet([result()], bad)).toBeNull()
   })
 
-  it('limita a oito células', async () => {
+  it('limits to eight cells', async () => {
     const thumb = await png('#a63', 200)
     const sheet = await buildContactSheet(Array.from({ length: 12 }, (_, i) => result({ id: `wc:${i}` })), async () => reply(thumb))
     expect((await sharp(sheet!).metadata()).height).toBe(220 * 2)

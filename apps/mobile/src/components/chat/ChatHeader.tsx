@@ -15,23 +15,23 @@ import { useChatSearchStore } from '~/stores/chat-search-store'
 import { BranchSheet } from '~/components/chat/BranchSheet'
 
 interface ChatHeaderProps {
-  /** Sessão atual — undefined enquanto o chat é um rascunho (ainda não enviado). */
+  /** Current session — undefined while the chat is a draft (not sent yet). */
   session?: SessionInfo
   personaState: PersonaState
-  /** Opacidade animada do persona pequeno — só aparece depois da 1ª mensagem
-   *  e só depois do persona grande do centro terminar de sumir. */
+  /** Animated opacity of the small persona — it only shows up after the 1st message
+   *  and only after the large persona in the center finishes fading out. */
   personaOpacity: Animated.Value
   onRename: (title: string) => void
   onTogglePin: () => void
   onToggleArchive: () => void
   onFork: () => void
   onDelete: () => void
-  /** Busca na conversa é exclusiva do modo chat. */
+  /** Search in the conversation is exclusive to chat mode. */
   searchEnabled?: boolean
 }
 
-// memo: o header carrega a view nativa do Rive (Persona) — sem memo ele
-// re-renderizava a cada flush de delta do streaming.
+// memo: the header carries the native Rive view (Persona) — without memo it
+// re-rendered on every delta flush of the streaming.
 export const ChatHeader = memo(function ChatHeader({
   session,
   personaState,
@@ -45,14 +45,14 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
-  // Só a persona do topo: a da saudação é outra escolha (ver PersonaVisibility).
+  // Only the persona at the top: the one of the greeting is another choice (see PersonaVisibility).
   const personaVisible = showsPersonaInChat(useAppearanceStore((s) => s.personaVisibility))
   const [menuOpen, setMenuOpen] = useState(false)
   const [branchOpen, setBranchOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
 
-  // Branch atual da pasta de trabalho, so para rotular o item do menu. Busca
-  // ao abrir o menu (e nao no mount) para nao rodar git em todo chat exibido.
+  // Current branch of the working folder, only to label the menu item. Fetched
+  // when opening the menu (and not on mount) so as not to run git on every chat shown.
   const loadBranch = useCallback(async () => {
     if (!session?.directory) return
     const res = await useConnectionStore

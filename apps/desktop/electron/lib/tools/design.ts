@@ -26,36 +26,36 @@ import {
 } from './piece-common'
 
 /**
- * Design — um canvas de artboards (telas/mockups HTML completos, dispostos lado
- * a lado como um board do Figma), no mesmo molde do motion (ver motion.ts): nos
- * DOIS modos o canvas mora no armazenamento do Orbit
- * (`orbit-data/design/<sessão>/<nome>/`), criado e editado por NOME com as
- * tools daqui — nunca com write/edit no projeto. A aba Design abre e recarrega
- * ao vivo a cada escrita, e toda escrita passa pelo diário do turno (o revert
- * da mensagem a desfaz).
+ * Design — an artboard canvas (complete HTML screens/mockups, laid side by
+ * side like a Figma board), in the same mold as motion (see motion.ts): in
+ * BOTH modes the canvas lives in Orbit's storage
+ * (`orbit-data/design/<session>/<name>/`), created and edited by NAME with the
+ * tools from here — never with write/edit in the project. The Design tab opens and reloads
+ * live on every write, and every write goes through the turn's journal (the message's
+ * revert undoes it).
  *
- * Cada artboard é um arquivo .html AUTOCONTIDO (próprio <html><head><style>) —
- * sem runtime nem DSL de template: o agente escreve HTML/CSS de verdade, e o
- * navegador resolve o layout. O ARRANJO (posição/tamanho de cada artboard no
- * canvas infinito) é só isso: um índice JSON pequeno (`canvas.json`), não uma
- * árvore paralela ao conteúdo — ver design-canvas.ts.
+ * Each artboard is a SELF-CONTAINED .html file (its own <html><head><style>) —
+ * with no runtime and no template DSL: the agent writes real HTML/CSS, and the
+ * browser resolves the layout. The ARRANGEMENT (position/size of each artboard on the
+ * infinite canvas) is only that: a small JSON index (`canvas.json`), not a
+ * tree parallel to the content — see design-canvas.ts.
  */
 
-/** Pasta dos canvas desta conversa. */
+/** Folder of this conversation's canvases. */
 export function designPiecesDir(sessionId: string): string {
   return piecesDir('design', sessionId)
 }
 
-/** "Landing page v2" → "landing-page-v2". Mesmo algoritmo do motionSlug. */
+/** "Landing page v2" → "landing-page-v2". Same algorithm as motionSlug. */
 export function designSlug(name: string): string {
   return pieceSlug(name, 'design')
 }
 
 /**
- * Nome do canvas num pedaço de JSON da tool ainda EM STREAMING — o chat-engine
- * acumula os tool-input-delta e chama isto a cada pedaço. `name` é o primeiro
- * campo do input, então basta achar o começo do valor (parse parcial por regex,
- * com o escape de aspas resolvido pelo JSON.parse do pedaço capturado).
+ * Canvas name in a piece of the tool's JSON still STREAMING — chat-engine
+ * accumulates the tool-input-delta and calls this on every piece. `name` is the first
+ * field of the input, so it is enough to find the start of the value (partial parse by regex,
+ * with the quote escaping resolved by the JSON.parse of the captured piece).
  */
 export function designNameFromInputJson(json: string): string | null {
   const match = /"name"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(json)
@@ -68,15 +68,15 @@ export function designNameFromInputJson(json: string): string | null {
 }
 
 /**
- * Abre a aba Design ANTES da tool terminar: o chat-engine chama isto assim que
- * o nome do canvas aparece no input streaming — enquanto o modelo ainda está
- * transmitindo o HTML dos artboards. Registra a pasta e garante um canvas.json
- * mínimo (`placeholder`); a escrita progressiva do design_write e o watcher
- * (design:changed) entregam cada artboard conforme ele é gravado, e o report()
- * do fim da tool segue como estava (capa, validação, texto para o modelo).
- * `placeholder: false` (design_edit) não cria canvas vazio: sem canvas a
- * edição tem o próprio erro ("create it with design_write") e não há o que
- * abrir.
+ * Opens the Design tab BEFORE the tool finishes: chat-engine calls this as soon as
+ * the canvas name appears in the streaming input — while the model is still
+ * transmitting the artboards' HTML. It registers the folder and guarantees a minimal canvas.json
+ * (`placeholder`); design_write's progressive writing and the watcher
+ * (design:changed) deliver each artboard as it is written, and the report()
+ * at the end of the tool stays as it was (cover, validation, text for the model).
+ * `placeholder: false` (design_edit) does not create an empty canvas: with no canvas the
+ * edit has its own error ("create it with design_write") and there is nothing to
+ * open.
  */
 export async function openDesignLive(
   sessionId: string,
@@ -90,7 +90,7 @@ export async function openDesignLive(
   } catch {
     if (opts.placeholder === false) return
     await withAssetLock(`design:${folder}`, async () => {
-      // O canvas vazio já é uma escrita do turno: a pasta entra no diário antes.
+      // The empty canvas is already a write of the turn: the folder goes into the journal first.
       await journalPiece('design', folder, { root, sessionId })
       await writeDesignCanvas(folder, { v: 1, boards: {}, order: [] })
     })
@@ -106,9 +106,9 @@ const NAME = z
   .describe('Name of the design canvas in this conversation (e.g. "landing-page") — the same name addresses it in every design tool')
 
 /**
- * Endereço GLOBAL por id (dsg_…), o mesmo da nota de anexo: lê/edita um canvas
- * de qualquer conversa sem conhecer o nome dele. Os writes leem o canvas sob
- * lock, então dois chats no mesmo id não se sobrescrevem em silêncio.
+ * GLOBAL address by id (dsg_…), the same as the attachment note: it reads/edits a canvas
+ * from any conversation without knowing its name. The writes read the canvas under
+ * lock, so two chats on the same id do not silently overwrite each other.
  */
 const ID = z
   .string()
@@ -128,13 +128,13 @@ const STYLE_FILE = z
   .max(80)
   .describe('Shared stylesheet file name, plain (no slashes), ending in .css — e.g. "base.css"')
 
-/** Teto de artboards numa chamada: ver o comentário no schema do design_write. */
+/** Cap of artboards in one call: see the comment in the design_write schema. */
 const MAX_BOARDS_PER_WRITE = 4
 
 export function createDesignTools(scope: PieceToolScope): ToolSet {
   const root = designPiecesDir(scope.sessionId)
 
-  /** Alvo por `name` (desta conversa) OU por `id` (global). */
+  /** Target by `name` (this conversation) OR by `id` (global). */
   const resolveFolder = async (input: { name?: string; id?: string }) => {
     if (input.id) {
       const reg = await getDesign(input.id)
@@ -145,7 +145,7 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
     return { folder: path.join(root, designSlug(input.name)), name: designSlug(input.name), root }
   }
 
-  /** Toda escrita no canvas: sob o lock da pasta e com a pasta no diário. */
+  /** Every write to the canvas: under the folder's lock and with the folder in the journal. */
   const writing = <T>(target: { folder: string; root?: string }, fn: () => Promise<T>) =>
     withAssetLock(`design:${target.folder}`, async () => {
       await journalPiece('design', target.folder, { root: target.root, sessionId: scope.sessionId })
@@ -192,10 +192,10 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
             }),
           )
           .min(1)
-          // Teto de UMA chamada. A tool só executa quando o input termina de
-          // streamar: quatro telas num call = canvas vazio até o fim. Uma por
-          // chamada (a principal aqui, o resto no design_edit) mostra a primeira
-          // enquanto o modelo ainda escreve as outras — ver prompts.ts.
+          // Cap of ONE call. The tool only executes when the input finishes
+          // streaming: four screens in one call = an empty canvas until the end. One per
+          // call (the main one here, the rest in design_edit) shows the first
+          // while the model is still writing the others — see prompts.ts.
           .max(
             MAX_BOARDS_PER_WRITE,
             'at most 4 artboards per call — write the main one first and add the rest with design_edit',
@@ -217,8 +217,8 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
           ),
       }),
       execute: async ({ name, id, title, boards, styles }) => {
-        // O schema já limita; aqui a mensagem é a que o modelo precisa ver se a
-        // validação for contornada (o execute também é chamado direto).
+        // The schema already limits it; here the message is what the model needs to see if the
+        // validation is bypassed (execute is also called directly).
         if (boards.length > MAX_BOARDS_PER_WRITE) {
           throw new Error(
             `design_write takes at most ${MAX_BOARDS_PER_WRITE} artboards — write the main one here and add the rest with design_edit, one at a time, so each appears while you write the next`,
@@ -235,12 +235,12 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
           }
         }
         const target = await resolveFolder({ name, id })
-        // Um canvas inteiro (canvas.json + vários artboards) fica sob um lock só:
-        // dois design_write no mesmo id não intercalam e não deixam o índice
-        // apontando para um artboard pela metade.
+        // A whole canvas (canvas.json + several artboards) stays under a single lock:
+        // two design_write on the same id do not interleave and do not leave the index
+        // pointing at a half-written artboard.
         const existed = await writing(target, async () => {
-          // O canvas vazio do openDesignLive (abertura ao vivo) não conta como
-          // existente: "replaced" só quando já há artboard no canvas.
+          // The empty canvas from openDesignLive (live opening) does not count as
+          // existing: "replaced" only when there is already an artboard in the canvas.
           let existed = false
           try {
             existed = (await readDesignCanvas(target.folder)).order.length > 0
@@ -248,15 +248,15 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
             existed = false
           }
           await fs.mkdir(target.folder, { recursive: true })
-          // A base compartilhada entra ANTES dos artboards: eles já a referenciam
-          // (<link href="base.css">) e assim não há um instante com a tela sem
-          // estilo (o watcher recarrega a aba a cada arquivo).
+          // The shared base comes in BEFORE the artboards: they already reference it
+          // (<link href="base.css">) and that way there is no instant with the screen without
+          // style (the watcher reloads the tab on every file).
           for (const s of styles ?? []) await writeFileAtomic(path.join(target.folder, s.file), s.css)
-          // Escrita progressiva: cada artboard entra no canvas.json assim que o
-          // arquivo é gravado — com a aba já aberta desde o streaming da entrada
-          // (openDesignLive), o usuário vê o board montando peça por peça em vez
-          // de esperar o lote inteiro. O canvas é uma substituição: o índice novo
-          // nasce vazio e cresce.
+          // Progressive writing: each artboard enters canvas.json as soon as the
+          // file is written — with the tab already open since the input's streaming
+          // (openDesignLive), the user sees the board assembling piece by piece instead
+          // of waiting for the whole batch. The canvas is a replacement: the new index
+          // is born empty and grows.
           const canvas: DesignCanvas = { v: 1, title: title ?? target.name, boards: {}, order: [] }
           for (const b of boards) {
             await writeFileAtomic(path.join(target.folder, b.file), b.html)
@@ -307,9 +307,9 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
         if (style && !isSafeStyleFile(style.file)) {
           throw new Error(`invalid stylesheet file name: "${style.file}" — use a plain name ending in .css, e.g. "base.css"`)
         }
-        // Ler o canvas, mexer no artboard e regravar o índice sob o mesmo lock:
-        // um edit que leu um canvas desatualizado (outro chat gravou no meio)
-        // falha nos oldText em vez de reescrever por cima.
+        // Read the canvas, touch the artboard and rewrite the index under the same lock:
+        // an edit that read a stale canvas (another chat wrote in the middle)
+        // fails on the oldText instead of overwriting.
         await writing(target, async () => {
           let canvas: DesignCanvas
           try {
@@ -318,9 +318,9 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
             throw new Error(`no design canvas named "${target.name}" — create it with design_write`)
           }
           if (style) {
-            // A folha compartilhada é um arquivo da pasta como o artboard: mesmo
-            // par "substitui tudo / troca exata", para a edição pequena não custar
-            // o CSS inteiro de volta.
+            // The shared sheet is a file of the folder like the artboard: the same
+            // pair "replace everything / exact swap", so a small edit does not cost
+            // the whole CSS back.
             const stylePath = path.join(target.folder, style.file)
             if (style.css !== undefined) {
               await writeFileAtomic(stylePath, style.css)
@@ -403,9 +403,9 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
         }
         try {
           const canvas = await readDesignCanvas(target.folder)
-          // O canvas.json é só o ARRANJO: as folhas compartilhadas não estão nele.
-          // Sem esta lista o agente esquece que base.css existe — repete o CSS em
-          // cada documento ou reescreve um artboard sem o <link>.
+          // canvas.json is only the ARRANGEMENT: the shared sheets are not in it.
+          // Without this list the agent forgets that base.css exists — it repeats the CSS in
+          // each document or rewrites an artboard without the <link>.
           const styles = (await fs.readdir(target.folder).catch(() => [] as string[]))
             .filter((entry) => entry.toLowerCase().endsWith('.css'))
             .sort()
@@ -477,7 +477,7 @@ export function createDesignTools(scope: PieceToolScope): ToolSet {
     }),
   }
 
-  // Modo plano: ler e mostrar, sem escrever.
+  // Plan mode: read and show, without writing.
   if (scope.readOnly) {
     delete tools.design_write
     delete tools.design_edit

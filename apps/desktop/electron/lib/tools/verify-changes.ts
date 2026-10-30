@@ -10,24 +10,24 @@ export interface VerifyChangesResult {
 }
 
 /**
- * Núcleo da verificação pós-escrita do turno em andamento. O snapshot
- * inicial é capturado pelo chat-engine no início do turno e exposto via
- * ToolContext.getTurnSnapshot — aqui capturamos o estado ATUAL do
- * filesystem e diferecemos contra ele, devolvendo por arquivo o estado
- * (edited/created/removed) e o tamanho do diff (patchSize em caracteres).
+ * Core of the post-write check of the turn in progress. The initial
+ * snapshot is captured by the chat-engine at the start of the turn and exposed via
+ * ToolContext.getTurnSnapshot — here we capture the CURRENT state of the
+ * filesystem and diff against it, returning per file the state
+ * (edited/created/removed) and the diff size (patchSize in characters).
  *
- * Compartilhado entre a tool (createVerifyChangesTool, chamada pelo modelo)
- * e o chat-engine, que a executa deterministicamente no fim do turno quando
- * o modelo conclui sem verificar (anti-overclaim) — o modelo não pode
- * "pular" a verificação se o engine a roda por conta própria.
+ * Shared between the tool (createVerifyChangesTool, called by the model)
+ * and the chat-engine, which runs it deterministically at the end of the turn when
+ * the model finishes without checking (anti-overclaim) — the model cannot
+ * "skip" the check if the engine runs it on its own.
  *
- * Sem snapshot (modo chat, captura falhou ou ainda não rodou) → changes vazio
- * com observação, para o modelo não inventar arquivos.
+ * With no snapshot (chat mode, capture failed or has not run yet) → empty changes
+ * with a note, so the model does not invent files.
  *
- * A invocação do git é a MESMA do engine de snapshots (--git-dir em
- * userData/snapshots/<hash> com --work-tree no projeto, binário e PATH
- * resolvidos no load — snapshotGit em electron/lib/snapshot/index.ts): fonte
- * única, sem duplicar gitDirFor nem a resolução do binário (B3).
+ * The git invocation is the SAME as the snapshot engine's (--git-dir in
+ * userData/snapshots/<hash> with --work-tree in the project, binary and PATH
+ * resolved at load — snapshotGit in electron/lib/snapshot/index.ts): a single
+ * source, without duplicating gitDirFor nor the binary resolution (B3).
  */
 export async function verifyTurnChanges(ctx: ToolContext): Promise<VerifyChangesResult> {
   const turn = ctx.getTurnSnapshot?.()
@@ -42,8 +42,8 @@ export async function verifyTurnChanges(ctx: ToolContext): Promise<VerifyChanges
   try {
     const end = await capture(ctx.directory)
     if (end === turn.start) return { changes: [] }
-    // --name-status dá o status por arquivo (A/M/D); o patch de cada
-    // arquivo é medido separadamente para o patchSize individual.
+    // --name-status gives the status per file (A/M/D); each file's patch
+    // is measured separately for the individual patchSize.
     const statusLines = (await snapshotGit(ctx.directory, ['diff', '--name-status', turn.start, end]))
       .split('\n')
       .filter(Boolean)
@@ -52,7 +52,7 @@ export async function verifyTurnChanges(ctx: ToolContext): Promise<VerifyChanges
     const changes: VerifyChangesResult['changes'] = []
     for (const line of statusLines) {
       const parts = line.split('\t')
-      // Rename/copy reportam dois caminhos (origem\t destino) — usamos o último
+      // Rename/copy report two paths (source\t destination) — we use the last one
       const file = parts[parts.length - 1]
       if (!file) continue
       const status = parts[0]
@@ -61,7 +61,7 @@ export async function verifyTurnChanges(ctx: ToolContext): Promise<VerifyChanges
       try {
         patchSize = (await snapshotGit(ctx.directory, ['diff', turn.start, end, '--', file])).length
       } catch {
-        // patchSize é informativo — não derruba a verificação
+        // patchSize is informative — it does not bring the check down
       }
       changes.push({ path: file, state, patchSize })
     }

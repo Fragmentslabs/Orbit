@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { MAX_MCP_TEXT_CHARS, mcpResultToText, type McpResultScope } from './result'
 
 /**
- * O defeito de origem: o bloco `image` de um screenshot do Nodara virava
- * JSON.stringify — 3,3M caracteres de base64 no contexto — e o provedor
- * recusava o request por estouro de janela. Imagem vai para a galeria; o
- * modelo recebe só a referência.
+ * The original defect: the `image` block of a Nodara screenshot became JSON.stringify —
+ * 3.3M characters of base64 in the context — and the provider refused the request for
+ * overflowing the window. The image goes to the gallery; the model only gets the
+ * reference.
  */
 
 const PNG_B64 = Buffer.from('fake-png-bytes').toString('base64')
@@ -26,7 +26,7 @@ function scope(overrides: Partial<McpResultScope> = {}): McpResultScope {
 }
 
 describe('mcpResultToText', () => {
-  it('grava a imagem na galeria e nunca devolve o base64', async () => {
+  it('saves the image in the gallery and never returns the base64', async () => {
     const s = scope()
     const text = await mcpResultToText(
       {
@@ -46,7 +46,7 @@ describe('mcpResultToText', () => {
     expect(text).toContain('describe_image(')
   })
 
-  it('sem modo Visão, aponta para ferramentas de texto/estrutura em vez de describe_image', async () => {
+  it('with no Vision mode, it points to text/structure tools instead of describe_image', async () => {
     const text = await mcpResultToText(
       { content: [{ type: 'image', data: PNG_B64, mimeType: 'image/png' }] },
       scope({ canDescribe: false }),
@@ -57,7 +57,7 @@ describe('mcpResultToText', () => {
     expect(text).toContain('accessibility tree')
   })
 
-  it('não oferece show_image quando o turno não tem a tool', async () => {
+  it('does not offer show_image when the turn has no such tool', async () => {
     const text = await mcpResultToText(
       { content: [{ type: 'image', data: PNG_B64, mimeType: 'image/png' }] },
       scope({ canShow: false }),
@@ -65,7 +65,7 @@ describe('mcpResultToText', () => {
     expect(text).not.toContain('show_image')
   })
 
-  it('imagem que não pôde ser gravada vira aviso, não base64', async () => {
+  it('an image that could not be saved becomes a warning, not base64', async () => {
     const text = await mcpResultToText(
       { content: [{ type: 'image', data: PNG_B64, mimeType: 'image/png' }] },
       scope({ saveImage: async () => { throw new Error('disco cheio') } }),
@@ -74,7 +74,7 @@ describe('mcpResultToText', () => {
     expect(text).not.toContain(PNG_B64)
   })
 
-  it('recurso binário embutido e áudio também ficam de fora', async () => {
+  it('an embedded binary resource and audio also stay out', async () => {
     const text = await mcpResultToText(
       {
         content: [
@@ -91,7 +91,7 @@ describe('mcpResultToText', () => {
     expect(text).toContain('conteúdo')
   })
 
-  it('corta texto gigante sem perder a orientação da imagem', async () => {
+  it('cuts a giant text without losing the image orientation', async () => {
     const text = await mcpResultToText(
       {
         content: [
@@ -106,8 +106,8 @@ describe('mcpResultToText', () => {
     expect(text).toContain('show_image')
   })
 
-  it('mantém o formato antigo para resultado sem content', async () => {
+  it('keeps the old format for a result with no content', async () => {
     expect(await mcpResultToText({ toolResult: 42 }, scope())).toBe('{"toolResult":42}')
-    expect(await mcpResultToText({ content: [] }, scope())).toBe('(sem retorno)')
+    expect(await mcpResultToText({ content: [] }, scope())).toBe('(no return)')
   })
 })

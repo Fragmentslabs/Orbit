@@ -5,14 +5,14 @@ import { silencesIn } from './timeline'
 const w = (text: string, startMs: number, endMs: number): TimedWord => ({ text, startMs, endMs })
 
 describe('silencesIn', () => {
-  it('sem transcrição não declara silêncio nenhum', () => {
-    // Música/ambiente não têm transcrição: `words` vazio não é uma pausa de
-    // 9 s, é ausência de medida — o vídeo com trilha era reportado inteiro
-    // como silêncio.
+  it('with no transcript it declares no silence at all', () => {
+    // Music/ambience have no transcription: empty `words` is not a
+    // 9 s pause, it is the absence of a measurement — the video with a track was reported entirely
+    // as silence.
     expect(silencesIn([], 0, 9200)).toEqual([])
   })
 
-  it('acha as lacunas entre duas falas, inclusive nas bordas da janela', () => {
+  it('finds the gaps between two speeches, including at the window edges', () => {
     const words = [w('a', 1000, 1500), w('b', 3000, 3400)]
     expect(silencesIn(words, 0, 4000)).toEqual([
       { startMs: 0, endMs: 1000 },
@@ -21,12 +21,12 @@ describe('silencesIn', () => {
     ])
   })
 
-  it('ignora lacuna menor que o mínimo', () => {
+  it('ignores a gap smaller than the minimum', () => {
     const words = [w('a', 1000, 1500), w('b', 1800, 2000)]
     expect(silencesIn(words, 1000, 2000, 400)).toEqual([])
   })
 
-  it('janela dentro de uma fala não tem silêncio', () => {
+  it('a window inside a speech has no silence', () => {
     const words = [w('longa', 0, 5000)]
     expect(silencesIn(words, 1000, 2000, 400)).toEqual([])
   })

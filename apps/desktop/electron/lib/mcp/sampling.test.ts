@@ -5,14 +5,14 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { CreateMessageResult, CreateMessageResultWithTools } from '@modelcontextprotocol/sdk/types.js'
 
 /**
- * O encanamento do "MCP inverso": um servidor MCP de verdade pede uma
- * amostragem e recebe resposta.
+ * The plumbing of the "reverse MCP": a real MCP server asks for a sample and gets an
+ * answer.
  *
- * Só o modelo é dublado (não há credencial num teste); o resto é o caminho
- * real — capability declarada, handler ligado, transporte, resposta montada.
- * O que este teste existe para pegar é justamente o que falha calado: sem a
- * capability o servidor levaria "method not found", e o app veria um erro
- * incompreensível em vez da resposta.
+ * Only the model is doubled (there is no credential in a test); the rest is the real
+ * path — capability declared, handler attached, transport, answer assembled. What this
+ * test exists to catch is exactly what fails quietly: without the capability the server
+ * would get "method not found", and the app would see an incomprehensible error instead
+ * of the answer.
  */
 
 const generateText = vi.fn()
@@ -29,7 +29,7 @@ vi.mock('ai', async () => {
 
 const { attachSamplingHandler, samplingCapabilities } = await import('./sampling')
 
-/** Servidor + client ligados por um transporte em memória, com o handler ligado. */
+/** Server + client connected by an in-memory transport, with the handler attached. */
 async function connectedPair() {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const client = new Client(
@@ -43,22 +43,22 @@ async function connectedPair() {
 }
 
 describe('sampling', () => {
-  it('responde texto quando o app não manda ferramentas', async () => {
-    generateText.mockResolvedValue({ text: 'Beber água', toolCalls: [], finishReason: 'stop' })
+  it('answers with text when the app sends no tools', async () => {
+    generateText.mockResolvedValue({ text: 'Drink water', toolCalls: [], finishReason: 'stop' })
     const { server } = await connectedPair()
 
     const result = (await server.createMessage({
-      messages: [{ role: 'user', content: { type: 'text', text: 'Beber água de 5 em 5 dias' } }],
+      messages: [{ role: 'user', content: { type: 'text', text: 'Drink water every 5 days' } }],
       maxTokens: 500,
     })) as CreateMessageResult
 
     expect(result.role).toBe('assistant')
     expect(result.stopReason).toBe('endTurn')
-    // Bloco ÚNICO: sem tools o MCP recusa array de conteúdo.
-    expect(result.content).toEqual({ type: 'text', text: 'Beber água' })
+    // A SINGLE block: without tools MCP refuses an array of content.
+    expect(result.content).toEqual({ type: 'text', text: 'Drink water' })
   })
 
-  it('devolve tool_use preenchido e NÃO executa a ferramenta', async () => {
+  it('returns a filled tool_use and does NOT run the tool', async () => {
     generateText.mockResolvedValue({
       text: '',
       finishReason: 'tool-calls',
@@ -66,19 +66,19 @@ describe('sampling', () => {
         {
           toolCallId: 'call-1',
           toolName: 'stacks_create_task',
-          input: { title: 'Beber água', recurrence: { freq: 'daily', interval: 5 } },
+          input: { title: 'Drink water', recurrence: { freq: 'daily', interval: 5 } },
         },
       ],
     })
     const { server } = await connectedPair()
 
     const result = (await server.createMessage({
-      messages: [{ role: 'user', content: { type: 'text', text: 'Beber água de 5 em 5 dias' } }],
+      messages: [{ role: 'user', content: { type: 'text', text: 'Drink water every 5 days' } }],
       maxTokens: 500,
       tools: [
         {
           name: 'stacks_create_task',
-          description: 'Cria uma tarefa no Stacks.',
+          description: 'Creates a task in Stacks.',
           inputSchema: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] },
         },
       ],
@@ -91,17 +91,17 @@ describe('sampling', () => {
         type: 'tool_use',
         id: 'call-1',
         name: 'stacks_create_task',
-        input: { title: 'Beber água', recurrence: { freq: 'daily', interval: 5 } },
+        input: { title: 'Drink water', recurrence: { freq: 'daily', interval: 5 } },
       },
     ])
 
-    // A ferramenta foi OFERECIDA ao modelo e nada mais: quem executa é o app.
+    // The tool was OFFERED to the model and nothing more: whoever executes is the app.
     const call = generateText.mock.calls.at(-1)?.[0] as Record<string, unknown>
     expect(Object.keys(call.tools as object)).toEqual(['stacks_create_task'])
     expect(call.toolChoice).toBe('required')
   })
 
-  it('limita os tokens de saída pedidos pelo app', async () => {
+  it('limits the output tokens requested by the app', async () => {
     generateText.mockResolvedValue({ text: 'ok', toolCalls: [], finishReason: 'stop' })
     const { server } = await connectedPair()
 
@@ -114,21 +114,21 @@ describe('sampling', () => {
     expect(call.maxOutputTokens).toBe(4096)
   })
 
-  it('leva o systemPrompt do app como system do modelo', async () => {
+  it('takes the app systemPrompt as the model system', async () => {
     generateText.mockResolvedValue({ text: 'ok', toolCalls: [], finishReason: 'stop' })
     const { server } = await connectedPair()
 
     await server.createMessage({
       messages: [{ role: 'user', content: { type: 'text', text: 'oi' } }],
-      systemPrompt: 'Você converte frases em tarefas.',
+      systemPrompt: 'You turn sentences into tasks.',
       maxTokens: 100,
     })
 
     const call = generateText.mock.calls.at(-1)?.[0] as Record<string, unknown>
-    expect(call.system).toBe('Você converte frases em tarefas.')
+    expect(call.system).toBe('You turn sentences into tasks.')
   })
 
-  it('falha do modelo vira erro do pedido, não resposta vazia', async () => {
+  it('a model failure becomes a request error, not an empty response', async () => {
     generateText.mockRejectedValue(new Error('No API key configured for OpenAI'))
     const { server } = await connectedPair()
 

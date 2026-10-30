@@ -1,22 +1,22 @@
 import os from 'node:os'
 
 /**
- * Capacidade da máquina, num lugar só.
+ * Machine capacity, in a single place.
  *
- * A detecção nasceu dentro da voz (`voice/hardware.ts`), que decidia o motor de
- * transcrição contando RAM. Ela é útil para qualquer recurso que precise
- * responder "dá para ir no máximo?" — hoje o perfil de gravação do
- * `browser_record`, amanhã o render de motion.
+ * The detection was born inside voice (`voice/hardware.ts`), which decided the transcription engine
+ * by counting RAM. It is useful for any feature that needs to
+ * answer "can it go max?" — today `browser_record`'s recording profile,
+ * tomorrow the motion render.
  *
- * O que importa aqui é o que pesa no trabalho de mídia: núcleos (compositor +
- * x264) e RAM (fila de quadros). A pontuação é grosseira DE PROPÓSITO — não é
- * benchmark, é um degrau. Medir de verdade (rodar uma amostra e cronometrar)
- * custaria segundos a cada chamada e daria respostas diferentes conforme o que
- * estivesse aberto na máquina.
+ * What matters here is what weighs on media work: cores (compositor +
+ * x264) and RAM (frame queue). The scoring is coarse ON PURPOSE — it is not a
+ * benchmark, it is a step. Measuring for real (running a sample and timing it)
+ * would cost seconds on every call and would give different answers depending on what
+ * was open on the machine.
  *
- * Regra de ouro para quem consome: o tier é uma SUGESTÃO de padrão. Um pedido
- * explícito do usuário (ou do agente) sempre vence — máquina fraca não impede
- * gravar em qualidade alta, só avisa que pode faltar fôlego.
+ * Golden rule for whoever consumes it: the tier is a SUGGESTION for the default. An explicit
+ * request from the user (or the agent) always wins — a weak machine does not prevent
+ * recording in high quality, it only warns that it may run short of breath.
  */
 
 export type MachineTier = 'weak' | 'balanced' | 'strong'
@@ -26,15 +26,15 @@ export interface MachineInfo {
   arch: string
   cpus: number
   totalMemGb: number
-  /** Pontuação crua — só para diagnóstico; quem decide é `tier`. */
+  /** Raw score — only for diagnosis; what decides is `tier`. */
   score: number
   tier: MachineTier
 }
 
-/** A partir daqui a máquina aguenta 60 fps em resolução alta sem engasgar. */
+/** From here on the machine handles 60 fps at high resolution without stuttering. */
 const STRONG_SCORE = 9
 
-/** Abaixo disto sobra pouco para capturar e codificar ao mesmo tempo. */
+/** Below this there is little left to capture and encode at the same time. */
 const BALANCED_SCORE = 3
 
 export function machineTier(score: number): MachineTier {
@@ -44,17 +44,17 @@ export function machineTier(score: number): MachineTier {
 }
 
 /**
- * - núcleos: cada núcleo acima de 4 vale 1 (os 4 primeiros são o mínimo para o
- *   app rodar; o que sobra é o que o compositor e o x264 podem usar);
- * - RAM: 8 GB = 1, 16 GB = 3, 32 GB+ = 5 (é onde a fila de quadros mora);
- * - Apple Silicon: +3, porque o encode tem o VideoToolbox ao lado e o
- *   compositor é bem mais eficiente que o de um x64 da mesma faixa.
+ * - cores: each core above 4 is worth 1 (the first 4 are the minimum for the
+ *   app to run; what is left is what the compositor and x264 can use);
+ * - RAM: 8 GB = 1, 16 GB = 3, 32 GB+ = 5 (it is where the frame queue lives);
+ * - Apple Silicon: +3, because the encode has VideoToolbox alongside and the
+ *   compositor is much more efficient than a x64 one of the same range.
  *
- * As faixas de RAM são 7/12/30 e não 8/16/32 de propósito: o `os.totalmem()`
- * desconta o que o firmware e a GPU integrada reservam, então uma máquina de
- * 16 GB se apresenta com ~15,3 GB. Com o corte em 16, ela cairia no degrau de
- * baixo — exatamente quem tem folga de sobra. (Mesma armadilha que a voz já
- * documenta em `MIN_MEMORY_GB`.)
+ * The RAM ranges are 7/12/30 and not 8/16/32 on purpose: `os.totalmem()`
+ * deducts what the firmware and the integrated GPU reserve, so a 16 GB machine
+ * presents itself with ~15.3 GB. With the cut at 16, it would fall into the low
+ * step — exactly those with slack to spare. (The same trap that voice already
+ * documents in `MIN_MEMORY_GB`.)
  */
 export function scoreMachine(input: {
   cpus: number
@@ -72,8 +72,8 @@ export function detectMachine(): MachineInfo {
   const platform = process.platform
   const arch = os.arch()
   const cpus = Math.max(1, os.cpus().length || 1)
-  // Mesma conta da voz: o `totalmem()` desconta o que o firmware reserva, e uma
-  // máquina de 16 GB aparece com ~15,3 GB.
+  // Same account as voice: `totalmem()` deducts what the firmware reserves, and a
+  // 16 GB machine shows up with ~15.3 GB.
   const totalMemGb = Math.round((os.totalmem() / 1024 ** 3) * 10) / 10
   const score = scoreMachine({ cpus, totalMemGb, platform, arch })
   return { platform, arch, cpus, totalMemGb, score, tier: machineTier(score) }

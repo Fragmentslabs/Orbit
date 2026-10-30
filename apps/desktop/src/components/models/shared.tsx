@@ -3,7 +3,7 @@ import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { scoreColor } from "./meta"
 
-/** Componentes visuais compartilhados da aba Models. */
+/** Shared visual components of the Models tab. */
 
 export function ScoreBar({ score, className, showValue = true }: {
   score?: number
@@ -29,7 +29,7 @@ export function ScoreBar({ score, className, showValue = true }: {
   )
 }
 
-/** Checkbox simples (não há componente ui/checkbox no projeto). */
+/** Simple checkbox (there is no ui/checkbox component in the project). */
 export function ModelCheckbox({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
   return (
     <button

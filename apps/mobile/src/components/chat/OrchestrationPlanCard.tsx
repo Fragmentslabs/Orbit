@@ -23,7 +23,7 @@ interface Props {
   plan: OrchestrationPlan
 }
 
-/** Worker de orquestracao roda sempre na pasta de trabalho, em modo codigo. */
+/** An orchestration worker always runs in the working folder, in code mode. */
 function TaskModeIcon() {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   return <Terminal size={14} color={tokens.mutedForeground} />

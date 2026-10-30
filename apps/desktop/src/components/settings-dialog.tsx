@@ -41,7 +41,7 @@ interface TabDef {
   label: string
   icon: typeof Shield
   description: string
-  /** Recurso ainda em teste: ganha o selo "Beta" na lista e no título. */
+  /** Feature still in testing: it gets the "Beta" badge in the list and in the title. */
   beta?: boolean
 }
 
@@ -54,14 +54,14 @@ function useTabs(): TabDef[] {
     { id: "appearance", label: t(SETTINGS_TAB_LABEL_KEY.appearance), icon: Palette, description: t("settings.tabs.appearance.description") },
     { id: "notifications", label: t(SETTINGS_TAB_LABEL_KEY.notifications), icon: Bell, description: t("settings.tabs.notifications.description") },
     { id: "voice", label: t(SETTINGS_TAB_LABEL_KEY.voice), icon: Volume2, description: t("settings.tabs.voice.description"), beta: true },
-    // Overlay: o painel do atalho global (⇧⌘espaço). Fica ao lado da voz porque
-    // "abrir em modo chamada" depende dela.
+    // Overlay: the global shortcut panel (⇧⌘space). It sits next to voice because
+    // "open in call mode" depends on it.
     { id: "overlay", label: t(SETTINGS_TAB_LABEL_KEY.overlay), icon: AppWindow, description: t("overlaySettings.description"), beta: true },
     { id: "browser", label: t(SETTINGS_TAB_LABEL_KEY.browser), icon: Globe, description: t("settings.tabs.browser.description") },
-    // Computador: a v1 só tem driver no macOS — nas outras plataformas a aba não aparece.
+    // Computer: v1 only has a driver on macOS — on the other platforms the tab does not appear.
     { id: "computer", label: t(SETTINGS_TAB_LABEL_KEY.computer), icon: Monitor, description: t("settings.tabs.computer.description"), beta: true },
-    // Sistema só tem o "Abrir com Orbit" do Explorer, que é exclusivo do
-    // Windows: em macOS/Linux a aba nem aparece (ver `visibleTabs` abaixo).
+    // System only has the Explorer's "Open with Orbit", which is exclusive to
+    // Windows: on macOS/Linux the tab does not even appear (see `visibleTabs` below).
     { id: "system", label: t(SETTINGS_TAB_LABEL_KEY.system), icon: Settings2, description: t("settings.tabs.system.description") },
     { id: "data", label: t(SETTINGS_TAB_LABEL_KEY.data), icon: Database, description: t("settings.tabs.data.description") },
     { id: "about", label: t(SETTINGS_TAB_LABEL_KEY.about), icon: Info, description: t("settings.tabs.about.description") },
@@ -72,15 +72,15 @@ function useTabs(): TabDef[] {
 }
 
 /**
- * Enquanto o campo de chave está aberto, esta linha é a dona do foco.
+ * While the key field is open, this row owns the focus.
  *
- * O campo perdia o foco sozinho no meio da digitação — e ninguém mais
- * recuperava: o `blur` ia para o `body` sem nenhuma interação do usuário e as
- * teclas seguintes caíam no vazio (não dava para cadastrar a chave pelo
- * seletor de modelos; o caminho pela sidebar às vezes escapava). Como não há
- * como saber quem rouba o foco de fora, o campo se defende: se o foco sair para
- * o vazio sem um `pointerdown` recente, ele volta — e registra quem levou, para
- * a próxima ocorrência dizer o nome do culpado.
+ * The field lost the focus by itself in the middle of typing — and nobody else
+ * recovered it: the `blur` went to the `body` with no user interaction and the
+ * following keys fell into the void (it was not possible to register the key through the
+ * model selector; the path through the sidebar sometimes escaped). Since there is no
+ * way to know who steals the focus from outside, the field defends itself: if the focus goes to
+ * the void without a recent `pointerdown`, it comes back — and records who took it, so
+ * the next occurrence says the name of the culprit.
  */
 function useKeepFocusWhileEditing(active: boolean, containerRef: React.RefObject<HTMLDivElement>) {
   useEffect(() => {
@@ -92,46 +92,46 @@ function useKeepFocusWhileEditing(active: boolean, containerRef: React.RefObject
     const onPointerDown = () => {
       lastPointerDown = performance.now()
     }
-    /** Um destino de foco de verdade (campo, botão, link, algo com tabindex) é
-     *  navegação legítima — Tab, clique em outro campo. O que o campo recupera
-     *  é o foco que "sumiu": `body`, um `div` do diálogo, nada. */
+    /** A real focus target (field, button, link, something with tabindex) is
+     *  legitimate navigation — Tab, click on another field. What the field recovers
+     *  is the focus that "disappeared": `body`, a `div` of the dialog, nothing. */
     const isMeaningfulTarget = (node: Element | null) =>
       !!node &&
       node !== document.body &&
       node.matches("input, textarea, select, button, a[href], [tabindex], [contenteditable=true]")
 
-    /** Devolve o foco, se ele realmente escapou: clique do usuário e foco que foi
-     *  para outro campo são movimentos legítimos e não se combatem. */
+    /** Gives the focus back, if it really escaped: a user click and a focus that went
+     *  to another field are legitimate movements and are not fought. */
     const reclaim = () => {
       if (performance.now() - lastPointerDown < 400) return
       if (!input.isConnected || document.activeElement === input) return
       if (isMeaningfulTarget(document.activeElement)) return
-      console.warn("[providers] campo de chave perdeu o foco sozinho; devolvendo", document.activeElement)
+      console.warn("[providers] the key field lost focus on its own; restoring it", document.activeElement)
       input.focus()
     }
-    // O foco indo para o vazio chega como `blur` — e nem sempre vem acompanhado
-    // do `focusout` (o `blur` avisa primeiro); os dois entram, deduplicados,
-    // porque o mesmo movimento gera os dois eventos.
+    // The focus going to the void arrives as `blur` — and is not always accompanied
+    // by `focusout` (the `blur` warns first); both enter, deduplicated,
+    // because the same movement generates both events.
     let lastFocusOut = 0
     const onFocusOut = () => {
       if (performance.now() - lastFocusOut < 50) return
       lastFocusOut = performance.now()
       reclaim()
-      // O roubo pode chegar atrasado (rAF/timer de quem tirou o foco): confere
-      // de novo depois, ainda respeitando o clique do usuário.
+      // The theft may arrive late (rAF/timer of whoever took the focus): it checks
+      // again afterwards, still respecting the user click.
       requestAnimationFrame(reclaim)
       setTimeout(reclaim, 150)
     }
 
-    // Foco inicial explícito em vez do `autoFocus` nativo: assim ele roda
-    // depois do commit (o mesmo efeito reinstala a posse do campo quando a
-    // linha remonta com o campo aberto).
+    // Explicit initial focus instead of the native `autoFocus`: that way it runs
+    // after the commit (the same effect reinstalls the ownership of the field when the
+    // row remounts with the field open).
     input.focus()
     input.addEventListener("blur", onFocusOut)
     input.addEventListener("focusout", onFocusOut)
     window.addEventListener("pointerdown", onPointerDown, true)
-    // Janela voltando ao foco com o campo aberto: se o foco do documento não
-    // está em nenhum campo, o usuário digitando aqui não escreveria em nada.
+    // Window coming back to the focus with the field open: if the document focus is not
+    // in any field, the user typing here would not write into anything.
     window.addEventListener("focus", reclaim)
     return () => {
       input.removeEventListener("blur", onFocusOut)
@@ -150,13 +150,13 @@ const ProviderRow = memo(function ProviderRow({
   onDraftChange,
 }: {
   providerId: string
-  /** Campo de chave aberto nesta linha */
+  /** Key field open in this row */
   editing: boolean
-  /** Texto já digitado desta linha (o estado vive no ProvidersTab — ver lá) */
+  /** Text already typed in this row (the state lives in ProvidersTab — see there) */
   draft: string
-  /* Callbacks levam o id (em vez de serem fechados sobre ele) para continuarem
-     estáveis: com props estáveis, o `memo` evita re-renderizar as outras
-     dezenas de linhas da lista a cada tecla digitada. */
+  /* Callbacks take the id (instead of being closed over it) to stay
+     stable: with stable props, the `memo` avoids re-rendering the other
+     dozens of rows of the list on every key typed. */
   onEdit: (providerId: string, editing: boolean) => void
   onDraftChange: (providerId: string, value: string) => void
 }) {
@@ -235,7 +235,7 @@ const ProviderRow = memo(function ProviderRow({
   )
 })
 
-/** Modelo em edição no diálogo (o enabled é estado só da UI, não vai ao disco). */
+/** Model being edited in the dialog (the enabled one is UI-only state, it does not go to disk). */
 interface ModelDraft {
   id: string
   name?: string
@@ -259,7 +259,7 @@ function modelsFromProvider(provider: CatalogProvider | undefined): ModelDraft[]
   }))
 }
 
-/** Precisa bater com defaultEnvName do main (custom-providers.ts). */
+/** It needs to match the main process defaultEnvName (custom-providers.ts). */
 function defaultEnvName(providerId: string): string {
   const slug = providerId.replace(/^custom:/, "").toUpperCase().replace(/[^A-Z0-9_]/g, "_")
   return `CUSTOM_${slug}_KEY`
@@ -283,11 +283,11 @@ function slugify(value: string): string {
 }
 
 /**
- * Servidores locais conhecidos. O clique só preenche a URL e dispensa a chave:
- * o formulário continua editável, e o "Buscar modelos" segue sendo o passo que
- * confirma que o servidor está no ar e quais modelos ele tem. As duas primeiras
- * URLs são as mesmas dos seeds (`custom-providers.ts`), para o card criado à
- * mão e o detectado apontarem para o mesmo lugar.
+ * Known local servers. The click only fills the URL and waives the key:
+ * the form stays editable, and "Fetch models" keeps being the step that
+ * confirms the server is up and which models it has. The first two
+ * URLs are the same as the seeds (`custom-providers.ts`), so the card created by
+ * hand and the detected one point to the same place.
  */
 const LOCAL_PRESETS = [
   { id: "ollama", name: "Ollama", baseURL: "http://localhost:11434/v1" },
@@ -311,7 +311,7 @@ function CustomProviderCard({
   const [error, setError] = useState("")
 
   const count = Object.keys(provider.models).length
-  // `env` com nome e `hasKey` falso = espera chave que ainda não existe.
+  // `env` with a name and `hasKey` false = it waits for a key that does not exist yet.
   const missingKey = provider.env.length > 0 && provider.hasKey === false
   const local = isLocalEndpoint(provider.api)
 
@@ -408,7 +408,7 @@ function CustomProviderDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   editProvider?: CatalogProvider
-  /** Nome sugerido ao criar (vem da busca da nuvem, ex.: o que foi digitado). */
+  /** Name suggested on creating (it comes from the cloud search, e.g. what was typed). */
   initialName?: string
 }) {
   const { t } = useTranslation()
@@ -477,20 +477,20 @@ function CustomProviderDialog({
     setManualId("")
   }
 
-  /** Preenche o cadastro a partir de um servidor local conhecido. */
+  /** Fills the registration from a known local server. */
   const applyPreset = (preset: (typeof LOCAL_PRESETS)[number]) => {
     setBaseURL(preset.baseURL)
-    // Servidor local não pede chave: sem isto o "salvar" fica bloqueado
-    // esperando uma credencial que não existe.
+    // A local server does not ask for a key: without this "save" stays blocked
+    // waiting for a credential that does not exist.
     setKeyMode("none")
     setProtocol("openai-completions")
     if (!name.trim()) setName(preset.name)
   }
 
   /**
-   * Consulta o /models do servidor e marca tudo como disponível. Roda sem
-   * gravar nada: o cadastro só é escrito no "salvar" (o resultado parcial não
-   * vira um provedor fantasma).
+   * Queries the server's /models and marks everything as available. It runs without
+   * writing anything: the registration is only written on "save" (the partial result does not
+   * become a ghost provider).
    */
   const handleDiscover = async () => {
     if (!baseURL.trim()) return
@@ -501,8 +501,8 @@ function CustomProviderDialog({
         baseURL: baseURL.trim(),
         ...(keyMode === "key" && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         protocol,
-        // Em edição o provedor já pode ter a chave salva: sem isto o
-        // "buscar modelos" tomaria 401 mesmo com a credencial gravada.
+        // When editing the provider may already have the key saved: without this
+        // "fetch models" would take a 401 even with the credential recorded.
         ...(editProvider ? { providerId: editProvider.id } : {}),
       })
       setModels((current) => {
@@ -524,7 +524,7 @@ function CustomProviderDialog({
                 enabled: true,
               }
         })
-        // Mantém o que foi adicionado à mão e não apareceu na listagem.
+        // Keeps what was added by hand and did not appear in the listing.
         for (const model of current) {
           if (!next.some((item) => item.id === model.id)) next.push(model)
         }
@@ -828,16 +828,16 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
   const [query, setQuery] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editProvider, setEditProvider] = useState<CatalogProvider | undefined>(undefined)
-  /** Nome que o cadastro abre preenchido (vem da busca sem resultado). */
+  /** Name the registration opens filled with (it comes from the search with no result). */
   const [newProviderName, setNewProviderName] = useState("")
   const [detecting, setDetecting] = useState(false)
   const [detectResults, setDetectResults] = useState<DetectResult[] | null>(null)
   /**
-   * Qual linha está com o campo de chave aberto, e o que já foi digitado nela.
-   * Fica aqui (e não dentro da linha) porque a lista se re-renderiza quando o
-   * catálogo ou as conexões mudam: se a linha remontasse no meio da digitação,
-   * o campo aberto e o texto digitado iam junto. De quebra, só uma linha fica
-   * em edição por vez, e fechar o campo sempre descarta o rascunho.
+   * Which row has the key field open, and what has already been typed in it.
+   * It stays here (and not inside the row) because the list re-renders when the
+   * catalog or the connections change: if the row remounted in the middle of typing,
+   * the open field and the typed text would go with it. As a bonus, only one row is
+   * being edited at a time, and closing the field always discards the draft.
    */
   const [editingId, setEditingId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -864,9 +864,9 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
   const customIds = useMemo(() => new Set(customProviders.map((p) => p.id)), [customProviders])
 
   /**
-   * Personalizados separados por "roda neste computador" e "está na rede ou na
-   * nuvem". A classificação sai da URL (nada persistido), então trocar o
-   * endereço na edição move o card de grupo sozinho.
+   * Custom ones split by "runs on this computer" and "is on the network or in
+   * the cloud". The classification comes from the URL (nothing persisted), so swapping the
+   * address in the edit moves the card to another group by itself.
    */
   const customGroups = useMemo(
     () =>
@@ -886,8 +886,8 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
   )
 
   /**
-   * Abre o cadastro já com um nome sugerido — é o que liga a busca da nuvem
-   * ("não achei esse provedor") ao cadastro de um provedor próprio.
+   * Opens the registration already with a suggested name — it is what links the cloud search
+   * ("I did not find this provider") to the registration of a custom provider.
    */
   const openNewProvider = (name = "") => {
     setNewProviderName(name)
@@ -915,8 +915,8 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
     try {
       const results = await customProvidersApi.detect()
       setDetectResults(results)
-      // O main adota os modelos encontrados no provedor correspondente;
-      // recarregar aqui faz os cards (e o seletor) refletirem isso na hora.
+      // The main process adopts the models found in the corresponding provider;
+      // reloading here makes the cards (and the selector) reflect that right away.
       if (results.some((result) => result.detected && result.models.length > 0)) {
         await refreshCustomProviders()
       }
@@ -934,7 +934,7 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
         </p>
       </div>
 
-      {/* Provedores locais / customizados */}
+      {/* Local / custom providers */}
       <div className="flex items-center gap-2">
         <Server className="size-3.5 text-muted-foreground" />
         <p className="text-xs font-medium text-muted-foreground">{t("providers.local.title")}</p>
@@ -1008,7 +1008,7 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
         )}
       </div>
 
-      {/* Provedores da nuvem (catálogo models.dev) */}
+      {/* Cloud providers (models.dev catalog) */}
       <div className="flex flex-col gap-2 border-t pt-3">
         <p className="text-xs font-medium text-muted-foreground">{t("providers.cloud.title")}</p>
         <input
@@ -1032,8 +1032,8 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
           <div className="flex flex-col items-center gap-2 py-4">
             <p className="text-center text-xs text-muted-foreground">{t("providers.cloud.none")}</p>
             {/*
-              A busca sem resultado é o momento em que o usuário descobre que o
-              provedor dele não está no catálogo — daí a oferta de cadastrar.
+              The search with no result is the moment when the user finds out that their
+              provider is not in the catalog — hence the offer to register it.
             */}
             <Button
               size="sm"
@@ -1142,12 +1142,12 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
 }
 
 /**
- * Instância ÚNICA do SettingsDialog, montada na raiz do app e controlada pelo
- * `useSettingsUi`. Todo ponto de entrada (menu da conta, menu nativo do macOS,
- * comando /settings, "gerenciar provedores" do seletor de modelo) chama
- * `openSettings(tab)` e cai exatamente neste dialog — antes cada seletor
- * montava um SettingsDialog próprio dentro da sua árvore, e o do input de chat
- * herdava os handlers do PromptInput.
+ * SINGLE instance of SettingsDialog, mounted at the root of the app and controlled by
+ * `useSettingsUi`. Every entry point (account menu, macOS native menu,
+ * /settings command, "manage providers" of the model selector) calls
+ * `openSettings(tab)` and lands exactly on this dialog — before, each selector
+ * mounted its own SettingsDialog inside its tree, and the chat input one
+ * inherited the PromptInput handlers.
  */
 export function SettingsDialogHost() {
   const open = useSettingsUi((s) => s.open)

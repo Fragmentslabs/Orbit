@@ -3,9 +3,9 @@ import path from 'node:path'
 import { dataDir } from '../storage'
 
 /**
- * Fonte OpenRouter — lista pública de modelos (sem chave), com contexto,
- * pricing, modalidades e índices da Artificial Analysis embutidos em
- * `benchmarks.artificial_analysis` para parte dos modelos.
+ * OpenRouter source — public model list (no key), with context,
+ * pricing, modalities and Artificial Analysis indices embedded in
+ * `benchmarks.artificial_analysis` for some of the models.
  */
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'

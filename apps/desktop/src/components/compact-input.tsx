@@ -2,23 +2,23 @@ import { forwardRef, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * O campo de uma linha do painel do atalho (⇧⌘espaço). É o MESMO nos painéis
- * flutuantes do Computer Use: quem está em outro app e fala com o Orbit vê uma
- * forma só de escrever, seja pelo atalho, seja na conversa que está
- * controlando — não um composer completo de um lado e uma faixa do outro.
+ * The one-line field of the shortcut panel (⇧⌘space). It is the SAME one in the
+ * floating panels of Computer Use: whoever is in another app and talks to Orbit sees one
+ * single way of writing, be it through the shortcut or in the conversation they are
+ * controlling — not a full composer on one side and a strip on the other.
  *
- * Só o campo e o que vai ao lado dele (`trailing`); quem usa decide o envio.
+ * Only the field and what goes next to it (`trailing`); the caller decides the send.
  */
 export const CompactInput = forwardRef<
   HTMLInputElement,
   {
     value: string
     onChange: (value: string) => void
-    /** Enter sem Shift; devolve true quando enviou (o campo é limpo) */
+    /** Enter without Shift; returns true when it sent (the field is cleared) */
     onSubmit: (value: string) => boolean | void
     placeholder: string
     disabled?: boolean
-    /** Ganhou/perdeu o foco (a janela dos painéis só aceita teclado enquanto ele está em uso) */
+    /** Gained/lost focus (the panels window only accepts the keyboard while it is in use) */
     onFocusChange?: (focused: boolean) => void
     trailing?: ReactNode
     className?: string

@@ -2,17 +2,17 @@ import type { ChatMessage } from "@shared/chat"
 import { stripThinking } from "@/src/lib/voice-call"
 
 /**
- * O que o painel mostra da última resposta.
+ * What the panel shows of the last answer.
  *
- * Num turno com ferramentas o modelo escreve texto pelo caminho ("vou trazer o
- * Notas pra frente…") e uma mensagem final. Mostrar tudo colado, como antes,
- * não bate com a voz — que só fala a espera do começo e a mensagem final (ver
- * `callSpeech`). Então:
- *  - trabalhando: a última narração, em cinza (`progress`);
- *  - terminou: só a mensagem final (`final`) — a que está sendo falada, e a que
- *    fica na tela no modo texto. Sem texto depois da última ferramenta, vale a
- *    última narração.
- * Sem ferramentas, o texto é a própria resposta e aparece enquanto chega.
+ * In a turn with tools the model writes text along the way ("I'll bring the
+ * Notes forward…") and a final message. Showing everything glued together, as before,
+ * does not match the voice — which only speaks the opening wait and the final
+ * message (see `callSpeech`). So:
+ *  - working: the last narration, in gray (`progress`);
+ *  - finished: only the final message (`final`) — the one being spoken, and the one that
+ *    stays on the screen in text mode. Without text after the last tool, the
+ *    last narration counts.
+ * Without tools, the text is the answer itself and shows up as it arrives.
  */
 export interface AnswerView {
   final: string

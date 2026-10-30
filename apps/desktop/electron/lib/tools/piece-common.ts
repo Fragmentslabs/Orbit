@@ -12,37 +12,37 @@ import type { AttachmentKind } from '../attachment-ref'
 import { resolveSafePath, type ToolContext } from './context'
 
 /**
- * O que as três peças do Orbit (motion, design, slides) têm em comum, nos DOIS
- * modos. Uma peça é um objeto do app: mora no armazenamento do Orbit
- * (`orbit-data/<tipo>/<sessão>/<nome>/`), é criada, lida, mostrada, editada e
- * excluída pelas tools dela, por NOME (desta conversa) ou por id (de qualquer
- * uma) — no chat e no código, as mesmas tools. O repositório do usuário só
- * recebe uma peça quando ele pede (piece_export).
+ * What Orbit's three pieces (motion, design, slides) have in common, in BOTH
+ * modes. A piece is an app object: it lives in Orbit's storage
+ * (`orbit-data/<type>/<session>/<name>/`), is created, read, shown, edited and
+ * deleted by its tools, by NAME (this conversation) or by id (from any
+ * conversation) — in the chat and in code, the same tools. The user's repository only
+ * receives a piece when they ask (piece_export).
  *
- * Toda escrita numa pasta de peça passa antes pelo diário de mídia do turno
- * (journalPiece): é o que deixa o revert da mensagem desfazê-la.
+ * Every write to a piece folder first goes through the turn's media journal
+ * (journalPiece): that is what lets the message's revert undo it.
  */
 
 export interface PieceToolScope {
   sessionId: string
   /**
-   * Pasta de trabalho (modo código). Com ela, os *_asset também copiam um
-   * arquivo do projeto (`path`) e piece_export grava a peça nela.
+   * Working folder (code mode). With it, the *_asset ones also copy a
+   * project file (`path`) and piece_export writes the piece into it.
    */
   project?: ToolContext | null
-  /** Sessão principal: abre e foca a aba. Worker: escreve sem abrir aba. */
+  /** Main session: opens and focuses the tab. Worker: writes without opening a tab. */
   canShow?: boolean
-  /** Modo plano: só ler e mostrar. */
+  /** Plan mode: read and show only. */
   readOnly?: boolean
 }
 
-// Caminho e slug moram num módulo próprio (piece-paths): a importação de
-// projeto usa os dois sem arrastar media, diário e as outras peças junto.
+// Path and slug live in their own module (piece-paths): the project
+// import uses both without dragging media, journal and the other pieces along.
 export { piecesDir, piecesRoot, pieceSlug } from './piece-paths'
 
 /**
- * Guarda a pasta da peça no diário do turno ANTES da escrita — chame dentro do
- * lock da peça. Fora de um turno (a pessoa editando no painel) não faz nada.
+ * Saves the piece folder in the turn's journal BEFORE the write — call it inside the
+ * piece's lock. Outside a turn (the person editing in the panel) it does nothing.
  */
 export async function journalPiece(
   kind: PieceKind,
@@ -71,9 +71,9 @@ export const EDIT_OP = z.object({
 })
 
 /**
- * Aplica trocas EXATAS em ordem (o mesmo contrato do `edit` do modo código): o
- * trecho tem que existir e, sem replaceAll, ser único — senão a troca cairia no
- * lugar errado em silêncio. Puro.
+ * Applies EXACT replacements in order (the same contract as code mode's `edit`): the
+ * excerpt has to exist and, without replaceAll, be unique — otherwise the replacement would land in the
+ * wrong place silently. Pure.
  */
 export function applyTextEdits(source: string, edits: TextEdit[]): string {
   let out = source
@@ -89,7 +89,7 @@ export function applyTextEdits(source: string, edits: TextEdit[]): string {
   return out
 }
 
-/** Os dois jeitos de trazer material para dentro de uma peça. */
+/** The two ways of bringing material into a piece. */
 export const ASSET_SOURCE = {
   ref: z.string().optional().describe('Reference from the attachment note: img_…, vdo_… or aud_… (something the user ATTACHED)'),
   path: z
@@ -100,8 +100,8 @@ export const ASSET_SOURCE = {
 }
 
 /**
- * Copia um anexo (`ref`) ou um arquivo da pasta de trabalho (`path`) para a
- * pasta da peça. Quem chama já registrou a pasta no diário.
+ * Copies an attachment (`ref`) or a file from the working folder (`path`) into the
+ * piece folder. The caller has already registered the folder in the journal.
  */
 export async function importIntoPiece(
   folder: string,
@@ -124,10 +124,10 @@ const GALLERY_LINK: Record<PieceKind, 'motionId' | 'designId' | 'slidesId'> = {
 }
 
 /**
- * Exclui uma peça de verdade: o item da galeria (cujo gancho apaga a pasta e o
- * registro), ou só a pasta e o registro quando ela nunca entrou na galeria. As
- * abas dela fecham. No turno do agente tudo passa pelo diário — o revert da
- * mensagem traz a peça de volta.
+ * Really deletes a piece: the gallery item (whose hook deletes the folder and the
+ * record), or only the folder and the record when it never entered the gallery. Its
+ * tabs close. In the agent's turn everything goes through the journal — the message's
+ * revert brings the piece back.
  */
 export async function deletePiece(kind: PieceKind, id: string): Promise<{ removedFolder: boolean; keptBecause?: string }> {
   const link = GALLERY_LINK[kind]

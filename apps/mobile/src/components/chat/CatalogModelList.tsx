@@ -11,39 +11,39 @@ import { ModalityIcons } from '~/components/ui/modality-icons'
 import { ProviderLogo } from '~/components/ui/provider-logo'
 
 /**
- * Lista de modelos do catálogo, por provedor — virtualizada.
+ * Model list of the catalog, per provider — virtualized.
  *
- * Os modais de worker e de visão montavam o catálogo inteiro dentro de um
- * ScrollView (`groups.map(...)` aninhado): com os provedores conectados isso
- * são centenas de linhas construídas de uma vez só na abertura, e reconstruídas
- * inteiras a cada toque (o estado muda → tudo re-renderiza). Daí a demora para
- * abrir e para selecionar.
+ * The worker and vision modals built the whole catalog inside a
+ * ScrollView (nested `groups.map(...)`): with the connected providers that is
+ * hundreds of rows built at once on opening, and rebuilt
+ * whole on every touch (the state changes → everything re-renders). Hence the slowness to
+ * open and to select.
  *
- * Aqui a SectionList monta só o que cabe na tela, a linha é memoizada (escolher
- * um modelo re-renderiza duas linhas, não a lista) e sem busca cada provedor
- * mostra no máximo MAX_POR_PROVEDOR — o mesmo teto do picker de modelos.
+ * Here the SectionList mounts only what fits on screen, the row is memoized (choosing
+ * a model re-renders two rows, not the list) and without a search each provider
+ * shows at most MAX_PER_PROVIDER — the same ceiling as the model picker.
  */
 
-/** Teto por provedor ao navegar sem busca (igual ao ModelPickerModal e ao
- *  desktop). Com busca o teto não vale: esconder resultado é pior. */
-const MAX_POR_PROVEDOR = 40
+/** Ceiling per provider when browsing without a search (same as ModelPickerModal and the
+ *  desktop). With a search the ceiling does not apply: hiding a result is worse. */
+const MAX_PER_PROVIDER = 40
 
 const CARD_RADIUS = 12
 
-interface Secao {
+interface ModelSection {
   provider: CatalogProvider
   data: { key: string; model: CatalogModel }[]
 }
 
 interface CatalogModelListProps {
-  /** Texto da busca (o input vive no cabeçalho, que é do dono da lista). */
+  /** Search text (the input lives in the header, which belongs to the owner of the list). */
   search: string
-  /** Filtro extra por modelo — ex.: só modelos com visão. */
+  /** Extra filter by model — e.g. only models with vision. */
   includeModel?: (provider: CatalogProvider, model: CatalogModel) => boolean
   selected: { providerId: string; modelId: string } | null
   onSelect: (providerId: string, modelId: string) => void
-  /** Cabeçalho rolável (título, busca, cards de config). Passe um ELEMENTO,
-   *  não um componente: componente inline remonta a cada tecla digitada. */
+  /** Scrollable header (title, search, config cards). Pass an ELEMENT,
+   *  not a component: an inline component remounts on every keystroke. */
   header?: ReactElement
   emptyLabel: string
 }
@@ -60,7 +60,7 @@ export function CatalogModelList({
   const catalog = useSettingsStore((s) => s.catalog)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
 
-  const sections = useMemo<Secao[]>(() => {
+  const sections = useMemo<ModelSection[]>(() => {
     if (!catalog) return []
     const q = search.toLowerCase().trim()
     return Object.values(catalog)
@@ -79,17 +79,17 @@ export function CatalogModelList({
               ? b.release_date.localeCompare(a.release_date)
               : a.name.localeCompare(b.name),
           )
-        const visiveis = q ? models : models.slice(0, MAX_POR_PROVEDOR)
+        const visible = q ? models : models.slice(0, MAX_PER_PROVIDER)
         return {
           provider,
-          data: visiveis.map((model) => ({ key: `${provider.id}/${model.id}`, model })),
+          data: visible.map((model) => ({ key: `${provider.id}/${model.id}`, model })),
         }
       })
-      .filter((secao) => secao.data.length > 0)
+      .filter((group) => group.data.length > 0)
   }, [catalog, connectedProviders, search, includeModel])
 
   const renderItem = useCallback(
-    ({ item, index, section }: { item: { model: CatalogModel }; index: number; section: Secao }) => (
+    ({ item, index, section }: { item: { model: CatalogModel }; index: number; section: ModelSection }) => (
       <ModelRow
         provider={section.provider}
         model={item.model}
@@ -114,7 +114,7 @@ export function CatalogModelList({
       renderItem={renderItem}
       renderSectionHeader={({ section }) => (
         <Text style={[s.providerLabel, { color: tokens.mutedForeground }]}>
-          {(section as Secao).provider.name}
+          {(section as ModelSection).provider.name}
         </Text>
       )}
       SectionSeparatorComponent={() => <View style={{ height: 12 }} />}
@@ -133,9 +133,9 @@ export function CatalogModelList({
   )
 }
 
-/** Linha memoizada: como a lista é virtualizada, cada linha desenha o próprio
- *  pedaço do card (borda + raio nas pontas) para o grupo continuar parecendo um
- *  card só. */
+/** Memoized row: since the list is virtualized, each row draws its own
+ *  piece of the card (border + radius at the ends) so the group keeps looking like a
+ *  single card. */
 const ModelRow = memo(
   function ModelRow({
     provider,

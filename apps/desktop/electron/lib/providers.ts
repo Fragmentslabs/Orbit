@@ -22,9 +22,9 @@ import {
 import { currentProviderSession } from './provider-session'
 
 /**
- * Resolução de modelos no padrão do opencode: o catálogo models.dev informa
- * qual pacote npm (`npm`) e URL base (`api`) cada provedor usa. Os SDKs mais
- * comuns são empacotados; os demais caem no adaptador openai-compatible.
+ * Model resolution in the opencode style: the models.dev catalog tells
+ * which npm package (`npm`) and base URL (`api`) each provider uses. The most
+ * common SDKs are bundled; the rest fall back to the openai-compatible adapter.
  */
 
 type SdkFactory = (opts: {
@@ -49,28 +49,28 @@ const BUNDLED_SDKS: Record<string, unknown> = {
 }
 
 /**
- * Indica se o modelo de um provider é servido pelo adaptador openai-compatible
- * no resolveModel — espelha exatamente a regra de fallback: SDKs sem pacote
- * empacotado (npm fora de BUNDLED_SDKS) e o próprio openai-compatible caem em
- * createOpenAICompatible. O módulo de reasoning usa isso para decidir onde
- * injetar campos interleaved (ex: reasoning_content do DeepSeek) — o gate pelo
- * nome do npm do catálogo deixava de fora providers como o OpenRouter
- * (npm: "@openrouter/ai-sdk-provider") mesmo com o runtime servindo via
- * adaptador openai-compatible.
+ * Tells whether a provider's model is served by the openai-compatible adapter
+ * in resolveModel — it mirrors the fallback rule exactly: SDKs without a bundled
+ * package (npm outside BUNDLED_SDKS) and openai-compatible itself fall into
+ * createOpenAICompatible. The reasoning module uses this to decide where to
+ * inject interleaved fields (e.g. DeepSeek's reasoning_content) — the gate by the
+ * catalog's npm name left out providers like OpenRouter
+ * (npm: "@openrouter/ai-sdk-provider") even with the runtime serving through the
+ * openai-compatible adapter.
  */
 export function isServedByOpenAiCompatible(npm: string | undefined): boolean {
   if (npm == null || npm === '@ai-sdk/openai-compatible') return true
   return !(npm in BUNDLED_SDKS)
 }
 
-/** Reexportado daqui porque era o endereço público da classe antes de o módulo
- *  existir (ver provider-errors.ts). */
+/** Re-exported from here because it was the class's public address before the module
+ *  existed (see provider-errors.ts). */
 export { ProviderResolutionError } from './provider-errors'
 
 /**
- * Fallback para chamadas fora de qualquer conversa (ex: um teste de conexão do
- * provider nas Configurações). Enviar um id estável do processo é melhor que
- * omitir o header, que faria a requisição falhar.
+ * Fallback for calls outside any conversation (e.g. a provider connection test in
+ * Settings). Sending a stable process id is better than omitting the header, which
+ * would make the request fail.
  */
 let processSessionId: string | null = null
 function fallbackSessionId(): string {
@@ -79,10 +79,10 @@ function fallbackSessionId(): string {
 }
 
 /**
- * Ids de sessão que o gateway já recusou, e o substituto que ele aceitou. Sem
- * isso, toda requisição seguinte do mesmo turno (tool loop, visão, workers)
- * repetiria a recusa e a repetição de emergência do `providerFetch` — dois
- * requests por passo, indefinidamente.
+ * Session ids the gateway already refused, and the replacement it accepted. Without
+ * this, every following request of the same turn (tool loop, vision, workers)
+ * would repeat the refusal and the `providerFetch` emergency retry — two
+ * requests per step, indefinitely.
  */
 const rejectedSessions = new Set<string>()
 let recoveredSessionId: string | null = null
@@ -94,8 +94,8 @@ function rotateSession(rejectedId: string): string {
 }
 
 /**
- * Id da conversa para o header de sessão (ver provider-fetch.ts). Id vazio é
- * tratado como ausente (o gateway faz o mesmo), daí `||` no lugar de `??`.
+ * Conversation id for the session header (see provider-fetch.ts). An empty id is
+ * treated as absent (the gateway does the same), hence `||` instead of `??`.
  */
 function sessionIdFor(opts?: ResolveModelOptions): string {
   const base = opts?.sessionId || currentProviderSession() || fallbackSessionId()
@@ -103,9 +103,9 @@ function sessionIdFor(opts?: ResolveModelOptions): string {
 }
 
 /**
- * UA do produto. O SDK assina sozinho (`ai-sdk/openai-compatible`) e o gateway
- * não tem como distinguir o Orbit de qualquer outro consumidor — a doc do
- * OpenCode Go pede que o cliente se identifique. Formato `Orbit/<versão>`.
+ * Product UA. The SDK signs on its own (`ai-sdk/openai-compatible`) and the gateway
+ * has no way of telling Orbit from any other consumer — the OpenCode Go docs ask the
+ * client to identify itself. Format `Orbit/<version>`.
  */
 let cachedUserAgent: string | null = null
 function orbitUserAgent(): string {
@@ -114,7 +114,7 @@ function orbitUserAgent(): string {
     try {
       version = app?.getVersion?.() ?? ''
     } catch {
-      // Fora do Electron (scripts, testes): assina com o nome puro.
+      // Outside Electron (scripts, tests): signs with the plain name.
     }
     cachedUserAgent = version ? `Orbit/${version}` : 'Orbit'
   }
@@ -122,15 +122,15 @@ function orbitUserAgent(): string {
 }
 
 export interface ResolveModelOptions {
-  /** Id da conversa; se omitido, usa o escopo aberto por `withProviderSession`. */
+  /** Conversation id; if omitted, it uses the scope opened by `withProviderSession`. */
   sessionId?: string
-  /** Headers já definidos para a requisição — preservados como estão. */
+  /** Headers already defined for the request — preserved as they are. */
   headers?: Record<string, string>
 }
 
 /**
- * Monta os headers extras do provider. Se o header de sessão já vier definido
- * (em qualquer capitalização), é reaproveitado em vez de sobrescrito.
+ * Assembles the provider's extra headers. If the session header is already defined
+ * (in any capitalization), it is reused instead of overwritten.
  */
 function providerHeaders(
   providerId: string,
@@ -155,22 +155,22 @@ export async function resolveModel(
 ): Promise<LanguageModel> {
   const provider = await getProvider(providerId)
   if (!provider) {
-    // Mensagens daqui são DIAGNÓSTICO (ficam em ChatMessage.error e aparecem
-    // como detalhe cru no card) — a explicação que o usuário lê é traduzida na
-    // UI a partir do `reason`/kind (chat.errorKind.*, notif.chatError.kind.*).
+    // Messages from here are DIAGNOSTIC (they stay in ChatMessage.error and show up
+    // as raw detail in the card) — the explanation the user reads is translated in the
+    // UI from `reason`/kind (chat.errorKind.*, notif.chatError.kind.*).
     throw new ProviderResolutionError(`Unknown provider: ${providerId}`, 'unknown-provider')
   }
-  // Id renomeado no models.dev: pede ao provedor o sucessor, não o nome velho
-  // (que o gateway às vezes ainda aceita, mas com outro comportamento).
+  // Id renamed in models.dev: it asks the provider for the successor, not the old name
+  // (which the gateway sometimes still accepts, but with another behavior).
   const found = findCatalogModel({ [provider.id]: provider }, provider.id, modelId)
   modelId = found?.modelId ?? modelId
 
-  // O SDK e o endpoint são do MODELO quando o catálogo os declara (ver
-  // modelRuntime); senão os do provedor. Provedor personalizado não tem `npm`
-  // no catálogo: quem decide o SDK é o `protocol` do cadastro.
+  // The SDK and the endpoint belong to the MODEL when the catalog declares them (see
+  // modelRuntime); otherwise the provider's. A custom provider has no `npm`
+  // in the catalog: whoever decides the SDK is the protocol` of the registration.
   const { npm, api } = modelRuntime(provider, found?.model)
 
-  // SDKs que usam auth própria do ambiente (gcloud ADC, AWS credentials, etc.)
+  // SDKs that use their own auth from the environment (gcloud ADC, AWS credentials, etc.)
   if (npm === '@ai-sdk/google-vertex' || npm === '@ai-sdk/amazon-bedrock') {
     const factory = BUNDLED_SDKS[npm]
     if (!factory) throw new ProviderResolutionError(`Missing SDK: ${npm}`, 'missing-sdk')
@@ -188,16 +188,16 @@ export async function resolveModel(
 
   const factory = BUNDLED_SDKS[npm]
   const headers = providerHeaders(providerId, opts)
-  // Nos provedores de sessão, o header também é garantido no transporte: o
-  // wrapper repõe o que faltar em qualquer requisição do SDK e repete uma vez se
-  // o gateway recusar a sessão (ver provider-fetch.ts).
+  // In session providers, the header is also guaranteed in the transport: the
+  // wrapper puts back whatever is missing in any SDK request and retries once if
+  // the gateway refuses the session (see provider-fetch.ts).
   const fetchImpl = SESSION_HEADER_PROVIDERS.has(providerId)
     ? providerFetch(sessionIdFor(opts), rotateSession)
     : undefined
 
-  // Protocolo explícito de um provedor fora do models.dev: o gateway fala
-  // Anthropic Messages ou o endpoint /responses, e o adaptador
-  // openai-compatible não serve para nenhum dos dois.
+  // Explicit protocol of a provider outside models.dev: the gateway speaks
+  // Anthropic Messages or the /responses endpoint, and the openai-compatible
+  // adapter does not serve either of them.
   if (provider.protocol === 'anthropic-messages') {
     const sdk = createAnthropic({
       apiKey,
@@ -250,9 +250,9 @@ export async function resolveModel(
 }
 
 /**
- * Gateways que só aceitam `max_completion_tokens` (modelos da família o-series
- * atrás de um proxy). O adaptador openai-compatible sempre manda `max_tokens`;
- * aqui o campo é renomeado sem tocar no resto do corpo.
+ * Gateways that only accept `max_completion_tokens` (o-series family models
+ * behind a proxy). The openai-compatible adapter always sends `max_tokens`;
+ * here the field is renamed without touching the rest of the body.
  */
 function renameMaxTokensField(body: Record<string, unknown>): Record<string, unknown> {
   if (!('max_tokens' in body)) return body

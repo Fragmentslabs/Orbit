@@ -1,22 +1,22 @@
 "use client";
 
 /**
- * A aba de pastas: o painel de leitura à esquerda, o índice à direita.
+ * The folders tab: the reading panel on the left, the index on the right.
  *
- * O índice à direita tem três abas — Arquivos, Alterações e Commits — e o painel
- * da esquerda tem dois modos, escolhidos pelas duas primeiras:
+ * The index on the right has three tabs — Files, Changes and Commits — and the left
+ * panel has two modes, chosen by the first two:
  *
- * - **Arquivos** — a árvore completa à direita, um arquivo só à esquerda. É o
- *   modo de trabalho: procurar, abrir, editar.
- * - **Alterações** — a lista dos modificados à direita, todos os diffs
- *   empilhados à esquerda. É o modo de leitura: comparar o que mudou sem
- *   perder de vista o que já foi lido. Aqui clicar num arquivo não troca o que
- *   está na tela — só rola até a seção dele.
- * - **Commits** — o histórico, que é só do índice: a esquerda fica como estava,
- *   e o arquivo de um commit abre nela quando se clica nele.
+ * - **Files** — the full tree on the right, a single file on the left. It is the
+ *   working mode: look up, open, edit.
+ * - **Changes** — the list of the modified ones on the right, all the diffs
+ *   stacked on the left. It is the reading mode: comparing what changed without
+ *   losing sight of what has already been read. Here clicking a file does not swap what
+ *   is on screen — it only scrolls to its section.
+ * - **Commits** — the history, which belongs only to the index: the left stays as it was,
+ *   and the file of a commit opens in it when one clicks it.
  *
- * Aqui vive só o que é do conjunto: qual modo está ativo, que arquivo está em
- * foco, com que lente ele abre, até onde rolar e se há rascunho a perder.
+ * Here lives only what belongs to the set: which mode is active, which file is in
+ * focus, with what lens it opens, how far to scroll and whether there is a draft to lose.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,11 +35,11 @@ import { useWorkspaceSearchStore } from "@/src/stores/workspace-search-store";
 const FILE_PANEL_MIN_PX = 200;
 
 /**
- * O que está em foco: o arquivo E a lente sobre ele.
+ * What is in focus: the file AND the lens over it.
  *
- * Os dois andam juntos porque descrevem a mesma tela — o arquivo sozinho não
- * diz se o painel mostra o texto ou o diff dele. Quem escolhe a lente é quem
- * abre: a lista de alterações abre no diff, a árvore completa no conteúdo.
+ * The two go together because they describe the same screen — the file alone does not
+ * say whether the panel shows its text or its diff. Whoever chooses the lens is whoever
+ * opens it: the changes list opens in the diff, the full tree in the content.
  */
 interface ViewerTarget {
   file: ViewedFile;
@@ -47,13 +47,13 @@ interface ViewerTarget {
 }
 
 /**
- * Identidade do arquivo aberto no visualizador.
+ * Identity of the file open in the viewer.
  *
- * A chave existe para o visualizador renascer ao trocar de arquivo: o estado
- * interno dele (rascunho, conflito, patch) é todo do arquivo anterior. Ela é
- * derivada do arquivo, e não um contador, para que reabrir o MESMO arquivo não
- * jogue fora o que está na tela — a lente fica de fora de propósito: trocar de
- * lente é do visualizador, e remontá-lo perderia o rascunho.
+ * The key exists so the viewer is reborn when switching files: its internal
+ * state (draft, conflict, patch) all belongs to the previous file. It is
+ * derived from the file, and not a counter, so that reopening the SAME file does not
+ * throw away what is on screen — the lens stays out on purpose: switching
+ * lens belongs to the viewer, and remounting it would lose the draft.
  */
 function viewerKey(file: ViewedFile | undefined): string {
   if (!file) return "empty";
@@ -65,40 +65,40 @@ function viewerKey(file: ViewedFile | undefined): string {
 export function FoldersTab() {
   const { t } = useTranslation();
   const { folders, setFolders } = useWorkspace();
-  // Quem tem git nas pastas do chat — a principal e as anexadas —, em cada uma
-  // a raiz e/ou as subpastas com repo próprio. A leitura das alterações usa a
-  // lista para mostrar o espaço inteiro, com cada projeto debaixo do seu nome;
-  // antes só a pasta principal era lida e as anexadas ficavam de fora.
+  // What has git in the chat folders — the main one and the attached ones —, in each one
+  // the root and/or the subfolders with their own repo. The changes reading uses the
+  // list to show the whole workspace, with each project under its name;
+  // before, only the main folder was read and the attached ones were left out.
   const repos = useGitRepos(folders);
 
   const [tab, setTab] = useState<BrowserTab>("files");
   /**
-   * O modo do painel da esquerda. Ele NÃO é a aba do índice: a aba de commits é
-   * só do índice, e os diffs empilhados (ou o arquivo aberto) não têm por que
-   * sumir porque se foi olhar o histórico.
+   * The mode of the left panel. It is NOT the index tab: the commits tab belongs
+   * only to the index, and the stacked diffs (or the open file) have no reason to
+   * disappear because one went to look at the history.
    */
   const [leftMode, setLeftMode] = useState<"files" | "changes">("files");
   const [target, setTarget] = useState<ViewerTarget>();
   const [reveal, setReveal] = useState<RevealRequest | null>(null);
   const [changesReload, setChangesReload] = useState(0);
   const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
-  /** Espelho de "há rascunho" para leitura dentro dos callbacks de troca. */
+  /** Mirror of "there is a draft" for reading inside the switch callbacks. */
   const dirtyRef = useRef(false);
-  /** Espelho do alvo em foco, para callbacks que não podem depender do estado. */
+  /** Mirror of the focused target, for callbacks that cannot depend on the state. */
   const targetRef = useRef<ViewerTarget | undefined>(undefined);
   targetRef.current = target;
-  /** Cresce a cada pedido de foco: repetir o clique no mesmo arquivo vale de novo. */
+  /** Grows on every focus request: repeating the click on the same file counts again. */
   const revealNonce = useRef(0);
-  /** Linha pedida pela busca; o visualizador rola até ela ao carregar o arquivo. */
+  /** Line asked for by the search; the viewer scrolls to it when loading the file. */
   const [revealLine, setRevealLine] = useState<{ line: number; nonce: number }>();
   const lineNonce = useRef(0);
-  /** Cresce quando uma substituição em massa grava o arquivo que está aberto. */
+  /** Grows when a mass replacement writes the file that is open. */
   const [viewerReload, setViewerReload] = useState(0);
 
   /**
-   * A substituição no arquivo aberto mora no editor (é ele que tem o buffer e
-   * o histórico de undo). O visualizador publica a função aqui, e a busca do
-   * índice à direita a chama — sem passar pelo disco, sem perder rascunho.
+   * The replacement in the open file lives in the editor (it is what has the buffer and
+   * the undo history). The viewer publishes the function here, and the search of the
+   * index on the right calls it — without going through the disk, without losing the draft.
    */
   const replaceInOpenFile = useRef<
     ((query: string, replacement: string, options: WsMatchOptions) => number) | null
@@ -120,9 +120,9 @@ export function FoldersTab() {
   );
 
   /**
-   * Publica para o App — onde a paleta ⌘P mora agora — qual arquivo está em foco
-   * e como substituir no buffer dele. Sem esta ponte, o "Substituir neste
-   * arquivo" do modal não teria a quem pedir: o buffer só existe aqui.
+   * Publishes to the App — where the ⌘P palette lives now — which file is in focus
+   * and how to replace in its buffer. Without this bridge, the "Replace in this
+   * file" of the modal would have no one to ask: the buffer only exists here.
    */
   useEffect(() => {
     const file = target?.file;
@@ -139,9 +139,9 @@ export function FoldersTab() {
   }, [target, registerReplaceInOpenFile]);
 
   /**
-   * A consulta do índice vira grifo no arquivo aberto. Fica no estado da aba
-   * porque os dois lados do split são irmãos: o campo mora na árvore, o
-   * editor mora no visualizador, e ninguém vê o outro sem passar por aqui.
+   * The index query becomes a mark in the open file. It stays in the state of the tab
+   * because the two sides of the split are siblings: the field lives in the tree, the
+   * editor lives in the viewer, and neither sees the other without passing through here.
    */
   const [searchHighlight, setSearchHighlight] = useState<{
     query: string;
@@ -166,9 +166,9 @@ export function FoldersTab() {
   const toggleBrowser = useCallback(() => setFileBrowserOpen((v) => !v), []);
 
   /**
-   * Trocar de arquivo joga fora o buffer atual. Sem esta confirmação o
-   * rascunho não salvo sumia em silêncio — um clique na árvore e o texto ia
-   * embora sem nada na tela dizendo que havia algo a perder.
+   * Switching file throws away the current buffer. Without this confirmation the
+   * unsaved draft disappeared in silence — one click in the tree and the text was
+   * gone with nothing on screen saying there was something to lose.
    */
   const confirmDiscard = useCallback(() => {
     if (!dirtyRef.current) return true;
@@ -176,8 +176,8 @@ export function FoldersTab() {
   }, [t]);
 
   /**
-   * Entrar no modo Alterações desmonta o editor, e o rascunho morre com ele —
-   * a mesma perda da troca de arquivo, com a mesma confirmação.
+   * Entering Changes mode unmounts the editor, and the draft dies with it —
+   * the same loss as the file switch, with the same confirmation.
    */
   const goToChanges = useCallback(() => {
     if (!confirmDiscard()) return false;
@@ -193,7 +193,7 @@ export function FoldersTab() {
         goToChanges();
         return;
       }
-      // A aba de commits é só do índice: o painel da esquerda fica como estava.
+      // The commits tab belongs only to the index: the left panel stays as it was.
       if (next === "files") setLeftMode("files");
       setTab(next);
     },
@@ -201,9 +201,9 @@ export function FoldersTab() {
   );
 
   /**
-   * Trazer um arquivo à vista: o índice à direita manda o caminho ABSOLUTO —
-   * com mais de um repositório é o único que não deixa dúvida de qual projeto
-   * é — e a visão empilhada resolve o repo e o caminho relativo a partir dele.
+   * Bring a file into view: the index on the right sends the ABSOLUTE path —
+   * with more than one repository it is the only one that leaves no doubt about which project
+   * it is — and the stacked view resolves the repo and the relative path from it.
    */
   const handleReveal = useCallback(
     (filePath: string) => {
@@ -215,12 +215,12 @@ export function FoldersTab() {
   );
 
   /**
-   * Põe um arquivo do working tree em foco — ou o fantasma de um excluído,
-   * que o visualizador abre pelo conteúdo do HEAD. Ler o arquivo é do
-   * visualizador: aqui só se decide qual é, e com que lente.
+   * Puts a working tree file in focus — or the ghost of a deleted one,
+   * which the viewer opens through the HEAD content. Reading the file belongs to the
+   * viewer: here one only decides which one it is, and with what lens.
    *
-   * Devolve se abriu: quem precisa trocar de modo junto com a abertura só
-   * deve fazê-lo depois de a confirmação passar.
+   * Returns whether it opened: whoever needs to switch mode along with the opening should only
+   * do it after the confirmation passes.
    */
   const openLiveFile = useCallback(
     (filePath: string, deleted = false, lens: ViewerLens = "content") => {
@@ -243,9 +243,9 @@ export function FoldersTab() {
   );
 
   /**
-   * Põe em foco um arquivo congelado em um commit. A leitura vai para o modo
-   * Arquivos: o que se quer ver é o arquivo do commit, e ele não está no working
-   * tree — na leitura de Alterações não haveria seção dele para onde rolar.
+   * Puts in focus a file frozen in a commit. The reading goes to Files
+   * mode: what one wants to see is the commit's file, and it is not in the working
+   * tree — in the Changes reading there would be no section of it to scroll to.
    */
   const openCommitFile = useCallback(
     (
@@ -265,7 +265,7 @@ export function FoldersTab() {
     [confirmDiscard],
   );
 
-  /** Do diff empilhado para o editor: é a única porta de saída da leitura. */
+  /** From the stacked diff to the editor: it is the only exit door of the reading. */
   const handleOpenFromDiff = useCallback(
     (absPath: string) => {
       if (!openLiveFile(absPath, false, "content")) return;
@@ -276,18 +276,18 @@ export function FoldersTab() {
   );
 
   /**
-   * Abrir um resultado da busca já na linha clicada. A confirmação de descarte
-   * vem do `openLiveFile` — a mesma de qualquer troca de arquivo — e o modo
-   * volta para Arquivos: na leitura empilhada não há onde rolar dentro de um
-   * arquivo só.
+   * Open a search result already on the clicked line. The discard confirmation
+   * comes from `openLiveFile` — the same as any file switch — and the mode
+   * goes back to Files: in the stacked reading there is nowhere to scroll inside a
+   * single file.
    */
   const openAtLine = useCallback(
     (filePath: string, line?: number) => {
       if (!openLiveFile(filePath, false, "content")) return;
       setLeftMode("files");
       setTab("files");
-      // Um resultado do grupo Arquivos não tem linha: abre no topo, como a
-      // árvore. Só a ocorrência pede para rolar.
+      // A result of the Files group has no line: it opens at the top, like the
+      // tree. Only the occurrence asks for a scroll.
       if (line != null) {
         lineNonce.current += 1;
         setRevealLine({ line, nonce: lineNonce.current });
@@ -297,9 +297,9 @@ export function FoldersTab() {
   );
 
   /**
-   * Alguém gravou em disco por fora (substituir em todos). Se foi o arquivo em
-   * foco, o visualizador releia — do contrário a tela mostraria o texto velho
-   * e o próximo save sobrescreveria a substituição.
+   * Someone wrote to disk from outside (replace in all). If it was the focused
+   * file, the viewer re-reads it — otherwise the screen would show the old text
+   * and the next save would overwrite the replacement.
    */
   const handleReplaced = useCallback((paths: string[]) => {
     const current = targetRef.current;
@@ -309,9 +309,9 @@ export function FoldersTab() {
   }, []);
 
   /**
-   * O ⌘P subiu para o App (a paleta responde de qualquer aba), então o pedido
-   * chega pelo store. Aqui se atende a parte que só esta aba sabe fazer: abrir
-   * o arquivo no visualizador e rolar até a linha pedida.
+   * ⌘P went up to the App (the palette answers from any tab), so the request
+   * arrives through the store. Here the part only this tab knows how to do is served: opening
+   * the file in the viewer and scrolling to the requested line.
    */
   const pendingFile = useWorkspaceSearchStore((state) => state.pending);
   const handledFileRequest = useRef(0);
@@ -322,7 +322,7 @@ export function FoldersTab() {
     openAtLine(pendingFile.path, pendingFile.line);
   }, [pendingFile, openAtLine]);
 
-  /** "Substituir em todos" pode ter gravado o arquivo aberto: o store avisa. */
+  /** "Replace in all" may have written the open file: the store warns. */
   const replacedFiles = useWorkspaceSearchStore((state) => state.replaced);
   const handledReplaced = useRef(0);
 

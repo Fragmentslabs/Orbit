@@ -3,17 +3,17 @@ import type { Memory, MemoryEvent } from "@shared/memory"
 import { memoryApi } from "@/src/lib/ipc"
 
 /**
- * Store da view de Memórias. O índice completo vem do main (memory:list) e é
- * mantido em sincronia pelos MemoryEvents (canal memory:event) — toda mutação
- * feita pelo agente ou pela UI reflete aqui em tempo real.
+ * Store of the Memories view. The full index comes from main (memory:list) and is
+ * kept in sync by the MemoryEvents (memory:event channel) — every mutation
+ * made by the agent or by the UI reflects here in real time.
  */
 
 interface MemoryState {
   initialized: boolean
-  /** true até o primeiro list() responder — a view mostra skeleton nesse meio. */
+  /** true until the first list() answers — the view shows a skeleton meanwhile. */
   loading: boolean
   index: Memory[]
-  /** Documentos markdown carregados sob demanda, por id */
+  /** Markdown documents loaded on demand, by id */
   docs: Record<string, string>
 
   initialize: () => Promise<void>
@@ -43,7 +43,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     set({ initialized: true })
     memoryApi.onEvent((event) => {
       set((state) => {
-        // Invalida o doc em cache — pode ter sido atualizado/removido junto
+        // Invalidates the cached doc — it may have been updated/removed along with
         const docs = { ...state.docs }
         delete docs[event.memory.id]
         return { index: applyEvent(event, state.index), docs }
@@ -57,8 +57,8 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const index = await memoryApi.list()
       set({ index })
     } finally {
-      // Sai do skeleton mesmo se o list falhar, senão a tela fica carregando
-      // para sempre em vez de mostrar o estado vazio.
+      // Leaves the skeleton even if the list fails, otherwise the screen stays loading
+      // forever instead of showing the empty state.
       set({ loading: false })
     }
   },
@@ -73,7 +73,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   update: async (id, patch) => {
-    await memoryApi.update(id, patch) // o memory:event atualiza o índice
+    await memoryApi.update(id, patch) // the memory:event updates the index
   },
 
   remove: async (id) => {

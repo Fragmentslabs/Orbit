@@ -2,11 +2,11 @@ import { USER_AGENT } from './search'
 import type { Fetcher, ImageResult } from './types'
 
 /**
- * Baixar a imagem escolhida. O endereço veio da resposta de uma API, então não é
- * confiável: só https, nunca para a rede local, com teto de tamanho e só se o
- * conteúdo for mesmo uma imagem raster. O Openverse aponta para o acervo de
- * origem (Flickr, NASA…), que às vezes recusa o acesso direto — aí o endereço
- * alternativo, servido pelo próprio provedor, entra no lugar.
+ * Downloading the chosen image. The address came from an API response, so it is not
+ * trusted: https only, never to the local network, with a size ceiling and only if
+ * the content really is a raster image. Openverse points to the source collection
+ * (Flickr, NASA…), which sometimes refuses direct access — then the alternative
+ * address, served by the provider itself, takes its place.
  */
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024
@@ -19,7 +19,7 @@ const MIME_EXT: Record<string, string> = {
   'image/gif': 'gif',
 }
 
-/** O endereço é https e não aponta para a máquina ou a rede local? */
+/** Is the address https and not pointing at the machine or the local network? */
 export function isSafeImageUrl(raw: string): boolean {
   let url: URL
   try {
@@ -30,7 +30,7 @@ export function isSafeImageUrl(raw: string): boolean {
   if (url.protocol !== 'https:') return false
   const host = url.hostname.toLowerCase()
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return false
-  // IPv6 literal (entre colchetes) ou IPv4: só passa se for público.
+  // IPv6 literal (in brackets) or IPv4: it only passes if it is public.
   if (host.startsWith('[')) return false
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host)
   if (v4) {
@@ -60,7 +60,7 @@ async function fetchOnce(url: string, fetcher: Fetcher): Promise<DownloadedImage
   const declared = Number(res.headers.get('content-length') ?? 0)
   if (declared > MAX_IMAGE_BYTES) throw new Error(`image is ${(declared / 1e6).toFixed(0)} MB, above the ${MAX_IMAGE_BYTES / 1024 / 1024} MB limit`)
 
-  // Lê aos poucos: o content-length pode faltar ou mentir.
+  // Reads in chunks: content-length may be missing or lie.
   const chunks: Uint8Array[] = []
   let total = 0
   const reader = res.body?.getReader()
@@ -78,7 +78,7 @@ async function fetchOnce(url: string, fetcher: Fetcher): Promise<DownloadedImage
   return { buffer: Buffer.concat(chunks), ext, mime }
 }
 
-/** Baixa o arquivo do resultado; se o endereço principal falha, tenta o alternativo. */
+/** Downloads the file of the result; if the main address fails, tries the alternative. */
 export async function downloadImage(result: ImageResult, fetcher: Fetcher = fetch): Promise<DownloadedImage> {
   try {
     return await fetchOnce(result.downloadUrl, fetcher)

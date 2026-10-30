@@ -1,11 +1,11 @@
 import { Storage } from '~/lib/storage'
 
 /**
- * Rascunho do input por chat, persistido no aparelho — antes era só um Map em
- * memória: trocar de chat no mesmo app preservava, mas sair do app (ou o SO
- * matar o processo) perdia o texto digitado. O mapa inteiro vive numa chave só
- * (SecureStore não lista chaves) e a gravação é debounced: a cada keystroke
- * não pode virar escrita de storage.
+ * Input draft per chat, persisted on the device — before it was only a Map in
+ * memory: switching chats in the same app preserved it, but leaving the app (or the OS
+ * killing the process) lost the typed text. The whole map lives under a single key
+ * (SecureStore does not list keys) and the write is debounced: it cannot become a storage
+ * write on every keystroke.
  */
 
 const STORAGE_KEY = 'orbit_chat_drafts'
@@ -14,8 +14,8 @@ const FLUSH_MS = 400
 const drafts = new Map<string, string>()
 let hydrated = false
 
-/** Carrega o mapa do storage uma vez por processo. Chamada no boot (_layout) e
- *  garantida pelo PromptInput antes de ler. */
+/** Loads the map from storage once per process. Called on boot (_layout) and
+ *  guaranteed by the PromptInput before reading. */
 export async function hydrateInputDrafts(): Promise<void> {
   if (hydrated) return
   hydrated = true
@@ -28,7 +28,7 @@ export async function hydrateInputDrafts(): Promise<void> {
       }
     }
   } catch {
-    // Storage corrompido: começa limpo.
+    // Corrupted storage: starts clean.
   }
 }
 
@@ -47,12 +47,12 @@ function flush() {
       })
       void Storage.setItem(STORAGE_KEY, JSON.stringify(obj))
     } catch {
-      // Persistência é oportunista — o rascunho continua válido em memória.
+      // Persistence is opportunistic — the draft remains valid in memory.
     }
   }, FLUSH_MS)
 }
 
-/** Texto vazio apaga a chave: o envio (setText('')) limpa o rascunho. */
+/** Empty text deletes the key: sending (setText('')) clears the draft. */
 export function setInputDraft(sessionId: string, text: string) {
   if (text) drafts.set(sessionId, text)
   else drafts.delete(sessionId)

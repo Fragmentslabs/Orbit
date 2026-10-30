@@ -6,21 +6,21 @@ import { getMediaEntry, mutateArtifact, saveArtifact, updateArtifact } from '../
 import { applyTextEdits } from './piece-common'
 
 /**
- * Artefatos HTML: o agente entrega uma página renderizável DENTRO da resposta
- * — dashboard, protótipo de tela, diagrama, relatório, simulador — em vez de
- * despejar um bloco de código que o usuário teria que salvar e abrir sozinho.
+ * HTML artifacts: the agent delivers a renderable page INSIDE the response
+ * — dashboard, screen prototype, diagram, report, simulator — instead of
+ * dumping a code block the user would have to save and open themselves.
  *
- * O arquivo vai para orbit-data/artifacts e entra no mesmo registry das
- * imagens, então o artefato aparece na galeria de mídia e sobrevive ao chat.
- * A tool devolve só o id/URL: o HTML nunca entra no contexto de volta nem na
- * mensagem persistida.
+ * The file goes to orbit-data/artifacts and enters the same registry as the
+ * images, so the artifact shows up in the media gallery and survives the chat.
+ * The tool returns only the id/URL: the HTML never comes back into the context nor into the
+ * persisted message.
  *
- * Disponível nos DOIS modos. No modo chat isso importa mais do que no código:
- * lá o agente não tem `write` nem `bash`, então o artefato é a única forma de
- * ele produzir algo visual — por isso o HTML chega pelo próprio input da tool.
+ * Available in BOTH modes. In chat mode this matters more than in code:
+ * there the agent has no `write` nor `bash`, so the artifact is the only way for
+ * it to produce something visual — that is why the HTML arrives through the tool's own input.
  */
 
-/** Teto do markup — acima disso é despejo de dados, não artefato. */
+/** Markup cap — above that it is a data dump, not an artifact. */
 const MAX_HTML_BYTES = 2 * 1024 * 1024
 
 function looksLikeDocument(html: string): boolean {
@@ -29,9 +29,9 @@ function looksLikeDocument(html: string): boolean {
 }
 
 /**
- * Fragmento vira documento. O modelo às vezes manda só o corpo; sem
- * `<meta charset>` acentuação quebra e sem `color-scheme` a página pinta
- * branca por padrão.
+ * A fragment becomes a document. The model sometimes sends only the body; without
+ * `<meta charset>` accented characters break and without `color-scheme` the page paints
+ * white by default.
  */
 function ensureDocument(html: string, title: string): string {
   if (looksLikeDocument(html)) return html

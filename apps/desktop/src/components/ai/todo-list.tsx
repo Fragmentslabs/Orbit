@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 import type { ToolPart } from "@shared/chat"
 
 /**
- * Checklist viva da tool todowrite. A última chamada da mensagem é a lista
- * atual; chamadas anteriores (stale) viram uma linha discreta.
+ * Live checklist of the todowrite tool. The last call of the message is the current
+ * list; earlier (stale) calls become a discreet line.
  */
 
 interface TodoItem {

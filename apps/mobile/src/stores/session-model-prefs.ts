@@ -4,19 +4,19 @@ import { useConnectionStore } from './connection-store'
 import { useSettingsStore } from './settings-store'
 
 /**
- * Modelo selecionado POR CHAT (mesmo padrão do desktop: o modelo segue a
- * sessão, não o app inteiro). `overrides` guarda o modelo escolhido de cada
- * sessão; chat novo usa a chave DRAFT até a criação da sessão (adopt). Sem
- * override, vale o último chat usado e, por fim, o default global (que é o
- * modelo selecionado no desktop, sincronizado via HTTP). `recents` é global
- * (últimos 5 modelos de fato usados em qualquer chat) — espelho do desktop.
+ * Model selected PER CHAT (same pattern as the desktop: the model follows the
+ * session, not the whole app). `overrides` holds the model chosen for each
+ * session; a new chat uses the DRAFT key until the session is created (adopt). Without an
+ * override, the last chat used applies and, at the end, the global default (which is the
+ * model selected on the desktop, synchronized via HTTP). `recents` is global
+ * (last 5 models really used in any chat) — mirror of the desktop.
  *
- * Sincronização com o desktop: o desktop é a fonte de verdade dos overrides —
- * o renderer dele empurra o mapa para o main (que repassa aos companions via
- * WS 'session:model-change' e expõe em GET /api/session-models). O mobile
- * aplica o snapshot na hidratação e em eventos ao vivo; escolhas feitas no
- * mobile são enviadas via WS 'models:select' (com sessionId) e o desktop
- * aplica no store dele.
+ * Synchronization with the desktop: the desktop is the source of truth for the overrides —
+ * its renderer pushes the map to main (which passes it on to the companions via
+ * WS 'session:model-change' and exposes it at GET /api/session-models). Mobile
+ * applies the snapshot on hydration and on live events; choices made on
+ * mobile are sent via WS 'models:select' (with sessionId) and the desktop
+ * applies them in its store.
  */
 
 const STORAGE_KEY = 'orbit_session_models'
@@ -39,27 +39,27 @@ async function loadRecents(): Promise<SelectedModel[]> {
       if (Array.isArray(parsed)) return parsed.slice(0, MAX_RECENTS)
     }
   } catch {
-    // recents corrompidos — recomeça vazio
+    // corrupted recents — starts empty
   }
   return []
 }
 
 interface SessionModelPrefsState {
   overrides: SessionModelOverrides
-  /** Últimos modelos usados (global, mais recente primeiro, máx. 5) */
+  /** Last models used (global, most recent first, max. 5) */
   recents: SelectedModel[]
   hydrated: boolean
-  /** Aplica um snapshot vindo do desktop (HTTP ou WS). Só entra chave que o
-   *  mobile não tem localmente — escolha local vence em conflito. */
+  /** Applies a snapshot coming from the desktop (HTTP or WS). Only a key the
+   *  mobile does not have locally enters — the local choice wins in a conflict. */
   applySync: (remote: SessionModelOverrides) => void
   hydrate: () => Promise<void>
   selectModel: (sessionId: string | null | undefined, providerId: string, modelId: string) => void
-  /** Move o override do draft (chat novo) para a sessão criada no 1º envio */
+  /** Moves the override of the draft (new chat) to the session created on the 1st send */
   adopt: (sessionId: string, fallback?: SelectedModel) => void
-  /** Registra um modelo como "usado" (entra nos recentes). Chamado apenas
-   *  quando o agente concluiu uma resposta de fato — nunca em falha. */
+  /** Records a model as "used" (enters the recents). Called only
+   *  when the agent actually completed an answer — never on failure. */
   markUsed: (providerId?: string, modelId?: string) => void
-  /** Remove um modelo dos recentes (botão "x" no seletor). */
+  /** Removes a model from the recents ("x" button in the picker). */
   removeRecent: (providerId: string, modelId: string) => void
   clear: (sessionId: string) => void
 }
@@ -90,12 +90,12 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
       const raw = await Storage.getItem(STORAGE_KEY)
       if (raw) set({ overrides: JSON.parse(raw) as SessionModelOverrides })
     } catch {
-      // prefs corrompidas — segue vazio
+      // corrupted prefs — stays empty
     }
     set({ recents: await loadRecents() })
     set({ hydrated: true })
 
-    // Snapshot dos overrides por sessão do desktop (renderer → main → HTTP)
+    // Snapshot of the per-session overrides of the desktop (renderer → main → HTTP)
     const { http } = useConnectionStore.getState()
     if (!http) return
     try {
@@ -105,7 +105,7 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
         if (remote) get().applySync(remote)
       }
     } catch {
-      // Offline — fica com o cache local
+      // Offline — keeps the local cache
     }
   },
 
@@ -117,18 +117,18 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
     set({ overrides })
 
     if (!sessionId) {
-      // Chat novo: o modelo escolhido vira também o default global (mesmo
-      // comportamento do desktop) — o desktop é avisado via HTTP.
+      // New chat: the chosen model also becomes the global default (same
+      // behavior as the desktop) — the desktop is notified via HTTP.
       void useSettingsStore.getState().selectModel(providerId, modelId)
     } else {
-      // Sessão existente: avisa o desktop para atualizar o override no
-      // renderer (que repassa aos demais companions).
+      // Existing session: notifies the desktop to update the override in the
+      // renderer (which passes it on to the other companions).
       const { wsClient } = useConnectionStore.getState()
       try {
         void wsClient.send({ type: 'models:select', providerId, modelId, sessionId } as any)
       } catch {
-        // Offline: o envio explícito do modelo em cada mensagem mantém o
-        // comportamento mesmo sem o desktop saber do override.
+        // Offline: the explicit send of the model in every message keeps the
+        // behavior even without the desktop knowing about the override.
       }
     }
   },
@@ -139,8 +139,8 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
       overrides[sessionId] = overrides[DRAFT_KEY]
       delete overrides[DRAFT_KEY]
     } else if (fallback) {
-      // Sem escolha explícita no draft, fixa o modelo efetivamente usado
-      // (herdado do último chat) para a sessão continuar nele.
+      // Without an explicit choice in the draft, it fixes the model actually used
+      // (inherited from the last chat) so the session stays with it.
       overrides[sessionId] = fallback
     } else {
       return

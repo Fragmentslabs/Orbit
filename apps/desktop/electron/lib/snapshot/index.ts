@@ -5,32 +5,33 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { app } from 'electron'
+import { perfSpan } from '../perf'
 
 /**
- * Engine de snapshots do filesystem por mensagem (padrão opencode): um
- * repositório git auxiliar por projeto em userData/snapshots/<hash>, usando
- * --git-dir + --work-tree para versionar a pasta do projeto sem tocar no
- * .git dele. Snapshots são tree hashes (write-tree) — sem commits, sem refs.
+ * Filesystem snapshot engine per message (opencode style): an auxiliary git
+ * repository per project in userData/snapshots/<hash>, using
+ * --git-dir + --work-tree to version the project folder without touching its
+ * own .git. Snapshots are tree hashes (write-tree) — no commits, no refs.
  */
 
 const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 50 * 1024 * 1024
 
 /**
- * B3 — Resolução do binário do git no carregamento do módulo.
+ * B3 — Resolution of the git binary at module load.
  *
- * Quando o app é aberto pelo Finder/dock ou pelo Menu Iniciar, e não pelo
- * terminal, o PATH do processo pode não ter o diretório do git, e o execFile
- * falha com ENOENT. A resolução procura o git no PATH, depois nos lugares
- * onde os instaladores o deixam, e por fim entrega `git` com o PATH ampliado.
+ * When the app is opened from Finder/dock or from the Start menu, and not from the
+ * terminal, the process PATH may not have the git directory, and execFile
+ * fails with ENOENT. The resolution looks for git in the PATH, then in the places
+ * where the installers leave it, and finally hands over `git` with the PATH widened.
  *
- * Isto nasceu só para macOS, e no Windows o snapshot quebrava SEMPRE: o PATH
- * era juntado com ":" (lá é ";"), o arquivo procurado era "git" (lá é
- * "git.exe") e, como a variável do Windows se chama "Path", o código criava
- * uma SEGUNDA chave "PATH" só com diretórios do macOS — o git rodava num PATH
- * onde ele não existe, e todo turno do modo código perdia o snapshot, o revert
- * por mensagem e a verificação de mudanças. Agora o separador, o nome do
- * arquivo e a chave da variável vêm da plataforma.
+ * This was born for macOS only, and on Windows the snapshot broke ALWAYS: the PATH
+ * was joined with ":" (there it is ";"), the file looked for was "git" (there it is
+ * "git.exe") and, since the Windows variable is called "Path", the code created
+ * a SECOND "PATH" key with only macOS directories — git ran in a PATH
+ * where it does not exist, and every code-mode turn lost the snapshot, the revert
+ * per message and the check of changes. Now the separator, the file
+ * name and the variable key come from the platform.
  */
 const KNOWN_GIT_PATHS: Partial<Record<NodeJS.Platform, string[]>> = {
   darwin: ['/usr/bin/git', '/opt/homebrew/bin/git', '/usr/local/bin/git'],
@@ -41,7 +42,7 @@ const KNOWN_GIT_PATHS: Partial<Record<NodeJS.Platform, string[]>> = {
     'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
   ],
 }
-/** Diretórios somados ao PATH herdado — só onde o PATH mínimo é um risco. */
+/** Directories added to the inherited PATH — only where the minimal PATH is a risk. */
 const EXTRA_PATH: Partial<Record<NodeJS.Platform, string[]>> = {
   darwin: ['/usr/bin', '/bin', '/usr/sbin', '/sbin', '/opt/homebrew/bin', '/usr/local/bin'],
   linux: ['/usr/bin', '/bin', '/usr/local/bin'],
@@ -49,25 +50,25 @@ const EXTRA_PATH: Partial<Record<NodeJS.Platform, string[]>> = {
 
 export function resolveGitBinary(
   platform: NodeJS.Platform,
-  // Um ambiente qualquer, e não o ProcessEnv deste app: o tipo global declara
-  // as variáveis do Orbit como obrigatórias, e o ambiente de um processo filho
-  // não tem por que ter nenhuma delas.
+  // An arbitrary environment, and not the ProcessEnv of this app: the global type declares
+  // the Orbit variables as required, and a child process environment
+  // has no reason to have any of them.
   baseEnv: Record<string, string | undefined>,
   isExecutable: (file: string) => boolean,
 ): { binary: string; env: NodeJS.ProcessEnv } {
   const paths = platform === 'win32' ? path.win32 : path.posix
   const env = { ...baseEnv } as NodeJS.ProcessEnv
 
-  // A chave como ela VEIO: "Path" no Windows. Escrever em "PATH" criaria uma
-  // segunda variável, e qual das duas o processo filho enxerga não é decisão
-  // nossa.
+  // The key as it CAME: "Path" on Windows. Writing to "PATH" would create a
+  // second variable, and which of the two the child process sees is not a decision
+  // of ours.
   const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH'
   const inherited = (env[pathKey] ?? '').split(paths.delimiter).filter(Boolean)
   const extra = (EXTRA_PATH[platform] ?? []).filter((dir) => !inherited.includes(dir))
   const searchPath = [...inherited, ...extra]
   env[pathKey] = searchPath.join(paths.delimiter)
 
-  // 1. O PATH, na ordem (o que o usuário configurou tem precedência)
+  // 1. The PATH, in order (what the user configured takes precedence)
   const names = platform === 'win32' ? ['git.exe', 'git.cmd'] : ['git']
   for (const dir of searchPath) {
     for (const name of names) {
@@ -76,7 +77,7 @@ export function resolveGitBinary(
     }
   }
 
-  // 2. Onde os instaladores costumam deixar o git
+  // 2. Where the installers usually leave git
   const localPrograms =
     platform === 'win32' && env.LOCALAPPDATA
       ? [paths.join(env.LOCALAPPDATA, 'Programs', 'Git', 'cmd', 'git.exe')]
@@ -85,7 +86,7 @@ export function resolveGitBinary(
     if (isExecutable(candidate)) return { binary: candidate, env }
   }
 
-  // 3. Deixa o PATH ampliado decidir
+  // 3. Let the extended PATH decide
   return { binary: 'git', env }
 }
 
@@ -98,20 +99,20 @@ function canExecute(file: string): boolean {
   }
 }
 
-/** Binário do git e PATH resolvidos no load — exportado para ferramentas
- * externas (ex.: verify_changes) que precisem invocar git com a mesma
- * resolução (B3: Finder/PATH mínimo) sem duplicá-la. */
+/** git binary and PATH resolved at load — exported for external tools
+ * (e.g. verify_changes) that need to invoke git with the same
+ * resolution (B3: Finder/minimal PATH) without duplicating it. */
 export const gitBinary = resolveGitBinary(process.platform, process.env, canExecute)
 
-/** Excludes padrão além do .gitignore do projeto (projetos sem .gitignore) */
+/** Default excludes beyond the project's .gitignore (projects without .gitignore) */
 /**
- * `.orbit/`: worktrees do Orbit no modo "dentro do projeto". O repositório
- * auxiliar não lê o .git/info/exclude do projeto — sem isto cada snapshot
- * levaria cópias inteiras do repositório, e desfazer um turno apagaria um
- * worktree criado depois dele.
+ * `.orbit/`: Orbit worktrees in "inside the project" mode. The auxiliary repository
+ * does not read the project's .git/info/exclude — without this every snapshot
+ * would carry whole copies of the repository, and undoing a turn would delete a
+ * worktree created after it.
  */
 const DEFAULT_EXCLUDES = ['node_modules/', '.git/', '.orbit/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
-/** Repositórios auxiliares cujo exclude já foi conferido nesta execução. */
+/** Auxiliary repositories whose exclude was already checked in this run. */
 const excludesConferidos = new Set<string>()
 
 const GC_INTERVAL = 60 * 60 * 1000 // 1h
@@ -123,50 +124,50 @@ function gitDirFor(directory: string): string {
 }
 
 /**
- * Fila de operações por pasta (chave = repositório auxiliar).
+ * Queue of operations per folder (key = auxiliary repository).
  *
- * O repositório de snapshot é POR PASTA (`gitDirFor`), então workers em
- * paralelo na MESMA pasta — o padrão da orquestra, quando não há worktree —
- * batem no mesmo `.git/index`: `git add`, `write-tree` e `git gc` disputam o
- * `index.lock`, e quem perde não grava snapshot nenhum. O turno termina com o
- * veredito 'unknown' e daí saem os dois sintomas vistos em campo: o chat não
- * mostra o badge de alterações e o `ver_diff` do revisor responde "no changes
- * found" para um turno que trabalhou.
+ * The snapshot repository is PER FOLDER (`gitDirFor`), so workers running in
+ * parallel in the SAME folder — the orchestra default, when there is no
+ * worktree — hit the same `.git/index`: `git add`, `write-tree` and `git gc`
+ * fight over the `index.lock`, and whoever loses writes no snapshot at all. The
+ * turn ends with the verdict 'unknown', and from there come the two symptoms
+ * seen in the field: the chat shows no change badge and the reviewer's
+ * `show_diff` answers "no changes found" for a turn that did work.
  *
- * É um encadeamento de promises por pasta: uma operação de git por vez naquela
- * pasta, e pastas diferentes seguem em paralelo. Nenhuma função pública pega a
- * trava duas vezes (por dentro todas usam `snapshotGitCru`), então não há
- * reentrância nem deadlock.
+ * It is a chain of promises per folder: one git operation at a time in that
+ * folder, and different folders go on in parallel. No public function takes the
+ * lock twice (inside, all of them use `snapshotGitCru`), so there is no
+ * reentrancy and no deadlock.
  */
-const filas = new Map<string, Promise<unknown>>()
+const queues = new Map<string, Promise<unknown>>()
 
-function comTrava<T>(gitDir: string, fn: () => Promise<T>): Promise<T> {
-  const anterior = filas.get(gitDir) ?? Promise.resolve()
-  // `fn` nos dois ramos: a falha de uma operação não pode travar a pasta.
-  const atual = anterior.then(fn, fn)
-  // A cauda guardada já vem resolvida — um erro de um turno não contamina os
-  // próximos. Sem isto, um único `index.lock` azedaria a fila da pasta toda.
-  const cauda = atual.then(
+function withLock<T>(gitDir: string, fn: () => Promise<T>): Promise<T> {
+  const previous = queues.get(gitDir) ?? Promise.resolve()
+  // `fn` in both branches: one operation's failure cannot lock the folder.
+  const current = previous.then(fn, fn)
+  // The stored tail already comes resolved — an error from one turn does not contaminate the
+  // next ones. Without this, a single `index.lock` would sour the whole folder's queue.
+  const tail = current.then(
     () => {},
     () => {},
   )
-  filas.set(gitDir, cauda)
-  // Chave liberada quando a fila esvazia; se alguém entrou atrás, a cauda já é outra.
-  void cauda.then(() => {
-    if (filas.get(gitDir) === cauda) filas.delete(gitDir)
+  queues.set(gitDir, tail)
+  // Key released when the queue empties; if someone entered behind, the tail is already another.
+  void tail.then(() => {
+    if (queues.get(gitDir) === tail) queues.delete(gitDir)
   })
-  return atual
+  return current
 }
 
 /**
- * Invocação CRUA do git no repositório auxiliar — sem a trava da pasta.
- * Interna de propósito: é o que as operações abaixo usam quando JÁ estão com a
- * fila da pasta nas mãos (pegar a trava aqui dentro seria reentrância).
+ * RAW invocation of git in the auxiliary repository — without the folder's lock.
+ * Internal on purpose: it is what the operations below use when they ALREADY hold
+ * the folder's queue (taking the lock in here would be reentrancy).
  *
- * `--literal-pathspecs`: os caminhos passados depois de `--` são NOMES de
- * arquivo, não padrões. Sem isso, `checkout <tree> -- app/[id]/page.tsx`
- * também casaria `app/i/page.tsx` e o revert sobrescreveria um arquivo que
- * a transição tinha classificado como conflito.
+ * `--literal-pathspecs`: the paths passed after `--` are file NAMES,
+ * not patterns. Without this, `checkout <tree> -- app/[id]/page.tsx`
+ * would also match `app/i/page.tsx` and the revert would overwrite a file that
+ * the transition had classified as a conflict.
  */
 async function snapshotGitCru(directory: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(
@@ -178,17 +179,17 @@ async function snapshotGitCru(directory: string, args: string[]): Promise<string
 }
 
 /**
- * Executa git no repositório auxiliar de snapshots (--git-dir em
- * userData/snapshots/<hash> + --work-tree no projeto) usando o binário e o
- * PATH resolvidos no load. Único ponto de verdade da invocação — exportado
- * para ferramentas externas (ex.: verify_changes) não duplicarem gitDirFor
- * nem a resolução do binário.
+ * Runs git in the snapshot auxiliary repository (--git-dir in
+ * userData/snapshots/<hash> + --work-tree in the project) using the binary and the
+ * PATH resolved at load. Single point of truth of the invocation — exported
+ * so that external tools (e.g. verify_changes) do not duplicate gitDirFor
+ * nor the binary resolution.
  *
- * Passa pela fila da pasta: uma invocação por vez naquele repositório, para
- * não disputar o `index.lock` com uma captura do mesmo projeto.
+ * Goes through the folder's queue: one invocation at a time in that repository, so
+ * as not to dispute the `index.lock` with a capture of the same project.
  */
 export function snapshotGit(directory: string, args: string[]): Promise<string> {
-  return comTrava(gitDirFor(directory), () => snapshotGitCru(directory, args))
+  return withLock(gitDirFor(directory), () => snapshotGitCru(directory, args))
 }
 
 async function ensureRepo(directory: string): Promise<void> {
@@ -202,27 +203,27 @@ async function ensureRepo(directory: string): Promise<void> {
       env: gitBinary.env,
     })
   }
-  // Também nos repositórios que já existiam: a lista de excludes cresce entre
-  // versões (ex.: .orbit/), e só escrevê-la no init deixaria os antigos sem.
+  // Also in the repositories that already existed: the excludes list grows between
+  // versions (e.g. .orbit/), and only writing it at init would leave the old ones without it.
   if (excludesConferidos.has(gitDir)) return
   const exclude = path.join(gitDir, 'info', 'exclude')
-  const atual = await fs.readFile(exclude, 'utf8').catch(() => '')
-  const linhas = new Set(atual.split('\n').map((l) => l.trim()))
-  const faltando = DEFAULT_EXCLUDES.filter((e) => !linhas.has(e))
-  if (faltando.length > 0) {
+  const current = await fs.readFile(exclude, 'utf8').catch(() => '')
+  const lines = new Set(current.split('\n').map((l) => l.trim()))
+  const missing = DEFAULT_EXCLUDES.filter((e) => !lines.has(e))
+  if (missing.length > 0) {
     await fs.mkdir(path.dirname(exclude), { recursive: true })
-    const prefixo = atual && !atual.endsWith('\n') ? '\n' : ''
-    await fs.appendFile(exclude, prefixo + faltando.join('\n') + '\n', 'utf8')
+    const prefixo = current && !current.endsWith('\n') ? '\n' : ''
+    await fs.appendFile(exclude, prefixo + missing.join('\n') + '\n', 'utf8')
   }
   excludesConferidos.add(gitDir)
 }
 
 /**
- * `git gc --prune=7.days`, no máximo 1x/hora por projeto.
+ * `git gc --prune=7.days`, at most once an hour per project.
  *
- * Vai pela fila da pasta (`snapshotGit`), e não na frente dela: o gc espera a
- * captura que estiver rodando e nunca segura o `index.lock` no meio de um
- * `add --all` — era essa corrida que fazia o turno perder o snapshot.
+ * It goes through the folder's queue (`snapshotGit`), and not in front of it: the gc waits for the
+ * capture that is running and never holds the `index.lock` in the middle of an
+ * `add --all` — it was this race that made the turn lose the snapshot.
  */
 function maybeGc(directory: string) {
   const key = gitDirFor(directory)
@@ -233,81 +234,96 @@ function maybeGc(directory: string) {
 }
 
 /**
- * Apaga o repositório auxiliar de snapshots de uma pasta que deixou de existir
- * (ex.: o worktree de uma task da esteira, ao ser removido).
+ * Deletes the snapshot side-repository of a folder that no longer exists
+ * (e.g. the worktree of a pipeline task, when it is removed).
  *
- * Pela fila da pasta: o que estiver rodando termina antes, e nenhum git fica
- * com o repositório aberto no instante da remoção.
+ * Through the folder queue: whatever is running finishes first, and no git
+ * keeps the repository open at the moment of the removal.
  */
 export async function descartarSnapshots(directory: string): Promise<void> {
   const gitDir = gitDirFor(directory)
   lastGc.delete(gitDir)
-  await comTrava(gitDir, () => fs.rm(gitDir, { recursive: true, force: true }))
+  await withLock(gitDir, () => fs.rm(gitDir, { recursive: true, force: true }))
 }
 
 /**
- * Captura o estado atual do worktree como tree hash.
+ * Captures the current state of the worktree as a tree hash.
  *
- * `add --all` + `write-tree` são uma operação só: a trava fica com a pasta até
- * o fim, senão outra captura do mesmo projeto entraria entre os dois comandos.
+ * `add --all` + `write-tree` are a single operation: the lock stays with the folder until
+ * the end, otherwise another capture of the same project would enter between the two commands.
  */
 export async function capture(directory: string): Promise<string> {
-  return comTrava(gitDirFor(directory), async () => {
-    await ensureRepo(directory)
-    // B4 — Limitação documentada: `git add --all` NÃO versiona arquivos
-    // ignorados pelo .gitignore do projeto (nem pelos excludes deste módulo).
-    // Logo, esses arquivos nunca entram no snapshot e não são revertidos pelo
-    // restore — comportamento intencional. Não usamos -f de propósito: ele
-    // quebraria os excludes de node_modules/ etc. e incharia o repositório
-    // auxiliar com lixo que não devemos restaurar.
-    await snapshotGitCru(directory, ['add', '--all'])
-    const tree = (await snapshotGitCru(directory, ['write-tree'])).trim()
-    // Fire-and-forget: o gc só entra na fila (não é aguardado aqui).
-    maybeGc(directory)
-    return tree
-  })
+  // The span opens BEFORE the lock on purpose: the difference between opening the
+  // lock at once and getting it minutes later is exactly how much the workers of
+  // the same folder are queueing behind each other.
+  const perf = perfSpan('snapshot:capture', { directory })
+  try {
+    return await withLock(gitDirFor(directory), async () => {
+      await ensureRepo(directory)
+      // B4 — Documented limitation: `git add --all` does NOT version files
+      // ignored by the project's .gitignore (nor by the excludes of this module).
+      // Therefore, those files never enter the snapshot and are not reverted by the
+      // restore — intentional behavior. We do not use -f on purpose: it
+      // would break the excludes of node_modules/ etc. and would bloat the auxiliary
+      // repository with junk we should not restore.
+      await snapshotGitCru(directory, ['add', '--all'])
+      const tree = (await snapshotGitCru(directory, ['write-tree'])).trim()
+      // Fire-and-forget: the gc only enters the queue (it is not awaited here).
+      maybeGc(directory)
+      return tree
+    })
+  } finally {
+    perf.end()
+  }
 }
 
 /**
- * A restauração GLOBAL da pasta (`read-tree --reset -u`) foi removida de
- * propósito: ela devolvia o repositório inteiro ao início do turno e engolia
- * o trabalho de outra conversa na mesma pasta. O revert agora usa
- * `transition` (S/E/C por caminho), que só toca no que o turno mudou e ainda
- * está como ele deixou.
+ * The GLOBAL restore of the folder (`read-tree --reset -u`) was removed on
+ * purpose: it took the whole repository back to the start of the turn and swallowed
+ * the work of another conversation in the same folder. The revert now uses
+ * `transition` (S/E/C per path), which only touches what the turn changed and is still
+ * as it left it.
  */
 export interface SnapshotDiff {
   files: string[]
-  /** Diff unificado (pode ser grande — truncado em ~200kB) */
+  /** Unified diff (can be large — truncated at ~200kB) */
   patch: string
 }
 
 const MAX_PATCH_CHARS = 200_000
 
-/** Diferença entre dois snapshots (tree hashes). */
+/** Difference between two snapshots (tree hashes). */
 export async function diff(directory: string, from: string, to: string): Promise<SnapshotDiff> {
-  return comTrava(gitDirFor(directory), async () => {
-    const files = (await snapshotGitCru(directory, ['diff', '--name-only', from, to]))
-      .split('\n')
-      .map((f) => f.trim())
-      .filter(Boolean)
-    let patch = ''
-    if (files.length > 0) {
-      patch = await snapshotGitCru(directory, ['diff', from, to])
-      if (patch.length > MAX_PATCH_CHARS) {
-        patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'
+  const perf = perfSpan('snapshot:diff', { directory })
+  try {
+    return await withLock(gitDirFor(directory), async () => {
+      const files = (await snapshotGitCru(directory, ['diff', '--name-only', from, to]))
+        .split('\n')
+        .map((f) => f.trim())
+        .filter(Boolean)
+      let patch = ''
+      if (files.length > 0) {
+        patch = await snapshotGitCru(directory, ['diff', from, to])
+        if (patch.length > MAX_PATCH_CHARS) {
+          patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'
+        }
       }
-    }
-    return { files, patch }
-  })
+      perf.end({ files: files.length, patchChars: patch.length })
+      return { files, patch }
+    })
+  } catch (err) {
+    perf.end({ failed: true })
+    throw err
+  }
 }
 
 /**
- * Estado de um caminho num tree hash ou no worktree.
+ * State of a path in a tree hash or in the worktree.
  *
- * `hash` é o blob do git (o mesmo que `add`/`write-tree` gravaram); `mode`
- * separa arquivo comum, executável e symlink. Comparar hash + modo é o que
- * responde "o worktree AINDA está como o turno deixou?" sem olhar conteúdo de
- * arquivo por arquivo em Node.
+ * `hash` is the git blob (the same one `add`/`write-tree` wrote); `mode`
+ * separates ordinary file, executable and symlink. Comparing hash + mode is what
+ * answers "is the worktree STILL as the turn left it?" without looking at file
+ * content one by one in Node.
  */
 export interface PathState {
   exists: boolean
@@ -316,19 +332,19 @@ export interface PathState {
 }
 
 export interface TransitionResult {
-  /** Caminhos que voltaram ao estado `to` (o que o revert realmente desfez). */
+  /** Paths that went back to the `to` state (what the revert actually undid). */
   applied: string[]
-  /** Caminhos que mudaram depois do turno — preservados, não tocados. */
+  /** Paths that changed after the turn — preserved, not touched. */
   conflicts: string[]
-  /** Caminhos que já estavam no estado `to` (nada a fazer). */
+  /** Paths that were already in the `to` state (nothing to do). */
   already: string[]
 }
 
 /**
- * Mesmo blob em ambos: o sha1 do git para um symlink é o blob do TEXTO do
- * alvo, e `git hash-object <symlink>` segue o link (falha se o alvo não
- * existe). Aqui o conteúdo vai por stdin, no formato de objeto do repositório
- * auxiliar (sha1 por padrão, sha256 se o git do usuário configurou assim).
+ * Same blob in both: the git sha1 for a symlink is the blob of the TEXT of the
+ * target, and `git hash-object <symlink>` follows the link (it fails if the target does not
+ * exist). Here the content goes through stdin, in the object format of the auxiliary
+ * repository (sha1 by default, sha256 if the user's git is configured that way).
  */
 function gitHashStdin(directory: string, content: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -352,18 +368,18 @@ function gitHashStdin(directory: string, content: string): Promise<string> {
   })
 }
 
-/** Estado de `rel` dentro de um tree hash (sem tocar no worktree). */
+/** State of `rel` inside a tree hash (without touching the worktree). */
 async function entryState(directory: string, tree: string, rel: string): Promise<PathState> {
   const out = (await snapshotGitCru(directory, ['ls-tree', tree, '--', rel])).trim()
   if (!out) return { exists: false, hash: null, mode: null }
-  // "<mode> <type> <hash>\t<path>" — o path pode vir citado, mas os três
-  // primeiros campos nunca vêm.
+  // "<mode> <type> <hash>\t<path>" — the path may come quoted, but the three
+  // first fields never do.
   const [mode, type, hash] = out.split('\t')[0].split(/\s+/)
   if (!mode || !hash || type !== 'blob') return { exists: true, hash: hash ?? null, mode: mode ?? null }
   return { exists: true, hash, mode }
 }
 
-/** Estado de `rel` no worktree agora. */
+/** State of `rel` in the worktree right now. */
 async function worktreeState(directory: string, rel: string): Promise<PathState> {
   const abs = path.join(directory, rel)
   const st = await fs.lstat(abs).catch(() => null)
@@ -386,22 +402,22 @@ function samePathState(a: PathState, b: PathState): boolean {
 }
 
 /**
- * Transição S/E/C POR CAMINHO — o coração do revert sem restauração global.
+ * S/E/C transition PER PATH — the heart of the revert without a global restore.
  *
- * `from` é o estado que o worktree deveria ter (o `end` do turno, no revert;
- * o estado pós-revert, no unrevert) e `to` é o estado a que ele deve voltar.
- * Para cada caminho que difere entre os dois:
+ * `from` is the state the worktree should have (the `end` of the turn, on revert;
+ * the post-revert state, on unrevert) and `to` is the state it should go back to.
+ * For each path that differs between the two:
  *
- * - worktree == `from` → AINDA é o que o turno deixou: volta para `to`;
- * - worktree == `to`   → já está desfeito: nada a fazer;
- * - qualquer outra coisa → alguém mexeu depois (outra conversa, o usuário
- *   fora do Orbit, um agente externo): NÃO toca e reporta conflito.
+ * - worktree == `from` → it is STILL what the turn left: goes back to `to`;
+ * - worktree == `to`   → already undone: nothing to do;
+ * - anything else → someone touched it afterwards (another conversation, the user
+ *   outside Orbit, an external agent): does NOT touch it and reports a conflict.
  *
- * O resto da pasta não é lido além dos caminhos do diff, e nada é apagado em
- * bloco. `skip` são caminhos que o turno mudou mas que não são dele (saves
- * manuais do painel) — entram como conflito, preservados. `paths` limita a
- * transição a esses caminhos (os de autoria confirmada do turno); sem ele,
- * vale todo o diff entre `from` e `to`.
+ * The rest of the folder is not read beyond the paths of the diff, and nothing is deleted in
+ * bulk. `skip` are paths the turn changed but that are not its own (manual
+ * saves from the panel) — they come in as a conflict, preserved. `paths` limits the
+ * transition to those paths (the ones with confirmed authorship of the turn); without it,
+ * the whole diff between `from` and `to` applies.
  */
 export async function transition(
   directory: string,
@@ -410,7 +426,7 @@ export async function transition(
   options: { skip?: Set<string>; paths?: string[] } = {},
 ): Promise<TransitionResult> {
   const { skip } = options
-  return comTrava(gitDirFor(directory), async () => {
+  return withLock(gitDirFor(directory), async () => {
     await ensureRepo(directory)
     const paths = options.paths ?? (await changedPathsCru(directory, from, to))
     const applied: string[] = []
@@ -428,13 +444,13 @@ export async function transition(
         const current = await worktreeState(directory, rel)
         if (samePathState(current, expected)) {
           if (target.exists) {
-            // checkout restaura conteúdo, modo e symlink de uma vez.
+            // checkout restores content, mode and symlink at once.
             await snapshotGitCru(directory, ['checkout', to, '--', rel])
           } else {
             await fs.rm(path.join(directory, rel), { force: true })
             await removeEmptyParents(directory, rel)
-            // Mantém o índice coerente com o que sobrou; o próximo capture
-            // faria isso de qualquer forma.
+            // Keeps the index consistent with what is left; the next capture
+            // would do that anyway.
             await snapshotGitCru(directory, ['rm', '--cached', '--ignore-unmatch', '--', rel]).catch(() => '')
           }
           applied.push(rel)
@@ -444,9 +460,9 @@ export async function transition(
           conflicts.push(rel)
         }
       } catch (err) {
-        // Um caminho ilegível não pode derrubar o revert inteiro — e não é
-        // seguro sobrescrevê-lo sem saber o estado atual.
-        console.error('[snapshot] transição falhou em', rel, err)
+        // An unreadable path cannot bring down the whole revert — and it is not
+        // safe to overwrite it without knowing the current state.
+        console.error('[snapshot] transition failed at', rel, err)
         conflicts.push(rel)
       }
     }
@@ -456,8 +472,8 @@ export async function transition(
 }
 
 /**
- * Caminhos que diferem entre dois trees, sem renomeação e sem mexer no nome:
- * `-z` entrega o nome cru (espaço no começo ou no fim é parte dele).
+ * Paths that differ between two trees, without rename detection and without touching the name:
+ * `-z` delivers the raw name (a space at the start or end is part of it).
  */
 async function changedPathsCru(directory: string, from: string, to: string): Promise<string[]> {
   const raw = await snapshotGitCru(directory, ['diff', '--name-only', '-z', '--no-renames', from, to])
@@ -466,16 +482,16 @@ async function changedPathsCru(directory: string, from: string, to: string): Pro
 
 export async function changedPaths(directory: string, from: string, to: string): Promise<string[]> {
   if (from === to) return []
-  return comTrava(gitDirFor(directory), async () => {
+  return withLock(gitDirFor(directory), async () => {
     await ensureRepo(directory)
     return changedPathsCru(directory, from, to)
   })
 }
 
 /**
- * Apagar o arquivo que o turno criou deixava a pasta dele para trás (o
- * `read-tree -u` antigo levava junto). Sobe removendo só as pastas que
- * ficaram VAZIAS, e nunca a raiz.
+ * Deleting the file the turn created left its folder behind (the old
+ * `read-tree -u` took it along). Goes up removing only the folders that became
+ * EMPTY, and never the root.
  */
 async function removeEmptyParents(directory: string, rel: string): Promise<void> {
   const root = path.resolve(directory)
@@ -488,7 +504,7 @@ async function removeEmptyParents(directory: string, rel: string): Promise<void>
   }
 }
 
-/** Diff entre dois trees limitado a caminhos — é o que a barra de revert mostra. */
+/** Diff between two trees limited to paths — it is what the revert bar shows. */
 export async function diffPaths(
   directory: string,
   from: string,
@@ -496,7 +512,7 @@ export async function diffPaths(
   paths: string[],
 ): Promise<SnapshotDiff> {
   if (paths.length === 0) return { files: [], patch: '' }
-  return comTrava(gitDirFor(directory), async () => {
+  return withLock(gitDirFor(directory), async () => {
     let patch = await snapshotGitCru(directory, ['diff', '--no-ext-diff', from, to, '--', ...paths])
     if (patch.length > MAX_PATCH_CHARS) {
       patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'

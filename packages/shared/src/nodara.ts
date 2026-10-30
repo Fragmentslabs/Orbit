@@ -1,32 +1,32 @@
 /**
- * Nodara: integração oficial (controle de dispositivos Android via MCP).
- * O estado cruza duas pontas — o app Nodara rodando na máquina e o servidor
- * MCP "Nodara" registrado e conectado no Orbit.
+ * Nodara: official integration (control of Android devices via MCP).
+ * The state crosses two ends — the Nodara app running on the machine and the MCP
+ * server "Nodara" registered and connected in Orbit.
  */
 
 export type NodaraState =
-  /** Sem ~/.nodara/mcp.json: o Nodara nunca rodou nesta máquina */
+  /** Without ~/.nodara/mcp.json: Nodara never ran on this machine */
   | 'not-installed'
-  /** Bridge file existe, mas o servidor local não responde (app fechado) */
+  /** Bridge file exists, but the local server does not answer (app closed) */
   | 'stopped'
-  /** Ponte desligada nas configurações do Nodara, ou servidor MCP desabilitado no Orbit */
+  /** Bridge off in the Nodara settings, or MCP server disabled in Orbit */
   | 'disabled'
-  /** Nodara no ar, mas ainda sem servidor MCP registrado no Orbit */
+  /** Nodara up, but still without an MCP server registered in Orbit */
   | 'installed'
-  /** Registrado no Orbit, porém a conexão MCP falhou (token vencido, porta trocada...) */
+  /** Registered in Orbit, but the MCP connection failed (expired token, changed port...) */
   | 'error'
-  /** Conectado: as tools estão no toolset do agente */
+  /** Connected: the tools are in the agent's toolset */
   | 'connected'
 
 export interface NodaraStatus {
   state: NodaraState
-  /** Existe entrada "Nodara" no mcp-config.json do Orbit */
+  /** There is a "Nodara" entry in Orbit's mcp-config.json */
   linked: boolean
-  /** Credencial salva diverge da publicada pelo Nodara (token regenerado / porta trocada) */
+  /** Saved credential differs from the one published by Nodara (token regenerated / port changed) */
   tokenStale: boolean
   mcpUrl?: string
-  /** Quantidade de ferramentas expostas quando conectado */
+  /** Number of tools exposed when connected */
   toolCount: number
-  /** Erro da conexão MCP, ou um código da própria integração (nodara-not-running...) */
+  /** MCP connection error, or a code of the integration itself (nodara-not-running...) */
   error?: string
 }

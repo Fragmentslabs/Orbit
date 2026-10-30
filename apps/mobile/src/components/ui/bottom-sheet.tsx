@@ -1,11 +1,11 @@
 /**
- * Bottom sheet genérico: Modal nativo (RN Modal) ancorado na base da tela —
- * imune a problemas de posicionamento de popover/portal (não há como sair dos
- * limites da tela). Padrão do app para pickers e editores compactos.
+ * Generic bottom sheet: native Modal (RN Modal) anchored to the bottom of the screen —
+ * immune to popover/portal positioning issues (there is no way to leave the
+ * screen bounds). The app standard for pickers and compact editors.
  *
- * - `fecharAoToqueFora={false}` para editores com conteúdo não salvo (o
- *   fechamento fica explícito nos botões).
- * - Levanta junto com o teclado (KeyboardAvoidingView) em iOS.
+ * - `closeOnOutsideTap={false}` for editors with unsaved content (the
+ *   closing stays explicit in the buttons).
+ * - Rises with the keyboard (KeyboardAvoidingView) on iOS.
  */
 import type { ReactNode } from 'react'
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
@@ -14,32 +14,32 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 export function BottomSheet({
-  aberto,
-  aoFechar,
-  titulo,
+  open,
+  onClose,
+  title,
   children,
-  fecharAoToqueFora = true,
-  alturaMaxima = '82%',
+  closeOnOutsideTap = true,
+  maxHeight = '82%',
 }: {
-  aberto: boolean
-  aoFechar: () => void
-  titulo?: ReactNode
+  open: boolean
+  onClose: () => void
+  title?: ReactNode
   children: ReactNode
-  /** Fechar ao tocar no fundo e no botão voltar do Android. */
-  fecharAoToqueFora?: boolean
-  alturaMaxima?: `${number}%` | number
+  /** Close on tapping the backdrop and on the Android back button. */
+  closeOnOutsideTap?: boolean
+  maxHeight?: `${number}%` | number
 }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   return (
     <Modal
-      visible={aberto}
+      visible={open}
       transparent
       animationType="fade"
-      onRequestClose={fecharAoToqueFora ? aoFechar : undefined}
+      onRequestClose={closeOnOutsideTap ? onClose : undefined}
     >
       <Animated.View entering={FadeIn.duration(150)} style={s.backdrop}>
-        {fecharAoToqueFora && <Pressable style={StyleSheet.absoluteFill} onPress={aoFechar} />}
+        {closeOnOutsideTap && <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={s.avoider}
@@ -47,16 +47,16 @@ export function BottomSheet({
           <Animated.View
             entering={SlideInDown.duration(260).easing(Easing.out(Easing.cubic))}
             style={[
-              s.folha,
+              s.sheet,
               {
                 backgroundColor: tokens.card,
                 borderColor: tokens.border,
-                maxHeight: alturaMaxima,
+                maxHeight: maxHeight,
               },
             ]}
           >
-            <View style={[s.alca, { backgroundColor: tokens.mutedForeground }]} />
-            {titulo}
+            <View style={[s.handle, { backgroundColor: tokens.mutedForeground }]} />
+            {title}
             {children}
           </Animated.View>
         </KeyboardAvoidingView>
@@ -68,7 +68,7 @@ export function BottomSheet({
 const s = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
   avoider: { flex: 1, justifyContent: 'flex-end' },
-  folha: {
+  sheet: {
     width: '100%',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
@@ -77,5 +77,5 @@ const s = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 28,
   },
-  alca: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 10, opacity: 0.4 },
+  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 10, opacity: 0.4 },
 })

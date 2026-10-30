@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * Timeline da gravação: quadros com timestamp → durações do concat.
+ * Recording timeline: frames with a timestamp → concat durations.
  *
- * É a conta que define o vídeo inteiro: começar no primeiro quadro (nada de
- * tela branca do carregamento), cada quadro durando até o próximo, e um trecho
- * parado mantendo a última imagem pelo tempo real que durou. O resto do módulo
- * depende de Electron e é exercitado pelo smoke test, não aqui.
+ * It is the count that defines the whole video: starting at the first frame (no
+ * white loading screen), each frame lasting until the next one, and a still
+ * stretch holding the last image for the real time it lasted. The rest of the module
+ * depends on Electron and is exercised by the smoke test, not here.
  */
 
 vi.mock('electron', () => ({
@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
 const { frameTimeline, timelineDurationMs, concatList } = await import('./browser-record')
 
 describe('frameTimeline', () => {
-  it('começa no primeiro quadro e dura até o próximo', () => {
+  it('starts at the first frame and lasts until the next one', () => {
     const entries = frameTimeline(
       [
         { file: 'a.jpg', at: 1000 },
@@ -30,7 +30,7 @@ describe('frameTimeline', () => {
     expect(timelineDurationMs(entries)).toBe(67)
   })
 
-  it('mantém o último quadro pelo tempo parado mais a cauda', () => {
+  it('keeps the last frame for the still time plus the tail', () => {
     const entries = frameTimeline(
       [
         { file: 'a.jpg', at: 0 },
@@ -41,7 +41,7 @@ describe('frameTimeline', () => {
     expect(entries[1]).toEqual({ file: 'b.jpg', durationMs: 2460 })
   })
 
-  it('ordena pelo timestamp e nunca gera duração zero', () => {
+  it('sorts by timestamp and never generates zero duration', () => {
     const entries = frameTimeline(
       [
         { file: 'b.jpg', at: 50 },
@@ -53,11 +53,11 @@ describe('frameTimeline', () => {
     expect(entries.every((e) => e.durationMs >= 1)).toBe(true)
   })
 
-  it('sem quadros, não há timeline', () => {
+  it('without frames, there is no timeline', () => {
     expect(frameTimeline([], { endedAt: 999 })).toEqual([])
   })
 
-  it('o concat repete o último arquivo (senão o ffmpeg descarta a duração dele)', () => {
+  it('the concat repeats the last file (otherwise ffmpeg drops its duration)', () => {
     const text = concatList([
       { file: '/tmp/a.jpg', durationMs: 33 },
       { file: '/tmp/b.jpg', durationMs: 500 },
@@ -71,7 +71,7 @@ describe('frameTimeline', () => {
     expect(lines[5]).toBe("file '/tmp/b.jpg'")
   })
 
-  it('escapa apóstrofo no caminho', () => {
+  it('escapes the apostrophe in the path', () => {
     expect(concatList([{ file: "/tmp/o'brien.jpg", durationMs: 10 }])).toContain("file '/tmp/o'\\''brien.jpg'")
   })
 })

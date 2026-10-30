@@ -5,22 +5,22 @@ import { ColorPicker } from "./design-color"
 import { toHex } from "./design-protocol"
 
 /**
- * Peças do painel de propriedades do canvas de design — o vocabulário visual do
- * inspetor do Lummia (seção com título compacto, campo com ícone/letra e
- * unidade, grupo segmentado com ícones), refeito sobre o design system do
- * Orbit. Cada controle edita UMA coisa e confirma ao sair do campo / Enter:
- * escrever a cada tecla seria uma escrita no arquivo (e um passo de desfazer)
- * por letra.
+ * Pieces of the properties panel of the design canvas — the visual vocabulary of the
+ * Lummia inspector (section with a compact title, field with icon/letter and
+ * unit, segmented group with icons), redone over the Orbit design
+ * system. Each control edits ONE thing and confirms on leaving the field / Enter:
+ * writing on every key would be a write to the file (and an undo step)
+ * per letter.
  */
 
-// ------------------------------------------------------------------ valores
+// ------------------------------------------------------------------- values
 
-/** `12px` → `12`; qualquer outra coisa (`1rem`, `50%`, `auto`) fica como está. */
+/** `12px` → `12`; anything else (`1rem`, `50%`, `auto`) stays as it is. */
 export const stripPx = (value: string) => value.replace(/^(-?\d+(?:\.\d+)?)px$/i, "$1")
 
 /**
- * O que o campo digitou, como valor de CSS: número puro vira `px` (a menos que a
- * propriedade seja sem unidade), vazio tira a propriedade.
+ * What the field typed, as a CSS value: a bare number becomes `px` (unless the
+ * property is unitless), empty removes the property.
  */
 export function toCssLength(input: string, unitless = false): string {
   const value = input.trim()
@@ -29,15 +29,15 @@ export function toCssLength(input: string, unitless = false): string {
   return value
 }
 
-/** O valor numérico de um campo, ou null (`auto`, `1rem`, vazio). */
+/** The numeric value of a field, or null (`auto`, `1rem`, empty). */
 export function numberOf(value: string): number | null {
   const m = /^(-?\d+(?:\.\d+)?)(?:px)?$/i.exec(value.trim())
   return m ? parseFloat(m[1]) : null
 }
 
-// ------------------------------------------------------------------ estrutura
+// ----------------------------------------------------------------- structure
 
-/** Seção do painel: título pequeno e semibold, divisor embaixo, `action` à direita. */
+/** Panel section: small semibold title, divider below, `action` on the right. */
 export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="border-b border-border/40 px-3 py-2.5">
@@ -50,7 +50,7 @@ export function Section({ title, action, children }: { title: string; action?: R
   )
 }
 
-/** Rótulo pequeno acima de um campo (o `text-[9px]` do Lummia). */
+/** Small label above a field (the `text-[9px]` of Lummia). */
 export function SubLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex h-4 items-center justify-between">
@@ -60,14 +60,14 @@ export function SubLabel({ children, action }: { children: ReactNode; action?: R
   )
 }
 
-/** Linha de campos lado a lado, de larguras iguais. */
+/** Row of fields side by side, of equal widths. */
 export function Fields({ cols = 2, children }: { cols?: 2 | 3; children: ReactNode }) {
   return <div className={cn("grid gap-1.5", cols === 2 ? "grid-cols-2" : "grid-cols-3")}>{children}</div>
 }
 
-// ------------------------------------------------------------------ botões
+// ------------------------------------------------------------------ buttons
 
-/** Botão quadrado de ícone com estado ligado — o liga/desliga de lados independentes, trava de proporção etc. */
+/** Square icon button with an on state — the on/off of independent sides, aspect ratio lock etc. */
 export function ToggleButton({
   active,
   onClick,
@@ -107,10 +107,10 @@ export interface SegmentedOption<T extends string> {
 }
 
 /**
- * Grupo segmentado de ícones (o modo de layout, o alinhamento de texto…): um
- * trilho `muted` com o item ativo "levantado". `value` fora das opções (um
- * valor que o painel não conhece) deixa todos apagados — mostrar um ativo que
- * não é o real seria mentir sobre o elemento.
+ * Segmented group of icons (the layout mode, the text alignment…): a
+ * `muted` track with the active item "raised". A `value` outside the options (a
+ * value the panel does not know) leaves them all dimmed — showing an active one that
+ * is not the real one would lie about the element.
  */
 export function Segmented<T extends string>({
   value,
@@ -146,41 +146,41 @@ export function Segmented<T extends string>({
   )
 }
 
-// ------------------------------------------------------------------ campos
+// ------------------------------------------------------------------- fields
 
 /**
- * A casca de todo campo do inspetor: 28px de altura, sempre. `flex-auto` (e não
- * `flex-1`) porque `flex: 1` é `flex-basis: 0%` — numa COLUNA flex o basis vale
- * para a ALTURA e anula o `h-7`, e o campo colapsa para a altura do texto. Nos
- * campos dentro de `Fields` (grade) e das linhas flex o `h-7` valia; nos que são
- * filhos diretos de uma `Section` (coluna), não — era o que fazia metade do
- * painel parecer espremida. `min-h-7` segura a altura mesmo numa coluna apertada.
+ * The shell of every inspector field: 28px of height, always. `flex-auto` (and not
+ * `flex-1`) because `flex: 1` is `flex-basis: 0%` — in a flex COLUMN the basis applies
+ * to the HEIGHT and cancels the `h-7`, and the field collapses to the height of the text. In the
+ * fields inside `Fields` (grid) and the flex rows the `h-7` worked; in the ones that are
+ * direct children of a `Section` (column), it did not — that is what made half the
+ * panel look squeezed. `min-h-7` holds the height even in a tight column.
  */
 const SHELL =
   "flex h-7 min-h-7 min-w-0 flex-auto items-center gap-1.5 rounded-md border border-input bg-input/20 px-1.5 transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 dark:bg-input/30"
 
-/** A mesma casca para controles que IMITAM um campo (o seletor de fonte). */
+/** The same shell for controls that IMITATE a field (the font picker). */
 export const FIELD_SHELL = SHELL
 
 const INPUT = "w-0 min-w-0 flex-1 border-0 bg-transparent p-0 text-[10px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground/60 disabled:text-muted-foreground/40"
 
 /**
- * A coluna do lead: 12px, SEMPRE a mesma em todos os campos — é o ícone, a
- * amostra de cor, ou nada (quando o campo não tem ícone). É ela que faz os
- * valores começarem no mesmo lugar em todo o inspetor.
+ * The lead column: 12px, ALWAYS the same in every field — it is the icon, the
+ * color swatch, or nothing (when the field has no icon). It is what makes the
+ * values start in the same place across the whole inspector.
  */
 const LEAD = "flex size-3 shrink-0 items-center justify-center"
 
-/** Ícone (ou letra) à esquerda do campo, apagado como no Lummia. */
+/** Icon (or letter) to the left of the field, dimmed as in Lummia. */
 function Lead({ children }: { children: ReactNode }) {
   return <span className={cn(LEAD, "select-none text-[9px] font-bold text-muted-foreground/60 [&_svg]:size-3")}>{children}</span>
 }
 
 /**
- * Campo de valor: ícone/letra, entrada, unidade. Confirma no Enter ou ao sair;
- * Esc volta ao valor anterior; ↑/↓ andam de 1 em 1 (Shift: 10) quando o valor é
- * numérico — e confirmam na hora, que é o que faz o ajuste fino ser visível no
- * canvas enquanto se aperta a seta.
+ * Value field: icon/letter, input, unit. Confirms on Enter or on leaving;
+ * Esc goes back to the previous value; ↑/↓ walk 1 by 1 (Shift: 10) when the value is
+ * numeric — and they confirm right away, which is what makes the fine adjustment visible on the
+ * canvas while the arrow is pressed.
  */
 export function Field({
   value,
@@ -205,7 +205,7 @@ export function Field({
   className?: string
   step?: number
   mono?: boolean
-  /** Controle extra no fim do campo (o Fix/Fill/Hug do tamanho). */
+  /** Extra control at the end of the field (the Fix/Fill/Hug of the size). */
   trailing?: ReactNode
 }) {
   const [draft, setDraft] = useState(value)
@@ -255,8 +255,8 @@ export function Field({
 }
 
 /**
- * Cor: amostra clicável (abre o seletor do app), valor em texto e botão de
- * limpar. O seletor é o do design (design-color.tsx), não o do sistema.
+ * Color: clickable swatch (opens the app picker), value as text and a clear
+ * button. The picker is the design one (design-color.tsx), not the system one.
  */
 export function ColorField({
   value,
@@ -276,7 +276,7 @@ export function ColorField({
   }
   return (
     <div className={SHELL}>
-      {/* A amostra é o lead do campo: 12px, como o ícone dos outros campos. */}
+      {/* The swatch is the lead of the field: 12px, like the icon of the other fields. */}
       <ColorPicker value={value} computed={computed} onCommit={onCommit} />
       <input
         value={draft}
@@ -312,7 +312,7 @@ export function ColorField({
   )
 }
 
-/** Valor livre de uma propriedade que o painel não tem controle visual para (família da fonte, sombra…). */
+/** Free value of a property the panel has no visual control for (font family, shadow…). */
 export function TextField(props: Omit<Parameters<typeof Field>[0], "mono">) {
   return <Field {...props} mono />
 }

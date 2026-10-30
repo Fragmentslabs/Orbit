@@ -27,15 +27,15 @@ export function clearSessionTrust(sessionId: string): void {
 }
 
 /**
- * Resolve o modo de permissão efetivo: servidores MCP podem ter override
- * próprio via permissionMode no config, independente do modo global.
+ * Resolves the effective permission mode: MCP servers can have their own
+ * override via permissionMode in the config, independent of the global mode.
  */
 function effectiveMode(toolName: string, globalMode: PermissionMode): PermissionMode {
   return getMcpPermissionMode(toolName) ?? globalMode
 }
 
 export function createToolApproval(
-  /** Fixo, ou consultado a cada ferramenta (turno que segue o seletor global) */
+  /** Fixed, or consulted on every tool (a turn that follows the global selector) */
   mode: PermissionMode | (() => PermissionMode),
   sessionId: string,
   dir: string | null,
@@ -44,31 +44,31 @@ export function createToolApproval(
   parentSessionId?: string,
   workerTitle?: string,
 ) {
-  // "Permitir" vale pelo TURNO, não por chamada: o gate nasce com o turno, e
-  // uma regra aprovada aqui não pergunta de novo até ele acabar. Antes era só
-  // esta vez — o agente pedia a mesma permissão a cada tool (no Computer Use,
-  // a cada clique no mesmo app).
+  // "Allow" holds for the TURN, not per call: the gate is born with the turn,
+  // and a rule approved here does not ask again until it ends. Before, it was
+  // only this once — the agent asked the same permission on every tool (in
+  // Computer Use, on every click in the same app).
   const turnTrust = new Set<string>()
 
   return async ({ toolCall }: { toolCall: ApprovalToolCall }) => {
     if (isForbidden(toolCall.toolName, toolCall.input, dir)) {
-      denialReasons.set(toolCall.toolCallId, 'Ação bloqueada pela política de segurança.')
-      return { type: 'denied' as const, reason: 'Esta ação é bloqueada pela política de segurança. Busque uma alternativa segura.' }
+      denialReasons.set(toolCall.toolCallId, 'Action blocked by the security policy.')
+      return { type: 'denied' as const, reason: 'This action is blocked by the security policy. Look for a safe alternative.' }
     }
 
     const assessment = assess(toolCall.toolName, toolCall.input, dir)
     if (!assessment) return 'approved' as const
 
     const mcpMode = effectiveMode(toolCall.toolName, typeof mode === 'function' ? mode() : mode)
-    if (mcpMode === 'full' && !assessment.sempre) return 'approved' as const
+    if (mcpMode === 'full' && !assessment.alwaysAsk) return 'approved' as const
 
     const ruleId = assessment.ruleId
 
-    if (!assessment.sempre && checkTrust(ruleId)) return 'approved' as const
-    if (!assessment.sempre && turnTrust.has(ruleId)) return 'approved' as const
+    if (!assessment.alwaysAsk && checkTrust(ruleId)) return 'approved' as const
+    if (!assessment.alwaysAsk && turnTrust.has(ruleId)) return 'approved' as const
 
     const targetSession = sessionTrust.get(sessionId)
-    if (!assessment.sempre && targetSession?.has(ruleId)) return 'approved' as const
+    if (!assessment.alwaysAsk && targetSession?.has(ruleId)) return 'approved' as const
 
     const requestId = newRequestId()
     const isWorker = !!parentSessionId
@@ -80,7 +80,7 @@ export function createToolApproval(
         {
           requestId,
           kind: 'permission',
-          claim: assessment.sempre ? { ...assessment.claim, alwaysAsk: true } : assessment.claim,
+          claim: assessment.alwaysAsk ? { ...assessment.claim, alwaysAsk: true } : assessment.claim,
           origin: isWorker
             ? { workerSessionId: sessionId, workerTitle: workerTitle ?? 'worker' }
             : undefined,
@@ -104,16 +104,16 @@ export function createToolApproval(
       }
 
       if (reply === 'allow') {
-        // Ação que pergunta sempre (ex.: remover worktree) continua uma a uma.
-        if (!assessment.sempre) turnTrust.add(ruleId)
+        // An action that always asks (e.g. removing a worktree) still goes one by one.
+        if (!assessment.alwaysAsk) turnTrust.add(ruleId)
         return 'approved' as const
       }
 
-      denialReasons.set(toolCall.toolCallId, 'Negado pelo usuário.')
+      denialReasons.set(toolCall.toolCallId, 'Denied by the user.')
 
-      // Emite part:error diretamente para garantir que o mobile (e desktop)
-      // atualizem o tool part para error, independente do SDK emitir
-      // tool-output-denied no fullStream
+      // Emits part:error directly to make sure mobile (and desktop)
+      // update the tool part to error, regardless of the SDK emitting
+      // tool-output-denied in the fullStream
       broadcastChatEvent({
         type: 'part',
         sessionId: target,
@@ -124,17 +124,17 @@ export function createToolApproval(
           tool: toolCall.toolName,
           state: 'error',
           input: toolCall.input as Record<string, unknown> | undefined,
-          error: 'Negado pelo usuário.',
+          error: 'Denied by the user.',
         },
       })
 
       return {
         type: 'denied' as const,
-        reason: 'O usuário negou esta ação. Não a repita — siga por outro caminho ou pergunte.',
+        reason: 'The user denied this action. Do not repeat it — take another route or ask.',
       }
     } catch {
-      denialReasons.set(toolCall.toolCallId, 'Pedido de permissão cancelado.')
-      return { type: 'denied' as const, reason: 'O pedido de permissão foi cancelado.' }
+      denialReasons.set(toolCall.toolCallId, 'Permission request canceled.')
+      return { type: 'denied' as const, reason: 'The permission request was canceled.' }
     } finally {
       broadcastChatEvent({ type: 'ask:done', sessionId: target, requestId })
     }

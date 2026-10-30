@@ -20,41 +20,41 @@ export { loadCachedAsks, CACHE_ASKS_PREFIX }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** Pedido pendente exibido como card no chat. */
+/** Pending request displayed as a card in the chat. */
 export interface PendingAsk extends AskItem {
   title?: string
   batchId?: string
 }
 
 interface ChatState {
-  /** Pedidos de permissão/question pendentes, por sessão. */
+  /** Permission/question requests pending, per session. */
   pendingAsks: Record<string, PendingAsk[]>
-  /** ID da sessão que tem pending ask (atalho para UI). */
+  /** ID of the session that has a pending ask (shortcut for the UI). */
   activeAskSessionId: string | null
 
-  /** Adiciona um pending ask recebido via WS. */
+  /** Adds a pending ask received via WS. */
   addPendingAsk: (sessionId: string, ask: PendingAsk) => void
-  /** Remove um pending ask (respondido). */
+  /** Removes a pending ask (answered). */
   removePendingAsk: (sessionId: string, requestId: string) => void
-  /** Define os pending asks de uma sessão (usado ao carregar cache). */
+  /** Sets the pending asks of a session (used when loading the cache). */
   setPendingAsks: (sessionId: string, asks: PendingAsk[]) => void
   /**
-   * Aplica a lista autoritativa vinda do desktop (session:state) ao abrir o
-   * chat: mostra o que o desktop mostra e descarta card já respondido enquanto
-   * o celular estava fora. `knownIds` são os requestIds que existiam quando a
-   * busca saiu — pedido que chegou ao vivo depois dela ainda não está no disco
-   * do desktop e é preservado.
+   * Applies the authoritative list coming from the desktop (session:state) on opening the
+   * chat: shows what the desktop shows and discards a card already answered while
+   * the phone was away. `knownIds` are the requestIds that existed when the
+   * fetch left — a request that arrived live after it is not yet on the desktop
+   * disk and is preserved.
    */
   syncPendingAsks: (sessionId: string, serverAsks: PendingAsk[], knownIds: Set<string>) => void
-  /** Responde a um pending ask via WS. */
+  /** Answers a pending ask via WS. */
   replyToAsk: (requestId: string, value: unknown) => Promise<void>
-  /** Retorna todos os asks de uma sessão. */
+  /** Returns all the asks of a session. */
   getAsks: (sessionId: string) => PendingAsk[]
 }
 
 /**
- * Grava a lista de uma sessão no estado + cache e mantém activeAskSessionId
- * coerente (aponta para alguma sessão com pedido, ou null quando não há mais).
+ * Writes the list of a session to the state + cache and keeps activeAskSessionId
+ * consistent (pointing to some session with a request, or null when there are none left).
  */
 function applyAsks(
   state: ChatState,
@@ -87,7 +87,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addPendingAsk: (sessionId, ask) => {
     set((state) => {
       const current = state.pendingAsks[sessionId] ?? []
-      // Deduplica por requestId
+      // Deduplicates by requestId
       if (current.some((a) => a.requestId === ask.requestId)) return state
       const next = [...current, ask]
       void cacheAsks(sessionId, next)
@@ -111,7 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         pendingAsks[sessionId] = next
         void cacheAsks(sessionId, next)
       }
-      // Atualiza activeAskSessionId
+      // Updates activeAskSessionId
       const activeAskSessionId = Object.keys(pendingAsks).length > 0
         ? Object.keys(pendingAsks)[0]
         : null
@@ -138,9 +138,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { wsClient } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({ type: 'ask:reply', requestId, value })
-      // ok:false = o desktop nao tem mais esse pedido em aberto (respondido em
-      // outro lugar, ou o app reiniciou e o card sobreviveu so no disco). Nao
-      // vira 'ask:done', entao o card seria eterno — some aqui mesmo.
+      // ok:false = the desktop no longer has that request open (answered somewhere
+      // else, or the app restarted and the card survived only on disk). It does not
+      // become 'ask:done', so the card would be eternal — it disappears right here.
       if (!res.ok) {
         const sessionId = Object.keys(get().pendingAsks).find((id) =>
           get().pendingAsks[id]?.some((a) => a.requestId === requestId),
@@ -148,7 +148,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (sessionId) get().removePendingAsk(sessionId, requestId)
       }
     } catch {
-      // Sem rede: mantem o card para tentar de novo depois de reconectar
+      // No network: keeps the card to try again after reconnecting
     }
   },
 

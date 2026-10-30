@@ -5,8 +5,8 @@ const DRAFT_KEY = "draft"
 
 export interface DraftPayload {
   text: string
-  /** Anexos devolvidos ao input junto com o texto (ex: revert de uma
-   *  mensagem que tinha imagem — sem isso o anexo sumiria silenciosamente). */
+  /** Attachments returned to the input along with the text (e.g.: revert of a
+   *  message that had an image — without this the attachment would vanish silently). */
   files?: FilePart[]
 }
 

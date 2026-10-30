@@ -70,19 +70,19 @@ import { FloatingSidebar, FullscreenComposer } from "@/src/components/fullscreen
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Editor do canvas de design na aba do painel direito — navegável, selecionável
- * e editável, no molde do editor de design do Claude (e do Figma).
+ * Design canvas editor in the right panel tab — navigable, selectable
+ * and editable, in the mold of Claude's design editor (and Figma's).
  *
- * O que está na tela é o próprio HTML dos artboards, cada um num iframe sandbox
- * (sem allow-same-origin). Não existe modelo paralelo: a ponte injetada em cada
- * artboard (electron/lib/design/design-runtime.ts) lê e mexe no DOM ao vivo, e
- * toda edição feita aqui — propriedade, texto, apagar, código — é aplicada no
- * FONTE do arquivo pelo mesmo endereço (caminho de filhos a partir do <body>),
- * via DOMParser. As camadas são o DOM lido na hora; o código é o arquivo.
+ * What is on screen is the HTML of the artboards itself, each one in a sandbox iframe
+ * (without allow-same-origin). There is no parallel model: the bridge injected into each
+ * artboard (electron/lib/design/design-runtime.ts) reads and touches the live DOM, and
+ * every edit made here — property, text, delete, code — is applied to the
+ * SOURCE of the file through the same address (child path from the <body>),
+ * via DOMParser. The layers are the DOM read on the spot; the code is the file.
  *
- * Navegação: arrastar o fundo (ou segurar Espaço / ferramenta Mão) move o
- * canvas; a roda move, Ctrl+roda (ou pinça) dá zoom em torno do cursor —
- * inclusive por cima de um artboard, porque a ponte repassa a roda para cá.
+ * Navigation: dragging the background (or holding Space / the Hand tool) moves the
+ * canvas; the wheel moves, Ctrl+wheel (or pinch) zooms around the cursor —
+ * including over an artboard, because the bridge forwards the wheel over here.
  */
 
 interface DesignCanvasFile {
@@ -96,7 +96,7 @@ type LoadState = { status: "loading" } | { status: "ready"; canvas: DesignCanvas
 
 interface Selection {
   file: string
-  /** null = o artboard inteiro. */
+  /** null = the whole artboard. */
   path: ElementPath | null
 }
 
@@ -121,19 +121,19 @@ const MAX_ZOOM = 4
 const FIT_PADDING = 56
 const WIDE_LAYOUT_PX = 720
 const UNDO_LIMIT = 50
-/** Quanto tempo o aviso de mudança no disco é ignorado depois de uma escrita
- *  NOSSA que já está aplicada ao vivo — recarregar ali só piscaria a tela. */
+/** How long the disk change notice is ignored after a write of
+ *  OURS that is already applied live — reloading there would only blink the screen. */
 const QUIET_MS = 1500
 const STYLE_PERSIST_MS = 300
-/** Margem (em px de TELA) em volta da viewport em que o artboard ainda monta:
- *  é o que evita o iframe aparecer em branco quando a pessoa dá um pan rápido. */
+/** Margin (in SCREEN px) around the viewport in which the artboard still mounts:
+ *  it is what prevents the iframe from appearing blank when the person pans fast. */
 const VIRTUAL_MARGIN = 480
 
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
 /**
- * Ordem de dois caminhos: o do DOM vem antes. É o que ordena a seleção
- * múltipla (o grupo sai na ordem em que os elementos aparecem na tela).
+ * Order of two paths: the DOM one comes first. It is what orders the multiple
+ * selection (the group comes out in the order in which the elements appear on screen).
  */
 const pathOrder = (a: ElementPath, b: ElementPath) => {
   const n = Math.min(a.length, b.length)
@@ -142,9 +142,9 @@ const pathOrder = (a: ElementPath, b: ElementPath) => {
   }
   return a.length - b.length
 }
-/** Espaçamento das bolinhas do fundo, em px de TELA. Acompanha o canvas
- *  (20 unidades × zoom), mas com um piso: abaixo dele o passo dobra (2×, como
- *  o grid do Figma) — no zoom out o fundo escala junto em vez de virar poeira. */
+/** Spacing of the background dots, in SCREEN px. It follows the canvas
+ *  (20 units × zoom), but with a floor: below it the step doubles (2×, like
+ *  Figma's grid) — when zooming out the background scales along instead of turning into dust. */
 const GRID_MIN_PX = 8
 const gridStep = (zoom: number) => {
   let px = 20 * zoom
@@ -166,35 +166,35 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   viewRef.current = view
   const [tool, setTool] = useState<"select" | "hand">("select")
   const [spaceHeld, setSpaceHeld] = useState(false)
-  // Artboard em apresentação (Play no canvas): ele roda como página — links e
-  // botões funcionam —, e os demais seguem editáveis.
+  // Artboard in presentation (Play on the canvas): it runs as a page — links and
+  // buttons work —, and the others stay editable.
   const [playing, setPlaying] = useState<string | null>(null)
   const playingRef = useRef(playing)
   playingRef.current = playing
-  /** Links relativos que cada artboard declara (a ponte avisa ao carregar): é o
-   *  que decide quem ganha o botão Play. */
+  /** Relative links each artboard declares (the bridge warns on load): it is
+   *  what decides who gets the Play button. */
   const [links, setLinks] = useState<Record<string, string[]>>({})
   const [reloads, setReloads] = useState(0)
-  /** Versão de cada artboard: quando o agente grava um arquivo, só ELE remonta
-   *  (o `reloads` global fica para a recarga manual e para mudanças que podem
-   *  afetar todas as telas — CSS, imagem, fonte da pasta). */
+  /** Version of each artboard: when the agent writes a file, only IT remounts
+   *  (the global `reloads` is left for the manual reload and for changes that may
+   *  affect all the screens — CSS, image, folder font). */
   const [fileVersions, setFileVersions] = useState<Record<string, number>>({})
   const [selection, setSelection] = useState<Selection | null>(null)
   const selectionRef = useRef(selection)
   selectionRef.current = selection
   const [info, setInfo] = useState<DesignElementInfo | null>(null)
   const [selRect, setSelRect] = useState<DesignRect | null>(null)
-  /** Contornos dos DEMAIS membros da seleção múltipla (o primário usa selRect). */
+  /** Outlines of the OTHER members of the multiple selection (the primary one uses selRect). */
   const [groupRects, setGroupRects] = useState<DesignRect[]>([])
-  /** A seleção múltipla (caminhos de irmãos); o primário é `selection.path`. */
+  /** The multiple selection (sibling paths); the primary one is `selection.path`. */
   const [groupPaths, setGroupPaths] = useState<ElementPath[]>([])
   const groupPathsRef = useRef(groupPaths)
   groupPathsRef.current = groupPaths
   const [hover, setHover] = useState<{ file: string; rect: DesignRect } | null>(null)
   const [trees, setTrees] = useState<Record<string, DesignTreeNode | undefined>>({})
-  /** Árvores já pedidas e ainda sem resposta (as Camadas pedem uma por artboard). */
+  /** Trees already requested and still unanswered (the Layers ask for one per artboard). */
   const treeRequests = useRef<Set<string>>(new Set())
-  /** Tamanho da viewport do canvas: é o que decide quais artboards montam. */
+  /** Size of the canvas viewport: it is what decides which artboards mount. */
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("properties")
   const [inspectorOpen, setInspectorOpen] = useState(true)
@@ -202,7 +202,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   const [codeVersion, setCodeVersion] = useState(0)
   const [overrides, setOverrides] = useState<Record<string, Partial<DesignBoardView>>>({})
   const [fullscreen, setFullscreen] = useState(false)
-  // Tela cheia: sidebars flutuantes (abertas por padrão) e o composer em hover
+  // Fullscreen: floating sidebars (open by default) and the composer on hover
   const [leftSideOpen, setLeftSideOpen] = useState(true)
   const [rightSideOpen, setRightSideOpen] = useState(true)
   const [composerPinned, setComposerPinned] = useState(false)
@@ -214,8 +214,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   const [drag, setDrag] = useState<Drag | null>(null)
   const dragRef = useRef(drag)
   dragRef.current = drag
-  /** Último tamanho do elemento no resize — fora do estado, para os re-renders
-   *  do meio do arrasto (cada passo devolve `info`) não o perderem. */
+  /** Last size of the element on resize — outside the state, so the re-renders
+   *  in the middle of the drag (every step returns `info`) do not lose it. */
   const resizeLast = useRef<{ w: number; h: number } | null>(null)
   const [undoCount, setUndoCount] = useState(0)
 
@@ -262,28 +262,28 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   const boardsRef = useRef(boards)
   boardsRef.current = boards
 
-  /** As Camadas estão à vista? É a única coisa que precisa da árvore do DOM. */
+  /** Are the Layers in view? It is the only thing that needs the DOM tree. */
   const layersVisible = fullscreen ? leftSideOpen : inspectorOpen && inspectorTab === "layers"
   const layersVisibleRef = useRef(layersVisible)
   layersVisibleRef.current = layersVisible
 
   /**
-   * Que artboards têm iframe montado agora. Cada um é um DOCUMENTO inteiro com
-   * a ponte injetada; com dez telas no canvas, montar todas na abertura custa
-   * caro e não muda nada para quem está olhando uma. Fora da vista o board
-   * vira um retângulo — e o iframe monta quando ele entra na tela.
+   * Which artboards have an iframe mounted now. Each one is a whole DOCUMENT with
+   * the bridge injected; with ten screens on the canvas, mounting all of them on opening costs
+   * a lot and changes nothing for whoever is looking at one. Outside the view the board
+   * becomes a rectangle — and the iframe mounts when it enters the screen.
    */
   const mounted = useMemo(() => {
     const files = new Set<string>()
     const { w: vw, h: vh } = viewportSize
-    // Antes da primeira medição não dá para saber o que está à vista — e até o
-    // primeiro `fit` a vista ainda é a de origem: monta tudo, senão a abertura
-    // mostraria retângulos vazios por um quadro.
+    // Before the first measurement there is no way to know what is in view — and until the
+    // first `fit` the view is still the origin one: mount everything, otherwise the opening
+    // would show empty rectangles for a frame.
     const everything = vw === 0 || vh === 0 || autoFit.current
     for (const board of boards) {
-      // Play e seleção precisam do iframe mesmo fora da vista; com as Camadas
-      // abertas também — o painel lista a estrutura de TODOS e clicar numa
-      // linha tem de selecionar de verdade.
+      // Play and selection need the iframe even outside the view; with the Layers
+      // open as well — the panel lists the structure of ALL of them and clicking a
+      // row has to really select.
       if (everything || layersVisible || board.file === playing || board.file === selection?.file) {
         files.add(board.file)
         continue
@@ -302,7 +302,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return { minX, minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) }
   }, [boards])
 
-  // ----------------------------------------------------------------- vista
+  // ------------------------------------------------------------------- view
   const fit = useCallback(() => {
     const el = viewportRef.current
     if (!el || !bounds) return
@@ -323,7 +323,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     requestAnimationFrame(fit)
   }, [state, bounds, fit])
 
-  /** Zoom em torno de um ponto da viewport (o que estiver sob o cursor fica parado). */
+  /** Zoom around a point of the viewport (whatever is under the cursor stays put). */
   const zoomAt = useCallback((sx: number, sy: number, next: (z: number) => number) => {
     setView((v) => {
       const zoom = clampZoom(next(v.zoom))
@@ -346,13 +346,13 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     (sx: number, sy: number, dx: number, dy: number, ctrl: boolean, shift: boolean, mode: number) => {
       const scale = mode === 1 ? 16 : mode === 2 ? 400 : 1
       if (ctrl) {
-        // Um passo de roda (~100) dá ~22%; a pinça do trackpad manda deltas
-        // pequenos e contínuos. O teto por evento evita saltos de roda "rápida".
+        // A wheel step (~100) gives ~22%; the trackpad pinch sends small
+        // and continuous deltas. The per-event ceiling avoids "fast" wheel jumps.
         const delta = Math.max(-80, Math.min(80, dy * scale))
         zoomAt(sx, sy, (z) => z * Math.exp(-delta * 0.002))
       } else {
-        // Shift inverte os eixos: a roda vira pan horizontal (como nos
-        // navegadores e no Figma).
+        // Shift inverts the axes: the wheel becomes a horizontal pan (as in
+        // browsers and in Figma).
         const hx = shift ? dy : dx
         const hy = shift ? dx : dy
         setView((v) => ({ ...v, x: v.x - hx * scale, y: v.y - hy * scale }))
@@ -361,8 +361,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     [zoomAt],
   )
 
-  // A roda fora dos artboards (no fundo). `passive: false` porque o zoom precisa
-  // cancelar o zoom da página.
+  // The wheel outside the artboards (on the background). `passive: false` because the zoom needs
+  // to cancel the page zoom.
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
@@ -375,8 +375,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return () => el.removeEventListener("wheel", onWheel)
   }, [wheel, state.status])
 
-  // Layout do inspetor: ao lado do canvas quando cabe, embaixo quando o painel
-  // é estreito (o caso normal da aba lateral).
+  // Inspector layout: next to the canvas when it fits, below when the panel
+  // is narrow (the normal case of the side tab).
   useEffect(() => {
     const el = rootRef.current
     if (!el) return
@@ -387,10 +387,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return () => observer.disconnect()
   }, [])
 
-  // O canvas é uma camada transformada: para saber o que está à vista é preciso
-  // o tamanho da viewport (o pan e o zoom saem do `view`). `useLayoutEffect`
-  // porque a primeira medição tem de valer já no primeiro paint — senão a
-  // abertura montaria todos os artboards e desmontaria metade no quadro seguinte.
+  // The canvas is a transformed layer: to know what is in view one needs
+  // the viewport size (the pan and the zoom come from `view`). `useLayoutEffect`
+  // because the first measurement has to count already on the first paint — otherwise the
+  // opening would mount all the artboards and unmount half of them on the next frame.
   useLayoutEffect(() => {
     const el = viewportRef.current
     if (!el) return
@@ -401,7 +401,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return () => observer.disconnect()
   }, [])
 
-  // --------------------------------------------------------------- ponte
+  // ----------------------------------------------------------------- bridge
   const post = useCallback((file: string, message: Record<string, unknown>) => {
     iframes.current.get(file)?.contentWindow?.postMessage({ source: DESIGN_SOURCE, ...message }, "*")
   }, [])
@@ -425,9 +425,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   )
 
   /**
-   * Seleção na LISTA DE CAMADAS: o clique troca, o Shift+clique alterna o
-   * elemento no grupo — e só entre irmãos, como no canvas (um grupo é sempre
-   * um conjunto de irmãos).
+   * Selection in the LAYERS LIST: the click swaps, Shift+click toggles the
+   * element in the group — and only among siblings, as on the canvas (a group is always
+   * a set of siblings).
    */
   const selectLayer = useCallback(
     (file: string, path: ElementPath | null, additive: boolean) => {
@@ -439,11 +439,11 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       const current = selectionRef.current
       const primary = current && current.file === file ? current.path : null
       const group = groupPathsRef.current
-      // O Shift trabalha no MESMO NÍVEL da seleção: o alvo sobe até a
-      // profundidade do selecionado, para o grupo não virar uma mistura de
-      // níveis (e para não sugerir coisas fundas da árvore).
+      // Shift works at the SAME LEVEL as the selection: the target goes up to the
+      // depth of the selected one, so the group does not become a mixture of
+      // levels (and so as not to suggest deep things from the tree).
       if (additive && primary && target.length > primary.length) target = target.slice(0, primary.length)
-      // Texto solto entra na seleção sozinho: ele não forma grupo.
+      // Loose text enters the selection alone: it does not form a group.
       const groupable = !isTextPath(target)
       const siblings = primary && primary.length === target.length && primary.slice(0, -1).every((n, i) => n === target.slice(0, -1)[i])
       let next: ElementPath[]
@@ -471,8 +471,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     [],
   )
 
-  // Modo apresentação: o artboard em Play funciona como página (links, botões)
-  // e a seleção sai de cena; os outros continuam editáveis.
+  // Presentation mode: the artboard in Play works as a page (links, buttons)
+  // and the selection leaves the scene; the others stay editable.
   useEffect(() => {
     for (const file of iframes.current.keys()) post(file, modeFor(file))
     if (playing) {
@@ -484,7 +484,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     }
   }, [playing, post, modeFor])
 
-  /** Enquadra um artboard na viewport (o Play entra "dentro" dele). */
+  /** Frames an artboard in the viewport (Play goes "inside" it). */
   const focusBoard = useCallback((file: string) => {
     const b = boardsRef.current.find((item) => item.file === file)
     const el = viewportRef.current
@@ -501,7 +501,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     [focusBoard],
   )
 
-  /** O artboard tem para onde ir? Ele aponta (`<a href>`) para outro do canvas. */
+  /** Does the artboard have somewhere to go? It points (`<a href>`) to another one of the canvas. */
   const canPlay = useCallback(
     (file: string) => {
       const files = boardsRef.current.map((b) => b.file)
@@ -513,7 +513,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     [links],
   )
 
-  // ------------------------------------------------------------- edição
+  // ---------------------------------------------------------------- editing
   const pushUndo = useCallback((file: string, html: string) => {
     const stack = undoStacks.current.get(file) ?? []
     stack.push(html)
@@ -523,8 +523,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     setUndoCount((n) => n + 1)
   }, [])
 
-  /** Escritas no MESMO artboard em fila: duas edições seguidas não podem ler o
-   *  mesmo fonte e uma apagar a outra. */
+  /** Writes to the SAME artboard in a queue: two edits in a row cannot read the
+   *  same source and one erase the other. */
   const chain = useCallback((file: string, task: () => Promise<void>) => {
     const previous = writeChains.current.get(file) ?? Promise.resolve()
     const next = previous
@@ -536,9 +536,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   }, [])
 
   /**
-   * Aplica a mudança no FONTE do artboard. `quiet`: a mudança já está na tela
-   * (a ponte aplicou ao vivo), então o aviso do disco que vem a seguir não
-   * recarrega nada; mudanças de estrutura (apagar, desfazer, código) recarregam.
+   * Applies the change to the SOURCE of the artboard. `quiet`: the change is already on screen
+   * (the bridge applied it live), so the disk notice that comes next
+   * reloads nothing; structure changes (delete, undo, code) reload.
    */
   const mutateSourceHtml = useCallback(
     (file: string, mutate: (html: string) => string, quiet: boolean) => {
@@ -564,10 +564,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   )
 
   /**
-   * Arrasto na LISTA DE CAMADAS: a camada solta sobre outra vira uma mudança
-   * de estrutura. O plano sai do FONTE (o que manda nos índices) e vai para o
-   * arquivo; a ponte aplica o MESMO plano no DOM ao vivo, para o canvas não
-   * ficar para trás até o próximo reload.
+   * Drag in the LAYERS LIST: the layer dropped over another becomes a structure
+   * change. The plan comes from the SOURCE (which rules the indexes) and goes to the
+   * file; the bridge applies the SAME plan to the live DOM, so the canvas does not
+   * lag behind until the next reload.
    */
   const moveLayer = useCallback(
     (file: string, fromPath: ElementPath, targetPath: ElementPath, mode: DropMode) => {
@@ -602,8 +602,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
         entry.file,
         entry.path,
         (el) => {
-          // Remoções antes das definições (o mesmo motivo do arraste ao vivo:
-          // o shorthand expande para os longhands).
+          // Removals before the definitions (the same reason as the live drag:
+          // the shorthand expands into the longhands).
           const entries = Object.entries(entry.styles).sort(([, a], [, b]) => (a === "" ? -1 : b === "" ? 1 : 0))
           for (const [prop, value] of entries) setInlineStyle(el, prop, value)
         },
@@ -614,17 +614,17 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   )
 
   /**
-   * Os caminhos de TODOS os selecionados (o primário e o resto do grupo) —
-   * é neles que uma alteração de propriedade vale: mexer num só é mexer em
-   * todos. Texto solto não tem estilo: o que ele herda é do pai, e é no pai
-   * que a mudança age.
+   * The paths of ALL the selected ones (the primary one and the rest of the group) —
+   * it is on them that a property change applies: touching one is touching
+   * all. Loose text has no style: what it inherits is the parent's, and it is on the parent
+   * that the change acts.
    */
   const styleTargets = useCallback((): ElementPath[] => {
     const sel = selectionRef.current
     if (!sel?.path) return []
     const group = groupPathsRef.current.filter((p) => p.length > 0)
     const all = group.length ? group.slice() : []
-    // O primário sempre entra: é ele que está selecionado.
+    // The primary one always enters: it is the one that is selected.
     if (!all.some((p) => samePath(p, sel.path!))) all.push(sel.path!)
     const out: ElementPath[] = []
     for (const path of all) {
@@ -636,9 +636,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
 
   const applyStyles = useCallback(
     (file: string, path: ElementPath, styles: Record<string, string>, persistNow = false) => {
-      // As REMOÇÕES vão antes das definições: no CSSOM o shorthand expande
-      // para os longhands, então apagar "padding-top" depois de pôr "padding"
-      // desfaria o próprio valor (o campo voltava ao anterior).
+      // The REMOVALS go before the definitions: in the CSSOM the shorthand expands
+      // into the longhands, so deleting "padding-top" after setting "padding"
+      // would undo the value itself (the field went back to the previous one).
       const entries = Object.entries(styles).sort(([, a], [, b]) => (a === "" ? -1 : b === "" ? 1 : 0))
       for (const [prop, value] of entries) post(file, { type: "style", path, prop, value })
       const key = pathKey(file, path)
@@ -683,7 +683,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     const sel = selectionRef.current
     if (!sel || !sel.path || sel.path.length === 0) return
     const { file, path: target } = sel
-    // Com grupo, apaga o grupo inteiro (a seleção múltipla é uma coisa só).
+    // With a group, it deletes the whole group (the multiple selection is a single thing).
     const group = groupPathsRef.current.filter((p) => p.length > 0)
     const paths = group.length > 1 ? group : [target]
     select(null)
@@ -741,7 +741,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     })
   }, [addQuote, info, path, title])
 
-  // --------------------------------------------------- mensagens da ponte
+  // --------------------------------------------- messages from the bridge
   const blurInspector = useCallback(() => {
     const active = document.activeElement as HTMLElement | null
     if (active && active !== document.body && rootRef.current?.contains(active) && !active.closest(".cm-editor")) active.blur()
@@ -753,9 +753,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   }, [])
 
   /**
-   * "Envolver" a seleção: os elementos viram filhos de um div novo, que entra
-   * no lugar do primeiro deles. `flex` vira uma linha ou uma coluna (conforme
-   * onde eles estão); `block` vira um div de bloco.
+   * "Wrap" the selection: the elements become children of a new div, which enters
+   * in the place of the first of them. `flex` becomes a row or a column (according
+   * to where they are); `block` becomes a block div.
    */
   const wrapSelected = useCallback(
     (mode: "flex" | "block") => {
@@ -763,11 +763,11 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       if (!sel?.path) return
       const group = groupPathsRef.current.filter((p) => p.length > 0)
       const paths = group.length > 1 ? group.slice() : []
-      // O primário sempre entra (é ele que está selecionado).
+      // The primary one always enters (it is the one that is selected).
       if (paths.length && !paths.some((p) => samePath(p, sel.path!))) paths.push(sel.path!)
       if (paths.length < 2) return
-      // A direção do flex: lado a lado (centros espalhados na horizontal) é
-      // linha; empilhados (espalhados na vertical) é coluna.
+      // The flex direction: side by side (centers spread horizontally) is
+      // a row; stacked (spread vertically) is a column.
       const rects = [selRect, ...groupRects].filter((r): r is DesignRect => Boolean(r))
       let direction = "row"
       if (rects.length >= 2) {
@@ -791,7 +791,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       ).then(() => {
         const plan = planRef.current
         if (!plan) return
-        // A ponte aplica o MESMO plano no DOM ao vivo: o canvas muda na hora.
+        // The bridge applies the SAME plan to the live DOM: the canvas changes on the spot.
         post(sel.file, { type: "wrap", parent: plan.parent, index: plan.index, children: plan.children, style })
       })
     },
@@ -824,14 +824,14 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
         return true
       }
       if (mod && lower === "g") {
-        // Agrupar: os selecionados viram filhos de um div de bloco.
+        // Group: the selected ones become children of a block div.
         wrapSelected("block")
         return true
       }
       if (mod) return false
       if (key.shift && lower === "a") {
-        // Alinhar: os selecionados viram filhos de um div flex (linha ou
-        // coluna, conforme onde estão).
+        // Align: the selected ones become children of a flex div (row or
+        // column, according to where they are).
         wrapSelected("flex")
         return true
       }
@@ -876,9 +876,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       const sel = selectionRef.current
       switch (msg.type) {
         case "ready": {
-          // Documento novo (primeira carga ou recarga): a árvore que estava
-          // guardada é do HTML anterior. Se as Camadas estão à vista já se pede
-          // a nova; senão, só quando o painel abrir (efeito logo abaixo).
+          // New document (first load or reload): the tree that was
+          // kept belongs to the previous HTML. If the Layers are in view it is requested
+          // right away; otherwise, only when the panel opens (effect right below).
           treeRequests.current.delete(file)
           setTrees((prev) => {
             const next = msg.tree ?? undefined
@@ -891,8 +891,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           }
           setGroupRects([])
           post(file, modeFor(file))
-          // Recarga (o agente editou, desfazer, código): a seleção volta no MESMO
-          // endereço, se ele ainda existir — e com o grupo, se houver.
+          // Reload (the agent edited, undo, code): the selection comes back at the SAME
+          // address, if it still exists — and with the group, if there is one.
           if (sel?.file === file && sel.path && sel.path.length > 0) {
             const group = groupPathsRef.current.filter((p) => p.length > 0)
             post(file, { type: "select", path: sel.path, group: group.length ? group : [sel.path] })
@@ -903,8 +903,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           setTrees((prev) => ({ ...prev, [file]: msg.tree }))
           break
         case "navigate": {
-          // Link clicado no artboard em Play: a apresentação segue para a tela
-          // que ele aponta (se for uma do canvas).
+          // Link clicked in the artboard in Play: the presentation goes on to the screen
+          // it points to (if it is one of the canvas).
           if (playingRef.current !== file) break
           const target = boardForHref(msg.href, boardsRef.current.map((b) => b.file))
           if (target) startPlay(target)
@@ -914,18 +914,18 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           setHover((prev) => (msg.rect && msg.path ? { file, rect: msg.rect } : prev?.file === file ? null : prev))
           break
         case "select":
-          // O clique no artboard não tira o foco do painel (a ponte cancela o
-          // mousedown): um campo do inspetor no meio da edição seguiria focado e
-          // a edição se perderia com a troca de seleção. O blur confirma o campo
-          // AGORA, ainda contra a seleção anterior.
+          // The click on the artboard does not take the focus from the panel (the bridge cancels the
+          // mousedown): an inspector field in the middle of an edit would stay focused and
+          // the edit would be lost with the selection switch. The blur confirms the field
+          // NOW, still against the previous selection.
           blurInspector()
-          // O runtime logo manda um `rects` com os contornos dos demais membros.
+          // The runtime soon sends a `rects` with the outlines of the other members.
           setGroupRects([])
           if (msg.path && msg.path.length > 0) {
             setSelection({ file, path: msg.path })
             setInfo(msg.info)
             setSelRect(msg.info?.rect ?? null)
-            // O grupo volta na ordem do DOM (é a ordem dos elementos na tela).
+            // The group comes back in DOM order (it is the order of the elements on screen).
             setGroupPaths(msg.group.length ? msg.group.slice().sort(pathOrder) : [msg.path])
           } else {
             setSelection({ file, path: null })
@@ -963,9 +963,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           handleKey(msg)
           break
         case "focus": {
-          // Fallback: normalmente o mousedown nativo do duplo clique já deu
-          // foco ao iframe. Só intervimos se ele ainda estiver no painel —
-          // focar de novo reiniciaria a seleção/cursor que o nativo colocou.
+          // Fallback: usually the native mousedown of the double click has already given
+          // focus to the iframe. We only intervene if it is still in the panel —
+          // focusing again would restart the selection/cursor the native one placed.
           const frame = iframes.current.get(file)
           if (frame && document.activeElement !== frame) frame.focus()
           break
@@ -981,17 +981,17 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           )
           break
         case "reorder":
-          // O arraste já aconteceu na tela (a ponte reordenou o DOM ao vivo);
-          // aqui só o fonte passa a contar a mesma história. A lista de Camadas
-          // veio da árvore antiga, então pede uma nova.
+          // The drag already happened on screen (the bridge reordered the live DOM);
+          // here only the source starts telling the same story. The Layers list
+          // came from the old tree, so it asks for a new one.
           void mutateSource(file, msg.parent, (el) => reorderChildren(el, msg.order), true).then(() => {
             post(file, { type: "tree" })
           })
           break
         case "move":
-          // Mesma ideia do reorder, mas trocando de pai: a ponte já moveu o
-          // elemento (ou o bloco da seleção múltipla) ao vivo; o fonte recebe
-          // o mesmo movimento.
+          // Same idea as the reorder, but swapping parents: the bridge has already moved the
+          // element (or the block of the multiple selection) live; the source receives
+          // the same move.
           void mutateSourceHtml(file, (html) => moveElements(html, msg.paths, msg.parent, msg.index), true).then(() => {
             post(file, { type: "tree" })
           })
@@ -1002,13 +1002,13 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return () => window.removeEventListener("message", onMessage)
   }, [blurInspector, fileOf, handleKey, mutateSource, mutateSourceHtml, modeFor, post, startPlay, wheel])
 
-  // A árvore do DOM só serve às Camadas — ela é pedida na hora em que o painel
-  // fica à vista (e de novo a cada recarga, no `ready`). Sem o painel aberto
-  // nenhum artboard paga por montá-la.
+  // The DOM tree only serves the Layers — it is requested the moment the panel
+  // comes into view (and again on every reload, in `ready`). With the panel closed
+  // no artboard pays for mounting it.
   useEffect(() => {
     const files = [...iframes.current.keys()]
     if (!layersVisible) {
-      // Painel fechado: a ponte para de montar árvores que ninguém vai ver.
+      // Panel closed: the bridge stops mounting trees nobody is going to see.
       treeRequests.current.clear()
       for (const file of files) post(file, { type: "tree", want: false })
       return
@@ -1020,10 +1020,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     }
   }, [layersVisible, post])
 
-  // Qualquer clique FORA dos artboards encerra a edição de texto em andamento
-  // (eventos do iframe não chegam aqui, então um pointerdown no painel significa
-  // que o clique foi fora). O `blur` da janela do artboard também cobre isso, mas
-  // clicar num elemento não-focável do painel pode não tirar o foco do iframe.
+  // Any click OUTSIDE the artboards ends the text edit in progress
+  // (iframe events do not reach here, so a pointerdown in the panel means
+  // that the click was outside). The `blur` of the artboard window also covers that, but
+  // clicking a non-focusable element of the panel may not take the focus from the iframe.
   useEffect(() => {
     const onPointerDown = () => {
       for (const file of iframes.current.keys()) post(file, { type: "blur" })
@@ -1032,7 +1032,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     return () => window.removeEventListener("pointerdown", onPointerDown, true)
   }, [post])
 
-  // Atalhos com o foco FORA dos artboards (dentro, a ponte os repassa).
+  // Shortcuts with the focus OUTSIDE the artboards (inside, the bridge forwards them).
   useEffect(() => {
     const visible = () => Boolean(rootRef.current && rootRef.current.getClientRects().length > 0)
     const typing = (target: EventTarget | null) => {
@@ -1058,10 +1058,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     }
   }, [fullscreen, handleKey])
 
-  // O agente (ou outra janela) mudou a pasta: recarrega o índice e SÓ os
-  // artboards que mudaram — menos quando a mudança é nossa e já está na tela.
-  // O watcher manda os nomes (ver design-store.ts); antes, qualquer gravação
-  // remontava todos os iframes, e gerar 4 telas remontava o canvas 4 vezes.
+  // The agent (or another window) changed the folder: it reloads the index and ONLY the
+  // artboards that changed — except when the change is ours and is already on screen.
+  // The watcher sends the names (see design-store.ts); before, any write
+  // remounted all the iframes, and generating 4 screens remounted the canvas 4 times.
   useEffect(() => {
     if (!designId) return
     return designApi.onChanged((payload) => {
@@ -1077,17 +1077,17 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           return next
         })
       }
-      // CSS, imagem ou fonte da pasta (ou evento sem nome): todas recarregam.
+      // CSS, image or folder font (or an event with no name): all of them reload.
       if (plan.all) setReloads((n) => n + 1)
     })
   }, [designId, load])
 
-  // --------------------------------------------------------------- arrastos
+  // ------------------------------------------------------------------ drags
   const toCanvas = useCallback((dx: number, dy: number) => ({ dx: dx / viewRef.current.zoom, dy: dy / viewRef.current.zoom }), [])
 
-  // Os listeners do arrasto são ligados NO pointerdown (ver beginDrag), não num
-  // efeito: um arrasto rápido manda os primeiros pointermove antes de o efeito
-  // rodar, e eles se perdiam. Os handlers leem o estado pelos refs.
+  // The drag listeners are attached ON pointerdown (see beginDrag), not in an
+  // effect: a fast drag sends the first pointermove before the effect
+  // runs, and they were lost. The handlers read the state through the refs.
   const markMoved = (current: Drag) => {
     if ((current.kind === "pan" || current.kind === "move") && !current.moved) {
       const next = { ...current, moved: true }
@@ -1196,7 +1196,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             info,
             depth: selection.path.length,
             key: `${selection.file}|${selection.path.join(".")}`,
-            // Quantos elementos estão selecionados (o painel edita todos).
+            // How many elements are selected (the panel edits all of them).
             count: Math.max(1, groupPaths.length),
           }
         : { kind: "board", board: selectedBoard }
@@ -1222,8 +1222,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     layers: [Layers, t("design.inspector.layers")],
     code: [Code2, t("design.inspector.code")],
   } as const
-  /** A faixa de abas do inspetor: `tabs` decide quais aparecem (na tela cheia
-   *  as camadas têm sidebar própria, então a da direita só tem as outras duas). */
+  /** The inspector tab strip: `tabs` decides which ones appear (in fullscreen
+   *  the layers have their own sidebar, so the right one only has the other two). */
   const renderTabStrip = (tabs: readonly InspectorTab[], active: InspectorTab) => (
     <div className="flex shrink-0 items-center gap-0.5 border-b border-border/60 px-1.5 py-1">
       {tabs.map((value) => {
@@ -1245,12 +1245,12 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       })}
     </div>
   )
-  /** O arquivo que a aba de código mostra (o escolhido, ou o primeiro). */
+  /** The file the code tab shows (the chosen one, or the first). */
   const codeShownFile = codeFile && boards.some((b) => b.file === codeFile) ? codeFile : (boards[0]?.file ?? null)
-  /** A seleção do canvas só realça o código quando é do MESMO arquivo. */
+  /** The canvas selection only highlights the code when it is from the SAME file. */
   const codeSelectionPath = selection && selection.file === codeShownFile ? selection.path : null
-  /** O conteúdo de uma aba do inspetor — o mesmo no painel lateral e nas
-   *  sidebars flutuantes da tela cheia. */
+  /** The content of an inspector tab — the same in the side panel and in the
+   *  floating sidebars of fullscreen. */
   const renderInspectorBody = (tab: InspectorTab) => (
       <>
         {tab === "properties" && (
@@ -1258,8 +1258,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             target={target}
             onStyles={(styles) => {
               if (!selection?.path) return
-              // Vale para TODOS os selecionados: é o que faz a edição em
-              // grupo valer.
+              // It applies to ALL the selected ones: it is what makes the group
+              // edit count.
               for (const path of styleTargets()) applyStyles(selection.file, path, styles)
             }}
             onAttr={(name, value) => {
@@ -1276,7 +1276,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             }}
             onText={(value) => {
               if (!selection?.path) return
-              // Texto solto: muda o CONTEÚDO do nó. Elemento: o HTML de dentro.
+              // Loose text: changes the CONTENT of the node. Element: the HTML inside.
               const paths = groupPathsRef.current.filter((p) => p.length > 0)
               const all = paths.length ? paths : [selection.path]
               for (const path of all) {
@@ -1319,7 +1319,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
               } else if (p && p.length > 0) {
                 post(file, { type: "hover", path: p })
               } else {
-                // A linha do ARTBOARD: o contorno é o quadro inteiro.
+                // The ARTBOARD row: the outline is the whole frame.
                 post(file, { type: "hover", path: null })
                 const board = boardsRef.current.find((b) => b.file === file)
                 setHover(board ? { file, rect: { x: 0, y: 0, w: board.w, h: board.h } } : null)
@@ -1355,21 +1355,21 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     </div>
   )
 
-  // Tela cheia: camadas à esquerda; propriedades e código (abas) à direita.
-  // Se a aba ativa era "camadas", a direita cai em "propriedades".
+  // Fullscreen: layers on the left; properties and code (tabs) on the right.
+  // If the active tab was "layers", the right one falls back to "properties".
   const rightTab: InspectorTab = inspectorTab === "layers" ? "properties" : inspectorTab
 
   return (
     <div
       ref={rootRef}
       className={cn(
-        // Em tela cheia o MESMO nó vira o overlay fixo (como o browser e o
-        // motion): o iframe não é remontado e a ponte de seleção sobrevive.
+        // In fullscreen the SAME node becomes the fixed overlay (like the browser and the
+        // motion): the iframe is not remounted and the selection bridge survives.
         "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sidebar",
         fullscreen && FULLSCREEN_OVERLAY_CLASS,
       )}
     >
-      {/* Cabeçalho: o canvas à esquerda; ferramentas, zoom e vista à direita. */}
+      {/* Header: the canvas on the left; tools, zoom and view on the right. */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <LayoutGrid className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1413,8 +1413,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             </Button>
           </Hint>
           <div className="mx-1 h-4 w-px bg-border" />
-          {/* No painel estreito o −/+ sai: o zoom segue no Ctrl+roda, na pinça
-              e nos atalhos, e o título do canvas precisa do espaço. */}
+          {/* In the narrow panel the −/+ goes away: the zoom stays on Ctrl+wheel, on pinch
+              and on the shortcuts, and the canvas title needs the room. */}
           {wide && <IconAction icon={Minus} label={t("design.zoomOut")} onClick={() => zoomCenter((z) => z / 1.25)} />}
           <button
             type="button"
@@ -1450,7 +1450,7 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             label={t(fullscreen ? "design.exitFullscreen" : "design.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
           />
-          {/* Na tela cheia quem abre/fecha são os botões flutuantes das sidebars */}
+          {/* In fullscreen the floating buttons of the sidebars are what open/close them */}
           {!fullscreen && (
             <IconAction
               icon={inspectorOpen ? PanelRightClose : PanelRightOpen}
@@ -1478,8 +1478,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
       )}
 
       <div className={cn("relative flex min-h-0 flex-1", wide ? "flex-row" : "flex-col")}>
-        {/* Canvas infinito: uma camada transformada (translate + scale) com os
-            artboards nas coordenadas do canvas.json. */}
+        {/* Infinite canvas: a transformed layer (translate + scale) with the
+            artboards at the coordinates of canvas.json. */}
         <div
           ref={viewportRef}
           className={cn(
@@ -1512,9 +1512,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${zoom})` }}
           >
             {boards.map((board) => {
-              // Fora da vista: só o retângulo (o iframe monta quando o board
-              // entra na tela — ver `mounted`). `data-canvas-layer` mantém o pan
-              // funcionando se o ponteiro cair aqui.
+              // Outside the view: only the rectangle (the iframe mounts when the board
+              // enters the screen — see `mounted`). `data-canvas-layer` keeps the pan
+              // working if the pointer falls here.
               if (!mounted.has(board.file)) {
                 return (
                   <div
@@ -1532,9 +1532,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
               const hoverRect = hover?.file === board.file && !dragging ? hover.rect : null
               return (
                 <div key={board.file} className="absolute" style={{ left: board.x, top: board.y, width: board.w, height: board.h }}>
-                  {/* Cabeçalho do artboard: o nome à esquerda (clicar seleciona o quadro,
-                      arrastar o move) e, à direita, as ações de apresentação — só
-                      onde há para onde navegar. Mesma escala do canvas. */}
+                  {/* Artboard header: the name on the left (clicking selects the frame,
+                      dragging moves it) and, on the right, the presentation actions — only
+                      where there is somewhere to navigate. Same scale as the canvas. */}
                   <div
                     className="absolute left-0 flex items-center justify-between"
                     style={{ bottom: "100%", marginBottom: 4 / zoom, width: board.w, gap: 8 / zoom, fontSize: 11 / zoom, lineHeight: 1.3 }}
@@ -1617,11 +1617,11 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
                         if (el) iframes.current.set(board.file, el)
                         else iframes.current.delete(board.file)
                       }}
-                      // A chave carrega a versão do ARQUIVO: um artboard que não
-                      // mudou segue montado (com o scroll e a seleção dele).
+                      // The key carries the FILE version: an artboard that has not
+                      // changed stays mounted (with its scroll and selection).
                       key={`${board.file}:${reloads}:${fileVersions[board.file] ?? 0}`}
-                      // A versão do arquivo entra pela chave, não pelo URL: assim
-                      // o endereço fica estável e o ETag do scheme pode dar 304.
+                      // The file version enters through the key, not through the URL: that way
+                      // the address stays stable and the scheme's ETag can return 304.
                       src={`${DESIGN_SCHEME}://${designId}/${encodeFile(board.file)}?v=${reloads}`}
                       title={board.title ?? board.file}
                       sandbox="allow-scripts"
@@ -1632,8 +1632,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
                     />
                   </div>
 
-                  {/* Contornos: desenhados AQUI, por cima do iframe — nada entra no
-                      DOM do artboard (o caminho dos elementos não pode mudar). */}
+                  {/* Outlines: drawn HERE, over the iframe — nothing enters the
+                      DOM of the artboard (the path of the elements cannot change). */}
                   {groupRectList.map((rect, index) => (
                     <div
                       key={`group-${index}`}
@@ -1715,8 +1715,8 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
             })}
           </div>
 
-          {/* Mão / Espaço / arrasto em curso: uma camada por cima dos iframes, que
-              senão engoliriam o ponteiro. */}
+          {/* Hand / Space / drag in progress: a layer over the iframes, which
+              would otherwise swallow the pointer. */}
           {(panning || dragging) && (
             <div className="absolute inset-0 z-20" onPointerDown={(e) => panning && startPan(e, false)} />
           )}
@@ -1724,10 +1724,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
 
         {!fullscreen && inspectorOpen && inspector}
 
-        {/* Tela cheia: o canvas ocupa tudo e as sidebars flutuam por cima, com a
-            aparência da sidebar padrão (redonda, flutuante, abre no hover da
-            borda quando fechada). Esquerda: camadas. Direita: propriedades e
-            código, em abas como no painel lateral. */}
+        {/* Fullscreen: the canvas takes everything and the sidebars float over it, with the
+            look of the standard sidebar (round, floating, opens on the edge hover
+            when closed). Left: layers. Right: properties and
+            code, in tabs as in the side panel. */}
         {fullscreen && (
           <>
             <FloatingSidebar
@@ -1763,12 +1763,12 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   )
 }
 
-/** O hover é o próprio selecionado? (então só um contorno aparece) */
+/** Is the hover the selected one itself? (then only one outline appears) */
 function samePathRect(a: DesignRect, b: DesignRect): boolean {
   return Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5
 }
 
-/** Com `playFile` a aba APRESENTA o canvas (uma tela por vez); sem ele, edita. */
+/** With `playFile` the tab PRESENTS the canvas (one screen at a time); without it, it edits. */
 export function DesignTab({
   designId,
   title,
@@ -1780,7 +1780,7 @@ export function DesignTab({
   title: string
   path?: string
   playFile?: string
-  /** A apresentação nasceu do editor em tela cheia — a aba já entra assim. */
+  /** The presentation was born from the fullscreen editor — the tab already enters like this. */
   playFullscreen?: boolean
 }) {
   if (designId && playFile)

@@ -4,16 +4,16 @@ import { runBrowserScript, type CaptureItem } from '../browser-script'
 import { resolveSafePath, type ToolContext } from './context'
 
 /**
- * Automação de browser em lote (engine oculta — ver browser-script.ts).
+ * Batch browser automation (hidden engine — see browser-script.ts).
  *
- * - `run_browser_script`: o agente escreve JS com a API `orbit` e recebe de
- *   volta o manifesto das imagens. As fotos NÃO entram no contexto do modelo:
- *   ficam em orbit-data/media e o retorno traz só nome, URL e dimensões.
- * - `capture_batch`: açúcar para o caso comum (uma lista de URLs → uma foto de
- *   cada), gerado como script trivial e executado na mesma engine.
+ * - `run_browser_script`: the agent writes JS with the `orbit` API and gets back
+ *   the manifest of the images. The photos do NOT enter the model's context:
+ *   they stay in orbit-data/media and the return brings only name, URL and dimensions.
+ * - `capture_batch`: sugar for the common case (a list of URLs → one photo of
+ *   each), generated as a trivial script and executed in the same engine.
  *
- * Nenhuma das duas escreve no repositório do usuário: o script vai para
- * orbit-data/scripts/<taskId>/ e a pasta é apagada ao terminar (keep preserva).
+ * Neither of them writes to the user's repository: the script goes to
+ * orbit-data/scripts/<taskId>/ and the folder is deleted when it finishes (keep preserves it).
  */
 
 const API_DOC = `Available inside the script (global \`orbit\`, all async — use await):
@@ -63,7 +63,7 @@ function formatResult(
     lines.push('', '## Console', result.logs.slice(0, 50).join('\n'))
   }
   if (result.returned !== undefined) {
-    lines.push('', `## Retorno\n${JSON.stringify(result.returned, null, 2).slice(0, 2000)}`)
+    lines.push('', `## Return\n${JSON.stringify(result.returned, null, 2).slice(0, 2000)}`)
   }
   if (result.error) {
     lines.push('', `## Error\n${result.error}`)
@@ -108,7 +108,7 @@ export function createBrowserScriptTools(ctx: ToolContext): ToolSet {
           timeoutMs,
           keep,
           source: 'script',
-          // resolveSafePath mantém a saída dentro da pasta de trabalho.
+          // resolveSafePath keeps the output inside the working folder.
           outDir: outDir ? resolveSafePath(ctx, outDir) : undefined,
         })
         const header = result.timedOut
@@ -139,8 +139,8 @@ export function createBrowserScriptTools(ctx: ToolContext): ToolSet {
         taskId: z.string().optional().describe('Short task name — groups the captures'),
       }),
       execute: async ({ steps, taskId }) => {
-        // Gera o script trivial e roda na MESMA engine do run_browser_script:
-        // uma chamada de tool, laço local (sem ida e volta ao modelo por foto).
+        // Generates the trivial script and runs it in the SAME engine as run_browser_script:
+        // one tool call, a local loop (no round trip to the model per photo).
         const script = `const steps = ${JSON.stringify(steps)}
 for (let i = 0; i < steps.length; i++) {
   const step = steps[i]

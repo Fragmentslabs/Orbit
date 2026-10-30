@@ -14,28 +14,28 @@ import type { DocumentStyle } from '../document-render'
 import { underscoreBlankWarning } from '../markdown-blanks'
 
 /**
- * Documentos entregáveis: relatório, proposta, ata, especificação.
+ * Deliverable documents: report, proposal, minutes, specification.
  *
- * O agente escreve MARKDOWN, e é isso que o documento É — não um passo
- * intermediário. Markdown é o fonte porque HTML→DOCX é intratável (CSS
- * arbitrário não tem equivalente em OOXML) e porque é o que o modelo escreve
- * melhor. Artefato HTML continua sendo o caminho de dashboard e protótipo —
- * documento é outro objeto, feito para ser lido, editado e, quando for o
- * caso, impresso ou enviado.
+ * The agent writes MARKDOWN, and that is what the document IS — not an intermediate
+ * step. Markdown is the source because HTML→DOCX is intractable (arbitrary CSS
+ * has no equivalent in OOXML) and because it is what the model writes
+ * best. The HTML artifact remains the path for dashboards and prototypes —
+ * a document is another object, made to be read, edited and, when it is the
+ * case, printed or sent.
  *
- * PDF e DOCX são SAÍDAS, não o produto: sem `formats`, nada é renderizado na
- * criação e o usuário baixa o formato que quiser depois. Renderizar por
- * padrão custava uma janela do Chromium em todo documento, inclusive nos que
- * nunca viram arquivo — que são a maioria, porque o normal é ler ali e
- * seguir.
+ * PDF and DOCX are OUTPUTS, not the product: without `formats`, nothing is rendered at
+ * creation and the user downloads whichever format they want later. Rendering by
+ * default cost a Chromium window on every document, including the ones that
+ * never become a file — which are the majority, because the normal thing is to read there and
+ * move on.
  *
- * Guardar o fonte é o que faz "modificar" existir de verdade: editar um PDF
- * ou preservar a formatação de um .docx é intratável; reescrever o Markdown e
- * renderizar de novo é exato.
+ * Keeping the source is what makes "modify" really exist: editing a PDF
+ * or preserving a .docx's formatting is intractable; rewriting the Markdown and
+ * rendering again is exact.
  *
- * Escopo: o documento nasce marcado com a pasta de trabalho (modo código) ou
- * a pasta da sidebar (modo chat), então list_documents reencontra o que foi
- * produzido no MESMO projeto, em qualquer conversa anterior.
+ * Scope: the document is born tagged with the working folder (code mode) or
+ * the sidebar folder (chat mode), so list_documents finds again what was
+ * produced in the SAME project, in any earlier conversation.
  */
 
 const MAX_MARKDOWN_BYTES = 1024 * 1024
@@ -51,9 +51,9 @@ const MARKDOWN_HELP =
   'Markdown: # ## ### for headings, - or 1. for lists, | tables | (the divider row sets column alignment: |:---|:---:|---:|), > quote, **bold**, *italic*, `code`, ``` fenced blocks for code (write the language right after the opening fence), --- for a rule, <br> for a blank line, and \\pagebreak on its own line to force a page break. Diagrams: a ```mermaid fenced block (flowchart, sequenceDiagram, classDiagram, erDiagram, stateDiagram-v2, gantt, pie, mindmap, timeline) is drawn as a diagram on screen, in the PDF and in the DOCX — use it when a flow, architecture, schema or timeline reads better as a picture than as prose. Keep node labels short and quote any label with parentheses or punctuation (A["Login (OAuth)"]); a diagram with invalid syntax falls back to showing its source as code.'
 
 /**
- * Estilo exposto como um conjunto FECHADO de opções, e não CSS livre: tudo
- * aqui tem que existir também em OOXML, senão o PDF sairia bonito e o .docx
- * quebrado — e o usuário só descobriria ao abrir o arquivo no Word.
+ * Style exposed as a CLOSED set of options, and not free CSS: everything
+ * here has to exist in OOXML too, otherwise the PDF would come out pretty and the .docx
+ * broken — and the user would only find out when opening the file in Word.
  */
 const styleSchema = z
   .object({
@@ -75,16 +75,17 @@ const styleSchema = z
 
 export interface DocumentToolScope {
   sessionId: string
-  /** Pasta de trabalho (modo código) — escopo de projeto do documento. */
+  /** Working folder (code mode) — the document's project scope. */
   directory?: string
 }
 
 /**
- * Pasta da sidebar em que a sessão está. Resolvida aqui, lendo a sessão
- * persistida, e não recebida no SendMessageInput: o folderId muda quando o
- * usuário arrasta o chat entre pastas, e o input é montado em vários lugares
- * (envio normal, loop, rotinas, esteira) — qualquer um deles esqueceria de
- * preencher. Ler no momento do uso sempre reflete o estado atual.
+ * Sidebar folder the session belongs to. Resolved here, by reading the
+ * persisted session, instead of being received in SendMessageInput: the
+ * folderId changes when the user drags the chat between folders, and the input
+ * is assembled in several places (normal send, loop, routines, pipeline) — any
+ * of them would forget to fill it in. Reading it at the point of use always
+ * reflects the current state.
  */
 async function resolveFolderId(sessionId: string): Promise<string | undefined> {
   try {
@@ -96,10 +97,10 @@ async function resolveFolderId(sessionId: string): Promise<string | undefined> {
 }
 
 /**
- * Filtro da listagem. "project" é o escopo que interessa no modo código: a
- * pasta de trabalho, que reúne o que foi produzido sobre o MESMO repositório
- * em qualquer conversa — não só nesta. Sem pasta e sem agrupamento (chat
- * solto), cai para a sessão, que é o único escopo que existe ali.
+ * Listing filter. "project" is the scope that matters in code mode: the
+ * working folder, which gathers what was produced over the SAME repository
+ * in any conversation — not only this one. With no folder and no grouping (a loose
+ * chat), it falls back to the session, which is the only scope that exists there.
  */
 function documentFilter(
   scope: DocumentToolScope,
@@ -115,9 +116,9 @@ function documentFilter(
 }
 
 /**
- * O PDF embute a fonte instalada; o .docx nao - OOXML exigiria embutir o TTF,
- * que a biblioteca nao guarda. O aviso na resposta e o que impede o usuario de
- * descobrir isso so ao abrir o arquivo no Word.
+ * The PDF embeds the installed font; the .docx does not - OOXML would require embedding the TTF,
+ * which the library does not keep. The warning in the response is what keeps the user from
+ * finding that out only when opening the file in Word.
  */
 async function docxFontWarning(style?: DocumentStyle): Promise<string> {
   const first = (style?.fontFamily ?? '').split(',')[0].replace(/["']/g, '').trim()
@@ -140,8 +141,8 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
           return `Document too large (limit ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB of Markdown).`
         }
-        // Sem `formats`, nada é renderizado: o documento nasce em Markdown e o
-        // usuário escolhe o formato na hora de baixar.
+        // Without `formats`, nothing is rendered: the document is born in Markdown and the
+        // user chooses the format when downloading.
         const wanted: DocumentFormat[] = formats ?? []
         const ref = await saveDocument(markdown, wanted, {
           title,
@@ -150,8 +151,8 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           directory: scope.directory,
           folderId: await resolveFolderId(scope.sessionId),
         })
-        // Só é falha quando havia o que renderizar: `formats` vazio é o caso
-        // normal, e o documento em Markdown já está inteiro na conversa.
+        // It is only a failure when there was something to render: an empty `formats` is the
+        // normal case, and the Markdown document is already whole in the conversation.
         if (wanted.length > 0 && ref.formats.length === 0) {
           return `The document "${title}" was saved, but no rendering was generated. Try again; if it persists, tell the user.`
         }
@@ -166,8 +167,8 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
             ref.formats.length > 0
               ? `Document created as ${ref.formats.join(' and ')} — the user already sees it in the reply and it is in the gallery. To change it, use update_document with this documentId.`
               : 'Document created — the user already sees it in the reply and can download it as PDF or DOCX from the card whenever they want. To change it, use update_document with this documentId.',
-            // O documento foi gravado como veio; o que volta é o aviso de que
-            // uma linha não vai chegar assim na tela de quem for ler.
+            // The document was written as it came; what comes back is the warning that
+            // a line will not arrive like that on the reader's screen.
             await docxFontWarning(style),
             underscoreBlankWarning(markdown),
           ]
@@ -206,8 +207,8 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           if (result.reason === 'notFound') {
             return `Document not found: ${documentId}. Use list_documents to see the available ones.`
           }
-          // Nada foi gravado. Repetir a mesma reescrita repetiria o erro: o
-          // caminho é reler e reaplicar a mudança sobre a versão nova.
+          // Nothing was written. Repeating the same rewrite would repeat the error: the
+          // path is to re-read and re-apply the change over the new version.
           return `The document changed since the version you based your edit on — the user probably edited it in the panel (it is now at revision ${result.revision}). NOTHING was saved. Call read_document, reapply your change on the text it returns and call update_document again with the baseRevision that read reports. Do not repeat the same rewrite: it would erase the user's edit.`
         }
         const ref = result.ref
@@ -235,8 +236,8 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
       execute: async ({ documentId }) => {
         const found = await readDocumentSource(documentId)
         if (!found) return `Document not found: ${documentId}.`
-        // A revisão volta no próprio envelope: é o que o update_document pede
-        // de volta para provar que a reescrita partiu DESTA versão.
+        // The revision comes back in the envelope itself: it is what update_document asks
+        // back to prove that the rewrite started from THIS version.
         const revision = found.entry.revision ?? 1
         return `<document id="${documentId}" title="${found.entry.name ?? ''}" revision="${revision}">\n${found.markdown}\n</document>\nWhen rewriting this document, pass baseRevision=${revision}.`
       },

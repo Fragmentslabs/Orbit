@@ -3,15 +3,15 @@ import path from 'node:path'
 import { writeFileAtomic } from '../asset-lock'
 
 /**
- * O índice de um canvas de design: `canvas.json` na raiz da pasta registrada.
+ * The index of a design canvas: `canvas.json` at the root of the registered folder.
  *
- * Espelha o `canvas.json` do appifact "Design" da Anthropic (ver a conversa que
- * motivou isto): um índice JSON só com o ARRANJO — posição e tamanho de cada
- * artboard no canvas infinito — e cada artboard é um arquivo HTML autocontido à
- * parte. Nada de geometria por elemento aqui: o conteúdo de cada artboard é
- * HTML/CSS de verdade (flex/grid), resolvido pelo próprio navegador — é o que
- * evita um modelo paralelo (árvore + sincronização) e mantém a geração por IA
- * barata (ver a discussão que motivou este recurso).
+ * Mirrors the `canvas.json` of Anthropic's "Design" artifact (see the conversation
+ * that motivated this): a JSON index holding only the LAYOUT — position and size of
+ * each artboard on the infinite canvas — and each artboard is a separate
+ * self-contained HTML file. No per-element geometry here: the content of each
+ * artboard is real HTML/CSS (flex/grid), resolved by the browser itself — which is
+ * what avoids a parallel model (tree + synchronization) and keeps AI generation
+ * cheap (see the discussion that motivated this feature).
  */
 
 export interface DesignBoard {
@@ -25,24 +25,24 @@ export interface DesignBoard {
 export interface DesignCanvas {
   v: 1
   title?: string
-  /** Um artboard por chave, o nome do arquivo .html dentro da mesma pasta. */
+  /** One artboard per key, the name of the .html file inside the same folder. */
   boards: Record<string, DesignBoard>
-  /** As mesmas chaves de `boards`, de trás para frente (empilhamento). */
+  /** The same keys of `boards`, back to front (stacking). */
   order: string[]
 }
 
 const SAFE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.html?$/
 const SAFE_STYLE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.css$/
 
-/** Nome de arquivo de artboard válido: plano, termina em .html/.htm, sem path. */
+/** Valid artboard file name: flat, ends in .html/.htm, no path. */
 export function isSafeBoardFile(file: string): boolean {
   return SAFE_FILE.test(file)
 }
 
 /**
- * Nome de folha de estilo compartilhada do canvas (ex.: "base.css"): plano,
- * termina em .css, sem path. O scheme serve qualquer arquivo da pasta, então um
- * <link rel="stylesheet" href="base.css"> dentro do artboard resolve.
+ * Name of the canvas' shared style sheet (e.g. "base.css"): flat, ends in .css,
+ * no path. The scheme serves any file of the folder, so a
+ * <link rel="stylesheet" href="base.css"> inside the artboard resolves.
  */
 export function isSafeStyleFile(file: string): boolean {
   return SAFE_STYLE.test(file)

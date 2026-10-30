@@ -45,11 +45,11 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * Aba Browser do painel direito, controlável pelo agente (tools panel_*):
- * - registra o webContents do <webview> no main (panel:register)
- * - navegação da barra de URL é controlada (loadURL), sem remount do webview
- * - modo seleção: clique em um elemento vira badge/anexo no input do code mode
- * - viewport (responsividade), tela cheia com feed de atividade e composer p/ IA
+ * Browser tab of the right panel, controllable by the agent (panel_* tools):
+ * - registers the webContents of the <webview> in the main process (panel:register)
+ * - navigation from the URL bar is controlled (loadURL), without remounting the webview
+ * - selection mode: a click on an element becomes a badge/attachment in the code mode input
+ * - viewport (responsiveness), fullscreen with activity feed and composer for the AI
  */
 
 const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; labelKey: string; viewport: Viewport | null }[] = [
@@ -60,10 +60,10 @@ const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; labelKey: string; viewport: 
 ]
 
 /**
- * Corpo da aba: só orquestra intenções (navegar, recarregar, ligar seleção).
- * Quem fala com o `<webview>` é o pool (webview-session.ts) — nenhuma API do
- * guest é chamada daqui, porque o guest é recriado a cada re-parent e uma
- * chamada fora de hora lança e derruba a árvore React inteira.
+ * Tab body: it only coordinates intentions (navigate, reload, enable selection).
+ * What talks to the `<webview>` is the pool (webview-session.ts) — no API of the
+ * guest is called from here, because the guest is recreated on every re-parent and a
+ * call at the wrong moment throws and takes down the whole React tree.
  */
 function PanelBrowserBody({
   persistKey,
@@ -77,13 +77,13 @@ function PanelBrowserBody({
   const viewport = usePanelStore((s) => s.viewport)
   const initialSrcRef = useRef(url)
 
-  // Navegação controlada: a barra de URL pede, o pool aplica quando der.
+  // Controlled navigation: the URL bar asks, the pool applies when it can.
   useEffect(() => {
     if (!persistKey || !url) return
     navigateWebview(persistKey, url)
   }, [url, persistKey])
 
-  // Modo seleção — o pool também re-injeta a cada guest novo (dom-ready).
+  // Selection mode — the pool also re-injects it on every new guest (dom-ready).
   useEffect(() => {
     if (!persistKey) return
     applySelectMode(persistKey, selectMode)
@@ -161,7 +161,7 @@ function FullscreenButton() {
   )
 }
 
-/** Indicador de que o agente está dirigindo o browser (badge no modo lateral). */
+/** Indicator that the agent is driving the browser (badge in side mode). */
 function AgentIndicator() {
   const agentActive = usePanelStore((s) => s.agentActive)
   const latest = usePanelStore((s) => s.activity[0])
@@ -178,9 +178,9 @@ function AgentIndicator() {
   )
 }
 
-/** Feed do que o agente está fazendo — barinha na borda direita da tela cheia
- *  que expande no hover (não cobre o conteúdo da página permanentemente) ou
- *  fica aberta com o pin, como a conversa. */
+/** Feed of what the agent is doing — a small bar on the right edge of fullscreen
+ *  that expands on hover (it does not cover the page content permanently) or
+ *  stays open with the pin, like the conversation. */
 function ActivityFeed({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
   const agentActive = usePanelStore((s) => s.agentActive)
   const activity = usePanelStore((s) => s.activity)
@@ -188,8 +188,8 @@ function ActivityFeed({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: (
   const { hovered, handleEnter, handleLeave } = useEdgeHover()
   const expanded = pinned || hovered
 
-  // z-30: acima do overlay do estado vazio (z-10, renderizado depois no DOM),
-  // que cobria a barra na tela inicial até a primeira pesquisa.
+  // z-30: above the empty-state overlay (z-10, rendered later in the DOM),
+  // which covered the bar on the start screen until the first search.
   return (
     <div
       onMouseEnter={handleEnter}
@@ -202,7 +202,7 @@ function ActivityFeed({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: (
           expanded ? "h-[min(55vh,440px)] w-72" : "h-12 w-9",
         )}
       >
-        {/* Alça: sempre visível, indica atividade com um ponto pulsante */}
+        {/* Handle: always visible, indicates activity with a pulsing dot */}
         <Hint label={t("browser.browserActivity")}>
           <button
             type="button"
@@ -267,9 +267,9 @@ export function BrowserTab({
 }: {
   initialUrl?: string
   persistKey?: string
-  /** Sessão dona da aba — escopo dos processos mostrados na tela inicial. */
+  /** Session that owns the tab — scope of the processes shown on the start screen. */
   sessionId?: string
-  /** Notifica a URL atual da página (did-navigate) — mantém tab.url sincronizado. */
+  /** Notifies the current page URL (did-navigate) — keeps tab.url in sync. */
   onUrlChange?: (url: string) => void
 }) {
   const fullscreen = usePanelStore((s) => s.fullscreen)
@@ -278,7 +278,7 @@ export function BrowserTab({
   const [activityPinned, setActivityPinned] = useState(false)
   const [composerPinned, setComposerPinned] = useState(false)
 
-  // Fecha o feed de conversa e o composer ao sair da tela cheia
+  // Closes the conversation feed and the composer when leaving fullscreen
   useEffect(() => {
     if (!fullscreen) {
       setChatPinned(false)
@@ -287,7 +287,7 @@ export function BrowserTab({
     }
   }, [fullscreen])
 
-  // Esc sai da tela cheia
+  // Esc leaves fullscreen
   useEffect(() => {
     if (!fullscreen) return
     const onKey = (e: KeyboardEvent) => {

@@ -6,11 +6,11 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 const userData = path.join(os.tmpdir(), `orbit-doc-formats-${Date.now()}`)
 
 /**
- * O Chromium não existe aqui, então `session.fromPartition` explode — e é
- * exatamente o que estes testes querem: a captura da miniatura e a geração do
- * PDF são best-effort, e falhar nelas não pode derrubar a criação do
- * documento. O .docx não depende de janela nenhuma (é ZIP + XML), então é por
- * ele que o caminho de sucesso é verificado.
+ * Chromium does not exist here, so `session.fromPartition` blows up — and that is
+ * exactly what these tests want: the thumbnail capture and the PDF generation
+ * are best-effort, and failing at them cannot bring the document's creation
+ * down. The .docx does not depend on any window (it is ZIP + XML), so it is through
+ * it that the success path is verified.
  */
 vi.mock('electron', () => ({
   app: { getPath: () => userData },
@@ -21,7 +21,7 @@ vi.mock('electron', () => ({
   protocol: { handle: () => {} },
   session: {
     fromPartition: () => {
-      throw new Error('sem Chromium no teste')
+      throw new Error('without Chromium in the test')
     },
   },
   dialog: {},
@@ -31,7 +31,7 @@ const { documentInfo, ensureDocumentRender, saveDerivedDocx, saveDocument, saveD
   await import('./media')
 const { documentOpensAsFile } = await import('@shared/media')
 
-/** O texto do .docx, para conferir QUE versão o arquivo entregue carrega. */
+/** The .docx text, to check WHICH version the delivered file carries. */
 async function docxText(file: string): Promise<string> {
   const JSZip = (await import('jszip')).default
   const zip = await JSZip.loadAsync(await fsp.readFile(file))
@@ -40,7 +40,7 @@ async function docxText(file: string): Promise<string> {
 
 const documentsDir = path.join(userData, 'orbit-data', 'documents')
 
-/** Os arquivos irmãos de um documento, pela extensão. */
+/** The sibling files of a document, by extension. */
 async function siblings(id: string): Promise<string[]> {
   const base = id.replace(/\.md$/, '')
   const names = await fsp.readdir(documentsDir)
@@ -58,24 +58,24 @@ afterAll(async () => {
   await fsp.rm(userData, { recursive: true, force: true })
 })
 
-describe('documento nasce em Markdown', () => {
-  it('sem formats, grava só o fonte e o preview', async () => {
-    const ref = await saveDocument('# Relatório\n\nCorpo do texto.', [], { title: 'Relatório' })
+describe('a document is born as Markdown', () => {
+  it('without formats, saves only the source and the preview', async () => {
+    const ref = await saveDocument('# Report\n\nBody of the text.', [], { title: 'Report' })
 
     expect(ref.formats).toEqual([])
     expect(await siblings(ref.id)).toEqual(['.html', '.md'])
   })
 
-  it('com formats pedido, renderiza na criação', async () => {
-    const ref = await saveDocument('# Proposta\n\nCorpo.', ['docx'], { title: 'Proposta' })
+  it('with formats requested, renders on creation', async () => {
+    const ref = await saveDocument('# Proposal\n\nBody.', ['docx'], { title: 'Proposal' })
 
     expect(ref.formats).toEqual(['docx'])
     expect(await siblings(ref.id)).toContain('.docx')
   })
 
-  it('editar não inventa renderização que ninguém pediu', async () => {
-    const ref = await saveDocument('# Ata\n\nPrimeira versão.', [], { title: 'Ata' })
-    const updated = await updateDocument(ref.id, '# Ata\n\nSegunda versão.', {})
+  it('editing does not invent a render nobody asked for', async () => {
+    const ref = await saveDocument('# Minutes\n\nFirst version.', [], { title: 'Minutes' })
+    const updated = await updateDocument(ref.id, '# Minutes\n\nSecond version.', {})
 
     expect(updated.ok && updated.ref.formats).toEqual([])
     expect(updated.ok && updated.ref.revision).toBe(2)
@@ -83,9 +83,9 @@ describe('documento nasce em Markdown', () => {
   })
 })
 
-describe('renderização sob demanda', () => {
-  it('gera o arquivo no primeiro pedido e o registra', async () => {
-    const ref = await saveDocument('# Manual\n\n- um\n- dois', [], { title: 'Manual' })
+describe('rendering on demand', () => {
+  it('generates the file on the first request and registers it', async () => {
+    const ref = await saveDocument('# Manual\n\n- one\n- two', [], { title: 'Manual' })
     expect(await siblings(ref.id)).not.toContain('.docx')
 
     const file = await ensureDocumentRender(ref.id, 'docx')
@@ -94,8 +94,8 @@ describe('renderização sob demanda', () => {
     expect(await siblings(ref.id)).toContain('.docx')
   })
 
-  it('o segundo pedido reaproveita o que está em disco', async () => {
-    const ref = await saveDocument('# Manual\n\nCorpo.', [], { title: 'Manual' })
+  it('the second request reuses what is on disk', async () => {
+    const ref = await saveDocument('# Manual\n\nBody.', [], { title: 'Manual' })
     const first = await ensureDocumentRender(ref.id, 'docx')
     const stamp = (await fsp.stat(first!)).mtimeMs
 
@@ -105,8 +105,8 @@ describe('renderização sob demanda', () => {
     expect((await fsp.stat(second!)).mtimeMs).toBe(stamp)
   })
 
-  it('gera de novo quando o arquivo sumiu do disco por fora', async () => {
-    const ref = await saveDocument('# Manual\n\nCorpo.', [], { title: 'Manual' })
+  it('regenerates when the file vanished from disk behind our back', async () => {
+    const ref = await saveDocument('# Manual\n\nBody.', [], { title: 'Manual' })
     const file = (await ensureDocumentRender(ref.id, 'docx'))!
     await fsp.rm(file)
 
@@ -114,18 +114,18 @@ describe('renderização sob demanda', () => {
     expect(await siblings(ref.id)).toContain('.docx')
   })
 
-  it('documento que não existe não gera nada', async () => {
-    expect(await ensureDocumentRender('doc_naoexiste.md', 'docx')).toBeNull()
+  it('a document that does not exist generates nothing', async () => {
+    expect(await ensureDocumentRender('doc_missing.md', 'docx')).toBeNull()
   })
 })
 
-describe('documento derivado', () => {
-  it('não é convertido sob demanda: o que ele tem é o arquivo, não uma fonte', async () => {
-    // Bytes que não são um .docx de verdade: o mammoth falha, o preview cai no
-    // texto de indisponível e o registro nasce igual ao de uma cópia editada.
-    const ref = await saveDerivedDocx(Buffer.from('nao é um docx'), {
-      title: 'Contrato revisado',
-      sourceName: 'contrato.docx',
+describe('derived document', () => {
+  it('is not converted on demand: what it has is the file, not a source', async () => {
+    // Bytes that are not a real .docx: mammoth fails, the preview falls back to the
+    // unavailable text and the record is born the same as an edited copy's.
+    const ref = await saveDerivedDocx(Buffer.from('not a docx'), {
+      title: 'Revised contract',
+      sourceName: 'contract.docx',
     })
 
     expect(ref.formats).toEqual(['docx'])
@@ -134,65 +134,65 @@ describe('documento derivado', () => {
   })
 })
 
-describe('destino do documento', () => {
-  it('sem formats, é documento vivo: abre no canvas', async () => {
-    const ref = await saveDocument('# Notas\n\nCorpo.', [], { title: 'Notas' })
+describe('document destination', () => {
+  it('without formats, it is a live document: opens in the canvas', async () => {
+    const ref = await saveDocument('# Notes\n\nBody.', [], { title: 'Notes' })
     const info = (await documentInfo(ref.id))!
 
     expect(info.delivery).toBeUndefined()
     expect(documentOpensAsFile(info)).toBe(false)
   })
 
-  it('pedido como arquivo, abre no visualizador', async () => {
-    const ref = await saveDocument('# Contrato\n\nCorpo.', ['docx'], { title: 'Contrato' })
+  it('requested as a file, opens in the viewer', async () => {
+    const ref = await saveDocument('# Contract\n\nBody.', ['docx'], { title: 'Contract' })
     const info = (await documentInfo(ref.id))!
 
     expect(info.delivery).toEqual(['docx'])
     expect(documentOpensAsFile(info)).toBe(true)
   })
 
-  it('baixar um documento vivo não o transforma em arquivo', async () => {
-    const ref = await saveDocument('# Notas\n\nCorpo.', [], { title: 'Notas' })
+  it('downloading a live document does not turn it into a file', async () => {
+    const ref = await saveDocument('# Notes\n\nBody.', [], { title: 'Notes' })
     await ensureDocumentRender(ref.id, 'docx')
     const info = (await documentInfo(ref.id))!
 
-    // O cache cresceu, o destino não: continua sendo um documento para editar.
+    // The cache grew, the destination did not: it is still a document to edit.
     expect(info.formats).toEqual(['docx'])
     expect(documentOpensAsFile(info)).toBe(false)
   })
 
-  it('pedir o formato depois muda o destino', async () => {
-    const ref = await saveDocument('# Notas\n\nCorpo.', [], { title: 'Notas' })
-    await updateDocument(ref.id, '# Notas\n\nCorpo revisado.', { formats: ['docx'] })
+  it('requesting the format later changes the destination', async () => {
+    const ref = await saveDocument('# Notes\n\nBody.', [], { title: 'Notes' })
+    await updateDocument(ref.id, '# Notes\n\nRevised body.', { formats: ['docx'] })
 
     expect(documentOpensAsFile((await documentInfo(ref.id))!)).toBe(true)
   })
 })
 
-describe('edição do usuário no canvas', () => {
-  it('grava o fonte e avança a revisão', async () => {
-    const ref = await saveDocument('# Ata\n\nPrimeira.', [], { title: 'Ata' })
+describe('user edit in the canvas', () => {
+  it('saves the source and advances the revision', async () => {
+    const ref = await saveDocument('# Minutes\n\nFirst.', [], { title: 'Minutes' })
 
-    const result = await saveDocumentEdit(ref.id, '# Ata\n\nEscrita à mão.')
+    const result = await saveDocumentEdit(ref.id, '# Minutes\n\nHandwritten.')
 
     expect(result.ok && result.revision).toBe(2)
-    expect(await fsp.readFile(path.join(documentsDir, ref.id), 'utf8')).toContain('Escrita à mão.')
+    expect(await fsp.readFile(path.join(documentsDir, ref.id), 'utf8')).toContain('Handwritten.')
   })
 
-  it('o arquivo baixado depois da edição carrega o texto novo', async () => {
-    const ref = await saveDocument('# Manual\n\nVersão do agente.', [], { title: 'Manual' })
-    const antes = (await ensureDocumentRender(ref.id, 'docx'))!
-    expect(await docxText(antes)).toContain('Versão do agente')
+  it('the file downloaded after the edit carries the new text', async () => {
+    const ref = await saveDocument('# Manual\n\nAgent version.', [], { title: 'Manual' })
+    const before = (await ensureDocumentRender(ref.id, 'docx'))!
+    expect(await docxText(before)).toContain('Agent version')
 
-    await saveDocumentEdit(ref.id, '# Manual\n\nVersão do usuário.')
-    const depois = (await ensureDocumentRender(ref.id, 'docx'))!
+    await saveDocumentEdit(ref.id, '# Manual\n\nUser version.')
+    const after = (await ensureDocumentRender(ref.id, 'docx'))!
 
-    expect(await docxText(depois)).toContain('Versão do usuário')
-    expect(await docxText(depois)).not.toContain('Versão do agente')
+    expect(await docxText(after)).toContain('User version')
+    expect(await docxText(after)).not.toContain('Agent version')
   })
 
-  it('derivado não é editável: o Markdown dele é só um bilhete', async () => {
-    const ref = await saveDerivedDocx(Buffer.from('nao é um docx'), { title: 'Contrato revisado' })
+  it('a derived one is not editable: its Markdown is only a note', async () => {
+    const ref = await saveDerivedDocx(Buffer.from('not a docx'), { title: 'Revised contract' })
 
     expect(await saveDocumentEdit(ref.id, '# Reescrito')).toEqual({
       ok: false,
@@ -200,84 +200,84 @@ describe('edição do usuário no canvas', () => {
     })
   })
 
-  it('recusa a gravação baseada numa versão que o agente já substituiu', async () => {
-    const ref = await saveDocument('# Ata\n\nDo agente.', [], { title: 'Ata' })
-    const aberto = (await documentInfo(ref.id))!.revision ?? 1
-    await updateDocument(ref.id, '# Ata\n\nSegunda do agente.', {})
+  it('refuses a save based on a version the agent already replaced', async () => {
+    const ref = await saveDocument('# Minutes\n\nFrom the agent.', [], { title: 'Minutes' })
+    const openRevision = (await documentInfo(ref.id))!.revision ?? 1
+    await updateDocument(ref.id, '# Minutes\n\nSecond from the agent.', {})
 
-    const result = await saveDocumentEdit(ref.id, '# Ata\n\nDo usuário.', aberto)
+    const result = await saveDocumentEdit(ref.id, '# Minutes\n\nFrom the user.', openRevision)
 
     expect(result).toEqual({ ok: false, reason: 'stale', revision: 2 })
     expect(await fsp.readFile(path.join(documentsDir, ref.id), 'utf8')).toContain(
-      'Segunda do agente.',
+      'Second from the agent.',
     )
   })
 })
 
 /**
- * O agente lê, o usuário edita no canvas, o agente escreve: sem guarda, a
- * reescrita apagaria em silêncio o que a pessoa acabou de digitar. É o único
- * caminho neste módulo em que se perde trabalho, então é o mais coberto.
+ * The agent reads, the user edits in the canvas, the agent writes: without a guard, the
+ * rewrite would silently erase what the person just typed. It is the only
+ * path in this module in which work is lost, so it is the most covered one.
  */
-describe('agente escrevendo por cima da edição do usuário', () => {
-  /** O que está gravado agora — o que importa é se a reescrita ENTROU. */
+describe('agent writing over the user edit', () => {
+  /** What is written now — what matters is whether the rewrite WENT IN. */
   async function sourceOf(id: string): Promise<string> {
     return fsp.readFile(path.join(documentsDir, id), 'utf8')
   }
 
-  it('recusa a reescrita baseada numa versão velha, sem gravar nada', async () => {
-    const ref = await saveDocument('# Ata\n\nDo agente.', [], { title: 'Ata' })
-    const lido = (await documentInfo(ref.id))!.revision ?? 1
-    await saveDocumentEdit(ref.id, '# Ata\n\nDo usuário.')
+  it('refuses the rewrite based on an old version, saving nothing', async () => {
+    const ref = await saveDocument('# Minutes\n\nFrom the agent.', [], { title: 'Minutes' })
+    const readRevision = (await documentInfo(ref.id))!.revision ?? 1
+    await saveDocumentEdit(ref.id, '# Minutes\n\nFrom the user.')
 
-    const result = await updateDocument(ref.id, '# Ata\n\nReescrita cega.', {
-      baseRevision: lido,
+    const result = await updateDocument(ref.id, '# Minutes\n\nBlind rewrite.', {
+      baseRevision: readRevision,
     })
 
     expect(result).toEqual({ ok: false, reason: 'stale', revision: 2 })
-    expect(await sourceOf(ref.id)).toContain('Do usuário.')
+    expect(await sourceOf(ref.id)).toContain('From the user.')
   })
 
-  it('recusa também sem baseRevision, quando há edição humana pendente', async () => {
-    const ref = await saveDocument('# Ata\n\nDo agente.', [], { title: 'Ata' })
-    await saveDocumentEdit(ref.id, '# Ata\n\nDo usuário.')
+  it('also refuses without baseRevision, when there is a pending human edit', async () => {
+    const ref = await saveDocument('# Minutes\n\nFrom the agent.', [], { title: 'Minutes' })
+    await saveDocumentEdit(ref.id, '# Minutes\n\nFrom the user.')
 
-    const result = await updateDocument(ref.id, '# Ata\n\nReescrita cega.', {})
+    const result = await updateDocument(ref.id, '# Minutes\n\nBlind rewrite.', {})
 
     expect(result.ok).toBe(false)
-    expect(await sourceOf(ref.id)).toContain('Do usuário.')
+    expect(await sourceOf(ref.id)).toContain('From the user.')
   })
 
-  it('aceita quando o agente partiu da versão que está em disco', async () => {
-    const ref = await saveDocument('# Ata\n\nDo agente.', [], { title: 'Ata' })
-    await saveDocumentEdit(ref.id, '# Ata\n\nDo usuário.')
-    const atual = (await documentInfo(ref.id))!.revision!
+  it('accepts when the agent started from the version on disk', async () => {
+    const ref = await saveDocument('# Minutes\n\nFrom the agent.', [], { title: 'Minutes' })
+    await saveDocumentEdit(ref.id, '# Minutes\n\nFrom the user.')
+    const current = (await documentInfo(ref.id))!.revision!
 
-    const result = await updateDocument(ref.id, '# Ata\n\nDo agente, sobre a do usuário.', {
-      baseRevision: atual,
+    const result = await updateDocument(ref.id, '# Minutes\n\nFrom the agent, over the user one.', {
+      baseRevision: current,
     })
 
     expect(result.ok).toBe(true)
-    expect(await sourceOf(ref.id)).toContain('sobre a do usuário')
+    expect(await sourceOf(ref.id)).toContain('over the user one')
   })
 
-  it('depois de o agente ver a versão do usuário, a escrita volta a ser livre', async () => {
-    const ref = await saveDocument('# Ata\n\nDo agente.', [], { title: 'Ata' })
-    await saveDocumentEdit(ref.id, '# Ata\n\nDo usuário.')
-    const atual = (await documentInfo(ref.id))!.revision!
-    await updateDocument(ref.id, '# Ata\n\nPrimeira do agente.', { baseRevision: atual })
+  it('after the agent sees the user version, writing becomes free again', async () => {
+    const ref = await saveDocument('# Minutes\n\nFrom the agent.', [], { title: 'Minutes' })
+    await saveDocumentEdit(ref.id, '# Minutes\n\nFrom the user.')
+    const current = (await documentInfo(ref.id))!.revision!
+    await updateDocument(ref.id, '# Minutes\n\nFirst from the agent.', { baseRevision: current })
 
-    // Sem edição humana pendente, reescrever sem baseRevision continua valendo:
-    // é o caso de quem escreveu o texto do zero e não leu nada.
-    const result = await updateDocument(ref.id, '# Ata\n\nSegunda do agente.', {})
+    // With no pending human edit, rewriting without baseRevision still counts:
+    // it is the case of whoever wrote the text from scratch and read nothing.
+    const result = await updateDocument(ref.id, '# Minutes\n\nSecond from the agent.', {})
 
     expect(result.ok).toBe(true)
-    expect(await sourceOf(ref.id)).toContain('Segunda do agente')
+    expect(await sourceOf(ref.id)).toContain('Second from the agent')
   })
 
-  it('documento que o usuário nunca tocou continua aceitando reescrita direta', async () => {
-    const ref = await saveDocument('# Ata\n\nPrimeira.', [], { title: 'Ata' })
+  it('a document the user never touched still accepts a direct rewrite', async () => {
+    const ref = await saveDocument('# Minutes\n\nFirst.', [], { title: 'Minutes' })
 
-    expect((await updateDocument(ref.id, '# Ata\n\nSegunda.', {})).ok).toBe(true)
+    expect((await updateDocument(ref.id, '# Minutes\n\nSecond.', {})).ok).toBe(true)
   })
 })

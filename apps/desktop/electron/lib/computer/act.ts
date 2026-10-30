@@ -7,10 +7,10 @@ import type { ShotTarget } from './shots'
 import { ComputerError, type AppInfo, type ComputerDriver, type DeliveryMode, type PointerMode } from './types'
 
 /**
- * Execução de uma ação do cu_computer. A ordem de preferência é sempre a menos
- * intrusiva: ação de acessibilidade no elemento (AXPress, AXValue) antes de
- * evento de mouse; evento por pid (sem mover o cursor do usuário) antes do
- * ponteiro global, que só existe com o opt-in nas Preferências.
+ * Execution of a cu_computer action. The order of preference is always the least
+ * intrusive: accessibility action on the element (AXPress, AXValue) before a mouse
+ * event; event by pid (without moving the user's cursor) before the global pointer,
+ * which only exists with the opt-in in the Preferences.
  */
 
 export const COMPUTER_ACTIONS = [
@@ -50,21 +50,21 @@ export interface ActRequest {
   amount?: number
   seconds?: number
   axAction?: string
-  /** select_text: qual ocorrência do texto (1 = a primeira) */
+  /** select_text: which occurrence of the text (1 = the first one) */
   occurrence?: number
   pointer: PointerMode
   signal?: AbortSignal
 }
 
 export interface ActOutcome {
-  /** Frase legível do que aconteceu (vai para o modelo e para o chip) */
+  /** Readable sentence of what happened (goes to the model and to the chip) */
   summary: string
   app: AppInfo | null
-  /** Observação usada — o read_back observa a mesma janela */
+  /** Observation used — the read_back observes the same window */
   record: ObservationRecord | null
-  /** O app saiu do lugar (aberto agora): o read_back escolhe a janela da frente */
+  /** The app moved (opened now): the read_back picks the front window */
   reopen?: boolean
-  /** Onde a ação mirou, em pontos globais — o marcador da miniatura no painel */
+  /** Where the action aimed, in global points — the marker of the thumbnail in the panel */
   target?: ShotTarget
 }
 
@@ -101,7 +101,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
 
   if (req.action === 'open_app') {
     await driver.openApp(req.app, req.signal)
-    // Abrir (ou trazer para a frente) leva um instante até a janela existir.
+    // Opening (or bringing to the front) takes a moment until the window exists.
     await sleep(900, req.signal)
     const snapshot = await driver.apps(req.signal)
     const app = resolveApp(snapshot, req.app)
@@ -115,11 +115,11 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
   const record = registry.forAction(req.sessionId, app.pid, req.observationId)
   const mode: DeliveryMode = req.pointer === 'global' ? 'global' : 'pid'
   const windowRef = { id: record.window.id, frame: record.window.frame, title: record.window.title }
-  // Windows: mouse e roda por mensagem de janela chegam ao app sem mover o
-  // cursor. No macOS não (Fase 0) — lá o modo dirigido é só acessibilidade.
+  // Windows: mouse and wheel through a window message reach the app without moving the
+  // cursor. Not on macOS (Phase 0) — there the directed mode is accessibility only.
   const messageMouse = mode === 'pid' && driver.capabilities().messageMouse
   const keys = (input: string) => parseKeys(input, driver.platform)
-  // O atalho de "ir até o fim da linha" é Cmd no Mac e Ctrl no Windows.
+  // The "go to the end of the line" shortcut is Cmd on the Mac and Ctrl on Windows.
   const modKey = driver.platform === 'win32' ? 'ctrl' : 'cmd'
 
   const handle = req.element !== undefined ? registry.element(record, req.element) : null
@@ -133,7 +133,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     if (x === undefined || y === undefined) throw new ComputerError('badRequest', `Action "${req.action}" needs element or x/y.`)
     return shotToGlobal(record.geometry, x, y)
   }
-  // A identidade vai no vocabulário do host (UIA no Windows): é ele que confere.
+  // The identity goes in the host's vocabulary (UIA on Windows): it is the host that checks it.
   const expect = (h: ElementHandle) => ({ role: h.nativeRole ?? h.role, title: h.title })
   const element = (
     h: ElementHandle,
@@ -146,7 +146,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     )
   const mouse = (point: [number, number], button: 'left' | 'right' | 'middle', clicks = 1, kind: 'click' | 'move' = 'click') =>
     driver.act({ op: 'mouse', pid: app.pid, windowId: record.window.id, x: point[0], y: point[1], button, clicks, kind, mode }, req.signal)
-  // Alvo para o marcador da miniatura: o elemento, ou o ponto x/y pedido.
+  // Target for the thumbnail marker: the element, or the requested x/y point.
   const aimed = (): ShotTarget | undefined => {
     if (handle?.frame && handle.frame[2] > 0 && handle.frame[3] > 0) return { frame: handle.frame }
     if (req.x === undefined || req.y === undefined) return undefined
@@ -160,12 +160,12 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
   const where = (point: [number, number]) => (handle ? `element ${handle.index} (${label(handle)})` : `(${req.x}, ${req.y}) → global (${point[0]}, ${point[1]})`)
   const pressed = (r: { action?: string; unconfirmed?: boolean }, what: string) =>
     `${what} via ${r.action}${r.unconfirmed ? ' (the app did not confirm in time — it probably ran; check the next observation)' : ''}.`
-  // Modo dirigido: evento de mouse por pid é ignorado pelo AppKit (Fase 0) —
-  // o ponto vira elemento pelo hit-test do AX e a ação vai pela acessibilidade.
+  // Directed mode: a mouse event by pid is ignored by AppKit (Phase 0) —
+  // the point becomes an element through the AX hit-test and the action goes through accessibility.
   const hit = (point: [number, number], actions: string[], focusText: boolean) =>
     driver.act({ op: 'hit', pid: app.pid, x: point[0], y: point[1], actions, focusText }, req.signal)
-  // O que ficou selecionado depois de arrastar ou de clique duplo/triplo — dado,
-  // não suposição. Sem seleção é aviso explícito: o arrasto errou o texto.
+  // What stayed selected after dragging or a double/triple click — data,
+  // not an assumption. No selection is an explicit warning: the drag missed the text.
   const selectionNote = async (): Promise<string> => {
     await sleep(150, req.signal)
     const r = await driver.act({ op: 'selection', pid: app.pid }, req.signal).catch(() => null)
@@ -176,8 +176,8 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     }
     return ` Selection now: ${sel.length} character(s)${sel.text ? ` ${JSON.stringify(sel.text)}` : ''}.`
   }
-  // Clique por mensagem de janela (Windows, modo dirigido): o app não confirma
-  // nada — o retorno pede para conferir a próxima observação.
+  // Click through a window message (Windows, directed mode): the app confirms
+  // nothing — the return asks to check the next observation.
   const messageClick = async (point: [number, number], button: 'left' | 'right' | 'middle', clicks = 1, kind: 'click' | 'move' = 'click') => {
     await mouse(point, button, clicks, kind)
     return ' via a window message (the app does not confirm it — check the next observation)'
@@ -232,7 +232,7 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
     }
     case 'double_click':
     case 'triple_click': {
-      // Selecionar palavra (duplo) ou linha (triplo) não tem ação AX equivalente.
+      // Selecting a word (double) or a line (triple) has no equivalent AX action.
       const triple = req.action === 'triple_click'
       const point = pointAt(handle, req.x, req.y)
       if (messageMouse) {
@@ -251,8 +251,8 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       return done(`Moved the pointer to ${where(point)}.`)
     }
     case 'drag': {
-      // Arrastar janela ou seleção depende de uma sessão de drag do window
-      // server, que evento por pid não conduz.
+      // Dragging a window or a selection depends on a drag session of the window
+      // server, which an event by pid does not drive.
       if (mode !== 'global') throw needsGlobal('Dragging')
       const from = pointAt(handle, req.x, req.y)
       const toHandle = req.toElement !== undefined ? registry.element(record, req.toElement) : null
@@ -266,12 +266,12 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       const point =
         handle || (req.x !== undefined && req.y !== undefined) ? pointAt(handle, req.x, req.y) : frameCenter(record.window.frame)
       const pixels = ticks * SCROLL_PIXELS_PER_TICK
-      // Roda positiva = conteúdo desce (rolar para cima).
+      // Positive delta = content goes down (scroll up).
       const dy = direction === 'up' ? pixels : direction === 'down' ? -pixels : 0
       const dx = direction === 'left' ? pixels : direction === 'right' ? -pixels : 0
       if (mode === 'pid') {
-        // A roda por pid também é ignorada: move a barra de rolagem pelo AX e,
-        // sem barra exposta, cai para Page Up/Down (teclado por pid funciona).
+        // The wheel by pid is ignored too: it moves the scroll bar through AX and,
+        // with no bar exposed, falls back to Page Up/Down (keyboard by pid works).
         const r = await driver.act({ op: 'scrollAx', pid: app.pid, x: point[0], y: point[1], dx, dy }, req.signal)
         if (r.done) return done(`Scrolled ${direction} ~${pixels}px at ${point.join(', ')} (accessibility scroll bar).`)
         if (messageMouse) {
@@ -318,8 +318,8 @@ export async function act(driver: ComputerDriver, registry: Registry, req: ActRe
       return done(`Set the value of element ${handle.index} (${label(handle)}). Read back: ${JSON.stringify(result.readBack ?? '')}.`)
     }
     case 'select_text': {
-      // Seleção pelo AX: determinística, sem coordenada nem mouse — funciona com
-      // o app em segundo plano. É o caminho certo para "selecionar e trocar".
+      // Selection through AX: deterministic, no coordinate and no mouse — it works with
+      // the app in the background. It is the right path for "select and replace".
       if (!handle) throw new ComputerError('badRequest', 'Action "select_text" needs "element" (a text field or text area).')
       if (handle.secure) throw secureRefusal()
       const result = await element(handle, 'select', { find: req.text, occurrence: req.occurrence })

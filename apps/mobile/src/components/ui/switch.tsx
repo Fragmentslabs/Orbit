@@ -3,15 +3,15 @@ import { getThemeTokens } from "~/lib/theme-tokens";
 import { useThemeStore } from "~/stores/theme-store";
 
 /**
- * Switch com estilos explícitos (track 44×24, thumb 20×20).
+ * Switch with explicit styles (track 44×24, thumb 20×20).
  *
- * Não depende das variantes data-[state=*] do NativeWind: elas não eram
- * aplicadas no dev client e o track ficava transparente (só o thumb
- * aparecia, parecendo um círculo). As cores vêm dos tokens do tema.
+ * It does not rely on the data-[state=*] variants of NativeWind: they were not
+ * applied in the dev client and the track stayed transparent (only the thumb
+ * showed up, looking like a circle). The colors come from the theme tokens.
  */
 function Switch(props: React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
-  const ativo = !!props.checked;
+  const active = !!props.checked;
   const { style: _style, ...rest } = props;
   return (
     <SwitchPrimitive.Root
@@ -22,7 +22,7 @@ function Switch(props: React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Roo
         borderRadius: 12,
         paddingHorizontal: 2,
         justifyContent: "center",
-        backgroundColor: ativo ? tokens.primary : tokens.mutedForeground,
+        backgroundColor: active ? tokens.primary : tokens.mutedForeground,
         opacity: props.disabled ? 0.5 : 1,
       }}
     >
@@ -32,7 +32,7 @@ function Switch(props: React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Roo
           height: 20,
           borderRadius: 10,
           backgroundColor: tokens.background,
-          transform: [{ translateX: ativo ? 20 : 0 }],
+          transform: [{ translateX: active ? 20 : 0 }],
           shadowColor: "#000",
           shadowOpacity: 0.25,
           shadowRadius: 2,

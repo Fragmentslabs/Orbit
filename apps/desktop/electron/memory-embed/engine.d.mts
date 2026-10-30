@@ -1,4 +1,4 @@
-/** Tipos do motor de embeddings (engine.mjs) para o lado TypeScript. */
+/** Types of the embedding engine (engine.mjs) for the TypeScript side. */
 export interface EmbedderOptions {
   modelPath: string
   tokenizerPath: string

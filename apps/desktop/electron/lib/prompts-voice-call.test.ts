@@ -2,18 +2,18 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SendMessageInput } from '@shared/chat'
 
 /**
- * Modo chamada: a resposta vai ser lida em voz alta, então o prompt pede
- * respostas curtas e sem formatação — e só quando a opção vem ligada.
+ * Call mode: the answer is going to be read aloud, so the prompt asks for
+ * short answers without formatting — and only when the option comes turned on.
  */
 
 vi.mock('./memory/service', () => ({ loadPromptContext: async () => null }))
 vi.mock('./skills', () => ({ loadSkills: async () => [] }))
 vi.mock('./mcp', () => ({ listMcpToolDescriptions: () => [] }))
 vi.mock('./past-chats', () => ({ buildPastChatsContext: async () => '', detectPastChatsIntent: () => false }))
-// Subchats leem o storage (app.getPath), que não existe fora do Electron.
+// Subchats read the storage (app.getPath), which does not exist outside Electron.
 vi.mock('./subchats', () => ({ listSubchats: async () => [], formatSubchatsBlock: () => '' }))
-/** Voz como nas Preferências; cada teste liga/desliga as metades. */
-const voz = { tts: true, stt: true }
+/** Voice as in Preferences; each test turns the halves on/off. */
+const voiceFlags = { tts: true, stt: true }
 vi.mock('./app-settings', async () => {
   const { DEFAULT_APP_SETTINGS } = await import('@shared/app-settings')
   return {
@@ -23,8 +23,8 @@ vi.mock('./app-settings', async () => {
       ...DEFAULT_APP_SETTINGS,
       voice: {
         ...DEFAULT_APP_SETTINGS.voice,
-        tts: { ...DEFAULT_APP_SETTINGS.voice.tts, enabled: voz.tts },
-        stt: { ...DEFAULT_APP_SETTINGS.voice.stt, enabled: voz.stt },
+        tts: { ...DEFAULT_APP_SETTINGS.voice.tts, enabled: voiceFlags.tts },
+        stt: { ...DEFAULT_APP_SETTINGS.voice.stt, enabled: voiceFlags.stt },
       },
     }),
   }
@@ -35,7 +35,7 @@ const { buildSystemPrompt } = await import('./prompts')
 function turn(voiceCall: boolean): SendMessageInput {
   return {
     sessionId: 's1',
-    text: 'que horas abre o mercado?',
+    text: 'what time does the market open?',
     providerId: 'p',
     modelId: 'm',
     mode: 'chat',
@@ -43,37 +43,37 @@ function turn(voiceCall: boolean): SendMessageInput {
   } as SendMessageInput
 }
 
-describe('modo chamada no system prompt', () => {
-  it('pede resposta falada, curta e sem Markdown', async () => {
+describe('call mode in the system prompt', () => {
+  it('asks for a spoken, short answer without Markdown', async () => {
     const prompt = await buildSystemPrompt(turn(true))
     expect(prompt).toContain('VOICE CALL ACTIVE')
     expect(prompt).toMatch(/no Markdown/i)
-    // Antes de ferramentas, uma frase curta para a chamada não ficar muda.
+    // Before tools, a short sentence so the call does not go mute.
     expect(prompt).toMatch(/before any tool call/i)
   })
 
-  it('fora da chamada não aparece', async () => {
+  it('outside the call it does not show up', async () => {
     expect(await buildSystemPrompt(turn(false))).not.toContain('VOICE CALL ACTIVE')
   })
 })
 
-describe('áudio desligado nas Preferências', () => {
-  it('com as duas metades ligadas, nada a explicar', async () => {
-    voz.tts = true
-    voz.stt = true
+describe('audio off in Preferences', () => {
+  it('with both halves on, nothing to explain', async () => {
+    voiceFlags.tts = true
+    voiceFlags.stt = true
     const prompt = await buildSystemPrompt(turn(false))
     expect(prompt).not.toContain('Creating audio files')
     expect(prompt).not.toContain('Transcribing audio')
   })
 
-  it('cada metade desligada vira uma instrução de como responder', async () => {
-    voz.tts = false
-    voz.stt = false
+  it('each half off becomes an instruction on how to answer', async () => {
+    voiceFlags.tts = false
+    voiceFlags.stt = false
     const prompt = await buildSystemPrompt(turn(false))
     expect(prompt).toContain('Creating audio files (text-to-speech) is DISABLED')
     expect(prompt).toContain('Transcribing audio (speech-to-text) is DISABLED')
     expect(prompt).toContain('Settings → Voice')
-    voz.tts = true
-    voz.stt = true
+    voiceFlags.tts = true
+    voiceFlags.stt = true
   })
 })

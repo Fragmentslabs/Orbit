@@ -1,16 +1,16 @@
 /**
- * Leitura em voz alta de uma resposta: pede o WAV ao desktop e toca.
+ * Reading an answer out loud: asks the desktop for the WAV and plays it.
  *
- * POR QUE UMA STORE, e não um hook por mensagem: o celular não sintetiza nada —
- * a fala atravessa como ARQUIVO (`POST /api/voice/speak` → WAV com token no
- * caminho) e é tocada pelo `expo-audio`. Um player por bolha significaria um
- * player nativo por mensagem da conversa; aqui é UM, criado no primeiro toque e
- * reaproveitado com `replace`. O estado também fica num lugar só, então "só uma
- * fala por vez" sai de graça.
+ * WHY A STORE, and not a hook per message: the phone synthesizes nothing —
+ * the speech travels as a FILE (`POST /api/voice/speak` → WAV with the token in the
+ * path) and is played by `expo-audio`. One player per bubble would mean a native
+ * player per message of the conversation; here it is ONE, created on the first touch and
+ * reused with `replace`. The state also lives in a single place, so "only one
+ * speech at a time" comes for free.
  *
- * O texto não é montado aqui: chega pronto de `speakableText` (@orbit/shared),
- * a mesma regra que o desktop usa — senão o mesmo turno sairia diferente no
- * computador e no telefone.
+ * The text is not assembled here: it arrives ready from `speakableText` (@orbit/shared),
+ * the same rule the desktop uses — otherwise the same turn would come out different on the
+ * computer and on the phone.
  */
 import { create } from 'zustand'
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio'
@@ -21,32 +21,32 @@ import { errorCodeFromHttpError } from '~/lib/http-error'
 import i18n from '~/i18n'
 import { useConnectionStore } from './connection-store'
 
-/** Quanto o erro fica na tela antes de sumir sozinho (o mesmo do desktop). */
+/** How long the error stays on screen before vanishing by itself (the same as the desktop). */
 const ERROR_VISIBLE_MS = 6000
 
 export type SpeakState = 'idle' | 'generating' | 'playing'
 
 interface SpeakStore {
   state: SpeakState
-  /** Mensagem cuja fala está sendo gerada ou tocando. */
+  /** Message whose speech is being generated or played. */
   messageId: string | null
-  /** Motivo da última falha (motor sem modelo, offline), já legível. */
+  /** Reason for the last failure (engine without a model, offline), already readable. */
   error: string | null
-  /** Mensagem cuja fala falhou — o aviso só aparece naquela barra de ações. */
+  /** Message whose speech failed — the notice only shows up in that actions bar. */
   errorMessageId: string | null
-  /** Fala a resposta; segundo toque na mesma mensagem interrompe. */
+  /** Speaks the answer; a second tap on the same message interrupts it. */
   toggle: (message: ChatMessage) => void
-  /** Silencia agora e invalida o pedido que estiver em voo. */
+  /** Silences it now and invalidates the request in flight. */
   stop: () => void
   dismissError: () => void
 }
 
 let player: AudioPlayer | null = null
 /**
- * Número do último pedido. Uma resposta HTTP que chega depois de um toque novo
- * (ou de um stop) não pode roubar a fala — compara e desiste.
+ * Number of the last request. An HTTP response that arrives after a new tap
+ * (or a stop) cannot steal the speech — it compares and gives up.
  */
-let pedido = 0
+let requestSeq = 0
 let errorTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearErrorTimer(): void {
@@ -54,19 +54,19 @@ function clearErrorTimer(): void {
   errorTimer = null
 }
 
-/** Player único do app, criado no primeiro toque. */
+/** Single player of the app, created on the first touch. */
 function ensurePlayer(): AudioPlayer {
   if (player) return player
-  const criado = createAudioPlayer(null)
-  // Fim do áudio → volta ao repouso. Sem isto o botão continuaria em "parar"
-  // depois que a fala terminou.
-  criado.addListener('playbackStatusUpdate', (status) => {
+  const created = createAudioPlayer(null)
+  // End of the audio → back to rest. Without this the button would stay on "stop"
+  // after the speech finished.
+  created.addListener('playbackStatusUpdate', (status) => {
     if (!status.didJustFinish) return
     if (useSpeakStore.getState().state !== 'playing') return
     useSpeakStore.setState({ state: 'idle', messageId: null })
   })
-  player = criado
-  return criado
+  player = created
+  return created
 }
 
 export const useSpeakStore = create<SpeakStore>((set, get) => ({
@@ -76,26 +76,26 @@ export const useSpeakStore = create<SpeakStore>((set, get) => ({
   errorMessageId: null,
 
   toggle: (message) => {
-    const texto = speakableText(message)
-    if (!texto) return
-    const atual = get()
-    // Mesmo botão de novo: parar. Qualquer outra mensagem assume a fala.
-    if (atual.messageId === message.id && atual.state !== 'idle') {
+    const text = speakableText(message)
+    if (!text) return
+    const current = get()
+    // Same button again: stop. Any other message takes over the speech.
+    if (current.messageId === message.id && current.state !== 'idle') {
       get().stop()
       return
     }
-    void run(message.id, texto)
+    void run(message.id, text)
   },
 
   stop: () => {
-    // Invalida o pedido em voo: se a síntese ainda estiver rodando, a resposta
-    // que chegar depois não toca.
-    pedido++
+    // Invalidates the request in flight: if the synthesis is still running, the response
+    // that arrives later does not play.
+    requestSeq++
     if (player) {
       try {
         player.pause()
       } catch {
-        // Já liberado — nada a pausar.
+        // Already released — nothing to pause.
       }
       releaseAudioFocus(player)
     }
@@ -109,12 +109,12 @@ export const useSpeakStore = create<SpeakStore>((set, get) => ({
 }))
 
 /**
- * Código do desktop → chave i18n.
+ * Code from the desktop → i18n key.
  *
- * O desktop manda código, não frase (`VoiceSpeakErrorCode` em @orbit/shared):
- * a frase é escrita aqui, onde se sabe em que idioma a pessoa está lendo. Um
- * código fora deste mapa — um 400 de validação, que só acontece se o app montar
- * o corpo errado — cai no aviso genérico, porque não há o que a pessoa fazer.
+ * The desktop sends a code, not a sentence (`VoiceSpeakErrorCode` in @orbit/shared):
+ * the sentence is written here, where it is known in which language the person is reading. A
+ * code outside this map — a 400 from validation, which only happens if the app assembles
+ * the body wrongly — falls back to the generic notice, because there is nothing the person can do.
  */
 const SPEAK_ERROR_KEY: Record<string, string> = {
   tts_disabled: 'voice.tts.errorDisabled',
@@ -122,14 +122,14 @@ const SPEAK_ERROR_KEY: Record<string, string> = {
 }
 
 function speakErrorText(error?: string): string {
-  const codigo = errorCodeFromHttpError(error)
-  const chave = codigo ? SPEAK_ERROR_KEY[codigo] : undefined
-  return chave ? i18n.t(chave) : i18n.t('voice.tts.failed')
+  const code = errorCodeFromHttpError(error)
+  const key = code ? SPEAK_ERROR_KEY[code] : undefined
+  return key ? i18n.t(key) : i18n.t('voice.tts.failed')
 }
 
-/** Falha: guarda o motivo, prende-o à mensagem que falhou e agenda a saída. */
-function fail(messageId: string, motivo: string): void {
-  useSpeakStore.setState({ state: 'idle', messageId: null, error: motivo, errorMessageId: messageId })
+/** Failure: stores the reason, ties it to the message that failed and schedules the exit. */
+function fail(messageId: string, reason: string): void {
+  useSpeakStore.setState({ state: 'idle', messageId: null, error: reason, errorMessageId: messageId })
   clearErrorTimer()
   errorTimer = setTimeout(() => {
     errorTimer = null
@@ -137,8 +137,8 @@ function fail(messageId: string, motivo: string): void {
   }, ERROR_VISIBLE_MS)
 }
 
-async function run(messageId: string, texto: string): Promise<void> {
-  const meu = ++pedido
+async function run(messageId: string, text: string): Promise<void> {
+  const mine = ++requestSeq
   clearErrorTimer()
   useSpeakStore.setState({ state: 'generating', messageId, error: null, errorMessageId: null })
 
@@ -148,9 +148,9 @@ async function run(messageId: string, texto: string): Promise<void> {
     return
   }
 
-  const res = await http.speak(texto)
-  // Toque novo ou stop no meio do caminho: este pedido morreu.
-  if (meu !== pedido) return
+  const res = await http.speak(text)
+  // New tap or stop along the way: this request died.
+  if (mine !== requestSeq) return
 
   if (!res.ok || !res.data?.url) {
     fail(messageId, speakErrorText(res.error))
@@ -159,7 +159,7 @@ async function run(messageId: string, texto: string): Promise<void> {
 
   const p = ensurePlayer()
   claimAudioFocus(p, () => {
-    // Outro áudio assumiu a saída: esta fala acabou, e o botão precisa saber.
+    // Another audio took over the output: this speech is over, and the button needs to know.
     if (useSpeakStore.getState().messageId === messageId) {
       useSpeakStore.setState({ state: 'idle', messageId: null })
     }

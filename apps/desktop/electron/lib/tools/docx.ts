@@ -10,18 +10,18 @@ import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
- * Editar um .docx que veio de fora, preservando a formatação.
+ * Editing a .docx that came from outside, preserving the formatting.
  *
- * O resultado é sempre uma CÓPIA. O arquivo do usuário não é alterado: a cópia
- * nasce no storage do Orbit, aparece na conversa como documento e sai de lá
- * pelo botão de baixar. Gravar por cima do original é outra coisa, pede pedido
- * explícito, e é o que `savePath` faz — mesma convenção do
- * panel_screenshot({ savePath }), que também só escreve no projeto quando o
- * usuário pede.
+ * The result is always a COPY. The user's file is not changed: the copy
+ * is born in Orbit's storage, appears in the conversation as a document and leaves there
+ * through the download button. Writing over the original is another thing, asks for an
+ * explicit request, and is what `savePath` does — same convention as
+ * panel_screenshot({ savePath }), which also only writes to the project when the
+ * user asks.
  *
- * A fidelidade não é imitação: a cópia PARTE dos bytes originais e troca só o
- * texto pedido dentro do XML. Estilos, fontes, cabeçalho, imagens e numeração
- * continuam sendo os do arquivo de origem porque nunca foram tocados.
+ * The fidelity is not imitation: the copy STARTS from the original bytes and swaps only the
+ * requested text inside the XML. Styles, fonts, header, images and numbering
+ * remain those of the source file because they were never touched.
  */
 
 const replacementSchema = z.object({
@@ -31,7 +31,7 @@ const replacementSchema = z.object({
 })
 
 export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext | null) {
-  /** Resolve a fonte do .docx: anexo da conversa ou arquivo da pasta. */
+  /** Resolves the .docx source: a conversation attachment or a file from the folder. */
   const loadSource = async (
     docId: string | undefined,
     filePath: string | undefined,
@@ -131,9 +131,9 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
           return `Failed to edit ${source.name}: ${(err as Error).message}`
         }
 
-        // Âncora não encontrada é o erro mais provável e o mais silencioso: o
-        // Word fragmenta o texto, e o agente costuma buscar por algo que ele
-        // parafraseou. Dizer QUAIS falharam é o que permite corrigir.
+        // An anchor not found is the most likely and the quietest error: Word
+        // fragments the text, and the agent usually searches for something it
+        // paraphrased. Saying WHICH ones failed is what allows fixing it.
         const missed = [
           ...replacements.map((r, i) => ({ what: `replace "${r.find}"`, count: edited.applied[i] })),
           ...(insert ?? []).map((op, i) => ({ what: `insert after "${op.after}"`, count: edited.structural.insert[i] })),

@@ -14,18 +14,18 @@ import { CatalogModelList } from './CatalogModelList'
 interface VisionConfigModalProps {
   visible: boolean
   onClose: () => void
-  /** Sessão (ou chat novo, undefined) que terá o modo Visão ativado/desativado. */
+  /** Session (or new chat, undefined) that will have the Vision mode turned on/off. */
   targetSession?: string
 }
 
 /**
- * Configuração do modo Visão — espelho do VisionConfigDialog do desktop:
- * escolhe o modelo de visão que DESCREVE imagens para o agente. Só mostra
- * modelos com suporte a imagem (modelSupportsVision). Escolher um modelo
- * configura E ativa o modo; "Desativar visão" limpa a seleção e desliga.
+ * Configuration of the Vision mode — mirror of the desktop VisionConfigDialog:
+ * picks the vision model that DESCRIBES images for the agent. It only shows
+ * models with image support (modelSupportsVision). Choosing a model
+ * configures AND turns the mode on; "Disable vision" clears the selection and turns it off.
  */
 export function VisionConfigModal({ visible, onClose, targetSession }: VisionConfigModalProps) {
-  // Fechado não monta nada (ver WorkerModelModal).
+  // Closed, it mounts nothing (see WorkerModelModal).
   if (!visible) return null
   return <VisionConfigSheet onClose={onClose} targetSession={targetSession} />
 }
@@ -50,15 +50,15 @@ function VisionConfigSheet({
     0.08,
   )
 
-  // Identidade estável: a lista usa o filtro como dependência do memo dela.
-  const apenasComVisao = useCallback(
+  // Stable identity: the list uses the filter as a dependency of its memo.
+  const visionOnly = useCallback(
     (provider: CatalogProvider, model: CatalogModel) => modelSupportsVision(provider, model.id),
     [],
   )
 
   const selectModel = useCallback(
     (providerId: string, modelId: string) => {
-      // Escolher modelo configura E ativa o modo (nesta sessão), como no desktop
+      // Choosing a model configures AND turns the mode on (in this session), as on the desktop
       void setVisionModel({ providerId, modelId })
       setModeActive('vision', targetSession, true)
     },
@@ -88,7 +88,7 @@ function VisionConfigSheet({
             {t('visionConfig.explainer')}
           </Text>
 
-          {/* Desligado — modo visão desativado */}
+          {/* Off — vision mode disabled */}
           <Pressable
             onPress={disableVision}
             style={[s.disabledRow, { borderColor: tokens.border }, !visionModel && { backgroundColor: rowSelectedBg }]}
@@ -98,7 +98,7 @@ function VisionConfigSheet({
             {!visionModel && <Check size={16} color={tokens.primary} />}
           </Pressable>
 
-          {/* Busca */}
+          {/* Search */}
           <View style={[s.searchRow, { backgroundColor: tokens.border }]}>
             <Search size={16} color={tokens.mutedForeground} />
             <TextInput
@@ -114,7 +114,7 @@ function VisionConfigSheet({
 
           <CatalogModelList
             search={search}
-            includeModel={apenasComVisao}
+            includeModel={visionOnly}
             selected={visionModel}
             onSelect={selectModel}
             emptyLabel={t('visionConfig.noModels')}
@@ -123,7 +123,7 @@ function VisionConfigSheet({
             {t('visionConfig.noSelectionHint')}
           </Text>
 
-          {/* Footer — espelho do dialog desktop */}
+          {/* Footer — mirror of the desktop dialog */}
           <View style={[s.footer, { borderTopColor: tokens.border }]}>
             {visionModel ? (
               <Pressable onPress={disableVision} style={s.disableBtn}>

@@ -45,38 +45,38 @@ import { voiceApi } from "@/src/lib/voice-ipc"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Preferências → Voz: TTS (ler respostas em voz alta), STT (ditar) e o
- * gerenciamento dos modelos baixados, com a recomendação para esta máquina.
+ * Preferences → Voice: TTS (read answers aloud), STT (dictate) and the
+ * management of the downloaded models, with the recommendation for this machine.
  *
- * As preferências são o bloco `voice` do AppSettings, que o renderer guarda e
- * persiste — lido com os padrões de `@shared/voice` como rede de segurança
- * para uma versão antiga salva no localStorage.
+ * The preferences are the `voice` block of AppSettings, which the renderer keeps and
+ * persists — read with the `@shared/voice` defaults as a safety net
+ * for an old version saved in localStorage.
  *
- * Regra da casa: o selo (Badge) e o texto logo abaixo saem do MESMO estado
- * (ver `enginePhase`). Selo dizendo "não baixado" com texto dizendo "o pacote
- * está no disco" é o defeito que esta tela não pode repetir.
+ * House rule: the badge (Badge) and the text right below come from the SAME state
+ * (see `enginePhase`). A badge saying "not downloaded" with text saying "the package
+ * is on disk" is the defect this screen cannot repeat.
  */
 
-/** Motores de transcrição oferecidos; o Parakeet é o preferido. */
+/** Transcription engines offered; Parakeet is the preferred one. */
 const STT_ENGINES: readonly VoiceEngineId[] = ["parakeet", "whisper"]
 
-/** Vozes do TTS: F1–F5 femininas, M1–M5 masculinas (Supertonic 3). */
+/** TTS voices: F1–F5 female, M1–M5 male (Supertonic 3). */
 const VOICE_IDS = ["F1", "F2", "F3", "F4", "F5", "M1", "M2", "M3", "M4", "M5"] as const
 
-/** Idiomas da leitura: `auto` segue o idioma de cada resposta; os demais
- *  forçam o sotaque; `na` deixa a voz sem idioma (agnóstica). */
+/** Reading languages: `auto` follows the language of each answer; the others
+ *  force the accent; `na` leaves the voice without a language (agnostic). */
 const TTS_LANGS = ["auto", "pt", "en", "es", "fr", "de", "it", "na"] as const
 
-/** Idiomas do ditado ("auto" deixa o motor detectar). */
+/** Dictation languages ("auto" lets the engine detect it). */
 const STT_LANGS = ["auto", "pt", "en", "es", "fr", "de", "it", "ja", "zh"] as const
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const
 
-/** Threads de inferência oferecidas — o teto é o mesmo do núcleo compartilhado. */
+/** Inference threads offered — the ceiling is the same as the shared core's. */
 const THREAD_STEPS = [1, 2, 3, 4, 6, 8, 12, 16] as const
 
-/** Catálogo do main nas linhas da tela: a visão de `modelViews` mais os
- *  idiomas, que os metadados mostram como texto secundário. */
+/** Main process catalog in the screen rows: the `modelViews` view plus the
+ *  languages, which the metadata shows as secondary text. */
 function catalogRows(catalog: VoiceModelInfo[] | null): VoiceModelRow[] {
   const byId = new Map((Array.isArray(catalog) ? catalog : []).map((model) => [model.id, model]))
   return modelViews(catalog).map((view) => ({ ...view, langs: byId.get(view.id)?.langs ?? [] }))
@@ -93,8 +93,8 @@ function useVoicePrefs(): { voice: VoiceSettings; updateVoice: (next: Partial<Vo
     }),
     [voice],
   )
-  // Mescla com o que já está salvo: quem mexe em `tts`/`stt` não apaga o
-  // bloco `call` (nem o contrário).
+  // Merges with what is already saved: whoever touches `tts`/`stt` does not erase the
+  // `call` block (nor the other way around).
   const updateVoice = useCallback(
     (next: Partial<VoiceSettings>) => update({ voice: { ...safe, ...next } }),
     [update, safe],
@@ -116,21 +116,21 @@ function formatSpeed(speed: number): string {
 interface CompactOption {
   value: string
   label: string
-  /** Texto completo (o rótulo cortado do catálogo) para o `title`. */
+  /** Full text (the truncated catalog label) for the `title`. */
   title?: string
-  /** Aparece na lista mas não dá para escolher (modelo ainda não baixado). */
+  /** It appears in the list but cannot be chosen (model not downloaded yet). */
   disabled?: boolean
-  /** Complemento discreto depois do rótulo, só na lista ("não baixado · 488 MB"). */
+  /** Discreet complement after the label, only in the list ("not downloaded · 488 MB"). */
   hint?: string
 }
 
 /**
- * Select de largura FIXA dentro da linha do painel — o `w-fit` do trigger é
- * sobrescrito com `w-44!` e o rótulo corta com reticências. Os rótulos do
- * catálogo de voz são frases inteiras ("Whisper large-v3-turbo (whisper.cpp) —
- * 574 MB, …"): sem o corte, o controle estica e empurra a linha do grid (o
- * mesmo defeito de layout para "parakeet-tdt-0.6b-v3"). O texto completo fica
- * no `title`; o tamanho e os idiomas, na linha secundária abaixo.
+ * FIXED width Select inside the panel row — the trigger's `w-fit` is
+ * overridden with `w-44!` and the label cuts with an ellipsis. The labels of the voice
+ * catalog are whole sentences ("Whisper large-v3-turbo (whisper.cpp) —
+ * 574 MB, …"): without the cut, the control stretches and pushes the grid row (the
+ * same layout defect for "parakeet-tdt-0.6b-v3"). The full text stays
+ * in the `title`; the size and the languages, in the secondary row below.
  */
 function CompactSelect({
   value,
@@ -172,7 +172,7 @@ function CompactSelect({
   )
 }
 
-/** Selo do estado do motor — os três estados saem de `EnginePhase`. */
+/** Badge of the engine state — the three states come from `EnginePhase`. */
 function phaseBadgeVariant(phase: EnginePhase): "secondary" | "outline" {
   return phase === "ready" ? "secondary" : "outline"
 }
@@ -198,8 +198,8 @@ export function VoicePanel() {
       setStatus(state && typeof state === "object" ? state : null)
       setLoadError(false)
     } catch {
-      // Canal não registrado (main antigo, dev) ou resposta inválida: o painel
-      // mostra um erro legível e continua com o que já tem — nunca uma tela vazia.
+      // Channel not registered (old main process, dev) or invalid response: the panel
+      // shows a readable error and keeps going with what it already has — never an empty screen.
       setLoadError(true)
     }
   }, [])
@@ -208,10 +208,10 @@ export function VoicePanel() {
     void refresh()
   }, [refresh])
 
-  // O main avisa a cada mudança de estado (download, extração do pacote, VAD,
-  // remoção, falha) e a tela reconsulta. Sem esta assinatura o "Preparar agora"
-  // parecia não ter função: a extração rodava no main e o selo ficava em
-  // "Preparando…" para sempre, mesmo depois de o modelo ficar pronto.
+  // The main process warns on every state change (download, package extraction, VAD,
+  // removal, failure) and the screen re-queries. Without this subscription the "Prepare now"
+  // seemed to have no function: the extraction ran in the main process and the badge stayed in
+  // "Preparing…" forever, even after the model was ready.
   useEffect(() => voiceApi.onStatusChanged(() => void refresh()), [refresh])
 
   const engineLabel = useCallback(
@@ -223,8 +223,8 @@ export function VoicePanel() {
     [t],
   )
 
-  /** `null` = não sabemos (status indisponível, ou o id fora do retrato) —
-   *  que NÃO é o mesmo que "não baixado": sem saber, a tela não afirma nada. */
+  /** `null` = we do not know (status unavailable, or the id out of the snapshot) —
+   *  which is NOT the same as "not downloaded": without knowing, the screen states nothing. */
   const downloadedOf = useCallback(
     (modelId: string | null): boolean | null => {
       if (!modelId || !status) return null
@@ -241,7 +241,7 @@ export function VoicePanel() {
   const recommendedModel = models.find((model) => model.id === hardware?.recommendedModel) ?? null
   const recommendedModelLabel = recommendedModel?.label ?? hardware?.recommendedModel ?? ""
 
-  // O estado do motor em UM lugar: o selo e o texto abaixo são consequência dele.
+  // The engine state in ONE place: the badge and the text below are a consequence of it.
   const engineDownloaded = sttModels.some((model) => downloadedOf(model.id) === true)
   const sttPhase = engineInfo ? enginePhase(engineInfo, engineDownloaded) : null
   const engineBadgeKey =
@@ -253,9 +253,9 @@ export function VoicePanel() {
           ? "voice.settings.stt.engineUnavailable"
           : "voice.settings.stt.engineMissing"
 
-  // Modelo "em uso": o escolhido; sem escolha, o que o PRÓPRIO motor usa no
-  // "Automático" (`autoModelId` — ele sabe o que está no disco) e, com um main
-  // que ainda não publica isso, a recomendação ou o primeiro já baixado.
+  // Model "in use": the chosen one; with no choice, the one the ENGINE ITSELF uses in
+  // "Automatic" (`autoModelId` — it knows what is on disk) and, with a main process
+  // that does not publish that yet, the recommendation or the first one already downloaded.
   const autoModelId = engineInfo?.autoModelId ?? hardware?.recommendedModel ?? null
   const inUseModel =
     selectedModel ??
@@ -270,16 +270,16 @@ export function VoicePanel() {
         .join(" · ")
     : ""
   const recommendedDownloaded = downloadedOf(hardware?.recommendedModel ?? null)
-  // A recomendação já está valendo: o mesmo motor e o mesmo modelo — escolhido
-  // à mão ou pelo "Automático", que o motor resolve para ele. Aí o cartão vira
-  // uma linha de confirmação; o botão de aplicar não teria o que fazer.
+  // The recommendation is already in effect: the same engine and the same model — chosen
+  // by hand or through "Automatic", which the engine resolves to it. Then the card becomes
+  // a confirmation line; the apply button would have nothing to do.
   const recommendationActive =
     !!hardware &&
     stt.engine === hardware.recommendedEngine &&
     (stt.modelId ?? autoModelId) === hardware.recommendedModel
   const engineModelId = selectedModel?.id ?? sttModels[0]?.id ?? null
-  /** Bytes no disco (o pacote do Parakeet conta antes de extrair: o motor
-   *  prepara sozinho). Sem status, não sabemos — e aí nada fica bloqueado. */
+  /** Bytes on disk (the Parakeet package counts before extracting: the engine
+   *  prepares itself). Without status, we do not know — and then nothing is blocked. */
   const modelOnDisk = (modelId: string): boolean | null => {
     const model = status?.models[modelId]
     if (!model) return null
@@ -287,8 +287,8 @@ export function VoicePanel() {
   }
   const missingModels = status ? sttModels.filter((model) => modelOnDisk(model.id) === false) : []
 
-  // Microfone escolhido que não está plugado agora: continua na lista (e
-  // selecionado) com o aviso, em vez de o seletor mostrar um valor vazio.
+  // Chosen microphone that is not plugged in now: it stays in the list (and
+  // selected) with the notice, instead of the selector showing an empty value.
   const micMissing = !!stt.micDeviceId && !micInputs.some((input) => input.deviceId === stt.micDeviceId)
   const micOptions: CompactOption[] = [
     { value: "", label: t("voice.settings.stt.micDefault") },
@@ -302,10 +302,10 @@ export function VoicePanel() {
   const ttsDownloaded = downloadedOf(ttsModel?.id ?? null)
   const ttsPhase: EnginePhase = status?.ttsReady ? "ready" : ttsDownloaded ? "preparing" : "missing"
 
-  // Prioridade de áudio: a rota do MODELO (provedor) e o motor LOCAL são as
-  // duas metades do estado. "Modelo de voz" fala pelo provedor quando a rota
-  // existe; sem ela o pipeline cai no local, e o texto abaixo diz exatamente
-  // isso — nada de um selo "pronto" que não corresponde a quem vai falar.
+  // Audio priority: the MODEL route (provider) and the LOCAL engine are the
+  // two halves of the state. "Voice model" speaks through the provider when the route
+  // exists; without it the pipeline falls back to the local one, and the text below says exactly
+  // that — no "ready" badge that does not correspond to who is going to speak.
   const modelTts = status?.modelTts
   const modelRouteReady = modelTts?.available === true
   const ttsViaModel = tts.engine === "model" && modelRouteReady
@@ -335,8 +335,8 @@ export function VoicePanel() {
         <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.tabs.voice.description")}</p>
       </div>
 
-      {/* Estado ilegível (canal ausente, main antigo, resposta inválida): um
-          cartão com o motivo e o botão de tentar de novo — nunca tela vazia. */}
+      {/* Unreadable state (missing channel, old main process, invalid response): a
+          card with the reason and the try again button — never an empty screen. */}
       {loadError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
           <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
@@ -353,7 +353,7 @@ export function VoicePanel() {
         </div>
       )}
 
-      {/* ── Texto em fala ─────────────────────────────────────────────────── */}
+      {/* ── Text into speech ──────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2">
         <div>
           <p className="text-xs font-medium text-muted-foreground">{t("voice.settings.sections.tts")}</p>
@@ -372,8 +372,8 @@ export function VoicePanel() {
           />
         </SettingRow>
 
-        {/* Prioridade de áudio: por onde a fala sai. Compacto, no mesmo padrão
-            do seletor de motor do ditado — a linha do grid não estica. */}
+        {/* Audio priority: where the speech comes out. Compact, in the same pattern
+            as the dictation engine selector — the grid row does not stretch. */}
         <SettingRow
           icon={Cpu}
           title={t("voice.settings.tts.engineTitle")}
@@ -401,7 +401,7 @@ export function VoicePanel() {
               onChange={(next) => updateVoice({ tts: { ...tts, voice: next }, stt })}
               options={VOICE_IDS.map((id) => ({ value: id, label: t(`voice.settings.tts.voice${id}`) }))}
             />
-            {/* Ouvir antes de escolher: a amostra sai pelo mesmo caminho da leitura. */}
+            {/* Listen before choosing: the sample comes out through the same path as the reading. */}
             <VoicePreviewButton voice={tts.voice} lang={tts.lang} speed={tts.speed} engine={tts.engine} />
           </div>
         </SettingRow>
@@ -430,9 +430,9 @@ export function VoicePanel() {
           />
         </SettingRow>
 
-        {/* Texto do MESMO estado que decide a fala: com a rota do modelo, o
-            "pronto" é dela; sem ela, o pipeline usa o motor local e a frase
-            nomeia o motivo — baixado ≠ pronto, e a fase manda na frase. */}
+        {/* Text from the SAME state that decides the speech: with the model route, the
+            "ready" is its; without it, the pipeline uses the local engine and the sentence
+            names the reason — downloaded ≠ ready, and the phase rules the sentence. */}
         {tts.enabled && status && (
           <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
             {ttsPhaseNow === "ready" ? (
@@ -453,8 +453,8 @@ export function VoicePanel() {
           </p>
         )}
 
-        {/* Por que a fala NÃO sai pelo modelo: a preferência pede o provedor,
-            não há rota, e é o motor local que vai falar. */}
+        {/* Why the speech does NOT come out through the model: the preference asks for the provider,
+            there is no route, and it is the local engine that is going to speak. */}
         {tts.enabled && status && tts.engine === "model" && !modelRouteReady && (
           <p className="px-1 text-[11px] text-muted-foreground/70">
             {t("voice.settings.tts.engineModelFallback", { reason: modelTts?.reason ?? "" })}
@@ -462,7 +462,7 @@ export function VoicePanel() {
         )}
       </div>
 
-      {/* ── Fala em texto ─────────────────────────────────────────────────── */}
+      {/* ── Speech into text ──────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 border-t pt-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground">{t("voice.settings.sections.stt")}</p>
@@ -515,8 +515,8 @@ export function VoicePanel() {
           />
         </SettingRow>
 
-        {/* Selo e explicação do MESMO estado: em "preparando" o texto é o que
-            falta (extração + VAD), junto da ação de disparar o preparo. */}
+        {/* Badge and explanation from the SAME state: in "preparing" the text is what is
+            missing (extraction + VAD), along with the action to trigger the preparation. */}
         {status && engineInfo && sttPhase && (
           <div className="flex flex-col gap-1.5 px-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
@@ -567,8 +567,8 @@ export function VoicePanel() {
               onChange={(modelId) => updateVoice({ tts, stt: { ...stt, modelId: modelId || null } })}
               options={[
                 { value: "", label: t("voice.settings.stt.modelAuto") },
-                // Só o que está no disco dá para escolher; o resto aparece
-                // desabilitado com o tamanho, e o download fica logo abaixo.
+                // Only what is on disk can be chosen; the rest appears
+                // disabled with the size, and the download stays right below.
                 ...sttModels.map((model) => {
                   const missing = modelOnDisk(model.id) === false && model.id !== stt.modelId
                   return {
@@ -588,8 +588,8 @@ export function VoicePanel() {
           )}
         </SettingRow>
 
-        {/* O que está em uso e o que falta baixar — explícito, sem depender de
-            o usuário adivinhar o efeito do "Automático". */}
+        {/* What is in use and what is still to download — explicit, without depending on
+            the user guessing the effect of "Automatic". */}
         {status && sttModels.length > 0 && (
           <div className="flex flex-col gap-1.5 px-1 text-[11px] text-muted-foreground">
             {inUseModel ? (
@@ -637,8 +637,8 @@ export function VoicePanel() {
           </div>
         )}
 
-        {/* Atalho para baixar outro modelo do motor sem descer até a lista
-            completa: baixado por aqui, ele já fica escolhido. */}
+        {/* Shortcut to download another model of the engine without going down to the full
+            list: downloaded from here, it is already chosen. */}
         {missingModels.length > 0 && (
           <div className="flex flex-col gap-2 px-1">
             <Button
@@ -659,8 +659,8 @@ export function VoicePanel() {
                 status={status}
                 onChanged={refresh}
                 onDownloaded={(modelId) => {
-                  // Lido na hora do fim do download: a preferência pode ter
-                  // mudado enquanto ele corria (outro motor, outro modelo).
+                  // Read at the moment the download ends: the preference may have
+                  // changed while it was running (another engine, another model).
                   const current = useAppSettings.getState().settings.voice
                   if (!current || current.stt.engine !== stt.engine) return
                   updateVoice({ tts: current.tts, stt: { ...current.stt, modelId } })
@@ -703,8 +703,8 @@ export function VoicePanel() {
             checked={stt.preload}
             onChange={(preload) => {
               updateVoice({ tts, stt: { ...stt, preload } })
-              // Desligar devolve a RAM NA HORA: o main solta o modelo que já
-              // estava carregado, em vez de esperar o ciclo ocioso de 5 min.
+              // Turning it off gives the RAM back RIGHT AWAY: the main process releases the model that was already
+              // loaded, instead of waiting for the 5 min idle cycle.
               if (!preload) void voiceApi.sttRelease()
             }}
             label={t("voice.settings.stt.preloadTitle")}
@@ -723,8 +723,8 @@ export function VoicePanel() {
           />
         </SettingRow>
 
-        {/* O que esta máquina comporta: motivo, avisos e o próximo passo em
-            destaque quando o modelo recomendado ainda não está no disco. */}
+        {/* What this machine supports: reason, warnings and the next step in
+            evidence when the recommended model is not on disk yet. */}
         {hardware && recommendationActive && (
           <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground" title={hardware.reason}>
             <Sparkles className="size-3 shrink-0" />
@@ -753,8 +753,8 @@ export function VoicePanel() {
               </p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {/* Sem repetir o botão que a linha do modelo em uso já mostrou
-                  para este mesmo modelo. */}
+              {/* Without repeating the button the row of the model in use already showed
+                  for this same model. */}
               {recommendedDownloaded === false && hardware.recommendedModel !== inUseModel?.id && (
                 <Button
                   size="sm"
@@ -801,7 +801,7 @@ export function VoicePanel() {
         )}
       </div>
 
-      {/* ── Modo chamada ──────────────────────────────────────────────────── */}
+      {/* ── Call mode ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 border-t pt-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground">{t("voice.settings.sections.call")}</p>
@@ -838,14 +838,14 @@ export function VoicePanel() {
         <p className="px-1 text-[11px] text-muted-foreground/70">{t("voice.settings.call.needs")}</p>
       </div>
 
-      {/* ── Modelos ───────────────────────────────────────────────────────── */}
+      {/* ── Models ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 border-t pt-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground">{t("voice.settings.sections.models")}</p>
           <p className="mt-0.5 text-[11px] text-muted-foreground/70">{t("voice.settings.sections.modelsHint")}</p>
         </div>
-        {/* Sem catálogo legível não há lista a mostrar — o cartão de erro no
-            topo já explica o porquê (melhor que "nenhum modelo disponível"). */}
+        {/* With no readable catalog there is no list to show — the error card at the
+            top already explains why (better than "no model available"). */}
         {!loadError && <VoiceModelsSection models={models} status={status} onChanged={refresh} />}
       </div>
     </div>

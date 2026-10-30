@@ -4,7 +4,7 @@ import { StorageKeys } from '@shared/chat'
 import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown, ProjectBreakdown, ProjectDayBreakdown } from '@shared/analytics'
 import { listKeys, readJson } from './storage'
 import { projectIdOf } from './memory/domain'
-import { pastaNoRepositorioPrincipal } from './worktrees/principal'
+import { folderInMainRepository } from './worktrees/main'
 
 function computeRange(range: AnalyticsRange): { since: number; until?: number } {
   const now = Date.now()
@@ -27,7 +27,7 @@ function computeRange(range: AnalyticsRange): { since: number; until?: number } 
   }
 }
 
-/** Sessões sem pasta de trabalho (modo chat) ficam neste bucket. */
+/** Sessions without a working folder (chat mode) fall into this bucket. */
 const NO_PROJECT_ID = '__chat__'
 
 function getDateKey(ts: number): string {
@@ -40,8 +40,8 @@ function sumTokens(t: TokenUsage | undefined): number {
   return (t.input ?? 0) + (t.output ?? 0)
 }
 
-/** Só o texto que a pessoa digitou (ignora texto extraído de anexo) — usado
- * pra decidir se um follow-up "parece" um teste/implementação detalhada. */
+/** Only the text the person typed (ignores text extracted from an attachment) — used
+ *  to decide whether a follow-up "looks like" a test/detailed implementation. */
 function visibleTextLength(message: ChatMessage): number {
   return message.parts
     .filter((p): p is Extract<ChatMessage['parts'][number], { type: 'text' }> => p.type === 'text' && p.source !== 'attachment')
@@ -50,8 +50,8 @@ function visibleTextLength(message: ChatMessage): number {
 
 interface WorkSegment {
   day: string
-  /** Instante em que o trecho começa — permite recortar por período sem
-   *  depender do createdAt da sessão, que pode ser bem anterior. */
+  /** Instant when the stretch begins — allows cutting by period without
+   *  depending on the session's createdAt, which may be much earlier. */
   at: number
   ms: number
   providerId: string
@@ -59,15 +59,15 @@ interface WorkSegment {
 }
 
 /**
- * Tempo trabalhado = distância entre mensagens consecutivas, com regras pra
- * decidir se o gap entre uma resposta do Orbit e a próxima mensagem do
- * usuário ainda conta como trabalho ou é uma pausa:
- * - resposta do Orbit (user → assistant): sempre conta (geração ativa).
- * - gap < 30min: conta inteiro (lendo/testando/revisando).
- * - gap 30–60min E próxima msg > 300 chars: conta inteiro (follow-up detalhado).
- * - gap 60–90min E próxima msg > 1000 chars: conta 50% do gap.
- * - qualquer outro caso (gap > 90min, ou gap 30–90min sem msg longa o
- *   suficiente): quebra — não conta.
+ * Time worked = distance between consecutive messages, with rules to
+ * decide whether the gap between an Orbit answer and the next message from the
+ * user still counts as work or is a pause:
+ * - Orbit answer (user → assistant): always counts (active generation).
+ * - gap < 30min: counts whole (reading/testing/reviewing).
+ * - gap 30–60min AND next msg > 300 chars: counts whole (detailed follow-up).
+ * - gap 60–90min AND next msg > 1000 chars: counts 50% of the gap.
+ * - any other case (gap > 90min, or gap 30–90min without a long enough
+ *   message): breaks — does not count.
  */
 function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
   const sorted = [...messages].sort((a, b) => a.createdAt - b.createdAt)
@@ -115,7 +115,7 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
 
 export async function computeAnalytics(range: AnalyticsRange): Promise<AnalyticsSummary> {
   const { since, until } = computeRange(range)
-  const ate = until ?? Number.POSITIVE_INFINITY
+  const upperBound = until ?? Number.POSITIVE_INFINITY
 
   const sessionKeys = await listKeys(StorageKeys.sessionPrefix)
 
@@ -123,39 +123,39 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
   const modelTotals = new Map<string, ModelDayBreakdown>()
   const projectTotals = new Map<string, ProjectBreakdown>()
   const hourCounts = new Array<number>(24).fill(0)
-  let sessoesComAtividade = 0
+  let sessionsWithActivity = 0
   let totalMessages = 0
   let totalTokensVal = 0
 
   for (const key of sessionKeys) {
     const session = await readJson<SessionInfo>(key)
     if (!session) continue
-    // Uma leitura por sessão: o histórico completo serve para os segmentos de
-    // hora (um intervalo pode atravessar a borda do período) e o recorte sai
-    // dele, sem uma segunda passada pelo disco.
-    const historico = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
-    if (!historico) continue
+    // One read per session: the complete history serves the hour segments
+    // (an interval may cross the period's border) and the cut comes from
+    // it, without a second pass over the disk.
+    const history = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
+    if (!history) continue
 
-    // O período recorta MENSAGEM, não a data de criação da sessão. Filtrar
-    // pela sessão fazia "últimos 7 dias" esconder o trabalho desta semana numa
-    // conversa aberta no mês passado e, ao mesmo tempo, somar o histórico
-    // inteiro de uma conversa criada ontem.
-    const messages = historico.filter((m) => m.createdAt >= since && m.createdAt <= ate)
+    // The period cuts MESSAGES, not the session's creation date. Filtering
+    // by session made "last 7 days" hide this week's work in a
+    // conversation opened last month and, at the same time, add the whole
+    // history of a conversation created yesterday.
+    const messages = history.filter((m) => m.createdAt >= since && m.createdAt <= upperBound)
     if (messages.length === 0) continue
-    sessoesComAtividade++
+    sessionsWithActivity++
 
     for (const msg of messages) hourCounts[new Date(msg.createdAt).getHours()]++
 
-    // Projeto da sessão: directory do modo código; chat sem pasta = bucket próprio.
-    // Chat num worktree conta no projeto do repositório principal.
-    const pastaProjeto = session.directory ? await pastaNoRepositorioPrincipal(session.directory) : undefined
-    const projectId = pastaProjeto ? projectIdOf(pastaProjeto) : NO_PROJECT_ID
+    // The session's project: directory in code mode; chat without a folder = its own bucket.
+    // A chat in a worktree counts in the main repository's project.
+    const projectFolder = session.directory ? await folderInMainRepository(session.directory) : undefined
+    const projectId = projectFolder ? projectIdOf(projectFolder) : NO_PROJECT_ID
     let pt = projectTotals.get(projectId)
     if (!pt) {
       pt = {
         projectId,
-        name: pastaProjeto ? path.basename(pastaProjeto) : '',
-        directory: pastaProjeto,
+        name: projectFolder ? path.basename(projectFolder) : '',
+        directory: projectFolder,
         hours: 0,
         tokens: 0,
         messages: 0,
@@ -175,7 +175,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
       msgsByDay.set(day, bucket)
     }
 
-    /** Fatia deste projeto dentro de um dia — o heatmap filtra por ela. */
+    /** This project's slice within a day — the heatmap filters by it. */
     const projectSlice = (entry: AnalyticsDay): ProjectDayBreakdown => {
       let slice = entry.byProject.find((p) => p.projectId === projectId)
       if (!slice) {
@@ -234,14 +234,14 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
       }
     }
 
-    // Horas = distância entre mensagens consecutivas (geração + gaps que
-    // passam nas regras de computeSessionSegments), não mais o span
-    // primeiro-último-msg do dia. Sessões-worker da orquestração entram
-    // normalmente (não são filtradas) — cada worker conta seu próprio tempo.
-    for (const segment of computeSessionSegments(historico)) {
-      if (segment.at < since || segment.at > ate) continue
+    // Hours = distance between consecutive messages (generation + gaps that
+    // pass the computeSessionSegments rules), no longer the first-to-last message
+    // span of the day. Orchestration worker sessions come in normally (they are
+    // not filtered) — each worker counts its own time.
+    for (const segment of computeSessionSegments(history)) {
+      if (segment.at < since || segment.at > upperBound) continue
       const entry = dayMap.get(segment.day)
-      if (!entry) continue // dia sem nenhuma mensagem (não deveria acontecer)
+      if (!entry) continue // day with no message at all (should not happen)
       const hours = segment.ms / 3_600_000
       entry.totalHours += hours
       pt.hours += hours
@@ -274,7 +274,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
   const activeDays = days.filter((d) => d.totalMessages > 0).length
   const { currentStreak, longestStreak } = computeStreaks(days)
 
-  // Pico de horário: contado na passada acima, sobre as mensagens do período.
+  // Peak hour: counted in the pass above, over the period's messages.
   const peakHour = hourCounts.indexOf(Math.max(...hourCounts))
 
   const totalHours = days.reduce((s, d) => s + d.totalHours, 0)
@@ -284,7 +284,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
     days,
     byModel,
     byProject,
-    totalSessions: sessoesComAtividade,
+    totalSessions: sessionsWithActivity,
     totalMessages,
     totalTokens: totalTokensVal,
     totalHours,
@@ -332,9 +332,9 @@ function computeStreaks(days: AnalyticsDay[]): { currentStreak: number; longestS
 }
 
 /* ------------------------------------------------------------------ *
- * Relatório de trabalho — a mesma contagem de horas do painel, porém
- * recortada por projeto e com o que foi conversado em cada dia, para o
- * agente conseguir escrever "o que foi feito" sem inventar.
+ * Work report — the same hours count as the panel, but
+ * cut by project and with what was talked about on each day,
+ * so the agent can write "what was done" without inventing.
  * ------------------------------------------------------------------ */
 
 export interface WorkReportSession {
@@ -342,7 +342,7 @@ export interface WorkReportSession {
   title: string
   hours: number
   messages: number
-  /** Trechos do que o usuário pediu naquele dia, na ordem em que pediu. */
+  /** Stretches of what the user asked on that day, in the order they asked. */
   prompts: string[]
 }
 
@@ -352,7 +352,7 @@ export interface WorkReportDay {
   messages: number
   tokens: number
   cost: number
-  /** Primeira e última mensagem do dia (ms) — dá o horário de início/fim. */
+  /** First and last message of the day (ms) — it gives the start/end time. */
   firstAt: number
   lastAt: number
   sessions: WorkReportSession[]
@@ -377,22 +377,22 @@ export interface WorkReport {
   totalHours: number
   totalTokens: number
   totalCost: number
-  /** Nomes de todos os projetos com atividade no período, mesmo os que o
-   *  filtro descartou — é o que permite responder "esse projeto não existe,
-   *  os que existem são estes". */
+  /** Names of all projects with activity in the period, even the ones the
+   *  filter discarded — it is what allows answering "that project does not exist,
+   *  the ones that exist are these". */
   knownProjects: string[]
 }
 
 export interface WorkReportOptions {
   since: number
   until: number
-  /** Casa com o caminho completo ou com o nome da pasta, sem acentuação de caixa. */
+  /** Matches the full path or the folder name, case-insensitively. */
   project?: string
-  /** Quantos prompts guardar por sessão/dia. 0 desliga o resumo do que foi feito. */
+  /** How many prompts to keep per session/day. 0 turns off the summary of what was done. */
   promptsPerDay?: number
 }
 
-/** Texto visível de uma mensagem (sem o que veio de anexo), numa linha só. */
+/** Visible text of a message (without what came from an attachment), on a single line. */
 function visibleText(message: ChatMessage): string {
   return message.parts
     .filter((p): p is Extract<ChatMessage['parts'][number], { type: 'text' }> => p.type === 'text' && p.source !== 'attachment')
@@ -403,22 +403,22 @@ function visibleText(message: ChatMessage): string {
 }
 
 /**
- * Casa o filtro com a pasta da sessão por SEGMENTO de caminho, nunca por
- * substring solta: com "orbit", um substring traria junto "orbit-legacy" e o
- * relatório somaria horas de um projeto que ninguém pediu. Um filtro com
- * barra é tratado como trecho de caminho ("projects/orbit").
+ * Matches the filter with the session's folder by path SEGMENT, never by a loose
+ * substring: with "orbit", a substring would bring "orbit-legacy" along and the
+ * report would add hours from a project nobody asked for. A filter with a
+ * slash is treated as a path stretch ("projects/orbit").
  */
 function matchesProject(session: SessionInfo, filter: string): boolean {
-  const alvo = normalizarCaminho(filter)
-  if (!session.directory) return alvo === '__chat__' || alvo === 'sem projeto' || alvo === 'no project'
-  const dir = normalizarCaminho(session.directory)
-  if (alvo.includes('/')) return dir === alvo || dir.endsWith(`/${alvo}`)
-  return dir.split('/').includes(alvo)
+  const target = normalizePath(filter)
+  if (!session.directory) return target === '__chat__' || target === 'sem projeto' || target === 'no project'
+  const dir = normalizePath(session.directory)
+  if (target.includes('/')) return dir === target || dir.endsWith(`/${target}`)
+  return dir.split('/').includes(target)
 }
 
-/** Minúsculas, barras normais e sem barra sobrando no fim. */
-function normalizarCaminho(valor: string): string {
-  return valor.toLowerCase().split('\\').join('/').replace(/\/+$/, '')
+/** Lowercase, normal slashes and no trailing slash left over. */
+function normalizePath(value: string): string {
+  return value.toLowerCase().split('\\').join('/').replace(/\/+$/, '')
 }
 
 export async function computeWorkReport(options: WorkReportOptions): Promise<WorkReport> {
@@ -434,25 +434,25 @@ export async function computeWorkReport(options: WorkReportOptions): Promise<Wor
     const messages = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
     if (!messages || messages.length === 0) continue
 
-    // O recorte é por mensagem, não pelo createdAt da sessão: uma sessão
-    // antiga que continuou esta semana precisa aparecer na semana.
-    const noPeriodo = messages.filter((m) => m.createdAt >= since && m.createdAt <= until)
-    if (noPeriodo.length === 0) continue
+    // The cut is by message, not by the session's createdAt: an old
+    // session that continued this week has to show up in the week.
+    const inPeriod = messages.filter((m) => m.createdAt >= since && m.createdAt <= until)
+    if (inPeriod.length === 0) continue
 
-    // Chat num worktree conta no projeto do repositório principal (nome,
-    // filtro e totais), não como um projeto à parte com o nome do worktree.
-    const pastaProjeto = session.directory ? await pastaNoRepositorioPrincipal(session.directory) : undefined
-    const nome = pastaProjeto ? path.basename(pastaProjeto) : ''
-    knownProjects.add(nome || 'Sem projeto')
-    if (project && !matchesProject({ ...session, directory: pastaProjeto }, project)) continue
+    // A chat in a worktree counts in the main repository's project (name,
+    // filter and totals), not as a separate project with the worktree's name.
+    const projectFolder = session.directory ? await folderInMainRepository(session.directory) : undefined
+    const name = projectFolder ? path.basename(projectFolder) : ''
+    knownProjects.add(name || 'Sem projeto')
+    if (project && !matchesProject({ ...session, directory: projectFolder }, project)) continue
 
-    const projectId = pastaProjeto ? projectIdOf(pastaProjeto) : NO_PROJECT_ID
+    const projectId = projectFolder ? projectIdOf(projectFolder) : NO_PROJECT_ID
     let proj = projects.get(projectId)
     if (!proj) {
       proj = {
         projectId,
-        name: nome,
-        directory: pastaProjeto,
+        name: name,
+        directory: projectFolder,
         hours: 0,
         tokens: 0,
         cost: 0,
@@ -464,84 +464,84 @@ export async function computeWorkReport(options: WorkReportOptions): Promise<Wor
     }
     proj.sessions++
 
-    const dias = new Map<string, WorkReportDay>()
-    const pegarDia = (ts: number): WorkReportDay => {
+    const days = new Map<string, WorkReportDay>()
+    const getDay = (ts: number): WorkReportDay => {
       const date = getDateKey(ts)
-      let dia = dias.get(date)
-      if (!dia) {
-        dia = { date, hours: 0, messages: 0, tokens: 0, cost: 0, firstAt: ts, lastAt: ts, sessions: [] }
-        dias.set(date, dia)
+      let day = days.get(date)
+      if (!day) {
+        day = { date, hours: 0, messages: 0, tokens: 0, cost: 0, firstAt: ts, lastAt: ts, sessions: [] }
+        days.set(date, day)
       }
-      dia.firstAt = Math.min(dia.firstAt, ts)
-      dia.lastAt = Math.max(dia.lastAt, ts)
-      return dia
+      day.firstAt = Math.min(day.firstAt, ts)
+      day.lastAt = Math.max(day.lastAt, ts)
+      return day
     }
-    const pegarSessaoDoDia = (dia: WorkReportDay): WorkReportSession => {
-      let entrada = dia.sessions.find((s) => s.id === session.id)
-      if (!entrada) {
-        entrada = { id: session.id, title: session.title, hours: 0, messages: 0, prompts: [] }
-        dia.sessions.push(entrada)
+    const getSessionOfDay = (day: WorkReportDay): WorkReportSession => {
+      let entry = day.sessions.find((s) => s.id === session.id)
+      if (!entry) {
+        entry = { id: session.id, title: session.title, hours: 0, messages: 0, prompts: [] }
+        day.sessions.push(entry)
       }
-      return entrada
+      return entry
     }
 
-    for (const msg of noPeriodo) {
-      const dia = pegarDia(msg.createdAt)
-      const entrada = pegarSessaoDoDia(dia)
+    for (const msg of inPeriod) {
+      const day = getDay(msg.createdAt)
+      const entry = getSessionOfDay(day)
       if (msg.role === 'assistant') {
         const tokens = sumTokens(msg.tokens)
-        dia.tokens += tokens
-        dia.cost += msg.tokens?.cost ?? 0
-        dia.messages++
-        entrada.messages++
+        day.tokens += tokens
+        day.cost += msg.tokens?.cost ?? 0
+        day.messages++
+        entry.messages++
         proj.tokens += tokens
         proj.cost += msg.tokens?.cost ?? 0
         proj.messages++
-      } else if (msg.role === 'user' && promptsPerDay > 0 && entrada.prompts.length < promptsPerDay) {
-        const texto = visibleText(msg)
-        if (texto) entrada.prompts.push(texto.length > 400 ? `${texto.slice(0, 400)}…` : texto)
+      } else if (msg.role === 'user' && promptsPerDay > 0 && entry.prompts.length < promptsPerDay) {
+        const text = visibleText(msg)
+        if (text) entry.prompts.push(text.length > 400 ? `${text.slice(0, 400)}…` : text)
       }
     }
 
-    // Horas: as mesmas regras do painel, recortadas pelo período.
+    // Hours: the same rules as the panel, cut by the period.
     for (const segment of computeSessionSegments(messages)) {
       if (segment.at < since || segment.at > until) continue
-      const horas = segment.ms / 3_600_000
-      const dia = pegarDia(segment.at)
-      dia.hours += horas
-      pegarSessaoDoDia(dia).hours += horas
-      proj.hours += horas
+      const hours = segment.ms / 3_600_000
+      const day = getDay(segment.at)
+      day.hours += hours
+      getSessionOfDay(day).hours += hours
+      proj.hours += hours
     }
 
-    for (const dia of dias.values()) {
-      const existente = proj.days.find((d) => d.date === dia.date)
-      if (!existente) {
-        proj.days.push(dia)
+    for (const day of days.values()) {
+      const existing = proj.days.find((d) => d.date === day.date)
+      if (!existing) {
+        proj.days.push(day)
         continue
       }
-      existente.hours += dia.hours
-      existente.messages += dia.messages
-      existente.tokens += dia.tokens
-      existente.cost += dia.cost
-      existente.firstAt = Math.min(existente.firstAt, dia.firstAt)
-      existente.lastAt = Math.max(existente.lastAt, dia.lastAt)
-      existente.sessions.push(...dia.sessions)
+      existing.hours += day.hours
+      existing.messages += day.messages
+      existing.tokens += day.tokens
+      existing.cost += day.cost
+      existing.firstAt = Math.min(existing.firstAt, day.firstAt)
+      existing.lastAt = Math.max(existing.lastAt, day.lastAt)
+      existing.sessions.push(...day.sessions)
     }
   }
 
-  const lista = [...projects.values()].sort((a, b) => b.hours - a.hours)
-  for (const proj of lista) {
+  const list = [...projects.values()].sort((a, b) => b.hours - a.hours)
+  for (const proj of list) {
     proj.days.sort((a, b) => a.date.localeCompare(b.date))
-    for (const dia of proj.days) dia.sessions.sort((a, b) => b.hours - a.hours)
+    for (const day of proj.days) day.sessions.sort((a, b) => b.hours - a.hours)
   }
 
   return {
     since,
     until,
-    projects: lista,
-    totalHours: lista.reduce((s, p) => s + p.hours, 0),
-    totalTokens: lista.reduce((s, p) => s + p.tokens, 0),
-    totalCost: lista.reduce((s, p) => s + p.cost, 0),
+    projects: list,
+    totalHours: list.reduce((s, p) => s + p.hours, 0),
+    totalTokens: list.reduce((s, p) => s + p.tokens, 0),
+    totalCost: list.reduce((s, p) => s + p.cost, 0),
     knownProjects: [...knownProjects].sort(),
   }
 }

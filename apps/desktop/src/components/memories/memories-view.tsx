@@ -25,39 +25,39 @@ import { MemoryDetailPanel } from "./memory-detail-panel"
 import { MemoryGraph } from "./memory-graph"
 import { CATEGORY_LABEL, lastActivity } from "./meta"
 
-/** Referência estável para memórias sem vizinhos — evita quebrar o memo. */
+/** Stable reference for memories without neighbors — it avoids breaking the memo. */
 const EMPTY_RELATED: Memory[] = []
 
 /**
- * View de Memórias: lista de cards ou árvore de conexões (SVG com zoom/pan),
- * com filtro automático pelo modo do workspace — chat mostra
- * core+seasonal+general, código mostra project+general (seletor de projeto).
+ * Memories view: list of cards or tree of connections (SVG with zoom/pan),
+ * with an automatic filter by the workspace mode — chat shows
+ * core+seasonal+general, code shows project+general (project selector).
  *
- * Escolher um projeto no seletor restringe a vista ao que pertence a ele: as
- * memórias do projeto mais as gerais criadas ali. Gerais de outros projetos
- * ficam de fora — para vê-las, volte o seletor para "todos os projetos".
+ * Choosing a project in the selector restricts the view to what belongs to it: the
+ * project memories plus the general ones created there. General ones from other projects
+ * stay out — to see them, set the selector back to "all projects".
  */
 
 const ALL_PROJECTS = "__all__"
 const ALL_CATEGORIES = "__all__"
 
-/** Sufixo da chave i18n de cada opção da rotina de memória. */
+/** i18n key suffix of each memory-routine option. */
 function routineKey(mode: MemoryRoutineMode): string {
   return mode === "daily+weekly" ? "dailyWeekly" : mode
 }
-/** Cards renderizados por vez — o resto entra conforme a rolagem. */
+/** Cards rendered at a time — the rest enters as one scrolls. */
 const PAGE_SIZE = 24
 
 /**
- * Placeholder do carregamento inicial. Sem ele a tela pisca o estado vazio
- * ("nenhuma memória") antes do índice chegar do main, o que lê como se não
- * houvesse nada salvo.
+ * Placeholder of the initial loading. Without it the screen blinks the empty state
+ * ("no memories") before the index arrives from the main process, which reads as if there were
+ * nothing saved.
  */
 function MemoriesSkeleton({ graph }: { graph: boolean }) {
   if (graph) {
     return (
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border">
-        {/* Nós esparsos, no espírito do grafo que vai aparecer */}
+        {/* Sparse nodes, in the spirit of the graph that is going to appear */}
         {[
           { top: "44%", left: "48%", size: 44 },
           { top: "26%", left: "30%", size: 26 },
@@ -119,8 +119,8 @@ export function MemoriesView() {
     const map = new Map<string, string>()
     for (const m of index) {
       if (m.kind === "project" && m.projectId) map.set(m.projectId, m.projectName ?? m.projectId)
-      // Um projeto cujas memórias são todas gerais ainda merece entrada no
-      // seletor — senão elas ficariam inalcançáveis pelo filtro.
+      // A project whose memories are all general still deserves an entry in the
+      // selector — otherwise they would become unreachable through the filter.
       else if (m.originProjectId && !map.has(m.originProjectId)) {
         map.set(m.originProjectId, m.originProjectName ?? m.originProjectId)
       }
@@ -131,34 +131,34 @@ export function MemoriesView() {
   const kinds: MemoryKind[] = mode === "chat" ? ["core", "seasonal", "general"] : ["project", "general"]
 
   /**
-   * Propostas da rotina. Ficam FORA do pool — não são memória ainda — e têm um
-   * bloco próprio, visível nos dois modos, até serem aceitas ou descartadas.
+   * Routine proposals. They stay OUTSIDE the pool — they are not memories yet —
+   * and have their own block, visible in both modes, until accepted or discarded.
    */
   const proposals = useMemo(() => index.filter((m) => m.proposed), [index])
 
-  // Pool visível (modo + projeto, sem busca e sem categoria) — o grafo destaca
-  // em vez de esconder, e é dele que saem as contagens do filtro.
+  // Visible pool (mode + project, without search and without category) — the graph highlights
+  // instead of hiding, and it is from it that the filter counts come.
   const basePool = useMemo(() => {
     const now = Date.now()
     return index.filter((m) => {
-      // Proposta tem bloco próprio e não entra na lista como memória.
+      // A proposal has its own block and does not enter the list as a memory.
       if (m.proposed) return false
       if (!kinds.includes(m.kind)) return false
-      // Uma regra só: a memória aparece no modo em que vale. É o que mantém
-      // aprendizados fora do chat e preferência de conversa fora do código.
+      // A single rule: the memory appears in the mode in which it counts. It is what keeps
+      // learnings out of the chat and conversation preference out of the code.
       if (!visibleIn(m, mode)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
-      // O filtro de projeto vale para TODOS os kinds, não só "project": uma
-      // memória geral criada dentro de outro projeto não pertence a esta vista.
-      // As sem origem registrada (preferências de trabalho) seguem valendo em
-      // qualquer projeto — quem decide isso é matchesProjectFilter.
+      // The project filter counts for ALL kinds, not only "project": a
+      // general memory created inside another project does not belong to this view.
+      // The ones without a recorded origin (work preferences) keep counting in
+      // any project — what decides that is matchesProjectFilter.
       if (projectFilter !== ALL_PROJECTS && !matchesProjectFilter(m, projectFilter)) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mode, projectFilter])
 
-  /** Só as categorias que existem na vista viram opção — com a contagem ao lado. */
+  /** Only the categories that exist in the view become an option — with the count next to it. */
   const categories = useMemo(() => {
     const counts = new Map<ProjectCategory, number>()
     for (const m of basePool) if (m.category) counts.set(m.category, (counts.get(m.category) ?? 0) + 1)
@@ -175,7 +175,7 @@ export function MemoriesView() {
     return [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
   }, [pool, query])
 
-  // Pasta do projeto em foco — arquivos soltos no grafo viram memórias dele
+  // Folder of the focused project — files dropped in the graph become memories of it
   const projectDirectory = useMemo(() => {
     const focusId = projectFilter !== ALL_PROJECTS ? projectFilter : projects.length === 1 ? projects[0].id : null
     if (!focusId) return undefined
@@ -186,8 +186,8 @@ export function MemoriesView() {
   const selected = selectedId ? byId.get(selectedId) : undefined
 
   /**
-   * Vizinhos resolvidos uma vez por índice. Antes isto era recalculado por card
-   * a cada render, criando um array novo — o que anulava o memo do MemoryCard.
+   * Neighbors resolved once per index. Before, this was recalculated per card
+   * on every render, creating a new array — which nullified the MemoryCard memo.
    */
   const relatedByMemory = useMemo(() => {
     const map = new Map<string, Memory[]>()
@@ -209,27 +209,27 @@ export function MemoriesView() {
     [],
   )
 
-  // Aceitar mantém a memória (e a promoção semanal pode promovê-la); descartar
-  // apaga a proposta de vez.
+  // Accepting keeps the memory (and the weekly promotion may promote it); discarding
+  // erases the proposal for good.
   const acceptProposal = useCallback(
     (id: string) => void updateMemory(id, { proposed: false }),
     [updateMemory],
   )
   const discardProposal = useCallback((id: string) => void removeMemory(id), [removeMemory])
 
-  // Rolagem infinita: renderizar 300+ cards de uma vez travava a aba.
+  // Infinite scroll: rendering 300+ cards at once froze the tab.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Qualquer mudança no conjunto exibido recomeça a paginação — senão uma busca
-  // nova herdaria o total já expandido da anterior.
+  // Any change in the displayed set restarts the pagination — otherwise a new
+  // search would inherit the already expanded total of the previous one.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
   }, [query, projectFilter, mode, tab])
 
-  // Trocar de modo ou de projeto pode deixar a categoria escolhida fora da
-  // vista — volta para "todas" em vez de mostrar lista vazia sem motivo.
+  // Switching mode or project may leave the chosen category out of the
+  // view — it goes back to "all" instead of showing an empty list for no reason.
   useEffect(() => {
     setCategoryFilter(ALL_CATEGORIES)
   }, [mode, projectFilter])
@@ -244,8 +244,8 @@ export function MemoriesView() {
       (entries) => {
         if (entries[0]?.isIntersecting) setVisibleCount((c) => c + PAGE_SIZE)
       },
-      // O root é o container rolável, não a viewport: rootMargin só antecipa o
-      // carregamento se for medido no mesmo elemento que rola.
+      // The root is the scrollable container, not the viewport: rootMargin only anticipates the
+      // loading if it is measured on the same element that scrolls.
       { root: scrollRef.current, rootMargin: "400px" },
     )
     observer.observe(el)
@@ -254,7 +254,7 @@ export function MemoriesView() {
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-hidden">
-      {/* Rotina de memória: o interruptor e, quando existem, as propostas do dia. */}
+      {/* Memory routine: the switch and, when there are any, the proposals of the day. */}
       <div className="rounded-lg border bg-card px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium">{t("memories.routine.title")}</span>
@@ -382,8 +382,8 @@ export function MemoriesView() {
         </div>
       ) : tab === "list" ? (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
-          {/* Uma coluna a menos com o painel aberto — o espaço restante não
-              comporta três cards sem espremer o texto. */}
+          {/* One column less with the panel open — the remaining space does not
+              fit three cards without squeezing the text. */}
           <div
             className={cn(
               "grid grid-cols-1 gap-2",
@@ -397,8 +397,8 @@ export function MemoriesView() {
                 related={relatedOf(memory)}
                 selected={memory.id === selectedId}
                 onSelect={handleSelect}
-                // Antes isto pulava para a aba Grafo; com o painel compartilhado
-                // basta trocar a seleção, sem tirar o usuário da lista.
+                // Before this it jumped to the Graph tab; with the shared panel
+                // swapping the selection is enough, without taking the user out of the list.
                 onSelectRelated={setSelectedId}
               />
             ))}
@@ -422,8 +422,8 @@ export function MemoriesView() {
           projectDirectory={projectDirectory}
         />
       )}
-      {/* Painel único das duas abas: clicar num card ou num nó do grafo abre
-          o mesmo detalhe, com o documento preenchendo a altura restante. */}
+      {/* Single panel of the two tabs: clicking a card or a node of the graph opens
+          the same detail, with the document filling the remaining height. */}
       {selected && (
         <MemoryDetailPanel
           memory={selected}

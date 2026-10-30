@@ -1,27 +1,27 @@
 import type { Frame } from './types'
 
 /**
- * Edição da gravação do Computer Use. A janela é gravada sem parar; o que vai
- * para o vídeo é decidido depois, a partir das ações do agente: cada ação
- * ganha um respiro antes e depois, trechos próximos se juntam, e o resto
- * (o agente pensando, esperando aprovação, escrevendo a resposta) sai. Cortar
- * depois — em vez de pausar o gravador — não depende da latência do
- * pause/resume do MediaRecorder, que podia engolir o começo de uma ação.
+ * Editing of the Computer Use recording. The window is recorded without stopping;
+ * what goes into the video is decided afterwards, from the agent's actions: each
+ * action gets a breath before and after, nearby stretches merge, and the rest (the
+ * agent thinking, waiting for approval, writing the answer) is cut out. Cutting
+ * afterwards — instead of pausing the recorder — does not depend on the latency of
+ * MediaRecorder's pause/resume, which could swallow the beginning of an action.
  *
- * Tudo aqui é puro (tempos em ms desde o início da gravação) e testado; o
- * ffmpeg só executa o plano.
+ * Everything here is pure (times in ms since the start of the recording) and tested;
+ * ffmpeg only executes the plan.
  */
 
 export interface RecordedAction {
-  /** ms desde o início da gravação */
+  /** ms since the start of the recording */
   start: number
   end: number
   label: string
-  /** `wait` fica inteiro no vídeo: é o agente segurando um estado de propósito */
+  /** `wait` stays whole in the video: it is the agent holding a state on purpose */
   hold?: boolean
-  /** Desenha o pulso no alvo (só cliques: na rolagem o alvo é o centro da janela) */
+  /** Draws the pulse on the target (clicks only: on a scroll the target is the center of the window) */
   pulse?: boolean
-  /** Onde a ação mirou, em pontos globais, e o frame da janela naquele momento */
+  /** Where the action aimed, in global points, and the window frame at that moment */
   target?: { frame?: Frame; point?: [number, number] }
   window?: Frame
 }
@@ -32,39 +32,39 @@ export interface RecordedMark {
 }
 
 export interface PlanOptions {
-  /** Respiro antes de cada ação (a interface antes de mudar) */
+  /** Breath before each action (the interface before it changes) */
   padBefore: number
-  /** Respiro depois (a interface reagindo) */
+  /** Breath after (the interface reacting) */
   padAfter: number
-  /** Trechos separados por menos que isto viram um só */
+  /** Stretches separated by less than this become a single one */
   joinGap: number
-  /** Mantém a gravação inteira (sem cortar o ocioso) */
+  /** Keeps the whole recording (without cutting the idle) */
   keepIdle?: boolean
 }
 
 export const DEFAULT_PLAN: PlanOptions = { padBefore: 300, padAfter: 900, joinGap: 500 }
 
 export interface PlannedSegment {
-  /** ms na gravação */
+  /** ms in the recording */
   from: number
   to: number
 }
 
 export interface TimelineEntry {
-  /** ms no vídeo final */
+  /** ms in the final video */
   start: number
   end: number
   label: string
 }
 
 export interface Pulse {
-  /** ms no vídeo final */
+  /** ms in the final video */
   at: number
-  /** Retângulo no vídeo (px), já com margem */
+  /** Rectangle in the video (px), margin included */
   box: { x: number; y: number; w: number; h: number }
 }
 
-/** Onde o cursor desenhado está no instante de uma ação (vídeo final, px). */
+/** Where the drawn cursor is at the instant of an action (final video, px). */
 export interface CursorStop {
   at: number
   x: number
@@ -73,17 +73,17 @@ export interface CursorStop {
 
 export interface RecordingPlan {
   segments: PlannedSegment[]
-  /** Paradas do cursor desenhado, em ordem */
+  /** Stops of the drawn cursor, in order */
   cursor: CursorStop[]
   timeline: TimelineEntry[]
   marks: TimelineEntry[]
   pulses: Pulse[]
   durationMs: number
-  /** Tempo da gravação que saiu (ocioso) */
+  /** Recording time that was cut out (idle) */
   cutMs: number
 }
 
-/** Trechos mantidos: cada ação com respiro, juntando os próximos, dentro da gravação. */
+/** Stretches kept: each action with its breath, merging the close ones, inside the recording. */
 export function planSegments(actions: RecordedAction[], recordedMs: number, options: PlanOptions): PlannedSegment[] {
   if (options.keepIdle || actions.length === 0) return [{ from: 0, to: recordedMs }]
   const raw = actions
@@ -99,7 +99,7 @@ export function planSegments(actions: RecordedAction[], recordedMs: number, opti
   return merged
 }
 
-/** Tempo da gravação → tempo no vídeo final (null se caiu num trecho cortado). */
+/** Recording time → time in the final video (null if it fell in a cut stretch). */
 export function toOutputTime(segments: PlannedSegment[], t: number): number | null {
   let offset = 0
   for (const s of segments) {
@@ -110,9 +110,9 @@ export function toOutputTime(segments: PlannedSegment[], t: number): number | nu
 }
 
 /**
- * Frame global → retângulo no vídeo. O vídeo é a janela inteira em pixels
- * (pontos × escala), então a conversão é a razão entre o tamanho do vídeo e o
- * da janela no momento da ação.
+ * Global frame → rectangle in the video. The video is the whole window in pixels
+ * (points × scale), so the conversion is the ratio between the size of the video and
+ * that of the window at the moment of the action.
  */
 export function targetBox(
   target: NonNullable<RecordedAction['target']>,
@@ -137,7 +137,7 @@ export function targetBox(
   } else {
     return null
   }
-  // Fora da janela (ela mudou de lugar, elemento rolado): sem pulso.
+  // Outside the window (it moved, element scrolled): no pulse.
   if (x + w < 0 || y + h < 0 || x > video.width || y > video.height) return null
   const cx = Math.max(0, Math.round(x))
   const cy = Math.max(0, Math.round(y))
@@ -149,7 +149,7 @@ export function targetBox(
   }
 }
 
-/** Centro do alvo no vídeo (onde a ponta do cursor desenhado para). */
+/** Center of the target in the video (where the tip of the drawn cursor goes). */
 export function targetPoint(
   target: NonNullable<RecordedAction['target']>,
   window: Frame,
@@ -173,13 +173,13 @@ export function targetPoint(
   return { x, y }
 }
 
-/** Quanto tempo o cursor desenhado leva para chegar ao próximo alvo. */
+/** How long the drawn cursor takes to reach the next target. */
 const CURSOR_MOVE_MS = 450
 
 /**
- * Expressão do ffmpeg para a posição do cursor ao longo do vídeo: parado no
- * primeiro alvo, desliza até cada alvo seguinte (suavizado nas pontas) e chega
- * no instante da ação; depois da última, fica parado. `axis` escolhe x ou y.
+ * ffmpeg expression for the cursor position along the video: stopped at the first
+ * target, it slides to each following target (eased at the ends) and arrives at the
+ * instant of the action; after the last one, it stays put. `axis` chooses x or y.
  */
 export function cursorExpression(stops: CursorStop[], axis: 'x' | 'y', offset = 0): string {
   if (stops.length === 0) return '0'
@@ -230,13 +230,13 @@ export function planRecording(
   return { segments, timeline, marks: markEntries, pulses, cursor, durationMs, cutMs: Math.max(0, recordedMs - durationMs) }
 }
 
-/** Duração de cada pulso de clique no vídeo. */
+/** Duration of each click pulse in the video. */
 const PULSE_MS = 650
 
 /**
- * Filtro do ffmpeg: fps constante, os trechos mantidos (trim + concat) e um
- * retângulo amarelo pulsando no alvo de cada ação. O amarelo é o primário do
- * Orbit (#F5C400, perto do oklch do tema).
+ * ffmpeg filter: constant fps, the stretches kept (trim + concat) and a yellow
+ * rectangle pulsing on the target of each action. The yellow is Orbit's primary
+ * (#F5C400, close to the theme's oklch).
  */
 export function buildFilter(plan: RecordingPlan, fps = 30, options: { cursorInput?: number } = {}): { filter: string; output: string } {
   const parts: string[] = [`[0:v]fps=${fps},format=yuv420p,split=${plan.segments.length}${plan.segments.map((_, i) => `[s${i}]`).join('')}`]
@@ -254,8 +254,8 @@ export function buildFilter(plan: RecordingPlan, fps = 30, options: { cursorInpu
     )
     last = next
   })
-  // Cursor desenhado (modo dirigido): a imagem da 2ª entrada sobreposta no
-  // caminho entre os alvos. A ponta da seta fica em (2,2) da imagem.
+  // Drawn cursor (directed mode): the image of the 2nd input overlaid on the
+  // path between the targets. The tip of the arrow sits at (2,2) of the image.
   if (options.cursorInput !== undefined && plan.cursor.length > 0) {
     const x = cursorExpression(plan.cursor, 'x', 2)
     const y = cursorExpression(plan.cursor, 'y', 2)
@@ -265,7 +265,7 @@ export function buildFilter(plan: RecordingPlan, fps = 30, options: { cursorInpu
   return { filter: parts.join(';'), output: last }
 }
 
-/** "0.0–1.4s  left_click on element 3" — o que o agente lê para saber o que está em cada segundo. */
+/** "0.0–1.4s  left_click on element 3" — what the agent reads to know what is in each second. */
 export function formatTimeline(plan: RecordingPlan): string {
   const s = (ms: number) => (ms / 1000).toFixed(1)
   const entries = [

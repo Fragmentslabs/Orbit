@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Frase de amostra por idioma da LEITURA (`voice.tts.lang`), não da interface:
- * é a língua em que a voz vai falar de verdade. No "Automático" a voz fala o
- * idioma do texto, então a amostra é a da interface (é nela que a pessoa
- * lê). "na" (agnóstico) e idiomas sem frase própria caem no inglês.
+ * Sample sentence per READING language (`voice.tts.lang`), not of the interface:
+ * it is the language in which the voice is really going to speak. In "Automatic" the voice speaks the
+ * language of the text, so the sample is the interface one (it is in it that the person
+ * reads). "na" (agnostic) and languages without their own sentence fall into English.
  */
 const SAMPLES: Record<string, string> = {
   pt: "Olá! Esta é a minha voz. É assim que vou ler as suas respostas.",
@@ -26,10 +26,10 @@ export function voiceSample(lang: string): string {
 }
 
 /**
- * Ouvir a voz escolhida antes de usá-la: fala uma frase curta com a voz, o
- * idioma, a velocidade e a prioridade de áudio das preferências — o mesmo
- * caminho da leitura de uma resposta, então o que se ouve aqui é o que se vai
- * ouvir no chat. Clicar de novo enquanto fala para.
+ * Listen to the chosen voice before using it: it speaks a short sentence with the voice, the
+ * language, the speed and the audio priority of the preferences — the same
+ * path as the reading of an answer, so what one hears here is what one is going to
+ * hear in the chat. Clicking again while it speaks stops it.
  */
 export function VoicePreviewButton({
   voice,
@@ -46,7 +46,7 @@ export function VoicePreviewButton({
   const { speak, stop, speaking, generating, error, dismissError } = useSpeak()
   const sampleLang = lang === "auto" ? (i18n.language || "en").slice(0, 2).toLowerCase() : lang
 
-  // Trocou a voz no meio da amostra: a que está tocando já não é a escolhida.
+  // The voice was swapped in the middle of the sample: the one playing is no longer the chosen one.
   useEffect(() => {
     stop()
   }, [voice, lang, speed, engine, stop])

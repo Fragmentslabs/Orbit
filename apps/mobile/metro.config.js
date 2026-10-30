@@ -13,23 +13,23 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
-// `halo-2.0.riv` (persona) é empacotado como asset local; sem essa entrada o
-// Metro trata o require() como módulo e falha com "Unable to resolve".
+// `halo-2.0.riv` (persona) is packed as a local asset; without that entry
+// Metro treats the require() as a module and fails with "Unable to resolve".
 config.resolver.assetExts = [...config.resolver.assetExts, "riv"];
 
-// O bundle do mermaid (3,4 MB) vai como asset, não como módulo: é lido só
-// quando um diagrama aparece e vai embutido no WebView. Importá-lo como JS faria
-// o Metro transpilar e embarcar tudo no bundle principal.
+// The mermaid bundle (3.4 MB) goes as an asset, not as a module: it is read only
+// when a diagram shows up and goes embedded in the WebView. Importing it as JS would make
+// Metro transpile and embed everything in the main bundle.
 config.resolver.assetExts = [...config.resolver.assetExts, "txt"];
 
 // Apply withNativewind FIRST so its CSS resolution chain is established,
 // then layer our custom lucide redirect on top.
 const nativeWindConfig = withNativewind(config);
 
-// Redireciona os imports de `lucide-react-native` do app para o wrapper que
-// aplica `className` aos ícones via styled() (o resolver do react-native-css
-// não cobre o lucide). O próprio wrapper importa o lucide real — por isso
-// pulamos o redirect quando a origem é o próprio arquivo.
+// Redirects the `lucide-react-native` imports of the app to the wrapper that
+// applies `className` to the icons via styled() (the resolver of react-native-css
+// does not cover lucide). The wrapper itself imports the real lucide — that is why
+// we skip the redirect when the origin is the file itself.
 const lucideStyled = path.resolve(__dirname, "src/lib/lucide-styled.js");
 const originalResolveRequest = nativeWindConfig.resolver.resolveRequest;
 nativeWindConfig.resolver.resolveRequest = (context, moduleName, platform) => {

@@ -20,25 +20,25 @@ import { slidesRefOf } from "@/src/lib/slides-part-ref"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Altura do preview como fração da JANELA, não em pixels fixos — a mesma regra
- * do artefato. Um deck é 16:9, então a largura da coluna manda: a fração
- * mantém a presença relativa igual num notebook e num monitor grande.
+ * Preview height as a fraction of the WINDOW, not in fixed pixels — the same rule
+ * as the artifact. A deck is 16:9, so the column width rules: the fraction
+ * keeps the relative presence the same on a laptop and on a large monitor.
  */
 const PREVIEW_VIEWPORT_RATIO = 0.5
 const MIN_PREVIEW_HEIGHT = 380
 
 /**
- * O deck na conversa: o deck RENDERIZA aqui, como o artefato, em vez de virar
- * só um atalho para a aba do painel.
+ * The deck in the conversation: the deck RENDERS here, like the artifact, instead of becoming
+ * just a shortcut to the panel tab.
  *
- * A diferença de comportamento em relação ao card antigo é o que o deck é: uma
- * apresentação se lê clicando nela. Por isso o palco vem inline, com as duas
- * saídas de sempre — abrir na sidebar (para trabalhar com a aba ao lado) e tela
- * cheia (para apresentar). Fechar a aba não perde mais o deck de vista.
+ * The difference in behavior from the old card is what the deck is: a
+ * presentation is read by clicking through it. That is why the stage comes inline, with the two
+ * usual exits — open in the sidebar (to work with the tab alongside) and full
+ * screen (to present). Closing the tab no longer loses sight of the deck.
  *
- * O trabalho de verdade fica em dois lugares: o id/entrada do deck são
- * resolvidos no main (`slides:resolve`, sem abrir aba) e a ponte com o runtime
- * é o use-slides-deck, o mesmo da aba.
+ * The real work lives in two places: the deck's id/entry are
+ * resolved in the main process (`slides:resolve`, without opening a tab) and the bridge to the runtime
+ * is use-slides-deck, the same one as the tab.
  */
 export function SlidesPartView({ part, sessionId }: { part: ToolPart; sessionId?: string }) {
   const { t } = useTranslation()
@@ -50,8 +50,8 @@ export function SlidesPartView({ part, sessionId }: { part: ToolPart; sessionId?
   const [resolving, setResolving] = useState(true)
   const [attempt, setAttempt] = useState(0)
 
-  // O deck do chat (slides_write) se resolve pelo título + sessão; o do projeto
-  // (slides_preview) pelo caminho. Só o que existe é que vira URL de iframe.
+  // The chat deck (slides_write) resolves itself by the title + session; the project
+  // one (slides_preview) by the path. Only what exists becomes an iframe URL.
   const resolveInput = useMemo(
     () => (id ? { id } : path ? { path } : name ? { sessionId, name } : null),
     [id, path, name, sessionId],
@@ -114,8 +114,8 @@ export function SlidesPartView({ part, sessionId }: { part: ToolPart; sessionId?
 }
 
 /**
- * O card com o palco. Componente separado porque o hook do deck só pode ser
- * chamado por quem SABE que o deck existe — a resolução acontece no pai.
+ * The card with the stage. A separate component because the deck hook can only be
+ * called by whoever KNOWS the deck exists — the resolution happens in the parent.
  */
 function SlidesDeckCard({ slidesId, entry, label }: { slidesId: string; entry: string; label: string }) {
   const { t } = useTranslation()
@@ -188,15 +188,15 @@ function SlidesDeckCard({ slidesId, entry, label }: { slidesId: string; entry: s
       </div>
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        {/* flex-col, e não o grid padrão do DialogContent: com altura fixa as
-            linhas implícitas esticam e a barra do título ficaria com metade do
-            diálogo. Mesmo padrão do card de artefato. */}
+        {/* flex-col, and not DialogContent's default grid: with a fixed height the
+            implicit rows stretch and the title bar would get half the
+            dialog. Same pattern as the artifact card. */}
         <DialogContent className="flex h-[88vh] max-w-[92vw] flex-col gap-0 p-0">
           <DialogTitle className="shrink-0 border-b border-border/60 px-4 py-2 pr-12 text-sm font-medium">
             {label}
           </DialogTitle>
-          {/* Aberta por cima do card, a tela cheia começa no slide em que o
-              usuário estava — e tem o seu próprio palco, com o seu iframe. */}
+          {/* Opened on top of the card, fullscreen starts at the slide the
+              user was on — and has its own stage, with its own iframe. */}
           <SlidesFullscreen slidesId={slidesId} entry={entry} label={label} initialIndex={index} totalFallback={total} />
         </DialogContent>
       </Dialog>
@@ -205,8 +205,8 @@ function SlidesDeckCard({ slidesId, entry, label }: { slidesId: string; entry: s
 }
 
 /**
- * O deck em tela cheia. Palco próprio (outro iframe, outra ponte): o card
- * continua vivo atrás, e cada um guarda o seu índice.
+ * The deck in fullscreen. Its own stage (another iframe, another bridge): the card
+ * stays alive behind, and each one keeps its own index.
  */
 function SlidesFullscreen({
   slidesId,

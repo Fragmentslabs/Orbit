@@ -11,15 +11,15 @@ import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { FolderOpen } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
-import { useEsteiraStore } from "@/src/stores/esteira-store"
+import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
-import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
-import { RotinasView } from "@/src/components/rotinas/rotinas-view"
+import { PipelineBoard } from "@/src/components/pipeline/pipeline-board"
+import { RoutinesView } from "@/src/components/routines/routines-view"
 import { ToolsView } from "@/src/components/tools-view"
 import { UsageView } from "@/src/components/usage-view"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
@@ -42,8 +42,8 @@ const STORAGE_KEY = "sidebar-mode"
 
 type SidebarMode = "hover" | "pinned"
 
-/** Referência estável: `?? []` num seletor zustand vira loop de render. */
-const SEM_PASTAS: string[] = []
+/** Stable reference: `?? []` in a zustand selector becomes a render loop. */
+const NO_FOLDERS: string[] = []
 
 function loadMode(): SidebarMode {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -67,31 +67,31 @@ function Layout() {
   const { mode: workspaceMode, view, folders, setFolders, setMode, setView } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
   const [mode, setModeState] = useState<SidebarMode>(loadMode)
-  // O painel é do CHAT, não da janela. O agente pode estar trabalhando numa
-  // sessão que não é a da tela: a aba (e a abertura) nascem lá, e é só ao
-  // voltar para aquele chat que o painel aparece — aqui não se abre nada.
+  // The panel belongs to the CHAT, not to the window. The agent may be working in a
+  // session that is not the one on the screen: the tab (and the opening) are born there, and only
+  // on going back to that chat does the panel appear — nothing is opened here.
   const activeKey = activeSession?.id ?? ORPHAN_KEY
   const rightPanelOpen = usePanelStore((s) => s.openBySession[activeKey] ?? false)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
-  // Modo corrente para o handler de eventos do main: ele é registrado UMA vez e
-  // não pode depender do render para saber em que workspace o usuário está.
+  // Current mode for the main event handler: it is registered ONCE and
+  // cannot depend on the render to know which workspace the user is in.
   const modeRef = useRef(workspaceMode)
   useEffect(() => {
     modeRef.current = workspaceMode
   }, [workspaceMode])
 
-  // Eventos do main (tools panel_*): o agente pediu o browser — registra no
-  // store e garante o webview NO HOST OCULTO, sem abrir o painel (a UI só
-  // aparece quando o usuário clica no indicador "testando…").
+  // Main events (panel_* tools): the agent asked for the browser — records it in the
+  // store and ensures the webview in the HIDDEN HOST, without opening the panel (the UI only
+  // shows up when the user clicks the "testing…" indicator).
   useEffect(() => {
     return panelApi.onEvent((event) => {
       const store = usePanelStore.getState()
-      // O evento de motion não traz a sessão (o contrato é {id, entry, title}):
-      // sem ela a aba nasceria no balde órfão, escondida atrás do chat aberto.
-      // O balde é o do chat ATIVO — é onde o painel está apontado agora.
+      // The motion event does not carry the session (the contract is {id, entry, title}):
+      // without it the tab would be born in the orphan bucket, hidden behind the open chat.
+      // The bucket is the ACTIVE chat's — it is where the panel is pointed now.
       const resolved =
         (event.type === "motion" || event.type === "design" || event.type === "slides") && !event.sessionId
           ? { ...event, sessionId: useSessionStore.getState().activeIds[modeRef.current] ?? undefined }
@@ -103,15 +103,15 @@ function Layout() {
     })
   }, [])
 
-  // Eviction de webviews desmontados/inativos (browser do agente em segundo
-  // plano de chats fechados) — roda a cada 5min, TTL de 10min.
+  // Eviction of unmounted/inactive webviews (agent browser in the background
+  // of closed chats) — runs every 5min, TTL of 10min.
   useEffect(() => {
     const timer = setInterval(() => evictInactiveWebviews(), 5 * 60 * 1000)
     return () => clearInterval(timer)
   }, [])
 
-  // ─── Abertura de pasta no modo código ─────────────────────────────────────
-  // Usada pelo "Abrir com Orbit" do Explorer e pelo drag & drop de pastas.
+  // ─── Opening a folder in code mode ─────────────────────────────────────
+  // Used by Explorer's "Open with Orbit" and by folder drag & drop.
   const openFolderInCode = useCallback(
     async (directory: string) => {
       await useSessionStore.getState().createSession("code", { directory, setActive: true })
@@ -124,14 +124,14 @@ function Layout() {
 
   useEffect(() => {
     const unsub = windowApi.onOpenFolder((directory) => void openFolderInCode(directory))
-    // Abertura fria: o main deixou a pasta pendente antes do React montar
+    // Cold open: main left the folder pending before React mounted
     void windowApi.consumePendingOpen().then((directory) => {
       if (directory) void openFolderInCode(directory)
     })
     return unsub
   }, [openFolderInCode])
 
-  // ─── Drag & drop de pastas (só pastas; arquivos seguem o fluxo de anexo) ─
+  // ─── Folder drag & drop (folders only; files follow the attachment flow) ─
   const [draggingFolder, setDraggingFolder] = useState(false)
   const dragDepth = useRef(0)
 
@@ -201,18 +201,18 @@ function Layout() {
     if (workspaceMode !== "code" && workspaceMode !== "chat") setRightPanelOpen(false)
   }, [workspaceMode, setRightPanelOpen])
 
-  // O store também precisa saber qual balde a tela mostra: quem abre o painel
-  // sem ser de sessão nenhuma (diff de task da esteira, aba escolhida no "+")
-  // abre no painel da TELA, e ele escreve por esse balde.
+  // The store also needs to know which bucket the screen is showing: whoever
+  // opens the panel without belonging to a session (pipeline task diff, tab
+  // picked in "+") opens it in the SCREEN's panel, and writes through that bucket.
   useEffect(() => {
     usePanelStore.getState().setUiBucket(activeKey)
   }, [activeKey])
 
   /**
-   * A paleta (⌘P) pode pedir um arquivo com o painel FECHADO — e aí o RightPanel
-   * não está montado (ele vive sob `rightPanelOpen`), então o efeito que abriria
-   * o painel estaria dentro do componente que não existe. Abrir o painel é do
-   * App; garantir a aba é do RightPanel, que passa a existir logo depois.
+   * The palette (⌘P) may request a file with the panel CLOSED — and then RightPanel
+   * is not mounted (it lives under `rightPanelOpen`), so the effect that would open
+   * the panel would be inside the component that does not exist. Opening the panel belongs to the
+   * App; ensuring the tab belongs to RightPanel, which starts to exist right after.
    */
   useEffect(() => {
     if (pendingFile) setRightPanelOpen(true)
@@ -245,16 +245,16 @@ function Layout() {
     }
   }, [open, setOpen])
 
-  // Arrastar uma conversa da sidebar: abre no painel lateral ou muda de lugar
-  // (pasta, fixados, conversas, arquivados) — mesma animação nos dois casos.
+  // Dragging a conversation from the sidebar: opens it in the side panel or moves it
+  // (folder, pinned, conversations, archived) — same animation in both cases.
   const sessionDnd = useSessionDragAndDrop(workspaceMode)
 
-  // Esteira ABERTA (na lista não há nenhuma): o header do modo esteira reflete
-  // o contexto dela — pastas e branch. O modelo fica em cada coluna de fase:
-  // cada fase pode ter o seu, então não há "um" modelo da esteira.
-  const pastasDaEsteira = useEsteiraStore((s) => {
-    const esteira = s.abertaId ? s.esteiras.find((e) => e.id === s.abertaId) : undefined
-    return esteira ? s.projetos.find((p) => p.id === esteira.projetoId)?.pastas ?? SEM_PASTAS : SEM_PASTAS
+  // OPEN pipeline (on the list there is none): the pipeline mode header reflects
+  // its context — folders and branch. The model sits in each phase column: each
+  // phase may have its own, so there is no "one" model of the pipeline.
+  const pipelineFolders = usePipelineStore((s) => {
+    const pipeline = s.openPipelineId ? s.pipelines.find((p) => p.id === s.openPipelineId) : undefined
+    return pipeline ? s.projects.find((p) => p.id === pipeline.projectId)?.folders ?? NO_FOLDERS : NO_FOLDERS
   })
 
   const onRequestAgentAction = useCallback((instruction: string) => {
@@ -295,9 +295,9 @@ function Layout() {
           onMouseLeave={handleSidebarMouseLeave}
         >
           <AppSidebar />
-          {/* A alça fica montada mesmo sem poder arrastar: é ela que aplica a
-              largura salva, então a sidebar abre já no tamanho escolhido. O
-              arrasto em si só vale com a sidebar fixada (ver o componente). */}
+          {/* The handle stays mounted even when it cannot be dragged: it is what applies the
+              saved width, so the sidebar opens already at the chosen size. The
+              drag itself only counts with the sidebar pinned (see the component). */}
           <SidebarResizeHandle active={open && mode === "pinned"} />
         </div>
         <PanelGroup direction="horizontal" className="min-w-0 flex-1">
@@ -309,50 +309,50 @@ function Layout() {
                       ? t("sidebar.memories")
                       : view === "models"
                         ? t("header.models")
-                        : view === "esteira"
-                          ? t("esteira.titulo")
-                          : view === "rotinas"
-                            ? t("rotinas.titulo")
+                        : view === "pipeline"
+                          ? t("pipeline.title")
+                          : view === "routines"
+                            ? t("routines.title")
                             : view === "tools"
                               ? t("sidebar.tools")
                               : view === "analytics"
                                 ? t("sidebar.usage")
                                 : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
-                  // O menu vale nos dois modos: fixar, renomear, arquivar,
-                  // excluir e buscar são da SESSÃO, e a sidebar já os oferece
-                  // para uma conversa de código pelo menu da linha.
+                  // The menu works in both modes: pin, rename, archive,
+                  // delete and search belong to the SESSION, and the sidebar already offers them
+                  // for a code conversation through the row menu.
                   hasMenu={view === "chat" && !!activeSession}
                   session={view === "chat" ? activeSession : undefined}
-                  // Indicador do browser do agente: vale nos dois modos da
-                  // conversa (chat e código), já que as tools de browser são
-                  // chaveadas pelo id da sessão, não pelo modo.
+                  // Agent browser indicator: works in both modes of the
+                  // conversation (chat and code), since the browser tools are
+                  // keyed by the session id, not by the mode.
                   sessionId={view === "chat" ? activeSession?.id : undefined}
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={view === "esteira" ? pastasDaEsteira[0] : view === "rotinas" ? undefined : folders[0]}
+                  repoPath={view === "pipeline" ? pipelineFolders[0] : view === "routines" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
-                  // Na página Esteira o header segue a esteira ABERTA, não as
-                  // pastas do chat: na lista não há esteira escolhida ainda, e
-                  // mostrar pasta/branch ali sugeriria um contexto que não existe.
-                  // Na página Rotinas a pasta é escolhida DENTRO do modal de
-                  // criação (uma por rotina) — o header não tem nenhuma pasta
-                  // "da tela" para mostrar.
+                  // On the Pipeline page the header follows the OPEN pipeline,
+                  // not the chat's folders: on the list no pipeline is chosen yet,
+                  // and showing folder/branch there would suggest a context that
+                  // does not exist. On the Routines page the folder is chosen
+                  // INSIDE the creation dialog (one per routine) — the header has
+                  // no "screen" folder to show.
                   folders={
-                    view === "esteira"
-                      ? pastasDaEsteira.length
-                        ? pastasDaEsteira
+                    view === "pipeline"
+                      ? pipelineFolders.length
+                        ? pipelineFolders
                         : undefined
-                      : view === "rotinas"
+                      : view === "routines"
                         ? undefined
                         : workspaceMode === "code"
                           ? folders
                           : undefined
                   }
                   onFoldersChange={
-                    view === "esteira" || view === "rotinas"
+                    view === "pipeline" || view === "routines"
                       ? undefined
                       : workspaceMode === "code"
                         ? setFolders
@@ -365,10 +365,10 @@ function Layout() {
                     <MemoriesView />
                   ) : view === "models" ? (
                     <ModelsView />
-                  ) : view === "esteira" ? (
-                    <EsteiraBoard />
-                  ) : view === "rotinas" ? (
-                    <RotinasView />
+                  ) : view === "pipeline" ? (
+                    <PipelineBoard />
+                  ) : view === "routines" ? (
+                    <RoutinesView />
                   ) : view === "tools" ? (
                     <ToolsView />
                   ) : view === "analytics" ? (
@@ -403,17 +403,17 @@ function App() {
   const [open, setOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
 
-  // Ctrl+Space abre a busca global
+  // Ctrl+Space opens the global search
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.code === "Space" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
         setSearchOpen((v) => !v)
       }
-      // ⌘P procura no código de qualquer aba: a paleta existe para trazer o que
-      // não está à vista, então amarrá-la à aba de arquivos faria o atalho
-      // calar justamente quando ele é mais útil. Quem abre a aba é o painel,
-      // ao receber o pedido do resultado.
+      // ⌘P searches the code of any tab: the palette exists to bring what
+      // is not in sight, so tying it to the files tab would make the shortcut
+      // go silent exactly when it is most useful. Whoever opens the tab is the panel,
+      // on receiving the request from the result.
       if (e.code === "KeyP" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
         e.preventDefault()
         useWorkspaceSearchStore.getState().toggle()

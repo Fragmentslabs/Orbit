@@ -1,0 +1,296 @@
+import { BrowserWindow, Notification } from 'electron'
+import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
+import type { Routine, RoutineEvent, RoutineRun } from '@shared/routines'
+import { nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
+import { runChat } from '../chat-engine'
+import { runChatWithLoop } from '../loop-engine'
+import { runOrchestration } from '../orchestrator'
+import { broadcastChatEvent, broadcastRoutineEvent } from '../broadcast'
+import { readJson, writeJson } from '../storage'
+import { readAppLanguage } from '../app-language'
+import { t } from '../i18n'
+import { listRoutines, listRuns, saveRun, updateRoutine } from './repo'
+
+/**
+ * Routines scheduler: a one-minute tick in the main process, no cron library.
+ *
+ * The trigger REUSES the `chat:send` path (runChat / runChatWithLoop /
+ * runOrchestration) instead of having its own runner like the pipeline. The
+ * pipeline is not a conversation — a routine is: it needs history, per-message
+ * diff, permissions and the chat UI that already exist.
+ *
+ * Known limitation: with the app CLOSED nothing runs — the scheduler dies with
+ * the main process. On reopening, a late execution inside the tolerance window
+ * still fires; anything older is dropped (the 09:00 routine must not run at
+ * 23:00 three days later).
+ */
+
+const TICK_INTERVAL_MS = 60_000
+/** Maximum delay tolerated on firing (app closed, machine suspended). */
+const LATE_WINDOW_MS = 60 * 60 * 1000
+
+let timer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Routines running right now. A routine never fires again while the previous
+ * execution has not finished — same rule as the pipeline's `running` map: the
+ * second run would work over the files the first one is touching.
+ */
+const running = new Set<string>()
+
+export function emit(event: RoutineEvent): void {
+  broadcastRoutineEvent(event)
+}
+
+// ─── Execution session ───────────────────────────────────────────────────────
+
+function stamp(when: number): string {
+  const d = new Date(when)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/**
+ * Every execution is born in a session of its own — that is what gives the
+ * routine its chat history. `folderId` stays null on purpose: routine chats
+ * live only in the "Routines" group of the sidebar, never inside a folder. The
+ * session inherits the routine's mode: that is what makes the sidebar separate
+ * chat routines from code routines.
+ */
+async function createSession(routine: Routine, when: number): Promise<SessionInfo> {
+  const chat = routine.mode === 'chat'
+  const session: SessionInfo = {
+    id: `${ROUTINE_SESSION_PREFIX}${routine.id}_${when.toString(36)}`,
+    title: `${routine.title} — ${stamp(when)}`,
+    mode: routine.mode,
+    pinned: false,
+    archived: false,
+    folderId: null,
+    directory: chat ? undefined : routine.folders[0],
+    extraDirectories: chat ? undefined : routine.folders.slice(1),
+    routineId: routine.id,
+    createdAt: when,
+    updatedAt: when,
+  }
+  await writeJson(StorageKeys.session(session.id), session)
+  // The renderer only knows the session through this event: it was born in the
+  // main process, outside the session-store. Without it the routine's chat does
+  // not show up in the sidebar until a reload.
+  broadcastChatEvent({ type: 'session', sessionId: session.id, session })
+  return session
+}
+
+/** Metrics of what the execution consumed: sums the assistant turns. */
+async function collectResult(sessionId: string): Promise<{ tokens: number; cost: number; error?: string }> {
+  const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
+  let tokens = 0
+  let cost = 0
+  let error: string | undefined
+  for (const msg of messages) {
+    if (msg.role !== 'assistant') continue
+    if (msg.tokens) {
+      tokens += msg.tokens.input + msg.tokens.output + msg.tokens.reasoning
+      cost += msg.tokens.cost ?? 0
+    }
+    // The LAST turn's error wins: a failure in the middle that the loop worked
+    // around does not turn the whole execution into a failure.
+    error = msg.error
+  }
+  return { tokens, cost, error }
+}
+
+async function notify(routine: Routine, run: RoutineRun): Promise<void> {
+  if (!Notification.isSupported()) return
+  const ok = run.status === 'ok'
+  // Body in a fixed translated sentence (the title is the routine name, user
+  // data); the execution error is provider/engine text — never translated.
+  const body = ok
+    ? run.cost > 0
+      ? await t('notif.routine.doneWithCost', { cost: run.cost.toFixed(4) })
+      : await t('notif.routine.done')
+    : await t('notif.routine.failed', {
+        error: (run.error ?? '').slice(0, 120) || (await t('notif.routine.unknownError')),
+      })
+  new Notification({ title: routine.title, body, silent: ok }).show()
+}
+
+// ─── Execution ───────────────────────────────────────────────────────────────
+
+/**
+ * Runs the routine now. Returns the created sessionId, or null when the routine
+ * is already running or has no working folder.
+ */
+export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'): Promise<string | null> {
+  if (running.has(routine.id)) return null
+  const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
+  if (!win) return null
+  // A working folder is only required in code mode: the chat routine runs
+  // without a project, using only the chat-mode tools.
+  if (routine.mode !== 'chat' && !routine.folders[0]) {
+    console.warn(`[routines] "${routine.title}" has no working folder — execution skipped`)
+    return null
+  }
+
+  running.add(routine.id)
+  const start = Date.now()
+  const session = await createSession(routine, start)
+
+  let run: RoutineRun = {
+    routineId: routine.id,
+    sessionId: session.id,
+    startedAt: start,
+    status: 'running',
+    tokens: 0,
+    cost: 0,
+  }
+  await saveRun(run)
+  emit({ type: 'run', run })
+
+  // `lastRun` is stamped BEFORE running: if it were left to the end, a long turn
+  // would make the next tick believe the routine had not run yet.
+  const updated = await updateRoutine(routine.id, (r) => ({ ...r, lastRun: start }))
+  if (updated) emit({ type: 'routine', routine: updated })
+
+  const options = routineOptions(routine.modes)
+  // A chat routine only knows the chat modes: not even a hand-edited
+  // routines.json should be able to turn orchestration/loop/subagents/plan on in
+  // a mode that does not support them (the orchestrator, for instance, pins
+  // worker sessions to mode 'code' — orchestration simply does not run in chat).
+  if (routine.mode === 'chat') {
+    options.orchestrate = undefined
+    options.loop = undefined
+    options.subagents = undefined
+    options.plan = undefined
+  }
+  const language = await readAppLanguage()
+  const input: SendMessageInput = {
+    sessionId: session.id,
+    text: routine.prompt,
+    providerId: routine.model.providerId,
+    modelId: routine.model.modelId,
+    mode: routine.mode,
+    options,
+    directory: session.directory,
+    extraDirectories: session.extraDirectories,
+    // Subagents/orchestration need a worker model; the routine uses its own,
+    // which is the only model it knows.
+    ...(options.subagents || options.orchestrate ? { workerModel: routine.model } : {}),
+    // Vision mode: the routine carries the vision model it had at creation time
+    // (the main process does not read the renderer's localStorage).
+    ...(routine.modes.vision && routine.visionModel ? { visionModel: routine.visionModel } : {}),
+    // Read NOW, not stored in the routine: changing the app language immediately
+    // applies to routines that already exist. Without this the agent falls back
+    // to "answer in the user's language" and follows the PROMPT's language —
+    // English in the sample routines.
+    ...(language ? { language } : {}),
+    ...(options.loop ? { loopConfig: { maxIterations: 5 } } : {}),
+  }
+
+  console.log(`[routines] firing "${routine.title}" (${reason}) in session ${session.id}`)
+
+  try {
+    if (options.orchestrate) await runOrchestration(win, input)
+    else if (options.loop) await runChatWithLoop(win, input, input.loopConfig!)
+    else await runChat(win, input)
+    const { tokens, cost, error } = await collectResult(session.id)
+    run = { ...run, completedAt: Date.now(), status: error ? 'error' : 'ok', error, tokens, cost }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    const { tokens, cost } = await collectResult(session.id)
+    run = { ...run, completedAt: Date.now(), status: 'error', error: detail, tokens, cost }
+  } finally {
+    running.delete(routine.id)
+  }
+
+  // The routine may have been deleted in the middle of the execution (the delete
+  // erases the chats and aborts the stream). Writing the metrics again would
+  // resurrect an orphan record in runs.json — better to end quietly.
+  const stillExists = (await listRoutines()).some((r) => r.id === routine.id)
+  if (!stillExists) return session.id
+
+  await saveRun(run)
+  emit({ type: 'run', run })
+  void notify(routine, run)
+
+  // One-time schedule: after running, the routine turns itself off. The
+  // computation would no longer return it (the target is in the past), but the
+  // switch in the UI would say otherwise — turning it off here closes the loop
+  // in the right place.
+  if (routine.schedule.onceDate) {
+    const deactivated = await updateRoutine(routine.id, (r) => ({ ...r, active: false }))
+    if (deactivated) emit({ type: 'routine', routine: deactivated })
+  }
+  return session.id
+}
+
+/** "Run now" of the panel — same execution, without touching the schedule. */
+export async function runNow(id: string): Promise<string | null> {
+  const routine = (await listRoutines()).find((r) => r.id === id)
+  if (!routine) return null
+  return runRoutine(routine, 'manual')
+}
+
+// ─── Tick ────────────────────────────────────────────────────────────────────
+
+async function tick(): Promise<void> {
+  const now = Date.now()
+  let routines: Routine[]
+  try {
+    routines = await listRoutines()
+  } catch (err) {
+    console.error('[routines] could not read the routines on tick:', err)
+    return
+  }
+
+  for (const routine of routines) {
+    if (!routine.active || running.has(routine.id)) continue
+    // The floor drops the missed windows at once: with the app closed for days,
+    // the routine goes back to the calendar on the next time of day instead of
+    // trying to recover every firing that did not happen.
+    const base = Math.max(routine.lastRun ?? routine.createdAt, now - LATE_WINDOW_MS)
+    const target = nextRun(routine.schedule, base, routine.lastRun)
+    // Invalid schedule (a time that does not parse): the routine stays put
+    // instead of firing at a guessed time.
+    if (target == null || target > now) continue
+
+    // No await: a long routine must not hold back the others in this tick.
+    void runRoutine(routine, 'schedule').catch((err) =>
+      console.error(`[routines] run of "${routine.title}" failed:`, err),
+    )
+  }
+}
+
+/**
+ * Runs marked "running" on disk with nobody executing them: the app was closed
+ * (or crashed) in the middle. Closing the record on boot avoids an endless
+ * spinner in the panel and a routine that never fires again.
+ */
+async function reconcileRuns(): Promise<void> {
+  for (const run of await listRuns()) {
+    if (run.status !== 'running' || running.has(run.routineId)) continue
+    const closed: RoutineRun = {
+      ...run,
+      status: 'error',
+      completedAt: Date.now(),
+      error: run.error ?? 'Execution interrupted (app closed).',
+    }
+    await saveRun(closed)
+    emit({ type: 'run', run: closed })
+  }
+}
+
+export function startScheduler(): void {
+  if (timer) return
+  void reconcileRuns().catch((err) => console.error('[routines] reconciliation failed:', err))
+  timer = setInterval(() => void tick(), TICK_INTERVAL_MS)
+  // An immediate tick catches what came due while the app was closed (inside the
+  // tolerance window) without waiting for the first minute.
+  void tick()
+}
+
+export function stopScheduler(): void {
+  if (!timer) return
+  clearInterval(timer)
+  timer = null
+}

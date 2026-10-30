@@ -29,37 +29,37 @@ import { attachSamplingHandler, samplingCapabilities } from './sampling'
 import { descriptionsState, optimizedFor, optimizeServerDescriptions } from './describe'
 
 /**
- * Manager MCP: conecta os servidores do mcp-config.json (stdio/streamable
- * HTTP), descobre as ferramentas via tools/list e as expõe como ToolSet do
- * ai-sdk com nomes prefixados (<servidor>_<tool>). getMcpTools() é síncrono
- * (lista do manager) para encaixar no buildToolSet. Servidores com erro
- * tentam reconectar em background com backoff exponencial.
+ * MCP manager: connects the servers of mcp-config.json (stdio/streamable HTTP),
+ * discovers the tools via tools/list and exposes them as an ai-sdk ToolSet with
+ * prefixed names (<server>_<tool>). getMcpTools() is synchronous (the manager's list)
+ * so that it fits into buildToolSet. Servers with an error try to reconnect in the
+ * background with exponential backoff.
  */
 
 const CONNECT_TIMEOUT_MS = 15_000
 const RECONNECT_BASE_MS = 15_000
-const RECONNECT_MAX_MS = 300_000 // 5 minutos
-const RECONNECT_INTERVAL_MS = 10_000 // checa a cada 10s
+const RECONNECT_MAX_MS = 300_000 // 5 minutes
+const RECONNECT_INTERVAL_MS = 10_000 // checked every 10 s
 
 interface ServerRuntime {
   config: McpServerConfig
   client: Client | null
-  /** Ferramentas descobertas no tools/list, já com o nome prefixado. O ToolSet
-   *  é montado por turno em getMcpTools: o resultado depende da sessão (onde
-   *  gravar as imagens) e do que o turno oferece (show_image, describe_image). */
+  /** Tools discovered in tools/list, already with the prefixed name. The ToolSet
+   *  is built per turn in getMcpTools: the result depends on the session (where to
+   *  store the images) and on what the turn offers (show_image, describe_image). */
   tools: McpToolDef[]
   state: McpServerStatus['state']
   error?: string
   lastAttempt: number
   retryCount: number
-  /** http com OAuth: já existe token salvo (autorizado alguma vez neste device) */
+  /** http with OAuth: a token is already saved (authorized at some point on this device) */
   authorized?: boolean
-  /** Falha da última re-listagem automática (notifications/tools/list_changed).
-   *  Separado de `error`: a conexão segue válida e a lista anterior continua em
-   *  uso — isto é um aviso, não um servidor fora do ar. */
+  /** Failure of the last automatic re-listing (notifications/tools/list_changed).
+   *  Separate from `error`: the connection is still valid and the previous list stays
+   *  in use — this is a warning, not a server that is down. */
   toolListError?: string
-  /** Re-listagens em série: uma rajada de notificações não pode aplicar os
-   *  resultados fora de ordem (a lista velha sobrescrevendo a nova). */
+  /** Re-listings in series: a burst of notifications cannot apply the results out of
+   *  order (the old list overwriting the new one). */
   toolListQueue?: Promise<void>
 }
 
@@ -70,19 +70,19 @@ interface McpToolDef {
   inputSchema?: unknown
 }
 
-/** O que o turno oferece ao resultado de uma tool MCP. */
+/** What the turn offers to the result of an MCP tool. */
 export interface McpToolScope {
   sessionId: string
   canShow: boolean
   canDescribe: boolean
   /**
-   * Recorte de servidores escolhido na conversa (nomes). Ausente = todos os
-   * ligados no app; vazio = nenhum.
+   * Slice of servers chosen in the conversation (names). Absent = all the ones
+   * enabled in the app; empty = none.
    */
   only?: string[]
 }
 
-/** Servidor entra neste turno? Desligado no app ou fora do recorte da conversa. */
+/** Does the server take part in this turn? Turned off in the app or outside the conversation's slice. */
 function inScope(runtime: ServerRuntime, only?: string[]): boolean {
   if (runtime.config.enabled === false) return false
   return !only || only.includes(runtime.config.name)
@@ -121,8 +121,8 @@ const MIME_EXT: Record<string, string> = {
   'image/gif': 'gif',
 }
 
-/** Grava a imagem de um resultado MCP na galeria da conversa. Formatos fora
- *  da lista viram PNG — a galeria e o describe_image só falam os comuns. */
+/** Stores the image of an MCP result in the conversation's gallery. Formats outside
+ *  the list become PNG — the gallery and describe_image only speak the common ones. */
 async function saveMcpImage(
   data: Buffer,
   mimeType: string,
@@ -136,8 +136,8 @@ async function saveMcpImage(
     ext = 'png'
   }
   const meta = await sharp(buffer).metadata().catch(() => null)
-  // 'script': material intermediário de automação — entra na limpeza rápida
-  // da galeria enquanto não for mostrado em nenhuma mensagem.
+  // 'script': intermediate automation material — it goes into the gallery's quick
+  // cleanup while it is not shown in any message.
   const url = await saveMedia(buffer, ext, { source: 'script', sessionId, name })
   return { url, width: meta?.width, height: meta?.height, bytes: buffer.length }
 }
@@ -146,17 +146,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([
     promise,
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label}: timeout após ${ms / 1000}s`)), ms),
+      setTimeout(() => reject(new Error(`${label}: timeout after ${ms / 1000}s`)), ms),
     ),
   ])
 }
 
 /**
- * URL do servidor quando ele autentica via OAuth — ou undefined.
+ * URL of the server when it authenticates via OAuth — or undefined.
  *
- * Um Authorization header próprio desliga o OAuth (senão um 401 por chave
- * inválida viraria um fluxo de autorização indevido); outros headers
- * (versão de API, tenant…) convivem com o OAuth numa boa.
+ * Its own Authorization header turns OAuth off (otherwise a 401 for an invalid key
+ * would turn into an unrequested authorization flow); other headers (API version,
+ * tenant…) live fine with OAuth.
  */
 function oauthUrl(config: McpServerConfig): string | undefined {
   if (config.type !== 'http' || !config.url) return undefined
@@ -167,13 +167,13 @@ function oauthUrl(config: McpServerConfig): string | undefined {
 }
 
 /**
- * Monta o transport do servidor. Para HTTP, um authProvider OAuth é anexado
- * conforme oauthUrl(). No 401, o SDK chama redirectToAuthorization e lança
- * UnauthorizedError — o connect trata.
+ * Builds the server's transport. For HTTP, an OAuth authProvider is attached
+ * according to oauthUrl(). On a 401, the SDK calls redirectToAuthorization and throws
+ * UnauthorizedError — connect handles it.
  */
 async function buildTransport(config: McpServerConfig) {
   if (config.type === 'http') {
-    if (!config.url) throw new Error('servidor http sem url')
+    if (!config.url) throw new Error('http server with no url')
     const headers: Record<string, string> = {}
     if (config.headers) {
       for (const [k, v] of Object.entries(config.headers)) {
@@ -187,7 +187,7 @@ async function buildTransport(config: McpServerConfig) {
       authProvider,
     })
   }
-  if (!config.command) throw new Error('servidor stdio sem command')
+  if (!config.command) throw new Error('stdio server with no command')
   const env: Record<string, string> = {}
   if (config.env) {
     for (const [k, v] of Object.entries(config.env)) {
@@ -208,10 +208,10 @@ async function buildTransport(config: McpServerConfig) {
 }
 
 /**
- * Conecta um servidor. Com `interactive` (reconnect manual / botão
- * Autorizar), um 401 por OAuth abre o navegador e espera o code no
- * loopback; sem `interactive` (startup), o servidor vai para o estado
- * "unauthorized" e a UI oferece o botão Autorizar.
+ * Connects a server. With `interactive` (manual reconnect / Authorize button), a 401
+ * for OAuth opens the browser and waits for the code on the loopback; without
+ * `interactive` (startup), the server goes to the "unauthorized" state and the UI
+ * offers the Authorize button.
  */
 async function connect(runtime: ServerRuntime, interactive = false): Promise<void> {
   runtime.state = 'connecting'
@@ -232,8 +232,8 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
     } catch (err) {
       if (!(err instanceof UnauthorizedError) || !url) throw err
-      // Servidor exige OAuth: aguarda o code vindo do loopback (fluxo
-      // interativo) ou sinaliza "unauthorized" para a UI (fluxo automático).
+      // Server requires OAuth: it waits for the code coming from the loopback (interactive
+      // flow) or signals "unauthorized" to the UI (automatic flow).
       const code = await awaitPendingAuth(url)
       if (!code) {
         runtime.state = 'unauthorized'
@@ -241,9 +241,9 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
       }
       if (!(transport instanceof StreamableHTTPClientTransport)) throw err
       await transport.finishAuth(code)
-      // O par client/transport da tentativa anterior já foi iniciado (e
-      // fechado no erro) — o SDK recusa reiniciar o mesmo transport. Com o
-      // token salvo pelo finishAuth, a conexão vai em instâncias novas.
+      // The client/transport pair of the previous attempt was already started (and closed
+      // on the error) — the SDK refuses to restart the same transport. With the token saved
+      // by finishAuth, the connection goes in new instances.
       await transport.close().catch(() => {})
       client = createClient(runtime.config.name)
       transport = await buildTransport(runtime.config)
@@ -261,8 +261,8 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
     runtime.state = 'connected'
     runtime.retryCount = 0
     if (url) runtime.authorized = await hasOAuthTokens(url)
-    // A lista pode mudar com a conexão de pé (servidor que carrega tools sob
-    // demanda, plugin recarregado). O handler usa ESTE client e ESTE runtime.
+    // The list may change with the connection up (a server that loads tools on demand, a
+    // reloaded plugin). The handler uses THIS client and THIS runtime.
     watchToolList(runtime, client)
   } catch (err) {
     runtime.client = null
@@ -271,31 +271,31 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
     runtime.error =
       describeOAuthError(err, Boolean(runtime.config.oauth?.clientId?.trim())) ??
       (err instanceof Error ? err.message : String(err))
-    // Falha de autorização num servidor OAuth que nunca autorizou: vira
-    // "unauthorized" (a UI oferece Autorizar) em vez de "error" — assim o
-    // watcher não fica repetindo um fluxo que só o usuário destrava.
+    // Authorization failure in an OAuth server that never authorized: it becomes
+    // "unauthorized" (the UI offers Authorize) instead of "error" — that way the watcher
+    // does not keep repeating a flow that only the user can unlock.
     runtime.state = url && !runtime.authorized && isAuthFailure(err) ? 'unauthorized' : 'error'
   } finally {
     if (url) setOAuthInteractive(url, false)
   }
 }
 
-/** Erro que só o usuário resolve autorizando (401/403, OAuth, registro recusado). */
+/** Error that only the user solves by authorizing (401/403, OAuth, refused registration). */
 function isAuthFailure(err: unknown): boolean {
   if (err instanceof UnauthorizedError) return true
   const message = err instanceof Error ? err.message : String(err ?? '')
   return /oauth|unauthorized|invalid_client|invalid_grant|HTTP (401|403)/i.test(message)
 }
 
-/** Ferramenta como o tools/list a devolve — só o que o manager consome. */
+/** Tool as tools/list returns it — only what the manager consumes. */
 interface DiscoveredTool {
   name: string
   description?: string
   inputSchema?: unknown
 }
 
-/** Converte o resultado do tools/list em definições do manager, com o nome
- *  prefixado (`<prefixo>_<tool>`). O prefixo já vem sanitizado. */
+/** Converts the tools/list result into manager definitions, with the prefixed name
+ *  (`<prefix>_<tool>`). The prefix already comes sanitized. */
 function toToolDefs(prefix: string, discovered: DiscoveredTool[]): McpToolDef[] {
   return discovered.map((mcpTool) => ({
     name: `${prefix}_${sanitizeName(mcpTool.name)}`,
@@ -306,32 +306,32 @@ function toToolDefs(prefix: string, discovered: DiscoveredTool[]): McpToolDef[] 
 }
 
 /**
- * Escuta `notifications/tools/list_changed` do servidor conectado.
+ * Listens to the connected server's `notifications/tools/list_changed`.
  *
- * Sem isso, um servidor que muda a própria lista de tools só seria notado no
- * próximo connect, e o toolset do turno sairia do ar desatualizado (tool nova
- * invisível, tool removida ainda oferecida).
+ * Without it, a server that changes its own tool list would only be noticed on the
+ * next connect, and the turn's toolset would go out of date (new tool invisible,
+ * removed tool still offered).
  *
- * A conexão NÃO é refeita: `runtime` e `client` continuam os mesmos e só
- * `runtime.tools` é trocado no lugar — o estado "connected" e o client em uso
- * pelo ToolSet seguem válidos.
+ * The connection is NOT redone: `runtime` and `client` stay the same and only
+ * `runtime.tools` is swapped in place — the "connected" state and the client in use by
+ * the ToolSet remain valid.
  */
 function watchToolList(runtime: ServerRuntime, client: Client): void {
   client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
     const next = (runtime.toolListQueue ?? Promise.resolve()).then(() =>
       refreshToolList(runtime, client),
     )
-    // A re-listagem já trata os próprios erros; o catch é só a rede de
-    // segurança para a fila nunca ficar rejeitada (nem virar unhandled).
+    // The re-listing already handles its own errors; the catch is only the safety net so
+    // that the queue is never rejected (nor becomes unhandled).
     runtime.toolListQueue = next.catch(() => {})
     return runtime.toolListQueue
   })
 }
 
-/** Re-lista as tools e substitui `runtime.tools` no lugar. Nunca lança. */
+/** Re-lists the tools and replaces `runtime.tools` in place. It never throws. */
 async function refreshToolList(runtime: ServerRuntime, client: Client): Promise<void> {
-  // Conexão trocada/encerrada enquanto a notificação chegava: esta re-listagem
-  // é de um client morto e o resultado sobrescreveria a lista do atual.
+  // Connection swapped/closed while the notification was arriving: this re-listing
+  // belongs to a dead client and the result would overwrite the current list.
   if (runtime.client !== client) return
   try {
     const { tools: discovered } = await withTimeout(
@@ -343,12 +343,12 @@ async function refreshToolList(runtime: ServerRuntime, client: Client): Promise<
     runtime.tools = toToolDefs(sanitizeName(runtime.config.name), discovered)
     runtime.toolListError = undefined
   } catch (err) {
-    // Falha transitória (timeout, servidor ocupado, sessão HTTP caída): a lista
-    // anterior continua valendo — zerar aqui tiraria do modelo todas as tools
-    // de um servidor que segue conectado.
+    // Transient failure (timeout, busy server, dropped HTTP session): the previous list
+    // stays valid — clearing it here would take from the model all the tools of a server
+    // that is still connected.
     runtime.toolListError = err instanceof Error ? err.message : String(err)
     console.warn(
-      `[mcp:${runtime.config.name}] falha ao re-listar tools após tools/list_changed:`,
+      `[mcp:${runtime.config.name}] failed to re-list tools after tools/list_changed:`,
       runtime.toolListError,
     )
   }
@@ -358,7 +358,7 @@ async function disconnect(runtime: ServerRuntime): Promise<void> {
   try {
     await runtime.client?.close()
   } catch {
-    // já caiu
+    // it already went down
   }
   runtime.client = null
   runtime.tools = []
@@ -367,14 +367,14 @@ async function disconnect(runtime: ServerRuntime): Promise<void> {
   }
 }
 
-/** Conecta todos os servidores habilitados da config (chamado no startup). */
+/** Connects every enabled server of the config (called at startup). */
 export async function initMcp(): Promise<void> {
   const config = await readMcpConfig()
   await reconcile(config)
   startReconnectWatcher()
 }
 
-/** Desconecta tudo e para o watcher (chamado no shutdown). */
+/** Disconnects everything and stops the watcher (called at shutdown). */
 export async function shutdownMcp(): Promise<void> {
   stopReconnectWatcher()
   await Promise.all([...servers.values()].map(disconnect))
@@ -382,7 +382,7 @@ export async function shutdownMcp(): Promise<void> {
   closeOAuthLoopback()
 }
 
-/** Sincroniza runtimes com a config: remove, atualiza e conecta o necessário. */
+/** Syncs runtimes with the config: removes, updates and connects what is needed. */
 async function reconcile(config: McpConfig): Promise<void> {
   const wanted = new Map(config.servers.map((s) => [s.name, s]))
   for (const [name, runtime] of servers) {
@@ -413,7 +413,7 @@ async function reconcile(config: McpConfig): Promise<void> {
   )
 }
 
-/** Persiste a config e reconcilia as conexões. */
+/** Persists the config and reconciles the connections. */
 export async function saveMcpConfig(config: McpConfig): Promise<McpServerStatus[]> {
   await writeMcpConfig(config)
   await reconcile(config)
@@ -421,8 +421,8 @@ export async function saveMcpConfig(config: McpConfig): Promise<McpServerStatus[
 }
 
 /**
- * Reconecta sem abrir o navegador: um servidor OAuth sem token vai para
- * "unauthorized" e a UI oferece o botão Autorizar. Botão Reconectar da UI.
+ * Reconnects without opening the browser: an OAuth server without a token goes to
+ * "unauthorized" and the UI offers the Authorize button. The UI's Reconnect button.
  */
 export async function reconnectMcp(name?: string, interactive = false): Promise<McpServerStatus[]> {
   for (const runtime of servers.values()) {
@@ -435,10 +435,10 @@ export async function reconnectMcp(name?: string, interactive = false): Promise<
 }
 
 /**
- * Inicia o fluxo OAuth interativo (abre o navegador) — botão Autorizar da UI.
- * Quando o servidor nunca foi autorizado, descarta um registro dinâmico
- * incompleto de tentativas anteriores para o fluxo começar limpo; tokens
- * válidos (só precisando de refresh) são preservados.
+ * Starts the interactive OAuth flow (opens the browser) — the UI's Authorize button.
+ * When the server was never authorized, it discards an incomplete dynamic registration
+ * from previous attempts so the flow starts clean; valid tokens (only needing a
+ * refresh) are preserved.
  */
 export async function authorizeMcp(name: string): Promise<McpServerStatus[]> {
   const runtime = servers.get(name)
@@ -448,7 +448,7 @@ export async function authorizeMcp(name: string): Promise<McpServerStatus[]> {
   return reconnectMcp(name, true)
 }
 
-/** redirect_uri do loopback OAuth (para cadastrar no app do provedor). */
+/** redirect_uri of the OAuth loopback (to register in the provider's app). */
 export { oauthRedirectUrl }
 
 export function listMcpStatus(): McpServerStatus[] {
@@ -463,12 +463,12 @@ export function listMcpStatus(): McpServerStatus[] {
 }
 
 /**
- * Client MCP do Orbit.
+ * Orbit's MCP client.
  *
- * A capacidade `sampling` é deliberada: é o que permite um app conectado pedir
- * uma resposta ao modelo daqui — o "MCP inverso" (ver sampling.ts). Sem ela o
- * `sampling/createMessage` do app levaria "method not found", porque um client
- * MCP comum só FALA com o servidor, nunca responde a ele.
+ * The `sampling` capability is deliberate: it is what lets a connected app ask for a
+ * model response from here — the "reverse MCP" (see sampling.ts). Without it the app's
+ * `sampling/createMessage` would get "method not found", because a common MCP client
+ * only TALKS to the server, it never answers it.
  */
 function createClient(serverName: string): Client {
   const client = new Client(
@@ -479,15 +479,15 @@ function createClient(serverName: string): Client {
   return client
 }
 
-/** ToolSet mesclado dos servidores conectados (síncrono — lista do manager). */
+/** Merged ToolSet of the connected servers (synchronous — the manager's list). */
 export function getMcpTools(scope: McpToolScope): ToolSet {
   const merged: ToolSet = {}
   for (const runtime of servers.values()) {
     if (!inScope(runtime, scope.only)) continue
     if (runtime.state !== 'connected' || !runtime.client) continue
     const client = runtime.client
-    // Descrição reescrita (botão "Otimizar") vale só enquanto a lista de tools
-    // não muda: tool nova precisa voltar com o texto do próprio servidor.
+    // A rewritten description (the "Optimize" button) only holds while the tool list
+    // does not change: a new tool has to come back with the server's own text.
     const rewritten = optimizedFor(runtime.config.name, runtime.tools)
     for (const def of runtime.tools) {
       merged[def.name] = tool({
@@ -514,7 +514,7 @@ function findServer(name: string): ServerRuntime | undefined {
   return [...servers.values()].find((runtime) => runtime.config.name === name)
 }
 
-/** Estado da otimização de descrições, para o card do servidor. */
+/** State of the description optimization, for the server's card. */
 export function mcpDescriptionsState(name: string): {
   optimized: boolean
   count: number
@@ -528,8 +528,8 @@ export function mcpDescriptionsState(name: string): {
 }
 
 /**
- * Botão "Otimizar" do card: reescreve as descrições do servidor com o modelo
- * auxiliar e grava o resultado. Não é chamada por turno — só por clique.
+ * The card's "Optimize" button: rewrites the server's descriptions with the auxiliary
+ * model and stores the result. It is not called per turn — only on click.
  */
 export async function optimizeMcpServer(name: string) {
   const runtime = findServer(name)
@@ -542,7 +542,7 @@ export async function optimizeMcpServer(name: string) {
   return { ...result, tools: runtime.tools.length }
 }
 
-/** Nomes de servidores utilizáveis (para a paleta "/" citar @mcp:<nome>). */
+/** Usable server names (for the "/" palette to cite @mcp:<name>). */
 export function listMcpServerNames(): string[] {
   return [...servers.values()]
     .filter((r) => r.config.enabled !== false && r.state === 'connected')
@@ -550,9 +550,9 @@ export function listMcpServerNames(): string[] {
 }
 
 /**
- * Descrição formatada dos servidores MCP conectados e suas ferramentas.
- * `only` espelha o recorte da conversa: o prompt não deve listar um servidor
- * cuja tool não foi exposta neste turno.
+ * Formatted description of the connected MCP servers and their tools.
+ * `only` mirrors the conversation's slice: the prompt must not list a server whose tool
+ * was not exposed in this turn.
  */
 export function listMcpToolDescriptions(only?: string[]): string {
   const lines: string[] = []
@@ -565,11 +565,11 @@ export function listMcpToolDescriptions(only?: string[]): string {
 }
 
 /**
- * Prefixos SANITIZADOS dos servidores conectados — a chave que transforma
- * `<prefixo>_<tool>` em família MCP no catálogo de tools sob demanda.
+ * SANITIZED prefixes of the connected servers — the key that turns `<prefix>_<tool>`
+ * into an MCP family in the on-demand tool catalog.
  *
- * Tem de ser o mesmo `sanitizeName` usado ao montar o nome da tool (`:247`):
- * o nome do servidor pode ter espaço, o prefixo não.
+ * It has to be the same `sanitizeName` used when building the tool name (`:247`): the
+ * server name may have a space, the prefix may not.
  */
 export function listMcpServerPrefixes(): string[] {
   return [...servers.values()]
@@ -578,10 +578,10 @@ export function listMcpServerPrefixes(): string[] {
 }
 
 /**
- * Servidores ligados que NÃO subiram, com o motivo. O catálogo os mostra como
- * família vazia e desativada: sem isso, um servidor que falha ao conectar some
- * do mapa, e um servidor que sumiu é indistinguível de um que nunca existiu —
- * o modelo conclui que a capacidade não existe em vez de dizer o que aconteceu.
+ * Enabled servers that did NOT come up, with the reason. The catalog shows them as an
+ * empty, disabled family: without that, a server that fails to connect disappears from
+ * the map, and a server that vanished is indistinguishable from one that never existed
+ * — the model concludes the capability does not exist instead of saying what happened.
  */
 export function listUnavailableMcpServers(): { prefix: string; reason: string }[] {
   return [...servers.values()]
@@ -592,7 +592,7 @@ export function listUnavailableMcpServers(): { prefix: string; reason: string }[
     }))
 }
 
-/** Retorna o PermissionMode override do servidor MCP para uma tool, se configurado. */
+/** Returns the MCP server's PermissionMode override for a tool, if configured. */
 export function getMcpPermissionMode(toolName: string): PermissionMode | undefined {
   const idx = toolName.indexOf('_')
   if (idx <= 0) return undefined
@@ -601,12 +601,12 @@ export function getMcpPermissionMode(toolName: string): PermissionMode | undefin
 }
 
 /**
- * O prefixo deste nome é um servidor MCP REALMENTE configurado?
+ * Is the prefix of this name a REALLY configured MCP server?
  *
- * É a checagem que faltava em permission/rules.ts: lá, qualquer tool com "_" era
- * dada como MCP, então `motion_preview`, `audio_generate`, `pdf_merge` e
- * companhia pediam permissão como "Ferramenta do servidor MCP motion". O nome só
- * significa "servidor" se existir um servidor com esse nome.
+ * It is the check permission/rules.ts was missing: there, any tool with "_" was taken
+ * as MCP, so `motion_preview`, `audio_generate`, `pdf_merge` and company asked for
+ * permission as "Tool of the MCP server motion". The name only means "server" if a
+ * server with that name exists.
  */
 export function isMcpServerName(name: string): boolean {
   return servers.has(name)

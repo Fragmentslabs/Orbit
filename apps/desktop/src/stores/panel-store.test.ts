@@ -2,16 +2,16 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { ORPHAN_KEY, usePanelStore } from "./panel-store"
 
 /**
- * A tela de seleção de abas (o "+") fica POR CIMA da aba ativa — é justamente o
- * que permite escolher uma aba nova com outra já aberta. Por isso toda ação que
- * aponta o painel para uma aba precisa dispensá-la: quando alguma esquecia, o
- * "Abrir no painel" de um card da conversa criava a aba e não mostrava nada —
- * ela nascia escondida atrás do selector.
+ * The tab selection screen (the "+") sits ON TOP of the active tab — that is exactly what
+ * allows choosing a new tab with another one already open. That is why every action that
+ * points the panel at a tab has to dismiss it: when one forgot, the
+ * "Open in panel" of a conversation card created the tab and showed nothing —
+ * it was born hidden behind the selector.
  */
 function reset() {
   usePanelStore.setState({
     openBySession: {},
-    // A tela mostra "s1" nos testes: é o balde das aberturas sem sessão.
+    // The screen shows "s1" in the tests: it is the bucket of the openings without a session.
     uiBucket: "s1",
     selectorOpen: false,
     tabsBySession: {},
@@ -21,10 +21,10 @@ function reset() {
 
 const tabsOf = (sessionId: string) => usePanelStore.getState().tabsBySession[sessionId] ?? []
 
-describe("abrir uma aba pelo card da conversa", () => {
+describe("opening a tab from the conversation card", () => {
   beforeEach(reset)
 
-  it("o artefato assume a frente e o selector sai de cena", () => {
+  it("the artifact takes the front and the selector leaves the scene", () => {
     usePanelStore.getState().setSelectorOpen(true)
 
     usePanelStore.getState().openArtifactTab("s1", "art_1.html", "Vendas")
@@ -38,7 +38,7 @@ describe("abrir uma aba pelo card da conversa", () => {
     expect(state.activeTabBySession.s1).toBe(tabs[0].id)
   })
 
-  it("reabrir o mesmo artefato foca a aba existente — e também dispensa o selector", () => {
+  it("reopening the same artifact focuses the existing tab — and also dismisses the selector", () => {
     usePanelStore.getState().openArtifactTab("s1", "art_1.html", "Vendas")
     const first = tabsOf("s1")[0].id
     usePanelStore.getState().setSelectorOpen(true)
@@ -51,7 +51,7 @@ describe("abrir uma aba pelo card da conversa", () => {
     expect(state.selectorOpen).toBe(false)
   })
 
-  it("documento e citação de fonte dispensam o selector igual ao artefato", () => {
+  it("a document and a source citation dismiss the selector just like an artifact", () => {
     usePanelStore.getState().setSelectorOpen(true)
     usePanelStore.getState().openDocumentTab("s1", { documentId: "doc_1.md", title: "Relatório" })
     expect(usePanelStore.getState().selectorOpen).toBe(false)
@@ -67,11 +67,11 @@ describe("abrir uma aba pelo card da conversa", () => {
   })
 
   /**
-   * A citação de memória usa o mesmo gesto — e a mesma regra: a aba nasce
-   * apontando para UMA memória, e clicar de novo na mesma citação foca a aba
-   * que já está lá em vez de empilhar cópias.
+   * The memory citation uses the same gesture — and the same rule: the tab is born
+   * pointing at ONE memory, and clicking the same citation again focuses the tab
+   * that is already there instead of stacking copies.
    */
-  it("a memória citada abre aba, e a mesma memória reaproveita a aba", () => {
+  it("the cited memory opens a tab, and the same memory reuses the tab", () => {
     usePanelStore.getState().setSelectorOpen(true)
     usePanelStore.getState().openMemoryTab("s1", { memoryId: "mem_abc123", title: "Idioma" })
 
@@ -90,15 +90,15 @@ describe("abrir uma aba pelo card da conversa", () => {
 })
 
 /**
- * A galeria abre artefato e documento no painel que está na tela — num chat
- * novo, o balde órfão. A aba não pode guardar "__orphan__" como sessão: o
- * adoptOrphanTabs só carimba a sessão nova em aba sem dona, e o "adicionar
- * como fonte" do documento iria para um chat que não existe.
+ * The gallery opens artifact and document in the panel that is on the screen — in a new
+ * chat, the orphan bucket. The tab cannot keep "__orphan__" as its session: the
+ * adoptOrphanTabs only stamps the new session on a tab without an owner, and the document's "add
+ * as source" would go to a chat that does not exist.
  */
-describe("abrir uma aba no chat novo, antes de ele virar sessão", () => {
+describe("opening a tab in the new chat, before it becomes a session", () => {
   beforeEach(reset)
 
-  it("a aba nasce sem sessão e herda a que o chat ganhar", () => {
+  it("the tab is born with no session and inherits the one the chat gets", () => {
     usePanelStore.getState().openArtifactTab(ORPHAN_KEY, "art_1.html", "Vendas")
     usePanelStore.getState().openDocumentTab(ORPHAN_KEY, { documentId: "doc_1.md", title: "Relatório" })
     usePanelStore.getState().openSourceTab(ORPHAN_KEY, { docId: "doc_2.pdf", page: 1, title: "Contrato" })
@@ -110,19 +110,19 @@ describe("abrir uma aba no chat novo, antes de ele virar sessão", () => {
     expect(tabsOf("s1").map((t) => t.sessionId)).toEqual(["s1", "s1", "s1"])
   })
 
-  it("num chat que já é sessão, a aba guarda a sessão dele", () => {
+  it("in a chat that is already a session, the tab keeps its session", () => {
     usePanelStore.getState().openDocumentTab("s1", { documentId: "doc_1.md", title: "Relatório" })
     expect(tabsOf("s1")[0].sessionId).toBe("s1")
   })
 })
 
 /**
- * A aba de motion não tem seletor: ela nasce do evento que o main dispara
- * quando o agente registra uma composição (a tool motion_preview). O balde vem
- * no evento; sem sessão nele, o App resolve a do chat ATIVO e o que sobra é o
- * órfão — o balde que o painel mostra quando não há chat aberto.
+ * The motion tab has no selector: it is born from the event main fires
+ * when the agent registers a composition (the motion_preview tool). The bucket comes
+ * in the event; without a session in it, the App resolves the ACTIVE chat's and what is left is the
+ * orphan — the bucket the panel shows when there is no chat open.
  */
-describe("abrir a aba de motion pelo evento do main", () => {
+describe("opening the motion tab from the main event", () => {
   beforeEach(reset)
 
   const motionEvent = (id: string, sessionId?: string) => ({
@@ -133,7 +133,7 @@ describe("abrir a aba de motion pelo evento do main", () => {
     sessionId,
   })
 
-  it("abre a aba na sessão do evento e dispensa o selector", () => {
+  it("opens the tab in the event's session and dismisses the selector", () => {
     usePanelStore.getState().setSelectorOpen(true)
 
     usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
@@ -154,12 +154,12 @@ describe("abrir a aba de motion pelo evento do main", () => {
   })
 
   /**
-   * A peça é uma por CONVERSA. O agente pode mexer na mesma composição a partir
-   * de outro chat, e levar a aba do chat onde o usuário a abriu seria mexer no
-   * que ele está vendo — cada balde tem a sua, e como o painel só mostra as
-   * abas do chat ativo, nunca são duas à vista.
+   * The piece is one per CONVERSATION. The agent may touch the same composition from
+   * another chat, and taking the tab from the chat where the user opened it would be touching
+   * what they are seeing — each bucket has its own, and since the panel only shows the
+   * active chat's tabs, there are never two in sight.
    */
-  it("a composição aberta em outra conversa fica onde está", () => {
+  it("a composition opened in another conversation stays where it is", () => {
     usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
     const first = tabsOf("s1")[0].id
 
@@ -173,8 +173,8 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(state.activeTabBySession.s2).toBe(tabsOf("s2")[0].id)
   })
 
-  it("a aba de um chat de fundo abre o painel DELE, não o da tela", () => {
-    // A tela está em "s1" (ver reset) e o agente trabalha em "s2".
+  it("a background chat's tab opens ITS panel, not the screen's", () => {
+    // The screen is on "s1" (see reset) and the agent works on "s2".
     usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s2"))
 
     const { openBySession } = usePanelStore.getState()
@@ -182,7 +182,7 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(openBySession.s1 ?? false).toBe(false)
   })
 
-  it("fechar o painel de um chat não fecha o do outro", () => {
+  it("closing one chat's panel does not close the other's", () => {
     usePanelStore.getState().setUiBucket("s2")
     usePanelStore.getState().setRightPanelOpen(true)
     usePanelStore.getState().setUiBucket("s1")
@@ -191,7 +191,7 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(usePanelStore.getState().openBySession).toEqual({ s2: true, s1: false })
   })
 
-  it("o painel aberto no chat novo continua aberto na sessão que ele ganha", () => {
+  it("the panel opened in the new chat stays open in the session it gets", () => {
     usePanelStore.getState().applyEvent(motionEvent("mv_abc"))
     expect(usePanelStore.getState().openBySession[ORPHAN_KEY]).toBe(true)
 
@@ -200,7 +200,7 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(usePanelStore.getState().openBySession.s1).toBe(true)
   })
 
-  it("a mesma composição, já adotada pelo chat, é reusada em vez de duplicada", () => {
+  it("the same composition, already adopted by the chat, is reused instead of duplicated", () => {
     usePanelStore.getState().applyEvent(motionEvent("mv_abc"))
     const orphanId = tabsOf(ORPHAN_KEY)[0].id
 
@@ -212,7 +212,7 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(usePanelStore.getState().activeTabBySession.s1).toBe(orphanId)
   })
 
-  it("composições diferentes abrem abas diferentes", () => {
+  it("different compositions open different tabs", () => {
     usePanelStore.getState().applyEvent(motionEvent("mv_1", "s1"))
     usePanelStore.getState().applyEvent(motionEvent("mv_2", "s1"))
 
@@ -220,9 +220,9 @@ describe("abrir a aba de motion pelo evento do main", () => {
     expect(usePanelStore.getState().activeTabBySession.s1).toBe(tabsOf("s1")[1].id)
   })
 
-  it("sem sessão no evento, a aba cai no balde órfão e o chat novo a adota", () => {
-    // O contrato do evento é {id, entry, title}: quem resolve a sessão do chat
-    // ativo é o App; sem chat nenhum, o balde é o órfão.
+  it("with no session in the event, the tab falls into the orphan bucket and the new chat adopts it", () => {
+    // The event contract is {id, entry, title}: whoever resolves the chat's session
+    // is the App; with no chat at all, the bucket is the orphan.
     usePanelStore.getState().applyEvent(motionEvent("mv_xyz"))
     expect(tabsOf(ORPHAN_KEY)).toHaveLength(1)
     expect(tabsOf(ORPHAN_KEY)[0].sessionId).toBeUndefined()
@@ -235,18 +235,18 @@ describe("abrir a aba de motion pelo evento do main", () => {
 })
 
 /**
- * O instante de motion é um só: o gesto é apontar UM ponto da composição
- * ("faça isso neste quadro"), então clicar de novo troca o anexo em vez de
- * empilhar dois instantes que não formam um pedido só. Os trechos de documento
- * seguem acumulando — são pedaços diferentes de uma leitura.
+ * The motion instant is a single one: the gesture is pointing at ONE point of the composition
+ * ("do this on this frame"), so clicking again swaps the attachment instead of
+ * stacking two instants that do not form a single request. The document stretches
+ * keep accumulating — they are different pieces of one reading.
  */
-describe("anexos de citação no compositor", () => {
+describe("citation attachments in the composer", () => {
   beforeEach(() => usePanelStore.setState({ quotes: [] }))
 
   const instante = (frame: number) =>
     ({ kind: "motion" as const, file: "index.html", name: "Título", frame, fps: 30 })
 
-  it("o segundo comentário substitui o primeiro instante", () => {
+  it("the second comment replaces the first instant", () => {
     usePanelStore.getState().addQuote(instante(30))
     usePanelStore.getState().addQuote(instante(69))
 
@@ -255,21 +255,21 @@ describe("anexos de citação no compositor", () => {
     expect(quotes[0]).toMatchObject({ kind: "motion", frame: 69 })
   })
 
-  it("o instante não apaga os trechos de documento já anexados", () => {
+  it("the instant does not erase document excerpts already attached", () => {
     usePanelStore.getState().addQuote({ kind: "source", docId: "src1", name: "contrato.pdf", text: "prazo" })
     usePanelStore.getState().addQuote(instante(69))
 
     expect(usePanelStore.getState().quotes.map((q) => q.kind)).toEqual(["source", "motion"])
   })
 
-  it("os trechos de documento continuam acumulando", () => {
+  it("the document excerpts keep piling up", () => {
     usePanelStore.getState().addQuote({ kind: "source", docId: "src1", name: "contrato.pdf", text: "prazo" })
     usePanelStore.getState().addQuote({ kind: "document", docId: "doc_1.md", name: "relatório.md", text: "resumo" })
 
     expect(usePanelStore.getState().quotes).toHaveLength(2)
   })
 
-  it("enviar a mensagem limpa o anexo (mesmo ciclo de vida da citação)", () => {
+  it("sending the message clears the attachment (same lifecycle as the citation)", () => {
     usePanelStore.getState().addQuote(instante(69))
     usePanelStore.getState().clearQuotes()
 

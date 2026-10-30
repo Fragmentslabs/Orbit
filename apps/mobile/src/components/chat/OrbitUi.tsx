@@ -24,18 +24,18 @@ import {
 import { panelBg, useTokens } from './OrbitUi/style'
 
 /**
- * Blocos inline da resposta do assistente (fence ```orbit-ui) no app mobile —
- * o espelho do `generative-ui.tsx` do desktop, com o MESMO contrato do shared
- * (`parseOrbitUi` + `orbit-expr`) e o design system da conversa.
+ * Inline blocks of the assistant answer (```orbit-ui fence) in the mobile app —
+ * the mirror of the desktop `generative-ui.tsx`, with the SAME contract from shared
+ * (`parseOrbitUi` + `orbit-expr`) and the design system of the conversation.
  *
- * O que antes caía como bloco de código com JSON cru agora vira componente.
- * Interatividade é declarativa: as entradas (slider, select…) gravam num estado
- * local do fence, todo texto com `{expr}` resolve contra ele — inclusive
- * gráficos e barras de progresso — e só os botões com `action: "send"` falam
- * com o chat.
+ * What used to fall through as a code block with raw JSON now becomes a component.
+ * Interactivity is declarative: the inputs (slider, select…) write to a local
+ * state of the fence, every text with `{expr}` resolves against it — including
+ * charts and progress bars — and only the buttons with `action: "send"` talk
+ * to the chat.
  */
 
-/** Um bloco pelo seu tipo; cada componente recebe as próprias props. */
+/** One block by its type; each component receives its own props. */
 function Block({ block }: { block: OrbitUiBlock }) {
   switch (block.type) {
     case 'stats':
@@ -71,19 +71,19 @@ function Block({ block }: { block: OrbitUiBlock }) {
     case 'buttons':
       return <Buttons {...block} />
     case 'nav':
-      // O Markdown já separa `nav` antes de chegar aqui (o cartão tem o próprio
-      // caminho de navegação); este caso existe para quem renderiza um fence
-      // inteiro de uma vez.
-      return <NavCard destino={block.destino} nota={block.nota} />
+      // Markdown already separates `nav` before getting here (the card has its own
+      // navigation path); this case exists for whoever renders a whole fence
+      // at once.
+      return <NavCard destination={block.destination} note={block.note} />
   }
 }
 
 type Layout = { start: number; blocks: OrbitUiBlock[]; grouped: boolean }
 
 /**
- * Entradas consecutivas (exceto abas) dividem um painel: quatro sliders em
- * sequência viram um controle só, não quatro faixas soltas — os sliders são a
- * fonte das fórmulas, e juntos se leem como um formulário.
+ * Consecutive inputs (except tabs) share a panel: four sliders in
+ * a row become a single control, not four loose tracks — the sliders are the
+ * source of the formulas, and together they read as a form.
  */
 function layoutOf(blocks: OrbitUiBlock[]): Layout[] {
   const out: Layout[] = []
@@ -96,7 +96,7 @@ function layoutOf(blocks: OrbitUiBlock[]): Layout[] {
   return out
 }
 
-/** Blocos já parseados (o Markdown entrega a lista pronta do fence). */
+/** Blocks already parsed (Markdown hands over the ready list of the fence). */
 export const OrbitUiBlocks = memo(function OrbitUiBlocks({
   blocks,
   pending = false,
@@ -167,7 +167,7 @@ export const OrbitUiBlocks = memo(function OrbitUiBlocks({
   )
 })
 
-/** Fence cru: parse + render, para quem tem o texto em mãos (e para os testes). */
+/** Raw fence: parse + render, for whoever has the text at hand (and for the tests). */
 export const OrbitUiFence = memo(function OrbitUiFence({
   code,
   incomplete = false,

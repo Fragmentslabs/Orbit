@@ -3,10 +3,10 @@ import { Plug, X } from "lucide-react"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 
 /**
- * Card de aviso exibido acima do input quando o usuário tenta enviar uma
- * mensagem sem nenhum provedor configurado (primeira execução). O envio é
- * bloqueado (o texto é preservado) e o card oferece o atalho direto para a
- * configuração. Some sozinho quando um provedor é conectado.
+ * Warning card shown above the input when the user tries to send a
+ * message with no provider configured (first run). Sending is
+ * blocked (the text is preserved) and the card offers the direct shortcut to the
+ * settings. It goes away by itself when a provider is connected.
  */
 export function ProviderHintCard({ visible, onDismiss }: {
   visible: boolean

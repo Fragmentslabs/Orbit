@@ -3,29 +3,29 @@ import type { ReactElement } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface HintProps {
-  /** Rótulo do controle. Vira o tooltip e o nome acessível. */
+  /** Label of the control. It becomes the tooltip and the accessible name. */
   label: string
   side?: "top" | "right" | "bottom" | "left"
   align?: "start" | "center" | "end"
-  /** Não abre o tooltip — para texto que só precisa dele quando corta. */
+  /** Does not open the tooltip — for text that only needs it when it is cut. */
   disabled?: boolean
-  /** Não injeta `aria-label`: para texto já visível, cujo nome vem do conteúdo. */
+  /** Does not inject `aria-label`: for text already visible, whose name comes from the content. */
   injectName?: boolean
-  /** O elemento controlado: um <button>, um <Button>, um <span>. */
+  /** The controlled element: a <button>, a <Button>, a <span>. */
   children: ReactElement
 }
 
 /**
- * Rótulo de um controle que não tem texto visível.
+ * Label of a control that has no visible text.
  *
- * O Orbit não usa `title` nativo: no macOS ele demora cerca de um segundo, não
- * segue o tema e nunca aparece no toque. Este wrapper entrega as três coisas de
- * uma vez — o tooltip do app, o `aria-label` e o nome que o leitor de tela
- * anuncia — sem tocar no visual do elemento, que continua sendo o que o
- * chamador passou.
+ * Orbit does not use the native `title`: on macOS it takes about a second, does not
+ * follow the theme and never shows up on touch. This wrapper delivers the three things at
+ * once — the app's tooltip, the `aria-label` and the name the screen reader
+ * announces — without touching the visuals of the element, which keeps being what the
+ * caller passed.
  *
- * O `aria-label` só é injetado quando o elemento não traz o seu, para não
- * sobrescrever um nome mais específico escrito à mão.
+ * The `aria-label` is only injected when the element does not bring its own, so as not to
+ * overwrite a more specific hand-written name.
  */
 function Hint({ label, side = "top", align, disabled, injectName = true, children }: HintProps) {
   if (!label) return children

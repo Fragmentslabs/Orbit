@@ -2,23 +2,23 @@ import { Animated } from 'react-native'
 
 export const DRAWER_WIDTH = 308
 
-/** Duração da transição abrir/fechar do drawer. */
+/** Duration of the open/close transition of the drawer. */
 const DRAWER_DURATION = 250
 
-/** Valores compartilhados entre o Sidebar (que os renderiza) e o gesto de
- *  swipe (que os arrasta com o dedo) — o drawer é único na árvore, então
- *  viver em escopo de módulo evita prop drilling pelo layout. */
+/** Values shared between the Sidebar (which renders them) and the swipe
+ *  gesture (which drags them with the finger) — the drawer is unique in the
+ *  tree, so living in module scope avoids prop drilling through the layout. */
 export const drawerTranslateX = new Animated.Value(-DRAWER_WIDTH)
 export const backdropOpacity = new Animated.Value(0)
 
-/** Posiciona o drawer instantaneamente (durante o arraste). */
+/** Positions the drawer instantly (during the drag). */
 export function setDrawerOffset(offset: number) {
   const clamped = Math.min(0, Math.max(-DRAWER_WIDTH, offset))
   drawerTranslateX.setValue(clamped)
   backdropOpacity.setValue((clamped + DRAWER_WIDTH) / DRAWER_WIDTH)
 }
 
-/** Anima o drawer até o estado aberto/fechado. */
+/** Animates the drawer to the open/closed state. */
 export function animateDrawer(open: boolean) {
   Animated.parallel([
     Animated.timing(drawerTranslateX, {

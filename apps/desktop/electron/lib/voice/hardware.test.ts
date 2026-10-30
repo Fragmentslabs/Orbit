@@ -9,7 +9,7 @@ vi.mock('node:os', async (importOriginal) => {
   return { ...os, default: os }
 })
 
-// O catálogo de verdade, sem o resto do motor (que puxa o Electron).
+// The real catalog, without the rest of the engine (which pulls in Electron).
 vi.mock('./stt', () => ({
   STT_MODELS: STT_MODEL_DEFS.map((m) => ({ id: m.id, kind: 'stt', engine: m.engine, bytes: m.bytes })),
 }))
@@ -25,14 +25,14 @@ beforeEach(() => {
 })
 
 describe('detectHardware', () => {
-  it('uma máquina de 16 GB que o sistema reporta como 15,3 GB ainda leva o Parakeet', () => {
+  it('a 16 GB machine that the system reports as 15.3 GB still gets the Parakeet', () => {
     maquina.memGb = 15.3
     const info = detectHardware()
     expect(info.recommendedEngine).toBe('parakeet')
     expect(info.recommendedModel).toBe('parakeet-tdt-0.6b-v3')
   })
 
-  it('com pouca RAM recomenda whisper COM um modelo de whisper — nunca o Parakeet', () => {
+  it('with little RAM it recommends whisper WITH a whisper model — never the Parakeet', () => {
     maquina.memGb = 7.8
     const info = detectHardware()
     expect(info.recommendedEngine).toBe('whisper')
@@ -40,13 +40,13 @@ describe('detectHardware', () => {
     expect(engineOf(info.recommendedModel)).toBe('whisper')
   })
 
-  it('abaixo de 7 GB o whisper recomendado é o base', () => {
+  it('below 7 GB the recommended whisper is base', () => {
     maquina.memGb = 3.8
     const info = detectHardware()
     expect(info.recommendedModel).toBe('whisper-base')
   })
 
-  it('o modelo recomendado é sempre do motor recomendado', () => {
+  it('the recommended model always belongs to the recommended engine', () => {
     for (const memGb of [2, 4, 6, 8, 12, 16, 32]) {
       maquina.memGb = memGb
       const info = detectHardware()

@@ -9,8 +9,8 @@ import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useTranslation } from "react-i18next"
 
 /**
- * Card colapsável da mensagem de compactação (summary: true): o histórico
- * anterior foi resumido para liberar contexto — o texto completo fica aqui.
+ * Collapsible card of the compaction message (summary: true): the previous
+ * history was summarized to free context — the full text stays here.
  */
 export function SummaryCard({ message }: { message: ChatMessage }) {
   const { t } = useTranslation()

@@ -10,32 +10,32 @@ import { firstLine } from "@/src/lib/document-preview"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Documento entregável na resposta (create_document, update_document,
- * docx_edit): relatório, proposta, ata, prova.
+ * Deliverable document in the reply (create_document, update_document,
+ * docx_edit): report, proposal, minutes, evidence.
  *
- * Na conversa ele é um CARD — título, tipo e o clique para abrir —, e o
- * documento mesmo mora no painel lateral. Era o contrário: o card desenhava o
- * documento inteiro no meio da conversa, e um relatório longo empurrava a
- * resposta do agente para longe da pergunta que a pediu. Além disso havia
- * dois lugares mostrando o mesmo texto, e só um deles editava.
+ * In the conversation it is a CARD — title, type and the click to open —, and the
+ * document itself lives in the side panel. It used to be the other way: the card drew the
+ * whole document in the middle of the conversation, and a long report pushed the
+ * agent's reply away from the question that asked for it. Besides that there were
+ * two places showing the same text, and only one of them edited.
  *
- * O painel abre SOZINHO quando o documento nasce, no turno em andamento — é o
- * momento em que ele é o assunto. Não abre ao voltar a uma conversa antiga
- * nem ao rolar o histórico, e abre uma vez só por documento: quem fechou o
- * painel depois disso não o vê reabrir a cada update_document.
+ * The panel opens BY ITSELF when the document is born, in the turn in progress — it is the
+ * moment when it is the subject. It does not open when going back to an old conversation
+ * nor when scrolling the history, and it opens only once per document: whoever closed the
+ * panel after that does not see it reopen on every update_document.
  */
 
-/** Documentos já abertos automaticamente nesta execução do app. */
+/** Documents already opened automatically in this run of the app. */
 const autoOpened = new Set<string>()
 
 /**
- * Largura mínima da janela para abrir o painel sem pedir. Abaixo disso o
- * painel espremeria a conversa até ela ficar ilegível — o card continua lá
- * para quem quiser abrir.
+ * Minimum window width to open the panel without asking. Below that the
+ * panel would squeeze the conversation until it became unreadable — the card stays there
+ * for whoever wants to open it.
  */
 const AUTO_OPEN_MIN_WIDTH = 1100
 
-/** Tipo e primeira linha, lidos do registro — a part é só o retrato do turno. */
+/** Type and first line, read from the record — the part is only the snapshot of the turn. */
 interface CardInfo {
   kind: string
   preview: string | null
@@ -47,11 +47,11 @@ export function DocumentPartView({
   live = false,
 }: {
   part: DocumentPart
-  /** Ausente em contextos sem sessão: o painel é por sessão, então o card
-   *  fica sem o clique de abrir. */
+  /** Absent in contexts without a session: the panel is per session, so the card
+   *  is left without the open click. */
   sessionId?: string
-  /** A mensagem está sendo escrita agora — é o único momento em que o
-   *  documento abre sozinho no painel. */
+  /** The message is being written right now — it is the only moment when the
+   *  document opens by itself in the panel. */
   live?: boolean
 }) {
   const { t } = useTranslation()
@@ -80,8 +80,8 @@ export function DocumentPartView({
     }
   }, [part.documentId, reloads, t])
 
-  // update_document reescreve no lugar: sem isto a primeira linha do card
-  // ficaria a da versão anterior.
+  // update_document rewrites in place: without this the first line of the card
+  // would stay that of the previous version.
   useEffect(
     () =>
       artifactApi.onUpdated(({ artifactId }) => {
@@ -138,7 +138,7 @@ export function DocumentPartView({
             </p>
             </Truncate>
         </div>
-        {/* Baixar não abre o painel: o clique para aqui. */}
+        {/* Download does not open the panel: the click stops here. */}
         <div className="shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <DocumentDownloadMenu documentId={part.documentId} onError={setError} compact />
         </div>

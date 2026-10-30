@@ -98,7 +98,7 @@
     "newChat": "Novo Chat",
     "newSession": "Nova Sessão",
     "memories": "Memórias",
-    "rotinas": "Rotinas",
+    "routines": "Rotinas",
     "media": "Mídia",
     "usage": "Uso",
     "tools": "Ferramentas",
@@ -138,7 +138,7 @@
     "navigation": "Navegação",
     "sessions": "Sessões",
     "theme": "Tema",
-    "esteira": "Esteira",
+    "pipeline": "Esteira",
     "newChatInFolder": "Novo chat nesta pasta"
   },
   "media": {
@@ -365,7 +365,13 @@
       "screens_other": "{{count}} telas",
       "slides_one": "{{count}} slide",
       "slides_other": "{{count}} slides"
-    }
+    },
+    "slides": {
+      "counter": "{{index}} / {{count}}",
+      "previous": "Slide anterior",
+      "next": "Próximo slide"
+    },
+    "closeFullscreen": "Fechar tela cheia"
   },
   "askCard": {
     "allowOnce": "Permitir neste turno",
@@ -1093,48 +1099,48 @@
     "dark": "Escuro",
     "system": "Sistema"
   },
-  "rotinas": {
-    "titulo": "Rotinas",
-    "subtitulo": "Sessões que voltam sozinhas: o agente roda o mesmo prompt na hora marcada.",
-    "subtituloChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat.",
-    "modo": {
+  "routines": {
+    "title": "Rotinas",
+    "subtitle": "Sessões que voltam sozinhas: o agente roda o mesmo prompt na hora marcada.",
+    "subtitleChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat.",
+    "mode": {
       "chat": "Modo chat",
       "code": "Modo código"
     },
-    "criar": {
-      "titulo": "Nova rotina",
-      "descreverDica": "Descreva em texto corrido. O modelo transforma isso em título, prompt, agenda e modos — você revisa tudo na etapa seguinte.",
+    "create": {
+      "title": "Nova rotina",
+      "describeHint": "Descreva em texto corrido. O modelo transforma isso em título, prompt, agenda e modos — você revisa tudo na etapa seguinte.",
       "placeholder": "Ex.: todo dia às 9h, revise os commits do dia anterior neste repositório e escreva um resumo do que mudou, com os riscos que você encontrar.",
       "placeholderChat": "Ex.: todo dia às 8h, monte um briefing matinal com as notícias de tecnologia do dia e um resumo das minhas memórias recentes.",
-      "modelo": "Modelo",
-      "gerar": "Gerar",
-      "gerando": "Gerando…",
-      "semModelo": "Escolha um modelo para gerar a rotina.",
-      "modoChatDica": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
+      "model": "Modelo",
+      "generate": "Gerar",
+      "generating": "Gerando…",
+      "noModel": "Escolha um modelo para gerar a rotina.",
+      "modeChatHint": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
     },
-    "revisar": {
-      "voltar": "Voltar",
-      "campoTitulo": "Título",
-      "campoPrompt": "Prompt da rotina",
-      "campoPromptDica": "É o que o agente recebe a cada execução. Precisa ser autocontido: não há ninguém para responder perguntas.",
-      "agenda": "Quando executar",
-      "modos": "Modos",
-      "modosDica": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
-      "pastas": "Pastas de trabalho",
-      "pastasDica": "Escolhidas nesta etapa — a rotina sempre roda nelas.",
-      "semPastas": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
-      "criar": "Criar rotina"
+    "review": {
+      "back": "Voltar",
+      "titleField": "Título",
+      "promptField": "Prompt da rotina",
+      "promptFieldHint": "É o que o agente recebe a cada execução. Precisa ser autocontido: não há ninguém para responder perguntas.",
+      "schedule": "Quando executar",
+      "modes": "Modos",
+      "modesHint": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
+      "folders": "Pastas de trabalho",
+      "foldersHint": "Escolhidas nesta etapa — a rotina sempre roda nelas.",
+      "noFolders": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
+      "create": "Criar rotina"
     },
-    "agenda": {
-      "modo": {
-        "diario": "Todo dia",
-        "semanal": "Dias da semana",
-        "intervalo": "A cada N dias",
-        "horas": "A cada N horas",
-        "unico": "Uma vez"
+    "schedule": {
+      "mode": {
+        "daily": "Todo dia",
+        "weekly": "Dias da semana",
+        "intervalDays": "A cada N dias",
+        "intervalHours": "A cada N horas",
+        "once": "Uma vez"
       },
-      "horario": "às",
-      "dia": {
+      "time": "às",
+      "day": {
         "0": "D",
         "1": "S",
         "2": "T",
@@ -1143,14 +1149,14 @@
         "5": "S",
         "6": "S"
       },
-      "uteis": "Seg a Sex",
-      "fimDeSemana": "Fim de semana",
-      "aCada": "A cada",
-      "dias": "dias",
-      "resumoDiario": "Todo dia às {{horario}}",
-      "resumoDias": "{{dias}} às {{horario}}",
-      "resumoIntervalo": "A cada {{dias}} dias às {{horario}}",
-      "diaAbrev": {
+      "workdays": "Seg a Sex",
+      "weekend": "Fim de semana",
+      "every": "A cada",
+      "days": "dias",
+      "summaryDaily": "Todo dia às {{time}}",
+      "summaryDays": "{{days}} às {{time}}",
+      "summaryInterval": "A cada {{days}} dias às {{time}}",
+      "dayAbbr": {
         "0": "Dom",
         "1": "Seg",
         "2": "Ter",
@@ -1159,71 +1165,72 @@
         "5": "Sex",
         "6": "Sáb"
       },
-      "resumoUteis": "Seg a Sex às {{horario}}",
-      "resumoFimDeSemana": "Fim de semana às {{horario}}",
-      "selecionarHorario": "Horário",
-      "horas": "horas",
+      "summaryWorkdays": "Seg a Sex às {{time}}",
+      "summaryWeekend": "Fim de semana às {{time}}",
+      "selectTime": "Horário",
+      "hours": "horas",
       "em": "em",
-      "umaVezDica": "Depois de rodar, a rotina se desativa sozinha.",
-      "resumoHoras": "A cada {{horas}} horas",
-      "resumoUnico": "Uma vez em {{data}} às {{horario}}"
+      "onceHint": "Depois de rodar, a rotina se desativa sozinha.",
+      "summaryHours": "A cada {{hours}} horas",
+      "summarySingle": "Uma vez em {{date}} às {{time}}",
+      "datePlaceholder": "AAAA-MM-DD"
     },
-    "modos": {
+    "modes": {
       "loop": {
-        "nome": "Loop"
+        "name": "Loop"
       },
       "subagents": {
-        "nome": "Subagentes"
+        "name": "Subagentes"
       },
       "orchestrate": {
-        "nome": "Orquestra"
+        "name": "Orquestra"
       },
       "brain": {
-        "nome": "Memória"
+        "name": "Memória"
       },
       "browser": {
-        "nome": "Browser"
+        "name": "Browser"
       },
       "plan": {
-        "nome": "Modo Plano"
+        "name": "Modo Plano"
       },
       "simple": {
-        "nome": "Simples"
+        "name": "Simples"
       },
       "search": {
-        "nome": "Pesquisa"
+        "name": "Pesquisa"
       },
       "vision": {
-        "nome": "Visão"
+        "name": "Visão"
       },
-      "permissao": "Permissões",
-      "permissaoAviso": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução."
+      "permission": "Permissões",
+      "permissionWarning": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução."
     },
-    "lista": {
-      "nova": "Nova rotina",
-      "vazioTitulo": "Nenhuma rotina ainda",
-      "vazioSubtitulo": "Uma rotina é uma sessão que volta sozinha — um relatório diário, uma varredura semanal, uma verificação depois do deploy.",
-      "vazioSubtituloChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias.",
-      "criarPrimeira": "Criar a primeira rotina",
-      "ativa": "Ativa",
-      "pausada": "Pausada",
-      "proxima": "Próxima: {{quando}}",
-      "executarAgora": "Executar agora",
-      "editar": "Editar",
-      "salvar": "Salvar",
-      "salvando": "Salvando…",
-      "excluir": "Excluir",
-      "excluirTitulo": "Excluir rotina",
-      "excluirDescricao": "\"{{titulo}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer."
+    "list": {
+      "new": "Nova rotina",
+      "emptyTitle": "Nenhuma rotina ainda",
+      "emptySubtitle": "Uma rotina é uma sessão que volta sozinha — um relatório diário, uma varredura semanal, uma verificação depois do deploy.",
+      "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias.",
+      "createFirst": "Criar a primeira rotina",
+      "active": "Ativa",
+      "paused": "Pausada",
+      "next": "Próxima: {{when}}",
+      "runNow": "Executar agora",
+      "edit": "Editar",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "delete": "Excluir",
+      "deleteTitle": "Excluir rotina",
+      "deleteDescription": "\"{{title}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer."
     },
     "runs": {
-      "titulo": "Sessões",
-      "vazio": "Ainda não rodou nenhuma vez.",
-      "abrirChat": "Abrir sessão",
-      "rodando": "Rodando…",
+      "title": "Sessões",
+      "empty": "Ainda não rodou nenhuma vez.",
+      "openChat": "Abrir sessão",
+      "running": "Rodando…",
       "ok": "Concluída",
-      "erro": "Falhou",
-      "tokens": "{{valor}} tokens"
+      "error": "Falhou",
+      "tokens": "{{value}} tokens"
     }
   },
   "memoriesScreen": {
@@ -1236,152 +1243,152 @@
     "emptyChatHint": "Converse com o Brain ativo e o Orbit passa a lembrar fatos e preferências automaticamente.",
     "emptyCodeHint": "Trabalhe em um projeto com o Brain ativo e o Orbit memoriza decisões, convenções e estrutura."
   },
-  "esteira": {
-    "titulo": "Esteira",
-    "subtitulo": "Esteiras que executam tasks fase a fase, sem chats",
-    "carregando": "Carregando board...",
-    "vazioTitulo": "Nenhum board ainda",
-    "vazioSubtitulo": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
-    "novaEsteira": "Nova esteira",
-    "criar": "Criar",
-    "salvar": "Salvar",
-    "editarEsteira": "Editar esteira",
-    "nomeEsteira": "Nome da esteira",
-    "nomeExemplo": "ex.: Features",
-    "pastas": "Pastas",
-    "pastasDica": "Pastas de trabalho, como no chat",
-    "repositorioPrincipal": "Repositório principal",
-    "modeloPadrao": "Modelo padrão",
-    "modeloDica": "Propagado para todas as fases; cada fase pode ser trocada depois",
-    "fases": "Fases",
-    "fasesDica": "Copiadas dos templates do sistema — segure uma fase para reordenar",
-    "pendentes": "Pendentes",
-    "concluidas": "Concluídas",
-    "emAndamento": "Em andamento",
-    "falhas": "Falhas",
+  "pipeline": {
+    "title": "Esteira",
+    "subtitle": "Esteiras que executam tasks fase a fase, sem chats",
+    "loading": "Carregando board...",
+    "emptyTitle": "Nenhum board ainda",
+    "emptySubtitle": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
+    "newPipeline": "Nova esteira",
+    "create": "Criar",
+    "save": "Salvar",
+    "editPipeline": "Editar esteira",
+    "pipelineName": "Nome da esteira",
+    "nameExample": "ex.: Features",
+    "folders": "Pastas",
+    "foldersHint": "Pastas de trabalho, como no chat",
+    "mainRepository": "Repositório principal",
+    "defaultModel": "Modelo padrão",
+    "modelHint": "Propagado para todas as fases; cada fase pode ser trocada depois",
+    "phases": "Fases",
+    "phasesHint": "Copiadas dos templates do sistema — segure uma fase para reordenar",
+    "pendingPlural": "Pendentes",
+    "completedPlural": "Concluídas",
+    "inProgress": "Em andamento",
+    "failures": "Falhas",
     "commits": "Commits",
-    "tempoTotal": "Tempo total",
+    "totalTime": "Tempo total",
     "tokens": "Tokens",
-    "custo": "Custo",
-    "iniciar": "Iniciar",
-    "pausar": "Pausar",
-    "retomar": "Retomar",
-    "pausada": "Pausada",
-    "erro": "Erro",
-    "pushFalhou": "Push falhou",
-    "pausadaPorErro": "Task pausada após falhar na fase",
-    "filaLigada": "Fila automática ligada",
-    "filaDesligada": "Fila automática desligada",
-    "filaDica": "Executa as tasks pendentes uma por vez, respeitando dependências",
-    "removerEsteira": "Excluir esteira",
-    "confirmarRemocao": "Excluir a esteira \"{{nome}}\" e suas tasks?",
-    "descricao": "Descrição",
-    "semAnotacao": "Esta fase ainda não rodou.",
-    "executando": "Executando…",
-    "iniciando": "Iniciando a fase…",
-    "comandosControlados": "Comandos registrados",
-    "criadaEm": "Criada em",
-    "concluidaEm": "Concluída em",
-    "tempoTrabalho": "Tempo de trabalho",
-    "dependenciasTitulo": "Dependências",
-    "semDependencias": "Nenhuma",
-    "adicionarDependencia": "adicionar dependência",
-    "selecioneTask": "Selecione uma task...",
-    "dependencias_one": "{{count}} dependência",
-    "dependencias_other": "{{count}} dependências",
-    "excluirTask": "Excluir task",
-    "confirmarExclusaoTask": "Excluir a task \"{{titulo}}\"?",
-    "exclusaoTaskDescricao": "Essa ação não pode ser desfeita — a task e as anotações das fases serão perdidas.",
+    "cost": "Custo",
+    "start": "Iniciar",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "paused": "Pausada",
+    "error": "Erro",
+    "pushFailed": "Push falhou",
+    "pausedByError": "Task pausada após falhar na fase",
+    "queueOn": "Fila automática ligada",
+    "queueOff": "Fila automática desligada",
+    "queueHint": "Executa as tasks pendentes uma por vez, respeitando dependências",
+    "removePipeline": "Excluir esteira",
+    "confirmRemoval": "Excluir a esteira \"{{name}}\" e suas tasks?",
+    "description": "Descrição",
+    "noNote": "Esta fase ainda não rodou.",
+    "running": "Executando…",
+    "starting": "Iniciando a fase…",
+    "controlledCommands": "Comandos registrados",
+    "createdAt": "Criada em",
+    "completedAt": "Concluída em",
+    "workTime": "Tempo de trabalho",
+    "dependenciesTitle": "Dependências",
+    "noDependencies": "Nenhuma",
+    "addDependency": "adicionar dependência",
+    "selectTask": "Selecione uma task...",
+    "dependencies_one": "{{count}} dependência",
+    "dependencies_other": "{{count}} dependências",
+    "deleteTask": "Excluir task",
+    "confirmTaskDeletion": "Excluir a task \"{{title}}\"?",
+    "taskDeletionDescription": "Essa ação não pode ser desfeita — a task e as anotações das fases serão perdidas.",
     "status": {
-      "pendente": "Pendente",
-      "em_progresso": "Em execução",
-      "pausada": "Pausada",
-      "concluida": "Concluída"
+      "pending": "Pendente",
+      "in_progress": "Em execução",
+      "paused": "Pausada",
+      "completed": "Concluída"
     },
-    "criarPrimeira": "Criar a primeira esteira",
-    "erroCarregarTitulo": "Não deu para carregar as esteiras",
-    "erroCarregarDica": "Confira se o Orbit Desktop está aberto, pareado e atualizado — o servidor local só ganha recursos novos quando o app é reiniciado.",
-    "tentarNovamente": "Tentar novamente",
-    "voltar": "Voltar para a lista",
-    "adicionarTarefa": "Adicionar tarefa",
-    "semPendentes": "Nenhuma tarefa pendente",
-    "tasksResumo": "{{concluidas}}/{{total}} tasks",
-    "adicionarFase": "Adicionar fase",
-    "criarFase": "Criar minha própria fase",
-    "editarFase": "Editar fase",
-    "novaFase": "Nova fase",
-    "faseNome": "Nome",
-    "faseDescricao": "Descrição",
-    "faseDescricaoDica": "Uma linha — aparece na lista da esteira",
-    "faseTipo": "Papel",
-    "faseTipoDica": "Define o que a fase faz (e o que ela deixa para as próximas), independentemente do nome",
-    "fasePrompt": "Prompt",
-    "fasePromptDica": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
-    "faseCapacidades": "Capacidades",
-    "salvarComoPadrao": "Salvar como padrão",
-    "salvarNestaEsteira": "Salvar nesta esteira",
-    "capacidade": {
-      "leitura": "Leitura",
+    "createFirst": "Criar a primeira esteira",
+    "loadErrorTitle": "Não deu para carregar as esteiras",
+    "loadErrorHint": "Confira se o Orbit Desktop está aberto, pareado e atualizado — o servidor local só ganha recursos novos quando o app é reiniciado.",
+    "tryAgain": "Tentar novamente",
+    "back": "Voltar para a lista",
+    "addTask": "Adicionar tarefa",
+    "noPending": "Nenhuma tarefa pendente",
+    "tasksSummary": "{{completed}}/{{total}} tasks",
+    "addPhase": "Adicionar fase",
+    "createPhase": "Criar minha própria fase",
+    "editPhase": "Editar fase",
+    "newPhase": "Nova fase",
+    "phaseName": "Nome",
+    "phaseDescription": "Descrição",
+    "phaseDescriptionHint": "Uma linha — aparece na lista da esteira",
+    "phaseKind": "Papel",
+    "phaseKindHint": "Define o que a fase faz (e o que ela deixa para as próximas), independentemente do nome",
+    "phasePrompt": "Prompt",
+    "phasePromptHint": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
+    "phaseCapabilities": "Capacidades",
+    "saveAsDefault": "Salvar como padrão",
+    "saveInThisPipeline": "Salvar nesta esteira",
+    "capability": {
+      "read": "Leitura",
       "edit": "Edição",
       "shell": "Shell",
       "browser": "Browser",
-      "memoria": "Memória"
+      "memory": "Memória"
     },
-    "tipo": {
-      "desenvolvimento": "Desenvolvimento",
-      "validacao": "Validação",
-      "seguranca": "Segurança",
-      "revisao": "Revisão de código",
+    "kind": {
+      "development": "Desenvolvimento",
+      "validation": "Validação",
+      "security": "Segurança",
+      "review": "Revisão de código",
       "infra": "Infra",
-      "generico": "Genérica"
+      "generic": "Genérica"
     },
-    "arquivosAlterados_one": "{{count}} arquivo alterado",
-    "arquivosAlterados_other": "{{count}} arquivos alterados",
-    "fase": {
-      "desenvolvimento": {
-        "nome": "Desenvolvimento",
-        "descricao": "Implementa a task seguindo as convenções do projeto"
+    "changedFiles_one": "{{count}} arquivo alterado",
+    "changedFiles_other": "{{count}} arquivos alterados",
+    "phase": {
+      "development": {
+        "name": "Desenvolvimento",
+        "description": "Implementa a task seguindo as convenções do projeto"
       },
-      "validacao": {
-        "nome": "Validação",
-        "descricao": "Valida a implementação: build, testes e revisão do diff"
+      "validation": {
+        "name": "Validação",
+        "description": "Valida a implementação: build, testes e revisão do diff"
       },
-      "seguranca": {
-        "nome": "Segurança",
-        "descricao": "Auditoria de dependências, segredos e permissões"
+      "security": {
+        "name": "Segurança",
+        "description": "Auditoria de dependências, segredos e permissões"
       },
-      "revisao": {
-        "nome": "Revisão de código",
-        "descricao": "Code review de qualidade e estilo"
+      "review": {
+        "name": "Revisão de código",
+        "description": "Code review de qualidade e estilo"
       },
       "infra": {
-        "nome": "Infra",
-        "descricao": "Checklist de deploy e ambiente"
+        "name": "Infra",
+        "description": "Checklist de deploy e ambiente"
       }
     },
     "push": "Fazer push ao finalizar",
     "prints": "Capturar prints do resultado",
-    "novaTask": "Nova task",
-    "criarTask": "Criar task",
-    "taskTitulo": "Título",
-    "taskTituloExemplo": "ex.: Corrigir login no mobile",
-    "taskDescricao": "Descrição",
-    "taskDescricaoDica": "O briefing completo que as fases recebem — a task roda sem chat, então o que não estiver aqui não chega ao agente.",
-    "taskDependencias": "Depende de",
-    "taskDependenciasDica": "Esta task só inicia depois que as selecionadas concluírem.",
-    "selecioneDependencias": "Nenhuma — inicia livremente",
-    "semTasksParaDependencia": "Ainda não há outra task nesta esteira",
-    "buscarTask": "Buscar task...",
-    "nenhumaTask": "Nenhuma task encontrada",
-    "aguardando": "Aguardando {{titulo}}",
-    "aguardandoTitulo": "Esperando: {{titulo}}",
-    "proxima": "Próxima",
+    "newTask": "Nova task",
+    "createTask": "Criar task",
+    "taskTitle": "Título",
+    "taskTitleExample": "ex.: Corrigir login no mobile",
+    "taskDescription": "Descrição",
+    "taskDescriptionHint": "O briefing completo que as fases recebem — a task roda sem chat, então o que não estiver aqui não chega ao agente.",
+    "taskDependencies": "Depende de",
+    "taskDependenciesHint": "Esta task só inicia depois que as selecionadas concluírem.",
+    "selectDependencies": "Nenhuma — inicia livremente",
+    "noTasksForDependency": "Ainda não há outra task nesta esteira",
+    "searchTask": "Buscar task...",
+    "noTasks": "Nenhuma task encontrada",
+    "waiting": "Aguardando {{title}}",
+    "waitingTitle": "Esperando: {{title}}",
+    "next": "Próxima",
     "commit": "Criar commit ao finalizar",
-    "commitPromptTitulo": "Mensagem do commit final",
-    "commitPromptDica": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases, os arquivos alterados e o último commit do repositório — o mesmo contexto que uma fase recebe. Vazio usa o padrão: o que a task pedir sobre o commit; sem isso, o estilo do último commit; sem histórico, as preferências da memória; e por fim Conventional Commits (header + body de tópicos resumidos).",
-    "commitPromptVazio": "Vazio = prompt padrão (pedido da task → último commit → memória → Conventional Commits).",
-    "commitFalhou": "Commit final falhou",
-    "conecteDesktop": "Conecte-se ao Orbit Desktop para carregar as esteiras"
+    "commitPromptTitle": "Mensagem do commit final",
+    "commitPromptHint": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases, os arquivos alterados e o último commit do repositório — o mesmo contexto que uma fase recebe. Vazio usa o padrão: o que a task pedir sobre o commit; sem isso, o estilo do último commit; sem histórico, as preferências da memória; e por fim Conventional Commits (header + body de tópicos resumidos).",
+    "commitPromptEmpty": "Vazio = prompt padrão (pedido da task → último commit → memória → Conventional Commits).",
+    "commitFailed": "Commit final falhou",
+    "connectDesktop": "Conecte-se ao Orbit Desktop para carregar as esteiras"
   },
   "branch": {
     "title": "Branch",
@@ -1452,5 +1459,12 @@
       "errorUnavailable": "O motor de voz do desktop ainda não está pronto — falta baixar o modelo",
       "offline": "Sem conexão com o desktop — a voz é gerada lá"
     }
+  },
+  "mermaid": {
+    "failed": "Não foi possível desenhar este diagrama."
+  },
+  "codeBlock": {
+    "copy": "Copiar",
+    "copied": "Copiado"
   }
 }

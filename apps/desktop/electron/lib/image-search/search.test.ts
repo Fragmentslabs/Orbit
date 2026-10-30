@@ -15,7 +15,7 @@ const opts = (over: Partial<SearchOptions> = {}): SearchOptions => ({
   ...over,
 })
 
-/** Um fetch falso que responde por host e guarda o que foi pedido. */
+/** A fake fetch that answers by host and records what was requested. */
 function fake(routes: { commons?: () => Response; openverse?: () => Response }) {
   const calls: Array<{ url: string; headers: Record<string, string> }> = []
   const fetcher: Fetcher = async (url, init) => {
@@ -27,8 +27,8 @@ function fake(routes: { commons?: () => Response; openverse?: () => Response }) 
 }
 const json = (body: string, status = 200) => () => new Response(body, { status, headers: { 'content-type': 'application/json' } })
 
-describe('URLs dos pedidos', () => {
-  it('Commons: só bitmap, pasta de arquivos, tamanho pedido e origin', () => {
+describe('request URLs', () => {
+  it('Commons: bitmap only, files folder, requested size and origin', () => {
     const url = new URL(commonsUrl(opts()))
     expect(url.origin + url.pathname).toBe('https://commons.wikimedia.org/w/api.php')
     expect(url.searchParams.get('gsrsearch')).toBe('lion filetype:bitmap')
@@ -37,7 +37,7 @@ describe('URLs dos pedidos', () => {
     expect(url.searchParams.get('iiprop')).toContain('extmetadata')
   })
 
-  it('Openverse: sem conteúdo adulto, e licença/orientação viram parâmetros nativos', () => {
+  it('Openverse: no adult content, and license/orientation become native parameters', () => {
     const base = new URL(openverseUrl(opts()))
     expect(base.searchParams.get('mature')).toBe('false')
     expect(base.searchParams.get('license_type')).toBe('commercial')
@@ -49,31 +49,31 @@ describe('URLs dos pedidos', () => {
 })
 
 describe('searchImages', () => {
-  it('junta os dois, intercala, filtra a licença e identifica o app (a Wikimedia exige)', async () => {
+  it('joins both, interleaves, filters the license and identifies the app (Wikimedia requires it)', async () => {
     const { fetcher, calls } = fake({ commons: json(fixture('commons.json')), openverse: json(fixture('openverse.json')) })
     const { results, warnings } = await searchImages(opts({ limit: 10, minWidth: 500 }), fetcher)
     expect(warnings).toEqual([])
-    // 3 do Commons + 2 do Openverse (a terceira é NC/ND e sai no filtro comercial).
+    // 3 from Commons + 2 from Openverse (the third one is NC/ND and drops out in the commercial filter).
     expect(results).toHaveLength(5)
     expect(results.some((r) => r.credit.license.includes('NC'))).toBe(false)
     expect(results.slice(0, 2).map((r) => r.provider)).toEqual(['commons', 'openverse'])
     for (const call of calls) expect(call.headers['User-Agent']).toBe(USER_AGENT)
   })
 
-  it('"any" deixa passar a licença restritiva', async () => {
+  it('"any" lets the restrictive license through', async () => {
     const { fetcher } = fake({ commons: json('{}'), openverse: json(fixture('openverse.json')) })
     const { results } = await searchImages(opts({ license: 'any', providers: ['openverse'], minWidth: 500 }), fetcher)
     expect(results.some((r) => r.credit.license === 'CC BY-NC-ND 2.0')).toBe(true)
   })
 
-  it('um provedor limitado (429) vira aviso, e o outro segue valendo', async () => {
+  it('a rate-limited provider (429) becomes a warning, and the other still counts', async () => {
     const { fetcher } = fake({ commons: json(fixture('commons.json')), openverse: json('{}', 429) })
     const { results, warnings } = await searchImages(opts({ minWidth: 500 }), fetcher)
     expect(results.length).toBeGreaterThan(0)
     expect(warnings).toEqual(['Openverse: rate limit reached — try again in a minute'])
   })
 
-  it('os dois falhando: nenhum resultado, os dois avisos', async () => {
+  it('both failing: no result, both warnings', async () => {
     const { fetcher } = fake({})
     const { results, warnings } = await searchImages(opts(), fetcher)
     expect(results).toEqual([])
@@ -81,7 +81,7 @@ describe('searchImages', () => {
     expect(warnings[0]).toContain('failed (500)')
   })
 
-  it('erro de rede também é só um aviso', async () => {
+  it('a network error is also just a warning', async () => {
     const fetcher: Fetcher = async () => {
       throw new Error('offline')
     }
@@ -90,7 +90,7 @@ describe('searchImages', () => {
     expect(warnings).toEqual(['Wikimedia Commons: offline'])
   })
 
-  it('respeita o limite e não repete o mesmo arquivo vindo dos dois', async () => {
+  it('respects the limit and does not repeat the same file coming from both', async () => {
     const { fetcher } = fake({ commons: json(fixture('commons.json')), openverse: json(fixture('openverse.json')) })
     const { results } = await searchImages(opts({ limit: 2, minWidth: 500 }), fetcher)
     expect(results).toHaveLength(2)
@@ -102,12 +102,12 @@ describe('searchImages', () => {
 })
 
 describe('provedor lento', () => {
-  it('o Openverse acima de 20 por página seria recusado: o pedido nunca passa de 20', () => {
+  it('Openverse above 20 per page would be refused: the request never passes 20', () => {
     expect(new URL(openverseUrl(opts({ limit: 12 }))).searchParams.get('page_size')).toBe('20')
     expect(new URL(openverseUrl(opts({ limit: 2 }))).searchParams.get('page_size')).toBe('6')
   })
 
-  it('depois que um provedor trouxe resultados, o lento tem só a janela de espera — e vira aviso', async () => {
+  it('after a provider has brought results, the slow one only has the wait window — and becomes a warning', async () => {
     const fetcher: Fetcher = async (url) => {
       if (url.includes('wikimedia')) return new Response(fixture('commons.json'), { status: 200 })
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -121,7 +121,7 @@ describe('provedor lento', () => {
     expect(warnings).toEqual(['Openverse: too slow — repeat the search to include it'])
   })
 
-  it('se o lento chega dentro da janela, entra normalmente', async () => {
+  it('if the slow one arrives within the window, it goes in normally', async () => {
     const fetcher: Fetcher = async (url) => {
       if (url.includes('wikimedia')) return new Response(fixture('commons.json'), { status: 200 })
       await new Promise((resolve) => setTimeout(resolve, 30))
@@ -132,7 +132,7 @@ describe('provedor lento', () => {
     expect(results.some((r) => r.provider === 'openverse')).toBe(true)
   })
 
-  it('sem nenhum resultado ainda, espera os dois responderem (não há o que entregar antes)', async () => {
+  it('with no result yet, it waits for both to answer (there is nothing to deliver before)', async () => {
     const fetcher: Fetcher = async (url) => {
       await new Promise((resolve) => setTimeout(resolve, url.includes('wikimedia') ? 5 : 80))
       return url.includes('wikimedia') ? new Response('{}', { status: 200 }) : new Response(fixture('openverse.json'), { status: 200 })
@@ -145,18 +145,18 @@ describe('provedor lento', () => {
 describe('acceptable', () => {
   const base = { id: 'x', provider: 'commons' as const, title: 't', thumbUrl: 'u', downloadUrl: 'u', credit: { license: 'CC BY 4.0', sourceUrl: 's', provider: 'commons' as const, attribution: 'a' } }
 
-  it('largura mínima e orientação', () => {
+  it('minimum width and orientation', () => {
     expect(acceptable({ ...base, width: 500, height: 400 }, opts({ minWidth: 800 }))).toBe(false)
     expect(acceptable({ ...base, width: 1600, height: 900 }, opts({ orientation: 'landscape' }))).toBe(true)
     expect(acceptable({ ...base, width: 900, height: 1600 }, opts({ orientation: 'landscape' }))).toBe(false)
     expect(acceptable({ ...base, width: 1000, height: 1000 }, opts({ orientation: 'square' }))).toBe(true)
-    // Sem dimensões declaradas não dá para recusar por tamanho.
+    // With no declared dimensions it is not possible to refuse it by size.
     expect(acceptable({ ...base }, opts({ orientation: 'portrait' }))).toBe(true)
   })
 })
 
 describe('interleave', () => {
-  it('um de cada lista, na ordem, até acabar', () => {
+  it('one from each list, in order, until they run out', () => {
     expect(interleave<number | string>([[1, 2, 3], ['a'], ['x', 'y']])).toEqual([1, 'a', 'x', 2, 'y', 3])
     expect(interleave([])).toEqual([])
   })

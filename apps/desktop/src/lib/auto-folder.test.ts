@@ -3,17 +3,17 @@ import type { FolderInfo } from "@shared/chat"
 import { planAutoFolder } from "./auto-folder"
 
 /**
- * "Criar pastas automaticamente" parou de funcionar por projeto, não por app.
+ * "Create folders automatically" stopped working per project, not per app.
  *
- * O mapa diretório → pasta guarda o que aconteceu da última vez. O que
- * aconteceu DESDE ENTÃO — a pasta foi arquivada, apagada — ele não sabe. E o
- * ramo que lidava com isso não fazia nada: a sessão nascia solta, o mapa
- * continuava apontando para a mesma pasta, e a próxima sessão caía no mesmo
- * lugar. Arquivar a pasta de um projeto desligava a criação automática DELE
- * para sempre, com a preferência ligada o tempo todo.
+ * The directory → folder map keeps what happened the last time. What
+ * happened SINCE THEN — the folder was archived, deleted — it does not know. And the
+ * branch that dealt with that did nothing: the session was born loose, the map
+ * kept pointing to the same folder, and the next session landed in the same
+ * place. Archiving a project's folder turned ITS automatic creation off
+ * forever, with the preference on the whole time.
  *
- * Os testes abaixo são os estados em que o mapa pode estar quando a sessão
- * nasce.
+ * The tests below are the states the map may be in when the session
+ * is born.
  */
 
 const ORBIT: FolderInfo = {
@@ -27,8 +27,8 @@ const ORBIT: FolderInfo = {
 
 const folder = (over: Partial<FolderInfo>): FolderInfo => ({ ...ORBIT, ...over })
 
-describe("pasta automática do projeto", () => {
-  it("usa a pasta que o mapa aponta", () => {
+describe("automatic project folder", () => {
+  it("uses the folder the map points at", () => {
     expect(
       planAutoFolder({
         directory: "C:/Projects/Orbit",
@@ -39,21 +39,21 @@ describe("pasta automática do projeto", () => {
     ).toEqual({ folderId: "f-orbit" })
   })
 
-  it("pasta ARQUIVADA volta para a sidebar em vez de virar beco sem saída", () => {
-    // Este é o bug. Antes, a sessão nascia solta e o mapa continuava apontando
-    // para a arquivada — todo chat novo daquele projeto nascia solto também.
-    const arquivada = folder({ id: "f-vlk", name: "Vlk go", archived: true })
+  it("an ARCHIVED folder comes back to the sidebar instead of becoming a dead end", () => {
+    // This is the bug. Before, the session was born loose and the map kept pointing
+    // to the archived one — every new chat of that project was born loose too.
+    const archivedFolder = folder({ id: "f-vlk", name: "Vlk go", archived: true })
     expect(
       planAutoFolder({
         directory: "C:/Projects/Vlk - GO",
         mode: "code",
-        folders: [arquivada],
+        folders: [archivedFolder],
         mappedId: "f-vlk",
       }),
     ).toEqual({ folderId: "f-vlk", revive: true })
   })
 
-  it("mapa apontando para pasta apagada cai na busca por nome", () => {
+  it("a map pointing at a deleted folder falls back to searching by name", () => {
     expect(
       planAutoFolder({
         directory: "C:/Projects/Orbit",
@@ -64,23 +64,23 @@ describe("pasta automática do projeto", () => {
     ).toEqual({ folderId: "f-orbit" })
   })
 
-  it("mapa apontando para pasta de OUTRO modo não vale", () => {
-    // Os ids são de espaços diferentes; uma pasta de chat não recebe sessão de
-    // código. Antes isso também caía no ramo que não fazia nada.
-    const dePastaDeChat = folder({ id: "f-chat", mode: "chat" })
+  it("a map pointing at a folder from ANOTHER mode does not count", () => {
+    // The ids belong to different spaces; a chat folder does not receive a code
+    // session. Before, this also fell into the branch that did nothing.
+    const ofChatFolder = folder({ id: "f-chat", mode: "chat" })
     expect(
       planAutoFolder({
         directory: "C:/Projects/Orbit",
         mode: "code",
-        folders: [dePastaDeChat],
+        folders: [ofChatFolder],
         mappedId: "f-chat",
       }),
     ).toEqual({ create: "Orbit" })
   })
 
-  it("sem mapa, reconhece o projeto pelo nome — inclusive com o caminho diferente", () => {
-    // Mapa perdido (localStorage limpo, máquina nova) ou o mesmo projeto aberto
-    // por outro caminho. Sem isto, nasceria uma segunda pasta "Orbit".
+  it("with no map, it recognizes the project by name — even with a different path", () => {
+    // Lost map (cleared localStorage, new machine) or the same project opened
+    // by another path. Without this, a second "Orbit" folder would be born.
     for (const dir of ["C:/Projects/Orbit", "C:\\Projects\\Orbit\\", "~/projects/orbit"]) {
       expect(planAutoFolder({ directory: dir, mode: "code", folders: [ORBIT] })).toEqual({
         folderId: "f-orbit",
@@ -88,22 +88,22 @@ describe("pasta automática do projeto", () => {
     }
   })
 
-  it("prefere a pasta viva quando existe uma arquivada com o mesmo nome", () => {
-    const viva = folder({ id: "f-viva" })
-    const velha = folder({ id: "f-velha", archived: true })
+  it("prefers the live folder when an archived one has the same name", () => {
+    const liveFolder = folder({ id: "f-viva" })
+    const oldArchived = folder({ id: "f-velha", archived: true })
     expect(
-      planAutoFolder({ directory: "C:/Projects/Orbit", mode: "code", folders: [velha, viva] }),
+      planAutoFolder({ directory: "C:/Projects/Orbit", mode: "code", folders: [oldArchived, liveFolder] }),
     ).toEqual({ folderId: "f-viva" })
   })
 
-  it("com só a arquivada, revive em vez de criar uma duplicata ao lado", () => {
-    const velha = folder({ id: "f-velha", archived: true })
+  it("with only the archived one, it revives it instead of creating a duplicate beside it", () => {
+    const oldArchived = folder({ id: "f-velha", archived: true })
     expect(
-      planAutoFolder({ directory: "C:/Projects/Orbit", mode: "code", folders: [velha] }),
+      planAutoFolder({ directory: "C:/Projects/Orbit", mode: "code", folders: [oldArchived] }),
     ).toEqual({ folderId: "f-velha", revive: true })
   })
 
-  it("projeto novo ganha pasta com o nome legível do diretório", () => {
+  it("a new project gets a folder with the readable name of the directory", () => {
     expect(
       planAutoFolder({
         directory: "C:/Projects/WWO/irrigaboi-app-montadores",

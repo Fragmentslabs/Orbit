@@ -4,7 +4,7 @@ import { appApi } from "@/src/lib/ipc"
 
 const LOCALE_KEY = "orbit_locale"
 
-/** Opções de idioma. "system" faz o app seguir o idioma do sistema operacional. */
+/** Language options. "system" makes the app follow the operating system's language. */
 export type AppLocale = "system" | "pt-BR" | "en"
 export const SUPPORTED_LOCALES: AppLocale[] = ["system", "pt-BR", "en"]
 
@@ -13,8 +13,8 @@ export const LOCALE_LABELS: Record<Exclude<AppLocale, "system">, string> = {
   en: "English",
 }
 
-/** Nome do idioma em inglês, usado nos system prompts enviados ao modelo
- * (o modelo entende melhor "Portuguese"/"English" do que o código do locale). */
+/** Language name in English, used in the system prompts sent to the model
+ * (the model understands "Portuguese"/"English" better than the locale code). */
 export const LOCALE_PROMPT_NAME: Record<Exclude<AppLocale, "system">, string> = {
   "pt-BR": "Portuguese",
   en: "English",
@@ -25,15 +25,15 @@ function detectDefaultLocale(): Exclude<AppLocale, "system"> {
   return nav.toLowerCase().startsWith("pt") ? "pt-BR" : "en"
 }
 
-/** Resolve "system" para o idioma efetivo do sistema. */
+/** Resolves "system" to the system's effective language. */
 export function resolveActiveLocale(pref: AppLocale): Exclude<AppLocale, "system"> {
   return pref === "system" ? detectDefaultLocale() : pref
 }
 
 interface LocaleState {
-  /** Preferência escolhida pelo usuário (pode ser "system"). */
+  /** Preference chosen by the user (it may be "system"). */
   locale: AppLocale
-  /** Idioma efetivo (pt-BR/en) usado em formatação e prompts. */
+  /** Effective language (pt-BR/en) used in formatting and prompts. */
   activeLocale: Exclude<AppLocale, "system">
   setLocale: (locale: AppLocale) => void
 }
@@ -42,20 +42,21 @@ const initial: AppLocale = (localStorage.getItem(LOCALE_KEY) as AppLocale | null
 void i18n.changeLanguage(resolveActiveLocale(initial))
 
 /**
- * Espelha o idioma efetivo no main. Ele não lê o localStorage do renderer, e o
- * scheduler de rotinas dispara agentes sem nenhum pedido vindo daqui — sem este
- * espelho, esses agentes responderiam no idioma do prompt (inglês).
- * Publicado no boot e a cada troca, então mudar o idioma vale para as rotinas
- * já existentes.
+ * Mirrors the effective language into the main process. It does not read the
+ * renderer's localStorage, and the routine scheduler fires agents without any
+ * request coming from here — without this mirror, those agents would answer in
+ * the prompt's language (English).
+ * Published on boot and on every switch, so changing the language applies to
+ * the routines that already exist.
  */
-function publicarIdioma(locale: AppLocale): void {
+function publishLanguage(locale: AppLocale): void {
   void appApi
     .setLanguage(LOCALE_PROMPT_NAME[resolveActiveLocale(locale)])
     .catch(() => {
-      // Espelho é best-effort: falhar aqui não pode quebrar a troca de idioma.
+      // The mirror is best-effort: failing here cannot break the language switch.
     })
 }
-publicarIdioma(initial)
+publishLanguage(initial)
 
 export const useLocaleStore = create<LocaleState>((set) => ({
   locale: initial,
@@ -63,7 +64,7 @@ export const useLocaleStore = create<LocaleState>((set) => ({
   setLocale: (locale) => {
     localStorage.setItem(LOCALE_KEY, locale)
     void i18n.changeLanguage(resolveActiveLocale(locale))
-    publicarIdioma(locale)
+    publishLanguage(locale)
     set({ locale, activeLocale: resolveActiveLocale(locale) })
   },
 }))

@@ -1,11 +1,11 @@
 import { ComputerError } from './types'
 
 /**
- * Teclas → códigos virtuais do SO e flags de modificador. No macOS, códigos do
- * layout físico ANSI: num layout não-US, "cmd+z" ainda é a tecla onde fica o Z
- * no teclado americano. No Windows, Virtual-Key codes (VK_*), que para letras e
- * dígitos já são o próprio caractere. Para TEXTO use `type`, que manda Unicode
- * e independe do layout.
+ * Keys → OS virtual codes and modifier flags. On macOS, codes of the ANSI physical
+ * layout: on a non-US layout, "cmd+z" is still the key where Z sits on the American
+ * keyboard. On Windows, Virtual-Key codes (VK_*), which for letters and digits already
+ * are the character itself. For TEXT use `type`, which sends Unicode and does not
+ * depend on the layout.
  */
 
 const KEY_CODES: Record<string, number> = {
@@ -28,8 +28,8 @@ const MODIFIERS: Record<string, number> = {
 }
 
 /**
- * Virtual-Key codes do Windows. Símbolos usam os VK_OEM_* do layout americano
- * (o mesmo critério de posição física do macOS).
+ * Windows Virtual-Key codes. Symbols use the VK_OEM_* of the American layout (the same
+ * physical-position criterion as macOS).
  */
 const WIN_KEY_CODES: Record<string, number> = {
   ...Object.fromEntries('abcdefghijklmnopqrstuvwxyz'.split('').map((c) => [c, c.toUpperCase().charCodeAt(0)])),
@@ -42,9 +42,9 @@ const WIN_KEY_CODES: Record<string, number> = {
 }
 
 /**
- * Flags do host Windows. "cmd" vira Ctrl: o modelo manda "cmd+s" por hábito do
- * Mac, e o atalho equivalente no Windows é Ctrl+S. A tecla Windows tem nome
- * próprio (win/super/meta).
+ * Windows host flags. "cmd" becomes Ctrl: the model sends "cmd+s" out of Mac habit,
+ * and the equivalent shortcut on Windows is Ctrl+S. The Windows key has a name of its
+ * own (win/super/meta).
  */
 export const WIN_FLAGS = { shift: 1, ctrl: 2, alt: 4, win: 8 } as const
 
@@ -55,7 +55,7 @@ const WIN_MODIFIERS: Record<string, number> = {
   win: WIN_FLAGS.win, windows: WIN_FLAGS.win, super: WIN_FLAGS.win, meta: WIN_FLAGS.win,
 }
 
-/** Sinônimos que os modelos costumam mandar (formato xdotool / Anthropic). */
+/** Synonyms the models usually send (xdotool / Anthropic format). */
 const ALIASES: Record<string, string> = {
   arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down',
   page_up: 'pageup', page_down: 'pagedown', kp_enter: 'return', bksp: 'backspace',
@@ -66,7 +66,7 @@ export interface KeyCombo {
   flags: number
 }
 
-/** "cmd+shift+t", "return", "ctrl+a ctrl+c" (espaço separa uma sequência). */
+/** "cmd+shift+t", "return", "ctrl+a ctrl+c" (a space separates a sequence). */
 export function parseKeys(input: string, platform: NodeJS.Platform = process.platform): KeyCombo[] {
   const codes = platform === 'win32' ? WIN_KEY_CODES : KEY_CODES
   const modifiers = platform === 'win32' ? WIN_MODIFIERS : MODIFIERS
@@ -74,7 +74,7 @@ export function parseKeys(input: string, platform: NodeJS.Platform = process.pla
   if (!chords.length) throw new ComputerError('badRequest', 'Empty key.')
   return chords.map((chord) => {
     const parts = chord.toLowerCase().split('+').filter(Boolean)
-    // "cmd++" (a tecla +) chega como ['cmd'] depois do filter — sem suporte: use shift+=.
+    // "cmd++" (the + key) arrives as ['cmd'] after the filter — unsupported: use shift+=.
     let flags = 0
     let code: number | null = null
     for (const raw of parts) {

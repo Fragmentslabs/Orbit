@@ -1,40 +1,40 @@
 /**
- * Contrato interno dos motores de ditado.
+ * Internal contract of the dictation engines.
  *
- * `stt.ts` é a fachada pública (a API pedida); cada motor implementa `SttEngine`
- * e cuida da própria peculiaridade: o Parakeet carrega um modelo ONNX na CPU e
- * fatia com VAD; o whisper fala com um `whisper-server` (processo auxiliar).
- * A fachada não sabe nada disso — só repassa áudio de 16 kHz e recebe texto.
+ * `stt.ts` is the public facade (the requested API); each engine implements `SttEngine`
+ * and handles its own peculiarity: Parakeet loads an ONNX model on the CPU and
+ * slices with VAD; whisper talks to a `whisper-server` (helper process).
+ * The facade knows nothing of that — it only passes 16 kHz audio along and receives text.
  *
- * O único tipo que vem de fora é `VoiceEngineId` (de `@shared/voice`, type-only,
- * então não há ciclo de runtime com o manifesto do núcleo).
+ * The only type that comes from outside is `VoiceEngineId` (from `@shared/voice`, type-only,
+ * so there is no runtime cycle with the core's manifest).
  */
 
 import type { VoiceEngineId } from '@shared/voice'
 
-/** Entrada já normalizada da sessão: áudio sempre a 16 kHz mono. */
+/** Already normalised session input: audio always at 16 kHz mono. */
 export interface SttStartInput {
-  /** Modelo escolhido; o motor decide o padrão quando vier nulo. */
+  /** Chosen model; the engine decides the default when it comes in null. */
   modelId: string | null
-  /** Código do idioma ("pt", "en"…) ou "auto" para o motor detectar. */
+  /** Language code ("pt", "en"…) or "auto" for the engine to detect. */
   language: string
-  /** Nº de threads de CPU (motores que aceitam); opcional. */
+  /** Number of CPU threads (engines that accept it); optional. */
   threads?: number
-  /** Pedir texto ao vivo enquanto a fala acontece. */
+  /** Ask for live text while the speech happens. */
   live: boolean
-  /** Pedir os trechos com tempo (transcrição de arquivo com timestamps);
-   *  `'words'` pede também o tempo de cada palavra (edição de vídeo). */
+  /** Ask for the segments with timings (file transcription with timestamps);
+   *  `'words'` also asks for the timing of each word (video editing). */
   timestamps?: boolean | 'words'
 }
 
-/** Palavra com a posição no áudio (só com `timestamps: 'words'`). */
+/** Word with its position in the audio (only with `timestamps: 'words'`). */
 export interface SttWord {
   startMs: number
   endMs: number
   text: string
 }
 
-/** Trecho transcrito com a posição no áudio da sessão. */
+/** Transcribed segment with its position in the session audio. */
 export interface SttSegment {
   startMs: number
   endMs: number
@@ -42,46 +42,46 @@ export interface SttSegment {
   words?: SttWord[]
 }
 
-/** Sessão de um motor, já com o modelo carregado/pronto. */
+/** An engine session, with the model already loaded/ready. */
 export interface SttHandle {
   pushAudio(samples: Float32Array): void
-  /** `segments` vem quando o motor sabe dar tempos (Parakeet: trechos do VAD;
-   *  whisper: segmentos do servidor, só com `timestamps` pedido). */
+  /** `segments` comes when the engine knows how to give timings (Parakeet: VAD segments;
+   *  whisper: server segments, only with `timestamps` requested). */
   stop(): Promise<{ text: string; audioMs: number; segments?: SttSegment[] }>
   cancel(): Promise<void>
 }
 
-/** Estado de um motor (o que virou `VoiceEngineStatus` na fachada). */
+/** State of an engine (what became `VoiceEngineStatus` in the facade). */
 export interface SttEngineStatus {
   engine: VoiceEngineId
-  /** O motor consegue rodar NESTA máquina (módulo/binário presente e modelo no disco). */
+  /** The engine can run ON THIS machine (module/binary present and model on disk). */
   available: boolean
-  /** Está tudo pronto para transcrever já (modelo carregável sem preparo extra). */
+  /** Everything is ready to transcribe right now (model loadable without extra preparation). */
   installed: boolean
-  /** Explicação quando não dá para rodar (o que falta, onde pôr). */
+  /** Explanation when it cannot run (what is missing, where to put it). */
   reason?: string
-  /** Dados de diagnóstico para a tela de configurações. */
+  /** Diagnostic data for the settings screen. */
   detail?: Record<string, unknown>
 }
 
 export interface SttEngine {
   readonly id: VoiceEngineId
   readonly label: string
-  /** Modelo usado quando `modelId` vem nulo. */
+  /** Model used when `modelId` comes in null. */
   readonly defaultModelId: string
   status(): Promise<SttEngineStatus>
   /**
-   * Carrega o modelo ANTES do primeiro uso, em SEGUNDO PLANO (opcional). No
-   * Parakeet isso são centenas de MB no ONNX Runtime; sem um aquecimento, a
-   * primeira sessão do usuário paga o carregamento — e o botão fica vermelho
-   * esperando por ele. Idempotente e silencioso: erro de carga não vira exceção
-   * aqui, aparece no `status()`.
+   * Loads the model BEFORE first use, IN THE BACKGROUND (optional). In
+   * Parakeet that is hundreds of MB in the ONNX Runtime; without a warm-up, the
+   * user's first session pays for the loading — and the button stays red
+   * waiting for it. Idempotent and silent: a load error does not become an exception
+   * here, it shows up in `status()`.
    */
   warm?(modelId: string | null, threads?: number): Promise<void>
   /**
-   * Solta o que o `warm` carregou (opcional), quando o ditado fica ocioso: o
-   * modelo não deve ocupar RAM a sessão inteira. O próximo `warm`/`start`
-   * carrega de novo.
+   * Releases what `warm` loaded (optional), when dictation goes idle: the
+   * model should not occupy RAM for the whole session. The next `warm`/`start`
+   * loads it again.
    */
   release?(): void
   start(input: SttStartInput, onPartial: (text: string) => void): Promise<SttHandle>

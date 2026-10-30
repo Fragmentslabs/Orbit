@@ -6,25 +6,26 @@ import { promisify } from 'node:util'
 import { IGNORED_DIRS } from '../tools/context'
 import { languageFor } from './languages'
 import { extractFacts, UseKind, type FileFacts, type SymbolDef } from './extract'
+import { perfSpan } from '../perf'
 
 /**
- * Índice de código de uma pasta: símbolos por arquivo + o grafo de usos.
+ * Code index of a folder: symbols per file + the graph of uses.
  *
- * Fresco por construção: toda consulta passa por `refresh()`, que compara
- * mtime/tamanho de cada arquivo e re-extrai só o que mudou (edições não
- * commitadas incluídas). O resultado vai para disco, então reabrir o app numa
- * pasta já vista custa um stat por arquivo, não um parse.
+ * Fresh by construction: every query goes through `refresh()`, which compares the
+ * mtime/size of each file and re-extracts only what changed (uncommitted
+ * edits included). The result goes to disk, so reopening the app on a
+ * folder already seen costs one stat per file, not a parse.
  */
 
 const execFileAsync = promisify(execFile)
 
-/** Muda quando o formato persistido ou a extração mudam — força re-extrair tudo. */
+/** Changes when the persisted format or the extraction change — forces re-extracting everything. */
 const FORMAT = 4
 const MAX_FILES = 30_000
 const MAX_FILE_BYTES = 1024 * 1024
-/** Abaixo disso, consultas seguidas reusam o último refresh. */
+/** Below this, back-to-back queries reuse the last refresh. */
 const REFRESH_THROTTLE_MS = 1500
-/** Nomes com mais definições que isto, sem pista de import, não viram aresta. */
+/** Names with more definitions than this, with no import hint, do not become an edge. */
 const MAX_AMBIGUOUS = 4
 
 export interface FileEntry extends FileFacts {
@@ -32,14 +33,14 @@ export interface FileEntry extends FileFacts {
   size: number
 }
 
-/** Chave de símbolo: `arquivo#índice`; `arquivo#-1` é o topo do arquivo. */
+/** Symbol key: `file#index`; `file#-1` is the top of the file. */
 export type SymbolKey = string
 
 export interface Edge {
   from: SymbolKey
   to: SymbolKey
   line: number
-  /** false quando o nome existe em vários lugares e nenhum import desempatou. */
+  /** false when the name exists in several places and no import broke the tie. */
   sure: boolean
 }
 
@@ -47,7 +48,7 @@ export interface CodeGraph {
   byName: Map<string, SymbolKey[]>
   incoming: Map<SymbolKey, Edge[]>
   outgoing: Map<SymbolKey, Edge[]>
-  /** Quantos símbolos distintos usam cada símbolo com certeza (fora ele mesmo) — base de ranking e hubs. */
+  /** How many distinct symbols use each symbol for sure (apart from itself) — the basis of the ranking and of the hubs. */
   inDegree: Map<SymbolKey, number>
 }
 
@@ -60,7 +61,7 @@ export function parseKey(key: SymbolKey): { file: string; def: number } {
 
 let cacheDirOverride: string | null | undefined
 
-/** Testes apontam o cache para um tmp (ou desligam com null). */
+/** Tests point the cache at a tmp dir (or turn it off with null). */
 export function setCodeIndexCacheDir(dir: string | null) {
   cacheDirOverride = dir
 }
@@ -90,7 +91,7 @@ export class CodeIndex {
     this.root = path.resolve(root)
   }
 
-  /** Já tem algo indexado — sem custo de primeira construção. */
+  /** Something is already indexed — no first-build cost. */
   get warm(): boolean {
     return this.files.size > 0
   }
@@ -98,14 +99,18 @@ export class CodeIndex {
   async refresh(abort?: AbortSignal): Promise<void> {
     if (this.running) return this.running
     if (Date.now() - this.lastRefresh < REFRESH_THROTTLE_MS) return
+    // One index per ROOT and they all live in the same process: with a worktree per
+    // worker the scan is also what multiplies the heap, so it gets a record.
+    const perf = perfSpan('index:scan', { root: this.root })
     this.running = this.scan(abort).finally(() => {
       this.running = null
       this.lastRefresh = Date.now()
+      perf.end({ files: this.files.size })
     })
     return this.running
   }
 
-  /** Re-extrai um arquivo agora (depois de um edit), sem esperar o throttle. */
+  /** Re-extracts one file right now (after an edit), without waiting for the throttle. */
   async touch(relPath: string): Promise<void> {
     const changed = await this.update(relPath)
     if (changed) this.invalidate()
@@ -143,8 +148,8 @@ export class CodeIndex {
       const batch = listed.slice(i, i + 64)
       const results = await Promise.all(batch.map((rel) => this.update(rel)))
       if (results.some(Boolean)) changed = true
-      // O parse roda no processo principal: cede o loop para a UI não travar
-      // na primeira indexação de um repositório grande.
+      // The parse runs in the main process: yield the loop so the UI does not freeze
+      // on the first indexing of a large repository.
       if (Date.now() - lastYield > 12) {
         await yieldToLoop()
         lastYield = Date.now()
@@ -153,7 +158,7 @@ export class CodeIndex {
     if (changed) this.invalidate()
   }
 
-  /** true quando o arquivo entrou, mudou ou saiu do índice. */
+  /** true when the file entered, changed or left the index. */
   private async update(rel: string): Promise<boolean> {
     const full = path.join(this.root, rel)
     let stat
@@ -192,7 +197,7 @@ export class CodeIndex {
       if (data.format !== FORMAT || data.root !== this.root) return
       this.files = new Map(data.files)
     } catch {
-      // sem cache (primeira vez) ou cache corrompido: reconstrói do zero
+      // no cache (first time) or corrupted cache: rebuild from scratch
     }
   }
 
@@ -205,12 +210,12 @@ export class CodeIndex {
       await fs.writeFile(tmp, JSON.stringify({ format: FORMAT, root: this.root, files: [...this.files] }))
       await fs.rename(tmp, file)
     } catch {
-      // cache é otimização: falhar em gravar só custa um parse na próxima vez
+      // the cache is an optimization: failing to write only costs a parse next time
     }
   }
 }
 
-/** Minificado/gerado: linhas enormes não têm símbolos úteis e incham o índice. */
+/** Minified/generated: huge lines have no useful symbols and bloat the index. */
 function looksGenerated(source: string): boolean {
   if (source.length < 4000) return false
   const newlines = source.split('\n').length
@@ -225,9 +230,9 @@ function isIndexable(rel: string): boolean {
 }
 
 /**
- * Arquivos de código da pasta. Num repositório git, o próprio git lista —
- * respeita o .gitignore (o que um walk manual não faz) e inclui arquivos novos
- * ainda não commitados. Fora do git, um walk que pula as pastas de sempre.
+ * Code files of the folder. In a git repository, git itself lists them —
+ * it respects the .gitignore (which a manual walk does not) and includes new files
+ * not yet committed. Outside git, a walk that skips the usual folders.
  */
 async function listSourceFiles(root: string, abort?: AbortSignal): Promise<string[]> {
   try {
@@ -275,15 +280,15 @@ function withExtensions(base: string): string[] {
 }
 
 /**
- * Import → arquivo do índice. Relativo: `./x` → `x.ts`, `./x.js` → `x.ts`,
- * `./dir` → `dir/index.ts`. Alias (`@shared/chat`, `~/lib/x`): o resto do
- * caminho sem o primeiro segmento, quando um único arquivo termina nele.
- * Pacote (`react`, `node:path`) → null: o nome é de fora do projeto.
+ * Import → file of the index. Relative: `./x` → `x.ts`, `./x.js` → `x.ts`,
+ * `./dir` → `dir/index.ts`. Alias (`@shared/chat`, `~/lib/x`): the rest of the
+ * path without the first segment, when a single file ends with it.
+ * Package (`react`, `node:path`) → null: the name is from outside the project.
  */
 function makeImportResolver(files: Map<string, FileEntry>) {
   const aliasMemo = new Map<string, string | null>()
-  // Arquivos pelo último segmento sem extensão (`a/b/chat.ts` → chat; `a/x/index.ts` → x):
-  // o alias só compara caminho com quem tem o nome certo, não com o repo inteiro.
+  // Files by their last segment without extension (`a/b/chat.ts` → chat; `a/x/index.ts` → x):
+  // the alias only compares a path with whoever has the right name, not with the whole repo.
   const byBase = new Map<string, string[]>()
   for (const key of files.keys()) {
     const parts = key.replace(/\.[^./]+$/, '').split('/')
@@ -316,10 +321,10 @@ const TYPE_KINDS = new Set(['class', 'interface', 'type', 'enum'])
 const isMember = (def: SymbolDef) => def.qual !== def.name
 
 /**
- * Que definições um uso pode significar, pelo jeito como o nome foi usado:
- * `: Foo` só é tipo; `x.foo` só é membro (método/campo); chamada simples
- * prefere o que é de topo, mas aceita membro (Java chama método da própria
- * classe sem `this.`).
+ * Which definitions a use may mean, given the way the name was used:
+ * `: Foo` is only a type; `x.foo` is only a member (method/field); a plain call
+ * prefers what is top-level, but accepts a member (Java calls a method of its own
+ * class without `this.`).
  */
 function compatible(candidates: SymbolKey[], kind: UseKind, defOf: Map<SymbolKey, SymbolDef>, prefix: string): SymbolKey[] {
   if (kind === UseKind.Type) return candidates.filter((k) => TYPE_KINDS.has(defOf.get(k)!.kind))
@@ -329,12 +334,12 @@ function compatible(candidates: SymbolKey[], kind: UseKind, defOf: Map<SymbolKey
 }
 
 /**
- * Liga cada uso a uma definição. Sem tipos, o desempate é por proximidade:
- * mesmo arquivo → arquivos importados → nome raro o bastante para ser ele.
- * Nome comum sem pista nenhuma (get, run, init…) não vira aresta: uma aresta
- * errada custa mais ao agente do que uma que falta. Acesso a membro sem pista
- * (`arr.slice()` em qualquer lugar) entra como incerto — aparece em code_refs
- * marcado, mas não infla o ranking de quem é central.
+ * Links each use to a definition. With no types, the tie-break is by proximity:
+ * same file → imported files → a name rare enough to be it.
+ * A common name with no hint at all (get, run, init…) does not become an edge: a wrong
+ * edge costs the agent more than a missing one. Member access with no hint
+ * (`arr.slice()` anywhere) comes in as uncertain — it shows up in code_refs
+ * marked, but does not inflate the ranking of what is central.
  */
 export function buildGraph(files: Map<string, FileEntry>): CodeGraph {
   const byName = new Map<string, SymbolKey[]>()
@@ -367,8 +372,8 @@ export function buildGraph(files: Map<string, FileEntry>): CodeGraph {
     const boundTo = new Map<string, string | null>()
     for (const [name, spec] of entry.importNames ?? []) boundTo.set(name, resolveImport(file, spec))
     const locals = new Set(entry.locals ?? [])
-    // Em JS/TS todo nome de outro arquivo chega por import: sem import, é
-    // global do runtime (window, process) ou alias que não resolvemos.
+    // In JS/TS every name from another file arrives through an import: with no import, it is a
+    // runtime global (window, process) or an alias we do not resolve.
     const modular = JS_LANGS.has(entry.lang)
     const prefix = `${file}#`
     for (const [name, owner, line, kind = UseKind.Plain] of entry.uses) {
@@ -380,8 +385,8 @@ export function buildGraph(files: Map<string, FileEntry>): CodeGraph {
       let targets = candidates.filter((k) => k.startsWith(prefix))
       let sure = targets.length === 1
       if (targets.length === 0 && kind !== UseKind.Member) {
-        // Nome ligado aqui: por import, só pode ser o do arquivo importado
-        // (ou nada, se veio de pacote); por parâmetro/variável local, é local.
+        // Name bound here: through an import, it can only be the one from the imported file
+        // (or nothing, if it came from a package); through a parameter/local variable, it is local.
         if (boundTo.has(name)) {
           const source = boundTo.get(name)
           if (!source) continue
@@ -421,7 +426,7 @@ export function buildGraph(files: Map<string, FileEntry>): CodeGraph {
 const registry = new Map<string, CodeIndex>()
 const MAX_ROOTS = 6
 
-/** Um índice por pasta, reaproveitado entre conversas; os menos usados saem da memória. */
+/** One index per folder, reused across conversations; the least used ones leave memory. */
 export function getCodeIndex(root: string): CodeIndex {
   const key = path.resolve(root)
   let index = registry.get(key)
@@ -435,7 +440,7 @@ export function getCodeIndex(root: string): CodeIndex {
   return index
 }
 
-/** O índice só se já existir em memória — para quem não deve pagar a construção. */
+/** The index only if it already exists in memory — for whoever must not pay for the build. */
 export function peekCodeIndex(root: string): CodeIndex | null {
   return registry.get(path.resolve(root)) ?? null
 }

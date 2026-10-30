@@ -12,9 +12,9 @@ interface QRScannerModalProps {
 }
 
 /**
- * Overlay de leitura de QR Code em tela cheia. Cobre toda a tela com a câmera
- * (padrão dos apps de scanner): header com título + fechar, área da câmera
- * ocupando o meio e dica no rodapé.
+ * Full-screen QR Code reading overlay. Covers the whole screen with the camera
+ * (standard of scanner apps): header with title + close, camera area
+ * occupying the middle and a hint in the footer.
  */
 export function QRScannerModal({ visible, onClose, onScanned }: QRScannerModalProps) {
   const { t } = useTranslation()

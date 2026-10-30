@@ -1,22 +1,22 @@
 "use client";
 
 /**
- * O painel direito da aba de pastas: o índice do que existe, do que mudou e do
- * que aconteceu.
+ * The right panel of the folders tab: the index of what exists, of what changed and of
+ * what happened.
  *
- * Três abas — as alterações do working tree (árvore podada, só o que mudou, já
- * aberta), os arquivos do workspace (árvore completa, para achar um arquivo que
- * pode não ter mudado) e o histórico de commits. O rodapé é do painel inteiro,
- * e não de uma aba: em qual projeto se está agindo, e a branch dele, valem para
- * as três.
+ * Three tabs — the working tree changes (pruned tree, only what changed, already
+ * open), the workspace files (full tree, to find a file that
+ * may not have changed) and the commit history. The footer belongs to the whole panel,
+ * and not to one tab: which project one is acting on, and its branch, count for
+ * the three.
  *
- * Com o painel estreito, só a aba ativa mostra o nome; as outras ficam no
- * ícone. Três nomes não cabem no piso de 200px, e a ativa é a única que precisa
- * se identificar.
+ * With the panel narrow, only the active tab shows the name; the others stay in the
+ * icon. Three names do not fit in the 200px floor, and the active one is the only one that needs
+ * to identify itself.
  *
- * Ele não abre nem exibe arquivo nenhum: só avisa o pai qual foi escolhido e
- * com que lente (a lista de alterações pede o diff; a árvore completa, o
- * conteúdo).
+ * It neither opens nor displays any file: it only tells the parent which one was chosen and
+ * with what lens (the changes list asks for the diff; the full tree, the
+ * content).
  */
 
 import {
@@ -113,30 +113,30 @@ import type { WsMatchOptions } from "@/src/lib/ipc";
 import { WorkspaceSearch } from "@/src/components/workspace-search";
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Modo do par de painéis — o mesmo da aba selecionada à direita. */
+/** Mode of the panel pair — the same as the tab selected on the right. */
 export type BrowserTab = "files" | "changes" | "commits";
 
 export interface FileBrowserProps {
   folders: string[];
   onFoldersChange: (folders: string[]) => void;
   /**
-   * Aba ativa. Ela não é só do índice: o painel da esquerda inteiro segue este
-   * modo (árvore + um arquivo, ou lista + diffs empilhados).
+   * Active tab. It is not only the index's: the whole left panel follows this
+   * mode (tree + one file, or list + stacked diffs).
    */
   tab: BrowserTab;
   onTabChange: (tab: BrowserTab) => void;
-  /** Caminho do arquivo do working tree aberto, para realçar na árvore. */
+  /** Path of the open working tree file, to highlight it in the tree. */
   selectedPath?: string;
-  /** Arquivo escolhido numa das listas; `deleted` marca o fantasma de excluído. */
+  /** File chosen in one of the lists; `deleted` marks the ghost of a deleted one. */
   onSelectFile: (path: string, deleted: boolean, lens: ViewerLens) => void;
   /**
-   * Trazer um arquivo à vista na leitura empilhada. O caminho vai RELATIVO ao
-   * repo, que é como o patch nomeia os arquivos.
+   * Bring a file into view in the stacked reading. The path goes RELATIVE to the
+   * repo, which is how the patch names the files.
    */
   onReveal: (relPath: string) => void;
-  /** Pedido de recarga da leitura empilhada — ela vive no outro painel. */
+  /** Reload request of the stacked reading — it lives in the other panel. */
   onRefreshChanges: () => void;
-  /** Arquivo escolhido dentro de um card de commit. */
+  /** File chosen inside a commit card. */
   onOpenCommitFile: (
     repoPath: string,
     hash: string,
@@ -145,28 +145,28 @@ export interface FileBrowserProps {
     lens: ViewerLens,
   ) => void;
   /**
-   * A consulta da busca também grifa o arquivo aberto no visualizador. Vem de
-   * fora porque o grifo mora no editor, do outro lado do split. Consulta vazia
-   * limpa.
+   * The search query also marks the file open in the viewer. It comes from
+   * outside because the mark lives in the editor, on the other side of the split. An empty query
+   * clears it.
    *
-   * Substituir no arquivo aberto NÃO fica aqui: a lista do painel é o espaço
-   * inteiro, e o botão de lá substitui em todos. O arquivo em foco só entra no
-   * modal (⌘P), onde ele é o assunto.
+   * Replacing in the open file does NOT stay here: the panel list is the whole
+   * workspace, and the button there replaces in all of them. The focused file only enters the
+   * modal (⌘P), where it is the subject.
    */
   onHighlightQuery?: (query: string, options: WsMatchOptions) => void;
   /**
-   * Abre um resultado da busca já na linha clicada. Sem isso o visualizador
-   * abriria o arquivo no topo, e o trecho encontrado ficaria fora da tela.
+   * Opens a search result already on the clicked line. Without that the viewer
+   * would open the file at the top, and the found excerpt would be off screen.
    */
   onOpenOccurrence?: (path: string, line: number) => void;
   /**
-   * Quais arquivos foram gravados por fora ("substituir em todos"). O
-   * visualizador usa a lista para recarregar o que estiver aberto.
+   * Which files were written from outside ("replace in all"). The
+   * viewer uses the list to reload whatever is open.
    */
   onReplaced?: (paths: string[]) => void;
 }
 
-// ── Regiões do log de commits (estilo VS Code) ──────────────────────────
+// ── Regions of the commit log (VS Code style) ───────────────────────────
 type CommitRegionKind = "default" | "pushed" | "local";
 
 interface CommitRegion {
@@ -195,7 +195,7 @@ const REGION_STYLES: Record<CommitRegionKind, { line: string; chip: string }> =
     },
   };
 
-/** Região de um commit: branch principal, branch atual já no remoto, ou branch atual só local. */
+/** Region of a commit: main branch, current branch already on the remote, or current branch local only. */
 function commitRegion(
   commit: CommitEntry,
   info: BranchSyncInfo | undefined,
@@ -212,7 +212,7 @@ function commitRegion(
     : { kind: "local", label: info.current };
 }
 
-// ── Badges de refs nos cards ────────────────────────────────────────────
+// ── Ref badges in the cards ─────────────────────────────────────────────
 type RefKind = "current" | "default" | "remote" | "tag" | "head" | "other";
 
 function classifyRef(
@@ -292,8 +292,8 @@ function CommitRefBadges({
   const classified = refs.map((ref) =>
     classifyRef(ref, current, defaultBranch),
   );
-  // Branches e tags em grupos independentes: tags sempre aparecem ao lado
-  // das branches, sem serem descartadas pelo limite de badges de branch.
+  // Branches and tags in independent groups: tags always appear next to
+  // the branches, without being discarded by the branch badge limit.
   const branches = classified
     .filter((b) => b.kind !== "tag")
     .sort((a, b) => REF_PRIORITY[a.kind] - REF_PRIORITY[b.kind]);
@@ -357,8 +357,8 @@ function renderEntries(
       />
     ),
   );
-  // Arquivos excluídos (não existem em disco): entram como fantasmas no
-  // diretório pai, com indicador D — clicar abre o arquivo como excluído.
+  // Deleted files (they do not exist on disk): they enter as ghosts in the
+  // parent directory, with the D indicator — clicking opens the file as deleted.
   const deleted = deletedByDir[dirPath];
   if (deleted) {
     for (const d of deleted) {
@@ -375,7 +375,7 @@ function renderEntries(
   return children;
 }
 
-// ── Árvore das alterações ───────────────────────────────────────────────
+// ── Tree of the changes ─────────────────────────────────────────────────
 
 interface ChangeFileNode {
   path: string;
@@ -392,12 +392,12 @@ interface ChangeDirNode {
 }
 
 /**
- * Monta a árvore das alterações a partir do git status.
+ * Builds the tree of the changes from the git status.
  *
- * Existem só os diretórios que contêm alguma alteração: é uma árvore podada,
- * o oposto da árvore completa da outra aba. Ali se procura um arquivo que pode
- * não ter mudado; aqui só interessa o que mudou, e cada nível de pasta só
- * existe para dar o caminho do arquivo.
+ * Only the directories that contain some change exist: it is a pruned tree,
+ * the opposite of the full tree of the other tab. There one looks for a file that may
+ * not have changed; here only what changed matters, and each folder level only
+ * exists to give the path of the file.
  */
 function buildChangeTree(
   root: string,
@@ -446,18 +446,18 @@ function buildChangeTree(
 }
 
 /**
- * Uma raiz da árvore de alterações: a pasta do chat dona das mudanças e a
- * árvore podada montada a partir dela.
+ * A root of the changes tree: the chat folder that owns the changes and the
+ * pruned tree built from it.
  */
 interface ChangeGroup {
-  /** Caminho absoluto da pasta (a principal ou uma das anexadas). */
+  /** Absolute path of the folder (the main one or one of the attached ones). */
   path: string;
   name: string;
   root: ChangeDirNode;
   dirPaths: string[];
 }
 
-/** Desenha um nível da árvore podada: pastas primeiro, depois os arquivos. */
+/** Draws one level of the pruned tree: folders first, then the files. */
 function renderChangeEntries(
   node: ChangeDirNode,
   expanded: Set<string>,
@@ -574,9 +574,9 @@ export function FileBrowser({
 }: FileBrowserProps) {
   const { t } = useTranslation();
   /**
-   * O histórico é a terceira aba, e o log só é buscado quando ela está à vista
-   * — daí ser derivado da aba, e não um estado próprio: os efeitos que dependem
-   * dele continuam valendo, agora sem poder divergir do que está na tela.
+   * The history is the third tab, and the log is only fetched when it is in view
+   * — hence it being derived from the tab, and not its own state: the effects that depend
+   * on it keep working, now without being able to diverge from what is on screen.
    */
   const commitsOpen = tab === "commits";
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
@@ -585,29 +585,29 @@ export function FileBrowser({
   const [dirCache, setDirCache] = useState<Record<string, DirEntryInfo[]>>({});
   const loadingRef = useRef<Set<string>>(new Set());
   /**
-   * Número da última leitura pedida de cada diretório. Uma resposta que chega
-   * depois de uma leitura mais nova é descartada — sem isso, o refresh perderia
-   * para a listagem que já estava em voo e a árvore ficaria com o dado antigo.
+   * Number of the last requested read of each directory. A response that arrives
+   * after a newer read is discarded — without that, the refresh would lose
+   * to the listing that was already in flight and the tree would keep the old data.
    */
   const loadSeqRef = useRef<Map<string, number>>(new Map());
   const entryIsDirRef = useRef<Map<string, boolean>>(new Map());
 
-  // ── Repositórios desta pasta de trabalho ──────────────────────────────
-  // Um espaço pode ter git na própria pasta e/ou em subpastas com repo próprio
-  // (`front/`, `back/`), cada uma com o seu. O painel fala com UM por vez — o
-  // ativo, que o rodapé, a lista de alterações e os indicadores da árvore
-  // seguem. Sem nenhum repo descoberto o caminho volta a ser a pasta raiz, que
-  // é exatamente o comportamento de sempre.
+  // ── Repositories of this working folder ───────────────────────────────
+  // A workspace may have git in the folder itself and/or in subfolders with their own repo
+  // (`front/`, `back/`), each with its own. The panel talks to ONE at a time — the
+  // active one, which the footer, the changes list and the tree indicators
+  // follow. With no repo discovered the path goes back to being the root folder, which
+  // is exactly the usual behavior.
   const repos = useGitRepos(folders);
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
-  /** Seção aberta do acordeão — uma por vez: abrir outra fecha a primeira. */
+  /** Open section of the accordion — one at a time: opening another closes the first. */
   const [openRepo, setOpenRepo] = useState<string | null>(null);
   const repo = activeRepo ?? folders[0];
-  // Sem repo descoberto não há acordeão: a lista da pasta de trabalho fica
-  // aberta, sozinha e sem cabeçalho.
+  // With no repo discovered there is no accordion: the working folder list stays
+  // open, alone and without a header.
   const openPath = repos.length > 0 ? openRepo : (repo ?? null);
-  // Estável de propósito: alimenta os loaders do status e do numstat, que são
-  // dependência de efeito — recriar a lista a cada render viraria laço.
+  // Stable on purpose: it feeds the status and numstat loaders, which are
+  // an effect dependency — recreating the list on every render would become a loop.
   const repoSections = useMemo<GitRepoEntry[]>(
     () =>
       repos.length > 0
@@ -618,15 +618,15 @@ export function FileBrowser({
     [repos, repo],
   );
 
-  // Recarrega diretórios quando o branch git muda
+  // Reloads directories when the git branch changes
   const currentBranch = useBranchStore((s) =>
     repo ? s.byDir[repo]?.current : undefined,
   );
   const branchInfo = useBranchStore((s) =>
     repo ? s.infoByDir[repo] : undefined,
   );
-  // Cabeçalho de cada repo do acordeão: branch e distância do remoto saem do
-  // mesmo cache por pasta que o rodapé usa.
+  // Header of each accordion repo: branch and distance from the remote come from the
+  // same per-folder cache the footer uses.
   const branchByDir = useBranchStore((s) => s.byDir);
   const infoByDir = useBranchStore((s) => s.infoByDir);
   const syncBusyDir = useBranchStore((s) => s.syncBusyDir);
@@ -634,12 +634,12 @@ export function FileBrowser({
   const pullChanges = useBranchStore((s) => s.pullChanges);
   const pushChanges = useBranchStore((s) => s.pushChanges);
 
-  // Status git do working tree, keyed por caminho absoluto (indicadores na árvore)
+  // Git status of the working tree, keyed by absolute path (indicators in the tree)
   const [gitStatus, setGitStatus] = useState<Record<string, GitStatusEntry>>(
     {},
   );
-  /** +N/-N por caminho ABSOLUTO — o git devolve relativo ao repo, e aqui já
-   *  vem juntado com a pasta dele, igual ao status. */
+  /** +N/-N by ABSOLUTE path — git returns it relative to the repo, and here it already
+   *  comes joined with its folder, like the status. */
   const [numstat, setNumstat] = useState<Record<string, LineStat>>({});
   const [refreshing, setRefreshing] = useState(false);
 
@@ -649,10 +649,10 @@ export function FileBrowser({
   const [commitsReload, setCommitsReload] = useState(0);
   const [commitsHasMore, setCommitsHasMore] = useState(false);
   const [commitsLoadingMore, setCommitsLoadingMore] = useState(false);
-  // Ref de exclusão mútua síncrona (evita duas páginas simultâneas com o mesmo skip)
+  // Synchronous mutual exclusion ref (avoids two simultaneous pages with the same skip)
   const commitsLoadingMoreRef = useRef(false);
-  // Época da carga inicial: descarta appends de uma página velha que chegue
-  // depois de um reload (pull/push/troca de pasta).
+  // Epoch of the initial load: it discards appends from an old page that arrives
+  // after a reload (pull/push/folder switch).
   const commitsEpochRef = useRef(0);
   const commitsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -660,7 +660,7 @@ export function FileBrowser({
     kind: "error" | "info";
     text: string;
   } | null>(null);
-  const [criarRepoOpen, setCriarRepoOpen] = useState(false);
+  const [createRepoOpen, setCreateRepoOpen] = useState(false);
 
   const loadDir = useCallback(async (dirPath: string, force = false) => {
     if (!force && loadingRef.current.has(dirPath)) return;
@@ -671,7 +671,7 @@ export function FileBrowser({
       "fs:readdir",
       dirPath,
     )) as ReaddirResult;
-    // Resposta velha: já existe uma leitura mais nova deste diretório a caminho.
+    // Old response: there is already a newer read of this directory on the way.
     if (loadSeqRef.current.get(dirPath) !== seq) return;
     loadingRef.current.delete(dirPath);
     if (result.ok) {
@@ -682,16 +682,16 @@ export function FileBrowser({
   }, []);
 
   /**
-   * Relê a árvore inteira à vista: as raízes e toda pasta aberta.
+   * Re-reads the whole tree in view: the roots and every open folder.
    *
-   * Antes só a raiz era relida, e o arquivo criado fora dela — dentro de uma
-   * subpasta aberta, que é onde se salva quase sempre — continuava sumido,
-   * porque a listagem da subpasta vinha do cache e nada a invalidava. O cache
-   * das pastas FECHADAS é descartado, e não relido: ao abrir, elas leem do
-   * disco, que é o que se espera de uma árvore recém-atualizada.
+   * Before, only the root was re-read, and the file created outside it — inside an
+   * open subfolder, which is where one almost always saves — kept being missing,
+   * because the subfolder listing came from the cache and nothing invalidated it. The cache
+   * of the CLOSED folders is discarded, and not re-read: on opening, they read from
+   * disk, which is what one expects from a freshly updated tree.
    *
-   * O que está aberto NÃO é apagado antes da releitura: a listagem antiga fica
-   * na tela até a nova chegar, em vez de a pasta piscar vazia.
+   * What is open is NOT erased before the re-read: the old listing stays
+   * on screen until the new one arrives, instead of the folder blinking empty.
    */
   const reloadTree = useCallback(() => {
     const visible = new Set<string>(folders);
@@ -706,12 +706,12 @@ export function FileBrowser({
     for (const dir of visible) void loadDir(dir, true);
   }, [folders, expandedPaths, loadDir]);
 
-  // ── Status do espaço, não de um repo só ───────────────────────────────
-  // A árvore e a lista de alterações mostram o ESPAÇO: num workspace com
-  // `front/` e `back/`, as mudanças dos dois aparecem, cada uma debaixo do seu
-  // projeto. Por isso o status é lido de todos os repos descobertos — e as
-  // chaves viram caminhos ABSOLUTOS, porque duas pastas podem ter o mesmo
-  // `src/index.ts` e a chave relativa colidiria.
+  // ── Status of the workspace, not of a single repo ─────────────────────
+  // The tree and the changes list show the WORKSPACE: in a workspace with
+  // `front/` and `back/`, the changes of both appear, each one under its own
+  // project. That is why the status is read from all the discovered repos — and the
+  // keys become ABSOLUTE paths, because two folders may have the same
+  // `src/index.ts` and the relative key would collide.
   const loadGitStatus = useCallback(async () => {
     const map: Record<string, GitStatusEntry> = {};
     for (const target of repoSections) {
@@ -727,8 +727,8 @@ export function FileBrowser({
     setGitStatus(map);
   }, [repoSections]);
 
-  // Linhas por arquivo, para o "+N -N" da lista de alterações. Falha de numstat
-  // não é erro de tela: sem os números a lista continua útil.
+  // Lines per file, for the "+N -N" of the changes list. A numstat failure
+  // is not a screen error: without the numbers the list is still useful.
   const loadNumstat = useCallback(async () => {
     const map: Record<string, LineStat> = {};
     for (const target of repoSections) {
@@ -744,25 +744,25 @@ export function FileBrowser({
     setNumstat(map);
   }, [repoSections]);
 
-  // Recarrega os indicadores ao montar, trocar de pasta/branch, voltar às
-  // listas (pull/push/disco podem ter mudado o working tree) ou pedir refresh.
-  // Fechado o histórico, nada disso aparece na tela.
+  // Reloads the indicators on mount, on folder/branch switch, on returning to the
+  // lists (pull/push/disk may have changed the working tree) or asking for a refresh.
+  // With the history closed, none of that appears on screen.
   useEffect(() => {
     if (commitsOpen) return;
     void loadGitStatus();
     void loadNumstat();
   }, [commitsOpen, tab, loadGitStatus, loadNumstat, currentBranch]);
 
-  // A branch do rodapé vale para os dois modos e não pode depender de o
-  // histórico ter sido aberto alguma vez — era daí que vinha o "Detached"
-  // mentiroso: sem dado carregado, o rótulo caía no vazio.
+  // The footer branch counts for both modes and cannot depend on the
+  // history having been opened at some point — that is where the lying "Detached"
+  // came from: with no data loaded, the label fell into the void.
   useEffect(() => {
     if (repo) void refreshInfo(repo);
   }, [repo, refreshInfo]);
 
-  // A escolha anterior sobrevive a um refresh ou a um pull: só cai quando
-  // aquele repo deixou de existir. Sem nenhum descoberto, o painel volta a
-  // falar com a pasta de trabalho — o comportamento de sempre.
+  // The previous choice survives a refresh or a pull: it only falls when
+  // that repo stopped existing. With none discovered, the panel goes back to
+  // talking to the working folder — the usual behavior.
   useEffect(() => {
     setActiveRepo((prev) =>
       prev && repos.some((x) => x.path === prev)
@@ -776,27 +776,27 @@ export function FileBrowser({
     );
   }, [repos]);
 
-  // O cabeçalho de cada repo mostra a branch dele — e isso custa alguns
-  // comandos git por repo. Vale com o histórico à vista (é quando os cabeçalhos
-  // existem) e com mais de um projeto, que é quando o chip do rodapé lista a
-  // branch de cada um; o do repo ativo, esse, o rodapé pede o tempo todo.
+  // The header of each repo shows its branch — and that costs a few
+  // git commands per repo. It is worth it with the history in view (that is when the headers
+  // exist) and with more than one project, which is when the footer chip lists the
+  // branch of each one; the active repo's one, that the footer asks for all the time.
   useEffect(() => {
     if (!commitsOpen && repos.length < 2) return;
     for (const r of repos) void refreshInfo(r.path);
   }, [commitsOpen, repos, refreshInfo]);
 
-  // Acordeão exclusivo: abrir uma seção fecha a outra. Clicar na que já está
-  // aberta recolhe — e o repo segue sendo o ativo do painel.
+  // Exclusive accordion: opening one section closes the other. Clicking the one that is already
+  // open collapses it — and the repo keeps being the active one of the panel.
   const handleRepoClick = useCallback((path: string) => {
     setOpenRepo((prev) => (prev === path ? null : path));
     setActiveRepo(path);
   }, []);
 
   /**
-   * Escolher em qual projeto o painel age — pelo chip do rodapé, que é onde a
-   * escolha fica visível. O histórico vai junto: com a seção aberta noutro repo,
-   * a lista mostraria um e o rodapé falaria de outro, e o puxar/enviar iriam
-   * para o repositório errado.
+   * Choosing which project the panel acts on — through the footer chip, which is where the
+   * choice is visible. The history goes along: with the section open in another repo,
+   * the list would show one and the footer would talk about another, and pull/push would go
+   * to the wrong repository.
    */
   const handleRepoPick = useCallback((path: string) => {
     setOpenRepo(path);
@@ -804,11 +804,11 @@ export function FileBrowser({
   }, []);
 
   /**
-   * O rodapé segue o arquivo em foco: é o repo DELE que o seletor de branch e o
-   * puxar/enviar alcançam — a troca de branch por pasta, como no VS Code.
+   * The footer follows the focused file: it is ITS repo that the branch selector and the
+   * pull/push reach — the branch switch per folder, as in VS Code.
    *
-   * Sem isto o rodapé mudava só pelo histórico: a mesma ação (focar um arquivo)
-   * trocava a branch embaixo numa aba e não na outra, que era o que não fechava.
+   * Without this the footer changed only through the history: the same action (focusing a file)
+   * swapped the branch below in one tab and not in the other, which was what did not add up.
    */
   const focusRepoOf = useCallback(
     (filePath: string) => {
@@ -818,7 +818,7 @@ export function FileBrowser({
     [repoSections],
   );
 
-  // Agrupa arquivos excluídos por diretório pai (camada de fantasma no tree).
+  // Groups deleted files by parent directory (ghost layer in the tree).
   const deletedByDir = useMemo(() => {
     const map: Record<string, DeletedEntry[]> = {};
     for (const [absPath, entry] of Object.entries(gitStatus)) {
@@ -833,7 +833,7 @@ export function FileBrowser({
     return map;
   }, [gitStatus]);
 
-  // ── A lista de alterações ─────────────────────────────────────────────
+  // ── The changes list ──────────────────────────────────────────────────
   const changeFiles = useMemo<ChangeFileNode[]>(
     () =>
       Object.entries(gitStatus).map(([abs, entry]) => ({
@@ -846,13 +846,13 @@ export function FileBrowser({
   );
 
   /**
-   * As raízes da árvore de alterações.
+   * The roots of the changes tree.
    *
-   * Com um repo só, a árvore nasce nele (ou na pasta de trabalho) — o caminho
-   * de sempre. Com mais de um, cada pasta do chat que TEM alterações vira uma
-   * raiz: num espaço com `front/` e `back/` isso põe cada projeto debaixo do
-   * seu nome, e com uma pasta anexada ao chat as mudanças dela aparecem junto.
-   * Antes só a pasta principal era lida, e as anexadas ficavam de fora.
+   * With a single repo, the tree is born in it (or in the working folder) — the usual
+   * path. With more than one, each chat folder that HAS changes becomes a
+   * root: in a workspace with `front/` and `back/` that puts each project under
+   * its name, and with a folder attached to the chat its changes appear along.
+   * Before, only the main folder was read, and the attached ones were left out.
    */
   const changeGroups = useMemo<ChangeGroup[]>(() => {
     const fallback = repo ?? folders[0] ?? "";
@@ -868,9 +868,9 @@ export function FileBrowser({
       ];
     }
 
-    // O arquivo conta uma vez só (a pasta mais específica que o contém), e um
-    // arquivo de uma pasta que não está mais na lista não some: cai no
-    // `fallback` até a próxima leitura.
+    // The file counts only once (the most specific folder that contains it), and a
+    // file of a folder that is no longer in the list does not disappear: it falls into the
+    // `fallback` until the next read.
     return groupByFolder(folders, changeFiles, fallback).map(
       ({ folder, files }) => {
         const { root, dirPaths } = buildChangeTree(folder, files);
@@ -889,11 +889,11 @@ export function FileBrowser({
     [changeGroups],
   );
   /**
-   * Com mais de uma pasta com alterações cada uma vira uma pasta da árvore, com
-   * o nome dela — é o que diz de qual projeto é o arquivo lá embaixo.
+   * With more than one folder with changes each one becomes a folder of the tree, with
+   * its name — it is what says which project the file down there belongs to.
    */
   const changeShowFolders = changeGroups.length > 1;
-  /** O que abre e fecha na lista: as subpastas e, quando rotulada, a raiz. */
+  /** What opens and closes in the list: the subfolders and, when labeled, the root. */
   const changeExpandable = useMemo(
     () =>
       changeShowFolders
@@ -902,10 +902,10 @@ export function FileBrowser({
     [changeShowFolders, changeGroups, changeDirPaths],
   );
 
-  // Pastas da lista de alterações nascem TODAS abertas — é o ponto da aba: ver
-  // o que mudou sem ter de abrir caminho. Guardar o que foi FECHADO (e não o
-  // que foi aberto) é o que faz a pasta que a pessoa recolheu continuar
-  // recolhida quando o status do git recarrega.
+  // Folders of the changes list are ALL born open — it is the point of the tab: seeing
+  // what changed without having to open the way. Storing what was CLOSED (and not what
+  // was opened) is what makes the folder the person collapsed stay
+  // collapsed when the git status reloads.
   const [collapsedChanges, setCollapsedChanges] = useState<Set<string>>(
     new Set(),
   );
@@ -925,7 +925,7 @@ export function FileBrowser({
 
   useEffect(() => {
     if (!currentBranch || folders.length === 0) return;
-    // Trocar de branch muda o conteúdo de qualquer subpasta, não só da raiz.
+    // Switching branch changes the content of any subfolder, not only of the root.
     reloadTree();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBranch]);
@@ -954,17 +954,17 @@ export function FileBrowser({
   );
 
   /**
-   * Árvore completa: um arquivo alterado leva à leitura empilhada, na seção
-   * dele. Arquivo sem alteração abre para edição — é o outro motivo de clicar
-   * num arquivo, e o único que a leitura não atende.
+   * Full tree: a changed file leads to the stacked reading, in its
+   * section. A file without changes opens for editing — it is the other reason to click
+   * a file, and the only one the reading does not serve.
    */
   const handleSelect = useCallback(
     (path: string) => {
-      // A checagem de alterado vem antes da de diretório: um arquivo excluído
-      // não está em listagem nenhuma do disco, então não teria como passar.
+      // The changed check comes before the directory one: a deleted file
+      // is not in any disk listing, so it would have no way of passing.
       if (gitStatus[path]) {
-        // Vai o caminho ABSOLUTO: com mais de um repositório, o relativo não
-        // diz de qual projeto é o arquivo.
+        // The ABSOLUTE path goes: with more than one repository, the relative one does not
+        // say which project the file belongs to.
         focusRepoOf(path);
         onReveal(path);
         return;
@@ -978,13 +978,13 @@ export function FileBrowser({
   );
 
   /**
-   * Lista de alterações: abrir um arquivo é querer ver O QUE MUDOU nele, então
-   * a lente já vem no diff. Clique em pasta não é seleção — é só abrir/fechar.
+   * Changes list: opening a file is wanting to see WHAT CHANGED in it, so
+   * the lens already comes in the diff. A click on a folder is not a selection — it is just open/close.
    */
   const handleSelectChange = useCallback(
     (path: string) => {
       if (!gitStatus[path]) return;
-      // Caminho absoluto, como no clique da árvore: é o que identifica o repo.
+      // Absolute path, as in the tree click: it is what identifies the repo.
       focusRepoOf(path);
       onReveal(path);
     },
@@ -995,21 +995,21 @@ export function FileBrowser({
     if (!repo || refreshing) return;
     setRefreshing(true);
     try {
-      // A árvore é da pasta de trabalho inteira: raízes E pastas abertas — o
-      // arquivo criado à mão numa subpasta não aparecia quando só a raiz era
-      // relida.
+      // The tree is of the whole working folder: roots AND open folders — the
+      // file created by hand in a subfolder did not appear when only the root was
+      // re-read.
       reloadTree();
       onRefreshChanges();
-      // Branch, `*` de sujo e ↑↓ do rodapé/cabeçalhos vivem no cache por pasta
-      // do branch-store: sem esta leitura o botão atualizava a árvore e as
-      // alterações, mas deixava o retrato do repositório como estava antes.
+      // Branch, dirty `*` and ↑↓ of the footer/headers live in the per-folder cache
+      // of the branch-store: without this read the button updated the tree and the
+      // changes, but left the snapshot of the repository as it was before.
       await Promise.all([
         loadGitStatus(),
         loadNumstat(),
         ...repoSections.map((target) => refreshInfo(target.path)),
       ]);
-      // O botão é o único "atualizar" do painel e vale para as três abas: no
-      // histórico, o que há para atualizar é o log.
+      // The button is the only "refresh" of the panel and counts for the three tabs: in the
+      // history, what there is to refresh is the log.
       setCommitsReload((n) => n + 1);
     } finally {
       setRefreshing(false);
@@ -1041,10 +1041,10 @@ export function FileBrowser({
     setSyncStatus(null);
     const result = await pullChanges(repo);
     if (result.ok) {
-      // O pull pode trazer arquivos para qualquer pasta aberta.
+      // The pull may bring files to any open folder.
       reloadTree();
-      // E o que ele trouxe também muda o diff empilhado: sem isto ele só se
-      // renovava no refresh manual ou ao remontar o painel.
+      // And what it brought also changes the stacked diff: without this it only
+      // renewed on the manual refresh or when remounting the panel.
       onRefreshChanges();
       void loadGitStatus();
       void loadNumstat();
@@ -1070,8 +1070,8 @@ export function FileBrowser({
     setSyncStatus(null);
     const result = await pushChanges(repo);
     if (result.ok) {
-      // Um push só mexe na referência remota: a árvore e o status local ficam
-      // como estavam. O que muda é o selo local/remoto das commits.
+      // A push only touches the remote reference: the tree and the local status stay
+      // as they were. What changes is the local/remote badge of the commits.
       setCommitsReload((n) => n + 1);
       setSyncStatus({
         kind: "info",
@@ -1081,10 +1081,10 @@ export function FileBrowser({
       });
       return;
     }
-    // Sem remote não é erro do usuário, é um passo que falta: o modal oferece
-    // criar o repositório em vez de só informar que não dá para enviar.
+    // With no remote it is not a user error, it is a missing step: the modal offers
+    // to create the repository instead of only informing that it cannot be sent.
     if (result.kind === "noRemote") {
-      setCriarRepoOpen(true);
+      setCreateRepoOpen(true);
       return;
     }
     setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
@@ -1120,8 +1120,8 @@ export function FileBrowser({
 
   const loadMoreCommits = useCallback(() => {
     if (!repo || !commits || commitsLoading || commitsHasMore === false) return;
-    // commitsLoadingMore do estado não é síncrono: a ref garante exclusão mútua
-    // mesmo com o IntersectionObserver disparando várias vezes no mesmo tick.
+    // commitsLoadingMore of the state is not synchronous: the ref guarantees mutual exclusion
+    // even with the IntersectionObserver firing several times in the same tick.
     if (commitsLoadingMoreRef.current) return;
     commitsLoadingMoreRef.current = true;
     const epoch = commitsEpochRef.current;
@@ -1142,8 +1142,8 @@ export function FileBrowser({
       });
   }, [repo, commits, commitsLoading, commitsHasMore]);
 
-  // Sentinela no fim da lista: quando o viewport do ScrollArea se aproxima do
-  // fim (rootMargin de 300px), carrega a próxima página -> scroll contínuo.
+  // Sentinel at the end of the list: when the ScrollArea viewport approaches the
+  // end (300px rootMargin), it loads the next page -> continuous scroll.
   useEffect(() => {
     const el = commitsEndRef.current;
     if (!el) return;
@@ -1158,12 +1158,12 @@ export function FileBrowser({
     );
     observer.observe(el);
     return () => observer.disconnect();
-    // `openPath` entra nas dependências porque recolher e reabrir a seção
-    // remonta a sentinela: sem isso o observador continuaria preso ao nó velho
-    // e o scroll infinito pararia de carregar depois do primeiro recolhimento.
+    // `openPath` enters the deps because collapsing and reopening the section
+    // remounts the sentinel: without that the observer would stay stuck to the old node
+    // and the infinite scroll would stop loading after the first collapse.
   }, [commits, loadMoreCommits, openPath]);
 
-  // Linhas do log com divisores de região (main vs branch atual vs remoto)
+  // Log rows with region dividers (main vs current branch vs remote)
   const commitRows = useMemo<CommitRow[]>(() => {
     if (!commits) return [];
     const rows: CommitRow[] = [];
@@ -1181,12 +1181,12 @@ export function FileBrowser({
   const changeCount = changeFiles.length;
 
   /**
-   * O cabeçalho de um repo no acordeão: nome, branch, distância do remoto e o
-   * marcador de working tree sujo.
+   * The header of a repo in the accordion: name, branch, distance from the remote and the
+   * dirty working tree marker.
    *
-   * Com a seção aberta ele fica fixo no topo do scroll — e o padding de cima é
-   * dele, não do container, justamente para que, ao grudar, o próprio
-   * cabeçalho cubra a faixa por onde a lista passa.
+   * With the section open it stays fixed at the top of the scroll — and the top padding is
+   * its own, not the container's, precisely so that, when it sticks, the
+   * header itself covers the strip through which the list passes.
    */
   const renderRepoHeader = (section: GitRepoEntry) => {
     const open = openPath === section.path;
@@ -1212,7 +1212,7 @@ export function FileBrowser({
         <span className="min-w-0 truncate text-xs font-medium">
           {section.name}
         </span>
-        {/* Repo aninhado: o caminho desfaz a dúvida de qual "front" é este. */}
+        {/* Nested repo: the path resolves the doubt about which "front" this one is. */}
         {section.relative.includes("/") && (
           <span className="min-w-0 truncate text-[10px] text-muted-foreground">
             {section.relative}
@@ -1252,13 +1252,13 @@ export function FileBrowser({
           value={tab}
         >
           <div className="shrink-0 px-3 pt-4 ">
-            {/* Três índices, e não duas listas com o histórico atrás de um botão
-                no rodapé. O nome fica só na aba ativa quando o painel aperta:
-                três nomes não cabem no piso de 200px, e a ativa é a única que
-                precisa se identificar — as outras se explicam pelo ícone.
-                Sem o nome, elas encolhem para o ícone (`flex-none`) e a sobra
-                vai toda para a ativa: é o que faz o nome dela caber inteiro,
-                em vez de aparecer truncado entre duas abas largas e vazias. */}
+            {/* Three indexes, and not two lists with the history behind a button
+                in the footer. The name stays only on the active tab when the panel tightens:
+                three names do not fit in the 200px floor, and the active one is the only one that
+                needs to identify itself — the others explain themselves by the icon.
+                Without the name, they shrink to the icon (`flex-none`) and the remainder
+                goes entirely to the active one: it is what makes its name fit whole,
+                instead of appearing truncated between two wide and empty tabs. */}
             <TabsList className="w-full">
               <TabsTrigger
                 className="group min-w-0 flex-1 @max-[18rem]:flex-none @max-[18rem]:data-[active]:flex-1"
@@ -1357,21 +1357,21 @@ export function FileBrowser({
                 {syncStatus.text}
               </p>
             )}
-            {/* `min-h-0 flex-1`, e não `h-full`: esta coluna já tem a barra de
-                cima e a faixa de sync acima, então `h-full` fazia o scroll pegar
-                a altura INTEIRA do painel e passar por baixo do rodapé — que
-                tem de ficar sempre à vista. */}
+            {/* `min-h-0 flex-1`, and not `h-full`: this column already has the top bar
+                and the sync strip above, so `h-full` made the scroll take
+                the WHOLE height of the panel and pass under the footer — which
+                has to stay always in view. */}
             <ScrollArea className="min-h-0 flex-1">
-              {/* Sem padding em cima: o cabeçalho do repo aberto é `sticky` e
-                  traz a própria folga — assim, ao grudar no topo, ele cobre a
-                  faixa por onde a lista passa. */}
-              {/* `mr-2`: a barra de rolagem é sobreposta à lista, e sem a folga
-                  ela passava por cima do texto dos commits. */}
+              {/* No padding on top: the header of the open repo is `sticky` and
+                  brings its own slack — that way, when it sticks to the top, it covers the
+                  strip through which the list passes. */}
+              {/* `mr-2`: the scrollbar is overlaid on the list, and without the slack
+                  it passed over the text of the commits. */}
               <div className="mr-2 flex flex-col gap-1 pb-2 text-xs">
                 {repoSections.map((section) => (
                   <section key={section.path} className="flex flex-col">
-                    {/* Com um repo só não há o que escolher: a lista vem solta,
-                        sem cabeçalho nenhum. */}
+                    {/* With a single repo there is nothing to choose: the list comes loose,
+                        with no header at all. */}
                     {repos.length > 1 && renderRepoHeader(section)}
                     {openPath === section.path && (
                       <div className="flex flex-col gap-2 px-2 pb-2 pt-1">
@@ -1392,8 +1392,8 @@ export function FileBrowser({
                               {t("folders.noCommits")}
                             </div>
                           )}
-                        {/* Sem as linhas enquanto a carga inicial corre: trocar
-                            de repo não pode mostrar o commit do anterior. */}
+                        {/* No rows while the initial load runs: switching
+                            repo cannot show the previous one's commit. */}
                         {!commitsLoading &&
                           commitRows.map((row) =>
                             row.divider ? (
@@ -1471,9 +1471,9 @@ export function FileBrowser({
                                         </div>
                                       </HoverCardContent>
                                     </HoverCard>
-                                    {/* O autor e o separador dele saem juntos quando a
-                              coluna aperta: truncar só o texto deixava os dois
-                              pontos colados com um vão vazio no meio. */}
+                                    {/* The author and its separator leave together when the
+                              column tightens: truncating only the text left the two
+                              dots glued with an empty gap in the middle. */}
                                     <CommitMetadata className="@container min-w-0 text-[10px]">
                                       <CommitHash className="shrink-0 text-[10px]">
                                         {row.commit!.hash.slice(0, 7)}
@@ -1507,8 +1507,8 @@ export function FileBrowser({
                                           key={f.path}
                                           className="cursor-pointer text-[11px]"
                                           onClick={() =>
-                                            // O que interessa num commit é o que ele mudou:
-                                            // abre já no diff, com o conteúdo a um clique.
+                                            // What matters in a commit is what it changed:
+                                            // it opens already in the diff, with the content one click away.
                                             onOpenCommitFile(
                                               section.path,
                                               row.commit!.hash,
@@ -1557,7 +1557,7 @@ export function FileBrowser({
                     )}
                   </section>
                 ))}
-                {/* Acordeão recolhido: os repos ficam à vista, sem lista. */}
+                {/* Accordion collapsed: the repos stay in view, without a list. */}
                 {repos.length > 1 && !openPath && (
                   <p className="px-2 py-4 text-center text-muted-foreground">
                     {t("folders.reposPick")}
@@ -1603,19 +1603,19 @@ export function FileBrowser({
               </ScrollArea>
             )}
           </TabsContent>
-          {/* `flex`, e não um bloco: a busca é um flex item que precisa de
-              altura DEFINIDA para o `flex-1` valer. Como bloco, a altura dela
-              virava automática, o `h-full` do ScrollArea resolvia contra `auto`
-              e a árvore era cortada pelo `overflow-hidden` da aba, sem rolar —
-              o que só aparecia quando o conteúdo passava da altura do painel
-              (uma pasta a mais bastava). */}
+          {/* `flex`, and not a block: the search is a flex item that needs a
+              DEFINED height for `flex-1` to count. As a block, its height
+              became automatic, the ScrollArea's `h-full` resolved against `auto`
+              and the tree was cut by the tab's `overflow-hidden`, without scrolling —
+              which only appeared when the content went past the panel height
+              (one more folder was enough). */}
           <TabsContent
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             value="files"
           >
-            {/* A busca é o topo do índice, e a árvore é o estado dela sem
-                consulta: digitar troca a árvore pelos resultados, apagar volta.
-                Um campo só — nome e conteúdo —, sem sintaxe para decorar. */}
+            {/* The search is the top of the index, and the tree is its state without
+                a query: typing swaps the tree for the results, erasing goes back.
+                A single field — name and content —, with no syntax to memorize. */}
             <WorkspaceSearch
               className="min-h-0 flex-1 pt-1"
               openFile={selectedPath ?? null}
@@ -1627,9 +1627,9 @@ export function FileBrowser({
               onHighlightQuery={onHighlightQuery}
               onReplaced={onReplaced}
             >
-              {/* Flex item (`flex-1`) em vez de `h-full`: a altura vem da
-                  corrente de flex da aba, e não de uma porcentagem que depende
-                  de o pai ter altura própria — o mesmo padrão do histórico. */}
+              {/* Flex item (`flex-1`) instead of `h-full`: the height comes from the
+                  flex chain of the tab, and not from a percentage that depends
+                  on the parent having its own height — the same pattern as the history. */}
               <ScrollArea className="min-h-0 flex-1">
                 <FileTree
                   className="rounded-none border-0 bg-transparent mr-2 "
@@ -1661,14 +1661,14 @@ export function FileBrowser({
           </TabsContent>
         </Tabs>
 
-        {/* Rodapé do painel inteiro: em qual projeto o painel age, a branch dele
-            e o estado do working tree. Vale para as três abas — o histórico, que
-            antes entrava por aqui, agora é uma delas. */}
+        {/* Footer of the whole panel: which project the panel acts on, its branch
+            and the state of the working tree. It counts for the three tabs — the history, which
+            used to enter through here, is now one of them. */}
         <div className="flex shrink-0 items-center gap-1.5 border-t border-sidebar-border px-2 py-1.5 text-xs">
-          {/* Com mais de um projeto, o rodapé DIZ em qual está agindo. Sem isso,
-              abrir uma seção do histórico trocava a branch aqui embaixo sem nada
-              na tela explicando por quê — parecia a branch de outro repo. Com um
-              repo só não há o que escolher, e o chip não aparece. */}
+          {/* With more than one project, the footer SAYS which one it is acting on. Without that,
+              opening a history section swapped the branch down here with nothing
+              on screen explaining why — it looked like another repo's branch. With a single
+              repo there is nothing to choose, and the chip does not appear. */}
           {repos.length > 1 && (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -1737,8 +1737,8 @@ export function FileBrowser({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {/* O mesmo seletor do cabeçalho, abrindo para cima: o rodapé fica no
-              fim do painel, e um dropdown para baixo sairia da janela. */}
+          {/* The same selector as the header, opening upwards: the footer sits at the
+              end of the panel, and a dropdown downwards would leave the window. */}
           <BranchSelector compact repoPath={repo} side="top" />
           {branchInfo?.dirty && (
             <span
@@ -1748,12 +1748,12 @@ export function FileBrowser({
               *
             </span>
           )}
-          {/* A distância até a branch principal saiu daqui. Ela não é a branch
-              em que se está — é `rev-list main...HEAD`, a comparação com a
-              `main` — e, colada no seletor de branch, parecia um segundo nome de
-              branch (o "33 0 ⇄ main" da dúvida). O histórico já diz o mesmo, e
-              melhor: os divisores de região marcam onde a branch começa, e o
-              cabeçalho de cada projeto traz o ↑↓ dele. */}
+          {/* The distance to the main branch left here. It is not the branch
+              one is on — it is `rev-list main...HEAD`, the comparison with
+              `main` — and, glued to the branch selector, it looked like a second branch
+              name (the "33 0 ⇄ main" of the doubt). The history already says the same, and
+              better: the region dividers mark where the branch starts, and the
+              header of each project brings its ↑↓. */}
           <Hint label={t("folders.refresh")}>
             <button
               type="button"
@@ -1777,16 +1777,16 @@ export function FileBrowser({
       {repo && (
         <CreateRemoteRepoDialog
           repoPath={repo}
-          open={criarRepoOpen}
-          onOpenChange={setCriarRepoOpen}
+          open={createRepoOpen}
+          onOpenChange={setCreateRepoOpen}
           onCreated={(result) => {
             setCommitsReload((n) => n + 1);
             void refreshInfo(repo);
             setSyncStatus({
               kind: result.pushed ? "info" : "error",
               text: result.pushed
-                ? t("createRepo.sucesso", { repo: result.fullName })
-                : t("createRepo.criadoSemPush", { repo: result.fullName }),
+                ? t("createRepo.success", { repo: result.fullName })
+                : t("createRepo.createdWithoutPush", { repo: result.fullName }),
             });
           }}
         />

@@ -4,11 +4,11 @@ import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 /**
- * Itens de menu dos modos de delegação (dropdown "+" dos inputs):
- * Subagents (workers efêmeros em background) e Orchestra (plano + sessões
- * filhas no painel direito). Mutuamente exclusivos; a engrenagem abre o modal
- * de configuração do worker sem alternar o toggle.
- * Loop mode (modo código): revisa e itera até completar a tarefa.
+ * Menu items of the delegation modes ("+" dropdown of the inputs):
+ * Subagents (ephemeral workers in the background) and Orchestra (plan + child
+ * sessions in the right panel). Mutually exclusive; the gear opens the worker
+ * settings modal without toggling the switch.
+ * Loop mode (code mode): reviews and iterates until the task is complete.
  */
 export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsChange, onOrchestraChange, onLoopChange, onOpenConfig, onOpenLoopConfig, mode }: {
   subagents: boolean
@@ -17,10 +17,10 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
   onSubagentsChange: (value: boolean) => void
   onOrchestraChange: (value: boolean) => void
   onLoopChange?: (value: boolean) => void
-  /** Engrenagem de Subagentes ou de Orquestra: cada uma abre a sua configuração */
+  /** Subagents or Orchestra gear: each opens its own settings */
   onOpenConfig: (kind: "subagents" | "orchestra") => void
   onOpenLoopConfig?: () => void
-  /** Orquestração é exclusiva do modo code */
+  /** Orchestration is exclusive to code mode */
   mode?: "chat" | "code"
 }) {
   const { t } = useTranslation()
@@ -75,8 +75,8 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
         <DropdownMenuCheckboxItem
           checked={loop ?? false}
           onCheckedChange={(checked) => onLoopChange(checked)}
-          // Na orquestra quem revisa é o orquestrador (Configurações da
-          // Orquestra) — o Loop não se aplica.
+          // In the orchestra the reviewer is the orchestrator (Orchestra
+          // Settings) — Loop does not apply.
           disabled={orchestra}
           title={orchestra ? t("delegation.loopOffInOrchestra") : undefined}
           className={cn(loop && "pr-14")}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { MessagePart, ToolPart } from "@shared/chat"
 import { landPieceCard, pieceCardKeyOf } from "./piece-tools"
 
-/** O relatório que a tool devolve ao registrar o canvas (resumido). */
+/** The report the tool returns when registering the canvas (summarized). */
 function designWrite(id: string, name: string, boards: number): ToolPart {
   return {
     id,
@@ -29,7 +29,7 @@ function slidesWrite(id: string, title: string, slides: number): ToolPart {
   }
 }
 
-/** Um segmento de card como o construtor de segmentos da conversa o monta. */
+/** A card segment as the conversation's segment builder assembles it. */
 type Card = { kind: "part"; id: string; part: MessagePart }
 const create = (part: MessagePart): Card => ({ kind: "part", id: part.id, part })
 
@@ -43,23 +43,23 @@ function build(parts: MessagePart[]): Card[] {
   return segments
 }
 
-describe("identidade do card da peça", () => {
-  it("a mesma peça endereçada por nome dá a mesma chave", () => {
+describe("identity of the piece card", () => {
+  it("the same piece addressed by name gives the same key", () => {
     expect(pieceCardKeyOf(designWrite("p1", "landing", 1))).toBe(pieceCardKeyOf(designWrite("p2", "landing", 3)))
   })
 
-  it("famílias diferentes com o mesmo nome não se confundem", () => {
+  it("different families with the same name are not confused", () => {
     expect(pieceCardKeyOf(designWrite("p1", "peça", 1))).not.toBe(pieceCardKeyOf(motionWrite("p2", "peça")))
   })
 
-  it("uma part que não é de peça não tem chave", () => {
+  it("a part that belongs to no piece has no key", () => {
     const read: MessagePart = { id: "p1", type: "tool", tool: "read", state: "done", input: {} }
     expect(pieceCardKeyOf(read)).toBeNull()
   })
 })
 
-describe("um card por peça na mesma mensagem", () => {
-  it("as telas escritas em chamadas seguidas viram UM card, com o estado final", () => {
+describe("one card per piece in the same message", () => {
+  it("screens written in consecutive calls become ONE card, with the final state", () => {
     const cards = build([
       designWrite("p1", "landing", 1),
       designWrite("p2", "landing", 2),
@@ -67,13 +67,13 @@ describe("um card por peça na mesma mensagem", () => {
     ])
 
     expect(cards).toHaveLength(1)
-    // O card fica no lugar da PRIMEIRA chamada: durante o stream ele não pula
-    // para baixo, só passa a mostrar o que a última sabe.
+    // The card stays in place of the FIRST call: during the stream it does not jump
+    // down, it just starts showing what the last one knows.
     expect(cards[0].id).toBe("p1")
     expect(cards[0].part.id).toBe("p3")
   })
 
-  it("peças diferentes continuam com um card cada", () => {
+  it("different pieces keep one card each", () => {
     const cards = build([
       designWrite("p1", "landing", 1),
       designWrite("p2", "precos", 1),
@@ -85,9 +85,9 @@ describe("um card por peça na mesma mensagem", () => {
     expect(cards.map((c) => c.part.id)).toEqual(["p3", "p2", "p4"])
   })
 
-  it("a chamada sem identidade nenhuma não é engolida por outra", () => {
-    // Sem nome, sem caminho e sem relatório não há como dizer de que peça se
-    // trata: cada card fica, em vez de sumir dentro de um card alheio.
+  it("a call with no identity is not swallowed by another", () => {
+    // Without a name, without a path and without a report there is no way to say which piece it
+    // is: each card stays, instead of vanishing into someone else's card.
     const anonymous = (id: string): ToolPart => ({
       id,
       type: "tool",

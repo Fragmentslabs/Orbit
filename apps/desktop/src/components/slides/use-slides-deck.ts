@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { SLIDES_SCHEME } from "@shared/media"
 import { slidesApi } from "@/src/lib/ipc"
 
-/** Marca das mensagens da ponte — a mesma de slides-runtime.ts. */
+/** Mark of the bridge messages — the same as slides-runtime.ts. */
 const SLIDES_SOURCE = "orbit-slides"
 
 export interface SlideInfo {
@@ -21,8 +21,8 @@ export interface DeckInfo {
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
 /**
- * Caminho da entrada DENTRO da pasta registrada — o que a URL
- * `orbit-slides://<id>/<caminho-relativo>` serve (mesma regra do motion-tab).
+ * Path of the entry INSIDE the registered folder — what the URL
+ * `orbit-slides://<id>/<relative-path>` serves (same rule as motion-tab).
  */
 export function entryPath(entry: string): string {
   const cleaned = entry.replace(/\\/g, "/").replace(/^file:\/\//, "")
@@ -32,28 +32,28 @@ export function entryPath(entry: string): string {
 }
 
 /**
- * O palco de um deck: o iframe, a ponte e o slide em que ele está.
+ * The stage of a deck: the iframe, the bridge and the slide it is on.
  *
- * Quem monta o 16:9, escala e obedece ao teclado é o runtime injetado no
- * `<head>` (electron/lib/slides/slides-runtime.ts). Este hook segura o que é do
- * app — qual slide está na tela, quando recarregar e o que fazer quando o
- * runtime pede tela cheia — para que a aba e o card do chat compartilhem o
- * mesmo comportamento sem duplicar a ponte.
+ * What builds the 16:9, scales and obeys the keyboard is the runtime injected into the
+ * `<head>` (electron/lib/slides/slides-runtime.ts). This hook holds what belongs to the
+ * app — which slide is on screen, when to reload and what to do when the
+ * runtime asks for fullscreen — so that the tab and the chat card share the
+ * same behavior without duplicating the bridge.
  *
- * A ponte é postMessage com `source: "orbit-slides"`:
+ * The bridge is postMessage with `source: "orbit-slides"`:
  *
- *   deck → app: ready (total, palco, títulos e notas), change (índice),
+ *   deck → app: ready (total, stage, titles and notes), change (index),
  *               error, request-fullscreen
  *   app → deck: go(index), next, prev
  *
- * O iframe roda em `sandbox="allow-scripts"` SEM `allow-same-origin` (origem
- * opaca): não dá para ler o DOM dele, e é por isso que a lista de slides e as
- * notas chegam pelo `ready` em vez de serem lidas daqui.
+ * The iframe runs in `sandbox="allow-scripts"` WITHOUT `allow-same-origin` (opaque
+ * origin): there is no way to read its DOM, and that is why the slide list and the
+ * notes arrive through `ready` instead of being read from here.
  *
- * Duas superfícies usam este hook, cada uma com o SEU iframe. O filtro
- * `event.source === iframe.contentWindow` é o que impede um palco de reagir ao
- * "change" do outro — sem ele, dois decks na mesma conversa trocariam de slide
- * juntos.
+ * Two surfaces use this hook, each one with ITS OWN iframe. The
+ * `event.source === iframe.contentWindow` filter is what prevents one stage from reacting to
+ * the other's "change" — without it, two decks in the same conversation would switch slides
+ * together.
  */
 export function useSlidesDeck({
   slidesId,
@@ -63,9 +63,9 @@ export function useSlidesDeck({
 }: {
   slidesId?: string
   entry?: string
-  /** Slide em que o palco abre (a tela cheia herda o slide do card). */
+  /** Slide the stage opens on (fullscreen inherits the card's slide). */
   initialIndex?: number
-  /** O runtime pediu tela cheia (tecla F dentro do palco). */
+  /** The runtime asked for fullscreen (F key inside the stage). */
   onFullscreenRequest?: () => void
 }) {
   const { t } = useTranslation()
@@ -76,18 +76,18 @@ export function useSlidesDeck({
   const [failed, setFailed] = useState<string | null>(null)
 
   /**
-   * Slide a reenviar assim que o runtime disser "ready". Cobre duas coisas: a
-   * entrada (a tela cheia herda o slide do card) e a recarga ao vivo, em que o
-   * iframe remonta e o deck VOLTARIA ao slide 0 — o alvo é o do momento da
-   * recarga. Esperar o "ready" é determinístico: um deck que demora a carregar
-   * não volta mais para o primeiro slide.
+   * Slide to resend as soon as the runtime says "ready". It covers two things: the
+   * entry (fullscreen inherits the card's slide) and the live reload, in which the
+   * iframe remounts and the deck WOULD GO BACK to slide 0 — the target is the one of the moment of the
+   * reload. Waiting for "ready" is deterministic: a deck that takes long to load
+   * does not go back to the first slide anymore.
    */
   const restoreRef = useRef(initialIndex)
   useEffect(() => {
     restoreRef.current = initialIndex
   }, [initialIndex])
 
-  /** O índice mais recente, para o watcher (que não pode reassinar a cada troca). */
+  /** The most recent index, for the watcher (which cannot re-subscribe on every switch). */
   const indexRef = useRef(index)
   useEffect(() => {
     indexRef.current = index
@@ -103,7 +103,7 @@ export function useSlidesDeck({
     [slidesId, entry, reloads],
   )
 
-  /** Comando app → deck. Sem janela montada, não há para quem mandar. */
+  /** App → deck command. With no window mounted, there is no one to send it to. */
   const post = useCallback((message: Record<string, unknown>) => {
     iframeRef.current?.contentWindow?.postMessage({ source: SLIDES_SOURCE, ...message }, "*")
   }, [])
@@ -130,23 +130,23 @@ export function useSlidesDeck({
   const next = useCallback(() => go(indexRef.current + 1), [go])
   const prev = useCallback(() => go(indexRef.current - 1), [go])
 
-  // Outro deck no mesmo palco: começa do zero, sem herdar índice nem erro.
+  // Another deck on the same stage: it starts from zero, without inheriting index or error.
   useEffect(() => {
     restoreRef.current = initialIndex
     setDeck(null)
     setIndex(initialIndex)
     setFailed(null)
-    // `initialIndex` de propósito fora: trocar o slide inicial do MESMO deck
-    // (a tela cheia do chat) não pode remontar o palco.
+    // `initialIndex` out on purpose: swapping the initial slide of the SAME deck
+    // (the chat fullscreen) cannot remount the stage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slidesId])
 
-  // ---------------------------------------------------------------- ponte
+  // --------------------------------------------------------------- bridge
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const win = iframeRef.current?.contentWindow
-      // A origem do iframe é opaca (sandbox sem allow-same-origin): quem diz
-      // que a mensagem é DESTE iframe é a janela de origem, não a origem.
+      // The iframe origin is opaque (sandbox without allow-same-origin): what says
+      // that the message is from THIS iframe is the source window, not the origin.
       if (!win || event.source !== win) return
       const data = event.data as Record<string, unknown> | null
       if (!data || data.source !== SLIDES_SOURCE) return
@@ -167,8 +167,8 @@ export function useSlidesDeck({
           setIndex(0)
         }
       } else if (data.type === "change") {
-        // O runtime é a fonte da verdade do índice: clique no palco e tecla
-        // dentro do iframe também mudam de slide, não só o nosso `go`.
+        // The runtime is the source of truth of the index: a click on the stage and a key
+        // inside the iframe also switch slides, not only our `go`.
         setIndex(Number(data.index) || 0)
       } else if (data.type === "error") {
         setFailed(String(data.message ?? "unknown"))
@@ -180,8 +180,8 @@ export function useSlidesDeck({
     return () => window.removeEventListener("message", onMessage)
   }, [])
 
-  // O agente reescreveu o arquivo (fs.watch do main): recarrega voltando ao
-  // MESMO slide, que é o que deixa comparar o antes e o depois do ajuste.
+  // The agent rewrote the file (main fs.watch): it reloads going back to the
+  // SAME slide, which is what allows comparing the before and the after of the adjustment.
   useEffect(() => {
     if (!slidesId) return
     return slidesApi.onChanged((payload) => {
@@ -193,9 +193,9 @@ export function useSlidesDeck({
     })
   }, [slidesId])
 
-  // Sem "ready" a tempo, a página não vai responder: pergunta ao scheme o que
-  // houve (a mesma URL, por fetch — o scheme aceita CORS) em vez de deixar o
-  // palco girando para sempre.
+  // Without "ready" in time, the page is not going to answer: it asks the scheme what
+  // happened (the same URL, through fetch — the scheme accepts CORS) instead of leaving the
+  // stage spinning forever.
   useEffect(() => {
     if (!src || deck) return
     let cancelled = false

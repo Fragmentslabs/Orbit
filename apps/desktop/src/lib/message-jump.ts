@@ -1,14 +1,14 @@
 /**
- * Pular para uma mensagem do chat.
+ * Jump to a message in the chat.
  *
- * A lista do chat só monta as últimas mensagens (janela — ver ChatMessages em
- * chat-view.tsx), então uma mensagem antiga pode não existir no DOM. Quem quer
- * rolar até ela (busca, navegador de mensagens, galeria de mídia) pede aqui:
- * cada lista montada registra um "revelador" que estende a própria janela até
- * a mensagem, e só depois o elemento é procurado.
+ * The chat list only mounts the last messages (window — see ChatMessages in
+ * chat-view.tsx), so an old message may not exist in the DOM. Whoever wants to
+ * scroll to it (search, message navigator, media gallery) asks here:
+ * each mounted list registers a "revealer" that extends its own window up to
+ * the message, and only then is the element looked up.
  */
 
-/** Devolve true quando a lista tem a mensagem (e já pediu para mostrá-la). */
+/** Returns true when the list has the message (and has already asked to show it). */
 type Revealer = (messageId: string) => boolean
 
 const revealers = new Set<Revealer>()
@@ -28,14 +28,14 @@ function findMessageElement(messageId: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(messageId)}"]`)
 }
 
-/** Quadros de espera pelo elemento (~2s): cobre o chat que ainda está
- *  carregando o histórico, como depois de trocar de sessão pela galeria. */
+/** Frames spent waiting for the element (~2s): covers the chat that is still
+ *  loading the history, as after switching session from the gallery. */
 const MAX_FRAMES = 120
 
 /**
- * Garante a mensagem montada e devolve o elemento dela (null se não apareceu).
- * Os reveladores são consultados a cada quadro até algum reconhecer a
- * mensagem — a lista certa pode ainda nem ter montado.
+ * Ensures the message is mounted and returns its element (null if it did not appear).
+ * The revealers are consulted on every frame until one of them recognizes the
+ * message — the right list may not even have mounted yet.
  */
 export async function revealMessage(messageId: string): Promise<HTMLElement | null> {
   let owned = false
@@ -47,8 +47,8 @@ export async function revealMessage(messageId: string): Promise<HTMLElement | nu
     }
     const el = findMessageElement(messageId)
     if (el) {
-      // O elemento acabou de entrar: espera o layout do que entrou junto
-      // acima dele, senão a rolagem mira uma posição que ainda vai mudar.
+      // The element just came in: wait for the layout of what came in with
+      // it above, otherwise the scroll aims at a position that is still going to change.
       await nextFrame()
       return el
     }
@@ -58,12 +58,12 @@ export async function revealMessage(messageId: string): Promise<HTMLElement | nu
 }
 
 export interface ScrollToMessageOptions {
-  /** Pisca um anel na mensagem. A busca do chat desliga: lá o destaque é o
-   *  próprio termo grifado (ver highlightTextIn). */
+  /** Blinks a ring on the message. The chat search turns it off: there the highlight is the
+   *  search term itself (see highlightTextIn). */
   flash?: boolean
 }
 
-/** Rola até a mensagem (centralizada) e, por padrão, pisca um anel nela. */
+/** Scrolls to the message (centered) and, by default, blinks a ring on it. */
 export async function scrollToMessage(
   messageId: string,
   options: ScrollToMessageOptions = {},
@@ -76,12 +76,12 @@ export async function scrollToMessage(
 }
 
 /**
- * Pisca um anel em volta da mensagem.
+ * Blinks a ring around the message.
  *
- * Antes isto pintava o `background-color` do elemento — e o wrapper da
- * mensagem ocupa a linha inteira, então o resultado era um retângulo quadrado
- * atrás da bolha arredondada. O anel marca o mesmo lugar sem cobrir o que a
- * mensagem tem dentro, e segue o raio do elemento que o recebe.
+ * Before, this painted the element's `background-color` — and the message
+ * wrapper fills the whole row, so the result was a square rectangle
+ * behind the rounded bubble. The ring marks the same place without covering what the
+ * message has inside, and follows the radius of the element that receives it.
  */
 function flashMessage(el: HTMLElement): void {
   const surface = el.querySelector<HTMLElement>("[data-msg-surface]") ?? el
@@ -103,21 +103,21 @@ function flashMessage(el: HTMLElement): void {
 }
 
 /* ------------------------------------------------------------------ */
-/* Grifo do termo buscado                                              */
+/* Highlight of the searched term                                      */
 /* ------------------------------------------------------------------ */
 
 /**
- * A busca do chat NÃO pinta a mensagem: um fundo no wrapper vira bloco
- * quadrado atrás da bolha e, pior, não aponta o que casou com a busca. Com a
- * CSS Custom Highlight API (Chromium — é o que roda no Electron) o destaque
- * são só os caracteres do termo: os ranges vão para `CSS.highlights` e o
- * desenho vem da regra `::highlight(orbit-search-hit)` no index.css.
- * Registrar e apagar é uma linha, então o grifo não sobrevive ao fechamento
- * da busca.
+ * The chat search does NOT paint the message: a background on the wrapper becomes a
+ * square block behind the bubble and, worse, does not point out what matched the search. With the
+ * CSS Custom Highlight API (Chromium — it is what runs in Electron) the highlight
+ * is only the characters of the term: the ranges go to `CSS.highlights` and the
+ * drawing comes from the `::highlight(orbit-search-hit)` rule in index.css.
+ * Registering and clearing is one line, so the highlight does not survive the closing
+ * of the search.
  */
 const SEARCH_HIGHLIGHT = "orbit-search-hit"
 
-/** Teto do texto varrido: uma resposta gigante não precisa ser grifada toda. */
+/** Cap on the scanned text: a giant answer does not need to be entirely highlighted. */
 const MAX_WALK = 200_000
 
 const COMBINING = /[\u0300-\u036f]/g
@@ -139,12 +139,12 @@ function highlightConstructor(): HighlightCtor | null {
   return typeof ctor === "function" ? (ctor as HighlightCtor) : null
 }
 
-/** Apaga o grifo da busca. Chamado ao fechar a busca e antes de cada grifo novo. */
+/** Clears the search highlight. Called when closing the search and before each new highlight. */
 export function clearTextHighlight(): void {
   highlightRegistry()?.delete(SEARCH_HIGHLIGHT)
 }
 
-/** Minúscula e sem acento — a mesma comparação que a busca faz (normalizeText). */
+/** Lowercase and without accents — the same comparison the search makes (normalizeText). */
 function foldChar(ch: string): string {
   return ch.normalize("NFD").replace(COMBINING, "").toLowerCase()
 }
@@ -156,9 +156,9 @@ function fold(text: string): string {
 }
 
 /**
- * Texto dobrado + o mapa de volta para os índices do original (um caractere
- * acentuado pode virar letras de tamanho diferente depois do NFD, então o
- * offset do DOM não é o offset da busca).
+ * Folded text + the map back to the indices of the original (an accented
+ * character may become letters of a different size after NFD, so the
+ * DOM offset is not the search offset).
  */
 function foldWithMap(text: string): { folded: string; starts: number[]; ends: number[] } {
   const chars: string[] = []
@@ -178,10 +178,10 @@ function foldWithMap(text: string): { folded: string; starts: number[]; ends: nu
 }
 
 /**
- * Grifa `query` dentro do elemento da mensagem e devolve quantos trechos
- * foram marcados. Substitui o grifo anterior: só o resultado atual fica
- * aceso. Devolve 0 quando não há o que grifar (ou quando o runtime não tem a
- * API — a rolagem continua valendo).
+ * Highlights `query` inside the message element and returns how many stretches
+ * were marked. Replaces the previous highlight: only the current result stays
+ * lit. Returns 0 when there is nothing to highlight (or when the runtime does not have the
+ * API — the scroll still applies).
  */
 export function highlightTextIn(el: HTMLElement, query: string): number {
   clearTextHighlight()
@@ -196,7 +196,7 @@ export function highlightTextIn(el: HTMLElement, query: string): number {
     acceptNode(node) {
       const text = node.nodeValue
       if (!text || !text.trim()) return NodeFilter.FILTER_REJECT
-      // Rótulo de leitor de tela e script não são conteúdo visível.
+      // Screen reader label and script are not visible content.
       if (node.parentElement?.closest("script, style, .sr-only")) return NodeFilter.FILTER_REJECT
       return NodeFilter.FILTER_ACCEPT
     },

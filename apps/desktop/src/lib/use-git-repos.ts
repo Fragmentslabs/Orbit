@@ -4,16 +4,16 @@ import { useEffect, useState } from "react";
 import type { GitRepoEntry, GitReposResult } from "@/src/lib/folders";
 
 /**
- * Os repositórios git que vivem nas pastas de trabalho do chat — a principal e
- * as anexadas. Em cada uma: a própria pasta quando é repo, mais as subpastas
- * com git próprio (`front/`, `back/`, cada uma com o seu). Sem nenhum, devolve
- * lista vazia — e aí quem consome volta a falar com a pasta principal, como
- * sempre foi.
+ * The git repositories that live in the chat's working folders — the main one and
+ * the attached ones. In each one: the folder itself when it is a repo, plus the subfolders
+ * with their own git (`front/`, `back/`, each with its own). With none, it returns an
+ * empty list — and then whoever consumes it goes back to talking to the main folder, as
+ * it always was.
  *
- * A varredura é do main (toca o disco), então roda uma vez por mudança de
- * pasta — e não a cada render. Quem precisa da lista em dois lugares (o painel
- * de arquivos e a leitura de alterações) chama o hook nos dois: a resposta é a
- * mesma e o custo é uma varredura de diretório.
+ * The scan is main's (it touches the disk), so it runs once per folder
+ * change — and not on every render. Whoever needs the list in two places (the file
+ * panel and the changes view) calls the hook in both: the answer is the
+ * same and the cost is one directory scan.
  */
 export function useGitRepos(folders: string[]): GitRepoEntry[] {
   const [repos, setRepos] = useState<GitRepoEntry[]>([]);

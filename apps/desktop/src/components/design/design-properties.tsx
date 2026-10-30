@@ -50,18 +50,18 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * Painel de propriedades do canvas de design — o inspetor do Figma/Lummia no
- * design system do Orbit: modo de layout em botões, grade de alinhamento 3×3,
- * tamanho com Fix/Fill/Hug e trava de proporção, padding/margem/raio com
- * "lados independentes", tipografia em grupos de ícones, preenchimento e
- * borda com seletor de cor.
+ * Properties panel of the design canvas — the Figma/Lummia inspector in
+ * the Orbit design system: layout mode in buttons, 3×3 alignment grid,
+ * size with Fix/Fill/Hug and aspect ratio lock, padding/margin/radius with
+ * "independent sides", typography in icon groups, fill and
+ * border with a color picker.
  *
- * Cada controle edita propriedades do `style` do elemento (a ponte aplica ao
- * vivo e o painel grava no arquivo). O valor do campo é o INLINE e o cinza é o
- * calculado — dá para ver o que está valendo sem escrever no arquivo o que a
- * pessoa não mexeu. Os controles de lados (padding, margem, raio) mostram o
- * calculado de cada lado, porque um `padding: 10px 18px` e quatro longhands
- * são a mesma coisa para quem olha.
+ * Each control edits properties of the element's `style` (the bridge applies them
+ * live and the panel writes them to the file). The field value is the INLINE one and the gray is the
+ * computed one — it is possible to see what is in effect without writing to the file what the
+ * person did not touch. The side controls (padding, margin, radius) show the
+ * computed one of each side, because a `padding: 10px 18px` and four longhands
+ * are the same thing to whoever looks.
  */
 
 export interface DesignBoardView {
@@ -80,7 +80,7 @@ export type DesignPropertiesTarget =
 
 interface Props {
   target: DesignPropertiesTarget
-  /** Várias propriedades de uma vez (um passo só no arquivo). Valor vazio tira a propriedade. */
+  /** Several properties at once (a single step in the file). An empty value removes the property. */
   onStyles: (styles: Record<string, string>) => void
   onAttr: (name: string, value: string) => void
   onText: (value: string) => void
@@ -92,7 +92,7 @@ interface Props {
 
 type Style = (prop: string, value: string) => void
 
-// ------------------------------------------------------------------ ícones
+// ------------------------------------------------------------------- icons
 
 const svg = (children: ReactNode, size = 14) => (
   <svg width={size} height={size} viewBox="1 1 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -194,7 +194,7 @@ const cornersIcon = (
   </svg>
 )
 
-// ------------------------------------------------------------------ valores
+// ------------------------------------------------------------------ values
 
 const SIDES = ["top", "right", "bottom", "left"] as const
 const CORNERS = [
@@ -204,10 +204,10 @@ const CORNERS = [
   { key: "br", prop: "border-bottom-right-radius" },
 ] as const
 
-/** O primeiro token de um valor composto (`8px 8px` → `8px`). */
+/** The first token of a compound value (`8px 8px` → `8px`). */
 const first = (value: string) => value.trim().split(/\s+/)[0] ?? ""
 
-/** A primeira cor de um valor composto (`rgb(1, 2, 3) rgb(…)` → `rgb(1, 2, 3)`). */
+/** The first color of a compound value (`rgb(1, 2, 3) rgb(…)` → `rgb(1, 2, 3)`). */
 function firstColor(value: string): string {
   const m = /^(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-f]{3,8}|[a-z]+)/i.exec(value.trim())
   return m ? m[1] : value.trim()
@@ -235,9 +235,9 @@ const SHADOWS = {
 } as const
 
 /**
- * Forma canônica de uma sombra, para comparar com os presets: o navegador
- * devolve o inline normalizado (`rgba(0, 0, 0, 0.18) 0px 4px 12px`, cor
- * primeiro e `0px` explícito), diferente do que o preset escreve.
+ * Canonical form of a shadow, to compare with the presets: the browser
+ * returns the inline one normalized (`rgba(0, 0, 0, 0.18) 0px 4px 12px`, color
+ * first and an explicit `0px`), different from what the preset writes.
  */
 function canonShadow(value: string): string {
   const color = /rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-f]{3,8}/i.exec(value)?.[0] ?? ""
@@ -248,7 +248,7 @@ function canonShadow(value: string): string {
 type Sizing = "fixed" | "fill" | "hug"
 const sizingOf = (inline: string): Sizing => (inline === "100%" ? "fill" : inline === "fit-content" ? "hug" : "fixed")
 
-// ------------------------------------------------------------------ peças locais
+// ------------------------------------------------------------- local pieces
 
 function SelectInShell({
   value,
@@ -312,7 +312,7 @@ function SelectField({
   )
 }
 
-/** Grade 3×3 de alinhamento (a do Lummia): o ponto ativo é a posição do conteúdo no contêiner flex. */
+/** 3×3 alignment grid (Lummia's): the active point is the position of the content in the flex container. */
 function AlignGrid({
   isCol,
   justify,
@@ -330,7 +330,7 @@ function AlignGrid({
   onToggleSpace: () => void
   label: string
 }) {
-  // No eixo principal o que vale é o `justify`; no cruzado, o `items`.
+  // On the main axis what counts is `justify`; on the cross one, `items`.
   const horizontal = isCol ? items : justify
   const vertical = isCol ? justify : items
   const axes: Axis[] = ["start", "center", "end"]
@@ -368,9 +368,9 @@ function AlignGrid({
 }
 
 /**
- * Padding ou margem: um par X/Y (os lados ligados) ou os quatro lados
- * independentes, como no Lummia. O estado inicial é "independente" quando os
- * lados não são simétricos — ligar de novo seria perder um valor.
+ * Padding or margin: an X/Y pair (the sides linked) or the four independent
+ * sides, as in Lummia. The initial state is "independent" when the
+ * sides are not symmetric — linking them again would lose a value.
  */
 function SpacingBox({
   kind,
@@ -383,7 +383,7 @@ function SpacingBox({
   title: string
   info: DesignElementInfo
   onStyles: (styles: Record<string, string>) => void
-  /** Propriedades com valores diferentes no grupo selecionado ("Misto"). */
+  /** Properties with different values in the selected group ("Mixed"). */
   mixed?: Set<string>
 }) {
   const { t } = useTranslation()
@@ -404,9 +404,9 @@ function SpacingBox({
     }
     const y = css(next.top)
     const x = css(next.left)
-    // A ordem importa: no CSSOM o shorthand EXPANDE para os longhands, então
-    // apagar "padding-top" depois de pôr "padding" desfaria o próprio valor.
-    // Os longhands vão primeiro, o shorthand por último.
+    // The order matters: in the CSSOM the shorthand EXPANDS into the longhands, so
+    // deleting "padding-top" after setting "padding" would undo the value itself.
+    // The longhands go first, the shorthand last.
     onStyles({
       ...Object.fromEntries(SIDES.map((side) => [`${kind}-${side}`, ""])),
       [kind]: y === x ? y : `${y} ${x}`,
@@ -416,7 +416,7 @@ function SpacingBox({
   const setSide = (side: (typeof SIDES)[number], value: string) => {
     const next = { ...sides, [side]: value }
     if (!independent) {
-      // Ligados: X vale para os dois lados horizontais, Y para os verticais.
+      // Linked: X applies to both horizontal sides, Y to the vertical ones.
       if (side === "left" || side === "right") {
         next.left = value
         next.right = value
@@ -446,7 +446,7 @@ function SpacingBox({
             onClick={() => {
               const next = !independent
               setIndependent(next)
-              // Ao desligar, os lados passam a ser o par X (esquerda) / Y (cima).
+              // On unlinking, the sides become the X (left) / Y (top) pair.
               if (!next) write(sides, false)
             }}
           >
@@ -493,7 +493,7 @@ function SpacingBox({
   )
 }
 
-/** Raio: um valor para os quatro cantos, ou um por canto. */
+/** Radius: one value for the four corners, or one per corner. */
 function RadiusField({
   info,
   onStyles,
@@ -503,7 +503,7 @@ function RadiusField({
   info: DesignElementInfo
   onStyles: (styles: Record<string, string>) => void
   label: string
-  /** Propriedades com valores diferentes no grupo selecionado ("Misto"). */
+  /** Properties with different values in the selected group ("Mixed"). */
   mixed?: Set<string>
 }) {
   const { t } = useTranslation()
@@ -555,7 +555,7 @@ function RadiusField({
   )
 }
 
-// ------------------------------------------------------------------ painel
+// -------------------------------------------------------------------- panel
 
 export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, onSelectParent, onComment, onDelete }: Props) {
   const { t } = useTranslation()
@@ -627,9 +627,9 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
   const { info } = target
   const style: Style = (prop, value) => onStyles({ [prop]: value })
   /**
-   * "Misto": a propriedade tem valores DIFERENTES entre os elementos
-   * selecionados. O campo fica vazio e mostra o aviso no lugar do valor (como
-   * no Figma) — e o que o usuário digitar vale para todos eles.
+   * "Mixed": the property has DIFFERENT values among the selected
+   * elements. The field stays empty and shows the notice in place of the value (as
+   * in Figma) — and what the user types applies to all of them.
    */
   const mixedProps = new Set(info.mixed ?? [])
   const mixedAttrs = new Set(info.mixedAttrs ?? [])
@@ -659,7 +659,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
   const justifyRaw = either("justify-content")
   const spaceBetween = justifyRaw === "space-between"
   const justify = FLEX_AXIS[justifyRaw] ?? null
-  // `align-items: normal` é "esticar" — nenhum dos nove pontos é o real.
+  // `align-items: normal` is "stretch" — none of the nine points is the real one.
   const itemsRaw = either("align-items")
   const items = itemsRaw === "normal" || itemsRaw === "stretch" ? null : (FLEX_AXIS[itemsRaw] ?? null)
 
@@ -682,7 +682,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
 
   const toggleSpace = () => onStyles(spaceBetween ? { "justify-content": "flex-start" } : { "justify-content": "space-between", gap: "" })
 
-  // ----- tamanho
+  // ----- size
   const widthKind = sizingOf(inline("width"))
   const heightKind = sizingOf(inline("height"))
   const rect = info.rect
@@ -719,11 +719,11 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
     />
   )
 
-  // ----- posição
+  // ----- position
   const position = either("position")
   const gap = isGrid || isFlex ? inline("gap") : ""
 
-  // ----- tipografia
+  // ----- typography
   const showType = info.kind !== "image" && info.kind !== "svg"
   const weight = either("font-weight")
   const italic = either("font-style") === "italic"
@@ -741,7 +741,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
     style("text-decoration", lines.size ? [...lines].join(" ") : "none")
   }
 
-  // ----- aparência
+  // ----- appearance
   const opacityPercent = (() => {
     const raw = inline("opacity") || computed("opacity")
     const n = parseFloat(raw)
@@ -753,14 +753,14 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
     style("opacity", n >= 100 ? "" : String(Math.max(0, n) / 100))
   }
 
-  // ----- borda
+  // ----- border
   const borderStyle = ((): "solid" | "dashed" | "dotted" | "none" => {
     const v = either("border-style")
     return v === "solid" || v === "dashed" || v === "dotted" ? v : "none"
   })()
   const borderWidth = stripPx(first(either("border-width")))
   const borderColor = firstColor(inline("border-color") || computed("border-color"))
-  /** Dar cor ou espessura a uma borda "none" é querer ver a borda: vira sólida. */
+  /** Giving color or thickness to a "none" border is wanting to see the border: it becomes solid. */
   const withVisibleBorder = (styles: Record<string, string>) =>
     onStyles(borderStyle === "none" && !("border-style" in styles) ? { ...styles, "border-style": "solid" } : styles)
 
@@ -772,14 +772,14 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
 
   return (
     <div className="flex flex-col">
-      {/* Cabeçalho do elemento: tag + nome à esquerda, ações à direita. */}
+      {/* Element header: tag + name on the left, actions on the right. */}
       <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="shrink-0 rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">{info.tag}</span>
           <Truncate text={info.label || (info.text ?? "").trim().slice(0, 40) || info.tag}>
             <span className="truncate text-xs font-medium">{info.label || (info.text ?? "").trim().slice(0, 40) || info.tag}</span>
           </Truncate>
-          {/* Mais de um selecionado: o painel edita TODOS eles. */}
+          {/* More than one selected: the panel edits ALL of them. */}
           {target.count && target.count > 1 && (
             <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
               {target.count}×
@@ -804,7 +804,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
         </Section>
       )}
 
-      {/* Layout: modo em botões, tamanho com Fix/Fill/Hug, alinhamento, espaçamentos. */}
+      {/* Layout: mode in buttons, size with Fix/Fill/Hug, alignment, spacings. */}
       <Section title={t("design.props.layout")}>
         <Segmented<LayoutMode>
           value={mode}
@@ -899,7 +899,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
         </label>
       </Section>
 
-      {/* Posição: só pede X/Y quando o elemento sai do fluxo. */}
+      {/* Position: it only asks for X/Y when the element leaves the flow. */}
       <Section title={t("design.props.position")}>
         <SelectField
           value={inline("position")}
@@ -1006,8 +1006,8 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
         <ColorField value={inline("background-color")} computed={computed("background-color")} onCommit={(v) => style("background-color", v)} />
         <div className="flex flex-col gap-1">
           <SubLabel>{t("design.props.background")}</SubLabel>
-          {/* Só gradiente/imagem: uma cor lisa já é o campo de cima (o inline
-              `background: #fff` apareceria aqui como `rgb(255, 255, 255)`). */}
+          {/* Only gradient/image: a flat color is already the field above (the inline
+              `background: #fff` would appear here as `rgb(255, 255, 255)`). */}
           <TextField
             value={/gradient|url\(/i.test(inline("background")) ? inline("background") : ""}
             placeholder="linear-gradient(…) / url(…)"
@@ -1033,7 +1033,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
           />
           <Segmented
             value={borderStyle}
-            // Estilo sem espessura não desenha nada: escolher um dá 1px junto.
+            // A style without thickness draws nothing: choosing one gives 1px along.
             onChange={(v) =>
               v !== "none" && (numberOf(borderWidth) ?? 0) === 0 ? onStyles({ "border-style": v, "border-width": "1px" }) : style("border-style", v)
             }
@@ -1090,7 +1090,7 @@ function Columns() {
   )
 }
 
-/** O `style` inteiro do elemento, para quem prefere escrever CSS (o RawClasses do Lummia). */
+/** The whole `style` of the element, for whoever prefers writing CSS (the RawClasses of Lummia). */
 function CssBox({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])

@@ -9,7 +9,7 @@ const { useProcessStore } = await import("./process-store")
 
 import type { ProcessInfo } from "@/src/lib/ipc"
 
-function processo(pid: number, sessionId?: string): ProcessInfo {
+function process(pid: number, sessionId?: string): ProcessInfo {
   return {
     pid,
     label: `proc-${pid}`,
@@ -21,38 +21,38 @@ function processo(pid: number, sessionId?: string): ProcessInfo {
   }
 }
 
-describe("processos da conversa", () => {
+describe("conversation processes", () => {
   beforeEach(() => {
     list.mockReset()
     kill.mockReset()
     useProcessStore.setState({ processes: [] })
   })
 
-  // O rodapé do painel (e a tela inicial do browser) mostram os processos do
-  // CHAT ABERTO. Um chat novo ainda não tem sessão — e pedir a lista sem filtro
-  // devolvia a de todos os chats, que é como o dev server de um chat de código
-  // acabou aparecendo dentro de um chat comum.
-  it("sem sessão não vai ao main — a lista fica vazia", async () => {
+  // The panel footer (and the browser's start screen) show the processes of the
+  // OPEN chat. A new chat does not have a session yet — and asking for the list without a filter
+  // returned the one from all chats, which is how a code chat's dev server
+  // ended up showing inside a regular chat.
+  it("with no session it does not reach main — the list stays empty", async () => {
     await useProcessStore.getState().fetch()
 
     expect(list).not.toHaveBeenCalled()
     expect(useProcessStore.getState().processes).toEqual([])
   })
 
-  it("sem sessão limpa o que tinha ficado de outro chat", async () => {
-    useProcessStore.setState({ processes: [processo(1, "outro-chat")] })
+  it("with no session it clears whatever was left from another chat", async () => {
+    useProcessStore.setState({ processes: [process(1, "outro-chat")] })
 
     await useProcessStore.getState().fetch()
 
     expect(useProcessStore.getState().processes).toEqual([])
   })
 
-  it("com sessão pede a lista escopada e guarda", async () => {
-    list.mockResolvedValue([processo(2, "s1")])
+  it("with a session it asks for the scoped list and stores it", async () => {
+    list.mockResolvedValue([process(2, "s1")])
 
     await useProcessStore.getState().fetch("s1")
 
     expect(list).toHaveBeenCalledWith("s1")
-    expect(useProcessStore.getState().processes).toEqual([processo(2, "s1")])
+    expect(useProcessStore.getState().processes).toEqual([process(2, "s1")])
   })
 })

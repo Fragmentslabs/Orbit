@@ -1,26 +1,26 @@
 import path from 'node:path'
 
 /**
- * Registro do que o USUÁRIO salvou à mão pelo painel de arquivos.
+ * Registry of what the USER saved by hand through the files panel.
  *
- * O snapshot do turno difere a pasta INTEIRA (`capture`/`diff` em
- * [snapshot/index.ts]), então um Ctrl+S durante um turno entrava no diff e o
- * engine contava aquele arquivo como escrita do agente: o
- * `[Verified record: ...]` passava a afirmar que o modelo alterou algo que ele
- * nunca tocou, e era justamente essa linha que existia para não mentir.
+ * The turn's snapshot diffs the WHOLE folder (`capture`/`diff` in
+ * [snapshot/index.ts]), so a Ctrl+S during a turn entered the diff and the
+ * engine counted that file as the agent's writing: the
+ * `[Verified record: ...]` started claiming that the model changed something it
+ * never touched, and that line existed precisely not to lie.
  *
- * Aqui ficam os caminhos salvos pela pessoa; o `verifyTurn` os subtrai antes
- * de montar o veredito do turno.
+ * Here stay the paths saved by the person; `verifyTurn` subtracts them before
+ * assembling the turn's verdict.
  */
 
 /**
- * Caminho absoluto (normalizado pelo `path.resolve`) → instante do último
- * save. Por instante, e não "limpa no começo do turno": dois turnos podem
- * rodar ao mesmo tempo na mesma pasta, e o começo de um apagaria os saves que
- * a pessoa fez durante o outro.
+ * Absolute path (normalized by `path.resolve`) → instant of the last
+ * save. By instant, and not "clear at the start of the turn": two turns may
+ * run at the same time in the same folder, and the start of one would erase the saves the
+ * person made during the other.
  */
 const saved = new Map<string, number>()
-/** Ninguém consulta saves mais velhos que o turno mais longo. */
+/** Nobody queries saves older than the longest turn. */
 const SAVE_TTL_MS = 24 * 60 * 60 * 1000
 
 export function recordManualSave(absPath: string, at = Date.now()): void {
@@ -30,11 +30,11 @@ export function recordManualSave(absPath: string, at = Date.now()): void {
 }
 
 /**
- * Os caminhos salvos à mão dentro deste diretório desde `since` (o começo do
- * turno), relativos a ele e com separador '/' — o mesmo formato em que o
- * `git diff --name-only` devolve. O que foi salvo ANTES do turno já está no
- * `start` e nunca aparece no diff; contá-lo criaria o erro inverso — o agente
- * editar esse arquivo agora e a alteração dele ser subtraída do registro.
+ * The paths saved by hand inside this directory since `since` (the start of the
+ * turn), relative to it and with the '/' separator — the same format in which
+ * `git diff --name-only` returns them. What was saved BEFORE the turn is already in the
+ * `start` and never shows up in the diff; counting it would create the inverse error — the agent
+ * edits that file now and its change is subtracted from the record.
  */
 export function manualSavesUnder(directory: string, since = 0): Set<string> {
   const root = path.resolve(directory)
@@ -49,22 +49,22 @@ export function manualSavesUnder(directory: string, since = 0): Set<string> {
   return result
 }
 
-/** Só para teste: zera tudo entre casos. */
+/** For testing only: zeroes everything between cases. */
 export function resetManualSaves(): void {
   saved.clear()
 }
 
 /**
- * Remove do diff unificado as seções dos arquivos indicados.
+ * Removes the sections of the given files from the unified diff.
  *
- * O `snapshot.patch` não é só bookkeeping: alimenta a aba Diff e a lista de
- * arquivos do card da mensagem ([code-message.tsx]). Filtrar só o
- * `snapshot.files` deixaria o arquivo do usuário sumir do registro verificado
- * e continuar aparecendo na tela como obra do agente.
+ * `snapshot.patch` is not just bookkeeping: it feeds the Diff tab and the list of
+ * files in the message card ([code-message.tsx]). Filtering only
+ * `snapshot.files` would make the user's file vanish from the verified record
+ * and keep showing up on screen as the agent's work.
  *
- * Corta nos limites de `diff --git`, que é como o git sempre separa os
- * arquivos — nenhuma linha de conteúdo começa assim, porque no corpo de um
- * diff toda linha vem prefixada por espaço, '+', '-' ou '\'.
+ * It cuts at the `diff --git` boundaries, which is how git always separates the
+ * files — no content line starts like that, because in the body of a
+ * diff every line is prefixed by space, '+', '-' or '\'.
  */
 export function stripFilesFromPatch(patch: string, exclude: Set<string>): string {
   if (!patch || exclude.size === 0) return patch

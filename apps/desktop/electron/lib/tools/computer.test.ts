@@ -2,9 +2,9 @@ import sharp from 'sharp'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * cu_batch e o read_back com o driver falso: o que a tool devolve ao modelo.
- * Electron, indicadores e gravação ficam de fora (mocks) — o que se confere é
- * o lote parar no primeiro erro e observar uma vez só, no fim, sem imagem.
+ * cu_batch and read_back with the fake driver: what the tool returns to the model.
+ * Electron, indicators and recording stay out (mocks) — what is checked is
+ * the batch stopping at the first error and observing once only, at the end, without an image.
  */
 
 vi.mock('electron', () => ({
@@ -65,7 +65,7 @@ const call = async (tools: ReturnType<typeof createComputerTools>, name: string,
   (tools[name] as unknown as { execute: (a: unknown, o: unknown) => Promise<string> }).execute(args, { toolCallId: 'c1', messages: [], abortSignal: undefined })
 
 describe('cu_batch', () => {
-  it('roda os passos em ordem e observa uma vez só, no fim, sem carregar a imagem', async () => {
+  it('runs the steps in order and observes only once, at the end, without loading the image', async () => {
     const tools = createComputerTools({ sessionId: 's1', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     const out = await call(tools, 'cu_batch', {
@@ -81,14 +81,14 @@ describe('cu_batch', () => {
     expect(out).toContain('Screenshot not loaded')
   })
 
-  it('para no primeiro passo que falha e diz quais não rodaram', async () => {
+  it('stops at the first failing step and says which ones did not run', async () => {
     const tools = createComputerTools({ sessionId: 's2', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     const out = await call(tools, 'cu_batch', {
       app: 'com.apple.TextEdit',
       steps: [
         { action: 'left_click', element: 2 },
-        { action: 'type', element: 3, text: 'segredo' },
+        { action: 'type', element: 3, text: 'secret' },
         { action: 'key', key: 'return' },
       ],
     })
@@ -99,51 +99,51 @@ describe('cu_batch', () => {
 })
 
 describe('read_back do cu_computer', () => {
-  it('traz a árvore em texto; a imagem só com screenshot: true', async () => {
+  it('brings the tree as text; the image only with screenshot: true', async () => {
     const tools = createComputerTools({ sessionId: 's3', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
-    const sem = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2 })
-    expect(sem).toContain('Screenshot not loaded')
-    const com = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2, screenshot: true })
-    expect(com).not.toContain('Screenshot not loaded')
+    const withoutImage = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2 })
+    expect(withoutImage).toContain('Screenshot not loaded')
+    const withImage = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2, screenshot: true })
+    expect(withImage).not.toContain('Screenshot not loaded')
   })
 
-  it('depois de uma observação lida, devolve só o que mudou — com os mesmos índices', async () => {
+  it('after a read observation, returns only what changed — with the same indexes', async () => {
     const tools = createComputerTools({ sessionId: 's4', modelVision: true })
     const full = await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     expect(full).toContain('Tree (4 elements)')
     const out = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2 })
     expect(out).toMatch(/Tree: changes since obs_\w+ \(3 other elements unchanged/)
     expect(out).toContain('~ 1 text area = "Olá 1"')
-    // O botão não mudou: não volta a aparecer na árvore (só no resumo da ação).
+    // The button did not change: it does not show up in the tree again (only in the action summary).
     expect(out.split('<screen_content')[1]).not.toContain('button "Salvar"')
   })
 
-  it('sem observação lida neste loop, a árvore vem inteira (o modelo não tem base para um diff)', async () => {
+  it('with no read observation in this loop, the whole tree comes back (the model has no basis for a diff)', async () => {
     const first = createComputerTools({ sessionId: 's5', modelVision: true })
     await call(first, 'cu_observe', { app: 'com.apple.TextEdit' })
-    // Outro loop (subagente, turno seguinte) na mesma sessão: nunca leu aquela observação.
+    // Another loop (subagent, next turn) in the same session: it never read that observation.
     const other = createComputerTools({ sessionId: 's5', modelVision: true })
     const out = await call(other, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2 })
     expect(out).toContain('Tree (4 elements)')
   })
 
-  it('a observação não carrega a imagem por padrão', async () => {
+  it('the observation does not load the image by default', async () => {
     const tools = createComputerTools({ sessionId: 's6', modelVision: true })
     const out = await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     expect(out).toContain('Screenshot not loaded')
   })
 })
 
-describe('alvo por descrição (find)', () => {
-  it('acha o elemento pelo texto da linha', async () => {
+describe('target by description (find)', () => {
+  it('finds the element by its line text', async () => {
     const tools = createComputerTools({ sessionId: 'f1', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     const out = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', find: { text: 'salvar' } })
     expect(out).toMatch(/^Pressed element 2 \(button "Salvar"\)/)
   })
 
-  it('ambíguo é erro com os candidatos, nunca o primeiro da lista', async () => {
+  it('ambiguous is an error with the candidates, never the first of the list', async () => {
     driver.mutate = (tree) => {
       tree.nodes.push({ ...tree.nodes[3], id: 9, path: [0, 2], title: 'Salvar como…' })
     }
@@ -152,13 +152,13 @@ describe('alvo por descrição (find)', () => {
     const out = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', find: { text: 'salv' } })
     expect(out).toContain('Error (ambiguous): 2 elements match "salv"')
     expect(driver.actions).toHaveLength(0)
-    // O título exato desempata.
+    // The exact title breaks the tie.
     const exact = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', find: { text: 'Salvar' } })
     expect(exact).toMatch(/^Pressed element 2 /)
   })
 
-  it('no batch, o passo depois de um clique mira contra a árvore nova', async () => {
-    // Depois do primeiro clique, o botão "Salvar" vira "Confirmar" no mesmo lugar.
+  it('in a batch, the step after a click targets the new tree', async () => {
+    // After the first click, the "Save" button becomes "Confirm" in the same place.
     driver.mutate = (tree, acted) => {
       if (acted >= 1) tree.nodes[3].title = 'Confirmar'
     }
@@ -168,7 +168,7 @@ describe('alvo por descrição (find)', () => {
       app: 'com.apple.TextEdit',
       steps: [
         { action: 'left_click', element: 2 },
-        // O índice 2 era o "Salvar": com a tela mudada, não pode virar clique no "Confirmar".
+        // Index 2 was "Save": with the screen changed, it must not become a click on "Confirm".
         { action: 'left_click', element: 2 },
       ],
     })
@@ -186,14 +186,14 @@ describe('alvo por descrição (find)', () => {
 })
 
 describe('expect', () => {
-  it('espera o estado e confirma', async () => {
+  it('waits for the state and confirms', async () => {
     const tools = createComputerTools({ sessionId: 'e1', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     const out = await call(tools, 'cu_computer', { action: 'left_click', app: 'com.apple.TextEdit', element: 2, expect: { text: 'Olá 1' } })
     expect(out).toContain('✓ Expected "Olá 1" on screen: confirmed.')
   })
 
-  it('não vindo, diz que não viu — e o batch para ali', async () => {
+  it('when it does not come, it says it did not see it — and the batch stops there', async () => {
     const tools = createComputerTools({ sessionId: 'e2', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     const out = await call(tools, 'cu_batch', {
@@ -209,8 +209,8 @@ describe('expect', () => {
   })
 })
 
-describe('trava de estagnação', () => {
-  it('três ações seguidas sem mudança: manda parar e avisa quem chamou', async () => {
+describe('stagnation brake', () => {
+  it('three actions in a row with no change: tells it to stop and warns the caller', async () => {
     driver.changeAfterAction = false
     const onStall = vi.fn()
     const tools = createComputerTools({ sessionId: 't1', modelVision: true, onStall })
@@ -223,8 +223,8 @@ describe('trava de estagnação', () => {
   })
 })
 
-describe('uma conversa controla por vez', () => {
-  it('com outra conversa controlando, a ação vira erro claro e nada chega ao app', async () => {
+describe('one conversation controls at a time', () => {
+  it('with another conversation controlling, the action becomes a clear error and nothing reaches the app', async () => {
     const tools = createComputerTools({ sessionId: 'b1', modelVision: true })
     await call(tools, 'cu_observe', { app: 'com.apple.TextEdit' })
     busy.other = 'Another Orbit conversation is controlling the computer right now (in Safari).'

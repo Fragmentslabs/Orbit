@@ -55,65 +55,65 @@ import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/compo
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Preview de uma composição de motion na aba do painel direito — o palco onde o
- * usuário acompanha, ao vivo, o agente editando a peça.
+ * Preview of a motion composition in the right panel tab — the stage where the
+ * user follows, live, the agent editing the piece.
  *
- * O iframe carrega a PASTA registrada por `orbit-motion://<id>/<caminho>`; quem
- * injeta o runtime de seek é o próprio handler do scheme (video/motion-store),
- * então aqui não se injeta script nenhum — só se conversa com ele por
- * postMessage, com o campo `source: "orbit-motion"`:
+ * The iframe loads the registered FOLDER through `orbit-motion://<id>/<path>`; whoever
+ * injects the seek runtime is the scheme handler itself (video/motion-store),
+ * so no script is injected here — one only talks to it through
+ * postMessage, with the `source: "orbit-motion"` field:
  *
- *   iframe → painel: ready (formato e duração), time (quadro tocado), error,
- *                    assets (fontes que não carregaram)
- *   painel → iframe: seek(frame), play, pause, loop
+ *   iframe → panel: ready (format and duration), time (frame played), error,
+ *                   assets (fonts that did not load)
+ *   panel → iframe: seek(frame), play, pause, loop
  *
- * A unidade de tempo é QUADRO INTEIRO, no fps que a COMPOSIÇÃO declara (30 é só
- * o padrão de quem não declara) — a mesma do contrato do render, para o que o
- * usuário aprova aqui ser exatamente o que sai lá. O transporte anda um segundo
- * por seta (um quadro com Shift), e o timecode é `mm:ss:ff`.
+ * The time unit is a WHOLE FRAME, at the fps the COMPOSITION declares (30 is only
+ * the default of whoever does not declare it) — the same as the render contract, so that what the
+ * user approves here is exactly what comes out there. The transport moves one second
+ * per arrow (one frame with Shift), and the timecode is `mm:ss:ff`.
  *
- * Embaixo da régua, as CAMADAS: quem entra e sai de cena, e quando — medidas no
- * main numa janela offscreen (motion:layers), porque a composição é HTML livre e
- * não declara camada nenhuma. Clicar numa camada a leva junto com o quadro para
- * a nota do chat.
+ * Below the ruler, the LAYERS: who enters and leaves the scene, and when — measured in the
+ * main process in an offscreen window (motion:layers), because the composition is free HTML and
+ * declares no layer at all. Clicking a layer takes it along with the frame to
+ * the chat note.
  *
- * O iframe roda em `sandbox="allow-scripts"` SEM `allow-same-origin` (origem
- * opaca: sem window do Orbit, sem cookies, sem storage), como o artefato. É
- * dessa origem opaca que vem o cuidado com a ponte: não há origem para
- * conferir, quem confere é o `event.source === contentWindow` do nosso iframe.
+ * The iframe runs in `sandbox="allow-scripts"` WITHOUT `allow-same-origin` (opaque
+ * origin: no Orbit window, no cookies, no storage), like the artifact. It is
+ * from that opaque origin that the care with the bridge comes: there is no origin to
+ * check, what checks is the `event.source === contentWindow` of our iframe.
  */
 
-/** fps de uma composição que não declara nenhum (o padrão do contrato). */
+/** fps of a composition that declares none (the contract default). */
 const DEFAULT_FPS = 30
 
-/** Marca das mensagens da ponte (ver MOTION_SOURCE no motion-runtime do main). */
+/** Mark of the bridge messages (see MOTION_SOURCE in the main motion-runtime). */
 const MOTION_SOURCE = "orbit-motion"
 
-/** Formato do palco enquanto o runtime não anuncia o da composição. */
+/** Stage format while the runtime does not announce the composition's one. */
 const DEFAULT_SPEC: MotionSpec = { width: 1920, height: 1080, durationInFrames: 0 }
 
-/** Sem "ready" nesse tempo, a página não vai responder: diz por quê, em vez de girar. */
+/** Without "ready" in that time, the page is not going to answer: it says why, instead of spinning. */
 const LOAD_TIMEOUT_MS = 10_000
 
-/** Fração da altura do painel que o palco pode ocupar — o resto é da linha de tempo. */
+/** Fraction of the panel height the stage may occupy — the rest belongs to the timeline. */
 const STAGE_MAX_RATIO = 0.5
 const STAGE_MAX_RATIO_FULLSCREEN = 0.62
 
 interface MotionSpec {
   width: number
   height: number
-  /** 0 = ainda não anunciado (a composição declara o comprimento). */
+  /** 0 = not announced yet (the composition declares the length). */
   durationInFrames: number
-  /** fps declarado pela composição; ausente = 30 (contrato). */
+  /** fps declared by the composition; absent = 30 (contract). */
   fps?: number
 }
 
 type MotionLayer = MotionLayersResult["layers"][number]
 
 /**
- * O ícone de cada tipo de camada. O rótulo diz o NOME, não o que o elemento é —
- * um título e uma foto podem se chamar os dois de ".caption" —, então o tipo vem
- * medido do DOM pelo runtime e é o que diferencia dois elementos na lista.
+ * The icon of each layer type. The label says the NAME, not what the element is —
+ * a heading and a photo may both be called ".caption" —, so the type comes
+ * measured from the DOM by the runtime and is what differentiates two elements in the list.
  */
 const LAYER_ICON: Record<MotionLayer["kind"], LucideIcon> = {
   text: Type,
@@ -135,7 +135,7 @@ type RenderState =
   | { status: "done"; path: string; audioPath?: string }
   | { status: "error"; message: string }
 
-/** "Salvar projeto": o .zip da peça inteira, com manifesto (ver motion-project). */
+/** "Save project": the .zip of the whole piece, with a manifest (see motion-project). */
 type ProjectState =
   | { status: "idle" }
   | { status: "saving" }
@@ -149,9 +149,9 @@ type LayersState =
   | { status: "error"; message: string }
 
 /**
- * Valida uma mensagem iframe → painel. Mesmas regras do parseMotionMessage do
- * runtime (que vive no main e não é importável daqui): o que não casa é
- * descartado em silêncio, porque a composição é conteúdo não confiável.
+ * Validates an iframe → panel message. Same rules as the runtime's parseMotionMessage
+ * (which lives in the main process and is not importable from here): what does not match is
+ * discarded in silence, because the composition is untrusted content.
  */
 function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
   if (!raw || typeof raw !== "object") return null
@@ -164,7 +164,7 @@ function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
       durationInFrames: Math.max(1, Math.round(msg.durationInFrames)),
       width: typeof msg.width === "number" ? msg.width : DEFAULT_SPEC.width,
       height: typeof msg.height === "number" ? msg.height : DEFAULT_SPEC.height,
-      // Runtime antigo (ou mensagem sem o campo) cai no padrão do contrato.
+      // Old runtime (or a message without the field) falls into the contract default.
       fps: typeof msg.fps === "number" && Number.isFinite(msg.fps) && msg.fps > 0 ? msg.fps : DEFAULT_FPS,
       version: typeof msg.version === "number" ? msg.version : 0,
     }
@@ -190,10 +190,10 @@ function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
 /**
- * Caminho da entrada DENTRO da pasta registrada — o que a URL
- * `orbit-motion://<id>/<caminho-relativo>` serve. O evento traz o relativo
- * (o normal); se vier o absoluto, não há como reconstruir a pasta da composição
- * daqui e fica o nome do arquivo.
+ * Path of the entry INSIDE the registered folder — what the URL
+ * `orbit-motion://<id>/<relative-path>` serves. The event brings the relative one
+ * (the normal case); if the absolute one comes, there is no way to rebuild the composition folder
+ * from here and the file name stays.
  */
 function entryPath(entry: string): string {
   const cleaned = entry.replace(/\\/g, "/").replace(/^file:\/\//, "")
@@ -201,21 +201,21 @@ function entryPath(entry: string): string {
   return relative.split("/").map(encodeURIComponent).join("/")
 }
 
-/** A camada está em cena neste quadro? */
+/** Is the layer in the scene at this frame? */
 function onScreenAt(layer: MotionLayer, frame: number): boolean {
   return layer.spans.some(([a, b]) => frame >= a && frame <= b)
 }
 
-/** Passo das marcas da régua (em segundos) para caber ~8 rótulos na largura. */
+/** Step of the ruler marks (in seconds) to fit ~8 labels in the width. */
 function rulerStep(seconds: number): number {
   return [1, 2, 5, 10, 15, 30, 60].find((s) => seconds / s <= 8) ?? 60
 }
 
 /**
- * Formatos que o modal de render oferece, na ordem em que aparecem. O valor é o
- * da união do IPC (`motion:render`) — o rótulo diz o que o arquivo é e a dica,
- * para que ele serve: a diferença entre os três é a transparência, que só
- * mov/webm carregam.
+ * Formats the render modal offers, in the order in which they appear. The value is the
+ * one of the IPC union (`motion:render`) — the label says what the file is and the hint,
+ * what it is for: the difference between the three is transparency, which only
+ * mov/webm carry.
  */
 const RENDER_FORMATS: { value: MotionRenderFormat; labelKey: string; hintKey: string }[] = [
   { value: "mp4", labelKey: "motion.formatMp4", hintKey: "motion.formatMp4Hint" },
@@ -231,7 +231,7 @@ export function MotionTab({
 }: {
   motionId?: string
   entry?: string
-  /** Caminho absoluto da entrada — o endereço que a nota do chat entrega ao agente. */
+  /** Absolute path of the entry — the address the chat note hands to the agent. */
   path?: string
   title: string
 }) {
@@ -240,15 +240,15 @@ export function MotionTab({
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const stageWrapRef = useRef<HTMLDivElement | null>(null)
   const trackRef = useRef<HTMLDivElement | null>(null)
-  /** O som da peça toca FORA do iframe (o palco é sandbox: sem autoplay, sem
-   *  controle): são estes elementos que o transporte comanda, um por faixa, na
-   *  ordem em que o manifest as declarou. */
+  /** The sound of the piece plays OUTSIDE the iframe (the stage is a sandbox: no autoplay, no
+   *  control): it is these elements the transport commands, one per track, in the
+   *  order in which the manifest declared them. */
   const audioRefs = useRef<(HTMLAudioElement | null)[]>([])
 
   const [spec, setSpec] = useState<MotionSpec | null>(null)
-  /** O fps DA COMPOSIÇÃO, não um 30 fixo: régua, timecode e playhead seguem ele.
-   *  Declarado aqui (e não junto do layout) porque o efeito do áudio, mais abaixo,
-   *  também converte quadro em segundos. */
+  /** The COMPOSITION fps, not a fixed 30: ruler, timecode and playhead follow it.
+   *  Declared here (and not next to the layout) because the audio effect, further below,
+   *  also converts frame into seconds. */
   const fps = spec?.fps ?? DEFAULT_FPS
   const [readyCount, setReadyCount] = useState(0)
   const [frame, setFrame] = useState(0)
@@ -273,69 +273,69 @@ export function MotionTab({
   const [render, setRender] = useState<RenderState>({ status: "idle" })
   const [project, setProject] = useState<ProjectState>({ status: "idle" })
   /**
-   * O modal de render. O botão do cabeçalho só ABRE; quem renderiza é o botão
-   * de dentro — assim a pessoa vê o que vai sair (formato, peso, fps, áudio)
-   * antes de pagar os minutos de captura, em vez de descobrir depois.
+   * The render modal. The header button only OPENS it; what renders is the button
+   * inside — that way the person sees what is going to come out (format, size, fps, audio)
+   * before paying the capture minutes, instead of finding out afterwards.
    */
   const [renderOpen, setRenderOpen] = useState(false)
   const [renderOptions, setRenderOptions] = useState<{
     format: MotionRenderFormat
     quality: MotionRenderQuality
-    /** 0 = o fps da composição. */
+    /** 0 = the composition fps. */
     fps: number
     separateAudio: boolean
   }>({ format: "mp4", quality: "balanced", fps: 0, separateAudio: false })
   const [layers, setLayers] = useState<LayersState>({ status: "idle" })
   const [selectedName, setSelectedName] = useState<string | null>(null)
-  /** As faixas da peça, medidas no main junto com as camadas — pela MESMA
-   *  resolução que o render usa: o que a linha de tempo desenha e o que toca no
-   *  preview são os arquivos que vão no vídeo, nos mesmos instantes. */
+  /** The tracks of the piece, measured in the main process along with the layers — through the SAME
+   *  resolution the render uses: what the timeline draws and what plays in the
+   *  preview are the files that go in the video, at the same instants. */
   const [audio, setAudio] = useState<{
     tracks: { name: string; url: string | null; start: number; end: number | null; offset?: number }[]
     error: string | null
   } | null>(null)
-  /** O comprimento REAL de cada arquivo, medido pelo próprio elemento quando o
-   *  metadata chega: é o que fecha a janela de uma faixa que o manifest não
-   *  delimitou (ver `motionTrackEnd`), em vez de esticá-la até o fim da peça. */
+  /** The REAL length of each file, measured by the element itself when the
+   *  metadata arrives: it is what closes the window of a track the manifest did not
+   *  delimit (see `motionTrackEnd`), instead of stretching it to the end of the piece. */
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({})
   const audioTracks = audio?.tracks ?? []
-  // O que está em foco pode ser uma CAMADA do DOM ou uma faixa de SOM. O som não
-  // é elemento (toca fora do palco — ver motion-audio.ts), mas se seleciona do
-  // mesmo jeito; é por aqui que a aba sabe qual dos dois está selecionado.
+  // What is in focus may be a DOM LAYER or a SOUND track. The sound is not
+  // an element (it plays outside the stage — see motion-audio.ts), but it is selected the
+  // same way; it is through here that the tab knows which of the two is selected.
   const selectedAudio = audioTracks.find((track) => track.name === selectedName) ?? null
   const measureAudio = (url: string | null, el: HTMLAudioElement | null) => {
     const duration = el?.duration
     if (!url || duration === undefined || !Number.isFinite(duration) || duration <= 0) return
     setAudioDurations((prev) => (prev[url] === duration ? prev : { ...prev, [url]: duration }))
   }
-  /** A medida do arquivo da faixa. A chave é a URL (e não a posição na lista):
-   *  assim uma peça nova não herda por um instante a medida da anterior. Estável
-   *  entre renders — ela entra nas dependências do efeito que comanda o som. */
+  /** The measurement of the track file. The key is the URL (and not the position in the list):
+   *  that way a new piece does not inherit the previous one's measurement for an instant. Stable
+   *  between renders — it enters the deps of the effect that commands the sound. */
   const trackDuration = useCallback(
     (track: { url: string | null; offset?: number }): number | null => {
       const duration = track.url ? (audioDurations[track.url] ?? null) : null
-      // O arquivo toca a partir do `offset` (corte inicial de um vídeo): o que
-      // sobra para a janela da faixa é o resto dele, não o comprimento inteiro.
+      // The file plays from the `offset` (initial cut of a video): what
+      // is left for the track window is the rest of it, not the whole length.
       return duration === null ? null : Math.max(0, duration - (track.offset ?? 0))
     },
     [audioDurations],
   )
-  /** `?r=` é o que faz a voz regerada entrar em cena: a URL muda a cada recarga,
-   *  e sem trocá-la os elementos seguiriam tocando os bytes antigos. É também por
-   *  isso que a mídia pode ser servida sem `no-store` (ver o handler do scheme). */
+  /** `?r=` is what makes the regenerated voice enter the scene: the URL changes on every reload,
+   *  and without swapping it the elements would keep playing the old bytes. It is also for
+   *  that reason that the media can be served without `no-store` (see the scheme handler). */
   const audioSrc = (url: string | null): string | null => (url ? `${url}?r=${reloads}` : null)
 
   /**
-   * As faixas acompanham o TRANSPORTE: o iframe é o relógio (é ele que manda
-   * `time` a cada quadro), os elementos de áudio são seguidores. Concentrar isso
-   * num efeito — em vez de espalhar play/pause por play, pausa, arrasto da régua,
-   * passo de quadro, loop e recarga — é o que garante que nenhum caminho novo
-   * esqueça o som, que é exatamente como este erro nasce.
+   * The tracks follow the TRANSPORT: the iframe is the clock (it is what sends
+   * `time` on every frame), the audio elements are followers. Concentrating that
+   * in one effect — instead of spreading play/pause across play, pause, ruler drag,
+   * frame step, loop and reload — is what guarantees that no new path
+   * forgets the sound, which is exactly how this bug is born.
    *
-   * Cada faixa tem a JANELA dela (`start`/`end`): fora dela o elemento fica
-   * parado, e o instante do transporte é traduzido para a linha de tempo do
-   * próprio arquivo (`at - start`). A folga de reata também cobre a volta do
-   * loop, quando o playhead salta para o zero.
+   * Each track has its WINDOW (`start`/`end`): outside it the element stays
+   * stopped, and the transport instant is translated to the timeline of the
+   * file itself (`at - start`). The re-sync slack also covers the loop wrap,
+   * when the playhead jumps to zero.
    */
   useEffect(() => {
     const at = frame / fps
@@ -344,10 +344,10 @@ export function MotionTab({
     tracks.forEach((track, index) => {
       const el = audioRefs.current[index]
       if (!el || !track.url) return
-      // Posição no ARQUIVO: o tempo desde a entrada da faixa, mais o corte inicial.
+      // Position in the FILE: the time since the entry of the track, plus the initial cut.
       const local = at - track.start + (track.offset ?? 0)
-      // A janela sai da MESMA função que desenha a barra: sem `end` no manifest
-      // ela é fechada pelo comprimento real do arquivo, e não pelo fim da peça.
+      // The window comes from the SAME function that draws the bar: without `end` in the manifest
+      // it is closed by the real length of the file, and not by the end of the piece.
       const within = motionTrackIsLive(track, trackDuration(track), at)
       if (!within) {
         if (!el.paused) el.pause()
@@ -355,33 +355,33 @@ export function MotionTab({
         return
       }
       if (!playing) {
-        // Parado, o som senta no quadro do playhead — e no ritmo natural, para o
-        // play seguinte sair do lugar certo e no tempo certo.
+        // Stopped, the sound sits on the playhead frame — and at natural rate, so that the
+        // next play starts from the right place and at the right time.
         if (el.playbackRate !== 1) el.playbackRate = 1
         if (Math.abs(el.currentTime - local) > SEEK_EPSILON_S) el.currentTime = local
         if (!el.paused) el.pause()
         return
       }
-      // Rodando, o reata se divide em dois: reposicionamento DE VERDADE (arrasto
-      // da régua, corte, entrada na faixa) é seek; deriva é ritmo.
+      // Running, the re-sync splits into two: REAL repositioning (drag
+      // of the ruler, cut, entry into the track) is seek; drift is rate.
       //
-      // Era só seek, e isso passou a doer quando o scheme começou a anunciar
-      // faixas: antes o Chromium IGNORAVA o `currentTime` (o som tocava com uma
-      // folga fixa e ninguém notava); agora que ele obedece, cada deriva virava
-      // descarte de buffer e rebaixamento do arquivo — o som picotava e nunca
-      // assentava. Seek volta a ser só o que é reposicionamento.
+      // It was only seek, and that started to hurt when the scheme began announcing
+      // tracks: before, Chromium IGNORED the `currentTime` (the sound played with a fixed
+      // slack and nobody noticed); now that it obeys, every drift became
+      // buffer discard and file downgrade — the sound stuttered and never
+      // settled. Seek goes back to being only what is repositioning.
       const drift = el.currentTime - local
       if (Math.abs(drift) > MOTION_AUDIO_SEEK_S) {
         el.currentTime = local
         if (el.playbackRate !== 1) el.playbackRate = 1
       } else {
-        // O estado do PRÓPRIO elemento é a histerese: ele já está corrigindo?
-        // Sem isso, com a deriva oscilando no limiar, o ritmo ficava ligando e
-        // desligando — e cada reinício do resample é um estalo.
+        // The state of the ELEMENT itself is the hysteresis: is it already correcting?
+        // Without it, with the drift oscillating at the threshold, the rate kept switching on and
+        // off — and every restart of the resample is a click.
         const engaged = Math.abs(el.playbackRate - 1) > 0.001
         const rate = motionAudioRate(drift, engaged)
-        // Folga de 0,5%: reajustar o ritmo a cada quadro seria trocar um
-        // artefato por outro.
+        // Slack of 0.5%: readjusting the rate on every frame would be trading one
+        // artifact for another.
         if (Math.abs(el.playbackRate - rate) > 0.005) el.playbackRate = rate
       }
       if (el.paused) void el.play().catch(() => {})
@@ -390,33 +390,33 @@ export function MotionTab({
   const addQuote = usePanelStore((s) => s.addQuote)
   const quotes = usePanelStore((s) => s.quotes)
   /**
-   * A camada que está presa na próxima mensagem do chat (o "marcar"). O botão da
-   * linha fica aceso enquanto for ela — sem isso o gesto não teria resposta
-   * visível, e a única prova estaria lá no anexo do compositor.
+   * The layer that is pinned to the next chat message (the "mark"). The row button
+   * stays lit while it is that one — without this the gesture would have no visible
+   * response, and the only proof would be there in the composer attachment.
    */
   const quoteLayer = useMemo(() => {
     const quote = quotes.find((item) => item.kind === "motion")
     return quote?.kind === "motion" ? (quote.layer ?? null) : null
   }, [quotes])
 
-  /** O outro lado do "marcar": a faixa de SOM presa na próxima mensagem. */
+  /** The other side of "mark": the SOUND track pinned to the next message. */
   const quoteAudio = useMemo(() => {
     const quote = quotes.find((item) => item.kind === "motion")
     return quote?.kind === "motion" ? (quote.audio ?? null) : null
   }, [quotes])
 
-  // Espelhos para os handlers que não podem depender do render (o listener de
-  // mensagem e os atalhos ficam registrados uma vez só).
+  // Mirrors for the handlers that cannot depend on the render (the message
+  // listener and the shortcuts are registered only once).
   const frameRef = useRef(0)
   const playingRef = useRef(false)
   const loopRef = useRef(false)
   const specRef = useRef<MotionSpec>(DEFAULT_SPEC)
-  /** Quadro a retomar depois de um remount (recarregar volta ao MESMO instante). */
+  /** Frame to resume after a remount (reloading goes back to the SAME instant). */
   const restoreRef = useRef<number | null>(null)
-  /** Instantes dos `time` recebidos: é o que mede o fps REAL do preview. */
+  /** Instants of the received `time`: it is what measures the REAL fps of the preview. */
   const tickTimes = useRef<number[]>([])
   const lastFpsAt = useRef(0)
-  /** Chegou "ready" desde a última (re)carga? É o que o diagnóstico de carga consulta. */
+  /** Has "ready" arrived since the last (re)load? It is what the load diagnosis consults. */
   const loadedRef = useRef(false)
 
   const layout = spec ?? DEFAULT_SPEC
@@ -427,14 +427,14 @@ export function MotionTab({
     [motionId, entry, reloads],
   )
 
-  /** Comando painel → iframe. Sem janela montada, não há para quem mandar. */
+  /** Panel → iframe command. With no window mounted, there is no one to send it to. */
   const post = useCallback((message: Record<string, unknown>) => {
     const win = iframeRef.current?.contentWindow
     if (!win) return
     win.postMessage({ source: MOTION_SOURCE, ...message }, "*")
   }, [])
 
-  /** Vai para um quadro (inteiro, dentro da composição) e avisa o iframe. */
+  /** Goes to a frame (whole, inside the composition) and tells the iframe. */
   const seek = useCallback(
     (target: number) => {
       const next = total > 0 ? Math.max(0, Math.min(Math.round(target), total - 1)) : Math.max(0, Math.round(target))
@@ -463,15 +463,15 @@ export function MotionTab({
       pause()
       return
     }
-    // Parado no último quadro, o play do runtime terminaria no mesmo instante:
-    // recomeça do zero, como qualquer player.
+    // Stopped at the last frame, the runtime play would end in the same instant:
+    // it starts over from zero, like any player.
     if (total > 0 && frameRef.current >= total - 1) seek(0)
     playingRef.current = true
     setPlaying(true)
     post({ type: "play" })
   }, [pause, post, seek, total])
 
-  /** Anda N quadros: o play do runtime sobrescreveria o seek, então pausa antes. */
+  /** Moves N frames: the runtime play would overwrite the seek, so it pauses first. */
   const stepFrames = useCallback(
     (delta: number) => {
       if (playingRef.current) pause()
@@ -480,7 +480,7 @@ export function MotionTab({
     [pause, seek],
   )
 
-  /** Salta para um instante (início/fim): mesma pausa, mesmo motivo. */
+  /** Jumps to an instant (start/end): same pause, same reason. */
   const jump = useCallback(
     (target: number) => {
       if (playingRef.current) pause()
@@ -502,23 +502,23 @@ export function MotionTab({
   )
 
   /**
-   * Comentar o instante: prende o quadro de AGORA à próxima mensagem do chat,
-   * com o que está em foco — a camada do DOM ou a faixa de som — e as camadas em
-   * cena. O agente sabe de qual momento E de qual elemento a frase fala ("aqui o
-   * título entra rápido").
+   * Comment the instant: it pins the frame of NOW to the next chat message,
+   * with what is in focus — the DOM layer or the sound track — and the layers in
+   * the scene. The agent knows which moment AND which element the sentence speaks of ("here the
+   * title enters fast").
    *
-   * O quadro é congelado no clique — o anexo é um gesto de apontar, não um
-   * playhead que segue tocando. Clicar de novo substitui o instante anterior em
-   * vez de acumular (ver addQuote no panel-store).
+   * The frame is frozen on the click — the attachment is a pointing gesture, not a
+   * playhead that keeps playing. Clicking again replaces the previous instant in-
+   * stead of accumulating (see addQuote in panel-store).
    */
   const comment = useCallback(
     (target?: { layer?: string; audio?: string }) => {
       if (!entry) return
       const at = frameRef.current
       const onScreen = layerList.filter((l) => onScreenAt(l, at)).map((l) => l.name)
-      // O alvo vem do botão da LINHA quando foi ele que chamou; sem ele vale o que
-      // está em foco. Camada e som são campos DIFERENTES: dizer "camada" de um som
-      // mandaria o agente procurar no palco um elemento que não existe lá.
+      // The target comes from the ROW button when it was the one that called; without it what counts is what
+      // is in focus. Layer and sound are DIFFERENT fields: calling a sound a "layer"
+      // would send the agent to look in the stage for an element that is not there.
       const layer = target ? target.layer : selectedAudio ? undefined : (selectedName ?? undefined)
       const audio = target ? target.audio : (selectedAudio?.name ?? undefined)
       addQuote({
@@ -536,12 +536,12 @@ export function MotionTab({
     [addQuote, entry, title, path, selectedName, selectedAudio, layerList, fps],
   )
 
-  // ------------------------------------------------------------ ponte iframe
+  // --------------------------------------------------------- iframe bridge
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const win = iframeRef.current?.contentWindow
-      // A origem do iframe é opaca (sandbox sem allow-same-origin): quem diz que
-      // a mensagem é DESTE iframe é a janela de origem, não a origem.
+      // The iframe origin is opaque (sandbox without allow-same-origin): what says that
+      // the message is from THIS iframe is the source window, not the origin.
       if (!win || event.source !== win) return
       const msg = parseRuntimeMessage(event.data)
       if (!msg) return
@@ -556,16 +556,16 @@ export function MotionTab({
         loadedRef.current = true
         setSpec(next)
         setReadyCount((n) => n + 1)
-        // Página nova: os avisos da anterior não valem mais.
+        // New page: the warnings of the previous one no longer count.
         setRuntimeError(null)
         setLoadError(null)
         setFailedFonts([])
-        // O loop vive no runtime e se perde no remount: reafirma o estado.
+        // The loop lives in the runtime and is lost on remount: it reasserts the state.
         post({ type: "loop", on: loopRef.current })
         const restore = restoreRef.current
         restoreRef.current = null
-        // A composição pode ter ficado mais curta entre as duas versões: o
-        // quadro a retomar é preso ao comprimento NOVO.
+        // The composition may have become shorter between the two versions: the
+        // frame to resume is clamped to the NEW length.
         if (restore != null) seek(Math.min(restore, msg.durationInFrames - 1))
         return
       }
@@ -581,15 +581,15 @@ export function MotionTab({
           setMeasuredFps(Math.round(((times.length - 1) * 1000) / (now - times[0])))
         }
         if (msg.frame >= specRef.current.durationInFrames - 1) {
-          // Repetir: o play do runtime PARA no último quadro mesmo com loop
-          // ligado (o `frame >= total - 1` dele vence o caso do loop), então
-          // quem reinicia é o painel — volta ao zero e manda tocar de novo.
+          // Repeat: the runtime play STOPS at the last frame even with loop
+          // on (its `frame >= total - 1` wins over the loop case), so
+          // what restarts is the panel — it goes back to zero and orders it to play again.
           if (loopRef.current) {
             seek(0)
             post({ type: "play" })
           } else {
-            // Sem loop o runtime parou de verdade: o transporte precisa saber,
-            // senão ficaria "tocando" para sempre.
+            // Without loop the runtime really stopped: the transport needs to know,
+            // otherwise it would stay "playing" forever.
             stopClock()
           }
         }
@@ -605,11 +605,11 @@ export function MotionTab({
     return () => window.removeEventListener("message", onMessage)
   }, [post, seek, stopClock])
 
-  // ------------------------------------------------------------- recarregar
+  // ---------------------------------------------------------------- reload
   const reload = useCallback(() => {
     restoreRef.current = frameRef.current
-    // A página nova nasce parada: o transporte não pode continuar dizendo
-    // "tocando" enquanto ninguém manda quadro nenhum.
+    // The new page is born stopped: the transport cannot keep saying
+    // "playing" while nobody sends any frame.
     stopClock()
     setRuntimeError(null)
     setLoadError(null)
@@ -617,8 +617,8 @@ export function MotionTab({
     setReloads((n) => n + 1)
   }, [stopClock])
 
-  // O agente reescreveu o arquivo (fs.watch do main): recarrega voltando ao
-  // mesmo quadro, que é o que deixa comparar o antes e o depois do ajuste.
+  // The agent rewrote the file (main fs.watch): it reloads going back to the
+  // same frame, which is what allows comparing the before and the after of the adjustment.
   useEffect(() => {
     if (!motionId) return
     return motionApi.onChanged((payload) => {
@@ -626,9 +626,9 @@ export function MotionTab({
     })
   }, [motionId, reload])
 
-  // Sem "ready" a tempo, a página não vai responder: pergunta ao scheme o que
-  // houve (a mesma URL, por fetch — o scheme aceita CORS) e mostra o motivo,
-  // em vez de deixar o palco girando para sempre.
+  // Without "ready" in time, the page is not going to answer: it asks the scheme what
+  // happened (the same URL, through fetch — the scheme accepts CORS) and shows the reason,
+  // instead of leaving the stage spinning forever.
   useEffect(() => {
     if (!src) return
     loadedRef.current = false
@@ -655,10 +655,10 @@ export function MotionTab({
     }
   }, [src, t])
 
-  // ------------------------------------------------------------ camadas
-  // A cada página nova (carga, recarga ao vivo) as camadas são medidas de novo:
-  // o agente acabou de mudar quando algo entra ou sai. As faixas antigas ficam
-  // na tela enquanto a medição nova roda — sem piscar a cada save.
+  // --------------------------------------------------------------- layers
+  // On every new page (load, live reload) the layers are measured again:
+  // the agent has just changed when something enters or leaves. The old tracks stay
+  // on screen while the new measurement runs — without blinking on every save.
   useEffect(() => {
     if (!motionId || readyCount === 0) return
     let cancelled = false
@@ -672,9 +672,9 @@ export function MotionTab({
         .then((result) => {
           if (cancelled) return
           setLayers({ status: "ready", layers: result.layers })
-          // A trilha vem na mesma medição. Só é trocada quando a composição
-          // RESPONDEU: durante o "medindo" o áudio da versão anterior continua na
-          // tela, como as faixas das camadas.
+          // The soundtrack comes in the same measurement. It is only swapped when the composition
+          // ANSWERED: during the "measuring" the audio of the previous version stays on
+          // screen, like the layer tracks.
           setAudio(result.audio)
         })
         .catch((err: unknown) => {
@@ -689,10 +689,10 @@ export function MotionTab({
     }
   }, [motionId, readyCount])
 
-  // A camada selecionada sumiu da composição (o agente a removeu ou renomeou).
+  // The selected layer disappeared from the composition (the agent removed or renamed it).
   useEffect(() => {
-    // Uma faixa de som também tem nome e NÃO é camada: sem a ressalva, o som
-    // selecionado seria desmarcado no mesmo instante em que fosse clicado.
+    // A sound track also has a name and is NOT a layer: without the caveat, the selected
+    // sound would be unmarked in the same instant it was clicked.
     if (
       selectedName &&
       !selectedAudio &&
@@ -704,34 +704,34 @@ export function MotionTab({
   }, [layers, selectedName, selectedAudio])
 
   /**
-   * O realce de quem está selecionado mora no PREVIEW, não aqui: o palco é um
-   * sandbox sem same-origin, então quem contorna o elemento é o runtime, a nosso
-   * pedido. E o endereço é o ÍNDICE na caminhada da página, não o rótulo — dois
-   * elementos podem se chamar ".caption".
+   * The highlight of whoever is selected lives in the PREVIEW, not here: the stage is a
+   * sandbox without same-origin, so what outlines the element is the runtime, at our
+   * request. And the address is the INDEX in the page walk, not the label — two
+   * elements may be called ".caption".
    *
-   * Reenvia quando a lista de camadas muda: um save remonta o iframe, e o
-   * documento novo não sabe de realce nenhum. `index: -1` é "tire o realce".
+   * It resends when the layer list changes: a save remounts the iframe, and the
+   * new document knows no highlight at all. `index: -1` is "remove the highlight".
    */
   useEffect(() => {
     const layer = layers.status === "ready" ? layers.layers.find((l) => l.name === selectedName) : undefined
     post(layer ? { type: "highlight", index: layer.index, name: layer.name } : { type: "highlight", index: -1, name: null })
   }, [selectedName, layers, post])
 
-  // ----------------------------------------------------------- atalhos
+  // ------------------------------------------------------------- shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      // Digitar no chat (ou em qualquer campo) não pode mexer no playhead.
+      // Typing in the chat (or in any field) cannot touch the playhead.
       const target = e.target as HTMLElement | null
       if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) return
-      // A aba precisa estar visível: com outra aba em cima, as setas são de outro.
+      // The tab needs to be visible: with another tab on top, the arrows belong to another one.
       if (!rootRef.current || rootRef.current.offsetParent === null) return
       if (e.key === " ") {
         e.preventDefault()
         togglePlay()
       } else if (e.key === "ArrowLeft") {
-        // Um SEGUNDO por seta; com Shift, um quadro — o ajuste fino continua
-        // existindo, só deixou de ser o gesto padrão.
+        // ONE SECOND per arrow; with Shift, one frame — the fine adjustment keeps
+        // existing, it just stopped being the default gesture.
         e.preventDefault()
         stepFrames(e.shiftKey ? -1 : -fps)
       } else if (e.key === "ArrowRight") {
@@ -751,10 +751,10 @@ export function MotionTab({
     return () => window.removeEventListener("keydown", onKey)
   }, [togglePlay, stepFrames, jump, fps, total, fullscreen])
 
-  // -------------------------------------------------------------- palco
-  // O palco fica no TOPO, na proporção nativa da composição: ocupa a largura do
-  // painel e, numa peça vertical ou num painel baixo, para numa fração da
-  // altura — o resto é da linha de tempo, e não sobra faixa preta em volta.
+  // ---------------------------------------------------------------- stage
+  // The stage stays at the TOP, in the native proportion of the composition: it takes the width of the
+  // panel and, in a vertical piece or in a short panel, stops at a fraction of the
+  // height — the rest belongs to the timeline, and no black band is left around it.
   useEffect(() => {
     const wrap = stageWrapRef.current
     const root = rootRef.current
@@ -777,7 +777,7 @@ export function MotionTab({
     return () => observer.disconnect()
   }, [layout.width, layout.height, fullscreen])
 
-  // ------------------------------------------------------------- régua
+  // --------------------------------------------------------------- ruler
   const dragging = useRef(false)
 
   const frameAt = useCallback((clientX: number) => {
@@ -794,8 +794,8 @@ export function MotionTab({
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (specRef.current.durationInFrames <= 0) return
       e.preventDefault()
-      // Arrastar é inspecionar: pausa antes, senão o play do runtime
-      // sobrescreveria o seek no quadro seguinte.
+      // Dragging is inspecting: it pauses first, otherwise the runtime play
+      // would overwrite the seek on the next frame.
       if (playingRef.current) pause()
       dragging.current = true
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -817,7 +817,7 @@ export function MotionTab({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
   }, [])
 
-  // ------------------------------------------------------------- render
+  // -------------------------------------------------------------- render
   useEffect(() => {
     if (!motionId) return
     return motionApi.onProgress((payload) => {
@@ -828,15 +828,15 @@ export function MotionTab({
     })
   }, [motionId])
 
-  // O estado do render vira três valores simples: o handler não depende do
-  // objeto inteiro e o JSX não precisa estreitar a união em cada uso.
+  // The render state becomes three simple values: the handler does not depend on the
+  // whole object and the JSX does not need to narrow the union on every use.
   const rendering = render.status === "running"
   const renderTotal = render.status === "running" ? render.total : 0
   const renderedPath = render.status === "done" ? render.path : null
   const renderError = render.status === "error" ? render.message : null
   const renderPercent = rendering && renderTotal > 0 ? Math.round((render.frame / renderTotal) * 100) : 0
 
-  /** O modal é a última parada antes do arquivo existir: as escolhas vêm dele. */
+  /** The modal is the last stop before the file exists: the choices come from it. */
   const onRender = useCallback(
     (options: MotionRenderOptions) => {
       if (!motionId || rendering) return
@@ -845,8 +845,8 @@ export function MotionTab({
       motionApi
         .render(motionId, options)
         .then((result) => {
-          // O render começa por um diálogo de salvar do sistema: cancelar não é
-          // falha, é a pessoa desistindo — a aba volta ao repouso.
+          // The render starts with a system save dialog: cancelling is not
+          // a failure, it is the person giving up — the tab goes back to rest.
           if ("canceled" in result) {
             setRender({ status: "idle" })
             return
@@ -861,9 +861,9 @@ export function MotionTab({
   )
 
   /**
-   * "Salvar projeto": a peça inteira num .zip — HTML, mídias, fontes, audio.json
-   * e o manifesto orbit.json. É o que o composer reconhece quando o arquivo é
-   * arrastado de volta em outra conversa (ver motion-project no main).
+   * "Save project": the whole piece in a .zip — HTML, media, fonts, audio.json
+   * and the orbit.json manifest. It is what the composer recognizes when the file is
+   * dragged back in another conversation (see motion-project in the main process).
    */
   const saveProject = useCallback(() => {
     if (!motionId || project.status === "saving") return
@@ -881,8 +881,8 @@ export function MotionTab({
   }, [motionId, project.status, t])
 
   const reveal = useCallback((target: string) => {
-    // Mesmo canal dos outros pontos do app (file-viewer, video-part, task-modal):
-    // abrir a pasta do sistema com o arquivo já selecionado.
+    // Same channel as the other points of the app (file-viewer, video-part, task-modal):
+    // opening the system folder with the file already selected.
     void window.ipcRenderer.invoke("shell:showItemInFolder", target)
   }, [])
 
@@ -899,31 +899,31 @@ export function MotionTab({
   const seconds = total / fps
   const step = rulerStep(seconds)
   const marks = total > 0 ? Array.from({ length: Math.floor(seconds / step) + 1 }, (_, i) => i * step) : []
-  // O que o modal promete de custo: o fps escolhido muda o número de quadros
-  // capturados (a duração em segundos é a mesma), e é esse número que dói.
+  // What the modal promises of cost: the chosen fps changes the number of captured
+  // frames (the duration in seconds is the same), and it is that number that hurts.
   const renderFps = renderOptions.fps > 0 ? renderOptions.fps : fps
   const renderFrames = fps > 0 ? Math.round((total / fps) * renderFps) : 0
-  // A coluna do nome cresceu para caber o ÍCONE do tipo e o botão de marcar sem
-  // espremer o nome. É UMA largura, usada pela régua, pelas faixas de áudio e
-  // pelas camadas: é ela que mantém as três na mesma escala (playhead incluído).
+  // The name column grew to fit the type ICON and the mark button without
+  // squeezing the name. It is ONE width, used by the ruler, by the audio tracks and
+  // by the layers: it is what keeps the three on the same scale (playhead included).
   const nameColumn = fullscreen ? "w-44" : "w-32"
   const failed = loadError
 
   return (
-    // Em tela cheia o MESMO nó vira o overlay fixo (como o browser do painel):
-    // o iframe não é remontado, então o playhead e a ponte sobrevivem.
+    // In fullscreen the SAME node becomes the fixed overlay (like the panel browser):
+    // the iframe is not remounted, so the playhead and the bridge survive.
     <div
       ref={rootRef}
       className={cn(
-        // `bg-sidebar`, o mesmo das outras abas do painel (o terminal e o browser
-        // usam esse): com `bg-background` a aba destoava do resto e o cabeçalho
-        // parecia colado na faixa de abas.
+        // `bg-sidebar`, the same as the other panel tabs (the terminal and the browser
+        // use it): with `bg-background` the tab clashed with the rest and the header
+        // looked glued to the tab strip.
         "group/motion flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sidebar",
         fullscreen && FULLSCREEN_OVERLAY_CLASS,
       )}
     >
-      {/* Cabeçalho: composição + arquivo à esquerda; recarregar, tela cheia e
-          render à direita. Mesmo respiro do cabeçalho do browser (p-2). */}
+      {/* Header: composition + file on the left; reload, fullscreen and
+          render on the right. Same breathing room as the browser header (p-2). */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <Clapperboard className="size-3.5 shrink-0 text-muted-foreground" />
@@ -951,9 +951,9 @@ export function MotionTab({
             label={t(fullscreen ? "motion.exitFullscreen" : "motion.fullscreen")}
             onClick={() => setFullscreen((v) => !v)}
           />
-          {/* Renderizar abre o MODAL: formato, peso, fps e áudio separado são
-              decididos antes de pagar os minutos de captura. Enquanto renderiza o
-              botão fica desabilitado e vira o próprio indicador de progresso. */}
+          {/* Render opens the MODAL: format, size, fps and separate audio are
+              decided before paying the capture minutes. While it renders the
+              button stays disabled and becomes the progress indicator itself. */}
           <Hint label={t("motion.renderOptions")}>
             <Button
               variant="default"
@@ -970,18 +970,18 @@ export function MotionTab({
         </div>
       </div>
 
-      {/* Linha fina do progresso do render — o estado do botão diz o número. */}
+      {/* Thin line of the render progress — the button state says the number. */}
       {rendering && (
         <div className="h-0.5 shrink-0 bg-muted">
           <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${renderPercent}%` }} />
         </div>
       )}
 
-      {/* Feedback do render: o MESMO respiro lateral do palco (px-3). O `Alert`
-          nasce com `w-full` — com margem lateral ele media 100% + 2×margem e
-          estourava o painel exatamente por essa margem; o `overflow-hidden` do
-          painel então cortava a borda direita e o X. Quem dá o respiro é o
-          container, não o card. */}
+      {/* Render feedback: the SAME side breathing room as the stage (px-3). The `Alert`
+          is born with `w-full` — with a side margin it measured 100% + 2×margin and
+          overflowed the panel exactly by that margin; the panel's `overflow-hidden`
+          then cut the right border and the X. What gives the breathing room is the
+          container, not the card. */}
       {project.status === "done" && (
         <div className="shrink-0 px-3 pt-2">
           <Alert>
@@ -1028,8 +1028,8 @@ export function MotionTab({
                        {t("motion.showInFolder")}
               </Button>
               </Hint>
-              {/* Pediu áudio separado: o WAV está ao lado do vídeo, e o botão
-                  leva direto a ele (a pasta já está aberta pelo outro). */}
+              {/* It asked for separate audio: the WAV is next to the video, and the button
+                  leads straight to it (the folder is already open from the other one). */}
               {render.status === "done" && render.audioPath && (
                 <Hint label={render.audioPath}>
                   <Button
@@ -1074,43 +1074,43 @@ export function MotionTab({
         </div>
       )}
 
-      {/* Palco no topo: a composição na proporção nativa, sem faixa preta em
-          volta — o que sobra da altura é da linha de tempo. */}
+      {/* Stage at the top: the composition in the native proportion, with no black band
+          around it — what is left of the height belongs to the timeline. */}
       <div ref={stageWrapRef} className="flex shrink-0 justify-center px-3 pt-3">
-        {/* O palco é só a JANELA: quem carrega o tamanho da peça é o iframe.
-            `maxWidth` segura o iframe ainda sem escala (o documento tem o tamanho
-            declarado) de estourar o painel no primeiro quadro. */}
+        {/* The stage is only the WINDOW: what carries the size of the piece is the iframe.
+            `maxWidth` keeps the iframe still unscaled (the document has the declared
+            size) from overflowing the panel on the first frame. */}
         <div
           className="relative overflow-hidden rounded-md bg-black ring-1 ring-border/60"
           style={{ width: box.width || undefined, height: box.height || 160, maxWidth: "100%" }}
         >
           <iframe
             ref={iframeRef}
-            // Remonta o iframe (recarga de verdade): a URL da composição não muda
-            // quando o arquivo é reescrito no lugar.
+            // Remounts the iframe (a real reload): the composition URL does not change
+            // when the file is rewritten in place.
             key={`${motionId}:${reloads}`}
             src={src}
             title={title}
-            // SEM allow-same-origin de propósito: `allow-scripts` + same-origin
-            // deixaria a composição remover o próprio sandbox.
+            // WITHOUT allow-same-origin on purpose: `allow-scripts` + same-origin
+            // would let the composition remove its own sandbox.
             sandbox="allow-scripts"
             allow=""
             referrerPolicy="no-referrer"
-            // A composição é um documento do TAMANHO DECLARADO (o guia manda
-            // html/body em 1920x1080), não uma página que se adapta ao palco. O
-            // iframe recebe o tamanho REAL — é ele que define a viewport interna
-            // que a composição lê, a mesma da janela de captura do render — e só
-            // o `scale` o encolhe para caber no palco. Com `h-full w-full` o
-            // documento transbordava e o palco mostrava o canto superior esquerdo.
+            // The composition is a document of the DECLARED SIZE (the guide tells
+            // html/body to be 1920x1080), not a page that adapts to the stage. The
+            // iframe receives the REAL size — it is what defines the internal viewport
+            // the composition reads, the same as the capture window of the render — and only
+            // the `scale` shrinks it to fit the stage. With `h-full w-full` the
+            // document overflowed and the stage showed the top left corner.
             style={{
               width: layout.width,
               height: layout.height,
               transform: `scale(${box.width > 0 ? box.width / layout.width : 1})`,
               transformOrigin: "top left",
             }}
-            // `pointer-events-none`: o palco é só IMAGEM. Sem isso, um clique nele
-            // dava o foco de teclado ao iframe e espaço/setas paravam de chegar
-            // ao app — o atalho existia e não respondia, que é pior do que não ter.
+            // `pointer-events-none`: the stage is only IMAGE. Without this, a click on it
+            // gave the keyboard focus to the iframe and space/arrows stopped reaching
+            // the app — the shortcut existed and did not answer, which is worse than not having it.
             className={cn("pointer-events-none border-0 bg-transparent", !spec && "invisible")}
           />
           {!spec && !runtimeError && !failed && (
@@ -1119,7 +1119,7 @@ export function MotionTab({
               {t("motion.loading")}
             </div>
           )}
-          {/* Não carregou: o motivo no lugar da tela girando, e a saída. */}
+          {/* It did not load: the reason in place of the spinning screen, and the way out. */}
           {failed && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/40 p-3 text-center">
               <AlertTriangle className="size-4 text-destructive" />
@@ -1130,8 +1130,8 @@ export function MotionTab({
               </Button>
             </div>
           )}
-          {/* Composição quebrada: o aviso no lugar da tela preta vazia (o iframe
-              segue vivo atrás — recarregar é a saída). */}
+          {/* Broken composition: the notice in place of the empty black screen (the iframe
+              stays alive behind — reloading is the way out). */}
           {runtimeError && (
             <div className="absolute inset-0 flex items-start justify-center overflow-auto bg-black/85 p-3">
               <Alert variant="destructive" className="max-w-lg">
@@ -1149,9 +1149,9 @@ export function MotionTab({
         </div>
       </div>
 
-      {/* Metadados: posição / duração (um contador, não dois tempos soltos) e o
-          formato. O fps medido só aparece TOCANDO — parado, um número de fps na
-          tela não diz nada e ainda parecia que a peça era 30 quando não é. */}
+      {/* Metadata: position / duration (one counter, not two loose times) and the
+          format. The measured fps only appears WHILE PLAYING — stopped, an fps number on
+          screen says nothing and even looked like the piece was 30 when it is not. */}
       <div className="flex shrink-0 items-center gap-x-3 px-3 pt-2 text-[10px] tabular-nums text-muted-foreground">
         <span className="font-medium text-foreground">
           {motionTimecode(frame, fps)}
@@ -1168,8 +1168,8 @@ export function MotionTab({
         </span>
       </div>
 
-      {/* Transporte: repetir à esquerda, início/play/fim no meio e comentar o
-          instante à direita — os dois extremos são ações sobre o que se vê. */}
+      {/* Transport: repeat on the left, start/play/end in the middle and comment the
+          instant on the right — the two extremes are actions over what one sees. */}
       <div className="flex shrink-0 items-center justify-between gap-2 px-2.5 py-1">
         <Hint label={t("motion.loop")}>
           <Button
@@ -1233,16 +1233,16 @@ export function MotionTab({
         </Hint>
       </div>
 
-      {/* Linha de tempo: régua + uma faixa por camada, com a mesma escala e o
-          mesmo playhead. Clicar ou arrastar em qualquer ponto busca o quadro;
-          clicar no nome seleciona a camada para a nota do chat. */}
+      {/* Timeline: ruler + one track per layer, with the same scale and the
+          same playhead. Clicking or dragging anywhere seeks the frame;
+          clicking the name selects the layer for the chat note. */}
       <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
-        {/* A régua vive DENTRO da área rolável, grudada no topo. Fora dela, a
-            largura da régua não batia com a das linhas assim que a barra de
-            rolagem aparecia (ela ocupa 6px — ver `*::-webkit-scrollbar`), e o
-            playhead saía do lugar em relação às camadas. Aqui régua e linhas têm
-            a mesma largura por construção; o fundo opaco é o que deixa as linhas
-            passarem por baixo. */}
+        {/* The ruler lives INSIDE the scrollable area, stuck to the top. Outside it, the
+            ruler width did not match the width of the rows as soon as the scroll
+            bar appeared (it takes 6px — see `*::-webkit-scrollbar`), and the
+            playhead went out of place in relation to the layers. Here ruler and rows have
+            the same width by construction; the opaque background is what lets the rows
+            pass underneath. */}
         <div className="relative min-h-0 flex-1 overflow-y-auto pb-2">
           <div className="sticky top-0 z-10 flex items-center bg-sidebar">
             <div className={cn("flex shrink-0 items-center gap-1.5 px-3 text-[10px] font-medium text-muted-foreground", nameColumn)}>
@@ -1275,10 +1275,10 @@ export function MotionTab({
             <div className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: `${position}%` }} />
           </div>
         </div>
-          {/* O som da peça toca FORA do iframe (o palco é sandbox: sem autoplay,
-              sem controle próprio), então os elementos vivem aqui — invisíveis —
-              e quem os comanda é o transporte, pelo efeito acima. Um por faixa, na
-              ordem do manifest: é o índice que casa o elemento com a faixa. */}
+          {/* The sound of the piece plays OUTSIDE the iframe (the stage is a sandbox: no autoplay,
+              no control of its own), so the elements live here — invisible —
+              and what commands them is the transport, through the effect above. One per track, in
+              the manifest order: it is the index that matches the element with the track. */}
           {audioTracks.map((track, index) => (
             <audio
               key={`audio-${track.name}-${index}`}
@@ -1290,17 +1290,17 @@ export function MotionTab({
               onLoadedMetadata={(e) => measureAudio(track.url, e.currentTarget)}
             />
           ))}
-          {/* Cada faixa é uma LINHA, desenhada onde ela toca: a régua é a peça
-              inteira, então `start`/`end` viram posição e comprimento — dá para ver
-              a cama de música, o efeito pontual e a narração de uma vez. Sem `url`
-              o áudio está FORA da pasta da composição: vai no arquivo renderizado,
-              mas o scheme não o serve e o preview fica mudo. */}
+          {/* Each track is a ROW, drawn where it plays: the ruler is the whole
+              piece, so `start`/`end` become position and length — one can see
+              the music bed, the one-off effect and the narration at once. Without `url`
+              the audio is OUTSIDE the composition folder: it goes in the rendered file,
+              but the scheme does not serve it and the preview stays mute. */}
           {audioTracks.map((track, index) => {
             const seconds = total / fps
             const at = frame / fps
             const from = seconds > 0 ? Math.min(100, Math.max(0, (track.start / seconds) * 100)) : 0
-            // Sem `end` no manifest a barra esticava até a borda direita; agora ela
-            // termina onde o arquivo realmente tem som (ver motionTrackEnd).
+            // Without `end` in the manifest the bar stretched to the right edge; now it
+            // ends where the file really has sound (see motionTrackEnd).
             const end = motionTrackEnd(track, trackDuration(track)) ?? seconds
             const to = seconds > 0 ? Math.min(100, Math.max(from, (end / seconds) * 100)) : 100
             const live = playing && track.url !== null && motionTrackIsLive(track, trackDuration(track), at)
@@ -1334,17 +1334,17 @@ export function MotionTab({
                                <span
                       className={cn("size-1.5 shrink-0 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground/30")}
                     />
-                    {/* O ícone de SOM também nesta linha: a faixa não é elemento
-                        do DOM (toca fora do palco), mas é do mesmo tipo que uma
-                        camada de áudio de composição — o desenho diz isso sem
-                        precisar de palavra. */}
+                    {/* The SOUND icon also in this row: the track is not a DOM
+                        element (it plays outside the stage), but it is of the same type as a
+                        composition audio layer — the drawing says that without
+                        needing a word. */}
                     <Music className="size-3 shrink-0 opacity-70" />
                     <span className="truncate italic">{track.name}</span>
                   </button>
                   </Hint>
-                  {/* Marcar a FAIXA, como se marca a camada — mas em `audio`: o
-                      agente precisa saber que é som, senão procura no palco um
-                      elemento com o nome da trilha. */}
+                  {/* Mark the TRACK, as one marks the layer — but in `audio`: the
+                      agent needs to know it is sound, otherwise it looks in the stage for an
+                      element with the name of the soundtrack. */}
                   <Hint label={t("motion.audioMarkHint", { name: track.name })}>
                     <button
                       type="button"
@@ -1433,17 +1433,17 @@ export function MotionTab({
                         visible ? "bg-emerald-500" : "bg-muted-foreground/30",
                       )}
                     />
-                    {/* O `title` vai no invólucro: o ícone do lucide não aceita o
-                        atributo, e o nome do tipo tem de estar a um hover. */}
+                    {/* The `title` goes in the wrapper: the lucide icon does not accept the
+                        attribute, and the type name has to be one hover away. */}
                     <span className="flex shrink-0" title={t(`motion.kind.${layer.kind}`)}>
                       <KindIcon className="size-3 opacity-70" />
                     </span>
                     <span className={cn("truncate", !layer.named && "italic")}>{layer.name}</span>
                   </button>
                   </Hint>
-                  {/* Marcar: prende ESTA camada — e o quadro de agora — à próxima
-                      mensagem do chat. Aparece no hover e fica aceso quando é a
-                      marcada: em quarenta faixas, botão sempre visível é ruído. */}
+                  {/* Mark: pins THIS layer — and the frame of now — to the next
+                      chat message. It appears on hover and stays lit when it is the
+                      marked one: in forty tracks, an always visible button is noise. */}
                   <Hint label={t("motion.layerMarkHint", { name: layer.name })}>
                     <button
                       type="button"
@@ -1480,11 +1480,11 @@ export function MotionTab({
                   {layer.spans.map(([a, b]) => (
                     <div
                       key={`${a}-${b}`}
-                      // Clicar na própria BARRA seleciona a camada — e o evento
-                      // segue para a faixa, que reposiciona o playhead: os dois
-                      // gestos pedem a mesma coisa ("ir até ali e me mostrar quem
-                      // é"). Não é preciso parar a propagação; este chega antes,
-                      // o da faixa logo depois.
+                      // Clicking the BAR itself selects the layer — and the event
+                      // goes on to the track, which repositions the playhead: the two
+                      // gestures ask for the same thing ("go there and show me who
+                      // it is"). There is no need to stop the propagation; this one arrives first,
+                      // the track one right after.
                       onPointerDown={() => setSelectedName(layer.name)}
                       className={cn(
                         "absolute inset-y-1 rounded-sm",
@@ -1503,8 +1503,8 @@ export function MotionTab({
           })}
         </div>
       </div>
-      {/* Tela cheia: conversa à esquerda, ações do agente à direita e composer
-          embaixo — recolhidos na borda, abrem no hover ou fixados, o mesmo do
+      {/* Fullscreen: conversation on the left, agent actions on the right and composer
+          below — collapsed at the edge, they open on hover or pinned, the same as the
           browser. */}
       {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
       {fullscreen && (
@@ -1523,9 +1523,9 @@ export function MotionTab({
         />
       )}
 
-      {/* O modal do render: as quatro decisões que sobravam escondidas num menu
-          (só o formato) ou fixas no código (peso, fps, áudio). O "Renderizar"
-          daqui abre o diálogo de salvar do sistema, como antes. */}
+      {/* The render modal: the four decisions that were left hidden in a menu
+          (only the format) or fixed in the code (size, fps, audio). The "Render"
+          here opens the system save dialog, as before. */}
       <Dialog open={renderOpen} onOpenChange={setRenderOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -1592,7 +1592,7 @@ export function MotionTab({
                   format: renderOptions.format,
                   quality: renderOptions.quality,
                   separateAudio: renderOptions.separateAudio,
-                  // 0 = "o da composição": não manda fps nenhum.
+                  // 0 = "the composition one": it sends no fps at all.
                   ...(renderOptions.fps > 0 ? { fps: renderOptions.fps } : {}),
                 })
               }

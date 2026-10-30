@@ -11,7 +11,7 @@ import {
 interface UserMessageNavItem {
   id: string
   text: string
-  /** Timestamp (epoch ms) da mensagem — exibido no rodapé do tooltip */
+  /** Timestamp (epoch ms) of the message — shown in the tooltip footer */
   time: number
 }
 
@@ -19,7 +19,7 @@ interface UserMessageNavProps {
   items: UserMessageNavItem[]
   activeId: string | null
   onSelect: (id: string) => void
-  /** IDs de mensagens de usuário que geraram um plano — recebem destaque com cor primária */
+  /** IDs of user messages that generated a plan — they get a highlight in the primary color */
   planIds?: Set<string>
 }
 
@@ -42,8 +42,8 @@ export function UserMessageNav({ items, activeId, onSelect, planIds }: UserMessa
                     type="button"
                     onClick={() => onSelect(item.id)}
                     className={cn(
-                      // Transição suave; no hover do container (nav) TODAS as barras crescem (altura + largura).
-                      // O hover fica no grupo todo, não na barrinha, para os gaps entre as barras não quebrarem o efeito.
+                      // Smooth transition; on the hover of the container (nav) ALL the bars grow (height + width).
+                      // The hover stays on the whole group, not on the little bar, so the gaps between the bars do not break the effect.
                       "pointer-events-auto rounded-full transition-all duration-200 ease-out",
                       "group-hover:h-2 group-hover:w-7 group-hover:transition-all group-hover:duration-200",
                       isPlan

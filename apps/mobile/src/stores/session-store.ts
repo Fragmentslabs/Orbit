@@ -17,7 +17,7 @@ import type {
   SessionStateResponse,
   UnrevertResult,
 } from '@orbit/shared'
-import { parseMessageReply, SESSION_BUSY_ERROR } from '@orbit/shared'
+import { normalizeOrchestrationPlan, parseMessageReply, SESSION_BUSY_ERROR } from '@orbit/shared'
 import { useReply } from '~/stores/reply-store'
 import { Storage } from '~/lib/storage'
 import { visibleMessageText } from '~/lib/message-utils'
@@ -44,25 +44,25 @@ export interface RevertResponse {
 
 export interface MessagesResponse {
   messages: ChatMessage[]
-  /** Resumo do unrevert: o que voltou e o que ficou intacto por conflito. */
+  /** Summary of the unrevert: what came back and what stayed intact due to a conflict. */
   result?: UnrevertResult
 }
 
-// ─── Modelo efetivo da sessão ────────────────────────────────────────────────
-// Mistura três regras (override por chat > draft > último chat > default
-// global). Vive no session-store — e não no session-model-prefs — porque
-// depende da lista de sessões; isso evita o require cycle entre os dois
-// stores (session-model-prefs só guarda os overrides).
+// ─── Effective model of the session ──────────────────────────────────────────
+// Mixes three rules (per-chat override > draft > last chat > global
+// default). It lives in session-store — and not in session-model-prefs — because
+// it depends on the session list; that avoids the require cycle between the two
+// stores (session-model-prefs only holds the overrides).
 
-/** Sessão mais recente não arquivada e não-worker — o modelo dela é o default
- *  do próximo chat novo. */
+/** Most recent session that is not archived and not a worker — its model is the default
+ *  of the next new chat. */
 function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
   return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
 }
 
-/** Modelo efetivo da sessão: override por chat > default global. Chat novo
- *  (draft) sem escolha explícita herda o modelo do último chat usado antes de
- *  cair no default global. */
+/** Effective model of the session: per-chat override > global default. A new chat
+ *  (draft) without an explicit choice inherits the model of the last chat used before
+ *  falling back to the global default. */
 export function sessionModelFor(sessionId?: string | null): SelectedModel | null {
   const prefs = useSessionModelPrefs.getState()
   const override = prefs.overrides[sessionId ?? DRAFT_KEY]
@@ -75,8 +75,8 @@ export function sessionModelFor(sessionId?: string | null): SelectedModel | null
   return useSettingsStore.getState().selectedModel
 }
 
-/** Hook reativo do modelo efetivo da sessão (reage a override, a default e à
- *  sessão mais recente — para o chat novo acompanhar o último modelo usado). */
+/** Reactive hook of the effective model of the session (reacts to the override, to the default and to the
+ *  most recent session — so the new chat follows the last model used). */
 export function useSessionModel(sessionId?: string | null): SelectedModel | null {
   const overrides = useSessionModelPrefs((s) => s.overrides)
   const globalModel = useSettingsStore((s) => s.selectedModel)
@@ -128,50 +128,51 @@ async function cacheOrchestration(sessionId: string, plan: OrchestrationPlan) {
 async function loadCachedOrchestration(sessionId: string): Promise<OrchestrationPlan | null> {
   try {
     const raw = await Storage.getItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
-    return raw ? JSON.parse(raw) : null
+    // Legacy plans (Portuguese keys/phase values) are translated at the read edge.
+    return raw ? normalizeOrchestrationPlan(JSON.parse(raw)) ?? null : null
   } catch { return null }
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface SessionState {
-  /** Lista de sessões do desktop. */
+  /** Session list of the desktop. */
   sessions: SessionInfo[]
-  /** Pastas do desktop. */
+  /** Folders of the desktop. */
   folders: FolderInfo[]
-  /** Sessão ativa (aberta). */
+  /** Active session (open). */
   activeSessionId: string | null
-  /** Mensagens por sessão. */
+  /** Messages per session. */
   messages: Record<string, ChatMessage[]>
-  /** Status de streaming por sessão. */
+  /** Streaming status per session. */
   status: Record<string, ChatStatus>
-  /** Erros por sessão. */
+  /** Errors per session. */
   errors: Record<string, string | undefined>
-  /** Plan reviews (modo plano) por sessão. */
+  /** Plan reviews (plan mode) per session. */
   planReviews: Record<string, PlanReview>
-  /** Sessões que aguardam criação de PlanReview ao fim do streaming. */
+  /** Sessions waiting for the creation of a PlanReview at the end of the streaming. */
   _planReviewOutbox: Record<string, boolean>
-  /** Sessoes cuja PlanReview foi criada aqui (envio em modo plano pelo celular)
-   *  e por isso ainda nao existe no disco do desktop — nao pode ser limpa pelo
-   *  session:state, senao o card sumiria ao reabrir a conversa. */
+  /** Sessions whose PlanReview was created here (sending in plan mode from the phone)
+   *  and therefore does not exist yet on the desktop disk — it cannot be cleared by
+   *  session:state, otherwise the card would vanish when reopening the conversation. */
   _localPlanReviews: Record<string, boolean>
-  /** Planos de orquestração por sessão. */
+  /** Orchestration plans per session. */
   orchestration: Record<string, OrchestrationPlan>
-  /** Contagem de mensagens não lidas por sessão. */
+  /** Count of unread messages per session. */
   unreadCounts: Record<string, number>
-  /** Busca lista de sessões via WS. */
+  /** Fetches the session list via WS. */
   fetchSessions: () => Promise<void>
-  /** Busca textual em títulos e mensagens (mesma lógica do desktop). */
+  /** Text search in titles and messages (same logic as the desktop). */
   searchSessions: (query: string) => Promise<SearchHit[]>
-  /** Busca lista de pastas via WS. */
+  /** Fetches the folder list via WS. */
   fetchFolders: () => Promise<void>
-  /** Sincroniza quem esta rodando no desktop (o engine vive la). */
+  /** Synchronizes who is running on the desktop (the engine lives there). */
   fetchRunningSessions: () => Promise<void>
-  /** Seleciona sessão e carrega mensagens. */
+  /** Selects a session and loads the messages. */
   selectSession: (id: string | null) => Promise<void>
-  /** Busca as mensagens mais recentes de uma sessão via WS. */
+  /** Fetches the most recent messages of a session via WS. */
   fetchMessages: (sessionId: string) => Promise<void>
-  /** Carrega uma página de mensagens antigas, anexando-a no início. */
+  /** Loads a page of older messages, attaching it at the beginning. */
   loadOlderMessages: (sessionId: string) => Promise<void>
 
   sendMessage: (
@@ -182,65 +183,65 @@ interface SessionState {
       options?: SendMessageOptions
       sessionId?: string
       files?: FilePart[]
-      /** Pastas do modo código (principal + adicionais). */
+      /** Folders of code mode (main + additional ones). */
       directory?: string
       extraDirectories?: string[]
     },
   ) => Promise<void>
-  /** Cria uma sessão nova no desktop e retorna-a. */
+  /** Creates a new session on the desktop and returns it. */
   createSession: (mode: SessionMode, title?: string) => Promise<SessionInfo | null>
-  /** Aborta streaming de uma sessão. */
+  /** Aborts the streaming of a session. */
   abortChat: (sessionId: string) => void
-  /** Renomeia uma sessão. */
+  /** Renames a session. */
   renameSession: (sessionId: string, title: string) => Promise<void>
-  /** Fixa/desafixa uma sessão. */
+  /** Pins/unpins a session. */
   setPinned: (sessionId: string, pinned: boolean) => Promise<void>
-  /** Arquiva/desarquiva uma sessão. */
+  /** Archives/unarchives a session. */
   setArchived: (sessionId: string, archived: boolean) => Promise<void>
-  /** Exclui uma sessão (e workers filhos, em cascata). */
+  /** Deletes a session (and child workers, in cascade). */
   deleteSession: (sessionId: string) => Promise<void>
-  /** Cria uma cópia (fork) de uma sessão, opcionalmente até uma mensagem. */
+  /** Creates a copy (fork) of a session, optionally up to a message. */
   forkSession: (sessionId: string, messageId?: string) => Promise<SessionInfo | null>
-  /** Move uma sessão para uma pasta (ou para a raiz, com null). */
+  /** Moves a session to a folder (or to the root, with null). */
   moveToFolder: (sessionId: string, folderId: string | null) => Promise<void>
-  /** Cria uma pasta nova. */
+  /** Creates a new folder. */
   createFolder: (mode: SessionMode, name: string) => Promise<FolderInfo | null>
-  /** Renomeia uma pasta. */
+  /** Renames a folder. */
   renameFolder: (folderId: string, name: string) => Promise<void>
-  /** Fixa/desafixa uma pasta. */
+  /** Pins/unpins a folder. */
   setFolderPinned: (folderId: string, pinned: boolean) => Promise<void>
-  /** Arquiva/desarquiva uma pasta — os chats dela acompanham. */
+  /** Archives/unarchives a folder — its chats follow along. */
   setFolderArchived: (folderId: string, archived: boolean) => Promise<void>
-  /** Remove uma pasta (sessões voltam pra raiz). */
+  /** Removes a folder (sessions go back to the root). */
   deleteFolder: (folderId: string) => Promise<void>
-  /** Reorganiza a sidebar (mescla pastas duplicadas e recolhe chats soltos
-   *  para a pasta do projeto). Executa no desktop; o resultado volta pelos
-   *  eventos de sessão/pasta. false = o desktop não pôde executar (no macOS o
-   *  app segue vivo sem janela aberta, e é a janela que reorganiza). */
+  /** Reorganizes the sidebar (merges duplicate folders and pulls loose chats
+   *  into the project folder). Runs on the desktop; the result comes back through
+   *  the session/folder events. false = the desktop could not run it (on macOS the
+   *  app stays alive without an open window, and it is the window that reorganizes). */
   organizeSidebar: () => Promise<boolean>
-  /** Reverte sessão até uma mensagem específica (trunca msgs posteriores). */
+  /** Reverts the session up to a specific message (truncates later msgs). */
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
-  /** Desfaz o revert ativo, restaurando mensagens descartadas. */
+  /** Undoes the active revert, restoring the discarded messages. */
   unrevert: (sessionId: string) => Promise<void>
-  /** Reverte também os arquivos de autor incerto do revert ativo. */
+  /** Reverts the files of uncertain authorship of the active revert as well. */
   revertUncertain: (sessionId: string) => Promise<void>
-  /** Aceita plano de implementação (modo plano). */
+  /** Accepts the implementation plan (plan mode). */
   acceptPlanReview: (sessionId: string, permissionMode: PermissionMode, orchestrate?: boolean) => Promise<void>
-  /** Rejeita plano de implementação (modo plano). */
+  /** Rejects the implementation plan (plan mode). */
   rejectPlanReview: (sessionId: string) => Promise<void>
-  /** Envia feedback para revisar o plano (modo plano). */
+  /** Sends feedback to revise the plan (plan mode). */
   reviewPlanReview: (sessionId: string, feedback: string) => Promise<void>
-  /** Aprova plano de orquestração. */
+  /** Approves an orchestration plan. */
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => Promise<void>
-  /** Rejeita plano de orquestração. */
+  /** Rejects an orchestration plan. */
   rejectPlan: (sessionId: string) => Promise<void>
-  /** Aplica evento de chat recebido via WS. */
+  /** Applies a chat event received via WS. */
   applyChatEvent: (event: ChatEvent) => void
 }
 
 // ─── Delta batching ─────────────────────────────────────────────────────────
-// Agrupa part-deltas num frame (~33ms) para o stream parecer fluido sem
-// re-render por token. Atualiza só a mensagem afetada (cópia do array).
+// Groups part-deltas into one frame (~33ms) so the stream looks fluid without
+// a re-render per token. It updates only the affected message (copy of the array).
 
 interface PendingDelta {
   sessionId: string
@@ -265,7 +266,7 @@ function flushDeltas(set: (fn: (state: SessionState) => Partial<SessionState>) =
 
   set((state) => {
     const messages = { ...state.messages }
-    // Agrupa por sessão para copiar cada lista uma vez
+    // Groups by session so each list is copied once
     const bySession = new Map<string, PendingDelta[]>()
     for (const d of pending) {
       const list = bySession.get(d.sessionId)
@@ -277,7 +278,7 @@ function flushDeltas(set: (fn: (state: SessionState) => Partial<SessionState>) =
       if (!list) continue
       const next = list.slice()
       for (const delta of deltas) {
-        // Mensagem ativa costuma ser a última — busca do fim
+        // The active message is usually the last one — search from the end
         let msgIdx = -1
         for (let i = next.length - 1; i >= 0; i--) {
           if (next[i].id === delta.messageId) {
@@ -323,13 +324,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const res = await wsClient.send({ type: 'sessions:list' })
       if (res.ok && Array.isArray(res.data)) {
         const sessions = res.data as SessionInfo[]
-        // Ordena por updatedAt desc (mais recente primeiro)
+        // Sorts by updatedAt desc (most recent first)
         sessions.sort((a, b) => b.updatedAt - a.updatedAt)
         set({ sessions })
         void cacheSessions(sessions)
       }
     } catch {
-      // Fallback para cache quando offline
+      // Fallback to the cache when offline
       const cached = await loadCachedSessions()
       if (cached.length > 0) set({ sessions: cached })
     }
@@ -367,16 +368,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const res = await wsClient.send({ type: 'sessions:running' })
       if (!res.ok || !Array.isArray(res.data)) return
-      const rodando = new Set(res.data as string[])
+      const running = new Set(res.data as string[])
       set((state) => {
         const status = { ...state.status }
-        for (const id of rodando) {
+        for (const id of running) {
           if (status[id] !== 'streaming') status[id] = 'streaming'
         }
-        // Terminou enquanto o celular estava fora: o 'status: idle' passou sem
-        // ninguem ouvindo e o spinner ficaria preso para sempre.
+        // Finished while the phone was away: the 'status: idle' went by with no one
+        // listening and the spinner would stay stuck forever.
         for (const id of Object.keys(status)) {
-          if (status[id] === 'streaming' && !rodando.has(id)) status[id] = 'idle'
+          if (status[id] === 'streaming' && !running.has(id)) status[id] = 'idle'
         }
         return { status }
       })
@@ -386,19 +387,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   selectSession: async (id) => {
-    // Lembra o último chat aberto: ao reabrir o app ele volta para cá (e o
-    // rascunho do input vem junto). Chat novo (null) limpa a lembrança.
+    // Remembers the last open chat: reopening the app comes back here (and the
+    // input draft comes along). A new chat (null) clears the memory.
     void saveLastSessionId(id)
     set((state) => ({
       activeSessionId: id,
       unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,
     }))
     if (id) {
-      // Carrega do cache primeiro (instantâneo), depois busca da rede
+      // Loads from the cache first (instant), then fetches from the network
       const cached = await loadCachedMessages(id)
       if (cached) {
-        // O cache pode conter até 200 itens para uso futuro, mas a abertura
-        // deve montar somente a janela inicial leve.
+        // The cache may hold up to 200 items for future use, but the opening
+        // must mount only the light initial window.
         set((state) => ({
           messages: { ...state.messages, [id]: cached.slice(-MAX_INITIAL_CACHED_MESSAGES) },
         }))
@@ -408,29 +409,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (asks && asks.length > 0) {
         useChatStore.getState().setPendingAsks(id, asks)
       }
-      // Carrega plano de orquestração do cache
+      // Loads the orchestration plan from the cache
       const plan = await loadCachedOrchestration(id)
       if (plan) {
         set((state) => ({
           orchestration: { ...state.orchestration, [id]: plan },
         }))
       }
-      // Fetch da rede em background (atualiza quando chegar)
+      // Network fetch in the background (updates when it arrives)
       void get().fetchMessages(id)
     }
   },
 
   fetchMessages: async (sessionId) => {
     const { wsClient } = useConnectionStore.getState()
-    // Plano, review e pedidos pendentes nao vem nas mensagens: sem esta busca,
-    // reabrir a conversa (ou parear o celular depois que o card foi emitido)
-    // perdia os cards mesmo com o pedido ainda pendente no desktop — o mobile
-    // so os conhecia pelos eventos ao vivo, que ja tinham passado.
-    const askIdsAntes = new Set(
+    // Plan, review and pending requests do not come in the messages: without this fetch,
+    // reopening the conversation (or pairing the phone after the card was emitted)
+    // lost the cards even with the request still pending on the desktop — mobile
+    // only knew them from the live events, which had already gone by.
+    const askIdsBefore = new Set(
       (useChatStore.getState().pendingAsks[sessionId] ?? []).map((a) => a.requestId),
     )
-    const planReviewAntes = get().planReviews[sessionId]
-    const planAntes = get().orchestration[sessionId]
+    const planReviewBefore = get().planReviews[sessionId]
+    const planBefore = get().orchestration[sessionId]
     void wsClient
       .send({ type: 'session:state', sessionId })
       .then((res) => {
@@ -439,11 +440,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set((prev) => {
           const planReviews = { ...prev.planReviews }
           if (state.planReview) planReviews[sessionId] = state.planReview
-          // Sem review no desktop, nada mudou aqui desde a busca e o card nao e
-          // otimista deste app: foi aceito/recusado enquanto o celular estava
-          // fora — sai da tela em vez de virar um card morto.
+          // No review on the desktop, nothing changed here since the fetch and the card is not
+          // optimistic from this app: it was accepted/rejected while the phone was
+          // away — it leaves the screen instead of becoming a dead card.
           else if (
-            prev.planReviews[sessionId] === planReviewAntes &&
+            prev.planReviews[sessionId] === planReviewBefore &&
             !prev._localPlanReviews[sessionId]
           ) {
             delete planReviews[sessionId]
@@ -451,14 +452,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
           const orchestration = { ...prev.orchestration }
           if (state.plan) orchestration[sessionId] = state.plan
-          else if (prev.orchestration[sessionId] === planAntes) {
+          else if (prev.orchestration[sessionId] === planBefore) {
             delete orchestration[sessionId]
             void Storage.removeItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
           }
           return { planReviews, orchestration }
         })
-        // Lista autoritativa dos cards de pergunta/permissão do desktop.
-        useChatStore.getState().syncPendingAsks(sessionId, state.pendingAsks ?? [], askIdsAntes)
+        // Authoritative list of the question/permission cards of the desktop.
+        useChatStore.getState().syncPendingAsks(sessionId, state.pendingAsks ?? [], askIdsBefore)
       })
       .catch(() => {})
     try {
@@ -471,19 +472,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const msgs = res.data as ChatMessage[]
         set((state) => {
           const current = state.messages[sessionId] ?? []
-          // A rede é autoritativa: a resposta do desktop já vem com as URLs de
-          // mídia reescritas (http://host:3848/...t=token). Antes o cache/local
-          // vencia no conflito e o histórico ficava com orbit-media:// — esquema
-          // que o React Native não resolve — para sempre. Mensagens que só
-          // existem localmente continuam no mapa (base é o current).
+          // The network is authoritative: the desktop response already comes with the media
+          // URLs rewritten (http://host:3848/...t=token). Before, the cache/local
+          // won the conflict and the history kept orbit-media:// — a scheme
+          // React Native does not resolve — forever. Messages that only
+          // exist locally stay in the map (the base is the current one).
           const byId = new Map(current.map((message) => [message.id, message]))
           for (const message of msgs) byId.set(message.id, message)
           const merged = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
 
-          // Reconciliação de status pós-reconexão: se a última mensagem do
-          // assistente já tem tokens/error (fim do stream) e o status ficou
-          // preso em streaming/submitted (evento status: idle perdido durante
-          // o gap de conexão), destrava a UI.
+          // Status reconciliation after reconnection: if the last assistant message
+          // already has tokens/error (end of the stream) and the status stayed
+          // stuck in streaming/submitted (status: idle event lost during
+          // the connection gap), it releases the UI.
           const status = state.status
           const lastAssistant = [...merged].reverse().find((m) => m.role === 'assistant')
           const finished =
@@ -498,7 +499,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         void cacheMessages(sessionId, get().messages[sessionId] ?? msgs)
       }
     } catch {
-      // O cache já foi exibido pelo selectSession.
+      // The cache has already been displayed by selectSession.
     }
   },
 
@@ -525,7 +526,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         void cacheMessages(sessionId, get().messages[sessionId] ?? current)
       }
     } catch {
-      // Paginação é oportunista; mantém as mensagens já visíveis.
+      // Pagination is opportunistic; it keeps the messages already visible.
     }
   },
 
@@ -537,7 +538,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const isOnline = connection.status === 'connected'
 
     if (!isOnline) {
-      // Offline: enfileira para enviar quando reconectar
+      // Offline: queues it to send when reconnecting
       const session = get().sessions.find((s) => s.id === sessionId)
       const mode = session?.mode ?? 'chat'
       useMessageQueueStore.getState().enqueueForSend(sessionId, text, config?.options ?? {}, mode, {
@@ -545,7 +546,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         extraDirectories: config?.extraDirectories,
         files: config?.files,
       })
-      // Mostra status de erro amigável
+      // Shows a friendly error status
       set((state) => ({
         status: { ...state.status, [sessionId]: 'error' as ChatStatus },
         errors: { ...state.errors, [sessionId]: i18n.t('sessionStore.queuedOffline') },
@@ -562,19 +563,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId]: true } }))
     }
 
-    // Modelo: explícito no config, senão o da SESSÃO (override por chat >
-    // draft > último chat > default global do desktop) — mesmo padrão do
-    // desktop, onde o modelo segue a sessão, não o app inteiro.
+    // Model: explicit in the config, otherwise the one of the SESSION (per-chat override >
+    // draft > last chat > global default of the desktop) — same pattern as the
+    // desktop, where the model follows the session, not the whole app.
     const settings = useSettingsStore.getState()
     const selected = sessionModelFor(sessionId) ?? settings.selectedModel
     const usesWorkers = config?.options?.subagents || config?.options?.orchestrate
     const workerModel = usesWorkers && settings.workerModel
       ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
       : undefined
-    // Modo Visão: envia o modelo de visão configurado quando ativo para ESTA
-    // sessão (toggle por chat com default nas preferências). O engine do
-    // desktop usa para descrever imagens (preprocess) — mesmo caminho do
-    // desktop, onde o visionModel chega via SendMessageInput.
+    // Vision mode: sends the configured vision model when active for THIS
+    // session (per-chat toggle with a default in the preferences). The desktop engine
+    // uses it to describe images (preprocess) — same path as the
+    // desktop, where the visionModel arrives via SendMessageInput.
     const session = get().sessions.find((s) => s.id === sessionId)
     const sessionMode = session?.mode ?? 'chat'
     const visionPrefs =
@@ -584,9 +585,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const visionModel = settings.visionModel && modeActiveFor('vision', sessionId, visionPrefs.vision)
       ? { ...settings.visionModel }
       : undefined
-    // Só maxIterations viaja: é o que a engine lê (o autoReview é um ajuste
-    // local do modal). Antes o objeto inteiro ia com `as any` — e o desktop
-    // descartava, porque o campo nem existia no protocolo.
+    // Only maxIterations travels: it is what the engine reads (autoReview is a local
+    // adjustment of the modal). Before, the whole object went with `as any` — and the desktop
+    // discarded it, because the field did not even exist in the protocol.
     const loopConfig = config?.options?.loop
       ? { maxIterations: settings.loopConfig.maxIterations }
       : undefined
@@ -607,10 +608,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       })
       if (res.ok) return
       if (res.error === SESSION_BUSY_ERROR) {
-        // O desktop ainda está no turno anterior (o status daqui estava velho:
-        // idle entre iterações do loop, reconexão...). Mandar agora abortaria
-        // aquele turno no meio — a mensagem entra na FRENTE da fila
-        // compartilhada, e o desktop a envia quando a sessão ficar livre.
+        // The desktop is still in the previous turn (the status here was stale:
+        // idle between loop iterations, reconnection...). Sending now would abort
+        // that turn halfway — the message goes to the FRONT of the shared
+        // queue, and the desktop sends it when the session becomes free.
         useMessageQueueStore.getState().enqueueFront(sessionId, {
           id: newQueueId(),
           text,
@@ -630,8 +631,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       failSend(String(err))
     }
 
-    /** O desktop não recebeu (ou recusou) a mensagem: em vez de ela sumir, o
-     *  texto e os anexos voltam ao input desta conversa para reenviar. */
+    /** The desktop did not receive (or refused) the message: instead of vanishing, the
+     *  text and the attachments go back to the input of this conversation to be resent. */
     function failSend(error: string) {
       set((state) => ({
         status: { ...state.status, [sessionId!]: 'error' },
@@ -643,16 +644,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   createSession: async (mode, title) => {
     const { wsClient, connection } = useConnectionStore.getState()
-    // Sem conexão não há onde criar: falha na hora (quem chamou devolve o texto
-    // ao input) em vez de esperar o socket voltar.
+    // Without a connection there is nowhere to create it: it fails right away (whoever
+    // called gives the text back to the input) instead of waiting for the socket to return.
     if (connection.status !== 'connected') return null
     try {
       const res = await wsClient.send({ type: 'sessions:create', mode, title })
       if (res.ok && res.data) {
         const session = res.data as SessionInfo
         set((state) => {
-          // O desktop também transmite um evento `session` do mesmo id — evita
-          // inserir uma 2ª cópia (que causava "two children with the same key").
+          // The desktop also broadcasts a `session` event with the same id — avoids
+          // inserting a 2nd copy (which caused "two children with the same key").
           const exists = state.sessions.some((s) => s.id === session.id)
           return {
             sessions: exists ? state.sessions : [session, ...state.sessions],
@@ -662,32 +663,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
                 : state.messages,
           }
         })
-        // O draft (chat novo) passa a valer para esta sessão: overrides de
-        // modos ativos (pesquisa/browser/plano/subagentes/orquestra/visão),
-        // simples e brain.
+        // The draft (new chat) now applies to this session: overrides of the
+        // active modes (research/browser/plan/subagents/orchestra/vision),
+        // simple and brain.
         useModeOverrides.getState().adopt(session.id)
         useSimplePrefs.getState().adopt(session.id)
         useBrainPrefs.getState().adopt(session.id)
-        // O modelo escolhido no chat novo (draft) passa a ser o da sessão;
-        // sem escolha explícita, fixa o modelo efetivamente usado (herdado do
-        // último chat) para o picker e o envio continuarem consistentes.
+        // The model chosen in the new chat (draft) becomes the one of the session;
+        // without an explicit choice, it fixes the model actually used (inherited from the
+        // last chat) so the picker and the send stay consistent.
         useSessionModelPrefs.getState().adopt(session.id, sessionModelFor(undefined) ?? undefined)
-        // Idem para a rotação escolhida no chat novo — sem isto ela ficaria
-        // presa no draft e o primeiro turno da sessão rodaria sem rotação.
+        // Same for the rotation chosen in the new chat — without this it would stay
+        // stuck in the draft and the first turn of the session would run without a rotation.
         useModelRotationStore.getState().adoptRotation(session.id)
-        // Thinking e autonomia do chat novo também passam a ser da sessão:
-        // sem escolha no rascunho, fixa o nível em vigor (o do modelo / o
-        // padrão), para o chat não mudar quando o default for mexido depois.
-        const modeloDaSessao = sessionModelFor(undefined)
+        // Thinking and autonomy of the new chat also become the ones of the session:
+        // without a choice in the draft, it fixes the level in force (the one of the model / the
+        // default), so the chat does not change when the default is touched later.
+        const sessionModel = sessionModelFor(undefined)
         useSessionReasoning.getState().adopt(
           session.id,
-          sessionReasoningFor(undefined, modeloDaSessao?.providerId, modeloDaSessao?.modelId),
+          sessionReasoningFor(undefined, sessionModel?.providerId, sessionModel?.modelId),
         )
         usePermissionPrefs.getState().adopt(session.id)
         return session
       }
     } catch {
-      // servidor pode ser de uma versão antiga sem sessions:create
+      // the server may be an older version without sessions:create
     }
     return null
   },
@@ -699,9 +700,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch {
       // Silently fail
     }
-    // Otimista: quando a geração já terminou no desktop, o chat:abort é no-op e
-    // nenhum status volta — sem isto o status ficaria preso em streaming/
-    // submitted e o botão de parar pareceria não funcionar.
+    // Optimistic: when the generation has already finished on the desktop, chat:abort is a no-op and
+    // no status comes back — without this the status would stay stuck in streaming/
+    // submitted and the stop button would seem not to work.
     set((state) => ({ status: { ...state.status, [sessionId]: 'idle' as ChatStatus } }))
   },
 
@@ -749,16 +750,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         delete _localPlanReviews[sessionId]
         const unreadCounts = { ...state.unreadCounts }
         delete unreadCounts[sessionId]
-        // Limpa pendingAsks da memória e do cache
+        // Clears pendingAsks from memory and from the cache
         const pendingAsks = { ...useChatStore.getState().pendingAsks }
         delete pendingAsks[sessionId]
         useChatStore.setState({ pendingAsks, activeAskSessionId: useChatStore.getState().activeAskSessionId === sessionId ? null : useChatStore.getState().activeAskSessionId })
         return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox, _localPlanReviews, unreadCounts }
       })
-      // Thinking e autonomia do chat vão junto — nada de override órfão.
+      // Thinking and autonomy of the chat go along — no orphan override.
       useSessionReasoning.getState().clear(sessionId)
       usePermissionPrefs.getState().clear(sessionId)
-      // Cleanup de arquivos de cache
+      // Cache file cleanup
       void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
       void Storage.removeItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
     }
@@ -815,8 +816,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { wsClient } = useConnectionStore.getState()
     const res = await wsClient.send({ type: 'folders:archive', folderId, archived })
     if (res.ok && Array.isArray(res.data)) {
-      // Os chats da pasta chegam pelos eventos 'session' do broadcast, mas a
-      // cascata é aplicada aqui também para a lista não piscar no meio.
+      // The chats of the folder arrive through the 'session' events of the broadcast, but the
+      // cascade is applied here as well so the list does not blink in between.
       set((state) => ({
         folders: res.data as FolderInfo[],
         sessions: state.sessions.map((s) => (s.folderId === folderId ? { ...s, archived } : s)),
@@ -837,8 +838,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   organizeSidebar: async () => {
     const { wsClient } = useConnectionStore.getState()
-    // O desktop reorganiza e emite os eventos de sessão/pasta resultantes —
-    // não há estado a aplicar aqui.
+    // The desktop reorganizes and emits the resulting session/folder events —
+    // there is no state to apply here.
     const res = await wsClient.send({ type: 'sidebar:organize' })
     return res.ok
   },
@@ -849,11 +850,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: 'implementing', permissionMode }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
 
-    // Mesma resolucao do sendMessage: override do chat > default global. Sem
-    // ela a implementacao roda no modelo global, e com selectedModel vazio o
-    // desktop cai no fallback openai/gpt-4o — provider que pode nem existir.
+    // Same resolution as sendMessage: per-chat override > global default. Without
+    // it the implementation runs on the global model, and with an empty selectedModel the
+    // desktop falls back to openai/gpt-4o — a provider that may not even exist.
     const settings = useSettingsStore.getState()
-    const modelo = sessionModelFor(sessionId) ?? settings.selectedModel
+    const model = sessionModelFor(sessionId) ?? settings.selectedModel
     const { wsClient } = useConnectionStore.getState()
     try {
       await wsClient.send({
@@ -861,8 +862,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         sessionId,
         messageId: review.messageId,
         permissionMode,
-        providerId: modelo?.providerId,
-        modelId: modelo?.modelId,
+        providerId: model?.providerId,
+        modelId: model?.modelId,
         orchestrate,
       })
     } catch {
@@ -891,7 +892,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
 
     const settings = useSettingsStore.getState()
-    const modelo = sessionModelFor(sessionId) ?? settings.selectedModel
+    const model = sessionModelFor(sessionId) ?? settings.selectedModel
     const { wsClient } = useConnectionStore.getState()
     try {
       await wsClient.send({
@@ -900,8 +901,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         messageId: review.messageId,
         feedback,
         permissionMode: review.permissionMode ?? 'ask',
-        providerId: modelo?.providerId,
-        modelId: modelo?.modelId,
+        providerId: model?.providerId,
+        modelId: model?.modelId,
       })
     } catch {
       // Silently fail
@@ -941,15 +942,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ),
           messages: { ...state.messages, [sessionId]: messages },
         }))
-        // A mensagem revertida volta para o input, como se estivesse sendo
-        // editada. O texto sai de `discardedMessages` em vez de vir num campo
-        // próprio do SessionRevert: anexos são data URLs e duplicá-los dobraria
-        // o tamanho da sessão em disco.
+        // The reverted message goes back to the input, as if it were being
+        // edited. The text comes out of `discardedMessages` instead of arriving in a field
+        // of its own in SessionRevert: attachments are data URLs and duplicating them would double
+        // the size of the session on disk.
         const prompt = revert?.discardedMessages?.find((m) => m.role === 'user')
         if (prompt) {
           const files = prompt.parts.filter((p): p is FilePart => p.type === 'file')
-          // A citação volta como resposta ARMADA (barra no compositor), e não
-          // como `> [assistant] …` dentro do campo de texto — ver o desktop.
+          // The quote comes back as an ARMED reply (bar in the composer), and not
+          // as `> [assistant] …` inside the text field — see the desktop.
           const { reply, body } = parseMessageReply(visibleMessageText(prompt))
           if (reply) useReply.getState().setReply(sessionId, reply)
           useDraftInput.getState().setDraft(sessionId, body, files)
@@ -972,8 +973,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ),
           messages: { ...state.messages, [sessionId]: messages },
         }))
-        // O que não voltou (mudou entre o revert e agora) não pode passar em
-        // silêncio no celular.
+        // What did not come back (changed between the revert and now) cannot pass in
+        // silence on the phone.
         const kept =
           (result?.files?.conflicts.length ?? 0) + (result?.media?.conflicts ?? 0)
         if (result?.files?.error) {
@@ -1005,8 +1006,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   applyChatEvent: (event) => {
     const sessionId = 'sessionId' in event ? event.sessionId : ''
 
-    // Eventos que tocam as mensagens diretamente precisam ver o texto já
-    // acumulado — descarrega os deltas pendentes antes de aplicá-los.
+    // Events that touch the messages directly need to see the text already
+    // accumulated — it flushes the pending deltas before applying them.
     if (event.type === 'message' || event.type === 'part' || event.type === 'messages' || event.type === 'status') {
       flushDeltas(set)
     }
@@ -1018,7 +1019,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             status: { ...state.status, [sessionId]: event.status },
             errors: { ...state.errors, [sessionId]: event.error },
           }
-          // Cria PlanReview ao fim do streaming se estava em modo plano
+          // Creates a PlanReview at the end of the streaming if it was in plan mode
           if (event.status === 'idle' && state._planReviewOutbox?.[sessionId] && !state.planReviews[sessionId]) {
             const msgs = state.messages[sessionId] ?? []
             const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
@@ -1043,25 +1044,25 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               ? list.map((m, i) => (i === idx ? event.message : m))
               : [...list, event.message]
 
-          // Cache após receber mensagem completa
+          // Cache after receiving a complete message
           void cacheMessages(sessionId, next)
 
-          // Reconciliação de status: uma mensagem do assistente com `tokens`
-          // (só definidos no 'finish' do stream) ou com erro significa que a
-          // geração terminou. Se o evento `status: idle` se perder, isto
-          // destrava o input/stop e some com o "Pensando".
+          // Status reconciliation: an assistant message with `tokens`
+          // (only defined at the 'finish' of the stream) or with an error means that the
+          // generation finished. If the `status: idle` event gets lost, this
+          // releases the input/stop and clears the "Thinking".
           const m = event.message
           const finished =
             m.role === 'assistant' && (m.tokens !== undefined || m.error !== undefined)
-          // Com erro, o estado é `error`, não `idle`.
+          // With an error, the state is `error`, not `idle`.
           const status = finished
             ? { ...state.status, [sessionId]: (m.error !== undefined ? 'error' : 'idle') as ChatStatus }
             : state.status
 
-          // Incrementa contador de não lidas se a sessão não está ativa.
-          // Placeholder vazio emitido pelo engine antes do stream (e re-emitido
-          // ao trocar anexos pós-preprocess) não conta — a primeira part ou a
-          // mensagem final contam.
+          // Increments the unread counter if the session is not active.
+          // Empty placeholder emitted by the engine before the stream (and re-emitted
+          // when switching attachments after preprocess) does not count — the first part or the
+          // final message count.
           const isInbound = m.role === 'assistant'
           const placeholder =
             isInbound && m.parts.length === 0 && m.tokens === undefined && m.error === undefined
@@ -1073,10 +1074,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
           return { messages: { ...state.messages, [sessionId]: next }, status, unreadCounts }
         })
-        // Um modelo só entra nos "recentes" quando foi de fato usado: a
-        // resposta final do agente (completedAt) chegou completa, com
-        // conteúdo real e sem erro — mesmo critério do desktop. markUsed é
-        // idempotente (dedup nos recents).
+        // A model only enters the "recents" when it was really used: the final
+        // answer of the agent (completedAt) arrived complete, with real
+        // content and without an error — same criterion as the desktop. markUsed is
+        // idempotent (dedup in the recents).
         const done = event.message
         if (
           done.role === 'assistant' &&
@@ -1091,11 +1092,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'part':
-        // O evento traz o estado COMPLETO da part (o desktop mantém o texto
-        // acumulado), então qualquer delta ainda no buffer já está contido
-        // nele — aplicar os dois duplicaria o trecho. Descartar o buffer aqui
-        // também é o que permite ao engine corrigir um texto já transmitido
-        // (ex.: o saneamento dos marcadores internos no 'text-end').
+        // The event brings the COMPLETE state of the part (the desktop keeps the text
+        // accumulated), so any delta still in the buffer is already contained in
+        // it — applying both would duplicate the stretch. Discarding the buffer here
+        // is also what allows the engine to correct a text already transmitted
+        // (e.g. the sanitizing of the internal markers at 'text-end').
         deltaBuffer.delete(`${sessionId}:${event.messageId}:${event.part.id}`)
         set((state) => {
           const list = state.messages[sessionId] ?? []
@@ -1132,7 +1133,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
 
       case 'messages':
-        // Substituição completa (compactação, etc.)
+        // Complete replacement (compaction, etc.)
         set((state) => ({
           messages: { ...state.messages, [sessionId]: event.messages },
         }))
@@ -1166,7 +1167,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'session':
-        // Sessão criada/atualizada pelo desktop (workers da orquestração)
+        // Session created/updated by the desktop (orchestration workers)
         set((state) => {
           const exists = state.sessions.some((s) => s.id === event.session.id)
           const sessions = exists
@@ -1184,7 +1185,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'session:deleted':
-        // Some com o chat também o thinking e a autonomia que ele guardava.
+        // The thinking and the autonomy it held go away with the chat as well.
         useSessionReasoning.getState().clear(event.sessionId)
         usePermissionPrefs.getState().clear(event.sessionId)
         set((state) => {
@@ -1204,7 +1205,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set({ folders: event.folders })
         break
 
-      // ─── Permissões ──────────────────────────────────────────────
+      // ─── Permissions ─────────────────────────────────────────────
 
       case 'permission': {
         const { addPendingAsk } = useChatStore.getState()
@@ -1230,7 +1231,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       case 'ask:batch': {
         const { addPendingAsk } = useChatStore.getState()
-        // event.items já é AskItem[] — o batchId agrupa o lote (card único).
+        // event.items is already AskItem[] — the batchId groups the batch (single card).
         for (const item of event.items ?? []) {
           addPendingAsk(sessionId, { ...item, batchId: event.batchId })
         }

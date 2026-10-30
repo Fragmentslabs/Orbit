@@ -1,4 +1,5 @@
 import { ChevronDownIcon, PaperclipIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import type { ComponentProps } from "react"
 import { Button } from "~/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
@@ -175,12 +176,15 @@ export const QueueSectionTrigger = ({
   children,
   className,
   ...props
-}: QueueSectionTriggerProps) => (
-  <CollapsibleTrigger render={<button className={cn(
+}: QueueSectionTriggerProps) => {
+  const { t } = useTranslation()
+  return (
+    <CollapsibleTrigger render={<button className={cn(
             "group flex w-full items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-left font-medium text-muted-foreground text-sm transition-colors hover:bg-muted",
             className,
-          )} type="button" aria-label="Alternar seção" {...props} />}>{children}</CollapsibleTrigger>
-)
+          )} type="button" aria-label={t("queue.toggleSection")} {...props} />}>{children}</CollapsibleTrigger>
+  )
+}
 
 // QueueSectionLabel - label content with icon and count
 export type QueueSectionLabelProps = ComponentProps<"span"> & {

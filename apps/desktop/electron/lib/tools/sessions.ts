@@ -8,44 +8,44 @@ import { abortChat } from '../chat-engine'
 import { deleteMediaJournals } from '../session/media-journal'
 
 /**
- * Manutenção de chats pelo agente — a base das rotinas de limpeza.
+ * Chat maintenance by the agent — the basis of the cleanup routines.
  *
- * Arquivar é reversível e é o caminho padrão; excluir apaga mensagens e o
- * histórico de revert, então tem regras próprias (ver chat_delete).
+ * Archiving is reversible and is the default path; deleting erases messages and the
+ * revert history, so it has its own rules (see chat_delete).
  *
- * As sessões são mutadas aqui no main e o renderer acompanha pelos eventos
- * "session" / "session:deleted" / "folders", que ele já trata.
+ * The sessions are mutated here in main and the renderer follows through the
+ * "session" / "session:deleted" / "folders" events, which it already handles.
  */
 
-const DIA_MS = 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Quantos chats uma única chamada de exclusão pode apagar. */
-const LIMITE_EXCLUSAO = 25
+/** How many chats a single delete call can erase. */
+const DELETE_LIMIT = 25
 
-async function carregarSessoes(): Promise<SessionInfo[]> {
-  const chaves = await listKeys(StorageKeys.sessionPrefix)
-  const itens = await Promise.all(chaves.map((k) => readJson<SessionInfo>(k)))
-  return itens.filter((s): s is SessionInfo => s != null)
+async function loadSessions(): Promise<SessionInfo[]> {
+  const keys = await listKeys(StorageKeys.sessionPrefix)
+  const items = await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))
+  return items.filter((s): s is SessionInfo => s != null)
 }
 
-async function carregarPastas(): Promise<FolderInfo[]> {
+async function loadFolders(): Promise<FolderInfo[]> {
   return (await readJson<FolderInfo[]>(StorageKeys.folders)) ?? []
 }
 
-function diasInativo(sessao: SessionInfo, agora: number): number {
-  return Math.floor((agora - sessao.updatedAt) / DIA_MS)
+function daysInactive(session: SessionInfo, now: number): number {
+  return Math.floor((now - session.updatedAt) / DAY_MS)
 }
 
-function descrever(sessao: SessionInfo, pastas: Map<string, string>, agora: number): string {
-  const pasta = sessao.folderId ? pastas.get(sessao.folderId) : undefined
-  const marcas = [
-    sessao.pinned ? 'pinned' : null,
-    sessao.archived ? 'archived' : null,
-    pasta ? `folder: ${pasta}` : null,
-    sessao.directory ? `dir: ${sessao.directory}` : null,
+function describeSession(session: SessionInfo, folders: Map<string, string>, now: number): string {
+  const folder = session.folderId ? folders.get(session.folderId) : undefined
+  const marks = [
+    session.pinned ? 'pinned' : null,
+    session.archived ? 'archived' : null,
+    folder ? `folder: ${folder}` : null,
+    session.directory ? `dir: ${session.directory}` : null,
   ].filter(Boolean)
-  const extra = marcas.length ? ` (${marcas.join(', ')})` : ''
-  return `#${sessao.id} [${sessao.mode}] ${diasInativo(sessao, agora)}d without interaction — "${sessao.title}"${extra}`
+  const extra = marks.length ? ` (${marks.join(', ')})` : ''
+  return `#${session.id} [${session.mode}] ${daysInactive(session, now)}d without interaction — "${session.title}"${extra}`
 }
 
 export function createSessionTools(): ToolSet {
@@ -74,32 +74,33 @@ export function createSessionTools(): ToolSet {
         limit: z.number().int().min(1).max(200).optional().describe('Default: 50'),
       }),
       execute: async ({ mode, inactiveDays, includePinned, includeArchived, folder, limit }) => {
-        const agora = Date.now()
-        const [sessoes, pastas] = await Promise.all([carregarSessoes(), carregarPastas()])
-        const nomePorId = new Map(pastas.map((f) => [f.id, f.name]))
-        const idsDaPasta = folder
-          ? new Set(pastas.filter((f) => f.name === folder).map((f) => f.id))
+        const now = Date.now()
+        const [sessoes, folders] = await Promise.all([loadSessions(), loadFolders()])
+        const nameById = new Map(folders.map((f) => [f.id, f.name]))
+        const folderIds = folder
+          ? new Set(folders.filter((f) => f.name === folder).map((f) => f.id))
           : null
 
-        const filtradas = sessoes
+        const filtered = sessoes
           .filter((s) => {
             if (mode && s.mode !== mode) return false
             if (!includePinned && s.pinned) return false
             if (!includeArchived && s.archived) return false
-            // Workers de orquestração e execuções de rotina não são chats do
-            // usuário: pertencem a outra sessão ou à rotina que os criou.
+            // Orchestration workers and routine executions are not the
+            // user's chats: they belong to another session or to the routine
+            // that created them.
             if (s.parentId || s.routineId) return false
-            if (idsDaPasta && (!s.folderId || !idsDaPasta.has(s.folderId))) return false
-            if (inactiveDays != null && diasInativo(s, agora) < inactiveDays) return false
+            if (folderIds && (!s.folderId || !folderIds.has(s.folderId))) return false
+            if (inactiveDays != null && daysInactive(s, now) < inactiveDays) return false
             return true
           })
           .sort((a, b) => a.updatedAt - b.updatedAt)
           .slice(0, limit ?? 50)
 
-        if (filtradas.length === 0) return 'No chat matches these criteria.'
+        if (filtered.length === 0) return 'No chat matches these criteria.'
         return [
-          `${filtradas.length} chat(s), oldest to newest:`,
-          ...filtradas.map((s) => descrever(s, nomePorId, agora)),
+          `${filtered.length} chat(s), oldest to newest:`,
+          ...filtered.map((s) => describeSession(s, nameById, now)),
         ].join('\n')
       },
     }),
@@ -116,27 +117,27 @@ export function createSessionTools(): ToolSet {
         archived: z.boolean().optional().describe('Default true. Pass false to unarchive.'),
       }),
       execute: async ({ ids, archived }) => {
-        const alvo = archived ?? true
-        const resultados: string[] = []
-        let alterados = 0
+        const target = archived ?? true
+        const results: string[] = []
+        let updated = 0
         for (const id of ids) {
-          const sessao = await readJson<SessionInfo>(StorageKeys.session(id))
-          if (!sessao) {
-            resultados.push(`#${id}: not found`)
+          const session = await readJson<SessionInfo>(StorageKeys.session(id))
+          if (!session) {
+            results.push(`#${id}: not found`)
             continue
           }
-          if (sessao.pinned && alvo) {
-            resultados.push(`#${id}: pinned by the user — not archived`)
+          if (session.pinned && target) {
+            results.push(`#${id}: pinned by the user — not archived`)
             continue
           }
-          if (sessao.archived === alvo) continue
-          const proxima = setArchivedState(sessao, alvo)
-          await writeJson(StorageKeys.session(id), proxima)
-          broadcastSessionEvent({ type: 'session', sessionId: id, session: proxima })
-          alterados++
+          if (session.archived === target) continue
+          const next = setArchivedState(session, target)
+          await writeJson(StorageKeys.session(id), next)
+          broadcastSessionEvent({ type: 'session', sessionId: id, session: next })
+          updated++
         }
-        const verbo = alvo ? 'archived' : 'unarchived'
-        return [`${alterados} chat(s) ${verbo}.`, ...resultados].join('\n')
+        const verb = target ? 'archived' : 'unarchived'
+        return [`${updated} chat(s) ${verb}.`, ...results].join('\n')
       },
     }),
 
@@ -150,31 +151,31 @@ export function createSessionTools(): ToolSet {
       ].join(' '),
       inputSchema: z.object({
         ids: z.array(z.string()).min(1).describe('Chat ids from chat_list'),
-        motivo: z
+        reason: z
           .string()
           .min(10)
           .describe(
             'Why deleting (not archiving) is right for THESE chats. Written out so the decision is deliberate and auditable.',
           ),
       }),
-      execute: async ({ ids, motivo }) => {
-        if (ids.length > LIMITE_EXCLUSAO) {
-          return `Error: ${ids.length} chats in a single call exceeds the limit of ${LIMITE_EXCLUSAO}. Deletion is irreversible — review the list and do it in smaller batches.`
+      execute: async ({ ids, reason }) => {
+        if (ids.length > DELETE_LIMIT) {
+          return `Error: ${ids.length} chats in a single call exceeds the limit of ${DELETE_LIMIT}. Deletion is irreversible — review the list and do it in smaller batches.`
         }
-        const resultados: string[] = []
-        let apagados = 0
+        const results: string[] = []
+        let deleted = 0
         for (const id of ids) {
-          const sessao = await readJson<SessionInfo>(StorageKeys.session(id))
-          if (!sessao) {
-            resultados.push(`#${id}: not found`)
+          const session = await readJson<SessionInfo>(StorageKeys.session(id))
+          if (!session) {
+            results.push(`#${id}: not found`)
             continue
           }
-          if (sessao.pinned) {
-            resultados.push(`#${id}: pinned by the user — not deleted`)
+          if (session.pinned) {
+            results.push(`#${id}: pinned by the user — not deleted`)
             continue
           }
-          // Encerra o que estiver rodando antes de apagar: um stream órfão
-          // continuaria escrevendo numa sessão que não existe mais.
+          // It stops whatever is running before deleting: an orphan stream
+          // would keep writing to a session that no longer exists.
           abortChat(id)
           await removeJson(StorageKeys.session(id))
           await removeJson(StorageKeys.messages(id))
@@ -182,9 +183,9 @@ export function createSessionTools(): ToolSet {
           await removeJson(StorageKeys.planReview(id))
           await removeJson(StorageKeys.pendingAsks(id))
           broadcastSessionEvent({ type: 'session:deleted', sessionId: id })
-          apagados++
+          deleted++
         }
-        return [`${apagados} chat(s) permanently deleted. Reason: ${motivo}`, ...resultados].join('\n')
+        return [`${deleted} chat(s) permanently deleted. Reason: ${reason}`, ...results].join('\n')
       },
     }),
   }

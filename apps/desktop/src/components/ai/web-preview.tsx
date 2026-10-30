@@ -22,8 +22,8 @@ import { getWebviewUrl, mountWebview, unmountWebview } from "@/src/components/br
 export interface WebPreviewContextValue {
   url: string
   setUrl: (url: string) => void
-  /** Atualiza a URL atual sem empurrar no histórico (usado quando o conteúdo
-   *  do webview navega por fora — ex.: agente dirigindo o browser). */
+  /** Updates the current URL without pushing to the history (used when the webview
+   *  content navigates on its own — e.g. the agent driving the browser). */
   syncUrl: (url: string) => void
   consoleOpen: boolean
   setConsoleOpen: (open: boolean) => void
@@ -33,9 +33,9 @@ export interface WebPreviewContextValue {
   canGoBack: boolean
   canGoForward: boolean
   refreshKey: number
-  /** Conteúdo extra do estado vazio (ex.: lista de servidores rodando no
-   *  browser do painel). Função recebe `setUrl` para navegar sem depender
-   *  do contexto. Ausente no preview de mensagem, que é genérico. */
+  /** Extra content for the empty state (e.g. list of servers running in the
+   *  panel browser). The function receives `setUrl` to navigate without depending
+   *  on the context. Absent in the message preview, which is generic. */
   emptyExtra?: EmptyExtra
 }
 
@@ -54,7 +54,7 @@ export const useWebPreview = () => {
 export type WebPreviewProps = ComponentProps<"div"> & {
   defaultUrl?: string
   onUrlChange?: (url: string) => void
-  /** Renderizado no estado vazio, abaixo do campo de URL. */
+  /** Rendered in the empty state, below the URL field. */
   emptyExtra?: EmptyExtra
 }
 
@@ -182,12 +182,12 @@ export const WebPreviewNavigationButton = ({
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger render={<Button className="h-8 w-8 p-0 hover:text-foreground" disabled={disabled} onClick={onClick} size="sm" variant="ghost" {...props} />}>{children}</TooltipTrigger>
-      {/* z-[80]: o tooltip é portaled ao body (z-50 base) e ficaria atrás do
-          overlay do browser em tela cheia (z-[70]), cortando a dica no header.
-          side="bottom": o header do browser fica no topo da janela e, no macOS,
-          os botões fechar/minimizar/maximizar são nativos e sempre compostos
-          sobre o conteúdo web — nenhum z-index os vence. Abrindo a dica para
-          baixo, ela não entra na faixa da titlebar e não fica atrás deles. */}
+      {/* z-[80]: the tooltip is portaled to the body (base z-50) and would stay behind the
+          browser overlay in fullscreen (z-[70]), cutting the hint in the header.
+          side="bottom": the browser header sits at the top of the window and, on macOS,
+          the close/minimize/maximize buttons are native and always composed
+          over the web content — no z-index beats them. Opening the hint
+          downwards, it does not enter the titlebar strip and does not stay behind them. */}
       <TooltipContent side="bottom" positionerClassName="z-[80]">
         <p>{tooltip}</p>
       </TooltipContent>
@@ -265,19 +265,19 @@ export const WebPreviewUrl = ({ value, onChange, onKeyDown, ...props }: WebPrevi
   )
 }
 
-// Base "div" e não "iframe": o corpo renderiza o container do pool de
-// <webview> (ou o próprio <webview>), nunca um iframe. Herdar os atributos de
-// iframe obrigava a espalhar `props as any` nos dois caminhos.
+// Base "div" and not "iframe": the body renders the pool container of
+// <webview> (or the <webview> itself), never an iframe. Inheriting the attributes of
+// iframe forced spreading `props as any` on both paths.
 export type WebPreviewBodyProps = ComponentProps<"div"> & {
   src?: string
   loading?: ReactNode
-  /** Dimensões fixas do viewport (responsividade). Ausente = preenche o container. */
+  /** Fixed viewport dimensions (responsiveness). Absent = fills the container. */
   viewport?: { width: number; height: number } | null
-  /** Chave do <webview> no pool (sessionId:tabId). O pool é o dono do guest:
-   *  navegação, reload, modo seleção e URL da aba passam por ele — o
-   *  componente nunca chama a API do <webview> direto. */
+  /** Key of the <webview> in the pool (sessionId:tabId). The pool owns the guest:
+   *  navigation, reload, selection mode and the tab URL go through it — the
+   *  component never calls the <webview> API directly. */
   persistKey?: string
-  /** Notifica navegações do guest (did-navigate), além do syncUrl interno. */
+  /** Notifies navigations of the guest (did-navigate), beyond the internal syncUrl. */
   onNavigate?: (url: string) => void
 }
 
@@ -300,8 +300,8 @@ export const WebPreviewBody = ({
   const onNavigateRef = useRef(onNavigate)
   onNavigateRef.current = onNavigate
 
-  // Webview do pool: o ELEMENTO sobrevive ao unmount do componente (o guest é
-  // recriado pelo Electron a cada re-parent, e o pool o devolve à URL da aba).
+  // Pool webview: the ELEMENT survives the unmount of the component (the guest is
+  // recreated by Electron on every re-parent, and the pool returns it to the tab URL).
   useEffect(() => {
     if (!persistKey) return
     const container = containerRef.current
@@ -310,22 +310,22 @@ export const WebPreviewBody = ({
       syncUrlRef.current(navUrl)
       onNavigateRef.current?.(navUrl)
     })
-    // Aba já tinha página (ciclo anterior ou agente navegando em background):
-    // espelha na barra. Vem do registro do pool, sem tocar no guest.
+    // The tab already had a page (previous cycle or agent navigating in the background):
+    // mirrors it in the bar. It comes from the pool registry, without touching the guest.
     const known = getWebviewUrl(persistKey)
     if (known) syncUrlRef.current(known)
     return () => unmountWebview(persistKey)
-    // monta/desmonta conforme a chave: a navegação é feita pelo pool
-    // (navigateWebview) ou pelo agente — nunca recriando o elemento.
+    // mounts/unmounts according to the key: the navigation is done by the pool
+    // (navigateWebview) or by the agent — never recreating the element.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistKey])
 
   const empty = !url && !src
 
   if (persistKey) {
-    // Com persistência, o container SEMPRE existe (o efeito acima anexa o
-    // webview mesmo sem URL inicial) — o estado vazio vira um overlay, e a
-    // primeira URL digitada navega no MESMO webview persistido.
+    // With persistence, the container ALWAYS exists (the effect above attaches the
+    // webview even without an initial URL) — the empty state becomes an overlay, and the
+    // first URL typed navigates in the SAME persisted webview.
     return (
       <div
         className={cn(
@@ -333,7 +333,7 @@ export const WebPreviewBody = ({
           viewport && "flex items-start justify-center bg-muted/40 p-3",
         )}
       >
-        {/* O <webview> vive no pool (webview-session.ts) e é movido pra cá */}
+        {/* The <webview> lives in the pool (webview-session.ts) and is moved over here */}
         <div
           ref={containerRef}
           className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}

@@ -1,27 +1,27 @@
 /**
- * Registro de DESTINOS do app: onde cada tela fica, em cada superfície.
+ * Registry of DESTINATIONS of the app: where each screen is, on each surface.
  *
- * Existe para responder "onde fica isso?" com um dado só — não com o que o
- * modelo lembra da última vez. O bloco `nav` do orbit-ui (ver
- * orbit-ui.ts no desktop) carrega apenas um `id`; o rótulo do caminho é montado
- * na tela, com as mesmas chaves de i18n que a própria tela usa, então renomear
- * uma aba renomeia o cartão e nada fica desatualizado em silêncio.
+ * It exists to answer "where is this?" with a single datum — not with what the
+ * model remembers from last time. The `nav` block of orbit-ui (see
+ * orbit-ui.ts in the desktop) carries only an `id`; the label of the path is built
+ * in the screen, with the same i18n keys the screen itself uses, so renaming
+ * a tab renames the card and nothing falls silently out of date.
  *
- * As duas superfícies não têm as mesmas telas: `voice`, `computer` e `overlay`
- * só existem no desktop. Quem consome deve checar `supportsSurface` e degradar
- * SEMPRE para uma explicação — nunca para um botão que não abre nada.
+ * The two surfaces do not have the same screens: `voice`, `computer` and `overlay`
+ * only exist on the desktop. Whoever consumes it must check `supportsSurface` and degrade
+ * ALWAYS to an explanation — never to a button that opens nothing.
  *
- * Fatia atual: os destinos que são aba do SettingsDialog do desktop. As telas
- * que só existem no mobile (memórias, uso, ferramentas, rotinas…) entram aqui
- * quando o renderer do mobile passar a desenhar o bloco.
+ * Current slice: the destinations that are tabs of the desktop SettingsDialog. The screens
+ * that only exist on mobile (memories, usage, tools, routines…) come in here
+ * when the mobile renderer starts drawing the block.
  */
 
 /**
- * Abas do SettingsDialog do desktop.
+ * Tabs of the desktop SettingsDialog.
  *
- * Fica aqui, e não no store, porque o registro precisa nomeá-las; `stores/
- * settings-ui.ts` reexporta este tipo, então uma aba nova quebra o typecheck
- * no mapa de rótulos em vez de virar um destino invisível.
+ * It lives here, and not in the store, because the registry needs to name them; `stores/
+ * settings-ui.ts` re-exports this type, so a new tab breaks the typecheck
+ * on the label map instead of becoming an invisible destination.
  */
 export type SettingsTab =
   | "providers"
@@ -43,24 +43,24 @@ export type AppSurface = "desktop" | "mobile"
 export type DesktopPlatform = "darwin" | "win32" | "linux"
 
 export interface UiDestination {
-  /** Id que o modelo manda no bloco `nav`. É contrato com o prompt: não renomeie. */
+  /** Id the model sends in the `nav` block. It is a contract with the prompt: do not rename it. */
   id: string
-  /** Aba do SettingsDialog no desktop. Ausente = a tela não existe lá. */
+  /** SettingsDialog tab on the desktop. Absent = the screen does not exist there. */
   desktop?: SettingsTab
-  /** Onde a tela fica no celular. Ausente = não existe lá. */
+  /** Where the screen is on the phone. Absent = it does not exist there. */
   mobile?: MobileDestination
-  /** A aba some nas outras plataformas (ver `visibleTabs` em settings-dialog). */
+  /** The tab disappears on the other platforms (see `visibleTabs` in settings-dialog). */
   desktopPlatforms?: readonly DesktopPlatform[]
-  /** Como o usuário chama isso, em pt e en — é o que liga a pergunta ao destino. */
+  /** How the user calls it, in pt and en — it is what links the question to the destination. */
   keywords: readonly string[]
 }
 
 export interface MobileDestination {
-  /** Rota do expo-router no formato que o app usa: "/(main)/providers". */
+  /** expo-router route in the format the app uses: "/(main)/providers". */
   path: string
   /**
-   * Chave do título que a própria tela mostra ("providersScreen.title").
-   * Guardada junto da rota para as duas não divergirem.
+   * Key of the title the screen itself shows ("providersScreen.title").
+   * Kept next to the route so the two do not diverge.
    */
   titleKey: string
 }
@@ -184,15 +184,15 @@ export const UI_DESTINATIONS: readonly UiDestination[] = [
 
 const byId = new Map(UI_DESTINATIONS.map((destination) => [destination.id, destination]))
 
-/** Busca por id, tolerante a caixa e espaço — o modelo escreve " Voice ". */
+/** Search by id, tolerant to case and spaces — the model writes " Voice ". */
 export function uiDestination(id: string): UiDestination | undefined {
   return byId.get(id.trim().toLowerCase())
 }
 
 /**
- * O destino existe nesta superfície? No desktop, uma aba restrita a certas
- * plataformas conta como inexistente nas outras: prometer "Configurações →
- * Computador" a quem está num Linux é o mesmo que mandar procurar o que não há.
+ * Does the destination exist on this surface? On the desktop, a tab restricted to certain
+ * platforms counts as nonexistent on the others: promising "Settings →
+ * Computer" to someone on Linux is the same as sending them after what is not there.
  */
 export function supportsSurface(
   destination: UiDestination,
@@ -206,8 +206,8 @@ export function supportsSurface(
 }
 
 /**
- * Catálogo em texto para o system prompt: id, superfícies e sinônimos. Gerado
- * do registro para que o modelo nunca veja uma lista que o app já não tem.
+ * Catalog in text for the system prompt: id, surfaces and synonyms. Generated
+ * from the registry so the model never sees a list the app no longer has.
  */
 export function uiDestinationCatalog(): string {
   return UI_DESTINATIONS.map((destination) => {

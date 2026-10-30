@@ -7,11 +7,11 @@ import { parseSkill } from './parser'
 import { BUILTIN_SKILLS } from './builtin'
 
 /**
- * Loader de skills: mescla as fontes nativas (somente leitura), global
- * (orbit-data/skills) e do projeto ({workspace}/.orbit/skills). Precedência da
- * mais específica para a menos: projeto > global > nativo — quem sobrescreve
- * é sempre a do usuário. Leitura fresca a cada chamada (arquivos pequenos); o
- * watcher da pasta global avisa o renderer para recarregar a paleta.
+ * Skills loader: merges the built-in sources (read-only), the global one
+ * (orbit-data/skills) and the project one ({workspace}/.orbit/skills). Precedence
+ * from the most specific to the least: project > global > built-in — the one that
+ * overrides is always the user's. Fresh read on every call (small files); the
+ * watcher of the global folder tells the renderer to reload the palette.
  */
 
 const EXTENSIONS = new Set(['.skill', '.md'])
@@ -24,7 +24,7 @@ function projectSkillsDir(directory: string): string {
   return path.join(directory, '.orbit', 'skills')
 }
 
-/** Lista arquivos de um bundle recursivamente (exceto o manifesto), caminhos absolutos. */
+/** Lists the files of a bundle recursively (except the manifest), absolute paths. */
 async function listBundleFiles(dir: string, manifestPath: string): Promise<string[]> {
   const files: string[] = []
   async function walk(current: string) {
@@ -40,8 +40,8 @@ async function listBundleFiles(dir: string, manifestPath: string): Promise<strin
 }
 
 /**
- * Manifesto de um bundle (pasta de skill): skill.md, skill.skill ou
- * <nome-da-pasta>.skill/.md — o primeiro que existir.
+ * Manifest of a bundle (skill folder): skill.md, skill.skill or
+ * <folder-name>.skill/.md — the first one that exists.
  */
 async function findManifest(dir: string): Promise<string | null> {
   const base = path.basename(dir)
@@ -51,7 +51,7 @@ async function findManifest(dir: string): Promise<string | null> {
       await fsp.access(full)
       return full
     } catch {
-      // tenta o próximo
+      // try the next one
     }
   }
   return null
@@ -69,7 +69,7 @@ async function loadDir(dir: string, source: SkillSource): Promise<Skill[]> {
     const entryPath = path.join(dir, entry.name)
     try {
       if (entry.isDirectory()) {
-        // Bundle: pasta com manifesto + scripts/arquivos auxiliares
+        // Bundle: folder with a manifest + helper scripts/files
         const manifestPath = await findManifest(entryPath)
         if (!manifestPath) continue
         const raw = await fsp.readFile(manifestPath, 'utf8')
@@ -85,13 +85,13 @@ async function loadDir(dir: string, source: SkillSource): Promise<Skill[]> {
         if (skill) skills.push(skill)
       }
     } catch {
-      // arquivo ilegível/corrompido — ignora
+      // unreadable/corrupted file — ignore
     }
   }
   return skills
 }
 
-/** Nativas + global + projeto mesclados; a do projeto sobrepõe a global. */
+/** Built-in + global + project merged; the project one overrides the global one. */
 export async function loadSkills(directory?: string): Promise<Skill[]> {
   const bySlug = new Map<string, Skill>()
   for (const skill of BUILTIN_SKILLS) bySlug.set(skill.slug, skill)
@@ -104,14 +104,14 @@ export async function loadSkills(directory?: string): Promise<Skill[]> {
   return [...bySlug.values()]
 }
 
-/** Avisa o renderer para recarregar skills/propostas (mudanças fora do watcher). */
+/** Tells the renderer to reload skills/proposals (changes outside the watcher). */
 export function notifySkillsChanged(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('skills:changed')
   }
 }
 
-/** Observa a pasta global (criações da tool createSkill incluídas) com debounce. */
+/** Watches the global folder (createSkill tool writes included) with debounce. */
 export function setupSkillsWatcher(onChange: () => void): void {
   const dir = globalSkillsDir()
   fs.mkdirSync(dir, { recursive: true })
@@ -122,6 +122,6 @@ export function setupSkillsWatcher(onChange: () => void): void {
       timer = setTimeout(onChange, 300)
     })
   } catch (err) {
-    console.error('[skills] watcher falhou:', err)
+    console.error('[skills] watcher failed:', err)
   }
 }

@@ -1,57 +1,57 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { dataDir } from '../storage'
-import type { FamiliaFerramenta } from './catalogo'
+import type { ToolFamily } from './catalog'
 
 /**
- * Telemetria de desfecho do toolset.
+ * Toolset outcome telemetry.
  *
- * Grava UMA linha JSON por turno em `orbit-data/tool-metrics.jsonl` — append,
- * nunca reescrita. O objetivo é responder, sem instrumentar o modelo, as duas
- * perguntas que decidem se o toolset funcionou:
+ * Writes ONE JSON line per turn to `orbit-data/tool-metrics.jsonl` — append,
+ * never a rewrite. The goal is to answer, without instrumenting the model, the two
+ * questions that decide whether the toolset worked:
  *
- * 1. **Família oferecida e nunca chamada**: custo de contexto pago à toa.
- * 2. **Tool chamada e que falhou**: a família está certa, a tool não.
+ * 1. **Family offered and never called**: context cost paid for nothing.
+ * 2. **Tool called and that failed**: the family is right, the tool is not.
  *
- * Por que no início do turno e não no fim: o engine não expõe `onFinish`, e
- * instrumentar o stream para saber o desfecho custaria mais do que o dado vale.
- * Do histórico já dá para ler o que foi chamado e o que falhou — o que não se
- * consegue é separar por turno exato, e para decidir família isso não muda nada.
+ * Why at the start of the turn and not at the end: the engine does not expose `onFinish`, and
+ * instrumenting the stream to know the outcome would cost more than the data is worth.
+ * From the history it is already possible to read what was called and what failed — what cannot
+ * be done is separating it by exact turn, and for deciding on a family that changes nothing.
  */
 
 export interface TurnMetrics {
   at: string
-  /** Tools declaradas no request (o que o modelo viu). */
+  /** Tools declared in the request (what the model saw). */
   offered: number
-  /** Famílias com tools vivas. */
+  /** Families with live tools. */
   families: number
-  /** Famílias fora do ar, com o motivo — não foram oferecidas. */
+  /** Families down, with the reason — they were not offered. */
   disabled: string[]
-  /** Quantas tools_load o histórico retido pediu. */
+  /** How many tools_load the retained history asked for. */
   loads: number
-  /** Tools efetivamente chamadas no histórico retido. */
+  /** Tools actually called in the retained history. */
   calls: string[]
-  /** Resultados de tool marcados como erro. */
+  /** Tool results marked as errors. */
   failed: number
-  /** Famílias cujas tools estão em `calls`. */
+  /** Families whose tools are in `calls`. */
   usedFamilies: string[]
 }
 
-/** Lê do histórico o que já foi chamado. `messages` é o array do turno. */
-export function usageFromHistory(mensagens: readonly unknown[]): Pick<TurnMetrics, 'loads' | 'calls' | 'failed'> {
+/** Reads from the history what has already been called. `messages` is the turn's array. */
+export function usageFromHistory(messages: readonly unknown[]): Pick<TurnMetrics, 'loads' | 'calls' | 'failed'> {
   const calls = new Set<string>()
   let failed = 0
   let loads = 0
-  for (const mensagem of mensagens) {
-    // O histórico vem do disco e pode trazer item nulo: sem esta guarda a
-    // leitura inteira lançaria, e a telemetria perderia o turno por causa de
-    // uma linha corrompida.
-    if (!mensagem || typeof mensagem !== 'object') continue
-    const conteudo = (mensagem as { content?: unknown }).content
-    if (!Array.isArray(conteudo)) continue
-    for (const parte of conteudo) {
-      if (!parte || typeof parte !== 'object') continue
-      const p = parte as Record<string, unknown>
+  for (const message of messages) {
+    // The history comes from disk and may bring a null item: without this guard the
+    // whole read would throw, and the telemetry would lose the turn because of
+    // a corrupted line.
+    if (!message || typeof message !== 'object') continue
+    const content = (message as { content?: unknown }).content
+    if (!Array.isArray(content)) continue
+    for (const part of content) {
+      if (!part || typeof part !== 'object') continue
+      const p = part as Record<string, unknown>
       if (p.type === 'tool-call' && typeof p.toolName === 'string') {
         calls.add(p.toolName)
         if (p.toolName === 'tools_load') loads++
@@ -63,25 +63,25 @@ export function usageFromHistory(mensagens: readonly unknown[]): Pick<TurnMetric
 }
 
 /**
- * Registra o turno. Nunca lança: telemetria que derruba o chat é pior do que
- * telemetria ausente, então erro de disco vira linha no console e segue.
+ * Records the turn. It never throws: telemetry that brings the chat down is worse than
+ * telemetry that is missing, so a disk error becomes a line in the console and it moves on.
  */
 export async function recordTurn(input: {
-  familias: readonly FamiliaFerramenta[]
+  families: readonly ToolFamily[]
   offered: number
-  mensagens: readonly unknown[]
+  messages: readonly unknown[]
 }): Promise<void> {
   try {
-    const uso = usageFromHistory(input.mensagens)
-    const usadas = new Set(uso.calls)
+    const usage = usageFromHistory(input.messages)
+    const used = new Set(usage.calls)
     const metrics: TurnMetrics = {
       at: new Date().toISOString(),
       offered: input.offered,
-      families: input.familias.filter((f) => !f.indisponivel && f.tools.length > 0).length,
-      disabled: input.familias.filter((f) => f.indisponivel).map((f) => f.id),
-      ...uso,
-      usedFamilies: input.familias
-        .filter((f) => f.tools.some((nome) => usadas.has(nome)))
+      families: input.families.filter((f) => !f.unavailable && f.tools.length > 0).length,
+      disabled: input.families.filter((f) => f.unavailable).map((f) => f.id),
+      ...usage,
+      usedFamilies: input.families
+        .filter((f) => f.tools.some((name) => used.has(name)))
         .map((f) => f.id),
     }
     await fsp.appendFile(path.join(dataDir(), 'tool-metrics.jsonl'), `${JSON.stringify(metrics)}\n`, 'utf8')

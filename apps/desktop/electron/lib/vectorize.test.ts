@@ -5,17 +5,17 @@ import { vectorizeImage } from './vectorize'
 import { svgInfo } from './svg-ops'
 
 /**
- * Vetorizar "funciona" com muita facilidade: qualquer coisa que devolva um
- * `<svg>` válido passa por sucesso. O que decide se prestou é o desenho
- * continuar o mesmo — então o teste central aqui RASTERIZA O RESULTADO DE
- * VOLTA e compara com a origem, pixel a pixel.
+ * Vectorizing "works" far too easily: anything that returns a valid
+ * `<svg>` passes as success. What decides whether it was worth it is the drawing
+ * staying the same — so the central test here RASTERIZES THE RESULT
+ * BACK and compares it with the source, pixel by pixel.
  */
 
 async function solid(width: number, height: number, color: string): Promise<Buffer> {
   return sharp({ create: { width, height, channels: 3, background: color } }).png().toBuffer()
 }
 
-/** Fração de pixels que diferem entre duas imagens do mesmo tamanho. */
+/** Fraction of pixels that differ between two images of the same size. */
 async function difference(a: Buffer, b: Buffer): Promise<number> {
   const [ra, rb] = await Promise.all([
     sharp(a).removeAlpha().raw().toBuffer({ resolveWithObject: true }),
@@ -34,8 +34,8 @@ async function difference(a: Buffer, b: Buffer): Promise<number> {
   return diff / total
 }
 
-/** Quadrado vermelho sobre branco — o caso de logo chapado. */
-async function marca(): Promise<Buffer> {
+/** Red square on white — the flat-logo case. */
+async function makeMark(): Promise<Buffer> {
   return sharp({ create: { width: 120, height: 120, channels: 3, background: '#ffffff' } })
     .composite([{ input: await solid(60, 60, '#c81e1e'), top: 30, left: 30 }])
     .png()
@@ -43,38 +43,38 @@ async function marca(): Promise<Buffer> {
 }
 
 describe('vectorizeImage', () => {
-  it('devolve um SVG válido, com viewBox', async () => {
-    const out = await vectorizeImage(await marca())
+  it('returns a valid SVG, with a viewBox', async () => {
+    const out = await vectorizeImage(await makeMark())
     expect(out.svg).toMatch(/^<svg /)
     const info = svgInfo(out.svg)
     expect(info.viewBox).toBe('0 0 120 120')
     expect(out.paths).toBeGreaterThan(0)
   })
 
-  it('o desenho SOBREVIVE à ida e à volta', async () => {
-    // O teste que importa: vetorizar, rasterizar de novo no mesmo tamanho e
-    // conferir que é a mesma imagem. Um traçado errado passa em tudo o mais.
-    const origem = await marca()
-    const out = await vectorizeImage(origem)
-    const volta = await sharp(Buffer.from(out.svg)).resize(120, 120).png().toBuffer()
-    // Alguma diferença é esperada na borda (o traçado anda pela aresta do
-    // pixel), mas o desenho tem que ser o mesmo.
-    expect(await difference(origem, volta)).toBeLessThan(0.02)
+  it('the drawing SURVIVES the round trip', async () => {
+    // The test that matters: vectorize, rasterize again at the same size and
+    // check that it is the same image. A wrong tracing passes everything else.
+    const source = await makeMark()
+    const out = await vectorizeImage(source)
+    const roundTrip = await sharp(Buffer.from(out.svg)).resize(120, 120).png().toBuffer()
+    // Some difference is expected at the edge (the tracing walks along the pixel
+    // border), but the drawing has to be the same.
+    expect(await difference(source, roundTrip)).toBeLessThan(0.02)
   })
 
-  it('reconhece as cores que existem no desenho', async () => {
-    const out = await vectorizeImage(await marca())
-    // O vermelho tem que estar entre as cores traçadas, não uma aproximação
-    // distante dele.
-    const vermelho = out.colors.find((c) => c.startsWith('#c') || c.startsWith('#b'))
-    expect(vermelho).toBeDefined()
+  it('recognizes the colors that exist in the drawing', async () => {
+    const out = await vectorizeImage(await makeMark())
+    // The red has to be among the traced colors, not an approximation
+    // distant from it.
+    const red = out.colors.find((c) => c.startsWith('#c') || c.startsWith('#b'))
+    expect(red).toBeDefined()
   })
 
-  it('VAZA o meio de um anel em vez de tapá-lo', async () => {
-    // O caso que separa um traçador certo de um errado: o contorno de dentro
-    // tem sentido oposto ao de fora, e é o fill-rule que faz o buraco existir.
-    // Sem isso, o anel vira um disco.
-    const anel = await sharp({ create: { width: 100, height: 100, channels: 3, background: '#ffffff' } })
+  it('HOLLOWS the middle of a ring instead of covering it', async () => {
+    // The case that separates a correct tracer from a wrong one: the inner outline
+    // has the opposite direction to the outer one, and it is the fill-rule that makes the hole exist.
+    // Without it, the ring becomes a disc.
+    const ring = await sharp({ create: { width: 100, height: 100, channels: 3, background: '#ffffff' } })
       .composite([
         { input: await solid(80, 80, '#000000'), top: 10, left: 10 },
         { input: await solid(40, 40, '#ffffff'), top: 30, left: 30 },
@@ -82,61 +82,61 @@ describe('vectorizeImage', () => {
       .png()
       .toBuffer()
 
-    const out = await vectorizeImage(anel)
-    const volta = await sharp(Buffer.from(out.svg)).resize(100, 100).png().toBuffer()
-    const { data, info } = await sharp(volta).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    const out = await vectorizeImage(ring)
+    const roundTrip = await sharp(Buffer.from(out.svg)).resize(100, 100).png().toBuffer()
+    const { data, info } = await sharp(roundTrip).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     const at = (50 * info.width + 50) * info.channels
-    // O centro do anel tem que continuar claro.
+    // The center of the ring has to stay light.
     expect(data[at]).toBeGreaterThan(200)
   })
 
-  it('dropBackground recorta o fundo em vez de deixar um retângulo', async () => {
-    const com = await vectorizeImage(await marca())
-    const sem = await vectorizeImage(await marca(), { dropBackground: true })
-    expect(sem.paths).toBe(com.paths - 1)
-    expect(sem.colors).not.toContain('#ffffff')
+  it('dropBackground cuts the background instead of leaving a rectangle', async () => {
+    const withBackground = await vectorizeImage(await makeMark())
+    const withoutBackground = await vectorizeImage(await makeMark(), { dropBackground: true })
+    expect(withoutBackground.paths).toBe(withBackground.paths - 1)
+    expect(withoutBackground.colors).not.toContain('#ffffff')
   })
 
-  it('escala sem perder nitidez — o ponto de vetorizar', async () => {
-    // 120 de origem, 600 de saída: num raster isso seria borrão.
-    const out = await vectorizeImage(await marca())
-    const grande = await sharp(Buffer.from(out.svg)).resize(600, 600).png().toBuffer()
-    const { data, info } = await sharp(grande).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-    // A transição do branco para o vermelho acontece em poucos pixels: uma
-    // ampliação de raster espalharia isso por dezenas.
-    const linha = 300
-    let transicao = 0
+  it('scales without losing sharpness — the point of vectorizing', async () => {
+    // 120 at the source, 600 at the output: in a raster that would be blur.
+    const out = await vectorizeImage(await makeMark())
+    const large = await sharp(Buffer.from(out.svg)).resize(600, 600).png().toBuffer()
+    const { data, info } = await sharp(large).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    // The transition from white to red happens in a few pixels: a
+    // raster upscale would spread that over dozens.
+    const line = 300
+    let transitions = 0
     for (let x = 1; x < info.width; x++) {
-      const a = (linha * info.width + x - 1) * info.channels
-      const b = (linha * info.width + x) * info.channels
-      if (Math.abs(data[a] - data[b]) > 40) transicao++
+      const a = (line * info.width + x - 1) * info.channels
+      const b = (line * info.width + x) * info.channels
+      if (Math.abs(data[a] - data[b]) > 40) transitions++
     }
-    expect(transicao).toBeLessThanOrEqual(4)
+    expect(transitions).toBeLessThanOrEqual(4)
   })
 
-  it('simplifica: uma borda reta não vira um ponto por pixel', async () => {
-    const out = await vectorizeImage(await marca())
-    // Um quadrado tem 4 cantos. Sem simplificação seriam ~240 pontos.
+  it('simplifies: a straight edge does not become one point per pixel', async () => {
+    const out = await vectorizeImage(await makeMark())
+    // A square has 4 corners. Without simplification it would be ~240 points.
     expect(out.points).toBeLessThan(40)
   })
 
-  it('avisa quando o resultado tem cara de fotografia', async () => {
-    // Ruído não tem região chapada nenhuma: é o pior caso, e o relatório
-    // precisa dizer isso em vez de entregar calado.
-    const ruido = Buffer.alloc(300 * 300 * 3)
-    for (let i = 0; i < ruido.length; i++) ruido[i] = Math.floor(Math.random() * 256)
-    const foto = await sharp(ruido, { raw: { width: 300, height: 300, channels: 3 } }).png().toBuffer()
+  it('warns when the result looks like a photograph', async () => {
+    // Noise has no flat region at all: it is the worst case, and the report
+    // has to say so instead of delivering silently.
+    const noise = Buffer.alloc(300 * 300 * 3)
+    for (let i = 0; i < noise.length; i++) noise[i] = Math.floor(Math.random() * 256)
+    const photo = await sharp(noise, { raw: { width: 300, height: 300, channels: 3 } }).png().toBuffer()
 
-    const out = await vectorizeImage(foto, { colors: 16 })
-    expect(out.warnings.join(' ')).toMatch(/fotografia/)
+    const out = await vectorizeImage(photo, { colors: 16 })
+    expect(out.warnings.join(' ')).toMatch(/photograph/)
   })
 
-  it('NÃO acusa arte antisserrilhada de ser fotografia', async () => {
-    // Regressão de um falso positivo real. Um logo com bordas suavizadas ganha
-    // uma cor de mistura na quantização, e ela forma anéis de um pixel que se
-    // estilhaçam em centenas de manchas. Contando CABEÇAS, o aviso disparava
-    // num traçado perfeito; contando ÁREA, essas migalhas são desprezíveis.
-    const marcaSuave = await sharp(
+  it('does NOT report anti-aliased art as a photograph', async () => {
+    // Regression of a real false positive. A logo with softened edges gains
+    // a mixture color in the quantization, and it forms one-pixel rings that
+    // shatter into hundreds of blobs. Counting HEADS, the warning fired
+    // on a perfect tracing; counting AREA, those crumbs are negligible.
+    const softMark = await sharp(
       Buffer.from(
         `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
            <rect width="300" height="300" fill="#ffffff"/>
@@ -149,80 +149,80 @@ describe('vectorizeImage', () => {
       .png()
       .toBuffer()
 
-    const out = await vectorizeImage(marcaSuave, { colors: 5 })
-    expect(out.warnings.join(' ')).not.toMatch(/fotografia|cores chapadas/)
-    // E o desenho tem que continuar reconhecível: o miolo vermelho, o anel
-    // branco e o azul em volta, cada um no seu lugar.
-    const volta = await sharp(Buffer.from(out.svg)).resize(300, 300).png().toBuffer()
-    const { data, info } = await sharp(volta).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-    const cor = (x: number, y: number) => {
+    const out = await vectorizeImage(softMark, { colors: 5 })
+    expect(out.warnings.join(' ')).not.toMatch(/photograph|flat colors/)
+    // And the drawing has to remain recognizable: the red core, the white
+    // ring and the blue around it, each one in its place.
+    const roundTrip = await sharp(Buffer.from(out.svg)).resize(300, 300).png().toBuffer()
+    const { data, info } = await sharp(roundTrip).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    const color = (x: number, y: number) => {
       const at = (y * info.width + x) * info.channels
       return [data[at], data[at + 1], data[at + 2]]
     }
-    expect(cor(150, 150)[0]).toBeGreaterThan(150) // centro vermelho
-    expect(cor(150, 60)[2]).toBeGreaterThan(150) // anel azul no topo
+    expect(color(150, 150)[0]).toBeGreaterThan(150) // red center
+    expect(color(150, 60)[2]).toBeGreaterThan(150) // blue ring at the top
   })
 
-  it('o SVG de um desenho chapado sai MENOR que o raster', async () => {
-    // É o ganho concreto de vetorizar arte: menos bytes e escala infinita.
-    const origem = await marca()
-    const out = await vectorizeImage(origem)
-    expect(Buffer.byteLength(out.svg)).toBeLessThan(origem.length)
+  it('the SVG of flat art comes out SMALLER than the raster', async () => {
+    // It is the concrete gain of vectorizing art: fewer bytes and infinite scaling.
+    const source = await makeMark()
+    const out = await vectorizeImage(source)
+    expect(Buffer.byteLength(out.svg)).toBeLessThan(source.length)
   })
 
-  it('some com a tinta de borda, e PRESERVA um acento pequeno', async () => {
-    // As duas metades da mesma regra, e é por isso que estão no mesmo teste.
+  it('removes the edge ink and PRESERVES a small accent', async () => {
+    // The two halves of the same rule, and that is why they are in the same test.
     //
-    // A mistura entre dois tons (o cinza que nasce entre um traço escuro e um
-    // fundo claro) tem que sumir: é ela que desenha o contorno fantasma. Mas
-    // ela é PEQUENA, e um acento legítimo de marca também é — se a regra fosse
-    // por tamanho, o ponto vermelho morreria junto. O que separa os dois é a
-    // mistura cair sobre a linha que liga as duas cores de onde ela saiu.
-    const escuro = '#1a2b4a'
-    const claro = '#f2f0ea'
-    const meio = '#8a8d9a' // a média dos dois: a tinta de borda
-    const acento = '#e11d48' // vermelho: fora da linha entre os outros dois
+    // The mixture between two tones (the gray born between a dark stroke and a
+    // light background) has to vanish: it is what draws the ghost outline. But
+    // it is SMALL, and a legitimate brand accent is too — if the rule were
+    // by size, the red dot would die along with it. What separates the two is the
+    // mixture falling on the line that links the two colors it came from.
+    const dark = '#1a2b4a'
+    const light = '#f2f0ea'
+    const middle = '#8a8d9a' // the average of the two: the edge ink
+    const accent = '#e11d48' // red: outside the line between the other two
 
-    const cena = await sharp({ create: { width: 200, height: 200, channels: 3, background: claro } })
+    const scene = await sharp({ create: { width: 200, height: 200, channels: 3, background: light } })
       .composite([
-        { input: await solid(140, 140, escuro), top: 30, left: 30 },
-        { input: await solid(120, 120, claro), top: 40, left: 40 },
-        // Moldura de mistura acompanhando o traço.
-        { input: await solid(140, 3, meio), top: 28, left: 30 },
-        { input: await solid(140, 3, meio), top: 170, left: 30 },
-        // O acento, pequeno como a mistura.
-        { input: await solid(18, 18, acento), top: 90, left: 90 },
+        { input: await solid(140, 140, dark), top: 30, left: 30 },
+        { input: await solid(120, 120, light), top: 40, left: 40 },
+        // Mixture frame following the stroke.
+        { input: await solid(140, 3, middle), top: 28, left: 30 },
+        { input: await solid(140, 3, middle), top: 170, left: 30 },
+        // The accent, as small as the mixture.
+        { input: await solid(18, 18, accent), top: 90, left: 90 },
       ])
       .png()
       .toBuffer()
 
-    const out = await vectorizeImage(cena, { colors: 4 })
-    const proximo = (hex: string, alvo: string, limite = 40) => {
+    const out = await vectorizeImage(scene, { colors: 4 })
+    const near = (hex: string, target: string, limit = 40) => {
       const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16)
-      return Math.hypot(p(hex, 0) - p(alvo, 0), p(hex, 1) - p(alvo, 1), p(hex, 2) - p(alvo, 2)) < limite
+      return Math.hypot(p(hex, 0) - p(target, 0), p(hex, 1) - p(target, 1), p(hex, 2) - p(target, 2)) < limit
     }
-    expect(out.colors.some((c) => proximo(c, acento))).toBe(true)
-    expect(out.colors.some((c) => proximo(c, meio, 25))).toBe(false)
+    expect(out.colors.some((c) => near(c, accent))).toBe(true)
+    expect(out.colors.some((c) => near(c, middle, 25))).toBe(false)
   })
 
-  it('escolhe sozinho quantas cores usar, e diz qual escolheu', async () => {
-    const out = await vectorizeImage(await marca())
+  it('chooses by itself how many colors to use, and says which one it chose', async () => {
+    const out = await vectorizeImage(await makeMark())
     expect(out.usedColors).toBeGreaterThanOrEqual(3)
     expect(out.usedColors).toBeLessThanOrEqual(6)
-    // Pedido explícito continua sendo respeitado ao pé da letra.
-    expect((await vectorizeImage(await marca(), { colors: 3 })).usedColors).toBe(3)
+    // An explicit request is still honored to the letter.
+    expect((await vectorizeImage(await makeMark(), { colors: 3 })).usedColors).toBe(3)
   })
 
-  it('não abre costura entre duas cores vizinhas', async () => {
-    // Traçando cada cor com os próprios pixels, a fronteira entre duas regiões
-    // é percorrida DUAS vezes, uma de cada lado, e a simplificação afasta um
-    // traçado do outro — abrindo um fio de nada entre elas. As camadas são
-    // empilhadas (cada uma carrega o que vem por cima) para que não exista
-    // fronteira compartilhada que possa divergir.
+  it('opens no seam between two neighboring colors', async () => {
+    // Tracing each color with its own pixels, the boundary between two regions
+    // is walked TWICE, one on each side, and the simplification pushes one
+    // tracing away from the other — opening a thread of nothing between them. The layers are
+    // stacked (each one carries what comes on top) so that there is no
+    // shared boundary that could drift apart.
     //
-    // A divisa precisa ser ONDULADA: numa reta os dois traçados caem no mesmo
-    // lugar e não há divergência nenhuma para abrir fresta.
-    const duasCores = await sharp(
+    // The boundary has to be WAVY: on a straight line both tracings fall in the same
+    // place and there is no divergence at all to open a gap.
+    const twoColors = await sharp(
       Buffer.from(
         `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
            <rect width="200" height="200" fill="#1d4ed8"/>
@@ -233,35 +233,35 @@ describe('vectorizeImage', () => {
       .png()
       .toBuffer()
 
-    const out = await vectorizeImage(duasCores, { colors: 2 })
-    // Composto SOBRE magenta: o que aparecer dessa cor é buraco no traçado.
-    const sobreMagenta = await sharp({
+    const out = await vectorizeImage(twoColors, { colors: 2 })
+    // Composited OVER magenta: whatever shows that color is a hole in the tracing.
+    const overMagenta = await sharp({
       create: { width: 200, height: 200, channels: 3, background: '#ff00ff' },
     })
       .composite([{ input: await sharp(Buffer.from(out.svg)).resize(200, 200).png().toBuffer() }])
       .png()
       .toBuffer()
 
-    const { data, info } = await sharp(sobreMagenta)
+    const { data, info } = await sharp(overMagenta)
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true })
-    let vazando = 0
-    // Só o MIOLO: a borda externa da imagem tem meio pixel de folga por
-    // construção e não é costura.
+    let leaking = 0
+    // Only the CORE: the image's outer border has half a pixel of slack by
+    // construction and is not a seam.
     for (let y = 4; y < info.height - 4; y++) {
       for (let x = 4; x < info.width - 4; x++) {
         const at = (y * info.width + x) * info.channels
-        if (data[at] > 180 && data[at + 1] < 90 && data[at + 2] > 180) vazando++
+        if (data[at] > 180 && data[at + 1] < 90 && data[at + 2] > 180) leaking++
       }
     }
-    expect(vazando).toBe(0)
+    expect(leaking).toBe(0)
   })
 
-  it('imagem grande é reduzida antes, e avisa', async () => {
-    const grande = await solid(2400, 1200, '#334155')
-    const out = await vectorizeImage(grande)
+  it('a large image is downscaled first, and says so', async () => {
+    const large = await solid(2400, 1200, '#334155')
+    const out = await vectorizeImage(large)
     expect(out.width).toBeLessThanOrEqual(1000)
-    expect(out.warnings.join(' ')).toMatch(/reduzida/)
+    expect(out.warnings.join(' ')).toMatch(/downscaled/)
   })
 })

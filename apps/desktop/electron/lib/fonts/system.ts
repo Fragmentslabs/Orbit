@@ -5,25 +5,25 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 /**
- * As famílias instaladas no computador, para o seletor de fonte do inspetor.
+ * The families installed on the computer, for the inspector's font selector.
  *
- * É uma lista de NOMES (o que `font-family` aceita), não de arquivos: a fonte
- * do sistema já é carregada pelo Chromium, então basta o nome. No Windows a
- * fonte da verdade é o registro — as entradas vêm como "Arial Bold (TrueType)",
- * que é FACE e não família; sem tirar o sufixo o `font-family` do elemento
- * apontaria para uma família que não existe.
+ * It is a list of NAMES (what `font-family` accepts), not of files: the system font
+ * is already loaded by Chromium, so the name is enough. On Windows the source of
+ * truth is the registry — the entries come as "Arial Bold (TrueType)", which is a
+ * FACE and not a family; without stripping the suffix the element's `font-family`
+ * would point at a family that does not exist.
  */
 
 const execFileAsync = promisify(execFile)
 const CACHE_MS = 5 * 60 * 1000
 
-/** Palavras que são ESTILO, não nome: "Segoe UI Semibold" → "Segoe UI". */
+/** Words that are a STYLE, not a name: "Segoe UI Semibold" → "Segoe UI". */
 const STYLE_WORDS =
   /\s+(?:bold|italic|oblique|black|heavy|light|thin|medium|semibold|semi\s?bold|demibold|demi\s?bold|extrabold|extra\s?bold|ultrabold|ultra\s?bold|extralight|extra\s?light|ultralight|ultra\s?light|regular|book|roman|normal)$/i
 
 let cache: { at: number; families: string[] } | null = null
 
-/** Tira o sufixo de estilo (repetidamente: "Bold Italic" são dois). */
+/** Strips the style suffix (repeatedly: "Bold Italic" is two of them). */
 export function familyOf(name: string): string {
   let value = name
     .replace(/\s*\((?:TrueType|OpenType|Type\s?1|PostScript)\)\s*$/i, '')
@@ -39,7 +39,7 @@ export function familyOf(name: string): string {
 
 function decode(buffer: Buffer): string {
   const utf8 = buffer.toString('utf8')
-  // O `reg` fala a codepage do console: se o utf8 não fecha, latin1 é mais fiel.
+  // `reg` speaks the console codepage: if utf8 does not check out, latin1 is more faithful.
   return utf8.includes('\uFFFD') ? buffer.toString('latin1') : utf8
 }
 
@@ -60,7 +60,7 @@ async function windowsFamilies(): Promise<string[]> {
         names.push(raw)
       }
     } catch {
-      // Chave ausente (HKCU nasce vazia) não é erro.
+      // A missing key (HKCU starts out empty) is not an error.
     }
   }
   return names
@@ -81,7 +81,7 @@ async function directoryFamilies(dirs: string[]): Promise<string[]> {
 async function linuxFamilies(): Promise<string[]> {
   try {
     const { stdout } = await execFileAsync('fc-list', ['--format=%{family}\\n'], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 })
-    // `fc-list` devolve várias famílias por arquivo, separadas por vírgula.
+    // `fc-list` returns several families per file, separated by commas.
     return stdout
       .split(/\r?\n/)
       .flatMap((line) => line.split(','))
@@ -92,7 +92,7 @@ async function linuxFamilies(): Promise<string[]> {
   }
 }
 
-/** Famílias instaladas, ordenadas e sem repetição (cache curto: abrir o seletor é frequente). */
+/** Installed families, sorted and without repetition (short cache: opening the selector is frequent). */
 export async function listSystemFonts(): Promise<string[]> {
   const now = Date.now()
   if (cache && now - cache.at < CACHE_MS) return cache.families

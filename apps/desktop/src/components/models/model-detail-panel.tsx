@@ -15,9 +15,9 @@ import { useModelsStore } from "@/src/stores/models-store"
 import { availabilityLabel, formatContext, formatPrice, MODALITY_LABELS, SCORE_CATEGORIES, SPEED_LABELS } from "./meta"
 import { ScoreBar } from "./shared"
 
-/** Painel direito com o perfil completo do modelo clicado na tabela. */
+/** Right panel with the full profile of the model clicked in the table. */
 
-/** "Best For" derivado dos scores/capacidades — base dos futuros perfis de agentes. */
+/** "Best For" derived from the scores/capabilities — basis of the future agent profiles. */
 function bestForOf(model: OrbitModel): string[] {
   const items: string[] = []
   const s = model.scores

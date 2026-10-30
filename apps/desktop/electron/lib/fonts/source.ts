@@ -3,16 +3,16 @@ import path from 'node:path'
 import { addFont, findFont, fontsRoot, storeFontFile, type FontFileRef, type OrbitFont } from './store'
 
 /**
- * Origem das fontes: o catálogo do Fontsource (jsDelivr).
+ * Where the fonts come from: the Fontsource catalog (jsDelivr).
  *
- * Só o Fontsource, e não uma busca genérica na web: o pacote diz qual é a
- * licença (`OFL-1.1`), quais subsets existem, os eixos da variável e o
- * `unicode-range` de cada subset — o `@font-face` que a gente gera depende
- * disso. E o nome do arquivo é previsível (`<id>-<subset>-<peso>-<estilo>.woff2`),
- * sem raspar CSS nem forjar User-Agent para receber woff2.
+ * Fontsource only, and not a generic web search: the package says which license it
+ * is (`OFL-1.1`), which subsets exist, the axes of the variable font and the
+ * `unicode-range` of each subset — the `@font-face` we generate depends on that. And
+ * the file name is predictable (`<id>-<subset>-<weight>-<style>.woff2`), without
+ * scraping CSS or forging a User-Agent to receive woff2.
  *
- * A versão fica fixada no que foi BAIXADO (o índice guarda o arquivo, não a
- * URL): o render de amanhã usa o mesmo byte, não o que estiver no ar.
+ * The version stays fixed on what was DOWNLOADED (the index keeps the file, not the
+ * URL): tomorrow's render uses the same bytes, not whatever is up in the air.
  */
 
 const CATALOG_URL = 'https://api.fontsource.org/v1/fonts'
@@ -24,7 +24,7 @@ const MAX_FONT_BYTES = 4 * 1024 * 1024
 const MAX_JSON_BYTES = 8 * 1024 * 1024
 const TIMEOUT_MS = 20_000
 
-/** Subsets que valem baixar por padrão: cobre português (inclusive acentos) e latim. */
+/** Subsets worth downloading by default: it covers Portuguese (accents included) and Latin. */
 const DEFAULT_SUBSETS = ['latin', 'latin-ext']
 
 export interface CatalogFont {
@@ -63,7 +63,7 @@ function catalogFile(): string {
   return path.join(fontsRoot(), 'catalog.json')
 }
 
-/** Só https, só nos hosts do Fontsource — a URL nunca é escolhida pelo modelo. */
+/** https only, and only on Fontsource hosts — the URL is never chosen by the model. */
 function checked(url: string): URL {
   const parsed = new URL(url)
   if (parsed.protocol !== 'https:') throw new Error('the font address must be https')
@@ -71,7 +71,7 @@ function checked(url: string): URL {
   return parsed
 }
 
-/** Lê o corpo com teto de bytes — o content-length pode faltar ou mentir. */
+/** Reads the body with a byte ceiling — content-length may be missing or lie. */
 async function readCapped(res: Response, limit: number): Promise<Buffer> {
   const declared = Number(res.headers.get('content-length') ?? 0)
   if (declared > limit) throw new Error(`the file is ${(declared / 1e6).toFixed(1)} MB, above the ${(limit / 1024 / 1024).toFixed(0)} MB limit`)
@@ -104,9 +104,9 @@ async function getJson(url: string, options: SourceOptions, limit = MAX_JSON_BYT
 }
 
 /**
- * O catálogo inteiro (≈2 mil famílias), em disco por uma semana. A busca é
- * local: filtrar 2 mil nomes é instantâneo e não depende de a cada consulta
- * existir rede.
+ * The whole catalog (≈2 thousand families), on disk for a week. The search is local:
+ * filtering 2 thousand names is instant and does not depend on there being a network
+ * on every query.
  */
 export async function catalog(options: SourceOptions = {}): Promise<CatalogFont[]> {
   const now = options.now?.() ?? Date.now()
@@ -125,14 +125,14 @@ export async function catalog(options: SourceOptions = {}): Promise<CatalogFont[
     await fsp.writeFile(catalogFile(), JSON.stringify({ at: now, fonts }), 'utf8')
     return fonts
   } catch (err) {
-    // Sem rede agora: o catálogo antigo ainda serve para buscar e usar o que já
-    // foi baixado (a biblioteca local não depende dele).
+    // No network right now: the old catalog still serves to search and use what has
+    // already been downloaded (the local library does not depend on it).
     if (cached?.fonts?.length) return cached.fonts
     throw new Error(`could not read the font catalog: ${(err as Error).message}`)
   }
 }
 
-/** Busca por nome, com a família que COMEÇA com o termo na frente. */
+/** Search by name, with the family that STARTS with the term in front. */
 export function searchCatalog(fonts: CatalogFont[], query: string, limit = 8): CatalogFont[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (words.length === 0) return fonts.slice(0, limit)
@@ -176,7 +176,7 @@ function licenseOf(metadata: FontsourceMetadata): OrbitFont['license'] | undefin
   return { type, url: raw.url, attribution: raw.attribution }
 }
 
-/** Aceita o arquivo só se ele COMEÇA como uma fonte — um 404 de HTML não entra no armazém. */
+/** Accepts the file only if it STARTS like a font — an HTML 404 does not enter the store. */
 function fontExt(buffer: Buffer): 'woff2' | 'woff' | 'ttf' | 'otf' {
   const magic = buffer.subarray(0, 4).toString('latin1')
   if (magic === 'wOF2') return 'woff2'
@@ -206,7 +206,7 @@ async function packageInfo(font: CatalogFont, options: SourceOptions): Promise<P
   throw new Error(`could not read the font package of "${font.family}": ${lastError?.message ?? 'unknown error'}`)
 }
 
-/** Os `unicode-range` por subset, quando o pacote informa. */
+/** The `unicode-range` per subset, when the package reports it. */
 async function unicodeRanges(packageName: string, options: SourceOptions): Promise<Record<string, string>> {
   try {
     return (await getJson(`${NPM_CDN}/${packageName}@latest/unicode.json`, options)) as Record<string, string>
@@ -227,14 +227,14 @@ async function downloadFile(url: string, options: SourceOptions): Promise<Buffer
 }
 
 export interface EnsureOptions {
-  /** Subsets desejados; o padrão cobre latim + português. */
+  /** Desired subsets; the default covers Latin + Portuguese. */
   subsets?: string[]
   styles?: ('normal' | 'italic')[]
 }
 
 /**
- * Garante a família na biblioteca (baixando se preciso) e devolve a entrada do
- * índice. Idempotente: com a família já instalada, não toca na rede.
+ * Guarantees the family in the library (downloading if needed) and returns the index
+ * entry. Idempotent: with the family already installed, it does not touch the network.
  */
 export async function ensureFont(ref: string, ensure: EnsureOptions = {}, options: SourceOptions = {}): Promise<OrbitFont> {
   const existing = await findFont(ref)
@@ -275,7 +275,7 @@ export async function ensureFont(ref: string, ensure: EnsureOptions = {}, option
           unicodeRange: ranges[subset],
         })
       } catch (err) {
-        // Subset que o pacote não publica (comum em fonte variável): segue com os outros.
+        // A subset the package does not publish (common in a variable font): go on with the others.
         lastError = err as Error
       }
     }

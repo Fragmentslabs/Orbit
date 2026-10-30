@@ -1,17 +1,17 @@
 /**
- * Índice de desenho do grafo — o que a cena precisa por nó, calculado UMA vez
- * por layout, e os blocos espaciais que permitem montar só o pedaço visível.
+ * Drawing index of the graph — what the scene needs per node, computed ONCE
+ * per layout, and the spatial blocks that allow mounting only the visible piece.
  *
- * Antes cada render da cena refazia, por nó: `normalizeText` sobre o texto
- * inteiro da memória para saber se ela casava com a busca, o corte do rótulo, a
- * conta de "recente/esquecida" e a caixa de colisão. Com milhares de nós isso
- * era trabalho proporcional ao grafo INTEIRO a cada mudança de viewport.
+ * Before, every render of the scene redid, per node: `normalizeText` over the whole
+ * text of the memory to know whether it matched the search, the label truncation, the
+ * "recent/forgotten" calculation and the collision box. With thousands of nodes that
+ * was work proportional to the WHOLE graph on every viewport change.
  *
- * Os blocos sobraram de quando a cena era montada em SVG e precisava ser
- * cortada por viewport. Com o desenho em Skia — a cena inteira gravada num
- * SkPicture e só transformada por frame — eles não decidem mais o que é
- * desenhado; servem ao RESUMO do zoom de longe, onde cada bloco vira um ponto
- * com o tamanho proporcional a quantas memórias representa.
+ * The blocks are left over from when the scene was mounted in SVG and had to be
+ * clipped by viewport. With the drawing in Skia — the whole scene recorded into a
+ * SkPicture and only transformed per frame — they no longer decide what is
+ * drawn; they serve the SUMMARY of the far zoom, where each block becomes a dot
+ * with a size proportional to how many memories it represents.
  */
 import type { Memory, MemoryLayout, LayoutNode } from '@orbit/shared'
 import { LABEL_HEIGHT, LABEL_OFFSET, nodeLabelText, normalizeText } from '@orbit/shared'
@@ -19,117 +19,117 @@ import { KIND_COLOR, lastActivity } from './meta'
 
 const RECENT_MS = 7 * 24 * 60 * 60 * 1000
 const STALE_MS = 30 * 24 * 60 * 60 * 1000
-/** Nós por bloco. Poucos demais e a lista de blocos vira o custo; muitos e o
- *  bloco deixa de ser um pedaço pequeno. */
-const NOS_POR_BLOCO = 48
-/** Cinza das arestas que não são de relação. */
-const CINZA_ARESTA = '#8a8e99'
+/** Nodes per block. Too few and the block list becomes the cost; too many and the
+ *  block stops being a small piece. */
+const NODES_PER_BLOCK = 48
+/** Gray of the edges that are not of a relation. */
+const EDGE_GRAY = '#8a8e99'
 
-export interface Regiao {
+export interface Region {
   minX: number
   maxX: number
   minY: number
   maxY: number
 }
 
-export interface NoDesenho {
+export interface NodeShape {
   id: string
   x: number
   y: number
   r: number
-  cor: string
+  color: string
   fillOpacity: number
-  larguraTraco: number
-  rotulo: string
-  rotuloY: number
+  strokeWidth: number
+  label: string
+  labelY: number
   fontSize: number
   fontWeight: '400' | '600' | '700'
   isRoot: boolean
-  /** Raiz ou área: os marcos que continuam desenhados no zoom de longe. */
-  marco: boolean
-  recente: boolean
-  velha: boolean
-  /** Caixa ocupada (círculo + rótulo), já resolvida. */
+  /** Root or area: the landmarks that stay drawn at the far zoom. */
+  landmark: boolean
+  recent: boolean
+  stale: boolean
+  /** Occupied box (circle + label), already resolved. */
   minX: number
   maxX: number
   minY: number
   maxY: number
 }
 
-export interface ArestaDesenho {
-  chave: string
+export interface EdgeShape {
+  key: string
   x1: number
   y1: number
   x2: number
   y2: number
-  cor: string
-  opacidade: number
-  largura: number
-  traco?: string
-  arvore: boolean
+  color: string
+  opacity: number
+  width: number
+  dash?: string
+  tree: boolean
 }
 
 /**
- * Bloco de NÓS. A caixa cobre só os círculos e rótulos, sem as arestas: uma
- * aresta longa esticaria a caixa por meio canvas e o bloco entraria na cena a
- * cada arrasto, que é o oposto do que os blocos existem para fazer.
+ * Block of NODES. The box covers only the circles and labels, without the edges: a
+ * long edge would stretch the box across half the canvas and the block would enter the scene on
+ * every drag, which is the opposite of what the blocks exist for.
  */
-export interface BlocoNos {
-  chave: string
+export interface NodeBlock {
+  key: string
   minX: number
   maxX: number
   minY: number
   maxY: number
-  nos: NoDesenho[]
-  /** Resumo do bloco para o zoom de longe: um ponto no centro de massa. */
+  nodes: NodeShape[]
+  /** Summary of the block for the far zoom: a dot at the center of mass. */
   cx: number
   cy: number
-  raio: number
-  cor: string
+  radius: number
+  color: string
 }
 
-export interface IndiceGrafo {
-  blocos: BlocoNos[]
-  /** Todos os nós, na ordem de desenho. */
-  nos: NoDesenho[]
-  arestas: ArestaDesenho[]
-  /** Raízes e áreas — desenhadas em qualquer nível de zoom. */
-  marcos: NoDesenho[]
-  limites: Regiao
+export interface GraphIndex {
+  blocks: NodeBlock[]
+  /** All the nodes, in drawing order. */
+  nodes: NodeShape[]
+  edges: EdgeShape[]
+  /** Roots and areas — drawn at any zoom level. */
+  landmarks: NodeShape[]
+  bounds: Region
   total: number
 }
 
-const VAZIO: IndiceGrafo = {
-  blocos: [],
-  nos: [],
-  arestas: [],
-  marcos: [],
-  limites: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
+const EMPTY_INDEX: GraphIndex = {
+  blocks: [],
+  nodes: [],
+  edges: [],
+  landmarks: [],
+  bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
   total: 0,
 }
 
-function noDesenho(node: LayoutNode, now: number): NoDesenho {
+function toNodeShape(node: LayoutNode, now: number): NodeShape {
   const { memory } = node
-  const atividade = lastActivity(memory)
-  const cor = KIND_COLOR[memory.kind]
-  const rotulo = nodeLabelText(memory, node.isRoot)
+  const activity = lastActivity(memory)
+  const color = KIND_COLOR[memory.kind]
+  const label = nodeLabelText(memory, node.isRoot)
   const halfW = Math.max(node.r, node.labelHalfWidth)
   return {
     id: memory.id,
     x: node.x,
     y: node.y,
     r: node.r,
-    cor,
+    color,
     fillOpacity: node.isRoot ? 0.3 : memory.area ? 0.16 : 0.24,
-    larguraTraco: node.isRoot ? 2 : 1.2,
-    rotulo,
-    rotuloY: node.r + LABEL_OFFSET + 10,
+    strokeWidth: node.isRoot ? 2 : 1.2,
+    label,
+    labelY: node.r + LABEL_OFFSET + 10,
     fontSize: node.isRoot ? 13 : memory.area ? 11 : 10,
     fontWeight: node.isRoot ? '700' : memory.area ? '600' : '400',
     isRoot: node.isRoot,
-    marco: node.isRoot || memory.area != null,
-    recente: now - atividade < RECENT_MS,
-    velha: now - atividade > STALE_MS,
+    landmark: node.isRoot || memory.area != null,
+    recent: now - activity < RECENT_MS,
+    stale: now - activity > STALE_MS,
     minX: node.x - halfW,
     maxX: node.x + halfW,
     minY: node.y - node.r,
@@ -137,133 +137,133 @@ function noDesenho(node: LayoutNode, now: number): NoDesenho {
   }
 }
 
-export function construirIndice(
+export function buildGraphIndex(
   layout: MemoryLayout | null,
   now: number,
-  corPrimaria: string,
-): IndiceGrafo {
-  if (!layout || layout.nodes.length === 0) return VAZIO
+  primaryColor: string,
+): GraphIndex {
+  if (!layout || layout.nodes.length === 0) return EMPTY_INDEX
 
-  const nos = layout.nodes.map((node) => noDesenho(node, now))
-  const porId = new Map(nos.map((n) => [n.id, n]))
-  const marcos = nos.filter((n) => n.marco)
+  const nodes = layout.nodes.map((node) => toNodeShape(node, now))
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const landmarks = nodes.filter((n) => n.landmark)
 
   let minX = Infinity
   let maxX = -Infinity
   let minY = Infinity
   let maxY = -Infinity
-  for (const no of nos) {
-    if (no.minX < minX) minX = no.minX
-    if (no.maxX > maxX) maxX = no.maxX
-    if (no.minY < minY) minY = no.minY
-    if (no.maxY > maxY) maxY = no.maxY
+  for (const node of nodes) {
+    if (node.minX < minX) minX = node.minX
+    if (node.maxX > maxX) maxX = node.maxX
+    if (node.minY < minY) minY = node.minY
+    if (node.maxY > maxY) maxY = node.maxY
   }
 
-  // Lado do bloco calculado a partir da densidade real: o grafo pode ocupar
-  // trezentos ou trezentos mil pontos de mundo, e um lado fixo seria bom em um
-  // caso e péssimo no outro.
+  // Block side computed from the real density: the graph may occupy
+  // three hundred or three hundred thousand world points, and a fixed side would be good in one
+  // case and terrible in the other.
   const area = Math.max(1, (maxX - minX) * (maxY - minY))
-  const lado = Math.max(1, Math.sqrt((area / nos.length) * NOS_POR_BLOCO))
-  const colunas = Math.max(1, Math.ceil((maxX - minX) / lado) + 1)
+  const side = Math.max(1, Math.sqrt((area / nodes.length) * NODES_PER_BLOCK))
+  const columns = Math.max(1, Math.ceil((maxX - minX) / side) + 1)
 
-  const blocosNos = new Map<number, BlocoNos>()
-  const indiceDe = (x: number, y: number) =>
-    Math.floor((y - minY) / lado) * colunas + Math.floor((x - minX) / lado)
+  const blocksByKey = new Map<number, NodeBlock>()
+  const cellIndex = (x: number, y: number) =>
+    Math.floor((y - minY) / side) * columns + Math.floor((x - minX) / side)
 
-  for (const no of nos) {
-    const chave = indiceDe(no.x, no.y)
-    let b = blocosNos.get(chave)
+  for (const node of nodes) {
+    const key = cellIndex(node.x, node.y)
+    let b = blocksByKey.get(key)
     if (!b) {
       b = {
-        chave: `n${chave}`,
+        key: `n${key}`,
         minX: Infinity,
         maxX: -Infinity,
         minY: Infinity,
         maxY: -Infinity,
-        nos: [],
+        nodes: [],
         cx: 0,
         cy: 0,
-        raio: 0,
-        cor: '',
+        radius: 0,
+        color: '',
       }
-      blocosNos.set(chave, b)
+      blocksByKey.set(key, b)
     }
-    b.nos.push(no)
-    if (no.minX < b.minX) b.minX = no.minX
-    if (no.maxX > b.maxX) b.maxX = no.maxX
-    if (no.minY < b.minY) b.minY = no.minY
-    if (no.maxY > b.maxY) b.maxY = no.maxY
+    b.nodes.push(node)
+    if (node.minX < b.minX) b.minX = node.minX
+    if (node.maxX > b.maxX) b.maxX = node.maxX
+    if (node.minY < b.minY) b.minY = node.minY
+    if (node.maxY > b.maxY) b.maxY = node.maxY
   }
 
-  const arestas: ArestaDesenho[] = []
+  const edges: EdgeShape[] = []
   for (const edge of layout.edges) {
-    const a = porId.get(edge.from)
-    const b = porId.get(edge.to)
+    const a = byId.get(edge.from)
+    const b = byId.get(edge.to)
     if (!a || !b) continue
-    const arvore = edge.kind === 'tree'
-    // Cor e opacidade SEPARADAS: no Skia a pintura recebe a cor e depois o
-    // alfa, então um `rgba(...)` com transparência embutida seria apagado pelo
-    // `setAlphaf` que vem em seguida.
-    const desenho: ArestaDesenho = {
-      chave: `${edge.from}:${edge.to}`,
+    const tree = edge.kind === 'tree'
+    // Color and opacity SEPARATED: in Skia the paint receives the color and then the
+    // alpha, so an `rgba(...)` with transparency built in would be erased by the
+    // `setAlphaf` that comes next.
+    const edgeShape: EdgeShape = {
+      key: `${edge.from}:${edge.to}`,
       x1: a.x,
       y1: a.y,
       x2: b.x,
       y2: b.y,
-      cor: arvore || edge.kind === 'inferred' ? CINZA_ARESTA : corPrimaria,
-      opacidade: arvore ? 0.45 : edge.kind === 'inferred' ? 0.2 : 0.3,
-      largura: arvore ? 1 + Math.min(edge.hits / 14, 1.4) : 1,
-      traco: arvore ? undefined : edge.kind === 'inferred' ? '3 5' : '6 4',
-      arvore,
+      color: tree || edge.kind === 'inferred' ? EDGE_GRAY : primaryColor,
+      opacity: tree ? 0.45 : edge.kind === 'inferred' ? 0.2 : 0.3,
+      width: tree ? 1 + Math.min(edge.hits / 14, 1.4) : 1,
+      dash: tree ? undefined : edge.kind === 'inferred' ? '3 5' : '6 4',
+      tree,
     }
-    arestas.push(desenho)
+    edges.push(edgeShape)
   }
 
-  const lista = [...blocosNos.values()]
-  for (const b of lista) {
-    let somaX = 0
-    let somaY = 0
-    const contagem = new Map<string, number>()
-    for (const no of b.nos) {
-      somaX += no.x
-      somaY += no.y
-      contagem.set(no.cor, (contagem.get(no.cor) ?? 0) + 1)
+  const list = [...blocksByKey.values()]
+  for (const b of list) {
+    let sumX = 0
+    let sumY = 0
+    const counts = new Map<string, number>()
+    for (const node of b.nodes) {
+      sumX += node.x
+      sumY += node.y
+      counts.set(node.color, (counts.get(node.color) ?? 0) + 1)
     }
-    const total = Math.max(1, b.nos.length)
-    b.cx = somaX / total
-    b.cy = somaY / total
-    // Raio do resumo cresce com a raiz da contagem: é assim que a área do
-    // ponto fica proporcional a quantas memórias ele representa.
-    b.raio = Math.min(lado / 2, 6 + Math.sqrt(b.nos.length) * 3)
-    let melhor = ''
-    let melhorQtd = -1
-    for (const [cor, qtd] of contagem) {
-      if (qtd > melhorQtd) {
-        melhorQtd = qtd
-        melhor = cor
+    const total = Math.max(1, b.nodes.length)
+    b.cx = sumX / total
+    b.cy = sumY / total
+    // Radius of the summary grows with the square root of the count: that is how the area of the
+    // dot becomes proportional to how many memories it represents.
+    b.radius = Math.min(side / 2, 6 + Math.sqrt(b.nodes.length) * 3)
+    let best = ''
+    let bestCount = -1
+    for (const [color, count] of counts) {
+      if (count > bestCount) {
+        bestCount = count
+        best = color
       }
     }
-    b.cor = melhor || KIND_COLOR.general
+    b.color = best || KIND_COLOR.general
   }
 
   return {
-    blocos: lista,
-    nos,
-    arestas,
-    marcos,
-    limites: { minX, maxX, minY, maxY },
-    total: nos.length,
+    blocks: list,
+    nodes,
+    edges,
+    landmarks,
+    bounds: { minX, maxX, minY, maxY },
+    total: nodes.length,
   }
 }
 
-/** Ids das memórias que casam com a busca. `null` = busca vazia (todas casam). */
-export function idsQueCasam(pool: Memory[], query: string): Set<string> | null {
+/** Ids of the memories that match the search. `null` = empty search (all match). */
+export function matchingIds(pool: Memory[], query: string): Set<string> | null {
   const tokens = normalizeText(query).split(' ').filter(Boolean)
   if (tokens.length === 0) return null
-  const casam = new Set<string>()
+  const matches = new Set<string>()
   for (const memory of pool) {
-    const alvo = normalizeText(`${memory.text} ${memory.tags.join(' ')}`)
-    if (tokens.every((tok) => alvo.includes(tok))) casam.add(memory.id)
+    const target = normalizeText(`${memory.text} ${memory.tags.join(' ')}`)
+    if (tokens.every((tok) => target.includes(tok))) matches.add(memory.id)
   }
-  return casam
+  return matches
 }

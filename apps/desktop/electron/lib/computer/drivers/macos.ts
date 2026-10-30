@@ -17,10 +17,9 @@ import {
 } from '../types'
 
 /**
- * Driver macOS: a bridge JXA roda num `osascript` filho. O TCC atribui a
- * permissão ao processo responsável (o Orbit), então a Acessibilidade e a
- * Gravação de Tela concedidas ao app valem para o filho — em dev, o dono é o
- * binário do Electron, não o Orbit.
+ * macOS driver: a JXA bridge runs in a child `osascript`. TCC assigns the permission
+ * to the responsible process (Orbit), so the Accessibility and Screen Recording granted
+ * to the app hold for the child — in dev, the owner is the Electron binary, not Orbit.
  */
 
 const READ_TIMEOUT_MS = 10_000
@@ -28,7 +27,7 @@ const ACTION_TIMEOUT_MS = 15_000
 
 let bridgeFile: Promise<string> | null = null
 
-/** Grava a bridge uma vez por versão do conteúdo (o nome carrega o hash). */
+/** Writes the bridge once per version of the content (the name carries the hash). */
 function ensureBridgeFile(): Promise<string> {
   bridgeFile ??= (async () => {
     const hash = createHash('sha1').update(BRIDGE_SOURCE).digest('hex').slice(0, 10)
@@ -68,7 +67,7 @@ export function createMacosDriver(): ComputerDriver {
     platform: 'darwin',
     capabilities: () => ({ directedPointer: true, dragNeedsGlobal: true, accessibilityTree: true, messageMouse: false }),
     perms: (signal) => run('perms', {}, { timeoutMs: READ_TIMEOUT_MS, signal }),
-    // O diálogo do sistema pode ficar aberto: prazo folgado.
+    // The system dialog may stay open: a generous deadline.
     requestScreen: () => run('requestScreen', {}, { timeoutMs: 60_000 }),
     apps: (signal) => run<AppsSnapshot>('apps', {}, { timeoutMs: READ_TIMEOUT_MS, signal }),
     tree: (request: TreeRequest, signal) => run<TreeSnapshot>('tree', request, { timeoutMs: READ_TIMEOUT_MS, signal }),
@@ -84,7 +83,7 @@ export function createMacosDriver(): ComputerDriver {
       const file = path.join(os.tmpdir(), 'orbit-computer', `shot-${process.pid}-${windowId}-${Date.now()}.png`)
       await fsp.mkdir(path.dirname(file), { recursive: true })
       try {
-        // -o sem sombra; -x sem som; -l captura a janela mesmo coberta por outra.
+        // -o without shadow; -x without sound; -l captures the window even when covered by another one.
         await execOnce('screencapture', ['-x', '-o', `-l${windowId}`, '-t', 'png', file], READ_TIMEOUT_MS, signal)
         const buffer = await fsp.readFile(file)
         if (buffer.length === 0) throw new Error('empty capture')
@@ -100,7 +99,7 @@ export function createMacosDriver(): ComputerDriver {
       }
     },
     openApp: async (app, signal) => {
-      // Bundle id (com.apple.TextEdit) abre por -b; nome (TextEdit) por -a.
+      // Bundle id (com.apple.TextEdit) opens via -b; name (TextEdit) via -a.
       const args = /^[\w-]+(\.[\w-]+)+$/.test(app) ? ['-b', app] : ['-a', app]
       try {
         await execOnce('open', args, ACTION_TIMEOUT_MS, signal)

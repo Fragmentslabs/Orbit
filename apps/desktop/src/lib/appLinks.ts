@@ -1,14 +1,14 @@
 /**
- * URL do smart link de download do app mobile (`<dominio>/mobile`): detecta o
- * SO do visitante e redireciona para a loja correspondente (App Store/Google
- * Play) — enquanto o app não é publicado, mostra a página "Em breve".
- * Usada pelo QR de download e pelo link do modal "Conectar App".
+ * URL of the mobile app's download smart link (`<domain>/mobile`): it detects the
+ * visitor's OS and redirects to the corresponding store (App Store/Google
+ * Play) — while the app is not published, it shows the "Coming soon" page.
+ * Used by the download QR and by the "Connect App" modal link.
  */
 export const MOBILE_DOWNLOAD_URL = "https://orbit.fragmentslabs.com/mobile"
 
 /**
- * Links institucionais da Fragments Labs. Compartilhados pelo painel Sobre e
- * pelo item de apoio no menu da conta — mantidos aqui para não duplicar as URLs.
+ * Fragments Labs institutional links. Shared by the About panel and
+ * by the support item in the account menu — kept here so as not to duplicate the URLs.
  */
 export const WEBSITE_URL = "https://fragmentslabs.com"
 export const GITHUB_URL = "https://github.com/fragmentslabs"

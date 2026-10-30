@@ -5,11 +5,11 @@ import path from 'node:path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * O layout de disco é o contrato entre este motor e o downloader do núcleo.
- * Se um dos dois mudar o caminho ou a regra de "instalado", o modelo baixa e
- * nunca aparece como pronto — ou pior, o motor acha que dá para transcrever com
- * o arquivo pela metade. Estes testes fixam o layout e as duas regras de
- * completude (tamanho exato do arquivo do whisper; pacote extraído + VAD).
+ * The disk layout is the contract between this engine and the core downloader.
+ * If either of them changes the path or the "installed" rule, the model downloads and
+ * never shows up as ready — or worse, the engine thinks it can transcribe with
+ * a half-written file. These tests pin the layout and the two completeness
+ * rules (exact size of the whisper file; package extracted + VAD).
  */
 
 const userData = path.join(os.tmpdir(), `orbit-voice-store-${process.pid}`)
@@ -31,50 +31,50 @@ afterAll(async () => {
   await fsp.rm(userData, { recursive: true, force: true })
 })
 
-describe('caminhos', () => {
-  it('os modelos ficam em <userData>/voice/models (mesmo caminho do núcleo)', () => {
+describe('paths', () => {
+  it('the models live in <userData>/voice/models (same path as the core)', () => {
     expect(store.modelsDir()).toBe(modelsDir)
     expect(store.voiceDir()).toBe(path.join(userData, 'voice'))
   })
 
-  it('a pasta de um modelo é <models>/<id>', () => {
+  it('the folder of a model is <models>/<id>', () => {
     expect(store.modelDirFor('whisper-base')).toBe(path.join(modelsDir, 'whisper-base'))
   })
 
-  it('o arquivo do whisper tem o nome do último segmento da URL', () => {
+  it('the whisper file takes the name of the last URL segment', () => {
     const def = getSttModel('whisper-tiny')!
     expect(store.modelFileFor(def)).toBe(path.join(modelsDir, 'whisper-tiny', 'ggml-tiny.bin'))
   })
 
-  it('o pacote do Parakeet fica na pasta dele com o nome da URL', () => {
+  it('the Parakeet package lands in its own folder with the URL name', () => {
     const def = getSttModel('parakeet-tdt-0.6b-v3')!
     expect(store.modelFileFor(def)).toBe(
       path.join(modelsDir, 'parakeet-tdt-0.6b-v3', `${PARAKEET_DIR}.tar.bz2`),
     )
   })
 
-  it('o VAD Silero é compartilhado, fora das pastas de modelo', () => {
+  it('the Silero VAD is shared, outside the model folders', () => {
     expect(store.sileroVadPath()).toBe(path.join(modelsDir, 'silero_vad.onnx'))
   })
 
-  it('o binário opcional do whisper-server fica em <voice>/whisper/', () => {
+  it('the optional whisper-server binary lives in <voice>/whisper/', () => {
     expect(store.localWhisperServerPath()).toBe(
       path.join(userData, 'voice', 'whisper', process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server'),
     )
   })
 })
 
-describe('completude dos arquivos', () => {
-  it('modelo ausente não está instalado', () => {
+describe('file completeness', () => {
+  it('a missing model is not installed', () => {
     expect(store.isWhisperModelInstalled('whisper-tiny')).toBe(false)
     expect(store.whisperInstalledIds()).toEqual([])
     expect(store.parakeetArchiveComplete()).toBe(false)
     expect(store.isParakeetReady()).toBe(false)
   })
 
-  it('fileComplete exige o tamanho EXATO (truncado e sobrando não contam)', async () => {
-    // Def sintético (bytes pequenos) para não criar um arquivo de 78 MB no /tmp:
-    // a regra testada é a mesma que o downloader do núcleo usa.
+  it('fileComplete requires the EXACT size (truncated and oversized do not count)', async () => {
+    // Synthetic def (small bytes) so as not to create a 78 MB file in /tmp:
+    // the rule under test is the same one the core downloader uses.
     const def = { ...getSttModel('whisper-tiny')!, bytes: 10 }
     const file = store.modelFileFor(def)
     await fsp.mkdir(path.dirname(file), { recursive: true })
@@ -89,13 +89,13 @@ describe('completude dos arquivos', () => {
     expect(store.fileComplete(def)).toBe(false)
   })
 
-  it('o Parakeet está pronto só com os quatro arquivos e o VAD inteiro', async () => {
+  it('the Parakeet is ready only with the four files and the whole VAD', async () => {
     const files = store.parakeetFilesDir()
     await fsp.mkdir(files, { recursive: true })
     for (const name of ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx', 'tokens.txt']) {
       await fsp.writeFile(path.join(files, name), Buffer.from('x'))
     }
-    // Sem o VAD ainda não dá.
+    // Without the VAD it is not possible yet.
     expect(store.isParakeetReady()).toBe(false)
 
     await fsp.writeFile(store.sileroVadPath(), Buffer.alloc(643854))
@@ -103,12 +103,12 @@ describe('completude dos arquivos', () => {
   })
 })
 
-describe('extração do pacote do Parakeet', () => {
-  it('sem o pacote baixado, a extração recusa com o motivo (não estoura no tar)', async () => {
-    await expect(store.ensureParakeetExtracted()).rejects.toThrow(/ainda não foi baixado/)
+describe('Parakeet package extraction', () => {
+  it('with no downloaded package, extraction refuses with the reason (no tar blow-up)', async () => {
+    await expect(store.ensureParakeetExtracted()).rejects.toThrow(/has not been downloaded/)
   })
 
-  it('quando já está pronto, resolve na hora sem tocar no pacote', async () => {
+  it('when it is already ready, it resolves at once without touching the package', async () => {
     const files = store.parakeetFilesDir()
     await fsp.mkdir(files, { recursive: true })
     for (const name of ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx', 'tokens.txt']) {
@@ -116,7 +116,7 @@ describe('extração do pacote do Parakeet', () => {
     }
     await fsp.writeFile(store.sileroVadPath(), Buffer.alloc(643854))
     await expect(store.ensureParakeetExtracted()).resolves.toBeUndefined()
-    // Não deixou lixo de extração para trás.
+    // It left no extraction garbage behind.
     expect(fs.existsSync(path.join(store.modelDirFor('parakeet-tdt-0.6b-v3'), '.extract'))).toBe(false)
   })
 })

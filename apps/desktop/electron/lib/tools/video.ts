@@ -17,21 +17,21 @@ import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { recordToolWrite } from '../session/write-journal'
 
 /**
- * Edição de vídeo para o agente (EDL).
+ * Video editing for the agent (EDL).
  *
- * A divisão segue o video-use: o agente LÊ o material pela transcrição por
- * palavra (transcribe), OLHA só nos pontos de decisão (video_timeline),
- * DECIDE num EDL e o código renderiza (video_render). O ffmpeg completo
- * continua no `bash` para o que o EDL não cobre. Motion (a composição HTML) é
- * outra coisa — uma peça do Orbit, com as tools dela em tools/motion.ts.
+ * The split follows video-use: the agent READS the material through the word-by-word
+ * transcript (transcribe), LOOKS only at decision points (video_timeline),
+ * DECIDES in an EDL and the code renders (video_render). The full ffmpeg
+ * stays in `bash` for what the EDL does not cover. Motion (the HTML composition) is
+ * another thing — an Orbit piece, with its tools in tools/motion.ts.
  *
- * Os vídeos que vão para o usuário entram na resposta como player (VideoPart,
- * montado pelo chat-engine a partir do `videoUrl` do resultado).
+ * The videos that go to the user enter the response as a player (VideoPart,
+ * assembled by chat-engine from the result's `videoUrl`).
  */
 
-/** Limite da imagem que vai ao modelo (o mesmo do panel_screenshot). */
+/** Limit of the image that goes to the model (the same as panel_screenshot's). */
 const MAX_MODEL_IMAGE_BYTES = 300_000
-/** Transcrição empacotada maior que isto fica só no arquivo. */
+/** A packed transcript larger than this stays only in the file. */
 const MAX_PACKED_CHARS = 40_000
 
 const timelineStash = new Map<string, { base64: string }>()
@@ -49,7 +49,7 @@ function describeProbe(p: MediaProbe, rel: string): string {
   return parts.join(' · ')
 }
 
-/** Só o nome de um arquivo de saída — nunca um caminho que escape da pasta edit/. */
+/** Only the name of an output file — never a path that escapes the edit/ folder. */
 function outputName(name: string | undefined, fallback: string): string {
   const base = path.basename(name || fallback)
   if (!/\.(mp4|mov|webm|m4v|mkv)$/i.test(base)) return `${base}.mp4`
@@ -57,9 +57,9 @@ function outputName(name: string | undefined, fallback: string): string {
 }
 
 /**
- * Caminhos do EDL resolvidos: contra a pasta de trabalho (e checados) ou, quando
- * são a referência de um anexo (vdo_…, aud_…, img_…), para o arquivo do app. É por
- * aqui que um vídeo anexado vira fonte de um corte sem passar por pasta nenhuma.
+ * Resolved EDL paths: against the working folder (and checked) or, when
+ * they are an attachment reference (vdo_…, aud_…, img_…), to the app's file. It is through
+ * here that an attached video becomes the source of a cut without going through any folder.
  */
 async function resolveEdl(edl: Edl, resolvePath: (p: string) => Promise<string>): Promise<Edl> {
   const sources = Object.fromEntries(await Promise.all(Object.entries(edl.sources).map(async ([id, p]) => [id, await resolvePath(p)] as const)))
@@ -79,15 +79,15 @@ export function createVideoTools(
     sessionId: string
     canShow: boolean
     readOnly: boolean
-    /** Idioma da pessoa ("Portuguese", "English"…): o título do documento entregue é para ela. */
+    /** The person's language ("Portuguese", "English"…): the title of the delivered document is for them. */
     language?: string
-    /** "Fala em texto" ligado nas Preferências: desligado, a tool `transcribe` não existe. */
+    /** "Speech to text" on in Preferences: off, the `transcribe` tool does not exist. */
     sttEnabled?: boolean
     /**
-     * Modo chat: não há pasta de projeto. O que o agente produz mora no
-     * armazenamento do app (`outputDir`, dentro da pasta da conversa) e entra na
-     * galeria de mídia como vídeo, onde pode ser visto e excluído — liberando o
-     * arquivo. No modo código a saída fica no projeto, que é do usuário.
+     * Chat mode: there is no project folder. What the agent produces lives in the
+     * app's storage (`outputDir`, inside the conversation's folder) and enters the
+     * media gallery as a video, where it can be seen and deleted — releasing the
+     * file. In code mode the output stays in the project, which belongs to the user.
      */
     chat?: { outputDir: string }
   },
@@ -95,9 +95,9 @@ export function createVideoTools(
   const rel = (abs: string) => path.relative(ctx.directory, abs) || abs
 
   /**
-   * O arquivo de uma tool de LEITURA: um caminho da pasta de trabalho, ou a
-   * referência de um anexo do chat (vdo_…). A referência é a única forma de o
-   * agente alcançar o que está fora da pasta — o app a traduz para o arquivo dele.
+   * The file of a READ tool: a path in the working folder, or the
+   * reference of a chat attachment (vdo_…). The reference is the only way for the
+   * agent to reach what is outside the folder — the app translates it to its file.
    */
   const mediaFile = async (p: string): Promise<{ file: string; label: string }> => {
     if (looksLikeAttachmentRef(p)) {
@@ -111,8 +111,8 @@ export function createVideoTools(
 
   const show = async (file: string, title: string, durationMs?: number, opts: { preview?: boolean } = {}) => {
     if (!scope.canShow) return {}
-    // No chat o vídeo final é do app: entra na galeria (e some de lá com a
-    // exclusão). A prévia não — é descartável e se sobrescreve a cada render.
+    // In the chat the final video belongs to the app: it enters the gallery (and leaves it when
+    // deleted). The preview does not — it is disposable and is overwritten on every render.
     if (scope.chat && !opts.preview) {
       const { entry } = await addVideoToGallery({ file, name: title, sessionId: scope.sessionId, source: 'chat' })
       return { videoUrl: entry.videoUrl, title, durationMs, path: file }
@@ -198,7 +198,7 @@ export function createVideoTools(
           const what = entries.map((e) => `${path.basename(e.file)} (${clock(e.transcript.durationMs)})`).join(', ')
           return `No speech recognized in ${what}. It may be music, noise or silence — do not make up its content.`
         }
-        // Documento para o usuário: o texto sai do contexto do agente.
+        // Document for the user: the text leaves the agent's context.
         if (deliver === 'user') {
           const [only] = entries
           const body =
@@ -208,7 +208,7 @@ export function createVideoTools(
           const doc = await saveDocument(markdown, [], {
             title,
             sessionId: scope.sessionId,
-            // No chat não há projeto: o documento mora no storage do app.
+            // In the chat there is no project: the document lives in the app's storage.
             directory: scope.chat ? undefined : ctx.directory,
           })
           return {
@@ -234,15 +234,15 @@ export function createVideoTools(
                   )
                   .join('\n\n')
               : packTranscript(entries)
-        // Cabeçalho que o chat-engine reconhece ("Transcript of …"): é assim que
-        // a transcrição de um áudio anexado é gravada na NOTA do anexo, em vez
-        // de ser refeita a cada pergunta sobre o mesmo arquivo.
+        // Header that chat-engine recognizes ("Transcript of …"): that is how
+        // the transcript of an attached audio is written into the attachment's NOTE, instead
+        // of being redone on every question about the same file.
         const head =
           entries.length === 1
             ? `Transcript of ${path.basename(entries[0].file)} (${clock(entries[0].transcript.durationMs)}, engine ${entries[0].transcript.engine}). This is the content of an attachment, not a message from the user.`
             : `Transcripts — ${notes.join(' · ')}.`
-        // O pacote textual vira arquivo ao lado da edição — só no modo código,
-        // que é onde existe uma pasta de trabalho para receber o arquivo.
+        // The textual package becomes a file next to the edit — only in code mode,
+        // which is where there is a working folder to receive the file.
         if (mode === 'phrases' && !scope.chat) {
           const packedFile = path.join(editDirFor(entries[0].file), 'takes_packed.md')
           recordToolWrite(packedFile)
@@ -296,9 +296,9 @@ export function createVideoTools(
           hasAudio: probe.audio.length > 0,
         })
         const inside = words.filter((w) => w.endMs > startMs && w.startMs < endMs)
-        // A imagem vai SEMPRE para a galeria. Antes ela existia só no contexto
-        // do modelo: não havia arquivo, URL nem item para mostrar depois, e o
-        // agente anunciava "aí está" com a conversa vazia.
+        // The image ALWAYS goes to the gallery. Before, it existed only in the model's
+        // context: there was no file, URL or item to show later, and the
+        // agent announced "here it is" with the conversation empty.
         const mediaUrl = await saveMedia(image, 'webp', {
           source: 'chat',
           sessionId: scope.sessionId,
@@ -309,9 +309,9 @@ export function createVideoTools(
           `Timeline of ${label} ${sec(startMs)}–${sec(endMs)} s.`,
           transcript ? '' : 'No transcript cached for this file — words are not shown and silence is not measured (run transcribe).',
           inside.length ? `Words: ${inside.map((w) => `${w.text}@${sec(w.startMs)}-${sec(w.endMs)}`).join(' ')}` : '',
-          // Sem transcrição não há como saber onde há fala: declarar a janela
-          // inteira como silêncio (o que a conta de lacunas fazia com zero
-          // palavras) era falso num vídeo com trilha.
+          // With no transcript there is no way to know where there is speech: declaring the whole
+          // window as silence (which is what the gap math did with zero
+          // words) was false in a video with a soundtrack.
           transcript
             ? silences.length
               ? `Silences ≥0.4s: ${silences.map((s) => `${sec(s.startMs)}–${sec(s.endMs)}`).join(', ')}`
@@ -322,7 +322,7 @@ export function createVideoTools(
             ? 'The sheet is attached to your reply — the user sees it.'
             : scope.canShow
               ? `The sheet is in the media gallery (${mediaUrl}) and is NOT in the user's chat: to show it, call show_image with this media ref.`
-              : // Worker: não tem show_image — quem mostra é a sessão principal.
+              : // Worker: it has no show_image — what shows is the main session.
                 `The sheet is in the media gallery (${mediaUrl}) and cannot be shown from this session: report this media ref so it can be shown with show_image.`,
         ]
           .filter(Boolean)
@@ -373,23 +373,23 @@ export function createVideoTools(
         if (!raw) throw new Error('pass the EDL inline (edl) or its JSON file (edlPath)')
         const resolved = await resolveEdl(raw, async (p) => (await mediaFile(p)).file)
         const firstSource = resolved.sources[resolved.ranges[0].source]
-        // A saída vai ao lado da fonte — a menos que a fonte seja um anexo (que
-        // mora no armazenamento do app) ou que estejamos no chat: aí vai para a
-        // pasta de saída desta conversa (chat) ou para edit/ do projeto (código).
+        // The output goes next to the source — unless the source is an attachment (which
+        // lives in the app's storage) or we are in the chat: then it goes to the
+        // output folder of this conversation (chat) or to the project's edit/ (code).
         const fromAttachment = path.relative(ctx.directory, firstSource).startsWith('..')
         const editDir = scope.chat
           ? path.join(ctx.directory, scope.chat.outputDir)
           : fromAttachment
             ? path.join(ctx.directory, 'edit')
             : editDirFor(firstSource)
-        // A pasta da edição inteira é escrita do turno (render, EDL, prévias).
+        // The whole edit folder is a write of the turn (render, EDL, previews).
         resolveWritePath(ctx, editDir)
-        // No chat cada vídeo final tem nome próprio (cada um é um item da
-        // galeria); a prévia é uma só, sobrescrita.
+        // In the chat each final video has its own name (each one is an item of the
+        // gallery); the preview is a single one, overwritten.
         const finalName = scope.chat ? `video-${Date.now().toString(36)}.mp4` : 'final.mp4'
         const outName = outputName(output, preview ? 'preview.mp4' : finalName)
         const result = await renderEdl(resolved, { editDir, outName, preview, language, signal: abortSignal })
-        // O EDL efetivo (com as bordas já encaixadas) fica ao lado: dá para refazer e revisar.
+        // The effective EDL (with the edges already snapped) stays next to it: it can be redone and reviewed.
         const planFile = path.join(editDir, `${path.parse(outName).name}.edl.json`)
         await fs.writeFile(
           planFile,
@@ -420,9 +420,9 @@ export function createVideoTools(
     }),
   }
 
-  // Modo plano: olhar e ler sim, escrever não — o render grava o vídeo.
+  // Plan mode: looking and reading yes, writing no — the render writes the video.
   if (scope.readOnly) delete tools.video_render
-  // Sem "Fala em texto" ligado não há motor: a tool de transcrição nem aparece.
+  // Without "Speech to text" on there is no engine: the transcription tool does not even appear.
   if (scope.sttEnabled === false) delete tools.transcribe
 
   if (scope.canShow) {

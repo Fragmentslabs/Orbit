@@ -4,9 +4,9 @@ on:
   push:
     tags:
       - "v*"
-  # Permite publicar a partir de uma tag que ja existe, sem mover a tag: empurrar a
-  # tag de novo reacenderia o workflow de Linux, reenviando os artefatos de Linux.
-  # Disparar este workflow com ref=homolog e build_ref=v0.1.4 builda a tag e publica.
+  # Allows publishing from a tag that already exists, without moving the tag: pushing the
+  # tag again would re-trigger the Linux workflow, re-uploading the Linux artifacts.
+  # Running this workflow with ref=homolog and build_ref=v0.1.4 builds the tag and publishes.
   workflow_dispatch:
     inputs:
       build_ref:
@@ -40,6 +40,6 @@ jobs:
         run: npm run desktop:build:windows:release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Sem isso, reexecutar o workflow mais de 2h depois da publicacao faz o
-          # electron-builder pular o upload em silencio (release "antiga" demais).
+          # Without this, re-running the workflow more than 2h after the publication makes
+          # electron-builder silently skip the upload (release too "old").
           EP_GH_IGNORE_TIME: "true"

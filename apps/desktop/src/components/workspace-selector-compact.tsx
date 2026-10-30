@@ -3,30 +3,30 @@ import { useTranslation } from "react-i18next"
 import { ChevronDown, ChevronRight, Folder, FolderGit2, GitBranch } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { BranchSelector } from "@/src/components/branch-selector"
-import { FolderSelector, getFolderName, useNomeDaPastaPrincipal } from "@/src/components/folder-selector"
-import { useRotuloWorktreeAtual, WorktreeSelector } from "@/src/components/worktree-selector"
+import { FolderSelector, getFolderName, useMainFolderName } from "@/src/components/folder-selector"
+import { useCurrentWorktreeLabel, WorktreeSelector } from "@/src/components/worktree-selector"
 import { useBranchStore } from "@/src/stores/branch-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Versão compacta de branch + pastas para containers estreitos (@container):
- * um único botão que abre um menu com dois atalhos ("Branch" e "Pastas"),
- * cada um abrindo o dropdown completo do respectivo componente (controlado
- * via open/onOpenChange/hideTrigger) ancorado neste mesmo wrapper.
+ * Compact version of branch + folders for narrow containers (@container):
+ * a single button that opens a menu with two shortcuts ("Branch" and "Folders"),
+ * each one opening the full dropdown of the respective component (controlled
+ * via open/onOpenChange/hideTrigger) anchored in this same wrapper.
  */
 export function CompactWorkspaceSelector({
   repoPath,
   folders,
   onFoldersChange,
   onRequestAgentAction,
-  sugestaoNomeWorktree,
+  suggestedWorktreeName,
 }: {
   repoPath?: string
   folders: string[]
   onFoldersChange: (folders: string[]) => void
   onRequestAgentAction?: (instruction: string) => void
-  /** Sugestão de nome para um worktree novo (título do chat) */
-  sugestaoNomeWorktree?: string
+  /** Name suggestion for a new worktree (chat title) */
+  suggestedWorktreeName?: string
 }) {
   const { t } = useTranslation()
   const byDir = useBranchStore((s) => (repoPath ? s.byDir[repoPath] : undefined))
@@ -36,9 +36,9 @@ export function CompactWorkspaceSelector({
   const [branchOpen, setBranchOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
   const [worktreeOpen, setWorktreeOpen] = useState(false)
-  // Null fora de repositório git: o atalho de worktree some do menu.
-  const worktreeAtual = useRotuloWorktreeAtual(folders[0])
-  const nomePrincipal = useNomeDaPastaPrincipal(folders[0])
+  // Null outside a git repository: the worktree shortcut disappears from the menu.
+  const currentWorktree = useCurrentWorktreeLabel(folders[0])
+  const mainName = useMainFolderName(folders[0])
 
   if (!repoPath && folders.length === 0) return null
 
@@ -56,10 +56,10 @@ export function CompactWorkspaceSelector({
           <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
           
             <Truncate>
-                <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
+                <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : mainName}</span>
             </Truncate>
-          {/* O botão compacto só mostra a pasta principal: o contador avisa
-              quantas pastas anexadas ficaram fora (hover lista os nomes). */}
+          {/* The compact button only shows the main folder: the counter tells
+              how many attached folders were left out (hover lists the names). */}
           {folders.length > 1 && (
             <span
               className="flex shrink-0 items-center gap-0.5 text-muted-foreground"
@@ -80,7 +80,7 @@ export function CompactWorkspaceSelector({
                 {t("branch.title")}
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
-                {/* max-w-16 corta quase qualquer nome real de branch aqui */}
+                {/* max-w-16 cuts almost any real branch name here */}
                 
                   <Truncate>
                       <span className="max-w-16 truncate" title={byDir?.current}>{byDir?.current}</span>
@@ -89,16 +89,16 @@ export function CompactWorkspaceSelector({
               </span>
             </DropdownMenuItem>
           )}
-          {folders[0] && worktreeAtual && (
+          {folders[0] && currentWorktree && (
             <DropdownMenuItem onClick={() => setWorktreeOpen(true)} className="justify-between">
               <span className="flex items-center gap-2">
                 <FolderGit2 className="size-3.5" />
-                {t("worktree.titulo")}
+                {t("worktree.title")}
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
                 
                   <Truncate>
-                      <span className="max-w-16 truncate" title={worktreeAtual}>{worktreeAtual}</span>
+                      <span className="max-w-16 truncate" title={currentWorktree}>{currentWorktree}</span>
                   </Truncate>
                 <ChevronRight className="size-3" />
               </span>
@@ -125,9 +125,9 @@ export function CompactWorkspaceSelector({
       )}
       {folders[0] && (
         <WorktreeSelector
-          pasta={folders[0]}
-          onTrocar={(pasta) => onFoldersChange([pasta, ...folders.slice(1)])}
-          sugestaoNome={sugestaoNomeWorktree}
+          folder={folders[0]}
+          onSwitch={(folder) => onFoldersChange([folder, ...folders.slice(1)])}
+          suggestedName={suggestedWorktreeName}
           open={worktreeOpen}
           onOpenChange={setWorktreeOpen}
           hideTrigger

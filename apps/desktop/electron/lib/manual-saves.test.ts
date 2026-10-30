@@ -9,10 +9,10 @@ import {
 } from './manual-saves'
 
 /**
- * O que está em jogo aqui é a honestidade do registro verificado. Subtrair de
- * menos faz o engine creditar ao agente um arquivo que a pessoa salvou à mão;
- * subtrair de mais esconde uma escrita real do agente, que é pior — é
- * exatamente a alegação falsa que a verificação existe para pegar.
+ * What is at stake here is the honesty of the verified record. Subtracting too
+ * little makes the engine credit the agent with a file the person saved by hand;
+ * subtracting too much hides a real write by the agent, which is worse — it is
+ * exactly the false claim the verification exists to catch.
  */
 
 const root = path.resolve('/repo')
@@ -20,81 +20,81 @@ const root = path.resolve('/repo')
 beforeEach(resetManualSaves)
 
 describe('manualSavesUnder', () => {
-  it('devolve o caminho relativo com separador do git', () => {
+  it('returns the relative path with the git separator', () => {
     recordManualSave(path.join(root, 'src', 'app.ts'))
     expect(manualSavesUnder(root)).toEqual(new Set(['src/app.ts']))
   })
 
-  it('ignora o que foi salvo fora do diretório do turno', () => {
-    // Duas pastas abertas no workspace, um turno só: o save na outra pasta não
-    // pode sumir do veredito deste.
-    recordManualSave(path.join(root, 'dentro.ts'))
-    recordManualSave(path.resolve('/outro', 'fora.ts'))
-    expect(manualSavesUnder(root)).toEqual(new Set(['dentro.ts']))
+  it('ignores what was saved outside the turn directory', () => {
+    // Two folders open in the workspace, a single turn: the save in the other folder cannot
+    // vanish from this one's verdict.
+    recordManualSave(path.join(root, 'inside.ts'))
+    recordManualSave(path.resolve('/other', 'outside.ts'))
+    expect(manualSavesUnder(root)).toEqual(new Set(['inside.ts']))
   })
 
-  it('não confunde pasta irmã de prefixo parecido', () => {
-    recordManualSave(path.resolve('/repo-legado', 'a.ts'))
+  it('does not confuse a sibling folder with a similar prefix', () => {
+    recordManualSave(path.resolve('/repo-legacy', 'a.ts'))
     expect(manualSavesUnder(root).size).toBe(0)
   })
 
-  it('conta só os saves desde o começo do turno — e não apaga os de outro turno', () => {
-    recordManualSave(path.join(root, 'antes.ts'), 1_000)
-    recordManualSave(path.join(root, 'durante.ts'), 2_000)
-    // Turno que começou em 1500 vê só o save de 2000; um que começou antes vê os dois.
-    expect(manualSavesUnder(root, 1_500)).toEqual(new Set(['durante.ts']))
-    expect(manualSavesUnder(root, 500)).toEqual(new Set(['antes.ts', 'durante.ts']))
+  it('counts only the saves since the start of the turn — and does not delete those of another turn', () => {
+    recordManualSave(path.join(root, 'before.ts'), 1_000)
+    recordManualSave(path.join(root, 'during.ts'), 2_000)
+    // A turn that started at 1500 sees only the save at 2000; one that started earlier sees both.
+    expect(manualSavesUnder(root, 1_500)).toEqual(new Set(['during.ts']))
+    expect(manualSavesUnder(root, 500)).toEqual(new Set(['before.ts', 'during.ts']))
   })
 })
 
 describe('stripFilesFromPatch', () => {
   const patch = [
-    'diff --git a/src/agente.ts b/src/agente.ts',
+    'diff --git a/src/agent.ts b/src/agent.ts',
     'index 111..222 100644',
-    '--- a/src/agente.ts',
-    '+++ b/src/agente.ts',
+    '--- a/src/agent.ts',
+    '+++ b/src/agent.ts',
     '@@ -1 +1 @@',
-    '-antigo',
-    '+novo',
-    'diff --git a/src/usuario.ts b/src/usuario.ts',
+    '-old',
+    '+new',
+    'diff --git a/src/user.ts b/src/user.ts',
     'index 333..444 100644',
-    '--- a/src/usuario.ts',
-    '+++ b/src/usuario.ts',
+    '--- a/src/user.ts',
+    '+++ b/src/user.ts',
     '@@ -1 +1 @@',
-    '-meu antigo',
-    '+meu novo',
+    '-my old',
+    '+my new',
     '',
   ].join('\n')
 
-  it('remove só a seção do arquivo excluído', () => {
-    const result = stripFilesFromPatch(patch, new Set(['src/usuario.ts']))
-    expect(result).toContain('a/src/agente.ts')
-    expect(result).not.toContain('a/src/usuario.ts')
-    expect(result).not.toContain('meu novo')
-    expect(result).toContain('+novo')
+  it('removes only the section of the excluded file', () => {
+    const result = stripFilesFromPatch(patch, new Set(['src/user.ts']))
+    expect(result).toContain('a/src/agent.ts')
+    expect(result).not.toContain('a/src/user.ts')
+    expect(result).not.toContain('my new')
+    expect(result).toContain('+new')
   })
 
-  it('devolve o patch intacto quando não há o que excluir', () => {
+  it('returns the patch intact when there is nothing to exclude', () => {
     expect(stripFilesFromPatch(patch, new Set())).toBe(patch)
   })
 
-  it('esvazia quando todos os arquivos eram do usuário', () => {
-    const excluded = new Set(['src/agente.ts', 'src/usuario.ts'])
+  it('empties when all the files belonged to the user', () => {
+    const excluded = new Set(['src/agent.ts', 'src/user.ts'])
     expect(stripFilesFromPatch(patch, excluded)).toBe('')
   })
 
-  it('não corta em linha de conteúdo que parece cabeçalho', () => {
-    // Uma linha do CORPO do diff sempre vem prefixada (' ', '+', '-'), então
-    // um "diff --git" dentro do código não pode ser lido como fronteira.
-    const comArmadilha = [
+  it('does not cut on a content line that looks like a header', () => {
+    // A line from the BODY of the diff always comes prefixed (' ', '+', '-'), so
+    // a "diff --git" inside the code cannot be read as a boundary.
+    const trap = [
       'diff --git a/doc.md b/doc.md',
       '--- a/doc.md',
       '+++ b/doc.md',
       '@@ -1 +1,2 @@',
-      ' texto',
-      '+diff --git a/falso b/falso',
+      ' text',
+      '+diff --git a/fake b/fake',
       '',
     ].join('\n')
-    expect(stripFilesFromPatch(comArmadilha, new Set(['outro.ts']))).toBe(comArmadilha)
+    expect(stripFilesFromPatch(trap, new Set(['other.ts']))).toBe(trap)
   })
 })

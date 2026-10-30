@@ -7,17 +7,17 @@ import * as memory from '../memory/service'
 import type { ToolContext } from './context'
 
 /**
- * Ferramentas de memória do modo Brain — adapters finos sobre o memory service.
+ * Brain mode memory tools — thin adapters over the memory service.
  * Chat: memory_save / memory_search / memory_link / memory_open.
- * Code: memory_save (com category e doc opcional) / memory_search / memory_open,
- *       isoladas por projeto (projectId derivado do directory — nunca do modelo).
+ * Code: memory_save (with category and optional doc) / memory_search / memory_open,
+ *       isolated per project (projectId derived from the directory — never from the model).
  */
 
 /**
- * Enriquecimento de busca, oferecido aos dois memory_save (chat e código) e ao
- * memory_update. Tudo opcional: quem chama o modelo já tem o texto, então
- * preencher custa poucos tokens e evita uma segunda passada de LLM só para
- * indexar. O que não vier é derivado do texto (memory-retrieval.ts).
+ * Search enrichment, offered to both memory_save (chat and code) and
+ * memory_update. All optional: whoever calls the model already has the text, so
+ * filling it in costs few tokens and avoids a second LLM pass just to
+ * index. What does not come is derived from the text (memory-retrieval.ts).
  */
 const ENRICHMENT = z.object({
   title: z.string().optional().describe('Short descriptive title (3-8 words)'),
@@ -35,18 +35,18 @@ const ENRICHMENT = z.object({
 
 function describe(m: Memory): string {
   const kind = m.kind === 'project' ? `project/${m.category}` : m.kind
-  // Só aparece quando foi escolhido: o padrão do kind já é implícito, e
-  // imprimir "scope=chat" em toda memória de conversa é ruído.
+  // It only appears when it was chosen: the kind's default is already implicit, and
+  // printing "scope=chat" on every conversation memory is noise.
   const scope = m.scope && m.scope !== defaultScopeOf(m.kind, m.category) ? ` scope=${m.scope}` : ''
   const area = m.area ? ` area=${m.area}` : ''
   const sub = m.subproject ? ` sub=${m.subproject}` : ''
   const doc = m.hasDoc ? ' (doc attached — use memory_open to read it)' : ''
   const tags = m.tags.length ? ` tags: ${m.tags.join(', ')}` : ''
-  // A vizinhança entra no describe de propósito: é lendo daqui que o agente
-  // descobre a que nó pendurar a próxima memória, em vez de criar uma solta.
+  // The neighborhood goes into the describe on purpose: it is by reading from here that the agent
+  // finds out which node to hang the next memory on, instead of creating a loose one.
   const links = m.relatedIds.length ? ` linked to: ${m.relatedIds.join(', ')}` : ' NO CONNECTIONS'
-  // O título é a manchete escolhida para esta memória — cinco palavras que
-  // dizem o que o texto às vezes leva três linhas para dizer.
+  // The title is the headline chosen for this memory — five words that
+  // say what the text sometimes takes three lines to say.
   const title = m.title ? `${m.title} — ` : ''
   return `#${m.id} [${kind}]${scope}${area}${sub} (weight ${m.weight.toFixed(2)}, hits ${m.hits}) ${title}${m.text}${tags}${doc}${links}`
 }
@@ -57,7 +57,7 @@ function saveReply(result: { id: string; merged: boolean; text: string }): strin
     : `Memory #${result.id} saved.`
 }
 
-/** Rótulo de um nó no esqueleto da árvore devolvido ao agente. */
+/** Label of a node in the tree skeleton returned to the agent. */
 function treeLine(node: memory.TreeNodeSummary): string {
   const indent = '  '.repeat(Math.min(node.depth, 6))
   const tag = node.area ? `[${node.area}]` : node.category ? `[${node.category}]` : ''
@@ -72,9 +72,9 @@ function treeReply(nodes: memory.TreeNodeSummary[]): string {
 }
 
 /**
- * Uma memória de projeto criada sem pai fica órfã no canvas e invisível para a
- * navegação do grafo. Quando a árvore já existe, recusamos o save e devolvemos
- * o esqueleto — o agente escolhe o pai e repete a chamada.
+ * A project memory created without a parent stays orphaned in the canvas and invisible to
+ * graph navigation. When the tree already exists, we refuse the save and return
+ * the skeleton — the agent picks the parent and repeats the call.
  */
 async function requireParent(projectId: string, relatedIds: string[] | undefined): Promise<string | null> {
   if (relatedIds && relatedIds.length > 0) return null
@@ -94,20 +94,20 @@ function searchReply(results: Memory[]): string {
   return results.map(describe).join('\n')
 }
 
-/** Idade em dias, para os relatórios de manutenção. */
-function dias(desde: number): number {
-  return Math.floor((Date.now() - desde) / (24 * 60 * 60 * 1000))
+/** Age in days, for the maintenance reports. */
+function daysAgo(since: number): number {
+  return Math.floor((Date.now() - since) / (24 * 60 * 60 * 1000))
 }
 
 /**
- * Lista por USO, não por relevância — é o que a manutenção precisa: a busca
- * léxica esconde justamente as memórias esquecidas, que não casam com nenhum
- * termo. Ordena da menos usada e mais antiga para a mais viva.
+ * Lists by USE, not by relevance — it is what maintenance needs: lexical
+ * search hides exactly the forgotten memories, which match no
+ * term. It orders from the least used and oldest to the most alive.
  *
- * No modo chat (sem projectId) o conhecimento de código fica de fora por
- * padrão, igual ao memory_search: enumerar não é o mesmo que consultar, mas o
- * agente conversacional não deveria topar com memórias de projeto sem pedir.
- * A rotina de consolidação pede — é ela que passa includeProjectMemories.
+ * In chat mode (no projectId) code knowledge stays out by
+ * default, like memory_search: enumerating is not the same as querying, but the
+ * conversational agent should not run into project memories without asking.
+ * The consolidation routine asks for it — that is what passes includeProjectMemories.
  */
 function createListTool(projectIdOf?: () => Promise<string>) {
   return tool({
@@ -135,39 +135,39 @@ function createListTool(projectIdOf?: () => Promise<string>) {
     }),
     execute: async ({ kind, category, maxHits, minAgeDays, onlyOrphans, includeProjectMemories, limit }) => {
       const projectId = projectIdOf ? await projectIdOf() : undefined
-      const todas = await memory.list()
-      const agora = Date.now()
-      const ids = new Set(todas.map((m) => m.id))
-      const filtradas = todas
+      const all = await memory.list()
+      const now = Date.now()
+      const ids = new Set(all.map((m) => m.id))
+      const filtered = all
         .filter((m) => {
-          if (m.expiresAt != null && m.expiresAt < agora) return false
-          // Proposta da rotina ainda não é memória: não aparece para o agente.
+          if (m.expiresAt != null && m.expiresAt < now) return false
+          // A routine proposal is not memory yet: it does not show up to the agent.
           if (m.proposed) return false
           if (kind && m.kind !== kind) return false
           if (category && m.category !== category) return false
-          // Escopo do projeto quando a ferramenta roda no modo código: sem
-          // isto a limpeza de um projeto alcançaria memórias de outro.
-          // Modo código: só o projeto atual. Modo chat: nada de código, a menos
-          // que a chamada peça explicitamente.
+          // Project scope when the tool runs in code mode: without
+          // this a project's cleanup would reach another one's memories.
+          // Code mode: only the current project. Chat mode: no code at all, unless
+          // the call explicitly asks for it.
           if (projectId) {
             if (m.kind === 'project' && m.projectId !== projectId) return false
           } else if (!includeProjectMemories && !visibleIn(m, 'chat')) {
             return false
           }
           if (maxHits != null && m.hits > maxHits) return false
-          if (minAgeDays != null && dias(m.createdAt) < minAgeDays) return false
+          if (minAgeDays != null && daysAgo(m.createdAt) < minAgeDays) return false
           if (onlyOrphans && m.relatedIds.some((r) => ids.has(r))) return false
           return true
         })
         .sort((a, b) => a.hits - b.hits || a.createdAt - b.createdAt)
         .slice(0, limit ?? 30)
 
-      if (filtradas.length === 0) return 'No memories match these criteria.'
+      if (filtered.length === 0) return 'No memories match these criteria.'
       return [
-        `${filtradas.length} memory(ies), least used first:`,
-        ...filtradas.map((m) => {
-          const usoRecente = m.lastHitAt ? `, last used ${dias(m.lastHitAt)}d ago` : ', never used'
-          return `${describe(m)} — created ${dias(m.createdAt)}d ago${usoRecente}`
+        `${filtered.length} memory(ies), least used first:`,
+        ...filtered.map((m) => {
+          const lastUsed = m.lastHitAt ? `, last used ${daysAgo(m.lastHitAt)}d ago` : ', never used'
+          return `${describe(m)} — created ${daysAgo(m.createdAt)}d ago${lastUsed}`
         }),
       ].join('\n')
     },
@@ -175,9 +175,9 @@ function createListTool(projectIdOf?: () => Promise<string>) {
 }
 
 /**
- * Exclusão de memória. Menos grave que apagar um chat (não há conteúdo do
- * usuário aqui, só o que o agente resumiu), mas ainda é definitivo: o
- * documento anexado e os backlinks das vizinhas vão junto.
+ * Memory deletion. Less serious than deleting a chat (there is no user
+ * content here, only what the agent summarized), but still definitive: the
+ * attached document and the neighbors' backlinks go along with it.
  */
 function createDeleteTool() {
   return tool({
@@ -189,24 +189,24 @@ function createDeleteTool() {
     ].join(' '),
     inputSchema: z.object({
       ids: z.array(z.string()).min(1).max(50).describe('Memory ids (from memory_list / memory_search)'),
-      motivo: z
+      reason: z
         .string()
         .min(10)
         .describe('Why these specific memories should cease to exist. Written out so the choice is deliberate.'),
     }),
-    execute: async ({ ids, motivo }) => {
-      const linhas: string[] = []
-      let apagadas = 0
+    execute: async ({ ids, reason }) => {
+      const lines: string[] = []
+      let deleted = 0
       for (const id of ids) {
         const existente = await memory.getFull(id)
         if (!existente) {
-          linhas.push(`#${id}: not found`)
+          lines.push(`#${id}: not found`)
           continue
         }
         await memory.remove(id)
-        apagadas++
+        deleted++
       }
-      return [`${apagadas} memory(ies) deleted. Reason: ${motivo}`, ...linhas].join('\n')
+      return [`${deleted} memory(ies) deleted. Reason: ${reason}`, ...lines].join('\n')
     },
   })
 }
@@ -264,10 +264,10 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         const result = await memory.save({
           text,
           kind: resolvedKind,
-          // Só "general" escolhe onde vale: core e seasonal são conversa por
-          // definição, e o padrão do kind já os prende ao chat.
+          // Only "general" chooses where it applies: core and seasonal are conversation by
+          // definition, and the kind's default already ties them to the chat.
           scope: resolvedKind === 'general' ? (scope ?? 'chat') : undefined,
-          // E só ele carrega categoria: os outros dois não são conhecimento.
+          // And only it carries a category: the other two are not knowledge.
           category: resolvedKind === 'general' ? category : undefined,
           weight,
           tags,
@@ -295,8 +295,8 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         const results = await memory.search({
           query,
           kinds: kind ? [kind] : ['core', 'seasonal', 'general'],
-          // O chat nunca vê conhecimento de código, mesmo quando ele está
-          // gravado como kind="general" (é o caso dos aprendizados).
+          // The chat never sees code knowledge, even when it is
+          // stored as kind="general" (that is the case of learnings).
           mode: 'chat',
           limit,
         })
@@ -354,9 +354,9 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
 }
 
 /**
- * Escopo de memória da pasta da sessão, resolvido uma vez por conjunto de
- * ferramentas. É o projeto da pasta mãe quando ela já tem árvore — ver
- * resolveProjectScope — e não o projectIdOf da pasta crua.
+ * Memory scope of the session's folder, resolved once per tool set.
+ * It is the parent folder's project when it already has a tree — see
+ * resolveProjectScope — and not the projectIdOf of the raw folder.
  */
 function scopeResolver(ctx: ToolContext): () => Promise<memory.ProjectScope> {
   let pending: Promise<memory.ProjectScope> | undefined
@@ -479,7 +479,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         const result = await memory.save({
           text,
           kind: resolvedKind,
-          // Só "general" escolhe onde vale; "project" já é código por natureza.
+          // Only "general" chooses where it applies; "project" is already code by nature.
           scope: resolvedKind === 'general' ? (savedScope ?? 'code') : undefined,
           category,
           area: resolvedKind === 'project' ? area : undefined,
@@ -494,9 +494,9 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           entities,
           keywords,
           concepts,
-          // Sempre enviado: define o projeto em memórias "project" e registra a
-          // origem nas "general", para o canvas ancorá-las na árvore certa. É
-          // a raiz do escopo: numa subpasta, a memória entra na árvore da mãe.
+          // Always sent: it defines the project in "project" memories and records the
+          // origin in the "general" ones, so the canvas anchors them in the right tree. It is
+          // the scope root: in a subfolder, the memory enters the parent's tree.
           directory: (await scope()).directory,
           sessionId: input.sessionId,
         })
@@ -543,8 +543,8 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           if (!updated) return `Memory #${id} not found.`
           return `Memory #${id} updated: ${describe(updated)}`
         } catch (err) {
-          // Reclassificação inválida volta como texto para o agente corrigir a
-          // chamada, em vez de derrubar o turno com uma exceção.
+          // An invalid reclassification comes back as text so the agent can correct the
+          // call, instead of bringing the turn down with an exception.
           return `Error: ${err instanceof Error ? err.message : String(err)}`
         }
       },

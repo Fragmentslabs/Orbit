@@ -1,36 +1,36 @@
 import type { SessionInfo } from './chat'
 
 /**
- * Arquivamento e exclusão de conversas arquivadas.
+ * Archiving and deletion of archived conversations.
  *
- * Toda mudança de `archived` passa por `setArchivedState`, para `archivedAt`
- * acompanhar: é dele que a exclusão automática conta o prazo, e não de
- * `updatedAt` — arquivar à mão uma conversa parada há meses não pode fazê-la
- * sumir no mesmo instante.
+ * Every change of `archived` goes through `setArchivedState`, so that `archivedAt`
+ * follows: it is from it that the automatic deletion counts the deadline, and not from
+ * `updatedAt` — archiving by hand a conversation that has been idle for months cannot make it
+ * vanish on the spot.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** A sessão com o arquivamento ligado/desligado; `archivedAt` acompanha. */
+/** The session with archiving on/off; `archivedAt` follows. */
 export function setArchivedState<T extends SessionInfo>(session: T, archived: boolean, now = Date.now()): T {
   if (session.archived === archived) return session
   return { ...session, archived, archivedAt: archived ? now : null }
 }
 
 export interface ArchivedCleanupPlan {
-  /** Arquivadas há mais do que o prazo: podem ser excluídas. */
+  /** Archived for longer than the deadline: they can be deleted. */
   expired: SessionInfo[]
   /**
-   * Arquivadas antes de `archivedAt` existir: o prazo começa agora (ganham a
-   * data atual), em vez de saírem de uma vez assim que a opção é ligada.
+   * Archived before `archivedAt` existed: the deadline starts now (they get the
+   * current date), instead of going away at once as soon as the option is turned on.
    */
   undated: SessionInfo[]
 }
 
 /**
- * O que a exclusão automática faz com as conversas arquivadas. Ficam de fora as
- * fixadas, as que estão respondendo e os workers de orquestração (saem junto
- * com o orquestrador, na cascata de exclusão).
+ * What the automatic cleanup does with archived conversations. Left out are the
+ * pinned ones, the ones that are answering and the orchestration workers (they
+ * go away with the orchestrator, in the deletion cascade).
  */
 export function planArchivedCleanup(
   sessions: SessionInfo[],

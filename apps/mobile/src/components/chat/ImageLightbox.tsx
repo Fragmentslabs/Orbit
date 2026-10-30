@@ -1,9 +1,9 @@
-/* eslint-disable react-hooks/refs -- `base` é lido dentro dos callbacks do
- * react-native-gesture-handler (.onStart/.onUpdate), que rodam no gesto e
- * nunca durante o render. A regra não consegue provar isso e marca qualquer
- * acesso a ref em função criada no render — envolver em useMemo não muda o
- * diagnóstico (testado). A alternativa, virar estado, dispararia um render
- * por quadro do pinch/pan, que é exatamente o que o ref evita aqui. */
+/* eslint-disable react-hooks/refs -- `base` is read inside the react-native-gesture-handler
+ * callbacks (.onStart/.onUpdate), which run during the gesture and
+ * never during render. The rule cannot prove that and flags any
+ * access to a ref inside a function created during render — wrapping it in useMemo does not change the
+ * diagnosis (tested). The alternative, making it state, would trigger a render
+ * per pinch/pan frame, which is exactly what the ref avoids here. */
 import { useCallback, useRef, useState } from 'react'
 import { Modal, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -28,10 +28,10 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 /**
- * Lightbox fullscreen para imagens do chat — espelho do ImageLightbox do
- * desktop (abrir num viewer em tela cheia), com o extra nativo de zoom:
- * pinch/arrastar e double-tap. O toque simples fecha (ou reenquadra quando
- * ampliado); o X fecha direto.
+ * Fullscreen lightbox for chat images — mirror of the desktop ImageLightbox
+ * (open in a fullscreen viewer), with the native extra of zoom:
+ * pinch/drag and double-tap. A single tap closes (or reframes when
+ * zoomed in); the X closes directly.
  */
 export function ImageLightbox({ src, alt, open, onOpenChange }: {
   src: string
@@ -46,7 +46,7 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: MIN_SCALE })
   const base = useRef<Transform>({ x: 0, y: 0, k: MIN_SCALE })
 
-  // Fecha e reenquadra — na próxima abertura o viewer volta em 1x.
+  // Closes and reframes — on the next opening the viewer comes back at 1x.
   const close = useCallback(() => {
     setTransform({ x: 0, y: 0, k: MIN_SCALE })
     onOpenChange(false)
@@ -91,7 +91,7 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
     })
     .onUpdate((e) => {
       const b = base.current
-      // Sem zoom não há para onde arrastar — deixa o enquadramento fixo.
+      // Without zoom there is nowhere to drag — leave the framing fixed.
       if (b.k <= MIN_SCALE) return
       setTransform({ ...b, x: b.x + e.translationX, y: b.y + e.translationY })
     })
@@ -117,7 +117,7 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
     .maxDistance(24)
     .onEnd((_e, success) => {
       if (!success) return
-      // Ampliado → primeiro toque reenquadra; em 1x → fecha.
+      // Zoomed in → the first tap reframes; at 1x → closes.
       if (transform.k > MIN_SCALE) {
         setTransform({ x: 0, y: 0, k: MIN_SCALE })
       } else {
@@ -125,7 +125,7 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
       }
     })
 
-  // Single tap espera o double tap; pinch/pan rodam em paralelo.
+  // Single tap waits for the double tap; pinch/pan run in parallel.
   const taps = Gesture.Exclusive(doubleTap, singleTap)
   const composed = Gesture.Simultaneous(pinch, pan, taps)
 

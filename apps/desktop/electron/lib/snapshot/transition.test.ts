@@ -4,10 +4,10 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Transição S/E/C por caminho — o revert que não toca no resto da pasta.
+ * S/E/C transition per path — the revert that does not touch the rest of the folder.
  *
- * S = estado antes do turno, E = estado depois, C = worktree agora. Cada caso
- * aqui é uma resposta a "outra conversa mexeu nesse arquivo depois do turno?".
+ * S = state before the turn, E = state after, C = worktree now. Each case
+ * here is an answer to "another conversation touched this file after the turn?".
  */
 const userData = path.join(os.tmpdir(), `orbit-transition-${process.pid}`)
 
@@ -25,8 +25,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  // O gc da captura é fire-and-forget: sem esperar, ele ainda estaria de pé
-  // quando o temporário fosse apagado.
+  // The capture gc is fire-and-forget: without waiting, it would still be running
+  // when the temp folder was deleted.
   await new Promise((resolve) => setTimeout(resolve, 80))
   await fs.rm(root, { recursive: true, force: true })
 })
@@ -48,7 +48,7 @@ async function exists(rel: string): Promise<boolean> {
 }
 
 describe('transition', () => {
-  it('devolve um arquivo modificado ao conteúdo do turno anterior', async () => {
+  it('gives a modified file back to the content of the previous turn', async () => {
     await write('a.txt', 'um')
     const start = await capture(root)
     await write('a.txt', 'dois')
@@ -60,55 +60,55 @@ describe('transition', () => {
     expect(await read('a.txt')).toBe('um')
   })
 
-  it('apaga o arquivo criado pelo turno e devolve o que ele apagou', async () => {
+  it('deletes the file created by the turn and gives back what it deleted', async () => {
     await write('apagado.txt', 'volta')
     const start = await capture(root)
-    await write('novo.txt', 'criado')
+    await write('new.txt', 'created')
     await fs.rm(path.join(root, 'apagado.txt'))
     const end = await capture(root)
 
     const result = await transition(root, end, start)
 
-    expect(result.applied.sort()).toEqual(['apagado.txt', 'novo.txt'])
-    expect(await exists('novo.txt')).toBe(false)
+    expect(result.applied.sort()).toEqual(['apagado.txt', 'new.txt'])
+    expect(await exists('new.txt')).toBe(false)
     expect(await read('apagado.txt')).toBe('volta')
   })
 
-  it('NÃO toca no arquivo que outra conversa mudou depois do turno', async () => {
-    await write('a.txt', 'antes')
+  it('does NOT touch the file another conversation changed after the turn', async () => {
+    await write('a.txt', 'before')
     const start = await capture(root)
     await write('a.txt', 'turno')
     const end = await capture(root)
-    // Depois do turno, outra conversa (ou o usuário fora do Orbit) escreve.
-    await write('a.txt', 'outra conversa')
+    // After the turn, another conversation (or the user outside Orbit) writes.
+    await write('a.txt', 'another conversation')
 
     const result = await transition(root, end, start)
 
     expect(result.applied).toEqual([])
     expect(result.conflicts).toEqual(['a.txt'])
-    expect(await read('a.txt')).toBe('outra conversa')
+    expect(await read('a.txt')).toBe('another conversation')
   })
 
-  it('nome com [ ] é caminho literal: não restaura o vizinho que o padrão casaria', async () => {
-    // Rota dinâmica do Next.js: como padrão, `app/[id]/page.tsx` casa
-    // `app/i/page.tsx` — que aqui mudou depois do turno e é conflito.
-    await write('app/[id]/page.tsx', 'antes')
-    await write('app/i/page.tsx', 'antes')
+  it('a name with [ ] is a literal path: it does not restore the neighbor the pattern would match', async () => {
+    // Next.js dynamic route: by default, `app/[id]/page.tsx` matches
+    // `app/i/page.tsx` — which here changed after the turn and is a conflict.
+    await write('app/[id]/page.tsx', 'before')
+    await write('app/i/page.tsx', 'before')
     const start = await capture(root)
     await write('app/[id]/page.tsx', 'turno')
     await write('app/i/page.tsx', 'turno')
     const end = await capture(root)
-    await write('app/i/page.tsx', 'outra conversa')
+    await write('app/i/page.tsx', 'another conversation')
 
     const result = await transition(root, end, start)
 
     expect(result.applied).toEqual(['app/[id]/page.tsx'])
     expect(result.conflicts).toEqual(['app/i/page.tsx'])
-    expect(await read('app/[id]/page.tsx')).toBe('antes')
-    expect(await read('app/i/page.tsx')).toBe('outra conversa')
+    expect(await read('app/[id]/page.tsx')).toBe('before')
+    expect(await read('app/i/page.tsx')).toBe('another conversation')
   })
 
-  it('nome com espaço no fim é o nome do arquivo, não lixo para aparar', async () => {
+  it('a name with a trailing space is the file name, not junk to trim', async () => {
     const start = await capture(root)
     await write('nota ', 'do turno')
     const end = await capture(root)
@@ -119,13 +119,13 @@ describe('transition', () => {
     expect(await exists('nota ')).toBe(false)
   })
 
-  it('apagar o arquivo criado leva junto só as pastas que ficaram vazias', async () => {
-    await write('src/existente.ts', 'fica')
+  it('deleting the created file takes with it only the folders left empty', async () => {
+    await write('src/existente.ts', 'stays')
     const start = await capture(root)
     await write('src/novo/fundo/a.ts', 'do turno')
     await write('src/outro/b.ts', 'do turno')
     const end = await capture(root)
-    // Alguém pôs um arquivo numa das pastas novas depois do turno.
+    // Someone put a file in one of the new folders after the turn.
     await write('src/outro/de-fora.ts', 'externo')
 
     await transition(root, end, start)
@@ -135,9 +135,9 @@ describe('transition', () => {
     expect(await exists('src/existente.ts')).toBe(true)
   })
 
-  it('`paths` limita a transição aos caminhos dados', async () => {
-    await write('a.txt', 'antes')
-    await write('b.txt', 'antes')
+  it('`paths` limits the transition to the given paths', async () => {
+    await write('a.txt', 'before')
+    await write('b.txt', 'before')
     const start = await capture(root)
     await write('a.txt', 'turno')
     await write('b.txt', 'turno')
@@ -146,34 +146,34 @@ describe('transition', () => {
     const result = await transition(root, end, start, { paths: ['a.txt'] })
 
     expect(result.applied).toEqual(['a.txt'])
-    expect(await read('a.txt')).toBe('antes')
+    expect(await read('a.txt')).toBe('before')
     expect(await read('b.txt')).toBe('turno')
   })
 
-  it('não apaga o arquivo criado pelo turno que foi editado depois', async () => {
+  it('does not delete the file created by the turn that was edited later', async () => {
     const start = await capture(root)
-    await write('novo.txt', 'do turno')
+    await write('new.txt', 'do turno')
     const end = await capture(root)
-    await write('novo.txt', 'editado depois')
+    await write('new.txt', 'edited later')
 
     const result = await transition(root, end, start)
 
-    expect(result.conflicts).toEqual(['novo.txt'])
-    expect(await read('novo.txt')).toBe('editado depois')
+    expect(result.conflicts).toEqual(['new.txt'])
+    expect(await read('new.txt')).toBe('edited later')
   })
 
-  it('turno sem escrita não mexe em nada', async () => {
-    await write('a.txt', 'estável')
+  it('a turn with no write touches nothing', async () => {
+    await write('a.txt', 'stable')
     const start = await capture(root)
     const end = await capture(root)
 
     const result = await transition(root, end, start)
 
     expect(result).toEqual({ applied: [], conflicts: [], already: [] })
-    expect(await read('a.txt')).toBe('estável')
+    expect(await read('a.txt')).toBe('stable')
   })
 
-  it('symlink volta ao alvo anterior (hash de symlink, não de arquivo seguido)', async () => {
+  it('a symlink goes back to the previous target (symlink hash, not of the followed file)', async () => {
     await write('um.txt', 'um')
     await write('dois.txt', 'dois')
     await fs.symlink('um.txt', path.join(root, 'link'))
@@ -188,30 +188,30 @@ describe('transition', () => {
     expect(await fs.readlink(path.join(root, 'link'))).toBe('um.txt')
   })
 
-  it('caminhos pulados (save manual do painel) viram conflito, preservados', async () => {
-    await write('a.txt', 'antes')
-    await write('manual.txt', 'antes')
+  it('skipped paths (manual panel save) become a conflict, preserved', async () => {
+    await write('a.txt', 'before')
+    await write('manual.txt', 'before')
     const start = await capture(root)
     await write('a.txt', 'turno')
-    await write('manual.txt', 'salvo à mão')
+    await write('manual.txt', 'saved by hand')
     const end = await capture(root)
 
     const result = await transition(root, end, start, { skip: new Set(['manual.txt']) })
 
     expect(result.applied).toEqual(['a.txt'])
     expect(result.conflicts).toEqual(['manual.txt'])
-    expect(await read('a.txt')).toBe('antes')
-    expect(await read('manual.txt')).toBe('salvo à mão')
+    expect(await read('a.txt')).toBe('before')
+    expect(await read('manual.txt')).toBe('saved by hand')
   })
 
-  it('unrevert: só devolve o caminho que ainda está no estado deixado pelo revert', async () => {
-    await write('a.txt', 'antes')
+  it('unrevert: only gives back the path that is still in the state left by the revert', async () => {
+    await write('a.txt', 'before')
     const start = await capture(root)
     await write('a.txt', 'turno')
     const end = await capture(root)
     await transition(root, end, start)
     const afterRevert = await capture(root)
-    // Alguém mexe entre o revert e o unrevert.
+    // Someone writes between the revert and the unrevert.
     await write('a.txt', 'novidade')
 
     const result = await transition(root, afterRevert, end)
@@ -220,7 +220,7 @@ describe('transition', () => {
     expect(await read('a.txt')).toBe('novidade')
   })
 
-  it('diffPaths mostra só o diff dos caminhos aplicados', async () => {
+  it('diffPaths shows only the diff of the applied paths', async () => {
     await write('a.txt', 'um')
     await write('b.txt', 'um')
     const start = await capture(root)

@@ -10,56 +10,56 @@ import {
 } from "./capabilities"
 
 /**
- * As três sugestões da tela inicial.
+ * The three suggestions of the start screen.
  *
- * A regra que importa: cada pill é sustentada por um fato que já está em
- * memória — uma sessão anterior, uma pasta de trabalho, o que a galeria diz
- * que a pessoa nunca produziu. Nada aqui consulta rede ou disco: é função
- * pura, testável, e a tela inicial continua instantânea.
+ * The rule that matters: each pill is backed by a fact that is already in
+ * memory — a previous session, a working folder, what the gallery says
+ * the person has never produced. Nothing here queries the network or disk: it is a pure
+ * function, testable, and the start screen stays instant.
  */
 
 export type StartAction =
-  /** Abre uma sessão existente. Navegação, não mensagem. */
+  /** Opens an existing session. Navigation, not a message. */
   | { kind: "open"; sessionId: string; mode: SessionMode }
-  /** Preenche o composer. Quem aperta Enter é a pessoa. */
+  /** Fills the composer. The person is the one who presses Enter. */
   | { kind: "fill"; text: string }
 
 export interface StartSuggestion {
-  /** Estável no dia — é o que o React usa como key e o teste como assinatura. */
+  /** Stable during the day — it is what React uses as key and the test as signature. */
   id: string
   capability?: CapabilityId
   label: string
   action: StartAction
-  /** Capacidade de uma família que a pessoa ainda não produziu. */
+  /** Capability of a family the person has not produced yet. */
   fresh: boolean
 }
 
 export interface StartContext {
   mode: SessionMode
-  /** Pasta principal de trabalho. No modo código, sem ela não há o que sugerir. */
+  /** Main working folder. In code mode, without it there is nothing to suggest. */
   directory?: string
-  /** Sessão recente do mesmo modo (e da mesma pasta, no código). */
+  /** Recent session of the same mode (and of the same folder, in code). */
   lastSession?: { id: string; title: string; mode: SessionMode }
-  /** Tipos de mídia já produzidos alguma vez — vem da galeria. */
+  /** Media types already produced at some point — comes from the gallery. */
   usedKinds?: readonly MediaKind[]
   /**
-   * Metades da voz ligadas nas Preferências. Desligada, a tool nem existe no
-   * turno (`tools/index.ts`), então a pill seria uma promessa vazia: a
-   * capacidade é pulada aqui e o painel oferece o botão de ativar.
+   * Voice halves turned on in Settings. When off, the tool does not even exist in the
+   * turn (`tools/index.ts`), so the pill would be an empty promise: the
+   * capability is skipped here and the panel offers the enable button.
    */
   features?: { tts: boolean; stt: boolean; browser: boolean }
-  /** YYYY-MM-DD. Semente da rotação: igual durante o dia inteiro. */
+  /** YYYY-MM-DD. Rotation seed: the same all day long. */
   day: string
 }
 
-/** Tradutor já resolvido — o builder não conhece i18n, e assim dá para testar. */
+/** Translator already resolved — the builder does not know i18n, and that way it can be tested. */
 export type Translate = (key: string, options?: Record<string, unknown>) => string
 
 export const MAX_SUGGESTIONS = 3
 
 export function buildStartSuggestions(ctx: StartContext, t: Translate): StartSuggestion[] {
-  // Sem pasta o modo código não roda nada: o seletor de pasta vive no próprio
-  // input, e uma pill aqui seria um botão que não leva a lugar nenhum.
+  // Without a folder the code mode runs nothing: the folder selector lives in the
+  // input itself, and a pill here would be a button that leads nowhere.
   if (ctx.mode === "code" && !ctx.directory) return []
 
   const used = ctx.usedKinds ?? []
@@ -93,9 +93,9 @@ export function buildStartSuggestions(ctx: StartContext, t: Translate): StartSug
 }
 
 /**
- * Grupos com novidade primeiro, depois a ordem girada do dia. Assim quem nunca
- * gerou vídeo vê vídeo antes de mais um documento, mesmo que a rotação do dia
- * começasse por "create".
+ * Groups with novelty first, then the rotated order of the day. That way whoever never
+ * generated a video sees video before one more document, even if the day's rotation
+ * started with "create".
  */
 function orderedGroups(
   seed: string,
@@ -138,7 +138,7 @@ function pickInGroup(
   return candidates[hash(`${seed}:${group}`) % candidates.length]
 }
 
-/** Recurso desligado = tool ausente no turno. Não entra nem como novidade. */
+/** Resource off = tool missing in the turn. It does not even count as novelty. */
 function isAvailable(
   capability: Capability,
   features: { tts: boolean; stt: boolean; browser: boolean },
@@ -153,7 +153,7 @@ function isFresh(capability: Capability, used: readonly MediaKind[]): boolean {
   return capability.produces !== undefined && !used.includes(capability.produces)
 }
 
-/** FNV-1a: determinístico entre processos, ao contrário de Math.random(). */
+/** FNV-1a: deterministic across processes, unlike Math.random(). */
 function hash(input: string): number {
   let value = 0x811c9dc5
   for (let index = 0; index < input.length; index++) {

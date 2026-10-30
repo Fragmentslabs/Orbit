@@ -68,18 +68,18 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   onSubmit: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
-  /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
+  /** Active session — the Brain toggle is per chat (undefined = new chat) */
   sessionId?: string
-  /** Chave de rascunho própria (ex.: painel lateral, para não misturar com o chat novo do painel principal) */
+  /** Its own draft key (e.g. side panel, so it does not mix with the main panel's new chat) */
   draftKey?: string
-  /** Sem provedor configurado e o usuário tentou enviar — quem renderiza o card decide como reagir */
+  /** No provider configured and the user tried to send — whoever renders the card decides how to react */
   onProviderBlocked?: () => void
 }) {
   const { t } = useTranslation()
-  // Chave do rascunho (e da mensagem respondida): a mesma regra do
-  // ChatInputDraft, para a citação de um chat não aparecer em outro.
+  // Draft key (and of the replied message): the same rule as
+  // ChatInputDraft, so the quote of one chat does not appear in another.
   const replyKey = draftKey ?? sessionId ?? "draft"
-  // ↑/↓ trazem de volta os textos já enviados neste chat.
+  // ↑/↓ bring back the texts already sent in this chat.
   const navigateHistory = useInputHistory(sessionId, replyKey)
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
@@ -96,31 +96,31 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  // Thinking POR CHAT: o seletor grava a escolha desta conversa; sem ela, vale
-  // o nível do modelo definido nas Preferências.
+  // Thinking PER CHAT: the selector saves the choice of this conversation; without it, the
+  // model level defined in Preferences applies.
   const { enabled, variantId: savedVariant, update } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   const suggestion = usePromptSuggestion(sessionId)
-  // Nível salvo que este modelo não oferece (ex: "medium" onde só há
-  // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
+  // A saved level this model does not offer (e.g. "medium" where there is only
+  // low/high/max) becomes the nearest neighbor — the same one the engine sends.
   const variantId = closestVariant(model?.variants?.map((v) => v.id) ?? [], savedVariant) ?? savedVariant
-  // Thinking: o chip das preferências define o default; reasoning do modelo e
-  // modelos com reasoningAlwaysOn continuam valendo como antes
+  // Thinking: the preferences chip defines the default; the model's reasoning and
+  // models with reasoningAlwaysOn keep applying as before
   const thinking = chatActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
-  // Pré-configuração (sem provedor): o envio é bloqueado via onSubmitCapture —
-  // em CAPTURE, antes do handleSubmit do PromptInput limpar o input — para o
-  // texto do usuário não se perder; onProviderBlocked mostra o card explicativo
+  // Pre-configuration (no provider): sending is blocked via onSubmitCapture —
+  // in CAPTURE, before PromptInput's handleSubmit clears the input — so the
+  // user's text is not lost; onProviderBlocked shows the explanatory card
   const noProvider = useNoProviderConnected()
 
   const visionModel = useProviderStore((s) => s.visionModel)
   const vision = useModeActive("vision", sessionId, chatActiveModes.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
-  // Servidores MCP: controle FIXO no rodapé, não um modo — ele recorta quais
-  // servidores esta conversa enxerga (as tools em si não têm liga/desliga).
+  // MCP servers: a FIXED control in the footer, not a mode — it narrows which
+  // servers this conversation sees (the tools themselves have no on/off).
   const toolsServers = useToolsServers(sessionId)
-  // Menu "+" controlado para poder FECHAR antes de abrir um modal de
-  // configuração: o popup do menu vive acima dos modais e os cobriria.
+  // Controlled "+" menu so it can CLOSE before opening a settings
+  // modal: the menu popup lives above the modals and would cover them.
   const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const { mode } = useWorkspace()
@@ -145,8 +145,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
       label: t("input.modes.vision.label"),
       active: vision,
       onChange: (v: boolean) => {
-        // Primeira ativação sem modelo configurado → abre a configuração;
-        // depois disso o toggle só liga/desliga (a configuração fica guardada)
+        // First activation with no model configured → opens the settings;
+        // after that the toggle only turns on/off (the settings stay stored)
         if (v && !visionModel) setVisionConfigOpen(true)
         else setModeActive("vision", sessionId, v)
       },
@@ -155,7 +155,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         setVisionConfigOpen(true)
       },
     },
-    // Computador: só aparece com o interruptor das Preferências ligado.
+    // Computer: only appears with the Preferences switch on.
     ...(computer.visible
       ? [{ icon: Monitor, label: t("input.modes.computer.label"), active: computer.active, onChange: (v: boolean) => setModeActive("computer", sessionId, v) }]
       : []),
@@ -172,10 +172,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     computer: computer.active || undefined,
   }), [search, browser, simple, brain, brainContext, thinking, variantId, toolsServers, computer.active])
 
-  /** Turno da chamada já amarrado a UMA sessão: nunca usa a sessão ativa. O
-   *  estado de ocupado é lido do store no instante da fala — a chamada pode
-   *  estar rodando com o composer do dono desmontado, então nada aqui pode
-   *  depender do chat que estiver aberto. */
+  /** The call's turn already tied to ONE session: it never uses the active session. The
+   *  busy state is read from the store at the instant of the utterance — the call may
+   *  be running with the owner's composer unmounted, so nothing here can
+   *  depend on the chat that happens to be open. */
   const submitVoiceTo = useCallback(
     (targetSessionId: string, text: string): boolean => {
       if (noProvider) {
@@ -194,12 +194,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     },
     [noProvider, onProviderBlocked, buildOptions, enqueueForSend, sendMessage],
   )
-  /** O submit da chamada DESTE composer, preso à sessão dele. */
+  /** The call submit of THIS composer, tied to its session. */
   const submitVoiceToSession = useCallback(
     (text: string): boolean => (sessionId ? submitVoiceTo(sessionId, text) : false),
     [sessionId, submitVoiceTo],
   )
-  /** Chat novo: cria a sessão dona da chamada antes de ligar. */
+  /** New chat: creates the session that owns the call before dialing. */
   const createCallSession = useCallback(async () => {
     const created = await createSession("chat", { setActive: false })
     void selectSession("chat", created.id)
@@ -214,8 +214,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     submit: submitVoiceToSession,
     createCallSession,
   })
-  // O composer da sessão da chamada mantém o host com o submit mais recente
-  // (pastas/modos/fila mudam). A chamada em si nunca muda de destinatário.
+  // The call session's composer keeps the host with the most recent submit
+  // (folders/modes/queue change). The call itself never changes recipient.
   const registerVoiceSubmit = voiceCall.registerSubmit
   useEffect(() => {
     if (voiceCall.call.active && voiceCall.isCallSession) registerVoiceSubmit(submitVoiceToSession)
@@ -227,18 +227,18 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
       setText("")
     }
     return [
-      { id: "pesquisa", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
-      { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setModeActive("browser", sessionId, !browser)) },
-      { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
-      { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
-      // Visão: primeira ativação sem modelo configurado abre a configuração.
-      { id: "vision", label: t("input.modes.vision.label"), description: t("input.modes.vision.description"), keywords: ["visao", "imagem", "vision"], group: "Modos" as const, active: vision, run: toggle(() => {
+      { id: "search", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modes" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
+      { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["browser", "web"], group: "Modes" as const, active: browser, run: toggle(() => setModeActive("browser", sessionId, !browser)) },
+      { id: "plain", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["plain", "text"], group: "Modes" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
+      { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memory", "brain"], group: "Modes" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      // Vision: first activation with no model configured opens the settings.
+      { id: "vision", label: t("input.modes.vision.label"), description: t("input.modes.vision.description"), keywords: ["vision", "image"], group: "Modes" as const, active: vision, run: toggle(() => {
         if (!vision && !visionModel) setVisionConfigOpen(true)
         else setModeActive("vision", sessionId, !vision)
       }) },
       ...actionCommands,
-      { id: "novo-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
-      { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
+      { id: "new-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "reset", "new"], group: "Actions" as const, run: toggle(() => void selectSession(mode, null)) },
+      { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Actions" as const, run: toggle(() => openSettings()) },
     ]
   }, [search, browser, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, actionCommands, selectSession, mode, openSettings, t])
 
@@ -258,8 +258,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
               title={quoteChipTitle(q)}
               className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
             >
-              {/* O ícone diz de onde o anexo veio sem gastar espaço: trecho de
-                  documento ou instante de composição. */}
+              {/* The icon says where the attachment came from without spending space: an excerpt of a
+                  document or an instant of a composition. */}
               {q.kind === "motion" ? (
                 <Clapperboard className="size-3" />
               ) : q.kind === "design" ? (
@@ -290,10 +290,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           onProviderBlocked?.()
         } : undefined}
         onSubmit={(message) => {
-          // Editando um item da fila (lápis na fila): o Enter grava a edição no
-          // MESMO item — a ordem da fila não muda — em vez de enfileirar outra
-          // mensagem. Com o input vazio o Enter só cancela a edição e o fluxo
-          // normal segue (sem texto, Enter não faz nada aqui).
+          // Editing a queue item (pencil in the queue): Enter saves the edit in the
+          // SAME item — the queue order does not change — instead of queueing another
+          // message. With the input empty Enter only cancels the edit and the
+          // normal flow goes on (with no text, Enter does nothing here).
           const editingId = sessionId ? useMessageQueueStore.getState().editing[sessionId] : undefined
           const rawText = message.text?.trim()
           if (editingId && sessionId) {
@@ -307,22 +307,22 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
             useMessageQueueStore.getState().cancelEdit(sessionId)
           }
           const files = toFileParts(message.files ?? [])
-          // Trechos citados do visualizador viram anexo com MIME próprio: a
-          // bolha mostra o chip e o modelo recebe o texto com a citação.
+          // Excerpts quoted from the viewer become an attachment with its own MIME: the
+          // bubble shows the chip and the model receives the text with the quote.
           const quoteFiles = quotesToFileParts(quotes)
           if (quoteFiles.length > 0) {
             files.push(...quoteFiles)
             usePanelStore.getState().clearQuotes()
           }
-          // Comandos "/" viram o prompt do pipeline correspondente
+          // "/" commands become the prompt of the corresponding pipeline
           const resolveText = (raw: string) => {
             const resolved = resolveSlashAction(raw, "chat")
             return resolved?.prompt ?? raw
           }
-          // Enter durante execução: com texto, enfileira; sem texto, não faz
-          // NADA — parar é intencional (botão de stop ou Tab+Enter nele);
-          // nunca "resposta em branco" para cancelar. ANEXO conta como
-          // conteúdo: texto grande colado vira arquivo e deixa o campo vazio.
+          // Enter during execution: with text, it queues; with no text, it does
+          // NOTHING — stopping is intentional (stop button or Tab+Enter on it);
+          // never an "empty reply" to cancel. AN ATTACHMENT counts as
+          // content: large pasted text becomes a file and leaves the field empty.
           if (busy) {
             const text = message.text?.trim()
             if (!text && files.length === 0) return
@@ -333,14 +333,14 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
             return
           }
           const text = message.text?.trim()
-          // Sem texto mas COM anexo ainda é mensagem: o chip sozinho é conteúdo.
-          // Continua barrando o Enter em branco, que é o caso que a trava existe
-          // para cobrir.
+          // No text but WITH an attachment is still a message: the chip alone is content.
+          // It still blocks the blank Enter, which is the case the lock exists
+          // to cover.
           if (!text && files.length === 0) return
           if (sessionId) clearInputDraft(sessionId)
-          // A citação é prependada DEPOIS do comando "/" ser resolvido: na
-          // frente dela, o texto deixaria de começar com "/" e o comando
-          // viraria conversa.
+          // The quote is prepended AFTER the "/" command is resolved: in
+          // front of it, the text would no longer start with "/" and the command
+          // would become conversation.
           return onSubmit(withReplyPrefix(replyKey, resolveText(text)), buildOptions(), files.length > 0 ? files : undefined)
         }}
         className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
@@ -349,13 +349,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          {/* O microfone é ancorado na LINHA do textarea, e não no topo da
-              caixa: assim ele segue o texto onde ele começa, mesmo que alguma
-              linha entre em cima da caixa. */}
+          {/* The microphone is anchored to the LINE of the textarea, and not to the top of the
+              box: that way it follows the text where it starts, even if some
+              line comes in above the box. */}
           <div className="relative w-full">
-            {/* Canto SUPERIOR direito, no nível da primeira linha do texto:
-                absoluto para não empurrar o conteúdo, com a folga à direita
-                reservada no próprio textarea (pr-10). */}
+            {/* TOP right corner, at the level of the first line of the text:
+                absolute so it does not push the content, with the slack on the right
+                reserved in the textarea itself (pr-10). */}
             <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
               <VoiceCallPanel control={voiceCall} />
               <DictationButton sessionId={sessionId} />
@@ -397,9 +397,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
             </div>
             <SendButtonGroup
               emptySlot={
-                // O chat novo do painel cria a sessão numa aba sem ativá-la; a
-                // chamada nasceria sem sessão. Ali só cabe o atalho para uma
-                // chamada que já existe; para começar, abra a conversa.
+                // The panel's new chat creates the session in a tab without activating it; the
+                // call would be born without a session. There only the shortcut to an
+                // existing call fits; to start one, open the conversation.
                 voiceCall.inSlot && (!!sessionId || !draftKey || voiceCall.call.active) ? (
                   <VoiceCallButton control={voiceCall} />
                 ) : undefined
@@ -420,7 +420,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
                 if (sessionId) enqueueScheduled(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, timestamp, { files: toFileParts(files ?? []) })
               }}
               onSendToSidePanel={async (text, files) => {
-                // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
+                // New chat in the same folder as the current session (if it is in one)
                 const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
                 const newSession = await createSession(mode, { setActive: false, folderId: current?.folderId ?? null })
                 await sendMessage(mode, withReplyPrefix(replyKey, text), { options: buildOptions(), sessionId: newSession.id, files: toFileParts(files ?? []) })
@@ -487,8 +487,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
-          {/* Computador: na barra só se ligado em Aparência (padrão: oculto) e
-              com o interruptor das Preferências → Computador ligado. */}
+          {/* Computer: in the bar only if enabled in Appearance (default: hidden) and
+              with the Preferences → Computer switch on. */}
           {computer.visible && modesInRow.includes("computer") && (
             <ModeToggle
               icon={Monitor}

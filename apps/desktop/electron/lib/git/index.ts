@@ -5,11 +5,11 @@ import { createRemoteRepo } from '../github-repo'
 import { discoverWorkspaceRepos } from '../git-repos'
 
 /**
- * Núcleo do git: log, status do working tree, diffs, branches e as operações
- * de rede (pull/push/commit). `registerGitIpc()` liga os canais; o resto do
- * arquivo são as funções que os handlers usam.
+ * Git core: log, working tree status, diffs, branches and the network
+ * operations (pull/push/commit). `registerGitIpc()` wires the channels; the rest of
+ * the file are the functions the handlers use.
  *
- * Contrato dos canais (consumido pelo painel de git do renderer — NÃO renomear):
+ * Channel contract (consumed by the renderer's git panel — DO NOT rename):
  *   invoke "git:repos"            root          -> { ok, repos } | { ok:false, error }
  *   invoke "git:log"              repoPath, skip -> { ok, commits, hasMore } | { ok:false, error }
  *   invoke "git:showFile"         repoPath, hash, relPath, deleted -> { content } | { error }
@@ -24,7 +24,7 @@ import { discoverWorkspaceRepos } from '../git-repos'
  *   invoke "git:commitAll"        repoPath, message -> { ok } | { ok:false, error }
  *   invoke "git:branchInfo"       repoPath      -> { ok, info } | { ok:false, error }
  *   invoke "git:pull"             repoPath      -> { ok } | { ok:false, ...gitError }
- *   invoke "git:createRemoteRepo" repoPath, name, isPrivate (delegado a ../github-repo)
+ *   invoke "git:createRemoteRepo" repoPath, name, isPrivate (delegated to ../github-repo)
  *   invoke "git:push"             repoPath      -> { ok, created } | { ok:false, ...gitError }
  */
 
@@ -35,9 +35,9 @@ interface CommitFileEntry {
   path: string
 }
 
-/** Status de um arquivo no working tree (git status --porcelain). */
+/** Status of a file in the working tree (git status --porcelain). */
 interface GitStatusEntry {
-  /** Caminho relativo ao repo (separador '/'). */
+  /** Path relative to the repo ('/' separator). */
   path: string
   status: 'added' | 'modified' | 'deleted' | 'untracked' | 'renamed'
 }
@@ -49,11 +49,11 @@ interface CommitEntry {
   message: string
   body: string
   files: CommitFileEntry[]
-  /** Refs (branches locais/remotas e tags) que apontam exatamente para este commit. */
+  /** Refs (local/remote branches and tags) that point exactly at this commit. */
   refs: string[]
-  /** Commit é ancestral da branch principal (main/master). */
+  /** The commit is an ancestor of the default branch (main/master). */
   onDefault: boolean
-  /** Commit é alcançável a partir do upstream da branch atual (já está no remoto). */
+  /** The commit is reachable from the current branch's upstream (it is already on the remote). */
   pushed: boolean
 }
 
@@ -67,7 +67,7 @@ const STATUS_MAP: Record<string, CommitFileEntry['status']> = {
 const FIELD_SEP = '\x1f'
 const RECORD_SEP = '\x1e'
 
-/** Tamanho de página do log de commits (paginação por --skip para o scroll infinito). */
+/** Page size of the commit log (paging by --skip for the infinite scroll). */
 const GIT_LOG_PAGE_SIZE = 30
 
 async function getGitLog(
@@ -106,8 +106,8 @@ async function getGitLog(
       }
     }
 
-    // ── Contexto de branches para badges/regiões no log ────────────────
-    // Mapa hash -> refs completas (refs/heads, refs/remotes, refs/tags)
+    // ── Branch context for badges/regions in the log ───────────────────
+    // Map hash -> full refs (refs/heads, refs/remotes, refs/tags)
     const refsByHash = new Map<string, string[]>()
     try {
       const { stdout: refsOut } = await execFileAsync(
@@ -119,9 +119,9 @@ async function getGitLog(
         const parts = line.split('\x1f')
         if (parts.length < 2 || !parts[0]) continue
         const ref = parts[0]
-        // Tags anotadas: %(objectname) é o objeto da tag; %(*objectname) é o
-        // commit alvo (peeled). Para branches/remotes/lightweight tags o
-        // peeled vem vazio e usamos o objectname direto.
+        // Annotated tags: %(objectname) is the tag object; %(*objectname) is the
+        // target commit (peeled). For branches/remotes/lightweight tags the
+        // peeled value comes out empty and we use objectname directly.
         const hash = (parts[2] || parts[1]).trim()
         if (!hash) continue
         const arr = refsByHash.get(hash) ?? []
@@ -129,7 +129,7 @@ async function getGitLog(
         refsByHash.set(hash, arr)
       }
     } catch {
-      // repo sem refs
+      // repo with no refs
     }
 
     let currentBranch: string | null = null
@@ -137,10 +137,10 @@ async function getGitLog(
       const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd: repoPath })
       currentBranch = stdout.trim() || null
     } catch {
-      // detached/erro
+      // detached/error
     }
 
-    // Branch principal: origin/HEAD -> fallback main/master local
+    // Default branch: origin/HEAD -> fallback to local main/master
     let defaultBranch: string | null = null
     try {
       const { stdout } = await execFileAsync('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: repoPath })
@@ -152,12 +152,12 @@ async function getGitLog(
           defaultBranch = candidate
           break
         } catch {
-          // candidato não existe
+          // candidate does not exist
         }
       }
     }
 
-    // Upstream da branch atual (ex.: origin/feature)
+    // Upstream of the current branch (e.g. origin/feature)
     let upstream: string | null = null
     if (currentBranch) {
       try {
@@ -168,20 +168,20 @@ async function getGitLog(
         )
         upstream = stdout.trim() || null
       } catch {
-        // sem upstream ainda
+        // no upstream yet
       }
     }
 
-    // Conjuntos de hashes alcançáveis (cresce com o skip para cobrir páginas
-    // profundas do log: um commit da página atual está a, no máximo,
-    // skip + GIT_LOG_PAGE_SIZE commits de distância da ponta da branch).
+    // Sets of reachable hashes (it grows with skip to cover deep pages
+    // of the log: a commit on the current page is at most
+    // skip + GIT_LOG_PAGE_SIZE commits away from the branch tip).
     const pushedSet = new Set<string>()
     if (upstream) {
       try {
         const { stdout } = await execFileAsync('git', ['rev-list', '-n', String(60 + skip), upstream], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
         for (const h of stdout.split('\n')) pushedSet.add(h.trim())
       } catch {
-        // upstream inválido
+        // invalid upstream
       }
     }
     const defaultSet = new Set<string>()
@@ -190,7 +190,7 @@ async function getGitLog(
         const { stdout } = await execFileAsync('git', ['rev-list', '-n', String(60 + skip), defaultBranch], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
         for (const h of stdout.split('\n')) defaultSet.add(h.trim())
       } catch {
-        // branch principal inválida
+        // invalid default branch
       }
     }
 
@@ -219,8 +219,8 @@ async function getGitLog(
   }
 }
 
-/** Executa git com prompt de terminal desabilitado (falha rápido em vez de
- *  travar pedindo credencial) e sem abrir editor de merge. */
+/** Runs git with the terminal prompt disabled (fails fast instead of
+ *  hanging while asking for credentials) and without opening the merge editor. */
 function runGit(repoPath: string, args: string[], timeout = 120_000) {
   return execFileAsync('git', args, {
     cwd: repoPath,
@@ -253,8 +253,8 @@ interface BranchSyncInfo {
   dirty: boolean
 }
 
-/** Indicador estilo VS Code: branch atual vs branch principal (main/master),
- *  à frente/atrás, upstream, sujo (mudanças não commitadas). */
+/** VS Code style indicator: current branch vs default branch (main/master),
+ *  ahead/behind, upstream, dirty (uncommitted changes). */
 async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
   const info: BranchSyncInfo = {
     current: null,
@@ -275,7 +275,7 @@ async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
     info.hasRemote = remoteOut.trim().length > 0
     info.dirty = statusOut.trim().length > 0
 
-    // Branch principal: origin/HEAD (remote) -> fallback para main/master local
+    // Default branch: origin/HEAD (remote) -> fallback to local main/master
     try {
       const { stdout: headOut } = await runGit(
         repoPath,
@@ -290,7 +290,7 @@ async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
           info.defaultBranch = candidate
           break
         } catch {
-          // candidato não existe
+          // candidate does not exist
         }
       }
     }
@@ -304,7 +304,7 @@ async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
         )
         info.upstream = upOut.trim() || null
       } catch {
-        // sem upstream
+        // no upstream
       }
       if (info.defaultBranch && info.defaultBranch !== info.current) {
         try {
@@ -317,12 +317,12 @@ async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
           info.behind = left || 0
           info.ahead = right || 0
         } catch {
-          // branch principal sem ref local ou repo sem commits
+          // default branch with no local ref, or a repo with no commits
         }
       }
     }
   } catch {
-    // repo inválido/inacessível — devolve o mínimo
+    // invalid/inaccessible repo — return the bare minimum
   }
   return info
 }
@@ -350,11 +350,11 @@ function classifyGitStatus(code: string): GitStatusEntry['status'] {
   if (code.startsWith('?')) return 'untracked'
   if (code.includes('D')) return 'deleted'
   if (code.includes('A')) return 'added'
-  // M (modificado) e T (mudança de tipo) são tratados como modificação
+  // M (modified) and T (type change) are treated as a modification
   return 'modified'
 }
 
-/** Lista os arquivos com mudança no working tree (estilo `git status`). */
+/** Lists the files changed in the working tree (`git status` style). */
 async function getGitStatus(
   repoPath: string,
 ): Promise<{ ok: true; entries: GitStatusEntry[] } | { ok: false; error: string }> {
@@ -365,12 +365,12 @@ async function getGitStatus(
     for (let i = 0; i < parts.length; i++) {
       const raw = parts[i]
       if (!raw) continue
-      // Registro "XY path" — com -z o path não sofre escaping (path separado por \0).
+      // "XY path" record — with -z the path is not escaped (path separated by \0).
       const code = raw.slice(0, 2)
       const path = raw.slice(3)
-      // Rename/copy com -z: "R  novo\0antigo\0" — o -z INVERTE a ordem do
-      // formato legível ("antigo -> novo"), então o primeiro campo já é o
-      // caminho que existe agora; o seguinte é o antigo, que saiu do disco.
+      // Rename/copy with -z: "R  new\0old\0" — -z REVERSES the order of the
+      // readable format ("old -> new"), so the first field already is the
+      // path that exists now; the next one is the old one, which left the disk.
       if ((code.startsWith('R') || code.startsWith('C')) && parts[i + 1]) {
         entries.push({
           path,
@@ -388,11 +388,11 @@ async function getGitStatus(
 }
 
 /**
- * Linhas adicionadas/removidas por arquivo, do working tree contra o HEAD.
+ * Lines added/removed per file, from the working tree against HEAD.
  *
- * Alimenta o "+N -N" da lista de alterações. Arquivos não rastreados ficam de
- * fora: não existem em nenhuma árvore do git, então não há com o que comparar —
- * para eles a lista mostra só o indicador de status.
+ * Feeds the "+N -N" of the change list. Untracked files are left out: they do
+ * not exist in any git tree, so there is nothing to compare them with — for
+ * them the list shows only the status indicator.
  */
 async function getWorkingNumstat(
   repoPath: string,
@@ -401,9 +401,9 @@ async function getWorkingNumstat(
   | { ok: false; error: string }
 > {
   try {
-    // --no-renames: um rename vira excluído + adicionado, cada lado com um
-    // caminho simples. Sem isso o git escreve "dir/{antigo => novo}", que não
-    // casa com o caminho que o `git status` reporta.
+    // --no-renames: a rename becomes deleted + added, each side with a
+    // single path. Without it git writes "dir/{old => new}", which does not
+    // match the path that `git status` reports.
     const { stdout } = await runGit(
       repoPath,
       ['diff', 'HEAD', '--numstat', '--no-renames'],
@@ -417,23 +417,23 @@ async function getWorkingNumstat(
       if (!path) continue
       const added = Number(addedRaw)
       const deleted = Number(deletedRaw)
-      // Binário: o git escreve "-" nos dois campos.
+      // Binary: git writes "-" in both fields.
       if (!Number.isFinite(added) || !Number.isFinite(deleted)) continue
       stats[path] = { added, deleted }
     }
 
-    // Arquivo não rastreado não aparece no diff contra o HEAD: o git só sabe
-    // contá-lo comparando com o vazio, e isso é um comando por arquivo. O teto
-    // existe porque uma árvore com centenas de arquivos novos viraria centenas
-    // de processos só para desenhar um número.
+    // An untracked file does not show up in the diff against HEAD: git can only
+    // count it by comparing against empty, and that is one command per file. The cap
+    // exists because a tree with hundreds of new files would become hundreds
+    // of processes just to draw a number.
     const { stdout: others } = await runGit(
       repoPath,
       ['ls-files', '--others', '--exclude-standard'],
       20_000,
     )
-    const novos = others.split('\n').filter(Boolean).slice(0, 40)
+    const added = others.split('\n').filter(Boolean).slice(0, 40)
     await Promise.all(
-      novos.map(async (rel) => {
+      added.map(async (rel) => {
         const apply = (stdout: string) => {
           const [addedRaw, deletedRaw] = stdout.split('\t')
           const added = Number(addedRaw)
@@ -449,8 +449,8 @@ async function getWorkingNumstat(
           )
           apply(stdout)
         } catch (err) {
-          // `--no-index` sai com código 1 quando há diferenças — o stdout
-          // ainda traz o numstat.
+          // `--no-index` exits with code 1 when there are differences — stdout
+          // still carries the numstat.
           const e = err as { stdout?: string }
           if (e.stdout) apply(e.stdout)
         }
@@ -464,10 +464,10 @@ async function getWorkingNumstat(
 }
 
 /**
- * Patch completo do working tree: tudo o que a lista de alterações mostra, num
- * comando só. Os não rastreados entram depois, um a um — o diff contra o HEAD
- * não os enxerga, e sem eles a visão empilhada ficaria com buracos que a lista
- * ao lado anuncia.
+ * Full working tree patch: everything the change list shows, in a single
+ * command. Untracked files come in afterwards, one by one — the diff against
+ * HEAD does not see them, and without them the stacked view would end up with
+ * holes that the list beside it announces.
  */
 async function getWorkingDiff(
   repoPath: string,
@@ -492,7 +492,7 @@ async function getWorkingDiff(
             )
             return out
           } catch (err) {
-            // `--no-index` sai com código 1 quando há diferenças.
+            // `--no-index` exits with code 1 when there are differences.
             const e = err as { stdout?: string }
             return e.stdout ?? ''
           }
@@ -504,7 +504,7 @@ async function getWorkingDiff(
   }
 }
 
-/** Diff do working tree contra HEAD para um arquivo (patch unified). */
+/** Working tree diff against HEAD for one file (unified patch). */
 async function getWorkingFileDiff(
   repoPath: string,
   relPath: string,
@@ -517,19 +517,19 @@ async function getWorkingFileDiff(
       const { stdout } = await runGit(repoPath, ['diff', 'HEAD', '--', relPath])
       return { ok: true, patch: stdout }
     }
-    // Arquivo não rastreado (novo): diff contra /dev/null mostra tudo adicionado.
+    // Untracked (new) file: a diff against /dev/null shows it all as added.
     const { stdout } = await runGit(repoPath, ['diff', '--no-index', '--', '/dev/null', relPath])
     return { ok: true, patch: stdout }
   } catch (err) {
-    // `git diff --no-index` sai com código 1 quando há diferenças — o stdout
-    // ainda traz o patch completo.
+    // `git diff --no-index` exits with code 1 when there are differences — stdout
+    // still carries the complete patch.
     const e = err as { stdout?: string; message?: string }
     if (e.stdout) return { ok: true, patch: e.stdout }
     return { ok: false, error: e.message ?? String(err) }
   }
 }
 
-/** Diff que um commit introduziu em um arquivo (diff contra o pai). */
+/** Diff a commit introduced in one file (diff against its parent). */
 async function getCommitFileDiff(
   repoPath: string,
   hash: string,
@@ -544,11 +544,11 @@ async function getCommitFileDiff(
 }
 
 export function registerGitIpc(): void {
-  // Quais repositórios vivem nestas pastas de trabalho: em cada uma, a própria
-  // pasta quando é repo e as subpastas com git próprio (front/back de um
-  // espaço). A lista cobre TODAS as pastas do chat — a principal e as anexadas
-  // —, e o painel usa a lista para escolher com quem falar; sem lista, fala com
-  // a pasta principal.
+  // Which repositories live in these working folders: in each of them, the folder
+  // itself when it is a repo plus the subfolders with their own git (front/back of a
+  // space). The list covers ALL the chat folders — the main one and the attached
+  // ones —, and the panel uses the list to pick who to talk to; with no list it talks to
+  // the main folder.
   ipcMain.handle('git:repos', async (_event, root: string | string[]) => {
     try {
       const roots = Array.isArray(root) ? root : [root]
@@ -644,9 +644,9 @@ export function registerGitIpc(): void {
     }
   })
 
-  // Cria o repositório no GitHub quando a pasta ainda não tem remote — o
-  // token vem do credential helper do git ou do `gh`, nunca do usuário
-  // (ver github-repo.ts).
+  // Creates the repository on GitHub when the folder has no remote yet — the
+  // token comes from the git credential helper or from `gh`, never from the user
+  // (see github-repo.ts).
   ipcMain.handle('git:createRemoteRepo', (_event, repoPath: string, name: string, isPrivate: boolean) =>
     createRemoteRepo(repoPath, name, isPrivate))
 
@@ -667,7 +667,7 @@ export function registerGitIpc(): void {
         )
         upstream = upOut.trim() || null
       } catch {
-        // sem upstream ainda
+        // no upstream yet
       }
 
       if (upstream) {
@@ -679,8 +679,8 @@ export function registerGitIpc(): void {
       if (!remoteOut.trim()) {
         return { ok: false as const, message: 'No remote configured', kind: 'noRemote' as const }
       }
-      // Sem branch remota: cria via -u origin <branch> (autenticado pelas
-      // credenciais já configuradas no git — token/SSH; nunca pede no terminal)
+      // No remote branch: create it via -u origin <branch> (authenticated by the
+      // credentials already configured in git — token/SSH; never prompts in the terminal)
       await runGit(repoPath, ['push', '-u', 'origin', branch])
       return { ok: true as const, created: true }
     } catch (err) {

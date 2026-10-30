@@ -2,12 +2,12 @@ import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
 import { cn } from "@/lib/utils"
 
 /**
- * Switch sobre o primitivo do base-ui (mesma base do resto do design system).
+ * Switch on top of the base-ui primitive (same base as the rest of the design system).
  *
- * O thumb é posicionado por `translate-x` calculado a partir do tamanho da
- * trilha, não por valores soltos: um número fora de sincronia com a largura
- * deixa a bolinha para fora da trilha, que foi o defeito da versão anterior
- * feita à mão.
+ * The thumb is positioned by `translate-x` calculated from the size of the
+ * track, not by loose values: a number out of sync with the width
+ * leaves the dot outside the track, which was the defect of the previous version
+ * made by hand.
  */
 export function Switch({
   className,
@@ -29,7 +29,7 @@ export function Switch({
         data-slot="switch-thumb"
         className={cn(
           "block size-4 rounded-full bg-background shadow-sm transition-transform",
-          // trilha 36px − padding 2×2px − thumb 16px = 16px de curso
+          // track 36px − 2×2px padding − 16px thumb = 16px of travel
           "translate-x-0 data-[checked]:translate-x-4",
         )}
       />

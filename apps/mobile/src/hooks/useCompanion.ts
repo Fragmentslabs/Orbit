@@ -5,8 +5,8 @@ import type {
   SessionModelChangeEvent,
   RotationChangeEvent,
   ChatEventMessage,
-  EsteiraEventMessage,
-  RotinaEventMessage,
+  PipelineEventMessage,
+  RoutineEventMessage,
   SessionModeOverrides,
   SessionPrefsSnapshot,
   WorkerConfigSnapshot,
@@ -24,47 +24,47 @@ import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync
 import { applyRemoteSessionPrefs, fetchSessionPrefs } from '~/stores/session-prefs-sync'
 import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-sync'
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
-import { useRotinasStore } from '~/stores/rotinas-store'
-import { useEsteiraStore } from '~/stores/esteira-store'
+import { useRoutinesStore } from '~/stores/routines-store'
+import { usePipelineStore } from '~/stores/pipeline-store'
 
 /**
- * Hook que orquestra a conexão WS + HTTP com o desktop.
+ * Hook that orchestrates the WS + HTTP connection with the desktop.
  *
- * Uso: chame `useCompanion()` no root layout (ou provider).
- * Ele:
- *  1. Carrega config salva e reconecta automaticamente
- *  2. Escuta eventos WS e despacha para os stores
- *  3. Faz fetch inicial de sessões/settings ao conectar
+ * Usage: call `useCompanion()` in the root layout (or provider).
+ * It:
+ *  1. Loads the saved config and reconnects automatically
+ *  2. Listens to WS events and dispatches them to the stores
+ *  3. Does the initial fetch of sessions/settings on connect
  */
 export function useCompanion() {
-  // ─── Conexão automática ao montar ──────────────────────────────────────
+  // ─── Automatic connection on mount ─────────────────────────────────────
 
   useEffect(() => {
     const conn = useConnectionStore.getState()
 
-    // Cache do catálogo de modelos: pinta a UI instantaneamente mesmo antes
-    // de conectar, enquanto o fetchCatalog() real (pós-conexão) atualiza.
+    // Model catalog cache: paints the UI instantly even before
+    // connecting, while the real fetchCatalog() (post-connection) updates it.
     void useSettingsStore.getState().hydrateCatalogCache()
 
-    // Tenta carregar config salva e reconectar
+    // Tries to load the saved config and reconnect
     void conn.loadConfig().then((saved) => {
       if (saved) {
         conn.connect(saved)
       }
     })
 
-    // Cleanup: fecha o socket sem apagar a config salva — em dev o React
-    // desmonta/remonta o root (double-invoke), e disconnect() aqui apagava
-    // as credenciais e matava a reconexão automática.
+    // Cleanup: closes the socket without erasing the saved config — in dev React
+    // unmounts/remounts the root (double-invoke), and disconnect() here erased
+    // the credentials and killed the automatic reconnection.
     return () => {
       conn.shutdown()
     }
   }, [])
 
-  // ─── Volta do segundo plano ────────────────────────────────────────────
-  // O iOS/Android suspendem o app e o socket morre sem avisar: ele volta com
-  // cara de conectado e tudo que se envia some. Ao voltar ao primeiro plano o
-  // cliente confere se o desktop responde (e reconecta se não).
+  // ─── Return from the background ────────────────────────────────────────
+  // iOS/Android suspend the app and the socket dies without warning: it comes back
+  // looking connected and everything that is sent vanishes. On returning to the foreground the
+  // client checks whether the desktop responds (and reconnects if it does not).
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -73,15 +73,15 @@ export function useCompanion() {
     return () => sub.remove()
   }, [])
 
-  // ─── Escuta mudanças de estado WS ──────────────────────────────────────
+  // ─── Listens to WS state changes ───────────────────────────────────────
 
   useEffect(() => {
     const conn = useConnectionStore.getState()
 
     const unsub = conn.onConnectionChange((state) => {
       if (state.status === 'connected') {
-        // Persiste o token de dispositivo emitido pelo desktop — é ele que
-        // permite reconectar depois sem PIN (o PIN expira em 5 min).
+        // Persists the device token issued by the desktop — it is what
+        // allows reconnecting later without a PIN (the PIN expires in 5 min).
         const store = useConnectionStore.getState()
         const config = store.config
           ? { ...store.config, token: state.deviceToken ?? store.config.token }
@@ -91,24 +91,24 @@ export function useCompanion() {
             useConnectionStore.setState({ config })
           }
           void store.saveConfig(config)
-          // state.deviceName vem do auth:ok — e o nome do DESKTOP. O
-          // config.deviceName e o deste celular, que nao serve aqui.
+          // state.deviceName comes from auth:ok — and it is the name of the DESKTOP. The
+          // config.deviceName is the one of this phone, which is no use here.
           void useRecentConnectionsStore.getState().addRecent(config, state.deviceName)
         }
         // Fetch initial data
         void useSessionStore.getState().fetchSessions()
-        // O chat aberto pode ter ganho cards (pergunta, permissao, plano)
-        // enquanto o socket estava fora: os eventos ao vivo passaram sem
-        // ninguem ouvindo, entao o estado da sessao e rebuscado no desktop.
+        // The open chat may have gained cards (question, permission, plan)
+        // while the socket was out: the live events went by without
+        // anyone listening, so the session state is fetched again from the desktop.
         const activeId = useSessionStore.getState().activeSessionId
         if (activeId) void useSessionStore.getState().fetchMessages(activeId)
-        // Quem ainda esta rodando no desktop — sem isto, conectar no meio de
-        // uma execucao mostra a conversa parada (e reconectar depois dela
-        // terminar deixa o spinner preso).
+        // Who is still running on the desktop — without this, connecting in the middle of
+        // an execution shows the conversation stalled (and reconnecting after it
+        // finishes leaves the spinner stuck).
         void useSessionStore.getState().fetchRunningSessions()
-        // Fila compartilhada: o espelho da fila do desktop, e a entrega do que
-        // foi escrito aqui sem conexão (o desktop envia quando a sessão ficar
-        // livre — o celular nunca dispara a fila por conta própria).
+        // Shared queue: the mirror of the desktop queue, and the delivery of what
+        // was typed here without a connection (the desktop sends it when the session becomes
+        // free — the phone never fires the queue on its own).
         void useMessageQueueStore.getState().fetchRemote()
         void useMessageQueueStore.getState().flushOutbox()
         void useSessionStore.getState().fetchFolders()
@@ -116,24 +116,24 @@ export function useCompanion() {
         void useSettingsStore.getState().fetchPreferences()
         void useSettingsStore.getState().fetchCatalog()
         void useSettingsStore.getState().fetchConnectedProviders()
-        // Overrides de modelo por sessão (snapshot do renderer do desktop)
+        // Model overrides per session (snapshot of the desktop renderer)
         void useSessionModelPrefs.getState().hydrate()
-        // Rotações de modelo (lista + escolha por chat) — vivem no desktop
+        // Model rotations (list + per-chat choice) — they live on the desktop
         void useModelRotationStore.getState().hydrate()
-        // Modos ativos por chat (mesmo caminho: snapshot do renderer)
+        // Active modes per chat (same path: snapshot of the renderer)
         void fetchSessionModes()
-        // Thinking por modelo (toggle + variante) — vive no renderer do desktop
+        // Thinking per model (toggle + variant) — it lives in the desktop renderer
         void fetchReasoningPrefs()
-        // Thinking e autonomia POR CHAT (mesmo caminho: snapshot do renderer)
+        // Thinking and autonomy PER CHAT (same path: snapshot of the renderer)
         void fetchSessionPrefs()
-        // Config de subagentes/orquestração e visão (global, mora no desktop)
+        // Subagent/orchestration and vision config (global, lives on the desktop)
         void useSettingsStore.getState().fetchWorkerConfig()
-        // Preferências do desktop mandam: na conexão o celular adota as de lá
-        // (defaults de modo, permissão, pastas automáticas).
+        // Desktop preferences win: on connection the phone adopts the ones from there
+        // (mode defaults, permission, automatic folders).
         void hydrateAppPreferences()
       } else if (state.status === 'disconnected' && state.errorReason === 'invalid_pin') {
-        // PIN expirou (TTL de 5 min no desktop) — esquece a config salva para
-        // não ficar preso num loop de auto-reconexão que sempre falha
+        // PIN expired (5 min TTL on the desktop) — forgets the saved config so as
+        // not to get stuck in an auto-reconnect loop that always fails
         void useConnectionStore.getState().clearSavedConfig()
       }
     })
@@ -141,7 +141,7 @@ export function useCompanion() {
     return unsub
   }, [])
 
-  // ─── Escuta eventos WS e despacha para stores ──────────────────────────
+  // ─── Listens to WS events and dispatches to stores ─────────────────────
 
   useEffect(() => {
     const conn = useConnectionStore.getState()
@@ -150,13 +150,13 @@ export function useCompanion() {
     const unsubChat = conn.onEvent('chat:event', (event) => {
       const msg = event as ChatEventMessage
       const chatEvent = msg.event
-      // "folders" é o único evento sem sessionId (substituição completa da lista)
+      // "folders" is the only event without a sessionId (full replacement of the list)
       if (chatEvent && typeof chatEvent === 'object' && ('sessionId' in chatEvent || 'folders' in chatEvent)) {
         useSessionStore.getState().applyChatEvent(chatEvent as any)
       }
     })
 
-    // session:model-change → overrides de modelo por sessão vindos do desktop
+    // session:model-change → per-session model overrides coming from the desktop
     const unsubModels = conn.onEvent('session:model-change', (event) => {
       const msg = event as Partial<SessionModelChangeEvent>
       if (msg?.overrides) {
@@ -164,65 +164,65 @@ export function useCompanion() {
       }
     })
 
-    // rotation:change → rotações (lista + escolha por chat) mudadas no
-    // desktop ou em outro aparelho pareado
+    // rotation:change → rotations (list + per-chat choice) changed on the
+    // desktop or on another paired device
     const unsubRotation = conn.onEvent('rotation:change', (event) => {
       const msg = event as Partial<RotationChangeEvent>
       if (msg?.config) useModelRotationStore.getState().applySync(msg.config)
     })
 
-    // session:mode-change → modos ativos por chat mudados no desktop
+    // session:mode-change → active modes per chat changed on the desktop
     const unsubModes = conn.onEvent('session:mode-change', (event) => {
       const msg = event as { overrides?: SessionModeOverrides }
       if (msg?.overrides) applyRemoteModes(msg.overrides, true)
     })
 
-    // session:prefs-change → thinking/autonomia de um chat mudados no desktop
+    // session:prefs-change → thinking/autonomy of a chat changed on the desktop
     const unsubSessionPrefs = conn.onEvent('session:prefs-change', (event) => {
       const msg = event as { prefs?: SessionPrefsSnapshot }
       if (msg?.prefs) applyRemoteSessionPrefs(msg.prefs, true)
     })
 
-    // reasoning:change → thinking por modelo mudado no desktop (ou pelo
-    // próprio toggle daqui, que volta no broadcast como confirmação)
+    // reasoning:change → per-model thinking changed on the desktop (or by the
+    // toggle here itself, which comes back in the broadcast as confirmation)
     const unsubReasoning = conn.onEvent('reasoning:change', (event) => {
       const msg = event as { prefs?: ReasoningPrefsMap }
       if (msg?.prefs) void applyReasoningPrefs(msg.prefs, true)
     })
 
-    // worker-config:change → modelo dos workers / modelo de visão do desktop
+    // worker-config:change → worker model / vision model of the desktop
     const unsubWorkerConfig = conn.onEvent('worker-config:change', (event) => {
       const msg = event as { config?: WorkerConfigSnapshot }
       if (msg?.config) useSettingsStore.getState().applyWorkerConfigSync(msg.config)
     })
 
-    // prefs:change → preferências do app (defaults de modo, permissão, pastas
-    // automáticas) mudadas no desktop ou em outro aparelho pareado
+    // prefs:change → app preferences (mode defaults, permission, automatic
+    // folders) changed on the desktop or on another paired device
     const unsubPrefs = conn.onEvent('prefs:change', (event) => {
       const msg = event as { prefs?: AppPreferences }
       if (msg?.prefs) applyAppPreferences(msg.prefs)
     })
 
-    // queue:change → fila de mensagens compartilhada, mudada no desktop ou em
-    // outro aparelho
+    // queue:change → shared message queue, changed on the desktop or on
+    // another device
     const unsubQueue = conn.onEvent('queue:change', (event) => {
       const msg = event as Partial<MessageQueueChangeEvent>
       if (msg?.queues) useMessageQueueStore.getState().applySync(msg.queues)
     })
 
-    // rotinas:event → rotinas store (criar/editar/excluir/execução pelo scheduler)
-    const unsubRotinas = conn.onEvent('rotinas:event', (event) => {
-      const msg = event as RotinaEventMessage
+    // routines:event → routines store (create/edit/delete/execution by the scheduler)
+    const unsubRoutines = conn.onEvent('routines:event', (event) => {
+      const msg = event as RoutineEventMessage
       if (msg?.event) {
-        useRotinasStore.getState().aplicarEvento(msg.event)
+        useRoutinesStore.getState().applyEvent(msg.event)
       }
     })
 
-    // esteira:event → esteira store (tasks, fases, fila, progresso ao vivo)
-    const unsubEsteira = conn.onEvent('esteira:event', (event) => {
-      const msg = event as EsteiraEventMessage
+    // pipeline:event → pipeline store (tasks, phases, queue, live progress)
+    const unsubPipeline = conn.onEvent('pipeline:event', (event) => {
+      const msg = event as PipelineEventMessage
       if (msg?.event) {
-        useEsteiraStore.getState().aplicarEvento(msg.event)
+        usePipelineStore.getState().applyEvent(msg.event)
       }
     })
 
@@ -236,8 +236,9 @@ export function useCompanion() {
       unsubWorkerConfig()
       unsubPrefs()
       unsubQueue()
-      unsubRotinas()
-      unsubEsteira()
+      unsubRoutines()
+      unsubPipeline()
     }
   }, [])
 }
+

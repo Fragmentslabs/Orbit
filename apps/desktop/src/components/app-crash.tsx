@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next"
 
 /**
- * O que a janela mostra quando um erro escapa de todas as outras redes.
+ * What the window shows when an error escapes all the other nets.
  *
- * Sem isto, o que sobrava era o fundo escuro da janela: parecia que o app
- * tinha travado, e não havia como saber o que quebrou. Aqui o erro fica
- * visível — para quem precisa reportá-lo — e recarregar é um clique.
+ * Without this, what was left was the dark background of the window: it looked like the app
+ * had frozen, and there was no way to know what broke. Here the error stays
+ * visible — for whoever needs to report it — and reloading is one click.
  */
 export function AppCrash({ error }: { error: Error }) {
   const { t } = useTranslation()

@@ -7,12 +7,12 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 
 /**
- * Estado do /init por diretório: alimenta o card automático de projeto novo
- * e o comando /init. Eventos de progresso chegam do main via init:event.
+ * State of /init per directory: feeds the automatic new project card
+ * and the /init command. Progress events arrive from main through init:event.
  */
 
 const DISMISSED_KEY = "orbit-init-dismissed"
-const DISMISSED_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 dias
+const DISMISSED_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 function loadDismissed(): string[] {
   try {
@@ -42,22 +42,22 @@ function saveDismissed(dirs: string[]) {
 
 export interface InitProgress {
   stage: InitStage
-  /** exploring: subagents concluídos/total */
+  /** exploring: subagents finished/total */
   progress?: { done: number; total: number; area?: ProjectArea }
   areas?: ProjectArea[]
   error?: string
 }
 
 interface InitState {
-  /** Progresso por diretório (só de inits desta sessão do app) */
+  /** Progress per directory (only for inits of this app session) */
   progress: Record<string, InitProgress>
-  /** Diretórios já inicializados (cache do init:status) */
+  /** Directories already initialized (init:status cache) */
   initialized: Record<string, boolean>
-  /** Cards dispensados pelo usuário (persistido) */
+  /** Cards dismissed by the user (persisted) */
   dismissed: string[]
   _subscribed: boolean
 
-  /** Consulta (e cacheia) se o projeto já tem memórias de init */
+  /** Checks (and caches) whether the project already has init memories */
   check: (directory: string) => Promise<boolean>
   run: (directory: string, force?: boolean) => Promise<void>
   dismiss: (directory: string) => void
@@ -94,9 +94,9 @@ export const useInitStore = create<InitState>((set, get) => ({
       return
     }
     set((state) => ({ progress: { ...state.progress, [directory]: { stage: "scanning" } } }))
-    // Sem worker configurado, os campos vão indefinidos e o runProjectInit cai
-    // em providerId/modelId — o modelo principal. Substituir por codeModel aqui
-    // contrariava a UI e podia apontar para um modelo indisponível.
+    // Without a configured worker the fields go undefined and runProjectInit falls
+    // back to providerId/modelId — the main model. Replacing it with codeModel here
+    // contradicted the UI and could point to an unavailable model.
     const worker = useProviderStore.getState().workerModel
     await initApi.run({
       directory,
@@ -126,7 +126,7 @@ export const useInitStore = create<InitState>((set, get) => ({
   },
 }))
 
-/** Assina os eventos do main uma única vez (lazy — no primeiro uso). */
+/** Subscribes to main's events only once (lazy — on first use). */
 function subscribe() {
   if (useInitStore.getState()._subscribed) return
   useInitStore.setState({ _subscribed: true })
@@ -141,8 +141,8 @@ function subscribe() {
           error: event.error,
         },
       },
-      // "done" também encerra um cancelamento e uma análise que não achou
-      // nada para gravar; só conta como inicializado quando algo foi salvo.
+      // "done" also ends a cancellation and an analysis that found
+      // nothing to write; it only counts as initialized when something was saved.
       initialized:
         event.stage === "done" && (event.areas?.length ?? 0) > 0
           ? { ...state.initialized, [event.directory]: true }

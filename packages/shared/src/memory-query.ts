@@ -1,12 +1,12 @@
 /**
- * Consulta de recuperação a partir da conversa recente.
+ * Retrieval query from the recent conversation.
  *
- * Mensagens como "E quanto custaria?" ou "Quero o mais barato" não dizem do que
- * se trata sozinhas. Em vez de mandar a conversa inteira ao embedding (o que
- * puxaria assuntos antigos), a consulta contextual junta a mensagem atual a um
- * trecho compacto do turno anterior — e só é usada quando a mensagem isolada
- * não achou evidência (ver `needsContextRetry`), para a troca de assunto
- * ("E o código da academia?") não herdar o tema da conversa anterior.
+ * Messages like "And how much would it cost?" or "I want the cheapest" do not say what
+ * they are about on their own. Instead of sending the whole conversation to the embedding (which
+ * would pull in old subjects), the contextual query joins the current message to a
+ * compact snippet of the previous turn — and it is only used when the isolated message
+ * found no evidence (see `needsContextRetry`), so that a change of subject
+ * ("And the gym code?") does not inherit the theme of the previous conversation.
  */
 
 import { lexTokens } from "./memory-retrieval"
@@ -17,16 +17,16 @@ export interface ChatTurn {
 }
 
 export interface QueryBuildOptions {
-  /** Teto de caracteres do contexto anexado */
+  /** Character cap of the attached context */
   maxContextChars?: number
-  /** Quantos turnos para trás olhar */
+  /** How many turns back to look */
   maxTurns?: number
 }
 
 export interface RetrievalQuery {
-  /** Texto para o embedding */
+  /** Text for the embedding */
   semantic: string
-  /** Texto original da mensagem (busca lexical) */
+  /** Original text of the message (lexical search) */
   lexical: string
   usedContext: boolean
 }
@@ -36,21 +36,21 @@ const clip = (s: string, n: number) => {
   return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`
 }
 
-/** Mensagem curta o bastante para depender do que veio antes. */
+/** Message short enough to depend on what came before. */
 export function isShortMessage(message: string, maxTokens = 8): boolean {
   return lexTokens(message).length <= maxTokens
 }
 
-/** Só a mensagem atual: texto semântico e lexical iguais. */
+/** Only the current message: semantic and lexical text equal. */
 export function isolatedQuery(message: string): RetrievalQuery {
   const text = message.trim()
   return { semantic: text, lexical: text, usedContext: false }
 }
 
 /**
- * Mensagem + trecho compacto do contexto: a pergunta anterior do usuário e o
- * fim da última resposta do assistente (onde costuma estar o assunto). O texto
- * lexical continua sendo só a mensagem original.
+ * Message + compact snippet of the context: the previous question from the user and the
+ * end of the last assistant answer (where the subject usually is). The lexical text
+ * remains only the original message.
  */
 export function contextualQuery(message: string, recent: ChatTurn[], options: QueryBuildOptions = {}): RetrievalQuery {
   const budget = options.maxContextChars ?? 360
@@ -70,8 +70,8 @@ export function contextualQuery(message: string, recent: ChatTurn[], options: Qu
 }
 
 /**
- * Vale refazer a busca com contexto? Só quando a mensagem é curta, há contexto
- * e a busca isolada não encontrou evidência (nem injeção nem ponteiro).
+ * Is it worth redoing the search with context? Only when the message is short, there is context
+ * and the isolated search found no evidence (neither injection nor pointer).
  */
 export function needsContextRetry(
   message: string,

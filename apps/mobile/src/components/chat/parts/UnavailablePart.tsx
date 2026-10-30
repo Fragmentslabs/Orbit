@@ -1,8 +1,8 @@
 /**
- * Card discreto para uma part que não tem como ser mostrada — URL ausente (part
- * antiga em cache, arquivo que o desktop não conseguiu servir). Mantém o título
- * visível: o texto do assistente pode falar de algo que o usuário ainda precisa
- * identificar, mesmo sem conseguir abrir.
+ * Discreet card for a part that cannot be shown — missing URL (an old part
+ * in the cache, a file the desktop could not serve). It keeps the title
+ * visible: the assistant text may talk about something the user still needs
+ * to identify, even without being able to open it.
  */
 import { View, Text } from 'react-native'
 import { getThemeTokens } from '~/lib/theme-tokens'

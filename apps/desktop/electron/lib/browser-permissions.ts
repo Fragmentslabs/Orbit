@@ -13,19 +13,19 @@ import { dataDir } from './storage'
 import { t, type MainMessageKey } from './i18n'
 
 /**
- * Permissões de site no navegador integrado (partition do painel e da engine
- * oculta de scripts): câmera, microfone, localização, notificações, leitura da
- * área de transferência e compartilhamento de tela.
+ * Site permissions in the built-in browser (the panel's partition and the hidden
+ * script engine's): camera, microphone, location, notifications, clipboard reading
+ * and screen sharing.
  *
- * Sem handler o Electron aprovava tudo em silêncio — e mesmo assim câmera e
- * microfone falhavam, porque o macOS nunca era consultado. Aqui cada site pede
- * como num navegador: um diálogo "Permitir / Bloquear" com "lembrar para este
- * site", e só depois do "sim" o macOS é consultado (o prompt do sistema
- * aparece uma vez para o app inteiro).
+ * Without a handler Electron approved everything silently — and camera and
+ * microphone still failed, because macOS was never asked. Here each site asks
+ * as in a browser: an "Allow / Block" dialog with "remember for this
+ * site", and only after the "yes" is macOS asked (the system prompt
+ * shows up once for the whole app).
  *
- * Decisões lembradas ficam em orbit-data/browser-permissions.json, por origem;
- * as não lembradas valem até o app fechar. "Limpar dados do navegador" apaga as
- * duas.
+ * Remembered decisions stay in orbit-data/browser-permissions.json, per origin;
+ * the ones not remembered count until the app closes. "Clear browser data" erases
+ * both.
  */
 
 type Kind = 'camera' | 'microphone' | 'geolocation' | 'notifications' | 'clipboard-read' | 'midi-sysex'
@@ -45,9 +45,9 @@ function storeFile(): string {
 }
 
 let remembered: Record<string, Partial<Record<Kind, Decision>>> | null = null
-/** Decisões sem "lembrar": valem até o app fechar. */
+/** Decisions without "remember": they count until the app closes. */
 const sessionDecisions = new Map<string, Decision>()
-/** Um diálogo por origem+tipos de cada vez — a página pode pedir em rajada. */
+/**One dialog per origin+types at a time — the page may ask in bursts. */
 const pending = new Map<string, Promise<boolean>>()
 
 async function loadRemembered(): Promise<Record<string, Partial<Record<Kind, Decision>>>> {
@@ -70,7 +70,7 @@ function decisionFor(origin: string, kind: Kind): Decision | undefined {
   return remembered?.[origin]?.[kind] ?? sessionDecisions.get(`${origin}|${kind}`)
 }
 
-/** Tipos geridos aqui; null = fora do escopo (segue o padrão do Electron). */
+/** Types managed here; null = out of scope (follows Electron's default). */
 function kindsForRequest(permission: string, details: { mediaTypes?: ('video' | 'audio')[] }): Kind[] | null {
   switch (permission) {
     case 'media': {
@@ -100,7 +100,7 @@ function originOf(url: string | undefined): string | null {
   }
 }
 
-/** Janela visível onde ancorar o diálogo (o guest do painel vive no host). */
+/** Visible window to anchor the dialog to (the panel's guest lives in the host). */
 function parentWindow(wc: WebContents | null): BrowserWindow | undefined {
   const host = wc?.hostWebContents ?? wc
   const win = host ? BrowserWindow.fromWebContents(host) : null
@@ -114,8 +114,8 @@ async function showDialog(win: BrowserWindow | undefined, options: Electron.Mess
 }
 
 /**
- * macOS: câmera e microfone também precisam do "sim" do sistema para o app.
- * Pergunta na primeira vez; se já foi negado, oferece abrir os Ajustes.
+ * macOS: camera and microphone also need the system's "yes" for the app.
+ * It asks the first time; if it was already denied, it offers to open Settings.
  */
 async function ensureSystemAccess(kinds: Kind[], wc: WebContents | null): Promise<boolean> {
   if (process.platform !== 'darwin') return true
@@ -187,7 +187,7 @@ function decide(origin: string, kinds: Kind[], wc: WebContents | null): Promise<
   return promise
 }
 
-/** Liga os handlers na sessão do navegador integrado. Chamar depois do app ready. */
+/** Connects the handlers in the built-in browser's session. Call after the app is ready. */
 export function setupBrowserPermissions(partition: string): void {
   const ses = session.fromPartition(partition)
   void loadRemembered()
@@ -206,8 +206,8 @@ export function setupBrowserPermissions(partition: string): void {
     void decide(origin, kinds, wc).then(callback)
   })
 
-  // Consultas síncronas (navigator.permissions.query, rótulos do
-  // enumerateDevices): só "concedido" quando já há um "sim" registrado.
+  // Synchronous queries (navigator.permissions.query, the labels of
+  // enumerateDevices): "granted" only when there is already a registered "yes".
   ses.setPermissionCheckHandler((_wc, permission, requestingOrigin, details) => {
     const mediaType = (details as { mediaType?: 'video' | 'audio' | 'unknown' }).mediaType
     const kinds =
@@ -226,9 +226,9 @@ export function setupBrowserPermissions(partition: string): void {
       : kinds.every((k) => decisionFor(origin, k) === 'allow')
   })
 
-  // getDisplayMedia: no macOS 15+ o seletor do próprio sistema assume (e já
-  // pede a permissão de gravação de tela); nos demais, confirma e compartilha
-  // a tela principal.
+  // getDisplayMedia: on macOS 15+ the system's own picker takes over (and already
+  // asks for the screen recording permission); on the others, it confirms and shares
+  // the main screen.
   ses.setDisplayMediaRequestHandler(
     (request, callback) => {
       void (async () => {
@@ -252,7 +252,7 @@ export function setupBrowserPermissions(partition: string): void {
   )
 }
 
-/** "Limpar dados do navegador" também esquece as permissões dadas aos sites. */
+/** "Clear browser data" also forgets the permissions given to sites. */
 export async function clearBrowserPermissions(): Promise<void> {
   remembered = {}
   sessionDecisions.clear()

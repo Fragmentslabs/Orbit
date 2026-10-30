@@ -1,30 +1,30 @@
 /**
- * A ponte que roda DENTRO de cada artboard (servida pelo scheme orbit-design://
- * e injetada como primeiro script do <head>) — é o que torna o canvas
- * selecionável e editável sem um modelo paralelo ao HTML.
+ * The bridge that runs INSIDE each artboard (served by the orbit-design:// scheme
+ * and injected as the first script of the <head>) — it is what makes the canvas
+ * selectable and editable without a model parallel to the HTML.
  *
- * O artboard roda num iframe sandbox SEM allow-same-origin: o painel não
- * alcança o DOM dele. Então quem lê e mexe no DOM é esta ponte, e os dois
- * conversam por postMessage com `source: "orbit-design"`:
+ * The artboard runs in a sandboxed iframe WITHOUT allow-same-origin: the panel cannot
+ * reach its DOM. So this bridge is the one that reads and touches the DOM, and the two
+ * talk over postMessage with `source: "orbit-design"`:
  *
- *   artboard → painel: ready (com os links para outras telas), tree, hover,
- *                      select, info, rects, wheel, key, textEdited, navigate
- *                      (link clicado no modo apresentação)
- *   painel → artboard: mode, select, hover, style, attr, text, tree
+ *   artboard → panel: ready (with the links to other screens), tree, hover,
+ *                     select, info, rects, wheel, key, textEdited, navigate
+ *                     (link clicked in presentation mode)
+ *   panel → artboard: mode, select, hover, style, attr, text, tree
  *
- * O ENDEREÇO de um elemento é o caminho de índices de filhos-elemento a partir
- * do <body> (`[1, 0, 2]`) — o mesmo que o painel usa para achar o elemento no
- * FONTE (DOMParser) e gravar a edição no arquivo. É por isso que a ponte vive no
- * <head> e nunca põe nada no <body>: o contorno da seleção é desenhado pelo
- * painel, por cima do iframe, e não aqui dentro.
+ * The ADDRESS of an element is the path of child-element indices from the
+ * <body> (`[1, 0, 2]`) — the same one the panel uses to find the element in the
+ * SOURCE (DOMParser) and write the edit into the file. That is why the bridge lives in the
+ * <head> and never puts anything in the <body>: the selection outline is drawn by the
+ * panel, on top of the iframe, and not in here.
  */
 
-/** Caminho reservado em que o scheme serve a ponte. */
+/** Reserved path where the scheme serves the bridge. */
 export const DESIGN_RUNTIME_PATH = '/__orbit_design_runtime.js'
 
 const RUNTIME_MARK = 'data-orbit-design-runtime'
 
-/** As propriedades que o painel de propriedades lê e edita (kebab-case). */
+/** The properties the properties panel reads and edits (kebab-case). */
 export const DESIGN_STYLE_PROPS = [
   'display',
   'position',
@@ -87,11 +87,11 @@ export const DESIGN_RUNTIME = `(() => {
   const SKIP = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT', 'TITLE', 'BASE'])
   const MAX_NODES = 1500
 
-  // No modo edição o artboard é uma superfície de seleção, não um documento
-  // para ler: nada de cursor de texto nem de seleção nativa por arraste. A
-  // exceção é o texto em edição (contenteditable), onde o cursor de texto é o
-  // esperado. Assim o primeiro clique seleciona e arrasta em vez de "prometer"
-  // edição de texto.
+  // In edit mode the artboard is a selection surface, not a document
+  // to read: no text cursor and no native selection by dragging. The
+  // exception is the text being edited (contenteditable), where the text cursor is
+  // expected. That way the first click selects and drags instead of "promising"
+  // text edition.
   const surface = document.createElement('style')
   surface.textContent =
     'html.__orbit-select, html.__orbit-select * { cursor: default !important; user-select: none !important; -webkit-user-select: none !important }' +
@@ -113,10 +113,10 @@ export const DESIGN_RUNTIME = `(() => {
   let drag = null
   let pendingDown = null
   let suppressClick = false
-  // A árvore do DOM custa para montar (até MAX_NODES nós) e só as Camadas a
-  // usam. Ela passa a ser enviada quando o painel PEDE ('tree') e, daí em
-  // diante, a cada mudança estrutural — nunca antes disso, e nunca depois de o
-  // painel fechar (o mesmo pedido com want:false).
+  // The DOM tree is expensive to build (up to MAX_NODES nodes) and only the Layers
+  // use it. It is sent when the panel ASKS for it ('tree') and, from then
+  // on, on every structural change — never before that, and never after the
+  // panel closes (the same request with want:false).
   let treeWanted = false
 
   const post = (message) => {
@@ -144,7 +144,7 @@ export const DESIGN_RUNTIME = `(() => {
     for (let i = 0; i < path.length; i += 1) {
       const index = path[i]
       if (index < 0) {
-        // Nó de TEXTO: só no último lugar do caminho.
+  // TEXT node: only in the last place of the path.
         if (i !== path.length - 1 || !node) return null
         const child = node.childNodes[-index - 1]
         return child && child.nodeType === 3 ? child : null
@@ -155,7 +155,7 @@ export const DESIGN_RUNTIME = `(() => {
     return node
   }
 
-  /** O caminho de um nó de TEXTO solto: o do pai + o índice do nó, negativo. */
+  /** The path of a loose TEXT node: the parent's + the node index, negative. */
   const pathOfText = (node) => {
     const parent = node.parentElement
     if (!parent) return null
@@ -166,13 +166,13 @@ export const DESIGN_RUNTIME = `(() => {
     return base.concat(-(index + 1))
   }
 
-  /** O caminho de qualquer alvo: elemento ou nó de texto. */
+  /** The path of any target: element or text node. */
   const pathOfNode = (node) => (node && node.nodeType === 3 ? pathOfText(node) : pathOf(node))
 
   const rectOf = (el) => {
     if (!el) return null
     if (el.nodeType === 3) {
-      // Texto solto: o retângulo é o do TRECHO (a Range do conteúdo).
+  // Loose text: the rectangle is the one of the RUN (the Range of the content).
       const range = document.createRange()
       range.selectNodeContents(el)
       const r = range.getBoundingClientRect()
@@ -183,18 +183,18 @@ export const DESIGN_RUNTIME = `(() => {
     return { x: r.left, y: r.top, w: r.width, h: r.height }
   }
 
-  // Os "dots" da seleção múltipla (como no Figma): UM CÍRCULO por item
-  // selecionado, no MEIO dele. Cada círculo é o punho daquele item: arrastar
-  // por ele reordena o grupo entre si (os itens que NÃO foram selecionados
-  // ficam onde estão). Quem arrasta o item em si é que pode levá-lo para fora
-  // do pai.
+  // The "dots" of the multiple selection (like in Figma): ONE CIRCLE per
+  // selected item, at its CENTER. Each circle is that item's handle: dragging
+  // by it reorders the group among themselves (the items that were NOT selected
+  // stay where they are). Whoever drags the item itself is the one who can take it out
+  // of the parent.
   //
-  // Vivem em <html>, e não no <body>, para não virarem mais filhos na
-  // árvore/paths.
+  // They live in <html>, and not in <body>, so that they do not become extra children in the
+  // tree/paths.
   //
-  // O estilo é TODO com !important: o CSS do artboard (que o agente escreve)
-  // pode ter regra genérica de div/button e deformar o círculo — largura,
-  // padding, transform. Aqui o círculo é redondo sempre.
+  // The style is ALL with !important: the artboard CSS (which the agent writes)
+  // may have a generic rule for div/button and deform the circle — width,
+  // padding, transform. Here the circle is round always.
   const DOT_STYLE =
     'position:fixed !important;width:12px !important;height:12px !important;min-width:0 !important;min-height:0 !important;max-width:none !important;max-height:none !important;margin:0 !important;padding:0 !important;border:1.5px solid #0d99ff !important;border-radius:50% !important;box-sizing:border-box !important;transform:none !important;transform-origin:center !important;background:#fff !important;box-shadow:0 1px 3px rgba(0,0,0,0.3) !important;z-index:2147483647 !important;cursor:grab !important;pointer-events:auto !important;flex:none !important;line-height:0 !important;font-size:0 !important;overflow:hidden !important;clip-path:none !important;filter:none !important'
 
@@ -209,7 +209,7 @@ export const DESIGN_RUNTIME = `(() => {
       const index = dots.indexOf(dot)
       const picked = group[index]
       if (!picked) return
-      // Arraste restrito: só a ordem entre os selecionados.
+  // Restricted drag: only the order among the selected items.
       startDrag([picked], e.clientX, e.clientY, true, group.slice())
     })
     document.documentElement.appendChild(dot)
@@ -235,7 +235,7 @@ export const DESIGN_RUNTIME = `(() => {
     }
   }
 
-  /** Os paths de todos os membros (vazio quando não há seleção). */
+  /** The paths of every member (empty when there is no selection). */
   const groupPaths = () => {
     const paths = []
     for (const el of group) {
@@ -276,11 +276,11 @@ export const DESIGN_RUNTIME = `(() => {
       children: [],
     }
     if (kind === 'svg') return node
-    // Filhos na ORDEM do DOM, misturando elementos e TEXTO SOLTO (o texto que
-    // não está dentro de nenhum elemento). Sem isso o texto some da lista de
-    // Camadas e não dá para pegar — e é texto de verdade na tela.
-    // Num elemento que SÓ tem texto, o elemento já é a camada: o texto de
-    // dentro dele não vira uma segunda camada.
+  // Children in DOM ORDER, mixing elements and LOOSE TEXT (the text that
+  // is not inside any element). Without that the text disappears from the
+  // Layers list and cannot be grabbed — and it is real text on the screen.
+  // In an element that ONLY has text, the element already is the layer: the text
+  // inside it does not become a second layer.
     const onlyText = el.children.length === 0
     let elementIndex = 0
     const kids = el.childNodes
@@ -318,8 +318,8 @@ export const DESIGN_RUNTIME = `(() => {
   const infoOf = (el) => {
     if (!el) return null
     if (el.nodeType === 3) {
-      // Texto solto: não tem tag nem estilo próprio — o estilo vem do pai
-      // (é herdado), e é lá que a edição age.
+  // Loose text: it has no tag and no style of its own — the style comes from the parent
+  // (it is inherited), and that is where the editing acts.
       const parent = el.parentElement
       const cs = getComputedStyle(parent || el)
       const inline = {}
@@ -372,12 +372,12 @@ export const DESIGN_RUNTIME = `(() => {
   }
 
   /**
-   * A info do selecionado, com o que DIFERE no grupo marcado como "Mixed" —
-   * é o que o painel mostra quando há mais de um elemento selecionado.
+   * The info of the selected item, with what DIFFERS in the group marked as "Mixed" —
+   * it is what the panel shows when more than one element is selected.
    *
-   * A comparação é do valor EFETIVO (o computado): dois elementos que
-   * ficaram iguais de verdade não são "mistos", mesmo que um deles tenha a
-   * propriedade no style e o outro herde.
+   * The comparison is of the EFFECTIVE value (the computed one): two elements that
+   * really became equal are not "mixed", even if one of them has the
+   * property in the style and the other inherits it.
    */
   const infoFor = (el) => {
     const info = infoOf(el)
@@ -391,12 +391,12 @@ export const DESIGN_RUNTIME = `(() => {
       return out
     }
     const mine = values(el.nodeType === 1 ? el : el.parentElement || el)
-    // Os valores dos outros, lidos uma vez só.
+  // The other members' values, read only once.
     const othersValues = others.map(values)
     const mixed = []
-    // Com mais de um selecionado, o valor em comum passa a ser o VALOR do
-    // campo (e não um placeholder apagado): é o que os selecionados têm em
-    // comum, e o que o usuário vê. O que difere fica sem valor e mostra "Misto".
+  // With more than one selected, the value in common becomes the VALUE of the
+  // field (and not a blanked placeholder): it is what the selected items have in
+  // common, and what the user sees. What differs is left without a value and shows "Mixed".
     const inline = {}
     for (const prop of PROPS) {
       const same = othersValues.every((other) => other[prop] === mine[prop])
@@ -411,8 +411,8 @@ export const DESIGN_RUNTIME = `(() => {
       if (same) attrs[name] = value
       else mixedAttrs.push(name)
     }
-    // O texto também é propriedade: se um tem um texto e o outro outro, é
-    // "misto" (e o que o usuário digitar vale para todos).
+  // Text is also a property: if one has a text and the other another, it is
+  // "mixed" (and what the user types applies to all of them).
     const mixedText = info.text !== null && others.some((other) => (other.textContent || '') !== (el.textContent || ''))
     return { ...info, inline, attrs, mixed, mixedAttrs, mixedText }
   }
@@ -424,7 +424,7 @@ export const DESIGN_RUNTIME = `(() => {
     syncDots()
   }
 
-  /** O alvo de um clique: o elemento, mas um <svg> inteiro vale como um. */
+  /** The target of a click: the element, but a whole <svg> counts as one. */
   const targetOf = (node) => {
     let el = node && node.nodeType === 1 ? node : node && node.parentElement
     if (!el) return null
@@ -438,7 +438,7 @@ export const DESIGN_RUNTIME = `(() => {
     return el
   }
 
-  /** O nó de texto solto sob o ponteiro (o navegador sabe dizer). */
+  /** The loose text node under the pointer (the browser knows how to tell). */
   const textNodeAtPoint = (x, y) => {
     try {
       if (document.caretPositionFromPoint) {
@@ -456,9 +456,9 @@ export const DESIGN_RUNTIME = `(() => {
   }
 
   /**
-   * O alvo do ponteiro: o elemento — ou o TEXTO SOLTO dentro dele, que é uma
-   * camada própria (sem tag e sem estilo: só conteúdo). Num elemento que é só
-   * texto, o elemento já é a camada.
+   * The pointer target: the element — or the LOOSE TEXT inside it, which is
+   * a layer of its own (no tag and no style: only content). In an element that is only
+   * text, the element already is the layer.
    */
   const targetAt = (x, y, node) => {
     const el = targetOf(node)
@@ -480,22 +480,22 @@ export const DESIGN_RUNTIME = `(() => {
       post({ type: 'textEdited', path: pathOf(el), html: el.innerHTML })
     }
     editing = null
-    // Sem limpar o range, o realce fica preso na tela — cinza, porque o
-    // documento perdeu o foco ao clicar fora do canvas.
+    // Without clearing the range, the highlight stays stuck on the screen — gray, because the
+    // document lost the focus when clicking outside the canvas.
     const selection = window.getSelection()
     if (selection) selection.removeAllRanges()
     sendInfo()
     sendRects()
   }
 
-  /** Põe o foco no texto em edição (o cursor é o do duplo clique nativo). */
+  /** Puts the focus on the text being edited (the cursor is the one of the native double click). */
   const focusEditing = () => {
     if (!editing) return
     try { window.focus() } catch (_) {}
     editing.el.focus()
   }
 
-  /** Entra em edição do texto do elemento (duplo clique). Devolve se começou. */
+  /** Enters the edition of the element's text (double click). Returns whether it started. */
   const startEditing = (el) => {
     if (!el || el === document.body || kindOf(el) !== 'text') return false
     if (editing && editing.el === el) return false
@@ -504,17 +504,17 @@ export const DESIGN_RUNTIME = `(() => {
     group = [el]
     editing = { el, html: el.innerHTML }
     el.setAttribute('contenteditable', 'true')
-    // A caixa da seleção (desenhada no painel) tem que ACOMPANHAR o texto: a
-    // cada tecla (input) e a cada mudança de tamanho mandamos o retângulo de
-    // novo. Sem isto a borda do painel ficava parada enquanto o texto crescia.
+    // The selection box (drawn in the panel) has to FOLLOW the text: on
+    // every keystroke (input) and on every size change we send the rectangle
+    // again. Without this the border of the panel stood still while the text grew.
     if (typeof ResizeObserver !== 'undefined') {
       editingResize = new ResizeObserver(sendRects)
       editingResize.observe(el)
     }
     focusEditing()
-    // Fallback: se o mousedown nativo não tiver dado foco ao iframe, o painel
-    // o foca (ver 'focus'). Não mexemos na seleção aqui — quem posiciona o
-    // cursor é o duplo clique nativo, para digitar de primeira.
+    // Fallback: if the native mousedown did not give the focus to the iframe, the panel
+    // focuses it (see 'focus'). We do not touch the selection here — whoever positions the
+    // cursor is the native double click, so that typing works on the first try.
     post({ type: 'focus' })
     sendInfo()
     sendRects()
@@ -526,9 +526,9 @@ export const DESIGN_RUNTIME = `(() => {
     if (e.target && e.target.closest && e.target.closest('[data-orbit-ui]')) return
     const el = targetAt(e.clientX, e.clientY, e.target)
     let next = el === document.body ? null : el
-    // Com Shift, o hover mostra o item do MESMO NÍVEL da seleção — o mesmo
-    // que o Shift+clique viraria. Passar por um texto fundo não acende a
-    // caixa dele: acende a do cartão, que é o que entraria no grupo.
+    // With Shift, the hover shows the item of the SAME LEVEL as the selection — the same
+    // one the Shift+click would turn into. Passing over a background text does not light up
+    // its box: it lights up the card's, which is what would enter the group.
     if (next && e.shiftKey && selected) {
       const level = pathOf(selected)
       if (level) next = snapLevel(next, level.length)
@@ -544,16 +544,16 @@ export const DESIGN_RUNTIME = `(() => {
     post({ type: 'hover', path: null, rect: null })
   })
 
-  // Digitar pode quebrar linha e mudar a altura: o retângulo da seleção no
-  // painel acompanha em tempo real (o ResizeObserver cobre o resto).
+  // Typing can break the line and change the height: the selection rectangle in the
+  // panel follows in real time (the ResizeObserver covers the rest).
   document.addEventListener('input', (e) => {
     if (editing && editing.el.contains(e.target)) sendRects()
   }, true)
 
-  // Clique duplo no MESMO elemento entra em edição. O ponto crítico: no duplo
-  // NÃO cancelamos o pointerdown — assim o mousedown nativo acontece, e é ele
-  // que dá foco ao iframe e coloca o cursor. Cancelá-lo deixava o foco no
-  // painel, e só um clique posterior (já em edição) o trazia.
+  // Double click on the SAME element enters edition. The critical point: on the double click
+  // we do NOT cancel the pointerdown — that way the native mousedown happens, and it is what
+  // gives the focus to the iframe and places the cursor. Canceling it left the focus in the
+  // panel, and only a later click (already in edition) brought it back.
   let lastDown = { el: null, at: 0 }
   let freeClick = false
 
@@ -571,12 +571,12 @@ export const DESIGN_RUNTIME = `(() => {
       lastDown = { el: node, at: now }
       freeClick = double && startEditing(node)
       if (freeClick) {
-        // A edição já está ativa, mas o gesto ainda pode virar arraste: quem
-        // decide é o limiar no pointermove (arrastar desfaz a edição).
+        // The edition is already active, but the gesture can still turn into a drag: who
+        // decides is the threshold in the pointermove (dragging undoes the edition).
         pendingDown = { el: node, x: e.clientX, y: e.clientY }
         return
       }
-      // Ainda pode virar um arraste: o limiar é medido no pointermove.
+      // It can still turn into a drag: the threshold is measured in the pointermove.
       if (node) pendingDown = { el: node, x: e.clientX, y: e.clientY }
     }
     if (freeClick) return
@@ -587,14 +587,14 @@ export const DESIGN_RUNTIME = `(() => {
     document.addEventListener(type, swallow, true)
   }
 
-  // ------------------------------------------------------------- arrastar
-  // Reordenar irmãos como no Figma: o elemento original fica no fluxo (apagado,
-  // como placeholder), um clone segue o ponteiro, e quando o clone cruza o
-  // centro de um irmão o DOM é reordenado NA HORA e os irmãos deslizam (FLIP
-  // com a Web Animations API, 160ms). No fim, a ordem vira uma mensagem para o
-  // painel reescrever o fonte. Saindo do pai, o arraste vira um MOVE: as guias
-  // (moldura do contêiner + linha de inserção) mostram onde ele cai, e o alvo
-  // é o contêiner no mesmo nível do pai.
+  // ------------------------------------------------------------- drag
+  // Reordering siblings like in Figma: the original element stays in the flow (faded,
+  // as a placeholder), a clone follows the pointer, and when the clone crosses the
+  // center of a sibling the DOM is reordered ON THE SPOT and the siblings slide (FLIP
+  // with the Web Animations API, 160ms). At the end, the order becomes a message for the
+  // panel to rewrite the source. Leaving the parent, the drag becomes a MOVE: the guides
+  // (container frame + insertion line) show where it lands, and the target
+  // is the container at the same level as the parent.
   const FLIP_MS = 160
   const FLIP_EASE = 'cubic-bezier(0.2, 0, 0, 1)'
 
@@ -626,17 +626,17 @@ export const DESIGN_RUNTIME = `(() => {
     }
   }
 
-  /** Ordem de documento: quem vem antes na árvore. */
+  /** Document order: whoever comes before in the tree. */
   const domOrder = (a, b) => (a === b ? 0 : a.compareDocumentPosition(b) & 4 ? -1 : 1)
 
-  /** Nós injetados pela ponte (fantasma, guias e o dot) não são conteúdo. */
+  /** Nodes injected by the bridge (ghost, guides and the dot) are not content. */
   const isInjected = (node) =>
     node.nodeType === 1 && (node.hasAttribute('data-orbit-drag') || node.hasAttribute('data-orbit-guide') || node.hasAttribute('data-orbit-ui'))
 
-  /** Filhos "de verdade" de um pai: as guias e o fantasma do arraste não contam. */
+  /** "Real" children of a parent: the guides and the drag ghost do not count. */
   const realChildren = (parent) => Array.prototype.filter.call(parent.children, (child) => !isInjected(child))
 
-  /** Aplica uma ordem (slot → índice original) preservando os nós de texto. */
+  /** Applies an order (slot → original index) preserving the text nodes. */
   const applyOrder = (parent, order) => {
     const nodes = Array.prototype.slice.call(parent.childNodes)
     const elements = nodes.filter((node) => node.nodeType === 1 && !isInjected(node))
@@ -653,9 +653,9 @@ export const DESIGN_RUNTIME = `(() => {
   }
 
   /**
-   * Sobe o elemento até a PROFUNDIDADE pedida — o mesmo nível da seleção.
-   * É o que o Shift+clique usa: o grupo é sempre um conjunto de irmãos, e
-   * nunca uma mistura de níveis (nem uma coisa funda da árvore).
+   * Raises the element up to the requested DEPTH — the same level as the selection.
+   * It is what the Shift+click uses: the group is always a set of siblings, and
+   * never a mix of levels (nor something deep from the tree).
    */
   const snapLevel = (el, level) => {
     let node = el
@@ -667,7 +667,7 @@ export const DESIGN_RUNTIME = `(() => {
     return node
   }
 
-  /** A caixa de conteúdo (sem borda/padding): onde moldura e linha são desenhadas. */
+  /** The content box (without border/padding): where frame and line are drawn. */
   const contentBox = (el) => {
     const rect = el.getBoundingClientRect()
     const cs = getComputedStyle(el)
@@ -713,7 +713,7 @@ export const DESIGN_RUNTIME = `(() => {
     }
   }
 
-  /** Volta os irmãos à ordem original (identidade) — cancelar, ou mirar fora do pai. */
+  /** Returns the siblings to the original order (identity) — cancel, or aim outside the parent. */
   const restoreSiblings = (d) => {
     if (d.order.every((value, i) => value === i)) return false
     applyOrder(d.parent, d.siblings.map((_, i) => i))
@@ -723,14 +723,14 @@ export const DESIGN_RUNTIME = `(() => {
   }
 
   /**
-   * Para onde o arraste cai quando o ponteiro sai do pai: o contêiner do alvo
-   * fica no MESMO NÍVEL do pai (a altura na árvore), como no Figma — arrastar
-   * entre colunas cai na outra coluna; sobre um cartão, no nível dos cartões.
-   * Sobre o próprio pai (ou um irmão) não há alvo: é o reordenar ao vivo.
+   * Where the drag lands when the pointer leaves the parent: the target's container
+   * stays at the SAME LEVEL as the parent (the height in the tree), like in Figma — dragging
+   * between columns lands on the other column; over a card, at the level of the cards.
+   * Over the parent itself (or a sibling) there is no target: it is the live reordering.
    */
   const crossTarget = (x, y) => {
-    // Arraste pelo dot: ele não oferece saída do pai — só a reordenação entre
-    // os filhos de onde o grupo está.
+    // Drag by the dot: it does not offer a way out of the parent — only the reordering among
+    // the children where the group is.
     if (drag.restricted) return null
     const hit = document.elementFromPoint(x, y)
     if (!hit || (hit.closest && hit.closest('[data-orbit-ui]'))) return null
@@ -758,10 +758,10 @@ export const DESIGN_RUNTIME = `(() => {
   }
 
   /**
-   * Começa um arraste. "restricted" é o arraste pelo CÍRCULO: ele reordena o
-   * grupo entre si (e só entre si — os irmãos que não foram selecionados
-   * ficam onde estão) e não oferece saída do pai. "reorderGroup" é o conjunto
-   * reordenado; sem ele, o arraste normal mexe em todos os irmãos.
+   * Starts a drag. "restricted" is the drag by the CIRCLE: it reorders the
+   * group among themselves (and only among themselves — the siblings that were not selected
+   * stay where they are) and does not offer a way out of the parent. "reorderGroup" is the set
+   * being reordered; without it, the normal drag touches all the siblings.
    */
   const startDrag = (members, x, y, restricted, reorderGroup) => {
     if (!members || members.length === 0) return
@@ -778,8 +778,8 @@ export const DESIGN_RUNTIME = `(() => {
     const others = siblings.filter((el) => members.indexOf(el) < 0)
     const originIndex = memberIndexes[0]
     if (restricted) {
-      // O círculo não mexe na seleção: o grupo continua como está, e o
-      // reordenado é ele (o conjunto dos selecionados).
+      // The circle does not touch the selection: the group stays as it is, and the
+      // reordered one is it (the set of the selected items).
     } else {
       if (group.indexOf(selected) < 0) selected = members[members.length - 1]
       group = members.slice()
@@ -795,10 +795,10 @@ export const DESIGN_RUNTIME = `(() => {
       if (r.right > right) right = r.right
       if (r.bottom > bottom) bottom = r.bottom
     }
-    // O fantasma é um wrapper no FIM do <body> (não desloca nenhum caminho)
-    // com um clone absoluto por membro, e recebe a tipografia COMPUTADA de cada
-    // original — sem isto ele não herdava a fonte/cor que vinham dos avós e
-    // caía na fonte do navegador (serifa).
+    // The ghost is a wrapper at the END of <body> (it shifts no path)
+    // with an absolute clone per member, and it receives the COMPUTED typography of each
+    // original — without this it did not inherit the font/color that came from the grandparents and
+    // fell back to the browser font (serif).
     const wrapper = document.createElement('div')
     wrapper.setAttribute('data-orbit-drag', '')
     wrapper.style.cssText =
@@ -841,8 +841,8 @@ export const DESIGN_RUNTIME = `(() => {
       el.style.opacity = '0.25'
       el.style.pointerEvents = 'none'
     }
-    // No arraste restrito (pelo círculo), o conjunto reordenado é o grupo
-    // selecionado; suas POSIÇÕES no pai são as vagas que elas ocupam.
+    // In the restricted drag (by the circle), the reordered set is the selected
+    // group; its POSITIONS in the parent are the slots they occupy.
     const reorderMembers = restricted ? (reorderGroup || []).slice().sort(domOrder) : members
     const reorderIndexes = []
     for (const el of reorderMembers) {
@@ -869,11 +869,11 @@ export const DESIGN_RUNTIME = `(() => {
       startY: y,
       moved: false,
       styles,
-      // Arraste pelo círculo: só reordena o grupo entre si.
+      // Drag by the circle: it only reorders the group among themselves.
       restricted: Boolean(restricted),
       reorderMembers,
       reorderIndexes,
-      // A ordem atual dos selecionados (índices dentro de reorderMembers).
+      // The current order of the selected items (indices inside reorderMembers).
       relative: reorderMembers.map((_, i) => i),
       picked: restricted ? members[0] : null,
     }
@@ -892,9 +892,9 @@ export const DESIGN_RUNTIME = `(() => {
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return
     drag.moved = true
     if (drag.restricted) {
-      // Arraste pelo círculo: o item arrastado muda de lugar ENTRE OS
-      // SELECIONADOS. Os irmãos que não foram selecionados ficam onde
-      // estão — só as vagas dos selecionados é que se trocam.
+      // Drag by the circle: the dragged item changes place AMONG THE
+      // SELECTED ONES. The siblings that were not selected stay where
+      // they are — only the slots of the selected items are swapped.
       const rect = drag.clone.getBoundingClientRect()
       const center = drag.axis === 'x' ? rect.left + rect.width / 2 : rect.top + rect.height / 2
       const picked = drag.reorderMembers.indexOf(drag.picked)
@@ -915,8 +915,8 @@ export const DESIGN_RUNTIME = `(() => {
     }
     const target = crossTarget(e.clientX, e.clientY)
     if (target) {
-      // Fora do pai: desfaz a ordem ao vivo (o fonte ainda é a referência dos
-      // caminhos no drop) e mostra as guias de onde o bloco cai.
+      // Outside the parent: undoes the live order (the source is still the reference of the
+      // paths on drop) and shows the guides of where the block lands.
       if (restoreSiblings(drag)) sendRects()
       drag.target = target
       showGuides(target)
@@ -931,8 +931,8 @@ export const DESIGN_RUNTIME = `(() => {
       if (center < centerOf(drag.others[i], drag.axis)) { index = i; break }
     }
     if (index === drag.index) return
-    // Os membros viram um bloco contíguo na posição "index" entre os demais
-    // irmãos: a ordem nova é os "outros" até ali, o bloco, e o resto.
+    // The members become a contiguous block at the position "index" among the other
+    // siblings: the new order is the "others" up to there, the block, and the rest.
     const otherOrder = drag.siblings.map((_, i) => i).filter((i) => drag.memberIndexes.indexOf(i) < 0)
     const nextOrder = otherOrder.slice(0, index).concat(drag.memberIndexes, otherOrder.slice(index))
     flip(drag.others.concat(drag.members), () => applyOrder(drag.parent, nextOrder))
@@ -961,15 +961,15 @@ export const DESIGN_RUNTIME = `(() => {
     suppressClick = true
     const target = commit && d.target && d.target.parent !== d.parent && !d.members.some((el) => el === d.target.parent || el.contains(d.target.parent)) ? d.target : null
     if (!commit) {
-      // Desfaz no DOM como o fonte faz: os elementos voltam à ordem original,
-      // cada um no "slot" onde o nó de texto vizinho estava (o arraste nunca
-      // mexe nos nós de texto).
+      // Undoes it in the DOM as the source does: the elements go back to the original order,
+      // each one in the "slot" where the neighboring text node was (the drag never
+      // touches the text nodes).
       restoreSiblings(d)
     } else if (target) {
-      // Soltar em outro pai: a ordem ao vivo volta ao original para os CAMINHOS
-      // baterem com o fonte, os membros mudam de lugar na tela e o painel
-      // reescreve. O bloco entra na ordem do DOM, cada um antes da MESMA
-      // referência.
+      // Dropping on another parent: the live order goes back to the original so that the PATHS
+      // match the source, the members move on the screen and the panel
+      // rewrites it. The block enters the DOM order, each one before the SAME
+      // reference.
       restoreSiblings(d)
       const parentPath = pathOf(target.parent)
       const fromPaths = d.members.map((el) => pathOf(el))
@@ -977,8 +977,8 @@ export const DESIGN_RUNTIME = `(() => {
         const kids = realChildren(target.parent)
         const reference = kids[target.index] || null
         for (const el of d.members) target.parent.insertBefore(el, reference)
-        // "Pouso": cada membro parte da posição do seu clone no fantasma e
-        // encaixa no destino.
+        // "Landing": each member starts from the position of its clone in the ghost and
+        // slots into the destination.
         for (let i = 0; i < d.members.length; i += 1) {
           const el = d.members[i]
           const to = el.getBoundingClientRect()
@@ -1003,13 +1003,13 @@ export const DESIGN_RUNTIME = `(() => {
     if (Math.abs(e.clientX - pendingDown.x) + Math.abs(e.clientY - pendingDown.y) < 4) return
     const p = pendingDown
     pendingDown = null
-    // Duplo clique no texto já entrou em edição no pointerdown; se o gesto
-    // virou arraste, a edição cai (o duplo clique "de verdade" não se move).
-    // Em outro elemento, o texto em edição é confirmado antes de arrastar.
+    // The double click on the text already entered edition on the pointerdown; if the gesture
+    // turned into a drag, the edition is dropped (the "real" double click does not move).
+    // On another element, the text being edited is confirmed before dragging.
     if (editing) finishEditing(editing.el !== p.el)
-    // Com mais de um selecionado, arrastar QUALQUER PARTE de um membro leva o
-    // grupo inteiro junto (e é por ali que o grupo pode sair do pai). Clicar
-    // (sem arrastar) continua Selecting o elemento sob o ponteiro.
+    // With more than one selected, dragging ANY PART of a member takes the
+    // whole group along (and that is how the group can leave the parent). Clicking
+    // (without dragging) keeps selecting the element under the pointer.
     const member = group.length > 1 ? group.find((el) => el === p.el || el.contains(p.el)) : null
     const members = member ? group.slice() : [p.el]
     selected = member ?? p.el
@@ -1031,9 +1031,9 @@ export const DESIGN_RUNTIME = `(() => {
   const LINK_SKIP = /^(#|https?:|mailto:|tel:|javascript:|data:|blob:)/i
   document.addEventListener('click', (e) => {
     if (e.target && e.target.closest && e.target.closest('[data-orbit-ui]')) return
-    // O clique que fecha um arraste nunca chega ao usuário. O sinal só cai no
-    // próximo pointerdown — assim o dblclick que o sucede (o navegador pode
-    // dispará-lo mesmo depois de um arraste curto) também é ignorado.
+    // The click that closes a drag never reaches the user. The signal only falls on the
+    // next pointerdown — that way the dblclick that follows it (the browser can
+    // fire it even after a short drag) is also ignored.
     if (suppressClick) {
       e.preventDefault()
       e.stopPropagation()
@@ -1044,8 +1044,8 @@ export const DESIGN_RUNTIME = `(() => {
       if (!a) return
       const href = a.getAttribute('href') || ''
       if (!href || LINK_SKIP.test(href)) return
-      // O artboard é uma tela de um protótipo: o link relativo vira "ir para
-      // essa tela" — quem decide qual é (e se existe) é o painel.
+      // The artboard is a screen of a prototype: the relative link becomes "go to
+      // that screen" — whoever decides which one it is (and whether it exists) is the panel.
       e.preventDefault()
       e.stopPropagation()
       post({ type: 'navigate', href })
@@ -1059,9 +1059,9 @@ export const DESIGN_RUNTIME = `(() => {
     const el = targetAt(e.clientX, e.clientY, e.target)
     let node = el === document.body ? null : el
     if (node && e.shiftKey && selected) {
-      // O Shift trabalha no MESMO NÍVEL da seleção: o alvo sobe até a
-      // profundidade do selecionado, para o grupo não virar uma mistura de
-      // níveis (e para não sugerir coisas fundas da árvore).
+      // Shift works at the SAME LEVEL as the selection: the target goes up to the
+      // depth of the selected item, so that the group does not become a mix of
+      // levels (and does not suggest deep things from the tree).
       const level = pathOfNode(selected)
       if (level) node = snapLevel(node, level.length)
     }
@@ -1069,12 +1069,12 @@ export const DESIGN_RUNTIME = `(() => {
       selected = null
       group = []
     } else if (node.nodeType === 3) {
-      // Texto solto: entra na seleção sozinho — texto não forma grupo.
+      // Loose text: it enters the selection by itself — text does not form a group.
       selected = node
       group = []
     } else if (e.shiftKey && selected && selected !== node && selected.parentElement === node.parentElement) {
-      // Shift alterna irmãos no grupo (como no Figma): clicar num membro o
-      // tira, clicar num irmão o põe — o último clicado vira o selecionado.
+      // Shift toggles siblings in the group (like in Figma): clicking a member takes it
+      // out, clicking a sibling puts it in — the last one clicked becomes the selected item.
       if (group.indexOf(node) >= 0) {
         group = group.filter((member) => member !== node)
         selected = group.length ? group[group.length - 1] : null
@@ -1093,12 +1093,12 @@ export const DESIGN_RUNTIME = `(() => {
   document.addEventListener('dblclick', (e) => {
     if (!selectMode) return
     if (e.target && e.target.closest && e.target.closest('[data-orbit-ui]')) return
-    // Um dblclick depois de um arraste (curto, ainda na mesma vizinhança) não
-    // pode virar edição.
+    // A dblclick after a drag (short, still in the same neighborhood) cannot
+    // become an edition.
     if (suppressClick) return
-    // Sem preventDefault: a seleção de palavra nativa do duplo clique é o
-    // cursor que o usuário espera. A edição normalmente já começou no
-    // pointerdown; aqui é só o fallback.
+    // Without preventDefault: the native word selection of the double click is the
+    // cursor the user expects. The edition has usually already started on the
+    // pointerdown; here it is only the fallback.
     startEditing(targetOf(e.target))
   }, true)
 
@@ -1127,12 +1127,12 @@ export const DESIGN_RUNTIME = `(() => {
     if (editing && e.target === editing.el) finishEditing(true)
   }, true)
 
-  // Clicar fora do canvas tira o foco do iframe SEM disparar focusout no
-  // elemento; sem isto a edição (e o realce cinza) ficava presa.
+  // Clicking outside the canvas takes the focus from the iframe WITHOUT firing focusout on
+  // the element; without this the edition (and the gray highlight) stayed stuck.
   window.addEventListener('blur', () => finishEditing(true))
 
-  // O artboard é um quadro do canvas: a roda navega o CANVAS (como no Figma),
-  // não rola o documento por dentro.
+  // The artboard is a frame of the canvas: the wheel navigates the CANVAS (like in Figma),
+  // it does not scroll the document inside.
   window.addEventListener('wheel', (e) => {
     if (!selectMode) return
     e.preventDefault()
@@ -1169,8 +1169,8 @@ export const DESIGN_RUNTIME = `(() => {
     if (msg.type === 'select') {
       selected = byPath(msg.path)
       if (selected === document.body) selected = null
-      // O painel manda o grupo inteiro (a seleção múltipla da lista de
-      // Camadas); só entram os IRMÃOS do selecionado — o resto é ignorado.
+      // The panel sends the whole group (the multiple selection of the Layers
+      // list); only the SIBLINGS of the selected item enter — the rest is ignored.
       const members = []
       const list = Array.isArray(msg.group) ? msg.group : []
       for (const path of list) {
@@ -1190,9 +1190,9 @@ export const DESIGN_RUNTIME = `(() => {
       sendRects()
       return
     }
-    // A lista de Camadas mandou uma mudança de estrutura: ela é aplicada no
-    // DOM ao vivo (o painel grava o fonte logo em seguida) para o canvas não
-    // ficar para trás até o próximo reload.
+    // The Layers list sent a structural change: it is applied to the live
+    // DOM (the panel writes the source right after) so that the canvas does not
+    // lag behind until the next reload.
     if (msg.type === 'move') {
       const moving = byPath(msg.path)
       const parent = byPath(msg.parent)
@@ -1225,8 +1225,8 @@ export const DESIGN_RUNTIME = `(() => {
         if (el) els.push(el)
       }
       if (els.length === 0) return
-      // Do último para o primeiro: assim o caminho dos que ainda restam não
-      // muda no meio da remoção.
+      // From the last to the first: that way the path of the ones still left does not
+      // change in the middle of the removal.
       for (const el of els.reverse()) el.remove()
       selected = null
       group = []
@@ -1235,9 +1235,9 @@ export const DESIGN_RUNTIME = `(() => {
       sendRects()
       return
     }
-    // "Envolver": os elementos selecionados viram filhos de um div novo, que
-    // entra no lugar do primeiro deles. O painel gravou o MESMO plano no
-    // fonte — aqui é só a mesma mudança, ao vivo.
+    // "Wrap": the selected elements become children of a new div, which
+    // enters in the place of the first of them. The panel wrote the SAME plan to the
+    // source — here it is only the same change, live.
     if (msg.type === 'wrap') {
       const parent = byPath(msg.parent)
       const list = Array.isArray(msg.children) ? msg.children : []
@@ -1261,8 +1261,8 @@ export const DESIGN_RUNTIME = `(() => {
     }
     const el = byPath(msg.path)
     if (!el) return
-    // Texto solto não tem estilo nem atributo: quem os tem é o pai (é de lá
-    // que o texto herda).
+    // Loose text has no style and no attribute: the parent has them (that is where
+    // the text inherits from).
     const styleTarget = el.nodeType === 3 ? el.parentElement : el
     if (msg.type === 'style') {
       if (!styleTarget) return
@@ -1277,8 +1277,8 @@ export const DESIGN_RUNTIME = `(() => {
       if (el.nodeType === 3) el.data = msg.value
       else el.textContent = msg.value
     }
-    // A mensagem pode ser de OUTRO membro do grupo: mudar estilo não muda a
-    // seleção (o painel continua mostrando o primário).
+    // The message may come from ANOTHER member of the group: changing style does not change the
+    // selection (the panel keeps showing the primary one).
     if (!selected || selected === el) selected = el
     sendInfo()
     sendRects()
@@ -1297,9 +1297,9 @@ export const DESIGN_RUNTIME = `(() => {
 
   const ready = () => {
     const doc = document.documentElement
-    // A árvore NÃO vai junto: montá-la custa (até 1500 nós, ver MAX_NODES) e
-    // só as Camadas a usam — o painel pede a mensagem 'tree' quando está à
-    // vista, e aí sim ela é montada (ver design-tab.tsx).
+    // The tree does NOT come along: building it is expensive (up to 1500 nodes, see MAX_NODES) and
+    // only the Layers use it — the panel asks for the 'tree' message when it is in
+    // view, and only then it is built (see design-tab.tsx).
     post({ type: 'ready', width: doc.scrollWidth, height: doc.scrollHeight, links: links() })
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready)
@@ -1308,10 +1308,10 @@ export const DESIGN_RUNTIME = `(() => {
 })()`
 
 /**
- * Versão do runtime, derivada do próprio fonte: só muda quando ele muda. Vai no
- * URL para o iframe poder reaproveitar o script (e o código já compilado) entre
- * remontagens — o `immutable` do Cache-Control em design-store.ts só é seguro
- * porque a versão muda junto com o conteúdo.
+ * Runtime version, derived from the source itself: it only changes when the source changes. It goes in the
+ * URL so the iframe can reuse the script (and the already compiled code) between
+ * remounts — the `immutable` of Cache-Control in design-store.ts is only safe
+ * because the version changes along with the content.
  */
 const DESIGN_RUNTIME_VERSION = (() => {
   let hash = 0
@@ -1320,14 +1320,14 @@ const DESIGN_RUNTIME_VERSION = (() => {
 })()
 
 /**
- * Põe a ponte como primeiro script do <head> (idempotente) e, logo depois, o
- * `@font-face` da biblioteca de fontes do Orbit.
+ * Puts the bridge as the first script of the <head> (idempotent) and, right after it, the
+ * `@font-face` of the Orbit font library.
  *
- * A fonte instalada vale para TODO artboard sem o agente colar CSS: o
- * `font-family` pelo nome resolve, como uma fonte do sistema. O bloco vem antes
- * do CSS do próprio artboard (que ainda pode sobrepor), e o `@font-face` só é
- * baixado quando a família é usada — declarar as 20 fontes da biblioteca não
- * custa rede nenhuma.
+ * The installed font applies to EVERY artboard without the agent pasting CSS: the
+ * `font-family` by name resolves, like a system font. The block comes before
+ * the artboard's own CSS (which can still override it), and the `@font-face` is only
+ * downloaded when the family is used — declaring the library's 20 fonts does not
+ * cost any network.
  */
 export function injectDesignRuntime(html: string, fontCss = ''): string {
   if (html.includes(RUNTIME_MARK)) return html

@@ -6,17 +6,17 @@ import { cn } from "@/lib/utils"
 import { computerApi } from "@/src/lib/ipc"
 
 /**
- * Miniatura do último screenshot da janela controlada, com o alvo da última
- * ação marcado: mostra ONDE o agente agiu mesmo com o app atrás de outras
- * janelas (o screenshot é da janela, não da tela). Vem da memória do main —
- * os screenshots do Computer Use não vão para a galeria nem para o histórico,
- * por isso ela só existe enquanto o controle está ativo.
+ * Thumbnail of the last screenshot of the controlled window, with the target of the last
+ * action marked: it shows WHERE the agent acted even with the app behind other
+ * windows (the screenshot is of the window, not of the screen). It comes from the memory of the main process —
+ * the Computer Use screenshots go neither to the gallery nor to the history,
+ * which is why it only exists while the control is active.
  *
- * Usada nos painéis flutuantes (Orbit fora de foco), no popover do chip do
- * header e no card fixado acima do campo de mensagem.
+ * Used in the floating panels (Orbit out of focus), in the popover of the header
+ * chip and in the card pinned above the message field.
  */
 
-/** O último screenshot da conversa, atualizado a cada evento `shot` do main. */
+/** The last screenshot of the conversation, updated on every `shot` event from the main process. */
 export function useComputerShot(sessionId: string | undefined): ComputerShot | null {
   const [shot, setShot] = useState<ComputerShot | null>(null)
   useEffect(() => {
@@ -69,7 +69,7 @@ export function ComputerShotImage({ shot, className }: { shot: ComputerShot; cla
   )
 }
 
-/** A miniatura dos painéis flutuantes: some enquanto ainda não há screenshot. */
+/** The thumbnail of the floating panels: it disappears while there is no screenshot yet. */
 export function ComputerShotThumb({ sessionId }: { sessionId: string }) {
   const shot = useComputerShot(sessionId)
   if (!shot) return null
@@ -81,9 +81,9 @@ export function ComputerShotThumb({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * Miniatura fixada acima do campo de mensagem, por conversa. Fica em memória
- * de propósito: é um modo de assistir uma tarefa em andamento, não uma
- * preferência — a próxima tarefa começa com o popover, sem card ocupando a tela.
+ * Thumbnail pinned above the message field, per conversation. It stays in memory
+ * on purpose: it is a way of watching a task in progress, not a
+ * preference — the next task starts with the popover, with no card taking up the screen.
  */
 export const useComputerThumbPin = create<{ pinned: Record<string, boolean>; setPinned: (sessionId: string, pinned: boolean) => void }>((set) => ({
   pinned: {},

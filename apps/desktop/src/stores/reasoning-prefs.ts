@@ -3,8 +3,8 @@ import { create } from "zustand"
 import type { ModelReasoningPref } from "@shared/companion"
 
 /**
- * Preferências de reasoning por modelo (toggle + variant selecionada),
- * persistidas em localStorage e compartilhadas entre os inputs de chat/código.
+ * Reasoning preferences per model (toggle + selected variant),
+ * persisted in localStorage and shared between the chat/code inputs.
  */
 
 const STORAGE_KEY = "orbit-reasoning-prefs"
@@ -35,9 +35,9 @@ export const useReasoningPrefsStore = create<ReasoningPrefsState>((set) => ({
 }))
 
 /**
- * Copia a preferência de cada chave velha para a nova (renomeação no catálogo).
- * A velha fica: outro chat ainda salvo com o id antigo continua achando o nível.
- * Uma preferência já existente sob a chave nova vence — é escolha mais recente.
+ * Copies each old key's preference to the new one (rename in the catalog).
+ * The old one stays: another chat still saved with the old id keeps finding the level.
+ * A preference that already exists under the new key wins — it is the more recent choice.
  */
 export function copyReasoningPrefs(pairs: Array<[string, string]>) {
   const { prefs } = useReasoningPrefsStore.getState()
@@ -54,17 +54,17 @@ export function copyReasoningPrefs(pairs: Array<[string, string]>) {
   useReasoningPrefsStore.setState({ prefs: next })
 }
 
-/** Chaves "provedor/modelo" com preferência salva. */
+/** "provider/model" keys with a saved preference. */
 export function reasoningPrefKeys(): string[] {
   return Object.keys(useReasoningPrefsStore.getState().prefs)
 }
 
 /**
- * Preferência de um modelo lida direto do storage, na hora.
+ * A model's preference read straight from storage, on the spot.
  *
- * O overlay é outra janela: a cópia em memória dele não acompanha o que a
- * janela principal grava. Sem isto, o nível de thinking escolhido nas
- * Preferências só valeria no painel depois de reiniciar o app.
+ * The overlay is another window: its in-memory copy does not follow what the
+ * main window writes. Without this, the thinking level chosen in the
+ * Preferences would only apply in the panel after restarting the app.
  */
 export function readReasoningPref(
   providerId: string | undefined,

@@ -30,9 +30,9 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
     setMatchIndex(0)
   }, [query])
 
-  // O destaque do resultado é o PRÓPRIO termo grifado dentro da mensagem —
-  // nada de pintar a mensagem (ver highlightTextIn). O `flash` da rolagem
-  // fica desligado aqui justamente por isso.
+  // The result highlight is the TERM itself marked inside the message —
+  // no painting the message (see highlightTextIn). The `flash` of the scroll
+  // is turned off here precisely for that reason.
   useEffect(() => {
     const current = matches[matchIndex]
     const term = query.trim()
@@ -49,7 +49,7 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
     }
   }, [matches, matchIndex, query])
 
-  // Fechar a busca apaga o grifo junto: o destaque é da busca, não da mensagem.
+  // Closing the search erases the mark too: the highlight belongs to the search, not to the message.
   useEffect(() => clearTextHighlight, [])
 
   const goNext = () => matches.length > 0 && setMatchIndex((i) => (i + 1) % matches.length)
@@ -67,30 +67,30 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
 
   return (
     /*
-      A barra FLUTUA sobre a conversa, e precisa dizer isso.
+      The bar FLOATS over the conversation, and it needs to say so.
 
-      A lista de mensagens é puxada para cima (`-mt-10`) para correr por baixo
-      do degradê do topo, e, sendo irmã posterior, pintava por cima da barra
-      inteira: os botões existiam mas o clique caía na conversa. O z-index
-      resolve o clique; a sombra e o véu resolvem a outra metade, que é a barra
-      parecer perdida no meio do texto que passa por trás dela.
+      The message list is pulled up (`-mt-10`) to run under the
+      gradient at the top, and, being a later sibling, it painted over the whole
+      bar: the buttons existed but the click fell on the conversation. The z-index
+      solves the click; the shadow and the veil solve the other half, which is the bar
+      looking lost in the middle of the text passing behind it.
 
-      z-[70], e não z-30: a barra flutua no topo da conversa, mas o que é
-      flutuante ali está ACIMA dela — a persona do topo (z-40) e o header
-      (z-50, com os popovers presos nele em z-[60]) —, e o campo de digitação
-      acabava por baixo dessas peças. z-[70] fica acima de todas elas e ainda
-      abaixo dos modais (z-[80]) e dos menus portados (z-[999]).
+      z-[70], and not z-30: the bar floats at the top of the conversation, but what is
+      floating there is ABOVE it — the top persona (z-40) and the header
+      (z-50, with the popovers trapped in it at z-[60]) —, and the typing field
+      ended up below those pieces. z-[70] is above all of them and still
+      below the modals (z-[80]) and the portaled menus (z-[999]).
     */
     <div className="relative z-[70] mx-auto w-full max-w-3xl px-1 pb-2">
-      {/* Véu: escurece e apaga o que passa por baixo, terminando num degradê
-          para a conversa não ser cortada por uma linha reta. Fica atrás do
-          cartão, mas dentro do mesmo nível — por isso cobre as mensagens. */}
+      {/* Veil: darkens and fades what passes underneath, ending in a gradient
+          so the conversation is not cut by a straight line. It stays behind the
+          card, but within the same level — that is why it covers the messages. */}
       <div
         className="pointer-events-none absolute inset-x-0 -bottom-8 top-0 backdrop-blur-[2px]"
         style={{
-          // Atrás do cartão, à frente da conversa: o z-index negativo vale
-          // dentro do contexto criado pelo z-[70] do pai, então ele não escapa
-          // para trás das mensagens.
+          // Behind the card, in front of the conversation: the negative z-index applies
+          // within the context created by the parent's z-[70], so it does not escape
+          // behind the messages.
           zIndex: -10,
           backgroundImage:
             'linear-gradient(to bottom, var(--panel-bg, var(--background)) 55%, color-mix(in oklab, var(--panel-bg, var(--background)) 70%, transparent) 80%, transparent)',

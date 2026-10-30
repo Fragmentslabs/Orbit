@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { createPersistentRunner, type PersistentChild, type PersistentSpawn } from './runner'
 
 /**
- * O host persistente do Windows simulado: lê uma linha JSON por pedido e
- * responde conforme o `op`. Confere a correlação por id, que timeout e abort
- * matam o host e ele volta no próximo uso, e que UTF-8 partido entre chunks e
- * linhas fora do protocolo não quebram nada.
+ * The simulated persistent Windows host: it reads one JSON line per request and
+ * answers according to the `op`. It checks the correlation by id, that timeout and
+ * abort kill the host and it comes back on the next use, and that UTF-8 split across
+ * chunks and lines off the protocol break nothing.
  */
 
 type Reply = (req: { id: number; op: string; args: unknown }, out: PassThrough, child: FakeChild) => void
@@ -54,32 +54,32 @@ const line = (o: unknown) => `${JSON.stringify(o)}\n`
 const base = async () => ['-NoProfile', '-File', 'C:\\orbit\\windows.ps1']
 
 describe('createPersistentRunner', () => {
-  it('um host para várias operações, cada resposta casada pelo id (mesmo fora de ordem)', async () => {
+  it('one host for several operations, each answer matched by id (even out of order)', async () => {
     const pending: [number, PassThrough][] = []
     const host = fakeHost((req, out) => {
       if (req.op === 'slowish') pending.push([req.id, out])
       else {
         out.write(line({ id: req.id, ok: true, result: { op: req.op, args: req.args } }))
-        // Responde o lento depois do rápido: a ordem não importa, o id sim.
-        for (const [id, o] of pending.splice(0)) o.write(line({ id, ok: true, result: 'lento' }))
+        // Answers the slow one after the fast one: the order does not matter, the id does.
+        for (const [id, o] of pending.splice(0)) o.write(line({ id, ok: true, result: 'slow' }))
       }
     })
     const run = createPersistentRunner('powershell.exe', base, host.spawn)
     const [a, b] = await Promise.all([run('slowish', {}, { timeoutMs: 1000 }), run('apps', { x: 1 }, { timeoutMs: 1000 })])
-    expect(a).toBe('lento')
+    expect(a).toBe('slow')
     expect(b).toEqual({ op: 'apps', args: { x: 1 } })
     expect(await run('tree', { pid: 4 }, { timeoutMs: 1000 })).toEqual({ op: 'tree', args: { pid: 4 } })
     expect(host.spawned).toEqual([['-NoProfile', '-File', 'C:\\orbit\\windows.ps1']])
     expect(host.received.map((r) => r.op)).toEqual(['slowish', 'apps', 'tree'])
   })
 
-  it('erro do host vira ComputerError com o código dele', async () => {
+  it('a host error becomes ComputerError with its code', async () => {
     const host = fakeHost((req, out) => out.write(line({ id: req.id, ok: false, error: { code: 'elevated', message: 'App is elevated.' } })))
     const run = createPersistentRunner('powershell.exe', base, host.spawn)
     await expect(run('mouse', {}, { timeoutMs: 1000 })).rejects.toMatchObject({ code: 'elevated', message: 'App is elevated.' })
   })
 
-  it('timeout: registra o desfecho, mata o host, falha os outros pendentes e volta no próximo uso', async () => {
+  it('timeout: records the outcome, kills the host, fails the other pending ones and comes back on the next use', async () => {
     let answer = false
     const host = fakeHost((req, out) => {
       if (answer) out.write(line({ id: req.id, ok: true, result: 'ok' }))
@@ -96,17 +96,17 @@ describe('createPersistentRunner', () => {
     expect(host.spawned).toHaveLength(2)
   })
 
-  it('o primeiro pedido de cada host ganha o prazo da partida', async () => {
+  it('the first request of each host gets the startup deadline', async () => {
     const host = fakeHost((req, out) => {
       setTimeout(() => out.write(line({ id: req.id, ok: true, result: req.op })), 60)
     })
     const run = createPersistentRunner('powershell.exe', base, host.spawn, { startupGraceMs: 200 })
     expect(await run('perms', {}, { timeoutMs: 20 })).toBe('perms')
-    // Depois da primeira resposta, o prazo é só o da operação.
+    // After the first response, the deadline is only the one of the operation.
     await expect(run('apps', {}, { timeoutMs: 20 })).rejects.toMatchObject({ code: 'timeout' })
   })
 
-  it('abort mata o host e diz que foi parado', async () => {
+  it('abort kills the host and says it was stopped', async () => {
     const host = fakeHost(() => undefined)
     const run = createPersistentRunner('powershell.exe', base, host.spawn)
     const controller = new AbortController()
@@ -117,7 +117,7 @@ describe('createPersistentRunner', () => {
     await expect(run('tree', {}, { timeoutMs: 100, signal: controller.signal })).rejects.toMatchObject({ code: 'aborted' })
   })
 
-  it('o host morrendo falha o pendente com o fim do stderr', async () => {
+  it('a dying host fails the pending one with the end of stderr', async () => {
     const host = fakeHost((_req, _out, child) => {
       const stderr = child.stderr as unknown as PassThrough
       stderr.write('Add-Type : Cannot add type. Constrained language mode.\n')
@@ -130,17 +130,17 @@ describe('createPersistentRunner', () => {
     })
   })
 
-  it('UTF-8 partido entre chunks, várias linhas num chunk e linha fora do protocolo', async () => {
+  it('UTF-8 split across chunks, several lines in one chunk and a line outside the protocol', async () => {
     const host = fakeHost((req, out) => {
       if (req.op === 'type') {
         const bytes = Buffer.from(line({ id: req.id, ok: true, result: 'ação — olá 😀' }), 'utf8')
-        // Corta no meio do emoji.
+        // Cuts in the middle of the emoji.
         const cut = bytes.indexOf(Buffer.from('😀', 'utf8')) + 2
-        out.write('WARNING: aviso solto do PowerShell\n')
+        out.write('WARNING: loose warning from PowerShell\n')
         out.write(bytes.subarray(0, cut))
         setTimeout(() => out.write(bytes.subarray(cut)), 5)
       } else {
-        out.write(line({ id: req.id, ok: true, result: 1 }) + line({ id: 999, ok: true, result: 'órfã' }))
+        out.write(line({ id: req.id, ok: true, result: 1 }) + line({ id: 999, ok: true, result: 'orphan' }))
       }
     })
     const run = createPersistentRunner('powershell.exe', base, host.spawn)

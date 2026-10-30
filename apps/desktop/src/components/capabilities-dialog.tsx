@@ -21,11 +21,11 @@ import {
 import { useAppSettings } from "@/src/stores/app-settings"
 
 /**
- * O mapa do que o Orbit faz — aberto pelo link discreto da tela inicial.
+ * The map of what Orbit does — opened by the discreet link on the start screen.
  *
- * Dialog e não navegação: trocar de tela jogaria fora o que a pessoa já
- * digitou no composer. E "Experimentar" preenche o campo em vez de enviar:
- * o exemplo é uma sugestão de partida, não uma ordem.
+ * A dialog and not navigation: switching screens would throw away what the person has already
+ * typed in the composer. And "Try it" fills the field instead of sending:
+ * the example is a starting suggestion, not an order.
  */
 export function CapabilitiesDialog({
   open,
@@ -39,13 +39,13 @@ export function CapabilitiesDialog({
   onPick: (example: string) => void
 }) {
   const { t } = useTranslation()
-  // O estado da voz vem das mesmas Preferências que o engine lê: desligada, a
-  // tool nem é registrada no turno. Ativar aqui é o mesmo que ativar lá — o
-  // store empurra a cópia para o main na hora.
+  // The voice state comes from the same Preferences the engine reads: turned off, the
+  // tool is not even registered in the turn. Enabling here is the same as enabling there — the
+  // store pushes the copy to the main process right away.
   const voice = useAppSettings((s) => s.settings.voice)
-  // A gravação de vídeo depende das ferramentas de navegador: sem elas a tool
-  // `browser_record` não existe no turno, e a linha prometeria um MP4 que não
-  // sai. Mesma lógica da voz, outro recurso.
+  // Video recording depends on the browser tools: without them the
+  // `browser_record` tool does not exist in the turn, and the row would promise an MP4 that does not
+  // come out. Same logic as voice, another feature.
   const browserTools = useAppSettings((s) => s.settings.browser.agentTools)
   const update = useAppSettings((s) => s.update)
 
@@ -89,8 +89,8 @@ export function CapabilitiesDialog({
         </DialogHeader>
         <div className="max-h-[min(60vh,26rem)] overflow-y-auto px-2 py-2">
           {CAPABILITY_GROUPS.map((group) => {
-            // O modo filtra o catálogo: no código não faz sentido oferecer
-            // "converse por voz" como se fosse uma tarefa do repositório.
+            // The mode filters the catalog: in code it makes no sense to offer
+            // "talk by voice" as if it were a task of the repository.
             const items = CAPABILITIES.filter(
               (capability) => capability.group === group && capability.modes.includes(mode),
             )
@@ -106,8 +106,8 @@ export function CapabilitiesDialog({
                     const example = capability.hasExample
                       ? t(`chat.start.items.${capability.id}.example`)
                       : null
-                    // Desligado, o recurso não existe para o agente — a linha
-                    // não promete exemplo nenhum, oferece ligar.
+                    // Turned off, the feature does not exist for the agent — the row
+                    // promises no example at all, it offers to turn it on.
                     const off = capability.requires ? !isOn(capability.requires) : false
                     return (
                       <li
@@ -125,8 +125,8 @@ export function CapabilitiesDialog({
                             {t(`chat.start.items.${capability.id}.desc`)}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground/80">
-                            {/* Sem exemplo (chamada de voz, ditado) a linha diz
-                                onde o recurso fica, em vez de prometer botão. */}
+                            {/* Without an example (voice call, dictation) the row says
+                                where the feature lives, instead of promising a button. */}
                             {off
                               ? t("chat.start.disabledHint")
                               : example

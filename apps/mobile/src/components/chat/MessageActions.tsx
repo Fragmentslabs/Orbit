@@ -14,7 +14,7 @@ interface MessageActionsProps {
   message: ChatMessage
   onCopy?: () => void
   onRevert?: () => void
-  /** Marca a mensagem como contexto no compositor (ver formatMessageReply). */
+  /** Marks the message as context in the composer (see formatMessageReply). */
   onReply?: () => void
 }
 
@@ -44,10 +44,10 @@ export function MessageActions({ message, onCopy, onRevert, onReply }: MessageAc
   const { t, i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [copied, setCopied] = useState(false)
-  // Motivo da falha da leitura em voz alta DESTA mensagem (motor sem modelo,
-  // offline). Fora da linha de ações: a linha é apagada de propósito (opacity),
-  // e um erro legível não pode nascer ilegível. Preso ao id porque a store
-  // guarda um erro por vez — solto, ele apareceria em todas as bolhas.
+  // Reason for the read-aloud failure of THIS message (engine without a model,
+  // offline). Outside the actions row: the row is dimmed on purpose (opacity),
+  // and a legible error cannot be born illegible. Tied to the id because the store
+  // holds one error at a time — loose, it would show up in every bubble.
   const speakError = useSpeakStore((s) => (s.errorMessageId === message.id ? s.error : null))
 
   const handleCopy = () => {
@@ -56,8 +56,8 @@ export function MessageActions({ message, onCopy, onRevert, onReply }: MessageAc
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Na bolha do usuário a barra fica logo abaixo de um bloco estreito e
-  // alinhado à direita — o filete separador ali vira um risco solto.
+  // In the user bubble the bar sits right below a narrow block aligned
+  // to the right — the separator hairline there becomes a loose line.
   const isUser = message.role === 'user'
 
   return (
@@ -78,21 +78,21 @@ export function MessageActions({ message, onCopy, onRevert, onReply }: MessageAc
           }
         </IconButton>
 
-        {/* Ouvir: ao lado do copiar, como no desktop. Só aparece em resposta
-            do assistente que tenha prosa para ler. */}
+        {/* Listen: next to copy, as on the desktop. It only shows up in an assistant
+            answer that has prose to read. */}
         <SpeakButton message={message} />
 
-        {/* Responder: a mensagem vira citação do próximo envio (barra acima do
-            campo de texto), como no WhatsApp. */}
+        {/* Reply: the message becomes a quote of the next send (bar above the
+            text field), as in WhatsApp. */}
         {onReply && (
           <IconButton onPress={onReply} accessibilityLabel={t('reply.action')}>
             <Reply size={13} color={tokens.mutedForeground} />
           </IconButton>
         )}
 
-        {/* Revert parte da mensagem do usuário: descarta esse turno e tudo
-            depois dele e devolve texto/anexos ao input, como se estivesse
-            editando a mensagem. */}
+        {/* Revert part of the user message: discards that turn and everything
+            after it and gives text/attachments back to the input, as if
+            editing the message. */}
         {onRevert && message.role === 'user' && (
           <IconButton onPress={onRevert}>
             <RotateCcw size={13} color={tokens.mutedForeground} />
@@ -118,7 +118,7 @@ export function MessageActions({ message, onCopy, onRevert, onReply }: MessageAc
         )}
       </View>
 
-      {/* Por que a fala não saiu ("baixe o modelo em Voz", "sem conexão"). */}
+      {/* Why the speech did not come out ("download the model in Voice", "no connection"). */}
       {speakError && (
         <Text numberOfLines={2} style={{ fontSize: 10, marginTop: 2, color: tokens.destructive }}>
           {speakError}

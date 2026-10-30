@@ -24,13 +24,13 @@ import {
 import type { CapabilityId } from "@/src/lib/capabilities"
 
 /**
- * Um ícone por família de capacidade. Existe para o catálogo continuar sendo
- * dado puro (sem JSX) e para a pill da tela inicial e a linha do painel
- * desenharem exatamente o mesmo símbolo.
+ * One icon per capability family. It exists so the catalog stays
+ * pure data (no JSX) and so the start screen pill and the panel row
+ * draw exactly the same symbol.
  */
 const ICONS: Record<CapabilityId, LucideIcon> = {
-  // O canvas de design não é o artefato: aqui a marca é o quadro (artboard),
-  // lá é o painel que abre pronto no chat.
+  // The design canvas is not the artifact: here the mark is the board (artboard),
+  // there it is the panel that opens ready in the chat.
   design: Frame,
   artifact: LayoutDashboard,
   document: FileText,
@@ -40,7 +40,7 @@ const ICONS: Record<CapabilityId, LucideIcon> = {
   vector: PenTool,
   photo: ImageIcon,
   video: Film,
-  // Comprimir é reduzir — o mesmo símbolo em qualquer tamanho de tela.
+  // Compressing is reducing — the same symbol at any screen size.
   compress: Minimize2,
   record: Video,
   docx: FileSignature,

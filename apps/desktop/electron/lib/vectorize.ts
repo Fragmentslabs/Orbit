@@ -2,101 +2,101 @@ import sharp from 'sharp'
 import { labOf } from './image-ops'
 
 /**
- * Vetorização: imagem raster → SVG com caminhos de verdade.
+ * Vectorization: raster image → SVG with real paths.
  *
- * Escrito aqui, e não trazido de biblioteca, por licença: o potrace — a
- * referência do assunto — é GPL-2.0, e o Orbit é distribuído sob Business
- * Source License. Linkar um contra o outro obrigaria a abrir o app inteiro.
+ * Written here, and not taken from a library, because of licensing: potrace — the
+ * reference on the subject — is GPL-2.0, and Orbit is distributed under the Business
+ * Source License. Linking one against the other would force opening the whole app.
  *
- * O caminho é em três passos, e o primeiro é o que torna os outros dois
- * simples: o sharp QUANTIZA a imagem num punhado de cores chapadas, e a partir
- * daí "achar a forma" deixa de ser análise de imagem e vira geometria sobre
- * uma máscara binária.
+ * The path has three steps, and the first is what makes the other two
+ * simple: sharp QUANTIZES the image into a handful of flat colors, and from
+ * there "finding the shape" stops being image analysis and becomes geometry over
+ * a binary mask.
  *
- *   quantizar → contornar cada cor → simplificar
+ *   quantize → trace each color → simplify
  *
- * O que isto faz bem: logo, ícone, desenho de linha, silhueta — coisas feitas
- * de regiões chapadas. O que NÃO faz: fotografia. Ali cada gradiente vira
- * dezenas de faixas e o resultado sai maior que o original e feio. O relatório
- * devolvido existe para reconhecer esse caso sem precisar abrir o arquivo.
+ * What this does well: logo, icon, line art, silhouette — things made
+ * of flat regions. What it does NOT do: photography. There every gradient becomes
+ * dozens of bands and the result comes out bigger than the original and ugly. The report
+ * returned exists to recognize that case without having to open the file.
  *
- * Módulo puro de bytes (sem Electron, sem IO), para ser testável.
+ * Pure bytes module (no Electron, no IO), to be testable.
  */
 
-/** Acima disto o traçado gera caminho demais para ser útil — e a imagem é
- *  reduzida antes, o que também suaviza o serrilhado da quantização. */
+/** Above this the tracing generates too many paths to be useful — and the image is
+ *  reduced before it, which also smooths the quantization's jaggedness. */
 const MAX_SIDE = 1000
 
 /**
- * Abaixo deste ΔE duas cores são a mesma cor para quem olha.
+ * Below this ΔE two colors are the same color to the eye.
  *
- * O limiar de "diferença perceptível" anda por 2,3; aqui ele é um pouco mais
- * folgado porque o objetivo não é fidelidade de cor, é achar FORMA — e duas
- * cores que ninguém distingue nunca deveriam virar dois contornos.
+ * The "perceptible difference" threshold is around 2.3; here it is a little more
+ * generous because the goal is not color fidelity, it is finding SHAPE — and two
+ * colors nobody distinguishes should never become two outlines.
  */
 const IDENTICAL_DELTA_E = 6
 
 /**
- * Quão perto da linha entre duas cores a mistura precisa cair.
+ * How close to the line between two colors the mixture has to fall.
  *
- * Uma transição real entre dois tons é, por construção, a média deles — então
- * ela pousa quase exatamente em cima do segmento que os liga em LAB. Uma cor
- * de verdade do desenho não tem motivo nenhum para cair ali.
+ * A real transition between two tones is, by construction, their average — so
+ * it lands almost exactly on top of the segment that links them in LAB. A real color
+ * of the drawing has no reason at all to fall there.
  */
 const BLEND_LINE_DISTANCE = 12
 
 export interface VectorizeOptions {
   /**
-   * Quantas cores manter, ou 'auto' (padrão). Poucas = desenho mais limpo;
-   * muitas = mais fiel — e é uma escolha que depende da imagem, não de quem
-   * chama: um arquivo castigado precisa de menos cores justamente porque as
-   * que ele tem a mais são ruído.
+   * How many colors to keep, or 'auto' (default). Few = cleaner drawing;
+   * many = more faithful — and it is a choice that depends on the image, not on whoever
+   * calls: a battered file needs fewer colors precisely because the
+   * extra ones it has are noise.
    */
   colors?: number | 'auto'
-  /** Ignora manchas menores que isto, em pixels. Tira a sujeira da
-   *  quantização sem comer detalhe de verdade. */
+  /** Ignores blobs smaller than this, in pixels. Removes the dirt from the
+   *  quantization without eating real detail. */
   minArea?: number
-  /** Tolerância da simplificação, em pixels. Maior = menos pontos, contorno
-   *  mais reto. */
+  /** Simplification tolerance, in pixels. Larger = fewer points, straighter
+   *  outline. */
   tolerance?: number
-  /** Não desenha a cor de fundo (a que ocupa as bordas): é o que entrega um
-   *  ícone recortado em vez de um retângulo colorido. */
+  /** Does not draw the background color (the one that fills the edges): it is what delivers a
+   *  cut-out icon instead of a colored rectangle. */
   dropBackground?: boolean
 }
 
 export interface VectorizeResult {
   svg: string
-  /** Quantas cores foram usadas de fato — o número que o 'auto' escolheu. */
+  /** How many colors were actually used — the number 'auto' chose. */
   usedColors: number
   width: number
   height: number
-  /** Cores desenhadas, da maior área para a menor. */
+  /** Colors drawn, from the largest area to the smallest. */
   colors: string[]
   paths: number
   points: number
   /**
-   * Leitura honesta do resultado. Uma foto vetorizada "funciona" — produz um
-   * SVG válido — e é lixo: milhares de caminhos, arquivo maior que a origem.
-   * Quem chamou precisa saber disso sem abrir o arquivo.
+   * Honest reading of the result. A vectorized photo "works" — it produces a valid
+   * SVG — and is garbage: thousands of paths, a file bigger than the source.
+   * Whoever called needs to know that without opening the file.
    */
   warnings: string[]
 }
 
 type Point = [number, number]
 
-/** Contornos de uma máscara binária, em coordenadas de ARESTA do pixel.
+/** Outlines of a binary mask, in pixel EDGE coordinates.
  *
- * Cada pixel aceso contribui com as arestas que fazem fronteira com apagado,
- * orientadas de modo que o interior fique sempre do mesmo lado. Isso faz o
- * contorno externo e o de um buraco saírem com sentidos opostos — que é
- * exatamente o que o `fill-rule` do SVG usa para vazar o meio de um anel sem
- * ninguém precisar dizer qual contorno é buraco.
+ * Each lit pixel contributes the edges that border an off pixel,
+ * oriented so that the interior is always on the same side. This makes the
+ * outer outline and the one of a hole come out with opposite directions — which is
+ * exactly what the SVG's `fill-rule` uses to hollow out the middle of a ring without
+ * anyone having to say which outline is a hole.
  */
 function contours(mask: Uint8Array, width: number, height: number): Point[][] {
   const on = (x: number, y: number) =>
     x >= 0 && y >= 0 && x < width && y < height && mask[y * width + x] === 1
 
-  // Aresta dirigida: chave do ponto inicial → pontos finais possíveis.
+  // Directed edge: key of the starting point → possible end points.
   const edges = new Map<string, Point[]>()
   const key = (p: Point) => `${p[0]},${p[1]}`
   const add = (from: Point, to: Point) => {
@@ -126,9 +126,9 @@ function contours(mask: Uint8Array, width: number, height: number): Point[][] {
     for (;;) {
       const list = edges.get(key(current))
       if (!list || list.length === 0) break
-      // Num vértice onde dois cantos se tocam na diagonal há duas saídas. A
-      // primeira registrada mantém as duas regiões separadas em vez de
-      // costurá-las num contorno só que passa pelo vazio.
+      // At a vertex where two corners touch diagonally there are two ways out. The
+      // first one recorded keeps the two regions separate instead of
+      // stitching them into a single outline that goes through the void.
       const next = list.shift() as Point
       if (list.length === 0) edges.delete(key(current))
       current = next
@@ -140,7 +140,7 @@ function contours(mask: Uint8Array, width: number, height: number): Point[][] {
   return loops
 }
 
-/** Área com sinal — o sinal diz o sentido, e o módulo filtra mancha pequena. */
+/** Signed area — the sign says the direction, and the modulus filters small blobs. */
 function signedArea(loop: Point[]): number {
   let sum = 0
   for (let i = 0; i < loop.length; i++) {
@@ -152,11 +152,11 @@ function signedArea(loop: Point[]): number {
 }
 
 /**
- * Douglas–Peucker: joga fora os pontos que não mudam o desenho.
+ * Douglas–Peucker: throws away the points that do not change the drawing.
  *
- * O contorno sai do pixel, então uma borda reta de 200px vira 200 pontos
- * idênticos em linha. Sem isto o SVG seria maior que o PNG e não teria ganho
- * nenhum — é este passo que transforma escada em segmento.
+ * The outline comes from the pixel grid, so a straight 200px edge becomes 200
+ * identical points in a line. Without this the SVG would be bigger than the PNG and there
+ * would be no gain at all — this is the step that turns a staircase into a segment.
  */
 function simplify(points: Point[], tolerance: number): Point[] {
   if (points.length < 3 || tolerance <= 0) return points
@@ -201,25 +201,25 @@ function toHex(r: number, g: number, b: number): string {
 }
 
 /**
- * Acima deste giro, o vértice é um CANTO de verdade e fica anguloso.
+ * Above this turn, the vertex is a real CORNER and stays angular.
  *
- * Sem esta distinção o arredondamento trataria tudo igual e um quadrado viraria
- * uma bolha. Com ela, a curva de um círculo suaviza e o canto de um retângulo
- * permanece canto.
+ * Without this distinction the rounding would treat everything the same and a square would
+ * become a blob. With it, the curve of a circle smooths out and the corner of a rectangle
+ * stays a corner.
  */
 const CORNER_ANGLE = Math.PI / 3
 
 /**
- * Do polígono para a curva.
+ * From the polygon to the curve.
  *
- * O contorno sai da grade de pixels, então mesmo simplificado ele é uma
- * sequência de retas — e num círculo isso aparece como facetas assim que a
- * pessoa amplia, que é justamente o que ela foi buscar ao vetorizar.
+ * The outline comes from the pixel grid, so even simplified it is a
+ * sequence of straight lines — and on a circle that shows up as facets as soon as the
+ * person zooms in, which is exactly what they went after when vectorizing.
  *
- * A suavização é a clássica por pontos médios: a curva passa pelo meio de cada
- * aresta e usa o vértice como controle. Ela não acrescenta nenhum ponto — o
- * mesmo arquivo, com curva no lugar de faceta — e só entra onde o giro é
- * suave; canto fechado continua reto.
+ * The smoothing is the classic midpoint one: the curve passes through the middle of each
+ * edge and uses the vertex as a control point. It adds no point at all — the
+ * same file, with a curve instead of a facet — and it only enters where the turn is
+ * smooth; a closed corner stays straight.
  */
 function pathData(loops: Point[][]): string {
   const round = (n: number) => Math.round(n * 10) / 10
@@ -259,11 +259,11 @@ function pathData(loops: Point[][]): string {
 }
 
 /**
- * `c` está na transição entre `a` e `b`?
+ * Is `c` in the transition between `a` and `b`?
  *
- * Projeta a cor no segmento que liga as outras duas em LAB. É mistura quando
- * cai PERTO da linha e no MEIO dela — perto de uma ponta significa que é só
- * uma variação daquela cor, e isso o passo anterior já resolve.
+ * It projects the color onto the segment that links the other two in LAB. It is a mixture when
+ * it falls NEAR the line and in the MIDDLE of it — near one end means it is just
+ * a variation of that color, and the previous step already handles that.
  */
 function betweenness(
   c: [number, number, number],
@@ -284,20 +284,20 @@ function betweenness(
 }
 
 /**
- * Reduz a paleta ao número REALMENTE pedido, em espaço perceptual.
+ * Reduces the palette to the number ACTUALLY requested, in perceptual space.
  *
- * Existe por dois motivos que se somam. O primeiro é que o quantizador do
- * libvips salta em potências de dois: pedir 8 devolve 16, e o parâmetro
- * mentiria. O segundo é o que aparece na tela — uma imagem borrada (um
- * desenho pequeno que foi ampliado, um JPEG castigado) tem bordas de cor
- * intermediária, e o quantizador as promove a cores próprias. Cada uma vira
- * uma camada de contorno FANTASMA ao lado do traço real, e o desenho sai com
- * halo.
+ * It exists for two reasons that add up. The first is that libvips' quantizer
+ * jumps in powers of two: asking for 8 returns 16, and the parameter
+ * would lie. The second is what shows up on screen — a blurred image (a
+ * small drawing that was enlarged, a battered JPEG) has intermediate-color
+ * edges, and the quantizer promotes them to colors of their own. Each one becomes
+ * a GHOST outline layer next to the real stroke, and the drawing comes out with
+ * a halo.
  *
- * A redução absorve sempre a cor de MENOR área na sua vizinha mais próxima em
- * LAB. Uma faixa de transição é, por definição, fina e pouco numerosa, então
- * ela desaparece dentro da cor de verdade de onde saiu — enquanto as cores
- * dominantes do desenho, que têm área, sobrevivem.
+ * The reduction always absorbs the color with the SMALLEST area into its nearest neighbor in
+ * LAB. A transition band is, by definition, thin and sparse, so
+ * it disappears inside the real color it came from — while the
+ * dominant colors of the drawing, which have area, survive.
  */
 function mergeColors(
   data: Buffer,
@@ -317,138 +317,138 @@ function mergeColors(
     lab.set(hex, labOf(parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)))
   }
 
-  // Todo mundo começa apontando para si; absorver é reescrever o destino.
+  // Everyone starts pointing at themselves; absorbing is rewriting the destination.
   const remap = new Map<string, string>()
   for (const hex of count.keys()) remap.set(hex, hex)
-  const vivos = new Map(count)
+  const alive = new Map(count)
 
-  const distancia = (a: string, b: string) => {
+  const distance = (a: string, b: string) => {
     const x = lab.get(a) as [number, number, number]
     const y = lab.get(b) as [number, number, number]
     return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2])
   }
-  const absorve = (menor: string, destino: string) => {
-    vivos.set(destino, (vivos.get(destino) as number) + (vivos.get(menor) as number))
-    vivos.delete(menor)
+  const absorb = (smallest: string, destination: string) => {
+    alive.set(destination, (alive.get(destination) as number) + (alive.get(smallest) as number))
+    alive.delete(smallest)
     for (const [de, para] of remap) {
-      if (para === menor) remap.set(de, destino)
+      if (para === smallest) remap.set(de, destination)
     }
   }
 
-  // Primeiro passo, e é o que mais importa num arquivo castigado: funde o que
-  // é INDISTINGUÍVEL ao olho, sem olhar tamanho. Um JPEG maltratado entrega o
-  // mesmo creme em cinco versões separadas por menos de um ΔE de nada, e todas
-  // elas são grandes — sobreviveriam a uma fusão por área e consumiriam o
-  // orçamento de cores inteiro, deixando o desenho de verdade sem vaga.
+  // First step, and it is the one that matters most in a battered file: it merges what
+  // is INDISTINGUISHABLE to the eye, without looking at size. A mistreated JPEG delivers the
+  // same cream in five versions separated by less than a ΔE of nothing, and all of
+  // them are large — they would survive an area-based merge and consume the whole
+  // color budget, leaving the real drawing without a slot.
   for (;;) {
     let a = ''
     let b = ''
-    let melhor = IDENTICAL_DELTA_E
-    const cores = [...vivos.keys()]
-    for (let i = 0; i < cores.length; i++) {
-      for (let j = i + 1; j < cores.length; j++) {
-        const d = distancia(cores[i], cores[j])
-        if (d < melhor) {
-          melhor = d
-          a = cores[i]
-          b = cores[j]
+    let best = IDENTICAL_DELTA_E
+    const colors = [...alive.keys()]
+    for (let i = 0; i < colors.length; i++) {
+      for (let j = i + 1; j < colors.length; j++) {
+        const d = distance(colors[i], colors[j])
+        if (d < best) {
+          best = d
+          a = colors[i]
+          b = colors[j]
         }
       }
     }
     if (!a) break
-    // A menor é absorvida pela maior: quem tem área define a cor final.
-    const menor = (vivos.get(a) as number) <= (vivos.get(b) as number) ? a : b
-    absorve(menor, menor === a ? b : a)
+    // The smaller is absorbed by the larger: whoever has area defines the final color.
+    const smallest = (alive.get(a) as number) <= (alive.get(b) as number) ? a : b
+    absorb(smallest, smallest === a ? b : a)
   }
 
-  // Segundo passo: some com a tinta de BORDA — a mistura que a transição entre
-  // dois tons cria e que desenha um contorno fantasma ao lado de cada traço.
+  // Second step: gets rid of the EDGE ink — the mixture that the transition between
+  // two tones creates and that draws a ghost outline next to each stroke.
   //
-  // O que a identifica não é ser pequena, é ficar ENTRE duas outras cores. A
-  // distinção importa: um acento legítimo (o ponto vermelho de uma marca) é
-  // pequeno também, e um limiar de área o apagaria junto. Já uma mistura entre
-  // o azul-marinho do traço e o creme do fundo cai, por construção, em cima do
-  // segmento que liga os dois — e nenhuma cor de verdade do desenho cai ali.
+  // What identifies it is not being small, it is being BETWEEN two other colors. The
+  // distinction matters: a legitimate accent (the red dot of a brand) is
+  // small too, and an area threshold would erase it along with it. A mixture between
+  // the navy of the stroke and the cream of the background falls, by construction, on top of
+  // the segment that links the two — and no real color of the drawing falls there.
   for (;;) {
-    let alvo = ''
-    let destino = ''
-    const cores = [...vivos.keys()]
-    for (const c of cores) {
-      const area = vivos.get(c) as number
-      for (const a of cores) {
-        for (const b of cores) {
+    let target = ''
+    let destination = ''
+    const colors = [...alive.keys()]
+    for (const c of colors) {
+      const area = alive.get(c) as number
+      for (const a of colors) {
+        for (const b of colors) {
           if (a === c || b === c || a === b) continue
-          // Só é mistura se as duas pontas pesarem mais que ela.
-          if ((vivos.get(a) as number) <= area || (vivos.get(b) as number) <= area) continue
-          const posicao = betweenness(lab.get(c)!, lab.get(a)!, lab.get(b)!)
-          if (!posicao) continue
-          alvo = c
-          destino = distancia(c, a) <= distancia(c, b) ? a : b
+          // It is only a mixture if the two ends weigh more than it.
+          if ((alive.get(a) as number) <= area || (alive.get(b) as number) <= area) continue
+          const position = betweenness(lab.get(c)!, lab.get(a)!, lab.get(b)!)
+          if (!position) continue
+          target = c
+          destination = distance(c, a) <= distance(c, b) ? a : b
           break
         }
-        if (alvo) break
+        if (target) break
       }
-      if (alvo) break
+      if (target) break
     }
-    if (!alvo || vivos.size <= 2) break
-    absorve(alvo, destino)
+    if (!target || alive.size <= 2) break
+    absorb(target, destination)
   }
 
-  while (vivos.size > target) {
-    // A menor área é a próxima a ser absorvida.
-    let menor = ''
-    let menorN = Infinity
-    for (const [hex, n] of vivos) {
-      if (n < menorN) {
-        menorN = n
-        menor = hex
+  while (alive.size > target) {
+    // The smallest area is the next to be absorbed.
+    let smallest = ''
+    let smallestN = Infinity
+    for (const [hex, n] of alive) {
+      if (n < smallestN) {
+        smallestN = n
+        smallest = hex
       }
     }
 
-    let destino = ''
-    let melhor = Infinity
-    const a = lab.get(menor) as [number, number, number]
-    for (const hex of vivos.keys()) {
-      if (hex === menor) continue
+    let destination = ''
+    let best = Infinity
+    const a = lab.get(smallest) as [number, number, number]
+    for (const hex of alive.keys()) {
+      if (hex === smallest) continue
       const b = lab.get(hex) as [number, number, number]
       const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
-      if (d < melhor) {
-        melhor = d
-        destino = hex
+      if (d < best) {
+        best = d
+        destination = hex
       }
     }
-    if (!destino) break
-    absorve(menor, destino)
+    if (!destination) break
+    absorb(smallest, destination)
   }
   return remap
 }
 
 /**
- * Traça buscando o número de cores que o DESENHO pede.
+ * Traces looking for the number of colors the DRAWING asks for.
  *
- * Mais cores não é mais fidelidade quando o arquivo é ruim: numa ilustração
- * pequena que foi ampliada, as cores extras são a mistura das bordas, e cada
- * uma vira um contorno fantasma ao lado do traço. O resultado fica maior,
- * mais lento e pior.
+ * More colors is not more fidelity when the file is bad: in a small illustration
+ * that was enlarged, the extra colors are the mixture of the edges, and each
+ * one becomes a ghost outline next to the stroke. The result comes out bigger,
+ * slower and worse.
  *
- * Como isso depende da imagem e não de quem pede, o padrão TENTA e mede: se o
- * traçado sai pesado para o tamanho da tela, repete com menos cores. No máximo
- * três tentativas — a busca não pode custar mais que o trabalho.
+ * Since this depends on the image and not on whoever asks, the default TRIES and measures: if
+ * the tracing comes out heavy for the screen size, it repeats with fewer colors. At most
+ * three attempts — the search cannot cost more than the work.
  */
 export async function vectorizeImage(
   source: Buffer,
   options: VectorizeOptions = {},
 ): Promise<VectorizeResult> {
   if (options.colors === undefined || options.colors === 'auto') {
-    let melhor: VectorizeResult | null = null
+    let best: VectorizeResult | null = null
     for (const colors of [6, 4, 3]) {
-      const tentativa = await traceOnce(source, { ...options, colors })
-      melhor = tentativa
-      // Orçamento por área: um desenho limpo cabe folgado, e é o excesso que
-      // denuncia que as cores a mais viraram borda em vez de forma.
-      if (tentativa.points <= (tentativa.width * tentativa.height) / 150) break
+      const attempt = await traceOnce(source, { ...options, colors })
+      best = attempt
+      // Budget by area: a clean drawing fits comfortably, and it is the excess that
+      // reveals that the extra colors became edge instead of shape.
+      if (attempt.points <= (attempt.width * attempt.height) / 150) break
     }
-    return melhor as VectorizeResult
+    return best as VectorizeResult
   }
   return traceOnce(source, options)
 }
@@ -462,23 +462,23 @@ async function traceOnce(
   const warnings: string[] = []
 
   const meta = await sharp(source).metadata()
-  const escala = Math.min(1, MAX_SIDE / Math.max(meta.width ?? 1, meta.height ?? 1))
-  if (escala < 1) {
+  const scale = Math.min(1, MAX_SIDE / Math.max(meta.width ?? 1, meta.height ?? 1))
+  if (scale < 1) {
     warnings.push(
-      `imagem reduzida para ${Math.round((meta.width ?? 0) * escala)}px antes de traçar — acima disso o resultado vira caminho demais para ser útil`,
+      `image downscaled to ${Math.round((meta.width ?? 0) * scale)}px before tracing — above that the result becomes too many paths to be useful`,
     )
   }
 
-  // Quantizar é o passo que torna o resto possível: sem ele, cada pixel de um
-  // gradiente seria uma "cor" e cada um viraria a sua própria forma.
+  // Quantizing is the step that makes the rest possible: without it, each pixel of a
+  // gradient would be a "color" and each one would become its own shape.
   //
-  // A paleta pedida ao libvips é GENEROSA de propósito: o quantizador dele
-  // salta em potências de dois — pedir 5, 6, 8 ou 12 devolve 16 —, então o
-  // número que chega aqui não seria respeitado. Quem reduz ao valor pedido é o
-  // mergeColors abaixo, e é ele que também dissolve as faixas de transição que
-  // desenham um contorno fantasma ao lado de cada traço.
+  // The palette requested from libvips is GENEROUS on purpose: its quantizer
+  // in powers of two — asking for 5, 6, 8 or 12 returns 16 —, so the
+  // number that arrives here would not be respected. What reduces to the requested value is
+  // mergeColors below, and it is also what dissolves the transition bands that
+  // draw a ghost outline next to each stroke.
   const prepared = sharp(source).flatten({ background: '#ffffff' })
-  if (escala < 1) prepared.resize({ width: Math.round((meta.width ?? 1) * escala) })
+  if (scale < 1) prepared.resize({ width: Math.round((meta.width ?? 1) * scale) })
   const quantized = await prepared.png({ palette: true, colours: 64, dither: 0 }).toBuffer()
 
   const { data, info } = await sharp(quantized).removeAlpha().raw().toBuffer({ resolveWithObject: true })
@@ -488,14 +488,13 @@ async function traceOnce(
   const remap = mergeColors(data, info.channels, width * height, colorCount)
   const palette = [...new Set(remap.values())]
 
-  // Cada pixel é reatribuído a partir da imagem ORIGINAL, e não da quantizada.
+  // Each pixel is reassigned from the ORIGINAL image, and not from the quantized one.
   //
-  // A diferença aparece na borda. Um pixel de transição foi rotulado pelo
-  // quantizador como uma cor intermediária, e a fusão mandou aquela cor
-  // inteira para um dos lados — todos os pixels dela juntos. Decidindo pixel a
-  // pixel, cada um vai para o lado de que ele está de fato mais perto, e a
-  // fronteira cai onde ela realmente está em vez de deslizar meio traço para
-  // um lado.
+  // The difference shows up at the edge. A transition pixel was labeled by the
+  // quantizer as an intermediate color, and the merge sent that whole color
+  // to one of the sides — all of its pixels together. Deciding pixel by
+  // pixel, each one goes to the side it is actually closer to, and the
+  // boundary falls where it really is instead of sliding half a stroke to the side.
   const original = await sharp(source)
     .flatten({ background: '#ffffff' })
     .resize({ width, height, fit: 'fill' })
@@ -516,95 +515,95 @@ async function traceOnce(
   for (let i = 0; i < width * height; i++) {
     const at = i * 3
     const [l, a, b] = labOf(original[at], original[at + 1], original[at + 2])
-    let melhor = 0
-    let menor = Infinity
+    let best = 0
+    let smallest = Infinity
     for (let k = 0; k < paletteLab.length; k++) {
       const p = paletteLab[k]
       const d = (l - p[0]) ** 2 + (a - p[1]) ** 2 + (b - p[2]) ** 2
-      if (d < menor) {
-        menor = d
-        melhor = k
+      if (d < smallest) {
+        smallest = d
+        best = k
       }
     }
-    label[i] = melhor
+    label[i] = best
   }
 
-  // Ordem de pintura: maior área atrás. Precisa ser decidida ANTES das
-  // máscaras, porque cada camada carrega o que vem por cima dela.
-  const areaPorCor = new Int32Array(palette.length)
-  for (let i = 0; i < width * height; i++) areaPorCor[label[i]]++
-  const ordem = palette
-    .map((hex, k) => ({ hex, k, area: areaPorCor[k] }))
+  // Painting order: larger area behind. It has to be decided BEFORE the
+  // masks, because each layer carries what comes on top of it.
+  const areaByColor = new Int32Array(palette.length)
+  for (let i = 0; i < width * height; i++) areaByColor[label[i]]++
+  const order = palette
+    .map((hex, k) => ({ hex, k, area: areaByColor[k] }))
     .filter((c) => c.area > 0)
     .sort((a, b) => b.area - a.area)
 
-  // Camadas EMPILHADAS: cada uma inclui tudo que será desenhado sobre ela.
+  // STACKED layers: each one includes everything that will be drawn over it.
   //
-  // Traçando só os próprios pixels, duas regiões vizinhas têm a mesma
-  // fronteira traçada duas vezes — uma de cada lado — e qualquer divergência
-  // entre os dois traçados abre um fio de fundo entre elas. Empilhando, a
-  // camada de baixo passa por baixo da de cima e não existe costura para
+  // Tracing only their own pixels, two neighboring regions have the same
+  // boundary traced twice — one on each side — and any divergence
+  // between the two tracings opens a thread of background between them. Stacking, the
+  // lower layer goes under the upper one and there is no seam to show.
   // divergir.
-  // Posição de cada rótulo na pilha, resolvida uma vez: procurar dentro do
-  // laço de pixel seria varrer a paleta inteira por pixel.
-  const rankDe = new Int32Array(palette.length).fill(ordem.length)
-  ordem.forEach((c, posicao) => {
-    rankDe[c.k] = posicao
+  // Position of each label in the stack, resolved once: looking inside the
+  // pixel loop would scan the whole palette per pixel.
+  const rankOf = new Int32Array(palette.length).fill(order.length)
+  order.forEach((c, position) => {
+    rankOf[c.k] = position
   })
 
-  const porCor = new Map<string, Uint8Array>()
-  for (let posicao = 0; posicao < ordem.length; posicao++) {
+  const byColor = new Map<string, Uint8Array>()
+  for (let position = 0; position < order.length; position++) {
     const mask = new Uint8Array(width * height)
     for (let i = 0; i < width * height; i++) {
-      if (rankDe[label[i]] >= posicao) mask[i] = 1
+      if (rankOf[label[i]] >= position) mask[i] = 1
     }
-    porCor.set(ordem[posicao].hex, mask)
+    byColor.set(order[position].hex, mask)
   }
 
-  // A cor que domina a BORDA é o fundo: é ela que se quer descartar para o
-  // ícone sair recortado em vez de dentro de um retângulo.
-  const borda = new Map<string, number>()
-  const conta = (i: number) => {
+  // The color that dominates the EDGE is the background: it is the one to throw away for the
+  // icon to come out cut out instead of inside a rectangle.
+  const border = new Map<string, number>()
+  const count = (i: number) => {
     const at = i * info.channels
     const hex = toHex(data[at], data[at + 1], data[at + 2])
-    borda.set(hex, (borda.get(hex) ?? 0) + 1)
+    border.set(hex, (border.get(hex) ?? 0) + 1)
   }
   for (let x = 0; x < width; x++) {
-    conta(x)
-    conta((height - 1) * width + x)
+    count(x)
+    count((height - 1) * width + x)
   }
   for (let y = 0; y < height; y++) {
-    conta(y * width)
-    conta(y * width + width - 1)
+    count(y * width)
+    count(y * width + width - 1)
   }
-  const fundo = [...borda.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+  const background = [...border.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
 
-  const camadas: { hex: string; d: string; area: number; points: number }[] = []
-  // Quanto do desenho é mancha pequena demais para virar forma — medido em
-  // ÁREA, não em quantidade. A diferença importa: um logo antisserrilhado
-  // produz centenas de anéis de um pixel na mistura de cores das bordas, e
-  // contar cabeças diria que ele não é arte chapada. Em área essas migalhas
-  // são desprezíveis, enquanto numa foto elas SÃO a imagem.
+  const layers: { hex: string; d: string; area: number; points: number }[] = []
+  // How much of the drawing is a blob too small to become a shape — measured in
+  // AREA, not in quantity. The difference matters: an anti-aliased old logo
+  // produces hundreds of one-pixel rings in the color mixture of the edges, and
+  // counting heads would say it is not flat art. In area those crumbs
+  // are negligible, whereas in a photo they ARE the image.
   let areaTotal = 0
-  let areaDescartada = 0
+  let discardedArea = 0
 
-  for (const [hex, mask] of porCor) {
-    if (options.dropBackground && hex === fundo) continue
+  for (const [hex, mask] of byColor) {
+    if (options.dropBackground && hex === background) continue
 
-    const brutos = contours(mask, width, height).map((loop) => ({ loop, area: signedArea(loop) }))
-    const grandes = brutos.filter(({ area }) => Math.abs(area) >= minArea)
-    for (const { area } of brutos) areaTotal += Math.abs(area)
-    for (const { area } of brutos) {
-      if (Math.abs(area) < minArea) areaDescartada += Math.abs(area)
+    const rawContours = contours(mask, width, height).map((loop) => ({ loop, area: signedArea(loop) }))
+    const large = rawContours.filter(({ area }) => Math.abs(area) >= minArea)
+    for (const { area } of rawContours) areaTotal += Math.abs(area)
+    for (const { area } of rawContours) {
+      if (Math.abs(area) < minArea) discardedArea += Math.abs(area)
     }
 
-    const loops = grandes
+    const loops = large
       .map(({ loop }) => simplify(loop, tolerance))
       .filter((loop) => loop.length >= 3)
 
     if (loops.length === 0) continue
     const area = loops.reduce((sum, loop) => sum + Math.abs(signedArea(loop)), 0)
-    camadas.push({
+    layers.push({
       hex,
       d: pathData(loops),
       area,
@@ -612,30 +611,30 @@ async function traceOnce(
     })
   }
 
-  // Sem reordenar: a ordem de pintura foi decidida junto com o empilhamento,
-  // e cada camada já contém o que vem por cima. Ordenar por área traçada aqui
-  // desfaria a pilha — todas as camadas empilhadas são grandes por construção.
+  // Without reordering: the painting order was decided along with the stacking,
+  // and each layer already contains what comes on top. Sorting by traced area here
+  // would undo the stack — every stacked layer is large by construction.
 
-  const paths = camadas.length
-  const points = camadas.reduce((sum, c) => sum + c.points, 0)
+  const paths = layers.length
+  const points = layers.reduce((sum, c) => sum + c.points, 0)
   if (points > 20_000) {
     warnings.push(
-      `${points} pontos em ${paths} camadas — isto tem cara de fotografia, e vetorizar fotografia produz arquivo grande e feio. Um raster serve melhor aqui.`,
+      `${points} points across ${paths} layers — this looks like a photograph, and vectorizing a photograph produces a large, ugly file. A raster serves better here.`,
     )
   }
-  // O outro jeito de a origem não prestar: em vez de formas demais, migalha
-  // demais. Ruído e gradiente se desfazem em manchas de poucos pixels, e o que
-  // sobra é um desenho que não se parece com a imagem.
-  const perdido = areaTotal > 0 ? areaDescartada / areaTotal : 0
-  if (perdido > 0.3) {
+  // The other way the source does not hold up: instead of too many shapes, too many
+  // crumbs. Noise and gradient break up into blobs of a few pixels, and what
+  // is left is a drawing that does not look like the image.
+  const lost = areaTotal > 0 ? discardedArea / areaTotal : 0
+  if (lost > 0.3) {
     warnings.push(
-      `${Math.round(perdido * 100)}% do desenho se desfez em manchas pequenas demais para virar forma — a imagem não é feita de cores chapadas (fotografia, gradiente, textura). O que saiu não vai se parecer com ela; um raster serve melhor aqui.`,
+      `${Math.round(lost * 100)}% of the drawing fell apart into blobs too small to become shapes — the image is not made of flat colors (photograph, gradient, texture). What came out will not look like it; a raster serves better here.`,
     )
   }
 
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
-    camadas
+    layers
       .map((c) => `<path fill="${c.hex}" fill-rule="evenodd" d="${c.d}"/>`)
       .join('') +
     '</svg>'
@@ -645,7 +644,7 @@ async function traceOnce(
     width,
     height,
     usedColors: colorCount,
-    colors: camadas.map((c) => c.hex),
+    colors: layers.map((c) => c.hex),
     paths,
     points,
     warnings,

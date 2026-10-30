@@ -1,22 +1,22 @@
 /**
- * Divide o texto em pedaços para a síntese em fluxo.
+ * Splits the text into pieces for the streamed synthesis.
  *
- * O corte normal é em FIM DE FRASE — o `call()` do motor insere 0,3 s de
- * silêncio entre os pedaços, então um corte no meio de uma frase criaria uma
- * pausa onde a fala não tem uma. O `maxChars` é um ALVO, não um limite rígido.
+ * The normal cut is at the END OF A SENTENCE — the `call()` of the engine inserts 0.3 s of
+ * silence between the pieces, so a cut in the middle of a sentence would create a
+ * pause where the speech does not have one. The `maxChars` is a TARGET, not a hard limit.
  *
- * Uma frase SOZINHA acima do alvo é dividida nos sinais de pausa natural
- * (vírgula, ponto e vírgula, dois-pontos, travessão): assim o motor começa a
- * falar antes de sintetizar a frase inteira. Isso encurta o vão entre um pedaço
- * e o seguinte quando a máquina sintetiza mais devagar que o tempo real — o
- * áudio do primeiro pedaço ainda está tocando quando o próximo fica pronto.
+ * A sentence ALONE above the target is split at the natural pause signals
+ * (comma, semicolon, colon, em dash): that way the engine starts to
+ * speak before synthesizing the whole sentence. This shortens the gap between one piece
+ * and the next when the machine synthesizes slower than real time — the
+ * audio of the first piece is still playing when the next one is ready.
  */
 export function splitForStreaming(text, maxChars = 140) {
   const clean = String(text).replace(/\s+/g, " ").trim()
   if (!clean) return []
-  // O alvo de 140 é bom para o tamanho do pedaço, mas ruim para a latência do
-  // modo chamada: o áudio do pedaço anterior pode acabar antes de a síntese
-  // dele pronta. 90 caracteres é o ponto em que o motor costuma ficar à frente.
+  // The target of 140 is good for the size of the piece, but bad for the latency of
+  // call mode: the audio of the previous piece may end before its synthesis
+  // is ready. 90 characters is the point where the engine usually stays ahead.
   const target = Math.min(maxChars, 90)
   const sentences = clean.match(/[^.!?…]+[.!?…]+[»”’")\]]*(?=\s|$)|[^.!?…]+$/g) || [clean]
   const pieces = []
@@ -43,8 +43,8 @@ export function splitForStreaming(text, maxChars = 140) {
       .split(/(?<=[,;:—])\s+/)
       .map((part) => part.trim())
       .filter(Boolean)
-    // Sem pausa natural, a frase fica inteira: cortar no meio seria pior que
-    // esperar a síntese terminar.
+    // Without a natural pause, the sentence stays whole: cutting in the middle would be worse than
+    // waiting for the synthesis to finish.
     if (clauses.length > 1) out.push(...clauses)
     else out.push(piece)
   }

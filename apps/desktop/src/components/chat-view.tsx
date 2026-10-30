@@ -56,9 +56,9 @@ import { messageBody, messageText, visibleMessageText } from "@/src/lib/message-
 import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src/lib/message-window"
 import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
-import { mesmasPastas, pastasDaSessao } from "@/src/lib/session-folders"
+import { sameFolders, sessionFolders } from "@/src/lib/session-folders"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
-import { pastasAposTroca, useWorktreeStore } from "@/src/stores/worktree-store"
+import { foldersAfterSwitch, useWorktreeStore } from "@/src/stores/worktree-store"
 import { useProviderStore, useNoProviderConnected, useProvidersLoading } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
@@ -68,52 +68,52 @@ import { pickWelcomeTitle } from "@shared/welcome-title"
 import { VOICE_DEFAULTS } from "@shared/voice"
 
 import { Hint } from "@/components/ui/hint"
-// Referências estáveis para seletores do zustand (evita loop de getSnapshot)
+// Stable references for the zustand selectors (avoids the getSnapshot loop)
 const NO_MESSAGES: ChatMessage[] = []
 const NO_ASKS: never[] = []
 
-/** Extensões que viram documento da conversa — é o que decide se o chip abre. */
+/** Extensions that become a conversation document — it is what decides whether the chip opens. */
 const DOCUMENT_FILE = /\.(pdf|docx|xlsx|xls|ods|csv)$/i
 
 /**
- * Abertura da tela de boas-vindas: três falas antes do convite.
+ * Opening of the welcome screen: three lines before the invitation.
  *
- * INTRO_START_MS é o atraso que a primeira fala herda do antigo "Pronto para
- * começar?" — o tempo que a persona leva para acordar. A partir daí tudo anda
- * no mesmo passo (INTRO_STEP_MS): cada fala começa um passo depois da
- * anterior, o convite final entra um passo depois da última, e o subtítulo e o
- * botão entram um passo depois do convite. Cada fala dura INTRO_LINE_MS, um
- * pouco mais que o passo — é o que faz a anterior ainda estar saindo quando a
- * seguinte entra.
+ * INTRO_START_MS is the delay the first line inherits from the old "Ready to
+ * start?" — the time the persona takes to wake up. From there on everything moves
+ * in the same step (INTRO_STEP_MS): each line starts one step after the
+ * previous one, the final invitation enters one step after the last, and the subtitle and the
+ * button enter one step after the invitation. Each line lasts INTRO_LINE_MS, a
+ * little more than the step — that is what makes the previous one still be leaving when the
+ * next one enters.
  *
- * INTRO_TOTAL_MS é quando o convite assume o lugar das falas; é o atraso que o
- * efeito de abertura usa.
+ * INTRO_TOTAL_MS is when the invitation takes the place of the lines; it is the delay that the
+ * opening effect uses.
  */
 const INTRO_START_MS = 1200
 const INTRO_STEP_MS = 1400
 const INTRO_LINE_MS = 1500
-/** Quantas falas vêm antes do convite. */
+/** How many lines come before the invitation. */
 const INTRO_STEPS = 3
 const INTRO_TOTAL_MS = INTRO_START_MS + INTRO_STEP_MS * INTRO_STEPS
 
 /**
- * Chip do anexo não-imagem. Clicar abre o arquivo no painel.
+ * Chip of the non-image attachment. Clicking opens the file in the panel.
  *
- * O `documentId` vem no chip desde que ele passou a ser gravado; nos anexos
- * anteriores a isso ele não existe, e aí o documento é reencontrado pelo NOME
- * entre as fontes da conversa. Sem esse resgate, toda mensagem antiga ficaria
- * com um anexo permanentemente inerte.
+ * The `documentId` comes in the chip since it started being recorded; in attachments
+ * older than that it does not exist, and then the document is found again by NAME
+ * among the conversation sources. Without that rescue, every old message would be left
+ * with a permanently inert attachment.
  *
- * O NOME também é o plano B de um id que não resolve mais: arrastar o arquivo
- * para as fontes da pasta troca doc1 por src1, e o chip guarda o id como ele
- * era no dia do envio. O backend segue o rastro sozinho, mas aqui o nome é
- * prova melhor — ele identifica o arquivo mesmo quando a conversa promoveu
- * dois documentos e o rastro se perdeu.
+ * The NAME is also the plan B for an id that no longer resolves: dragging the file
+ * to the folder sources swaps doc1 for src1, and the chip keeps the id as it
+ * was on the day of sending. The backend follows the trail by itself, but here the name is
+ * better proof — it identifies the file even when the conversation promoted
+ * two documents and the trail was lost.
  */
 function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string }) {
   const { t } = useTranslation()
-  // Fonte anexada por referência (arrastada da aba Fontes): o id JÁ é o
-  // endereço do documento, então o chip abre direto — sem passar pela lista.
+  // Source attached by reference (dragged from the Sources tab): the id ALREADY is the
+  // address of the document, so the chip opens it directly — without going through the list.
   const openable =
     Boolean(sessionId) &&
     (!!file.sourceId || !!file.documentId || DOCUMENT_FILE.test(file.filename ?? ""))
@@ -158,10 +158,10 @@ function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string 
   )
 }
 
-// Memoizado por referência da mensagem + flags: no flush de deltas só a
-// mensagem streamando muda de referência — as demais não re-renderizam.
-// `messages`/`sendMessage` ficam fora da comparação de propósito: o retry usa
-// `slice(0, index)`, imune a mensagens novas anexadas ao final da lista.
+// Memoized by message reference + flags: in the delta flush only the
+// streaming message changes reference — the others do not re-render.
+// `messages`/`sendMessage` stay out of the comparison on purpose: the retry uses
+// `slice(0, index)`, immune to new messages appended at the end of the list.
 const MessageItem = memo(
   function MessageItem({ msg, isLast, waiting, finished, isBusy, busyLabel, mode, sessionId, sendMessage, messages, index }: {
     msg: ChatMessage
@@ -181,9 +181,9 @@ const MessageItem = memo(
   const handleRetry = useCallback(() => {
     const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
     if (prevUser && sessionId) {
-      // Refaz o turno NO LUGAR: o main descarta esta resposta que falhou e reusa
-      // a mensagem do usuário (com os anexos dela) em vez de enviar uma nova —
-      // sem bolha duplicada e sem o card de erro ficar no histórico.
+      // Redoes the turn IN PLACE: the main process discards this failed reply and reuses
+      // the user message (with its attachments) instead of sending a new one —
+      // no duplicated bubble and no error card left in the history.
       void sendMessage(mode, messageText(prevUser), { options: {}, sessionId, retryOf: msg.id })
     }
   }, [messages, index, mode, sessionId, sendMessage, msg.id])
@@ -199,10 +199,10 @@ const MessageItem = memo(
                 file.mime.startsWith("image/") ? (
                   <MessageAttachment
                     key={file.id}
-                    // `mediaUrl` vai junto: a `url` do chip é só o thumbnail
-                    // da bolha, e é ele que o visualizador amplia e que os
-                    // botões de copiar e salvar entregam. Omiti-lo aqui fazia
-                    // o "salvar" devolver um webp de 320px no lugar da foto.
+                    // `mediaUrl` goes along: the chip's `url` is only the thumbnail
+                    // of the bubble, and it is what the viewer enlarges and what the
+                    // copy and save buttons hand over. Omitting it here made
+                    // the "save" return a 320px webp instead of the photo.
                     data={{
                       type: "file",
                       mediaType: file.mime,
@@ -212,16 +212,16 @@ const MessageItem = memo(
                     }}
                   />
                 ) : file.mime.startsWith("video/") && file.url ? (
-                  // Vídeo anexado: o main guardou o arquivo e deixou um quadro como
-                  // miniatura no chip. A bolha mostra esse quadro (o vídeo em si só
-                  // o agente alcança, por referência).
+                  // Attached video: the main process stored the file and left a frame as
+                  // a thumbnail in the chip. The bubble shows that frame (the video itself only
+                  // the agent reaches, by reference).
                   <MessageAttachment
                     key={file.id}
                     data={{ type: "file", mediaType: "image/webp", filename: file.filename, url: file.url }}
                   />
                 ) : file.mime.startsWith("audio/") && file.mediaUrl ? (
-                  // Áudio anexado: toca na própria bolha. O que ele diz (se o
-                  // agente transcrever) fica na nota do anexo, não aqui.
+                  // Attached audio: plays in the bubble itself. What it says (if the
+                  // agent transcribes it) stays in the attachment note, not here.
                   <AudioPlayerCard
                     key={file.id}
                     className="w-72 max-w-full"
@@ -229,17 +229,17 @@ const MessageItem = memo(
                     title={file.filename || t("audio.attachment")}
                   />
                 ) : (
-                  // Anexo que virou documento abre no painel; os demais (texto
-                  // solto, elemento do browser) não têm o que abrir — o
-                  // conteúdo deles está na própria mensagem.
+                  // An attachment that became a document opens in the panel; the others (loose
+                  // text, browser element) have nothing to open — their
+                  // content is in the message itself.
                   <DocumentChip key={file.id} file={file} sessionId={sessionId} />
                 ),
               )}
             </MessageAttachments>
           )}
-          {/* `data-msg-surface`: alvo do anel do pulo para a mensagem (busca,
-              galeria, artefato) — o anel vai na bolha, que é arredondada, e
-              não no wrapper da linha, que é retangular (ver message-jump). */}
+          {/* `data-msg-surface`: target of the ring of the jump to the message (search,
+              gallery, artifact) — the ring goes on the bubble, which is rounded, and
+              not on the wrapper of the row, which is rectangular (see message-jump). */}
           <MessageContent data-msg-surface>
             <UserMessageText text={visibleMessageText(msg)} />
           </MessageContent>
@@ -247,8 +247,8 @@ const MessageItem = memo(
             <MessageTimestamp timestamp={msg.createdAt} />
             <CopyAction text={visibleMessageText(msg)} />
             <ReplyAction message={msg} sessionId={sessionId} />
-            {/* Falar lê a RESPOSTA do assistente — a mensagem do usuário não
-                ganha o botão (nada dela é lido em voz alta). */}
+            {/* Speak reads the assistant's REPLY — the user message does not
+                get the button (nothing of it is read aloud). */}
             <RevertAction messageId={msg.id} sessionId={sessionId} />
           </Actions>
         </div>
@@ -269,8 +269,8 @@ const MessageItem = memo(
             onRetry={handleRetry}
           />
         ) : (
-          // `diffInFooter`: o "+N -N" sai no rodapé da mensagem, junto das
-          // outras ações — e não no cabeçalho do acordeon, que recolhe.
+          // `diffInFooter`: the "+N -N" comes out in the footer of the message, next to the
+          // other actions — and not in the accordion header, which collapses.
           <CodeAssistantMessage
             message={msg}
             sessionId={sessionId}
@@ -309,17 +309,17 @@ function BrokenMessage({ error }: { error: Error }) {
 }
 
 /**
- * Topo da janela de mensagens: monta os turnos anteriores quando a pessoa
- * rola até perto dele. Só reage depois que ela saiu do fim da conversa — ao
- * abrir o chat o topo está na tela antes de a rolagem inicial descer, e
- * carregar ali montaria o histórico inteiro, que é o que a janela evita.
- * Também carrega quando a janela nem enche a tela (não há o que rolar).
+ * Top of the message window: mounts the earlier turns when the person
+ * scrolls close to it. It only reacts after they left the end of the conversation — when
+ * opening the chat the top is on screen before the initial scroll goes down, and
+ * loading there would mount the whole history, which is what the window avoids.
+ * It also loads when the window does not even fill the screen (there is nothing to scroll).
  */
 function EarlierMessages({ hiddenCount, onLoad, paused }: {
   hiddenCount: number
   onLoad: () => void
-  /** Durante um pulo para mensagem: carregar aqui mexeria no scroll no meio
-   *  da rolagem até o alvo. */
+  /** During a jump to a message: loading here would disturb the scroll in the middle
+   *  of the scroll to the target. */
   paused: () => boolean
 }) {
   const { t } = useTranslation()
@@ -362,22 +362,22 @@ function EarlierMessages({ hiddenCount, onLoad, paused }: {
 
 function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan, footer, underVeil }: {
   messages: ChatMessage[]
-  /** O histórico da sessão ainda não chegou do disco. */
+  /** The session history has not arrived from disk yet. */
   historyPending: boolean
   isBusy: boolean
   busyLabel?: string
   mode: "chat" | "code"
   sessionId?: string
-  /** Há véu no topo (persona visível): só aí a conversa pode subir por baixo
-   *  dele. Sem véu, subir a conversa a coloca por cima do header, que é
-   *  transparente de propósito (a persona transborda para dentro dele). */
+  /** There is a veil at the top (persona visible): only then can the conversation rise under
+   *  it. Without the veil, raising the conversation puts it over the header, which is
+   *  transparent on purpose (the persona overflows into it). */
   underVeil?: boolean
   sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
   planIds: Set<string>
   planReview: PlanReview | undefined
   plan?: OrchestrationPlan | undefined
-  /** Cards que pertencem à conversa (pedido do agente, revert, orquestração)
-   *  e por isso rolam com ela, em vez de ocuparem a faixa fixa acima do input. */
+  /** Cards that belong to the conversation (agent request, revert, orchestration)
+   *  and therefore scroll with it, instead of taking the fixed strip above the input. */
   footer?: ReactNode
 }) {
   const { t } = useTranslation()
@@ -391,17 +391,17 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
     [messages],
   )
 
-  // ── Janela: só os últimos turnos ficam montados (ver message-window.ts) ──
-  // Guardada pelo ID da primeira mensagem, não pelo índice: mensagens novas
-  // chegam no fim e não podem deslocar a janela. Fica fixa depois de definida
-  // (o chat que cresce não desmonta o que está acima); trocar de sessão ou a
-  // mensagem sumir (revert, compactação) volta ao padrão.
+  // ── Window: only the last turns stay mounted (see message-window.ts) ──
+  // Keyed by the ID of the first message, not by the index: new messages
+  // arrive at the end and cannot shift the window. It stays fixed once defined
+  // (the growing chat does not unmount what is above); switching session or the
+  // message disappearing (revert, compaction) returns to the default.
   const [windowState, setWindowState] = useState<{ sessionId?: string; startId: string | null }>({
     sessionId,
     startId: null,
   })
-  // Atualizações de estado durante o render (estado derivado): o React
-  // descarta este render e refaz com o valor novo, sem passar pelo DOM.
+  // State updates during render (derived state): React
+  // discards this render and redoes it with the new value, without going through the DOM.
   const sameSession = windowState.sessionId === sessionId
   if (!sameSession) setWindowState({ sessionId, startId: null })
   let startIndex = 0
@@ -414,14 +414,14 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
   const visibleMessages = startIndex > 0 ? messages.slice(startIndex) : messages
 
   const stickRef = useRef<StickToBottomContext>(null)
-  /** Medidas do scroll antes de montar turnos acima — para manter na tela o
-   *  que a pessoa estava lendo quando o conteúdo cresce por cima. */
+  /** Scroll measurements before mounting turns above — to keep on screen what
+   *  the person was reading when the content grows on top. */
   const anchorRef = useRef<{ height: number; top: number } | null>(null)
   const messagesRef = useRef(messages)
   messagesRef.current = messages
   const startIndexRef = useRef(startIndex)
   startIndexRef.current = startIndex
-  /** Até quando o carregamento automático do topo fica parado (pulo em curso). */
+  /** Until when the automatic loading of the top stays halted (jump in progress). */
   const jumpUntilRef = useRef(0)
   const autoLoadPaused = useCallback(() => Date.now() < jumpUntilRef.current, [])
 
@@ -439,26 +439,26 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
     const scroller = stickRef.current?.scrollRef.current
     if (!anchor || !scroller) return
     anchorRef.current = null
-    // O Chromium pode já ter compensado sozinho (scroll anchoring); só mexe
-    // se a posição não for a esperada.
+    // Chromium may already have compensated by itself (scroll anchoring); it only touches
+    // it if the position is not the expected one.
     const expected = anchor.top + (scroller.scrollHeight - anchor.height)
     if (Math.abs(scroller.scrollTop - expected) > 1) scroller.scrollTop = expected
   }, [startIndex])
 
-  // Abre no fim ANTES do primeiro quadro: o StickToBottom só desce num
-  // requestAnimationFrame, e até lá o chat aparecia no topo por um instante.
-  // Roda quando a conversa monta (troca de sessão ou histórico que chegou).
+  // Opens at the end BEFORE the first frame: StickToBottom only goes down in a
+  // requestAnimationFrame, and until then the chat appeared at the top for an instant.
+  // Runs when the conversation mounts (session switch or history that arrived).
   useLayoutEffect(() => {
     if (historyPending) return
     const scroller = stickRef.current?.scrollRef.current
     if (scroller) scroller.scrollTop = scroller.scrollHeight
   }, [sessionId, historyPending])
 
-  // A área do chat também muda de altura sem o conteúdo mudar: a persona do
-  // header entra com o véu (o chat encolhe ~64px), o campo de texto cresce,
-  // um card aparece acima do input. O StickToBottom só observa o conteúdo,
-  // então nesses casos o fim da conversa ficava escondido embaixo. Colado no
-  // fim antes da mudança, continua colado depois.
+  // The chat area also changes height without the content changing: the header
+  // persona enters with the veil (the chat shrinks ~64px), the text field grows,
+  // a card appears above the input. StickToBottom only observes the content,
+  // so in those cases the end of the conversation stayed hidden underneath. Stuck to the
+  // end before the change, it stays stuck after it.
   useEffect(() => {
     if (historyPending) return
     const scroller = stickRef.current?.scrollRef.current
@@ -475,10 +475,10 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
     return () => observer.disconnect()
   }, [sessionId, historyPending])
 
-  // Pular para uma mensagem fora da janela (busca, navegador, galeria):
-  // estende a janela até o turno dela. O stopScroll solta a trava do fim —
-  // senão o conteúdo novo acima faria a conversa ser puxada de volta para
-  // baixo enquanto a busca tenta rolar até a mensagem.
+  // Jump to a message outside the window (search, browser, gallery):
+  // extends the window up to its turn. stopScroll releases the end lock —
+  // otherwise the new content above would pull the conversation back
+  // down while the search tries to scroll to the message.
   useEffect(() => {
     return registerMessageRevealer((messageId) => {
       const list = messagesRef.current
@@ -487,8 +487,8 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
       if (index < startIndexRef.current) {
         stickRef.current?.stopScroll()
         jumpUntilRef.current = Date.now() + 1500
-        // Turnos extras acima do alvo: o topo da janela fica longe dele, e
-        // rolar um pouco para cima depois do pulo não esbarra no limite.
+        // Extra turns above the target: the top of the window stays far from it, and
+        // scrolling a little up after the jump does not hit the limit.
         const start = turnStart(list, windowStartFor(list, index), PAGE_TURNS)
         setWindowState({ sessionId, startId: list[start].id })
       }
@@ -535,17 +535,17 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
     for (const el of els) observer.observe(el)
 
     return () => observer.disconnect()
-    // Re-observa quando a janela cresce: as perguntas recém-montadas no topo
-    // também contam para o destaque do navegador.
+    // Re-observes when the window grows: the questions just mounted at the top
+    // also count for the browser highlight.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userMsgItems.map((i) => i.id).join(","), startIndex])
 
   const handleNavSelect = useCallback(async (id: string) => {
     const el = await revealMessage(id)
     if (!el) return
-    // Rola o container de scroll real (div interna do StickToBottom), que fica
-    // sob um ancestral com overflow-y-hidden — scrollIntoView nem sempre rola
-    // o container certo nessa estrutura.
+    // Scrolls the real scroll container (StickToBottom's inner div), which sits
+    // under an ancestor with overflow-y-hidden — scrollIntoView does not always scroll
+    // the right container in this structure.
     let scroller = el.parentElement
     while (scroller) {
       const overflowY = getComputedStyle(scroller).overflowY
@@ -563,24 +563,24 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
     scroller.scrollTo({ top: Math.max(0, Math.min(target, max)), behavior: "smooth" })
   }, [])
 
-  // Sem o histórico, a conversa não monta. Montada vazia, a primeira medição
-  // do StickToBottom (a que rola sem animar) era gasta na lista vazia, e o
-  // histórico chegando depois virava "conteúdo cresceu": a mola suave descia
-  // o chat inteiro do topo até o fim, à vista.
+  // Without the history, the conversation does not mount. Mounted empty, the first measurement
+  // of StickToBottom (the one that scrolls without animating) was spent on the empty list, and the
+  // history arriving later became "content grew": the smooth spring went down
+  // the whole chat from the top to the end, in plain sight.
   if (historyPending) return <div className="relative flex-1" />
 
   return (
-    // initial="instant": o chat abre já no fim, sem rolar por tudo até lá.
+    // initial="instant": the chat opens already at the end, without scrolling through everything to get there.
     <Conversation key={sessionId ?? "no-session"} contextRef={stickRef} initial="instant" className={cn("relative flex-1", underVeil && "-mt-10")}>
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {startIndex > 0 && (
-          // key pela janela: cada carga remonta o observador, que reavalia na
-          // hora se o topo continua perto (rolagem rápida pede mais de uma)
+          // key by the window: every load remounts the observer, which re-evaluates on
+          // the spot whether the top is still near (fast scrolling asks for more than one)
           <EarlierMessages key={messages[startIndex].id} hiddenCount={startIndex} onLoad={loadEarlier} paused={autoLoadPaused} />
         )}
         {visibleMessages.map((msg, visibleIndex) => {
-          // Índice no histórico inteiro: separador de data e retry olham a
-          // mensagem anterior de verdade, montada ou não.
+          // Index in the whole history: the date separator and the retry look at the
+          // real previous message, mounted or not.
           const index = startIndex + visibleIndex
           const showSeparator = isNewDay(messages[index - 1]?.createdAt, msg.createdAt)
 
@@ -600,11 +600,11 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
           return (
             <div key={msg.id}>
               {showSeparator && <DateSeparator timestamp={msg.createdAt} />}
-              {/* Uma mensagem que o renderer não sabe desenhar — em geral
-                  dado gravado por uma versão anterior — vira um aviso no
-                  lugar dela. Antes ela apagava a conversa inteira. */}
+              {/* A message the renderer does not know how to draw — usually
+                  data recorded by a previous version — becomes a notice in
+                  its place. Before, it erased the whole conversation. */}
               <ErrorBoundary
-                label={`mensagem ${msg.id}`}
+                label={`message ${msg.id}`}
                 resetKeys={[msg]}
                 fallback={(error) => <BrokenMessage error={error} />}
               >
@@ -626,8 +626,8 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
           )
         })}
         {planReview && planReview.status === "proposed" && sessionId && (
-          // max-w-2xl para alinhar com o input: a conversa é max-w-3xl, e o
-          // card ficava mais largo que a caixa de mensagem logo abaixo dele.
+          // max-w-2xl to align with the input: the conversation is max-w-3xl, and the
+          // card was wider than the message box right below it.
           <div className="mx-auto w-full max-w-2xl px-1">
             <PlanReviewCard sessionId={sessionId} review={planReview} />
           </div>
@@ -645,26 +645,26 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
       </ConversationContent>
       <ConversationScrollButton />
       <UserMessageNav items={userMsgItems} activeId={activeUserMsgId} onSelect={handleNavSelect} planIds={planIds} />
-      {/* Selecionar um trecho e responder só ele — dentro do Conversation
-          porque é o elemento de rolagem dele que delimita a área válida. */}
+      {/* Select an excerpt and reply only to it — inside the Conversation
+          because it is its scroll element that delimits the valid area. */}
       <MessageReplySelection sessionId={sessionId} />
     </Conversation>
   )
 }
 
-// Abertura do app: a persona central nasce dormindo e acorda ~650ms após a
-// montagem. O som de entrada é tocado pelo renderer (WebAudio) neste mesmo
-// instante — áudio e persona começam juntos (ver src/lib/entrance-sound.ts).
-// Os flags são por módulo/processo — trocas de tela seguintes usam a transição
-// normal.
+// App opening: the central persona is born sleeping and wakes ~650ms after
+// mounting. The entrance sound is played by the renderer (WebAudio) at this same
+// instant — audio and persona start together (see src/lib/entrance-sound.ts).
+// The flags are per module/process — later screen switches use the normal
+// transition.
 let entranceWakeDone = false
 const isInitialLaunch = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("entrance")
 
-/** O ponto dourado do link "O que o Orbit faz?" some depois da primeira vez. */
+/** The golden dot of the "What does Orbit do?" link disappears after the first time. */
 const CAPABILITIES_SEEN_KEY = "orbit-capabilities-seen"
 
-/** `embedded`: o chat está numa aba do painel lateral. Lá o espaço vertical é
- *  curto e a aba já diz qual chat é, então a persona do topo sai. */
+/** `embedded`: the chat is in a tab of the side panel. There the vertical space is
+ *  short and the tab already says which chat it is, so the top persona goes away. */
 export function ChatView({ sessionId, embedded = false }: { sessionId?: string; embedded?: boolean } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(mode)
@@ -673,10 +673,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   )
   const session = sessionId ? explicitSession : activeSession
   const viewMode = session?.mode ?? mode
-  // Campos da sessão lidos fora de efeitos: a identidade do objeto muda a cada
-  // atualização do store, e dependências por objeto disparariam à toa.
-  const pastaDaSessao = session?.directory
-  const extrasDaSessao = session?.extraDirectories
+  // Session fields read outside effects: the object identity changes on every
+  // store update, and object dependencies would fire for nothing.
+  const sessionDirectory = session?.directory
+  const sessionExtraDirectories = session?.extraDirectories
   const messages = useSessionStore((s) =>
     session ? s.messages[session.id] ?? NO_MESSAGES : NO_MESSAGES,
   )
@@ -688,7 +688,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const compactionSuggestion = useSessionStore((s) =>
     session ? s.compactionSuggestion[session.id] : undefined,
   )
-  // IDs de mensagens de usuário que geraram planos — computado do review + mensagens
+  // IDs of user messages that generated plans — computed from the review + messages
   const planMsgIds = useMemo(() => {
     const ids = new Set<string>()
     if (!planReview || !session) return ids
@@ -701,7 +701,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const selectSession = useSessionStore((s) => s.selectSession)
   const initializeProviders = useProviderStore((s) => s.initialize)
-  // Default de brain/simple vem das preferências de modos ativos do modo atual
+  // The brain/simple default comes from the active modes preferences of the current mode
   const modeDefaults = useModelModePrefs((s) => (viewMode === "code" ? s.codeActiveModes : s.chatActiveModes))
   const simpleMode = useSimpleMode(session?.id, modeDefaults.simple)
   const chatSearchOpen = useChatSearchStore((s) => s.open)
@@ -710,107 +710,107 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     void initializeProviders()
   }, [initializeProviders])
 
-  // Carrega o histórico tanto para views explícitas (workers/painel) quanto
-  // para a sessão principal. Após um reload do renderer, o status pode voltar
-  // como streaming antes de a lista de mensagens ter sido hidratada; sem este
-  // efeito a UI ficava vazia enquanto o engine continuava rodando.
+  // Loads the history both for explicit views (workers/panel) and
+  // for the main session. After a renderer reload, the status may come back
+  // as streaming before the message list has been hydrated; without this
+  // effect the UI stayed empty while the engine kept running.
   useEffect(() => {
     if (session?.id) void useSessionStore.getState().ensureMessages(session.id)
   }, [session?.id])
 
-  // Fecha a busca ao trocar de sessão para não deixar resultados obsoletos visíveis
+  // Closes the search on session switch so obsolete results are not left visible
   useEffect(() => {
     useChatSearchStore.getState().close()
   }, [session?.id])
 
-  // Sincroniza pasta da sessão (ex.: vinda do mobile) com o workspace. Além
-  // da troca de chat, segue a troca de pasta da MESMA sessão feita fora da
-  // tela — o agente mudando o chat de worktree (worktree_switch/create).
-  // Sem isso, o próximo envio gravaria de volta a pasta antiga.
+  // Syncs the session folder (e.g. coming from mobile) with the workspace. Beyond
+  // the chat switch, it follows the folder switch of the SAME session made outside
+  // the screen — the agent moving the chat to another worktree (worktree_switch/create).
+  // Without that, the next send would write the old folder back.
   //
-  // O chat de uma aba do painel fica de fora: ele tem as pastas DELE (o header
-  // da aba já as persiste) e o workspace é o da janela principal — escrever
-  // nele trocaria as pastas do chat que está na tela, e o envio seguinte
-  // gravaria essa troca na sessão errada.
+  // The chat of a panel tab stays out: it has ITS OWN folders (the tab
+  // header already persists them) and the workspace is the main window's — writing
+  // to it would swap the folders of the chat on screen, and the next send
+  // would record that swap in the wrong session.
   const prevSessionId = useRef(session?.id)
   const prevDirectory = useRef(session?.directory)
   useEffect(() => {
     if (embedded || viewMode !== "code" || !session?.directory) return
     const trocouChat = session.id !== prevSessionId.current
-    const trocouPasta = !trocouChat && session.directory !== prevDirectory.current
+    const folderChanged = !trocouChat && session.directory !== prevDirectory.current
     prevSessionId.current = session.id
     prevDirectory.current = session.directory
     if (trocouChat) {
       setFolders([session.directory, ...(session.extraDirectories ?? [])])
-    } else if (trocouPasta && useSessionStore.getState().activeIds.code === session.id) {
-      // Mesma sessão, pasta trocada pelo agente: as extras do workspace ficam
-      // (inclusive as associadas depois do último envio) e vão para a sessão.
-      // Só no chat ativo — o workspace é dele; um chat no painel lateral não
-      // mexe nas pastas da tela.
-      const proximas = pastasAposTroca(session.directory, folders)
-      setFolders(proximas)
-      useSessionStore.getState().setSessionDirectories(session.id, session.directory, proximas.slice(1))
+    } else if (folderChanged && useSessionStore.getState().activeIds.code === session.id) {
+      // Same session, folder swapped by the agent: the extras of the workspace stay
+      // (including the ones attached after the last send) and go to the session.
+      // Only in the active chat — the workspace is its own; a chat in the side panel does not
+      // touch the folders of the screen.
+      const remaining = foldersAfterSwitch(session.directory, folders)
+      setFolders(remaining)
+      useSessionStore.getState().setSessionDirectories(session.id, session.directory, remaining.slice(1))
     }
-    if (trocouChat || trocouPasta) {
-      // Pasta que chegou de fora pode ser um worktree: registra o principal
-      // dela para a sidebar agrupar os próximos chats no projeto certo.
-      void useWorktreeStore.getState().resolverPrincipal(session.directory)
+    if (trocouChat || folderChanged) {
+      // A folder that arrived from outside may be a worktree: it registers its main
+      // one so the sidebar groups the next chats in the right project.
+      void useWorktreeStore.getState().resolveMain(session.directory)
     }
-    // folders entra só para a troca ler as extras atuais; mudar só as pastas
-    // não dispara nada (nem chat nem pasta principal da sessão mudaram).
+    // folders comes in only so the switch reads the current extras; changing only the folders
+    // fires nothing (neither the chat nor the main folder of the session changed).
   }, [embedded, session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders, folders])
 
-  // Associar (ou remover) uma pasta vale na hora, e não só no próximo envio.
+  // Attaching (or removing) a folder counts right away, and not only on the next send.
   //
-  // A sessão em disco só era atualizada ao enviar, então a associação vivia
-  // apenas no workspace (localStorage): fechar o app — ou abrir outro chat, que
-  // restaura o workspace a partir da sessão — desfazia o que a pessoa tinha
-  // acabado de associar. Aqui a lista vai para a sessão no mesmo clique, que é o
-  // que faz a pasta ficar "até ser removida".
+  // The session on disk was only updated on send, so the association lived
+  // only in the workspace (localStorage): closing the app — or opening another chat, which
+  // restores the workspace from the session — undid what the person had
+  // just attached. Here the list goes to the session on the same click, which is
+  // what makes the folder stay "until it is removed".
   //
-  // A referência guarda a lista (e o chat) do render anterior. Trocar de chat
-  // também troca a lista — e essa lista é da sessão nova, não uma associação
-  // feita agora —, então só conta como mudança quando o chat já estava na tela.
-  const sessionIdDoChat = session?.id
-  const foldersPrevia = useRef({ folders, sessionId: sessionIdDoChat })
+  // The ref keeps the list (and the chat) of the previous render. Switching chat
+  // also swaps the list — and that list is the new session's, not an association
+  // made now —, so it only counts as a change when the chat was already on screen.
+  const chatSessionId = session?.id
+  const previousFolders = useRef({ folders, sessionId: chatSessionId })
   useEffect(() => {
-    const anterior = foldersPrevia.current
-    foldersPrevia.current = { folders, sessionId: sessionIdDoChat }
-    if (anterior.sessionId !== sessionIdDoChat) return
-    const mudou = anterior.folders !== folders
-    if (!mudou || embedded || viewMode !== "code" || !sessionIdDoChat) return
-    const lista = folders.filter(Boolean)
-    if (lista.length === 0) return
-    const daSessao = pastasDaSessao({ directory: pastaDaSessao, extraDirectories: extrasDaSessao })
-    if (mesmasPastas(daSessao, lista)) return
-    useSessionStore.getState().setSessionDirectories(sessionIdDoChat, lista[0], lista.slice(1))
-  }, [folders, embedded, viewMode, sessionIdDoChat, pastaDaSessao, extrasDaSessao])
+    const previous = previousFolders.current
+    previousFolders.current = { folders, sessionId: chatSessionId }
+    if (previous.sessionId !== chatSessionId) return
+    const changed = previous.folders !== folders
+    if (!changed || embedded || viewMode !== "code" || !chatSessionId) return
+    const folderList = folders.filter(Boolean)
+    if (folderList.length === 0) return
+    const foldersOfSession = sessionFolders({ directory: sessionDirectory, extraDirectories: sessionExtraDirectories })
+    if (sameFolders(foldersOfSession, folderList)) return
+    useSessionStore.getState().setSessionDirectories(chatSessionId, folderList[0], folderList.slice(1))
+  }, [folders, embedded, viewMode, chatSessionId, sessionDirectory, sessionExtraDirectories])
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
-  // Os arquivos das peças de motion desta conversa: o card da peça no chat lê
-  // daqui (e se atualiza quando a pasta muda). Os endereços dizem em qual
-  // MENSAGEM cada card mora — a primeira que mostrou mídia daquela peça.
+  // The files of the motion pieces of this conversation: the piece card in the chat reads
+  // from here (and updates when the folder changes). The addresses say in which
+  // MESSAGE each card lives — the first one that showed media of that piece.
   useMotionBundleAnchors(session?.id, messages, isBusy)
-  // Sessão cujo histórico ainda não chegou do disco conta como conversa: sem
-  // isso, trocar de chat passava pela tela de início (lista vazia por um
-  // instante) e rodava as animações de saída e entrada antes de mostrar o
-  // chat escolhido.
+  // A session whose history has not arrived from disk counts as a conversation: without
+  // that, switching chat went through the start screen (empty list for an
+  // instant) and ran the exit and entrance animations before showing the
+  // chosen chat.
   const historyPending = useSessionStore((s) => (session ? s.messages[session.id] === undefined : false))
   const hasChat = messages.length > 0 || historyPending
   const personaVisibility = useAppearanceStore((s) => s.personaVisibility)
-  /** A flutuante do topo passa por cima da conversa; a da saudação não
-   *  disputa espaço com nada. São escolhas separadas — ver PersonaVisibility. */
+  /** The floating one at the top goes over the conversation; the greeting one does not
+   *  compete for space with anything. They are separate choices — see PersonaVisibility. */
   const personaInChat = showsPersonaInChat(personaVisibility)
   const personaOnWelcome = showsPersonaOnWelcome(personaVisibility)
-  // Pastas que ESTE chat usa. Numa aba do painel são as da sessão da aba: o
-  // workspace é o da janela principal, e usá-lo aqui mandaria o turno para a
-  // pasta do chat que está na tela.
-  const pastasDoChat = useMemo(
+  // Folders THIS chat uses. In a panel tab they are the ones of the tab session: the
+  // workspace is the main window's, and using it here would send the turn to the
+  // folder of the chat that is on screen.
+  const chatFolders = useMemo(
     () =>
-      embedded && pastaDaSessao
-        ? pastasDaSessao({ directory: pastaDaSessao, extraDirectories: extrasDaSessao })
+      embedded && sessionDirectory
+        ? sessionFolders({ directory: sessionDirectory, extraDirectories: sessionExtraDirectories })
         : folders,
-    [embedded, folders, pastaDaSessao, extrasDaSessao],
+    [embedded, folders, sessionDirectory, sessionExtraDirectories],
   )
 
   const handleFoldersChange = useCallback(
@@ -819,50 +819,50 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
         setFolders(next)
         return
       }
-      // Aba do painel: a associação é da sessão da aba, e só dela.
+      // Panel tab: the association belongs to the tab session, and only to it.
       if (!session?.id || next.length === 0) return
       useSessionStore.getState().setSessionDirectories(session.id, next[0], next.slice(1))
     },
     [embedded, session?.id, setFolders],
   )
 
-  // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector
-  const initDirectory = session?.directory ?? (viewMode === "code" ? pastasDoChat[0] : undefined)
+  // Target folder of the init card: the session's or the one selected in FolderSelector
+  const initDirectory = session?.directory ?? (viewMode === "code" ? chatFolders[0] : undefined)
 
   const prevHasChat = useRef(hasChat)
   const isBusyRef = useRef(isBusy)
   isBusyRef.current = isBusy
 
-  // Voz em curso (fala do TTS ou ditado) — publicada pelos próprios botões em
-  // `stores/voice-activity`, porque a persona não tem ligação com eles.
+  // Voice in progress (TTS speech or dictation) — published by the buttons themselves in
+  // `stores/voice-activity`, because the persona has no connection to them.
   const voiceActivity = useVoiceActivity()
   const [displayCenterState, setDisplayCenterState] = useState<PersonaState>("asleep")
   const [displayTopState, setDisplayTopState] = useState<PersonaState>(
     hasChat ? (isBusy ? "thinking" : "idle") : "asleep",
   )
   const [topVisible, setTopVisible] = useState(hasChat)
-  /** Opacidade da persona do topo, separada da montagem: na saída ela some com
-   *  fade e só desmonta depois, quando a animação de dormir terminou. */
+  /** Opacity of the top persona, separate from the mounting: on exit it disappears with
+   *  a fade and only unmounts afterwards, when the sleeping animation has finished. */
   const [topOpaque, setTopOpaque] = useState(hasChat)
   const [centerVisible, setCenterVisible] = useState(!hasChat)
   const [centerPersonaVisible, setCenterPersonaVisible] = useState(!hasChat)
   const [chatVisible, setChatVisible] = useState(hasChat)
   /**
-   * O convite da tela inicial entra DEPOIS da persona, não junto: lado a lado
-   * de tempo os dois competem e a tela parece que piscou. Em sequência, a
-   * pessoa vê o Orbit primeiro e o texto em seguida.
+   * The invitation of the start screen enters AFTER the persona, not with it: side by
+   * side in time the two compete and the screen looks like it blinked. In sequence, the
+   * person sees Orbit first and the text right after.
    */
   const [introVisible, setIntroVisible] = useState(false)
-  // Card de provedor ausente: aparece quando o usuário tenta enviar sem
-  // provider configurado (input ou sugestão) e some quando um provedor conecta
+  // Missing-provider card: appears when the user tries to send with no
+  // provider configured (input or suggestion) and disappears when a provider connects
   const [providerHintVisible, setProviderHintVisible] = useState(false)
   const noProvider = useNoProviderConnected()
   const providersLoading = useProvidersLoading()
 
-  // Chip de pendência: o card do pedido agora vive na conversa, então pode
-  // ficar fora de vista enquanto a pessoa lê o histórico. O chip só aparece
-  // nesse caso — com o card à vista ele seria ruído. Volta a sumir sozinho
-  // quando o pedido é respondido (aí não há mais pendência nenhuma).
+  // Pending chip: the request card now lives in the conversation, so it may
+  // be out of sight while the person reads the history. The chip only appears
+  // in that case — with the card in view it would be noise. It goes back to disappearing by itself
+  // when the request is answered (then there is no pending item at all anymore).
   const pendingAsksRef = useRef<HTMLDivElement | null>(null)
   const [pendingAskVisible, setPendingAskVisible] = useState(true)
   const hasPendingAsks = pendingAsks.length > 0
@@ -876,15 +876,15 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     )
     observer.observe(el)
     return () => observer.disconnect()
-    // historyPending entra nas dependências: enquanto o histórico não chega, a
-    // conversa (e o footer com o card) não está montada, e o ref é nulo.
+    // historyPending enters the deps: while the history does not arrive, the
+    // conversation (and the footer with the card) is not mounted, and the ref is null.
   }, [hasPendingAsks, session?.id, historyPending])
 
   const revealPendingAsk = useCallback(() => {
     const el = pendingAsksRef.current
     if (!el) return
-    // O scroller real é a div interna do StickToBottom (o Conversation é
-    // overflow-y-hidden) — mesmo caminho que o salto da busca percorre.
+    // The real scroller is StickToBottom's inner div (the Conversation is
+    // overflow-y-hidden) — the same path the search jump walks.
     let scroller = el.parentElement
     while (scroller) {
       const overflowY = getComputedStyle(scroller).overflowY
@@ -895,17 +895,17 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" })
   }, [])
 
-  // Conectou um provedor (ou a inicialização revelou que existem) → card some
+  // A provider connected (or the initialization revealed there are some) → the card goes away
   useEffect(() => {
     if (!noProvider) setProviderHintVisible(false)
   }, [noProvider])
 
-  // O convite entra DEPOIS da persona e DEPOIS da abertura falada. Na abertura
-  // ela acorda aos 650ms (ver a transição de entrada) e, ao voltar do chat,
-  // surge aos 650ms e acorda aos 800ms. As três falas começam em seguida e
-  // terminam em INTRO_TOTAL_MS — só então o convite e o resto entram.
-  // Sem persona na tela de boas-vindas, ou com movimento reduzido, não há por
-  // que esperar.
+  // The invitation enters AFTER the persona and AFTER the spoken opening. On opening
+  // it wakes at 650ms (see the entrance transition) and, coming back from the chat,
+  // it appears at 650ms and wakes at 800ms. The three lines start right after and
+  // end at INTRO_TOTAL_MS — only then do the invitation and the rest enter.
+  // With no persona on the welcome screen, or with reduced motion, there is no
+  // reason to wait.
   useEffect(() => {
     if (hasChat) {
       setIntroVisible(false)
@@ -915,13 +915,13 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       setIntroVisible(true)
       return
     }
-    // Os provedores ainda estão carregando: não se sabe se falta algum.
-    // Decidir agora faria o título aparecer e depois sumir, quando o
-    // loading terminasse.
+    // The providers are still loading: it is not known whether any is missing.
+    // Deciding now would make the title appear and then disappear, when the
+    // loading finished.
     if (providersLoading) return
-    // A abertura falada (as três palavras girando) é da primeira entrada:
-    // acontece só quando falta provedor. Com provedor conectado, o título
-    // entra direto, sem as palavras.
+    // The spoken opening (the three rotating words) belongs to the first entrance:
+    // it happens only when a provider is missing. With a provider connected, the title
+    // enters straight away, without the words.
     if (!noProvider) {
       setIntroVisible(true)
       return
@@ -931,27 +931,27 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     return () => clearTimeout(id)
   }, [hasChat, personaOnWelcome, providersLoading, noProvider])
 
-  // Se o Rive quebrou, a persona some; trocar de chat (ou abrir um novo) é a
-  // hora de tentar trazê-la de volta com um wasm novo
+  // If Rive broke, the persona goes away; switching chat (or opening a new one) is the
+  // moment to try bringing it back with a new wasm
   useEffect(() => {
     retryPersona()
   }, [session?.id])
 
   useEffect(() => {
-    // Decodifica o WAV de entrada durante o carregamento (idempotente), para
-    // o áudio estar pronto quando o despertar de 650ms acontecer.
+    // Decodes the entrance WAV during the loading (idempotent), so that
+    // the audio is ready when the 650ms waking happens.
     void prepareEntranceSound()
     const wasChatting = prevHasChat.current
     prevHasChat.current = hasChat
     const timers: ReturnType<typeof setTimeout>[] = []
 
     if (hasChat && !wasChatting) {
-      // Entrando no chat: o caminho da saída, ao contrário e nos mesmos tempos —
-      // o centro fecha (50ms) e sai (550ms); o topo nasce dormindo só depois
-      // que o centro terminou de fechar (650ms) e acorda 700ms depois
-      // (1350ms); as mensagens entram 150ms depois de o centro sair. Com o
-      // topo nascendo aos 300ms, ele aparecia com o centro ainda fechando — um
-      // bicho de cada lado ao mesmo tempo.
+      // Entering the chat: the exit path, backwards and in the same timings —
+      // the center closes (50ms) and leaves (550ms); the top is born sleeping only after
+      // the center finished closing (650ms) and wakes 700ms later
+      // (1350ms); the messages enter 150ms after the center leaves. With the
+      // top being born at 300ms, it appeared with the center still closing — one
+      // critter on each side at the same time.
       setCenterVisible(true)
       setCenterPersonaVisible(true)
       setDisplayCenterState("idle")
@@ -965,17 +965,17 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       timers.push(setTimeout(() => setChatVisible(true), 700))
       timers.push(setTimeout(() => setDisplayTopState(isBusyRef.current ? "thinking" : "idle"), 1350))
     } else if (!hasChat && wasChatting) {
-      // Saindo do chat: a MESMA animação da entrada, com as personas trocando
-      // de papel. O topo faz o que o centro faz na entrada — dorme aos 50ms e
-      // some com fade de 300ms a partir dos 550ms (invisível aos 850ms; o fim
-      // da animação de dormir, que dura 1000ms, fica escondido no fade, como
-      // na entrada) — e só desmonta depois do fade. O centro surge de uma vez
-      // aos 650ms, dormindo, como o topo na entrada, mas acorda antes: aos
-      // 800ms em vez de 1350ms (o primeiro brilho sai ~125ms depois, quando o
-      // fade do topo acabou). Dormindo, a persona não desenha nada (medido
-      // no canvas) — ela só aparece ao acordar. Na entrada o olho está no chat
-      // e o atraso não se nota; aqui o centro é o foco da tela, e acordar aos
-      // 1350ms deixava um buraco vazio acima do texto depois de o topo sumir.
+      // Leaving the chat: the SAME animation as the entrance, with the personas swapping
+      // roles. The top does what the center does on entrance — it sleeps at 50ms and
+      // disappears with a 300ms fade starting at 550ms (invisible at 850ms; the end
+      // of the sleeping animation, which lasts 1000ms, stays hidden in the fade, as
+      // on the entrance) — and only unmounts after the fade. The center appears all at once
+      // at 650ms, sleeping, like the top on the entrance, but wakes earlier: at
+      // 800ms instead of 1350ms (the first glow comes out ~125ms later, when the
+      // top's fade is over). Sleeping, the persona draws nothing (measured
+      // on the canvas) — it only appears on waking. On the entrance the eye is on the chat
+      // and the delay is not noticed; here the center is the focus of the screen, and waking at
+      // 1350ms left an empty hole above the text after the top disappeared.
       setChatVisible(false)
       setDisplayTopState(isBusyRef.current ? "thinking" : "idle")
       timers.push(setTimeout(() => setDisplayTopState("asleep"), 50))
@@ -987,28 +987,28 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       timers.push(setTimeout(() => setCenterPersonaVisible(true), 650))
       timers.push(setTimeout(() => setDisplayCenterState("idle"), 800))
     } else if (hasChat) {
-      // Permanece no chat (isBusy mudou durante a transição de entrada e
-      // cancelou os timers): convergem para o estado final — chat visível e
-      // centro oculto. Sem isso, o estado vazio (texto + sugestões) fica
-      // preso com opacidade total, aparecendo como "background" do chat.
+      // Stays in the chat (isBusy changed during the entrance transition and
+      // canceled the timers): they converge to the final state — chat visible and
+      // center hidden. Without that, the empty state (text + suggestions) is left
+      // stuck at full opacity, showing as the chat's "background".
       setChatVisible(true)
       setCenterVisible(false)
       setCenterPersonaVisible(false)
-      // O topo também: a entrada acima só o monta aos 650ms, e se o isBusy mudar
-      // antes disso é este ramo que termina a transição — sem esta linha a
-      // persona do topo não apareceria.
+      // The top too: the entrance above only mounts it at 650ms, and if isBusy changes
+      // before that it is this branch that ends the transition — without this line the
+      // top persona would not appear.
       setTopOpaque(true)
       setTopVisible(true)
       setDisplayTopState(isBusyRef.current ? "thinking" : "idle")
     } else {
-      // Permanece sem chat (isBusy mudou durante a saída do chat) — garante
-      // o estado final: tudo do centro visível, topo oculto e persona acordada.
+      // Stays without chat (isBusy changed during the chat exit) — guarantees
+      // the final state: everything of the center visible, top hidden and persona awake.
       setCenterVisible(true)
       setCenterPersonaVisible(true)
       if (isInitialLaunch && !entranceWakeDone) {
-        // Abertura do app: a transição sleep → idle acontece 650ms depois da
-        // montagem, e o som de entrada (já decodificado durante o carregamento)
-        // é agendado neste mesmo callback — os dois começam juntos.
+        // App opening: the sleep → idle transition happens 650ms after
+        // mounting, and the entrance sound (already decoded during the loading)
+        // is scheduled in this same callback — the two start together.
         timers.push(setTimeout(() => {
           entranceWakeDone = true
           playEntranceSound()
@@ -1024,8 +1024,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     return () => timers.forEach(clearTimeout)
   }, [hasChat, isBusy])
 
-  // A voz em curso ganha dos estados do chat: com o áudio saindo a persona fala,
-  // com o microfone aberto ela escuta. Sem voz, valem as animações de sempre.
+  // The voice in progress beats the chat states: with the audio going out the persona speaks,
+  // with the microphone open it listens. Without voice, the usual animations apply.
   const voiceState = voiceActivityState(voiceActivity)
   const centerPersonaState = voiceState ?? displayCenterState
   const topPersonaState = voiceState ?? displayTopState
@@ -1052,19 +1052,19 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const { t } = useTranslation()
   const openSettings = useSettingsUi((s) => s.openSettings)
 
-  // A abertura falada: ocupa o lugar do título e sai quando o convite entra.
+  // The spoken opening: it takes the place of the title and leaves when the invitation enters.
   const introGreetings = [
     t("chat.empty.greetingHello"),
     t("chat.empty.greetingWho"),
     t("chat.empty.greetingRole"),
   ]
 
-  // O título é sorteado a cada abertura do app e depende do modo e do nome
-  // aprendido: no chat cumprimenta (com o nome, quando existe), no código fala
-  // de trabalho. O sorteio é estável por processo — ver welcome-title.ts.
+  // The title is drawn on every app opening and depends on the mode and on the learned
+  // name: in chat it greets (with the name, when it exists), in code it talks
+  // about work. The draw is stable per process — see welcome-title.ts.
   //
-  // O subtítulo é que segue informação funcional: sem provedor ele explica o
-  // bloqueio e o botão aparece; com provedor não há o que explicar.
+  // The subtitle is what follows functional information: without a provider it explains the
+  // block and the button appears; with a provider there is nothing to explain.
   const showProviderSetup = noProvider
   const userName = useAppSettings((s) => s.settings.userName)
 
@@ -1075,10 +1075,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     cta: showProviderSetup ? (t("chat.empty.providerCta") as string | null) : (null as string | null),
   }
 
-  // --- Sugestões da abertura -------------------------------------------------
-  // Três pills: retomar o que ficou aberto, e duas capacidades — priorizando a
-  // família que a pessoa nunca produziu (motion, áudio, vídeo), que é
-  // exatamente o que fica escondido atrás da conversa.
+  // --- Opening suggestions ---------------------------------------------------
+  // Three pills: resume what was left open, and two capabilities — prioritizing the
+  // family the person never produced (motion, audio, video), which is
+  // exactly what stays hidden behind the conversation.
   const sessions = useSessionStore((s) => s.sessions)
   const [usedKinds, setUsedKinds] = useState<MediaKind[]>([])
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false)
@@ -1090,8 +1090,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     }
   })
 
-  // O que a galeria já tem decide qual capacidade é novidade. Uma leitura por
-  // montagem; se falhar, a rotação por dia continua funcionando sozinha.
+  // What the gallery already has decides which capability is news. One reading per
+  // mount; if it fails, the daily rotation keeps working on its own.
   useEffect(() => {
     let alive = true
     mediaApi
@@ -1115,12 +1115,12 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     let recent: (typeof sessions)[number] | undefined
     for (const item of sessions) {
       if (item.archived || item.parentId || item.mode !== viewMode) continue
-      // No código, retomar só faz sentido na pasta aberta: uma sessão de outro
-      // repositório levaria a um contexto que não é o desta tela.
+      // In code, resuming only makes sense in the open folder: a session of another
+      // repository would lead to a context that is not this screen's.
       if (viewMode === "code" && item.directory !== directory) continue
-      // A sessão aberta não é "retomar" — mas ela não derruba o convite: ele
-      // passa para a sessão anterior, que é justamente o que a pessoa quer
-      // quando está num chat novo e vazio.
+      // The open session is not "resume" — but it does not take down the invitation: it
+      // moves on to the previous session, which is exactly what the person wants
+      // when they are in a new and empty chat.
       if (item.id === session?.id) continue
       if (!recent || item.updatedAt > recent.updatedAt) recent = item
     }
@@ -1128,9 +1128,9 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     return { id: recent.id, title: recent.title, mode: recent.mode }
   }, [sessions, viewMode, folders, session?.id])
 
-  // Recurso desligado é tool ausente no turno: a pill pularia para uma
-  // promessa vazia. O painel "O que o Orbit faz?" é quem oferece o botão de
-  // ativar — aqui a linha simplesmente não aparece.
+  // A feature turned off is a tool missing from the turn: the pill would jump to an
+  // empty promise. The "What does Orbit do?" panel is what offers the button to
+  // enable it — here the row simply does not appear.
   const ttsEnabled = useAppSettings((s) => s.settings.voice?.tts?.enabled ?? VOICE_DEFAULTS.tts.enabled)
   const sttEnabled = useAppSettings((s) => s.settings.voice?.stt?.enabled ?? VOICE_DEFAULTS.stt.enabled)
   const browserToolsEnabled = useAppSettings((s) => s.settings.browser.agentTools)
@@ -1165,13 +1165,13 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   )
 
   /**
-   * A lista da abertura congela no instante em que ela começa a sair.
+   * The opening list freezes at the instant it starts to leave.
    *
-   * Entrar numa sessão troca a sessão ativa no mesmo tick em que o centro
-   * começa o fade de saída — e o "Retomar" daquela sessão deixaria de existir
-   * ali mesmo. O card sumia com a tela ainda visível, e as pills reflowavam
-   * na frente de quem acabou de clicar. Enquanto a abertura está de pé, o
-   * conteúdo não muda; ela só é recalculada quando a tela volta ao repouso.
+   * Entering a session swaps the active session in the same tick in which the center
+   * starts the exit fade — and that session's "Resume" would stop existing
+   * right there. The card disappeared with the screen still visible, and the pills reflowed
+   * in front of whoever had just clicked. While the opening is standing, the
+   * content does not change; it is only recalculated when the screen returns to rest.
    */
   const [welcomeSuggestions, setWelcomeSuggestions] = useState(startSuggestions)
   useEffect(() => {
@@ -1179,11 +1179,11 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   }, [hasChat, startSuggestions])
 
   /**
-   * A grade é de duas colunas. Uma pill que ocupa a linha inteira ("Retomar")
-   * já fecha a linha sozinha e por isso NÃO entra na paridade: contando com
-   * ela, "Retomar" + duas capacidades dava ímpar e a última capacidade caía
-   * sozinha na linha de baixo, centralizada. A sobra é contada só entre as
-   * pills de meia largura; quando ela é ímpar, a última centraliza.
+   * The grid has two columns. A pill that takes the whole row ("Resume")
+   * already closes the row by itself and therefore does NOT enter the parity: counting
+   * it, "Resume" + two capabilities came out odd and the last capability fell
+   * alone into the row below, centered. The remainder is counted only among the
+   * half-width pills; when it is odd, the last one centers.
    */
   const halfWidthCount = welcomeSuggestions.filter(suggestion => suggestion.action.kind !== "open").length
   const oddLeftover =
@@ -1192,7 +1192,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const handleStartSuggestion = useCallback(
     (suggestion: StartSuggestion) => {
       if (suggestion.action.kind === "fill") {
-        // Preenche, não envia: quem aperta Enter é a pessoa.
+        // It fills, it does not send: the person is who presses Enter.
         useDraftInput.getState().setDraft(session?.id ?? null, suggestion.action.text)
         return
       }
@@ -1208,7 +1208,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     try {
       window.localStorage.setItem(CAPABILITIES_SEEN_KEY, "1")
     } catch {
-      // localStorage indisponível não pode impedir o painel de abrir
+      // localStorage unavailable cannot prevent the panel from opening
     }
   }, [])
 
@@ -1220,27 +1220,27 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     [session?.id],
   )
 
-  // Cada linha da abertura entra sozinha, depois da persona: título →
-  // subtítulo → botão. O atraso vive no transition-delay porque a transição
-  // já roda no CSS; ao sair da tela os atrasos voltam a zero e tudo some junto.
-  // 1s por linha e uma curva que desacelera devagar (não o `ease-out` curto)
-  // é o que faz a entrada parecer lenta em vez de apressada.
+  // Each line of the opening enters on its own, after the persona: title →
+  // subtitle → button. The delay lives in the transition-delay because the transition
+  // already runs in CSS; when leaving the screen the delays go back to zero and everything disappears together.
+  // 1s per line and a curve that decelerates slowly (not the short `ease-out`)
+  // is what makes the entrance seem slow instead of rushed.
   const introLine = `transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
     introVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1.5"
   }`
 
-  // ── Cards conversacionais, dentro do fluxo ────────────────────────────
-  // Pedido do agente, revert, plano e progresso só existem QUANDO existe
-  // conversa, então moram nela: entram como último item da lista e rolam
-  // junto. Antes ocupavam a faixa fixa acima do input, e cada card que
-  // aparecia encurtava o histórico — com dois ou três, a conversa colapsava.
-  // Ficam de fora só os que também existem SEM conversa (init do projeto,
-  // aviso de visão e de provedor): esses precisam aparecer na tela inicial,
-  // onde não há lista para entrar, e continuam na faixa.
+  // ── Conversational cards, inside the flow ─────────────────────────────
+  // Agent request, revert, plan and progress only exist WHEN there is
+  // a conversation, so they live in it: they enter as the last item of the list and scroll
+  // along. Before, they took the fixed strip above the input, and each card that
+  // appeared shortened the history — with two or three, the conversation collapsed.
+  // Only the ones that also exist WITHOUT a conversation stay out (project init,
+  // vision and provider notices): those need to appear on the start screen,
+  // where there is no list to enter, and they stay in the strip.
   const planInFlow = !!plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running" || plan.status === "done")
-  // A oferta de continuar num chat novo só vale para a contagem de resumos da
-  // hora em que foi feita: uma compactação nova (que muda a contagem) esconde
-  // o card sem precisar de nenhuma invalidação manual.
+  // The offer to continue in a new chat is only valid for the summary count of the
+  // moment it was made: a new compaction (which changes the count) hides
+  // the card without needing any manual invalidation.
   const summaryCount = useMemo(
     () => messages.reduce((total, m) => (m.summary ? total + 1 : total), 0),
     [messages],
@@ -1253,18 +1253,18 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const hasInlineCards =
     !!session?.revert || planInFlow || pendingAsks.length > 0 || showCompactionSuggestion
 
-  // -mt-4 come o gap-8 do ConversationContent pela metade: o card fica perto
-  // do turno que o gerou, sem colar na última mensagem.
+  // -mt-4 eats half of ConversationContent's gap-8: the card stays near
+  // the turn that generated it, without sticking to the last message.
   const inlineCards = (
     <div className="mx-auto -mt-4 flex w-full max-w-2xl flex-col gap-2 px-1 pb-1">
-      {/* Revert ativo: barra com alterações desfeitas + botão de desfazer */}
+      {/* Revert active: bar with undone changes + undo button */}
       {session?.revert && <RevertBar session={session} />}
-      {/* Plano de orquestração proposto — aprovar/rejeitar */}
+      {/* Proposed orchestration plan — approve/reject */}
       {session && plan && plan.status === "proposed" && (
         <OrchestrationPlanCard sessionId={session.id} plan={plan} />
       )}
-      {/* Plano em execução/concluído — progresso das tarefas. O mode é fixo:
-          worker de orquestração roda sempre na pasta de trabalho. */}
+      {/* Plan running/finished — task progress. The mode is fixed:
+          an orchestration worker always runs in the working folder. */}
       {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
         <TaskProgress
           tasks={plan.tasks.map((t) => ({
@@ -1272,22 +1272,22 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
             title: t.title,
             status: t.status,
             mode: "code" as const,
-            fase: t.fase,
+            phase: t.phase,
             extra: t.extra,
             revisions: t.revisions,
-            nota: t.notaRevisao,
+            note: t.reviewNote,
           }))}
-          acompanhamento={plan.revisao}
-          onJuntarDeNovo={() => chatApi.juntarOrquestracao(session.id)}
+          followUp={plan.review}
+          onMergeAgain={() => chatApi.mergeOrchestration(session.id)}
           title={t("chat.orchestrationTitle")}
           defaultExpanded={plan.status !== "done"}
           onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}
         />
       )}
-      {/* Contexto perto do limite depois de compactações acumuladas: oferece
-          continuar num chat novo (com brief do agente) em vez de resumir um
-          resumo. É oferta, não bloqueio — ignorada, a compactação automática
-          do próximo turno roda como sempre. */}
+      {/* Context near the limit after accumulated compactions: offers
+          continuing in a new chat (with a brief from the agent) instead of summarizing a
+          summary. It is an offer, not a block — ignored, the automatic compaction
+          of the next turn runs as always. */}
       {session && showCompactionSuggestion && compactionSuggestion && (
         <CompactionSuggestionCard
           sessionId={session.id}
@@ -1295,10 +1295,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           threshold={compactionSuggestion.threshold}
         />
       )}
-      {/* Pedidos aguardando resposta (permissão / question): o card é a última
-          coisa da conversa — é onde o turno parou esperando. Itens com batchId
-          (workers em lote) agrupam num card único de submit único. O ref é o
-          que decide se o chip de pendência precisa aparecer. */}
+      {/* Requests waiting for an answer (permission / question): the card is the last
+          thing in the conversation — it is where the turn stopped waiting. Items with batchId
+          (batched workers) group into a single card with a single submit. The ref is
+          what decides whether the pending chip needs to appear. */}
       {pendingAsks.length > 0 && (
         <div ref={pendingAsksRef} className="flex flex-col gap-2">
           {pendingAsks
@@ -1347,17 +1347,17 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                   width: "8rem",
                   height: "8rem",
                   opacity: centerPersonaVisible ? 1 : 0,
-                  // Surge de uma vez ao voltar para a tela de novo chat (como
-                  // o topo surge ao entrar no chat) e sai com fade ao entrar.
+                  // It appears all at once when coming back to the new chat screen (as
+                  // the top appears on entering the chat) and leaves with a fade on entering.
                   transitionDuration: centerPersonaVisible ? "0ms" : "500ms",
                 }}
               >
                 <Persona state={centerPersonaState} className="!size-full" />
               </div>
             )}
-            {/* Sem a persona acima, o bloco de texto desce o espaço que ela
-                ocuparia (8rem) mais o gap do container (1rem): o título fica
-                na mesma altura dos dois estados em vez de colar no topo. */}
+            {/* Without the persona above, the text block goes down the space it
+                would take (8rem) plus the container gap (1rem): the title stays
+                at the same height in both states instead of sticking to the top. */}
             <div className={`flex flex-col items-center gap-6 ${personaOnWelcome ? "" : "pt-36"}`}>
               <div className="flex flex-col items-center gap-2">
                 <div className="relative flex items-center justify-center">
@@ -1395,10 +1395,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                     className={`relative mt-1 inline-flex ${introLine}`}
                     style={{ transitionDelay: introVisible ? `${INTRO_STEP_MS}ms` : "0ms" }}
                   >
-                    {/* Linha fina que nasce na borda do botão e se abre para
-                        fora, devagar: chama o olho para o único bloqueio real
-                        do app sem piscar o botão. Quem pediu menos movimento ao
-                        sistema não vê a pulsação. */}
+                    {/* Thin line that is born at the edge of the button and opens
+                        outwards, slowly: it draws the eye to the only real block
+                        of the app without making the button blink. Whoever asked the system for less motion
+                        does not see the pulsation. */}
                     <span
                       aria-hidden
                       className="provider-pulse-ring pointer-events-none absolute inset-0 rounded-lg"
@@ -1415,10 +1415,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                 )}
               </div>
               {!showProviderSetup && (
-                /* As sugestões entram depois do subtítulo, no mesmo passo: sem
-                    isto elas apareciam fixas enquanto a persona ainda
-                    dormia, e a tela ficava com os botões antes de qualquer
-                    texto. */
+                /* The suggestions enter after the subtitle, in the same step: without
+                    this they appeared fixed while the persona was still
+                    sleeping, and the screen got the buttons before any
+                    text. */
                 <div
                   className={`flex w-full max-w-md flex-col items-center gap-1 ${introLine}`}
                   style={{ transitionDelay: introVisible ? `${INTRO_STEP_MS * 2}ms` : "0ms" }}
@@ -1433,10 +1433,10 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                           className={cn(
                             "h-auto justify-start gap-2 py-1.5 text-left leading-snug whitespace-normal",
                             suggestion.action.kind === "open" && "sm:col-span-2",
-                            /* Sem sessão para retomar sobram só capacidades, e
-                               três pills deixam uma sozinha na segunda linha:
-                               parece que falta a quarta. A sobra ocupa a linha
-                               e se centraliza, então qualquer contagem fecha. */
+                            /* With no session to resume only capabilities remain, and
+                               three pills leave one alone on the second row:
+                               it looks like the fourth is missing. The remainder takes the row
+                               and centers itself, so any count closes. */
                             oddLeftover && index === welcomeSuggestions.length - 1 &&
                               "sm:col-span-2 sm:justify-self-center",
                           )}
@@ -1448,9 +1448,9 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                             <CapabilityIcon capability={suggestion.capability} className="size-3.5 shrink-0" />
                           ) : null}
                           <span className="min-w-0 flex-1">{suggestion.label}</span>
-                          {/* Capacidade de uma família que a pessoa ainda não
-                              produziu — o convite é para experimentar, não um
-                              selo de novidade. */}
+                          {/* A capability of a family the person has not yet
+                              produced — the invitation is to try it, not a
+                              novelty badge. */}
                           {suggestion.fresh && (
                             <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
                           )}
@@ -1458,8 +1458,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                       ))}
                     </div>
                   )}
-                  {/* Meta-navegação, não uma quarta sugestão: o mapa das
-                      capacidades é pequeno de propósito e não compete com as
+                  {/* Meta-navigation, not a fourth suggestion: the capability
+                      map is small on purpose and does not compete with the
                       pills. */}
                   <button
                     type="button"
@@ -1490,15 +1490,15 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           }`}
         >
           <div className={`flex min-h-0 flex-1 flex-col ${showTopPersona ? "pt-6" : "pt-2"}`}>
-            {/* Véu que dissolve a conversa por baixo da persona flutuante. Ele
-                existe POR CAUSA dela: sem a persona no topo não há o que
-                esconder, e a faixa vira só três centímetros de nada comendo o
-                começo da lista. Mesma condição do respiro acima. */}
+            {/* Veil that dissolves the conversation under the floating persona. It
+                exists BECAUSE of it: without the persona at the top there is nothing to
+                hide, and the strip becomes just three centimeters of nothing eating the
+                start of the list. Same condition as the breathing room above. */}
             {showTopPersona && (
               <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
             )}
-            {/* Vale nos dois modos: a conversa de código também tem histórico
-                para procurar, e o menu do header agora a oferece lá. */}
+            {/* It applies in both modes: the code conversation also has a history
+                to search, and the header menu now offers it there. */}
             {chatSearchOpen && <ChatMessageSearchBar messages={messages} />}
             <ChatMessages
               messages={messages}
@@ -1524,21 +1524,21 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           </div>
         </div>
       </div>
-      {/* Projeto novo no modo código: card oferece o /init automático. Fica na
-          faixa, e não na conversa, porque existe justamente quando ainda não
-          há conversa nenhuma (a lista está vazia/oculta). */}
+      {/* New project in code mode: the card offers the automatic /init. It stays in the
+          strip, and not in the conversation, because it exists precisely when there is not
+          any conversation yet (the list is empty/hidden). */}
       {viewMode === "code" && initDirectory && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <InitProjectCard directory={initDirectory} sessionId={session?.id} />
         </div>
       )}
-      {/* Imagem anexada com modelo sem visão e modo Visão desligado. Também
-          pode existir sem conversa (imagem pendente na tela inicial). */}
+      {/* Image attached with a model without vision and Vision mode off. It can
+          also exist without a conversation (pending image on the start screen). */}
       <VisionHintCard sessionId={session?.id} />
-      {/* Tentativa de envio sem nenhum provedor configurado (primeira execução) */}
+      {/* Send attempt with no provider configured (first run) */}
       <ProviderHintCard visible={providerHintVisible} onDismiss={() => setProviderHintVisible(false)} />
-      {/* Pendência fora de vista: o card do pedido está na conversa, e este
-          atalho leva até ele. Só existe quando o card saiu da área visível. */}
+      {/* Pending item out of sight: the request card is in the conversation, and this
+          shortcut leads to it. It only exists when the card left the visible area. */}
       {hasPendingAsks && !pendingAskVisible && (
         <div className="mx-auto flex w-full max-w-2xl px-1 pb-1">
           <button
@@ -1569,7 +1569,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           hasMessages={hasChat}
           sessionId={session?.id}
           onProviderBlocked={() => setProviderHintVisible(true)}
-          folders={pastasDoChat}
+          folders={chatFolders}
           onFoldersChange={handleFoldersChange}
         />
       )}

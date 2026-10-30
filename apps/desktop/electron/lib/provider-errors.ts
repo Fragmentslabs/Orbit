@@ -1,15 +1,15 @@
 /**
- * Erro de CONFIGURAÇÃO de provedor — não é falha do provedor em si: provedor
- * desconhecido, chave de API ausente, SDK que o Orbit não empacota.
+ * Provider CONFIGURATION error — it is not a failure of the provider itself: unknown
+ * provider, missing API key, SDK that Orbit does not bundle.
  *
- * Vive num módulo próprio, sem dependências, porque duas camadas precisam dele
- * sem se conhecer: providers.ts (que o lança) e errors.ts (que o classifica
- * como `provider-config`, para a UI traduzir a explicação). Importar
- * providers.ts dentro de errors.ts arrastaria os SDKs de AI junto só por causa
- * de um `instanceof`.
+ * It lives in a module of its own, without dependencies, because two layers need it
+ * without knowing each other: providers.ts (which throws it) and errors.ts (which classifies
+ * it as `provider-config`, so the UI can translate the explanation). Importing
+ * providers.ts inside errors.ts would drag the AI SDKs along just because
+ * of an `instanceof`.
  *
- * O `reason` existe para que a classificação não dependa de casar o texto da
- * mensagem — o texto é diagnóstico e pode mudar de idioma; a razão não.
+ * The `reason` exists so that the classification does not depend on matching the
+ * message's text — the text is diagnostic and may change language; the reason does not.
  */
 export type ProviderConfigReason = 'unknown-provider' | 'missing-key' | 'missing-sdk'
 

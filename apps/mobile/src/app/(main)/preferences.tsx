@@ -63,8 +63,8 @@ export default function PreferencesScreen() {
   const autoCreateFolders = useSettingsStore((s) => s.autoCreateFolders)
   const setAutoCreateFolders = useSettingsStore((s) => s.setAutoCreateFolders)
 
-  // Defaults configuráveis dos modos ativos, por modo (chat/código) — espelho
-  // do ActiveModesSection do desktop.
+  // Configurable defaults of the active modes, per mode (chat/code) — mirror
+  // of the ActiveModesSection of the desktop.
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
   const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
   const setChatActiveMode = useModelModePrefs((s) => s.setChatActiveMode)

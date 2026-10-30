@@ -12,23 +12,23 @@ import { computerApi, windowApi } from "@/src/lib/ipc"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { Truncate } from "@/components/ui/truncated-text"
 
-/** Preferências → Computador: o interruptor geral, o ponteiro e as permissões do macOS (no Windows, o estado do host de UI Automation). */
+/** Preferences → Computer: the general switch, the pointer and the macOS permissions (on Windows, the state of the UI Automation host). */
 export function ComputerPanel() {
   const { t } = useTranslation()
   const computer = useAppSettings((s) => s.settings.computer)
   const update = useAppSettings((s) => s.update)
   const [status, setStatus] = useState<ComputerStatus | null>(null)
   const [test, setTest] = useState<ComputerTestResult | "busy" | null>(null)
-  // Pediu a Gravação de Tela e ela não veio: o macOS pode não ter posto o
-  // Orbit na lista — sem este aviso, a pessoa liga um "Orbit" que não é o
-  // app (visto no teste com o build instalado) ou fica sem saber o que fazer.
+  // Screen Recording was requested and did not come: macOS may not have put
+  // Orbit in the list — without this notice, the person enables an "Orbit" that is not the
+  // app (seen in the test with the installed build) or is left not knowing what to do.
   const [screenAsked, setScreenAsked] = useState(false)
 
   const refresh = useCallback(() => {
     void computerApi.status().then(setStatus)
   }, [])
 
-  // Permissão muda fora do app (Ajustes do Sistema): relê ao voltar o foco.
+  // The permission changes outside the app (System Settings): it re-reads when the focus comes back.
   useEffect(() => {
     refresh()
     window.addEventListener("focus", refresh)
@@ -157,8 +157,8 @@ export function ComputerPanel() {
             {screenAsked && !screenOk && (
               <p className="pl-11 text-[11px] text-amber-700 dark:text-amber-300">{t("computerSettings.permissions.screenManual")}</p>
             )}
-            {/* Aberto por um terminal, o dono das permissões é o terminal — o
-                usuário libera o "Electron" e nada muda (Fase 0). */}
+            {/* Opened by a terminal, the owner of the permissions is the terminal — the
+                user allows "Electron" and nothing changes (Phase 0). */}
             {status?.responsible ? (
               <p className="pl-11 text-[11px] text-amber-700 dark:text-amber-300">
                 {t("computerSettings.permissions.responsible", { app: status.responsible })}

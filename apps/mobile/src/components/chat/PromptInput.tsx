@@ -62,8 +62,8 @@ interface PromptInputProps {
   isStreaming?: boolean
   sessionId?: string
   disabled?: boolean
-  /** Bloqueia só o envio (o texto continua editável) — ex.: modo código sem
-   *  pasta associada. */
+  /** Blocks only the send (the text stays editable) — e.g. code mode without
+   *  an associated folder. */
   sendDisabled?: boolean
   onCreateSession?: () => Promise<SessionInfo | null>
   onNavigateToSession?: (sessionId: string) => void
@@ -73,8 +73,8 @@ async function fileToFilePart(asset: any): Promise<FilePart> {
   return uriToFilePart(asset.uri, asset.mimeType, asset.name)
 }
 
-// Aviso da primeira vez (workers): modal só abre na 1ª ativação do modo agente
-// sem worker configurado; "usar o mesmo modelo do chat" é válido (persistido)
+// First-time notice (workers): the modal only opens on the 1st activation of agent mode
+// without a configured worker; "use the same model as the chat" is valid (persisted)
 const WORKER_CONFIG_PROMPTED_KEY = 'orbit_worker_config_prompted'
 
 export function PromptInput({
@@ -88,8 +88,8 @@ export function PromptInput({
   onNavigateToSession,
 }: PromptInputProps) {
   const { t } = useTranslation()
-  // Modos ativos por chat: override (mode-overrides/simple/brain) ?? default
-  // (model-mode-prefs, separado por modo chat/code) — espelho do desktop.
+  // Active modes per chat: override (mode-overrides/simple/brain) ?? default
+  // (model-mode-prefs, separated by chat/code mode) — mirror of the desktop.
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const modeDefaults = useModelModePrefs((s) =>
     workspaceMode === 'code' ? s.codeActiveModes : s.chatActiveModes,
@@ -110,18 +110,18 @@ export function PromptInput({
   const [loop, setLoop] = useState(false)
   const prevSessionIdRef = useRef(sessionId)
   const textRef = useRef(text)
-  // Último texto carregado/persistido para a sessão atual: o efeito de
-  // persistir compara com ele para não gravar '' por cima de um draft
-  // recém-carregado nem regravar o mesmo texto a cada keystroke.
+  // Last text loaded/persisted for the current session: the persist effect
+  // compares against it so as not to write '' over a freshly loaded draft
+  // nor rewrite the same text on every keystroke.
   const loadedDraftRef = useRef('')
-  // true quando o texto atual veio do draft-input (revert/adoção): o load do
-  // rascunho persistido, que resolve depois (async), não deve sobrescrevê-lo.
+  // true when the current text came from draft-input (revert/adoption): the load of the
+  // persisted draft, which resolves later (async), must not overwrite it.
   const consumedRef = useRef(false)
-  // Sincronizado em efeito, não no corpo do render: escrever em ref durante o
-  // render é justamente o que a regra react-hooks/refs proíbe. O único leitor
-  // é o efeito de troca de sessão abaixo, que roda depois deste.
-  // Também persiste o rascunho por chat enquanto o usuário digita (debounce no
-  // store): sair do app no meio da digitação não perde o texto.
+  // Synchronized in an effect, not in the render body: writing to a ref during
+  // render is exactly what the react-hooks/refs rule forbids. The only reader
+  // is the session-switch effect below, which runs after this one.
+  // It also persists the per-chat draft while the user types (debounce in the
+  // store): leaving the app in the middle of typing does not lose the text.
   useEffect(() => {
     textRef.current = text
     if (text === loadedDraftRef.current) return
@@ -129,15 +129,15 @@ export function PromptInput({
     setInputDraft(sessionId ?? 'draft', text)
   }, [text, sessionId])
 
-  // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
-  // deve gerar outro plano.
+  // Plan accepted → turns off the plan mode toggle: the next message must
+  // not generate another plan.
   const planReview = useSessionStore((s) => (sessionId ? s.planReviews[sessionId] : undefined))
   useEffect(() => {
     if (planReview?.status === 'implementing') setModeActive('plan', sessionId, false)
   }, [planReview, sessionId, setModeActive])
 
-  // Restaura texto do input ao montar/trocar de chat (per-chat draft,
-  // persistido no aparelho — sobrevive a restart do app).
+  // Restores the input text on mount/chat switch (per-chat draft,
+  // persisted on the device — survives an app restart).
   useEffect(() => {
     let cancelled = false
     const key = sessionId ?? 'draft'
@@ -149,14 +149,14 @@ export function PromptInput({
     }
     void hydrateInputDrafts().then(() => {
       if (cancelled) return
-      // Um revert devolvido ao input (draft-input-store) tem precedência sobre
-      // o rascunho persistido: o consume roda no efeito abaixo, antes deste
-      // callback (a hidratação é assíncrona).
+      // A revert handed back to the input (draft-input-store) takes precedence over
+      // the persisted draft: the consume runs in the effect below, before this
+      // callback (the hydration is asynchronous).
       if (consumedRef.current) return
       const saved = getInputDraft(key)
       loadedDraftRef.current = saved
-      // '' também restaura: sem draft, limpa o texto deixado pela sessão
-      // anterior (o PromptInput não remonta em toda troca de sessão).
+      // '' also restores: without a draft, it clears the text left by the previous
+      // session (PromptInput does not remount on every session switch).
       setText(saved)
     })
     return () => { cancelled = true }
@@ -169,12 +169,12 @@ export function PromptInput({
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  // Padding FIXO: o KeyboardAvoidingView desconta este mesmo valor da altura do
-  // teclado (keyboardVerticalOffset negativo, no ChatScreen), então existe uma
-  // animação só e o input não sai de fase com o teclado. Ver lib/keyboard.
-  const respiroFechado = useBottomBreathing()
-  // Autonomia POR CHAT (paridade com o desktop): o seletor muda só esta
-  // conversa; num chat novo a escolha vira o padrão do próximo.
+  // FIXED padding: the KeyboardAvoidingView discounts this same value from the keyboard
+  // height (negative keyboardVerticalOffset, in ChatScreen), so there is a single
+  // animation and the input does not go out of phase with the keyboard. See lib/keyboard.
+  const closedBreath = useBottomBreathing()
+  // Autonomy PER CHAT (parity with the desktop): the selector changes only this
+  // conversation; in a new chat the choice becomes the default of the next one.
   const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
@@ -208,17 +208,17 @@ export function PromptInput({
   }, [http])
 
   const catalog = useSettingsStore((s) => s.catalog)
-  // Modelo EFETIVO da sessão (override por chat > draft > default global) —
-  // paridade com o desktop (chat-input), onde o thinking segue o modelo do
-  // chat aberto, não o default global do app.
+  // EFFECTIVE model of the session (per-chat override > draft > global default) —
+  // parity with the desktop (chat-input), where thinking follows the model of the
+  // open chat, not the global default of the app.
   const selected = useSessionModel(sessionId)
   const model = selected && catalog
     ? catalog[selected.providerId]?.models[selected.modelId]
     : undefined
-  // Thinking POR CHAT: sem escolha nesta conversa, vale o nível do modelo.
+  // Thinking PER CHAT: without a choice in this conversation, the level of the model applies.
   const { enabled, variantId, update, hydrate, hydrated } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
-  // Thinking: o default das preferências define o default; reasoning do modelo
-  // e modelos com reasoningAlwaysOn continuam valendo como antes
+  // Thinking: the default of the preferences defines the default; reasoning of the model
+  // and models with reasoningAlwaysOn keep applying as before
   const thinking = modeDefaults.thinking || enabled || !!model?.reasoningAlwaysOn
   const workerModel = useSettingsStore((s) => s.workerModel)
   const workerModelLabel = workerModel && catalog
@@ -233,19 +233,19 @@ export function PromptInput({
     if (!hydrated) hydrate()
   }, [hydrated, hydrate])
 
-  // Assina o draft (não só lê na troca de sessão): o revert devolve a mensagem
-  // ao input estando na mesma sessão, e um consume só no [sessionId] perderia.
+  // Subscribes to the draft (not only reads it on session switch): the revert gives the message
+  // back to the input while in the same session, and a consume only on [sessionId] would miss it.
   const pendingDraft = useDraftInput((s) => s.drafts[sessionId ?? 'draft'])
   useEffect(() => {
     if (pendingDraft === undefined) return
     const payload = useDraftInput.getState().consume(sessionId)
     if (!payload) return
-    // Marca antes do setText: o load do rascunho persistido (efeito acima)
-    // resolve depois e não deve sobrescrever o texto devolvido pelo revert.
+    // Marks it before setText: the load of the persisted draft (effect above)
+    // resolves later and must not overwrite the text given back by the revert.
     consumedRef.current = true
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // Fetching/syncing data in an effect is the documented React pattern;
+    // the setState the rule flags is the loading/reset marker that
+    // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setText(payload.text)
     if (payload.files?.length) setAttachments((prev) => [...prev, ...payload.files!])
@@ -253,21 +253,21 @@ export function PromptInput({
 
   const inputRef = useRef<TextInput>(null)
 
-  // Ditado: grava no aparelho (PCM16 mono 16 kHz) e pede a transcrição ao
-  // desktop (o celular não roda modelo de voz). O texto volta para o input
-  // como se tivesse sido digitado, respeitando o rascunho por chat.
+  // Dictation: records on the device (PCM16 mono 16 kHz) and asks the desktop for the
+  // transcription (the phone does not run a voice model). The text comes back to the input
+  // as if it had been typed, respecting the per-chat draft.
   const insertDictation = useCallback((dictated: string) => {
     setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${dictated}` : dictated))
     inputRef.current?.focus()
   }, [])
   const dictation = useDictation(insertDictation)
 
-  // Workers: aviso da primeira vez — abre só na 1ª ativação sem worker
-  // configurado ("usar o mesmo modelo" é válido); depois nunca mais.
+  // Workers: first-time notice — it only opens on the 1st activation without a configured
+  // worker ("use the same model" is valid); after that, never again.
   const [workerConfigPrompted, setWorkerConfigPrompted] = useState(false)
 
-  // Declarado antes do toggleMode porque ele roteia subagents/orchestra para
-  // aqui — e ler um ref durante o render nao e permitido.
+  // Declared before toggleMode because it routes subagents/orchestra to
+  // here — and reading a ref during render is not allowed.
   const toggleWorkerMode = useCallback((id: 'subagents' | 'orchestra', next: boolean) => {
     setModeActive(id, sessionId, next)
     if (next && !workerModel && !workerConfigPrompted) {
@@ -278,8 +278,8 @@ export function PromptInput({
   }, [workerModel, workerConfigPrompted, sessionId, setModeActive])
 
   const toggleMode = useCallback((id: string) => {
-    // Modo Visão é per-chat (mode-overrides); ativar sem modelo configurado
-    // abre a configuração (mesmo gate do desktop).
+    // Vision mode is per-chat (mode-overrides); turning it on without a configured model
+    // opens the configuration (same gate as the desktop).
     if (id === 'vision') {
       const next = !vision
       if (next && !visionModel) {
@@ -299,7 +299,7 @@ export function PromptInput({
     if (id === 'loop') return setLoop((v) => !v)
   }, [vision, visionModel, sessionId, search, browser, simple, brain, plan, subagents, orchestra, setModeActive, setSimple, setBrainEnabled, setVisionConfigOpen, setLoop, toggleWorkerMode])
 
-  // Gate de configuração: só abre o modal quando o usuário ATIVA o modo.
+  // Configuration gate: only opens the modal when the user TURNS ON the mode.
   useEffect(() => {
     Storage.getItem(WORKER_CONFIG_PROMPTED_KEY)
       .then((v) => { if (v === '1') setWorkerConfigPrompted(true) })
@@ -325,7 +325,7 @@ export function PromptInput({
         setAttachments((prev) => [...prev, ...parts])
       }
     } catch (err) {
-      console.error('Erro ao selecionar arquivos:', err)
+      console.error('Failed to pick files:', err)
     } finally {
       setIsLoadingFile(false)
     }
@@ -335,9 +335,9 @@ export function PromptInput({
     setPlusOpen(false)
     setIsLoadingFile(true)
     try {
-      // O import e a permissão ficam DENTRO do try: fora dele, uma falha ao
-      // carregar o módulo virava rejeição não tratada (tela vermelha em dev)
-      // em vez de um erro tratado, e o loading nunca era desligado.
+      // The import and the permission stay INSIDE the try: outside it, a failure to
+      // load the module became an unhandled rejection (red screen in dev)
+      // instead of a handled error, and the loading was never turned off.
       const ImagePicker = await import('expo-image-picker')
       const perm = await ImagePicker.requestCameraPermissionsAsync()
       if (!perm.granted) return
@@ -348,7 +348,7 @@ export function PromptInput({
         setAttachments((prev) => [...prev, part])
       }
     } catch (err) {
-      console.error('Erro ao tirar foto:', err)
+      console.error('Failed to take photo:', err)
     } finally {
       setIsLoadingFile(false)
     }
@@ -371,7 +371,7 @@ export function PromptInput({
         setAttachments((prev) => [...prev, ...parts])
       }
     } catch (err) {
-      console.error('Erro ao selecionar fotos:', err)
+      console.error('Failed to pick photos:', err)
     } finally {
       setIsLoadingFile(false)
     }
@@ -394,9 +394,9 @@ export function PromptInput({
       orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
       loop,
       permissionMode: modeNow === 'code' ? permissionMode : undefined,
-      // Modo vindo do seletor: no desktop vale já na próxima ferramenta da
-      // resposta em curso. Agora o main resolve pelo nível DESTE chat, então o
-      // mesmo contrato vale aqui sem vazar para os outros.
+      // Mode coming from the selector: on the desktop it applies already to the next tool of the
+      // answer in progress. Now the main resolves by the level of THIS chat, so the
+      // same contract applies here without leaking to the others.
       followGlobalPermission: modeNow === 'code' ? true : undefined,
     } satisfies SendMessageOptions
   }, [search, browser, simple, brain, thinking, variantId, plan, subagents, orchestra, loop, permissionMode])
@@ -409,8 +409,8 @@ export function PromptInput({
     if (!trimmed || !sessionId) return
     const modeNow = useWorkspaceStore.getState().mode
     const resolved = resolveSlashAction(trimmed, modeNow)
-    // A citação entra DEPOIS do comando "/" ser resolvido: na frente dela, o
-    // texto deixaria de começar com "/" e o comando viraria conversa.
+    // The quote comes in AFTER the "/" command is resolved: in front of it, the
+    // text would stop starting with "/" and the command would become conversation.
     enqueueForSend(sessionId, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, {
       files: attachments.length > 0 ? attachments : undefined,
     })
@@ -435,10 +435,10 @@ export function PromptInput({
     const trimmed = text.trim()
     if (!trimmed || disabled || sendDisabled) return
 
-    // Agente em execução: em vez de bloquear o envio (causava o texto ficar
-    // preso no input ao dar Enter), manda para a fila da sessão — o mesmo
-    // "enviar para o painel lateral" do desktop — e limpa o input para o
-    // usuário continuar digitando enquanto o agente trabalha.
+    // Agent running: instead of blocking the send (it made the text get stuck
+    // in the input when pressing Enter), it sends to the session queue — the same
+    // "send to the side panel" of the desktop — and clears the input so the
+    // user can keep typing while the agent works.
     if (isStreaming) {
       if (sessionId) {
         handleQueue()
@@ -452,7 +452,7 @@ export function PromptInput({
     const modeNow = useWorkspaceStore.getState().mode
     const options: SendMessageOptions = buildOptions()
 
-    // Comandos "/" viram o prompt do pipeline correspondente
+    // "/" commands become the prompt of the corresponding pipeline
     const resolved = resolveSlashAction(trimmed, modeNow)
     const finalText = withReplyPrefix(sessionId, resolved?.prompt ?? trimmed)
 
@@ -491,13 +491,13 @@ export function PromptInput({
     [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, attachments],
   )
 
-  // Fileira única, na MESMA ordem do code-input do desktop (search, plan,
-  // simple, brain, subagents, orchestra, loop, vision). Os avançados eram uma
-  // row separada, mas a ordem do desktop os intercala — plan vem antes de
-  // simple —, então não dá para manter dois blocos.
+  // Single row, in the SAME order as the desktop code-input (search, plan,
+  // simple, brain, subagents, orchestra, loop, vision). The advanced ones were a
+  // separate row, but the desktop order interleaves them — plan comes before
+  // simple —, so there is no way to keep two blocks.
   //
-  // Browser fica fora do modo código: lá ele nem existe no desktop (o browser
-  // do painel direito é outra coisa).
+  // Browser stays out of code mode: there it does not even exist on the desktop (the browser
+  // of the right panel is another thing).
   const isCodeMode = workspaceMode === 'code'
   const modesList = [
     { id: 'research', icon: Search, label: t('promptInput.modes.research') },
@@ -514,8 +514,8 @@ export function PromptInput({
     { id: 'vision', icon: Eye, label: t('promptInput.modes.vision') },
   ]
 
-  // Mapeia o id da row para o id do modesInRow (espelho do desktop) — a row
-  // mostra só os modos marcados nas preferências; o "+" sempre mostra todos.
+  // Maps the row id to the modesInRow id (mirror of the desktop) — the row
+  // shows only the modes checked in the preferences; the "+" always shows all of them.
   const ROW_TO_MODE_ID: Record<string, ModeId> = {
     research: 'search',
     browser: 'browser',
@@ -529,7 +529,7 @@ export function PromptInput({
   }
   const visibleModes = modesList.filter((m) => modesInRow.includes(ROW_TO_MODE_ID[m.id]))
 
-  // Estado efetivo de cada toggle da fileira
+  // Effective state of each toggle in the row
   const simpleActive: Record<string, boolean> = {
     research: search,
     browser,
@@ -548,8 +548,8 @@ export function PromptInput({
         backgroundColor: tokens.background,
         borderTopWidth: 1,
         borderTopColor: tokens.border,
-        // 6 = o py-1.5 que o padding de baixo substitui.
-        paddingBottom: respiroFechado + 6,
+        // 6 = the py-1.5 that the bottom padding replaces.
+        paddingBottom: closedBreath + 6,
       }}
     >
       {/* Queue Indicator */}
@@ -594,10 +594,10 @@ export function PromptInput({
           </View>
         )}
 
-        {/* Mensagem respondida — citação acima do campo, como no WhatsApp */}
+        {/* Replied message — quote above the field, as in WhatsApp */}
         <ReplyBar sessionId={sessionId} />
 
-        {/* Ditado: gravando agora */}
+        {/* Dictation: recording now */}
         {dictation.recording && (
           <View className="flex-row items-center gap-2 py-1 mb-1"
             style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
@@ -607,7 +607,7 @@ export function PromptInput({
           </View>
         )}
 
-        {/* Ditado: erro visível (permissão, offline, motor de voz indisponível) */}
+        {/* Dictation: visible error (permission, offline, voice engine unavailable) */}
         {dictation.error && (
           <View className="flex-row items-center gap-2 py-1 mb-1"
             style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
@@ -641,7 +641,7 @@ export function PromptInput({
           />
         </View>
 
-        {/* Footer Row — sem separador, igual ao desktop */}
+        {/* Footer Row — no separator, same as the desktop */}
         <View className="flex-row items-center justify-between pt-1.5 pb-1 mt-1">
           {/* Plus + Config actions */}
           <View className="flex-row items-center gap-1">
@@ -659,7 +659,7 @@ export function PromptInput({
             >
               <Settings2 size={18} color={tokens.mutedForeground} />
             </TouchableOpacity>
-            {/* Ditado: toque para gravar, toque de novo para parar e transcrever */}
+            {/* Dictation: tap to record, tap again to stop and transcribe */}
             <TouchableOpacity
               onPress={dictation.toggle}
               disabled={disabled || dictation.transcribing}
@@ -694,11 +694,11 @@ export function PromptInput({
       </View>
       </SlashPaletteShell>
 
-      {/* Mode Toggles Row — sempre visível no mobile (toggles + "+" fixos) */}
+      {/* Mode Toggles Row — always visible on mobile (toggles + "+" fixed) */}
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-2">
-          {/* Thinking nao entra aqui: o controle dele (com a escolha de
-              variante) ja vive no sheet de configuracoes. */}
+          {/* Thinking does not come in here: its control (with the choice of
+              variant) already lives in the settings sheet. */}
           {visibleModes.map((mode) => {
             const isActive = simpleActive[mode.id] ?? false
             const IconComponent = mode.icon
@@ -712,9 +712,9 @@ export function PromptInput({
               >
                 <IconComponent
                   size={17}
-                  // Todo modo ativo acende igual (branco), com o fundo muted
-                  // marcando o estado — os avançados já não acendem em âmbar,
-                  // que dava a impressão de dois tipos de toggle na fileira.
+                  // Every active mode lights up the same (white), with the muted background
+                  // marking the state — the advanced ones no longer light up in amber,
+                  // which gave the impression of two kinds of toggle in the row.
                   color={isActive ? tokens.foreground : tokens.mutedForeground}
                 />
               </Pressable>
@@ -731,14 +731,14 @@ export function PromptInput({
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
-        // O corte entre os dois grupos e ter ou nao engrenagem: em cima os
-        // toggles secos, embaixo os que abrem configuracao propria. Thinking
-        // fica de fora — ele vive no ConfigSheet, onde da para escolher a
-        // variante de raciocinio.
+        // The cut between the two groups is having a gear or not: at the top the plain
+        // toggles, below the ones that open their own configuration. Thinking
+        // stays out — it lives in ConfigSheet, where one can choose the
+        // reasoning variant.
         simpleModes={[
           ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setModeActive('plan', sessionId, !plan) }] : []),
           { id: 'research', icon: Search, label: t('promptInput.modes.research'), active: search, onToggle: () => toggleMode('research') },
-          // Browser so no modo chat, igual a fileira e ao desktop.
+          // Browser only in chat mode, same as the row and the desktop.
           ...(workspaceMode === 'code'
             ? []
             : [{ id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: browser, onToggle: () => toggleMode('browser') }]),
@@ -804,9 +804,9 @@ export function PromptInput({
   )
 }
 
-// Folha que move o useSlashCommands (que assina o modo) para fora do corpo do
-// PromptInput: ao trocar a aba, só este shell re-renderiza e recomputa os
-// comandos — o PromptInput fica intacto (memo do ChatInput segura).
+// Shell that moves useSlashCommands (which subscribes to the mode) out of the body of
+// PromptInput: when switching the tab, only this shell re-renders and recomputes the
+// commands — PromptInput stays intact (the memo of ChatInput holds).
 const SlashPaletteShell = memo(function SlashPaletteShell({
   value,
   setText,
@@ -818,7 +818,7 @@ const SlashPaletteShell = memo(function SlashPaletteShell({
 }) {
   const commands = useSlashCommands()
   return (
-    // A "@" é a paleta de REFERÊNCIAS (skills, MCP); a "/" é a de COMANDOS.
+    // "@" is the REFERENCES palette (skills, MCP); "/" is the COMMANDS one.
     <ReferencePaletteShell value={value} setText={setText}>
       <SlashPalette value={value} setText={setText} commands={commands}>
         {children}

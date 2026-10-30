@@ -1,22 +1,22 @@
 /**
- * Worker de embeddings da memória: processo filho do main (utilityProcess) que
- * roda o Bekko no onnxruntime-node direto (sem transformers.js — ele duplicava
- * a RAM nas medições).
+ * Memory embedding worker: child process of the main (utilityProcess) that
+ * runs Bekko on onnxruntime-node directly (without transformers.js — it duplicated
+ * the RAM in the measurements).
  *
- * Por que processo separado: carregar ~130 MB de ONNX e rodar inferência no
- * thread do main congelaria janelas e IPC. Aqui o pico de memória (~400 MB) não
- * é o do app e o processo pode ser morto por ociosidade, devolvendo tudo.
+ * Why a separate process: loading ~130 MB of ONNX and running inference on
+ * the main thread would freeze windows and IPC. Here the memory peak (~400 MB) is not
+ * the app's and the process can be killed for idleness, giving everything back.
  *
- * Protocolo (lib/memory/embedding.ts):
- *   entrada: { id, cmd: "embed", texts: string[] }
+ * Protocol (lib/memory/embedding.ts):
+ *   input:  { id, cmd: "embed", texts: string[] }
  *            { cmd: "status" } | { cmd: "shutdown" }
- *   saída:   { type: "ready", model, dim, loadMs, tokenizerBytes }
+ *   output:  { type: "ready", model, dim, loadMs, tokenizerBytes }
  *            { type: "error", message, fatal? }
  *            { id, done: true, vectors: string[], ms }   // base64 float32
  *            { id, done: true, error: "..." }
  *
- * O vetor vai em base64 porque é pequeno (256 floats = 1 KB) e atravessa o
- * MessagePort sem depender de clone de typed array.
+ * The vector goes in base64 because it is small (256 floats = 1 KB) and crosses the
+ * MessagePort without depending on a typed array clone.
  */
 
 import fs from 'fs'
@@ -37,7 +37,7 @@ const MODEL_ID = arg('model', 'bekko-a8m')
 const MODEL_DIR = arg('dir', '')
 const DIM = Number(arg('dim', '256'))
 const THREADS = Number(arg('threads', '2'))
-/** Modelo dentro do app assinado: a pasta dele não pode ser escrita. */
+/** Model inside the signed app: its folder cannot be written. */
 const READONLY = arg('readonly', '0') === '1'
 
 let embedder = null
@@ -46,19 +46,19 @@ let booting = null
 const toBase64 = (vec) => Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength).toString('base64')
 
 /**
- * Devolve o `tokenizer.bin`, compilando-o do `.json` na primeira execução (o
- * JSON de 34 MB não é lido no runtime).
+ * Returns the `tokenizer.bin`, compiling it from the `.json` on the first run (the
+ * 34 MB JSON is not read at runtime).
  *
- * Quando o modelo veio dentro do app, compilar ao lado dele invalidaria a
- * assinatura do bundle — e o macOS passa a tratar o app como adulterado. Nesse
- * caso o binário vai para o temporário, com nome estável por modelo para não
- * recompilar a cada execução.
+ * When the model came inside the app, compiling next to it would invalidate the
+ * signature of the bundle — and macOS starts treating the app as tampered with. In that
+ * case the binary goes to the temporary folder, with a name stable per model so it does not
+ * recompile on every run.
  */
 function ensureTokenizer(dir) {
   const bin = path.join(dir, 'tokenizer.bin')
   if (fs.existsSync(bin)) return bin
   const json = path.join(dir, 'tokenizer.json')
-  if (!fs.existsSync(json)) throw new Error(`tokenizer.json ausente em ${dir}`)
+  if (!fs.existsSync(json)) throw new Error(`tokenizer.json missing in ${dir}`)
   const target = READONLY
     ? path.join(os.tmpdir(), 'orbit-memory-embed', `${path.basename(dir)}-tokenizer.bin`)
     : bin
@@ -74,9 +74,9 @@ async function boot() {
   if (booting) return booting
   booting = (async () => {
     const t0 = Date.now()
-    if (!MODEL_DIR) throw new Error('pasta do modelo não informada (--dir)')
+    if (!MODEL_DIR) throw new Error('model folder not given (--dir)')
     const modelPath = path.join(MODEL_DIR, 'onnx', 'model.onnx')
-    if (!fs.existsSync(modelPath)) throw new Error(`modelo ausente em ${modelPath}`)
+    if (!fs.existsSync(modelPath)) throw new Error(`model missing in ${modelPath}`)
     const tokenizerPath = ensureTokenizer(MODEL_DIR)
     embedder = await createEmbedder({ modelPath, tokenizerPath, dim: DIM, threads: THREADS })
     send({ type: 'ready', model: MODEL_ID, dim: embedder.dim, loadMs: Date.now() - t0, tokenizerBytes: embedder.tokenizerBytes })
@@ -95,7 +95,7 @@ parentPort.on('message', async (event) => {
     try {
       await embedder?.dispose()
     } catch {
-      // o processo vai morrer de qualquer forma
+      // the process is going to die anyway
     }
     process.exit(0)
   }
@@ -110,8 +110,8 @@ parentPort.on('message', async (event) => {
       const engine = await boot()
       const t0 = Date.now()
       const vectors = []
-      // Um texto por vez de propósito: o batch do Bekko não reduz o custo
-      // (o modelo é pequeno) e o laço mantém o pico de memória previsível.
+      // One text at a time on purpose: the Bekko batch does not reduce the cost
+      // (the model is small) and the loop keeps the memory peak predictable.
       for (const text of msg.texts ?? []) {
         const [vec] = await engine.embed([String(text ?? '')])
         vectors.push(toBase64(vec))
@@ -125,6 +125,6 @@ parentPort.on('message', async (event) => {
 
 parentPort.start()
 
-// O main manda "embed" e o modelo sobe na primeira chamada — mas subir antes
-// evita pagar a leitura do ONNX na primeira pergunta do usuário.
+// The main sends "embed" and the model comes up on the first call — but coming up before
+// avoids paying for reading the ONNX on the user's first question.
 boot().catch((err) => send({ type: 'error', message: String(err?.message ?? err), fatal: true }))

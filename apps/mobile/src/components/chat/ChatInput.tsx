@@ -13,8 +13,8 @@ interface ChatInputProps {
   onNavigateToSession?: (sessionId: string) => void
 }
 
-// memo: o input (com picker de modelo, bottom sheet etc.) não precisa
-// re-renderizar a cada flush de delta do streaming da conversa.
+// memo: the input (with model picker, bottom sheet etc.) does not need to
+// re-render on every delta flush of the conversation streaming.
 export const ChatInput = memo(function ChatInput({ onSend, onAbort, isStreaming, sessionId, disabled, sendDisabled, onCreateSession, onNavigateToSession }: ChatInputProps) {
   return (
     <PromptInput

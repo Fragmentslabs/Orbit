@@ -22,9 +22,9 @@ interface ReasoningPrefsState {
   hydrated: boolean
   hydrate: () => Promise<void>
   setPref: (modelKey: string, pref: ModelReasoningPref) => Promise<void>
-  /** Aplica o mapa vindo do desktop. `fillOnly` (snapshot do connect) só
-   *  preenche o que o aparelho não tem — preserva toggle feito offline; sem
-   *  ele (evento ao vivo) o mapa do desktop substitui, como no session-modes. */
+  /** Applies the map coming from the desktop. `fillOnly` (connect snapshot) only
+   *  fills in what the device does not have — it preserves a toggle made offline; without
+   *  it (live event) the desktop map replaces, as in session-modes. */
   applySync: (remote: ReasoningPrefsMap, fillOnly?: boolean) => void
 }
 
@@ -73,10 +73,10 @@ export function useReasoningPrefs(
     (next: ModelReasoningPref) => {
       if (!key) return
       setPref(key, next)
-      // O desktop é a fonte da verdade do thinking por modelo: o toggle segue
-      // via WS ('reasoning:select'), o renderer de lá persiste e devolve o
-      // mapa inteiro a todos os aparelhos pelo broadcast 'reasoning:change'.
-      // Desconectado o send fica na fila do wsClient e sai na reconexão.
+      // The desktop is the source of truth for the thinking per model: the toggle goes
+      // via WS ('reasoning:select'), the renderer there persists it and sends the whole
+      // map back to all devices through the broadcast 'reasoning:change'.
+      // Disconnected, the send stays in the wsClient queue and goes out on reconnection.
       const { wsClient } = useConnectionStore.getState()
       if (wsClient && providerId && modelId) {
         void wsClient

@@ -2,30 +2,30 @@ import type { JSONValue } from 'ai'
 import type { CatalogModel } from '@shared/chat'
 
 /**
- * Tipos internos do módulo de reasoning — isolados de shared/ para que a
- * lógica de variants não dependa dos tipos de IPC.
+ * Internal types of the reasoning module — isolated from shared/ so that the
+ * variants logic does not depend on the IPC types.
  */
 
 export interface ModelInput {
   providerId: string
   modelId: string
-  /** Pacote npm do SDK (ex: '@ai-sdk/openai') */
+  /** SDK npm package (e.g. '@ai-sdk/openai') */
   npm: string
-  /** ID usado na API do provedor (ex: 'gpt-5') */
+  /** ID used in the provider API (e.g. 'gpt-5') */
   apiId: string
-  /** Data de lançamento ISO (yyyy-mm-dd) — vazio quando desconhecida */
+  /** ISO release date (yyyy-mm-dd) — empty when unknown */
   releaseDate: string
   reasoning: boolean
   limit: { context: number; output: number }
-  /** Controles de reasoning que o models.dev declara para o modelo NESTE
-   *  provedor. Ausente quando o catálogo não informa. */
+  /** Reasoning controls that models.dev declares for the model on THIS
+   *  provider. Absent when the catalog does not report it. */
   reasoningOptions?: CatalogModel['reasoning_options']
-  /** URL base do provedor — identifica a Moonshot (Kimi) por trás de um id genérico */
+  /** Provider base URL — identifies Moonshot (Kimi) behind a generic id */
   apiUrl?: string
 }
 
-/** Payload de providerOptions sem o namespace do SDK */
+/** providerOptions payload without the SDK namespace */
 export type VariantPayload = Record<string, JSONValue>
 
-/** Mapa de variant id → payload, ordenado do mais fraco ao mais forte */
+/** Map of variant id → payload, ordered from the weakest to the strongest */
 export type VariantMap = Record<string, VariantPayload>

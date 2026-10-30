@@ -3,29 +3,29 @@ import { useConnectionStore } from '~/stores/connection-store'
 import { useReasoningPrefsStore } from '~/stores/reasoning-prefs'
 
 /**
- * Thinking por modelo vindo do desktop (toggle + variante). O desktop é a
- * fonte da verdade: empurra o mapa inteiro no connect (GET
- * /api/reasoning-prefs) e a cada mudança (evento WS 'reasoning:change').
+ * Thinking per model coming from the desktop (toggle + variant). The desktop is the
+ * source of truth: it pushes the whole map on connect (GET
+ * /api/reasoning-prefs) and on every change (WS event 'reasoning:change').
  *
- * `authoritative` separa os dois casos, como no session-modes-sync: no
- * snapshot do connect a escolha feita no celular vence (só entram chaves que
- * o mobile não tem); no evento ao vivo o desktop acabou de mudar, então ele
- * sobrescreve.
+ * `authoritative` separates the two cases, as in session-modes-sync: in the
+ * connect snapshot the choice made on the phone wins (only keys the
+ * mobile does not have enter); in the live event the desktop has just changed, so it
+ * overwrites.
  */
 export async function applyReasoningPrefs(
   remote: ReasoningPrefsMap,
   authoritative: boolean,
 ): Promise<void> {
-  // O evento ao vivo pode chegar antes da hidratação local (que lê o storage
-  // do aparelho): aplicar direto apagaria um toggle feito offline. Hidrata
-  // primeiro — é idempotente e o connect também passa por aqui.
+  // The live event may arrive before the local hydration (which reads the storage
+  // of the device): applying it straight would erase a toggle made offline. It hydrates
+  // first — it is idempotent and the connect also goes through here.
   if (!useReasoningPrefsStore.getState().hydrated) {
     await useReasoningPrefsStore.getState().hydrate()
   }
   useReasoningPrefsStore.getState().applySync(remote, !authoritative)
 }
 
-/** Snapshot do thinking por modelo do desktop — chamado no connect. */
+/** Snapshot of the thinking per model of the desktop — called on connect. */
 export async function fetchReasoningPrefs(): Promise<void> {
   const { http } = useConnectionStore.getState()
   if (!http) return
@@ -39,6 +39,6 @@ export async function fetchReasoningPrefs(): Promise<void> {
       if (prefs) await applyReasoningPrefs(prefs, false)
     }
   } catch {
-    // Offline — fica com o que já está no aparelho.
+    // Offline — keeps what is already on the device.
   }
 }

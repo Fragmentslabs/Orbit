@@ -9,15 +9,15 @@ import { deleteSlidesDeck, getSlides } from './slides-store'
 import { SLIDES_HEIGHT, SLIDES_WIDTH } from './slides-runtime'
 
 /**
- * A CAPA de um deck e o registro dele na galeria — espelha design-gallery.ts.
+ * The COVER of a deck and its record in the gallery — mirrors design-gallery.ts.
  *
- * A miniatura é o PRIMEIRO slide, e sai de graça: o deck é servido pelo
- * `orbit-slides://` com o runtime injetado, que monta o palco e mostra o slide
- * 1. Fotografar uma janela do tamanho do palco dá exatamente a capa — sem seek,
- * sem medição de camada, sem segunda fonte de verdade para o layout.
+ * The thumbnail is the FIRST slide, and it comes for free: the deck is served by
+ * `orbit-slides://` with the runtime injected, which builds the stage and shows
+ * slide 1. Photographing a window the size of the stage gives exactly the cover —
+ * no seek, no layer measurement, no second source of truth for the layout.
  *
- * A janela precisa ter o tamanho EXATO declarado no meta do deck: é isso que
- * faz o runtime escalar em 1:1 e a captura sair sem tarja.
+ * The window must have the EXACT size declared in the deck's meta: that is what
+ * makes the runtime scale 1:1 and the capture come out without a bar.
  */
 
 const COVER_WIDTH = 640
@@ -42,7 +42,7 @@ async function captureCover(id: string, folder: string, entry: string): Promise<
     height,
     frame: false,
     useContentSize: true,
-    // Sem isto o Chromium não pinta uma janela nunca exibida.
+    // Without this Chromium does not paint a window that was never shown.
     paintWhenInitiallyHidden: true,
     webPreferences: {
       offscreen: true,
@@ -67,7 +67,7 @@ async function captureCover(id: string, folder: string, entry: string): Promise<
       new Promise((resolve) => setTimeout(resolve, LOAD_TIMEOUT_MS)),
     ])
     await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)', true).catch(() => {})
-    // Um instante para o runtime montar o palco e o Chromium terminar de pintar.
+    // A moment for the runtime to build the stage and Chromium to finish painting.
     await new Promise((resolve) => setTimeout(resolve, 250))
     const image = await win.webContents.capturePage()
     const png = image.toPNG()
@@ -81,9 +81,9 @@ async function captureCover(id: string, folder: string, entry: string): Promise<
 }
 
 /**
- * Põe (ou atualiza) o deck na galeria, com a capa tirada agora. Idempotente:
- * registrar o mesmo deck de novo cai no MESMO item — é o `slidesId` que manda,
- * não o momento.
+ * Puts (or updates) the deck in the gallery, with the cover taken now. Idempotent:
+ * registering the same deck again lands on the SAME item — it is the `slidesId`
+ * that rules, not the moment.
  */
 export async function registerSlidesCover(
   id: string,
@@ -103,9 +103,9 @@ export async function registerSlidesCover(
   return true
 }
 
-// Excluir o deck na galeria apaga o de verdade (a pasta, o registro e o
-// watcher) — excluir é liberar espaço. As travas de segurança ficam em
-// deleteSlidesDeck: o projeto em si nunca é apagado.
+// Deleting the deck in the gallery deletes the real thing (the folder, the record and
+// the watcher) — deleting frees space. The safety locks stay in
+// deleteSlidesDeck: the project itself is never deleted.
 setMediaDeleteHook('slides', async (entry) => {
   if (entry.slidesId) await deleteSlidesDeck(entry.slidesId)
 })

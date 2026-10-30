@@ -13,42 +13,42 @@ export interface ProcessInfo {
   startTime: number
   status: 'running' | 'exited' | 'killed'
   exitCode?: number
-  /** Sessão de chat que iniciou o processo — escopo do painel e das tools bash_*. */
+  /** Chat session that started the process — scope of the panel and of the bash_* tools. */
   sessionId?: string
   /**
-   * URLs de servidor local anunciadas no output (Vite, Next, Expo…). Calculadas
-   * a partir do log em listProcesses — o buffer cresce, então derivar na leitura
-   * mantém a lista sempre atual, sem reescanear a cada chunk.
+   * Local server URLs announced in the output (Vite, Next, Expo…). Computed
+   * from the log in listProcesses — the buffer grows, so deriving on read
+   * keeps the list always current, without rescanning on every chunk.
    */
   urls?: string[]
 }
 
-// Buffer de saída por processo — cap simples em caracteres, evita acumular
-// gigabytes de log de builds longos (ex.: eas build) na memória do main.
+// Output buffer per process — a simple cap in characters, it avoids accumulating
+// gigabytes of log from long builds (e.g. eas build) in the main's memory.
 const MAX_OUTPUT_CHARS = 200_000
 
-// Códigos ANSI de cor/controle: os dev servers pintam a URL, e o escape entre
-// "localhost" e o ":" quebraria o match da regex. O ESC vem de fromCharCode
-// porque um \x1b literal num regex é barrado pelo no-control-regex.
+// ANSI color/control codes: dev servers paint the URL, and the escape between
+// "localhost" and the ":" would break the regex match. The ESC comes from fromCharCode
+// because a literal \x1b in a regex is barred by no-control-regex.
 const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g')
 
-// Host local com porta obrigatória, com ou sem esquema (um "localhost" solto
-// aparece em log de build e não é servidor).
+// Local host with a mandatory port, with or without a scheme (a loose "localhost"
+// shows up in build logs and is not a server).
 const LOCAL_URL_RE = /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):\d{1,5}\b/gi
 
 /**
- * URLs de servidor local que o processo anunciou no output.
+ * Local server URLs that the process announced in the output.
  *
- * Normaliza para `localhost` (0.0.0.0 e [::1] são bind de escuta, não endereço
- * navegável) e devolve só a origem — é o que o webview do painel precisa para
- * abrir a aplicação em desenvolvimento.
+ * It normalizes to `localhost` (0.0.0.0 and [::1] are listen binds, not a navigable
+ * address) and returns only the origin — it is what the panel webview needs to
+ * open the application in development.
  */
 export function extractLocalUrls(output: string): string[] {
   const found = new Set<string>()
   for (const match of output.replace(ANSI_RE, '').matchAll(LOCAL_URL_RE)) {
     const raw = match[0]
-    // Último ":" e não o primeiro: um bind IPv6 é "[::1]:8080" — o match
-    // ingênuo da esquerda pegaria o ":1" do endereço.
+    // The LAST ":" and not the first: an IPv6 bind is "[::1]:8080" — the naive
+    // match from the left would catch the ":1" of the address.
     const port = raw.slice(raw.lastIndexOf(':') + 1)
     if (!/^\d{1,5}$/.test(port)) continue
     found.add(`${/^https:\/\//i.test(raw) ? 'https' : 'http'}://localhost:${port}`)
@@ -87,10 +87,10 @@ function attachOutput(entry: { info: ProcessInfo; child: ChildProcess; output: s
 }
 
 /**
- * Registra um processo já iniciado (por spawnBackground ou pela promoção
- * automática do bash foreground que estourou o timeout) no gerenciador,
- * assumindo o buffer de saída e os listeners de status.
- * Se o processo já encerrou antes do registro (corrida), reflete o estado.
+ * Registers an already started process (by spawnBackground or by the automatic
+ * promotion of the foreground bash that blew the timeout) in the manager,
+ * taking over the output buffer and the status listeners.
+ * If the process already ended before the registration (race), it reflects the state.
  */
 export function registerProcess(
   child: ChildProcess,
@@ -133,8 +133,8 @@ export function spawnBackground(label: string, command: string, cwd?: string, se
         env: userShellEnv(),
       })
 
-  // Ao sair do app os processos exibidos no painel são mortos; desafixar não
-  // deixa o main terminar antes do filho.
+  // On leaving the app the processes shown in the panel are killed; unref'ing does not
+  // let the main finish before the child.
   child.unref()
 
   const info = registerProcess(child, {
@@ -150,7 +150,7 @@ export function spawnBackground(label: string, command: string, cwd?: string, se
 export function getProcessOutput(pid: number, sessionId?: string): string {
   const entry = processes.get(pid)
   if (!entry) return ''
-  // Escopo por sessão: output só para o dono (ou processos sem dono, ex.: legados).
+  // Scope per session: output only for the owner (or ownerless processes, e.g. legacy ones).
   if (sessionId !== undefined && entry.info.sessionId !== undefined && entry.info.sessionId !== sessionId) {
     return ''
   }
@@ -160,7 +160,7 @@ export function getProcessOutput(pid: number, sessionId?: string): string {
 export async function killProcess(pid: number, sessionId?: string): Promise<boolean> {
   const entry = processes.get(pid)
   if (!entry) return false
-  // Escopo por sessão: só o dono (ou processos sem dono) pode encerrar.
+  // Scope per session: only the owner (or ownerless processes) may end it.
   if (sessionId !== undefined && entry.info.sessionId !== undefined && entry.info.sessionId !== sessionId) {
     return false
   }
@@ -169,22 +169,22 @@ export async function killProcess(pid: number, sessionId?: string): Promise<bool
     const isWin = process.platform === 'win32'
     try {
       if (isWin) {
-        // Aguarda o taskkill terminar (exit code 0 = morto). Em falha (exit != 0:
-        // access denied, processo já morto…) a entrada NÃO é removida — o card
-        // continua no painel para nova tentativa, e o status real vira 'exited'
-        // sozinho via evento do child quando o processo de fato morrer. Antes
-        // disso, a entrada era deletada na hora: o processo sumia da UI mesmo
-        // vivo, e "não dava para parar" porque não havia onde apertar.
+        // Waits for taskkill to finish (exit code 0 = dead). On failure (exit != 0:
+        // access denied, process already dead…) the entry is NOT removed — the card
+        // stays in the panel for another attempt, and the real status becomes 'exited'
+        // on its own through the child event when the process actually dies. Before
+        // this, the entry was deleted right away: the process vanished from the UI while
+        // still alive, and "there was no way to stop it" because there was nowhere to press.
         try {
           await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
         } catch {
           return false
         }
       } else {
-        // detached:true roda o comando com setsid, então ele lidera seu próprio
-        // grupo de processos — matar só o PID (positivo) mata a shell mas deixa
-        // os filhos dela (ex.: o processo real do build) órfãos e rodando.
-        // PID negativo manda o sinal pro grupo inteiro.
+        // detached:true runs the command with setsid, so it leads its own
+        // process group — killing only the PID (positive) kills the shell but leaves
+        // its children (e.g. the real build process) orphaned and running.
+        // A negative PID sends the signal to the whole group.
         try {
           process.kill(-pid, 'SIGTERM')
         } catch {
@@ -194,7 +194,7 @@ export async function killProcess(pid: number, sessionId?: string): Promise<bool
           try {
             process.kill(-pid, 'SIGKILL')
           } catch {
-            try { process.kill(pid, 'SIGKILL') } catch { /* já encerrou */ }
+            try { process.kill(pid, 'SIGKILL') } catch { /* already ended */ }
           }
         }, 3000)
       }
@@ -204,9 +204,9 @@ export async function killProcess(pid: number, sessionId?: string): Promise<bool
     }
   }
 
-  // A lixeira na UI serve tanto pra encerrar quanto pra "esquecer" o processo —
-  // sem isso ele reaparece no próximo poll do painel (listProcesses nunca
-  // esquecia entradas sozinho) e o agente continuaria vendo-o no bash_list.
+  // The trash can in the UI serves both to end and to "forget" the process —
+  // without this it reappears on the panel's next poll (listProcesses never
+  // forgot entries on its own) and the agent would keep seeing it in bash_list.
   processes.delete(pid)
   return true
 }
@@ -233,7 +233,7 @@ export function killAll(): void {
           process.kill(pid, 'SIGTERM')
         }
       }
-    } catch { /* processo já pode ter encerrado — kill no quit é best-effort */ }
+    } catch { /* process may already have ended — kill on quit is best-effort */ }
   }
   processes.clear()
 }

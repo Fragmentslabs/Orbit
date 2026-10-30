@@ -1,13 +1,13 @@
 import type { SessionInfo } from "@shared/chat"
 
 /**
- * As pastas de um chat, na ordem que a UI usa: a principal e depois as extras.
+ * The folders of a chat, in the order the UI uses: the main one and then the extras.
  *
- * A sessão em disco é a única fonte que sobrevive ao fechamento do app — o
- * workspace (localStorage) só guarda a última tela. Por isso o que a pessoa
- * associa precisa chegar aqui no mesmo clique, e não no próximo envio.
+ * The session on disk is the only source that survives the app closing — the
+ * workspace (localStorage) only keeps the last screen. That is why what the person
+ * associates has to get here in the same click, and not on the next send.
  */
-export function pastasDaSessao(
+export function sessionFolders(
   session: Pick<SessionInfo, "directory" | "extraDirectories">,
 ): string[] {
   return [session.directory, ...(session.extraDirectories ?? [])].filter(
@@ -16,14 +16,14 @@ export function pastasDaSessao(
 }
 
 /**
- * A lista da tela já é a da sessão?
+ * Is the screen's list already the session's?
  *
- * A principal pesa (é o repositório da conversa); as extras são um conjunto,
- * então a ordem entre elas não muda nada e não vale gravar por causa dela.
+ * The main one weighs (it is the conversation's repository); the extras are a set,
+ * so the order between them changes nothing and is not worth writing for.
  */
-export function mesmasPastas(daSessao: string[], daTela: string[]): boolean {
-  if (daSessao.length !== daTela.length) return false
-  if (daSessao[0] !== daTela[0]) return false
-  const extras = (lista: string[]) => [...lista.slice(1)].sort().join("\n")
-  return extras(daSessao) === extras(daTela)
+export function sameFolders(fromSession: string[], fromScreen: string[]): boolean {
+  if (fromSession.length !== fromScreen.length) return false
+  if (fromSession[0] !== fromScreen[0]) return false
+  const extras = (list: string[]) => [...list.slice(1)].sort().join("\n")
+  return extras(fromSession) === extras(fromScreen)
 }

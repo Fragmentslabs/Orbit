@@ -1,53 +1,53 @@
 /**
- * Detecção de overclaim: a resposta AFIRMA ter feito o trabalho?
+ * Overclaim detection: does the answer CLAIM to have done the work?
  *
- * É só o GATILHO da verificação, nunca a prova — quem decide se houve trabalho
- * é o snapshot do filesystem (chat-engine: verifyTurn). Por isso o custo de um
- * falso positivo é baixo: uma ida a mais ao modelo, que confirma e segue.
+ * It is only the TRIGGER of the verification, never the proof — what decides whether there was work
+ * is the filesystem snapshot (chat-engine: verifyTurn). That is why the cost of a
+ * false positive is low: one more trip to the model, which confirms and moves on.
  *
- * Módulo separado e sem dependência do Electron de propósito: é heurística de
- * linguagem, a parte mais fácil de errar em silêncio, e assim fica coberta por
- * teste sem precisar carregar o app.
+ * A separate module with no dependency on Electron on purpose: it is language
+ * heuristics, the part easiest to get wrong silently, and this way it is covered by
+ * tests without having to load the app.
  */
 
 /**
- * Verbos de conclusão em 1ª pessoa (pt/en). Só verbos de ação: particípios
- * soltos ("criado", "feito") aparecem em frases descritivas inofensivas como
- * "o arquivo criado anteriormente já cobre esse caso".
+ * First-person completion verbs (pt/en). Only action verbs: loose participles
+ * ("created", "done") show up in harmless descriptive sentences such as
+ * "the file created earlier already covers this case".
  */
 const COMPLETION_CLAIM =
   /\b(criei|adicionei|implementei|corrigi|ajustei|atualizei|removi|apaguei|renomeei|movi|refatorei|alterei|modifiquei|escrevi|gerei|configurei|created|added|implemented|fixed|updated|removed|deleted|renamed|moved|refactored|changed|modified|wrote|applied)\b/gi
 
 /**
- * Particípios ingleses são ambíguos: "added"/"created" aparecem em descrições
- * passivas de código existente ("the group is added in Sidebar.tsx") e em
- * citações de commits. Só contam como afirmação do agente quando há sujeito
- * de 1ª pessoa na janela anterior ("I added", "the file I created"). Os
- * verbos portugueses da lista já são 1ª pessoa (criei, implementei…) e não
- * passam por esse filtro.
+ * English participles are ambiguous: "added"/"created" show up in passive
+ * descriptions of existing code ("the group is added in Sidebar.tsx") and in
+ * commit quotes. They only count as the agent's claim when there is a first-person
+ * subject in the preceding window ("I added", "the file I created"). The
+ * Portuguese verbs in the list are already first person (criei, implementei…) and do
+ * not go through this filter.
  */
 const ENGLISH_PARTICIPLE =
   /\b(created|added|implemented|fixed|updated|removed|deleted|renamed|moved|refactored|changed|modified|wrote|applied)\b/i
 
 const FIRST_PERSON = /\bI\b/i
 
-/** Negação logo antes do verbo, na mesma oração. */
+/** Negation right before the verb, in the same clause. */
 const NEGATION_BEFORE =
   /\b(n[aã]o|nenhum[ao]?|nunca|jamais|sem|didn'?t|did\s+not|couldn'?t|could\s+not|won'?t|will\s+not|haven'?t|have\s+not|no)\b[\s\w,]{0,24}$/i
 
-/** Janela de texto anterior ao verbo onde a negação ainda conta. */
+/** Window of text before the verb where the negation still counts. */
 const NEGATION_WINDOW = 40
 
 /**
- * Marcas explícitas de que a afirmação descreve trabalho de TURNOS ANTERIORES
- * (perguntas informativas, resumos de "o que mudou"): fala do que já foi feito
- * antes, não do que foi feito neste turno — não é overclaim deste turno e não
- * deve disparar a cobrança.
+ * Explicit marks that the claim describes work from PREVIOUS TURNS
+ * (informative questions, "what changed" summaries): it talks about what was already done
+ * before, not about what was done in this turn — it is not this turn's overclaim and it should
+ * not trigger the charge.
  */
 const PAST_TURN =
   /\b(turno|troca|resposta|mensagem|pergunta)\s+(anterior|passad[oa])\b|\b(ontem|anteriormente)\b|\b(semana|m[êe]s|ano)\s+passad[oa]\b|\b(previous|earlier|last)\s+(turn|response|answer|message)\b|\b(previously|yesterday)\b/i
 
-/** Extrai a sentença que contém o índice dado (heurística simples, sem NLP). */
+/** Extracts the sentence that contains the given index (simple heuristic, no NLP). */
 function sentenceContaining(text: string, index: number): string {
   for (const match of text.matchAll(/[^.!?\n]+[.!?]*/g)) {
     const start = match.index ?? 0
@@ -58,9 +58,9 @@ function sentenceContaining(text: string, index: number): string {
 }
 
 /**
- * Remove trechos de código (fenced ```…``` e inline `…`) antes de casar os
- * verbos: citações de identificadores, campos e comandos ("o campo `added`",
- * "`groups.push(...)`") não são afirmações do agente sobre o próprio trabalho.
+ * Removes code stretches (fenced ```…``` and inline `…`) before matching the
+ * verbs: quotes of identifiers, fields and commands ("the `added` field",
+ * "`groups.push(...)`") are not the agent's claims about its own work.
  */
 function stripCode(text: string): string {
   return text
@@ -69,24 +69,24 @@ function stripCode(text: string): string {
 }
 
 /**
- * Tratar negação é obrigatório: "analisei e não alterei nada" — a resposta
- * honesta que o próprio prompt exige — seria lida como overclaim, e o agente
- * levaria uma cobrança justamente por ter sido franco.
+ * Handling negation is mandatory: "I analyzed and changed nothing" — the
+ * honest answer the prompt itself requires — would be read as overclaim, and the agent
+ * would be charged precisely for having been frank.
  *
- * Basta uma ocorrência NÃO negada para valer como afirmação: em "implementei X,
- * mas não alterei Y" a primeira continua valendo.
+ * A single NON-negated occurrence is enough to count as a claim: in "I implemented X,
+ * but did not change Y" the first one still counts.
  */
 export function claimsCompletion(text: string): boolean {
   const clean = stripCode(text)
   for (const match of clean.matchAll(COMPLETION_CLAIM)) {
     const index = match.index ?? 0
-    // "adicionei X no turno anterior" descreve trabalho passado, não este
-    // turno — a sentença é ignorada antes mesmo da checagem de negação.
+    // "I added X in the previous turn" describes past work, not this
+    // turn — the sentence is ignored even before the negation check.
     if (PAST_TURN.test(sentenceContaining(clean, index))) continue
     const window = clean.slice(Math.max(0, index - NEGATION_WINDOW), index)
     if (NEGATION_BEFORE.test(window)) continue
-    // Particípio inglês sem "I" na janela = voz passiva/descrição de código
-    // ("was added", "is created") — não é o agente afirmando o próprio
+    // English participle without "I" in the window = passive voice/code description
+    // ("was added", "is created") — it is not the agent claiming its own
     // trabalho.
     if (ENGLISH_PARTICIPLE.test(match[0]) && !FIRST_PERSON.test(window)) continue
     return true
@@ -95,32 +95,32 @@ export function claimsCompletion(text: string): boolean {
 }
 
 /**
- * A resposta à cobrança do nudge foi SÓ a confirmação de que não havia nada a
- * corrigir (falso positivo do gatilho — ex.: o texto descrevia trabalho de um
- * turno anterior). O engine esconde esses textos do chat (source 'internal'):
- * são verificação interna, não conteúdo para o usuário. Correções reais
- * ("Correção: …") não casam e permanecem visíveis.
+ * The answer to the nudge's charge was ONLY the confirmation that there was nothing to
+ * fix (a false positive of the trigger — e.g. the text described work from a
+ * previous turn). The engine hides these texts from the chat (source 'internal'):
+ * they are internal verification, not content for the user. Real corrections
+ * ("Correction: …") do not match and remain visible.
  */
 export function isNoCorrectionReply(text: string): boolean {
   const t = text.trim().toLowerCase()
   if (t.startsWith('nada a corrigir')) return true
-  // Estilo "Confirmado: nenhuma alteração foi feita" — a negação precisa vir
-  // logo após o início; "Correto, na verdade não editei nada" (correção real)
-  // não casa.
+  // Style "Confirmed: no change was made" — the negation has to come
+  // right after the start; "Correct, actually I did not edit anything" (a real correction)
+  // does not match.
   return /^(confirmado|correto|ok)[\s:,-]*\s*(nada|nenhum[ao]?|sem)(\s+a corrigir|\s+altera[cç]|\s+arquivo|\s+mudança)/i.test(t)
 }
 
 /**
- * A resposta fala da TELA como se tivesse olhado ou agido nela: "abri o
- * TextEdit e escrevi", "estou vendo sua tela", "a captura chega ilegível". Só
- * é gatilho num turno com as tools de tela à mão e NENHUMA chamada a elas —
- * aí não há o que ter visto nem feito, e a frase é invenção (um modelo rápido
- * em modo de voz fazia isso: confirmava a ação sem chamar tool nenhuma).
+ * The answer talks about the SCREEN as if it had looked at or acted on it: "I opened
+ * TextEdit and wrote", "I'm seeing your screen", "the screenshot arrives illegible". It only
+ * is a trigger in a turn with the screen tools at hand and NO call to them —
+ * then there is nothing to have seen or done, and the sentence is invention (a fast model
+ * in voice mode did this: it confirmed the action without calling any tool).
  *
- * Mais largo que `claimsCompletion` de propósito: a negação não salva ("não
- * consigo ver, a captura não chega" sem ter capturado nada também é
- * invenção), e o custo de um falso positivo é uma ida a mais que responde
- * "Nada a corrigir.".
+ * Broader than `claimsCompletion` on purpose: negation does not save it ("I
+ * cannot see, the screenshot does not arrive" without having captured anything is also
+ * invention), and the cost of a false positive is one more trip that answers
+ * "Nothing to fix.".
  */
 const SCREEN_CLAIM =
   /\b(abri|cliquei|digitei|escrevi|preenchi|enviei|apertei|pressionei|selecionei|naveguei|rolei|salvei|fechei|vejo|estou vendo|consigo ver|n[aã]o consigo ver|na sua tela|sua tela|a captura|o print|screenshot|opened|clicked|typed|filled|sent|pressed|selected|scrolled|saved|closed|i can see|i see|on your screen|your screen|the capture)\b/i
@@ -130,10 +130,10 @@ export function claimsScreenWork(text: string): boolean {
 }
 
 /**
- * A resposta anuncia que vai olhar a tela por imagem ("vou tentar pela
- * imagem", "let me look at the screen"). Com a janela já lida em texto, o
- * modelo ainda pode prometer a imagem e responder sem chamar a tool — o caso
- * que repetia "pela imagem também não veio nada" sem nenhuma chamada.
+ * The answer announces that it will look at the screen through an image ("I'll try through
+ * the image", "let me look at the screen"). With the window already read as text, the
+ * model can still promise the image and answer without calling the tool — the case
+ * that repeated "it did not come through the image either" with no call at all.
  */
 const IMAGE_LOOK_CLAIM =
   /\b(pela imagem|tentar pela imagem|olhar a (tela|imagem)|ver pela imagem|pelo print|pela captura|via image|from the image|let me (look|try|check)|i'?ll (look|try|check))\b/i

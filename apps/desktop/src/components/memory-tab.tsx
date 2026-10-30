@@ -11,19 +11,19 @@ import { useMemoryById } from "@/src/hooks/use-memory"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 
-/** Primeiras palavras do texto, para o título de uma aba aberta a partir de um vínculo. */
+/** First words of the text, for the title of a tab opened from a link. */
 function excerpt(text: string, max = 40): string {
   const clean = text.replace(/\s+/g, " ").trim()
   return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean
 }
 
 /**
- * Aba do painel com uma memória citada na conversa.
+ * Panel tab with a memory cited in the conversation.
  *
- * Reusa o MemoryDetailPanel da tela de Memórias (card + texto completo ou
- * documento anexado), então o que se lê aqui é exatamente o que se edita lá —
- * sem uma segunda visão para manter em sincronia. Navegar por um vínculo abre
- * outra aba da mesma memória, e o atalho para a tela completa fica no rodapé.
+ * It reuses the MemoryDetailPanel of the Memories screen (card + full text or
+ * attached document), so what is read here is exactly what is edited there —
+ * without a second view to keep in sync. Navigating through a link opens
+ * another tab of the same memory, and the shortcut to the full screen stays in the footer.
  */
 export function MemoryTab({ memoryId, sessionId }: { memoryId?: string; sessionId?: string }) {
   const { t } = useTranslation()
@@ -43,8 +43,8 @@ export function MemoryTab({ memoryId, sessionId }: { memoryId?: string; sessionI
   if (!memory) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-xs text-muted-foreground">
-        {/* Skeleton só enquanto há um id para resolver: sem id o store nem
-            inicializa, e o esqueleto ficaria girando para sempre. */}
+        {/* Skeleton only while there is an id to resolve: without an id the store does not even
+            initialize, and the skeleton would spin forever. */}
         {loading && memoryId ? (
           <Skeleton className="h-4 w-40" />
         ) : (

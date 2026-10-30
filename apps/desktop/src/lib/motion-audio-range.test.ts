@@ -8,73 +8,73 @@ import {
   motionTrackIsLive,
 } from "./motion-audio-range"
 
-/** Uma narração da peça de apresentação: 4,319 s de fala a partir de 18,37 s. */
-const narracao = { start: 18.37, end: null }
+/** A narration of the presentation piece: 4.319 s of speech starting at 18.37 s. */
+const narration = { start: 18.37, end: null }
 
 describe("motionTrackEnd", () => {
-  it("o `end` declarado manda, mesmo com o arquivo medido", () => {
+  it("the declared `end` rules, even with the file measured", () => {
     expect(motionTrackEnd({ start: 2, end: 4.5 }, 9)).toBe(4.5)
   })
 
-  it("sem `end`, quem fecha a janela é o comprimento real do arquivo", () => {
-    expect(motionTrackEnd(narracao, 4.319)).toBeCloseTo(22.689, 3)
+  it("without `end`, the real file length closes the window", () => {
+    expect(motionTrackEnd(narration, 4.319)).toBeCloseTo(22.689, 3)
   })
 
-  it("sem `end` nem medição, não há janela — quem chama decide", () => {
-    expect(motionTrackEnd(narracao, null)).toBeNull()
-    expect(motionTrackEnd(narracao, undefined)).toBeNull()
-    expect(motionTrackEnd(narracao, 0)).toBeNull()
-    expect(motionTrackEnd(narracao, Number.NaN)).toBeNull()
-    expect(motionTrackEnd(narracao, Number.POSITIVE_INFINITY)).toBeNull()
-    expect(motionTrackEnd(narracao, -3)).toBeNull()
+  it("without `end` or measurement there is no window — the caller decides", () => {
+    expect(motionTrackEnd(narration, null)).toBeNull()
+    expect(motionTrackEnd(narration, undefined)).toBeNull()
+    expect(motionTrackEnd(narration, 0)).toBeNull()
+    expect(motionTrackEnd(narration, Number.NaN)).toBeNull()
+    expect(motionTrackEnd(narration, Number.POSITIVE_INFINITY)).toBeNull()
+    expect(motionTrackEnd(narration, -3)).toBeNull()
   })
 })
 
 describe("motionTrackIsLive", () => {
-  it("acende do start até o fim real do arquivo", () => {
-    expect(motionTrackIsLive(narracao, 4.319, 18)).toBe(false)
-    expect(motionTrackIsLive(narracao, 4.319, 18.37)).toBe(true)
-    expect(motionTrackIsLive(narracao, 4.319, 20)).toBe(true)
-    expect(motionTrackIsLive(narracao, 4.319, 22.7)).toBe(false)
+  it("lights up from the start to the real end of the file", () => {
+    expect(motionTrackIsLive(narration, 4.319, 18)).toBe(false)
+    expect(motionTrackIsLive(narration, 4.319, 18.37)).toBe(true)
+    expect(motionTrackIsLive(narration, 4.319, 20)).toBe(true)
+    expect(motionTrackIsLive(narration, 4.319, 22.7)).toBe(false)
   })
 
-  it("não fica acesa até o fim da peça só porque o manifest se calou", () => {
-    // O defeito que isto corrige: a faixa sendo desenhada e comandada como se
-    // tocasse dos 18,37 s até os 38 s da peça.
-    expect(motionTrackIsLive(narracao, 4.319, 30)).toBe(false)
-    // Sem medição (metadata ainda não chegou) vale o palpite antigo.
-    expect(motionTrackIsLive(narracao, null, 30)).toBe(true)
-    expect(motionTrackIsLive(narracao, Number.NaN, 30)).toBe(true)
+  it("does not stay lit until the end of the piece just because the manifest went quiet", () => {
+    // The defect this fixes: the track being drawn and driven as if it
+    // played from 18.37 s to the piece's 38 s.
+    expect(motionTrackIsLive(narration, 4.319, 30)).toBe(false)
+    // Without a measurement (the metadata has not arrived yet) the old guess applies.
+    expect(motionTrackIsLive(narration, null, 30)).toBe(true)
+    expect(motionTrackIsLive(narration, Number.NaN, 30)).toBe(true)
   })
 
-  it("com `end` declarado, a janela é a do manifest e não a do arquivo", () => {
-    const cama = { start: 0, end: 12 }
-    expect(motionTrackIsLive(cama, 300, 11.9)).toBe(true)
-    expect(motionTrackIsLive(cama, 300, 12)).toBe(false)
+  it("with `end` declared, the window is the manifest's, not the file's", () => {
+    const bed = { start: 0, end: 12 }
+    expect(motionTrackIsLive(bed, 300, 11.9)).toBe(true)
+    expect(motionTrackIsLive(bed, 300, 12)).toBe(false)
   })
 
-  it("começa exatamente no start", () => {
+  it("starts exactly at the start", () => {
     expect(motionTrackIsLive({ start: 5, end: null }, 2, 4.999)).toBe(false)
     expect(motionTrackIsLive({ start: 5, end: null }, 2, 5)).toBe(true)
   })
 })
 
-describe("reata do áudio pelo ritmo", () => {
-  it("já no lugar, toca no ritmo natural", () => {
+describe("re-syncs from the audio by the rhythm", () => {
+  it("already in place, it plays at the natural rhythm", () => {
     expect(motionAudioRate(0, false)).toBe(1)
-    // Dentro da folga não há resample nenhum.
+    // Within the slack there is no resampling at all.
     expect(motionAudioRate(0.05, false)).toBe(1)
     expect(motionAudioRate(-0.05, false)).toBe(1)
   })
 
-  it("a folga é maior que o passo do próprio laço", () => {
-    // `at` anda de quadro em quadro (1/30 s ≈ 33 ms), então a deriva medida serra
-    // ±33 ms mesmo com o som no lugar certo. Uma folga menor que isso ficaria
-    // dentro da serra: o ritmo piscaria a cada quadro, e reiniciar o resample a
-    // cada piscada é o estalo que se ouvia.
-    const passo = 1 / 30
-    expect(MOTION_AUDIO_NUDGE_S).toBeGreaterThan(passo)
-    expect(MOTION_AUDIO_SETTLE_S).toBeGreaterThan(passo)
+  it("the slack is larger than the loop's own step", () => {
+    // `at` moves frame by frame (1/30 s ≈ 33 ms), so the measured drift saws
+    // ±33 ms even with the sound in the right place. A slack smaller than that would fall
+    // inside the saw: the pace would blink on every frame, and restarting the resample on
+    // every blink is the click that was heard.
+    const step = 1 / 30
+    expect(MOTION_AUDIO_NUDGE_S).toBeGreaterThan(step)
+    expect(MOTION_AUDIO_SETTLE_S).toBeGreaterThan(step)
   })
 
   it("adiantado desacelera, atrasado acelera", () => {
@@ -82,16 +82,16 @@ describe("reata do áudio pelo ritmo", () => {
     expect(motionAudioRate(-0.2, false)).toBeGreaterThan(1)
   })
 
-  it("histerese: sai por um limiar menor do que entrou", () => {
-    // 0,1 s fica entre os dois limiares: quem já está corrigindo continua...
+  it("hysteresis: it leaves through a lower threshold than it entered", () => {
+    // 0.1 s falls between the two thresholds: whoever is already correcting keeps going...
     expect(motionAudioRate(0.1, true)).toBeLessThan(1)
-    // ...e quem está parado não começa por tão pouco.
+    // ...and whoever is stopped does not start over so little.
     expect(motionAudioRate(0.1, false)).toBe(1)
-    // Perto o bastante, para dos dois jeitos.
+    // Close enough, it stops both ways.
     expect(motionAudioRate(0.02, true)).toBe(1)
   })
 
-  it("nunca passa do teto — a correção tem de ser inaudível", () => {
+  it("never goes past the cap — the correction must be inaudible", () => {
     for (const drift of [0.2, 0.5, 3, 60, -0.2, -0.5, -3, -60]) {
       for (const engaged of [true, false]) {
         expect(Math.abs(motionAudioRate(drift, engaged) - 1)).toBeLessThanOrEqual(MOTION_AUDIO_MAX_NUDGE + 1e-9)
@@ -99,7 +99,7 @@ describe("reata do áudio pelo ritmo", () => {
     }
   })
 
-  it("drift sem sentido não mexe no ritmo", () => {
+  it("a meaningless drift does not touch the rhythm", () => {
     expect(motionAudioRate(Number.NaN, false)).toBe(1)
     expect(motionAudioRate(Number.POSITIVE_INFINITY, false)).toBe(1)
   })

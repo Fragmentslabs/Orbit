@@ -1,22 +1,22 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom'
 
 /**
- * Manipulação de SVG — que é TEXTO, não pixel.
+ * SVG manipulation — which is TEXT, not pixels.
  *
- * Por isso este módulo não usa o sharp: recolorir um ícone é reescrever
- * atributos, não reprocessar imagem. E é a diferença que dá o valor — trocar a
- * cor de um logo em SVG devolve o logo, no mesmo desenho, em qualquer tamanho;
- * a mesma troca num PNG devolve uma aproximação do que já estava lá.
+ * That is why this module does not use sharp: recoloring an icon is rewriting
+ * attributes, not reprocessing an image. And it is the difference that gives it value — swapping the
+ * color of an SVG logo gives back the logo, in the same drawing, at any size;
+ * the same swap on a PNG gives back an approximation of what was already there.
  *
- * O caminho contrário (SVG → PNG) fica com o sharp, que já o faz. O sharp LÊ
- * SVG mas não ESCREVE: vetorizar nunca vai sair dele.
+ * The opposite path (SVG → PNG) stays with sharp, which already does it. sharp READS
+ * SVG but does not WRITE it: vectorizing will never come out of it.
  *
- * Módulo puro de texto (sem Electron, sem IO), para ser testável — mesma
- * separação do pdf-ops.ts e do image-ops.ts.
+ * Pure text module (no Electron, no IO), to be testable — the same
+ * separation as pdf-ops.ts and image-ops.ts.
  */
 
-/** Atributos que carregam cor num SVG. `flood-` e `lighting-` aparecem em
- *  filtros; `stop-color` em gradientes. */
+/** Attributes that carry color in an SVG. `flood-` and `lighting-` show up in
+ *  filters; `stop-color` in gradients. */
 const COLOR_ATTRS = [
   'fill',
   'stroke',
@@ -27,23 +27,23 @@ const COLOR_ATTRS = [
 ]
 
 /**
- * Valores que PARECEM cor e não são.
+ * Values that LOOK like color and are not.
  *
- * `none` é ausência de pintura e trocá-lo por uma cor preencheria formas que
- * eram só contorno. `currentColor` é a herança do CSS de quem usa o ícone —
- * é justamente o que torna um ícone recolorível pela página, e resolvê-lo aqui
- * destruiria essa propriedade. `inherit` e `transparent` pela mesma razão.
+ * `none` is the absence of paint and swapping it for a color would fill shapes that
+ * were outline only. `currentColor` is the CSS inheritance of whoever uses the icon —
+ * it is precisely what makes an icon recolorable by the page, and resolving it here
+ * would destroy that property. `inherit` and `transparent` for the same reason.
  */
 const NOT_A_COLOR = new Set(['none', 'currentcolor', 'inherit', 'transparent'])
 
 /**
- * Forma comparável de uma cor.
+ * Comparable form of a color.
  *
- * Normaliza o que dá para normalizar com certeza — hexadecimal curto para
- * longo, caixa — e deixa o resto em minúsculas, comparado literalmente. Não
- * traduz nome para hexadecimal: `white` continua `white`, então um mapa com
- * `white` casa com `white` e um com `#ffffff` casa com `#fff`. Inventar a
- * tabela de 147 nomes do CSS traria mais erro do que acerto.
+ * It normalizes what can be normalized for sure — short hex to
+ * long, case — and leaves the rest lowercase, compared literally. It does not
+ * translate a name into hex: `white` stays `white`, so a map with
+ * `white` matches `white` and one with `#ffffff` matches `#fff`. Inventing the
+ * table of 147 CSS names would bring more error than accuracy.
  */
 export function normalizeColor(value: string): string {
   const text = value.trim().toLowerCase()
@@ -66,21 +66,21 @@ export interface SvgInfo {
   width: number | null
   height: number | null
   viewBox: string | null
-  /** Cores presentes, normalizadas e sem repetição — é o que permite pedir a
-   *  troca sem abrir o arquivo para descobrir o que tem lá dentro. */
+  /** Colors present, normalized and without repetition — it is what allows asking for the
+   *  swap without opening the file to find out what is in there. */
   colors: string[]
 }
 
-/** Erro explícito quando não é SVG: o DOMParser aceita quase tudo calado e o
- *  resultado seria um "sucesso" que não mudou nada. */
+/** Explicit error when it is not an SVG: the DOMParser accepts almost anything silently and the
+ *  result would be a "success" that changed nothing. */
 function parse(markup: string): Document {
-  // Aviso do parser não vira ruído no terminal: um SVG de editor traz
-  // namespace e entidade que o xmldom reclama sem que nada esteja errado. O
-  // que importa é o resultado, conferido logo abaixo.
+  // A parser warning does not become noise in the terminal: an editor's SVG brings
+  // namespace and entity that xmldom complains about with nothing actually wrong. What
+  // matters is the result, checked right below.
   const doc = new DOMParser({ errorHandler: () => {} }).parseFromString(markup, 'image/svg+xml')
   const root = doc.documentElement
   if (!root || root.nodeName.toLowerCase() !== 'svg') {
-    throw new Error('Não é um SVG: o elemento raiz precisa ser <svg>.')
+    throw new Error('Not an SVG: the root element must be <svg>.')
   }
   return doc as unknown as Document
 }
@@ -89,20 +89,20 @@ function serialize(doc: Document): string {
   return new XMLSerializer().serializeToString(doc as never)
 }
 
-/** Percorre todos os elementos — o xmldom não tem querySelectorAll. */
+/** Walks every element — xmldom has no querySelectorAll. */
 function eachElement(doc: Document, visit: (el: Element) => void): void {
   const walk = (node: Node) => {
     if (node.nodeType === 1) visit(node as Element)
-    // No xmldom um nó de texto tem childNodes NULO, e não lista vazia: ler
-    // `.length` direto estoura no primeiro SVG com quebra de linha dentro.
-    const filhos = node.childNodes
-    if (!filhos) return
-    for (let i = 0; i < filhos.length; i++) walk(filhos[i])
+    // In xmldom a text node has a NULL childNodes, not an empty list: reading
+    // `.length` directly blows up on the first SVG with a line break inside.
+    const children = node.childNodes
+    if (!children) return
+    for (let i = 0; i < children.length; i++) walk(children[i])
   }
   walk(doc.documentElement as unknown as Node)
 }
 
-/** Cores dentro de `style="fill:#fff;stroke:red"`. */
+/** Colors inside `style="fill:#fff;stroke:red"`. */
 function eachStyleColor(
   style: string,
   visit: (prop: string, value: string) => string | null,
@@ -156,27 +156,27 @@ export function svgInfo(markup: string): SvgInfo {
 }
 
 export interface RecolorOptions {
-  /** Troca dirigida: de → para. As chaves são comparadas normalizadas. */
+  /** Targeted swap: from → to. The keys are compared normalized. */
   map?: Record<string, string>
-  /** Pinta TODA cor com esta — a variante monocromática de um ícone. */
+  /** Paints EVERY color with this one — the monochrome variant of an icon. */
   all?: string
 }
 
 export interface RecolorResult {
   markup: string
-  /** Quantas pinturas mudaram. Zero é a resposta honesta a um mapa que não
-   *  casou com nada, e é o que distingue isso de um sucesso silencioso. */
+  /** How many paints changed. Zero is the honest answer to a map that did not
+   *  match anything, and it is what distinguishes it from a silent success. */
   changed: number
 }
 
 /**
- * Troca as cores mantendo o desenho.
+ * Swaps the colors while keeping the drawing.
  *
- * Alcança atributo (`fill="#f00"`) e estilo embutido (`style="fill:#f00"`).
- * NÃO alcança regra dentro de `<style>`: aquilo é CSS de verdade, com
- * seletores e especificidade, e um replace de texto ali acerta por sorte. O
- * resultado diz quantas pinturas mudaram, então um SVG que só se pinta por
- * CSS aparece como zero em vez de passar por trocado.
+ * It reaches the attribute (`fill="#f00"`) and inline style (`style="fill:#f00"`).
+ * It does NOT reach a rule inside `<style>`: that is real CSS, with
+ * selectors and specificity, and a text replace there hits by luck. The
+ * result says how many paints changed, so an SVG painted only by
+ * CSS shows up as zero instead of passing as swapped.
  */
 export function recolorSvg(markup: string, options: RecolorOptions): RecolorResult {
   const doc = parse(markup)
@@ -185,11 +185,11 @@ export function recolorSvg(markup: string, options: RecolorOptions): RecolorResu
     map.set(normalizeColor(from), to)
   }
   if (map.size === 0 && !options.all) {
-    throw new Error('Informe `map` (de → para) ou `all` (pinta tudo de uma cor).')
+    throw new Error('Provide `map` (from → to) or `all` (paints everything with one color).')
   }
 
   let changed = 0
-  const troca = (value: string): string | null => {
+  const swap = (value: string): string | null => {
     if (options.all) {
       changed++
       return options.all
@@ -204,12 +204,12 @@ export function recolorSvg(markup: string, options: RecolorOptions): RecolorResu
     for (const attr of COLOR_ATTRS) {
       const value = el.getAttribute(attr)
       if (!value || !isColor(value)) continue
-      const next = troca(value)
+      const next = swap(value)
       if (next !== null) el.setAttribute(attr, next)
     }
     const style = el.getAttribute('style')
     if (style) {
-      const next = eachStyleColor(style, (_prop, value) => troca(value))
+      const next = eachStyleColor(style, (_prop, value) => swap(value))
       if (next !== style) el.setAttribute('style', next)
     }
   })
@@ -218,33 +218,33 @@ export function recolorSvg(markup: string, options: RecolorOptions): RecolorResu
 }
 
 /**
- * Muda o tamanho de exibição sem tocar no desenho.
+ * Changes the display size without touching the drawing.
  *
- * O que dá escala a um SVG é o `viewBox`: ele é o sistema de coordenadas, e
- * width/height são só o tamanho em que aquilo é pintado. Por isso aqui o
- * viewBox nunca muda — mexer nele recortaria ou deslocaria o desenho, que é o
- * oposto de redimensionar.
+ * What gives an SVG its scale is the `viewBox`: it is the coordinate system, and
+ * width/height are only the size at which that is painted. That is why here the
+ * viewBox never changes — touching it would crop or shift the drawing, which is the
+ * opposite of resizing.
  *
- * Sem viewBox no arquivo original, um é criado a partir do tamanho que ele
- * tinha; senão o novo width/height esticaria o conteúdo em vez de escalá-lo.
+ * Without a viewBox in the original file, one is created from the size it
+ * had; otherwise the new width/height would stretch the content instead of scaling it.
  */
 export function resizeSvg(markup: string, size: { width?: number; height?: number }): string {
-  if (!size.width && !size.height) throw new Error('Informe width e/ou height.')
+  if (!size.width && !size.height) throw new Error('Provide width and/or height.')
   const doc = parse(markup)
   const root = doc.documentElement as unknown as Element
 
-  const atual = svgInfo(markup)
-  if (!atual.viewBox && atual.width && atual.height) {
-    root.setAttribute('viewBox', `0 0 ${atual.width} ${atual.height}`)
+  const current = svgInfo(markup)
+  if (!current.viewBox && current.width && current.height) {
+    root.setAttribute('viewBox', `0 0 ${current.width} ${current.height}`)
   }
 
-  // Um lado só preserva a proporção do viewBox, que é o comportamento
-  // esperado de "quero este ícone com 512 de largura".
+  // One side only preserves the viewBox's proportion, which is the behavior
+  // expected from "I want this icon 512 wide".
   const box = (root.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number)
-  const proporcao = box.length === 4 && box[2] > 0 && box[3] > 0 ? box[3] / box[2] : null
+  const ratio = box.length === 4 && box[2] > 0 && box[3] > 0 ? box[3] / box[2] : null
 
-  const width = size.width ?? (size.height && proporcao ? size.height / proporcao : null)
-  const height = size.height ?? (size.width && proporcao ? size.width * proporcao : null)
+  const width = size.width ?? (size.height && ratio ? size.height / ratio : null)
+  const height = size.height ?? (size.width && ratio ? size.width * ratio : null)
 
   if (width) root.setAttribute('width', String(Math.round(width)))
   if (height) root.setAttribute('height', String(Math.round(height)))
@@ -252,19 +252,19 @@ export function resizeSvg(markup: string, size: { width?: number; height?: numbe
 }
 
 /**
- * Verifica que o markup é um SVG utilizável, e recusa o que não é.
+ * Checks that the markup is a usable SVG, and refuses what is not.
  *
- * Um `<script>` dentro do arquivo não executa onde nós o mostramos (servido
- * como image/svg+xml e desenhado em `<img>`), mas ele acompanha o arquivo que
- * a pessoa baixa e leva para outro lugar. Recusar aqui é mais honesto do que
- * entregar um arquivo com carga que nós não vamos usar.
+ * A `<script>` inside the file does not run where we show it (served
+ * as image/svg+xml and drawn in `<img>`), but it goes along with the file that
+ * the person downloads and takes elsewhere. Refusing here is more honest than
+ * delivering a file with a payload we are not going to use.
  */
 export function assertSafeSvg(markup: string): void {
   parse(markup)
   if (/<\s*script[\s>]/i.test(markup)) {
-    throw new Error('SVG com <script> não é aceito: o arquivo sai daqui para outros lugares.')
+    throw new Error('SVG with <script> is not accepted: the file leaves here to other places.')
   }
   if (/\son\w+\s*=/i.test(markup)) {
-    throw new Error('SVG com manipulador de evento (onload, onclick…) não é aceito.')
+    throw new Error('SVG with an event handler (onload, onclick…) is not accepted.')
   }
 }

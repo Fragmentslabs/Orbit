@@ -1,13 +1,13 @@
 /**
- * Triagem de rótulos e métricas do piloto — puro: sem modelo, sem I/O, sem
- * memórias reais. É a parte do avaliador que decide *quais* cenários entram em
- * cada denominador, e por isso precisa ser testável sozinha.
+ * Label triage and pilot metrics — pure: no model, no I/O, no
+ * real memories. It is the part of the evaluator that decides *which* scenarios enter
+ * each denominator, and that is why it has to be testable on its own.
  *
- * Regra central: um cenário não revisado NUNCA é interpretado como "nenhuma
- * memória". Ele simplesmente não entra em nenhuma conta.
+ * Central rule: an unreviewed scenario is NEVER interpreted as "no
+ * memory". It simply does not enter any count.
  */
 
-/** Decisões aceitas como rótulo. Qualquer outra coisa = decisão ausente. */
+/** Decisions accepted as a label. Anything else = missing decision. */
 export const DECISIONS = ['inject', 'pointer', 'none'] as const
 export type Decision = (typeof DECISIONS)[number]
 
@@ -27,30 +27,30 @@ export interface QueueEntry {
 }
 
 export interface Triage {
-  /** entradas presentes no arquivo, incluindo as descartadas */
+  /** entries present in the file, including the discarded ones */
   total: number
-  /** no lote, mas ausentes do arquivo (export omitiu) */
+  /** in the batch, but absent from the file (the export omitted them) */
   notInFile: string[]
-  /** no arquivo, sem consulta escrita */
+  /** in the file, with no query written */
   unreviewed: string[]
-  /** marcados como inconclusivos pelo revisor */
+  /** flagged as inconclusive by the reviewer */
   inconclusive: string[]
-  /** id que não existe no lote (rótulo órfão de um lote anterior) */
+  /** id that does not exist in the batch (orphan label from a previous batch) */
   invalidId: string[]
-  /** memória-alvo que não existe mais no acervo */
+  /** target memory that no longer exists in the pool */
   invalidTarget: string[]
-  /** revisados e válidos, mas sem decisão escolhida */
+  /** reviewed and valid, but with no decision chosen */
   missingDecision: string[]
-  /** base do ranking: consulta + alvo válido */
+  /** ranking basis: query + valid target */
   valid: LabelEntry[]
-  /** base das métricas de decisão: válidos e com decisão */
+  /** decision-metric basis: valid and with a decision */
   decided: LabelEntry[]
 }
 
 /**
- * Separa os rótulos em conjuntos explícitos. A ordem das checagens importa:
- * id órfão é descartado antes de tudo (não sabemos a qual cenário pertence),
- * consulta vazia é "não revisado", e alvo inexistente é erro de dados.
+ * Splits the labels into explicit sets. The order of the checks matters:
+ * an orphan id is discarded before anything else (we do not know which scenario it belongs to),
+ * an empty query is "not reviewed", and a nonexistent target is a data error.
  */
 export function triage(labels: LabelEntry[], queue: QueueEntry[], corpusIds: Set<string>): Triage {
   const byId = new Map(queue.map((q) => [q.id, q]))
@@ -119,20 +119,20 @@ export interface PilotReport {
     n: number
     lexical: RankSummary
     hybrid: RankSummary
-    /** alvo no top-5 do híbrido e fora do top-5 do lexical */
+    /** target in the hybrid's top-5 and out of the lexical top-5 */
     hybOnly: string[]
-    /** alvo no top-5 do lexical e fora do top-5 do híbrido */
+    /** target in the lexical top-5 and out of the hybrid top-5 */
     lexOnly: string[]
-    /** alvo no top-5 dos dois */
+    /** target in both top-5s */
     both: string[]
-    /** alvo fora do top-5 dos dois */
+    /** target out of both top-5s */
     neither: string[]
   }
   noMemory: {
     n: number
-    /** consultas que não precisam de memória e receberam candidato do lexical */
+    /** queries that need no memory and got a candidate from the lexical search */
     lexReturned: number
-    /** ... e cujo topo do híbrido passou do piso calibrado */
+    /** ... and whose hybrid top went past the calibrated floor */
     hybAboveFloor: number
   }
   decision: Array<{ expected: Decision; n: number; match: number; tiers: Record<string, number> }>
@@ -160,8 +160,8 @@ function summariseRank(rows: RankRow[], pick: (r: RankRow) => number | null): Ra
 }
 
 /**
- * Agrega as linhas já calculadas. `floor` é o piso de ruído do acervo, usado só
- * para dizer se o topo do híbrido passaria do limiar de ponteiro.
+ * Aggregates the rows already computed. `floor` is the pool's noise floor, used only
+ * to say whether the hybrid top would pass the pointer threshold.
  */
 export function summarize(rows: RankRow[], floor: number): PilotReport {
   const targets = rows.filter((r) => r.role !== 'no-memory' && r.memoryId)

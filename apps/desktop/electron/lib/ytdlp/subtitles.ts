@@ -1,18 +1,20 @@
 /**
- * Legendas como TEXTO: o caminho barato da transcrição.
+ * Subtitles as TEXT: the cheap path of transcription.
  *
- * Quando o site já entrega legenda (o YouTube entrega em quase tudo, manual ou
- * automática), não faz sentido baixar o áudio inteiro e passar pelo motor de
- * ditado — a legenda sai em segundos e é mais fiel, porque vem de onde o
- * próprio site reconheceu a fala. Mas legenda de site não é texto limpo:
+ * When the site already delivers subtitles (YouTube delivers them for almost
+ * everything, manual or automatic), it makes no sense to download the whole audio and
+ * run it through the dictation engine — the subtitle comes out in seconds and is more
+ * faithful, because it comes from where the site itself recognized the speech. But
+ * site subtitles are not clean text:
  *
- *  - o `.vtt` automático do YouTube é uma JANELA que rola, com a mesma linha
- *    repetida em vários trechos seguidos (sem deduplicar, o texto sai gaguejando);
- *  - vêm tags (`<c>`, `<00:00:01.000>`), entidades HTML e marcação de posição.
+ *  - YouTube's automatic `.vtt` is a scrolling WINDOW, with the same line repeated
+ *    across several consecutive chunks (without deduplicating, the text comes out
+ *    stuttering);
+ *  - tags come along (`<c>`, `<00:00:01.000>`), HTML entities and position markup.
  *
- * Este módulo resolve isso e devolve trechos com tempo — o mesmo formato que a
- * transcrição local usa —, para o texto corrido e a lista com timestamps
- * saírem da MESMA leitura.
+ * This module solves that and returns chunks with timing — the same format the local
+ * transcription uses — so that the running text and the list with timestamps come out
+ * of the SAME reading.
  */
 
 export interface SubtitleCue {
@@ -47,7 +49,7 @@ export function decodeEntities(text: string): string {
   })
 }
 
-/** Uma linha de legenda sem marcação: tags, posição ASS, entidades e espaços. */
+/** A subtitle line without markup: tags, ASS position, entities and spaces. */
 export function cleanCueLine(line: string): string {
   return decodeEntities(
     line
@@ -71,7 +73,7 @@ export function subtitleFormatOf(file: string, content = ''): SubtitleFormat {
   return 'unknown'
 }
 
-/** `00:01:02.345`, `01:02,345`, `62.3s`… tudo em ms. */
+/** `00:01:02.345`, `01:02,345`, `62.3s`… all in ms. */
 export function parseTimestamp(value: string): number | null {
   const text = value.trim()
   const timed = /(?:(\d{1,3}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/.exec(text)
@@ -89,8 +91,8 @@ export function parseTimestamp(value: string): number | null {
 
 function parseTimedText(content: string): SubtitleCue[] {
   const cues: SubtitleCue[] = []
-  // Blocos separados por linha em branco; o cabeçalho WEBVTT e os blocos de
-  // estilo (STYLE/NOTE) caem fora por não terem `-->`.
+  // Blocks separated by a blank line; the WEBVTT header and the style
+  // blocks (STYLE/NOTE) drop out for having no `-->`.
   for (const block of content.split(/\n{2,}/)) {
     const lines = block.split('\n')
     const arrow = lines.findIndex((line) => line.includes('-->'))
@@ -98,7 +100,7 @@ function parseTimedText(content: string): SubtitleCue[] {
     const [left, right] = lines[arrow].split('-->')
     const startMs = parseTimestamp(left ?? '')
     if (startMs === null) continue
-    // O lado direito pode trazer posição depois do tempo ("00:02.000 align:start").
+    // The right side may carry a position after the time ("00:02.000 align:start").
     const endMs = parseTimestamp(right ?? '') ?? startMs
     const body = lines
       .slice(arrow + 1)
@@ -126,7 +128,7 @@ function parseJson3(content: string): SubtitleCue[] {
   const cues: SubtitleCue[] = []
   for (const event of data.events ?? []) {
     const raw = (event.segs ?? []).map((seg) => seg.utf8 ?? '').join('')
-    // O json3 marca quebra de linha com um evento só de "\n".
+    // json3 marks a line break with an event that is only "\n".
     const text = cleanCueLine(raw)
     if (!text) continue
     const startMs = Math.max(0, Math.round(event.tStartMs ?? 0))
@@ -144,9 +146,9 @@ export function parseSubtitleFile(content: string, file = ''): SubtitleCue[] {
 }
 
 /**
- * As linhas de um trecho que ainda não apareceram nos anteriores — é isto que
- * desfaz a janela rolante do `.vtt` automático (a mesma frase em 3 trechos
- * seguidos vira uma frase só).
+ * The lines of a chunk that have not appeared in the previous ones — this is what
+ * undoes the scrolling window of the automatic `.vtt` (the same sentence in 3
+ * consecutive chunks becomes a single sentence).
  */
 function freshLines(cue: SubtitleCue, recent: string[]): string[] {
   return cue.text
@@ -156,7 +158,7 @@ function freshLines(cue: SubtitleCue, recent: string[]): string[] {
     .filter((line) => !recent.includes(line))
 }
 
-/** Texto corrido, com parágrafo novo onde a fala descansa (pausa ≥ 1,5 s). */
+/** Running text, with a new paragraph where the speech rests (pause ≥ 1.5 s). */
 export function cueText(cues: SubtitleCue[]): string {
   const paragraphs: string[] = []
   let lines: string[] = []
@@ -182,7 +184,7 @@ export function cueText(cues: SubtitleCue[]): string {
   return paragraphs.join('\n\n')
 }
 
-/** 0:42 / 1:02:09 — o mesmo formato das outras transcrições do app. */
+/** 0:42 / 1:02:09 — the same format as the app's other transcripts. */
 export function clockText(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
   const h = Math.floor(total / 3600)
@@ -191,7 +193,7 @@ export function clockText(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
 }
 
-/** Uma linha `[m:ss] texto` por trecho (sem repetir a linha herdada). */
+/** One `[m:ss] text` line per chunk (without repeating the inherited line). */
 export function timestampedCues(cues: SubtitleCue[]): string {
   const out: string[] = []
   let recent: string[] = []
@@ -205,9 +207,9 @@ export function timestampedCues(cues: SubtitleCue[]): string {
 }
 
 /**
- * Qual idioma usar entre os que o site oferece: primeiro os pedidos (código
- * exato, depois a família — `pt` acha `pt-BR`), depois qualquer um. Devolver o
- * idioma REAL importa: o relatório precisa dizer em que língua o texto saiu.
+ * Which language to use among the ones the site offers: first the requested ones
+ * (exact code, then the family — `pt` finds `pt-BR`), then any. Returning the REAL
+ * language matters: the report has to say in which language the text came out.
  */
 export function matchLanguage(available: string[], requested: string[]): string | null {
   if (!available.length) return null

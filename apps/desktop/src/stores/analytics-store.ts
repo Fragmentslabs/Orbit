@@ -26,7 +26,7 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
       const data = await analyticsApi.summary(get().range)
       set({ data, loading: false })
     } catch (err) {
-      console.error("[analytics] falha ao carregar:", err)
+      console.error("[analytics] failed to load:", err)
       set({ loading: false })
     }
   },

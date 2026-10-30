@@ -18,59 +18,59 @@ import {
 } from './pdf-raster'
 
 /**
- * Documentos com que a conversa trabalha — as FONTES.
+ * Documents the conversation works with — the SOURCES.
  *
- * O modo chat não tem `read` nem `bash`: até aqui, a ÚNICA forma de um
- * documento chegar ao modelo era o anexo despejar o texto inteiro numa
- * TextPart — que o toModelMessages reenvia a cada turno. Um PDF de 300
- * páginas ficava na janela de contexto para sempre, sendo cobrado de novo em
- * toda mensagem.
+ * Chat mode has no `read` and no `bash`: until here, the ONLY way for a
+ * document to reach the model was the attachment dumping the whole text into a
+ * TextPart — which toModelMessages resends on every turn. A 300-page PDF
+ * stayed in the context window forever, being charged again on
+ * every message.
  *
- * Agora o texto extraído é persistido AQUI e a mensagem carrega só um trecho
- * de abertura. O resto o agente alcança pelas tools doc_search/doc_read,
- * pagando apenas pelas páginas que realmente usar.
+ * Now the extracted text is persisted HERE and the message carries only an opening
+ * excerpt. The rest the agent reaches through the doc_search/doc_read tools,
+ * paying only for the pages it actually uses.
  *
- * Persistir é obrigatório, não otimização: o chip do anexo descarta os bytes
- * originais depois do turno (attachmentChip zera a url em tudo que não é
- * imagem). Sem esta cópia, o documento existiria só no turno em que foi
- * enviado e qualquer pergunta posterior não teria o que ler.
+ * Persisting is mandatory, not an optimization: the attachment chip discards the original
+ * bytes after the turn (attachmentChip zeroes the url on everything that is not an
+ * image). Without this copy, the document would exist only in the turn in which it was
+ * sent and any later question would have nothing to read.
  *
- * DOIS ESCOPOS, e a diferença é de INTENÇÃO:
+ * TWO SCOPES, and the difference is one of INTENTION:
  *
- * - `doc1, doc2…` — anexo da conversa. Você jogou um arquivo para perguntar
- *   uma coisa; isso não é declaração de corpus. Vale só ali, nos dois modos.
- * - `src1, src2…` — fonte da pasta da sidebar, declarada de propósito. Vale
- *   para todas as conversas daquela pasta.
+ * - `doc1, doc2…` — attachment of the conversation. You threw in a file to ask
+ *   something; that is not a declaration of a corpus. It counts only there, in both modes.
+ * - `src1, src2…` — source of the sidebar folder, declared on purpose. It counts
+ *   for every conversation in that folder.
  *
- * O prefixo do id é o que diz onde o arquivo mora, então resolver um id não
- * precisa procurar nos dois lugares. E ele nunca colide: dois chats da mesma
- * pasta podem ter cada um o seu doc2 sem se ver, porque o que é compartilhado
- * está no outro espaço de nomes.
+ * The id prefix is what says where the file lives, so resolving an id does not
+ * have to look in both places. And it never collides: two chats of the same
+ * folder can each have their own doc2 without seeing each other, because what is shared
+ * lives in the other namespace.
  *
- * Promover (anexo → fonte) é um ato explícito do usuário na aba Fontes. Nada
- * escorre para a pasta sozinho: fonte errada é silenciosa e muda respostas em
- * OUTRAS conversas, enquanto o clique a mais é visível na hora.
+ * Promoting (attachment → source) is an explicit act of the user in the Sources tab. Nothing
+ * leaks to the folder on its own: a wrong source is silent and changes answers in
+ * OTHER conversations, whereas the extra click is visible right away.
  */
 
 export interface SessionDocument {
-  /** Id curto usado pelo modelo nas tools — legível e barato. `docN` é anexo
-   *  da conversa; `srcN` é fonte compartilhada da pasta. */
+  /** Short id used by the model in the tools — readable and cheap. `docN` is a conversation
+   *  attachment; `srcN` is a shared source of the folder. */
   id: string
-  /** Conversa em que o documento entrou. Continua gravado depois de promovido:
-   *  é o que deixa a aba dizer de onde aquele arquivo veio. */
+  /** Conversation the document entered. It stays written after being promoted:
+   *  it is what lets the tab say where that file came from. */
   sessionId: string
   filename: string
   kind: DocumentKind
   totalPages: number
   totalChars: number
   truncated: boolean
-  /** Tamanho do arquivo original, para a aba mostrar o que ocupa em disco. */
+  /** Size of the original file, for the tab to show what it takes on disk. */
   sizeBytes?: number
   createdAt: number
-  /** true quando mora no escopo da pasta (id `srcN`). */
+  /** true when it lives in the folder scope (`srcN` id). */
   shared?: boolean
-  /** Endereço de origem, nas fontes de site — é o que o usuário reconhece e
-   *  o que permite abrir a página de novo. */
+  /** Origin address, in website sources — it is what the user recognizes and
+   *  what allows opening the page again. */
   sourceUrl?: string
 }
 
@@ -78,12 +78,12 @@ interface StoredDocument extends SessionDocument {
   pages: ExtractedDocument['pages']
 }
 
-/** Só aceita os ids que nós mesmos geramos — nada de path traversal vindo de
- *  uma chamada de tool que o modelo inventou. */
+/** It only accepts the ids we generated ourselves — no path traversal coming from
+ *  a tool call the model made up. */
 const SAFE_ID = /^(doc|src)[0-9]+$/
 const SAFE_SCOPE = /^[a-zA-Z0-9_-]+$/
 
-/** Onde um id mora, lido do próprio id. */
+/** Where an id lives, read from the id itself. */
 function isShared(id: string): boolean {
   return id.startsWith('src')
 }
@@ -93,24 +93,24 @@ function scopeDir(scope: string): string {
 }
 
 interface Scopes {
-  /** Escopo da conversa — sempre existe. */
+  /** Scope of the conversation — always exists. */
   session: string
-  /** Escopo da pasta da sidebar, quando a conversa está em uma. */
+  /** Scope of the sidebar folder, when the conversation is in one. */
   folder: string | null
 }
 
 /**
- * Os dois escopos visíveis para esta conversa.
+ * The two scopes visible to this conversation.
  *
- * O folderId é lido da sessão persistida no momento do uso, e não recebido
- * como parâmetro, porque ele muda quando o usuário arrasta o chat entre
- * pastas — mesmo motivo do resolveFolderId das tools de documento.
+ * The folderId is read from the session persisted at the time of use, and not received
+ * as a parameter, because it changes when the user drags the chat between
+ * folders — same reason as resolveFolderId in the document tools.
  */
 async function scopesOf(sessionId: string): Promise<Scopes> {
-  // Sem sessão ainda: é o RASCUNHO. O painel abre a fonte de um chat novo com
-  // sessionId vazio (a aba vive no balde órfão, que não carrega sessão), e sem
-  // este desvio o visualizador não achava o documento que a própria aba Fontes
-  // acabou de listar — a fonte existia e o clique nela abria "não encontrada".
+  // No session yet: it is the DRAFT. The panel opens the source of a new chat with
+  // an empty sessionId (the tab lives in the orphan bucket, which carries no session), and without
+  // this detour the viewer did not find the document that the Sources tab
+  // had just listed — the source existed and clicking it opened "not found".
   const session = SAFE_SCOPE.test(sessionId) ? sessionId : sessionId === '' ? DRAFT_SCOPE : ''
   const folderId = await documentFolderId(sessionId)
   return {
@@ -120,22 +120,22 @@ async function scopesOf(sessionId: string): Promise<Scopes> {
 }
 
 /**
- * Onde o rascunho guarda a pasta a que ele vai pertencer.
+ * Where the draft keeps the folder it will belong to.
  *
- * Fica DENTRO do escopo de documentos, e não como uma sessão: um registro de
- * sessão chamado "draft" apareceria como conversa fantasma na sidebar, porque
- * a lista de sessões é lida do storage. Aqui ele é invisível para tudo menos
- * para esta resolução, e some junto com o rascunho na adoção.
+ * It lives INSIDE the documents scope, and not as a session: a session record
+ * called "draft" would show up as a ghost conversation in the sidebar, because
+ * the session list is read from storage. Here it is invisible to everything except
+ * this resolution, and it disappears with the draft on adoption.
  */
 const DRAFT_FOLDER_FILE = 'folder.json'
 
 /**
- * A pasta que o chat novo vai herdar quando nascer.
+ * The folder the new chat will inherit when it is born.
  *
- * Um chat criado pelo "+" de uma pasta já pertence a ela antes da primeira
- * mensagem — o usuário escolheu a pasta ao clicar. Sem isto o rascunho não
- * teria pasta nenhuma, e a aba Fontes mostraria a área compartilhada vazia
- * justamente na conversa que foi aberta a partir de uma pasta.
+ * A chat created by the "+" of a folder already belongs to it before the first
+ * message — the user chose the folder when clicking. Without this the draft would
+ * have no folder at all, and the Sources tab would show the empty shared area
+ * precisely in the conversation that was opened from a folder.
  */
 export async function setDraftFolder(folderId: string | null): Promise<void> {
   const file = path.join(scopeDir(DRAFT_SCOPE), DRAFT_FOLDER_FILE)
@@ -147,7 +147,7 @@ export async function setDraftFolder(folderId: string | null): Promise<void> {
   await fsp.writeFile(file, JSON.stringify({ folderId }), 'utf8')
 }
 
-/** A pasta da conversa, quando ela está em uma. */
+/** The conversation's folder, when it is in one. */
 export async function documentFolderId(sessionId: string): Promise<string | null> {
   if (sessionId === DRAFT_SCOPE) {
     try {
@@ -165,7 +165,7 @@ export async function documentFolderId(sessionId: string): Promise<string | null
   }
 }
 
-/** Diretório em que um id mora, ou null quando aquele escopo não existe. */
+/** Directory in which an id lives, or null when that scope does not exist. */
 function dirForId(scopes: Scopes, id: string): string | null {
   const scope = isShared(id) ? scopes.folder : scopes.session
   return scope ? scopeDir(scope) : null
@@ -184,17 +184,17 @@ async function readStoredAt(dir: string | null, id: string): Promise<StoredDocum
 }
 
 /**
- * Rastro deixado no lugar de um id que mudou de área (`doc1.moved.json`).
+ * Trace left in place of an id that changed area (`doc1.moved.json`).
  *
- * O id é o ENDEREÇO do documento e também diz onde ele mora, então arrastar o
- * arquivo de "anexos desta conversa" para "fontes da pasta" troca doc1 por
- * src1 — e toda citação já escrita na conversa passa a apontar para um id que
- * não existe mais. Para o agente isso era aceitável (ele refaz o doc_list),
- * mas o que está gravado na conversa é do USUÁRIO: o clique que abria o
- * trecho citado simplesmente parava de abrir, sem nada explicando por quê.
+ * The id is the ADDRESS of the document and also says where it lives, so dragging the
+ * file from "attachments of this conversation" to "sources of the folder" swaps doc1 for
+ * src1 — and every citation already written in the conversation starts pointing to an id that
+ * no longer exists. For the agent that was acceptable (it redoes the doc_list),
+ * but what is written in the conversation belongs to the USER: the click that opened the
+ * cited excerpt simply stopped opening, with nothing explaining why.
  *
- * O rastro é o que faz o endereço antigo continuar valendo. Fica no escopo de
- * origem, ao lado de onde o arquivo estava, e é seguido na leitura.
+ * The trace is what keeps the old address valid. It stays in the origin
+ * scope, next to where the file was, and it is followed when reading.
  */
 const TRAIL_SUFFIX = '.moved.json'
 
@@ -213,22 +213,22 @@ async function readTrail(dir: string, id: string): Promise<Trail | null> {
   }
 }
 
-/** Onde um documento está HOJE, para um id que pode ser antigo. */
+/** Where a document is TODAY, for an id that may be old. */
 interface ResolvedDoc {
   id: string
   dir: string
 }
 
 /**
- * O documento que um id endereça agora — seguindo o rastro quando ele mudou
- * de área.
+ * The document that an id addresses now — following the trace when it changed
+ * area.
  *
- * Toda leitura passa por aqui, e não só o painel: o doc_read de um id citado
- * num turno anterior tem o mesmo problema, e devolver o texto certo é melhor
- * do que mandar o agente refazer a lista.
+ * Every read goes through here, and not only the panel: doc_read of an id cited
+ * in a previous turn has the same problem, and returning the right text is better
+ * than telling the agent to redo the list.
  *
- * O laço existe porque o arquivo pode ter ido e voltado (doc1 → src1 → doc2),
- * e o teto é contra um rastro circular vindo de disco corrompido.
+ * The loop exists because the file may have gone and come back (doc1 → src1 → doc2),
+ * and the ceiling is against a circular trace from a corrupted disk.
  */
 async function resolveDoc(sessionId: string, docId: string): Promise<ResolvedDoc | null> {
   if (!SAFE_ID.test(docId)) return null
@@ -239,9 +239,9 @@ async function resolveDoc(sessionId: string, docId: string): Promise<ResolvedDoc
     if (!dir) break
     if (await exists(path.join(dir, `${id}.json`))) return { id, dir }
     const trail = await readTrail(dir, id)
-    // Só segue para uma área que ESTA conversa já alcança. Um documento
-    // rebaixado para o escopo de outro chat continua fora do alcance deste —
-    // o rastro devolve o endereço, não permissão.
+    // It only follows to an area that THIS conversation already reaches. A document
+    // demoted to another chat's scope stays out of this one's reach —
+    // the trace returns the address, not permission.
     if (!trail || (trail.scope !== scopes.session && trail.scope !== scopes.folder)) break
     id = trail.to
   }
@@ -258,21 +258,22 @@ async function exists(file: string): Promise<boolean> {
 }
 
 /**
- * Resgate dos arquivos promovidos ANTES de o rastro existir.
+ * Rescue of the files promoted BEFORE the trace existed.
  *
- * Sem isto, a correção só valeria para movimentações futuras, e as conversas
- * que já perderam a referência continuariam com o clique morto para sempre —
- * que é justamente o estado que se quer consertar.
+ * Without this, the fix would only count for future moves, and the conversations
+ * that already lost the reference would keep the dead click forever —
+ * which is exactly the state to be fixed.
  *
- * Três condições, todas necessárias para não abrir o arquivo errado sob uma
- * citação (que seria pior do que não abrir nada):
+ * Three conditions, all necessary so as not to open the wrong file under a
+ * citation (which would be worse than opening nothing):
  *
- * - o id pedido é anexo (`docN`): só esse sentido perde o endereço assim;
- * - o contador da conversa confirma que aquele id chegou a ser distribuído
- *   aqui — o exemplo do prompt do sistema usa `doc1`, então um id inventado
- *   pelo modelo não é hipótese remota;
- * - existe UMA única fonte da pasta vinda desta conversa. Com duas não há
- *   como saber qual era qual, e aí o clique volta a não abrir nada.
+ * - the requested id is an attachment (`docN`): only that direction loses the address like
+ *   this;
+ * - the conversation counter confirms that the id was at some point issued
+ *   here — the system prompt example uses `doc1`, so an id made up
+ *   by the model is not a remote hypothesis;
+ * - there is a SINGLE folder source coming from this conversation. With two there is no
+ *   way to know which was which, and then the click goes back to opening nothing.
  */
 async function promotedBeforeTrails(
   scopes: Scopes,
@@ -285,7 +286,7 @@ async function promotedBeforeTrails(
   return fromHere.length === 1 ? { id: fromHere[0].id, dir: scopeDir(scopes.folder) } : null
 }
 
-/** Se um id chegou a ser distribuído neste escopo, pelo contador. */
+/** Whether an id was at some point issued in this scope, by the counter. */
 async function wasAllocated(scope: string, id: string): Promise<boolean> {
   if (!scope || !SAFE_SCOPE.test(scope)) return false
   const n = Number(id.slice(3))
@@ -296,12 +297,12 @@ async function wasAllocated(scope: string, id: string): Promise<boolean> {
     ) as { next?: number }
     if (typeof saved.next === 'number') return n < saved.next
   } catch {
-    // Escopo anterior ao contador: não há com que desmentir o id.
+    // Scope from before the counter: there is nothing to contradict the id.
   }
   return true
 }
 
-/** Documentos de um escopo, em ordem de anexação. */
+/** Documents of a scope, in order of attachment. */
 async function readScope(scope: string | null): Promise<SessionDocument[]> {
   if (!scope || !SAFE_SCOPE.test(scope)) return []
   const dir = scopeDir(scope)
@@ -320,10 +321,10 @@ async function readScope(scope: string | null): Promise<SessionDocument[]> {
 }
 
 /**
- * Tudo que esta conversa alcança: as fontes da pasta e os anexos dela.
+ * Everything this conversation reaches: the folder's sources and its own attachments.
  *
- * As fontes vêm primeiro porque são o corpus declarado — quando o agente
- * percorre a lista para decidir onde procurar, é por onde deve começar.
+ * The sources come first because they are the declared corpus — when the agent
+ * walks the list to decide where to look, that is where it should start.
  */
 export async function listSessionDocuments(sessionId: string): Promise<SessionDocument[]> {
   const scopes = await scopesOf(sessionId)
@@ -331,8 +332,8 @@ export async function listSessionDocuments(sessionId: string): Promise<SessionDo
   return [...shared, ...own]
 }
 
-/** A visão da aba Fontes: os dois grupos separados, com o que a UI precisa
- *  para rotular o escopo e mostrar o espaço em disco. */
+/** The view of the Sources tab: the two groups separated, with what the UI needs
+ *  to label the scope and show the disk usage. */
 export async function listSessionSources(sessionId: string): Promise<{
   shared: SessionDocument[]
   own: SessionDocument[]
@@ -354,28 +355,28 @@ export async function listSessionSources(sessionId: string): Promise<{
 }
 
 /**
- * Escopo do chat que ainda não existe.
+ * Scope of the chat that does not exist yet.
  *
- * Um chat novo é um RASCUNHO: a sessão só nasce ao enviar a primeira mensagem.
- * Sem um escopo próprio, anexar antes disso seria impossível — e obrigar a
- * mandar uma mensagem só para poder anexar inverte a ordem natural de "trago o
- * material, depois pergunto".
+ * A new chat is a DRAFT: the session is only born when the first message is sent.
+ * Without a scope of its own, attaching before that would be impossible — and forcing the user to
+ * send a message just to be able to attach inverts the natural order of "I bring the
+ * material, then I ask".
  *
- * É um escopo fixo, e não um por rascunho, pelo mesmo motivo do rascunho de
- * texto do input (draft-input.ts): a UI tem um chat novo por vez.
+ * It is a fixed scope, and not one per draft, for the same reason as the input's
+ * text draft (draft-input.ts): the UI has one new chat at a time.
  */
 export const DRAFT_SCOPE = 'draft'
 
-/** Contador por escopo. O arquivo é o que garante que o id nunca volte. */
+/** Counter per scope. The file is what guarantees the id never comes back. */
 const COUNTER_FILE = 'counter.json'
 
 /**
- * Próximo id do escopo, de um contador que só cresce.
+ * Next id of the scope, from a counter that only grows.
  *
- * Olhar só o que está no disco não basta: apagar o documento de maior número e
- * anexar outro devolveria o mesmo id, e a conversa já disse antes que "doc1 é
- * o contrato" — o agente leria o arquivo errado achando que leu o certo. O
- * maior id existente entra como piso para escopos criados antes do contador.
+ * Looking only at what is on disk is not enough: deleting the highest-numbered document and
+ * attaching another would return the same id, and the conversation already said before that "doc1 is
+ * the contract" — the agent would read the wrong file thinking it read the right one. The
+ * highest existing id enters as a floor for scopes created before the counter.
  */
 async function allocateId(scope: string, prefix: 'doc' | 'src'): Promise<string> {
   const dir = scopeDir(scope)
@@ -386,7 +387,7 @@ async function allocateId(scope: string, prefix: 'doc' | 'src'): Promise<string>
     }
     if (typeof saved.next === 'number' && saved.next > 0) next = saved.next
   } catch {
-    // Escopo novo, ou anterior ao contador: o piso vem do que está gravado.
+    // New scope, or from before the counter: the floor comes from what is written.
   }
   for (const doc of await readScope(scope)) {
     const n = Number(doc.id.slice(3))
@@ -398,11 +399,11 @@ async function allocateId(scope: string, prefix: 'doc' | 'src'): Promise<string>
 }
 
 /**
- * Extrai e guarda um documento. Retorna o registro sem as páginas — quem
- * chama monta o trecho de abertura com o que vem em `pages`.
+ * Extracts and stores a document. Returns the record without the pages — whoever
+ * calls builds the opening excerpt with what comes in `pages`.
  *
- * `shared` só é honrado quando a conversa está numa pasta; sem pasta não há
- * escopo maior para compartilhar e o documento fica na conversa.
+ * `shared` is only honored when the conversation is in a folder; without a folder there is no
+ * larger scope to share and the document stays in the conversation.
  */
 export async function saveSessionDocument(
   sessionId: string,
@@ -434,16 +435,16 @@ export async function saveSessionDocument(
 }
 
 /**
- * Grava o registro e, quando o tipo pede, o ARQUIVO ORIGINAL ao lado.
+ * Writes the record and, when the type asks for it, the ORIGINAL FILE next to it.
  *
- * Planilha, PDF e DOCX guardam o original por motivos diferentes. Na planilha,
- * o texto extraído serve para ler mas não para calcular: ali o valor já vem
- * formatado como ela o exibe, e somar a partir disso obrigaria a reparsear
- * "1.234,56" — onde mora o erro silencioso de locale. No PDF, o motivo é
- * rasterizar: um digitalizado não tem camada de texto, e a única forma de
- * lê-lo é renderizar a página e olhar. O DOCX entra pelo mesmo motivo com
- * outro fim: editar preservando a formatação só é possível partindo do
- * arquivo original.
+ * Spreadsheet, PDF and DOCX keep the original for different reasons. In the spreadsheet,
+ * the extracted text serves to read but not to calculate: there the value already comes
+ * formatted as the app displays it, and adding from that would force reparsing
+ * "1,234.56" — where the silent locale error lives. In the PDF, the reason is
+ * rasterizing: a scan has no text layer, and the only way to
+ * read it is to render the page and look. The DOCX enters for the same reason with
+ * another purpose: editing while preserving formatting is only possible starting from the
+ * original file.
  */
 async function writeDocument(
   dir: string,
@@ -458,17 +459,17 @@ async function writeDocument(
 }
 
 /**
- * Passa as fontes do rascunho para a sessão que acabou de nascer.
+ * Passes the draft's sources to the session that was just born.
  *
- * Chamado quando a primeira mensagem cria a sessão — mesmo momento em que o
- * app adota o texto do input, o toggle do Brain e o modelo escolhidos no
- * rascunho. Depois disso o escopo do rascunho fica vazio para o próximo chat
- * novo.
+ * Called when the first message creates the session — the same moment the
+ * app adopts the input text, the Brain toggle and the model chosen in the
+ * draft. After that the draft scope stays empty for the next new
+ * chat.
  *
- * Os ids são reatribuídos pelo contador da sessão em vez de renomear o
- * diretório: a sessão pode já ter documentos (raro, mas possível se algo
- * anexou antes), e um `doc1` chegando por cima de outro `doc1` apagaria o que
- * já estava lá.
+ * The ids are reassigned by the session counter instead of renaming the
+ * directory: the session may already have documents (rare, but possible if something
+ * attached before), and a `doc1` arriving over another `doc1` would erase what
+ * was already there.
  */
 export async function adoptDraftDocuments(sessionId: string): Promise<number> {
   if (!SAFE_SCOPE.test(sessionId) || sessionId === DRAFT_SCOPE) return 0
@@ -500,9 +501,9 @@ export async function adoptDraftDocuments(sessionId: string): Promise<number> {
         JSON.stringify({ ...stored, id, sessionId }),
         'utf8',
       )
-      // Quando a numeração não coincide, o chip da primeira mensagem já foi
-      // gravado com o id do rascunho: o rastro é o que mantém o clique dele
-      // vivo. Fica no escopo da sessão porque o do rascunho é apagado aqui.
+      // When the numbering does not match, the chip of the first message was already
+      // written with the draft id: the trace is what keeps its click
+      // alive. It stays in the session scope because the draft's is deleted here.
       if (id !== oldId) {
         await fsp
           .writeFile(
@@ -512,18 +513,18 @@ export async function adoptDraftDocuments(sessionId: string): Promise<number> {
           )
           .catch(() => {})
       }
-      // O arquivo original vai junto: sem ele o documento perderia a
-      // rasterização, o sheet_query e a edição preservando formatação.
+      // The original file goes along: without it the document would lose the
+      // rasterization, sheet_query and editing while preserving formatting.
       await fsp.rename(path.join(from, `${oldId}.bin`), path.join(target, `${id}.bin`)).catch(() => {})
-      // A miniatura também, pelo id novo: ela já foi renderizada enquanto o
-      // usuário montava o rascunho, e refazê-la abriria uma janela oculta
-      // justamente no instante em que o primeiro turno está começando.
+      // The thumbnail too, under the new id: it was already rendered while the
+      // user was assembling the draft, and redoing it would open a hidden window
+      // precisely at the moment the first turn is starting.
       await fsp
         .rename(path.join(from, `${oldId}.thumb.webp`), path.join(target, `${id}.thumb.webp`))
         .catch(() => {})
       adopted += 1
     } catch {
-      // Um arquivo ilegível não pode impedir a adoção dos outros.
+      // An unreadable file cannot prevent the adoption of the others.
     }
   }
   await fsp.rm(from, { recursive: true, force: true })
@@ -531,7 +532,7 @@ export async function adoptDraftDocuments(sessionId: string): Promise<number> {
   return adopted
 }
 
-/** Reconstrói o ExtractedDocument de um documento guardado. */
+/** Rebuilds the ExtractedDocument of a stored document. */
 export async function readSessionDocument(
   sessionId: string,
   docId: string,
@@ -556,20 +557,20 @@ export interface DocumentHit {
   docId: string
   filename: string
   page: number
-  /** Linha dentro da página (1-indexada) — é o que a citação aponta. */
+  /** Line inside the page (1-indexed) — it is what the citation points to. */
   lineNumber: number
   line: string
-  /** Tipo e rótulo da página, para o resultado dizer "aba3 (Custos)" em vez de
-   *  "p3" — numa planilha o número é índice de aba, não página. */
+  /** Page type and label, so the result says "tab3 (Costs)" instead of
+   *  "p3" — in a spreadsheet the number is a tab index, not a page. */
   kind: DocumentKind
   label?: string
 }
 
 /**
- * Busca nos documentos que a conversa alcança. Devolve no MÁXIMO uma
- * ocorrência por página: o objetivo é localizar onde ler, não trazer o texto —
- * trazer todas as ocorrências recriaria, por outro caminho, o despejo que esta
- * camada existe para evitar.
+ * Searches the documents the conversation reaches. Returns AT MOST one
+ * match per page: the goal is to locate where to read, not to bring the text —
+ * bringing every match would recreate, by another route, the dump that this
+ * layer exists to avoid.
  */
 export async function searchSessionDocuments(
   sessionId: string,
@@ -606,16 +607,16 @@ export async function searchSessionDocuments(
 }
 
 
-/** Extensão do arquivo original por tipo — só os que têm arquivo guardado. */
+/** Extension of the original file per type — only the ones with a stored file. */
 const ORIGINAL_EXT: Partial<Record<DocumentKind, string>> = {
   pdf: 'pdf',
   docx: 'docx',
 }
 
 /**
- * Caminho do arquivo ORIGINAL de uma fonte, para o protocolo servi-lo ao
- * painel. null quando o tipo não guarda original (texto colado, site) ou
- * quando o arquivo não está mais lá.
+ * Path of the ORIGINAL file of a source, for the protocol to serve it to the
+ * panel. null when the type does not keep an original (pasted text, website) or
+ * when the file is no longer there.
  */
 export async function sessionDocumentFile(
   sessionId: string,
@@ -642,30 +643,30 @@ async function originalOf(
 }
 
 /**
- * Todas as páginas em texto, para o painel rolar o documento inteiro.
+ * All pages in text, for the panel to scroll the whole document.
  *
- * Vai de uma vez, e não página a página: a leitura do MODELO é paginada
- * porque cada página custa contexto, mas quem está olhando a tela quer rolar.
- * O teto global da extração (8MB) já limita o pior caso.
+ * It goes all at once, and not page by page: the MODEL's reading is paginated
+ * because each page costs context, but whoever is looking at the screen wants to scroll.
+ * The global ceiling of the extraction (8MB) already limits the worst case.
  */
-/** O documento como o painel lateral o consome, venha de onde vier. */
+/** The document as the side panel consumes it, wherever it comes from. */
 export interface SessionDocumentView {
-  /** Id em que o pedido foi parar — pode não ser o pedido, quando o arquivo
-   *  mudou de área depois da citação. */
+  /** Id where the request ended up — it may not be the requested one, when the file
+   *  changed area after the citation. */
   id: string
-  /** O id ANTIGO, quando houve desvio. O painel mostra os dois: o endereço
-   *  citado e onde o arquivo está agora, para a mudança não parecer bug. */
+  /** The OLD id, when there was a detour. The panel shows both: the cited
+   *  address and where the file is now, so the change does not look like a bug. */
   movedFrom?: string
   filename: string
   kind: DocumentKind
   totalPages: number
   pages: { num: number; label?: string; lines: string[] }[]
   sourceUrl?: string
-  /** true quando existe arquivo original exibível — é o que decide se o modo
-   *  Original aparece. */
+  /** true when there is a displayable original file — it is what decides whether the
+   *  Original mode shows up. */
   hasOriginal: boolean
-  /** COMO o original é desenhado: o PDF em páginas de imagem, o .docx como
-   *  documento em HTML. Só existe junto com hasOriginal. */
+  /** HOW the original is drawn: the PDF as image pages, the .docx as a
+   *  document in HTML. It only exists together with hasOriginal. */
   originalKind?: 'pdf' | 'docx'
 }
 
@@ -687,23 +688,23 @@ export async function readSessionText(
       lines: page.text.split('\n'),
     })),
     sourceUrl: found.doc.sourceUrl,
-    // O modo Original existe para o que tem forma além do texto: o PDF é
-    // desenhado em páginas, e o .docx vira documento em HTML (docx-view.ts).
-    // Antes só o PDF entrava, e o .docx anexado abria como lista de linhas.
+    // The Original mode exists for what has a form beyond text: the PDF is
+    // drawn as pages, and the .docx becomes an HTML document (docx-view.ts).
+    // Before, only the PDF entered, and an attached .docx opened as a list of lines.
     ...(await originalOf(sessionId, docId, found.doc.kind)),
   }
 }
 
 /**
- * Páginas do PDF renderizadas em imagem, com o trecho citado marcado.
+ * PDF pages rendered as images, with the cited excerpt marked.
  *
- * É o que permite grifar DENTRO do PDF: o visualizador nativo do Chromium é
- * fechado — não dá para alcançar o conteúdo dele nem a sua busca — então a
- * página é desenhada por nós e o destaque vai por cima, nas coordenadas que o
- * pdfjs dá para o texto.
+ * It is what allows highlighting INSIDE the PDF: Chromium's native viewer is
+ * closed — you cannot reach its content nor its search — so the
+ * page is drawn by us and the highlight goes on top, at the coordinates that
+ * pdfjs gives for the text.
  *
- * Em lote porque cada chamada abre uma janela oculta: pedir de cinco em cinco
- * é uma janela a cada cinco páginas, em vez de uma por página rolada.
+ * In batches because each call opens a hidden window: asking five at a time
+ * is one window per five pages, instead of one per scrolled page.
  */
 export async function renderSessionPages(
   sessionId: string,
@@ -745,8 +746,8 @@ export async function renderSessionPages(
 }
 
 /**
- * Manda a fonte para a impressora. Só as que têm arquivo: um trecho colado
- * não tem nada para imprimir além do texto, que sai pelo baixar.
+ * Sends the source to the printer. Only the ones with a file: a pasted excerpt
+ * has nothing to print beyond the text, which comes out through download.
  */
 export async function printSessionDocument(
   sessionId: string,
@@ -754,8 +755,8 @@ export async function printSessionDocument(
 ): Promise<{ ok: boolean; error?: string }> {
   const source = await sessionDocumentFile(sessionId, docId)
   if (!source) return { ok: false, error: await t('sources.error.noFileToPrint') }
-  // Mesma regra do documento da galeria: o Chromium só pagina PDF. Com .docx
-  // ele baixaria o arquivo em vez de abrir o diálogo de impressão.
+  // Same rule as the gallery document: Chromium only paginates PDF. With .docx
+  // it would download the file instead of opening the print dialog.
   if (source.ext !== 'pdf') {
     return { ok: false, error: await t('sources.error.onlyPdfPrint') }
   }
@@ -764,11 +765,11 @@ export async function printSessionDocument(
 }
 
 /**
- * Salva a fonte em disco, onde o usuário escolher.
+ * Saves the source to disk, where the user chooses.
  *
- * Nas fontes com arquivo é uma cópia do ORIGINAL, byte a byte — não do que o
- * painel mostra. Nas que nasceram texto (trecho colado, página baixada) o
- * texto extraído é o que existe, e sai como .txt.
+ * For sources with a file it is a copy of the ORIGINAL, byte for byte — not of what the
+ * panel shows. For the ones that were born as text (pasted excerpt, downloaded page) the
+ * extracted text is what exists, and it comes out as .txt.
  */
 export async function exportSessionDocument(
   sessionId: string,
@@ -802,10 +803,10 @@ export async function exportSessionDocument(
 }
 
 /**
- * Bytes originais do documento — a fonte tipada do sheet_query, a fonte da
- * rasterização do pdf_view_page e a base da cópia editada do docx_edit. null
- * quando o tipo não guarda original ou quando o anexo é anterior a esta cópia
- * existir; nesse caso quem chama avisa em vez de devolver resultado errado.
+ * Original bytes of the document — the typed source of sheet_query, the source of the
+ * rasterization of pdf_view_page and the base of the edited copy of docx_edit. null
+ * when the type does not keep an original or when the attachment predates this copy
+ * existing; in that case the caller warns instead of returning a wrong result.
  */
 export async function readSessionDocumentBytes(
   sessionId: string,
@@ -821,17 +822,17 @@ export async function readSessionDocumentBytes(
 }
 
 /**
- * Miniatura da primeira página, como data URL — o que a aba Fontes põe no
- * lugar do ícone do tipo.
+ * Thumbnail of the first page, as a data URL — what the Sources tab puts in
+ * place of the type icon.
  *
- * Gerada uma vez e guardada em `<id>.thumb.webp`, porque o caminho do PDF
- * passa por rasterizar a página numa janela oculta: caro demais para repetir
- * a cada vez que a aba monta. O documento é imutável depois de salvo, então o
- * cache nunca precisa ser invalidado — só acompanhado quando o arquivo muda
- * de escopo ou é apagado.
+ * Generated once and stored in `<id>.thumb.webp`, because the PDF path
+ * goes through rasterizing the page in a hidden window: too expensive to repeat
+ * every time the tab mounts. The document is immutable after being saved, so the
+ * cache never needs to be invalidated — only followed when the file changes
+ * scope or is deleted.
  *
- * Best-effort de ponta a ponta: qualquer falha devolve null e a linha da lista
- * volta a mostrar o ícone, que é exatamente o estado anterior a isto existir.
+ * Best-effort from end to end: any failure returns null and the list row
+ * goes back to showing the icon, which is exactly the state before this existed.
  */
 export async function sessionDocumentThumb(sessionId: string, docId: string): Promise<string | null> {
   const resolved = await resolveDoc(sessionId, docId)
@@ -843,7 +844,7 @@ export async function sessionDocumentThumb(sessionId: string, docId: string): Pr
   try {
     return asDataUrl(await fsp.readFile(cached))
   } catch {
-    // Sem cache ainda — segue para gerar.
+    // No cache yet — goes on to generate it.
   }
 
   const stored = await readStoredAt(dir, id)
@@ -854,14 +855,14 @@ export async function sessionDocumentThumb(sessionId: string, docId: string): Pr
     if (stored.kind === 'pdf') {
       const bytes = await fsp.readFile(path.join(dir, `${id}.bin`)).catch(() => null)
       if (bytes) {
-        // Escala baixa de propósito: o resultado é reduzido a 160px de largura
-        // logo em seguida, então renderizar grande só gastaria tempo.
+        // Low scale on purpose: the result is reduced to 160px of width
+        // right after, so rendering large would only waste time.
         const { pages } = await rasterizePdf(bytes, { pages: [1], scale: 0.6 })
         if (pages[0]) thumb = await pageThumb(pages[0].png)
       }
     }
-    // Vale também como plano B do PDF: um anexo antigo pode não ter o original
-    // guardado, e o texto extraído está sempre lá.
+    // It also works as a plan B for the PDF: an old attachment may not have the original
+    // stored, and the extracted text is always there.
     if (!thumb) thumb = await textThumb(stored.pages.map((p) => p.text).join('\n'))
   } catch {
     return null
@@ -873,22 +874,22 @@ export async function sessionDocumentThumb(sessionId: string, docId: string): Pr
 }
 
 /**
- * Arquivo de texto puro que a aba Fontes aceita como documento de TEXTO.
+ * Plain text file that the Sources tab accepts as a TEXT document.
  *
- * Fora de `EXTENSIONS` de propósito: `.md`/`.txt` não são documentos
- * "extraíveis" para o `read` do modo código, que tem de continuar entregando
- * esses arquivos crus. Aqui o destino é outro — virar fonte paginada da
- * conversa —, e o único requisito é o conteúdo ser texto de verdade.
+ * Outside `EXTENSIONS` on purpose: `.md`/`.txt` are not "extractable"
+ * documents for `read` in code mode, which has to keep delivering
+ * those files raw. Here the destination is another — becoming a paginated source of the
+ * conversation —, and the only requirement is that the content be real text.
  */
 const TEXT_SOURCE_EXT = /\.(md|markdown|mdx|txt)$/i
 
-/** Um Buffer é texto legível? NUL é o sinal mais confiável de binário. */
+/** Is a Buffer readable text? NUL is the most reliable sign of binary. */
 function looksLikeText(bytes: Buffer): boolean {
   if (bytes.includes(0)) return false
   return true
 }
 
-/** Adiciona um arquivo pela aba Fontes, sem passar por uma mensagem. */
+/** Adds a file through the Sources tab, without going through a message. */
 export async function addSessionDocument(
   sessionId: string,
   filename: string,
@@ -910,12 +911,12 @@ export async function addSessionDocument(
 }
 
 /**
- * Adiciona um trecho de texto colado como fonte.
+ * Adds a pasted excerpt of text as a source.
  *
- * Existe porque nem toda fonte é arquivo: o e-mail que alguém mandou, o
- * pedaço de uma norma, a transcrição de uma reunião. Colar isso numa mensagem
- * jogaria o texto inteiro no contexto de todo turno; como fonte, ele é
- * paginado e lido sob demanda igual aos outros.
+ * It exists because not every source is a file: the email someone sent, the
+ * piece of a regulation, the transcript of a meeting. Pasting that into a message
+ * would throw the whole text into the context of every turn; as a source, it is
+ * paginated and read on demand like the others.
  */
 export async function addSessionText(
   sessionId: string,
@@ -940,13 +941,13 @@ export async function addSessionText(
 }
 
 /**
- * Adiciona uma página da web como fonte: baixa, extrai o texto legível e
- * guarda como qualquer outro documento.
+ * Adds a web page as a source: downloads it, extracts the readable text and
+ * stores it like any other document.
  *
- * É uma FOTOGRAFIA do momento, não um link vivo — a página pode mudar depois,
- * e o que o agente lê continua sendo o que foi capturado. Isso é o que se
- * quer numa fonte de pesquisa (a citação tem que continuar valendo), e é o
- * oposto do webfetch, que serve justamente para ver o estado atual.
+ * It is a SNAPSHOT of the moment, not a live link — the page may change later,
+ * and what the agent reads remains what was captured. That is what is wanted in a
+ * research source (the citation has to keep counting), and it is the
+ * opposite of webfetch, which serves precisely to see the current state.
  */
 export async function addSessionUrl(
   sessionId: string,
@@ -972,14 +973,14 @@ export async function addSessionUrl(
 }
 
 /**
- * Move um documento entre os dois escopos — é o arrastar de uma área para a
- * outra na aba Fontes.
+ * Moves a document between the two scopes — it is the dragging from one area to the
+ * other in the Sources tab.
  *
- * O id MUDA junto com o escopo (doc5 → src2), porque é o prefixo que diz onde
- * o arquivo mora. No lugar do id antigo fica um RASTRO: sem ele, as citações
- * já escritas na conversa — e o chip do anexo, que guarda o id — apontariam
- * para um endereço vazio, e o clique do usuário pararia de abrir o documento
- * sem nada explicando por quê.
+ * The id CHANGES along with the scope (doc5 → src2), because it is the prefix that says where
+ * the file lives. In place of the old id a TRACE stays: without it, the citations
+ * already written in the conversation — and the attachment chip, which keeps the id — would point
+ * to an empty address, and the user's click would stop opening the document
+ * with nothing explaining why.
  */
 export async function setSessionDocumentShared(
   sessionId: string,
@@ -1007,18 +1008,18 @@ export async function setSessionDocumentShared(
     JSON.stringify({ ...stored, id, shared }),
     'utf8',
   )
-  // O original acompanha: sem ele o documento perderia o sheet_query, a
-  // rasterização e a edição preservando formatação só por ter mudado de área.
+  // The original goes along: without it the document would lose sheet_query, the
+  // rasterization and the editing while preserving formatting just for having changed area.
   await fsp.rename(path.join(from, `${docId}.bin`), path.join(dir, `${id}.bin`)).catch(() => {})
-  // A miniatura vai junto pelo id NOVO. Deixá-la para trás não só desperdiçaria
-  // a renderização — o id é reaproveitável dentro do escopo antigo, e o cache
-  // órfão viraria a capa de outro documento.
+  // The thumbnail goes along under the NEW id. Leaving it behind would not only waste
+  // the rendering — the id is reusable inside the old scope, and the orphan
+  // cache would become the cover of another document.
   await fsp
     .rename(path.join(from, `${docId}.thumb.webp`), path.join(dir, `${id}.thumb.webp`))
     .catch(() => {})
   await fsp.rm(path.join(from, `${docId}.json`), { force: true })
-  // O endereço antigo continua valendo: é o que está escrito nas citações da
-  // conversa, que não são reescritas em disco.
+  // The old address keeps counting: it is what is written in the citations of the
+  // conversation, which are not rewritten on disk.
   await fsp
     .writeFile(
       path.join(from, `${docId}${TRAIL_SUFFIX}`),
@@ -1030,7 +1031,7 @@ export async function setSessionDocumentShared(
   return { ok: true, id }
 }
 
-/** Remove um documento do escopo em que ele estiver. */
+/** Removes a document from the scope in which it is. */
 export async function removeSessionDocument(sessionId: string, docId: string): Promise<boolean> {
   if (!SAFE_ID.test(docId)) return false
   const dir = dirForId(await scopesOf(sessionId), docId)
@@ -1052,13 +1053,13 @@ async function scopeUsage(scope: string | null): Promise<number> {
   let total = 0
   try {
     for (const file of await fsp.readdir(dir)) {
-      // A miniatura é cache que nós geramos, não material do usuário: contá-la
-      // faria um texto colado de 2KB aparecer como o dobro do que ele é.
+      // The thumbnail is a cache we generate, not the user's material: counting it
+      // would make a pasted text of 2KB show up as twice what it is.
       if (file.endsWith('.thumb.webp')) continue
-      // Nem a pasta que o rascunho anotou: é marcador nosso, não material.
+      // Nor the folder the draft recorded: it is our marker, not material.
       if (file === DRAFT_FOLDER_FILE) continue
-      // Nem o rastro de um id que mudou de área — são dezenas de bytes de
-      // contabilidade nossa, e o arquivo já é contado no escopo de destino.
+      // Nor the trace of an id that changed area — they are dozens of bytes of
+      // our own bookkeeping, and the file is already counted in the destination scope.
       if (file.endsWith(TRAIL_SUFFIX)) continue
       const stat = await fsp.stat(path.join(dir, file)).catch(() => null)
       if (stat?.isFile()) total += stat.size
@@ -1070,11 +1071,11 @@ async function scopeUsage(scope: string | null): Promise<number> {
 }
 
 /**
- * Apaga os anexos de um chat excluído — só o escopo PRÓPRIO dele.
+ * Deletes the attachments of a deleted chat — only its OWN scope.
  *
- * O que ele tiver promovido a fonte da pasta fica: aquilo foi declarado corpus
- * e é compartilhado com as outras conversas, que não podem perder a base de
- * pesquisa porque um dos participantes saiu.
+ * Whatever it promoted to a folder source stays: that was declared a corpus
+ * and is shared with the other conversations, which cannot lose the research
+ * base because one of the participants left.
  */
 export async function deleteSessionDocuments(sessionId: string): Promise<void> {
   if (!SAFE_SCOPE.test(sessionId)) return
@@ -1082,10 +1083,10 @@ export async function deleteSessionDocuments(sessionId: string): Promise<void> {
 }
 
 /**
- * Apaga as fontes de uma pasta excluída. Os chats voltam para a raiz com os
- * anexos próprios intactos, mas o escopo da pasta deixa de ser alcançável por
- * qualquer um deles — manter os arquivos seria exatamente o lixo órfão que
- * esta limpeza existe para evitar.
+ * Deletes the sources of a deleted folder. The chats go back to the root with their
+ * own attachments intact, but the folder scope stops being reachable by
+ * any of them — keeping the files would be exactly the orphan garbage that
+ * this cleanup exists to avoid.
  */
 export async function deleteFolderDocuments(folderId: string): Promise<void> {
   if (!SAFE_SCOPE.test(folderId)) return
@@ -1093,12 +1094,12 @@ export async function deleteFolderDocuments(folderId: string): Promise<void> {
 }
 
 /**
- * Avisa as janelas que o conjunto de fontes mudou. A aba Fontes é a única
- * assinante: sem isto, anexar um PDF pela conversa deixaria a aba aberta ao
- * lado mostrando a lista velha.
+ * Warns the windows that the set of sources changed. The Sources tab is the only
+ * subscriber: without this, attaching a PDF from the conversation would leave the tab open
+ * next to it showing the old list.
  *
- * Emitido direto daqui, como o artifact:updated do media.ts, para não criar
- * ciclo de import com a camada de broadcast.
+ * Emitted straight from here, like artifact:updated in media.ts, to avoid creating
+ * an import cycle with the broadcast layer.
  */
 function notifyDocumentsChanged(): void {
   for (const win of BrowserWindow.getAllWindows()) {

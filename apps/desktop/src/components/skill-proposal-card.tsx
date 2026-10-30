@@ -8,13 +8,13 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { useSkillsStore } from "@/src/stores/skills-store"
 
 /**
- * Card da proposta de skill (tool create_skill): a skill fica em staging até
- * o usuário clicar "Adicionar skill". Estado derivado do skills-store —
- * pendente → botões; aprovada → check; dispensada → nota.
+ * Card of the skill proposal (tool create_skill): the skill stays in staging until
+ * the user clicks "Add skill". State derived from the skills-store —
+ * pending → buttons; approved → check; dismissed → note.
  */
 
 function slugOf(part: ToolPart): string | null {
-  // O output da tool confirma o slug sanitizado ("Skill @<slug> proposta…")
+  // The tool output confirms the sanitized slug ("Skill @<slug> proposed…")
   const fromOutput = part.output?.match(/@([a-z0-9_]+)/)?.[1]
   if (fromOutput) return fromOutput
   const raw = (part.input?.slug ?? part.input?.name) as string | undefined
@@ -35,8 +35,8 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
     void initialize()
   }, [initialize])
 
-  // A proposta é estagiada DURANTE a execução da tool; quando ela termina,
-  // re-sincroniza com o disco sem depender do evento skills:changed.
+  // The proposal is staged DURING the tool execution; when it ends,
+  // it re-syncs with the disk without depending on the skills:changed event.
   useEffect(() => {
     if (part.state === "done") void refresh()
   }, [part.state, refresh])
@@ -52,8 +52,8 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
   const proposal = pending.find((p) => p.slug === slug)
   const installed = skills.some((s) => s.slug === slug)
   const wasDiscarded = discarded.includes(slug)
-  // Botões sempre que a skill não está instalada e o usuário não recusou —
-  // "dispensada" só aparece com recusa real registrada no store.
+  // Buttons whenever the skill is not installed and the user did not refuse it —
+  // "dismissed" only appears with a real refusal recorded in the store.
   const actionable = !installed && (proposal !== undefined || !wasDiscarded)
   const name = (part.input?.name as string) ?? proposal?.name ?? slug
   const description = (part.input?.description as string) ?? proposal?.description ?? ""

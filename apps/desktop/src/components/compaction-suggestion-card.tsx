@@ -5,14 +5,14 @@ import { chatApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
- * Oferta ao FIM do turno, quando a próxima compactação passaria do limite de
- * resumos (ver maybeSuggestCompaction no engine). Uma ou duas compactações
- * funcionam bem; da terceira em diante o resumo já é um resumo de resumo, e o
- * começo da conversa — o porquê das decisões — vai embora primeiro.
+ * Offer at the END of the turn, when the next compaction would go past the
+ * summary limit (see maybeSuggestCompaction in the engine). One or two compactions
+ * work well; from the third on the summary is already a summary of a summary, and the
+ * beginning of the conversation — the why of the decisions — goes away first.
  *
- * Fica NA CONVERSA, no fim do fluxo, como os outros cards: não ocupa a faixa
- * fixa acima do input. É oferta, não bloqueio — ignorada, a compactação
- * automática do próximo turno roda como sempre.
+ * It stays IN THE CONVERSATION, at the end of the flow, like the other cards: it does not take the fixed
+ * strip above the input. It is an offer, not a block — ignored, the automatic compaction
+ * of the next turn runs as always.
  */
 export function CompactionSuggestionCard({
   sessionId,
@@ -20,9 +20,9 @@ export function CompactionSuggestionCard({
   threshold,
 }: {
   sessionId: string
-  /** Compactações já feitas (= resumos no histórico) */
+  /** Compactions already done (= summaries in the history) */
   summaries: number
-  /** A partir de quantas o card aparece (configuração) */
+  /** From how many on the card appears (setting) */
   threshold: number
 }) {
   const { t } = useTranslation()
@@ -34,8 +34,8 @@ export function CompactionSuggestionCard({
     setFailed(false)
     try {
       await chatApi.compact(sessionId)
-      // A compactação em si muda a contagem de resumos e já esconde o card;
-      // dispensar aqui cobre a corrida (evento de mensagens ainda a caminho).
+      // The compaction itself changes the summary count and already hides the card;
+      // dismissing here covers the race (message event still on the way).
       useSessionStore.getState().dismissCompactionSuggestion(sessionId)
     } finally {
       setBusy(null)
@@ -46,8 +46,8 @@ export function CompactionSuggestionCard({
     setBusy("new")
     setFailed(false)
     try {
-      // O brief é gerado no main (modelo auxiliar), a partir do resumo atual
-      // mais a cauda da conversa. Sem ele não há como começar o chat novo.
+      // The brief is generated in the main process (auxiliary model), from the current summary
+      // plus the tail of the conversation. Without it there is no way to start the new chat.
       const result = await chatApi.continuationBrief(sessionId)
       if (!result) {
         setFailed(true)

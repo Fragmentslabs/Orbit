@@ -1,8 +1,8 @@
 /**
- * Parser de unified diff (saída de `git diff` / `git show`).
- * Compartilhado entre a aba Diff e o visualizador de arquivos das Pastas:
- * ambos renderizam o mesmo modelo de hunks com linhas adicionadas (verde) e
- * removidas (vermelho).
+ * Unified diff parser (output of `git diff` / `git show`).
+ * Shared between the Diff tab and the file viewer of the Folders:
+ * both render the same model of hunks with added (green) and
+ * removed (red) lines.
  */
 
 export interface Hunk {
@@ -50,8 +50,8 @@ export function parsePatch(patch: string): FileDiff[] {
 
       const lines: Hunk["lines"] = [];
       const bodyLines = hunkBlock.split("\n").slice(1); // skip @@ line
-      // O split do corpo deixa um "" fantasma no fim (o \n final do patch):
-      // não é uma linha do arquivo, só desalinha números e índices.
+      // The split of the body leaves a ghost "" at the end (the trailing \n of the patch):
+      // it is not a line of the file, it only knocks the numbers and indices out of alignment.
       if (bodyLines.length > 0 && bodyLines[bodyLines.length - 1] === "") {
         bodyLines.pop();
       }

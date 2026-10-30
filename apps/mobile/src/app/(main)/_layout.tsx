@@ -14,7 +14,7 @@ export default function MainLayout() {
   const isDesktop = breakpoint === 'desktop'
   const rightPanelOpen = useWorkspaceStore((s) => s.rightPanelOpen)
   const sidebarPinned = useWorkspaceStore((s) => s.sidebarPinned)
-  // Swipe da borda esquerda abre o drawer; no desktop ele já é fixo/hover.
+  // Swipe from the left edge opens the drawer; on desktop it is already fixed/hover.
   const swipeHandlers = useSidebarSwipe(!isDesktop)
 
   return (
@@ -32,17 +32,17 @@ export default function MainLayout() {
             <Stack.Screen name="memories" />
             <Stack.Screen name="media" />
 
-            <Stack.Screen name="rotinas/index" />
-            <Stack.Screen name="rotinas/nova" />
-            <Stack.Screen name="rotinas/[id]" />
-            <Stack.Screen name="rotinas/editar/[id]" />
+            <Stack.Screen name="routines/index" />
+            <Stack.Screen name="routines/new" />
+            <Stack.Screen name="routines/[id]" />
+            <Stack.Screen name="routines/[id]/edit" />
 
-            <Stack.Screen name="esteira/index" />
-            <Stack.Screen name="esteira/nova" />
-            <Stack.Screen name="esteira/[id]/index" />
-            <Stack.Screen name="esteira/[id]/editar" />
-            <Stack.Screen name="esteira/[id]/task/nova" />
-            <Stack.Screen name="esteira/[id]/task/[taskId]" />
+            <Stack.Screen name="pipeline/index" />
+            <Stack.Screen name="pipeline/new" />
+            <Stack.Screen name="pipeline/[id]/index" />
+            <Stack.Screen name="pipeline/[id]/edit" />
+            <Stack.Screen name="pipeline/[id]/task/new" />
+            <Stack.Screen name="pipeline/[id]/task/[taskId]" />
 
             <Stack.Screen name="usage" />
             <Stack.Screen name="tools" />
@@ -65,10 +65,10 @@ export default function MainLayout() {
 
       <Sidebar />
 
-      {/* Folha da memória citada: montada UMA vez para o app inteiro (como a
-          Sidebar) — os chips de qualquer tela só apontam o id no store. Se
-          ficasse dentro do ChatScreen, um chip na tela de Memórias não abriria
-          nada; duas cópias montadas dariam dois modais para o mesmo estado. */}
+      {/* Sheet of the cited memory: mounted ONCE for the whole app (like the
+          Sidebar) — chips from any screen only point the id in the store. If it
+          lived inside the ChatScreen, a chip on the Memories screen would open
+          nothing; two mounted copies would give two modals for the same state. */}
       <MemorySheet />
     </View>
   )

@@ -9,9 +9,9 @@ import { createRegistry, type Registry } from './registry'
 import type { AxNode, TreeSnapshot } from './types'
 
 /**
- * O contrato visto pelo lado do Windows, com o driver falso: papéis da UIA
- * traduzidos, `ref` indo junto do `path`, identidade conferida no papel nativo
- * e o clique por mensagem de janela quando a UIA não tem o que apertar.
+ * The contract seen from the Windows side, with the fake driver: UIA roles
+ * translated, `ref` going along with the `path`, identity checked on the native role
+ * and the click through a window message when UIA has nothing to press.
  */
 
 let png: Buffer
@@ -38,7 +38,7 @@ function uia(over: Partial<AxNode> & Pick<AxNode, 'id' | 'parent' | 'depth' | 'p
   }
 }
 
-/** Uma janela do Bloco de Notas do Windows 11, como o host manda (frame em pixel físico). */
+/** A Windows 11 Notepad window, as the host sends it (frame in physical pixels). */
 function notepadTree(): TreeSnapshot {
   return {
     nodes: [
@@ -59,7 +59,7 @@ function notepadTree(): TreeSnapshot {
 }
 
 beforeAll(async () => {
-  // Escala 1: o screenshot tem o tamanho do frame físico.
+  // Scale 1: the screenshot has the size of the physical frame.
   png = await sharp({ create: { width: 1000, height: 800, channels: 3, background: '#ffffff' } }).png().toBuffer()
 })
 
@@ -87,8 +87,8 @@ const look = () =>
 
 const run = (req: Partial<ActRequest>) => act(driver, registry, { sessionId: 'w1', action: 'left_click', app: 'notepad', pointer: 'directed', ...req })
 
-describe('papéis da UIA', () => {
-  it('traduz para o vocabulário do AX', () => {
+describe('UIA roles', () => {
+  it('translates to the AX vocabulary', () => {
     expect(normalizeRole({ role: 'Button', subrole: null, url: null })).toBe('AXButton')
     expect(normalizeRole({ role: 'Edit', subrole: null, url: null })).toBe('AXTextField')
     expect(normalizeRole({ role: 'Hyperlink', subrole: null, url: null })).toBe('AXLink')
@@ -96,11 +96,11 @@ describe('papéis da UIA', () => {
     expect(normalizeRole({ role: 'Document', subrole: 'editable', url: null })).toBe('AXTextArea')
     expect(normalizeRole({ role: 'Document', subrole: 'editable', url: 'https://a.com' })).toBe('AXWebArea')
     expect(normalizeRole({ role: 'NovoTipo', subrole: null, url: null })).toBe('AXUnknown')
-    // Papel do macOS passa direto.
+    // A macOS role passes through.
     expect(normalizeRole({ role: 'AXTextArea', subrole: 'AXUnknown', url: null })).toBe('AXTextArea')
   })
 
-  it('Pane vazio some, os handles levam ref e papel nativo', () => {
+  it('an empty Pane disappears, the handles carry ref and native role', () => {
     const formatted = formatTree(notepadTree(), windowSpace([100, 50, 1000, 800], 1, 1280))
     expect(formatted.lines[0]).toBe('0 window "Sem título - Bloco de Notas" @0,0 1000x800')
     expect(formatted.lines[1]).toBe('\t1 text area = "Olá" [focused] @0,50 1000x600')
@@ -112,8 +112,8 @@ describe('papéis da UIA', () => {
   })
 })
 
-describe('act no Windows (modo dirigido só pela UIA)', () => {
-  it('ponto sem nada para apertar pela UIA é recusado, como no macOS', async () => {
+describe('act on Windows (steered mode driven only by UIA)', () => {
+  it('a point with nothing to press through UIA is refused, as on macOS', async () => {
     await look()
     driver.hitResult = { done: null, node: { ...notepadTree().nodes[1] } }
     await expect(run({ x: 500, y: 400 })).rejects.toThrow(/Nothing clickable/)
@@ -127,9 +127,9 @@ describe('act no Windows (modo dirigido só pela UIA)', () => {
   })
 })
 
-// O driver real do Windows deixa messageMouse desligado; estes casos ligam a
-// capability para cobrir o caminho genérico do act.ts (um driver futuro que o tenha).
-describe('act com a capability messageMouse', () => {
+// The real Windows driver leaves messageMouse off; these cases turn the
+// capability on to cover the generic path of act.ts (a future driver that has it).
+describe('act with the messageMouse capability', () => {
   beforeEach(() => {
     driver = createFakeDriver(png, { platform: 'win32', messageMouse: true })
     driver.tree = async () => notepadTree()
@@ -138,7 +138,7 @@ describe('act com a capability messageMouse', () => {
       windows: [{ id: 0x40a2c, pid: FAKE_PID, title: 'Sem título - Bloco de Notas', frame: [100, 50, 1000, 800] }],
     })
   })
-  it('elemento por índice manda ref, path de fallback, HWND e a identidade no papel nativo', async () => {
+  it('an element by index sends ref, fallback path, HWND and the identity in the native role', async () => {
     await look()
     await run({ element: 2 })
     expect(driver.actions[0]).toEqual({
@@ -153,7 +153,7 @@ describe('act com a capability messageMouse', () => {
     })
   })
 
-  it('ponto sem nada para apertar pela UIA vira clique por mensagem de janela (sem mover o cursor)', async () => {
+  it('a point with nothing to press through UIA becomes a window-message click (without moving the cursor)', async () => {
     await look()
     driver.hitResult = { done: null, node: { ...notepadTree().nodes[1] } }
     const out = await run({ x: 500, y: 400 })
@@ -162,7 +162,7 @@ describe('act com a capability messageMouse', () => {
     expect(out.summary).toMatch(/window message/)
   })
 
-  it('no macOS o mesmo caso continua recusando (o AppKit ignora mouse por pid)', async () => {
+  it('on macOS the same case keeps refusing (AppKit ignores mouse by pid)', async () => {
     const mac = createFakeDriver(png)
     const reg = createRegistry()
     await observe(mac, reg, { sessionId: 'm', app: 'TextEdit', includeTree: true, includeScreenshot: false, maxNodes: 50, maxScreenshotEdge: 1280, scaleFor: () => 1, enhance: false })
@@ -171,7 +171,7 @@ describe('act com a capability messageMouse', () => {
     expect(mac.actions.map((a) => a.op)).toEqual(['hit'])
   })
 
-  it('duplo clique e rolagem sem barra acessível também vão por mensagem no modo dirigido', async () => {
+  it('double click and scrolling with no accessible bar also go by message in steered mode', async () => {
     await look()
     await run({ action: 'double_click', x: 100, y: 100 })
     expect(driver.actions[0]).toMatchObject({ op: 'mouse', clicks: 2, mode: 'pid' })
@@ -188,18 +188,18 @@ describe('act com a capability messageMouse', () => {
     await expect(run({ action: 'drag', x: 1, y: 1, toX: 50, toY: 50 })).rejects.toThrow(/global pointer/)
   })
 
-  it('tecla usa VK do Windows: cmd+s vira Ctrl+S', async () => {
+  it('a key uses the Windows VK: cmd+s becomes Ctrl+S', async () => {
     await look()
     await run({ action: 'key', key: 'cmd+s' })
     expect(driver.actions[0]).toEqual({ op: 'keys', pid: FAKE_PID, combos: [{ code: 0x53, flags: 2 }], mode: 'pid' })
   })
 
-  it('campo de senha (IsPassword) é recusado', async () => {
+  it('a password field (IsPassword) is refused', async () => {
     await look()
     await expect(run({ action: 'type', element: 4, text: 'segredo' })).rejects.toThrow(/secure/)
   })
 
-  it('app elevado é recusado antes de agir', async () => {
+  it('an elevated app is refused before acting', async () => {
     driver.apps = async () => ({
       apps: [{ pid: FAKE_PID, bundleId: 'notepad.exe', exe: 'notepad.exe', name: 'Notepad', active: false, hidden: false, elevated: true }],
       windows: [{ id: 1, pid: FAKE_PID, title: 'x', frame: [0, 0, 100, 100] }],

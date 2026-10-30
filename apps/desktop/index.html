@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit</title>
     <script>
-      // Aplica o tema antes do primeiro paint: o ThemeProvider só roda depois
-      // do React montar (tarde demais) e o CSS padrão é claro — sem isso a
-      // janela pinta branca por alguns frames na abertura.
+      // Applies the theme before the first paint: the ThemeProvider only runs after
+      // React mounts (too late) and the default CSS is light — without this the
+      // window paints white for a few frames on open.
       ;(function () {
         try {
           var stored = localStorage.getItem('vite-ui-theme')
@@ -20,7 +20,7 @@
           root.classList.add(theme)
           root.style.backgroundColor = theme === 'dark' ? '#09090b' : '#ffffff'
         } catch (e) {
-          /* best-effort: o ThemeProvider aplica o tema de qualquer forma */
+          /* best-effort: the ThemeProvider applies the theme anyway */
         }
       })()
     </script>

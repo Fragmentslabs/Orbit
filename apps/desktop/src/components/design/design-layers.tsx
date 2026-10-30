@@ -7,14 +7,14 @@ import type { DesignBoardView } from "./design-properties"
 
 import { Hint } from "@/components/ui/hint"
 /**
- * Camadas do canvas: os artboards e, dentro de cada um, a árvore do DOM — lida
- * ao vivo pela ponte, e não guardada em lugar nenhum. O HTML É o modelo; esta
- * lista é só uma vista dele (por isso nunca dessincroniza do que está na tela).
+ * Layers of the canvas: the artboards and, inside each one, the DOM tree — read
+ * live by the bridge, and not kept anywhere. The HTML IS the model; this
+ * list is only a view of it (which is why it never goes out of sync with what is on screen).
  *
- * A lista também é onde a estrutura muda: arrastar uma camada sobre outra
- * reordena os irmãos ou move o elemento para dentro de outro — o painel escreve
- * no fonte e a ponte aplica a mesma mudança no DOM ao vivo, para o canvas não
- * ficar para trás.
+ * The list is also where the structure changes: dragging a layer over another
+ * reorders the siblings or moves the element inside another one — the panel writes
+ * to the source and the bridge applies the same change to the live DOM, so the canvas does not
+ * lag behind.
  */
 
 const KIND_ICON: Record<DesignNodeKind, LucideIcon> = {
@@ -25,12 +25,12 @@ const KIND_ICON: Record<DesignNodeKind, LucideIcon> = {
   box: Box,
 }
 
-/** O payload do arrasto entre linhas: só a identidade da camada arrastada. */
+/** The payload of the drag between rows: only the identity of the dragged layer. */
 const LAYER_DND_MIME = "application/x-orbit-design-layer"
 
 const keyOf = (file: string, path: ElementPath) => `${file}:${path.join(".")}`
 
-/** `a` é ancestral de `b`? (o caminho é a cadeia de índices de filhos) */
+/** Is `a` an ancestor of `b`? (the path is the chain of child indexes) */
 const isAncestor = (a: ElementPath, b: ElementPath) =>
   a.length < b.length && a.every((n, i) => b[i] === n)
 
@@ -38,26 +38,26 @@ interface Props {
   boards: DesignBoardView[]
   trees: Record<string, DesignTreeNode | undefined>
   selection: { file: string; path: ElementPath | null } | null
-  /** Os OUTROS membros da seleção múltipla (o primário é `selection.path`). */
+  /** The OTHER members of the multiple selection (the primary one is `selection.path`). */
   group: ElementPath[]
-  /** `additive` = Shift+clique: alterna o elemento no grupo. */
+  /** `additive` = Shift+click: toggles the element in the group. */
   onSelect: (file: string, path: ElementPath | null, additive: boolean) => void
-  /** `file` null = o ponteiro saiu da lista (tira o contorno). */
+  /** `file` null = the pointer left the list (removes the outline). */
   onHover: (file: string | null, path: ElementPath | null) => void
-  /** Arrasto de camada: `fromPath` foi solta sobre `targetPath`. */
+  /** Layer drag: `fromPath` was dropped over `targetPath`. */
   onMove: (file: string, fromPath: ElementPath, targetPath: ElementPath, mode: DropMode) => void
 }
 
 export function DesignLayers({ boards, trees, selection, group, onSelect, onHover, onMove }: Props) {
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
-  /** Onde a linha solta vai cair (linha + modo) — a guia do arrasto. */
+  /** Where the dropped row is going to land (row + mode) — the drag guide. */
   const [drop, setDrop] = useState<{ key: string; mode: DropMode } | null>(null)
   const dragging = useRef<{ file: string; path: ElementPath } | null>(null)
   const selectedRef = useRef<HTMLButtonElement | null>(null)
 
-  // A seleção feita no canvas abre os ancestrais dela na lista e rola até lá —
-  // senão clicar num botão lá no fundo não teria resposta visível aqui.
+  // The selection made on the canvas opens its ancestors in the list and scrolls there —
+  // otherwise clicking a button deep down would have no visible response here.
   const selectionKey = selection ? keyOf(selection.file, selection.path ?? []) : null
   useEffect(() => {
     if (!selection) return
@@ -106,9 +106,9 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
   }
 
   /**
-   * Onde a linha cai: acima, abaixo ou dentro dela. Uma linha sem filhos não
-   * tem "dentro" — e o artboard (a raiz) é sempre "dentro", porque o corpo é
-   * o container de tudo.
+   * Where the row lands: above, below or inside it. A row without children has no
+   * "inside" — and the artboard (the root) is always "inside", because the body is
+   * the container of everything.
    */
   const modeAt = (e: React.DragEvent, row: (typeof rows)[number]): DropMode => {
     if (!row.node) return "inside"
@@ -155,7 +155,7 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
             onDragOver={(e) => {
               const payload = dragging.current
               if (!payload || payload.file !== row.file) return
-              // Não se solta dentro de si mesmo nem dentro de um descendente.
+              // One does not drop inside itself nor inside a descendant.
               const target = row.node?.path ?? []
               if (samePath(payload.path, target) || isAncestor(payload.path, target)) return
               e.preventDefault()
@@ -164,7 +164,7 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
               setDrop((prev) => (prev && prev.key === row.key && prev.mode === mode ? prev : { key: row.key, mode }))
             }}
             onDragLeave={(e) => {
-              // Sair para um FILHO da linha não é sair da linha.
+              // Leaving to a CHILD of the row is not leaving the row.
               const to = e.relatedTarget as Node | null
               if (to && e.currentTarget.contains(to)) return
               setDrop((prev) => (prev?.key === row.key ? null : prev))
@@ -172,9 +172,9 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
             onDrop={(e) => {
               e.preventDefault()
               const payload = dragging.current
-              // O modo é recalculado aqui (e não lido do estado): o drop
-              // acontece logo depois do último dragover, e o estado pode ainda
-              // ser o de antes.
+              // The mode is recalculated here (and not read from the state): the drop
+              // happens right after the last dragover, and the state may still
+              // be the previous one.
               const mode = modeAt(e, row)
               setDrop(null)
               dragging.current = null
@@ -184,7 +184,7 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
               onMove(row.file, payload.path, target, mode)
             }}
           >
-            {/* A guia do arrasto: a linha onde o elemento vai cair. */}
+            {/* The drag guide: the row where the element is going to land. */}
             {hint === "before" && <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-primary" />}
             {hint === "after" && <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-primary" />}
             <button

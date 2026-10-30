@@ -1,8 +1,8 @@
 /**
  * @orbit/companion-client — barrel export
  *
- * Cliente de comunicação mobile→desktop para o Orbit.
- * Fornece WebSocket (streaming, events) e HTTP (preferences, models).
+ * Mobile→desktop communication client for Orbit.
+ * Provides WebSocket (streaming, events) and HTTP (preferences, models).
  */
 
 export { CompanionWebSocket } from './websocket-client'

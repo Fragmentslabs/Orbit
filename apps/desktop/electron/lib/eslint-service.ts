@@ -2,24 +2,24 @@ import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 
 /**
- * ESLint do PROJETO, servindo o painel de arquivos.
+ * The PROJECT's ESLint, serving the files panel.
  *
- * Duas decisões que valem registro:
+ * Two decisions worth recording:
  *
- * 1. É o eslint do projeto aberto, resolvido a partir do `package.json` dele —
- *    não um que o Orbit embute. O que aparece sublinhado tem que ser o que o
- *    projeto considera erro; uma segunda opinião de um analisador nosso seria
- *    ruído, e divergiria do que o CI reprova.
+ * 1. It is the eslint of the open project, resolved from its `package.json` —
+ *    not one that Orbit bundles. What shows up underlined has to be what the
+ *    project considers an error; a second opinion from an analyzer of ours would be
+ *    noise, and would diverge from what the CI rejects.
  *
- * 2. Roda numa worker thread, não no processo principal. Lint é trabalho de
- *    CPU: rodá-lo aqui travaria o event loop do main a cada pausa na
- *    digitação — e é pelo main que passa o stream do chat. Medido neste
- *    repositório: a primeira chamada leva ~2,8s (carregar eslint, config e
- *    plugins) e as seguintes 16–40ms, porque a instância fica viva.
+ * 2. It runs in a worker thread, not in the main process. Linting is CPU work:
+ *    running it here would block the main's event loop on every pause in
+ *    typing — and the chat stream goes through the main. Measured in this
+ *    repository: the first call takes ~2.8s (loading eslint, config and
+ *    plugins) and the following ones 16–40ms, because the instance stays alive.
  *
- * O script do worker é uma string avaliada em vez de um arquivo separado: o
- * main é empacotado pelo vite num bundle só, e um arquivo de worker exigiria
- * um entry point à parte só para isto.
+ * The worker's script is a string evaluated instead of a separate file: the
+ * main is bundled by vite into a single bundle, and a worker file would require
+ * an entry point of its own just for this.
  */
 
 const WORKER_SOURCE = [
@@ -34,9 +34,9 @@ const WORKER_SOURCE = [
   '  }',
   '  try {',
   '    if (!engine) {',
-  '      // Resolve a partir do ARQUIVO, não da raiz: num monorepo o eslint que',
-  "      // vale é o mais próximo dele, que é o mesmo que enxerga a config que",
-  '      // será aplicada. A raiz fica de reserva.',
+  '      // Resolves from the FILE, not from the root: in a monorepo the eslint that',
+  "      // counts is the closest one to it, which is the same one that sees the config",
+  '      // to be applied. The root is the fallback.',
   '      let ESLint',
   '      try {',
   "        ESLint = createRequire(msg.filePath)('eslint').ESLint",
@@ -51,8 +51,8 @@ const WORKER_SOURCE = [
   '    })',
   '    parentPort.postMessage({ id: msg.id, messages: results[0] ? results[0].messages : [] })',
   '  } catch (err) {',
-  '    // Projeto sem eslint, ou config que não carrega: desiste de vez em vez',
-  '    // de repetir o erro a cada tecla.',
+  '    // Project without eslint, or a config that does not load: give up for good instead',
+  '    // of repeating the error on every keystroke.',
   '    unavailable = true',
   '    parentPort.postMessage({',
   '      id: msg.id,',
@@ -63,7 +63,7 @@ const WORKER_SOURCE = [
   '})',
 ].join('\n')
 
-/** Uma mensagem do eslint, já no formato que o renderer consome. */
+/** An eslint message, already in the format the renderer consumes. */
 export interface LintMessage {
   line: number
   column: number
@@ -71,13 +71,13 @@ export interface LintMessage {
   endColumn?: number
   message: string
   ruleId: string | null
-  /** 1 = aviso, 2 = erro (o mesmo do eslint). */
+  /** 1 = warning, 2 = error (the same as eslint). */
   severity: number
 }
 
 export type LintFileResult =
   | { ok: true; messages: LintMessage[] }
-  /** Projeto sem eslint utilizável — o painel para de pedir. */
+  /** Project without a usable eslint — the panel stops asking. */
   | { ok: false; unavailable: true }
 
 interface Pending {
@@ -91,11 +91,11 @@ interface Instance {
   unavailable: boolean
 }
 
-/** Uma worker por raiz: cada projeto tem sua config e seus plugins. */
+/** One worker per root: each project has its own config and plugins. */
 const instances = new Map<string, Instance>()
 let nextId = 1
 
-/** Teto por chamada: um plugin lento não pode deixar o painel esperando. */
+/** Ceiling per call: a slow plugin cannot leave the panel waiting. */
 const LINT_TIMEOUT_MS = 15_000
 
 function settle(instance: Instance, id: number, value: LintFileResult): void {
@@ -114,7 +114,7 @@ function instanceFor(root: string): Instance {
   worker.on('message', (msg: { id: number; messages?: LintMessage[]; unavailable?: boolean; error?: string }) => {
     if (msg.unavailable) {
       if (!instance.unavailable && msg.error) {
-        console.warn('[eslint] indisponível para', root, '—', msg.error)
+        console.warn('[eslint] unavailable for', root, '—', msg.error)
       }
       instance.unavailable = true
       settle(instance, msg.id, { ok: false, unavailable: true })
@@ -123,13 +123,13 @@ function instanceFor(root: string): Instance {
     settle(instance, msg.id, { ok: true, messages: msg.messages ?? [] })
   })
   worker.on('error', (err: unknown) => {
-    console.error('[eslint] worker falhou:', err instanceof Error ? err.message : String(err))
+    console.error('[eslint] worker failed:', err instanceof Error ? err.message : String(err))
     instance.unavailable = true
     for (const id of [...instance.pending.keys()]) {
       settle(instance, id, { ok: false, unavailable: true })
     }
   })
-  // A worker não pode segurar o app aberto no fechamento.
+  // The worker cannot keep the app open on shutdown.
   worker.unref()
   instances.set(root, instance)
   return instance
@@ -158,7 +158,7 @@ export async function lintFile(
   })
 }
 
-/** Encerra as workers — chamado no fechamento do app. */
+/** Shuts the workers down — called when the app closes. */
 export function stopLintWorkers(): void {
   for (const instance of instances.values()) void instance.worker.terminate()
   instances.clear()

@@ -11,16 +11,16 @@ import { useSkillsStore } from "@/src/stores/skills-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Card da proposta de conexão MCP (tools mcp_connect / mcp_update): a conexão
- * fica PROPOSTA até o usuário aceitar aqui — nada foi gravado quando a tool
- * rodou. Estado derivado do status real dos servidores (o mesmo que a aba de
- * MCPs usa): não salvo -> Conectar; salvo sem token -> Autorizar (abre a
- * página de login do provedor, como o Figma); conectado -> check.
+ * Card of the MCP connection proposal (tools mcp_connect / mcp_update): the connection
+ * stays PROPOSED until the user accepts here — nothing was recorded when the tool
+ * ran. State derived from the real status of the servers (the same one the
+ * MCPs tab uses): not saved -> Connect; saved without token -> Authorize (it opens the
+ * provider login page, like Figma); connected -> check.
  */
 
 const DISMISSED_KEY = "orbit_mcp_proposals_dismissed"
 
-/** Campos que a tool aceita e que viram config (o resto é só apresentação). */
+/** Fields the tool accepts and that become config (the rest is only presentation). */
 interface ProposalInput {
   name: string
   type: "http" | "stdio"
@@ -32,7 +32,7 @@ interface ProposalInput {
   oauth?: { clientId?: string; clientSecret?: string; scope?: string }
   enabled?: boolean
   permissionMode?: "ask" | "approve" | "full"
-  /** Só do mcp_update: por que a conexão está sendo alterada. */
+  /** Only from mcp_update: why the connection is being changed. */
   reason?: string
 }
 
@@ -45,7 +45,7 @@ function loadDismissed(): string[] {
   }
 }
 
-/** O mesmo critério da aba de MCPs: OAuth que nunca autorizou ou caiu em 401. */
+/** The same criterion as the MCPs tab: OAuth that never authorized or fell into 401. */
 function needsAuth(server: McpServerStatus): boolean {
   if (!server.usesOAuth) return false
   return !server.authorized || server.state === "unauthorized"
@@ -55,7 +55,7 @@ function mask(value: string): string {
   return value.length <= 8 ? "••••" : `${value.slice(0, 4)}••••${value.slice(-2)}`
 }
 
-/** Cabeçalhos e client_secret não podem aparecer inteiros no card. */
+/** Headers and client_secret cannot appear whole in the card. */
 function secretsOf(input: ProposalInput): Array<{ key: string; value: string }> {
   const out: Array<{ key: string; value: string }> = []
   for (const [key, value] of Object.entries(input.headers ?? {})) {
@@ -65,7 +65,7 @@ function secretsOf(input: ProposalInput): Array<{ key: string; value: string }> 
   return out
 }
 
-/** Config final: alteração parte da entrada atual (só os campos enviados mudam). */
+/** Final config: a change starts from the current entry (only the sent fields change). */
 function toConfig(input: ProposalInput, current?: McpServerConfig): McpServerConfig {
   const { reason: _reason, ...changes } = input
   return { ...(current ?? {}), ...changes, name: input.name } as McpServerConfig
@@ -83,8 +83,8 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
     void initialize()
   }, [initialize])
 
-  // A proposta nasce durante a execução da tool; quando ela termina, o status
-  // real é relido — é ele que diz se já está salvo, se falta autorizar, etc.
+  // The proposal is born during the tool execution; when it ends, the real
+  // status is re-read — it is what says whether it is already saved, whether authorization is missing, etc.
   useEffect(() => {
     if (part.state === "done") void refresh()
   }, [part.state, refresh])
@@ -112,7 +112,7 @@ export function McpProposalCard({ part }: { part: ToolPart }) {
     }
   }
 
-  /** Grava a conexão proposta (criando ou alterando) — só aqui, no clique. */
+  /** Records the proposed connection (creating or changing) — only here, on the click. */
   async function connect(): Promise<void> {
     const config = await mcpApi.config()
     const current = config.servers.find((s) => s.name === name)

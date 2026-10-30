@@ -1,52 +1,52 @@
 import type { MediaCredit } from '@shared/media'
 
 /**
- * Busca de imagens em fontes ABERTAS — Wikimedia Commons e Openverse. Nenhuma
- * pede chave, e as duas devolvem a licença e o autor de cada imagem, que é o que
- * deixa o agente usar a imagem numa peça com o crédito certo.
+ * Image search in OPEN sources — Wikimedia Commons and Openverse. Neither asks for a
+ * key, and both return the license and the author of each image, which is what lets
+ * the agent use the image in a piece with the right credit.
  */
 
 export type ImageProvider = 'commons' | 'openverse'
 
-/** O que o agente pede sobre a licença: `commercial` é o padrão (serve a um vídeo publicado). */
+/** What the agent asks about the license: `commercial` is the default (it serves a published video). */
 export type LicenseFilter = 'commercial' | 'public-domain' | 'any'
 
 export type Orientation = 'landscape' | 'portrait' | 'square'
 
 export interface ImageResult {
-  /** Id curto que o agente usa para importar: `wc:123` (Commons) ou `ov:<uuid>` (Openverse). */
+  /** Short id the agent uses to import: `wc:123` (Commons) or `ov:<uuid>` (Openverse). */
   id: string
   provider: ImageProvider
   title: string
   width?: number
   height?: number
-  /** Miniatura para a olhada rápida. */
+  /** Thumbnail for the quick look. */
   thumbUrl: string
-  /** Arquivo a baixar (já num tamanho razoável para vídeo). */
+  /** File to download (already at a reasonable size for video). */
   downloadUrl: string
-  /** Alternativa quando o endereço principal recusa (hotlink): a cópia que o provedor serve. */
+  /** Alternative when the main address refuses (hotlink): the copy the provider serves. */
   fallbackUrl?: string
   credit: MediaCredit
-  /** De qual acervo o Openverse tirou (flickr, nasa…). */
+  /** Which collection Openverse took it from (flickr, nasa…). */
   origin?: string
 }
 
 export interface SearchOptions {
   query: string
-  /** Quantas imagens devolver (1–12). */
+  /** How many images to return (1–12). */
   limit: number
   license: LicenseFilter
   providers: ImageProvider[]
   orientation?: Orientation
-  /** Largura mínima em px (vídeo pede mais que miniatura). */
+  /** Minimum width in px (video asks for more than a thumbnail). */
   minWidth: number
 }
 
 export interface SearchOutcome {
   results: ImageResult[]
-  /** Avisos por provedor que falhou ou foi limitado — uma busca parcial ainda vale. */
+  /** Warnings per provider that failed or was rate-limited — a partial search is still worth it. */
   warnings: string[]
 }
 
-/** Quem faz a requisição: o `fetch` global, ou um dublê nos testes. */
+/** Who makes the request: the global `fetch`, or a double in the tests. */
 export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>

@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { isCaptionWorthy, rehypeFigureCaption } from './figure-caption'
 
 /**
- * A legenda diverge do Markdown padrão de propósito, então o que estes testes
- * fixam é o LIMITE dessa divergência: só a figura sozinha, e só quando o alt
- * foi escrito para ser lido. Sem isso, "screenshot.png" viraria legenda
- * visível e o remédio ficaria pior que a doença.
+ * The caption diverges from standard Markdown on purpose, so what these tests
+ * pin down is the LIMIT of that divergence: only the figure on its own, and only when the alt
+ * was written to be read. Without that, "screenshot.png" would become a visible
+ * caption and the cure would be worse than the disease.
  */
 function img(alt: string): Element {
   return { type: 'element', tagName: 'img', properties: { alt, src: 'x.png' }, children: [] }
@@ -24,36 +24,36 @@ function run(...children: ElementContent[]): Root {
 }
 
 describe('isCaptionWorthy', () => {
-  it('aceita alt que descreve a figura', () => {
+  it('accepts an alt that describes the figure', () => {
     expect(isCaptionWorthy('Dados Locais')).toBe(true)
     expect(isCaptionWorthy('Tela de seleção de projetos')).toBe(true)
-    // Uma palavra só também descreve, desde que não seja rótulo genérico.
+    // A single word also describes, as long as it is not a generic label.
     expect(isCaptionWorthy('Arquitetura')).toBe(true)
   })
 
-  it('recusa nome de arquivo', () => {
+  it('rejects a file name', () => {
     expect(isCaptionWorthy('screenshot.png')).toBe(false)
     expect(isCaptionWorthy('Captura de tela 2024.jpg')).toBe(false)
   })
 
-  it('recusa alt que só repete o nome do arquivo', () => {
+  it('rejects an alt that only repeats the file name', () => {
     expect(isCaptionWorthy('image', 'image.png')).toBe(false)
     expect(isCaptionWorthy('Figura 2', 'figura-2.png')).toBe(false)
     expect(isCaptionWorthy('img', '/assets/img.jpg?x=1')).toBe(false)
   })
 
-  it('aceita quando o alt descreve, mesmo tendo src', () => {
+  it('accepts it when the alt describes, even with a src', () => {
     expect(isCaptionWorthy('Tela de seleção de projetos', 'tela.png')).toBe(true)
   })
 
-  it('recusa vazio e espaço em branco', () => {
+  it('rejects empty and whitespace', () => {
     expect(isCaptionWorthy('')).toBe(false)
     expect(isCaptionWorthy('   ')).toBe(false)
   })
 })
 
 describe('rehypeFigureCaption', () => {
-  it('a figura sozinha vira <figure> com legenda', () => {
+  it('a figure on its own becomes a <figure> with a caption', () => {
     const tree = run(paragraph(img('Dados Locais')))
 
     const figure = tree.children[0] as Element
@@ -64,14 +64,14 @@ describe('rehypeFigureCaption', () => {
     expect(caption.children[0]).toEqual({ type: 'text', value: 'Dados Locais' })
   })
 
-  it('a legenda é escondida do leitor de tela — ela repete o alt', () => {
+  it('the caption is hidden from the screen reader — it repeats the alt', () => {
     const tree = run(paragraph(img('Dados Locais')))
 
     const caption = (tree.children[0] as Element).children[1] as Element
     expect(caption.properties?.ariaHidden).toBe('true')
   })
 
-  it('espaço em volta da imagem não conta como conteúdo', () => {
+  it('space around the image does not count as content', () => {
     const tree = run(
       paragraph({ type: 'text', value: '\n' }, img('Dados Locais'), { type: 'text', value: '\n' }),
     )
@@ -79,25 +79,25 @@ describe('rehypeFigureCaption', () => {
     expect((tree.children[0] as Element).tagName).toBe('figure')
   })
 
-  it('imagem no meio do texto continua ilustração inline', () => {
+  it('an image in the middle of the text stays an inline illustration', () => {
     const tree = run(paragraph({ type: 'text', value: 'veja ' }, img('Dados Locais')))
 
     expect((tree.children[0] as Element).tagName).toBe('p')
   })
 
-  it('fileira de imagens não vira três figuras', () => {
+  it('a row of images does not become three figures', () => {
     const tree = run(paragraph(img('Build'), img('Cobertura')))
 
     expect((tree.children[0] as Element).tagName).toBe('p')
   })
 
-  it('alt genérico não ganha legenda', () => {
+  it('a generic alt gets no caption', () => {
     const tree = run(paragraph(img('screenshot.png')))
 
     expect((tree.children[0] as Element).tagName).toBe('p')
   })
 
-  it('alcança parágrafo aninhado, não só a raiz', () => {
+  it('reaches a nested paragraph, not only the root', () => {
     const tree = run({
       type: 'element',
       tagName: 'blockquote',

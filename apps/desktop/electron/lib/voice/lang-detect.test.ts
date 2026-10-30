@@ -16,28 +16,28 @@ describe('detectSpeechLang', () => {
     expect(detectSpeechLang(text)).toEqual({ lang, confident: true })
   })
 
-  it('frase curta e ambígua não é confiante', () => {
+  it('a short, ambiguous sentence is not confident', () => {
     expect(detectSpeechLang('Claro.')?.confident ?? false).toBe(false)
     expect(detectSpeechLang('Ok!')?.confident ?? false).toBe(false)
   })
 })
 
 describe('pickSpeechLang', () => {
-  it('um idioma fixo é forçado, seja qual for o texto', () => {
+  it('a fixed language is forced, whatever the text', () => {
     expect(pickSpeechLang('en', 'Olá, tudo bem com você?', 'pt')).toBe('en')
   })
 
-  it('no automático a resposta em português sai em português mesmo com a interface em inglês', () => {
+  it('in auto mode a Portuguese reply comes out in Portuguese even with the UI in English', () => {
     expect(pickSpeechLang('auto', 'Claro, eu posso te ajudar com isso agora.', 'en')).toBe('pt')
   })
 
-  it('a frase ambígua herda o idioma já decidido na mesma fala', () => {
+  it('the ambiguous sentence inherits the language already decided in the same utterance', () => {
     const memory: { lang?: string } = {}
     expect(pickSpeechLang('auto', 'Sure, I can help you with that right now.', 'pt', memory)).toBe('en')
     expect(pickSpeechLang('auto', 'Ok.', 'pt', memory)).toBe('en')
   })
 
-  it('sem evidência nem memória vale o reserva', () => {
+  it('with no evidence and no memory, the fallback applies', () => {
     expect(pickSpeechLang('auto', 'Ok.', 'pt')).toBe('pt')
     expect(pickSpeechLang(undefined, '12345', 'en')).toBe('en')
   })

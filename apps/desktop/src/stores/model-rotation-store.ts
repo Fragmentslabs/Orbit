@@ -6,17 +6,17 @@ import type { SelectedModel } from "@/src/stores/provider-store"
 import { rotationApi } from "@/src/lib/ipc"
 
 /**
- * Rotação de modelos — listas nomeadas de modelos (1..4 slots) para o engine
- * tentar em sequência quando um falhar no início do turno (rate-limit, rede,
- * moderação). Não há toggle global nem rotação "ativa": a rotação é apenas
- * criada/gerenciada aqui e ESCOLHIDA POR CHAT no seletor de modelo, como se
- * fosse um modelo (`sessionOverrides` = sessão → rotação; "draft" = chat
- * novo antes do primeiro envio). Escolher um modelo no seletor limpa a
- * rotação do chat (e vice-versa).
+ * Model rotation — named lists of models (1..4 slots) for the engine
+ * to try in sequence when one fails at the start of the turn (rate-limit, network,
+ * moderation). There is no global toggle nor an "active" rotation: the rotation is only
+ * created/managed here and CHOSEN PER CHAT in the model selector, as if
+ * it were a model (`sessionOverrides` = session → rotation; "draft" = new
+ * chat before the first send). Choosing a model in the selector clears the
+ * chat's rotation (and vice-versa).
  *
- * O estado vive no localStorage (mesmo padrão de session-model-prefs) e é
- * empurrado para o main via `rotation:sync` — é o main quem resolve a
- * sequência do turno no momento da chamada (electron/lib/model-rotation.ts).
+ * The state lives in localStorage (same pattern as session-model-prefs) and is
+ * pushed to main through `rotation:sync` — it is main that resolves the
+ * turn's sequence at call time (electron/lib/model-rotation.ts).
  */
 
 const STORAGE_KEY = "orbit-model-rotations"
@@ -33,8 +33,8 @@ function loadState(): RotationConfig {
     if (raw) {
       const parsed = JSON.parse(raw) as RotationConfig
       if (parsed && typeof parsed === "object" && Array.isArray(parsed.rotations)) {
-        // Shape v1 tinha enabled/activeId — ignorados. A escolha por chat é
-        // lida do que já estiver salvo (ou vazio).
+        // Shape v1 had enabled/activeId — ignored. The per-chat choice is
+        // read from whatever is already saved (or empty).
         const overrides: Record<string, string> = {}
         if (parsed.sessionOverrides && typeof parsed.sessionOverrides === "object") {
           for (const [key, value] of Object.entries(parsed.sessionOverrides)) {
@@ -48,7 +48,7 @@ function loadState(): RotationConfig {
       }
     }
   } catch {
-    // estado corrompido — recomeça sem rotações
+    // corrupted state — starts over without rotations
   }
   return { rotations: [], sessionOverrides: {} }
 }
@@ -58,18 +58,18 @@ interface ModelRotationState extends RotationConfig {
   rename: (id: string, name: string) => void
   updateModels: (id: string, models: SelectedModel[]) => void
   remove: (id: string) => void
-  /** Pina a rotação num chat (como escolher um modelo); rotationId null desfaz. */
+  /** Pins the rotation in a chat (like choosing a model); rotationId null undoes it. */
   selectRotation: (sessionId: string | null | undefined, rotationId: string | null) => void
-  /** Move a escolha do draft (chat novo) para a sessão criada no 1º envio. */
+  /** Moves the draft's choice (new chat) to the session created on the 1st send. */
   adoptRotation: (sessionId: string) => void
-  /** Substitui a lista inteira — usado pelo CRUD vindo de um companion
-   *  (`rotation:set`), que manda o estado completo em vez de um verbo por
-   *  operação. Escolhas por chat que apontam para rotações que sumiram são
-   *  descartadas, como no `remove`. */
+  /** Replaces the whole list — used by the CRUD coming from a companion
+   *  (`rotation:set`), which sends the complete state instead of a verb per
+   *  operation. Per-chat choices pointing to rotations that vanished are
+   *  discarded, as in `remove`. */
   replaceAll: (rotations: ModelRotation[]) => void
 }
 
-/** Sincroniza o estado inteiro com o main (cache do engine). */
+/** Syncs the whole state with main (the engine's cache). */
 function sync(rotation: RotationConfig) {
   rotationApi.sync(rotation)
 }
@@ -111,7 +111,7 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
       const { rotations, sessionOverrides } = get()
       persist({
         rotations: rotations.filter((r) => r.id !== id),
-        // Sessões que apontavam para a rotação removida voltam ao default
+        // Sessions that pointed to the removed rotation go back to the default
         sessionOverrides: Object.fromEntries(Object.entries(sessionOverrides).filter(([, v]) => v !== id)),
       })
     },
@@ -150,11 +150,11 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
   }
 })
 
-// Repopula o cache do main após reload do renderer (mesma mecânica do
-// sessionModelsApi no session-model-prefs) e aplica o que foi feito nos
-// companions: o renderer é a fonte da verdade (o estado vive no
-// localStorage dele), então a escolha/CRUD do celular é persistida aqui e
-// volta a todos pelo `rotation:sync` → broadcast.
+// Repopulates the main cache after a renderer reload (same mechanics as
+// sessionModelsApi in session-model-prefs) and applies what was done on the
+// companions: the renderer is the source of truth (the state lives in
+// its localStorage), so the phone's choice/CRUD is persisted here and
+// goes back to everyone through `rotation:sync` → broadcast.
 if (typeof window !== "undefined" && window.ipcRenderer) {
   rotationApi.sync(loadState())
 

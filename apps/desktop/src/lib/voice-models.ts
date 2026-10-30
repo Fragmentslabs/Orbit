@@ -1,19 +1,19 @@
 import type { VoiceModelInfo, VoiceModelKind } from "@shared/voice"
 
-/** Modelo de voz do catálogo (`@shared/voice`) com o tamanho já em MB. */
+/** Voice model from the catalog (`@shared/voice`) with the size already in MB. */
 export interface VoiceModelView {
   id: string
   label: string
-  /** Motor que consome o modelo: "supertonic" (TTS), "parakeet", "whisper". */
+  /** Engine that consumes the model: "supertonic" (TTS), "parakeet", "whisper". */
   engine: string
   kind: VoiceModelKind
   sizeMb: number | null
 }
 
 /**
- * Catálogo do main no que a tela mostra. O catálogo pode chegar vazio (canal
- * ainda não respondeu) — e o tamanho vem em bytes, que é o número que o
- * usuário decide antes de baixar.
+ * Main's catalog reduced to what the screen shows. The catalog may arrive empty (the channel
+ * has not answered yet) — and the size comes in bytes, which is the number the
+ * user decides on before downloading.
  */
 export function modelViews(models: VoiceModelInfo[] | null | undefined): VoiceModelView[] {
   if (!Array.isArray(models)) return []
@@ -28,7 +28,7 @@ export function modelViews(models: VoiceModelInfo[] | null | undefined): VoiceMo
     }))
 }
 
-/** "1,2 GB" / "480 MB" — `null` quando o catálogo não informou o tamanho. */
+/** "1.2 GB" / "480 MB" — `null` when the catalog did not report the size. */
 export function formatSizeMb(sizeMb: number | null): string | null {
   if (sizeMb === null || !Number.isFinite(sizeMb) || sizeMb <= 0) return null
   if (sizeMb >= 1024) return `${(sizeMb / 1024).toFixed(1)} GB`

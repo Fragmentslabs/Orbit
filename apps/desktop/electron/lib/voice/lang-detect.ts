@@ -1,26 +1,26 @@
 /**
- * Idioma de um texto, para a FALA — o "Automático" da leitura em voz alta.
+ * Language of a text, for SPEECH — the "Automatic" mode of reading aloud.
  *
- * O motor local (Supertonic) fala com o sotaque do idioma que recebe: com o
- * idioma fixo em inglês, uma resposta em português sai em português com
- * sotaque americano. No "Automático" o idioma sai do próprio texto, frase a
- * frase — é o texto que vai ser falado, então é ele quem sabe.
+ * The local engine (Supertonic) speaks with the accent of the language it receives: with the
+ * language fixed to English, an answer in Portuguese comes out in Portuguese with
+ * an American accent. In "Automatic" the language comes from the text itself, sentence by
+ * sentence — it is the text that will be spoken, so it is the text that knows.
  *
- * Sem dependência: o alfabeto resolve os idiomas de escrita própria (cirílico,
- * grego, árabe, devanágari, hangul, kana) e, no latino, palavras funcionais
- * ("de", "the", "und"…) mais as letras acentuadas típicas decidem. Só devolve
- * idioma que o Supertonic fala (ver TTS_LANGS). Texto curto ou ambíguo
- * ("Ok.", "Claro.") volta como NÃO confiante — quem chama mantém o idioma que
- * já vinha usando em vez de trocar de sotaque no meio da resposta.
+ * No dependency: the alphabet settles the languages with their own script (Cyrillic,
+ * Greek, Arabic, Devanagari, Hangul, Kana) and, in Latin script, function words
+ * ("de", "the", "und"…) plus the typical accented letters decide. It only returns
+ * a language Supertonic speaks (see TTS_LANGS). Short or ambiguous text
+ * ("Ok.", "Claro.") comes back as NOT confident — the caller keeps the language it
+ * was already using instead of changing accents in the middle of the answer.
  */
 
 export interface LangGuess {
   lang: string
-  /** A evidência basta para trocar de idioma (texto curto/ambíguo não basta). */
+  /** The evidence is enough to switch language (short/ambiguous text is not enough). */
   confident: boolean
 }
 
-/** Palavras funcionais: as mais frequentes de cada idioma, e as que mais o distinguem. */
+/** Function words: the most frequent of each language, and the ones that distinguish it most. */
 const STOPWORDS: Record<string, string[]> = {
   pt: [
     "de", "que", "não", "o", "os", "as", "um", "uma", "é", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
@@ -62,7 +62,7 @@ const STOPWORDS: Record<string, string[]> = {
   ],
 }
 
-/** Letras que (quase) só aparecem num idioma: cada uma vale como uma palavra. */
+/** Letters that (almost) only appear in one language: each one counts as a word. */
 const LETTERS: Record<string, RegExp> = {
   pt: /[ãõ]/g,
   es: /[ñ¿¡]/g,
@@ -72,7 +72,7 @@ const LETTERS: Record<string, RegExp> = {
 
 const WORD_SETS = Object.fromEntries(Object.entries(STOPWORDS).map(([lang, words]) => [lang, new Set(words)]))
 
-/** Alfabetos próprios → idioma (só os que o Supertonic fala). */
+/** Own scripts → language (only the ones Supertonic speaks). */
 function byScript(text: string): string | null {
   const count = (re: RegExp) => (text.match(re) ?? []).length
   const scripts: [string, number][] = [
@@ -86,7 +86,7 @@ function byScript(text: string): string | null {
   const latin = count(/[a-zà-ÿ]/gi)
   const [best, n] = scripts.reduce((a, b) => (b[1] > a[1] ? b : a))
   if (n === 0 || n < latin) return null
-  // Ucraniano tem letras que o russo não tem; búlgaro e russo ficam no russo.
+  // Ukrainian has letters Russian does not; Bulgarian and Russian stay Russian.
   if (best === "cyrillic") return /[іїєґ]/i.test(text) ? "uk" : "ru"
   return best
 }
@@ -112,17 +112,17 @@ export function detectSpeechLang(text: string): LangGuess | null {
   const [lang, best] = ranked[0]
   const second = ranked[1]?.[1] ?? 0
   if (best === 0) return null
-  // Confiante = evidência suficiente E folga sobre o segundo colocado. "Claro."
-  // (pt/es) ou "Ok." não trocam o sotaque; uma frase inteira troca.
+  // Confident = enough evidence AND a margin over the runner-up. "Claro."
+  // (pt/es) or "Ok." do not switch the accent; a whole sentence does.
   const confident = best >= 2 && best - second >= 2 && best >= second * 1.5
   return { lang, confident }
 }
 
 /**
- * Idioma da fala de um trecho. `requested` concreto ("pt", "en"…) é forçado; o
- * "auto" (ou nada) detecta no texto. `memory` guarda o último idioma decidido
- * na MESMA fala (as frases do modo chamada chegam uma a uma): um trecho
- * ambíguo herda o idioma das frases anteriores em vez de cair no reserva.
+ * Speech language of a segment. A concrete `requested` ("pt", "en"…) is forced;
+ * "auto" (or nothing) detects it in the text. `memory` keeps the last language decided
+ * in the SAME utterance (call-mode sentences arrive one by one): an ambiguous
+ * segment inherits the language of the previous sentences instead of falling back to the reserve.
  */
 export function pickSpeechLang(
   requested: string | undefined,
@@ -137,7 +137,7 @@ export function pickSpeechLang(
     return guess.lang
   }
   if (memory?.lang) return memory.lang
-  // Primeiro trecho e ambíguo: vale o reserva — um "Ok." sozinho não pode
-  // decidir o sotaque da resposta inteira.
+  // First segment and ambiguous: the reserve applies — a lone "Ok." cannot
+  // decide the accent of the whole answer.
   return fallback
 }

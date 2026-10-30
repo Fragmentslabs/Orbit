@@ -2,20 +2,20 @@ import type { MessagePart, ModelRotation, RotationConfig, RotationModel } from '
 import { getSessionModelsCache } from './companion-http'
 
 /**
- * Rotação de modelos — listas nomeadas de modelos (1..4 slots) escolhidas
- * POR CHAT no seletor, como um modelo.
+ * Model rotation — named lists of models (1..4 slots) chosen
+ * PER CHAT in the selector, like a model.
  *
- * Resolução da sequência:
- * 1. rotação escolhida para o chat (override no seletor) → a lista ordenada
- *    da rotação (até MAX_ROTATION_ATTEMPTS tentativas);
- * 2. senão, modelo pinado no chat (escolha explícita no seletor) → sequência
- *    de 1 — o usuário que pinar um modelo continua pinado;
- * 3. senão, o default global (o modelo que o renderer resolveu no envio).
+ * Resolution of the sequence:
+ * 1. rotation chosen for the chat (override in the selector) → the rotation's ordered
+ *    list (up to MAX_ROTATION_ATTEMPTS attempts);
+ * 2. otherwise, model pinned in the chat (explicit choice in the selector) → sequence
+ *    of 1 — whoever pins a model stays pinned;
+ * 3. otherwise, the global default (the model the renderer resolved on send).
  *
- * O override por chat (modelo) chega aqui via `getSessionModelsCache()` — o
- * renderer empurra o mapa inteiro no `companion:session-models` a cada
- * mudança (e no load, repopulando o cache após reload). A escolha de rotação
- * por chat chega no mesmo `rotation:sync` que carrega a lista.
+ * The per-chat override (model) arrives here via `getSessionModelsCache()` — the
+ * renderer pushes the whole map in `companion:session-models` on every
+ * change (and on load, repopulating the cache after a reload). The rotation choice
+ * per chat arrives in the same `rotation:sync` that carries the list.
  */
 
 export const MAX_ROTATION_ATTEMPTS = 3
@@ -24,8 +24,8 @@ const DRAFT_KEY = 'draft'
 
 let rotationConfigCache: RotationConfig = { rotations: [], sessionOverrides: {} }
 
-/** Renderer → main (`rotation:sync`): o main guarda o estado em cache e o
- *  engine resolve a sequência no momento da chamada. */
+/** Renderer → main (`rotation:sync`): the main caches the state and the
+ *  engine resolves the sequence at call time. */
 export function setRotationConfigCache(config: RotationConfig | null | undefined): void {
   rotationConfigCache = config ?? { rotations: [], sessionOverrides: {} }
 }
@@ -34,16 +34,16 @@ export function getRotationConfigCache(): RotationConfig {
   return rotationConfigCache
 }
 
-/** Sequência de modelos do turno, segundo a regra acima. `fallbackModel`
- *  é o modelo que o renderer resolveu (override ou default global) — usado
- *  como sequência de 1 quando não há rotação escolhida para o chat. */
+/** Sequence of models for the turn, according to the rule above. `fallbackModel`
+ *  is the model the renderer resolved (override or global default) — used
+ *  as a sequence of 1 when there is no rotation chosen for the chat. */
 export function resolveRotation(
   sessionId: string | undefined,
   fallbackModel: RotationModel,
 ): RotationModel[] {
   const sessionKey = sessionId ?? DRAFT_KEY
 
-  // 1. rotação escolhida no seletor para este chat
+  // 1. rotation chosen in the selector for this chat
   const pinnedRotationId = rotationConfigCache.sessionOverrides[sessionKey]
   if (pinnedRotationId) {
     const rotation = rotationConfigCache.rotations.find((r: ModelRotation) => r.id === pinnedRotationId)
@@ -52,39 +52,39 @@ export function resolveRotation(
     }
   }
 
-  // 2. override por chat pina (draft = chat novo antes do primeiro envio)
+  // 2. per-chat override pins (draft = new chat before the first send)
   const overrides = getSessionModelsCache()
   const pinned = overrides[sessionKey]
   if (pinned) return [pinned]
 
-  // 3. comportamento atual
+  // 3. current behavior
   return [fallbackModel]
 }
 
-/** Próximo modelo da sequência (undefined = esgotou). */
+/** Next model of the sequence (undefined = exhausted). */
 export function selectNext(seq: RotationModel[], index: number): RotationModel | undefined {
   return seq[index]
 }
 
-/** true quando o turno já emitiu conteúdo (texto/raciocínio/tool) — a v1 só
- *  rotaciona falhas ANTES do primeiro token de saída; reenviar conteúdo já
- *  entregue custaria tokens duplicados. */
+/** true when the turn has already emitted content (text/reasoning/tool) — v1 only
+ *  rotates failures BEFORE the first output token; resending content already
+ *  delivered would cost duplicate tokens. */
 export function hasStreamedContent(parts: MessagePart[]): boolean {
   return parts.some(
     (p) => p.type === 'tool' || ((p.type === 'text' || p.type === 'reasoning') && (p.text?.length ?? 0) > 0),
   )
 }
-/** Espera antes de cada rodada extra do turno (SendMessageOptions.retries).
- *  Crescente porque o caso típico é a rede caída: tentar de novo em segundos
- *  só gasta as rodadas antes de ela voltar. Além do fim, repete o último. */
+/** Wait before each extra round of the turn (SendMessageOptions.retries).
+ *  Increasing because the typical case is the network down: trying again in seconds
+ *  only spends the rounds before it comes back. Past the end, it repeats the last one. */
 export const RETRY_DELAYS_MS = [5_000, 15_000, 30_000]
 
 export function retryDelay(round: number): number {
   return RETRY_DELAYS_MS[Math.min(round, RETRY_DELAYS_MS.length) - 1] ?? RETRY_DELAYS_MS[0]
 }
 
-/** Espera `ms`, mas volta na hora se o turno for interrompido — o botão de
- *  parar não pode ficar preso atrás de uma espera de 30s. */
+/** Waits `ms`, but comes back right away if the turn is interrupted — the stop
+ *  button cannot stay stuck behind a 30s wait. */
 export function waitUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve()

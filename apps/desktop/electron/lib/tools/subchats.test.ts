@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
     to: 2,
     total: 2,
     messages: [
-      { index: 1, role: 'user' as const, text: 'Pode começar', tools: [] },
+      { index: 1, role: 'user' as const, text: 'You can start', tools: [] },
       { index: 2, role: 'assistant' as const, text: 'Parser pronto em csv-parser.ts', tools: ['write'] },
     ],
   })),
@@ -50,12 +50,12 @@ type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const exec = (tools: ReturnType<typeof createSubchatTools>, name: 'suggest_subchat' | 'open_subchat' | 'read_subchat' | 'send_to_subchat') =>
   (tools[name] as unknown as { execute: Exec }).execute
 
-const BRIEF = 'Corrigir o split de aspas em csv-parser.ts:42 e cobrir com teste de importação.'
+const BRIEF = 'Fix the quote split in csv-parser.ts:42 and cover it with an import test.'
 
 function input(overrides: Partial<SendMessageInput> = {}): SendMessageInput {
   return {
     sessionId: 'ses_pai',
-    text: 'tem um bug no parser',
+    text: 'the parser has a bug',
     providerId: 'anthropic',
     modelId: 'claude',
     mode: 'code',
@@ -66,7 +66,7 @@ function input(overrides: Partial<SendMessageInput> = {}): SendMessageInput {
   } as SendMessageInput
 }
 
-const janela = {} as never
+const win = {} as never
 
 describe('suggest_subchat', () => {
   beforeEach(() => {
@@ -74,22 +74,22 @@ describe('suggest_subchat', () => {
     mocks.dispatchAsk.mockResolvedValue('deny')
   })
 
-  it('sugere antes de criar: manda o título e o brief para o card, sem abrir nada', async () => {
-    await exec(createSubchatTools(input(), janela), 'suggest_subchat')(
+  it('suggests before creating: sends the title and the brief to the card, opening nothing', async () => {
+    await exec(createSubchatTools(input(), win), 'suggest_subchat')(
       { title: 'Parser de CSV', brief: BRIEF },
       {},
     )
     expect(mocks.dispatchAsk).toHaveBeenCalledTimes(1)
-    const pedido = mocks.dispatchAsk.mock.calls[0][1] as { kind: string; subchat: { title: string; brief: string } }
-    expect(pedido.kind).toBe('subchat')
-    expect(pedido.subchat).toEqual({ title: 'Parser de CSV', brief: BRIEF })
+    const request = mocks.dispatchAsk.mock.calls[0][1] as { kind: string; subchat: { title: string; brief: string } }
+    expect(request.kind).toBe('subchat')
+    expect(request.subchat).toEqual({ title: 'Parser de CSV', brief: BRIEF })
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(mocks.runChat).not.toHaveBeenCalled()
   })
 
-  it('"implementar em novo chat" cria e já dispara o turno do filho', async () => {
+  it('"implement in a new chat" creates and already fires the child turn', async () => {
     mocks.dispatchAsk.mockResolvedValue('new')
-    const r = await exec(createSubchatTools(input(), janela), 'suggest_subchat')(
+    const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
       { title: 'Parser de CSV', brief: BRIEF },
       {},
     )
@@ -107,9 +107,9 @@ describe('suggest_subchat', () => {
     expect(String(r)).toContain('already working')
   })
 
-  it('"fazer neste chat" não cria nada e manda o agente trabalhar aqui', async () => {
+  it('"do it in this chat" creates nothing and tells the agent to work here', async () => {
     mocks.dispatchAsk.mockResolvedValue('here')
-    const r = await exec(createSubchatTools(input(), janela), 'suggest_subchat')(
+    const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
       { title: 'Parser de CSV', brief: BRIEF },
       {},
     )
@@ -118,8 +118,8 @@ describe('suggest_subchat', () => {
     expect(String(r)).toContain('THIS conversation')
   })
 
-  it('"negar" deixa o assunto de lado', async () => {
-    const r = await exec(createSubchatTools(input(), janela), 'suggest_subchat')(
+  it('"decline" leaves the matter aside', async () => {
+    const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
       { title: 'Parser de CSV', brief: BRIEF },
       {},
     )
@@ -134,8 +134,8 @@ describe('open_subchat', () => {
     mocks.dispatchAsk.mockResolvedValue('deny')
   })
 
-  it('cria direto, sem perguntar — só quando o usuário já pediu', async () => {
-    const r = await exec(createSubchatTools(input(), janela), 'open_subchat')(
+  it('creates directly, without asking — only when the user already asked', async () => {
+    const r = await exec(createSubchatTools(input(), win), 'open_subchat')(
       { title: 'Parser de CSV', brief: BRIEF },
       {},
     )
@@ -145,10 +145,10 @@ describe('open_subchat', () => {
     expect(String(r)).toContain('already working')
   })
 
-  it('o filho roda fora do escopo de escrita do pai: o que ele grava não é do pai', async () => {
-    // O filho é outra conversa, com revert próprio, disparado sem await.
+  it('the child runs outside the parent write scope: what it writes is not the parent\'s', async () => {
+    // The child is another conversation, with its own revert, fired without await.
     let filho: Promise<void> | undefined
-    // O runChat de verdade abre o escopo do turno do filho.
+    // The real runChat opens the child's turn scope.
     mocks.runChat.mockImplementationOnce(async () => {
       filho = runWithWriteScope(async () => {
         await new Promise((resolve) => setTimeout(resolve, 5))
@@ -157,21 +157,21 @@ describe('open_subchat', () => {
       await filho
     })
     await runWithWriteScope(async () => {
-      await exec(createSubchatTools(input(), janela), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+      await exec(createSubchatTools(input(), win), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
       await filho
       expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['do-filho.ts'] })
     })
   })
 
-  it('sem janela não dispara turno nenhum (subagente efêmero)', async () => {
+  it('with no win it fires no turn (ephemeral subagent)', async () => {
     await exec(createSubchatTools(input()), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
     expect(mocks.createSubchatRecord).toHaveBeenCalledTimes(1)
     expect(mocks.runChat).not.toHaveBeenCalled()
   })
 
-  it('conversa inexistente devolve erro e não dispara nada', async () => {
+  it('a nonexistent conversation returns an error and fires nothing', async () => {
     mocks.createSubchatRecord.mockResolvedValueOnce(null as never)
-    const r = await exec(createSubchatTools(input(), janela), 'open_subchat')(
+    const r = await exec(createSubchatTools(input(), win), 'open_subchat')(
       { title: 'Parser de CSV', brief: BRIEF },
       {},
     )
@@ -186,8 +186,8 @@ describe('send_to_subchat', () => {
     mocks.running.length = 0
   })
 
-  it('dispara um turno no filho com a instrução, sem esperar a resposta', async () => {
-    const r = await exec(createSubchatTools(input(), janela), 'send_to_subchat')(
+  it('fires a turn in the child with the instruction, without waiting for the answer', async () => {
+    const r = await exec(createSubchatTools(input(), win), 'send_to_subchat')(
       { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
       {},
     )
@@ -195,15 +195,15 @@ describe('send_to_subchat', () => {
     const [, filho] = mocks.runChat.mock.calls[0] as [unknown, SendMessageInput]
     expect(filho.sessionId).toBe('ses_filho')
     expect(filho.directory).toBe('/repo')
-    // No chat do filho a mensagem diz de onde veio, na língua do usuário.
+    // In the child's chat the message says where it came from, in the user's language.
     expect(filho.text).toBe('Mensagem do chat principal: Agora cubra aspas escapadas')
     expect(String(r)).toContain('Instruction sent')
-    // Não pergunta por conta própria: o card é o gate de permissão (rules.ts).
+    // It does not ask on its own: the card is the permission gate (rules.ts).
     expect(mocks.dispatchAsk).not.toHaveBeenCalled()
   })
 
-  it('só instrui filho DESTA conversa', async () => {
-    const r = await exec(createSubchatTools(input({ sessionId: 'ses_outra' }), janela), 'send_to_subchat')(
+  it('only instructs a child of THIS conversation', async () => {
+    const r = await exec(createSubchatTools(input({ sessionId: 'ses_other' }), win), 'send_to_subchat')(
       { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
       {},
     )
@@ -211,9 +211,9 @@ describe('send_to_subchat', () => {
     expect(String(r)).toContain('No subchat')
   })
 
-  it('recusa filho que ainda está rodando um turno', async () => {
+  it('refuses a child that is still running a turn', async () => {
     mocks.running.push('ses_filho')
-    const r = await exec(createSubchatTools(input(), janela), 'send_to_subchat')(
+    const r = await exec(createSubchatTools(input(), win), 'send_to_subchat')(
       { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
       {},
     )
@@ -221,8 +221,8 @@ describe('send_to_subchat', () => {
     expect(String(r)).toContain('busy')
   })
 
-  it('duas instruções no mesmo passo: a segunda recusa', async () => {
-    const tools = createSubchatTools(input(), janela)
+  it('two instructions in the same step: the second is refused', async () => {
+    const tools = createSubchatTools(input(), win)
     const send = exec(tools, 'send_to_subchat')
     const args = { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' }
     const [a, b] = await Promise.all([send(args, {}), send(args, {})])
@@ -230,7 +230,7 @@ describe('send_to_subchat', () => {
     expect([String(a), String(b)].filter((t) => t.includes('busy'))).toHaveLength(1)
   })
 
-  it('a instrução roda fora do escopo de escrita do pai', async () => {
+  it('the instruction runs outside the parent write scope', async () => {
     let filho: Promise<void> | undefined
     mocks.runChat.mockImplementationOnce(async () => {
       filho = runWithWriteScope(async () => {
@@ -240,7 +240,7 @@ describe('send_to_subchat', () => {
       await filho
     })
     await runWithWriteScope(async () => {
-      await exec(createSubchatTools(input(), janela), 'send_to_subchat')(
+      await exec(createSubchatTools(input(), win), 'send_to_subchat')(
         { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
         {},
       )
@@ -249,13 +249,13 @@ describe('send_to_subchat', () => {
     })
   })
 
-  it('sem janela não dispara nada', async () => {
+  it('with no win it fires nothing', async () => {
     const r = await exec(createSubchatTools(input()), 'send_to_subchat')(
       { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
       {},
     )
     expect(mocks.runChat).not.toHaveBeenCalled()
-    expect(String(r)).toContain('needs the app window')
+    expect(String(r)).toContain('needs the app win')
   })
 })
 
@@ -265,10 +265,10 @@ describe('read_subchat', () => {
     mocks.running.length = 0
   })
 
-  it('devolve a conversa do filho com o status', async () => {
+  it('returns the child conversation with the status', async () => {
     mocks.running.push('ses_filho')
     const r = String(
-      await exec(createSubchatTools(input(), janela), 'read_subchat')({ subchatId: 'ses_filho' }, {}),
+      await exec(createSubchatTools(input(), win), 'read_subchat')({ subchatId: 'ses_filho' }, {}),
     )
     expect(r).toContain('Parser de CSV')
     expect(r).toContain('running a turn now')
@@ -277,8 +277,8 @@ describe('read_subchat', () => {
     expect(mocks.runChat).not.toHaveBeenCalled()
   })
 
-  it('id de outra conversa não lê nada', async () => {
-    const r = await exec(createSubchatTools(input({ sessionId: 'ses_outra' }), janela), 'read_subchat')(
+  it('an id from another conversation reads nothing', async () => {
+    const r = await exec(createSubchatTools(input({ sessionId: 'ses_other' }), win), 'read_subchat')(
       { subchatId: 'ses_filho' },
       {},
     )

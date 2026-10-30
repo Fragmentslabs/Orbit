@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { stripLeakedReasoning } from "@shared/leaked-reasoning"
 
 describe("stripLeakedReasoning", () => {
-  it("o caso real: rascunho em português + pensamento em inglês + resposta final", () => {
+  it("the real case: Portuguese draft + English thinking + final reply", () => {
     const raw =
       "Só o contorno da janela do Claude, sem nada legível dentro. Vou tentar pela imagem, um instante.\n" +
       "Pela imagem também não veio nada legível, só a moldura.\n\n" +
@@ -15,28 +15,28 @@ describe("stripLeakedReasoning", () => {
     expect(clean).toContain("Se você anexar um print, eu leio na hora.")
   })
 
-  it("resposta em português com nomes e termos em inglês passa inteira", () => {
+  it("a Portuguese reply with English names and terms passes whole", () => {
     const text = "Você está no VS Code com o arquivo main.ts aberto, e atrás o YouTube tocando um vídeo do canal AI Explained."
     expect(stripLeakedReasoning(text, "Portuguese")).toBe(text)
   })
 
-  it("números com ponto e quebras de linha de lista não quebram a frase", () => {
+  it("numbers with dots and list line breaks do not break the sentence", () => {
     const text = "O Qwen 3.5 9B compete com modelos maiores.\n- primeiro item\n- segundo item"
     expect(stripLeakedReasoning(text, "Portuguese")).toBe(text)
   })
 
-  it("conversa em inglês não é filtrada", () => {
+  it("an English conversation is not filtered", () => {
     const text = "Let me check the screen. I should call the tool."
     expect(stripLeakedReasoning(text, "English")).toBe(text)
     expect(stripLeakedReasoning(text, undefined)).toBe(text)
   })
 
-  it("a frase em andamento pode ser inglesa e cair — e a seguinte, em português, fica", () => {
+  it("a sentence in progress can be English and fall — and the next one, in Portuguese, stays", () => {
     expect(stripLeakedReasoning("But wait — I should actually", "Portuguese")).toBe("")
     expect(stripLeakedReasoning("But wait — I should actually call it. Tudo certo por aqui.", "Portuguese")).toBe("Tudo certo por aqui.")
   })
 
-  it("uma palavra inglesa solta não derruba uma frase", () => {
+  it("a loose English word does not bring a sentence down", () => {
     expect(stripLeakedReasoning("Done.", "Portuguese")).toBe("Done.")
   })
 })

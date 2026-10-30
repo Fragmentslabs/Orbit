@@ -1,6 +1,6 @@
 /**
- * Reexporta o modal de rotação a partir do diretório dedicado.
- * Mantém a compatibilidade com o import path `@/src/components/models/rotation-dialog`
- * usado em `App.tsx`.
+ * Re-exports the rotation modal from the dedicated directory.
+ * It keeps compatibility with the import path `@/src/components/models/rotation-dialog`
+ * used in `App.tsx`.
  */
 export { RotationDialog, RotationDialogHost } from "./rotation"

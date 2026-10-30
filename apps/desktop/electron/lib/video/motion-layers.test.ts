@@ -30,36 +30,36 @@ describe('mergeSpans', () => {
 })
 
 describe('pickLayers', () => {
-  // Composição de 300 quadros: fundo e palco nomeados e sempre em cena, duas
-  // frases sem nome dentro do palco (com palavras dentro), e um contêiner anônimo
-  // que nunca sai.
+  // A 300-frame composition: a named background and stage, always on screen, two
+  // unnamed sentences inside the stage (with words inside), and an anonymous container
+  // that never leaves.
   const layers = [
     raw('bg', -1, [[0, 299]], true), // 0
     raw('stage', -1, [[0, 299]], true), // 1
-    raw('VOCÊ NÃO PRECISA', 1, [[30, 89]]), // 2
-    raw('VOCÊ', 2, [[30, 89]]), // 3 — palavra da frase
-    raw('PRECISA', 2, [[45, 89]]), // 4 — entra depois, mas é parte da frase
-    raw('DE MAIS UMA FERRAMENTA', 1, [[90, 150]]), // 5
-    raw('.wrapper', -1, [[0, 299]]), // 6 — anônimo e sempre lá
-    raw('logo', 6, [[200, 299]], true), // 7 — nomeado dentro do anônimo
-    raw('#ghost', -1, []), // 8 — nunca visível
+    raw('YOU DO NOT NEED', 1, [[30, 89]]), // 2
+    raw('YOU', 2, [[30, 89]]), // 3 — word of the sentence
+    raw('NEED', 2, [[45, 89]]), // 4 — enters later, but is part of the sentence
+    raw('ANOTHER TOOL', 1, [[90, 150]]), // 5
+    raw('.wrapper', -1, [[0, 299]]), // 6 — anonymous and always there
+    raw('logo', 6, [[200, 299]], true), // 7 — named inside the anonymous one
+    raw('#ghost', -1, []), // 8 — never visible
   ]
 
   it('keeps every named layer, and the OUTERMOST unnamed element that enters or leaves', () => {
     const picked = pickLayers(layers, 300)
-    expect(picked.map((l) => l.name)).toEqual(['bg', 'stage', 'VOCÊ NÃO PRECISA', 'DE MAIS UMA FERRAMENTA', 'logo'])
-    expect(picked.find((l) => l.name === 'VOCÊ NÃO PRECISA')).toEqual({
-      name: 'VOCÊ NÃO PRECISA',
+    expect(picked.map((l) => l.name)).toEqual(['bg', 'stage', 'YOU DO NOT NEED', 'ANOTHER TOOL', 'logo'])
+    expect(picked.find((l) => l.name === 'YOU DO NOT NEED')).toEqual({
+      name: 'YOU DO NOT NEED',
       named: false,
       spans: [[30, 89]],
-      // A posição na lista é o endereço do elemento (o retrato cru não declarou
-      // `index`, então vale a ordem) e o tipo fica em "other" sem medição.
+      // The position in the list is the element's address (the raw snapshot did not declare
+      // `index`, so the order counts) and the type stays "other" without measurement.
       index: 2,
       kind: 'other',
     })
   })
 
-  it('leva o ENDEREÇO e o TIPO de cada camada — é o que a aba realça e desenha', () => {
+  it('carries the ADDRESS and the TYPE of each layer — that is what the tab highlights and draws', () => {
     const typed: RawLayer[] = [
       raw('stage', -1, [[0, 299]], true),
       raw('titulo', 0, [[10, 90]], true, { kind: 'text' }),
@@ -70,15 +70,15 @@ describe('pickLayers', () => {
       ['stage', 0, 'other'],
       ['titulo', 1, 'text'],
       ['foto', 2, 'image'],
-      // O índice DECLARADO vence a posição na lista: é o runtime que sabe o
-      // endereço, e um retrato reordenado não pode trocar o realce de elemento.
+      // The DECLARED index wins over the position in the list: it is the runtime that knows the
+      // address, and a reordered snapshot cannot swap the element's highlight.
       ['player', 9, 'video'],
     ])
   })
 
   it('drops the words of a NAMED phrase that enters and leaves (they are parts of it)', () => {
-    // O caso real da composição kinetic: data-layer="phrase-1" com uma palavra
-    // por span, cada uma entrando num quadro.
+    // The real case of the kinetic composition: data-layer="phrase-1" with one word
+    // per span, each one entering on a frame.
     const phrase = [
       raw('stage', -1, [[0, 299]], true),
       raw('phrase-1', 0, [[1, 45]], true),
@@ -90,9 +90,9 @@ describe('pickLayers', () => {
   })
 
   it('keeps MEDIA even when it never enters or leaves — it is the content, not decoration', () => {
-    // O caso real: a peça é um vídeo de fundo do primeiro ao último quadro. Sem
-    // esta regra ele sumia da lista (a regra "só quem entra ou sai" o descartava),
-    // justamente a camada que a pessoa quer selecionar e comentar.
+    // The real case: the piece is a background video from the first frame to the last. Without
+    // this rule it vanished from the list (the "only those that enter or leave" rule discarded it),
+    // precisely the layer the person wants to select and comment on.
     const media = [
       raw('Mimi.mp4', -1, [[0, 299]], false, { kind: 'video', tag: 'video' }),
       raw('trilha.mp3', -1, [[0, 299]], false, { kind: 'audio', tag: 'audio' }),
@@ -102,8 +102,8 @@ describe('pickLayers', () => {
   })
 
   it('does not list a <video> twice (the wrapper that CONTAINS it is not the media)', () => {
-    // O runtime marca o contêiner como "video" (tem vídeo dentro), mas a camada
-    // de verdade é o <video>: a tag separa os dois.
+    // The runtime marks the container as "video" (it has a video inside), but the layer
+    // is really the <video>: the tag separates the two.
     const wrapper = [
       raw('.hero', -1, [[0, 299]], false, { kind: 'video', tag: 'div' }),
       raw('Mimi.mp4', 0, [[0, 299]], false, { kind: 'video', tag: 'video' }),

@@ -32,7 +32,7 @@ import {
   splitForSynthesis,
   splitPcmWindows,
 } from "./audio"
-// STT é o outro worker: aqui só se consome o que ele exporta (ver o rodapé).
+// STT is the other worker: here we only consume what it exports (see the footer).
 import {
   STT_MODELS,
   cancelSttSession,
@@ -47,40 +47,40 @@ import {
 } from "./stt"
 
 /**
- * Fachada do núcleo de voz: `registerVoiceIpc()` liga os canais e o resto do
- * arquivo é o que outros módulos do main usam por import direto.
+ * Facade of the voice core: `registerVoiceIpc()` wires the channels and the rest of the
+ * file is what other main modules use through a direct import.
  *
- * Contrato dos canais (consumido por três telas do renderer — NÃO renomear):
+ * Channel contract (consumed by three renderer screens — DO NOT rename):
  *   invoke "voice:hardware"          -> VoiceHardwareInfo
  *   invoke "voice:models"            -> VoiceModelInfo[]
  *   invoke "voice:status"            -> VoiceStatusSnapshot
  *   invoke "voice:download"          { modelId }  -> { started: boolean }
  *   invoke "voice:download-cancel"   { modelId }  -> void
  *   invoke "voice:remove-model"      { modelId }  -> void
- *   evento "voice:download-progress" -> VoiceDownloadProgress
- *   evento "voice:status-changed"    -> VoiceStatusSnapshot (a cada mudança)
+ *   event  "voice:download-progress" -> VoiceDownloadProgress
+ *   event  "voice:status-changed"    -> VoiceStatusSnapshot (on every change)
  *   invoke "voice:tts:start"         { text, voice?, lang?, speed?, engine? } -> { id }
- *                                     (`engine`: prioridade de áudio "model" | "local";
- *                                      sem ele, vale a das configurações)
- *   evento "voice:tts:chunk"         -> { id, pcm (base64 PCM16), sr, i, n, seg? }
- *                                     (`seg`: nº da frase, só na fala contínua)
- *   evento "voice:tts:done"          -> { id, error? }
+ *                                     (`engine`: audio priority "model" | "local";
+ *                                      without it, the settings one applies)
+ *   event  "voice:tts:chunk"         -> { id, pcm (base64 PCM16), sr, i, n, seg? }
+ *                                     (`seg`: sentence number, only in continuous speech)
+ *   event  "voice:tts:done"          -> { id, error? }
  *   invoke "voice:tts:cancel"        { id } -> void
  *   invoke "voice:tts:stream-start"  { voice?, lang?, speed?, engine? } -> { id }
- *   invoke "voice:tts:stream-append" { id, text }   (frase nova, na ordem)
- *   invoke "voice:tts:stream-clear"  { id }         (descarta as frases ainda não geradas)
- *   invoke "voice:tts:stream-end"    { id }         (não chegam mais frases)
- *                                     fala contínua: chunk/done/cancel como acima
+ *   invoke "voice:tts:stream-append" { id, text }   (new sentence, in order)
+ *   invoke "voice:tts:stream-clear"  { id }         (discards the sentences not yet generated)
+ *   invoke "voice:tts:stream-end"    { id }         (no more sentences arrive)
+ *                                     continuous speech: chunk/done/cancel as above
  *
- * Os modelos de STT ficam no catálogo (`voice:models`) e no `voice:status`
- * (motores disponíveis); as sessões de ditado em si são do worker de STT, que
- * registra os canais dele em ./stt.
+ * The STT models live in the catalog (`voice:models`) and in `voice:status`
+ * (available engines); the dictation sessions themselves belong to the STT worker, which
+ * registers its channels in ./stt.
  */
 
-/** Eventos de voz vão para TODAS as janelas (o app pode ter mais de uma). */
-function emitir(canal: string, payload: unknown): void {
+/** Voice events go to ALL windows (the app may have more than one). */
+function emit(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(canal, payload)
+    if (!win.isDestroyed()) win.webContents.send(channel, payload)
   }
 }
 
@@ -89,209 +89,209 @@ async function hardware(): Promise<VoiceHardwareInfo> {
 }
 
 /**
- * Publica o retrato atual em `voice:status-changed`. O renderer escuta esse
- * canal para revalidar o botão de fala e os selos — sem isto, baixar o modelo
- * e voltar ao chat deixava o botão desativado (nada avisava que mudou).
+ * Publishes the current snapshot on `voice:status-changed`. The renderer listens to that
+ * channel to revalidate the speech button and the badges — without this, downloading the model
+ * and going back to the chat left the button disabled (nothing announced the change).
  */
 async function emitStatusChanged(): Promise<void> {
-  emitir("voice:status-changed", await voiceStatusSnapshot())
+  emit("voice:status-changed", await voiceStatusSnapshot())
 }
 
 /**
- * Depois do fim de um download: avisa o novo estado e, quando o modelo é um
- * PACOTE (o `.tar.bz2` do Parakeet), extrai na hora — "baixado" nunca fica se
- * apresentando como "pronto". A extração também pode começar no primeiro uso
- * (dentro do motor); os dois caminhos passam pelo mesmo aviso de fase (ver
- * `onParakeetExtractPhaseChange` em ./models-store).
+ * After the end of a download: announces the new state and, when the model is a
+ * PACKAGE (Parakeet's `.tar.bz2`), extracts it right away — "downloaded" never ends up
+ * presenting itself as "ready". The extraction may also start on first use
+ * (inside the engine); both paths go through the same phase notice (see
+ * `onParakeetExtractPhaseChange` in ./models-store).
  */
-async function aposDownload(modelId: string, progress: VoiceDownloadProgress): Promise<void> {
+async function afterDownload(modelId: string, progress: VoiceDownloadProgress): Promise<void> {
   await emitStatusChanged()
   if (!progress.done || progress.error) return
   const model = modelInfo(modelId)
   if (!model) return
-  // Cancelamento chega como `done` sem erro: só prepara o que está completo.
+  // Cancellation arrives as `done` without an error: it only prepares what is complete.
   if (!(await isModelDownloaded(modelId))) return
   if (model.archive) {
     await prepareSttModel(modelId).catch(() => {
-      // a falha já ficou registrada na fase da extração (aparece no próximo status)
+      // the failure is already recorded in the extraction phase (it shows up in the next status)
     })
     await emitStatusChanged()
   }
-  // Aquece em segundo plano, sem `await`: o primeiro ditado não deve pagar o
-  // carregamento do modelo (no Parakeet, centenas de MB no ONNX Runtime). Não
-  // faz nada quando o id não é de ditado — ver `warmSttModel`.
+  // Warms up in the background, without `await`: the first dictation should not pay for
+  // the model loading (in Parakeet, hundreds of MB in the ONNX Runtime). It does
+  // nothing when the id is not a dictation one — see `warmSttModel`.
   void warmSttModel(modelId)
 }
 
-/** Falas em andamento, por id — é como o `voice:tts:cancel` acha o pedido. */
-const falas = new Map<string, AbortController>()
+/** Utterances in progress, by id — that is how `voice:tts:cancel` finds the request. */
+const speechJobs = new Map<string, AbortController>()
 
-/** Fala contínua: frases esperando síntese, na ordem em que chegaram. */
-interface Fluxo {
-  pedido: FalaPedido
-  /** `seg` é dado na CHEGADA da frase (a ordem do append), não na geração: as
-   *  descartadas por um clear também consomem número, e o renderer — que conta
-   *  as que mandou — continua alinhado com o main. */
-  fila: { texto: string; seg: number }[]
-  /** Número da próxima frase que chegar (vai nos pedaços como `seg`). */
-  proxima: number
-  /** Não chegam mais frases: com a fila vazia, a fala termina. */
-  fechado: boolean
-  rodando: boolean
+/** Continuous speech: sentences waiting for synthesis, in the order they arrived. */
+interface SpeechStream {
+  request: SpeechRequest
+  /** `seg` is assigned on the sentence's ARRIVAL (the append order), not on generation: the
+   *  ones discarded by a clear also consume a number, and the renderer — which counts
+   *  the ones it sent — stays aligned with the main. */
+  queue: { text: string; seg: number }[]
+  /** Number of the next sentence to arrive (it goes in the chunks as `seg`). */
+  next: number
+  /** No more sentences arrive: with the queue empty, the speech ends. */
+  closed: boolean
+  running: boolean
   signal: AbortSignal
-  /** Idioma já decidido nesta fala (no "Automático"): uma frase ambígua
-   *  ("Claro.") herda o das anteriores em vez de trocar o sotaque. */
-  idioma: { lang?: string }
+  /** Language already decided in this utterance (in "Automatic" mode): an ambiguous sentence
+   *  ("Claro.") inherits the previous one's instead of changing the accent. */
+  language: { lang?: string }
 }
 
-const fluxos = new Map<string, Fluxo>()
+const streams = new Map<string, SpeechStream>()
 
 /**
- * Sintetiza a fila de uma fala contínua, uma frase por vez, sem esperar o
- * renderer tocar nada — a geração corre à frente da reprodução. Termina (com
- * `done`) quando a fala foi fechada e a fila esvaziou, ou no primeiro erro.
+ * Synthesises the queue of a continuous utterance, one sentence at a time, without waiting for the
+ * renderer to play anything — generation runs ahead of playback. It ends (with
+ * `done`) when the utterance was closed and the queue emptied, or on the first error.
  */
-async function drenarFluxo(id: string): Promise<void> {
-  const fluxo = fluxos.get(id)
-  if (!fluxo || fluxo.rodando) return
-  fluxo.rodando = true
+async function drainStream(id: string): Promise<void> {
+  const stream = streams.get(id)
+  if (!stream || stream.running) return
+  stream.running = true
   try {
-    while (fluxo.fila.length > 0 && !fluxo.signal.aborted) {
-      const { texto, seg } = fluxo.fila.shift() as { texto: string; seg: number }
-      await rodarFala(id, texto, fluxo.pedido, fluxo.signal, seg, fluxo.idioma)
+    while (stream.queue.length > 0 && !stream.signal.aborted) {
+      const { text, seg } = stream.queue.shift() as { text: string; seg: number }
+      await runSpeech(id, text, stream.request, stream.signal, seg, stream.language)
     }
   } catch (err) {
-    fluxos.delete(id)
-    falas.delete(id)
-    // Cancelada pelo renderer (interromper/desligar): ninguém espera mais nada.
-    if (!fluxo.signal.aborted) emitir("voice:tts:done", { id, error: (err as Error).message ?? String(err) })
+    streams.delete(id)
+    speechJobs.delete(id)
+    // Cancelled by the renderer (interrupt/turn off): nobody waits for anything anymore.
+    if (!stream.signal.aborted) emit("voice:tts:done", { id, error: (err as Error).message ?? String(err) })
     return
   }
-  fluxo.rodando = false
-  if (fluxo.signal.aborted) {
-    fluxos.delete(id)
-    falas.delete(id)
+  stream.running = false
+  if (stream.signal.aborted) {
+    streams.delete(id)
+    speechJobs.delete(id)
     return
   }
-  // Chegou frase enquanto a última era gerada: o laço acima já a pegou; aqui
-  // só sobra decidir se a fala acabou.
-  if (fluxo.fechado && fluxo.fila.length === 0) {
-    fluxos.delete(id)
-    falas.delete(id)
-    emitir("voice:tts:done", { id })
+  // A sentence arrived while the last one was being generated: the loop above already took it; here
+  // all that is left is to decide whether the utterance is over.
+  if (stream.closed && stream.queue.length === 0) {
+    streams.delete(id)
+    speechJobs.delete(id)
+    emit("voice:tts:done", { id })
   }
 }
 
-/** Pedido de fala vindo do renderer (`voice:tts:start`). */
-interface FalaPedido {
+/** Speech request coming from the renderer (`voice:tts:start`). */
+interface SpeechRequest {
   text?: string
   voice?: string
   lang?: string
   speed?: number
-  /** Prioridade de áudio; sem ela, vale a das configurações (`voice.tts.engine`). */
+  /** Audio priority; without it, the settings one applies (`voice.tts.engine`). */
   engine?: VoiceTtsEngine
 }
 
-/** Um pedaço do contrato `voice:tts:chunk` (PCM16 base64). */
-interface FalaChunk {
+/** One chunk of the `voice:tts:chunk` contract (PCM16 base64). */
+interface SpeechChunk {
   pcm: Buffer
   sr: number
   i: number
   n: number
-  /** Texto do pedaço, quando o motor o manda (o local manda; o modelo, não). */
+  /** Text of the chunk, when the engine sends it (the local one does; the model one does not). */
   text?: string
 }
 
 /**
- * Roda UMA fala pelo motor escolhido pela prioridade de áudio.
+ * Runs ONE utterance through the engine chosen by the audio priority.
  *
- * `model` tenta a rota do provedor e, quando ela não existe ou falha ANTES de
- * entregar qualquer pedaço, cai no motor local — a preferência não deixa a
- * leitura muda. Com áudio já entregue, trocar de motor no meio emendaria duas
- * vozes diferentes, então a falha sobe como erro.
+ * `model` tries the provider route and, when it does not exist or fails BEFORE
+ * delivering any chunk, falls back to the local engine — the preference does not leave the
+ * reading mute. With audio already delivered, switching engines midway would splice two
+ * different voices together, so the failure surfaces as an error.
  */
-async function rodarFala(
+async function runSpeech(
   id: string,
-  texto: string,
-  payload: FalaPedido,
+  text: string,
+  payload: SpeechRequest,
   signal: AbortSignal,
-  /** Número da frase na fala contínua: o renderer mostra a frase que está tocando. */
+  /** Sentence number in continuous speech: the renderer shows the sentence that is playing. */
   seg?: number,
-  idioma?: { lang?: string },
+  language?: { lang?: string },
 ): Promise<void> {
-  await sintetizar(
-    texto,
+  await synthesize(
+    text,
     payload,
     signal,
     (chunk) =>
-      // O texto do pedaço vai junto: o renderer revela a legenda de cada
-      // trecho no ritmo do áudio (a rota do modelo manda o dela sem texto).
-      emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg, text: chunk.text }),
-    idioma,
+      // The chunk text goes along: the renderer reveals the caption of each
+      // segment at the pace of the audio (the model route sends its own without text).
+      emit("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg, text: chunk.text }),
+    language,
   )
 }
 
 /**
- * Idioma quando o "Automático" não tem evidência (texto curto, ambíguo): o
- * idioma fixo, se houver, senão o da interface do app.
+ * Language when "Automatic" has no evidence (short, ambiguous text): the
+ * fixed language, if there is one, otherwise the app interface's.
  */
-function idiomaReserva(): string {
-  const fixo = getAppSettings().voice.tts.lang
-  if (fixo && fixo !== "auto") return fixo
+function fallbackLanguage(): string {
+  const fixed = getAppSettings().voice.tts.lang
+  if (fixed && fixed !== "auto") return fixed
   return currentMainLocale() === "pt-BR" ? "pt" : "en"
 }
 
 /**
- * A síntese em si, sem destino fixo: a fala ao vivo manda os pedaços para as
- * janelas (`rodarFala`); o arquivo de áudio do agente (`synthesizeToWav`) os
- * junta num WAV.
+ * The synthesis itself, with no fixed destination: live speech sends the chunks to the
+ * windows (`rodarFala`); the agent's audio file (`synthesizeToWav`) joins them
+ * into a WAV.
  */
-async function sintetizar(
-  texto: string,
-  payload: FalaPedido,
+async function synthesize(
+  text: string,
+  payload: SpeechRequest,
   signal: AbortSignal,
-  emitirChunk: (chunk: FalaChunk) => void,
-  idioma?: { lang?: string },
+  emitChunk: (chunk: SpeechChunk) => void,
+  language?: { lang?: string },
 ): Promise<void> {
-  // "auto" (o padrão) decide pelo texto: é ele que vai ser falado, e o motor
-  // local fala com o sotaque do idioma que recebe. Um idioma fixo é forçado.
-  const lang = pickSpeechLang(payload?.lang ?? getAppSettings().voice.tts.lang, texto, idiomaReserva(), idioma)
-  const pedido = { voice: payload?.voice, lang, speed: payload?.speed }
+  // "auto" (the default) decides by the text: it is what will be spoken, and the local
+  // engine speaks with the accent of the language it receives. A fixed language is forced.
+  const lang = pickSpeechLang(payload?.lang ?? getAppSettings().voice.tts.lang, text, fallbackLanguage(), language)
+  const request = { voice: payload?.voice, lang, speed: payload?.speed }
   const engine: VoiceTtsEngine = payload?.engine ?? getAppSettings().voice.tts.engine
   if (engine === "model") {
     let entregou = false
     try {
       await speakWithModel(
-        texto,
-        pedido,
+        text,
+        request,
         (chunk) => {
           entregou = true
-          emitirChunk(chunk)
+          emitChunk(chunk)
         },
         signal,
       )
       return
     } catch (err) {
       if (entregou || signal.aborted) throw err
-      console.warn("[voice] rota pelo modelo indisponível, usando o motor local:", err)
+      console.warn("[voice] model unavailable, falling back to the local engine:", err)
     }
   }
-  // `local` — o motor do Supertonic, offline.
-  await speak(texto, pedido, emitirChunk, signal)
+  // `local` — the Supertonic engine, offline.
+  await speak(text, request, emitChunk, signal)
 }
 
 /**
- * Registra os canais de voz. Chamado uma vez, junto dos outros registros do
- * main (ver main.ts) — nada aqui pode ser registrado duas vezes.
+ * Registers the voice channels. Called once, along with the other main
+ * registrations (see main.ts) — nothing here may be registered twice.
  */
 /**
- * Whisper escolhido como motor do ditado: o `whisper-server` sobe JÁ, junto com o
- * app, em vez de no primeiro aperto do microfone (o spawn + a carga do ggml
- * levam segundos). Trocar para outro motor derruba o servidor na hora.
+ * Whisper chosen as the dictation engine: `whisper-server` comes up RIGHT AWAY, along with the
+ * app, instead of on the first microphone press (the spawn + the ggml load
+ * take seconds). Switching to another engine takes the server down at once.
  *
- * Chamado no boot (com o que está no disco) e a cada mudança das configurações.
- * Respeita o pré-carregamento: desligado, o servidor sobe no primeiro ditado.
- * O próprio servidor se encerra depois de ocioso (ver whisper.ts).
+ * Called at boot (with what is on disk) and on every settings change.
+ * It respects preloading: when off, the server comes up on the first dictation.
+ * The server itself shuts down when idle (see whisper.ts).
  */
 export function syncWhisperServer(next: AppSettings, prev?: AppSettings): void {
   const stt = next.voice.stt
@@ -310,10 +310,10 @@ export function syncWhisperServer(next: AppSettings, prev?: AppSettings): void {
 }
 
 /**
- * Desligar a voz devolve a memória NA HORA, em vez de esperar o ciclo ocioso de
- * cinco minutos: ditado desligado (ou trocado de motor, ou sem pré-carga) solta
- * o modelo carregado; leitura desligada encerra o processo do motor de fala.
- * Roda antes do `syncWhisperServer`, que pode subir o servidor do motor novo.
+ * Turning voice off gives the memory back RIGHT AWAY, instead of waiting for the five-minute
+ * idle cycle: dictation turned off (or switched to another engine, or without preload) releases
+ * the loaded model; reading turned off shuts the speech engine process down.
+ * It runs before `syncWhisperServer`, which may bring up the new engine's server.
  */
 export function releaseDisabledVoice(next: AppSettings, prev?: AppSettings): void {
   if (!prev) return
@@ -332,9 +332,9 @@ export function registerVoiceIpc(): void {
     syncWhisperServer(next, prev)
   })
 
-  // A extração do pacote começa por dois caminhos (logo após o download ou no
-  // primeiro uso, dentro do motor). Um só aviso cobre os dois: cada mudança de
-  // fase publica o estado novo em `voice:status-changed`.
+  // The package extraction starts through two paths (right after the download or on
+  // first use, inside the engine). A single notice covers both: every
+  // phase change publishes the new state on `voice:status-changed`.
   onParakeetExtractPhaseChange(() => {
     void emitStatusChanged()
   })
@@ -346,16 +346,16 @@ export function registerVoiceIpc(): void {
   ipcMain.handle("voice:status", () => voiceStatusSnapshot())
 
   /**
-   * Aquece um motor de ditado em SEGUNDO PLANO: a resposta volta na hora e a
-   * carga do modelo corre fora do caminho do usuário. O botão de microfone
-   * chama assim que aparece, para o primeiro ditado não esperar o modelo.
+   * Warms up a dictation engine IN THE BACKGROUND: the answer comes back at once and the
+   * model load runs off the user's path. The microphone button
+   * calls it as soon as it appears, so the first dictation does not wait for the model.
    */
   ipcMain.handle(
     "voice:stt:warm",
     (_event, payload: { modelId?: string; engine?: string; threads?: number } = {}) => {
       const modelId = String(payload?.modelId ?? "")
-      // O pré-carregamento é uma preferência: desligado, o pedido não aquece
-      // nada e a resposta diz isso, em vez de prometer trabalho que não houve.
+      // Preloading is a preference: when off, the request warms up
+      // nothing and the answer says so, instead of promising work that did not happen.
       const warming = sttPreloadEnabled()
       if (warming) void warmSttModel(modelId || undefined, payload?.engine, payload?.threads)
       return { warming }
@@ -363,9 +363,9 @@ export function registerVoiceIpc(): void {
   )
 
   /**
-   * Solta na hora o que os motores de ditado carregaram. A aba Voz dispara isto
-   * ao desligar o pré-carregamento: a RAM volta na hora, em vez de esperar o
-   * ciclo ocioso. Com ditado em curso, o modelo adia a liberação.
+   * Releases at once what the dictation engines loaded. The Voice tab fires this
+   * when turning preloading off: the RAM comes back right away, instead of waiting for the
+   * idle cycle. With dictation in progress, the model postpones the release.
    */
   ipcMain.handle("voice:stt:release", () => {
     releaseSttModels()
@@ -377,41 +377,41 @@ export function registerVoiceIpc(): void {
     if (!VOICE_MODELS.some((model) => model.id === modelId)) {
       throw new Error(`modelo desconhecido: ${modelId}`)
     }
-    // Já está no disco: não há o que baixar, e o que pode faltar é o PREPARO do
-    // pacote (extração + VAD), disparado aqui. Sem isto o clique num modelo já
-    // baixado não fazia NADA: o download terminava na hora, pulando os arquivos
-    // completos, e a tela não mudava.
+    // It is already on disk: there is nothing to download, and what may be missing is the PREPARATION of the
+    // package (extraction + VAD), triggered here. Without this, clicking an already
+    // downloaded model did NOTHING: the download ended at once, skipping the complete
+    // files, and the screen did not change.
     if (await isModelDownloaded(modelId)) {
       const model = modelInfo(modelId)
       if (model?.archive) {
         try {
           await prepareSttModel(modelId)
         } catch (err) {
-          // O erro morria aqui (`.catch(() => {})`): a extração falhava em
-          // silêncio e o botão "Preparar agora" parecia não fazer nada. O aviso
-          // vai pelo canal de progresso, que a lista de modelos já mostra.
-          const falha: VoiceDownloadProgress = {
+          // The error died here (`.catch(() => {})`): the extraction failed in
+          // silence and the "Prepare now" button seemed to do nothing. The notice
+          // goes through the progress channel, which the model list already shows.
+          const failure: VoiceDownloadProgress = {
             modelId,
             received: 0,
             total: model.bytes,
             done: true,
             error: (err as Error).message ?? String(err),
           }
-          emitir("voice:download-progress", falha)
+          emit("voice:download-progress", failure)
         }
       }
       await emitStatusChanged()
       return { started: false }
     }
-    const resultado = startDownload(modelId, (progress: VoiceDownloadProgress) => {
-      emitir("voice:download-progress", progress)
-      // Fim (ou falha) do download: o estado mudou — avisa e, se for pacote,
-      // extrai em seguida (ver `aposDownload`).
-      if (progress.done) void aposDownload(modelId, progress)
+    const started = startDownload(modelId, (progress: VoiceDownloadProgress) => {
+      emit("voice:download-progress", progress)
+      // End (or failure) of the download: the state changed — announce it and, if it is a package,
+      // extract right after (see `aposDownload`).
+      if (progress.done) void afterDownload(modelId, progress)
     })
-    // O download começou: "absent" virou "downloading" agora.
-    if (resultado.started) void emitStatusChanged()
-    return resultado
+    // The download started: "absent" became "downloading" just now.
+    if (started.started) void emitStatusChanged()
+    return started
   })
 
   ipcMain.handle("voice:download-cancel", (_event, payload: { modelId?: string }) => {
@@ -420,8 +420,8 @@ export function registerVoiceIpc(): void {
 
   ipcMain.handle("voice:remove-model", async (_event, payload: { modelId?: string }) => {
     const modelId = String(payload?.modelId ?? "")
-    // O motor mantém os ONNX abertos em memória: apagar o TTS com ele de pé
-    // deixaria o processo lendo arquivos que não existem mais.
+    // The engine keeps the ONNX files open in memory: deleting the TTS with it up
+    // would leave the process reading files that no longer exist.
     if (modelId === TTS_MODEL_ID) shutdownTts()
     await removeModel(modelId)
     await emitStatusChanged()
@@ -431,23 +431,23 @@ export function registerVoiceIpc(): void {
     "voice:tts:start",
     (
       _event,
-      payload: FalaPedido,
+      payload: SpeechRequest,
     ): { id: string } => {
       const id = randomUUID()
       const controller = new AbortController()
-      falas.set(id, controller)
-      const texto = String(payload?.text ?? "")
+      speechJobs.set(id, controller)
+      const text = String(payload?.text ?? "")
 
-      // O trabalho segue em segundo plano: o renderer recebe o id na hora e
-      // acompanha pelos eventos (é o que o streaming existe para permitir).
+      // The work continues in the background: the renderer receives the id at once and
+      // follows it through the events (that is what streaming exists to allow).
       void (async () => {
         try {
-          await rodarFala(id, texto, payload, controller.signal)
-          emitir("voice:tts:done", { id })
+          await runSpeech(id, text, payload, controller.signal)
+          emit("voice:tts:done", { id })
         } catch (err) {
-          emitir("voice:tts:done", { id, error: (err as Error).message ?? String(err) })
+          emit("voice:tts:done", { id, error: (err as Error).message ?? String(err) })
         } finally {
-          falas.delete(id)
+          speechJobs.delete(id)
         }
       })()
 
@@ -456,66 +456,66 @@ export function registerVoiceIpc(): void {
   )
 
   ipcMain.handle("voice:tts:cancel", (_event, payload: { id?: string }) => {
-    falas.get(String(payload?.id ?? ""))?.abort()
+    speechJobs.get(String(payload?.id ?? ""))?.abort()
   })
 
-  // Fala CONTÍNUA (modo chamada): uma fala só, aberta antes de existir texto, que
-  // recebe frases conforme o agente as escreve. O main sintetiza a próxima
-  // frase enquanto a anterior ainda toca no renderer — com uma fala por frase,
-  // cada uma esperava a anterior terminar de tocar para começar a ser gerada, e
-  // o silêncio entre "Claro." e o resto era exatamente esse tempo de síntese.
-  // Os pedaços saem pelos mesmos `voice:tts:chunk`/`done`, com o mesmo id.
-  ipcMain.handle("voice:tts:stream-start", (_event, payload: FalaPedido = {}): { id: string } => {
+  // CONTINUOUS speech (call mode): a single utterance, opened before any text exists, which
+  // receives sentences as the agent writes them. The main synthesises the next
+  // sentence while the previous one is still playing in the renderer — with one utterance per sentence,
+  // each waited for the previous one to finish playing before it started being generated, and
+  // the silence between "Claro." and the rest was exactly that synthesis time.
+  // The chunks come out through the same `voice:tts:chunk`/`done`, with the same id.
+  ipcMain.handle("voice:tts:stream-start", (_event, payload: SpeechRequest = {}): { id: string } => {
     const id = randomUUID()
     const controller = new AbortController()
-    falas.set(id, controller)
-    fluxos.set(id, {
-      pedido: payload,
-      fila: [],
-      proxima: 0,
-      fechado: false,
-      rodando: false,
+    speechJobs.set(id, controller)
+    streams.set(id, {
+      request: payload,
+      queue: [],
+      next: 0,
+      closed: false,
+      running: false,
       signal: controller.signal,
-      idioma: {},
+      language: {},
     })
     return { id }
   })
 
   ipcMain.handle("voice:tts:stream-append", (_event, payload: { id?: string; text?: string }) => {
-    const fluxo = fluxos.get(String(payload?.id ?? ""))
-    const texto = String(payload?.text ?? "").trim()
-    if (!fluxo || fluxo.fechado || !texto) return
-    fluxo.fila.push({ texto, seg: fluxo.proxima++ })
-    void drenarFluxo(String(payload.id))
+    const stream = streams.get(String(payload?.id ?? ""))
+    const text = String(payload?.text ?? "").trim()
+    if (!stream || stream.closed || !text) return
+    stream.queue.push({ text, seg: stream.next++ })
+    void drainStream(String(payload.id))
   })
 
-  // Descarta as frases que ainda não começaram a ser geradas (a fala segue
-  // aberta). O modo chamada usa quando o agente parte para as ferramentas: o
-  // que ele narrou antes disso, além da frase de espera, não deve ser lido.
+  // Discards the sentences that have not started being generated yet (the utterance stays
+  // open). Call mode uses it when the agent goes off to the tools: what it
+  // narrated before that, besides the waiting sentence, should not be read.
   ipcMain.handle("voice:tts:stream-clear", (_event, payload: { id?: string }) => {
-    const fluxo = fluxos.get(String(payload?.id ?? ""))
-    if (fluxo) fluxo.fila = []
+    const stream = streams.get(String(payload?.id ?? ""))
+    if (stream) stream.queue = []
   })
 
   ipcMain.handle("voice:tts:stream-end", (_event, payload: { id?: string }) => {
     const id = String(payload?.id ?? "")
-    const fluxo = fluxos.get(id)
-    if (!fluxo) return
-    fluxo.fechado = true
-    void drenarFluxo(id)
+    const stream = streams.get(id)
+    if (!stream) return
+    stream.closed = true
+    void drainStream(id)
   })
 
-  // Ditado. Os canais faltavam: o renderer chamava `voice:stt:start` e o main
-  // respondia "No handler registered" — a ponte abaixo existia sem ninguém
-  // ligando-a ao IPC.
+  // Dictation. The channels were missing: the renderer called `voice:stt:start` and the main
+  // answered "No handler registered" — the bridge below existed with nobody
+  // wiring it to the IPC.
   ipcMain.handle(
     "voice:stt:start",
     async (event, payload: Partial<VoiceSttSessionStart> = {}): Promise<{ id: string }> => {
       const sender = event.sender
-      // O parcial vai só para a janela que abriu a sessão; o id só existe depois
-      // do start, e o motor só produz parcial depois do primeiro push.
+      // The partial goes only to the window that opened the session; the id only exists after
+      // the start, and the engine only produces a partial after the first push.
       let id = ""
-      const sessao = await startVoiceSttSession(
+      const session = await startVoiceSttSession(
         {
           engine: payload.engine as VoiceEngineId,
           modelId: payload.modelId ?? null,
@@ -528,10 +528,10 @@ export function registerVoiceIpc(): void {
           if (id && !sender.isDestroyed()) sender.send("voice:stt:partial", { id, text })
         },
       )
-      id = sessao.id
-      // Janela fechada no meio da fala: a sessão (e o motor) não ficam órfãos.
+      id = session.id
+      // Window closed in the middle of the speech: the session (and the engine) are not left orphaned.
       sender.once("destroyed", () => void cancelVoiceSttSession(id).catch(() => {}))
-      return sessao
+      return session
     },
   )
 
@@ -551,19 +551,19 @@ export function registerVoiceIpc(): void {
 
 // ---------------------------------------------------------------------- STT
 //
-// Ponte para o módulo de STT (outro worker, ./stt.ts): o formato combinado é
-// `{ id }` na abertura da sessão + `onPartial(text)` para o texto ao vivo.
+// Bridge to the STT module (another worker, ./stt.ts): the agreed format is
+// `{ id }` when the session opens + `onPartial(text)` for the live text.
 
 export interface VoiceSttSessionStart {
   engine: VoiceEngineId
-  /** Taxa do PCM que será empurrado (16 kHz na captura padrão; o motor reamostra). */
+  /** Rate of the PCM that will be pushed (16 kHz on the default capture; the engine resamples). */
   sampleRate: number
   modelId?: string | null
   language?: string
   threads?: number
-  /** Texto ao vivo enquanto a fala acontece (padrão: sim). */
+  /** Live text while the speech happens (default: yes). */
   live?: boolean
-  /** Trechos com tempo (transcrição de arquivo); 'words' = por palavra. */
+  /** Segments with timing (file transcription); 'words' = per word. */
   timestamps?: boolean | 'words'
 }
 
@@ -574,21 +574,21 @@ export interface VoiceTranscribeResult {
   segments?: SttSegment[]
 }
 
-/** Estado dos motores de ditado — é o retrato que o celular consulta. */
+/** State of the dictation engines — it is the snapshot the phone queries. */
 export async function voiceStatus(): Promise<VoiceStatusResponse> {
   const engines = await sttEngineStatus()
   return { ready: engines.some((e) => e.installed && e.available), engines }
 }
 
 /**
- * Abre uma sessão de ditado e liga o texto ao vivo. Devolve o id da sessão — é
- * ele que amarra os `pushVoiceSttAudio`/`stopVoiceSttSession` seguintes.
+ * Opens a dictation session and hooks up the live text. Returns the session id — it is
+ * what ties the following `pushVoiceSttAudio`/`stopVoiceSttSession` together.
  */
 export async function startVoiceSttSession(
   options: VoiceSttSessionStart,
   onPartial: (text: string) => void,
 ): Promise<{ id: string }> {
-  const sessao = await startSttSession(
+  const session = await startSttSession(
     {
       engine: options.engine,
       modelId: options.modelId,
@@ -600,33 +600,33 @@ export async function startVoiceSttSession(
     },
     onPartial,
   )
-  return { id: sessao.id }
+  return { id: session.id }
 }
 
-/** Um pedaço de PCM (mesma taxa informada no start) da sessão. */
+/** A PCM chunk (same rate informed at start) of the session. */
 export function pushVoiceSttAudio(id: string, pcm: Buffer): void {
   pushSttAudio(id, pcm)
 }
 
-/** Fim da fala: fecha o último trecho e devolve o texto final. */
+/** End of the speech: closes the last segment and returns the final text. */
 export async function stopVoiceSttSession(id: string): Promise<VoiceTranscribeResult> {
   const out = await stopSttSession(id)
   return { text: out.text, audioMs: out.audioMs, ms: out.ms, segments: out.segments }
 }
 
-/** Cancela a sessão sem esperar texto (Esc, janela fechou…). */
+/** Cancels the session without waiting for text (Esc, window closed…). */
 export async function cancelVoiceSttSession(id: string): Promise<void> {
   await cancelSttSession(id)
 }
 
 /**
- * Transcreve um bloco de PCM de uma vez (áudio já gravado, sem ditado ao vivo):
- * abre a sessão, empurra tudo e fecha. É o caminho de quem manda um recado de
- * voz inteiro (o celular, por exemplo) e não quer sessão aberta.
+ * Transcribes a block of PCM in one go (already recorded audio, no live dictation):
+ * opens the session, pushes everything and closes it. It is the path of whoever sends a whole
+ * voice note (the phone, for instance) and does not want an open session.
  *
- * Sem `engine` no pedido, a escolha é: o motor que já está pronto para rodar
- * agora (instalado e disponível) e, se nenhum estiver, o recomendado pelo
- * hardware — a mesma regra que a tela de voz mostra.
+ * Without `engine` in the request, the choice is: the engine already ready to run
+ * now (installed and available) and, if none is, the one recommended by the
+ * hardware — the same rule the voice screen shows.
  */
 export async function transcribePcm(
   pcm: Buffer,
@@ -638,15 +638,15 @@ export async function transcribePcm(
     timestamps?: boolean | 'words'
   },
 ): Promise<VoiceTranscribeResult> {
-  if (!pcm || pcm.length === 0) throw new Error("PCM vazio")
-  const engine = opts.engine ?? (await enginePadrao())
+  if (!pcm || pcm.length === 0) throw new Error("empty PCM")
+  const engine = opts.engine ?? (await defaultEngine())
   const { id } = await startVoiceSttSession(
     {
       engine,
       modelId: opts.modelId,
       language: opts.language,
       sampleRate: opts.sampleRate,
-      // Sem valor ao vivo: uma passada só, sem parcial no meio do áudio.
+      // With no live value: a single pass, without a partial in the middle of the audio.
       live: false,
       timestamps: opts.timestamps,
     },
@@ -661,36 +661,36 @@ export async function transcribePcm(
   return await stopVoiceSttSession(id)
 }
 
-/** Motor que vale a pena tentar agora: o pronto, senão o recomendado. */
-async function enginePadrao(): Promise<VoiceEngineId> {
+/** Engine worth trying now: the ready one, otherwise the recommended one. */
+async function defaultEngine(): Promise<VoiceEngineId> {
   const engines = await sttEngineStatus()
   const pronto = engines.find((e) => e.installed && e.available)
   if (pronto) return pronto.engine
   return (await hardware()).recommendedEngine
 }
 
-/** Catálogo de STT para quem precisa dele fora do IPC (ex.: validação). */
+/** STT catalog for whoever needs it outside the IPC (e.g. validation). */
 export function sttModels(): VoiceModelInfo[] {
   return STT_MODELS
 }
 
-/** Estado do motor de TTS (diagnóstico: `voice:status` já traz o resumo). */
+/** TTS engine state (diagnostics: `voice:status` already brings the summary). */
 export async function voiceTtsStatus(): Promise<Awaited<ReturnType<typeof ttsStatus>>> {
   return await ttsStatus()
 }
 
-/** Desliga o motor de TTS agora (o desligamento por ociosidade é automático). */
+/** Shuts the TTS engine down now (the idle shutdown is automatic). */
 export function shutdownVoice(): void {
   shutdownTts()
 }
 
-// ------------------------------------------------- arquivos de áudio (tools)
+// ------------------------------------------------- audio files (tools)
 
 /**
- * Texto → arquivo WAV, pelo mesmo motor da leitura em voz alta (prioridade de
- * áudio das preferências: provedor, com o local como reserva). É o que a tool
- * audio_generate entrega. Texto longo vai em partes (a rota do provedor aceita
- * ~4 mil caracteres por pedido); os pedaços são emendados num arquivo só.
+ * Text → WAV file, through the same engine as reading aloud (the preferences'
+ * audio priority: provider, with the local one as fallback). It is what the
+ * audio_generate tool delivers. Long text goes in parts (the provider route accepts
+ * ~4 thousand characters per request); the chunks are spliced into a single file.
  */
 export async function synthesizeToWav(
   text: string,
@@ -698,7 +698,7 @@ export async function synthesizeToWav(
   signal: AbortSignal = new AbortController().signal,
 ): Promise<{ wav: Buffer; durationMs: number }> {
   const tts = getAppSettings().voice.tts
-  const payload: FalaPedido = {
+  const payload: SpeechRequest = {
     voice: opts.voice ?? tts.voice,
     lang: opts.lang ?? tts.lang,
     speed: opts.speed ?? tts.speed,
@@ -706,15 +706,15 @@ export async function synthesizeToWav(
   }
   const pieces: Float32Array[] = []
   let rate = 0
-  // Um arquivo, um idioma: as partes de um texto longo herdam o da primeira.
-  const idioma: { lang?: string } = {}
-  for (const parte of splitForSynthesis(text)) {
-    await sintetizar(parte, payload, signal, (chunk) => {
+  // One file, one language: the parts of a long text inherit the first one's.
+  const language: { lang?: string } = {}
+  for (const part of splitForSynthesis(text)) {
+    await synthesize(part, payload, signal, (chunk) => {
       const samples = pcm16ToFloat32(chunk.pcm)
       if (!rate) rate = chunk.sr
-      // A reserva local pode falar noutra taxa que o provedor: tudo na primeira.
+      // The local fallback may speak at a different rate from the provider: everything at the first one.
       pieces.push(chunk.sr === rate ? samples : resampleLinear(samples, chunk.sr, rate))
-    }, idioma)
+    }, language)
   }
   if (!rate || pieces.length === 0) throw new Error("the speech engine returned no audio")
   const all = concatFloat32(pieces)
@@ -722,11 +722,11 @@ export async function synthesizeToWav(
 }
 
 /**
- * PCM16 mono 16 kHz (de `decodeAudioFile`) → texto, pelo motor de ditado das
- * preferências. Arquivos longos vão em janelas de alguns minutos, cortadas no
- * trecho mais quieto perto de cada fronteira (ver `splitPcmWindows`): o
- * encerramento de uma sessão de ditado tem prazo curto, feito para a fala ao
- * vivo, e um arquivo de meia hora numa sessão só estouraria esse prazo.
+ * PCM16 mono 16 kHz (from `decodeAudioFile`) → text, through the preferences'
+ * dictation engine. Long files go in windows of a few minutes, cut at the
+ * quietest stretch near each boundary (see `splitPcmWindows`): the
+ * closing of a dictation session has a short deadline, made for live
+ * speech, and a half-hour file in a single session would blow that deadline.
  */
 export async function transcribeAudioPcm(
   pcm: Buffer,
@@ -734,26 +734,26 @@ export async function transcribeAudioPcm(
 ): Promise<{ text: string; engine: VoiceEngineId; segments: SttSegment[] }> {
   const stt = getAppSettings().voice.stt
   const engines = await sttEngineStatus()
-  const escolhido = engines.find((e) => e.engine === stt.engine)
-  if (!escolhido?.available || !escolhido.installed) {
+  const chosen = engines.find((e) => e.engine === stt.engine)
+  if (!chosen?.available || !chosen.installed) {
     throw new Error(
-      `the dictation engine (${stt.engine}) is not ready${escolhido?.reason ? `: ${escolhido.reason}` : ""} — see Settings → Voice`,
+      `the dictation engine (${stt.engine}) is not ready${chosen?.reason ? `: ${chosen.reason}` : ""} — see Settings → Voice`,
     )
   }
   const samples = pcm16ToFloat32(pcm)
-  const textos: string[] = []
+  const texts: string[] = []
   const segments: SttSegment[] = []
   for (const [start, end] of splitPcmWindows(samples, STT_SAMPLE_RATE)) {
-    const janela = float32ToPcm16(samples.subarray(start, end))
-    const out = await transcribePcm(janela, {
+    const pcmWindow = float32ToPcm16(samples.subarray(start, end))
+    const out = await transcribePcm(pcmWindow, {
       sampleRate: STT_SAMPLE_RATE,
       engine: stt.engine,
       modelId: stt.modelId,
       language: opts.language || stt.language,
       timestamps: opts.timestamps,
     })
-    if (out.text.trim()) textos.push(out.text.trim())
-    // Os tempos de cada janela começam em zero: desloca para o tempo do arquivo.
+    if (out.text.trim()) texts.push(out.text.trim())
+    // Each window's timings start at zero: shift them to the file's time.
     const offset = samplesToMs(start, STT_SAMPLE_RATE)
     for (const seg of out.segments ?? []) {
       segments.push({
@@ -766,5 +766,5 @@ export async function transcribeAudioPcm(
       })
     }
   }
-  return { text: textos.join(" "), engine: stt.engine, segments }
+  return { text: texts.join(" "), engine: stt.engine, segments }
 }

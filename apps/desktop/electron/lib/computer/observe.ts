@@ -7,9 +7,9 @@ import { assertTargetAllowed, CHROMIUM_BROWSERS } from './safety'
 import { ComputerError, type AppInfo, type AppsSnapshot, type ComputerDriver, type Frame, type TreeSnapshot, type WindowInfo } from './types'
 
 /**
- * Monta uma observação: screenshot + árvore + foco de UMA janela, registrada
- * com índices novos. O texto devolvido declara a geometria (em que espaço
- * estão x/y) e cerca todo conteúdo vindo da tela como dado não confiável.
+ * Builds an observation: screenshot + tree + focus of ONE window, registered with new
+ * indices. The text returned declares the geometry (which space the x/y are in) and
+ * fences all content coming from the screen as untrusted data.
  */
 
 export interface ObserveOptions {
@@ -20,38 +20,38 @@ export interface ObserveOptions {
   includeScreenshot: boolean
   maxNodes: number
   maxScreenshotEdge: number
-  /** Liga a árvore AX de apps Chromium/Electron */
+  /** Turns on the AX tree of Chromium/Electron apps */
   enhance: boolean
-  /** Espera depois de ligar a flag — quem chama sabe se o app já estava ligado */
+  /** Wait after turning on the flag — the caller knows whether the app was already on */
   enhanceWaitMs?: number
-  /** Escala do monitor da janela (2 no Retina) — define o espaço de coordenadas */
+  /** Scale of the monitor of the window (2 on Retina) — defines the coordinate space */
   scaleFor?: (frame: Frame) => number
   /**
-   * Observação contra a qual o texto pode sair como diff. Só quem chama sabe se
-   * o modelo ainda tem essa observação no contexto (uma de outro turno ou do
-   * subagente ele nunca viu), então é ela que decide passar a base.
+   * Observation against which the text can come out as a diff. Only the caller knows
+   * whether the model still has that observation in context (one from another turn or
+   * from the subagent it never saw), so it is the caller that decides to pass the base.
    */
   diffAgainst?: ObservationRecord | null
   signal?: AbortSignal
 }
 
-/** Diffs seguidos antes de uma árvore completa: a cadeia não cresce sem fim, e o corte de contexto descarta o que ficou para trás. */
+/** Consecutive diffs before a full tree: the chain does not grow forever, and the context cut discards what was left behind. */
 export const MAX_DIFF_CHAIN = 8
-/** Acima desta fração da árvore mudada, o diff já não é menor que a árvore. */
+/** Above this fraction of the tree changed, the diff is no longer smaller than the tree. */
 const DIFF_MAX_FRACTION = 0.4
 const DIFF_MIN_LINES = 12
 
 export interface ObservationResult {
   record: ObservationRecord
   text: string
-  /** Imagem já reduzida e codificada para o modelo */
+  /** Image already reduced and encoded for the model */
   image: { data: Buffer; mediaType: 'image/webp' } | null
-  /** Por que não há imagem, quando pedida */
+  /** Why there is no image, when one was asked for */
   imageNote: string | null
   tree: TreeSnapshot | null
 }
 
-/** Acha o app pelo que o modelo mandou: bundle id, exe (Windows), nome (sem caixa) ou pid. */
+/** Finds the app by what the model sent: bundle id, exe (Windows), name (case-insensitive) or pid. */
 export function resolveApp(snapshot: AppsSnapshot, query: string): AppInfo {
   const q = query.trim()
   const lower = q.toLowerCase()
@@ -60,7 +60,7 @@ export function resolveApp(snapshot: AppsSnapshot, query: string): AppInfo {
     byPid ??
     snapshot.apps.find((a) => a.bundleId === q) ??
     snapshot.apps.find((a) => a.bundleId?.toLowerCase() === lower) ??
-    // Windows: pelo exe, com ou sem ".exe" ("notepad" acha o Notepad.exe).
+    // Windows: by the exe, with or without ".exe" ("notepad" finds Notepad.exe).
     snapshot.apps.find((a) => a.exe && [lower, `${lower}.exe`].includes(a.exe.toLowerCase())) ??
     snapshot.apps.find((a) => a.name.toLowerCase() === lower) ??
     snapshot.apps.find((a) => a.name.toLowerCase().includes(lower))
@@ -70,7 +70,7 @@ export function resolveApp(snapshot: AppsSnapshot, query: string): AppInfo {
   return app
 }
 
-/** A janela pedida, ou a da frente do app (o CGWindowList vem de frente para trás). */
+/** The requested window, or the app's front one (CGWindowList comes from the front to the back). */
 export function resolveWindow(snapshot: AppsSnapshot, app: AppInfo, windowId?: number): WindowInfo {
   if (windowId !== undefined) {
     const win = snapshot.windows.find((w) => w.id === windowId && w.pid === app.pid)
@@ -87,7 +87,7 @@ export function resolveWindow(snapshot: AppsSnapshot, app: AppInfo, windowId?: n
   return win
 }
 
-/** Redimensiona exatamente para o espaço da janela: com e sem imagem, x/y são os mesmos. */
+/** Resizes exactly to the window space: with and without an image, x/y are the same. */
 async function encodeShot(png: Buffer, size: { width: number; height: number }): Promise<{ data: Buffer; width: number; height: number }> {
   const data = await sharp(png).resize(size.width, size.height, { fit: 'fill' }).webp({ quality: 72 }).toBuffer()
   return { data, ...size }
@@ -104,8 +104,8 @@ export async function observe(
   const win = resolveWindow(snapshot, app, options.windowId)
   const geometry = windowSpace(win.frame, options.scaleFor?.(win.frame) ?? 1, options.maxScreenshotEdge)
 
-  // Captura e árvore em paralelo: são processos diferentes, e a soma dos dois
-  // é o tempo que o turno espera.
+  // Capture and tree in parallel: they are different processes, and the sum of the two
+  // is the time the turn waits.
   const [shot, tree] = await Promise.all([
     options.includeScreenshot
       ? driver
@@ -137,7 +137,7 @@ export async function observe(
     throw shot instanceof ComputerError ? shot : new ComputerError('badRequest', 'Nothing to observe: include_tree and include_screenshot are both false.')
   }
 
-  // Mesma janela: os índices de quem continua na tela não mudam.
+  // Same window: the indices of whatever stays on screen do not change.
   const previous = registry.peek(options.sessionId, app.pid)
   const sameWindow = previous && previous.window.id === win.id ? previous : null
   const formatted = tree ? formatTree(tree, geometry, sameWindow?.keys) : null
@@ -219,7 +219,7 @@ export async function observe(
   return { record, text: lines.join('\n'), image: image ? { data: image.data, mediaType: 'image/webp' } : null, imageNote, tree }
 }
 
-/** Alvo por descrição em vez de índice: texto da linha (título, valor, descrição) e/ou papel. */
+/** Target by description instead of index: line text (title, value, description) and/or role. */
 export interface ElementQuery {
   text?: string
   role?: string
@@ -227,10 +227,10 @@ export interface ElementQuery {
 
 const roleWord = (role: string) => role.toLowerCase().replace(/^ax/, '').replace(/\s+/g, '')
 
-/** A parte da linha que descreve o elemento — sem ações nem posição, onde "press" ou "12" casariam com tudo. */
+/** The part of the line that describes the element — without actions or position, where "press" or "12" would match everything. */
 const searchable = (body: string) => body.replace(/ (actions: |@\d+,\d+ |offscreen\b).*$/, '').toLowerCase()
 
-/** Algum elemento da observação mostra este texto? (o `expect` das ações) */
+/** Does any element of the observation show this text? (the `expect` of the actions) */
 export function treeMentions(record: ObservationRecord, text: string): boolean {
   const needle = text.toLowerCase()
   if (record.window.title?.toLowerCase().includes(needle)) return true
@@ -239,9 +239,9 @@ export function treeMentions(record: ObservationRecord, text: string): boolean {
 }
 
 /**
- * Resolve um alvo descrito contra uma observação. Ambíguo é erro com os
- * candidatos — nunca o primeiro da lista, que é como um clique vai parar no
- * botão errado. Com vários candidatos, o título exatamente igual ao texto vence.
+ * Resolves a described target against an observation. Ambiguous is an error with the
+ * candidates — never the first in the list, which is how a click ends up on the wrong
+ * button. With several candidates, the title exactly equal to the text wins.
  */
 export function findElement(record: ObservationRecord, target: ElementQuery): number {
   if (!target.text && !target.role) throw new ComputerError('badRequest', 'find needs "text" and/or "role".')
@@ -288,10 +288,10 @@ export interface QueryOptions {
 }
 
 /**
- * Busca na árvore sem screenshot — o caminho barato quando o app é grande. Lê
- * com orçamento maior e devolve só as linhas que casam, com índices válidos
- * para o cu_computer: vira a observação mais recente do app. Se a janela não
- * mudou desde o último screenshot, mantém o espaço de coordenadas dele.
+ * Search in the tree without a screenshot — the cheap path when the app is big. It
+ * reads with a bigger budget and returns only the lines that match, with indices
+ * valid for cu_computer: it becomes the most recent observation of the app. If the
+ * window has not changed since the last screenshot, it keeps its coordinate space.
  */
 export async function query(driver: ComputerDriver, registry: Registry, options: QueryOptions): Promise<string> {
   if (!options.text && !options.role) throw new ComputerError('badRequest', 'cu_query needs "text" and/or "role".')
@@ -315,9 +315,9 @@ export async function query(driver: ComputerDriver, registry: Registry, options:
   const sameFrame = previous && previous.window.id === win.id && previous.window.frame.every((v, i) => Math.abs(v - win.frame[i]) < 1)
   const geometry: ShotGeometry = windowSpace(win.frame, options.scaleFor?.(win.frame) ?? 1, options.maxScreenshotEdge)
   const formatted = formatTree(tree, geometry, previous && previous.window.id === win.id ? previous.keys : undefined)
-  // Nunca vira base de diff (diffChain no teto): a busca lê com outro
-  // orçamento, e um diff contra ela apontaria como sumido tudo o que a
-  // observação seguinte não alcança. As linhas ficam para a busca por alvo.
+  // It never becomes a diff base (diffChain at the ceiling): the search reads with another
+  // budget, and a diff against it would point out as gone everything the next
+  // observation does not reach. The lines stay for the search by target.
   const record: ObservationRecord = {
     id: newObservationId(),
     sessionId: options.sessionId,

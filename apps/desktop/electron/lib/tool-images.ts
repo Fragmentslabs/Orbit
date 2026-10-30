@@ -1,24 +1,24 @@
 import type { ModelMessage } from 'ai'
 
 /**
- * Imagens devolvidas por uma tool não chegam ao modelo em todo provedor.
+ * Images returned by a tool do not reach the model in every provider.
  *
- * O adaptador `openai-compatible` — o caminho de qualquer gateway — monta a
- * mensagem de tool com `JSON.stringify` do output: uma imagem no resultado vira
- * base64 dentro de uma string, que o modelo lê como texto e ninguém enxerga.
- * Foi assim que o `see_screen` "mandou" a tela e o modelo respondeu que não
- * recebia imagem. O mesmo vale para qualquer tool que devolva imagem
- * (`panel_screenshot`, `pdf_view_page`, frames de vídeo…).
+ * The `openai-compatible` adapter — the path of any gateway — assembles the
+ * tool message with `JSON.stringify` of the output: an image in the result becomes
+ * base64 inside a string, which the model reads as text and nobody sees.
+ * That is how `see_screen` "sent" the screen and the model answered that it was not
+ * receiving an image. The same holds for any tool that returns an image
+ * (`panel_screenshot`, `pdf_view_page`, video frames…).
  *
- * Saída: a imagem sai do resultado da tool e vira uma mensagem de USUÁRIO logo
- * depois dele — todo adaptador converte imagem de usuário em `image_url`, que é
- * visão de verdade. O resultado fica em texto, apontando onde a imagem está.
+ * Way out: the image leaves the tool's result and becomes a USER message right
+ * after it — every adapter converts a user image into `image_url`, which is
+ * real vision. The result stays as text, pointing to where the image is.
  */
 export const HOISTED_IMAGE_NOTE =
   '[The image this tool captured is attached in the user message right after it.]'
 
 export interface HoistResult {
-  /** A lista original quando nada mudou; uma nova quando havia imagem. */
+  /** The original list when nothing changed; a new one when there was an image. */
   messages: ModelMessage[]
   images: number
 }
@@ -29,10 +29,10 @@ interface PendingImage {
 }
 
 /**
- * Move as imagens de resultados de tool para uma mensagem de usuário.
+ * Moves the images from tool results into a user message.
  *
- * Idempotente: depois da primeira passada o resultado já é texto (sem
- * `image-data`), então chamar de novo não acrescenta mensagem nenhuma.
+ * Idempotent: after the first pass the result is already text (without
+ * `image-data`), so calling again adds no message at all.
  */
 export function hoistToolImages(messages: ModelMessage[]): HoistResult {
   const images: PendingImage[] = []

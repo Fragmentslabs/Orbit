@@ -1,7 +1,7 @@
 /**
- * Assets que não são imagem não têm tipo para o TypeScript: o Metro os registra
- * e `require`/`import` devolve o id numérico, que o `expo-asset` transforma em
- * arquivo. Sem esta declaração o import do bundle do mermaid não compila.
+ * Assets that are not images have no type for TypeScript: Metro registers them
+ * and `require`/`import` returns the numeric id, which `expo-asset` turns into a
+ * file. Without this declaration the import of the mermaid bundle does not compile.
  */
 declare module '*.txt' {
   const asset: number

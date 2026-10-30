@@ -42,7 +42,7 @@ beforeEach(async () => {
 })
 
 describe('assetFileName', () => {
-  it('nome seguro: sem espaço, sem acento, sem separador, extensão minúscula', () => {
+  it('safe name: no space, no accent, no separator, lowercase extension', () => {
     expect(assetFileName(undefined, 'Minha Aula Ótima!.MP4', '.mp4')).toBe('Minha-Aula-Otima.mp4')
     expect(assetFileName('../../etc/passwd', 'x.mp4', '.mp4')).toBe('passwd.mp4')
     expect(assetFileName('meu clip', 'orig.mov', '.mov')).toBe('meu-clip.mov')
@@ -51,7 +51,7 @@ describe('assetFileName', () => {
 })
 
 describe('importAttachmentInto', () => {
-  it('copia o vídeo para a pasta e diz como usar — incluindo o som', async () => {
+  it('copies the video into the folder and says how to use it — sound included', async () => {
     await attach('vdo_a', 'video', 'Depoimento Cliente.mp4', 'VIDEO')
     const out = await importAttachmentInto(folder, 'vdo_a')
     expect(out).toMatchObject({ kind: 'video', name: 'Depoimento-Cliente.mp4' })
@@ -62,14 +62,14 @@ describe('importAttachmentInto', () => {
     expect(out.report).toContain('MIXED into the render unless you add the muted attribute')
   })
 
-  it('vídeo sem faixa de áudio: não fala de som para gerenciar', async () => {
+  it('video with no audio stream: it does not mention sound to manage', async () => {
     await attach('vdo_s', 'video', 'silent.mp4')
     const out = await importAttachmentInto(folder, 'vdo_s')
     expect(out.report).toContain('no audio stream')
     expect(out.report).not.toContain('MIXED')
   })
 
-  it('GIF: diz que é determinístico e dá o data-start; foto: só o <img>', async () => {
+  it('GIF: says it is deterministic and gives the data-start; photo: only the <img>', async () => {
     await attach('img_g', 'image', 'dança.gif')
     const gif = await importAttachmentInto(folder, 'img_g')
     expect(gif.name).toBe('danca.gif')
@@ -82,14 +82,14 @@ describe('importAttachmentInto', () => {
     expect(photo.report).not.toContain('GIF')
   })
 
-  it('áudio: manda declarar no audio.json', async () => {
+  it('audio: tells you to declare it in audio.json', async () => {
     await attach('aud_v', 'audio', 'voz.mp3')
     const out = await importAttachmentInto(folder, 'aud_v')
     expect(out.report).toContain('audio.json')
     expect(out.report).toContain('"file": "voz.mp3"')
   })
 
-  it('o mesmo anexo duas vezes dá o mesmo arquivo; conteúdo diferente com o mesmo nome ganha outro', async () => {
+  it('the same attachment twice gives the same file; different content with the same name gets another', async () => {
     await attach('vdo_r', 'video', 'clip.mp4', 'AAAA')
     const first = await importAttachmentInto(folder, 'vdo_r')
     const again = await importAttachmentInto(folder, 'vdo_r')
@@ -102,15 +102,15 @@ describe('importAttachmentInto', () => {
     expect((await fsp.readdir(folder)).sort()).toEqual(['clip-2.mp4', 'clip.mp4'])
   })
 
-  it('o nome pedido vale, mantendo a extensão do original quando falta', async () => {
+  it('the requested name wins, keeping the original extension when it is missing', async () => {
     await attach('vdo_n', 'video', 'qualquer.mov')
     expect((await importAttachmentInto(folder, 'vdo_n', 'abertura')).name).toBe('abertura.mov')
   })
 
-  it('referência que não é de um anexo é erro dizendo o que usar', async () => {
+  it('a reference that is not from an attachment is an error saying what to use', async () => {
     await expect(importAttachmentInto(folder, 'vdo_naoexiste')).rejects.toThrow(/attachment not found: vdo_naoexiste.*vdo_…/)
     await expect(importAttachmentInto(folder, '/etc/passwd')).rejects.toThrow(/attachment not found/)
-    // Nada foi criado por uma referência inválida.
+    // Nothing was created by an invalid reference.
     expect(await fsp.readdir(folder).catch(() => [])).toEqual([])
   })
 })

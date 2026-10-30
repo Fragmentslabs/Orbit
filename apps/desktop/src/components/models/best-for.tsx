@@ -8,8 +8,8 @@ import { useModelsStore } from "@/src/stores/models-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
- * Orbit Intelligence — rankings "Best For": top 3 por categoria, calculado
- * dos scores normalizados do dataset completo (ignora filtros da tabela).
+ * Orbit Intelligence — "Best For" rankings: top 3 per category, calculated
+ * from the normalized scores of the full dataset (it ignores the table filters).
  */
 
 const CATEGORIES: { key: keyof ModelScores; labelKey: string; icon: React.ElementType }[] = [

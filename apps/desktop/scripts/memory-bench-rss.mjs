@@ -1,13 +1,13 @@
 /**
- * Custo real do motor de memória, medido num processo limpo (sem vitest):
- * RSS antes/depois de carregar o modelo, depois do tokenizer, depois do índice
- * do acervo, e o tempo de indexação e de consulta.
+ * Real cost of the memory engine, measured in a clean process (without vitest):
+ * RSS before/after loading the model, after the tokenizer, after the index
+ * of the collection, and the indexing and query times.
  *
  *   node scripts/memory-bench-rss.mjs a8m
  *   node scripts/memory-bench-rss.mjs a25m
  *
- * Rode 3 vezes por modelo e reporte a MEDIANA — cada execução é um processo
- * novo, senão a RAM do modelo anterior contamina a medição.
+ * Run 3 times per model and report the MEDIAN — each run is a new process,
+ * otherwise the RAM of the previous model contaminates the measurement.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -18,11 +18,11 @@ const id = process.argv[2] ?? 'a8m'
 const cache = path.join(here, '..', '.cache', 'memory-embed', `bekko-${id}`)
 const modelPath = path.join(cache, 'onnx', 'model.onnx')
 if (!fs.existsSync(modelPath)) {
-  console.error(`modelo ausente: ${modelPath}`)
+  console.error(`model missing: ${modelPath}`)
   process.exit(1)
 }
 
-// O acervo de medição é o corpus sintético do benchmark (61 memórias).
+// The measurement collection is the synthetic corpus of the benchmark (61 memories).
 const corpus = JSON.parse(
   fs.readFileSync(path.join(here, '..', 'electron', 'lib', 'memory', 'bench', 'corpus.json'), 'utf8'),
 ).memories
@@ -45,8 +45,8 @@ const loadMs = performance.now() - t0
 await sleep(150)
 const rssModel = mb()
 
-// Índice do acervo: o texto indexado é o enriquecido (título + conceitos),
-// como no app; se o import do shared não resolver, cai no texto puro.
+// Index of the collection: the indexed text is the enriched one (title + concepts),
+// like in the app; if the import of shared does not resolve, it falls back to the plain text.
 const texts = corpus
   .filter((m) => !m.fixed)
   .map((m) => (buildRetrievalText ? buildRetrievalText(m) : `${m.text} ${(m.tags ?? []).join(' ')}`))
@@ -80,7 +80,7 @@ lat.sort((a, b) => a - b)
 const median = lat[Math.floor(lat.length / 2)]
 const p95 = lat[Math.min(lat.length - 1, Math.floor(lat.length * 0.95))]
 
-// Bytes que o índice ocupa em disco/memória (float32, 256 dims).
+// Bytes that the index occupies on disk/memory (float32, 256 dims).
 const vectorBytes = vectors.length * 256 * 4
 
 await embedder.dispose()

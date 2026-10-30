@@ -53,8 +53,8 @@ function PermissionBody({ ask, submitted, onReply }: {
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
           {t("permissions.deny")}
         </Button>
-        {/* Botão dividido: o caso comum (só desta vez) num clique; a seta
-            abre as permissões duradouras, que pedem uma escolha consciente. */}
+        {/* Split button: the common case (this time only) in one click; the arrow
+            opens the durable permissions, which ask for a conscious choice. */}
         <div className="flex">
           <Button size="sm" className="rounded-r-none" disabled={submitted} onClick={() => onReply("allow")}>
             {t("permissions.allowOnce")}
@@ -91,8 +91,8 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   onFree: (text: string) => void
 }) {
   const { t } = useTranslation()
-  // O campo diz o que o texto vai ser: com opção marcada é uma observação
-  // SOBRE ela (vai junto, rotulada); sem nenhuma, é a própria resposta.
+  // The field says what the text is going to be: with an option selected it is a note
+  // ABOUT it (it goes along, labeled); with none, it is the answer itself.
   const [only] = selected
   const placeholder =
     selected.size === 0
@@ -156,7 +156,7 @@ function buildComparisonPrompt(questions: Question[], currentIndex: number, t: T
 function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
   questions: Question[]
   currentIndex: number
-  /** Sessão que fez a pergunta (chat atual ou worker) — o sub-chat de discussão nasce aninhado nela. */
+  /** Session that asked the question (current chat or worker) — the discussion sub-chat is born nested in it. */
   parentSessionId?: string
 }) {
   const openChatTabWithPendingInput = usePanelStore((s) => s.openChatTabWithPendingInput)
@@ -173,10 +173,10 @@ function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
         setWorking(true)
         try {
           const title = t("ask.compareOptions")
-          // O sub-chat de discussão herda o modo e as pastas da sessão que fez
-          // a pergunta: continua na seção da sidebar do pai (um pai de código
-          // não deve "pular" para chat ao clicar no filho) e o subagente
-          // enxerga o mesmo diretório — lê a pasta para embasar a discussão.
+          // The discussion sub-chat inherits the mode and the folders of the session that asked
+          // the question: it stays in the parent's sidebar section (a code parent
+          // must not "jump" to chat when clicking the child) and the sub-agent
+          // sees the same directory — it reads the folder to ground the discussion.
           const parent = parentSessionId
             ? useSessionStore.getState().sessions.find((s) => s.id === parentSessionId)
             : undefined
@@ -339,8 +339,8 @@ function SubchatBody({ ask, submitted, onReply }: {
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
           {t("ask.subchat.deny")}
         </Button>
-        {/* Grupo de botões: o padrão é o chat novo; a seta abre a alternativa,
-            que mantém o trabalho nesta conversa. */}
+        {/* Button group: the default is the new chat; the arrow opens the alternative,
+            which keeps the work in this conversation. */}
         <div className="flex">
           <Button size="sm" className="rounded-r-none" disabled={submitted} onClick={() => onReply("new")}>
             {t("ask.subchat.newChat")}

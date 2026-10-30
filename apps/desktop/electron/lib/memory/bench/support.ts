@@ -1,7 +1,7 @@
 /**
- * Apoio do runner de VALIDAÇÃO (audit.test.ts): carrega fixture e modelo.
- * Separado do eval.test.ts de propósito — aquele é o harness de ajuste (lê
- * `dev`), este é o de validação (lê `eval` e `blocked`, nunca calibra).
+ * Support for the VALIDATION runner (audit.test.ts): loads the fixture and the model.
+ * Kept separate from eval.test.ts on purpose — that one is the tuning harness (reads
+ * `dev`), this one is the validation one (reads `eval` and `blocked`, never calibrates).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -29,8 +29,8 @@ function table(raw: CaseTable): BenchCase[] {
 }
 
 /**
- * `main` = fixture de ajuste (dev/eval). `blocked` = conjunto novo, criado
- * depois de o desenho estar fechado e nunca usado para escolher parâmetro.
+ * `main` = tuning fixture (dev/eval). `blocked` = a new set, created
+ * after the design was frozen and never used to choose a parameter.
  */
 export function loadFixture(name: 'main' | 'blocked' = 'main'): Fixture {
   if (name === 'blocked') {
@@ -51,7 +51,7 @@ export function loadFixture(name: 'main' | 'blocked' = 'main'): Fixture {
   return { memories: corpus.memories, cases: table(cases), dialogs: dialogs.dialogs }
 }
 
-/** Caminhos do modelo no cache; compila o tokenizer.bin na primeira vez. */
+/** Model paths in the cache; compiles tokenizer.bin the first time. */
 export function modelPaths(id: ModelId) {
   const dir = path.join(CACHE, `bekko-${id}`)
   const modelPath = path.join(dir, 'onnx', 'model.onnx')
@@ -75,7 +75,7 @@ export interface LoadedModel {
   embed(texts: string[]): Promise<Float32Array[]>
 }
 
-/** Carrega o modelo e devolve um `embed` que registra a latência por texto. */
+/** Loads the model and returns an `embed` that records the latency per text. */
 export async function loadModel(id: ModelId): Promise<LoadedModel> {
   const { createEmbedder } = await import('../../../memory-embed/engine.mjs')
   const paths = modelPaths(id)

@@ -60,7 +60,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
-import { ExcluirChatDialog } from "@/src/components/excluir-chat-dialog"
+import { DeleteChatDialog } from "@/src/components/delete-chat-dialog"
 import { NewFolderDialog } from "@/src/components/new-folder-dialog"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -104,8 +104,8 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
 
-/** Modo de seleção em lote — ativado pela opção "Selecionar" do menu de ações.
- *  Disponibiliza toggle de ids (chats e pastas) e fica/levanta contexto via hook. */
+/** Batch selection mode — activated by the "Select" option of the actions menu.
+ *  It provides the toggle of ids (chats and folders) and sets/lifts context through the hook. */
 interface SelectionContextValue {
   selectionMode: boolean
   selectedIds: Set<string>
@@ -143,8 +143,8 @@ function SelectionProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const toggleFolder = useCallback((id: string) => {
-    // Chats da pasta que aparecem sob ela (estado de arquivamento igual ao
-    // da pasta) acompanham a seleção — o usuário pode desmarcá-los depois.
+    // Chats of the folder that appear under it (archiving state equal to the
+    // folder's) follow the selection — the user can uncheck them later.
     const { folders, sessions } = useSessionStore.getState()
     const folderArchived = folders.find((f) => f.id === id)?.archived ?? false
     const chatIds = sessions
@@ -233,7 +233,7 @@ function NewChatButton() {
       className="w-full justify-start gap-2 text-sm"
       onClick={() => {
         setView("chat")
-        // Nova sessão herda as pastas de trabalho do último chat do modo
+        // New session inherits the working folders of the last chat of the mode
         if (mode === "code") {
           const last = [...useSessionStore.getState().sessions]
             .filter((s) => s.mode === "code" && !s.archived && !s.parentId && !!s.directory)
@@ -250,14 +250,14 @@ function NewChatButton() {
 }
 
 /**
- * Esteira: página do modo código, logo abaixo de "nova sessão". Não é um
- * toggle do input — é outra forma de trabalhar (pipeline de tasks, sem chat),
- * então vive na navegação, não entre os modos de uma conversa.
+ * Pipeline: a page of code mode, right below "new session". It is not an input
+ * toggle — it is another way of working (a task pipeline, without a chat), so it
+ * lives in the navigation, not among the modes of a conversation.
  */
-function EsteiraButton() {
+function PipelineButton() {
   const { t } = useTranslation()
   const { mode, view, setView } = useWorkspace()
-  const active = view === "esteira"
+  const active = view === "pipeline"
   if (mode !== "code") return null
   return (
     <Button
@@ -266,21 +266,21 @@ function EsteiraButton() {
         "w-full justify-start gap-2 text-sm",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
-      onClick={() => setView(active ? "chat" : "esteira")}
+      onClick={() => setView(active ? "chat" : "pipeline")}
     >
       <Layers className="size-4" />
-      {t("esteira.titulo")}
+      {t("pipeline.title")}
     </Button>
   )
 }
 
-/** Rotinas: chats agendados, dos modos chat e código. A página herda o modo
- *  ativo (a de chat lista/cria só rotinas de chat), então o botão existe nos
- *  dois modos — mesma lógica de navegação da esteira. */
-function RotinasButton() {
+/** Routines: scheduled chats, from both chat and code modes. The page inherits
+ *  the active mode (the chat one only lists/creates chat routines), so the
+ *  button exists in both modes — same navigation logic as the pipeline. */
+function RoutinesButton() {
   const { t } = useTranslation()
   const { view, setView } = useWorkspace()
-  const active = view === "rotinas"
+  const active = view === "routines"
   return (
     <Button
       variant="ghost"
@@ -288,10 +288,10 @@ function RotinasButton() {
         "w-full justify-start gap-2 text-sm",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
-      onClick={() => setView(active ? "chat" : "rotinas")}
+      onClick={() => setView(active ? "chat" : "routines")}
     >
       <CalendarClock className="size-4" />
-      {t("rotinas.titulo")}
+      {t("routines.title")}
     </Button>
   )
 }
@@ -392,8 +392,8 @@ function ModeTabs() {
   )
 }
 
-/** Área que recebe uma conversa arrastada; acende só quando soltar ali muda
- *  alguma coisa. */
+/** Area that receives a dragged conversation; it lights up only when dropping
+ *  there changes something. */
 function DropArea({ target, className, children }: {
   target: SidebarDropTarget
   className?: string
@@ -418,7 +418,7 @@ function AccordionGroup({ label, defaultExpanded = true, action, dropTarget, chi
   label: string
   defaultExpanded?: boolean
   action?: React.ReactNode
-  /** O grupo inteiro (título incluso, mesmo recolhido) aceita conversas soltas. */
+  /** The whole group (title included, even collapsed) accepts dropped conversations. */
   dropTarget?: SidebarDropTarget
   children: React.ReactNode
 }) {
@@ -453,25 +453,25 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Cartão perto do fim da sidebar: abrir sempre para baixo vazava o menu para
-  // fora da viewport, deixando os itens (e às vezes o próprio botão de trás
-  // dele) inclicáveis. O menu já está montado no DOM neste ponto (o portal
-  // renderiza no mesmo commit que abre `menuOpen`), então dá pra medir a
-  // altura real antes de decidir o lado — sem isso teríamos que abrir "cego".
+  // Card near the end of the sidebar: always opening downwards leaked the menu
+  // outside the viewport, leaving the items (and sometimes the back button
+  // behind it) unclickable. The menu is already mounted in the DOM at this point (the portal
+  // renders in the same commit that opens `menuOpen`), so the real height
+  // can be measured before deciding the side — without that we would have to open it "blind".
   useLayoutEffect(() => {
     if (!menuOpen || !buttonRef.current) return
     const rect = buttonRef.current.getBoundingClientRect()
-    const altura = menuRef.current?.offsetHeight ?? 0
-    const espacoAbaixo = window.innerHeight - rect.bottom
-    const espacoAcima = rect.top
-    // Prefere abrir para baixo; só vira para cima quando não cabe embaixo E lá
-    // em cima sobra mais espaço — evita trocar um vazamento pequeno por um maior.
-    const abrirAcima = espacoAbaixo < altura + 4 && espacoAcima > espacoAbaixo
-    const top = abrirAcima ? rect.top - altura - 4 : rect.bottom + 4
-    // Mesma ideia no eixo horizontal: perto da borda direita da janela (menu
-    // aberto no painel direito, por exemplo) o menu não pode vazar por ali.
-    const largura = menuRef.current?.offsetWidth ?? 192
-    const left = Math.min(rect.left, window.innerWidth - largura - 8)
+    const menuHeight = menuRef.current?.offsetHeight ?? 0
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    // Prefers opening downwards; it only flips upwards when it does not fit below AND
+    // there is more room up there — it avoids trading a small leak for a bigger one.
+    const opensUpward = spaceBelow < menuHeight + 4 && spaceAbove > spaceBelow
+    const top = opensUpward ? rect.top - menuHeight - 4 : rect.bottom + 4
+    // Same idea on the horizontal axis: near the right edge of the window (menu
+    // opened in the right panel, for example) the menu cannot leak there.
+    const menuWidth = menuRef.current?.offsetWidth ?? 192
+    const left = Math.min(rect.left, window.innerWidth - menuWidth - 8)
     setMenuPos({ top: Math.max(4, top), left: Math.max(4, left) })
   }, [menuOpen])
 
@@ -665,7 +665,7 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
   )
 }
 
-/** Chave do localStorage que guarda quais pastas ficam abertas (id → aberta). */
+/** localStorage key that stores which folders stay open (id → open). */
 const FOLDER_EXPANDED_KEY = "orbit.sidebar.folder-expanded"
 
 function loadExpandedFolders(): Record<string, boolean> {
@@ -683,7 +683,7 @@ function persistExpandedFolder(id: string, expanded: boolean) {
     map[id] = expanded
     localStorage.setItem(FOLDER_EXPANDED_KEY, JSON.stringify(map))
   } catch {
-    // localStorage indisponível — ignora silenciosamente
+    // localStorage unavailable — ignores it silently
   }
 }
 
@@ -692,13 +692,13 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   button: React.ElementType
   buttonClassName?: string
   actionButtonClassName?: string
-  /** Ícone à esquerda (padrão: balão de chat; worker usa Bot, subchat usa
-   *  MessagesSquare — os dois balões aninhados dizem "conversa aberta daqui",
-   *  sem cara de agente) */
+  /** Icon on the left (default: chat bubble; worker uses Bot, subchat uses
+   *  MessagesSquare — the two nested bubbles say "conversation opened from here",
+   *  without looking like an agent) */
   icon?: React.ElementType
-  /** Status da sessão exibido como dot (workers da orquestração) */
+  /** Session status shown as a dot (orchestration workers) */
   statusDot?: string
-  /** Nó extra dentro do botão (ex: chevron de expandir do orquestrador) */
+  /** Extra node inside the button (e.g. the orchestrator's expand chevron) */
   trailing?: React.ReactNode
 }) {
   const { t } = useTranslation()
@@ -707,8 +707,8 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const unreadCounts = useSessionStore((s) => s.unreadCounts)
   const pendingAsks = useSessionStore((s) => s.pendingAsks)
-  // Chamada em curso NESTA conversa: o telefone fica aceso na linha, para a
-  // pessoa achar de volta sem depender do card flutuante.
+  // Call in progress in THIS conversation: the phone stays lit on the row, so the
+  // person can find their way back without depending on the floating card.
   const inCallHere = useVoiceActivity((s) => s.inCall && s.callSessionId === session.id)
   const togglePin = useSessionStore((s) => s.togglePin)
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
@@ -718,9 +718,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
 
   const isSelected = selectedIds.has(session.id)
 
-  // Perguntas/permissões aguardando resposta do usuário: o agente está parado
-  // esperando input (não está trabalhando) — o status permanece "streaming",
-  // mas a UI deve indicar "precisa da sua resposta", não um spinner de atividade.
+  // Questions/permissions awaiting the user's answer: the agent is stopped
+  // waiting for input (it is not working) — the status stays "streaming",
+  // but the UI must indicate "needs your answer", not an activity spinner.
   const hasPendingAsk = (pendingAsks[session.id]?.length ?? 0) > 0
 
   const dragData: SessionDragData = {
@@ -783,9 +783,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
     if (selectionMode) {
       toggle(session.id)
     } else {
-      // Sub-chats (discussão do painel lateral, workers) pertencem à sessão do
-      // pai: abrir um filho não pode trocar a seção da sidebar para o modo do
-      // filho (um sub-chat de uma sessão de código continua no "código").
+      // Sub-chats (side panel discussion, workers) belong to the parent's
+      // session: opening a child cannot switch the sidebar section to the
+      // child's mode (a sub-chat of a code session stays in "code").
       const targetMode = session.parentId
         ? (useSessionStore.getState().sessions.find((s) => s.id === session.parentId)?.mode ?? session.mode)
         : session.mode
@@ -796,8 +796,8 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   }
 
   return (
-    // Arrastando: a linha some, mas o espaço fica — quem segue o cursor é o
-    // fantasma do DragOverlay (session-drag.tsx).
+    // Dragging: the row disappears, but the space stays — the one that follows the cursor is the
+    // ghost of the DragOverlay (session-drag.tsx).
     <div ref={setNodeRef} className={cn("group/menu-row relative min-w-0 transition-opacity duration-150", isDragging && "opacity-0")}>
       <ButtonComponent
         isActive={activeId === session.id}
@@ -825,8 +825,8 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
                   {isSelected && <Check className="size-3 text-primary" />}
                 </button>
               ) : inCallHere ? (
-                // Chamada nesta conversa: o telefone TOMA o lugar do balão de chat
-                // em vez de somar mais um ícone na linha.
+                // Call in this conversation: the phone TAKES the place of the chat bubble
+                // instead of adding yet another icon to the row.
                 <Phone aria-label={t("voice.call.inCall")} className="size-4 shrink-0 text-primary" />
               ) : (
                 <Icon className="size-4 shrink-0" />
@@ -861,7 +861,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
         buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-5", actionButtonClassName)}
         items={menuItems}
       />
-      <ExcluirChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
+      <DeleteChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
       <PromptDialog
         open={renaming}
         onOpenChange={setRenaming}
@@ -976,16 +976,16 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
 }
 
 /**
- * Pasta ATIVA aparecendo dentro de "Arquivados" só para agrupar os chats dela
- * que foram arquivados.
+ * ACTIVE folder showing up inside "Archived" only to group its chats
+ * that were archived.
  *
- * É somente leitura de propósito: reusar o FolderItem faria a pasta expandir
- * junto com a de "Pastas" (o estado é guardado por folder.id) e ofereceria
- * renomear/arquivar/excluir a pasta real a partir daqui.
+ * It is read-only on purpose: reusing FolderItem would make the folder expand
+ * together with the one in "Folders" (the state is stored by folder.id) and would offer
+ * renaming/archiving/deleting the real folder from here.
  *
- * Nenhuma pasta espelho é criada no armazenamento: o chat mantém o folderId,
- * então volta sozinho para o lugar ao ser desarquivado, e quando a pasta
- * original for arquivada os chats se juntam a ela sem duplicar nome.
+ * No mirror folder is created in the storage: the chat keeps the folderId,
+ * so it comes back on its own to the place when unarchived, and when the original folder
+ * is archived the chats join it without duplicating the name.
  */
 function ArchivedFolderGroup({ folder, sessions }: {
   folder: FolderInfo
@@ -1092,17 +1092,17 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              // Novo chat na pasta: volta para a tela de conversa (o "+" também
-              // é clicável fora do chat, ex.: na página Esteira) e a sessão só é
-              // criada ao enviar a 1ª mensagem.
+              // New chat in the folder: goes back to the conversation screen
+              // (the "+" is also clickable outside the chat, e.g. on the Pipeline
+              // page) and the session is only created when the 1st message is sent.
               setView("chat")
               const store = useSessionStore.getState()
-              // As pastas vêm da PRÓPRIA pasta (o chat mais recente dela ou o
-              // projeto que o mapa automático ainda aponta). Ler o workspace
-              // aqui fazia o "+" de uma pasta vazia herdar o repositório do
-              // último chat aberto — outro projeto.
-              const pastas = store.folderWorkspace(folder.id)
-              if (pastas) setFolders(pastas)
+              // The folders come from the FOLDER ITSELF (its most recent chat or the
+              // project the automatic map still points to). Reading the workspace
+              // here made the "+" of an empty folder inherit the repository of the
+              // last opened chat — another project.
+              const workspaceFolders = store.folderWorkspace(folder.id)
+              if (workspaceFolders) setFolders(workspaceFolders)
               void store.selectSession(mode, null)
               store.setPendingFolder(folder.id)
             }}
@@ -1176,12 +1176,12 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
 }
 
 /**
- * Ícone de ação no cabeçalho de um grupo da sidebar (organizar, nova pasta).
+ * Action icon in the header of a sidebar group (organize, new folder).
  *
- * `size-5` em volta de um ícone de 14px: 16px de alvo é difícil de acertar com
- * o mouse. O hover era inexistente — o botão não mudava nada ao passar por
- * cima, então não parecia clicável — e o `cursor-pointer` precisa ser dito
- * (o Tailwind v4 deixa `button` com o cursor padrão).
+ * `size-5` around a 14px icon: a 16px target is hard to hit with
+ * the mouse. The hover did not exist — the button changed nothing on mouse
+ * over, so it did not look clickable — and the `cursor-pointer` has to be said
+ * (Tailwind v4 leaves `button` with the default cursor).
  */
 const GROUP_ACTION_CLASS =
   "flex size-5 cursor-pointer items-center justify-center rounded text-sidebar-foreground/60 outline-hidden transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -1199,8 +1199,8 @@ function ChatHistory() {
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
 
   const totalSelected = selectedIds.size + selectedFolderIds.size
-  // Durante o arrasto, "Fixados" e "Arquivados" aparecem mesmo vazios para
-  // servirem de destino.
+  // During the drag, "Pinned" and "Archived" appear even when empty to
+  // serve as a destination.
   const draggingSession = !!useDraggedMovableSession()
 
   const handleBulkDelete = async () => {
@@ -1215,16 +1215,16 @@ function ChatHistory() {
     exitSelectionMode()
   }
 
-  // Posição de um chat na sidebar = atividade do bloco dele: a própria ou a do
-  // sub-chat/worker mais recente aninhado (sessionActivityMap). Mexer numa
-  // conversa lateral sobe o pai junto — a ordem não depende só do chat
-  // principal.
+  // Position of a chat in the sidebar = activity of its block: its own or the one of the
+  // most recent nested sub-chat/worker (sessionActivityMap). Touching a
+  // side conversation raises the parent along with it — the order does not depend only on the
+  // main chat.
   const activity = useMemo(() => sessionActivityMap(sessions), [sessions])
   const activityOf = (session: SessionInfo) => activity.get(session.id) ?? session.updatedAt
 
-  // Chats de rotina saem da listagem normal: eles vivem no grupo "Rotinas"
-  // logo abaixo, e apareceriam duplicados (e afogariam os recentes) se também
-  // entrassem em "Conversas" ou nas pastas.
+  // Routine chats leave the normal listing: they live in the "Routines" group
+  // right below, and would show up duplicated (drowning the recent ones) if
+  // they also entered "Chats" or the folders.
   const modeSessions = useMemo(
     () =>
       sessions
@@ -1232,11 +1232,11 @@ function ChatHistory() {
         .sort((a, b) => (activity.get(b.id) ?? b.updatedAt) - (activity.get(a.id) ?? a.updatedAt)),
     [sessions, mode, activity],
   )
-  // Grupo "Rotinas" do modo ativo: a sessão de cada execução herda o modo da
-  // rotina (scheduler.ts), então a sidebar de chat só lista as rotinas de
-  // chat e a de código só as de código. Sem filtro de arquivado: os chats de
-  // rotina não entram no grupo "Arquivados" (que sai de modeSessions), então
-  // arquivar um faria ele sumir da sidebar inteira.
+  // "Routines" group of the active mode: each run's session inherits the mode
+  // of the routine (scheduler.ts), so the chat sidebar only lists chat routines
+  // and the code one only the code routines. No archived filter: routine chats
+  // do not enter the "Archived" group (which comes from modeSessions), so
+  // archiving one would make it vanish from the whole sidebar.
   const routineSessions = useMemo(
     () =>
       sessions
@@ -1244,7 +1244,7 @@ function ChatHistory() {
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions, mode],
   )
-  // Workers ficam agrupados sob o orquestrador (independente do modo do worker)
+  // Workers are grouped under the orchestrator (regardless of the worker's mode)
   const childrenByParent = useMemo(() => {
     const map: Record<string, SessionInfo[]> = {}
     for (const s of sessions) {
@@ -1271,13 +1271,13 @@ function ChatHistory() {
     return b.createdAt - a.createdAt
   })
   const rootSessions = active
-    // Só pastas ativas "seguram" chats na raiz: um chat desarquivado dentro
-    // de uma pasta arquivada cai nos recentes (a pasta continua arquivada)
+    // Only active folders "hold" chats at the root: a chat unarchived inside
+    // an archived folder falls into the recent ones (the folder stays archived)
     .filter((s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId))
     .sort((a, b) => activityOf(b) - activityOf(a))
-  // Arquivados soltos: os de pasta ARQUIVADA aparecem dentro dela; os de pasta
-  // ATIVA ganham um agrupamento por nome logo abaixo — antes caíam soltos aqui
-  // e perdiam a referência da pasta a que pertencem.
+  // Loose archived ones: those of an ARCHIVED folder appear inside it; those of an
+  // ACTIVE folder get a grouping by name right below — before they fell loose here
+  // and lost the reference of the folder they belong to.
   const archivedInActiveFolders = archivedSessions.filter(
     (s) => s.folderId != null && !archivedFolderIds.has(s.folderId),
   )
@@ -1399,9 +1399,9 @@ function ChatHistory() {
         </SidebarMenu>
       </AccordionGroup>
 
-      {/* Expandido por padrão: é aqui que aparecem o spinner da execução em
-          curso e os pontos de "terminou e não foi lido" / erro — colapsado, a
-          rotina rodaria sem nenhum sinal na tela. */}
+      {/* Expanded by default: this is where the running spinner and the
+          "finished and unread" / error dots appear — collapsed, a routine would
+          run with no sign on screen. */}
       {routineSessions.length > 0 && (
         <AccordionGroup label={t("sidebar.groups.routines")}>
           <SidebarMenu>
@@ -1569,8 +1569,8 @@ export function AppSidebar() {
               <NewChatButton />
             </div>
             <div className="space-y-1 px-2 pb-2">
-              <EsteiraButton />
-              <RotinasButton />
+              <PipelineButton />
+              <RoutinesButton />
               <MemoriesButton />
               <ModelsButton />
               <UsageButton />

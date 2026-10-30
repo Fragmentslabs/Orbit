@@ -8,20 +8,23 @@ import { listCustomProviders, seedCustomProviders } from './custom-providers'
 import { modelRuntime } from './provider-npm'
 
 /**
- * Catálogo de provedores/modelos vindo do models.dev — a mesma fonte usada
- * pelo opencode. O resultado é cacheado em disco e atualizado em background.
+ * Catalog of providers/models from models.dev — the same source used
+ * by opencode. The result is cached on disk and updated in the background.
  */
 
 const MODELS_DEV_URL = 'https://models.dev/api.json'
-const REFRESH_INTERVAL = 24 * 60 * 60 * 1000 // 24h
+const REFRESH_INTERVAL = 24 * 60 * 60 * 1000 /**
+  * Catalog of providers/models from models.dev — the same source used
+  * by opencode. The result is cached on disk and updated in the background.
+  */
 
 let cached: Catalog | null = null
 
 /**
- * Quem quer saber que o catálogo mudou em segundo plano. A interface carrega o
- * catálogo uma vez ao abrir; sem esse aviso ela seguia mostrando modelos e
- * níveis do catálogo velho enquanto o engine já usava o novo. Registro por
- * callback (e não BrowserWindow aqui) para o módulo não depender do electron.
+ * Whoever wants to know that the catalog changed in the background. The interface loads the
+ * catalog once when it opens; without that notice it kept showing models and
+ * levels from the old catalog while the engine already used the new one. Registration by
+ * callback (and not BrowserWindow here) so the module does not depend on electron.
  */
 const refreshListeners = new Set<() => void>()
 export function onCatalogRefreshed(listener: () => void): () => void {
@@ -42,16 +45,16 @@ async function readCache(): Promise<{ catalog: Catalog; fetchedAt: number } | nu
 }
 
 /**
- * Enriquece cada modelo com metadados de reasoning (variants disponíveis e
- * flag de "sempre pensa") para o renderer montar a UI sem conhecer payloads.
+ * Enriches each model with reasoning metadata (available variants and the
+ * "always thinks" flag) so the renderer can assemble the UI without knowing payloads.
  */
 function enrichProvider(providerId: string, provider: CatalogProvider): CatalogProvider {
   for (const modelId in provider.models) {
     const model = provider.models[modelId]
     if (!model.reasoning) continue
-    // O npm efetivo (não só o do catálogo) mantém a UI alinhada ao SDK que o
-    // resolveModel vai usar de fato — inclusive nos provedores personalizados,
-    // cujo protocolo escolhe o SDK.
+    // The effective npm (not just the catalog's) keeps the UI aligned with the SDK that
+    // resolveModel is actually going to use — including in custom providers,
+    // whose protocol chooses the SDK.
     const runtime = modelRuntime(provider, model)
     const input = toModelInput(providerId, runtime.npm, model, runtime.api)
     model.reasoningAlwaysOn = isAlwaysOnModel(input.modelId, input.apiId) || undefined
@@ -69,10 +72,10 @@ function enrichCatalog(catalog: Catalog): Catalog {
 }
 
 /**
- * Remove modelos marcados como `deprecated` no models.dev: eles saíram do
- * backend do provedor (o gateway responde 400 "Model is unavailable") mas
- * continuam no snapshot do catálogo. Mesma política do cliente do opencode,
- * que esconde esses modelos do seletor.
+ * Removes models marked as `deprecated` in models.dev: they left the
+ * provider's backend (the gateway answers 400 "Model is unavailable") but
+ * stay in the catalog's snapshot. Same policy as the opencode client,
+ * which hides those models from the selector.
  */
 function pruneDeprecated(catalog: Catalog): Catalog {
   for (const providerId in catalog) {
@@ -133,9 +136,9 @@ export async function getMergedCatalog(): Promise<Catalog> {
   const custom = await listCustomProviders()
   if (custom.length === 0) return catalog
 
-  // Cópia, não escrita no cache: `cached` é o módulo inteiro. Escrever os
-  // personalizados nele fazia um provedor removido continuar no catálogo até
-  // reiniciar o app, e apagava a distinção entre catálogo e cadastro local.
+  // A copy, not a write to the cache: `cached` is the whole module. Writing the
+  // custom ones into it made a removed provider stay in the catalog until
+  // the app restarted, and erased the distinction between catalog and local registration.
   const merged: Catalog = { ...catalog }
   for (const provider of custom) merged[provider.id] = enrichProvider(provider.id, provider)
   return merged
@@ -147,9 +150,9 @@ export async function getProvider(providerId: string): Promise<CatalogProvider |
 }
 
 /**
- * O modelo aceita imagens como input? Usa as modalidades do models.dev
- * (input inclui 'image'); sem modalidades, cai no flag `attachment`. Controla
- * se a flag `ver` do panel_screenshot é oferecida ao modelo.
+ * Does the model accept images as input? It uses models.dev's modalities
+ * (input includes 'image'); without modalities, it falls back to the `attachment` flag. It controls
+ * whether the `see` flag of panel_screenshot is offered to the model.
  */
 export { modelSupportsVision }
 

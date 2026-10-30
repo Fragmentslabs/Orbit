@@ -1,10 +1,10 @@
 /**
- * Vocabulário compartilhado da aba de pastas.
+ * Shared vocabulary of the folders tab.
  *
- * Os tipos e helpers que atravessam as três peças da aba ficam aqui, e não
- * dentro de um dos componentes, porque nenhum deles é dono do vocabulário: o
- * navegador produz as referências de arquivo, o visualizador as consome e a aba
- * liga os dois. Sem este módulo, um teria de importar o outro só para conhecer
+ * The types and helpers that cross the three pieces of the tab live here, and not
+ * inside one of the components, because none of them owns the vocabulary: the
+ * navigator produces the file references, the viewer consumes them and the tab
+ * connects the two. Without this module, one would have to import the other just to know
  * `ViewedFile`.
  */
 
@@ -44,11 +44,11 @@ export type GitLogResult =
   | { ok: false; error: string };
 
 /**
- * O arquivo que o visualizador está mostrando, e de onde ele vem.
+ * The file the viewer is showing, and where it comes from.
  *
- * É a única fonte sobre "que arquivo é este": se está no working tree
- * (`live`) ou congelado em um commit (`commit`). O que se faz com ele — ler o
- * conteúdo ou ver o diff — é a lente do visualizador, não um estado paralelo.
+ * It is the only source about "which file is this": whether it is in the working tree
+ * (`live`) or frozen in a commit (`commit`). What is done with it — reading the
+ * content or seeing the diff — is the viewer lens, not a parallel state.
  */
 export type ViewedFile =
   | { kind: "live"; path: string; relPath: string | null; deleted: boolean }
@@ -60,7 +60,7 @@ export type ViewedFile =
       deleted: boolean;
     };
 
-/** Entrada do git status por caminho absoluto (chave do mapa). */
+/** Git status entry by absolute path (key of the map). */
 export interface GitStatusEntry {
   path: string;
   status: GitFileStatus;
@@ -70,9 +70,9 @@ export type GitStatusResult =
   { ok: true; entries: GitStatusEntry[] } | { ok: false; error: string };
 
 /**
- * Um repositório que vive dentro da pasta de trabalho: a própria pasta, quando
- * ela é repo, ou uma subpasta com git próprio (`front/`, `back/`). `relative`
- * é o caminho até ele a partir da pasta de trabalho ("" quando é ela mesma).
+ * A repository that lives inside the working folder: the folder itself, when
+ * it is a repo, or a subfolder with its own git (`front/`, `back/`). `relative`
+ * is the path to it from the working folder ("" when it is the folder itself).
  */
 export interface GitRepoEntry {
   path: string;
@@ -84,13 +84,13 @@ export type GitReposResult =
   { ok: true; repos: GitRepoEntry[] } | { ok: false; error: string };
 
 /**
- * Qual das caminhos contém o arquivo, ou `null` se nenhum o contém.
+ * Which of the paths contains the file, or `null` if none does.
  *
- * O de prefixo MAIS LONGO, e não o primeiro que casar: num espaço onde a pasta
- * raiz também é repo, o caminho dela é prefixo de todo repo aninhado — e
- * `front/src/x.ts` pertence ao `front`, não à raiz. Vale igual para as pastas
- * de trabalho: uma pasta anexada que esteja dentro da principal é a dona dos
- * arquivos dela.
+ * The one with the LONGEST prefix, and not the first that matches: in a space where the root
+ * folder is also a repo, its path is a prefix of every nested repo — and
+ * `front/src/x.ts` belongs to `front`, not to the root. The same holds for the working
+ * folders: an attached folder that is inside the main one owns its
+ * files.
  */
 export function folderForPath(
   folders: string[],
@@ -108,7 +108,7 @@ export function folderForPath(
   return best;
 }
 
-/** O repositório dono de um caminho, ou `null` se nenhum o contém. */
+/** The repository that owns a path, or `null` if none contains it. */
 export function repoForPath(
   repos: GitRepoEntry[],
   filePath: string,
@@ -120,16 +120,16 @@ export function repoForPath(
 }
 
 /**
- * Distribui arquivos pelas pastas de trabalho que os contêm — a base da lista
- * de alterações quando o chat tem mais de uma pasta.
+ * Distributes files across the working folders that contain them — the base of the changes
+ * list when the chat has more than one folder.
  *
- * O arquivo conta uma vez só: fica com a pasta mais específica, então uma pasta
- * anexada dentro da principal não mostra as mesmas mudanças duas vezes. Arquivo
- * que não está em pasta nenhuma (a leitura é de um instante atrás, logo depois
- * de trocar as pastas) vai para `fallback`, em vez de sumir da tela.
+ * The file counts once only: it stays with the most specific folder, so an attached folder
+ * inside the main one does not show the same changes twice. A file
+ * that is in no folder (the reading is from an instant ago, right after
+ * switching the folders) goes to `fallback`, instead of vanishing from the screen.
  *
- * A ordem segue `folders` — a principal primeiro —, e o que não pertence a
- * nenhuma fica no fim.
+ * The order follows `folders` — the main one first —, and what belongs to
+ * none stays at the end.
  */
 export function groupByFolder<T extends { path: string }>(
   folders: string[],
@@ -157,21 +157,21 @@ export type DiffResult =
   { ok: true; patch: string } | { ok: false; error: string };
 
 /**
- * A lente sobre o arquivo em foco: o conteúdo em si ou o diff dele.
+ * The lens over the file in focus: the content itself or its diff.
  *
- * Quem escolhe é o pai — a lista de alterações abre um arquivo direto no diff,
- * a árvore completa abre no conteúdo —, e o visualizador só obedece.
+ * The parent is the one that chooses — the changes list opens a file straight into the diff,
+ * the full tree opens into the content —, and the viewer just obeys.
  */
 export type ViewerLens = "content" | "diff";
 
 /**
- * Patch completo do working tree — todos os arquivos alterados num texto só,
- * que o `parsePatch` separa de volta. É o que alimenta a visão empilhada.
+ * Full patch of the working tree — every changed file in a single text,
+ * which `parsePatch` splits back. It is what feeds the stacked view.
  */
 export type GitWorkingDiffResult =
   { ok: true; patch: string } | { ok: false; error: string };
 
-/** Linhas adicionadas/removidas de um arquivo (working tree contra HEAD). */
+/** Lines added/removed of a file (working tree against HEAD). */
 export interface LineStat {
   added: number;
   deleted: number;
@@ -180,13 +180,13 @@ export interface LineStat {
 export type GitNumstatResult =
   { ok: true; stats: Record<string, LineStat> } | { ok: false; error: string };
 
-/** Arquivo excluído no working tree (fantasma no tree, não existe em disco). */
+/** File deleted in the working tree (a ghost in the tree, it does not exist on disk). */
 export interface DeletedEntry {
   path: string;
   name: string;
 }
 
-/** Junta a raiz do repo com um caminho relativo (separadores '/' no relPath). */
+/** Joins the repo root with a relative path ('/' separators in relPath). */
 export function joinPath(root: string, relPath: string) {
   const base = root.replace(/[\\/]+$/, "");
   return `${base}/${relPath.replace(/\\/g, "/")}`;

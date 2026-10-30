@@ -2,11 +2,11 @@ import type { TimedWord } from './edl'
 import { runFfmpeg } from './ffmpeg'
 
 /**
- * A "olhada" do agente num trecho: uma imagem com tira de quadros, forma de
- * onda e as palavras na posição em que são ditas — com os silêncios que dão
- * corte limpo destacados. É o `timeline_view` do video-use: chamado nos pontos
- * de decisão (pausa ambígua, comparar takes, conferir um corte), não para
- * varrer o vídeo.
+ * The agent's "look" at a stretch: an image with a filmstrip, the
+ * waveform and the words at the position where they are said — with the silences that give a
+ * clean cut highlighted. It is video-use's `timeline_view`: called at the decision
+ * points (ambiguous pause, comparing takes, checking a cut), not to
+ * scan the video.
  */
 
 const WIDTH = 1600
@@ -22,20 +22,20 @@ export interface TimelineInput {
   endMs: number
   frames: number
   words: TimedWord[]
-  /** Marcas verticais (ex.: os cortes de uma saída renderizada), em ms. */
+  /** Vertical marks (e.g. the cuts of a rendered output), in ms. */
   marks?: number[]
   hasVideo: boolean
   hasAudio: boolean
 }
 
 /**
- * Silêncios ≥ `minMs` entre palavras dentro da janela (candidatos a corte).
+ * Silences ≥ `minMs` between words inside the window (cut candidates).
  *
- * Sem NENHUMA palavra não existe medida de silêncio: `words` vazio é o arquivo
- * sem transcrição (música, ambiente), e a conta de lacunas devolveria a janela
- * inteira como silêncio — falso num vídeo com trilha contínua. Janela sem
- * palavras mas com transcrição no arquivo continua valendo: ali o silêncio é
- * real, entre duas falas.
+ * Without ANY word there is no measure of silence: empty `words` is the file
+ * without a transcription (music, ambience), and the gap count would return the whole
+ * window as silence — false in a video with a continuous track. A window without
+ * words but with a transcription in the file still counts: there the silence is
+ * real, between two speeches.
  */
 export function silencesIn(words: TimedWord[], startMs: number, endMs: number, minMs = 400): { startMs: number; endMs: number }[] {
   if (words.length === 0) return []
@@ -69,7 +69,7 @@ async function frameAt(file: string, ms: number, height: number): Promise<Buffer
   }
 }
 
-/** Pico absoluto por coluna (PCM16 mono 8 kHz é de sobra para desenhar). */
+/** Absolute peak per column (mono PCM16 at 8 kHz is more than enough to draw). */
 async function peaks(file: string, startMs: number, endMs: number, columns: number): Promise<Float32Array> {
   const { stdout } = await runFfmpeg([
     '-v', 'error',
@@ -109,7 +109,7 @@ export async function renderTimeline(input: TimelineInput): Promise<{ image: Buf
   g.fillRect(0, 0, WIDTH, height)
   let y = PAD
 
-  // Quadros: N amostras igualmente espaçadas, no meio de cada fatia.
+  // Frames: N equally spaced samples, in the middle of each slice.
   if (input.hasVideo) {
     const n = Math.max(1, Math.min(16, input.frames))
     const times = Array.from({ length: n }, (_, i) => startMs + ((i + 0.5) * span) / n)
@@ -131,12 +131,12 @@ export async function renderTimeline(input: TimelineInput): Promise<{ image: Buf
     y += FRAME_ROW + PAD
   }
 
-  // Silêncios ≥ 400 ms (corte limpo) em verde, por trás da onda e das palavras.
+  // Silences ≥ 400 ms (clean cut) in green, behind the waveform and the words.
   const silences = silencesIn(input.words, startMs, endMs)
   g.fillStyle = 'rgba(46, 160, 67, 0.22)'
   for (const s of silences) g.fillRect(x(s.startMs), y, x(s.endMs) - x(s.startMs), WAVE_ROW + WORD_ROW)
 
-  // Forma de onda.
+  // Waveform.
   const mid = y + WAVE_ROW / 2
   g.strokeStyle = '#3a3f4a'
   g.beginPath()
@@ -154,7 +154,7 @@ export async function renderTimeline(input: TimelineInput): Promise<{ image: Buf
   }
   y += WAVE_ROW
 
-  // Palavras: uma faixa por palavra, alternando altura para não encavalar.
+  // Words: one band per word, alternating height so they do not pile up.
   g.font = '13px sans-serif'
   const visible = input.words.filter((w) => w.endMs > startMs && w.startMs < endMs)
   visible.forEach((w, i) => {
@@ -168,7 +168,7 @@ export async function renderTimeline(input: TimelineInput): Promise<{ image: Buf
   })
   y += WORD_ROW
 
-  // Eixo de tempo.
+  // Time axis.
   g.fillStyle = '#9aa0aa'
   g.font = '12px sans-serif'
   const step = [100, 250, 500, 1000, 2000, 5000, 10_000, 30_000, 60_000].find((s) => span / s <= 12) ?? 60_000
@@ -177,7 +177,7 @@ export async function renderTimeline(input: TimelineInput): Promise<{ image: Buf
     g.fillText(label(t), x(t) + 3, y + 18)
   }
 
-  // Marcas (cortes de uma saída): linhas vermelhas de cima a baixo.
+  // Marks (cuts of an output): red lines from top to bottom.
   g.strokeStyle = '#ff5a5a'
   g.lineWidth = 2
   for (const m of input.marks ?? []) {

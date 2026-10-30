@@ -1,12 +1,12 @@
 import type { DetailedHTMLProps, HTMLAttributes } from "react"
 
 /**
- * `<webview>` é uma tag do Electron, não do DOM padrão — sem esta declaração
- * o TSX a trata como elemento desconhecido, e o código convivia com um
- * `@ts-ignore` e um `props as any` para contornar.
+ * `<webview>` is an Electron tag, not part of the standard DOM — without this declaration
+ * TSX treats it as an unknown element, and the code lived with a
+ * `@ts-ignore` and a `props as any` to work around it.
  *
- * Só os atributos que o app realmente usa: o dono do guest é o pool
- * (webview-session.ts), que fala com o elemento pela API imperativa.
+ * Only the attributes the app actually uses: the owner of the guest is the pool
+ * (webview-session.ts), which talks to the element through the imperative API.
  */
 declare global {
   namespace JSX {

@@ -1,33 +1,33 @@
 export const MAX_TITLE_LENGTH = 50
 
-// Modelos thinking (DeepSeek R1, Qwen QwQ, OpenAI o1/o3, Gemini Thinking etc.)
-// emitem blocos `<think>...</think>`. Alguns provedores/gateways não separam
-// o raciocínio direito e esses tokens vazam no `text` retornado — quando o
-// bloco é filtrado e sobra só o início da tag, o título nasce com `<think`
-// colado na frente. Remove também tokens de fim/início de turno de outros
-// modelos (ChatML, Llama, Mistral) que aparecem raramente em gateways mal
-// configurados.
+// Thinking models (DeepSeek R1, Qwen QwQ, OpenAI o1/o3, Gemini Thinking etc.)
+// emit ` thinking...</think>` blocks. Some providers/gateways do not separate
+// the reasoning properly and those tokens leak into the returned `text` — when the
+// block is filtered and only the opening of the tag is left, the title is born with `<think`
+// glued to the front. It also removes end/start-of-turn tokens from other
+// models (ChatML, Llama, Mistral) that rarely show up in badly
+// configured gateways.
 function stripThinkingAndArtifacts(text: string): string {
   return text
-    // Bloco de raciocínio completo (com fechamento) — pode aparecer em
-    // qualquer lugar; alguns provedores não separam reasoning direito.
+    // Complete reasoning block (with closing) — it may show up in
+    // any place; some providers do not separate reasoning properly.
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    // Tag aberta/fechada solta OU parcial sem `>` (modelo cortou, gateway
-    // vazou). Ancorada em "<think" pra não comer texto legítimo.
+    // Stray open/close tag OR partial without `>` (the model cut it, the gateway
+    // leaked it). Anchored on "<think" so as not to eat legitimate text.
     .replace(/<\/?think(?:ing)?\b[^>]*>?/gi, '')
-    // Tokens de fim/início de turno de modelos específicos (ChatML,
+    // End/start-of-turn tokens of specific models (ChatML,
     // Anthropic specials, Llama/Mistral end-of-turn).
     .replace(/<\/?(?:s|antml(?::text|_thinking)?)\s*>/gi, '')
     .replace(/<\||\|>/g, '')
     .replace(/\[\/?INST\]/g, '')
 }
 
-// Quando a mensagem do usuário é uma tarefa ("liste os arquivos…"), alguns
-// modelos (DeepSeek via opencode-go) executam em vez de dar título e devolvem
-// a chamada de ferramenta como texto: DSML da DeepSeek (`<｜DSML｜invoke …>`,
-// com a barra de largura total U+FF5C), tokens `<｜tool▁calls▁begin｜>`,
-// `<toolcall>`/`<tool_call>`/`<function_call>`, `[TOOL_CALLS]` do Mistral ou
-// JSON cru com `name` + `arguments`. Nada disso pode virar título.
+// When the user's message is a task ("list the files…"), some
+// models (DeepSeek via opencode-go) execute instead of giving a title and return
+// the tool call as text: DeepSeek's DSML (`<invoke …>`,
+// with the full-width bar U+FF5C), `<｜tool▁calls▁begin｜>` tokens,
+// `<toolcall>`/`<tool_call>`/`<function_call>`, Mistral's `[TOOL_CALLS]` or
+// raw JSON with `name` + `arguments`. None of that can become a title.
 const TOOL_CALL_MARKERS = [
   /[｜|]\s*DSML\s*[｜|]/i,
   /<\s*[｜|]\s*tool[\s▁_]*call/i,
@@ -39,30 +39,30 @@ const TOOL_CALL_MARKERS = [
 
 export function looksLikeToolCall(text: string): boolean {
   if (TOOL_CALL_MARKERS.some((re) => re.test(text))) return true
-  // JSON cru (objeto ou lista) nunca é um título legível
+  // Raw JSON (object or list) is never a readable title
   return /^[{[]/.test(text.trim())
 }
 
 export function truncateTitle(text: string): string {
   const cleaned = stripThinkingAndArtifacts(text)
     .trim()
-    .replace(/\*\*/g, '') // negrito/marcação forte
-    .replace(/[*_`#>~]/g, '') // outra marcação markdown
+    .replace(/\*\*/g, '') // bold/strong markup
+    .replace(/[*_`#>~]/g, '') // other markdown markup
     .replace(/^["']|["']$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
   if (!cleaned) return ''
   if (cleaned.length <= MAX_TITLE_LENGTH) return cleaned
-  // corta no limite de caracteres SEM quebrar palavra no meio, quando possível
+  // cuts at the character limit WITHOUT breaking a word in the middle, when possible
   const hard = cleaned.slice(0, MAX_TITLE_LENGTH)
   const lastSpace = hard.lastIndexOf(' ')
   const cut = lastSpace > MAX_TITLE_LENGTH * 0.5 ? lastSpace : hard.length
   return hard.slice(0, cut).trim()
 }
 
-// Título de reserva tirado da própria mensagem: a primeira frase da primeira
-// linha não vazia costuma dizer do que se trata ("Benchmark de navegação de
-// código. Use…" → "Benchmark de navegação de código").
+// Fallback title taken from the message itself: the first sentence of the first
+// non-empty line usually says what it is about ("Code navigation benchmark.
+// Use…" → "Code navigation benchmark").
 export function titleFromUserText(userText: string): string {
   const firstLine = userText.split('\n').find((line) => line.trim()) ?? ''
   const firstSentence = firstLine.split(/(?<=[.!?])\s/)[0] ?? ''
@@ -70,12 +70,12 @@ export function titleFromUserText(userText: string): string {
 }
 
 /**
- * Título de reserva quando a mensagem não tem texto (só anexo): o nome do
- * arquivo é a única pista do assunto, e sem isso um chat aberto com um PDF
- * ficava para sempre no título padrão.
+ * Fallback title when the message has no text (attachment only): the file
+ * name is the only clue to the subject, and without it a chat opened with a PDF
+ * stayed forever on the default title.
  *
- * "Contrato de aluguel.pdf" → "Contrato de aluguel". A extensão sai (ruído num
- * título), mas só quando é extensão de verdade: em "v1.2" o ".2" fica.
+ * "Rental agreement.pdf" → "Rental agreement". The extension leaves (noise in a
+ * title), but only when it really is an extension: in "v1.2" the ".2" stays.
  */
 export function titleFromAttachmentNames(
   files: { filename?: string; chip?: boolean }[] | undefined,
@@ -90,9 +90,9 @@ export function titleFromAttachmentNames(
 }
 
 /**
- * Converte a resposta do modelo de título em título final. Se ela vier com
- * markup de chamada de ferramenta (ou ficar vazia depois da limpeza), cai para
- * `fallback` — o título derivado da mensagem do usuário.
+ * Converts the title model's answer into a final title. If it comes with tool
+ * call markup (or is empty after the cleanup), it falls back to
+ * `fallback` — the title derived from the user's message.
  */
 export function resolveTitle(modelText: string, fallback: string): string {
   if (looksLikeToolCall(modelText)) return fallback

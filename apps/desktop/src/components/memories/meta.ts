@@ -1,15 +1,15 @@
 import type { Memory, MemoryKind, ProjectArea, ProjectCategory } from "@shared/memory"
 
-/** Rótulos e cores por tipo de memória, compartilhados entre lista e árvore. */
+/** Labels and colors per memory type, shared between list and tree. */
 
 export const KIND_LABEL: Record<MemoryKind, string> = {
   core: "core",
-  seasonal: "sazonal",
-  general: "geral",
-  project: "projeto",
+  seasonal: "seasonal",
+  general: "general",
+  project: "project",
 }
 
-/** Classes de badge por kind (lista) */
+/** Badge classes per kind (list) */
 export const KIND_BADGE: Record<MemoryKind, string> = {
   core: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   seasonal: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
@@ -17,7 +17,7 @@ export const KIND_BADGE: Record<MemoryKind, string> = {
   project: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
 }
 
-/** Cor sólida por kind (nós da árvore SVG) */
+/** Solid color per kind (nodes of the SVG tree) */
 export const KIND_COLOR: Record<MemoryKind, string> = {
   core: "#3b82f6",
   seasonal: "#f59e0b",
@@ -26,25 +26,25 @@ export const KIND_COLOR: Record<MemoryKind, string> = {
 }
 
 export const CATEGORY_LABEL: Record<ProjectCategory, string> = {
-  preference: "preferência",
-  convention: "convenção",
-  structure: "estrutura",
-  decision: "decisão",
-  context: "contexto",
-  database: "banco de dados",
-  learning: "aprendizado",
-  standard: "padronização",
+  preference: "preference",
+  convention: "convention",
+  structure: "structure",
+  decision: "decision",
+  context: "context",
+  database: "database",
+  learning: "learning",
+  standard: "standard",
 }
 
-/** Ícone Lucide por categoria (usado nos badges de memórias sem área — kind
- * "general"/"project" fora do grafo do /init, ex. aprendizados). */
+/** Lucide icon per category (used in the badges of memories without an area — kind
+ * "general"/"project" outside the /init graph, e.g. learnings). */
 export const CATEGORY_ICON: Partial<Record<ProjectCategory, string>> = {
   database: "Database",
   learning: "GraduationCap",
   standard: "BookText",
 }
 
-/** Ícone Lucide por área de conhecimento (usado no grafo de memórias). */
+/** Lucide icon per knowledge area (used in the memory graph). */
 export const AREA_ICON: Record<ProjectArea, string> = {
   overview: "BrainCircuit",
   business: "Briefcase",

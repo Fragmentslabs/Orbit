@@ -1,13 +1,13 @@
 import { app, type BrowserWindow } from 'electron'
 
 /**
- * Deixa a janela visível em todos os espaços, inclusive sobre apps em tela
- * cheia (overlay, faixa e painéis do Computer Use).
+ * Makes the window visible in all spaces, including over apps in full
+ * screen (overlay, strip and Computer Use panels).
  *
- * No macOS, `visibleOnFullScreen` transforma o processo em app "UIElement":
- * o ícone some do Dock e o Orbit passa a abrir em segundo plano, só voltando
- * com um segundo clique. O Orbit é um app de Dock de verdade, então o ícone é
- * devolvido logo depois da transformação.
+ * On macOS, `visibleOnFullScreen` turns the process into a "UIElement" app:
+ * the icon disappears from the Dock and Orbit starts opening in the background, only coming back
+ * with a second click. Orbit is a real Dock app, so the icon is given back
+ * right after the transformation.
  */
 export function floatAboveFullScreen(win: BrowserWindow): void {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
