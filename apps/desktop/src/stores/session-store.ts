@@ -89,8 +89,6 @@ export interface LiveContext {
 export interface CompactionSuggestion {
   /** Summaries in the history at the moment of the offer (= compactions made). */
   summaries: number
-  /** From how many summaries on the engine started suggesting it. */
-  threshold: number
   /** Dismissed for THIS count; a new compaction frees it again. */
   dismissed: boolean
 }
@@ -1745,7 +1743,6 @@ case "message": {
             ...state.compactionSuggestion,
             [sessionId]: {
               summaries: event.summaries,
-              threshold: event.threshold,
               dismissed: false,
             },
           },
@@ -1845,7 +1842,7 @@ case "message": {
             ? {
                 requestId: event.requestId,
                 kind: "subchat",
-                subchat: { title: event.title, brief: event.brief },
+                subchat: { title: event.title, brief: event.brief, scope: event.scope },
                 origin: event.origin,
               }
             : { requestId: event.requestId, kind: "question", questions: event.questions, origin: event.origin }

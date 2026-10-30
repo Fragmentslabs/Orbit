@@ -17,13 +17,10 @@ import { useSessionStore } from "@/src/stores/session-store"
 export function CompactionSuggestionCard({
   sessionId,
   summaries,
-  threshold,
 }: {
   sessionId: string
   /** Compactions already done (= summaries in the history) */
   summaries: number
-  /** From how many on the card appears (setting) */
-  threshold: number
 }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState<null | "compact" | "new">(null)
@@ -110,7 +107,7 @@ export function CompactionSuggestionCard({
           {t("chat.compactionSuggest.compactHere")}
         </button>
         <span className="text-[11px] text-muted-foreground">
-          {t("chat.compactionSuggest.hint", { threshold })}
+          {t("chat.compactionSuggest.hint")}
         </span>
       </div>
     </div>

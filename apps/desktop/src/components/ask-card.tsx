@@ -13,6 +13,7 @@ import { chatApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import type { PendingAskUI } from "@/src/stores/session-store"
+import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { Hint } from "@/components/ui/hint"
 
 function OriginBadge({ workerTitle, t }: { workerTitle: string; t: (key: string) => string }) {
@@ -60,11 +61,12 @@ function PermissionBody({ ask, submitted, onReply }: {
             {t("permissions.allowOnce")}
           </Button>
           <DropdownMenu open={open} onOpenChange={setOpen}>
+            {/* The arrow is a child of the button INSIDE `render`: with the icon on the
+                trigger's own children (and a wrapper in `render`) Base UI keeps the
+                wrapper's children and drops it — no chevron and no click to open. */}
             <DropdownMenuTrigger
               aria-label={t("permissions.moreOptions")}
-              render={<Hint label={t("common.previous")}>
-                <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />
-              </Hint>}
+              render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />}
             >
               <ChevronDown className="size-3" />
             </DropdownMenuTrigger>
@@ -153,11 +155,11 @@ function buildComparisonPrompt(questions: Question[], currentIndex: number, t: T
   ].join("\n")
 }
 
-function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
+function DiscussInPanelButton({ questions, currentIndex, sessionId }: {
   questions: Question[]
   currentIndex: number
-  /** Session that asked the question (current chat or worker) — the discussion sub-chat is born nested in it. */
-  parentSessionId?: string
+  /** Conversation the card is shown in — the discussion sub-chat is born nested in IT. */
+  sessionId?: string
 }) {
   const openChatTabWithPendingInput = usePanelStore((s) => s.openChatTabWithPendingInput)
   const createSession = useSessionStore((s) => s.createSession)
@@ -173,22 +175,30 @@ function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
         setWorking(true)
         try {
           const title = t("ask.compareOptions")
-          // The discussion sub-chat inherits the mode and the folders of the session that asked
-          // the question: it stays in the parent's sidebar section (a code parent
-          // must not "jump" to chat when clicking the child) and the sub-agent
-          // sees the same directory — it reads the folder to ground the discussion.
-          const parent = parentSessionId
-            ? useSessionStore.getState().sessions.find((s) => s.id === parentSessionId)
+          // It hangs from the conversation the card lives in — not from the worker that
+          // asked: nested under a worker the new chat shows up with the worker's icon,
+          // as if an agent had opened it instead of the person.
+          // The mode and the folders come from that same conversation: it stays in the
+          // parent's sidebar section (a code parent must not "jump" to chat when the
+          // child is clicked) and the sub-agent reads the same directory to ground the
+          // discussion.
+          const parent = sessionId
+            ? useSessionStore.getState().sessions.find((s) => s.id === sessionId)
             : undefined
           const mode = parent?.mode ?? "chat"
+          const model = sessionModelFor(sessionId)
           const session = await createSession(mode, {
             setActive: false,
             title,
-            parentId: parentSessionId,
+            parentId: sessionId,
             ...(mode === "code"
               ? { directory: parent?.directory, extraDirectories: parent?.extraDirectories }
               : {}),
           })
+          // The same model as the tab the card is in: without pinning it here the child
+          // fell back to the provider's global default — another model, another price,
+          // another voice than the conversation being discussed.
+          if (model) useSessionModelPrefs.getState().selectModel(session.id, model.providerId, model.modelId)
           openChatTabWithPendingInput(session.id, title, buildComparisonPrompt(questions, currentIndex, t))
         } finally {
           setWorking(false)
@@ -275,11 +285,7 @@ function QuestionBody({ ask, submitted, onReply, sessionId }: {
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="ml-6">
-          <DiscussInPanelButton
-            questions={questions}
-            currentIndex={currentIndex}
-            parentSessionId={ask.origin?.workerSessionId ?? sessionId}
-          />
+          <DiscussInPanelButton questions={questions} currentIndex={currentIndex} sessionId={sessionId} />
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -322,12 +328,21 @@ function SubchatBody({ ask, submitted, onReply }: {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const sugestao = ask.subchat ?? { title: "", brief: "" }
+  // A new top-level chat (conversation got long) is not a subchat: it does not nest
+  // under this one, and the card says so — with a chat icon, not the two-bubble one.
+  const newChat = sugestao.scope === "chat"
   return (
     <>
       <div className="flex items-start gap-2">
-        <MessagesSquare className="mt-0.5 size-4 shrink-0 text-primary" />
+        {newChat ? (
+          <MessageSquare className="mt-0.5 size-4 shrink-0 text-primary" />
+        ) : (
+          <MessagesSquare className="mt-0.5 size-4 shrink-0 text-primary" />
+        )}
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground">{t("ask.subchat.title")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t(newChat ? "ask.subchat.titleChat" : "ask.subchat.title")}
+          </p>
           <p className="mt-1 break-words text-sm font-medium">{sugestao.title}</p>
           <p className="mt-1 line-clamp-4 whitespace-pre-wrap break-words text-xs text-muted-foreground">
             {sugestao.brief}
@@ -346,11 +361,11 @@ function SubchatBody({ ask, submitted, onReply }: {
             {t("ask.subchat.newChat")}
           </Button>
           <DropdownMenu open={open} onOpenChange={setOpen}>
+            {/* Same as the permission split button: the chevron belongs to the button
+                inside `render`, otherwise it is dropped and the trigger never opens. */}
             <DropdownMenuTrigger
               aria-label={t("ask.subchat.moreOptions")}
-              render={<Hint label={t("common.next")}>
-                <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />
-              </Hint>}
+              render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />}
             >
               <ChevronDown className="size-3" />
             </DropdownMenuTrigger>

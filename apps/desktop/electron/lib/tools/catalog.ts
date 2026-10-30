@@ -88,6 +88,16 @@ export const CORE: readonly string[] = [
 
 export const CORE_SET: ReadonlySet<string> = new Set(CORE)
 
+/**
+ * Families active from the FIRST turn, without the model having to load them.
+ *
+ * `subchats` is here by evidence: the system prompt orders `suggest_subchat` on the
+ * agent's own initiative, but a tool that is not declared cannot be called — with
+ * the family behind `tools_load`, the suggestion only appeared when the user asked
+ * for a new chat out loud.
+ */
+export const DEFAULT_ACTIVE_FAMILIES: readonly string[] = ['subchats']
+
 /** Declared families. The order here is the map's order (deterministic). */
 interface FamilyDecl {
   id: string

@@ -233,6 +233,10 @@ export const MESSAGES = {
     'pt-BR': '(sem resposta)',
     en: '(no answer)',
   },
+  'resume.subchatHere': {
+    'pt-BR': 'Prefiro fazer isto nesta conversa, não em outro chat.',
+    en: "I'd rather do this in this conversation, not in another chat.",
+  },
 
   // ── Subchats — the first line of the child chat, in the voice of whoever opened it ─
   'subchat.kickoff': {

@@ -64,8 +64,6 @@ export function shouldCompact(
   lastTokens: TokenUsage | undefined,
   model: CatalogModel | undefined,
   estimatedContext = 0,
-  /** Compacts earlier: when passing this fraction of the window (e.g. 0.75). */
-  earlyAt?: number,
 ): boolean {
   if (!model?.limit?.context) return false
   const reserve =
@@ -82,7 +80,9 @@ export function shouldCompact(
   // compacting, because the trigger only looked at what the provider had reported.
   const used = Math.max(reported, estimatedContext)
   if (used === 0) return false
-  if (earlyAt && used >= effectiveContext * earlyAt) return true
+  // One rule, no early threshold: compacting before the window is actually full
+  // summarizes while there is still useful context left — paying a summary call to
+  // lose detail sooner. The reserve already covers the response.
   return used >= effectiveContext - reserve
 }
 

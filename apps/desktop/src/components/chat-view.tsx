@@ -1292,7 +1292,6 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
         <CompactionSuggestionCard
           sessionId={session.id}
           summaries={compactionSuggestion.summaries}
-          threshold={compactionSuggestion.threshold}
         />
       )}
       {/* Requests waiting for an answer (permission / question): the card is the last

@@ -1052,7 +1052,17 @@ export interface AskItem {
   /** Suggestion to open a separate conversation: the title and the brief it would have.
    *  The answer is "new" (opens it and starts working right away), "here" (does it in this one) or
    *  "deny" (sets it aside). It never opens by itself — the user decides. */
-  subchat?: { title: string; brief: string }
+  subchat?: {
+    title: string
+    brief: string
+    /**
+     * Where the suggestion is going: "subchat" (attached to this conversation — another subject,
+     * another folder) or "chat" (a NEW top-level conversation, for when the reason is this
+     * conversation itself being long: a fresh context continuing the work, not another compaction).
+     * Absent = "subchat".
+     */
+    scope?: "subchat" | "chat"
+  }
 }
 
 export interface PlanReview {
@@ -1541,8 +1551,6 @@ export type ChatEvent =
       sessionId: string
       /** Summaries already in the history (= compactions made) */
       summaries: number
-      /** From how many summaries the suggestion shows up */
-      threshold: number
     }
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
   | { type: "plan:review"; sessionId: string; review: PlanReview }
@@ -1552,8 +1560,17 @@ export type ChatEvent =
   | { type: "permission"; sessionId: string; requestId: string; claim: PermissionClaim; origin?: AskOrigin }
   /** Questions of the question tool awaiting an answer */
   | { type: "question"; sessionId: string; requestId: string; questions: Question[]; origin?: AskOrigin }
-  /** Suggestion to take a subject to another conversation — the card decides the destination */
-  | { type: "subchat"; sessionId: string; requestId: string; title: string; brief: string; origin?: AskOrigin }
+  /** Suggestion to take a subject to another conversation — the card decides the destination
+   *  ("subchat" = attached; "chat" = a new top-level conversation, see AskItem.subchat) */
+  | {
+      type: "subchat"
+      sessionId: string
+      requestId: string
+      title: string
+      brief: string
+      scope?: "subchat" | "chat"
+      origin?: AskOrigin
+    }
   /** Batch of worker requests grouped in a batching window (single card) */
   | { type: "ask:batch"; sessionId: string; batchId: string; items: AskItem[] }
   /** Request resolved/canceled — removes the card from the UI */

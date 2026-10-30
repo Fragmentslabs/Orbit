@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Archive, FoldVertical, LayoutList, Lightbulb, MessagesSquare, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
-import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type AutoCompactMode, type ChatViewMode } from "@shared/app-settings"
+import { Archive, LayoutList, Lightbulb, MessagesSquare, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
+import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type ChatViewMode } from "@shared/app-settings"
 import { USER_NAME_MAX } from "@shared/user-name"
 import { ModelField } from "@/src/components/model-field"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
@@ -54,8 +54,6 @@ function UserNameField() {
 }
 
 const COUNT_OPTIONS = [0, 1, 2, 3, 5] as const
-/** Compaction limit before offering a new chat (0 = off). */
-const COMPACT_SUGGEST_OPTIONS = [0, 1, 2, 3, 4] as const
 
 export function GeneralSettings() {
   const { t } = useTranslation()
@@ -148,36 +146,19 @@ export function GeneralSettings() {
         />
       </SettingRow>
 
-      <SettingRow
-        icon={FoldVertical}
-        title={t("preferences.general.compact.title")}
-        description={t("preferences.general.compact.description")}
-      >
-        <SettingSelect<AutoCompactMode>
-          value={settings.autoCompact}
-          onChange={(autoCompact) => update({ autoCompact })}
-          options={(["auto", "75", "50"] as const).map((value) => ({
-            value,
-            label: t(`preferences.general.compact.${value}`),
-          }))}
-        />
-      </SettingRow>
-
+      {/* Compaction has no option: it is automatic, at the model's limit, and the
+          manual one lives in the composer's context meter. A percentage of the window
+          was a decision nobody could calibrate — at 50% it summarized with plenty of
+          room left and degraded the conversation faster. */}
       <SettingRow
         icon={MessagesSquare}
         title={t("preferences.general.compactSuggest.title")}
         description={t("preferences.general.compactSuggest.description")}
       >
-        <SettingSelect
-          value={String(settings.compactSuggestionAfter)}
-          onChange={(v) => update({ compactSuggestionAfter: Number(v) })}
-          options={COMPACT_SUGGEST_OPTIONS.map((n) => ({
-            value: String(n),
-            label:
-              n === 0
-                ? t("preferences.general.off")
-                : t("preferences.general.compactSuggest.after", { count: n }),
-          }))}
+        <SettingSwitch
+          checked={settings.suggestNewChat}
+          onChange={(suggestNewChat) => update({ suggestNewChat })}
+          label={t("preferences.general.compactSuggest.title")}
         />
       </SettingRow>
 

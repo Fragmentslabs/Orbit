@@ -96,11 +96,15 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                     {t("planReview.accept", { mode: t(MODE_LABEL[currentMode]) })}
                   </Button>
                   <DropdownMenu>
-                    <DropdownMenuTrigger render={<Hint label={t("common.dismiss")}>
-                      <Button size="sm" className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5">
-                        <ChevronDown className="size-3" />
-                      </Button>
-                    </Hint>} />
+                    {/* The wrapper cannot be the trigger's `render`: Base UI clones it with
+                        the menu props and the wrapper does not forward them — the menu never
+                        opened. The label goes on the button itself. */}
+                    <DropdownMenuTrigger
+                      aria-label={t("common.dismiss")}
+                      render={<Button size="sm" className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5" />}
+                    >
+                      <ChevronDown className="size-3" />
+                    </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" side="top">
                       {otherModes.map((m) => (
                         <DropdownMenuItem key={m.id} onClick={() => acceptPlanReview(sessionId, m.id)}>

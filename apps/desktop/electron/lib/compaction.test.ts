@@ -75,18 +75,6 @@ describe('shouldCompact', () => {
   })
 })
 
-describe('early shouldCompact (Preferences → Automatic compaction)', () => {
-  it('compacts when passing the requested fraction, before the limit', () => {
-    expect(shouldCompact(usage(80_000), model(200_000), 0, 0.5)).toBe(false)
-    expect(shouldCompact(usage(100_000), model(200_000), 0, 0.5)).toBe(true)
-    expect(shouldCompact(usage(150_000), model(200_000), 0, 0.75)).toBe(true)
-  })
-
-  it('the usual limit still applies', () => {
-    expect(shouldCompact(usage(95_000), model(100_000), 0, 0.99)).toBe(true)
-  })
-})
-
 describe('findLastSummaryIndex', () => {
   it('returns -1 without any summary', () => {
     expect(findLastSummaryIndex(conversation(3))).toBe(-1)

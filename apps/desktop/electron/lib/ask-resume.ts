@@ -7,6 +7,7 @@ import { t } from './i18n'
 import { listCredentialProviders } from './auth'
 import { broadcastChatEvent } from './broadcast'
 import { runChat } from './chat-engine'
+import { createContinuationRecord, createSubchatRecord } from './subchats'
 import { listKeys, readJson, removeJson, writeJson } from './storage'
 
 /**
@@ -49,10 +50,52 @@ const queues = new Map<string, Queue>()
 interface Texts {
   authorize: string
   noAnswer: string
+  subchatHere: string
 }
 
 async function texts(): Promise<Texts> {
-  return { authorize: await t('resume.authorize'), noAnswer: await t('resume.noAnswer') }
+  return {
+    authorize: await t('resume.authorize'),
+    noAnswer: await t('resume.noAnswer'),
+    subchatHere: await t('resume.subchatHere'),
+  }
+}
+
+/**
+ * A chat suggestion answered after its run ended: the chat never existed, so the
+ * "new chat" choice would be lost with the card. It creates it from the saved
+ * brief and starts it, with the parent's last model — the same one the conversation
+ * would have used. The saved `scope` decides the shape: attached subchat, or a new
+ * top-level chat when the reason was the conversation itself being long.
+ */
+async function openSavedSubchat(win: BrowserWindow, sessionId: string, item: SavedRequest): Promise<void> {
+  const parent = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  if (!parent) return
+  const child = item.subchat?.scope === 'chat'
+    ? await createContinuationRecord({
+        sourceId: sessionId,
+        title: item.subchat?.title ?? '',
+        body: item.subchat?.brief ?? '',
+      })
+    : await createSubchatRecord({
+        parentId: sessionId,
+        title: item.subchat?.title ?? '',
+        body: item.subchat?.brief ?? '',
+      })
+  if (!child) return
+  try {
+    const input = await buildInput(sessionId, parent, await t('subchat.kickoff'))
+    void runChat(win, {
+      ...input,
+      sessionId: child.id,
+      mode: child.mode,
+      directory: child.directory,
+      extraDirectories: child.extraDirectories,
+    }).catch((err) => console.error('[subchat] saved subchat turn failed:', err))
+  } catch (err) {
+    // The chat already exists in the sidebar: it is opened, waiting for the person.
+    console.warn('[subchat] saved subchat created without a starting turn:', err)
+  }
 }
 
 /** Request persisted on disk — the broker only knows the ones still alive. */
@@ -88,6 +131,13 @@ function responseBlock(item: SavedRequest, value: unknown, texts: Texts): string
   // worker that asked no longer exists — saying whose it was keeps the agent from
   // reading the answers as if they belonged to its own turn.
   const origin = item.origin ? `[worker: ${item.origin.workerTitle}] ` : ''
+
+  // Subchat suggestion: "new chat" never becomes a message (see openSavedSubchat);
+  // "here" resumes the conversation asking for the work to be done in it.
+  if (item.kind === 'subchat') {
+    if (value !== 'here') return null
+    return `${origin}${texts.subchatHere}`
+  }
 
   if (item.kind === 'permission') {
     // 'deny' does not generate a message: denying a dead request is just clearing the screen.
@@ -164,6 +214,12 @@ export async function replyOrResume(
 
   const { key, sessionId, item, all } = saved
   await closeCard(key, sessionId, requestId, all)
+
+  // The card is already gone; now the choice is actually carried out.
+  if (item.kind === 'subchat' && value === 'new') {
+    if (win && !win.isDestroyed()) await openSavedSubchat(win, sessionId, item)
+    return true
+  }
 
   const block = responseBlock(item, value, await texts())
   // Dismissal/denial: the card is already gone, and there is nothing to tell the agent.

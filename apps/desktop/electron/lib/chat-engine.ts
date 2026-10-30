@@ -87,6 +87,7 @@ import { capture, diff } from './snapshot'
 import { isInitAborted, runProjectInit, type InitHooks, type InitResult } from './project-init'
 import { readJson, writeJson } from './storage'
 import { agentMayControlComputer, getAppSettings } from './app-settings'
+import { COMPACT_SUGGEST_AFTER } from '@shared/app-settings'
 import { isComputerAvailable } from './computer'
 import { audioExt, audioIdFrom, isAudioFile, saveAudio } from './audio-store'
 import { isVideoFile, saveVideoAttachment, videoAttachmentExt, videoPathFromFileUrl } from './attachment-ref'
@@ -96,7 +97,7 @@ import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import type { ImageToolHooks, ToolContext, TurnSnapshot } from './tools'
 import { buildCatalog } from './tools/catalog-turn'
-import { buildMap } from './tools/catalog'
+import { DEFAULT_ACTIVE_FAMILIES, buildMap } from './tools/catalog'
 import { deriveActive, familiesMentionedInText } from './tools/active'
 import { recordTurn } from './tools/metrics'
 import { hoistToolImages } from './tool-images'
@@ -1500,10 +1501,11 @@ const SUGGESTION_SYSTEM =
  * real usage is already known and there is no turn running, which is exactly what
  * manual compaction requires (compactSession refuses during a turn).
  *
- * It only suggests from `compactSuggestionAfter` summaries on: one or two
- * compactions work well; from the third on the summary is already a summary of a
- * summary and the beginning of the conversation is lost. It is an OFFER — ignored, the
- * automatic compaction of the next turn runs as always.
+ * It only suggests from COMPACT_SUGGEST_AFTER compactions on: one or two work well;
+ * from the third on the summary is already a summary of a summary and the beginning of
+ * the conversation is lost. The count alone is not enough — the context has to be about
+ * to force the next compaction, or the card would appear with plenty of room left. It is
+ * an OFFER — ignored, the automatic compaction of the next turn runs as always.
  */
 async function maybeSuggestCompaction(
   win: BrowserWindow,
@@ -1512,18 +1514,17 @@ async function maybeSuggestCompaction(
   catalogModel: CatalogModel | undefined,
   modelVision: boolean,
 ) {
-  const { autoCompact, compactSuggestionAfter } = getAppSettings()
-  if (!compactSuggestionAfter) return
+  const { suggestNewChat } = getAppSettings()
+  if (!suggestNewChat) return
   // A routine has nobody to decide anything: the card would just sit there.
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!session || session.routineId || isRoutineSessionId(session.id)) return
   const summaries = countSummaries(history)
-  if (summaries < compactSuggestionAfter) return
+  if (summaries < COMPACT_SUGGEST_AFTER) return
   const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
   const historyTokens = estimateTokens(toModelMessages(history, modelVision))
-  const earlyAt = autoCompact === '75' ? 0.75 : autoCompact === '50' ? 0.5 : undefined
-  if (!shouldCompact(lastTokens, catalogModel, historyTokens, earlyAt)) return
-  emit(win, { type: 'compaction:suggest', sessionId, summaries, threshold: compactSuggestionAfter })
+  if (!shouldCompact(lastTokens, catalogModel, historyTokens)) return
+  emit(win, { type: 'compaction:suggest', sessionId, summaries })
 }
 
 /**
@@ -1968,9 +1969,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // will be sent, so it does not depend on the provider cooperating.
     const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
     const historyTokens = estimateTokens(toModelMessages(history, modelVision))
-    const { autoCompact } = getAppSettings()
-    const earlyAt = autoCompact === '75' ? 0.75 : autoCompact === '50' ? 0.5 : undefined
-    if (shouldCompact(lastTokens, catalogModel, historyTokens, earlyAt)) {
+    if (shouldCompact(lastTokens, catalogModel, historyTokens)) {
       try {
         const aux = await resolveAuxModel(
           { providerId: input.providerId, modelId: input.modelId },
@@ -2283,7 +2282,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Deterministic self-activation (`@mcp:<server>` in the message). The
     // plan's fragile heuristics (attachment, "folder with video") only enter afterwards
     // of measurement — without a number, they give tools back on a "hi" for free.
-    const autoFamilies = familiesMentionedInText(input.text ?? '', catalog?.families ?? [])
+    const autoFamilies = [
+      ...familiesMentionedInText(input.text ?? '', catalog?.families ?? []),
+      // Families the prompt asks for by name: without them declared, the
+      // instruction exists and the tool does not.
+      ...(catalog ? DEFAULT_ACTIVE_FAMILIES : []),
+    ]
     const initialActive = catalog
       ? deriveActive(initialMessages, catalog.families, existingNames, { auto: autoFamilies })
       : null

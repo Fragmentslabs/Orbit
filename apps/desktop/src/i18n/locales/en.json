@@ -1029,7 +1029,7 @@
       "body_other": "This conversation has been compacted {{count}} times. The next compaction summarizes a summary — the beginning of the conversation, the reasoning behind decisions, is lost first.",
       "newChat": "Continue in a new chat",
       "compactHere": "Compact here",
-      "hint": "{{threshold}}-compaction threshold — the new chat opens with a summary; this one stays intact.",
+      "hint": "The new chat opens with a summary; this one stays intact.",
       "failed": "Could not generate the continuation summary. Try again.",
       "dismiss": "Dismiss"
     },
@@ -1147,6 +1147,7 @@
   "ask": {
     "subchat": {
       "title": "This belongs in another chat",
+      "titleChat": "This carries on in a new chat",
       "deny": "Decline",
       "newChat": "Implement in a new chat",
       "here": "Do it in this chat",
@@ -2122,18 +2123,9 @@
         "title": "Delete archived conversations",
         "description": "Permanently deletes conversations that have been archived for a while, counted from the day they were archived. Pinned conversations are left alone."
       },
-      "compact": {
-        "50": "At 50% of context",
-        "75": "At 75% of context",
-        "title": "Automatic compaction",
-        "description": "Summarizes the start of the conversation when the context fills up, so it keeps fitting the model.",
-        "auto": "Near the limit"
-      },
       "compactSuggest": {
         "title": "Suggest continuing in another chat",
-        "description": "Once the conversation has been compacted several times, offers to continue in a new chat (with a summary of the current state) instead of compacting again.",
-        "after_one": "After {{count}} compaction",
-        "after_other": "After {{count}} compactions"
+        "description": "After two compactions, once the context fills up again, offers to continue in a new chat (with a summary of the current state) instead of compacting once more. Automatic compaction has no option: it runs when the context reaches the model's limit, or you compact by hand from the context meter."
       },
       "retries": {
         "title": "Retries on temporary failure",

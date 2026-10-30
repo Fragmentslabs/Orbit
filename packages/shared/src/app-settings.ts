@@ -23,13 +23,6 @@ export type ChatViewMode =
   /** Everything open, no accordions: reasoning in full and each action listed. */
   | 'detailed'
 
-/**
- * When to compact the history on its own. `auto` = near the model's limit.
- * There is no "off": without compacting, the conversation ends up blowing the model's
- * context and stops answering.
- */
-export type AutoCompactMode = 'auto' | '75' | '50'
-
 /** Where to open links clicked in the app. */
 export type LinkTarget = 'integrated' | 'external'
 
@@ -107,10 +100,15 @@ export interface AppSettings {
   autoArchiveDays: number | null
   /** Deletes conversations archived N days ago (counted from the archiving). null = off. */
   deleteArchivedDays: number | null
-  autoCompact: AutoCompactMode
-  /** From how many compactions the conversation suggests continuing in a new
-   *  chat instead of compacting again. 0 = off. */
-  compactSuggestionAfter: number
+  /**
+   * Offers continuing in a new chat when the next compaction would already be a
+   * summary of a summary (see COMPACT_SUGGEST_AFTER). The COMPACTION itself has no
+   * option: it is always automatic, at the model's limit, or manual from the context
+   * meter. A percentage of the window was a decision nobody could calibrate — set to
+   * 50%, it summarized while there was still plenty of room and degraded the
+   * conversation faster, which is the opposite of what it should do.
+   */
+  suggestNewChat: boolean
   /** Extra rounds on a temporary failure (queue messages). 0 = off. */
   transientRetries: number
   /** Automatic continuations when the answer stops at the step limit. 0 = off. */
@@ -180,10 +178,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   chatView: 'summary',
   autoArchiveDays: null,
   deleteArchivedDays: null,
-  autoCompact: 'auto',
-  // Two compactions work well; from the third on the summary is already a
-  // summary of a summary, and the beginning of the conversation (the why of the decisions) is lost.
-  compactSuggestionAfter: 2,
+  // On because it is a card, not a behavior: ignored, the automatic compaction of the
+  // next turn runs as always. Whoever does not want the offer turns it off.
+  suggestNewChat: true,
   transientRetries: 3,
   autoContinues: 3,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
@@ -220,6 +217,16 @@ export const AUTO_ARCHIVE_DAY_OPTIONS = [2, 3, 7, 14, 30, 90] as const
 export const DELETE_ARCHIVED_DAY_OPTIONS = [7, 14, 30, 90] as const
 export const MAX_TRANSIENT_RETRIES = 5
 export const MAX_AUTO_CONTINUES = 5
+
+/**
+ * From how many compactions on the offer of continuing in a new chat appears.
+ *
+ * It is a rule, not a preference: "after three" or "after four" is precision nobody
+ * calibrates, and the count alone decides nothing — the offer only happens when the
+ * context is ALSO about to force the next compaction, which is the moment the next
+ * summary would be a summary of a summary.
+ */
+export const COMPACT_SUGGEST_AFTER = 2
 
 /** Supertonic 3 voice ids: M1–M5 (male) and F1–F5 (female). */
 const VOICE_ID = /^[MF][1-5]$/
@@ -318,6 +325,8 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     typeof value.sidebarWidth === 'number' && Number.isFinite(value.sidebarWidth)
       ? clampSidebarWidth(value.sidebarWidth)
       : d.sidebarWidth
+  // Leftover of the old "from how many compactions" selector, where 0 meant off.
+  const legacySuggestAfter = (value as { compactSuggestionAfter?: unknown }).compactSuggestionAfter
   return {
     auxModel: model(value.auxModel),
     auxReasoning: reasoning(value.auxReasoning),
@@ -337,10 +346,15 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     chatView: oneOf(value.chatView, ['summary', 'steps', 'detailed'], d.chatView),
     autoArchiveDays: dayOption(value.autoArchiveDays, AUTO_ARCHIVE_DAY_OPTIONS),
     deleteArchivedDays: dayOption(value.deleteArchivedDays, DELETE_ARCHIVED_DAY_OPTIONS),
-    // 'off' from previous versions falls back to the default: the option no longer exists.
-    autoCompact: oneOf(value.autoCompact, ['auto', '75', '50'], d.autoCompact),
-    // Ceiling of 5: above that the card becomes noise instead of a warning.
-    compactSuggestionAfter: count(value.compactSuggestionAfter, 5, d.compactSuggestionAfter),
+    // The threshold became a rule (COMPACT_SUGGEST_AFTER) and the only thing left to
+    // choose is whether the offer appears. A 0 saved by the old selector was exactly
+    // "off", and it stays off; any other number meant "on".
+    suggestNewChat:
+      typeof value.suggestNewChat === 'boolean'
+        ? value.suggestNewChat
+        : legacySuggestAfter === 0
+          ? false
+          : d.suggestNewChat,
     transientRetries: count(value.transientRetries, MAX_TRANSIENT_RETRIES, d.transientRetries),
     autoContinues: count(value.autoContinues, MAX_AUTO_CONTINUES, d.autoContinues),
     sidebarWidth,

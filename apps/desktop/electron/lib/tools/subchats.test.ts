@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     ],
   })),
   broadcastSessionEvent: vi.fn(),
+  broadcastChatEvent: vi.fn(),
   dispatchAsk: vi.fn(async (_target: string, _item: unknown, _signal?: AbortSignal) => 'deny'),
   createSubchatRecord: vi.fn(async () => ({
     id: 'ses_filho',
@@ -32,13 +33,29 @@ const mocks = vi.hoisted(() => ({
     createdAt: 1,
     updatedAt: 1,
   })),
+  // A new top-level chat: no parentId.
+  createContinuationRecord: vi.fn(async () => ({
+    id: 'ses_novo',
+    title: 'Continuação do parser',
+    mode: 'code' as const,
+    pinned: false,
+    archived: false,
+    folderId: null,
+    directory: '/repo',
+    extraDirectories: [],
+    createdAt: 1,
+    updatedAt: 1,
+  })),
+  modelSelect: vi.fn(),
 }))
 
 vi.mock('../chat-engine', () => ({ runChat: mocks.runChat, getRunningSessionIds: () => mocks.running }))
 vi.mock('../companion-server', () => ({ broadcastSessionEvent: mocks.broadcastSessionEvent }))
+vi.mock('../broadcast', () => ({ broadcastChatEvent: mocks.broadcastChatEvent }))
 vi.mock('../ask-dispatch', () => ({ dispatchAsk: mocks.dispatchAsk }))
 vi.mock('../subchats', () => ({
   createSubchatRecord: mocks.createSubchatRecord,
+  createContinuationRecord: mocks.createContinuationRecord,
   findSubchat: mocks.findSubchat,
   readSubchatMessages: mocks.readSubchatMessages,
 }))
@@ -84,11 +101,48 @@ describe('suggest_subchat', () => {
       {},
     )
     expect(mocks.dispatchAsk).toHaveBeenCalledTimes(1)
-    const request = mocks.dispatchAsk.mock.calls[0][1] as { kind: string; subchat: { title: string; brief: string } }
+    const request = mocks.dispatchAsk.mock.calls[0][1] as {
+      kind: string
+      subchat: { title: string; brief: string; scope: string }
+    }
     expect(request.kind).toBe('subchat')
-    expect(request.subchat).toEqual({ title: 'Parser de CSV', brief: BRIEF })
+    expect(request.subchat).toEqual({ title: 'Parser de CSV', brief: BRIEF, scope: 'subchat' })
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(mocks.runChat).not.toHaveBeenCalled()
+  })
+
+  it('a long conversation suggests a NEW chat, not a subchat', async () => {
+    mocks.dispatchAsk.mockResolvedValue('new')
+    const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
+      { title: 'Continuação do parser', brief: BRIEF, scope: 'chat' },
+      {},
+    )
+    const request = mocks.dispatchAsk.mock.calls[0][1] as { subchat: { scope: string } }
+    expect(request.subchat.scope).toBe('chat')
+    // Top-level: no parentId, so it is not indented under (nor deleted with) this chat.
+    expect(mocks.createContinuationRecord).toHaveBeenCalledWith({
+      sourceId: 'ses_pai',
+      title: 'Continuação do parser',
+      body: BRIEF,
+    })
+    expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
+    expect(mocks.runChat).toHaveBeenCalledTimes(1)
+    expect(String(r)).toContain('top-level')
+  })
+
+  it('the new top-level chat starts on the model of the conversation it came from', async () => {
+    mocks.dispatchAsk.mockResolvedValue('new')
+    const webContents = { send: mocks.modelSelect }
+    const realWin = { webContents } as never
+    await exec(createSubchatTools(input(), realWin), 'suggest_subchat')(
+      { title: 'Continuação do parser', brief: BRIEF, scope: 'chat' },
+      {},
+    )
+    expect(mocks.modelSelect).toHaveBeenCalledWith('companion:model-select', {
+      providerId: 'anthropic',
+      modelId: 'claude',
+      sessionId: 'ses_novo',
+    })
   })
 
   it('"implement in a new chat" creates and already fires the child turn', async () => {
@@ -130,6 +184,19 @@ describe('suggest_subchat', () => {
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(String(r)).toContain('declined')
   })
+
+  it('the card is closed when the request ends — answered, aborted or failed', async () => {
+    const tools = createSubchatTools(input(), win)
+    await exec(tools, 'suggest_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+    const done = mocks.broadcastChatEvent.mock.calls.at(-1)?.[0] as { type: string; sessionId: string }
+    expect(done.type).toBe('ask:done')
+    expect(done.sessionId).toBe('ses_pai')
+
+    vi.clearAllMocks()
+    mocks.dispatchAsk.mockRejectedValueOnce(new Error('aborted'))
+    await exec(tools, 'suggest_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+    expect((mocks.broadcastChatEvent.mock.calls.at(-1)?.[0] as { type: string }).type).toBe('ask:done')
+  })
 })
 
 describe('open_subchat', () => {
@@ -164,6 +231,18 @@ describe('open_subchat', () => {
       await exec(createSubchatTools(input(), win), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
       await filho
       expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['do-filho.ts'] })
+    })
+  })
+
+  it('opened from a worker, it hangs from the PERSON\'s chat — not from the worker', async () => {
+    await exec(
+      createSubchatTools(input({ sessionId: 'ses_worker', orchestrationRole: 'worker', parentSessionId: 'ses_pai' }), win),
+      'open_subchat',
+    )({ title: 'Parser de CSV', brief: BRIEF }, {})
+    expect(mocks.createSubchatRecord).toHaveBeenCalledWith({
+      parentId: 'ses_pai',
+      title: 'Parser de CSV',
+      body: BRIEF,
     })
   })
 

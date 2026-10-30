@@ -1029,7 +1029,7 @@
       "body_other": "Esta conversa já foi compactada {{count}} vezes. A próxima compactação resume um resumo — o começo da conversa, o porquê das decisões, se perde primeiro.",
       "newChat": "Continuar em novo chat",
       "compactHere": "Compactar aqui",
-      "hint": "Limite de {{threshold}} compactações — o chat novo abre com um resumo; este fica intacto.",
+      "hint": "O chat novo abre com um resumo; este fica intacto.",
       "failed": "Não foi possível gerar o resumo de continuidade. Tente de novo.",
       "dismiss": "Dispensar"
     },
@@ -1147,6 +1147,7 @@
   "ask": {
     "subchat": {
       "title": "Isto cabe em outro chat",
+      "titleChat": "Isto continua em um chat novo",
       "deny": "Negar",
       "newChat": "Implementar em novo chat",
       "here": "Fazer neste chat",
@@ -2122,18 +2123,9 @@
         "title": "Excluir conversas arquivadas",
         "description": "Exclui de vez as conversas arquivadas há um tempo, contado a partir do dia em que foram arquivadas. Conversas fixadas ficam de fora."
       },
-      "compact": {
-        "50": "Aos 50% do contexto",
-        "75": "Aos 75% do contexto",
-        "title": "Compactação automática",
-        "description": "Resume o início da conversa quando o contexto enche, para ela continuar cabendo no modelo.",
-        "auto": "Perto do limite"
-      },
       "compactSuggest": {
         "title": "Sugerir continuar em outro chat",
-        "description": "Quando a conversa já foi compactada várias vezes, oferece continuar num chat novo (com um resumo do estado atual) em vez de compactar de novo.",
-        "after_one": "Depois de {{count}} compactação",
-        "after_other": "Depois de {{count}} compactações"
+        "description": "Depois de duas compactações, quando o contexto enche de novo, oferece continuar num chat novo (com um resumo do estado atual) em vez de compactar outra vez. A compactação automática não tem opção: ela roda quando o contexto chega no limite do modelo, ou você compacta na mão pelo medidor de contexto."
       },
       "retries": {
         "title": "Novas tentativas em falha temporária",

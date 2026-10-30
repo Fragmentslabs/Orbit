@@ -125,26 +125,43 @@ export interface NewSubchat {
   body: string
 }
 
-/**
- * Creates the child with the brief as its opening message — a system summary,
- * for the new chat's model to read as context and for the UI to show as a card.
- * It inherits mode, folder and extra folders from the parent: the work goes on in the same place.
- */
-export async function createSubchatRecord({ parentId, title, body }: NewSubchat): Promise<SessionInfo | null> {
-  const parent = await readJson<SessionInfo>(StorageKeys.session(parentId))
-  if (!parent) return null
+export interface NewContinuation {
+  /** Conversation the brief was written from — read only for mode, folder and extra folders. */
+  sourceId: string
+  title: string
+  body: string
+}
 
+/**
+ * Creates the conversation with the brief as its opening message — a system summary,
+ * for the new chat's model to read as context and for the UI to show as a card.
+ * It inherits mode, folder and extra folders from the source: the work goes on in the same place.
+ * With `parentId` it is a subchat; without it, a top-level chat that merely continues the work.
+ */
+async function createRecord({
+  source,
+  title,
+  body,
+  parentId,
+  fallbackTitle,
+}: {
+  source: SessionInfo
+  title: string
+  body: string
+  parentId?: string
+  fallbackTitle: string
+}): Promise<SessionInfo> {
   const now = Date.now()
-  const child: SessionInfo = {
+  const session: SessionInfo = {
     id: newId('ses'),
-    title: title.trim().slice(0, 80) || 'Subchat',
-    mode: parent.mode,
+    title: title.trim().slice(0, 80) || fallbackTitle,
+    mode: source.mode,
     pinned: false,
     archived: false,
-    folderId: parent.folderId,
-    directory: parent.directory,
-    extraDirectories: parent.extraDirectories,
-    parentId,
+    folderId: source.folderId,
+    directory: source.directory,
+    extraDirectories: source.extraDirectories,
+    ...(parentId ? { parentId } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -165,9 +182,28 @@ export async function createSubchatRecord({ parentId, title, body }: NewSubchat)
     createdAt: now,
   }
 
-  await writeJson(StorageKeys.session(child.id), child)
-  await writeJson(StorageKeys.messages(child.id), [opening])
-  return child
+  await writeJson(StorageKeys.session(session.id), session)
+  await writeJson(StorageKeys.messages(session.id), [opening])
+  return session
+}
+
+/** Conversation attached to `parentId` — the subchat of the tools and of the card. */
+export async function createSubchatRecord({ parentId, title, body }: NewSubchat): Promise<SessionInfo | null> {
+  const parent = await readJson<SessionInfo>(StorageKeys.session(parentId))
+  if (!parent) return null
+  return createRecord({ source: parent, title, body, parentId, fallbackTitle: 'Subchat' })
+}
+
+/**
+ * A NEW top-level conversation continuing the work of `sourceId` — the case of a long
+ * conversation, where another compaction would make a summary of a summary and lose the
+ * beginning. It is deliberately WITHOUT `parentId`: a new chat is not a child chat, and it
+ * must not be indented under (nor vanish with) the one it came from.
+ */
+export async function createContinuationRecord({ sourceId, title, body }: NewContinuation): Promise<SessionInfo | null> {
+  const source = await readJson<SessionInfo>(StorageKeys.session(sourceId))
+  if (!source) return null
+  return createRecord({ source, title, body, fallbackTitle: 'New chat' })
 }
 
 /** The system prompt block: the parent sees the RESULT of each child. */

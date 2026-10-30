@@ -50,6 +50,7 @@ function emitSingle(target: string, item: AskItem): void {
       requestId: item.requestId,
       title: item.subchat?.title ?? '',
       brief: item.subchat?.brief ?? '',
+      scope: item.subchat?.scope,
       origin: item.origin,
     })
     return
