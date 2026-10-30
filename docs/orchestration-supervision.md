@@ -122,6 +122,14 @@ Defaults without a button: review each worker when it finishes; several actions 
 - When everyone is accepted, the orchestrator **joins the branches** in the chat's worktree (or in the main one), in dependency order. Conflict: it tries to resolve it with an integration worker; failing that, it stops and shows the files in conflict.
 - The workers' worktrees are removed at the end (branches kept until the merge). They respect the "Worktrees folder" preference.
 
+## Stage 7 — A plan that stopped halfway can be closed and continued
+
+- A plan only says `running` while the process running it is alive — but the FILE keeps the last state it had. After a crash or a force quit it came back as "in progress" forever: the card's X only appeared when nothing was running, so there was no way to close it, and no way to finish the work.
+- At boot, `recoverInterruptedPlans` (`electron/lib/orchestrator.ts`) settles every `approved`/`running` plan found on disk: `status: done`, `interrupted: true`, phases kept where they stopped.
+- The card takes "running" from the process, not from the phases (`live` in `task-progress.tsx`): the X exists whenever nothing is running, and a plan that stopped halfway says so ("Tasks interrupted", the open step says "stopped") instead of spinning.
+- **Continue** (`resumePlan`): runs again only the tasks that were not accepted. Each one goes back to its own worker session and worktree (`approvePlanTurn` with `resume`), the accepted work is kept and merged if it never was, and the plan finishes with the settings it was approved with (`keepAccepted` in `orchestration/execution.ts`).
+- A new message in the conversation does not sweep the card of an interrupted plan: dismissing it is the person's call.
+
 ---
 
 ## Cost

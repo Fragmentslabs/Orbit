@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, Loader2Icon, MessageSquareIcon, TerminalIcon, WrenchIcon, X, XCircleIcon } from "lucide-react"
+import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, Loader2Icon, MessageSquareIcon, PlayIcon, TerminalIcon, WrenchIcon, X, XCircleIcon } from "lucide-react"
 import type { OrchestrationPlan, OrchestrationTask } from "@shared/chat"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/hint"
@@ -35,6 +35,9 @@ export function TaskProgress({
   onDismiss,
   followUp,
   onMergeAgain,
+  live,
+  interrupted,
+  onContinue,
 }: {
   tasks: TaskItem[]
   title?: string
@@ -44,20 +47,38 @@ export function TaskProgress({
   followUp?: OrchestrationPlan["review"]
   /** Accepted work left out of the chat: try to merge it again */
   onMergeAgain?: () => Promise<void>
+  /**
+   * Something is running RIGHT NOW. Absent = derived from the items, which is what
+   * a card without steps has. A task in an open phase is not proof of it: a plan
+   * cut short (app closed, run interrupted) keeps the phases where it stopped, and
+   * reading them as "running" made the card spin forever — with no X, because the
+   * X only appeared when nothing was running.
+   */
+  live?: boolean
+  /** The run was cut short: the card says so and offers "Continue", even if every
+   *  task happens to be resolved (the accepted work that was never merged). */
+  interrupted?: boolean
+  /** Runs again the tasks that were not accepted */
+  onContinue?: () => Promise<void>
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [merging, setMerging] = useState(false)
+  const [continuing, setContinuing] = useState(false)
   const total = tasks.length
   // With steps (supervising orchestra), "done" means accepted by the
   // orchestrator — finishing a run still goes through the review.
   const done = tasks.filter((t) => (t.phase ? t.phase === "accepted" : t.status === "idle")).length
-  const running =
-    tasks.some((t) => (t.phase ? OPEN_PHASES.has(t.phase) : t.status === "submitted" || t.status === "streaming" || t.status === "cancelling" || t.status === "fallback")) ||
-    !!followUp?.activity
+  const openTask = tasks.some((t) =>
+    t.phase ? OPEN_PHASES.has(t.phase) : t.status === "submitted" || t.status === "streaming" || t.status === "cancelling" || t.status === "fallback",
+  )
+  const running = live ?? (openTask || !!followUp?.activity)
   const hasErrors = tasks.some((t) => (t.phase ? t.phase === "failed" : t.status === "error"))
   const progress = total > 0 ? Math.round((done / total) * 100) : 0
-  const allDoneOrError = !running && (done === total || hasErrors)
+  // Nothing is running and the work did not end: where the run stopped. The
+  // interrupted flag covers the plan whose tasks all closed but whose accepted
+  // work was never merged.
+  const stopped = !running && !hasErrors && (done < total || !!interrupted)
 
   if (total === 0) return null
 
@@ -72,17 +93,21 @@ export function TaskProgress({
           <ChevronDown className={cn("size-3 shrink-0 transition-transform text-muted-foreground", !expanded && "-rotate-90")} />
           {running ? (
             <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
-          ) : allDoneOrError && hasErrors ? (
+          ) : hasErrors ? (
             <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
+          ) : stopped ? (
+            <ClockIcon className="size-3.5 shrink-0 text-muted-foreground" />
           ) : (
             <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
           )}
           <span className="font-medium text-foreground">
             {running
               ? t("taskProgress.inProgress", { title: title ?? t("taskProgress.title") })
-              : allDoneOrError && hasErrors
+              : hasErrors
                 ? t("taskProgress.errors", { title: title ?? t("taskProgress.title") })
-                : t("taskProgress.done", { title: title ?? t("taskProgress.title") })}
+                : stopped
+                  ? t("taskProgress.interrupted", { title: title ?? t("taskProgress.title") })
+                  : t("taskProgress.done", { title: title ?? t("taskProgress.title") })}
           </span>
           <span className="text-muted-foreground">
             {done}/{total}
@@ -91,13 +116,16 @@ export function TaskProgress({
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-500",
-                hasErrors ? "bg-destructive" : "bg-primary",
+                hasErrors ? "bg-destructive" : stopped ? "bg-amber-500" : "bg-primary",
               )}
               style={{ width: `${progress}%` }}
             />
           </div>
         </button>
-        {allDoneOrError && onDismiss && (
+        {/* The X exists whenever nothing is running — done, failed OR stopped
+            halfway. It used to wait for `allDoneOrError`, so a plan that lost its
+            run could not be closed at all. */}
+        {!running && onDismiss && (
           <Hint label={t("common.dismiss")}>
             <button
               type="button"
@@ -160,7 +188,7 @@ export function TaskProgress({
                 )}
                 title={task.note}
               >
-                {task.phase ? <PhaseIcon phase={task.phase} /> : <TaskIcon status={task.status} />}
+                {task.phase ? <PhaseIcon phase={task.phase} live={running} /> : <TaskIcon status={task.status} live={running} />}
                 {task.mode === "code" ? (
                   <TerminalIcon className="size-3 shrink-0 text-muted-foreground" />
                 ) : task.mode === "chat" ? (
@@ -179,7 +207,9 @@ export function TaskProgress({
                 {task.extra && (
                   <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{t("taskProgress.extra")}</span>
                 )}
-                {task.phase && task.phase !== "accepted" && task.phase !== "running" && (
+                {/* A step that is open while nothing is running (a plan cut short)
+                    says where it stopped instead of staying silent. */}
+                {task.phase && task.phase !== "accepted" && (task.phase !== "running" || !running) && (
                   <span className={cn("shrink-0 text-[10px]", task.phase === "failed" ? "text-destructive" : "text-muted-foreground")}>
                     {/* The phase ids and the catalog keys are not the same word
                         ("queued" → phase.queue): map them explicitly instead of
@@ -188,6 +218,7 @@ export function TaskProgress({
                     {task.phase === "review" && t("taskProgress.phase.review")}
                     {task.phase === "failed" && t("taskProgress.phase.failed")}
                     {task.phase === "queued" && t("taskProgress.phase.queue")}
+                    {task.phase === "running" && t("taskProgress.phase.stopped")}
                   </span>
                 )}
               </div>
@@ -195,16 +226,42 @@ export function TaskProgress({
           })}
         </div>
       )}
+
+      {/* Interrupted: what is left runs again from where it stopped. The accepted
+          work stays as it is — the workers continue in their own sessions. */}
+      {!running && onContinue && (openTask || interrupted) && (
+        <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-1.5 text-[11px]">
+          <span className="min-w-0 flex-1 text-muted-foreground">{t("taskProgress.interruptedHint")}</span>
+          <button
+            type="button"
+            disabled={continuing}
+            onClick={() => {
+              setContinuing(true)
+              void onContinue().finally(() => setContinuing(false))
+            }}
+            className="flex shrink-0 items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {continuing ? <Loader2Icon className="size-3 animate-spin" /> : <PlayIcon className="size-3" />}
+            {t("taskProgress.continue")}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-function TaskIcon({ status }: { status: TaskItem["status"] }) {
+function TaskIcon({ status, live }: { status: TaskItem["status"]; live: boolean }) {
   switch (status) {
     case "submitted":
     case "streaming":
     case "fallback":
-      return <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+      // Not running: the status is what it was when the run was cut, not a turn
+      // happening now — so no spinner.
+      return live ? (
+        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+      ) : (
+        <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+      )
     case "error":
       return <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
     case "idle":
@@ -214,16 +271,30 @@ function TaskIcon({ status }: { status: TaskItem["status"] }) {
   }
 }
 
-function PhaseIcon({ phase }: { phase: TaskPhase }) {
+function PhaseIcon({ phase, live }: { phase: TaskPhase; live: boolean }) {
   switch (phase) {
     case "queued":
       return <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+    // The open steps keep their meaning while nothing runs — the worker was
+    // running/reviewed when the run was cut — but they stop animating.
     case "running":
-      return <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+      return live ? (
+        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+      ) : (
+        <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+      )
     case "review":
-      return <EyeIcon className="size-3.5 shrink-0 animate-pulse text-primary" />
+      return live ? (
+        <EyeIcon className="size-3.5 shrink-0 animate-pulse text-primary" />
+      ) : (
+        <EyeIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+      )
     case "adjustment":
-      return <WrenchIcon className="size-3.5 shrink-0 animate-pulse text-amber-500" />
+      return live ? (
+        <WrenchIcon className="size-3.5 shrink-0 animate-pulse text-amber-500" />
+      ) : (
+        <WrenchIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+      )
     case "accepted":
       return <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
     case "failed":

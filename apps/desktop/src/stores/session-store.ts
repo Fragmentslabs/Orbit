@@ -144,6 +144,8 @@ interface SessionState {
   initialize: () => Promise<void>
   ensureMessages: (sessionId: string) => Promise<void>
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => void
+  /** "Continue" on the card of an interrupted plan: runs the tasks it did not accept. */
+  resumeOrchestration: (sessionId: string) => Promise<void>
   rejectPlan: (sessionId: string) => void
   acceptPlanReview: (sessionId: string, permissionMode: "ask" | "approve" | "full", orchestrate?: boolean) => void
   rejectPlanReview: (sessionId: string) => void
@@ -605,6 +607,39 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return { orchestration: { ...state.orchestration, [sessionId]: { ...plan, status: "approved" } } }
     })
     void chatApi.approvePlan(sessionId, planId, taskIds)
+  },
+
+  /** Card of a plan that stopped halfway (the app was closed, or the run was cut):
+   *  the main process runs the tasks that were not accepted, each in its own worker
+   *  session. Nothing is set here optimistically — the plan and the status come back
+   *  as events from main, and an early return there (nothing left to run) must not
+   *  leave the screen saying "in progress". */
+  resumeOrchestration: async (sessionId) => {
+    const session = get().sessions.find((s) => s.id === sessionId)
+    if (!session?.directory) return
+    const provider = useProviderStore.getState()
+    const selected = sessionModelFor(sessionId) ?? provider.selectedModel
+    if (!selected) return
+    const worker = provider.workerModel
+    const conductor = provider.orchestratorModel
+    await chatApi.resumePlan({
+      sessionId,
+      text: "",
+      providerId: selected.providerId,
+      modelId: selected.modelId,
+      mode: "code",
+      // The modes a resumed run inherits from the orchestrator's chat: the level of
+      // autonomy follows the selector, exactly as a worker does (see runWorkerTurn).
+      options: { permissionMode: permissionFor(sessionId), followGlobalPermission: true },
+      directory: session.directory,
+      extraDirectories: session.extraDirectories,
+      workerModel: worker ? { ...worker, reasoning: provider.workerReasoning ?? undefined } : undefined,
+      orchestratorModel: conductor
+        ? { ...conductor, reasoning: provider.orchestratorReasoning ?? undefined }
+        : undefined,
+      visionModel: provider.visionModel ?? undefined,
+      language: LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale],
+    })
   },
 
   rejectPlan: (sessionId) => {
@@ -1350,7 +1385,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       void storage.remove(StorageKeys.planReview(sessionId!))
     }
     const orch = get().orchestration[sessionId!]
-    if (orch && orch.status === "done") {
+    // An INTERRUPTED plan is not swept away by the next message: its card is the
+    // only way back to the work that never ran ("Continue"), and dropping it is the
+    // person's call — the X is right there.
+    if (orch && orch.status === "done" && !orch.interrupted) {
       // Same door as the card's X: a new message after the finished plan takes the
       // card away for good — marking it in the file, without deleting the plan (see
       // dismissOrchestration).

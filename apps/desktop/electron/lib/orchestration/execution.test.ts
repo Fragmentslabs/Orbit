@@ -176,6 +176,31 @@ describe('executePlan', () => {
     expect(seen).toEqual(['api:streaming tests:submitted'])
   })
 
+  it('resuming keeps the accepted tasks and runs only the rest', async () => {
+    const p = plan([
+      task('done', { phase: 'accepted', status: 'idle' }),
+      task('running', { phase: 'running', status: 'streaming' }),
+      task('queued', { phase: 'queued', status: 'submitted' }),
+    ])
+    p.review = { adjustmentsUsed: 1, maxAdjustments: 6, activity: 'Reviewing: DONE' }
+    const w = workers()
+    await executePlan({ ...base(p), keepAccepted: true, runWorker: w.runWorker, review: async () => {} })
+
+    // the accepted one was not run again and kept its phase
+    expect(w.calls.map((c) => c.id)).toEqual(['running', 'queued'])
+    expect(p.tasks.map((t) => t.phase)).toEqual(['accepted', 'accepted', 'accepted'])
+    // the budget already spent stays spent; "Reviewing: X" of the dead run is gone
+    expect(p.review?.adjustmentsUsed).toBe(1)
+    expect(p.review?.activity).toBeUndefined()
+  })
+
+  it('a plan that starts now puts everything back in the queue', async () => {
+    const p = plan([task('done', { phase: 'accepted', status: 'idle' })])
+    const w = workers()
+    await executePlan({ ...base(p), runWorker: w.runWorker, review: async () => {} })
+    expect(w.calls.map((c) => c.id)).toEqual(['done'])
+  })
+
   it('prepareTask runs once per task and its notices go into the prompt', async () => {
     const p = plan([task('a')])
     const w = workers()

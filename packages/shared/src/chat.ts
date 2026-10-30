@@ -1278,6 +1278,14 @@ export interface OrchestrationPlan {
    *  conversation goes on; the mark only says the card must not come back. A new
    *  plan overwrites it and does not inherit the mark. */
   dismissed?: boolean
+  /**
+   * The run was cut short by the app closing (a crash, a force quit): the file
+   * kept saying `running` with tasks in an open phase, and the card would show
+   * "in progress" forever with no way to close it. Written at boot by
+   * `recoverInterruptedPlans` — which closes the plan as `done` — and cleared
+   * when the plan is resumed. It is what makes the card offer "Continue".
+   */
+  interrupted?: boolean
 }
 
 /**
@@ -1408,6 +1416,7 @@ export function normalizeOrchestrationPlan(raw: unknown): OrchestrationPlan | un
     ...(review ? { review } : {}),
     ...(p.usage !== undefined ? { usage: p.usage as TokenUsage } : {}),
     ...(p.dismissed !== undefined ? { dismissed: Boolean(p.dismissed) } : {}),
+    ...(p.interrupted !== undefined ? { interrupted: Boolean(p.interrupted) } : {}),
   }
 }
 

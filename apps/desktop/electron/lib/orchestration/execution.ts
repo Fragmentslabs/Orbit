@@ -66,6 +66,13 @@ export interface ExecutionDeps {
   persist(): Promise<void>
   /** Modes of an extra worker created during review. */
   extraOptions?: SendMessageOptions
+  /**
+   * Resuming an interrupted plan: the tasks the orchestrator already ACCEPTED
+   * keep their phase (and their merged/committed work) — only the rest runs.
+   * Without it every task goes back to the queue, which is right for a plan that
+   * is starting now and would redo the work of the ones that were already done.
+   */
+  keepAccepted?: boolean
   newId?(): string
 }
 
@@ -109,11 +116,21 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
   const noticesByTask = new Map<string, string[]>()
   const newId = d.newId ?? (() => `task_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
 
-  plan.review = { adjustmentsUsed: 0, maxAdjustments: config.adjustmentsPerWorker * plan.tasks.length }
+  // Resuming: the budget already spent stays spent, and the merge info of the
+  // previous run survives until this one replaces it.
+  plan.review = {
+    ...plan.review,
+    adjustmentsUsed: d.keepAccepted ? (plan.review?.adjustmentsUsed ?? 0) : 0,
+    maxAdjustments: config.adjustmentsPerWorker * plan.tasks.length,
+    // A run that died in the middle leaves "Reviewing: X" behind — that string is
+    // what the card reads as "the orchestrator is doing something right now".
+    activity: undefined,
+  }
   // `status` follows the step for whoever reads only it (the mobile app counts
   // "idle" as done): open = submitted/streaming, accepted = idle,
   // failed = error.
   for (const t of plan.tasks) {
+    if (d.keepAccepted && t.phase === 'accepted') continue
     t.phase = 'queued'
     t.status = 'submitted'
   }

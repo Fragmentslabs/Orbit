@@ -1468,13 +1468,17 @@
     "inProgress": "{{title}} in progress",
     "errors": "{{title}} with errors",
     "done": "{{title}} done",
+    "interrupted": "{{title}} interrupted",
+    "interruptedHint": "Stopped before finishing. Continue runs the pending tasks.",
+    "continue": "Continue",
     "adjustments": "Adjustments: {{used}}/{{cap}}",
     "extra": "extra",
     "phase": {
       "queue": "queued",
       "review": "in review",
       "adjustment": "adjustment {{n}}",
-      "failed": "failed"
+      "failed": "failed",
+      "stopped": "stopped"
     }
   },
   "diff": {

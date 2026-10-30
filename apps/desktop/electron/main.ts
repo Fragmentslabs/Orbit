@@ -96,7 +96,14 @@ import { compactSession, continuationBrief, getRunningSessionIds } from './lib/c
 import { startPerf } from './lib/perf'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
-import { approvePlan, getOrchestrationRunningSessionIds, mergeAgain, rejectPlan } from './lib/orchestrator'
+import {
+  approvePlan,
+  getOrchestrationRunningSessionIds,
+  mergeAgain,
+  recoverInterruptedPlans,
+  rejectPlan,
+  resumePlan,
+} from './lib/orchestrator'
 import { authorizeMcp, initMcp, listMcpStatus, mcpDescriptionsState, oauthRedirectUrl, optimizeMcpServer, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
@@ -1443,6 +1450,11 @@ app.whenReady().then(() => {
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)
   })
+  // "Continue" on the card of a plan that was interrupted: runs again the tasks it
+  // did not accept, in their own worker sessions (see resumePlan).
+  ipcMain.handle('chat:resumePlan', (_event, input: SendMessageInput) => {
+    if (win) void resumePlan(win, input)
+  })
   ipcMain.handle('chat:rejectPlan', (_event, sessionId: string) => {
     if (win) void rejectPlan(win, sessionId)
   })
@@ -2647,7 +2659,12 @@ app.whenReady().then(() => {
   // shortcut following the switch.
   watchOverlaySettings()
 
-  createWindow()
+  // A plan left "running" by a crash is settled BEFORE the window: the renderer
+  // reads the plan as soon as it opens a conversation, and a stale one would come
+  // back as "in progress" with nothing running (see recoverInterruptedPlans).
+  recoverInterruptedPlans()
+    .catch(() => 0)
+    .finally(() => createWindow())
 })
 
 /** Clears cookies, logins, localStorage, cache and permissions of the built-in browser. */

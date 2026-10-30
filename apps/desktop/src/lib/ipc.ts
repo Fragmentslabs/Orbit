@@ -309,6 +309,10 @@ export const chatApi = {
     } | null>,
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
+  /** "Continue" on an interrupted plan: runs again the tasks it did not accept. The
+   *  input is the same one a send carries (provider, worker/conductor models, modes),
+   *  minus the text — the plan already knows what has to be done. */
+  resumePlan: (input: SendMessageInput) => window.ipcRenderer.invoke("chat:resumePlan", input) as Promise<void>,
   /** Tries again to join into the chat the accepted work of the workers (worktrees) */
   mergeOrchestration: (sessionId: string) => window.ipcRenderer.invoke("chat:mergeOrchestration", sessionId) as Promise<void>,
   rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),

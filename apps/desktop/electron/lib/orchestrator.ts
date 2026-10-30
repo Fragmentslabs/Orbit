@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
@@ -24,7 +25,7 @@ import { withProviderSession } from './provider-session'
 import { coveredBy, currentTurnWrites, runWithWriteScope } from './session/write-journal'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { agentPrepareStep } from './agent-step'
-import { readJson, writeJson } from './storage'
+import { listKeys, readJson, writeJson } from './storage'
 import { SUBAGENT_MAX_STEPS, createRemoveTaskTool, createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { TaskModeCeiling } from './tools/orchestration'
 import {
@@ -887,6 +888,7 @@ async function approvePlanTurn(
   sessionId: string,
   planId: string,
   taskIds?: string[],
+  opts?: { resume?: boolean },
 ): Promise<void> {
   const entry = pending.get(sessionId)
   if (!entry || entry.plan.id !== planId) {
@@ -904,7 +906,7 @@ async function approvePlanTurn(
   controllers.set(sessionId, controller)
 
   const selected = taskIds ? plan.tasks.filter((t) => taskIds.includes(t.id)) : plan.tasks
-  if (selected.length === 0) {
+  if (selected.length === 0 && !opts?.resume) {
     plan.status = 'rejected'
     await persistPlan(win, sessionId, plan)
     return
@@ -922,21 +924,41 @@ async function approvePlanTurn(
     // Current settings (the Orchestra dialog, via the cache the renderer
     // pushes). They live on the plan: the card shows the budget, and a plan in
     // progress does not change behavior if the user edits the dialog.
-    const config = normalizeOrchestrationSettings(getWorkerConfigCache().orchestration)
+    // Resuming keeps the settings the plan was approved with: the dialog may have
+    // changed since, and a half-done plan is finished the way it started.
+    const config = opts?.resume
+      ? normalizeOrchestrationSettings(plan.config ?? getWorkerConfigCache().orchestration)
+      : normalizeOrchestrationSettings(getWorkerConfigCache().orchestration)
     plan.config = config
     // One worktree per worker only makes sense in a git repository.
     const chatRepo = config.worktrees ? await chatRepository(input.directory!) : null
 
     // Tasks outside the selection do not run — and depending on them no longer exists.
-    const ids = new Set(selected.map((t) => t.id))
-    for (const t of selected) if (t.dependsOn) t.dependsOn = t.dependsOn.filter((id) => ids.has(id))
-    plan.tasks = selected
+    // On a resume nothing is dropped: the accepted tasks stay in the plan (they are
+    // the record of what was done and go into the synthesis/merge) and only the
+    // selected ones run again.
+    if (!opts?.resume) {
+      const ids = new Set(selected.map((t) => t.id))
+      for (const t of selected) if (t.dependsOn) t.dependsOn = t.dependsOn.filter((id) => ids.has(id))
+      plan.tasks = selected
+    }
 
     // Child sessions of the workers. Each worker is registered in activeWorkers
     // ALREADY AT CREATION — an abort in this window has to reach them.
     activeWorkers.set(sessionId, [])
     const workerSessions = new Map<string, SessionInfo>()
     const createSession = async (task: OrchestrationTask): Promise<SessionInfo> => {
+      // Resuming: this task already has a worker — a session with the conversation
+      // of what it did before the interruption (and, with worktrees, its own tree).
+      // It continues there instead of starting over in a new child session.
+      if (opts?.resume && task.workerSessionId) {
+        const existing = await readJson<SessionInfo>(StorageKeys.session(task.workerSessionId))
+        if (existing) {
+          workerSessions.set(task.id, existing)
+          activeWorkers.get(sessionId)?.push(existing.id)
+          return existing
+        }
+      }
       const now = Date.now()
       const worker: SessionInfo = {
         id: newId('ses'),
@@ -966,6 +988,8 @@ async function approvePlanTurn(
     for (const task of selected) await createSession(task)
 
     plan.status = 'running'
+    // It is running again: whatever was left of the interruption is history now.
+    delete plan.interrupted
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'status', sessionId, status: 'streaming' })
 
@@ -1034,6 +1058,7 @@ async function approvePlanTurn(
       plan,
       config,
       signal: controller.signal,
+      keepAccepted: opts?.resume === true,
       extraOptions: { subagents: input.options.subagents === true },
       persist,
       runWorker: async (task, text) => {
@@ -1046,6 +1071,14 @@ async function approvePlanTurn(
       prepareTask: chatRepo
         ? async (task) => {
             const worker = workerSessions.get(task.id) ?? (await createSession(task))
+            // Resuming: the tree exists and holds what the worker wrote before the
+            // interruption — a new one would start again from the base commit and
+            // leave that work behind on the old branch. If the folder is gone (it
+            // was deleted by hand), the plan forgets it and a new one is created below.
+            if (task.worktree && existsSync(task.worktree.folder)) {
+              return [`You work in an isolated git worktree (${task.worktree.folder}) on branch ${task.worktree.branch}, created from ${task.worktree.base}. You don't need to commit: the orchestrator commits your work when it is accepted and merges it at the end.`]
+            }
+            if (task.worktree) task.worktree = undefined
             const dependencies = (task.dependsOn ?? [])
               .map((id) => plan.tasks.find((t) => t.id === id)?.worktree)
               .filter((w): w is NonNullable<OrchestrationTask['worktree']> => !!w)
@@ -1129,7 +1162,11 @@ async function approvePlanTurn(
       .map((t) => {
         const state = t.phase === 'accepted' ? 'accepted' : t.phase === 'failed' ? 'FAILED' : t.phase ?? 'unknown'
         const note = t.reviewNote ? `\nOrchestrator note: ${t.reviewNote}` : ''
-        const text = workerResults.get(t.id)?.text || '(no reply)'
+        // A resumed plan carries tasks accepted in the earlier run: this one has no
+        // reply for them, and "(no reply)" would read like a worker that said nothing.
+        const text =
+          workerResults.get(t.id)?.text ||
+          (t.phase === 'accepted' ? '(finished in an earlier run — its work is already in the folder)' : '(no reply)')
         return `## ${t.title}${t.extra ? ' (extra)' : ''} [${state}${t.revisions ? `, ${t.revisions} adjustment(s)` : ''}]${note}\n\n${text}`
       })
       .join('\n\n---\n\n') + (plan.review?.merge ? `\n\n---\n\nMerge of the workers' branches: ${plan.review.merge.detail}` : '')
@@ -1286,4 +1323,91 @@ export async function mergeAgain(win: BrowserWindow, sessionId: string): Promise
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!plan || !session?.directory) return
   await mergeWork(win, sessionId, plan, session.directory)
+}
+
+/**
+ * "Continue" on the orchestration card: runs again the tasks the plan did not
+ * accept — the ones still queued, running or in review when the app closed or the
+ * run was cut short. The accepted work stays (and is merged if it never was), the
+ * worker of each resumed task continues in its own session and worktree, and the
+ * plan is finished with the settings it was approved with.
+ */
+export async function resumePlan(win: BrowserWindow, input: SendMessageInput): Promise<void> {
+  const sessionId = input.sessionId
+  // The card is a click away from being pressed twice, and a run already going has
+  // nothing to resume.
+  if (controllers.has(sessionId) || pending.has(sessionId)) return
+  if (!input.directory) return
+  const plan = normalizeOrchestrationPlan(await readJson<unknown>(StorageKeys.orchestration(sessionId)))
+  if (!plan || plan.dismissed) return
+
+  const todo = plan.tasks.filter((t) => t.phase !== 'accepted')
+  // Nothing left to run: what remains is the accepted work that was never merged.
+  if (todo.length === 0) {
+    await mergeWork(win, sessionId, plan, input.directory)
+    return
+  }
+
+  // The reviewer judges the workers' work against the request that produced the
+  // plan; on a resume there is no turn to take it from, so it comes from the
+  // history (the last message the person wrote before the plan).
+  if (!input.text) {
+    const lastUser = [...(await loadMessages(sessionId))].reverse().find((m) => m.role === 'user')
+    input = {
+      ...input,
+      text:
+        lastUser?.parts
+          .filter((p): p is TextPart => p.type === 'text')
+          .map((p) => p.text)
+          .join('\n') ?? '',
+    }
+  }
+
+  // approvePlanTurn takes the turn's input from the pending entry — the same door
+  // the card's "Approve" uses, with the plan that is already on disk instead of the
+  // one that was just proposed.
+  pending.set(sessionId, { input, plan, assistantMessageId: '' })
+  try {
+    await withProviderSession(sessionId, () =>
+      approvePlanTurn(win, sessionId, plan.id, todo.map((t) => t.id), { resume: true }),
+    )
+  } finally {
+    if (pending.get(sessionId)?.plan === plan) pending.delete(sessionId)
+  }
+}
+
+/**
+ * A plan only says `running` while the process running it is alive — but the FILE
+ * keeps the last state it had. After a crash or a force quit it stays `running`
+ * with tasks in an open phase, and the card comes back as "in progress" forever:
+ * no X (the card only offers one when nothing is running) and no way to finish the
+ * work. At boot nothing is running yet, so an approved/running plan on disk is a
+ * leftover — it is closed as done and marked `interrupted`, with the phases kept
+ * as they were so the card can say where it stopped and offer "Continue".
+ */
+export async function recoverInterruptedPlans(): Promise<number> {
+  let keys: string[] = []
+  try {
+    keys = await listKeys('orchestration')
+  } catch {
+    return 0
+  }
+  let recovered = 0
+  for (const key of keys) {
+    if (controllers.has(key.split('/').pop() ?? '')) continue
+    let plan: OrchestrationPlan | undefined
+    try {
+      plan = normalizeOrchestrationPlan(await readJson<unknown>(key))
+    } catch {
+      continue
+    }
+    if (!plan || (plan.status !== 'approved' && plan.status !== 'running')) continue
+    plan.status = 'done'
+    plan.interrupted = true
+    // "Reviewing: X" would read as "the orchestrator is doing something right now".
+    if (plan.review) plan.review = { ...plan.review, activity: undefined }
+    await writeJson(key, plan).catch(() => {})
+    recovered++
+  }
+  return recovered
 }

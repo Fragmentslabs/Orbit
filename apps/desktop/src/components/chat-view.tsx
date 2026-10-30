@@ -1285,8 +1285,15 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           followUp={plan.review}
           onMergeAgain={() => chatApi.mergeOrchestration(session.id)}
           title={t("chat.orchestrationTitle")}
-          defaultExpanded={plan.status !== "done"}
-          onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}
+          // "Running" is a fact of the main process, not of the stored phases: a
+          // plan whose run died with the app keeps `running` in the file, and
+          // reading that as "in progress" is what left the card spinning — with no
+          // X, since it only appeared once nothing was running.
+          live={plan.status === "approved" || plan.status === "running"}
+          interrupted={plan.interrupted}
+          onContinue={() => useSessionStore.getState().resumeOrchestration(session.id)}
+          defaultExpanded={plan.status !== "done" || !!plan.interrupted}
+          onDismiss={() => useSessionStore.getState().dismissOrchestration(session.id)}
         />
       )}
       {/* Context near the limit after accumulated compactions: offers
