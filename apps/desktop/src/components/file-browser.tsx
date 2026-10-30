@@ -1671,25 +1671,24 @@ export function FileBrowser({
               repo there is nothing to choose, and the chip does not appear. */}
           {repos.length > 1 && (
             <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Hint label={t("folders.repoSwitch")}>
+              {/* Tooltip outside the trigger, content inside its button — as the `render`
+                  element the Hint dropped the trigger props and children (empty button). */}
+              <Hint label={t("folders.repoSwitch")}>
+                <DropdownMenuTrigger
+                  render={
                     <button
                       type="button"
-
                       className="flex h-6 min-w-0 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent"
-                    />
-                  </Hint>
-                }
-              >
-                <FolderIcon className="size-3 shrink-0 text-muted-foreground" />
-                <Truncate>
-                    <span className="max-w-24 truncate">
-                    {repo ? getBaseName(repo) : ""}
-                  </span>
-                </Truncate>
-                <ChevronUpIcon className="size-3 shrink-0 text-muted-foreground" />
-              </DropdownMenuTrigger>
+                    >
+                      <FolderIcon className="size-3 shrink-0 text-muted-foreground" />
+                      <Truncate>
+                        <span className="max-w-24 truncate">{repo ? getBaseName(repo) : ""}</span>
+                      </Truncate>
+                      <ChevronUpIcon className="size-3 shrink-0 text-muted-foreground" />
+                    </button>
+                  }
+                />
+              </Hint>
               <DropdownMenuContent
                 align="start"
                 className="w-56 p-1"

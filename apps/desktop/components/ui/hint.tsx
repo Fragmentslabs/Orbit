@@ -26,6 +26,13 @@ interface HintProps {
  *
  * The `aria-label` is only injected when the element does not bring its own, so as not to
  * overwrite a more specific hand-written name.
+ *
+ * NEVER pass a `Hint` as the `render` element of another trigger (`render={<Hint …><button/>}</Hint>`).
+ * Base UI merges the render element's own props and children over the trigger's, and this
+ * component only reads the props it knows: the trigger's handlers, its ref, its id and its
+ * children are all dropped — the button comes out empty, unclickable and, in a toolbar,
+ * invisible. Compose the other way around: `<Hint…><DropdownMenuTrigger
+ * render={<button>{content}</button>} /></Hint>` — then both triggers end up on the same node.
  */
 function Hint({ label, side = "top", align, disabled, injectName = true, children }: HintProps) {
   if (!label) return children

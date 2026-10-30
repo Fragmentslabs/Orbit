@@ -135,29 +135,31 @@ export function WorktreeSelector({
         </div>
       ) : (
         <DropdownMenu open={open} onOpenChange={setOpen}>
-          <DropdownMenuTrigger
-            render={
-              <Hint label={t("worktree.currentTitle", { name: currentLabel })}>
+          {/* Same arrangement as the BranchSelector: tooltip OUTSIDE the trigger, content
+              inside its button — as the `render` element the Hint swallowed the trigger
+              props and its children, leaving an empty button that opened nothing. */}
+          <Hint label={t("worktree.currentTitle", { name: currentLabel })}>
+            <DropdownMenuTrigger
+              render={
                 <button
                   type="button"
-
                   className={cn(
                     "flex h-7 items-center gap-1 rounded-md border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
                     current && !current.primary ? "border-primary/40 bg-primary/5" : "border-border",
                   )}
-                />
-              </Hint>
-            }
-          >
-            {loading && !list ? (
-              <Loader2Icon className="size-3 animate-spin" />
-            ) : (
-              <FolderGit2 className={cn("size-3", current && !current.primary ? "text-primary" : "text-muted-foreground")} />
-            )}
-            <Truncate>
-                <span className="max-w-24 truncate">{currentLabel}</span>
-            </Truncate>
-          </DropdownMenuTrigger>
+                >
+                  {loading && !list ? (
+                    <Loader2Icon className="size-3 animate-spin" />
+                  ) : (
+                    <FolderGit2 className={cn("size-3", current && !current.primary ? "text-primary" : "text-muted-foreground")} />
+                  )}
+                  <Truncate>
+                    <span className="max-w-24 truncate">{currentLabel}</span>
+                  </Truncate>
+                </button>
+              }
+            />
+          </Hint>
           <DropdownMenuContent align="end" className="w-72 p-1">
             {items}
           </DropdownMenuContent>

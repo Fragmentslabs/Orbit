@@ -208,34 +208,36 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
         </div>
       ) : (
         <DropdownMenu open={open} onOpenChange={setOpen}>
-          <DropdownMenuTrigger
-            render={
-              <Hint label={data.current || t("branch.detached")}>
+          {/* The tooltip wraps the trigger, never the other way around: passed as the
+              trigger's `render` element, the Hint received the trigger props and dropped
+              every one of them — handlers, ref, id — together with the trigger's children,
+              so the button came out empty and opened nothing. With the Hint outside and
+              THE CONTENT INSIDE the button, both triggers land on the same node. */}
+          <Hint label={data.current || t("branch.detached")}>
+            <DropdownMenuTrigger
+              render={
                 <button
                   type="button"
                   disabled={loading || checkoutLoading}
-
                   className={cn(
                     "flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
                     compact && "h-6 min-w-0 flex-1 border-0 px-1",
                   )}
-                />
-              </Hint>
-            }
-          >
-            {loading || checkoutLoading ? (
-              <Loader2Icon className="size-3 animate-spin" />
-            ) : (
-              <GitBranch className="size-3 text-muted-foreground" />
-            )}
-            <Truncate>
-                <span
-                className={cn("truncate", compact ? "min-w-0 flex-1 text-left" : "max-w-20")}
-              >
-                {data.current || t("branch.detached")}
-              </span>
-            </Truncate>
-          </DropdownMenuTrigger>
+                >
+                  {loading || checkoutLoading ? (
+                    <Loader2Icon className="size-3 animate-spin" />
+                  ) : (
+                    <GitBranch className="size-3 text-muted-foreground" />
+                  )}
+                  <Truncate>
+                    <span className={cn("truncate", compact ? "min-w-0 flex-1 text-left" : "max-w-20")}>
+                      {data.current || t("branch.detached")}
+                    </span>
+                  </Truncate>
+                </button>
+              }
+            />
+          </Hint>
           <DropdownMenuContent align={compact ? "start" : "end"} className="w-44 p-1" side={side}>
             {branchItems}
           </DropdownMenuContent>

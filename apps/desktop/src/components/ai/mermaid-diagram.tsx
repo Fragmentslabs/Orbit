@@ -236,14 +236,19 @@ export const MermaidDiagram = memo(function MermaidDiagram({ code, isIncomplete 
         />
         <div className="absolute top-0 right-0 flex gap-0.5 opacity-0 transition-opacity group-hover/mermaid:opacity-100 has-[[data-popup-open]]:opacity-100">
           <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Hint label={t("mermaid.download")}>
-                <Button variant="ghost" size="icon-sm"  />
-              </Hint>}
-              onClick={() => setDownloadFailed(false)}
-            >
-              <DownloadIcon className={downloadFailed ? "text-destructive" : undefined} />
-            </DropdownMenuTrigger>
+            {/* The tooltip goes OUTSIDE the trigger: used as the `render` element it
+                swallowed the trigger props and its children, and this button rendered
+                invisible (an icon-less ghost button in an overlay). */}
+            <Hint label={t("mermaid.download")}>
+              <DropdownMenuTrigger
+                onClick={() => setDownloadFailed(false)}
+                render={
+                  <Button variant="ghost" size="icon-sm">
+                    <DownloadIcon className={downloadFailed ? "text-destructive" : undefined} />
+                  </Button>
+                }
+              />
+            </Hint>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => download("png")}>{t("mermaid.asPng")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => download("svg")}>{t("mermaid.asSvg")}</DropdownMenuItem>
