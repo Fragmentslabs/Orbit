@@ -10,7 +10,9 @@ import {
   CORE_SET,
 } from './catalog'
 import { search } from './search'
-import { deriveActive } from './active'
+import { createToolBridgeTools, queryFamily } from './load'
+import { deriveActive, priorToolCalls } from './active'
+import type { ChatMessage } from '@shared/chat'
 
 /**
  * The catalog is what prevents drift: if a known tool falls into "outras",
@@ -175,9 +177,76 @@ describe('deriveActive', () => {
       // documents was USED; video never.
       { role: 'assistant', content: [{ type: 'tool-call', toolName: 'pdf_merge', input: {} }] },
     ]
-    const active = deriveActive(history, families, existing, { cap: 1 })
+    // The cap counts TOOLS: 4 of core + pdf_merge fit, video_probe does not.
+    const active = deriveActive(history, families, existing, { cap: 5 })
     expect(active.families.has('documents')).toBe(true)
-    expect(active.dropped).toContain('video')
+    expect(active.dropped).toEqual(['video'])
+    expect(active.names).toHaveLength(5)
+  })
+
+  it('without a cap the set is not trimmed', () => {
+    const history = [
+      { role: 'assistant', content: [{ type: 'tool-call', toolName: 'tools_load', input: { family: 'documents' } }] },
+      { role: 'assistant', content: [{ type: 'tool-call', toolName: 'tools_load', input: { family: 'video' } }] },
+    ]
+    expect(deriveActive(history, families, existing).dropped).toEqual([])
+  })
+
+  it('a tool used without tools_load activates its family', () => {
+    const history = [{ role: 'assistant', content: [{ type: 'tool-call', toolName: 'video_probe', input: {} }] }]
+    expect(deriveActive(history, families, existing).families.has('video')).toBe(true)
+  })
+})
+
+describe('large family (over the per-family limit)', () => {
+  const tools = Array.from({ length: 80 }, (_, i) => `big_t${i}`)
+  const families = [{ id: 'mcp:big', label: '@mcp:big', description: '', tools, mcp: true }]
+  const existing = new Set(['read', ...tools])
+  const load = (input: Record<string, unknown>) => [
+    { role: 'assistant', content: [{ type: 'tool-call', toolName: 'tools_load', input }] },
+  ]
+
+  it('a load refused for being too large activates nothing', () => {
+    expect(deriveActive(load({ server: 'big' }), families, existing).names).toEqual(['read'])
+  })
+
+  it('a query activates only what the search found, not the whole server', () => {
+    const active = deriveActive(load({ server: 'big', query: 'x' }), families, existing, {
+      resolveQuery: () => ['big_t3', 'big_t7'],
+    })
+    expect(active.names.sort()).toEqual(['big_t3', 'big_t7', 'read'])
+    expect(active.families.has('mcp:big')).toBe(false)
+  })
+
+  it('an exact name and a call activate only that name', () => {
+    const history = [
+      ...load({ tools: ['big_t1'] }),
+      { role: 'assistant', content: [{ type: 'tool-call', toolName: 'big_t2', input: {} }] },
+    ]
+    expect(deriveActive(history, families, existing).names.sort()).toEqual(['big_t1', 'big_t2', 'read'])
+  })
+})
+
+describe('persistence across turns', () => {
+  it('the ToolParts of previous turns keep the family active', () => {
+    const history = [
+      { id: 'u', role: 'user', parts: [{ id: 't', type: 'text', text: 'join the pdfs' }] },
+      {
+        id: 'a',
+        role: 'assistant',
+        parts: [
+          { id: 'p1', type: 'tool', tool: 'tools_load', state: 'done', input: { family: 'documents' } },
+          { id: 'p2', type: 'tool', tool: 'pdf_merge', state: 'done', input: {} },
+        ],
+      },
+    ] as unknown as ChatMessage[]
+    const families = [{ id: 'documents', label: 'documents', description: '', tools: ['pdf_merge'] }]
+    const active = deriveActive(priorToolCalls(history), families, new Set(['read', 'pdf_merge']))
+    expect(active.names).toContain('pdf_merge')
+  })
+
+  it('a history without tools produces no message', () => {
+    expect(priorToolCalls([])).toEqual([])
   })
 })
 
@@ -209,5 +278,36 @@ describe('handbrake (provider tool ceiling)', () => {
     const tools = { read: {}, video_probe: {} } as unknown as ToolSet
     expect(applyCeiling(tools, [], undefined)).toEqual([])
     expect(Object.keys(tools)).toHaveLength(2)
+  })
+})
+
+describe('bridge and derivation agree', () => {
+  const tools = {
+    read: { description: 'read a file' },
+    ...Object.fromEntries(
+      Array.from({ length: 50 }, (_, i) => [`big_t${i}`, { description: i === 7 ? 'create invoice' : `thing ${i}` }]),
+    ),
+  } as unknown as ToolSet
+  const families = [
+    { id: 'mcp:big', label: '@mcp:big', description: '', tools: Object.keys(tools).filter((n) => n !== 'read'), mcp: true },
+  ]
+  const bridges = createToolBridgeTools({ families, tools })
+  const run = (input: Record<string, unknown>) =>
+    (bridges.tools_load as unknown as { execute: (i: unknown, o: unknown) => Promise<string> }).execute(input, {})
+
+  it('what the query answers is exactly what becomes active', async () => {
+    const answer = await run({ server: 'big', query: 'invoice' })
+    expect(answer).toMatch(/big_t7/)
+    const active = deriveActive(
+      [{ role: 'assistant', content: [{ type: 'tool-call', toolName: 'tools_load', input: { server: 'big', query: 'invoice' } }] }],
+      families,
+      new Set(Object.keys(tools)),
+      { resolveQuery: (family, query) => queryFamily(tools, family, query) },
+    )
+    expect(active.names.sort()).toEqual(['big_t7', 'read'])
+  })
+
+  it('naming a core tool is not an error', async () => {
+    expect(await run({ tools: ['read'] })).toMatch(/^Loaded: read/)
   })
 })

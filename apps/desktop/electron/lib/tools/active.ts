@@ -1,51 +1,87 @@
+import type { ChatMessage } from '@shared/chat'
 import type { ToolFamily } from './catalog'
-import { CORE_SET } from './catalog'
+import { CORE_SET, MAX_TOOLS_PER_FAMILY } from './catalog'
 
 /**
  * Active set DERIVED from the history — never mutated.
  *
- * It comes from scanning `messages` on every step for calls to `tools_load`. Two
+ * It comes from scanning `messages` on every step for tool calls. Two
  * consequences that justify the design:
- * - **Persistence across turns for free**: the family loaded in turn N
- *   stays active in N+1, until compaction removes the call from the history.
  * - **No orphan history**: the set never shrinks for no reason — if it
- *   went back to the core on every turn, the history would carry calls to tools
+ *   went back to the core on every step, the history would carry calls to tools
  *   that are no longer declared, and an OpenAI-compatible provider may reject that.
+ * - **Immune to retry, provider rotation and compaction**: there is no state to
+ *   lose, only the history to read again.
+ *
+ * The model history does NOT carry the tool parts of previous turns (see
+ * `toModelMessages`), so the persistence across turns comes from the chat history
+ * itself: `priorToolCalls` turns its ToolParts into the same shape.
  */
 
-/** A `tools_load` call found in the history. */
-interface LoadedCall {
+/** Resolves a `query` inside a family to tool names — the same search the bridge answers with. */
+export type QueryResolver = (family: ToolFamily, query: string) => string[]
+
+/** What a call activates: whole families and loose names. */
+interface Activation {
   families: string[]
   names: string[]
-  /** Message index — used for the order and for the cap's LRU. */
-  at: number
 }
 
-/** What the model asked to load, read from a `tools_load` call. */
-function readLoadedCall(part: Record<string, unknown>, families: readonly ToolFamily[]): LoadedCall | null {
-  if (part.type !== 'tool-call' || part.toolName !== 'tools_load') return null
-  // The SDK used to use `args` and today uses `input`; accepting both costs nothing and
-  // survives a replay of old history.
-  const input = (part.input ?? part.args) as Record<string, unknown> | undefined
-  if (!input) return null
+/** Small family loads whole; a large one only through the names it was asked for. */
+function isWhole(family: ToolFamily): boolean {
+  return family.tools.length <= MAX_TOOLS_PER_FAMILY
+}
 
-  const target: string[] = []
-  if (typeof input.family === 'string') target.push(input.family)
-  if (typeof input.server === 'string') target.push(`mcp:${input.server}`)
-  // `tools: [...]` — each name is resolved to the family that contains it.
-  const names: string[] = []
+/**
+ * What a `tools_load` call activates. It mirrors what the bridge ANSWERED: a large
+ * family refused without a query activates nothing, and a query activates only
+ * what the search found — otherwise the refusal in the text would be a lie and
+ * the 80 tools of a server would go to the request anyway.
+ */
+function readLoadCall(
+  input: Record<string, unknown>,
+  families: readonly ToolFamily[],
+  resolveQuery?: QueryResolver,
+): Activation {
+  const activation: Activation = { families: [], names: [] }
+  const id =
+    typeof input.family === 'string' ? input.family : typeof input.server === 'string' ? `mcp:${input.server}` : undefined
+  const family = id ? families.find((f) => f.id === id) : undefined
+  const query = typeof input.query === 'string' ? input.query.trim() : ''
+  if (family && !family.unavailable) {
+    if (query) activation.names.push(...(resolveQuery?.(family, query) ?? []))
+    else if (isWhole(family)) activation.families.push(family.id)
+  }
+  // `tools: [...]` — the name itself always; the family whole only when it is small.
   if (Array.isArray(input.tools)) {
     for (const raw of input.tools) {
-      if (typeof raw !== 'string') continue
+      if (typeof raw !== 'string' || !raw.trim()) continue
       const name = raw.trim()
-      if (!name) continue
-      names.push(name)
-      const family = families.find((f) => f.tools.includes(name))
-      if (family) target.push(family.id)
+      activation.names.push(name)
+      const owner = families.find((f) => f.tools.includes(name))
+      if (owner && isWhole(owner)) activation.families.push(owner.id)
     }
   }
-  if (target.length === 0 && names.length === 0) return null
-  return { families: [...new Set(target)], names, at: -1 }
+  return activation
+}
+
+/**
+ * The ToolParts of the chat history as tool-call parts, in one message — what
+ * `deriveActive` reads to keep the families of the previous turns active.
+ *
+ * `history` is already the window the model sees (after the last summary): a
+ * family used before the compaction leaves with it, which is the point.
+ */
+export function priorToolCalls(history: readonly ChatMessage[]): { role: 'assistant'; content: unknown[] }[] {
+  const content: unknown[] = []
+  for (const message of history) {
+    if (message.role !== 'assistant') continue
+    for (const part of message.parts) {
+      if (part.type !== 'tool') continue
+      content.push({ type: 'tool-call', toolName: part.tool, input: part.input ?? {} })
+    }
+  }
+  return content.length > 0 ? [{ role: 'assistant', content }] : []
 }
 
 /**
@@ -95,70 +131,94 @@ export interface ActiveSet {
  * - It always includes the core that EXISTS in this turn (the nominal core has tools
  *   the chat does not assemble — `read`, `bash` —, and declaring a nonexistent tool in
  *   `activeTools` breaks the request).
+ * - A family becomes active by `tools_load` **or by use**: a tool called in a
+ *   previous turn keeps its family, and so does one called while inactive (the
+ *   SDK parses against the whole ToolSet, so that call runs).
  * - `auto` are families activated by context (e.g. `@mcp:x` in the message).
- * - Cap: the set grows monotonically; when it overflows, the first to go is the family
- *   **without recent use** (LRU by the calls of the retained history), not the
- *   oldest loaded — a worker that loaded `documents` in turn 2 and used it until
- *   turn 9 should not be dropped before `motion`, loaded in 7 and never called.
+ * - `cap` counts TOOLS — it is the provider's ceiling on the request. When the set
+ *   overflows, the first to go is the family **without recent use** (LRU by the
+ *   calls of the retained history), not the oldest loaded — a worker that loaded
+ *   `documents` in turn 2 and used it until turn 9 should not be dropped before
+ *   `motion`, loaded in 7 and never called. The core never leaves.
  */
 export function deriveActive(
   messages: readonly unknown[],
   families: readonly ToolFamily[],
   existing: ReadonlySet<string>,
-  options: { auto?: readonly string[]; cap?: number } = {},
+  options: { auto?: readonly string[]; cap?: number; resolveQuery?: QueryResolver } = {},
 ): ActiveSet {
-  const cap = options.cap ?? 120
   const byId = new Map(families.map((f) => [f.id, f]))
-  const loadedFamilies: string[] = []
+  const familyByName = new Map<string, ToolFamily>()
+  for (const family of families) for (const name of family.tools) familyByName.set(name, family)
+  const wanted: string[] = []
   const looseNames = new Set<string>()
   const lastUse = new Map<string, number>()
-  const familyByName = new Map<string, string>()
-  for (const family of families) for (const name of family.tools) familyByName.set(name, family.id)
+  const want = (id: string) => {
+    if (byId.has(id) && !wanted.includes(id)) wanted.push(id)
+  }
 
   messages.forEach((message, index) => {
+    if (!message || typeof message !== 'object') return
     const content = (message as { content?: unknown }).content
     if (!Array.isArray(content)) return
     for (const part of content) {
       if (!part || typeof part !== 'object') continue
       const p = part as Record<string, unknown>
-      // Use of any tool pushes its family's LRU.
-      if (p.type === 'tool-call' && typeof p.toolName === 'string') {
-        const family = familyByName.get(p.toolName)
-        if (family) lastUse.set(family, index)
+      if (p.type !== 'tool-call' || typeof p.toolName !== 'string') continue
+      if (p.toolName === 'tools_load') {
+        // The SDK used to use `args` and today uses `input`; accepting both costs
+        // nothing and survives a replay of old history.
+        const input = (p.input ?? p.args) as Record<string, unknown> | undefined
+        if (!input || typeof input !== 'object') continue
+        const activation = readLoadCall(input, families, options.resolveQuery)
+        for (const id of activation.families) want(id)
+        for (const name of activation.names) looseNames.add(name)
+        continue
       }
-      const call = readLoadedCall(p, families)
-      if (!call) continue
-      call.at = index
-      for (const id of call.families) if (!loadedFamilies.includes(id)) loadedFamilies.push(id)
-      for (const name of call.names) looseNames.add(name)
+      // Use of any tool activates its family (or the name, in a large one) and
+      // pushes the family's LRU.
+      const family = familyByName.get(p.toolName)
+      if (!family) continue
+      lastUse.set(family.id, index)
+      if (isWhole(family)) want(family.id)
+      else looseNames.add(p.toolName)
     }
   })
+  // What the user's message cites is the most recent intent there is.
+  for (const id of options.auto ?? []) {
+    want(id)
+    if (byId.has(id)) lastUse.set(id, messages.length)
+  }
 
-  const wanted = [...new Set([...loadedFamilies, ...(options.auto ?? [])])].filter((id) => byId.has(id))
+  const keep = new Set(wanted.filter((id) => !byId.get(id)?.unavailable))
+  const collect = () => {
+    const names = new Set<string>()
+    for (const name of CORE_SET) if (existing.has(name)) names.add(name)
+    for (const id of keep) for (const name of byId.get(id)!.tools) if (existing.has(name)) names.add(name)
+    for (const name of looseNames) {
+      if (!existing.has(name)) continue
+      // A loose name whose family was dropped by the cap leaves with it.
+      const owner = familyByName.get(name)
+      if (owner && dropped.includes(owner.id)) continue
+      names.add(name)
+    }
+    return names
+  }
+
   const dropped: string[] = []
-  const keep = new Set(wanted)
-  // Cap: drops the least used ones (never used first), the more recent ones after.
-  let total = keep.size
-  if (total > cap) {
-    const ordered = [...wanted].sort(
-      (a, b) => (lastUse.get(a) ?? -1) - (lastUse.get(b) ?? -1),
-    )
+  let names = collect()
+  if (options.cap && names.size > options.cap) {
+    // Never used first (in load order), then from the least recently used.
+    const ordered = [...keep, ...[...looseNames].map((n) => familyByName.get(n)?.id).filter((id): id is string => !!id)]
+      .filter((id, i, all) => all.indexOf(id) === i)
+      .sort((a, b) => (lastUse.get(a) ?? -1) - (lastUse.get(b) ?? -1))
     for (const id of ordered) {
-      if (total <= cap) break
+      if (names.size <= options.cap) break
       keep.delete(id)
       dropped.push(id)
-      total--
+      names = collect()
     }
   }
-
-  const names = new Set<string>()
-  for (const name of CORE_SET) if (existing.has(name)) names.add(name)
-  for (const id of keep) {
-    const family = byId.get(id)
-    if (!family || family.unavailable) continue
-    for (const name of family.tools) if (existing.has(name)) names.add(name)
-  }
-  for (const name of looseNames) if (existing.has(name)) names.add(name)
 
   return { names: [...names], families: keep, dropped }
 }

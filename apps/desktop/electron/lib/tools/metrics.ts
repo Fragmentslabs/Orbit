@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { dataDir } from '../storage'
+import type { MessagePart } from '@shared/chat'
 import type { ToolFamily } from './catalog'
 
 /**
@@ -13,51 +14,39 @@ import type { ToolFamily } from './catalog'
  * 1. **Family offered and never called**: context cost paid for nothing.
  * 2. **Tool called and that failed**: the family is right, the tool is not.
  *
- * Why at the start of the turn and not at the end: the engine does not expose `onFinish`, and
- * instrumenting the stream to know the outcome would cost more than the data is worth.
- * From the history it is already possible to read what was called and what failed — what cannot
- * be done is separating it by exact turn, and for deciding on a family that changes nothing.
+ * Recorded at the END of the turn, from the assistant message's ToolParts: the
+ * model history does not carry tool parts of previous turns, so read at the start
+ * it always came out empty.
  */
 
 export interface TurnMetrics {
   at: string
-  /** Tools declared in the request (what the model saw). */
+  /** Largest active set declared in a step of the turn (what the model saw). */
   offered: number
   /** Families with live tools. */
   families: number
   /** Families down, with the reason — they were not offered. */
   disabled: string[]
-  /** How many tools_load the retained history asked for. */
+  /** How many tools_load the turn called. */
   loads: number
-  /** Tools actually called in the retained history. */
+  /** Tools actually called in the turn. */
   calls: string[]
-  /** Tool results marked as errors. */
+  /** Tool calls that ended in error. */
   failed: number
   /** Families whose tools are in `calls`. */
   usedFamilies: string[]
 }
 
-/** Reads from the history what has already been called. `messages` is the turn's array. */
-export function usageFromHistory(messages: readonly unknown[]): Pick<TurnMetrics, 'loads' | 'calls' | 'failed'> {
+/** Reads the turn's usage from the assistant message's parts. */
+export function usageFromParts(parts: readonly MessagePart[]): Pick<TurnMetrics, 'loads' | 'calls' | 'failed'> {
   const calls = new Set<string>()
   let failed = 0
   let loads = 0
-  for (const message of messages) {
-    // The history comes from disk and may bring a null item: without this guard the
-    // whole read would throw, and the telemetry would lose the turn because of
-    // a corrupted line.
-    if (!message || typeof message !== 'object') continue
-    const content = (message as { content?: unknown }).content
-    if (!Array.isArray(content)) continue
-    for (const part of content) {
-      if (!part || typeof part !== 'object') continue
-      const p = part as Record<string, unknown>
-      if (p.type === 'tool-call' && typeof p.toolName === 'string') {
-        calls.add(p.toolName)
-        if (p.toolName === 'tools_load') loads++
-      }
-      if (p.type === 'tool-result' && p.isError === true) failed++
-    }
+  for (const part of parts) {
+    if (part.type !== 'tool') continue
+    calls.add(part.tool)
+    if (part.tool === 'tools_load') loads++
+    if (part.state === 'error') failed++
   }
   return { loads, calls: [...calls].sort(), failed }
 }
@@ -69,10 +58,10 @@ export function usageFromHistory(messages: readonly unknown[]): Pick<TurnMetrics
 export async function recordTurn(input: {
   families: readonly ToolFamily[]
   offered: number
-  messages: readonly unknown[]
+  parts: readonly MessagePart[]
 }): Promise<void> {
   try {
-    const usage = usageFromHistory(input.messages)
+    const usage = usageFromParts(input.parts)
     const used = new Set(usage.calls)
     const metrics: TurnMetrics = {
       at: new Date().toISOString(),

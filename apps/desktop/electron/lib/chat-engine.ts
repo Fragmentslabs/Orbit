@@ -23,6 +23,7 @@ import {
   formatDesignQuoteText,
   modelFileParts,
   StorageKeys,
+  toolLimitFor,
   type QuotePayload,
 } from '@shared/chat'
 import { isRoutineSessionId } from '@shared/routines'
@@ -97,8 +98,9 @@ import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import type { ImageToolHooks, ToolContext, TurnSnapshot } from './tools'
 import { buildCatalog } from './tools/catalog-turn'
-import { DEFAULT_ACTIVE_FAMILIES, buildMap } from './tools/catalog'
-import { deriveActive, familiesMentionedInText } from './tools/active'
+import { DEFAULT_ACTIVE_FAMILIES, buildMap, type ToolFamily } from './tools/catalog'
+import { deriveActive, familiesMentionedInText, priorToolCalls } from './tools/active'
+import { queryFamily } from './tools/load'
 import { recordTurn } from './tools/metrics'
 import { hoistToolImages } from './tool-images'
 import { endActivity } from './computer/session'
@@ -2278,35 +2280,39 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     const catalog = supportsTools
       ? buildCatalog(input, toolContext, imageHooks, modelVision, win)
       : null
+    // A worker's catalog has no bridges: it is the static set, sent whole.
+    const onDemand = catalog?.onDemand ? catalog : null
     const existingNames = catalog ? new Set(Object.keys(catalog.tools)) : new Set<string>()
     // Deterministic self-activation (`@mcp:<server>` in the message). The
     // plan's fragile heuristics (attachment, "folder with video") only enter afterwards
     // of measurement — without a number, they give tools back on a "hi" for free.
     const autoFamilies = [
-      ...familiesMentionedInText(input.text ?? '', catalog?.families ?? []),
+      ...familiesMentionedInText(input.text ?? '', onDemand?.families ?? []),
       // Families the prompt asks for by name: without them declared, the
       // instruction exists and the tool does not.
-      ...(catalog ? DEFAULT_ACTIVE_FAMILIES : []),
+      ...(onDemand ? DEFAULT_ACTIVE_FAMILIES : []),
     ]
-    const initialActive = catalog
-      ? deriveActive(initialMessages, catalog.families, existingNames, { auto: autoFamilies })
-      : null
-    // Outcome telemetry: this is the only point of the turn with the catalog (the
-    // offer) and the history (the use) at the same time. `usageFromHistory` reads the
-    // tool-calls and the tool-results of the already retained history, so `calls` and
-    // `failed` are accumulated over the session — to decide a family that is better
-    // than the isolated turn: it shows the family that was offered and never used.
-    if (catalog) {
-      void recordTurn({
-        families: catalog.families,
-        offered: existingNames.size,
-        messages: initialMessages,
-      })
-    }
+    // The model history carries no tool parts of previous turns: what keeps a
+    // family loaded in turn N active in N+1 are the ToolParts of the chat itself,
+    // in the same window the model sees (a compaction takes them along).
+    const lastSummary = findLastSummaryIndex(modelHistory)
+    const priorCalls = onDemand ? priorToolCalls(lastSummary >= 0 ? modelHistory.slice(lastSummary) : modelHistory) : []
+    const deriveOptions = onDemand
+      ? {
+          auto: autoFamilies,
+          cap: toolLimitFor(input.providerId),
+          resolveQuery: (family: ToolFamily, query: string) => queryFamily(onDemand.tools, family, query),
+        }
+      : {}
+    const deriveTurn = (messages: readonly unknown[]) =>
+      onDemand ? deriveActive([...priorCalls, ...messages], onDemand.families, existingNames, deriveOptions) : null
+    const initialActive = deriveTurn(initialMessages)
+    // Largest set declared in a step — what the telemetry calls "offered".
+    let offeredTools = initialActive?.names.length ?? 0
     // The map is the index: families, what each one solves, what is ACTIVE and
     // what is DISABLED — with the reason.
-    const promptMap = catalog
-      ? buildMap(catalog.families, { active: initialActive?.families }).text
+    const promptMap = onDemand
+      ? buildMap(onDemand.families, { active: initialActive?.families }).text
       : undefined
 
     for (;;) {
@@ -2338,23 +2344,10 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               ),
         tools: catalog?.tools,
         // The active set counts already in step 0 (the prepareStep only runs from
-        // step 1); in the others, the value returned by it is what rules.
+        // step 1); in the others, the value returned by it is what rules. A call to
+        // an inactive tool still runs — the SDK parses against the whole ToolSet —
+        // and its use activates the family from the next step on.
         activeTools: initialActive?.names,
-        // A call to an inactive tool cannot kill the turn: it becomes a bounce to
-        // tools_load with the family of the requested name. The next step already has the
-        // family active and the model re-emits the call.
-        repairToolCall: async ({ toolCall }) => {
-          if (!catalog) return null
-          const family = catalog.families.find(
-            (f) => !f.unavailable && f.tools.includes(toolCall.toolName),
-          )
-          if (!family) return null
-          return {
-            ...toolCall,
-            toolName: 'tools_load',
-            input: JSON.stringify({ family: family.id, tools: [toolCall.toolName] }),
-          }
-        },
         toolApproval,
         stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
@@ -2395,10 +2388,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           if (stepNumber < maxSteps - 1) {
             // Recomputed on every step from the history: it is what makes the
             // family loaded NOW count in the next step, without state.
-            const active = catalog
-              ? deriveActive(preparedWithImages, catalog.families, existingNames, { auto: autoFamilies })
-              : null
+            const active = deriveTurn(preparedWithImages)
             if (!active) return preparedWithImages === messages ? {} : { messages: preparedWithImages }
+            offeredTools = Math.max(offeredTools, active.names.length)
             if (active.dropped.length > 0) {
               console.warn(
                 `[tools] active set cap: ${active.dropped.join(', ')} dropped for lack of use`,
@@ -3125,6 +3117,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
 
     await bumpSessionActivity(win, sessionId)
+
+    // Outcome telemetry, at the end: only now the turn's ToolParts say what was
+    // called and what failed.
+    if (onDemand) {
+      void recordTurn({ families: onDemand.families, offered: offeredTools, parts: assistantMessage.parts })
+    }
 
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })

@@ -2,7 +2,7 @@ import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import { search } from './search'
 import type { ToolFamily } from './catalog'
-import { estimateTokens } from './catalog'
+import { CORE_SET, MAX_TOOLS_PER_FAMILY, estimateTokens } from './catalog'
 
 /**
  * The funnel's two bridges: `tools_load` and `tools_list`.
@@ -13,8 +13,7 @@ import { estimateTokens } from './catalog'
  * immune to retry, provider rotation and compaction.
  */
 
-/** A server above this does not load whole: it uses search. */
-export const MAX_TOOLS_PER_FAMILY = 40
+export { MAX_TOOLS_PER_FAMILY }
 
 export interface BridgeContext {
   families: readonly ToolFamily[]
@@ -34,6 +33,21 @@ function descriptionOf(tools: ToolSet, name: string): string {
     .trim()
   if (!clean) return ''
   return clean.length > 200 ? `${clean.slice(0, 200)}… (full description when loading)` : clean
+}
+
+/** How many tools a `query` activates inside a family. */
+const QUERY_LIMIT = 8
+
+/**
+ * The search inside a family. Deterministic on purpose: the bridge answers with it
+ * and `deriveActive` runs it again to know what became active — both must agree.
+ */
+export function queryFamily(tools: ToolSet, family: ToolFamily, query: string): string[] {
+  return search(
+    family.tools.map((name) => ({ name, text: `${name} ${descriptionOf(tools, name)}` })),
+    [query],
+    QUERY_LIMIT,
+  ).map((r) => r.name)
 }
 
 function label(family: ToolFamily): string {
@@ -75,7 +89,8 @@ export function createToolBridgeTools(ctx: BridgeContext) {
 
       // Explicit names: validates against the catalog instead of accepting silently.
       if (names?.length) {
-        const existing = new Set(ctx.families.flatMap((f) => f.tools))
+        // The core is always loaded: naming it is not an error.
+        const existing = new Set([...ctx.families.flatMap((f) => f.tools), ...Object.keys(ctx.tools).filter((n) => CORE_SET.has(n))])
         const unknown = names.filter((n) => !existing.has(n))
         if (unknown.length > 0) {
           const suggestions = search(
@@ -102,15 +117,11 @@ export function createToolBridgeTools(ctx: BridgeContext) {
           return `${label(requested)} has ${requested.tools.length} tools — too large to load whole. Use tools_load({ server: "${label(requested).replace(/^@mcp:/, '')}", query: "<what you need>" }).`
         }
         if (query) {
-          const found = search(
-            requested.tools.map((name) => ({ name, text: `${name} ${descriptionOf(ctx.tools, name)}` })),
-            [query],
-            Math.min(MAX_TOOLS_PER_FAMILY, 8),
-          )
+          const found = queryFamily(ctx.tools, requested, query)
           if (found.length === 0) {
             return `Nothing in ${label(requested)} matched "${query}". Available names:\n${requested.tools.join('\n')}`
           }
-          return `${label(requested)} — ${found.map((a) => a.name).join(', ')} (loaded). Call the tool now.${
+          return `${label(requested)} — ${found.join(', ')} (loaded). Call the tool now.${
             requested.manual ? `\n\n${requested.manual}` : ''
           }`
         }

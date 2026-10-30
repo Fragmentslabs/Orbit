@@ -19,10 +19,9 @@ import { listMcpServerPrefixes, listUnavailableMcpServers } from '../mcp'
  * Assembles the turn's ToolSet **and** the catalog families — the input of the
  * on-demand tool funnel.
  *
- * It is kept apart from `buildToolSet` on purpose: workers keep calling
- * `buildToolSet` directly and get the static set (§6.7 of the plan — a worker is
- * short and narrow, a round-trip in it costs proportionally more). Only the
- * normal turn and the orchestrator come through here.
+ * Every turn comes through here, workers included; `onDemand` says whether the
+ * funnel applies. A worker gets the static set (§6.7 of the plan — a worker is
+ * short and narrow, a round-trip in it costs proportionally more).
  */
 export function buildCatalog(
   input: SendMessageInput,
@@ -30,7 +29,7 @@ export function buildCatalog(
   imageHooks?: ImageToolHooks,
   modelVision?: boolean,
   win?: BrowserWindow,
-): { tools: ToolSet; families: ToolFamily[] } {
+): { tools: ToolSet; families: ToolFamily[]; onDemand: boolean } {
   const tools = buildToolSet(input, ctx, imageHooks, modelVision, win)
   // MCP servers become a family through the sanitized prefix with which the manager
   // names the tools (`<server>_<tool>`) — derived, never declared.
@@ -40,17 +39,22 @@ export function buildCatalog(
     listMcpServerPrefixes(),
     listUnavailableMcpServers(),
   )
+  // A worker has no bridges: it gets the whole static set, with no map and no
+  // trimming — a round-trip costs it proportionally more (§6.7 of the plan).
+  const onDemand = input.orchestrationRole !== 'worker'
   // The bridges come in AFTER the classification: they are core, not a family.
-  if (input.orchestrationRole !== 'worker') {
+  if (onDemand) {
     Object.assign(tools, createToolBridgeTools({ families, tools }))
+  } else {
+    // Handbrake only where the WHOLE set goes to the provider. On demand only the
+    // active set is sent, and its cap is applied there (`deriveActive`): cutting
+    // the full set would take a server out of the map with nothing loaded.
+    applyCeiling(tools, families, toolLimitFor(input.providerId))
   }
-  // Handbrake AFTER the bridges: tools_load/tools_list are core and need to
-  // survive the cut, otherwise the provider ceiling becomes a dead turn.
-  applyCeiling(tools, families, toolLimitFor(input.providerId))
   // The turn telemetry stays in the engine, where the offer and the history are at
   // the same point. Here there are no messages: a record without usage would answer half.
   if (process.env.ORBIT_DEBUG_TOOLSET === '1') dumpToolset(input, tools, families)
-  return { tools, families }
+  return { tools, families, onDemand }
 }
 
 /**

@@ -89,6 +89,13 @@ export const CORE: readonly string[] = [
 export const CORE_SET: ReadonlySet<string> = new Set(CORE)
 
 /**
+ * A family above this does not load whole: it goes through search (`query`), and
+ * only what the search found becomes active. Lives here, not in `load.ts`, because
+ * the bridge (what it answers) and the derivation (what it activates) must agree.
+ */
+export const MAX_TOOLS_PER_FAMILY = 40
+
+/**
  * Families active from the FIRST turn, without the model having to load them.
  *
  * `subchats` is here by evidence: the system prompt orders `suggest_subchat` on the

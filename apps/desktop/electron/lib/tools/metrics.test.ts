@@ -1,52 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { usageFromHistory } from './metrics'
+import type { MessagePart } from '@shared/chat'
+import { usageFromParts } from './metrics'
 
-/** A message in the AI SDK format: `content` is the list of parts. */
-function message(parts: unknown[]): unknown {
-  return { role: 'assistant', content: parts }
+/** A ToolPart as the engine writes it in the assistant message. */
+function tool(name: string, state: 'done' | 'error' | 'running' = 'done'): MessagePart {
+  return { id: `${name}-${Math.random()}`, type: 'tool', tool: name, state }
 }
 
-describe('usage read from the history', () => {
-  it('counts tool-call by name and does not repeat the same tool', () => {
-    const uso = usageFromHistory([
-      message([
-        { type: 'tool-call', toolName: 'pdf_merge' },
-        { type: 'tool-call', toolName: 'pdf_merge' },
-        { type: 'tool-call', toolName: 'git_status' },
-      ]),
-    ])
-    expect(uso.calls).toEqual(['git_status', 'pdf_merge'])
+describe('usage read from the turn', () => {
+  it('counts tool calls by name and does not repeat the same tool', () => {
+    const usage = usageFromParts([tool('pdf_merge'), tool('pdf_merge'), tool('git_status')])
+    expect(usage.calls).toEqual(['git_status', 'pdf_merge'])
   })
 
   it('counts tools_load apart — it is the hop telemetry wants to measure', () => {
-    const uso = usageFromHistory([
-      message([
-        { type: 'tool-call', toolName: 'tools_load' },
-        { type: 'tool-call', toolName: 'tools_load' },
-        { type: 'tool-call', toolName: 'pdf_merge' },
-      ]),
-    ])
-    expect(uso.loads).toBe(2)
-    expect(uso.calls).toEqual(['pdf_merge', 'tools_load'])
+    const usage = usageFromParts([tool('tools_load'), tool('tools_load'), tool('pdf_merge')])
+    expect(usage.loads).toBe(2)
+    expect(usage.calls).toEqual(['pdf_merge', 'tools_load'])
   })
 
-  it('counts only a result marked as error', () => {
-    const uso = usageFromHistory([
-      message([
-        { type: 'tool-result', isError: true },
-        { type: 'tool-result', isError: false },
-        { type: 'tool-result' },
-      ]),
-    ])
-    expect(uso.failed).toBe(1)
+  it('counts only a call that ended in error', () => {
+    const usage = usageFromParts([tool('a', 'error'), tool('b', 'done'), tool('c', 'running')])
+    expect(usage.failed).toBe(1)
   })
 
-  it('ignores a message without content in a list and a part that is not a tool', () => {
-    const uso = usageFromHistory([
-      { role: 'user', content: 'loose text' },
-      null,
-      message([{ type: 'text', text: 'oi' }, { type: 'tool-call' }]),
-    ])
-    expect(uso).toEqual({ loads: 0, calls: [], failed: 0 })
+  it('ignores parts that are not tools', () => {
+    const usage = usageFromParts([{ id: 't', type: 'text', text: 'oi' } as MessagePart])
+    expect(usage).toEqual({ loads: 0, calls: [], failed: 0 })
   })
 })
