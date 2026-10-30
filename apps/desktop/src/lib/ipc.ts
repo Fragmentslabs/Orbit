@@ -661,11 +661,6 @@ export const routinesApi = {
     window.ipcRenderer.invoke("routines:approvePending", id) as Promise<Routine | null>,
   discardPending: (id: string) =>
     window.ipcRenderer.invoke("routines:discardPending", id) as Promise<void>,
-  /** Background (macOS): LaunchAgent that relaunches the app with --hidden. */
-  backgroundState: () =>
-    window.ipcRenderer.invoke("routines:background:state") as Promise<{ active: boolean; supported: boolean }>,
-  applyBackground: (active: boolean) =>
-    window.ipcRenderer.invoke("routines:background:apply", active) as Promise<{ ok: boolean; error?: string }>,
   generate: (
     description: string,
     model: RoutineModel,

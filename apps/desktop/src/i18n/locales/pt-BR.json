@@ -2686,10 +2686,6 @@
       "summaryWorkdays": "Seg a Sex às {{time}}",
       "summaryWeekend": "Fim de semana às {{time}}"
     },
-    "background": {
-      "title": "Rodar em segundo plano",
-      "hint": "O app reabre sozinho se você sair — as rotinas disparam mesmo sem ninguém abrir o Orbit."
-    },
     "modes": {
       "loop": {
         "name": "Loop",

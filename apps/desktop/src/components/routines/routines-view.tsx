@@ -2,8 +2,6 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { MessageSquareIcon, PlusIcon, TerminalIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { routinesApi } from "@/src/lib/ipc"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -34,12 +32,6 @@ export function RoutinesView() {
   const sessions = useSessionStore((s) => s.sessions)
   const sessionsLoaded = useSessionStore((s) => s.initialized)
   const [createOpen, setCreateOpen] = useState(false)
-  // Background (macOS): LaunchAgent that relaunches the app with --hidden.
-  const [background, setBackground] = useState<{ active: boolean; supported: boolean } | null>(null)
-
-  useEffect(() => {
-    void routinesApi.backgroundState().then(setBackground)
-  }, [])
 
   const open = openId ? routines.find((r) => r.id === openId && r.mode === mode) : undefined
   const inMode = routines.filter((r) => r.mode === mode)
@@ -107,23 +99,6 @@ export function RoutinesView() {
       )}
 
       <RoutineList mode={mode} onCreateNew={() => setCreateOpen(true)} />
-
-      {background?.supported && (
-        <div className="flex shrink-0 items-center gap-3 border-t px-1 pb-1 pt-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-foreground">{t("routines.background.title")}</p>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">{t("routines.background.hint")}</p>
-          </div>
-          <Switch
-            checked={background.active}
-            onCheckedChange={async (v) => {
-              const r = await routinesApi.applyBackground(v)
-              setBackground({ active: v && r.ok, supported: true })
-            }}
-            aria-label={t("routines.background.title")}
-          />
-        </div>
-      )}
 
       <CreateRoutineDialog
         open={createOpen}

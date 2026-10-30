@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, globalShortcut, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, globalShortcut, nativeImage, nativeTheme, ClipboardItem, session, powerMonitor, type MenuItemConstructorOptions } from 'electron'
 import {
   disposeOverlay,
   hideOverlay,
@@ -204,7 +204,7 @@ import * as pipeline from './lib/pipeline'
 import { createChatWorktree, listWorktrees, removeChatWorktree, validateWorktreesFolder } from './lib/worktrees/service'
 import { folderInMainRepository } from './lib/worktrees/main'
 import * as routines from './lib/routines'
-import { applyBackground, backgroundState } from './lib/routines/background'
+import { installBackgroundAgent } from './lib/routines/background'
 import { approvePendingRoutine, discardPendingRoutine, listPendingRoutines } from './lib/routines/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
@@ -498,6 +498,9 @@ function queueOpenFolder(directory: string) {
 }
 
 app.on("second-instance", (_event, argv) => {
+  // Born from the LaunchAgent (--hidden): it comes from launchd, not from someone
+  // opening the app, so it must not pull the window to the front.
+  if (argv.includes('--hidden')) return
   // Relaunching the app is a per-window request: on macOS it may have been closed
   // (the app stays alive in the Dock), and without this the relaunch would do nothing.
   showMainWindow()
@@ -679,7 +682,17 @@ function createAppMenu() {
         { role: 'hideOthers', label: 'Hide Others' },
         { role: 'unhide', label: 'Show All' },
         { type: 'separator' },
-        { role: 'quit', label: 'Quit Orbit' },
+        // ⌘Q closes the window and the app stays in the Dock — routines run with
+        // no window, so this is NOT the way out. Leaving is the item below, which
+        // sets `quitting` and goes through the `before-quit` for real.
+        {
+          label: 'Close Window',
+          accelerator: 'Cmd+Q',
+          click: () => {
+            if (win && !win.isDestroyed()) win.close()
+          },
+        },
+        { label: 'Quit Orbit…', accelerator: 'Cmd+Shift+Q', click: quitApp },
       ],
     },
     {
@@ -1873,10 +1886,10 @@ app.whenReady().then(() => {
   ipcMain.handle('routines:pending', () => listPendingRoutines())
   ipcMain.handle('routines:approvePending', (_e, id: string) => approvePendingRoutine(id))
   ipcMain.handle('routines:discardPending', (_e, id: string) => discardPendingRoutine(id))
-  // Background (macOS): LaunchAgent that relaunches the app with --hidden.
-  ipcMain.handle('routines:background:state', () => backgroundState())
-  ipcMain.handle('routines:background:apply', (_e, active: boolean) => applyBackground(active))
   routines.startScheduler()
+  // Residency (macOS): the LaunchAgent that brings the app back at login and
+  // after a crash, hidden. Routines are what it exists for.
+  void installBackgroundAgent()
 
   // Media gallery ("Media" tab of the right panel)
   ipcMain.handle('media:list', (_event, filter?: MediaFilter) => listMedia(filter))
@@ -2557,7 +2570,17 @@ app.whenReady().then(() => {
     ),
   )
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
+    // Resident by design: on macOS closing the window is not the app leaving —
+    // routines fire with no window at all, and ⌘Q or the Dock taking the process
+    // down would take the scheduler with it. A real exit is asked for explicitly
+    // (`quitApp`: the menu item and the tray) or by the system, which warns here
+    // through `powerMonitor` on the way out.
+    if (process.platform === 'darwin' && !quitting) {
+      event.preventDefault()
+      if (win && !win.isDestroyed()) win.close()
+      return
+    }
     // The real exit starts here: from here on the window `close` can no longer
     // be converted into hiding.
     quitting = true
@@ -2575,6 +2598,12 @@ app.whenReady().then(() => {
     pipeline.abortAll()
     routines.stopScheduler()
     stopLintWorkers()
+  })
+
+  // Logout or restart: the system is asking. Marking the exit here is what lets
+  // the `before-quit` above go through instead of holding the shutdown.
+  powerMonitor.on('shutdown', () => {
+    quitting = true
   })
 
   // Pre-registered local providers (Ollama, LM Studio)
@@ -2621,7 +2650,11 @@ app.whenReady().then(() => {
   if (app.isPackaged) void registerOpenWith()
 
   // Auto-update via GitHub (ignored on MAS/Windows Store/linux-deb)
-  setupAutoUpdater()
+  setupAutoUpdater({
+    onBeforeInstallQuit: () => {
+      quitting = true
+    },
+  })
 
   // The on-disk copy of the settings is worth before the renderer pushes its
   // own: "cookies until quit" clears here, before any browser tab

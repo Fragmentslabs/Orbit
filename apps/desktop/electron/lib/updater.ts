@@ -16,7 +16,7 @@ let started = false
  * download anyway. On Linux, only AppImage supports automatic update
  * (deb is a manual update).
  */
-export function setupAutoUpdater() {
+export function setupAutoUpdater(opts?: { onBeforeInstallQuit?: () => void }) {
   if (!app.isPackaged) return
   if (process.mas || process.windowsStore) return
   if (process.platform === 'linux' && !process.env.APPIMAGE) return
@@ -51,6 +51,10 @@ export function setupAutoUpdater() {
         ? await dialog.showMessageBox(win, options)
         : await dialog.showMessageBox(options)
       if (response === 0) {
+        // Installing means leaving for real: the app is resident on macOS, and
+        // without this mark the `before-quit` would only close the window and the
+        // update would never install.
+        opts?.onBeforeInstallQuit?.()
         // Leaves the current stack before restarting: avoids hanging the quit
         setImmediate(() => autoUpdater.quitAndInstall())
       }

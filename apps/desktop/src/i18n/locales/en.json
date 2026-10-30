@@ -2686,10 +2686,6 @@
       "summaryWorkdays": "Mon to Fri at {{time}}",
       "summaryWeekend": "Weekends at {{time}}"
     },
-    "background": {
-      "title": "Run in the background",
-      "hint": "The app relaunches itself if you quit — routines fire even when nobody opens Orbit."
-    },
     "modes": {
       "loop": {
         "name": "Loop",
