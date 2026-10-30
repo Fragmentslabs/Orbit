@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, LoaderIcon, MessageSquarePlusIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, Loader2Icon, MessageSquarePlusIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Pipeline, Task } from "@shared/pipeline"
 import { instructionsForRound, notesForRound, returnForRound, taskRound } from "@shared/pipeline"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -520,7 +520,7 @@ function LiveRun({ taskId, phaseIndex }: { taskId: string; phaseIndex: number })
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-primary/30 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-primary shadow-sm">
-          <LoaderIcon className="size-3.5 shrink-0 animate-spin" />
+          <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
           <Shimmer>{t("pipeline.running")}</Shimmer>
         </span>
         <BrowserTestChip sessionId={`pipeline_${taskId}`} />

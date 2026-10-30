@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation, Trans } from "react-i18next"
-import { GitBranch, Check, LoaderIcon, PlusIcon } from "lucide-react"
+import { GitBranch, Check, Loader2Icon, PlusIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
@@ -224,7 +224,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
             }
           >
             {loading || checkoutLoading ? (
-              <LoaderIcon className="size-3 animate-spin" />
+              <Loader2Icon className="size-3 animate-spin" />
             ) : (
               <GitBranch className="size-3 text-muted-foreground" />
             )}

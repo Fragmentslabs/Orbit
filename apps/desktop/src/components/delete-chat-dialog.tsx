@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { FolderGit2, LoaderIcon } from "lucide-react"
+import { FolderGit2, Loader2Icon } from "lucide-react"
 import type { SessionInfo } from "@shared/chat"
 import type { WorktreeList, WorktreeInfo } from "@shared/worktrees"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -146,7 +146,7 @@ export function DeleteChatDialog({
             {t("common.cancel")}
           </Button>
           <Button variant="destructive" onClick={() => void confirm()} disabled={submitting || blocked}>
-            {submitting && <LoaderIcon className="size-3.5 animate-spin" />}
+            {submitting && <Loader2Icon className="size-3.5 animate-spin" />}
             {t("sidebar.session.confirmDelete")}
           </Button>
         </DialogFooter>

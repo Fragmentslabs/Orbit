@@ -6,7 +6,7 @@ import {
   EyeIcon,
   FileTextIcon,
   GlobeIcon,
-  LoaderIcon,
+  Loader2Icon,
   SearchIcon,
   SquareIcon,
   TerminalIcon,
@@ -56,7 +56,7 @@ function TaskStatusIcon({ status }: { status: OrchestrationTask["status"] }) {
   switch (status) {
     case "submitted":
     case "streaming":
-      return <LoaderIcon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+      return <Loader2Icon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
     case "error":
       return <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
     default:

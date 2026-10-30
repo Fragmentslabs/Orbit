@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, LoaderIcon, MessageSquareIcon, TerminalIcon, WrenchIcon, X, XCircleIcon } from "lucide-react"
+import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, Loader2Icon, MessageSquareIcon, TerminalIcon, WrenchIcon, X, XCircleIcon } from "lucide-react"
 import type { OrchestrationPlan, OrchestrationTask } from "@shared/chat"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/hint"
@@ -71,7 +71,7 @@ export function TaskProgress({
         >
           <ChevronDown className={cn("size-3 shrink-0 transition-transform text-muted-foreground", !expanded && "-rotate-90")} />
           {running ? (
-            <LoaderIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+            <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
           ) : allDoneOrError && hasErrors ? (
             <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
           ) : (
@@ -140,7 +140,7 @@ export function TaskProgress({
               }}
               className="flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] text-foreground transition-colors hover:bg-sidebar-accent disabled:opacity-50"
             >
-              {merging && <LoaderIcon className="size-3 animate-spin" />}
+              {merging && <Loader2Icon className="size-3 animate-spin" />}
               {t("taskProgress.rejoin")}
             </button>
           )}
@@ -204,7 +204,7 @@ function TaskIcon({ status }: { status: TaskItem["status"] }) {
     case "submitted":
     case "streaming":
     case "fallback":
-      return <LoaderIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+      return <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
     case "error":
       return <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
     case "idle":
@@ -219,7 +219,7 @@ function PhaseIcon({ phase }: { phase: TaskPhase }) {
     case "queued":
       return <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
     case "running":
-      return <LoaderIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+      return <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
     case "review":
       return <EyeIcon className="size-3.5 shrink-0 animate-pulse text-primary" />
     case "adjustment":

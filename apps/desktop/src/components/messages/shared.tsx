@@ -7,7 +7,7 @@ import {
   CopyIcon,
   Eye,
   FileTextIcon,
-  LoaderIcon,
+  Loader2Icon,
   MessageSquareQuoteIcon,
   RefreshCwIcon,
   RotateCwIcon,
@@ -290,7 +290,7 @@ export function GenericToolView({ part, label, subtitle, sessionId }: {
     <Collapsible open={open} onOpenChange={setOpen} className="not-prose my-1.5 w-full">
       <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-left text-xs hover:bg-muted/70">
         {part.state === "running" ? (
-          <LoaderIcon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+          <Loader2Icon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
         ) : part.state === "error" ? (
           <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
         ) : (

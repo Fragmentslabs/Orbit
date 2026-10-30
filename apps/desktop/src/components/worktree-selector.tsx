@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, FolderGit2, LoaderIcon, PlusIcon, XIcon } from "lucide-react"
+import { Check, FolderGit2, Loader2Icon, PlusIcon, XIcon } from "lucide-react"
 import { BASE_REMOTE, type WorktreeInfo } from "@shared/worktrees"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -150,7 +150,7 @@ export function WorktreeSelector({
             }
           >
             {loading && !list ? (
-              <LoaderIcon className="size-3 animate-spin" />
+              <Loader2Icon className="size-3 animate-spin" />
             ) : (
               <FolderGit2 className={cn("size-3", current && !current.primary ? "text-primary" : "text-muted-foreground")} />
             )}
@@ -356,7 +356,7 @@ function CreateWorktreeDialog({
 
           {submitting && (
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <LoaderIcon className="size-3 animate-spin" />
+              <Loader2Icon className="size-3 animate-spin" />
               {t("worktree.preparing")}
             </p>
           )}
@@ -451,7 +451,7 @@ function RemoveWorktreeDialog({
             {t("common.cancel")}
           </Button>
           <Button variant="destructive" onClick={() => void confirm()} disabled={submitting}>
-            {submitting ? <LoaderIcon className="size-3.5 animate-spin" /> : null}
+            {submitting ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
             {t("worktree.remove")}
           </Button>
         </DialogFooter>
