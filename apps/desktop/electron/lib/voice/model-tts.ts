@@ -111,7 +111,7 @@ export async function modelTtsStatus(): Promise<VoiceModelTtsStatus> {
   try {
     const route = await resolveSpeechRoute()
     if (!route) {
-      return { available: false, reason: "nenhum provedor com modelo de fala configurado" }
+      return { available: false, reason: "no provider with a speech model configured" }
     }
     return { available: true, providerId: route.providerId, modelId: route.modelId }
   } catch (err) {
@@ -174,7 +174,7 @@ export async function speakWithModel(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "")
-    throw new Error(`o modelo de fala respondeu ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`)
+    throw new Error(`the speech model answered ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`)
   }
 
   const pcm = Buffer.from(await response.arrayBuffer())

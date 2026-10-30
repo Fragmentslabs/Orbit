@@ -10,7 +10,7 @@ import {
   type ValidateWorktreesFolder,
 } from '@shared/worktrees'
 import { killProcess, listProcesses } from '../process-manager'
-import { descartarSnapshots } from '../snapshot'
+import { discardSnapshots } from '../snapshot'
 import {
   branchExists,
   configuredRoot,
@@ -289,8 +289,8 @@ export async function removeChatWorktree(opts: {
   await fs.rm(target.path, { recursive: true, force: true })
   await git(list.repo, ['worktree', 'prune']).catch(() => {})
   if (opts.deleteBranch && target.branch) await git(list.repo, ['branch', '-D', target.branch]).catch(() => {})
-  await descartarSnapshots(target.path).catch(() => {})
-  if (target.folder !== target.path) await descartarSnapshots(target.folder).catch(() => {})
+  await discardSnapshots(target.path).catch(() => {})
+  if (target.folder !== target.path) await discardSnapshots(target.folder).catch(() => {})
 }
 
 /**

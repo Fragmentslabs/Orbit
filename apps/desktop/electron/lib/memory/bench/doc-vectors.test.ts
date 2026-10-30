@@ -95,7 +95,7 @@ const quantile = (values: number[], q: number): number => {
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
 }
 
-describe.skipIf(!enabled)('documento anexado visto pelo vetor', () => {
+describe.skipIf(!enabled)('attached document seen by the vector', () => {
   it(
     'compares text, single document, chunks and hybrid on the same queries',
     async () => {
@@ -171,30 +171,30 @@ describe.skipIf(!enabled)('documento anexado visto pelo vetor', () => {
       }
 
       const rows = (queries: typeof probes.doc) => [
-        line('só o texto (hoje)', measure(queries, runVec(vecOf))),
-        line('+ documento único', measure(queries, runVec(withDoc))),
-        line('+ trechos', measure(queries, runVec(withChunks))),
-        line('lexical (hoje)', measure(queries, lexical)),
-        line('híbrido lexical+trechos', measure(queries, hybrid)),
+        line('text only (today)', measure(queries, runVec(vecOf))),
+        line('+ single document', measure(queries, runVec(withDoc))),
+        line('+ chunks', measure(queries, runVec(withChunks))),
+        line('lexical (today)', measure(queries, lexical)),
+        line('hybrid lexical+chunks', measure(queries, hybrid)),
       ]
 
       const chunkLens = chunkTexts.map((c) => c.length)
       const report = [
         '',
-        `[doc-vectors] ${pool.length} memórias · ${docs.size} documentos · ${chunkTexts.length} trechos`,
-        `trecho: mediana ${quantile(chunkLens, 0.5)} car · p90 ${quantile(chunkLens, 0.9)} car · máx ${Math.max(...chunkLens)}`,
+        `[doc-vectors] ${pool.length} memories · ${docs.size} documents · ${chunkTexts.length} chunks`,
+        `chunk: median ${quantile(chunkLens, 0.5)} chars · p90 ${quantile(chunkLens, 0.9)} chars · max ${Math.max(...chunkLens)}`,
         `documentos que estouram a janela de ${MAX_TOKENS} tokens: ${truncDocs} de ${docIds.length}`,
         '',
-        `tempo: texto ${textMs.toFixed(0)} ms · trechos ${chunkMs.toFixed(0)} ms · ${queries.length} consultas ${queryMs.toFixed(0)} ms`,
-        `por vetor: ${(chunkMs / Math.max(chunkTexts.length, 1)).toFixed(2)} ms · por consulta: ${(queryMs / Math.max(queries.length, 1)).toFixed(2)} ms`,
+        `time: text ${textMs.toFixed(0)} ms · chunks ${chunkMs.toFixed(0)} ms · ${queries.length} queries ${queryMs.toFixed(0)} ms`,
+        `per vector: ${(chunkMs / Math.max(chunkTexts.length, 1)).toFixed(2)} ms · per query: ${(queryMs / Math.max(queries.length, 1)).toFixed(2)} ms`,
         '',
-        `consultas que só o documento responde (${probes.doc.length})`,
+        `queries only the document answers (${probes.doc.length})`,
         ...rows(probes.doc),
         '',
-        `regressão nas consultas de texto (${probes.text.length})`,
+        `regression on the text queries (${probes.text.length})`,
         ...rows(probes.text),
         '',
-        'ganho do híbrido sobre o lexical, nas de doc:',
+        'gain of the hybrid over the lexical, on the doc ones:',
         `  ${delta(measure(probes.doc, lexical), measure(probes.doc, hybrid))}`,
         '',
       ]

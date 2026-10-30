@@ -99,15 +99,22 @@ export function claimsCompletion(text: string): boolean {
  * fix (a false positive of the trigger — e.g. the text described work from a
  * previous turn). The engine hides these texts from the chat (source 'internal'):
  * they are internal verification, not content for the user. Real corrections
- * ("Correction: …") do not match and remain visible.
+ * do not match and remain visible.
+ *
+ * The contract is the `NOTHING_TO_FIX` token — a token, not a sentence, so it
+ * does not depend on the conversation's language. "Nada a corrigir" is what the
+ * prompt asked for before, and still arrives from models that kept the habit.
  */
 export function isNoCorrectionReply(text: string): boolean {
   const t = text.trim().toLowerCase()
-  if (t.startsWith('nada a corrigir')) return true
+  if (/^(nothing_to_fix|nothing to fix|nothing to correct|nada a corrigir)\b/.test(t)) return true
   // Style "Confirmed: no change was made" — the negation has to come
   // right after the start; "Correct, actually I did not edit anything" (a real correction)
   // does not match.
-  return /^(confirmado|correto|ok)[\s:,-]*\s*(nada|nenhum[ao]?|sem)(\s+a corrigir|\s+altera[cç]|\s+arquivo|\s+mudança)/i.test(t)
+  return (
+    /^(confirmed|correct|ok)[\s:,-]*\s*(nothing|no)(\s+to (fix|correct)|\s+changes?\b|\s+files?\b)/i.test(t) ||
+    /^(confirmado|correto|ok)[\s:,-]*\s*(nada|nenhum[ao]?|sem)(\s+a corrigir|\s+altera[cç]|\s+arquivo|\s+mudança)/i.test(t)
+  )
 }
 
 /**

@@ -215,6 +215,40 @@ export const MESSAGES = {
     'pt-BR': 'A análise não encontrou nada específico o bastante para valer uma memória.',
     en: 'The analysis found nothing specific enough to be worth a memory.',
   },
+
+  // ── Resuming a pending request (ask-resume) — written in the user's voice ─
+  'resume.header': {
+    'pt-BR': 'Retomando um pedido que ficou pendente: a execução anterior terminou antes de eu responder. Segue o que ficou decidido:',
+    en: 'Resuming a pending request: the previous run ended before I answered. Here is what was decided:',
+  },
+  'resume.footer': {
+    'pt-BR': 'Continue de onde parou, considerando isto.',
+    en: 'Continue from where you stopped, taking this into account.',
+  },
+  'resume.authorize': {
+    'pt-BR': 'Autorizo a ação',
+    en: 'I authorize the action',
+  },
+  'resume.noAnswer': {
+    'pt-BR': '(sem resposta)',
+    en: '(no answer)',
+  },
+
+  // ── Subchats — the first line of the child chat, in the voice of whoever opened it ─
+  'subchat.kickoff': {
+    'pt-BR': 'Pode começar. Trabalhe até concluir — o resumo acima tem o contexto, então não pare para perguntar o que ele já responde.',
+    en: "Go ahead. Work through to the end — the summary above has the context, so don't stop to ask what it already answers.",
+  },
+  'subchat.fromParent': {
+    'pt-BR': 'Mensagem do chat principal: ',
+    en: 'Message from the main chat: ',
+  },
+
+  // ── Media tools ───────────────────────────────────────────────────────────
+  'tools.transcript': {
+    'pt-BR': 'Transcrição',
+    en: 'Transcript',
+  },
   'init.count.created': {
     'pt-BR': '{{count}} nova(s)',
     en: '{{count}} new',

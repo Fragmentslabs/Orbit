@@ -72,16 +72,16 @@ export const TTS_BYTES = TTS_ASSETS.reduce((sum, file) => sum + file.bytes, 0)
 
 /** Supertonic 3 voices — each one speaks the 31 languages (it is not per language). */
 export const TTS_VOICES: { id: string; label: string }[] = [
-  { id: "M1", label: "Masculina animada e confiante (narração, institucional)" },
-  { id: "M2", label: "Masculina grave e robusta (corporativo, documentário)" },
-  { id: "M3", label: "Masculina polida e autoritária (apresentações, negócios)" },
-  { id: "M4", label: "Masculina neutra e suave (educacional, explicadores)" },
-  { id: "M5", label: "Masculina calorosa, sussurrada (audiolivros)" },
-  { id: "F1", label: "Feminina calma, tom levemente grave (atendimento)" },
-  { id: "F2", label: "Feminina brilhante e animada, jovial (conteúdo jovem, ads)" },
-  { id: "F3", label: "Feminina estilo locutora (comerciais, notícias)" },
-  { id: "F4", label: "Feminina nítida e confiante, expressiva (treinamento)" },
-  { id: "F5", label: "Feminina gentil e suave, calmante (bem-estar)" },
+  { id: "M1", label: "Male, lively and confident (narration, corporate)" },
+  { id: "M2", label: "Male, deep and robust (corporate, documentary)" },
+  { id: "M3", label: "Male, polished and authoritative (presentations, business)" },
+  { id: "M4", label: "Male, neutral and soft (educational, explainers)" },
+  { id: "M5", label: "Male, warm and whispery (audiobooks)" },
+  { id: "F1", label: "Female, calm, slightly low tone (customer service)" },
+  { id: "F2", label: "Female, bright and lively, youthful (youth content, ads)" },
+  { id: "F3", label: "Female, announcer style (commercials, news)" },
+  { id: "F4", label: "Female, crisp and confident, expressive (training)" },
+  { id: "F5", label: "Female, gentle and soft, soothing (wellness)" },
 ]
 
 /** The 31 languages of the weights + `na` (agnostic mode). `pt` is verified. */

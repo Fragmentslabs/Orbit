@@ -70,7 +70,7 @@ export const P1_SELECTION: SelectionParams = {
 
 export const P1: Policy = {
   id: 'P1',
-  name: 'injeção calibrada (família F)',
+  name: 'calibrated injection (family F)',
   retrieval: PRODUCTION_RETRIEVAL,
   selection: P1_SELECTION,
   useNoise: false,
@@ -79,7 +79,7 @@ export const P1: Policy = {
 /** Pointers only: no automatic injection (impossible injectCos). */
 export const P2: Policy = {
   id: 'P2',
-  name: 'somente ponteiros (injeção desligada)',
+  name: 'pointers only (injection off)',
   retrieval: PRODUCTION_RETRIEVAL,
   selection: { ...P1_SELECTION, injectCos: 2, lexInjectCoverage: 2 },
   useNoise: false,
@@ -92,7 +92,7 @@ export const P2: Policy = {
 export function P3(injectCos: number): Policy {
   return {
     id: 'P3',
-    name: `injeção estrita (cosseno >= ${injectCos.toFixed(2)}, 0 FP no dev)`,
+    name: `strict injection (cosine >= ${injectCos.toFixed(2)}, 0 FP on dev)`,
     retrieval: PRODUCTION_RETRIEVAL,
     selection: { ...P1_SELECTION, injectCos },
     useNoise: false,

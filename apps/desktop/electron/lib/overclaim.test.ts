@@ -74,6 +74,10 @@ describe('claimsCompletion', () => {
 
 describe('isNoCorrectionReply', () => {
   it.each([
+    'NOTHING_TO_FIX',
+    'nothing_to_fix.',
+    'Nothing to fix — the text described the previous turn.',
+    'Confirmed: no changes were made in this turn.',
     'Nada a corrigir — o texto descrevia o turno anterior.',
     'Confirmado: nenhuma alteração foi feita neste turno.',
     'Ok, nada a corrigir.',
@@ -85,6 +89,7 @@ describe('isNoCorrectionReply', () => {
     'Correção: eu disse que criei o arquivo, mas não criei.',
     'Correto, na verdade não editei nada — vou fazer agora.',
     'Revisei e realmente faltou aplicar a mudança.',
+    'Correct, I did not actually edit anything — doing it now.',
   ])('keeps the real correction visible: %s', (text) => {
     expect(isNoCorrectionReply(text)).toBe(false)
   })

@@ -319,13 +319,13 @@ export function describeScan(scan: ProjectScan): string {
     section('Testes', scan.tests.join(', ')),
     section('Infraestrutura', scan.infra.join(', ')),
     section('Scripts', Object.entries(scan.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')),
-    section('Estrutura', '```\n' + scan.structure.join('\n') + '\n```'),
-    section('Subprojetos detectados', subprojectsBlock),
+    section('Structure', '```\n' + scan.structure.join('\n') + '\n```'),
+    section('Subprojects detected', subprojectsBlock),
     section('Documentation found', scan.docs.map((d) => `- ${d}`).join('\n')),
     section(
-      'Documentos do projeto (PDF/DOCX/planilha)',
+      'Project documents (PDF/DOCX/spreadsheet)',
       scan.binaryDocs.length > 0
-        ? `${scan.binaryDocs.map((d) => `- ${d}`).join('\n')}\n\nRead with \`read\` (returns page by page) and locate passages with \`grep\` (reports \`file:p12\`). Do not try to read them as plain textples.`
+        ? `${scan.binaryDocs.map((d) => `- ${d}`).join('\n')}\n\nRead with \`read\` (returns page by page) and locate passages with \`grep\` (reports \`file:p12\`). Do not try to read them as plain text.`
         : '',
     ),
     section('Schemas de banco', scan.schemas.map((s) => `- ${s}`).join('\n')),

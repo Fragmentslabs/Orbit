@@ -95,8 +95,8 @@ export function PipelineCreateDialog({
 
   // Built-in phases have translated name/description (the prompt stays in
   // English, like the rest of the app's prompts). The user's use what they wrote.
-  // The label family comes from `kind`: `i18nKey` is the persisted template id
-  // (Portuguese, kept for templates stored by older versions).
+  // The label family comes from `kind`: `i18nKey` is the persisted template id,
+  // which only says the phase is a built-in one.
   const label = (tpl: PhaseTemplate) =>
     tpl.i18nKey && !tpl.custom
       ? {

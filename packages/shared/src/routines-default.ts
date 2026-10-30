@@ -53,9 +53,15 @@ const MAINTENANCE_MODES: RoutineModes = {
   simple: false,
 }
 
+/** Preset ids before the English rename — already seeded under the old id means seeded. */
+export const LEGACY_DEFAULT_ROUTINE_IDS: Record<string, string> = {
+  'padrao:limpeza-chats': 'default:archive-chats',
+  'padrao:limpeza-memorias': 'default:consolidate-memories',
+}
+
 export const DEFAULT_ROUTINES: DefaultRoutine[] = [
   {
-    id: 'padrao:limpeza-chats',
+    id: 'default:archive-chats',
     title: 'Archive inactive chats',
     schedule: { time: '03:00', days: [1] },
     modes: MAINTENANCE_MODES,
@@ -88,7 +94,7 @@ RULES
 - Do not touch files, do not run commands, do not change anything but the chats.`,
   },
   {
-    id: 'padrao:limpeza-memorias',
+    id: 'default:consolidate-memories',
     title: 'Consolidate memories',
     schedule: { time: '03:30', days: [1] },
     modes: MAINTENANCE_MODES,

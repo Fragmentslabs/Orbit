@@ -17,20 +17,22 @@ import type { CommandPolicy, PhaseTemplate } from '@shared/pipeline'
 
 /**
  * Template ids and their i18n keys. They are persisted (a pipeline phase keeps
- * the `templateId` it came from), so they are NOT renamed with the domain.
+ * the `templateId` it came from); the ones written before the English rename
+ * (`desenvolvimento`, `validacao`, `seguranca`, `revisao`) are mapped on read by
+ * `pipeline/repo.ts`.
  */
-const ID_DEVELOPMENT = 'desenvolvimento'
-const ID_VALIDATION = 'validacao'
-const ID_SECURITY = 'seguranca'
-const ID_REVIEW = 'revisao'
-const ID_INFRA = 'infra'
+export const ID_DEVELOPMENT = 'development'
+export const ID_VALIDATION = 'validation'
+export const ID_SECURITY = 'security'
+export const ID_REVIEW = 'review'
+export const ID_INFRA = 'infra'
 
 /** Block common to every phase: how to close the phase. */
 const CONTRACT = `
 ## How to finish this phase
-End your turn with the phase note in Markdown, inside a fenced block tagged \`anotacao\`:
+End your turn with the phase note in Markdown, inside a fenced block tagged \`note\`:
 
-\`\`\`anotacao
+\`\`\`note
 <your note here>
 \`\`\`
 

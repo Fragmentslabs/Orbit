@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { OrchestrationTask } from '@shared/chat'
-import { descartarSnapshots } from '../snapshot'
+import { discardSnapshots } from '../snapshot'
 import { folderInMainRepository } from '../worktrees/main'
 import {
   findExtras,
@@ -187,13 +187,13 @@ export async function removeWorkerWorktree(worktree: WorkerWorktree, deleteBranc
     await git(repo, ['worktree', 'prune']).catch(() => {})
     if (deleteBranch) await git(repo, ['branch', '-d', worktree.branch]).catch(() => {})
   }
-  await descartarSnapshots(worktree.folder).catch(() => {})
+  await discardSnapshots(worktree.folder).catch(() => {})
 }
 
 /**
  * Files the worker changed in the worktree since the base (committed,
  * uncommitted and new), relative to the chat folder inside it — the same
- * reference as the task's `arquivos`. Whatever falls outside the subfolder comes
+ * reference as the task's `files`. Whatever falls outside the subfolder comes
  * out with "../".
  */
 export async function worktreeFiles(worktree: WorkerWorktree): Promise<string[]> {

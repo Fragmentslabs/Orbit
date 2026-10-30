@@ -36,6 +36,7 @@ const legacyPipeline = {
       thinkingNivel: 2,
       ordem: 0,
       tipo: 'desenvolvimento',
+      templateId: 'validacao',
       tools: ['leitura', 'memoria', 'edit'],
     },
   ],
@@ -48,7 +49,7 @@ const legacyPipeline = {
   commitPrompt: 'msg',
   printsDoResultado: true,
   politicaComandos: { bloqueados: ['rm -rf'], controlados: ['git push'] },
-  templateId: 'desenvolvimento',
+  templateId: 'desenvolvimento,validacao,infra',
   criadoEm: '2024-01-02T03:04:05.000Z',
 }
 
@@ -156,6 +157,8 @@ describe('legacy data migration', () => {
       commitAtEnd: true,
       resultScreenshots: true,
       commandPolicy: { blocked: ['rm -rf'], controlled: ['git push'] },
+      // The built-in template ids are English now; `infra` never changed.
+      templateId: 'development,validation,infra',
       createdAt: '2024-01-02T03:04:05.000Z',
     })
     expect(pipelines[0].phases[0]).toMatchObject({
@@ -165,6 +168,7 @@ describe('legacy data migration', () => {
       thinkingLevel: 2,
       order: 0,
       kind: 'development',
+      templateId: 'validation',
       tools: ['read', 'memory', 'edit'],
     })
 
@@ -206,7 +210,14 @@ describe('legacy data migration', () => {
     expect(onDisk[0].name).toBe('My Project')
     expect(onDisk[0].nome).toBeUndefined()
     const templates = JSON.parse(fs.readFileSync(path.join(dir, 'templates.json'), 'utf8'))
-    expect(templates[0]).toMatchObject({ isDefault: true, userCreated: true, kind: 'development', tools: ['read'] })
+    expect(templates[0]).toMatchObject({
+      id: 'development',
+      i18nKey: 'development',
+      isDefault: true,
+      userCreated: true,
+      kind: 'development',
+      tools: ['read'],
+    })
   })
 
   it('is idempotent: a second read rewrites nothing and does not bring the legacy folder back', async () => {

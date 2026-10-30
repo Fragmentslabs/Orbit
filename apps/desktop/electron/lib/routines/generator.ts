@@ -33,7 +33,7 @@ Rules:
 - If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
 
 PIPELINE = ORBIT'S TASK BOARD, never a file:
-- In Orbit, "pipeline", "pipeline mode" and "board mode" all name the SAME feature: a board of phases (e.g. desenvolvimento → validação → code review → segurança → infra) where every task is a board item that agents pick up and run autonomously. The user may use any of these words, in any language.
+- In Orbit, "pipeline", "pipeline mode" and "board mode" all name the SAME feature: a board of phases (e.g. development → validation → code review → security → infra) where every task is a board item that agents pick up and run autonomously. The user may use any of these words, in any language.
 - When the description asks to create/open/add tasks, or to work "in pipeline mode", the routine must create BOARD TASKS through the pipeline tools: pipeline_list to find the board, then pipeline_create_task once per unit of work, each with a title and a self-contained description (goal, files involved, acceptance criteria).
 - Writing a markdown or JSON file (PIPELINE.md, TASKS.md, a checklist on disk) is NOT creating tasks and must never be the routine's output for these requests. The board is the destination; the repository is only read.
 - Say all of this explicitly in the prompt you write, naming the pipeline tools — the agent that runs the routine later has no access to this instruction and must not have to guess.

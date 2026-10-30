@@ -2046,7 +2046,7 @@ app.whenReady().then(() => {
       return { ok: false as const, error: `Could not generate the ${format.toUpperCase()} for this document.` }
     }
     const target = await saveExport(null, {
-      fileName: documentFileName(entry?.name ?? 'documento', format),
+      fileName: documentFileName(entry?.name ?? 'document', format),
       filters: [{ name: format.toUpperCase(), extensions: [format] }],
     })
     if (!target) return { ok: false as const, canceled: true as const }
@@ -2312,11 +2312,11 @@ app.whenReady().then(() => {
   ipcMain.handle('skills:import', async () => {
     if (!win) return { imported: false }
     const result = await dialog.showOpenDialog(win, {
-      title: 'Importar skill',
+      title: 'Import skill',
       properties: ['openFile', 'multiSelections'],
       filters: [
         { name: 'Skill (.skill, .md)', extensions: ['skill', 'md'] },
-        { name: 'Todos os arquivos', extensions: ['*'] },
+        { name: 'All files', extensions: ['*'] },
       ],
     })
     if (result.canceled) return { imported: false }

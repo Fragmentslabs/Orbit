@@ -17,43 +17,45 @@ export function formatCost(cost: number): string {
  * en-US default and would show "02:00 PM" even with the pt-BR locale.
  */
 export function formatTime(ts: number, locale: string): string {
-  const hour12 = !locale.toLowerCase().startsWith("pt")
   return new Date(ts).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
-    hour12,
+    hour12: uses12h(locale),
   })
 }
 
-/** Link between date and time: "às" in Portuguese, "at" in the others. */
-function dateTimeConnector(locale: string): string {
-  return locale.toLowerCase().startsWith("pt") ? "às" : "at"
-}
-
-/** Full date + time in the locale's pattern (e.g.: pt "quinta-feira, 6 de agosto de 2026 às 14:00"). */
-export function formatDateTime(ts: number, locale: string): string {
-  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "full" })
-  return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
-}
-
-/** Date (day, month and year, without the weekday name) + time (e.g.: pt "6 de agosto de 2026 às 14:00"). */
-export function formatDateTimeShort(ts: number, locale: string): string {
-  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "long" })
-  return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
+function uses12h(locale: string): boolean {
+  return !locale.toLowerCase().startsWith("pt")
 }
 
 /**
- * Date in numbers only + time (pt "27/08/2026 às 14:30", en "08/27/2026 at
- * 02:30 PM"). The day/month order comes from the locale itself — in English the month comes
- * first. For where the spelled-out month does not fit, like the commit card.
+ * Full date + time in the locale's pattern ("Thursday, August 6, 2026 at 2:00 PM").
+ * Intl joins the two parts itself, with the connector each language uses — no
+ * word of any language is written here.
+ */
+export function formatDateTime(ts: number, locale: string): string {
+  return new Date(ts).toLocaleString(locale, { dateStyle: "full", timeStyle: "short", hour12: uses12h(locale) })
+}
+
+/** Date (day, month and year, without the weekday name) + time ("August 6, 2026 at 2:00 PM"). */
+export function formatDateTimeShort(ts: number, locale: string): string {
+  return new Date(ts).toLocaleString(locale, { dateStyle: "long", timeStyle: "short", hour12: uses12h(locale) })
+}
+
+/**
+ * Date in numbers only + time ("08/27/2026, 02:30 PM"). The day/month order comes
+ * from the locale itself — in English the month comes first. For where the
+ * spelled-out month does not fit, like the commit card.
  */
 export function formatDateTimeNumeric(ts: number, locale: string): string {
-  const date = new Date(ts).toLocaleDateString(locale, {
+  return new Date(ts).toLocaleString(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: uses12h(locale),
   })
-  return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
 }
 
 /** Readable duration (e.g.: "3s", "1m 12s", "2h 05m") from an interval in ms. */

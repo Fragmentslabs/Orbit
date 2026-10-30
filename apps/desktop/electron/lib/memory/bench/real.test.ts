@@ -169,10 +169,10 @@ gated('real corpus (smoke)', () => {
           lenRatio: +(Math.min(A.text.length, B.text.length) / Math.max(A.text.length, B.text.length)).toFixed(2),
           verdict:
             jaccard(ta, tb) > 0.85 || A.text.includes(B.text) || B.text.includes(A.text)
-              ? 'duplicata provável'
+              ? 'probable duplicate'
               : jaccard(ta, tb) > 0.5
-                ? 'variação do mesmo fato'
-                : 'tema próximo, fatos distintos',
+                ? 'variation of the same fact'
+                : 'close topic, distinct facts',
         })
       }
     }

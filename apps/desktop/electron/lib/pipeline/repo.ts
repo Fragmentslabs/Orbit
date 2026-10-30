@@ -77,6 +77,20 @@ const KIND: Record<string, string> = {
   revisao: 'review',
   generico: 'generic',
 }
+/** Built-in template ids before the English rename; `infra` did not change. */
+const TEMPLATE_ID: Record<string, string> = {
+  desenvolvimento: 'development',
+  validacao: 'validation',
+  seguranca: 'security',
+  revisao: 'review',
+}
+/** A pipeline's `templateId` is the comma-joined list of its phases' template ids. */
+function templateIdList(value: unknown): string {
+  return String(value)
+    .split(',')
+    .map((id) => TEMPLATE_ID[id] ?? id)
+    .join(',')
+}
 const MODE: Record<string, string> = { automatico: 'automatic' }
 const STATUS: Record<string, string> = {
   pendente: 'pending',
@@ -109,7 +123,7 @@ function mapPhaseConfig(raw: Json): PhaseConfig {
     modelId: (raw.modelId as string) ?? '',
     thinkingLevel: Number(pick<number>(raw, 'thinkingLevel', 'thinkingNivel') ?? 0),
     ...(raw.reasoning !== undefined ? { reasoning: raw.reasoning as PhaseConfig['reasoning'] } : {}),
-    ...(raw.templateId !== undefined ? { templateId: String(raw.templateId) } : {}),
+    ...(raw.templateId !== undefined ? { templateId: legacyValue<string>(raw.templateId, TEMPLATE_ID) } : {}),
     tools: asArray<string>(raw.tools).map((tool) => legacyValue<AllowedTool>(tool, TOOL) ?? 'read'),
     order: Number(pick<number>(raw, 'order', 'ordem') ?? 0),
     ...(kind !== undefined ? { kind } : {}),
@@ -118,14 +132,14 @@ function mapPhaseConfig(raw: Json): PhaseConfig {
 
 function mapPhaseTemplate(raw: Json): PhaseTemplate {
   return {
-    id: String(raw.id),
+    id: legacyValue<string>(raw.id, TEMPLATE_ID) ?? '',
     name: pick<string>(raw, 'name', 'nome') ?? '',
     description: pick<string>(raw, 'description', 'descricao') ?? '',
     prompt: (raw.prompt as string) ?? '',
     tools: asArray<string>(raw.tools).map((tool) => legacyValue<AllowedTool>(tool, TOOL) ?? 'read'),
     isDefault: (pick<boolean>(raw, 'isDefault', 'padrao') ?? false) as boolean,
     ...(raw.custom !== undefined ? { custom: Boolean(raw.custom) } : {}),
-    ...(raw.i18nKey !== undefined ? { i18nKey: String(raw.i18nKey) } : {}),
+    ...(raw.i18nKey !== undefined ? { i18nKey: legacyValue<string>(raw.i18nKey, TEMPLATE_ID) } : {}),
     ...(pick(raw, 'userCreated', 'doUsuario') !== undefined
       ? { userCreated: Boolean(pick(raw, 'userCreated', 'doUsuario')) }
       : {}),
@@ -156,7 +170,7 @@ function mapPipeline(raw: Json): Pipeline {
       blocked: asArray<string>(pick(policy, 'blocked', 'bloqueados')),
       controlled: asArray<string>(pick(policy, 'controlled', 'controlados')),
     },
-    ...(raw.templateId !== undefined ? { templateId: String(raw.templateId) } : {}),
+    ...(raw.templateId !== undefined ? { templateId: templateIdList(raw.templateId) } : {}),
     createdAt: pick<string>(raw, 'createdAt', 'criadoEm') ?? '',
   }
 }

@@ -759,7 +759,7 @@ MEMORY_REVIEW=build npx vitest run electron/lib/memory/bench/review.test.ts
 # 2. opens the local page and labels
 open ~/.orbit-memory-review/review.html
 #    → fill in the query, the context (if any), the expected decision and the reason
-#    → "Exportar rótulos" generates labels.json; save it in ~/.orbit-memory-review/
+#    → "Export labels" generates labels.json; save it in ~/.orbit-memory-review/
 
 # 3. evaluates lexical (what memory_search does today) × hybrid
 MEMORY_REVIEW=eval npx vitest run electron/lib/memory/bench/review.test.ts

@@ -375,7 +375,7 @@ export function registerVoiceIpc(): void {
   ipcMain.handle("voice:download", async (_event, payload: { modelId?: string }) => {
     const modelId = String(payload?.modelId ?? "")
     if (!VOICE_MODELS.some((model) => model.id === modelId)) {
-      throw new Error(`modelo desconhecido: ${modelId}`)
+      throw new Error(`unknown model: ${modelId}`)
     }
     // It is already on disk: there is nothing to download, and what may be missing is the PREPARATION of the
     // package (extraction + VAD), triggered here. Without this, clicking an already
@@ -664,8 +664,8 @@ export async function transcribePcm(
 /** Engine worth trying now: the ready one, otherwise the recommended one. */
 async function defaultEngine(): Promise<VoiceEngineId> {
   const engines = await sttEngineStatus()
-  const pronto = engines.find((e) => e.installed && e.available)
-  if (pronto) return pronto.engine
+  const ready = engines.find((e) => e.installed && e.available)
+  if (ready) return ready.engine
   return (await hardware()).recommendedEngine
 }
 

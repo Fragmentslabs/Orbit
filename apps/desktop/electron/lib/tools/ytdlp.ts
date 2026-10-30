@@ -28,6 +28,7 @@ import {
 } from '../ytdlp/run'
 import { cueText, matchLanguage, parseSubtitleFile, timestampedCues, type SubtitleCue } from '../ytdlp/subtitles'
 import { resolveWritePath, type ToolContext } from './context'
+import { tNow } from '../i18n'
 
 /**
  * Media by LINK: download video, extract audio, read the transcript and (with the
@@ -300,7 +301,7 @@ export function createYtdlpTools(
   const downloadTool = tool({
     description:
       'Downloads the video or the audio of a page (or a playlist) with yt-dlp and saves it as a real file. ' +
-      'Use it for "baixa esse vídeo", "pega o áudio desse link", "em mp3", "em 720p", "baixa a playlist". ' +
+      'Use it for "download this video", "get the audio from this link", "as mp3", "in 720p", "download the playlist" — in any language. ' +
       'kind "video" (default) merges the best video+audio into mp4/mkv; kind "audio" extracts the audio track (audioFormat best keeps the original codec, mp3/m4a/opus/flac/wav re-encode). ' +
       'quality caps the resolution (default 1080 — "best" keeps the largest, which can be a very large file). ' +
       'playlist: true downloads every entry (playlistItems "1-10" limits it). maxBytes makes yt-dlp skip anything above the ceiling. ' +
@@ -671,7 +672,7 @@ export function createYtdlpTools(
               .replace(/\s+/g, ' ')
               .slice(0, 80)
               .replace(/\s/g, '-') || 'transcript'
-          const label = /^portug/i.test(scope.language ?? '') ? 'Transcrição' : 'Transcript'
+          const label = tNow('tools.transcript')
 
           if (input.deliver === 'user') {
             const docTitle = `${label} — ${title}`

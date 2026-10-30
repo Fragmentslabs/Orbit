@@ -210,7 +210,7 @@ Expressions support numbers, "text", + - * / % ^, comparisons, && || !, if(cond,
 
 Write real data only — never invent numbers to fill a chart. Put the lines inside ONE fence, each object complete on a single line, and write your usual prose around it: the block replaces the table/list that would be hard to read as text, not the explanation.
 
-WHERE THINGS ARE. When the user asks how to enable something or where a screen lives ("where do I turn on TTS?", "não acho a tela de X"), do two things: say the path in words AND put a "nav" card, because the answer is a place, not a paragraph. These are the ONLY valid "destination" values (id [surfaces] — what people call it):
+WHERE THINGS ARE. When the user asks how to enable something or where a screen lives ("where do I turn on TTS?", "I can't find the X screen"), do two things: say the path in words AND put a "nav" card, because the answer is a place, not a paragraph. These are the ONLY valid "destination" values (id [surfaces] — what people call it):
 ${uiDestinationCatalog()}
 The card never opens anything by itself: the user clicks. So never say you opened a screen, and never invent an id or a path — an unknown id renders nothing at all. If the catalog has no entry for what they want, say plainly that you are not sure where that is instead of guessing. When the destination is desktop-only and the user is on the mobile app, say so rather than offering the card.
 
@@ -511,7 +511,7 @@ PROACTIVITY — turn a repetition into a question, not a rule:
 memory_search: use whenever the user references something past.
 memory_link: connect existing memories — thinking in terms of a tree (parent-child) or graph (related).
 
-CITING A MEMORY. When a memory is the reason for what you are saying ("você prefere X", "o padrão é Y"), point at it instead of pasting its id: [2 to 5 words](#orbit-memory/mem_xxx). The app renders a chip with the memory summary, and clicking it opens the memory in the side panel. Use the id exactly as memory_search / memory_save returned it — a guessed id opens nothing. Never leave a bare mem_xxx in the answer, and never cite a memory you did not read.`
+CITING A MEMORY. When a memory is the reason for what you are saying ("you prefer X", "the convention is Y"), point at it instead of pasting its id: [2 to 5 words](#orbit-memory/mem_xxx). The app renders a chip with the memory summary, and clicking it opens the memory in the side panel. Use the id exactly as memory_search / memory_save returned it — a guessed id opens nothing. Never leave a bare mem_xxx in the answer, and never cite a memory you did not read.`
 
 const BRAIN_CODE_PROMPT = `BRAIN MODE ACTIVE (CODE). Tools: memory_tree / memory_search / memory_save /
 memory_update / memory_link / memory_open / memory_graph — all scoped to the PROJECT (active folder).
@@ -580,8 +580,8 @@ you are rewriting anyway.
 DOC: use document for extensive context (maps, schemas). text stays the short summary.
 Use memory_graph to navigate the project graph, memory_search for text search.
 
-CITING A MEMORY. When a memory is the reason for what you are saying ("o padrão do projeto é Y",
-"a regra de cobrança vem daqui"), point at it instead of pasting its id: [2 to 5 words](#orbit-memory/mem_xxx).
+CITING A MEMORY. When a memory is the reason for what you are saying ("the project convention is Y",
+"the billing rule comes from here"), point at it instead of pasting its id: [2 to 5 words](#orbit-memory/mem_xxx).
 The app renders a chip with the summary, and clicking it opens the memory in the side panel. Use the
 id exactly as memory_tree / memory_search / memory_open returned it — a guessed id opens nothing.
 Never leave a bare mem_xxx in the answer, and never cite a memory you did not read.`
@@ -964,10 +964,12 @@ export async function buildSystemPrompt(
   if (input.options.brainContext && input.orchestrationRole !== 'worker') {
     parts.push(...(await buildBrainBlock(input)))
   }
-  // @memoria: explicit search (depends on the memory tools via brain)
-  if (input.options.brain && input.text.includes('@memoria')) {
+  // @memory: explicit search (depends on the memory tools via brain). `@memoria`
+  // is the mention from before the English rename, still typed by habit.
+  const memoryMention = /@memor(?:y|ia)\b/i.exec(input.text)?.[0]
+  if (input.options.brain && memoryMention) {
     parts.push(
-      'The message contains @memoria: the user EXPLICITLY ORDERED you to check memory. Run memory_search on the message topic BEFORE answering and use whatever you find.',
+      `The message contains ${memoryMention}: the user EXPLICITLY ORDERED you to check memory. Run memory_search on the message topic BEFORE answering and use whatever you find.`,
     )
   }
 

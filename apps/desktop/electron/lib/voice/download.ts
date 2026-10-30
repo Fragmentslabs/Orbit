@@ -239,7 +239,7 @@ async function fetchToFile(
  */
 export async function downloadModel(modelId: string, listener: VoiceProgressListener): Promise<void> {
   const model = modelInfo(modelId)
-  if (!model) throw new Error(`modelo desconhecido: ${modelId}`)
+  if (!model) throw new Error(`unknown model: ${modelId}`)
   const existente = jobs.get(modelId)
   if (existente) return
 

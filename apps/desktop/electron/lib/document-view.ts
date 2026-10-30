@@ -161,7 +161,7 @@ export async function viewExport(
   const file = await mediaFile(id)
   if (!file) return { ok: false, error: 'Document not found.' }
   const entry = await getMediaEntry(id)
-  const base = (entry?.name || 'documento').slice(0, 60)
+  const base = (entry?.name || 'document').slice(0, 60)
   const target = await saveExport(null, {
     fileName: `${base}.${file.ext}`,
     filters: [{ name: file.ext.toUpperCase(), extensions: [file.ext] }],

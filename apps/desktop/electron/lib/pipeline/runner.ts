@@ -393,7 +393,7 @@ function summarizeTool(tool: string, input: unknown): string {
     case 'code_search':
       return short(args.query)
     case 'code_outline':
-      return short(args.filePath ?? args.path ?? 'mapa do projeto')
+      return short(args.filePath ?? args.path ?? 'project map')
     case 'code_refs':
       return short(args.symbol)
     case 'ls':
@@ -513,7 +513,7 @@ async function runPhaseInner(ctx: PhaseContext): Promise<PhaseResult> {
       cost: usage.cost ?? 0,
       // A missing note is a contract failure: the next phase would receive noise
       // instead of the report, so a retry is worth it (§7).
-      error: note ? undefined : 'The phase ended without the mandatory annotation (```anotacao block).',
+      error: note ? undefined : 'The phase ended without the mandatory annotation (```note block).',
     }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)

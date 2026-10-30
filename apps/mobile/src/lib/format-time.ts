@@ -11,18 +11,23 @@ export function formatTime(ts: number, locale: string): string {
   })
 }
 
-/** Full date + time in the locale standard (pt-BR: "quinta-feira, 6 de agosto de 2026 às 14:00"). */
+/**
+ * Full date + time in the locale standard ("Thursday, August 6, 2026 at 2:00 PM").
+ * Intl joins the two parts with the connector each language uses.
+ */
 export function formatDateTime(ts: number, locale: string): string {
-  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: 'full' })
-  const time = formatTime(ts, locale)
-  const connector = locale.toLowerCase().startsWith('pt') ? 'às' : 'at'
-  return `${date} ${connector} ${time}`
+  return new Date(ts).toLocaleString(locale, {
+    dateStyle: 'full',
+    timeStyle: 'short',
+    hour12: !locale.toLowerCase().startsWith('pt'),
+  })
 }
 
-/** Long date + time (pt-BR: "6 de agosto de 2026 às 14:00") — used in the routines. */
+/** Long date + time ("August 6, 2026 at 2:00 PM") — used in the routines. */
 export function formatDateTimeShort(ts: number, locale: string): string {
-  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: 'long' })
-  const time = formatTime(ts, locale)
-  const connector = locale.toLowerCase().startsWith('pt') ? 'às' : 'at'
-  return `${date} ${connector} ${time}`
+  return new Date(ts).toLocaleString(locale, {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    hour12: !locale.toLowerCase().startsWith('pt'),
+  })
 }

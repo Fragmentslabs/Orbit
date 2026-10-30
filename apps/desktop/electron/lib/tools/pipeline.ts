@@ -54,7 +54,7 @@ export function createPipelineTools(
       description: [
         'Creates a NEW pipeline (task board): a fixed sequence of phases that runs tasks autonomously, without chats.',
         'Ask the user for the main repository folder before calling — the pipeline has nowhere to work without it.',
-        'Phases come from system templates; the default pipeline is desenvolvimento → validacao → pronto. Only pass other ids if the user asked for something different.',
+        'Phases come from system templates; the default pipeline is development → validation. Only pass other ids if the user asked for something different.',
       ].join(' '),
       inputSchema: z.object({
         name: z.string().describe('Pipeline name, e.g. "Features"'),
@@ -63,9 +63,9 @@ export function createPipelineTools(
           .min(1)
           .describe('Absolute paths; the FIRST one is the main repository'),
         templateIds: z
-          .array(z.enum(['desenvolvimento', 'validacao', 'pronto', 'seguranca', 'revisao', 'infra']))
+          .array(z.enum(['development', 'validation', 'security', 'review', 'infra']))
           .optional()
-          .describe('Phases in order (default: desenvolvimento, validacao, pronto)'),
+          .describe('Phases in order (default: development, validation)'),
         branch: z.string().optional().describe('Branch the pipeline works on (default: current)'),
       }),
       execute: async ({ name, folders, templateIds, branch }) => {
@@ -76,7 +76,7 @@ export function createPipelineTools(
         const pipeline = await createPipeline({
           projectId: project.id,
           name,
-          templateIds: templateIds ?? ['desenvolvimento', 'validacao', 'pronto'],
+          templateIds: templateIds ?? ['development', 'validation'],
           providerId: defaultModel.providerId,
           modelId: defaultModel.modelId,
           branch,

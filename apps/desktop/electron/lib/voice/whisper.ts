@@ -189,8 +189,8 @@ async function ensureServer(modelId: string, threads: number): Promise<WhisperSe
 
   const promise = (async () => {
     const def = getSttModel(modelId)
-    if (!def) throw new Error(`modelo de ditado desconhecido: ${modelId}`)
-    if (!isWhisperModelInstalled(modelId)) throw new Error(`o modelo "${modelId}" is not downloaded`)
+    if (!def) throw new Error(`unknown dictation model: ${modelId}`)
+    if (!isWhisperModelInstalled(modelId)) throw new Error(`the model "${modelId}" is not downloaded`)
 
     const port = await freePort()
     const proc = spawn(
@@ -450,7 +450,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
     const st = await status()
     throw new Error(st.reason || 'whisper-server not found')
   }
-  if (!isWhisperModelInstalled(modelId)) throw new Error(`o modelo "${modelId}" is not downloaded`)
+  if (!isWhisperModelInstalled(modelId)) throw new Error(`the model "${modelId}" is not downloaded`)
 
   const threads = input.threads ?? defaultThreads()
   const language = input.language || 'pt'

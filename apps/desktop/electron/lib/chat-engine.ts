@@ -189,8 +189,8 @@ function usedScreenTools(parts: MessagePart[]): boolean {
   )
 }
 
-const NO_SCREEN_TOOL_PROMPT = `[SYSTEM: automatic verification — you called NO screen tool in this turn (no see_screen, see_window_text, see_selection, cu_* or computer_task). Anything your reply says you saw on the screen, or did in an app (opened, clicked, typed, sent), did not happen, and anything it says about how a capture came out is a guess. Either do it now with the tools and answer from their results, or correct the claim in one short sentence. If your reply made no such claim, reply ONLY with the single line: Nada a corrigir. — nothing else.]`
-const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools (then end with your normal final answer), or correct the claim briefly in 1-2 sentences starting with "Correção:". Do not repeat the full answer and do not produce a new concluding text unless you actually changed files. If your reply made no false claim (e.g. it only described work from previous turns or answered a question), reply ONLY with the single line: Nada a corrigir. — nothing else.]`
+const NO_SCREEN_TOOL_PROMPT = `[SYSTEM: automatic verification — you called NO screen tool in this turn (no see_screen, see_window_text, see_selection, cu_* or computer_task). Anything your reply says you saw on the screen, or did in an app (opened, clicked, typed, sent), did not happen, and anything it says about how a capture came out is a guess. Either do it now with the tools and answer from their results, or correct the claim in one short sentence. If your reply made no such claim, reply ONLY with the single line: NOTHING_TO_FIX — nothing else.]`
+const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools (then end with your normal final answer), or correct the claim briefly in 1-2 sentences, in the language of the conversation. Do not repeat the full answer and do not produce a new concluding text unless you actually changed files. If your reply made no false claim (e.g. it only described work from previous turns or answered a question), reply ONLY with the single line: NOTHING_TO_FIX — nothing else.]`
 
 /**
  * Tools that can write to the working directory — verifyTurn's snapshot
@@ -1068,7 +1068,7 @@ async function preprocessAttachment(
         const { doc, pages } = await saveSessionDocument(
           deps.sessionId ?? 'no-session',
           Buffer.from(text, 'utf8'),
-          filename || 'texto',
+          filename || 'text',
           'text',
         )
         return [

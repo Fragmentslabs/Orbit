@@ -8,13 +8,14 @@ import type { Task } from '@shared/pipeline'
  */
 
 /**
- * Extracts the note from the ```anotacao block. It is the only channel between
+ * Extracts the note from the ```note block (```anotacao in phases written before
+ * the English rename — a resumed task may still answer with it). It is the only channel between
  * one phase and the next: without it the phase counts as a failure, because the
  * next one would receive noise (or the model's loose narration) instead of the
  * report.
  */
 export function extractNote(text: string): string | undefined {
-  const block = text.match(/```anotacao\s*\n([\s\S]*?)```/i)
+  const block = text.match(/```(?:note|anotacao)\s*\n([\s\S]*?)```/i)
   const content = block?.[1]?.trim()
   return content || undefined
 }

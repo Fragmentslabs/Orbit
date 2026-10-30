@@ -7,7 +7,7 @@ import type {
   RoutineModel,
   RoutineRun,
 } from "@shared/routines"
-import { DEFAULT_ROUTINES } from "@shared/routines-default"
+import { DEFAULT_ROUTINES, LEGACY_DEFAULT_ROUTINE_IDS } from "@shared/routines-default"
 import { routinesApi } from "@/src/lib/ipc"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -84,7 +84,7 @@ function seeded(): string[] {
  * whoever deletes a preset does not see it come back on the next boot.
  */
 async function seedDefaultRoutines(): Promise<void> {
-  const done = new Set(seeded())
+  const done = new Set(seeded().map((id) => LEGACY_DEFAULT_ROUTINE_IDS[id] ?? id))
   const pending = DEFAULT_ROUTINES.filter((r) => !done.has(r.id))
   if (pending.length === 0) return
 

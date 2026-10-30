@@ -218,7 +218,7 @@ export function aucOnSet(outs: Outcome[]): number {
   return s / (pos.length * neg.length)
 }
 
-gated('validação da memória contextual', () => {
+gated('contextual memory validation', () => {
   for (const id of MODELS) {
     it(
       `Bekko ${id}`,
@@ -247,7 +247,7 @@ gated('validação da memória contextual', () => {
         const P1b: Policy = {
           ...P1,
           id: 'P1',
-          name: `injeção P1 + ponteiro próprio (${pointerFix?.pointerCos ?? P1.selection.pointerCos}, top-${pointerFix?.maxPointers ?? 2})`,
+          name: `P1 injection + own pointer (${pointerFix?.pointerCos ?? P1.selection.pointerCos}, top-${pointerFix?.maxPointers ?? 2})`,
           selection: {
             ...P1.selection,
             pointerCos: pointerFix?.pointerCos ?? P1.selection.pointerCos,
@@ -259,9 +259,9 @@ gated('validação da memória contextual', () => {
         const strictCos = strictInjectCos(dataMain, main, P1)
         const P3s = { ...P3(strictCos), selection: { ...P3(strictCos).selection, pointerCos: P1b.selection.pointerCos, maxPointers: P1b.selection.maxPointers } }
         const candidates = [
-          { policy: P1b, name: 'P1b injeção calibrada + ponteiro próprio' },
-          { policy: P3s, name: `P3 injeção estrita (${strictCos})` },
-          { policy: P2, name: 'P2 somente ponteiros' },
+          { policy: P1b, name: 'P1b calibrated injection + own pointer' },
+          { policy: P3s, name: `P3 strict injection (${strictCos})` },
+          { policy: P2, name: 'P2 pointers only' },
         ]
         const blockedEvals = candidates.map((c) => ({
           c,
@@ -274,7 +274,7 @@ gated('validação da memória contextual', () => {
           ...summarize(c.name, outs),
         }))
         const chosen = blockedRuns.find((r) => r.verdict === 'aprovada') ?? blockedRuns[blockedRuns.length - 1]
-        for (const b of blockedRuns) if (b.policy.injectCos > 1 && b.policy.pointerCos <= 1 && b.precision.total === 0) (b as { verdict: string }).verdict = 'segura (sem injeção)'
+        for (const b of blockedRuns) if (b.policy.injectCos > 1 && b.policy.pointerCos <= 1 && b.precision.total === 0) (b as { verdict: string }).verdict = 'safe (no injection)'
         const shipped = candidates.find((c) => c.name === chosen.name)!.policy
 
         // ---- 3. Ablations ------------------------------------------------
@@ -353,27 +353,27 @@ gated('validação da memória contextual', () => {
         // ---- printing ----------------------------------------------------
         const p = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : '—')
         console.log(`\n================ Bekko ${id} ================`)
-        console.log(`P1 na fixture de ajuste (eval): injeção ${result.precisionEval.correct}/${result.precisionEval.total} = ${p(result.precisionEval.precision)} IC95 [${p(result.precisionEval.ci[0])}; ${p(result.precisionEval.ci[1])}]`)
+        console.log(`P1 on the tuning fixture (eval): injection ${result.precisionEval.correct}/${result.precisionEval.total} = ${p(result.precisionEval.precision)} IC95 [${p(result.precisionEval.ci[0])}; ${p(result.precisionEval.ci[1])}]`)
         console.log('eval matrix (expected row -> decided):')
         for (const e of EXPECT) {
           const m = result.confusionEval.matrix[e]
           console.log(`  ${e.padEnd(8)} inj=${m.inject} ptr=${m.pointer} nada=${m.none}`)
         }
-        console.log('injeções irrelevantes:')
-        for (const f of result.falsePositivesEval) console.log(`  ${f.case} (${f.expect}) injetou ${f.injected} cos=${f.cos?.toFixed(3)} expected=${f.relevant.join(',') || '—'}`)
-        console.log(`forense dos ponteiros (limiar P1 = ${P1.selection.pointerCos}):`)
+        console.log('irrelevant injections:')
+        for (const f of result.falsePositivesEval) console.log(`  ${f.case} (${f.expect}) injected ${f.injected} cos=${f.cos?.toFixed(3)} expected=${f.relevant.join(',') || '—'}`)
+        console.log(`pointer forensics (P1 threshold = ${P1.selection.pointerCos}):`)
         for (const r of forensic) console.log(`  ${r.id} gold=${r.relevant} rank=${r.goldRank ?? '-'} cos=${r.goldCos?.toFixed(3) ?? '-'} acima=${r.nAbovePointerT} → ${r.decided}`)
-        console.log('forense dos ponteiros no conjunto bloqueado (P1b):')
-        for (const r of pointerForensics(P1bOuts, dataBlocked, P1b)) console.log(`  ${r.id} gold=${r.relevant} rank=${r.goldRank ?? '-'} cos=${r.goldCos?.toFixed(3) ?? '-'} limiar=${r.pointerT} → ${r.decided}`)
-        console.log(`ponteiro recalibrado no dev: ${pointerFix ? `cos>=${pointerFix.pointerCos} top-${pointerFix.maxPointers} (dev: ${pointerFix.devUseful} úteis, ${pointerFix.devNeg} negativas)` : 'sem ponto viável'}`)
+        console.log('pointer forensics on the blocked set (P1b):')
+        for (const r of pointerForensics(P1bOuts, dataBlocked, P1b)) console.log(`  ${r.id} gold=${r.relevant} rank=${r.goldRank ?? '-'} cos=${r.goldCos?.toFixed(3) ?? '-'} threshold=${r.pointerT} → ${r.decided}`)
+        console.log(`pointer recalibrated on dev: ${pointerFix ? `cos>=${pointerFix.pointerCos} top-${pointerFix.maxPointers} (dev: ${pointerFix.devUseful} useful, ${pointerFix.devNeg} negatives)` : 'no viable point'}`)
         console.log('conjunto bloqueado (escada):')
         for (const b of blockedRuns) {
-          console.log(`  ${b.name}: injeção ${b.precision.correct}/${b.precision.total} ${p(b.precision.precision)} · ponteiros úteis ${b.confusion.matrix.pointer.pointer}/${b.confusion.expected.pointer} · sem-memória tocadas ${b.confusion.matrix.none.inject + b.confusion.matrix.none.pointer}/${b.confusion.expected.none} → ${b.verdict}`)
+          console.log(`  ${b.name}: injection ${b.precision.correct}/${b.precision.total} ${p(b.precision.precision)} · useful pointers ${b.confusion.matrix.pointer.pointer}/${b.confusion.expected.pointer} · sem-memória tocadas ${b.confusion.matrix.none.inject + b.confusion.matrix.none.pointer}/${b.confusion.expected.none} → ${b.verdict}`)
         }
         console.log(`  ESCOLHIDA: ${chosen.name}`)
         console.log(`AUC eval ${result.aucEval.toFixed(3)} · AUC bloqueado ${result.aucBlocked.toFixed(3)}`)
-        console.log(`injeção estrita (dev, 0 FP) = ${strictCos}`)
-        console.log(`diálogo: ${dialogRows.map((d) => `${d.id} isolated=${d.isolated} ctx=${d.contextual} ideal=${d.ideal}`).join(' | ')}`)
+        console.log(`strict injection (dev, 0 FP) = ${strictCos}`)
+        console.log(`dialog: ${dialogRows.map((d) => `${d.id} isolated=${d.isolated} ctx=${d.contextual} ideal=${d.ideal}`).join(' | ')}`)
 
         fs.mkdirSync(OUT, { recursive: true })
         fs.writeFileSync(path.join(OUT, `audit-${id}.json`), JSON.stringify(result, null, 2))

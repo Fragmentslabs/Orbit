@@ -137,7 +137,7 @@ export function createMediaTools(
     media_compress: tool({
       description:
         'Compresses or converts an audio or video file to a size or quality target, then MEASURES the result (never trusts the encoder). ' +
-        'Use it for "deixa abaixo de 25 MB", "comprime esse vídeo", "converte para mp3", "extrai o áudio", "em 720p". ' +
+        'Use it for "get it under 25 MB", "compress this video", "convert to mp3", "extract the audio", "in 720p" — in any language. ' +
         'Targets, in order of precedence: maxBytes (a hard ceiling — the tool computes the bitrate, encodes, measures and retries up to 3 times if it overshoots), ' +
         'bitrate (kbps), or quality (1-100, CRF-like; 75 is a good default when nothing is specified). height/fps only ever downscale. ' +
         'Do NOT use it for images: image_edit with maxBytes already compresses, resizes and converts them. ' +

@@ -21,8 +21,8 @@ computes the bitrate budget, encodes, **re-probes the output**, and retries with
 a corrected bitrate (up to 3 attempts) when a byte ceiling is missed. It never
 touches the source file.
 
-Use it for: "comprime esse vídeo", "abaixo de 25 MB", "em 720p", "converte para
-mp3", "extrai o áudio", "tira o áudio".
+Use it for: "compress this video", "under 25 MB", "in 720p", "convert to
+mp3", "extract the audio", "remove the audio" — in any language.
 
 Only reach for `bash` + ffmpeg when the tool genuinely does not cover it:
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { Task, TaskWorktree } from '@shared/pipeline'
-import { descartarSnapshots } from '../snapshot'
+import { discardSnapshots } from '../snapshot'
 import {
   currentBase,
   branchExists,
@@ -121,7 +121,7 @@ export async function removeWorktree(
     await git(repo, ['worktree', 'prune']).catch(() => {})
     if (opts.deleteBranch) await git(repo, ['branch', '-D', worktree.branch]).catch(() => {})
   }
-  await descartarSnapshots(worktree.folder).catch(() => {})
+  await discardSnapshots(worktree.folder).catch(() => {})
 }
 
 /**
@@ -192,7 +192,7 @@ async function sweep(folder: string, liveTasks: Set<string>): Promise<boolean> {
     }
     console.log(`[pipeline] removing orphan worktree ${worktreePath}`)
     await fs.rm(worktreePath, { recursive: true, force: true })
-    await descartarSnapshots(worktreePath).catch(() => {})
+    await discardSnapshots(worktreePath).catch(() => {})
     deleted = true
   }
   return deleted

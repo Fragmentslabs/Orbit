@@ -3,6 +3,7 @@ import type { AskItem, ChatMessage, SendMessageInput, SessionInfo } from '@share
 import { StorageKeys, formatAskLine } from '@shared/chat'
 import { reply as askReply } from './ask-broker'
 import { readAppLanguage } from './app-language'
+import { t } from './i18n'
 import { listCredentialProviders } from './auth'
 import { broadcastChatEvent } from './broadcast'
 import { runChat } from './chat-engine'
@@ -44,26 +45,15 @@ interface Queue {
 
 const queues = new Map<string, Queue>()
 
-const TEXTS = {
-  pt: {
-    header:
-      'Retomando um pedido que ficou pendente: a execução anterior terminou antes de eu responder. Segue o que ficou decidido:',
-    footer: 'Continue de onde parou, considerando isto.',
-    authorize: 'Autorizo a ação',
-    noAnswer: '(sem resposta)',
-    worker: 'worker',
-  },
-  en: {
-    header:
-      'Resuming a pending request: the previous run ended before I answered. Here is what was decided:',
-    footer: 'Continue from where you stopped, taking this into account.',
-    authorize: 'I authorize the action',
-    noAnswer: '(no answer)',
-    worker: 'worker',
-  },
-} as const
+/** The sentences of the resumed message, in the app language (`electron/lib/i18n.ts`). */
+interface Texts {
+  authorize: string
+  noAnswer: string
+}
 
-type Texts = (typeof TEXTS)['pt' | 'en']
+async function texts(): Promise<Texts> {
+  return { authorize: await t('resume.authorize'), noAnswer: await t('resume.noAnswer') }
+}
 
 /** Request persisted on disk — the broker only knows the ones still alive. */
 async function locate(
@@ -97,7 +87,7 @@ function responseBlock(item: SavedRequest, value: unknown, texts: Texts): string
   // Worker question: the request was made to the orchestrator's chat, and the
   // worker that asked no longer exists — saying whose it was keeps the agent from
   // reading the answers as if they belonged to its own turn.
-  const origin = item.origin ? `[${texts.worker}: ${item.origin.workerTitle}] ` : ''
+  const origin = item.origin ? `[worker: ${item.origin.workerTitle}] ` : ''
 
   if (item.kind === 'permission') {
     // 'deny' does not generate a message: denying a dead request is just clearing the screen.
@@ -150,9 +140,7 @@ async function dispatch(sessionId: string): Promise<void> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!session) return
 
-  const language = await readAppLanguage()
-  const texts = language === 'English' ? TEXTS.en : TEXTS.pt
-  const text = [texts.header, '', queue.blocks.join('\n\n'), '', texts.footer].join('\n')
+  const text = [await t('resume.header'), '', queue.blocks.join('\n\n'), '', await t('resume.footer')].join('\n')
 
   const input = await buildInput(sessionId, session, text)
   console.log(`[ask] resuming ${queue.blocks.length} pending answer(s) in session ${sessionId}`)
@@ -177,8 +165,7 @@ export async function replyOrResume(
   const { key, sessionId, item, all } = saved
   await closeCard(key, sessionId, requestId, all)
 
-  const language = await readAppLanguage()
-  const block = responseBlock(item, value, language === 'English' ? TEXTS.en : TEXTS.pt)
+  const block = responseBlock(item, value, await texts())
   // Dismissal/denial: the card is already gone, and there is nothing to tell the agent.
   if (!block || !win || win.isDestroyed()) return true
 

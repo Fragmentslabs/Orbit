@@ -357,8 +357,8 @@ export function contextExperiments(
 ) {
   const noise = useNoise ? data.noise[variant] : undefined
   const modes: Record<string, (d: BenchCase) => Outcome> = {
-    '1. mensagem isolada': (d) => runCase({ case: d, vec: data.q.get(d.text)!, lexical: d.text }, data.store[variant], retrieval, params, noise),
-    '2. mensagem + contexto (sempre)': (d) => {
+    '1. isolated message': (d) => runCase({ case: d, vec: data.q.get(d.text)!, lexical: d.text }, data.store[variant], retrieval, params, noise),
+    '2. message + context (always)': (d) => {
       const q = contextualQuery(d.text, d.context as ChatTurn[])
       return runCase({ case: d, vec: data.q.get(q.semantic)!, lexical: q.lexical }, data.store[variant], retrieval, params, noise)
     },

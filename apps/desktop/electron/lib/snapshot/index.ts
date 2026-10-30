@@ -113,7 +113,7 @@ export const gitBinary = resolveGitBinary(process.platform, process.env, canExec
  */
 const DEFAULT_EXCLUDES = ['node_modules/', '.git/', '.orbit/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
 /** Auxiliary repositories whose exclude was already checked in this run. */
-const excludesConferidos = new Set<string>()
+const excludesChecked = new Set<string>()
 
 const GC_INTERVAL = 60 * 60 * 1000 // 1h
 const lastGc = new Map<string, number>()
@@ -205,7 +205,7 @@ async function ensureRepo(directory: string): Promise<void> {
   }
   // Also in the repositories that already existed: the excludes list grows between
   // versions (e.g. .orbit/), and only writing it at init would leave the old ones without it.
-  if (excludesConferidos.has(gitDir)) return
+  if (excludesChecked.has(gitDir)) return
   const exclude = path.join(gitDir, 'info', 'exclude')
   const current = await fs.readFile(exclude, 'utf8').catch(() => '')
   const lines = new Set(current.split('\n').map((l) => l.trim()))
@@ -215,7 +215,7 @@ async function ensureRepo(directory: string): Promise<void> {
     const prefixo = current && !current.endsWith('\n') ? '\n' : ''
     await fs.appendFile(exclude, prefixo + missing.join('\n') + '\n', 'utf8')
   }
-  excludesConferidos.add(gitDir)
+  excludesChecked.add(gitDir)
 }
 
 /**
@@ -240,7 +240,7 @@ function maybeGc(directory: string) {
  * Through the folder queue: whatever is running finishes first, and no git
  * keeps the repository open at the moment of the removal.
  */
-export async function descartarSnapshots(directory: string): Promise<void> {
+export async function discardSnapshots(directory: string): Promise<void> {
   const gitDir = gitDirFor(directory)
   lastGc.delete(gitDir)
   await withLock(gitDir, () => fs.rm(gitDir, { recursive: true, force: true }))

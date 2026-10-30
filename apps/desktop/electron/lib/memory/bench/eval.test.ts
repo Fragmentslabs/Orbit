@@ -113,7 +113,7 @@ async function runModel(id: ModelId) {
   {
     const pos = fx.cases.filter((c) => c.relevant.length && c.split === 'eval')
     const calibratedTop1 = pos.filter((c) => rankCheck(orderForCheck(data, 'full', c, retrieval), c.relevant) === 1).length
-    const row = ranking.find((x) => x.name === 'híbrido RRF, fusão calibrada' && x.split === 'eval')
+    const row = ranking.find((x) => x.name === 'hybrid RRF, calibrated fusion' && x.split === 'eval')
     if (row && Math.round(row.m.hit1 * pos.length) !== calibratedTop1) {
       throw new Error(
         `recorte dessincronizado: ranking diz ${Math.round(row.m.hit1 * pos.length)}/${pos.length}, recalculo diz ${calibratedTop1}/${pos.length}`,
@@ -148,9 +148,9 @@ async function runModel(id: ModelId) {
   // an injection path, never blocks) cannot be dragging down the cross-language case.
   const evalCases = fx.cases.filter((c) => c.split === 'eval')
   const selByCross = selectionByGroup(evalMet.outs, evalCases, (c) => {
-    if (!c.relevant.length) return 'sem memória necessária'
+    if (!c.relevant.length) return 'no memory needed'
     const mem = memById.get(c.relevant[0])
-    return mem && mem.lang !== c.lang ? 'idioma diferente' : 'mesmo idioma'
+    return mem && mem.lang !== c.lang ? 'different language' : 'same language'
   })
 
   // Split sensitivity: calibrate on "eval" and measure on "dev". If the
@@ -207,10 +207,10 @@ async function runModel(id: ModelId) {
     cosines: {
       'inject (dev)': percentiles(diag.filter((d) => d.expect === 'inject' && d.split === 'dev').map((d) => d.gold ?? -1)),
       'inject (eval)': percentiles(diag.filter((d) => d.expect === 'inject' && d.split === 'eval').map((d) => d.gold ?? -1)),
-      'none: topo (dev)': percentiles(diag.filter((d) => d.expect === 'none' && d.split === 'dev').map((d) => d.top)),
-      'none: topo (eval)': percentiles(diag.filter((d) => d.expect === 'none' && d.split === 'eval').map((d) => d.top)),
+      'none: top (dev)': percentiles(diag.filter((d) => d.expect === 'none' && d.split === 'dev').map((d) => d.top)),
+      'none: top (eval)': percentiles(diag.filter((d) => d.expect === 'none' && d.split === 'eval').map((d) => d.top)),
       'pointer (dev)': percentiles(diag.filter((d) => d.expect === 'pointer' && d.split === 'dev').map((d) => d.gold ?? -1)),
-      'piso de ruído (sondas)': percentiles(data.noise.full.tops),
+      'noise floor (probes)': percentiles(data.noise.full.tops),
     },
     memoryTypes: Object.fromEntries(
       fx.memories.map((m) => [m.id, { type: m.type, lang: m.lang }]),
@@ -244,7 +244,7 @@ gated('benchmark Bekko (real)', () => {
         console.log(
           [
             `\n### Bekko ${id}`,
-            `carregar ${Math.round(r.loadMs)} ms · RSS ${r.rssLoadedMB} MB (modelo) / ${r.rssIndexedMB} MB (índice) · consulta ${r.medianMs} ms (p95 ${r.p95Ms})`,
+            `load ${Math.round(r.loadMs)} ms · RSS ${r.rssLoadedMB} MB (model) / ${r.rssIndexedMB} MB (index) · query ${r.medianMs} ms (p95 ${r.p95Ms})`,
             '',
             '| experimento | R@1 | R@3 | R@5 | MRR | AUC |',
             '|---|---|---|---|---|---|',
@@ -255,7 +255,7 @@ gated('benchmark Bekko (real)', () => {
                   `| ${x.name} | ${(x.m.hit1 * 100).toFixed(1)}% | ${(x.m.hit3 * 100).toFixed(1)}% | ${(x.m.hit5 * 100).toFixed(1)}% | ${x.m.mrr.toFixed(3)} | ${Number.isNaN(x.auc) ? '—' : x.auc.toFixed(3)} |`,
               ),
             '',
-            `pesos da fusão (dev): ${r.fusion.map((f) => `lex ${f.lexWeight}/cov ${f.lexMinCoverage}→R@1 ${(f.hit1 * 100).toFixed(1)}%`).join(' · ')}`,
+            `fusion weights (dev): ${r.fusion.map((f) => `lex ${f.lexWeight}/cov ${f.lexMinCoverage}→R@1 ${(f.hit1 * 100).toFixed(1)}%`).join(' · ')}`,
             '',
             '| cossenos | p10 | p25 | p50 | p75 | p90 | max |',
             '|---|---|---|---|---|---|---|',
@@ -264,28 +264,28 @@ gated('benchmark Bekko (real)', () => {
                 `| ${name} | ${p.p10} | ${p.p25} | ${p.p50} | ${p.p75} | ${p.p90} | ${p.p100} |`,
             ),
             '',
-            '| regra (dev) | injetou | FP | FP tema vizinho |',
+            '| rule (dev) | injected | FP | neighbor-topic FP |',
             '|---|---|---|---|',
             ...r.rulesDev.map(
               (x: { rule: string; injectHit: number; injectN: number; falsePos: number; negN: number; falsePosRel: number; relN: number }) =>
                 `| ${x.rule} | ${x.injectHit}/${x.injectN} | ${x.falsePos}/${x.negN} | ${x.falsePosRel}/${x.relN} |`,
             ),
             '',
-            `política escolhida: ${String(r.chosenPolicy.family)}`,
-            `dev: injetou ${r.dev.injectCasesHit}/${r.dev.injectCases} · FP ${r.dev.falsePositives} · ponteiros úteis ${r.dev.pointerCasesPointer}/${r.dev.pointerCases} · limpas ${r.dev.negClean}/${r.dev.negatives}`,
-            `eval: injetou ${r.eval.injectCasesHit}/${r.eval.injectCases} · FP ${r.eval.falsePositives} · ponteiros úteis ${r.eval.pointerCasesPointer}/${r.eval.pointerCases} · limpas ${r.eval.negClean}/${r.eval.negatives}`,
-            `  (eval: ${r.eval.positives} positivos + ${r.eval.negatives} negativos = ${r.eval.positives + r.eval.negatives} consultas; ${r.eval.injectedTotal} memórias injetadas, ${r.eval.relevantInjected}/${r.eval.relevantTotal} das necessárias)`,
+            `chosen policy: ${String(r.chosenPolicy.family)}`,
+            `dev: injected ${r.dev.injectCasesHit}/${r.dev.injectCases} · FP ${r.dev.falsePositives} · useful pointers ${r.dev.pointerCasesPointer}/${r.dev.pointerCases} · clean ${r.dev.negClean}/${r.dev.negatives}`,
+            `eval: injected ${r.eval.injectCasesHit}/${r.eval.injectCases} · FP ${r.eval.falsePositives} · useful pointers ${r.eval.pointerCasesPointer}/${r.eval.pointerCases} · clean ${r.eval.negClean}/${r.eval.negatives}`,
+            `  (eval: ${r.eval.positives} positives + ${r.eval.negatives} negatives = ${r.eval.positives + r.eval.negatives} queries; ${r.eval.injectedTotal} memories injected, ${r.eval.relevantInjected}/${r.eval.relevantTotal} das necessárias)`,
             '',
-            '| seleção no eval (eval) | injetou | FP | ponteiro útil | limpas |',
+            '| selection on eval (eval) | injected | FP | useful pointer | clean |',
             '|---|---|---|---|---|',
             ...r.selByCross.map(
               (g: { group: string; n: number; met: { injectCasesHit: number; injectCases: number; falsePositives: number; pointerCasesPointer: number; pointerCases: number; negClean: number; negatives: number } }) =>
                 `| ${g.group} (n=${g.n}) | ${g.met.injectCasesHit}/${g.met.injectCases} | ${g.met.falsePositives} | ${g.met.pointerCasesPointer}/${g.met.pointerCases} | ${g.met.negClean}/${g.met.negatives} |`,
             ),
             '',
-            `sensibilidade ao split (calibrado no eval, medido no dev): ${String(r.swap.family)} → injetou ${r.swap.inj}/${r.swap.injectCases} · FP ${r.swap.fp} · ponteiros úteis ${r.swap.ptr}/${r.swap.pointerCases}`,
+            `split sensitivity (calibrated on eval, measured on dev): ${String(r.swap.family)} → injected ${r.swap.inj}/${r.swap.injectCases} · FP ${r.swap.fp} · useful pointers ${r.swap.ptr}/${r.swap.pointerCases}`,
             '',
-            '| contexto | top1 | injetou | ponteiros | limpas |',
+            '| context | top1 | injected | pointers | clean |',
             '|---|---|---|---|---|',
             ...Object.entries(r.contexts).map(
               ([name, m]) => `| ${name} | ${m.top1}/${m.n} | ${m.injectCasesHit}/${m.injectCases} | ${m.pointerCasesPointer}/${m.pointerCases} | ${m.negClean}/${m.negatives} |`,
@@ -298,7 +298,7 @@ gated('benchmark Bekko (real)', () => {
                 ([key, m]) => `| ${group}: ${key} | ${(m.hit1 * 100).toFixed(0)}% | ${(m.hit5 * 100).toFixed(0)}% | ${m.n} |`,
               ),
             ),
-            row('híbrido RRF, enriquecida (com LLM)') ? '' : '',
+            row('hybrid RRF, enriched (with LLM)') ? '' : '',
           ].join('\n'),
         )
         expect(r.queries).toBeGreaterThan(100)

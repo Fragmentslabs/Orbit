@@ -410,7 +410,7 @@ function visibleText(message: ChatMessage): string {
  */
 function matchesProject(session: SessionInfo, filter: string): boolean {
   const target = normalizePath(filter)
-  if (!session.directory) return target === '__chat__' || target === 'sem projeto' || target === 'no project'
+  if (!session.directory) return target === '__chat__' || target === 'no project'
   const dir = normalizePath(session.directory)
   if (target.includes('/')) return dir === target || dir.endsWith(`/${target}`)
   return dir.split('/').includes(target)
@@ -443,7 +443,7 @@ export async function computeWorkReport(options: WorkReportOptions): Promise<Wor
     // filter and totals), not as a separate project with the worktree's name.
     const projectFolder = session.directory ? await folderInMainRepository(session.directory) : undefined
     const name = projectFolder ? path.basename(projectFolder) : ''
-    knownProjects.add(name || 'Sem projeto')
+    knownProjects.add(name || 'No project')
     if (project && !matchesProject({ ...session, directory: projectFolder }, project)) continue
 
     const projectId = projectFolder ? projectIdOf(projectFolder) : NO_PROJECT_ID

@@ -9,10 +9,10 @@
  * review, plus a short guide. `score` reads the classifications and compares the two
  * mechanisms.
  *
- * The local file names keep their original Portuguese spelling
- * (`avaliacao-consultas.json`, `COMO-ROTULAR.md`): they are user files that
- * already exist outside the repository. Only the content inside the JSON is
- * English — and the reader still accepts the old Portuguese keys.
+ * Files: `query-review.json`, `HOW-TO-LABEL.md` and `review-result.json`. A
+ * review started before the English rename lives in `avaliacao-consultas.json`
+ * — while only that one exists it is the one read and scored, and the reader
+ * still accepts its Portuguese keys.
  *
  * PRIVACY: the memory text goes ONLY to the local JSON file. This
  * runner prints counts, ids and metrics — never `text`, `title` or `summary`.
@@ -37,8 +37,12 @@ const MODEL = path.resolve(__dirname, '../../../../.cache/memory-embed/bekko-a8m
 /** Same retrieval parameters as the benchmark (a8m, calibrated on dev). */
 const RETRIEVAL = { ...DEFAULT_RETRIEVAL, semWeight: 1, lexWeight: 0.1, lexMinCoverage: 0.5 }
 
-const JSON_PATH = path.join(OUT, 'avaliacao-consultas.json')
-const GUIDE_PATH = path.join(OUT, 'COMO-ROTULAR.md')
+const LEGACY_JSON_PATH = path.join(OUT, 'avaliacao-consultas.json')
+const CURRENT_JSON_PATH = path.join(OUT, 'query-review.json')
+const JSON_PATH =
+  !fs.existsSync(CURRENT_JSON_PATH) && fs.existsSync(LEGACY_JSON_PATH) ? LEGACY_JSON_PATH : CURRENT_JSON_PATH
+const GUIDE_PATH = path.join(OUT, 'HOW-TO-LABEL.md')
+const RESULT_PATH = path.join(OUT, 'review-result.json')
 
 type QueryType =
   | 'decision'
@@ -175,7 +179,7 @@ function drafts(pool: Memory[]): Array<Draft & { id: string }> {
   return out.map((d, i) => ({ ...d, id: `q${String(i + 1).padStart(2, '0')}` }))
 }
 
-const GUIDE = `# How to label \`avaliacao-consultas.json\`
+const GUIDE = `# How to label \`query-review.json\`
 
 The file has one entry per query. For each one, you label **the memories that
 showed up in the top 5** — not the queries.
@@ -385,7 +389,7 @@ function runScore(): void {
   if (cmp.neither.length) console.log(`neither: ${cmp.neither.join(', ')}`)
 
   fs.writeFileSync(
-    path.join(OUT, 'avaliacao-resultado.json'),
+    RESULT_PATH,
     JSON.stringify(
       {
         evaluatedAt: new Date().toISOString(),
@@ -398,7 +402,7 @@ function runScore(): void {
       2,
     ),
   )
-  console.log(`\nresult: ${path.join(OUT, 'avaliacao-resultado.json')}`)
+  console.log(`\nresult: ${RESULT_PATH}`)
 }
 
 const only = (mode: string) => (process.env.MEMORY_REVIEW_JSON === mode ? it : it.skip)

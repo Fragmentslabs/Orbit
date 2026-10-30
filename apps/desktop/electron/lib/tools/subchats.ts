@@ -8,28 +8,13 @@ import { getRunningSessionIds, runChat } from '../chat-engine'
 import { broadcastSessionEvent } from '../companion-server'
 import { createSubchatRecord, findSubchat, readSubchatMessages } from '../subchats'
 import { detachFromTurn } from '../session/write-journal'
+import { tNow } from '../i18n'
 
-/**
- * First message of the new chat, in the voice of whoever authorized the opening: the child
- * starts working on its own, so the summary (the brief) is the context and this
- * line only says to go ahead.
- */
-const KICKOFF = {
-  pt: 'Pode começar. Trabalhe até concluir — o resumo acima tem o contexto, então não pare para perguntar o que ele já responde.',
-  en: "Go ahead. Work through to the end — the summary above has the context, so don't stop to ask what it already answers.",
-}
-
-type Language = keyof typeof KICKOFF
-
-function languageOf(language?: string): Language {
-  return (language ?? '').toLowerCase().startsWith('port') ? 'pt' : 'en'
-}
-
-/** Header of the parent's instruction: in the child's chat the message does not look like the user's. */
-const FROM_PARENT = {
-  pt: 'Mensagem do chat principal: ',
-  en: 'Message from the main chat: ',
-}
+// The first message of the new chat (`subchat.kickoff`) is in the voice of whoever
+// authorized the opening: the child starts working on its own, so the summary
+// (the brief) is the context and that line only says to go ahead. The parent's
+// later instructions carry `subchat.fromParent`, so in the child's chat they do
+// not look like the user's. Both follow the app language (`electron/lib/i18n.ts`).
 
 /**
  * Fires a turn in the child, in parallel to the parent's and without waiting for it. The
@@ -69,7 +54,7 @@ async function openAndStart(
   const child = await createSubchatRecord({ parentId: input.sessionId, title, body: brief })
   if (!child) return 'Error: the current conversation could not be found, so no subchat was opened.'
   broadcastSessionEvent({ type: 'session', sessionId: child.id, session: child })
-  if (win) startChildTurn(input, win, child, KICKOFF[languageOf(input.language)])
+  if (win) startChildTurn(input, win, child, tNow('subchat.kickoff'))
   return `Subchat opened: "${child.title}" (#${child.id}). It is attached to this conversation, starts from your brief and is already working on it in parallel.`
 }
 
@@ -189,7 +174,7 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         // would compete for the child's chat. It releases right away — the turn itself lives in the engine.
         inFlight.add(child.id)
         try {
-          startChildTurn(input, win, child, FROM_PARENT[languageOf(input.language)] + message.trim())
+          startChildTurn(input, win, child, tNow('subchat.fromParent') + message.trim())
         } finally {
           setTimeout(() => inFlight.delete(child.id), 1_000)
         }

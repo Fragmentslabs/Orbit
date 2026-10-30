@@ -15,6 +15,7 @@ import { saveDocument, saveMedia } from '../media'
 import { clock } from './audio'
 import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { recordToolWrite } from '../session/write-journal'
+import { tNow } from '../i18n'
 
 /**
  * Video editing for the agent (EDL).
@@ -203,7 +204,7 @@ export function createVideoTools(
           const [only] = entries
           const body =
             mode === 'words' ? wordsText([only]) : mode === 'phrases' ? packTranscript([only]) : plainText(only.transcript)
-          const title = `${/^portug/i.test(scope.language ?? '') ? 'Transcrição' : 'Transcript'} — ${path.basename(only.file)}`
+          const title = `${tNow('tools.transcript')} — ${path.basename(only.file)}`
           const markdown = `# ${title}\n\n_${clock(only.transcript.durationMs)} · ${only.transcript.engine}_\n\n${body.replace(/\n/g, '\n\n')}\n`
           const doc = await saveDocument(markdown, [], {
             title,

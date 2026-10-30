@@ -8,7 +8,7 @@ import type { OrchestrationTask } from '@shared/chat'
 const userData = vi.hoisted(() => ({ dir: '' }))
 vi.mock('electron', () => ({ app: { getPath: () => userData.dir } }))
 vi.mock('../shell-env', () => ({ userShellEnv: () => process.env }))
-vi.mock('../snapshot', () => ({ descartarSnapshots: vi.fn(async () => {}) }))
+vi.mock('../snapshot', () => ({ discardSnapshots: vi.fn(async () => {}) }))
 vi.mock('../app-settings', () => ({ getAppSettings: () => ({ worktrees: { local: 'default', folder: null } }) }))
 
 const { commitWork, createWorkerWorktree, mergeBranches, removeWorkerWorktree, worktreeDiff, worktreeFiles } = await import('./worktrees')

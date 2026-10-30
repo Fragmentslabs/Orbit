@@ -18,15 +18,15 @@
 | 0.2 | Monorepo dependencies installed (project root) | `npm install` at the root (`/Users/desknik/Projects/Orbit`) |
 | 0.3 | `git` installed and available (the snapshot feature uses an auxiliary git repo) | `git --version` |
 | 0.4 | Model provider configured in the app, with a model **that supports tools** (tool calling) | Models tab → selected model with the tools badge |
-| 0.5 | Isolated test folder for the script (the agent will edit files in it) | E.g.: `~/orbit-teste-manual/` |
+| 0.5 | Isolated test folder for the script (the agent will edit files in it) | E.g.: `~/orbit-manual-test/` |
 | 0.6 | App language: **Portuguese (BR)** (otherwise the exact strings of the expected results change) | Preferences → Language |
 
 **Test folder preparation (once):**
 
 ```bash
-mkdir -p ~/orbit-teste-manual
-printf 'linha original\n' > ~/orbit-teste-manual/ola.txt
-cat ~/orbit-teste-manual/ola.txt   # must show: linha original
+mkdir -p ~/orbit-manual-test
+printf 'original line\n' > ~/orbit-manual-test/hello.txt
+cat ~/orbit-manual-test/hello.txt   # must show: original line
 ```
 
 ---
@@ -53,11 +53,11 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 
 | Step | Action | Expected result |
 |-------|------|--------------------|
-| 2.1 | In the app, create a **new session in code mode** and attach the folder `~/orbit-teste-manual` as a working folder | Session created; the folder shows up as the session's working folder |
-| 2.2 | Send: `Leia ola.txt e me diga o conteúdo.` | The agent reads the file and answers with "linha original" |
+| 2.1 | In the app, create a **new session in code mode** and attach the folder `~/orbit-manual-test` as a working folder | Session created; the folder shows up as the session's working folder |
+| 2.2 | Send: `Read hello.txt and tell me what it says.` | The agent reads the file and answers with "original line" |
 | 2.3 | Wait for the turn to finish (spinner stops / idle status) | Turn completed without errors |
 
-**Cleanup between scenarios:** use the revert bar's **"Desfazer"** button (if active) or **delete the session** and create another one. **Never** edit the session/message JSON with the app open — the app may overwrite them.
+**Cleanup between scenarios:** use the revert bar's **"Undo"** button (if active) or **delete the session** and create another one. **Never** edit the session/message JSON with the app open — the app may overwrite them.
 
 ---
 
@@ -65,20 +65,20 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 
 ### Scenario 1 — Revert to here with a snapshot available (happy path)
 
-**Goal:** in code mode, edit a file and revert to the question: the file goes back to its original state and the bar shows "1 arquivo revertido".
+**Goal:** in code mode, edit a file and revert to the question: the file goes back to its original state and the bar shows "1 file reverted".
 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
-| 1.1 | Create the test session (section 2) | Session in code mode with the original `ola.txt` | `ola.txt` contains only "linha original" |
-| 1.2 | Send: `Adicione a linha "LINHA_ADICIONADA" no final de ola.txt.` and wait for it to finish | Turn completed; the assistant message's footer shows **"Arquivos alterados neste turno:"** with `ola.txt (1 diff)` | The footer (A3) lists exactly `ola.txt` |
-| 1.3 | Check on disk: `cat ~/orbit-teste-manual/ola.txt` | Content has both lines (original + added) | The edit was really written |
-| 1.4 | Hover over the **user message** and click **"Reverter até aqui"** | The conversation is truncated from that message on; the messages of the reverted turn disappear | Only the reverted turn (and the later ones) is removed; previous messages stay |
-| 1.5 | Observe the bar above the input | The bar shows **"1 arquivo revertido — nova mensagem continua deste ponto"** with the **"Diff"** and **"Desfazer"** buttons | Exact text: "1 arquivo revertido" (singular) |
+| 1.1 | Create the test session (section 2) | Session in code mode with the original `hello.txt` | `hello.txt` contains only "original line" |
+| 1.2 | Send: `Append the line "ADDED_LINE" to the end of hello.txt.` and wait for it to finish | Turn completed; the assistant message's footer shows **"Files changed in this turn:"** with `hello.txt (1 diff)` | The footer (A3) lists exactly `hello.txt` |
+| 1.3 | Check on disk: `cat ~/orbit-manual-test/hello.txt` | Content has both lines (original + added) | The edit was really written |
+| 1.4 | Hover over the **user message** and click **"Revert to here"** | The conversation is truncated from that message on; the messages of the reverted turn disappear | Only the reverted turn (and the later ones) is removed; previous messages stay |
+| 1.5 | Observe the bar above the input | The bar shows **"1 file reverted — new message continues from this point"** with the **"Diff"** and **"Undo"** buttons | Exact text: "1 file reverted" (singular) |
 | 1.6 | Click **"Diff"** on the bar | Opens the unified diff showing the removal of the added line | The diff matches what was reverted |
-| 1.7 | Check on disk: `cat ~/orbit-teste-manual/ola.txt` | The file went back to the original state ("linha original") | The filesystem was restored (not only the conversation) |
+| 1.7 | Check on disk: `cat ~/orbit-manual-test/hello.txt` | The file went back to the original state ("original line") | The filesystem was restored (not only the conversation) |
 | 1.8 | *(Optional, state check)* With the app closed, open `orbit-data/storage/session/<id>.json` | Field `"revert"` present with `"filesRestored": true`, `"files"` and `"diff"` filled | The revert state was saved (the basis for scenario 4) |
 
-> Do **not** click "Desfazer" yet — scenario 4 needs the active state. If you are going straight to scenario 2/3, do the cleanup indicated.
+> Do **not** click "Undo" yet — scenario 4 needs the active state. If you are going straight to scenario 2/3, do the cleanup indicated.
 
 ### Scenario 2 — Revert to a message without a snapshot → explicit warning (never a silent revert)
 
@@ -95,27 +95,27 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 3. Open `messages/<sessionId>.json` and, in **one assistant message** (e.g. the 2nd turn's answer), **remove the whole `"snapshot"` field**. Save.
 4. Reopen the app and enter the session.
 
-> Alternative method (B, without editing JSON, but with a short window and it may not reproduce): send a prompt and click "Reverter até aqui" on the **just sent** user message, before the assistant's answer gets a snapshot. If it does not reproduce, use method A.
+> Alternative method (B, without editing JSON, but with a short window and it may not reproduce): send a prompt and click "Revert to here" on the **just sent** user message, before the assistant's answer gets a snapshot. If it does not reproduce, use method A.
 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
 | 2.1 | Prepare the session as above (assistant message without `snapshot`) | Session with an "old" turn without a snapshot | `messages/<id>.json` has at least one assistant message without the `snapshot` field |
-| 2.2 | Hover over the message of the **user before the answer without a snapshot** and click **"Reverter até aqui"** | The conversation is truncated (the turn's messages disappear) | The truncation of the conversation **happens** (normal revert behavior) |
-| 2.3 | Observe the bar above the input | Bar with an **amber alert** icon and the exact text: **"A conversa foi truncada, mas as alterações de arquivo NÃO puderam ser desfeitas (snapshot indisponível para esta mensagem)."** | Explicit and visible warning — **never** a silent revert in a code session |
-| 2.4 | Check on disk: `cat ~/orbit-teste-manual/ola.txt` | The file **still** has the edits from the reverted turn (it was not restored) | No false restoration of files |
+| 2.2 | Hover over the message of the **user before the answer without a snapshot** and click **"Revert to here"** | The conversation is truncated (the turn's messages disappear) | The truncation of the conversation **happens** (normal revert behavior) |
+| 2.3 | Observe the bar above the input | Bar with an **amber alert** icon and the exact text: **"The conversation was truncated, but the file changes could NOT be undone (no snapshot available for this message)."** | Explicit and visible warning — **never** a silent revert in a code session |
+| 2.4 | Check on disk: `cat ~/orbit-manual-test/hello.txt` | The file **still** has the edits from the reverted turn (it was not restored) | No false restoration of files |
 | 2.5 | *(State check)* With the app closed, open `session/<id>.json` | `"revert"` with `"filesRestored": false` and `"reason": "no-snapshot"` | The reason was recorded in the persisted state |
-| 2.6 | **Cleanup:** reopen the app and click **"Desfazer"** (or delete the session) | The bar disappears; the messages come back | Clean state for the next scenario |
+| 2.6 | **Cleanup:** reopen the app and click **"Undo"** (or delete the session) | The bar disappears; the messages come back | Clean state for the next scenario |
 
-### Scenario 3 — Unrevert (Desfazer): files and messages come back
+### Scenario 3 — Unrevert (Undo): files and messages come back
 
-**Goal:** the bar's "Desfazer" restores the truncated conversation **and** the filesystem to the state before the revert.
+**Goal:** the bar's "Undo" restores the truncated conversation **and** the filesystem to the state before the revert.
 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
-| 3.1 | Run scenario 1 up to step 1.6 (revert active, bar visible) | "1 arquivo revertido" bar active | Revert state active |
-| 3.2 | Note down: number of visible messages and the content of `ola.txt` (it should be original) | "Reverted" state | — |
-| 3.3 | Click **"Desfazer"** on the bar | The bar disappears; **the truncated messages reappear** (full conversation back) | All messages of the reverted turn are back, in order |
-| 3.4 | Check on disk: `cat ~/orbit-teste-manual/ola.txt` | The file **has the "LINHA_ADICIONADA" line again** (edited state) | The filesystem was restored to the pre-revert state |
+| 3.1 | Run scenario 1 up to step 1.6 (revert active, bar visible) | "1 file reverted" bar active | Revert state active |
+| 3.2 | Note down: number of visible messages and the content of `hello.txt` (it should be original) | "Reverted" state | — |
+| 3.3 | Click **"Undo"** on the bar | The bar disappears; **the truncated messages reappear** (full conversation back) | All messages of the reverted turn are back, in order |
+| 3.4 | Check on disk: `cat ~/orbit-manual-test/hello.txt` | The file **has the "ADDED_LINE" line again** (edited state) | The filesystem was restored to the pre-revert state |
 | 3.5 | *(State check)* With the app closed, open `session/<id>.json` | The `"revert"` field **absent** | The revert state was removed from the session |
 | 3.6 | Send a new message and confirm that the session works normally | Turn runs with no traces of the bar/state | No ghost state |
 
@@ -125,13 +125,13 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
-| 4.1 | Run scenario 1 up to step 1.6 (revert active, bar visible) | "1 arquivo revertido" bar active; original `ola.txt` | Revert state active |
+| 4.1 | Run scenario 1 up to step 1.6 (revert active, bar visible) | "1 file reverted" bar active; original `hello.txt` | Revert state active |
 | 4.2 | Close the app (**Cmd+Q** — not just the window) | App terminates | — |
 | 4.3 | Reopen with `npm run desktop:dev` | App opens normally | No startup error |
-| 4.4 | Navigate to the **same session** | The bar is still visible: **"1 arquivo revertido — nova mensagem continua deste ponto"** | The revert state **persisted** |
-| 4.5 | Check on disk: `cat ~/orbit-teste-manual/ola.txt` | Still in the original (reverted) state | The filesystem restore survived the restart |
+| 4.4 | Navigate to the **same session** | The bar is still visible: **"1 file reverted — new message continues from this point"** | The revert state **persisted** |
+| 4.5 | Check on disk: `cat ~/orbit-manual-test/hello.txt` | Still in the original (reverted) state | The filesystem restore survived the restart |
 | 4.6 | Check the conversation | Still truncated (the reverted turn's messages did not come back) | Persistence preserves the truncation |
-| 4.7 | Click **"Desfazer"** | Messages and file come back (scenario 3 behavior) | The unrevert works **after** reopening the app |
+| 4.7 | Click **"Undo"** | Messages and file come back (scenario 3 behavior) | The unrevert works **after** reopening the app |
 | 4.8 | **Cleanup:** with the revert undone, go to scenario 5 | Clean state | — |
 
 ### Scenario 5 — Snapshot capture failure at the start of the turn → `snapshot.failed`
@@ -143,8 +143,8 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 | 5.1 | Close the app | App terminates | — |
 | 5.2 | Locate the test folder's auxiliary snapshot repo: `find ~/Library/Application\ Support -maxdepth 4 -type d -name snapshots 2>/dev/null` and identify the project's hash subfolder (the most recent/only one) | Folder `<userData>/snapshots/<hash>/` exists (created by the app on the first turn) | Auxiliary repo identified |
 | 5.3 | Lock the repo to force the capture failure: `chmod -R 444 <userData>/snapshots/<hash>` | No output; permissions changed (`ls -l` shows `r--r--r--`) | The snapshot's `git add`/`write-tree` will start to fail |
-| 5.4 | Reopen the app and, in the test session, send: `Adicione a linha "FALHA_SNAPSHOT" no final de ola.txt.` | The turn **completes normally** (a snapshot failure does not bring the turn down) | The tracking failure does not interrupt the agent |
-| 5.5 | Observe the assistant message | The footer shows the warning: **"As alterações deste turno não puderam ser rastreadas."** | The failure is **visible** — never silence (no footer at all) |
+| 5.4 | Reopen the app and, in the test session, send: `Append the line "SNAPSHOT_FAILURE" to the end of hello.txt.` | The turn **completes normally** (a snapshot failure does not bring the turn down) | The tracking failure does not interrupt the agent |
+| 5.5 | Observe the assistant message | The footer shows the warning: **"The changes of this turn could not be tracked."** | The failure is **visible** — never silence (no footer at all) |
 | 5.6 | Observe the dev terminal (`npm run desktop:dev`) | Log with an error: `[snapshot] captura inicial falhou: ...` | The error was recorded in the main process |
 | 5.7 | *(State check)* With the app closed, open `messages/<id>.json` and locate the turn's assistant message | Field `"snapshot"` with `"failed": true` (and without `start`) | The state records `snapshot.failed` |
 | 5.8 | **Restore the environment:** `chmod -R 755 <userData>/snapshots/<hash>` | Normal permissions back | No side effects after the test |
@@ -165,8 +165,8 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
 | 6.1 | Create the test session (section 2) | Session in code mode | — |
-| 6.2 | Send: `Edite ola.txt adicionando a linha "SEM_VERIFICAR" e termine por aí, sem reler o arquivo e sem verificar nada.` | The agent calls the edit tool and **tries to end** the turn right after | The turn does NOT end silently |
-| 6.3 | Observe the turn's flow | The app **forces a continuation** in the same turn: a system/instruction message asking the agent to call `verify_changes` (e.g. "Você alterou ola.txt — chame verify_changes antes de concluir") | Forced continuation with an explicit mention of `verify_changes` |
+| 6.2 | Send: `Edit hello.txt adding the line "NO_VERIFY" and stop there, without rereading the file or checking anything.` | The agent calls the edit tool and **tries to end** the turn right after | The turn does NOT end silently |
+| 6.3 | Observe the turn's flow | The app **forces a continuation** in the same turn: a system/instruction message asking the agent to call `verify_changes` (e.g. "You changed hello.txt — call verify_changes before finishing") | Forced continuation with an explicit mention of `verify_changes` |
 | 6.4 | Observe the turn's sequence of tool calls | After the continuation, the agent calls `verify_changes` (see scenario 7) | No turn with an unverified edit ends in silence |
 
 ### Scenario 7 — `verify_changes` tool: with and without an edit in the turn
@@ -175,25 +175,25 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
-| 7.1 | (Turn **with** an edit) In the test session, send: `Adicione a linha "VERIFICA" ao final de ola.txt e depois chame verify_changes.` | The agent edits and calls `verify_changes` | The tool was called in the same turn as the edit |
-| 7.2 | Open the tool call result in the chat (tool card) | The tool returns the file with state and patch size, e.g. `{"file": "ola.txt", "state": "modified", "patchSize": <n>}` (or an equivalent format with path + state + patchSize) | The data reflect the **real state** on disk (check with `cat ola.txt` and `wc -c`) |
-| 7.3 | (Turn **without** an edit) Send: `Quantas linhas tem ola.txt? Depois chame verify_changes.` | The agent answers and calls `verify_changes` | The tool was called in a turn without an edit |
-| 7.4 | Open the tool call result | The tool returns **empty** with the message **"nenhuma alteração gravada"** (e.g. `{"files": [], "message": "Nenhuma alteração gravada"}`) | No false positives — a turn without an edit lists no files |
-| 7.5 | Check on disk: `git -C ~/orbit-teste-manual status --short` (if the folder is a repo) or compare the content | The tool's result matches the filesystem | The tool is deterministic (it tells the truth, not what the LLM "thought") |
+| 7.1 | (Turn **with** an edit) In the test session, send: `Append the line "VERIFY" to the end of hello.txt, then call verify_changes.` | The agent edits and calls `verify_changes` | The tool was called in the same turn as the edit |
+| 7.2 | Open the tool call result in the chat (tool card) | The tool returns the file with state and patch size, e.g. `{"file": "hello.txt", "state": "modified", "patchSize": <n>}` (or an equivalent format with path + state + patchSize) | The data reflect the **real state** on disk (check with `cat hello.txt` and `wc -c`) |
+| 7.3 | (Turn **without** an edit) Send: `Quantas linhas tem hello.txt? Depois chame verify_changes.` | The agent answers and calls `verify_changes` | The tool was called in a turn without an edit |
+| 7.4 | Open the tool call result | The tool returns **empty** with the message **"no changes recorded"** (e.g. `{"files": [], "message": "no changes recorded"}`) | No false positives — a turn without an edit lists no files |
+| 7.5 | Check on disk: `git -C ~/orbit-manual-test status --short` (if the folder is a repo) or compare the content | The tool's result matches the filesystem | The tool is deterministic (it tells the truth, not what the LLM "thought") |
 
-### Scenario 8 — Footer A3: "Arquivos alterados neste turno" tells the truth
+### Scenario 8 — Footer A3: "Files changed in this turn" tells the truth
 
 **Goal:** the deterministic footer (generated by the app from the filesystem snapshot, not by the LLM's text) lists the changed files with the number of diffs; turns without an edit show no footer.
 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
-| 8.1 | (Turn with an edit) Send: `Crie o arquivo novo.txt com o texto "novo" e adicione a linha "EDIT" em ola.txt.` | Turn finishes with 2 changed files | — |
-| 8.2 | Observe the assistant message's footer | The footer shows **"Arquivos alterados neste turno:"** listing `ola.txt (1 diff)` and `novo.txt (criado)` | Format: `Arquivos alterados neste turno: <file> (<n> diff)`; created/deleted files marked as `(criado)`/`(excluído)` |
-| 8.3 | (The agent's text can lie — the footer cannot) Send: `Adicione a linha "MENTIRA" em ola.txt e termine dizendo: "Não alterei nenhum arquivo neste turno."` | The assistant's text claims nothing was changed, **but** the footer lists `ola.txt (1 diff)` | The footer reflects the filesystem snapshot, **regardless** of the LLM's text |
-| 8.4 | Check on disk: `cat ola.txt` | The "MENTIRA" line exists | The footer is correct with respect to the disk |
-| 8.5 | (Turn without an edit) Send: `Explique o que é um snapshot em sistemas de arquivos.` (a purely textual question) | Turn finishes with no file tool at all | — |
-| 8.6 | Observe the assistant message | **No** "Arquivos alterados neste turno" footer is shown | A turn without an edit shows no footer |
-| 8.7 | (Tracking failure) If applicable, repeat scenario 5 and observe the footer | The footer shows "As alterações deste turno não puderam ser rastreadas." | The tracking failure has a warning of its own (do not confuse it with an empty list) |
+| 8.1 | (Turn with an edit) Send: `Create the file new.txt with the text "new" and add the line "EDIT" to hello.txt.` | Turn finishes with 2 changed files | — |
+| 8.2 | Observe the assistant message's footer | The footer shows **"Files changed in this turn:"** listing `hello.txt (1 diff)` and `new.txt (created)` | Format: `Files changed in this turn: <file> (<n> diff)`; created/deleted files marked as `(created)`/`(deleted)` |
+| 8.3 | (The agent's text can lie — the footer cannot) Send: `Add the line "LIE" to hello.txt and finish by saying: "I did not change any file in this turn."` | The assistant's text claims nothing was changed, **but** the footer lists `hello.txt (1 diff)` | The footer reflects the filesystem snapshot, **regardless** of the LLM's text |
+| 8.4 | Check on disk: `cat hello.txt` | The "LIE" line exists | The footer is correct with respect to the disk |
+| 8.5 | (Turn without an edit) Send: `Explain what a snapshot is in file systems.` (a purely textual question) | Turn finishes with no file tool at all | — |
+| 8.6 | Observe the assistant message | **No** "Files changed in this turn" footer is shown | A turn without an edit shows no footer |
+| 8.7 | (Tracking failure) If applicable, repeat scenario 5 and observe the footer | The footer shows "The changes of this turn could not be tracked." | The tracking failure has a warning of its own (do not confuse it with an empty list) |
 
 ### Scenario 9 — `session_context` tool: "what was changed in the previous turn?"
 
@@ -202,8 +202,8 @@ Repeat at the start of each Part B scenario (or use the cleanup step at the end 
 | Step | Action | Expected result | Acceptance criterion |
 |-------|------|--------------------|--------------------|
 | 9.1 | Create the test session (section 2) | Session in code mode | — |
-| 9.2 | Run a turn **with an edit** (e.g. step 8.1) and note down: approximate time, changed files, mode and permission level selected in the input | Turn with changes in `ola.txt` and `novo.txt` | There is a previous turn with edits to consult |
-| 9.3 | In the next turn, send: `O que foi alterado no turno anterior? Use session_context.` | The agent calls the `session_context` tool and answers | The tool was used (visible in the tool call card) |
+| 9.2 | Run a turn **with an edit** (e.g. step 8.1) and note down: approximate time, changed files, mode and permission level selected in the input | Turn with changes in `hello.txt` and `new.txt` | There is a previous turn with edits to consult |
+| 9.3 | In the next turn, send: `What changed in the previous turn? Use session_context.` | The agent calls the `session_context` tool and answers | The tool was used (visible in the tool call card) |
 | 9.4 | Check the agent's answer | Answer with the real data of the previous turn, including: **mode** (code), the **permissionMode** used, **timestamps** (start/end of the turn), **changed files** and **tool part errors** (if any) | The data match what actually happened |
 | 9.5 | Validate the data against the disk/the footer | Files cited = the ones in the previous turn's footer (scenario 8) and in `git status`/`cat` | The tool is faithful to the real state — it does not "invent" the summary |
 | 9.6 | (Previous turn **without** an edit) Send a textual question, then ask again what was changed | The tool answers indicating that **nothing** was changed in the previous turn | No inventing files in a turn without an edit |
@@ -260,7 +260,7 @@ Classification: [ ] regression  [ ] missing feature  [ ] intermittent failure
 
 | # | Scenario | Passed? | Notes |
 |---|---------|---------|-------------|
-| C1 | Revert with a snapshot: file comes back + "1 arquivo revertido" | ☐ | |
+| C1 | Revert with a snapshot: file comes back + "1 file reverted" | ☐ | |
 | C2 | Revert without a snapshot: explicit warning (never silent) | ☐ | |
 | C3 | Unrevert: files and messages come back | ☐ | |
 | C4 | Close/reopen in the middle of the flow: state persists | ☐ | |
@@ -274,24 +274,24 @@ Classification: [ ] regression  [ ] missing feature  [ ] intermittent failure
 
 ---
 
-## Annex A — Exact strings (pt-BR locale)
+## Annex A — Exact strings (English locale)
 
-Source: `apps/desktop/src/i18n/locales/pt-BR.json`
+Source: `apps/desktop/src/i18n/locales/en.json` (`pt-BR.json` holds the same keys). The `messageFooter.*` keys are no longer in the locale files; their rows describe what the footer showed when this plan was written.
 
 | Key | Value |
 |-------|-------|
-| `chat.revert` | "Reverter até aqui" |
-| `revert.filesRevertedOne` | "1 arquivo revertido" |
-| `revert.filesRevertedNone` / `Many` | "Arquivos revertidos" / "{{n}} arquivos revertidos" |
-| `revert.filesNotRestored` | "A conversa foi truncada, mas as alterações de arquivo NÃO puderam ser desfeitas (snapshot indisponível para esta mensagem)." |
-| `revert.conversationReverted` | "Conversa revertida até este ponto" |
-| `revert.continueFromHere` | "nova mensagem continua deste ponto" |
-| `revert.unrevert` | "Desfazer" |
+| `chat.revert` | "Revert to here" |
+| `revert.filesRevertedOne` | "1 file reverted" |
+| `revert.filesRevertedNone` / `Many` | "No files reverted" / "{{n}} files reverted" |
+| `revert.filesNotRestored` | "The conversation was truncated, but the file changes could NOT be undone (no snapshot available for this message)." |
+| `revert.conversationReverted` | "Conversation reverted up to this point" |
+| `revert.continueFromHere` | "new message continues from this point" |
+| `revert.unrevert` | "Undo" |
 | `revert.diff` | "Diff" |
-| `messageFooter.title` | "Arquivos alterados neste turno:" |
+| `messageFooter.title` | "Files changed in this turn:" |
 | `messageFooter.diffCount_one` / `other` | "{{count}} diff" / "{{count}} diffs" |
-| `messageFooter.created` / `deleted` | "criado" / "excluído" |
-| `messageFooter.failed` | "As alterações deste turno não puderam ser rastreadas." |
+| `messageFooter.created` / `deleted` | "created" / "deleted" |
+| `messageFooter.failed` | "The changes of this turn could not be tracked." |
 
 ## Annex B — Code references (for debugging)
 
@@ -301,7 +301,7 @@ Source: `apps/desktop/src/i18n/locales/pt-BR.json`
 | Revert/unrevert/cleanup logic | `apps/desktop/electron/lib/session/revert.ts` |
 | Revert bar (UI) | `apps/desktop/src/components/revert-bar.tsx` |
 | Changed-files footer (A3) | `apps/desktop/src/components/messages/message-footer.tsx` |
-| "Reverter até aqui" action (UI) | `apps/desktop/src/components/messages/shared.tsx` (~line 417) |
+| "Revert to here" action (UI) | `apps/desktop/src/components/messages/shared.tsx` (~line 417) |
 | Snapshot capture (start/end of the turn) | `apps/desktop/electron/lib/chat-engine.ts` (~lines 484–491 and 599–611) |
 | Snapshot engine (auxiliary git) | `apps/desktop/electron/lib/snapshot/index.ts` |
 | IPC handlers | `apps/desktop/electron/main.ts` (~line 1019: `session:revert` / `session:unrevert`) |

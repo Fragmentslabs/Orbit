@@ -45,6 +45,10 @@ vi.mock('../subchats', () => ({
 
 const { createSubchatTools } = await import('./subchats')
 const { currentTurnWrites, recordToolWrite, runWithWriteScope } = await import('../session/write-journal')
+const { setMainLocale } = await import('../i18n')
+
+// The child's opening lines follow the app language; these tests run the app in Portuguese.
+setMainLocale('Portuguese')
 
 type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const exec = (tools: ReturnType<typeof createSubchatTools>, name: 'suggest_subchat' | 'open_subchat' | 'read_subchat' | 'send_to_subchat') =>
@@ -195,7 +199,7 @@ describe('send_to_subchat', () => {
     const [, filho] = mocks.runChat.mock.calls[0] as [unknown, SendMessageInput]
     expect(filho.sessionId).toBe('ses_filho')
     expect(filho.directory).toBe('/repo')
-    // In the child's chat the message says where it came from, in the user's language.
+    // In the child's chat the message says where it came from, in the app language.
     expect(filho.text).toBe('Mensagem do chat principal: Agora cubra aspas escapadas')
     expect(String(r)).toContain('Instruction sent')
     // It does not ask on its own: the card is the permission gate (rules.ts).

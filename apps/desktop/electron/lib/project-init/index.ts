@@ -146,7 +146,7 @@ async function runProjectInitInner(input: RunInitInput): Promise<InitResult> {
 
   try {
     emit('scanning', { directory })
-    main('Escaneando a estrutura do projeto…\n')
+    main('Scanning the project structure…\n')
     const scan = await scanProject(rootDirectory)
     const scanDescription = describeScan(scan)
     if (signal.aborted) throw new InitAbortedError()

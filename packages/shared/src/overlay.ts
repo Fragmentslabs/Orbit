@@ -44,7 +44,7 @@ export interface OverlaySettings {
 export const OVERLAY_SHORTCUT = "CommandOrControl+Shift+Space"
 
 export const OVERLAY_SHORTCUT_LABEL: Record<string, string> = {
-  darwin: "⇧⌘espaço",
+  darwin: "⇧⌘Space",
   win32: "Ctrl+Shift+Space",
   linux: "Ctrl+Shift+Space",
 }

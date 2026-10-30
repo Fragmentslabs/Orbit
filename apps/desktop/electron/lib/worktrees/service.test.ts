@@ -10,7 +10,7 @@ const config = vi.hoisted(() => ({ worktrees: { local: 'default' as 'default' | 
 vi.mock('electron', () => ({ app: { getPath: () => userData.dir } }))
 vi.mock('../app-settings', () => ({ getAppSettings: () => config }))
 vi.mock('../shell-env', () => ({ userShellEnv: () => process.env }))
-vi.mock('../snapshot', () => ({ descartarSnapshots: vi.fn(async () => {}) }))
+vi.mock('../snapshot', () => ({ discardSnapshots: vi.fn(async () => {}) }))
 vi.mock('../process-manager', () => ({
   listProcesses: () => processes.list,
   killProcess: vi.fn(async (pid: number) => {

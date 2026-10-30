@@ -11,7 +11,7 @@ const config = vi.hoisted(() => ({
 vi.mock('electron', () => ({ app: { getPath: () => userData.dir } }))
 vi.mock('../app-settings', () => ({ getAppSettings: () => config }))
 vi.mock('../shell-env', () => ({ userShellEnv: () => process.env }))
-vi.mock('../snapshot', () => ({ descartarSnapshots: vi.fn(async () => {}) }))
+vi.mock('../snapshot', () => ({ discardSnapshots: vi.fn(async () => {}) }))
 
 const { findExtras, branchName, cleanOrphans, createWorktree, removeWorktree, slug } = await import('./worktree')
 

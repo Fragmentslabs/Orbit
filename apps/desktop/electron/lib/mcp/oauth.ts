@@ -122,16 +122,14 @@ const pendingFlows = new Map<string, PendingFlow>()
 const interactiveServers = new Set<string>()
 
 const HTML_OK =
-  '<!doctype html><html lang="pt"><meta charset="utf-8"><title>Orbit — MCP</title>' +
+  '<!doctype html><html lang="en"><meta charset="utf-8"><title>Orbit — MCP</title>' +
   '<body style="font-family:system-ui;background:#0f0f13;color:#eee;display:grid;place-items:center;height:100vh;margin:0;text-align:center">' +
-  '<p>Autorização concluída — você já pode fechar esta aba.<br>' +
-  '<small>Authorization complete — you may close this tab.</small></p></body></html>'
+  '<p>Authorization complete — you may close this tab.</p></body></html>'
 
 const HTML_ERROR =
-  '<!doctype html><html lang="pt"><meta charset="utf-8"><title>Orbit — MCP</title>' +
+  '<!doctype html><html lang="en"><meta charset="utf-8"><title>Orbit — MCP</title>' +
   '<body style="font-family:system-ui;background:#0f0f13;color:#eee;display:grid;place-items:center;height:100vh;margin:0;text-align:center">' +
-  '<p>Autorização não concluída — você pode fechar esta aba.<br>' +
-  '<small>Authorization was not completed — you may close this tab.</small></p></body></html>'
+  '<p>Authorization was not completed — you may close this tab.</p></body></html>'
 
 function findFlow(state: string): PendingFlow | undefined {
   for (const flow of pendingFlows.values()) {
