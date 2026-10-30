@@ -839,19 +839,24 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              {(statusDot === "submitted" || statusDot === "streaming") && !hasPendingAsk && (
-                <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
-              )}
-              {hasPendingAsk && (
-                <span className="size-2 shrink-0 rounded-full bg-primary" title={t("sidebar.awaitingInput")} />
-              )}
-              {statusDot === "error" && (
-                <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
-              )}
-              {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
-                <span className="size-2 shrink-0 rounded-full bg-primary" />
-              )}
-              {trailing}
+              {/* Statuses anchored to the right edge of the row. Without the
+                  `ml-auto` they followed the title, so a short one left the
+                  spinner in the middle of the line. */}
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                {(statusDot === "submitted" || statusDot === "streaming") && !hasPendingAsk && (
+                  <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+                )}
+                {hasPendingAsk && (
+                  <span className="size-2 shrink-0 rounded-full bg-primary" title={t("sidebar.awaitingInput")} />
+                )}
+                {statusDot === "error" && (
+                  <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+                )}
+                {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
+                  <span className="size-2 shrink-0 rounded-full bg-primary" />
+                )}
+                {trailing}
+              </div>
             </div>
           </Truncate>
         {session.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
