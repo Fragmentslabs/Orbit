@@ -22,6 +22,24 @@ beforeEach(() => {
 })
 afterEach(() => fs.rmSync(userData, { recursive: true, force: true }))
 
+/**
+ * `appendFile` is fire-and-forget by design: poll for the record instead of betting on a
+ * fixed delay — under a loaded suite 50 ms is not always enough, and the test failed on it.
+ */
+async function waitForPerfFile(maxMs = 5_000): Promise<string[]> {
+  const dir = path.join(userData, 'perf')
+  const deadline = Date.now() + maxMs
+  while (Date.now() < deadline) {
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir).filter((name) => name.endsWith('.jsonl'))
+      const ready = files.find((name) => fs.readFileSync(path.join(dir, name), 'utf8').trim().length > 0)
+      if (ready) return files
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error(`perf record never landed in ${dir}`)
+}
+
 describe('sumChildren', () => {
   it('walks the whole tree and skips the processes the app already reported', () => {
     const rows = [
@@ -89,10 +107,8 @@ describe('perfSpan', () => {
     const span = perf.perfSpan('worker', { title: 'Translate comments' })
     await new Promise((resolve) => setTimeout(resolve, 20))
     span.end({ replyChars: 42 })
-    // appendFile is fire-and-forget: give the event loop a turn.
-    await new Promise((resolve) => setTimeout(resolve, 50))
-
-    const files = fs.readdirSync(path.join(userData, 'perf'))
+    // appendFile is fire-and-forget: poll for the record instead of betting on a fixed delay.
+    const files = await waitForPerfFile()
     expect(files).toHaveLength(1)
     const lines = fs
       .readFileSync(path.join(userData, 'perf', files[0]), 'utf8')
