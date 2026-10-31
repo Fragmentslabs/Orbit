@@ -45,7 +45,12 @@ import { MESSAGES, t as mainT } from './i18n'
 import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
 import { selectDraftImages } from './image-drafts'
 import { hasStreamedContent, resolveRotation, retryDelay, waitUnlessAborted } from './model-rotation'
-import { buildSystemPrompt, promptMemoryIds } from './prompts'
+import { buildSystemPrompt, ensureSkillsBlock, promptMemoryIds, promptSkillSlugs, skillDeltaTurnBlock } from './prompts'
+import { createTurnEmbedder, type TurnEmbedder } from './memory/embedding'
+import { loadSkills } from './skills'
+import { skillHash, slugsUsedInSession, usageScope } from './skills/meta'
+import { snapshotOf } from './skills/mention'
+import { renderSkillHints, resolveHintMode, skillHintsForTurn, skillMentionTurnBlock } from './skills/turn'
 import { subchatsTurnBlock } from './subchats'
 import { retrieveForTurn } from './memory/service'
 import { renderMemorySuggestions } from './memory/retrieval'
@@ -402,6 +407,48 @@ function turnText(message: ChatMessage): string {
     .map((p) => p.text)
     .join('\n')
     .trim()
+}
+
+/**
+ * What the turn adds about skills, in the user message and never the system prompt (which
+ * is frozen for the cache prefix): the body of what `@slug` cited, the note when the set of
+ * skills changed after the prompt was built, and the spontaneous hints. Workers only get
+ * the `@slug` body. Never throws: skills are auxiliary context.
+ */
+async function skillsTurnBlock(
+  input: SendMessageInput,
+  recent: Array<{ role: 'user' | 'assistant'; text: string }>,
+  embed: TurnEmbedder,
+): Promise<string> {
+  try {
+    // Loaded once: the mention needs the bodies and the frozen index is built from this list.
+    const skills = await loadSkills(input.mode === 'code' ? input.directory : undefined)
+    // A worker's use belongs to the main conversation, never to its own session.
+    const sessionId = input.parentSessionId ?? input.sessionId
+    const scope = await usageScope(input.mode, input.directory)
+    const mention = await skillMentionTurnBlock(input.text, skills, { sessionId, scope })
+    if (input.orchestrationRole === 'worker') return mention.block
+    // The index freezes on the first turn; the hints need to know what level 1 already shows.
+    await ensureSkillsBlock(input, skills)
+    const delta = skillDeltaTurnBlock(input.sessionId, input.mode, input.directory, snapshotOf(skills, skillHash))
+    const hints = renderSkillHints(
+      await skillHintsForTurn({
+        text: input.text,
+        recent,
+        skills,
+        indexed: promptSkillSlugs(input.sessionId, input.mode, input.directory),
+        mentioned: mention.slugs,
+        opened: slugsUsedInSession(sessionId),
+        sessionId,
+        mode: resolveHintMode(input.options.skillHints),
+        embed,
+      }),
+    )
+    return [mention.block, delta, hints].filter(Boolean).join('\n\n')
+  } catch (err) {
+    console.error('[skills] turn block failed:', err)
+    return ''
+  }
 }
 
 /** Last turns of the conversation, to disambiguate a short message. */
@@ -2238,10 +2285,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // cache, and changing it on every question would throw that cache away. The block is
     // retrieved with the current message (and, if it does not explain itself, with the
     // previous turn) — see memory/retrieval.ts.
+    // One query vector per message, shared by the memory and the skills search.
+    const turnEmbed = createTurnEmbedder()
     const memoryBlock =
       input.options.brainContext && input.orchestrationRole !== 'worker'
         ? renderMemorySuggestions(
             await retrieveForTurn({
+              embed: turnEmbed,
               text: input.text,
               mode: input.mode,
               directory: toolContext?.directory,
@@ -2267,8 +2317,10 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // turns, so they ride in the message like the memories (see subchats.ts).
     const subchatsBlock =
       input.orchestrationRole !== 'worker' ? await subchatsTurnBlock(input.sessionId).catch(() => '') : ''
+    const skillsBlock = await skillsTurnBlock(input, recentTurns(history), turnEmbed)
     const turnBlock = [
       memoryBlock,
+      skillsBlock,
       subchatsBlock,
       prefetchedScreen
         ? prefetchedScreenBlock({

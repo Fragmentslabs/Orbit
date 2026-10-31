@@ -25,7 +25,7 @@ function projectSkillsDir(directory: string): string {
 }
 
 /** Lists the files of a bundle recursively (except the manifest), absolute paths. */
-async function listBundleFiles(dir: string, manifestPath: string): Promise<string[]> {
+export async function listBundleFiles(dir: string, manifestPath: string): Promise<string[]> {
   const files: string[] = []
   async function walk(current: string) {
     const entries = await fsp.readdir(current, { withFileTypes: true })
@@ -89,6 +89,24 @@ async function loadDir(dir: string, source: SkillSource): Promise<Skill[]> {
     }
   }
   return skills
+}
+
+/** One skill from a path: a flat file or the manifest of a bundle folder. */
+export async function loadSkillAt(filePath: string, source: SkillSource): Promise<Skill | null> {
+  try {
+    const stat = await fsp.stat(filePath)
+    const dir = stat.isDirectory() ? filePath : null
+    const manifestPath = dir ? await findManifest(dir) : filePath
+    if (!manifestPath) return null
+    const skill = parseSkill(await fsp.readFile(manifestPath, 'utf8'), source, manifestPath)
+    if (skill && dir) {
+      const scripts = await listBundleFiles(dir, manifestPath)
+      if (scripts.length) skill.scripts = scripts
+    }
+    return skill
+  } catch {
+    return null
+  }
 }
 
 /** Built-in + global + project merged; the project one overrides the global one. */

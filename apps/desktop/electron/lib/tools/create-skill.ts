@@ -1,6 +1,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { notifySkillsChanged } from '../skills'
+import { SKILL_SUMMARY_LIMIT, SKILL_TAGS_MAX, SKILL_TAGS_MIN } from '@shared/skills'
 import { proposeSkill } from '../skills/pending'
 
 /**
@@ -8,7 +9,7 @@ import { proposeSkill } from '../skills/pending'
  * proposal goes to staging and appears as an "Add skill" card in the conversation —
  * it only comes into use when the user approves it in the card.
  */
-export function createSkillTool() {
+export function createSkillTool(language?: string) {
   return tool({
     description:
       'Proposes a new Orbit skill: curated knowledge in markdown, optionally accompanied by helper scripts/files the skill uses. The proposal appears as an "Add skill" card in the conversation and is only activated once the user approves it. After calling, briefly explain what the skill does and how it was structured.',
@@ -19,6 +20,16 @@ export function createSkillTool() {
         .string()
         .describe(
           'Skill content in markdown. If there are scripts, explain here when and how to run them (relative paths).',
+        ),
+      summary: z
+        .string()
+        .describe(
+          `The skill's card: ONE line of at most ${SKILL_SUMMARY_LIMIT} characters starting with a verb, saying what it is FOR. Written in the user's language; technical terms stay as people write them (deploy, XML, ffmpeg). Over the limit is refused.`,
+        ),
+      tags: z
+        .array(z.string())
+        .describe(
+          `${SKILL_TAGS_MIN + 2} to ${SKILL_TAGS_MAX} words or short phrases the USER would type when asking for this — their own vocabulary, in their language, technical terms unchanged.`,
         ),
       slug: z
         .string()
@@ -34,9 +45,9 @@ export function createSkillTool() {
         .optional()
         .describe('Helper scripts/files that come with the skill (optional)'),
     }),
-    execute: async ({ name, description, content, slug, files }) => {
+    execute: async ({ name, description, content, slug, files, summary, tags }) => {
       try {
-        const proposal = await proposeSkill({ name, description, content, slug, files })
+        const proposal = await proposeSkill({ name, description, content, slug, files, summary, tags, lang: language })
         notifySkillsChanged()
         const extras = proposal.files.length
           ? ` with ${proposal.files.length} auxiliary file(s): ${proposal.files.join(', ')}`

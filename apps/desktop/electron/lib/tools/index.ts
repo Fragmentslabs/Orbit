@@ -32,6 +32,7 @@ import {
 import { createCodeTools } from './code'
 import { createSkillTool } from './create-skill'
 import { createSkillReadTool } from './skill-read'
+import { createSkillSearchTool } from './skill-search'
 import { createUserNameTool } from './user-name'
 import { createMcpTools } from './mcp'
 import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from './memory'
@@ -108,10 +109,16 @@ export function buildToolSet(
     // Preferences → Computer model, if any), not on every step here.
     tools.computer_task = createComputerTaskTool(input, ctx?.abort)
   }
-  // Skills: they enter the prompt with the description; the full content comes on
-  // demand (skill_read), so that a native skill does not pay for the whole text
-  // on every turn. It exposes no new capability — it only reads what the agent already sees.
-  tools.skill_read = createSkillReadTool(ctx?.directory)
+  // Skills: the prompt carries an index (descriptions of the natives, a summary or the
+  // name of the user's); the full content comes on demand (skill_read) and the search by
+  // topic is skill_search. A worker's use is counted for its PARENT conversation —
+  // otherwise a turn with 3 workers would count as 3 conversations.
+  tools.skill_read = createSkillReadTool({
+    directory: ctx?.directory,
+    sessionId: input.parentSessionId ?? input.sessionId,
+    mode: input.mode,
+  })
+  tools.skill_search = createSkillSearchTool({ directory: ctx?.directory })
   // Identity: the name the person said, in the SAME Preferences field. Automatic
   // detection covers "my name is X"; this tool covers the rest —
   // "I am Rafael", a correction, and the request to forget the name. Workers
@@ -302,7 +309,7 @@ export function buildToolSet(
     )
     // Explicit /create-skill flow: enables only the propose-skill tool
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
-      tools.create_skill = createSkillTool()
+      tools.create_skill = createSkillTool(input.language)
     }
     // MCP connections: propose a new connection, fix an existing one and read
     // the state. They only propose — the card in the conversation applies it —,
@@ -335,7 +342,7 @@ export function buildToolSet(
     }),
   )
   if (input.orchestrationRole !== 'worker') {
-    tools.create_skill = createSkillTool()
+    tools.create_skill = createSkillTool(input.language)
     // MCP connections: propose a new connection, fix an existing one and read the
     // state. They only propose — what applies it is the card in the conversation.
     Object.assign(tools, createMcpTools())

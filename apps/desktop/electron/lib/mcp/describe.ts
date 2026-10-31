@@ -5,6 +5,7 @@ import path from 'node:path'
 import { dataDir } from '../storage'
 import { getAppSettings } from '../app-settings'
 import { resolveAuxModel } from '../aux-model'
+import { oneLine as oneLineOf, parseJson } from '../aux-json'
 
 /**
  * Rewritten descriptions of MCP server tools, on demand.
@@ -91,29 +92,6 @@ const LIMIT = 140
 const MAX_TOOLS = 60
 const MAX_SOURCE = 300
 
-function oneLine(text: string): string {
-  return text
-    .replace(/[`<>#]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, LIMIT)
-}
-
-function parseJson(raw: string): Record<string, unknown> {
-  const stripped = raw
-    .replace(/^\s*```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
-    .trim()
-  const start = stripped.indexOf('{')
-  const end = stripped.lastIndexOf('}')
-  if (start < 0 || end <= start) return {}
-  try {
-    return JSON.parse(stripped.slice(start, end + 1)) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
-
 const SYSTEM = `You rewrite MCP tool descriptions so another model can pick the right tool faster.
 
 For each tool, write ONE line, at most ${LIMIT} characters, in English, starting with an imperative verb, describing what the tool RESOLVES — not what it is.
@@ -163,7 +141,7 @@ export async function optimizeServerDescriptions(
   for (const t of picked) {
     const value = parsed[t.name]
     if (typeof value !== 'string') continue
-    const line = oneLine(value)
+    const line = oneLineOf(value, LIMIT)
     if (line) descriptions[t.name] = line
   }
   if (Object.keys(descriptions).length === 0) {

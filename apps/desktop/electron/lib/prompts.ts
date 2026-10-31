@@ -2,6 +2,7 @@ import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { PERSONA_MIRROR, personaPromptLines } from '@shared/persona'
+import type { Skill } from '@shared/skills'
 import { uiDestinationCatalog } from '@shared/ui-destinations'
 import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from './app-settings'
 import { isComputerAvailable } from './computer'
@@ -9,6 +10,9 @@ import { loadPromptContext } from './memory/service'
 import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
 import { loadSkills } from './skills'
+import { cardFor, eventsForScope, getPrefs, skillHash, usageScope } from './skills/meta'
+import { diffSnapshots, renderSkillDelta as renderDelta, snapshotOf, type SkillSnapshot } from './skills/mention'
+import { buildSkillIndex, flatten, skillIndexLine, type SkillEntry } from './skills/retrieval'
 import { resolveFfmpeg } from './video/ffmpeg'
 import { listMcpToolDescriptions } from './mcp'
 import { overlayOpenContext, overlayOpenContextLine } from './overlay/open-context'
@@ -597,13 +601,13 @@ The app renders a chip with the summary, and clicking it opens the memory in the
 id exactly as memory_tree / memory_search / memory_open returned it — a guessed id opens nothing.
 Never leave a bare mem_xxx in the answer, and never cite a memory you did not read.`
 
-const SKILLS_INSTRUCTION = `USER SKILLS. The sections below are knowledge curated by the user (conventions, patterns, permanent instructions). Apply a skill whenever the topic is relevant — you decide contextually. When the user's message references @skill-name, applying that skill is MANDATORY. A built-in skill (source: builtin) lists only its description: call skill_read({ slug }) to load its full instructions before applying it.`
+const SKILLS_INSTRUCTION = `SKILLS. Skills are knowledge curated by the user (conventions, patterns, procedures). Their content is NOT in this prompt: only an index. Built-in skills list their description; the user's own list a one-line summary, and any beyond the first 25 appear by name only. Before applying a skill, call skill_read({ slug }) with its @slug to load the instructions. If the skill you need is only listed by name, or not listed, use skill_search({ query }) to look it up by topic. A message may carry a "[skill hints]" block: automatic suggestions, unverified — open one only if it helps. When the user's message cites @slug, the skill's content already arrives with that message and applying it is MANDATORY. A skill is not a standing rule: permanent rules belong in AGENTS.md / CLAUDE.md (already in your context) or in the user's general preferences.`
 
 const CREATE_SKILL_INSTRUCTION = `/create-skill FLOW ACTIVE. The user wants you to create an Orbit skill from their description.
 
 1. If the description is insufficient (missing goal, context, or examples), use the question tool with clear options — at most one round of questions.
 2. Structure the skill: content in dense, actionable markdown (rules, steps, short examples). If the skill needs automation, include scripts in "files" (relative paths like scripts/name.ext) and explain in the content when and how to run them.
-3. Call create_skill ONCE. The proposal becomes an "Add skill" card in the conversation — the skill only goes into use once the user approves it.
+3. Write the skill's card too: "summary" (one line, at most 120 characters, saying what it is for) and "tags" (words the user would type), in the user's language with technical terms unchanged. Then call create_skill ONCE. The proposal becomes an "Add skill" card in the conversation — the skill only goes into use once the user approves it.
 4. Afterward, explain in 2-4 sentences how the skill was structured and how to use it (@slug in the "/" palette).`
 
 const DOCUMENT_INSTRUCTION = `DOCUMENTATION MODE ACTIVE (/document). You will navigate the web app with the panel_* tools and produce documentation in docs/ in the working folder.
@@ -631,30 +635,101 @@ const VISUAL_CHECK_INSTRUCTION = `CHECKING YOUR WORK. Verify through text whenev
 
 const VERIFIED_RECORD_INSTRUCTION = `Lines like "[Verified record: ...]" (e.g. "N file(s) modified in this turn — ..." or "NO file was modified in this turn"), "[TODO for this response]" and "[SYSTEM: ...]" may appear in the context that comes with the user's message. They are INTERNAL ENGINE BOOKKEEPING about YOUR previous turn — measured from filesystem snapshots and injected for your awareness only. They are not written by the user and are not a template for your output. NEVER quote, copy, echo or append them in your visible reply, not even at the end as a footer: the user must never see those lines. Report what changed in your own words.`
 
-/** Skills (global + project) injected as available context. */
-async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
+/**
+ * The skills block, computed ONCE per session and frozen (`sessionId | mode | directory`),
+ * like the memory block: the system prompt is the providers' cache prefix, so it is never
+ * recomputed mid-conversation. When the set of skills changes, the difference travels as a
+ * note in the turn (see skillDeltaTurnBlock), not as a new prompt.
+ */
+interface FrozenSkills {
+  parts: string[]
+  /** Slugs listed WITH a summary at level 1 — the turn's hints do not repeat them */
+  described: string[]
+  /** What each skill looked like when the prompt was built */
+  snapshot: SkillSnapshot
+  /** What the last delta note already told the model about */
+  notified: SkillSnapshot
+}
+
+const skillsBySession = new Map<string, FrozenSkills>()
+const SKILLS_SESSIONS = 64
+
+const skillsKey = (sessionId: string, mode: string, directory?: string) => `${sessionId}|${mode}|${directory ?? ''}`
+
+function builtinLine(skill: { slug: string; description: string }): string {
+  const description = flatten(skill.description, 10_000)
+  return `- @${skill.slug}${description ? ` — ${description}` : ''} (call skill_read to apply it)`
+}
+
+/** Frozen state of the session's skills, building it on the first call. */
+export async function ensureSkillsBlock(input: SendMessageInput, preloaded?: readonly Skill[]): Promise<FrozenSkills> {
+  // A worker shares the index of the conversation that spawned it: an entry of its own is
+  // work redone and would push live sessions out of this 64-slot map — and a rebuild
+  // mid-conversation can reorder the list, changing the prompt bytes the freeze protects.
+  const key = skillsKey(input.parentSessionId ?? input.sessionId, input.mode, input.directory)
+  const cached = skillsBySession.get(key)
+  if (cached) return cached
+
+  const frozen: FrozenSkills = { parts: [], described: [], snapshot: {}, notified: {} }
   try {
-    const skills = await loadSkills(input.mode === 'code' ? input.directory : undefined)
-    if (skills.length === 0) return []
-    const sections = skills.map((skill) => {
-      const referenced = input.text.includes(`@${skill.slug}`)
-      const header = `### Skill @${skill.slug}${referenced ? ' (REFERENCED IN THIS MESSAGE — apply it)' : ''}`
-      const description = skill.description ? `\n${skill.description}` : ''
-      // Native skill: only the description enters the prompt (the body comes through
-      // skill_read) — that way a default skill costs no tokens on every turn.
-      if (skill.source === 'builtin' && !referenced) {
-        return `${header}${description}\n\nBuilt-in skill: the full instructions are NOT loaded. Call skill_read({ slug: "${skill.slug}" }) to get them before applying it.`
+    const skills = preloaded ?? (await loadSkills(input.mode === 'code' ? input.directory : undefined))
+    frozen.snapshot = snapshotOf(skills, skillHash)
+    frozen.notified = { ...frozen.snapshot }
+    if (skills.length > 0) {
+      const builtins = skills.filter((s) => s.source === 'builtin')
+      const entries: SkillEntry[] = skills.filter((s) => s.source !== 'builtin').map((skill) => ({ skill, card: cardFor(skill) }))
+      const scope = await usageScope(input.mode, input.directory)
+      const index = await buildSkillIndex({ entries, events: eventsForScope(scope), prefs: getPrefs() })
+      frozen.described = index.described.map((d) => d.skill.slug)
+
+      const sections = [SKILLS_INSTRUCTION]
+      if (builtins.length > 0) sections.push(`## Built-in skills\n${builtins.map(builtinLine).join('\n')}`)
+      if (index.described.length > 0) {
+        sections.push(
+          `## Your skills\nTheir content is NOT loaded — call skill_read with the @slug before applying one.\n${index.described.map(skillIndexLine).join('\n')}`,
+        )
       }
-      const scripts = skill.scripts?.length
-        ? `\n\nHelper files for this skill (run with bash when it says to):\n${skill.scripts.map((s) => `- ${s}`).join('\n')}`
-        : ''
-      return `${header}${description}\n\n${skill.content}${scripts}`
-    })
-    return [`${SKILLS_INSTRUCTION}\n\n${sections.join('\n\n')}`]
+      if (index.namesOnly.length > 0) {
+        sections.push(
+          `Also available — call skill_read with any @slug when relevant:\n${index.namesOnly.map((s) => `@${s}`).join(', ')}`,
+        )
+      }
+      frozen.parts = [sections.join('\n\n')]
+    }
   } catch (err) {
     console.error('[skills] failed to load for the prompt:', err)
-    return []
   }
+  if (skillsBySession.size >= SKILLS_SESSIONS) skillsBySession.delete(skillsBySession.keys().next().value!)
+  skillsBySession.set(key, frozen)
+  return frozen
+}
+
+/** Skills block of the system prompt: index only, never a user skill's body. */
+async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
+  return (await ensureSkillsBlock(input)).parts
+}
+
+/** Slugs at level 1 of this session's index (the hints exclude them). */
+export function promptSkillSlugs(sessionId: string, mode: string, directory?: string): string[] {
+  return skillsBySession.get(skillsKey(sessionId, mode, directory))?.described ?? []
+}
+
+/**
+ * The difference between the skills now and what the frozen prompt describes, as the
+ * turn's note. It does not repeat what it already told: each call moves the baseline.
+ */
+export function skillDeltaTurnBlock(
+  sessionId: string,
+  mode: string,
+  directory: string | undefined,
+  now: SkillSnapshot,
+): string {
+  const frozen = skillsBySession.get(skillsKey(sessionId, mode, directory))
+  if (!frozen) return ''
+  const delta = diffSnapshots(frozen.notified, now)
+  if (delta.added.length + delta.removed.length + delta.changed.length === 0) return ''
+  frozen.notified = { ...now }
+  return renderDelta(delta)
 }
 
 /** Age in short language — the model needs it to judge whether it still counts. */

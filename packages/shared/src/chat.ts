@@ -1117,6 +1117,10 @@ export interface SendMessageOptions {
   brain?: boolean
   /** Injects relevant memories automatically into the prompt */
   brainContext?: boolean
+  /** Injects the per-turn skill suggestion line: a pointer, never the body. It is the
+   *  user's preference (Preferences → skill suggestions), already resolved against the
+   *  per-conversation Memory toggle. */
+  skillHints?: boolean
   /** Orchestra mode: splits into a task plan + workers in child sessions */
   orchestrate?: { plan?: OrchestrationPlan }
   /** Loop mode: the agent reviews and iterates until the task is complete (configurable max N iterations) */

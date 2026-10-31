@@ -17,7 +17,7 @@ import {
 } from './domain'
 import { buildProjectMap, rootOf, type ProjectMap } from './project-map'
 import * as repo from './repository'
-import { embedTexts, modelInstalled, syncIndex, vectorsById } from './embedding'
+import { embedTexts, modelInstalled, syncIndex, vectorsById, type TurnEmbedder } from './embedding'
 import { suggestMemories, type MemorySuggestion } from './retrieval'
 import { folderInMainRepository } from '../worktrees/main'
 
@@ -1033,6 +1033,8 @@ export async function retrieveForTurn(input: {
   recent?: Array<{ role: 'user' | 'assistant'; text: string }>
   /** Ids already present in this session's system prompt block. */
   exclude?: readonly string[]
+  /** The turn's shared embedder (one vector per message, whoever asks). */
+  embed?: TurnEmbedder
 }): Promise<MemorySuggestion[]> {
   if (!MEMORY_SUGGESTIONS_ENABLED) return []
   try {
@@ -1043,6 +1045,7 @@ export async function retrieveForTurn(input: {
       pool,
       docs: await docsFor(pool),
       exclude: input.exclude,
+      embed: input.embed,
     })
   } catch (err) {
     console.error('[memory] turn suggestions failed:', err)

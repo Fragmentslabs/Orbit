@@ -99,6 +99,7 @@ async function wake(win: BrowserWindow, opener: SendMessageInput, child: Session
       reasoning: o.reasoning,
       brain: o.brain,
       brainContext: o.brainContext,
+      skillHints: o.skillHints,
       research: o.research,
       browser: o.browser,
       subagents: o.subagents,

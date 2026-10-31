@@ -366,6 +366,34 @@ export async function stopWorker(): Promise<void> {
   })
 }
 
+/**
+ * The worker is up right now. Features that are only a bonus (skill suggestions) use this
+ * as their criterion instead of `modelInstalled()`: the worker shuts down after 5 idle
+ * minutes and waking it costs ~400 MB of RSS plus latency — not worth it for a hint.
+ */
+export function workerActive(): boolean {
+  return Boolean(child && ready)
+}
+
+/** Embeds one text for the turn. `wake: false` never starts the worker; null = no vector. */
+export type TurnEmbedder = (text: string, options?: { wake?: boolean }) => Promise<Float32Array | null>
+
+/**
+ * One query vector per turn, shared by everything that searches with the message
+ * (memory, skills): the same text is embedded once, however many consumers ask.
+ */
+export function createTurnEmbedder(): TurnEmbedder {
+  const done = new Map<string, Promise<Float32Array | null>>()
+  return (text, options = {}) => {
+    const hit = done.get(text)
+    if (hit) return hit
+    if (options.wake === false && !workerActive()) return Promise.resolve(null)
+    const run = embedTexts([text]).then(([vec]) => vec ?? null).catch(() => null)
+    done.set(text, run)
+    return run
+  }
+}
+
 /** Vectors for a list of texts. Throws when the model is not available. */
 export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
   if (texts.length === 0) return []

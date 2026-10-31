@@ -176,6 +176,8 @@ import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { computeAnalytics } from './lib/analytics'
 import type { AnalyticsRange } from '@shared/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
+import { metaViews, pruneOrphanCards, setPref, usageScope } from './lib/skills/meta'
+import { NoAuxModelError, optimizeSkill } from './lib/skills/optimize'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import {
   adoptDraftDocuments,
@@ -2311,6 +2313,25 @@ app.whenReady().then(() => {
 
   // Skills: list, create, and the watcher of the global folder notifies the renderer
   ipcMain.handle('skills:list', (_event, directory?: string) => loadSkills(directory))
+  // Card state, preferences and usage of each skill (usage in the open repository, else global)
+  ipcMain.handle('skills:meta', async (_event, directory?: string) => {
+    const skills = await loadSkills(directory)
+    await pruneOrphanCards()
+    return metaViews(skills, await usageScope(directory ? 'code' : 'chat', directory))
+  })
+  ipcMain.handle('skills:optimize', async (_event, slug: string, directory?: string, language?: string) => {
+    const skill = (await loadSkills(directory)).find((s) => s.slug === slug)
+    if (!skill || skill.source === 'builtin') return { error: 'not-found' as const }
+    try {
+      return { card: await optimizeSkill(skill, { language }) }
+    } catch (err) {
+      if (err instanceof NoAuxModelError) return { error: 'no-aux-model' as const }
+      return { error: 'failed' as const, message: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  ipcMain.handle('skills:set-pref', (_event, slug: string, patch: { pin?: boolean; never?: boolean }) =>
+    setPref(sanitizeSlug(slug), patch),
+  )
   ipcMain.handle('skills:create', async (_event, { name, description, content, slug, oldSlug }) => {
     const safeSlug = slug ? sanitizeSlug(slug) : sanitizeSlug(name)
     if (!safeSlug) return { error: 'Invalid slug — use only lowercase letters, numbers and underscores' }

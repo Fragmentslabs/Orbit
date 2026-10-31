@@ -11,7 +11,7 @@ import {
 } from '@shared/memory-select'
 import { contextualQuery, isolatedQuery, needsContextRetry, type ChatTurn } from '@shared/memory-query'
 import { deriveTitle } from '@shared/memory-retrieval'
-import { embedTexts, noiseFloorFor, vectorsById } from './embedding'
+import { embedTexts, noiseFloorFor, vectorsById, type TurnEmbedder } from './embedding'
 
 /**
  * Memory retrieval for the turn: merges what the semantic and the
@@ -67,6 +67,18 @@ export interface RetrieveInput {
   pool: Memory[]
   /** Attached documents, by id — what is inside the `.md` counts too */
   docs?: Map<string, string>
+  /** Embeds the query. The turn passes one shared with the other searches so the message is vectorized once. */
+  embed?: TurnEmbedder
+}
+
+/** The retrieval never embeds on its own: the caller hands the embedder in (or this default). */
+const defaultEmbed: TurnEmbedder = async (text) => {
+  try {
+    const [vec] = await embedTexts([text])
+    return vec ?? null
+  } catch {
+    return null
+  }
 }
 
 /** An empty pool or an empty message retrieves nothing. */
@@ -105,15 +117,7 @@ export async function retrieveMemoryContext(input: RetrieveInput): Promise<Memor
   }
 
   const run = async (semantic: string, lexicalQuery: string) => {
-    let queryVec: Float32Array | null = null
-    if (hasVectors) {
-      try {
-        const [vec] = await embedTexts([semantic])
-        queryVec = vec ?? null
-      } catch {
-        queryVec = null
-      }
-    }
+    const queryVec = hasVectors ? await (input.embed ?? defaultEmbed)(semantic) : null
     const candidates = retrieveCandidates({ queryVec, lexicalQuery, vectors, lexical }, RETRIEVAL)
     const selection = selectForContext(candidates, noise, SELECTION)
     const top = candidates.reduce<number | null>((best, c) => {
@@ -239,15 +243,8 @@ export async function suggestMemories(input: SuggestInput): Promise<MemorySugges
   const vectors = await vectorsById()
 
   const rank = async (semantic: string, lexicalQuery: string): Promise<MemorySuggestion[]> => {
-    let queryVec: Float32Array | null = null
-    if (vectors.size > 0) {
-      try {
-        const [vec] = await embedTexts([semantic])
-        queryVec = vec ?? null
-      } catch {
-        queryVec = null // model went down: carry on with the lexical path, no semantic suggestion
-      }
-    }
+    // Model went down → null: carry on with the lexical path, no semantic suggestion.
+    const queryVec = vectors.size > 0 ? await (input.embed ?? defaultEmbed)(semantic) : null
     const candidates = retrieveCandidates({ queryVec, lexicalQuery, vectors, lexical }, RETRIEVAL)
     return candidates
       .filter((c) => (c.cos != null && c.cos >= SELECTION.pointerCos) || c.lexRank === 0)
