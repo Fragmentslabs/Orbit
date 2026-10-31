@@ -1,66 +1,32 @@
 /**
- * Text search across sessions (title + text parts of the messages).
- * Linear on-demand scan — same caps as the search:sessions IPC.
+ * Text search across sessions (title + text of the messages) for the UI and the
+ * companion. It reads the in-memory session index — there is no scan here and no
+ * ceiling on how many sessions are covered.
  */
-import type { ChatMessage, SearchHit, SessionInfo } from '@shared/chat'
-import { StorageKeys } from '@shared/chat'
-import { listKeys, readJson } from './storage'
+import type { SearchHit } from '@shared/chat'
+import { excerpt, sessionIndex } from './session-index'
 
-const MAX_SESSIONS = 40
 const MAX_HITS_PER_SESSION = 5
-const MAX_RESULTS = 50
-const SNIPPET_PAD = 40
+const MAX_RESULTS = 100
+const SNIPPET_WIDTH = 120
 
 export async function searchSessions(query: string): Promise<SearchHit[]> {
   if (!query?.trim()) return []
-  const q = query.toLowerCase().trim()
+  const { matches, terms } = await sessionIndex().search({ query, includeArchived: true })
 
-  const keys = await listKeys(StorageKeys.sessionPrefix)
-  const all = (
-    await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))
-  ).filter((s): s is SessionInfo => s !== null)
-  all.sort((a, b) => b.updatedAt - a.updatedAt)
-
-  const results: SearchHit[] = []
-
-  for (const info of all.slice(0, MAX_SESSIONS)) {
-    const hits: string[] = []
-
-    if (info.title.toLowerCase().includes(q)) {
-      hits.push(info.title)
-    }
-
-    if (hits.length < MAX_HITS_PER_SESSION) {
-      const msgs = (await readJson<ChatMessage[]>(StorageKeys.messages(info.id))) ?? []
-      for (const msg of msgs) {
-        for (const part of msg.parts) {
-          if (part.type === 'text' && part.text.toLowerCase().includes(q)) {
-            const idx = part.text.toLowerCase().indexOf(q)
-            const start = Math.max(0, idx - SNIPPET_PAD)
-            const end = Math.min(part.text.length, idx + q.length + SNIPPET_PAD)
-            let snippet = part.text.slice(start, end)
-            if (start > 0) snippet = '…' + snippet
-            if (end < part.text.length) snippet += '…'
-            hits.push(snippet)
-            if (hits.length >= MAX_HITS_PER_SESSION) break
-          }
-        }
-        if (hits.length >= MAX_HITS_PER_SESSION) break
-      }
-    }
-
-    for (const snippet of hits.slice(0, MAX_HITS_PER_SESSION)) {
-      results.push({
-        sessionId: info.id,
-        sessionTitle: info.title,
-        mode: info.mode,
-        updatedAt: info.updatedAt,
-        snippet,
-      })
-    }
-
-    if (results.length >= MAX_RESULTS) break
+  // Chats in the order of their best match; within a chat, best match first.
+  const perChat = new Map<string, SearchHit[]>()
+  for (const { chat, passage } of matches) {
+    const hits = perChat.get(chat.id) ?? []
+    if (hits.length >= MAX_HITS_PER_SESSION) continue
+    hits.push({
+      sessionId: chat.id,
+      sessionTitle: chat.title,
+      mode: chat.mode,
+      updatedAt: chat.updatedAt,
+      snippet: passage.role === 'title' ? chat.title : excerpt(passage.text, terms, SNIPPET_WIDTH),
+    })
+    perChat.set(chat.id, hits)
   }
-
-  return results
+  return [...perChat.values()].flat().slice(0, MAX_RESULTS)
 }

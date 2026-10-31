@@ -160,6 +160,7 @@ import { registerPanelStateIpc } from './lib/panel-state'
 import { registerVoiceIpc, syncWhisperServer } from './lib/voice'
 import { registerGitIpc } from './lib/git'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
+import { startSessionIndex } from './lib/session-index'
 import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
 import { applyLaunchAtLogin } from './lib/autostart'
 import { createTray, destroyTray, hasTray, refreshTray } from './lib/tray'
@@ -2244,6 +2245,9 @@ app.whenReady().then(() => {
     }
   })
   setupMemoryScheduler()
+  // Text index of past conversations (search + chat_search): built in the background once the
+  // window has had its first paint, so it never competes with the boot.
+  setTimeout(startSessionIndex, 3000).unref()
 
   // General settings: the renderer pushes on every change (see app-settings).
   ipcMain.on('settings:sync', (_event, raw: unknown) => void setAppSettings(raw))

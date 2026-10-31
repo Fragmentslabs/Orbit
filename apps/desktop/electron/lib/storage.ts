@@ -59,6 +59,20 @@ async function writeAtomic(file: string, content: string): Promise<void> {
   await fs.rename(tmp, file)
 }
 
+/**
+ * Modification time and size of a key's file, without reading it — what a derived
+ * index compares to know which entries changed. `null` when the key does not exist.
+ */
+export async function statKey(key: string): Promise<{ mtimeMs: number; size: number } | null> {
+  try {
+    const { mtimeMs, size } = await fs.stat(fileFor(key))
+    return { mtimeMs, size }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw err
+  }
+}
+
 export async function writeJson(key: string, value: unknown): Promise<void> {
   const file = fileFor(key)
   await fs.mkdir(path.dirname(file), { recursive: true })

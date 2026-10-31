@@ -239,7 +239,9 @@ export function lexicalDocOf(memory: Memory & Partial<IndexSource>, doc?: string
 export class Bm25Index {
   private readonly k1: number
   private readonly b: number
-  private readonly postings = new Map<string, Array<[number, number]>>()
+  /** token → [doc, freq, doc, freq, …]. Flat on purpose: one small array per token instead of
+   *  one tuple per occurrence, which is what made a 7 000-passage index cost tens of MB. */
+  private readonly postings = new Map<string, number[]>()
   private readonly lengths: number[] = []
   private readonly ids: string[] = []
   private avgLen = 0
@@ -263,8 +265,8 @@ export class Bm25Index {
       for (const [token, freq] of tf) {
         len += freq
         const list = this.postings.get(token)
-        if (list) list.push([index, freq])
-        else this.postings.set(token, [[index, freq]])
+        if (list) list.push(index, freq)
+        else this.postings.set(token, [index, freq])
       }
       this.ids.push(doc.id)
       this.lengths.push(len)
@@ -277,6 +279,11 @@ export class Bm25Index {
     return this.ids.length
   }
 
+  /** Every token the index knows — lets a caller expand a query by prefix. */
+  terms(): IterableIterator<string> {
+    return this.postings.keys()
+  }
+
   /**
    * IDF mass of the query (unknown terms count as the rarest ones):
    * the denominator of the "coverage" — how much of what was asked the document has.
@@ -285,7 +292,7 @@ export class Bm25Index {
     const n = this.ids.length
     let mass = 0
     for (const token of new Set(lexTokens(query))) {
-      const df = this.postings.get(token)?.length ?? 0
+      const df = (this.postings.get(token)?.length ?? 0) / 2
       mass += Math.log(1 + (n - df + 0.5) / (df + 0.5))
     }
     return mass
@@ -298,8 +305,11 @@ export class Bm25Index {
     for (const token of new Set(lexTokens(query))) {
       const list = this.postings.get(token)
       if (!list) continue
-      const idf = Math.log(1 + (n - list.length + 0.5) / (list.length + 0.5))
-      for (const [doc, freq] of list) {
+      const df = list.length / 2
+      const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5))
+      for (let i = 0; i < list.length; i += 2) {
+        const doc = list[i]
+        const freq = list[i + 1]
         const norm = 1 - this.b + (this.b * this.lengths[doc]) / (this.avgLen || 1)
         const s = (idf * freq * (this.k1 + 1)) / (freq + this.k1 * norm)
         scores.set(doc, (scores.get(doc) ?? 0) + s)
