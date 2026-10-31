@@ -55,3 +55,9 @@ release
 # AppX assets generated in build:store (scripts/generate-appx-assets.mjs)
 apps/desktop/build/appx
 apps/desktop/.cache
+
+# Signing/notarization credentials. electron-builder reads electron-builder.env
+# from its cwd, which is apps/desktop (see node_modules/electron-builder/out/cli/cli-util.js:24).
+# The real file lives in the home directory; the one in here is a symlink — never commit.
+apps/desktop/electron-builder.env
+electron-builder.env
