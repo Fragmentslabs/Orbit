@@ -130,6 +130,18 @@ const STYLE_PERSIST_MS = 300
 const VIRTUAL_MARGIN = 480
 
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
+/**
+ * Boundary between a fine delta (the trackpad pinch, which arrives in small and
+ * continuous steps) and the coarse step of a wheel click (~100px at once).
+ */
+const COARSE_DELTA = 40
+/**
+ * Zoom gain per pixel of delta. A single gain for both gestures made the pinch
+ * crawl on a notebook: the whole pinch adds up to ~200px of delta, against
+ * ~100px in a single wheel click. Same split the memory graph uses.
+ */
+const ZOOM_SPEED_FINE = 0.0075
+const ZOOM_SPEED_COARSE = 0.0022
 
 /**
  * Order of two paths: the DOM one comes first. It is what orders the multiple
@@ -346,10 +358,11 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
     (sx: number, sy: number, dx: number, dy: number, ctrl: boolean, shift: boolean, mode: number) => {
       const scale = mode === 1 ? 16 : mode === 2 ? 400 : 1
       if (ctrl) {
-        // A wheel step (~100) gives ~22%; the trackpad pinch sends small
-        // and continuous deltas. The per-event ceiling avoids "fast" wheel jumps.
-        const delta = Math.max(-80, Math.min(80, dy * scale))
-        zoomAt(sx, sy, (z) => z * Math.exp(-delta * 0.002))
+        // The trackpad pinch sends small and continuous deltas; a wheel click
+        // arrives as one ~100px jump. `zoomAt` already clamps the result.
+        const delta = dy * scale
+        const speed = Math.abs(delta) < COARSE_DELTA ? ZOOM_SPEED_FINE : ZOOM_SPEED_COARSE
+        zoomAt(sx, sy, (z) => z * Math.exp(-delta * speed))
       } else {
         // Shift inverts the axes: the wheel becomes a horizontal pan (as in
         // browsers and in Figma).
