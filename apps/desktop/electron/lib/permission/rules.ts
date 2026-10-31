@@ -343,7 +343,12 @@ function isCriticalTarget(target: string, dir: string): boolean {
   if (path.isAbsolute(clean)) return true
   const resolved = path.resolve(dir, clean)
   const rel = path.relative(dir, resolved)
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+  // The working folder itself and anything that contains it: there the project
+  // goes with the deletion. Inside it is an ordinary recursive removal — `dist`,
+  // `node_modules` — and that is the dialog's business, not a refusal. Every
+  // outside path is either absolute (above) or `..`-relative, so both still stop
+  // here. `..cache` inside the project is a folder, not an escape.
+  return rel === '' || rel === '..' || rel.startsWith('..' + path.sep)
 }
 
 function segments(command: string): string[][] {
@@ -354,6 +359,65 @@ function segments(command: string): string[][] {
     .map((s) => s.split(/\s+/))
 }
 
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
+
+/** The quotes belong to whoever wrote the call, not to what runs inside. */
+function unquote(text: string): string {
+  return text.trim().replace(/^(['"])([\s\S]*)\1$/, '$2')
+}
+
+/** The string a shell was told to run: `sh -c "…"`, `bash -lc '…'`. */
+function innerCommand(tokens: string[]): string | null {
+  const flag = tokens.findIndex((t) => t === '--command' || /^-[a-zA-Z]*c[a-zA-Z]*$/.test(t))
+  if (flag === -1) return null
+  const payload = unquote(tokens.slice(flag + 1).join(' '))
+  return payload || null
+}
+
+/**
+ * Every command the shell will actually run, including the one hidden inside
+ * `sh -c "…"`. Without descending there the whole list below is decorative:
+ * `bash -c 'rm -rf /'` was approved in silence, because the first token of the
+ * segment is `bash` and no rule looks at the rest.
+ */
+function* commandSegments(command: string, depth = 0): Generator<string[]> {
+  for (const tokens of segments(command)) {
+    yield tokens
+    if (depth >= 3) continue
+    const rest = tokens[0] === 'sudo' ? tokens.slice(1) : tokens
+    const cmd = rest[0]
+    const nested =
+      cmd && SHELLS.has(cmd)
+        ? innerCommand(rest)
+        : cmd === 'eval'
+          ? unquote(rest.slice(1).join(' ')) || null
+          : null
+    if (nested) yield* commandSegments(nested, depth + 1)
+  }
+}
+
+/**
+ * Code that arrived from the network and goes straight into an interpreter:
+ * `curl … | sh`, `wget -O- … | bash`, `bash <(curl …)`, `sh -c "$(curl …)"`,
+ * `base64 -d … | sh`. Every other rule classifies a command, and here the
+ * command does not contain the code that runs.
+ */
+const REMOTE_CODE = [
+  /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh|fish)\b/i,
+  /<\s*\(\s*(?:curl|wget)\b/i,
+  /\b(?:sh|bash|zsh|eval)\b[^\n]*\$\s*\(\s*(?:curl|wget)\b/i,
+  /\bbase64\b[^|\n]*(?:-d|--decode)[^|\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b/i,
+]
+
+/** Files that exist to hold credentials: reading one is the exfiltration step. */
+const SECRET_PATHS =
+  /(?:^|[\s'"=])(?:~|\$HOME|\/Users\/[^/\s'"]+|\/root)\/\.(?:ssh\/id_[^\s'"]+|aws\/credentials|netrc|git-credentials|docker\/config\.json|kube\/config)/i
+
+/**
+ * Bash rules: only what ends the user's work or acts outside the project. The
+ * list stays short on purpose — the rule that fires on everyday work is the one
+ * the user switches off, and the dialog goes with it.
+ */
 function assessBash(command: string, dir: string | null): Assessment | null {
   const found: Assessment[] = []
   const claim = (ruleId: string, detail: string): Assessment => ({
@@ -361,7 +425,14 @@ function assessBash(command: string, dir: string | null): Assessment | null {
     claim: { tool: 'bash', title: `bash: ${shorten(command)}`, detail },
   })
 
-  for (let tokens of segments(command)) {
+  if (REMOTE_CODE.some((re) => re.test(command))) {
+    found.push(claim('bash:remote-code', tNow('perm.risk.remoteCode')))
+  }
+  if (SECRET_PATHS.test(command)) {
+    found.push(claim('bash:secrets', tNow('perm.risk.secrets')))
+  }
+
+  for (let tokens of commandSegments(command)) {
     if (tokens[0] === 'sudo') {
       found.push(claim('bash:sudo', tNow('perm.risk.elevated')))
       tokens = tokens.slice(1)
@@ -394,6 +465,74 @@ function assessBash(command: string, dir: string | null): Assessment | null {
       if (sub === 'reset' && tokens.includes('--hard')) {
         found.push(claim('bash:git-reset-hard', tNow('perm.risk.hardReset')))
       }
+      // Deleting what was never committed, or throwing away the edits in the tree:
+      // the same loss as `reset --hard`, by another door.
+      if (sub === 'clean') {
+        const flags = tokens.slice(2).filter((t) => t.startsWith('-'))
+        const dry = flags.some((t) => t === '--dry-run' || /^-[a-zA-Z]*n[a-zA-Z]*$/.test(t))
+        const force = flags.some((t) => t === '--force' || (/^-[a-zA-Z]+$/.test(t) && t.includes('f')))
+        if (force && !dry) found.push(claim('bash:git-clean', tNow('perm.risk.gitClean')))
+      }
+      const discards = sub === 'restore' || sub === 'checkout'
+      if (discards && tokens.some((t) => t === '.' || t === ':/' || t === '*')) {
+        found.push(claim('bash:git-discard', tNow('perm.risk.gitDiscard')))
+      }
+    }
+
+    // Permissions: recursing over a tree, opening it to everyone or setting the
+    // setuid bit. `chmod +x script.sh` is everyday work and does not fire.
+    if (cmd === 'chmod' || cmd === 'chown' || cmd === 'chgrp') {
+      const flags = tokens.filter((t) => t.startsWith('-')).join('')
+      const mode = tokens.slice(1).find((t) => !t.startsWith('-')) ?? ''
+      const recursive = /[rR]/.test(flags) || flags.includes('recursive')
+      const open =
+        cmd === 'chmod' &&
+        (/(?:^|[=+])(?:777|666)\b/.test(mode) || /\bs(?:t|etuid)?\b/.test(mode) || /^[246][0-7]{3}$/.test(mode))
+      if (recursive || open) found.push(claim('bash:permissions', tNow('perm.risk.permissions')))
+    }
+
+    // Raw disk: nothing here is undoable and nothing here is routine.
+    if (
+      (cmd === 'dd' && tokens.some((t) => /^of=\/dev\//.test(t))) ||
+      /^mkfs(\..+)?$/.test(cmd) ||
+      /^(fdisk|parted|gdisk|sgdisk|diskpart)$/.test(cmd) ||
+      (cmd === 'diskutil' && /^(erase\w*|reformat|zeroDisk|secureErase)/i.test(tokens[1] ?? ''))
+    ) {
+      found.push(claim('bash:disk-write', tNow('perm.risk.disk')))
+    }
+
+    // Other people's processes: by name (`killall`, `pkill`) it can reach the
+    // user's own app, and `kill -9` gives it no chance to save. A plain `kill`
+    // on a pid is the agent cleaning up after itself and does not ask.
+    if (
+      /^(?:killall|pkill|taskkill|xkill)$/.test(cmd) ||
+      (cmd === 'kill' && tokens.some((t) => /^-(?:9|KILL|SIGKILL|f|F)$/.test(t)))
+    ) {
+      found.push(claim('bash:kill', tNow('perm.risk.kill')))
+    }
+
+    // Something that keeps running after the command ends — "it started now" and
+    // "it starts by itself every day" are different promises. Reading the state
+    // (`launchctl print`, `crontab -l`) is not that.
+    if (cmd === 'launchctl' && !/^(?:print|list|blame|dumpstate|procinfo|version)$/.test(tokens[1] ?? '')) {
+      found.push(claim('bash:service-install', tNow('perm.risk.service')))
+    }
+    if (cmd === 'crontab' && tokens[1] !== '-l') {
+      found.push(claim('bash:service-install', tNow('perm.risk.service')))
+    }
+    if (cmd === 'systemctl' && /^(?:enable|disable|start|stop|restart|mask|unmask|link)$/.test(tokens[1] ?? '')) {
+      found.push(claim('bash:service-install', tNow('perm.risk.service')))
+    }
+
+    // The keychain through bash: reading a stored password is not the same as
+    // listing certificates, and only the first one is here.
+    if (
+      cmd === 'security' &&
+      (/dump-keychain/.test(command) ||
+        tokens.includes('-w') ||
+        /^(?:find|export)-(?:generic|internet)-password$/.test(tokens[1] ?? ''))
+    ) {
+      found.push(claim('bash:secrets', tNow('perm.risk.secrets')))
     }
 
     // Screen control through bash: osascript with System Events (keystroke,
@@ -519,13 +658,15 @@ export function isForbidden(toolName: string, input: unknown, dir: string | null
 
   if (toolName === 'bash' && typeof args.command === 'string') {
     const command = args.command
-    for (const tokens of segments(command)) {
-      const cmd = tokens[0]
-      if (cmd === 'rm') {
-        const flags = tokens.filter((t) => t.startsWith('-')).join('')
+    // Same descent as assess(): the hard block cannot be walked around with
+    // `bash -c '…'` or hidden behind `sudo`.
+    for (const tokens of commandSegments(command)) {
+      const rest = tokens[0] === 'sudo' ? tokens.slice(1) : tokens
+      if (rest[0] === 'rm') {
+        const flags = rest.filter((t) => t.startsWith('-')).join('')
         const recursiveForce = /r/i.test(flags) && flags.includes('f')
         if (recursiveForce) {
-          const targets = tokens.slice(1).filter((t) => !t.startsWith('-'))
+          const targets = rest.slice(1).filter((t) => !t.startsWith('-'))
           if (targets.some((t) => isCriticalTarget(t, dir ?? ''))) return true
         }
       }

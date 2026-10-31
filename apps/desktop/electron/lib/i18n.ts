@@ -611,6 +611,38 @@ export const MESSAGES = {
     'pt-BR': 'instalação/remoção de dependências',
     en: 'installing/removing dependencies',
   },
+  'perm.risk.remoteCode': {
+    'pt-BR': 'executa código baixado da rede (curl | sh)',
+    en: 'runs code downloaded from the network (curl | sh)',
+  },
+  'perm.risk.permissions': {
+    'pt-BR': 'muda permissões de arquivos de forma recursiva ou aberta',
+    en: 'changes file permissions recursively or wide open',
+  },
+  'perm.risk.disk': {
+    'pt-BR': 'escreve ou particiona um disco',
+    en: 'writes to or partitions a disk',
+  },
+  'perm.risk.kill': {
+    'pt-BR': 'encerra processos que não são do agente',
+    en: "ends processes that are not the agent's own",
+  },
+  'perm.risk.service': {
+    'pt-BR': 'cria ou altera um serviço que roda sem você',
+    en: 'creates or changes a service that runs without you',
+  },
+  'perm.risk.secrets': {
+    'pt-BR': 'lê credenciais ou chaves do sistema',
+    en: 'reads credentials or system keys',
+  },
+  'perm.risk.gitClean': {
+    'pt-BR': 'apaga arquivos que nunca foram commitados (git clean -f)',
+    en: 'deletes files that were never committed (git clean -f)',
+  },
+  'perm.risk.gitDiscard': {
+    'pt-BR': 'descarta as alterações locais não commitadas',
+    en: 'discards uncommitted local changes',
+  },
   'perm.risk.gitWrite': {
     'pt-BR': 'escrita dentro de .git corrompe o repositório',
     en: 'writing inside .git corrupts the repository',
