@@ -11,6 +11,8 @@ import {
   Minimize2,
   Minus,
   MousePointer2,
+  PanelBottomClose,
+  PanelBottomOpen,
   PanelRightClose,
   PanelRightOpen,
   Play,
@@ -1372,6 +1374,10 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
   // If the active tab was "layers", the right one falls back to "properties".
   const rightTab: InspectorTab = inspectorTab === "layers" ? "properties" : inspectorTab
 
+  // The inspector is a column on the right when the tab is wide and a strip at the
+  // bottom when it is not: the icon follows the place the panel actually takes.
+  const InspectorIcon = inspectorOpen ? (wide ? PanelRightClose : PanelBottomClose) : (wide ? PanelRightOpen : PanelBottomOpen)
+
   return (
     <div
       ref={rootRef}
@@ -1466,8 +1472,9 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
           {/* In fullscreen the floating buttons of the sidebars are what open/close them */}
           {!fullscreen && (
             <IconAction
-              icon={inspectorOpen ? PanelRightClose : PanelRightOpen}
+              icon={InspectorIcon}
               label={t(inspectorOpen ? "design.hideInspector" : "design.showInspector")}
+              active={inspectorOpen}
               onClick={() => setInspectorOpen((v) => !v)}
             />
           )}
