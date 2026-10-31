@@ -144,6 +144,10 @@ const NATIVE_TOOLS = new Set([
   'chat_list',
   'chat_archive',
   'chat_delete',
+  // Reading a past chat: pure read of Orbit's storage. The scope lock lives in the tool
+  // (the default scope, or a chat a search the user allowed already showed). chat_search is NOT
+  // here: widening it to every chat in code mode has its own rule in assess().
+  'chat_read',
   // Subchats: reading a child's conversation is a pure read of Orbit's storage.
   // Instructing one (send_to_subchat) has its own rule in assess().
   'read_subchat',
@@ -587,6 +591,20 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
   // whoever put the tool here wants execution without a question — isForbidden
   // (hard block) still applies on top of that.
   if (NATIVE_TOOLS.has(toolName) || loadUserNeverAsk().has(toolName)) return null
+  // A project session reading the user's OTHER chats and projects. In chat mode there is no
+  // working folder (`dir` is null) and every chat is the user's own; in code mode the default
+  // scope is this project and going past it needs a yes.
+  if (toolName === 'chat_search') {
+    if (args.scope !== 'all' || dir === null) return null
+    return {
+      ruleId: 'chats:search-all',
+      claim: {
+        tool: toolName,
+        title: tNow('perm.chats.searchAll'),
+        detail: tNow('perm.chats.searchAllDetail', { query: shorten(typeof args.query === 'string' ? args.query : '', 120) }),
+      },
+    }
+  }
   if (toolName === 'bash' && typeof args.command === 'string') {
     return assessBash(args.command, dir)
   }

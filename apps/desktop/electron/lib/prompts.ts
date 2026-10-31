@@ -159,6 +159,8 @@ WORKING WITH EXISTING PDFs. pdf_merge joins files; pdf_transform picks, REORDERS
 - pdf_metadata reads the document properties; pdf_transform writes them. pdf_extract_images pulls the FIGURES out of the file into the gallery — different from pdf_view_page, which photographs the page.
 - Before filling a form, call pdf_form_fields: fields are matched by their INTERNAL name, which is rarely the label printed next to the box. Flatten only when the form is being SENT.`
 
+const PAST_CHATS_INSTRUCTION = `When the user refers to something discussed or decided in an earlier conversation ("what did we decide about X", "that bug from last week") and memory has no answer, call chat_search with the distinctive words of the subject, then chat_read on the best passage before relying on it. Say which chat and date it came from; if nothing is found, say so instead of guessing.`
+
 const SUBCHAT_INSTRUCTION = `## Subchats
 When something shows up that does not belong in this conversation — a separate task, a side investigation, a problem the user mentioned in passing, work for another project or another folder — do not decide it alone and do not announce that you are separating it: call suggest_subchat with the title, the brief you would use and scope "subchat", and let the user choose. This is on your own initiative: nobody has to ask for it, and waiting to be asked is how the suggestion never happens. One card per subject. Write the brief as if it were the only thing the new chat knew: the goal, what is already done and verified, the files that matter (exact paths) and the next concrete step. If they pick the new chat, it opens attached to this one, in the same folder, and starts working from the brief right away; if they pick this chat, do the work here; if they decline, leave it aside.
 
@@ -985,6 +987,7 @@ export async function buildSystemPrompt(
   // history — see subchats.ts).
   if (input.orchestrationRole !== 'worker') {
     parts.push(SUBCHAT_INSTRUCTION)
+    parts.push(PAST_CHATS_INSTRUCTION)
     const subchats = formatSubchatsBlock(await listSubchats(input.sessionId))
     if (subchats) parts.push(subchats)
   }

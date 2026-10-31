@@ -17,6 +17,7 @@ import { createPipelineTools } from './pipeline'
 import { createRoutinesTool } from './routines'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
+import { createChatSearchTools } from './chat-search'
 import { createSubchatTools } from './subchats'
 import { createUsageTools } from './usage'
 import type { ToolContext } from './context'
@@ -266,6 +267,8 @@ export function buildToolSet(
       // cleanup routines. Out of the workers for the same reason as the pipeline —
       // the main session decides what leaves the sidebar.
       Object.assign(tools, createSessionTools())
+      // Past conversations: search by what was said, then read the surroundings.
+      Object.assign(tools, createChatSearchTools(input))
       // Subchats: a new conversation, attached to this one, for what does not belong to this
       // context (or when a new context is worth more than another compaction).
       // Out of the workers — whoever decides to open a conversation is whoever talks to the person.
@@ -497,6 +500,7 @@ export function buildToolSet(
     // cleanup routines. Out of the workers for the same reason as the pipeline —
     // the main session decides what leaves the sidebar.
     Object.assign(tools, createSessionTools())
+    Object.assign(tools, createChatSearchTools(input))
     // Subchats: a new conversation, attached to this one, for what does not belong to this
     // context (or when a new context is worth more than another compaction).
     // Out of the workers — whoever decides to open a conversation is whoever talks to the person.

@@ -107,7 +107,7 @@ export const MAX_TOOLS_PER_FAMILY = 40
  * the family behind `tools_load`, the suggestion only appeared when the user asked
  * for a new chat out loud.
  */
-export const DEFAULT_ACTIVE_FAMILIES: readonly string[] = ['subchats']
+export const DEFAULT_ACTIVE_FAMILIES: readonly string[] = ['subchats', 'history']
 
 /** Declared families. The order here is the map's order (deterministic). */
 interface FamilyDecl {
@@ -269,6 +269,16 @@ const FAMILIES: readonly FamilyDecl[] = [
     label: 'subchats',
     description: 'Open/read conversations attached to this one and send instructions to them.',
     prefixes: ['suggest_subchat', 'open_subchat', 'send_to_subchat', 'read_subchat'],
+  },
+  {
+    // Before `sessions`, whose `chat_` prefix would otherwise take these two. Active from the
+    // first turn like `subchats`: the prompt tells the agent to call chat_search on its own
+    // initiative, and a tool that is not declared cannot be called.
+    id: 'history',
+    label: 'history',
+    description: 'Search what was said in past conversations and read the surroundings of a passage.',
+    exact: ['chat_search', 'chat_read'],
+    prefixes: [],
   },
   {
     id: 'sessions',

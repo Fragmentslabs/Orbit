@@ -671,6 +671,14 @@ export const MESSAGES = {
     'pt-BR': ' O branch é mantido.',
     en: ' The branch is kept.',
   },
+  'perm.chats.searchAll': {
+    'pt-BR': 'Buscar em todas as conversas',
+    en: 'Search all conversations',
+  },
+  'perm.chats.searchAllDetail': {
+    'pt-BR': 'Além deste projeto, inclui conversas de outros projetos e do chat. Busca por: {{query}}',
+    en: 'Beyond this project, includes conversations from other projects and from chat. Looking for: {{query}}',
+  },
   'perm.subchat.sendInstruction': {
     'pt-BR': 'Enviar uma instrução a um subchat',
     en: 'Send an instruction to a subchat',

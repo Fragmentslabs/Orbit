@@ -50,6 +50,25 @@ describe('assess — nativas x MCP', () => {
   })
 })
 
+describe('assess — past conversations', () => {
+  it('searching inside the default scope never asks, and neither does reading', () => {
+    expect(assess('chat_search', { query: 'cache' }, '/work/orbit')).toBeNull()
+    expect(assess('chat_search', { query: 'cache', scope: 'folder' }, '/work/orbit')).toBeNull()
+    expect(assess('chat_read', { id: 'abc' }, '/work/orbit')).toBeNull()
+  })
+
+  it('in chat (no working folder) "all" is the user\'s own history: no question', () => {
+    expect(assess('chat_search', { query: 'cache', scope: 'all' }, null)).toBeNull()
+  })
+
+  it('in code, widening to every chat and project asks, once per kind of action', () => {
+    const request = assess('chat_search', { query: 'cache', scope: 'all' }, '/work/orbit')
+    expect(request).toMatchObject({ ruleId: 'chats:search-all', claim: { tool: 'chat_search' } })
+    expect(request?.alwaysAsk).toBeUndefined()
+    expect(request?.claim.detail).toContain('cache')
+  })
+})
+
 describe('computer use', () => {
   it('reading does not ask; acting asks per app', async () => {
     const { isForbidden } = await import('./rules')
