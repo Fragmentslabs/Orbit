@@ -42,6 +42,7 @@ import { createBashTool } from './shell'
 import { createTodoTool } from './todo'
 import { createSessionContextTool } from './session-context'
 import { createVerifyChangesTool } from './verify-changes'
+import { createRunToolsTool } from './run-tools'
 import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
 import { agentMayControlComputer, agentMayUseBrowser, getAppSettings } from '../app-settings'
@@ -510,6 +511,14 @@ export function buildToolSet(
   // Vision mode: seeing the attached images is the agent's decision — the
   // describe_image tool describes on demand (with the context it passes).
   if (input.visionModel) tools.describe_image = createDescribeImageTool(input)
+  // Programmatic Tool Calling: one script instead of N round trips. It goes LAST
+  // because it reads the assembled set (the script's API) on every run. Code mode
+  // only, and never in plan: the sandbox is hermetic, but a script that reached the
+  // host realm would still write around a read-only turn. Workers stay out — their
+  // loop already runs on a short context, which is the problem this solves.
+  if (ctx && !input.options.plan && input.orchestrationRole !== 'worker') {
+    tools.run_tools = createRunToolsTool({ input, ctx, tools: () => tools })
+  }
 
   return tools
 }

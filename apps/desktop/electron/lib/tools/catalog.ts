@@ -84,6 +84,10 @@ export const CORE: readonly string[] = [
   // The mechanism's two bridges: without them the funnel has no door.
   'tools_load',
   'tools_list',
+  // The other way around the round trip: one script that calls many tools. It is
+  // what keeps a loop over 20 files from costing 20 sends of this conversation,
+  // so it is worthless behind a family it would have to be loaded first to use.
+  'run_tools',
 ]
 
 export const CORE_SET: ReadonlySet<string> = new Set(CORE)
