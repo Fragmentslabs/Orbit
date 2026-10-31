@@ -42,14 +42,18 @@ export function PermissionModePicker({ sessionId }: { sessionId?: string }) {
         <SelectValue>{modes.find((m) => m.id === mode)?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent side="top" sideOffset={4} align="start" alignItemWithTrigger={false} className="min-w-64 p-1.5">
-        {modes.map((m) => (
-          <SelectItem key={m.id} value={m.id}>
-            <div className="flex flex-col whitespace-normal">
-              <span>{m.label}</span>
-              <span className="text-xs text-muted-foreground">{m.description}</span>
-            </div>
-          </SelectItem>
-        ))}
+        {modes.map((m) => {
+          const ModeIcon = MODE_ICON[m.id]
+          return (
+            <SelectItem key={m.id} value={m.id} className="items-start">
+              <ModeIcon className="mt-0.5 size-3.5 text-muted-foreground" />
+              <div className="flex flex-col whitespace-normal">
+                <span>{m.label}</span>
+                <span className="text-xs text-muted-foreground">{m.description}</span>
+              </div>
+            </SelectItem>
+          )
+        })}
       </SelectContent>
     </Select>
   )
