@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -23,21 +24,45 @@ function fileFor(key: string) {
 }
 
 export async function readJson<T>(key: string): Promise<T | null> {
+  const file = fileFor(key)
+  let raw: string
   try {
-    const raw = await fs.readFile(fileFor(key), 'utf8')
-    return JSON.parse(raw) as T
+    raw = await fs.readFile(file, 'utf8')
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
     throw err
   }
+  try {
+    return JSON.parse(raw) as T
+  } catch (err) {
+    // One damaged file must not take the app down with it — the renderer reads
+    // storage in its init, so a throw here leaves the whole window without events.
+    // The file is moved aside (kept for inspection) and the key reads as empty;
+    // the next write recreates it.
+    await fs.rename(file, `${file}.corrupt-${Date.now()}`).catch(() => {})
+    console.error(`[storage] ${key}.json is not valid JSON — moved aside`, err)
+    return null
+  }
+}
+
+/**
+ * Writes through a temporary sibling and renames it over the target.
+ *
+ * The temporary name must be unique per call. It used to be `<file>.<Date.now()>.tmp`,
+ * so two writes of the same key within one millisecond shared the same temp: the
+ * first rename carried the second write's bytes and the file was left with two JSON
+ * documents stitched together (a torn `folders.json` broke the renderer's load).
+ */
+async function writeAtomic(file: string, content: string): Promise<void> {
+  const tmp = `${file}.${process.pid}-${randomUUID()}.tmp`
+  await fs.writeFile(tmp, content, 'utf8')
+  await fs.rename(tmp, file)
 }
 
 export async function writeJson(key: string, value: unknown): Promise<void> {
   const file = fileFor(key)
   await fs.mkdir(path.dirname(file), { recursive: true })
-  const tmp = `${file}.${Date.now()}.tmp`
-  await fs.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8')
-  await fs.rename(tmp, file)
+  await writeAtomic(file, JSON.stringify(value, null, 2))
 }
 
 export async function removeJson(key: string): Promise<void> {
@@ -69,9 +94,7 @@ export async function readText(key: string): Promise<string | null> {
 export async function writeText(key: string, content: string): Promise<void> {
   const file = textFileFor(key)
   await fs.mkdir(path.dirname(file), { recursive: true })
-  const tmp = `${file}.${Date.now()}.tmp`
-  await fs.writeFile(tmp, content, 'utf8')
-  await fs.rename(tmp, file)
+  await writeAtomic(file, content)
 }
 
 export async function removeText(key: string): Promise<void> {
