@@ -156,10 +156,14 @@ motion_preview / motion_write / motion_edit end with a "Lint:" block, and motion
 - Keep the composition folder clean: it is watched for live reload. Renders and contact sheets land outside it by themselves — bring in only what the piece uses.
 - Name what matters with data-layer: the Motion tab draws one track per layer with the frames where it enters and leaves. Unnamed elements that appear and disappear show up with their text; naming the phrases/elements makes those tracks (and the user's notes) readable.
 
-## Render (motion_render) — the expensive step
-- It captures and encodes every frame once, and it is MINUTES per render (a 1080p30 piece runs frame by frame). Run it after the approval, never to discover what the piece looks like.
+## Render (motion_render) — the file is a deliverable, not a step
+- DEFAULT: do not render. The Motion tab already shows the piece live, at full quality — that is how the user watches it, and the tab has its own Render button. Call motion_render only when the user asks for the video, or when you need the clip as an overlay in an EDL. Never at the end of a task "to deliver something".
 - Never render to look: that is motion_frame's job (3–5 instants, see: true only for a real visual doubt). Never render again for a line of text or a colour — motion_edit changes it and the tab shows it live.
-- If a preview render is genuinely unavoidable, make it CHEAP: width/height at half the final size and fps 15. The user is judging cut, timing and text, not sharpness. The full-size render happens ONCE, after the approval.
+- A render for your OWN analysis, when genuinely unavoidable, is CHEAP: width/height at half the final size, fps 15, quality "small". The user is judging cut, timing and text, not sharpness. The full-size render happens ONCE, when they ask for the file.
+- COST: the frames are drawn in an OFFSCREEN window, where Chromium rasterizes in SOFTWARE (the tab uses the GPU). What is expensive is FILL RATE, not your JavaScript — a full-screen canvas, big gradients, blur and shadow filters, and above all MULTISAMPLING. antialias: true in a WebGL context costs nothing in the tab and can multiply the render by 40×: measured here, a 1080×1920 WebGL piece went from 14m45s to 22s by turning it off alone. In a piece that will be rendered, create the context with antialias: false — the frame is captured at the screen scale and reduced by ffmpeg anyway.
+- msPerFrame counts ONLY seek + capture + the write to ffmpeg — it does NOT see rasterization. A render that took minutes with a small msPerFrame is fill rate (canvas size, filters, MSAA), not per-frame work in the composition: look there before optimising code.
+- quality: "high" | "balanced" | "small" is the FILE's weight (CRF/preset) — it makes the file smaller, not the render faster. Size and fps are what make a render cheap.
+- The capture may come at the screen scale (a Retina screen doubles it) and ffmpeg brings the video back to the declared size: declare the size you want and leave the rest to the pipeline, never compensate inside the piece.
 - format: "mp4" (h264, no alpha — the normal clip), "mov-alpha" (ProRes 4444) or "webm-alpha" (VP9, smaller) for an overlay that has to sit over the footage. For alpha keep html/body background transparent.
 - bands: how many parallel bands the frame range is split into; the default follows the cores. bands: 1 forces a single sequential pass — the escape hatch for a composition that cannot be pure.
 - The result reports the time per frame (msPerFrame). A high number on a simple piece means the composition is doing per-frame work it could do once (a filter, a layout, a big image redrawn every frame): fix that before rendering again instead of paying for it twice.
@@ -176,6 +180,7 @@ motion_preview / motion_write / motion_edit end with a "Lint:" block, and motion
 - Text must be readable on a phone: large, high contrast, short.
 - Fonts: load them from local files with @font-face; motion_render warns when a font failed (the fallback is silent otherwise).
 - After the user approved it and you rendered the clip, check it with video_timeline at the key moments before placing it in the EDL.
+- WebGL/Canvas pieces: create the context with antialias: false. MSAA costs nothing in the tab (GPU) and can take a render from seconds to minutes under software rasterization — see "Render", COST.
 - Several independent animations? Delegate each to a sub-agent in parallel (subagent tool) with a self-contained brief: the composition name, size/fps/durationInFrames, exact text, the payoff frame, palette, mp4 or alpha. Each worker writes its own piece with motion_write and reports its motion id (mv_…); show each one to the user with motion_preview({ id }).
 
 ## Minimal skeleton
