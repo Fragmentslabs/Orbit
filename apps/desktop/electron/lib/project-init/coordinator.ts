@@ -7,6 +7,7 @@ import { createGlobTool, createGrepTool, createListTool, createReadTool } from '
 import type { ToolContext } from '../tools/context'
 import {
   createDraft,
+  cleanList,
   removeNode,
   renderDraft,
   retireExisting,
@@ -131,6 +132,7 @@ SHAPE OF THE TREE
 - One node per independent part (e.g. "front/", "backend/", "apps/mobile"), with "scope" set to its folder relative to the root. Knowledge specific to a part hangs under that part's node (and deeper when it helps: front > auth flow).
 - Cross-cutting knowledge — business rules, the contract between front and back, shared conventions — hangs under the root and is linked with "related" to every part it touches.
 - Each node: "summary" is 1–3 sentences (max ${SUMMARY_MAX} chars) that is useful on its own, because it is injected into future prompts; "document" holds the detail (paths, commands, rules, flows, examples) in markdown, opened on demand. A node without real detail in its document is usually not worth having.
+- SEARCH FIELDS: on every draft_node (and draft_learning) fill "keywords" and "concepts"; on nodes with named things, "entities". They are what lets a future question that words things differently — or in another language — find the node. They never state anything the summary and document do not.
 - AGENTS.md / CLAUDE.md / CONTRIBUTING and similar files contain rules the project declared explicitly — capture the ones that matter as category "standard".
 
 HOW TO WORK (you decide the order and depth; this is the usual path)
@@ -276,6 +278,9 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
         related: z.array(z.string()).optional().describe('Cross links to other nodes (keys or existing ids)'),
         scope: z.string().optional().describe('Folder this node represents, relative to the root — only for part nodes like "front"'),
         tags: z.array(z.string()).optional().describe('3–6 lowercase keywords'),
+        entities: z.array(z.string()).optional().describe('Products, services, tables, endpoints and identifiers named in the node'),
+        keywords: z.array(z.string()).optional().describe('Terms a future question would use to look for this node (any language)'),
+        concepts: z.array(z.string()).optional().describe('Paraphrases/intentions that should lead here, e.g. "how a user signs in" for an auth flow'),
         weight: z.number().min(0).max(1).optional().describe('Importance; default 0.7 (root 0.9, part nodes 0.85)'),
         updates: z.string().optional().describe('Id of an existing memory this node rewrites'),
       }),
@@ -290,6 +295,9 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
           related: node.related ?? [],
           scope: node.scope,
           tags: node.tags ?? [],
+          entities: node.entities,
+          keywords: node.keywords,
+          concepts: node.concepts,
           weight: node.weight,
           updates: node.updates,
         })
@@ -309,10 +317,19 @@ export async function runCoordinator(input: CoordinatorInput): Promise<Coordinat
       inputSchema: z.object({
         text: z.string().describe('Self-contained: problem + solution'),
         tags: z.array(z.string()).describe('Technology names'),
+        title: z.string().optional().describe('Short descriptive title (3-8 words)'),
+        keywords: z.array(z.string()).optional().describe('Terms a future question would use (any language)'),
+        concepts: z.array(z.string()).optional().describe('Paraphrases of the problem, e.g. "app does not find git when opened from Finder"'),
       }),
-      execute: async ({ text, tags }) => {
+      execute: async ({ text, tags, title, keywords, concepts }) => {
         if (text.trim().length < 20) return 'Error: learning too short to stand on its own.'
-        draft.learnings.push({ text: text.trim(), tags: tags.map((t) => t.toLowerCase()) })
+        draft.learnings.push({
+          text: text.trim(),
+          tags: tags.map((t) => t.toLowerCase()),
+          title: title?.trim() || undefined,
+          keywords: cleanList(keywords),
+          concepts: cleanList(concepts),
+        })
         return 'Learning recorded in the draft.'
       },
     }),

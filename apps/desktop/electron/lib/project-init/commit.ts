@@ -56,6 +56,11 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
       const revised = await memoryService.revise(node.updates, {
         text: memoryText(node),
         tags,
+        title: node.title,
+        summary: node.summary,
+        entities: node.entities,
+        keywords: node.keywords,
+        concepts: node.concepts,
         weight,
         category: node.category,
         // Area node of the old /init ("Arquitetura") reused with another
@@ -93,6 +98,11 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
         subproject,
         text: memoryText(node),
         tags,
+        title: node.title,
+        summary: node.summary,
+        entities: node.entities,
+        keywords: node.keywords,
+        concepts: node.concepts,
         weight,
         category: node.category,
         area: isRoot ? 'overview' : undefined,
@@ -121,6 +131,9 @@ export async function commitDraft(draft: Draft, ctx: CommitContext): Promise<Com
       category: 'learning',
       text: learning.text,
       tags: learning.tags,
+      title: learning.title,
+      keywords: learning.keywords,
+      concepts: learning.concepts,
       weight: 0.55,
       // It is valid in any project, but recording where it was born anchors the node near
       // the tree it came from on the canvas.

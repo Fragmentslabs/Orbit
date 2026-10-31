@@ -31,6 +31,13 @@ export interface DraftNode {
   /** Folder (relative to the root) this node represents — marks the node of a subproject. */
   scope?: string
   tags: string[]
+  /**
+   * Search enrichment (see SaveMemoryInput): what makes the node findable by a question that
+   * words it differently. Optional — what is missing is derived from the text.
+   */
+  entities?: string[]
+  keywords?: string[]
+  concepts?: string[]
   weight?: number
   /** Id of an existing memory this node rewrites, instead of creating another one. */
   updates?: string
@@ -39,6 +46,9 @@ export interface DraftNode {
 export interface DraftLearning {
   text: string
   tags: string[]
+  title?: string
+  keywords?: string[]
+  concepts?: string[]
 }
 
 export interface Draft {
@@ -60,6 +70,12 @@ const KEY_PATTERN = /^[a-z0-9][a-z0-9._/-]{0,59}$/i
 
 export function createDraft(): Draft {
   return { nodes: new Map(), learnings: [], retired: new Map() }
+}
+
+/** Trimmed, de-duplicated list; undefined when nothing is left, so the field stays absent. */
+export function cleanList(items: string[] | undefined): string[] | undefined {
+  const clean = [...new Set((items ?? []).map((s) => s.trim()).filter(Boolean))]
+  return clean.length ? clean : undefined
 }
 
 function refExists(draft: Draft, existing: ExistingTree, ref: string): boolean {
@@ -130,6 +146,9 @@ export function upsertNode(draft: Draft, existing: ExistingTree, node: DraftNode
     scope: node.scope?.replace(/\\/g, '/').replace(/^\.\/|\/+$/g, '') || undefined,
     related: [...new Set(node.related.filter((r) => r !== node.key))],
     tags: [...new Set(node.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))],
+    entities: cleanList(node.entities),
+    keywords: cleanList(node.keywords),
+    concepts: cleanList(node.concepts),
   })
   return null
 }

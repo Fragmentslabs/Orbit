@@ -171,6 +171,30 @@ describe('save the tree of a parent folder with front and backend', () => {
   })
 })
 
+describe('search fields of the draft', () => {
+  it('reach the memory: title, summary, keywords, concepts and entities', async () => {
+    const { createDraft, upsertNode } = draftLib
+    const none = { ids: new Set<string>() }
+    const draft = createDraft()
+    const dir = path.join(userData, 'workspace', 'enriched')
+    await fsp.mkdir(dir, { recursive: true })
+    upsertNode(draft, none, {
+      key: 'root', title: 'Enriquecido', summary: summary('o projeto'), category: 'structure', parent: null, related: [], tags: ['x'],
+      keywords: [' login ', 'login', ''], concepts: ['como o usuário entra'], entities: ['Stripe'],
+    })
+    draft.learnings.push({ text: 'Vite: variáveis sem prefixo VITE_ não chegam ao cliente.', tags: ['vite'], title: 'Prefixo VITE_', keywords: ['env'] })
+    await commit.commitDraft(draft, { rootDirectory: dir, existing: none })
+
+    const all = await memory.list()
+    const root = all.find((m) => m.text.startsWith('Enriquecido:'))!
+    const full = (await memory.getFull(root.id))!.memory
+    expect(full).toMatchObject({ title: 'Enriquecido', keywords: ['login'], concepts: ['como o usuário entra'], entities: ['Stripe'] })
+    expect(full.summary).toBe(summary('o projeto'))
+    const learning = (await memory.list()).find((m) => m.text.startsWith('Vite:'))!
+    expect((await memory.getFull(learning.id))!.memory).toMatchObject({ title: 'Prefixo VITE_', keywords: ['env'] })
+  })
+})
+
 describe('memory usage', () => {
   it('the search counts usage only on what matched, not on the neighbors brought by context', async () => {
     const scope = await memory.resolveProjectScope(app)
