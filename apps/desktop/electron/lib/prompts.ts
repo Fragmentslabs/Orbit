@@ -13,6 +13,7 @@ import { resolveFfmpeg } from './video/ffmpeg'
 import { listMcpToolDescriptions } from './mcp'
 import { overlayOpenContext, overlayOpenContextLine } from './overlay/open-context'
 import { folderInMainRepository } from './worktrees/main'
+import { projectContextBlock } from './project-context'
 
 /**
  * System prompts per mode, adapted from opencode's agents
@@ -846,6 +847,8 @@ export async function buildSystemPrompt(
         ? `\nAdditional attached folders: ${input.extraDirectories.join(', ')}`
         : ''
       parts.push(`Main working folder: ${input.directory}${extra}\nPlatform: ${process.platform}`)
+      const projectContext = await projectContextBlock(input.directory, input.extraDirectories ?? [])
+      if (projectContext) parts.push(projectContext)
       // In a worktree: the agent needs to know that the folder is an isolated copy
       // and where the main one is (which belongs to other chats and to the user).
       const mainFolder = await folderInMainRepository(input.directory)
