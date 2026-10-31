@@ -2140,10 +2140,6 @@
         "title": "Delete archived conversations",
         "description": "Permanently deletes conversations that have been archived for a while, counted from the day they were archived. Pinned conversations are left alone."
       },
-      "compactSuggest": {
-        "title": "Suggest continuing in another chat",
-        "description": "After two compactions, once the context fills up again, offers to continue in a new chat (with a summary of the current state) instead of compacting once more. Automatic compaction has no option: it runs when the context reaches the model's limit, or you compact by hand from the context meter."
-      },
       "retries": {
         "title": "Retries on temporary failure",
         "description": "Queued messages retry in the background when the connection or the provider's limit fails."

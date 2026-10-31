@@ -100,15 +100,6 @@ export interface AppSettings {
   autoArchiveDays: number | null
   /** Deletes conversations archived N days ago (counted from the archiving). null = off. */
   deleteArchivedDays: number | null
-  /**
-   * Offers continuing in a new chat when the next compaction would already be a
-   * summary of a summary (see COMPACT_SUGGEST_AFTER). The COMPACTION itself has no
-   * option: it is always automatic, at the model's limit, or manual from the context
-   * meter. A percentage of the window was a decision nobody could calibrate — set to
-   * 50%, it summarized while there was still plenty of room and degraded the
-   * conversation faster, which is the opposite of what it should do.
-   */
-  suggestNewChat: boolean
   /** Extra rounds on a temporary failure (queue messages). 0 = off. */
   transientRetries: number
   /** Automatic continuations when the answer stops at the step limit. 0 = off. */
@@ -178,9 +169,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   chatView: 'summary',
   autoArchiveDays: null,
   deleteArchivedDays: null,
-  // On because it is a card, not a behavior: ignored, the automatic compaction of the
-  // next turn runs as always. Whoever does not want the offer turns it off.
-  suggestNewChat: true,
   transientRetries: 3,
   autoContinues: 3,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
@@ -325,8 +313,6 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     typeof value.sidebarWidth === 'number' && Number.isFinite(value.sidebarWidth)
       ? clampSidebarWidth(value.sidebarWidth)
       : d.sidebarWidth
-  // Leftover of the old "from how many compactions" selector, where 0 meant off.
-  const legacySuggestAfter = (value as { compactSuggestionAfter?: unknown }).compactSuggestionAfter
   return {
     auxModel: model(value.auxModel),
     auxReasoning: reasoning(value.auxReasoning),
@@ -346,15 +332,6 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     chatView: oneOf(value.chatView, ['summary', 'steps', 'detailed'], d.chatView),
     autoArchiveDays: dayOption(value.autoArchiveDays, AUTO_ARCHIVE_DAY_OPTIONS),
     deleteArchivedDays: dayOption(value.deleteArchivedDays, DELETE_ARCHIVED_DAY_OPTIONS),
-    // The threshold became a rule (COMPACT_SUGGEST_AFTER) and the only thing left to
-    // choose is whether the offer appears. A 0 saved by the old selector was exactly
-    // "off", and it stays off; any other number meant "on".
-    suggestNewChat:
-      typeof value.suggestNewChat === 'boolean'
-        ? value.suggestNewChat
-        : legacySuggestAfter === 0
-          ? false
-          : d.suggestNewChat,
     transientRetries: count(value.transientRetries, MAX_TRANSIENT_RETRIES, d.transientRetries),
     autoContinues: count(value.autoContinues, MAX_AUTO_CONTINUES, d.autoContinues),
     sidebarWidth,

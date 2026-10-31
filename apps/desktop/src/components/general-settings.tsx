@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Archive, Brain, LayoutList, Lightbulb, MessagesSquare, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
+import { Archive, Brain, LayoutList, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
 import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type ChatViewMode, type MemoryRoutineMode } from "@shared/app-settings"
 import { USER_NAME_MAX } from "@shared/user-name"
 import { ModelField } from "@/src/components/model-field"
@@ -166,22 +166,6 @@ export function GeneralSettings() {
               label: t("preferences.general.archive.after", { count: days }),
             })),
           ]}
-        />
-      </SettingRow>
-
-      {/* Compaction has no option: it is automatic, at the model's limit, and the
-          manual one lives in the composer's context meter. A percentage of the window
-          was a decision nobody could calibrate — at 50% it summarized with plenty of
-          room left and degraded the conversation faster. */}
-      <SettingRow
-        icon={MessagesSquare}
-        title={t("preferences.general.compactSuggest.title")}
-        description={t("preferences.general.compactSuggest.description")}
-      >
-        <SettingSwitch
-          checked={settings.suggestNewChat}
-          onChange={(suggestNewChat) => update({ suggestNewChat })}
-          label={t("preferences.general.compactSuggest.title")}
         />
       </SettingRow>
 

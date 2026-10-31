@@ -1508,7 +1508,8 @@ const SUGGESTION_SYSTEM =
  * from the third on the summary is already a summary of a summary and the beginning of
  * the conversation is lost. The count alone is not enough — the context has to be about
  * to force the next compaction, or the card would appear with plenty of room left. It is
- * an OFFER — ignored, the automatic compaction of the next turn runs as always.
+ * an OFFER — ignored, the automatic compaction of the next turn runs as always. Not a
+ * preference: a card nobody is forced to click is cheaper than a setting nobody calibrates.
  */
 async function maybeSuggestCompaction(
   win: BrowserWindow,
@@ -1517,8 +1518,6 @@ async function maybeSuggestCompaction(
   catalogModel: CatalogModel | undefined,
   modelVision: boolean,
 ) {
-  const { suggestNewChat } = getAppSettings()
-  if (!suggestNewChat) return
   // A routine has nobody to decide anything: the card would just sit there.
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   if (!session || session.routineId || isRoutineSessionId(session.id)) return

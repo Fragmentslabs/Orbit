@@ -25,7 +25,6 @@ describe('normalizeAppSettings', () => {
       chatView: 'huge',
       autoArchiveDays: 5,
       deleteArchivedDays: 2,
-      suggestNewChat: 'maybe',
       transientRetries: 99,
       autoContinues: 2,
       browser: { cookies: 'until-quit' },
@@ -33,21 +32,16 @@ describe('normalizeAppSettings', () => {
     expect(settings.chatView).toBe('summary')
     expect(settings.autoArchiveDays).toBeNull()
     expect(settings.deleteArchivedDays).toBeNull()
-    // The suggestion is on/off; anything that is not a boolean goes back to the default.
-    expect(settings.suggestNewChat).toBe(true)
     expect(settings.transientRetries).toBe(3)
     expect(settings.autoContinues).toBe(2)
     expect(settings.browser).toEqual({ links: 'integrated', agentTools: true, cookies: 'until-quit' })
   })
 
-  it('the old compaction-threshold choice becomes the on/off of the suggestion', () => {
-    // 0 was "off" in the old selector, and it stays off.
-    expect(normalizeAppSettings({ compactSuggestionAfter: 0 }).suggestNewChat).toBe(false)
-    // Any other number meant the offer was on — the number itself became a rule.
-    expect(normalizeAppSettings({ compactSuggestionAfter: 3 }).suggestNewChat).toBe(true)
-    // The new value wins over the leftover, and it is not persisted any more.
+  it('the compaction leftovers are not persisted any more', () => {
+    // The threshold became a rule (COMPACT_SUGGEST_AFTER) and the offer stopped being
+    // a preference: both keys are dropped instead of carried along.
     const settings = normalizeAppSettings({ suggestNewChat: false, compactSuggestionAfter: 2 })
-    expect(settings.suggestNewChat).toBe(false)
+    expect(settings).not.toHaveProperty('suggestNewChat')
     expect(settings).not.toHaveProperty('compactSuggestionAfter')
     expect(settings).not.toHaveProperty('autoCompact')
   })
