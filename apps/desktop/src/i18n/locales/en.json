@@ -462,13 +462,10 @@
     "allProjectsFull": "All projects",
     "allCategories": "All categories",
     "routine": {
-      "title": "Memory routine",
       "off": "Off",
       "daily": "Daily — capture only",
       "weekly": "Weekly — consolidate only",
       "dailyWeekly": "Daily + weekly",
-      "model": "Uses the auxiliary model: {{model}}",
-      "needsModel": "Pick an auxiliary model in Preferences → General.",
       "accept": "Keep",
       "discard": "Discard"
     },
@@ -2102,6 +2099,11 @@
     },
     "byMode": "By conversation type",
     "general": {
+      "memoryRoutine": {
+        "title": "Memory routine",
+        "description": "Captures what repeats in your conversations and consolidates it into memories. Uses the auxiliary model: {{model}}.",
+        "needsModel": "Pick an auxiliary model above for the memory routine to work."
+      },
       "auxModel": "Auxiliary model",
       "auxModelNone": "Same as the conversation",
       "auxModelHint": "Used for titles, history compaction and prompt suggestions. A fast, cheap model saves cost without affecting answers.",

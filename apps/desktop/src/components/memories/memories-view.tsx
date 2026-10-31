@@ -14,11 +14,9 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import type { MemoryRoutineMode } from "@shared/app-settings"
 import type { Memory, MemoryKind, ProjectCategory } from "@shared/memory"
 import { searchMemories, visibleIn } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
-import { useAppSettings } from "@/src/stores/app-settings"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { MemoryCard } from "./memory-card"
 import { MemoryDetailPanel } from "./memory-detail-panel"
@@ -41,10 +39,6 @@ const EMPTY_RELATED: Memory[] = []
 const ALL_PROJECTS = "__all__"
 const ALL_CATEGORIES = "__all__"
 
-/** i18n key suffix of each memory-routine option. */
-function routineKey(mode: MemoryRoutineMode): string {
-  return mode === "daily+weekly" ? "dailyWeekly" : mode
-}
 /** Cards rendered at a time — the rest enters as one scrolls. */
 const PAGE_SIZE = 24
 
@@ -103,8 +97,6 @@ export function MemoriesView() {
   const loading = useMemoryStore((s) => s.loading)
   const updateMemory = useMemoryStore((s) => s.update)
   const removeMemory = useMemoryStore((s) => s.remove)
-  const settings = useAppSettings((s) => s.settings)
-  const updateSettings = useAppSettings((s) => s.update)
   const [query, setQuery] = useState("")
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
   const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES)
@@ -254,34 +246,10 @@ export function MemoriesView() {
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-hidden">
-      {/* Memory routine: the switch and, when there are any, the proposals of the day. */}
-      <div className="rounded-lg border bg-card px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium">{t("memories.routine.title")}</span>
-          <Select
-            value={settings.memoryRoutine}
-            onValueChange={(v) =>
-              updateSettings({ memoryRoutine: (v ?? "off") as MemoryRoutineMode })
-            }
-          >
-            <SelectTrigger className="h-7 w-44">
-              <SelectValue>{t(`memories.routine.${routineKey(settings.memoryRoutine)}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value="off">{t("memories.routine.off")}</SelectItem>
-              <SelectItem value="daily">{t("memories.routine.daily")}</SelectItem>
-              <SelectItem value="weekly">{t("memories.routine.weekly")}</SelectItem>
-              <SelectItem value="daily+weekly">{t("memories.routine.dailyWeekly")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="text-[11px] text-muted-foreground">
-            {settings.auxModel
-              ? t("memories.routine.model", { model: settings.auxModel.modelId })
-              : t("memories.routine.needsModel")}
-          </span>
-        </div>
-        {proposals.length > 0 && (
-          <ul className="mt-2 space-y-1 border-t pt-2">
+      {/* Routine proposals: the switch itself lives in Preferences → General. */}
+      {proposals.length > 0 && (
+        <div className="rounded-lg border bg-card px-3 py-2">
+          <ul className="space-y-1">
             {proposals.map((proposal) => (
               <li key={proposal.id} className="flex items-start gap-2 text-xs">
                 <span className="min-w-0 flex-1 leading-snug">{proposal.text}</span>
@@ -304,8 +272,8 @@ export function MemoriesView() {
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

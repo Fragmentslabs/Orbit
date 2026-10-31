@@ -462,13 +462,10 @@
     "allProjectsFull": "Todos os projetos",
     "allCategories": "Todas as categorias",
     "routine": {
-      "title": "Rotina de memória",
       "off": "Desligada",
       "daily": "Diária — só captura",
       "weekly": "Semanal — só consolida",
       "dailyWeekly": "Diária + semanal",
-      "model": "Usa o modelo auxiliar: {{model}}",
-      "needsModel": "Escolha um modelo auxiliar em Preferências → Geral.",
       "accept": "Manter",
       "discard": "Descartar"
     },
@@ -2102,6 +2099,11 @@
     },
     "byMode": "Por tipo de conversa",
     "general": {
+      "memoryRoutine": {
+        "title": "Rotina de memória",
+        "description": "Captura o que se repete nas suas conversas e consolida em memórias. Usa o modelo auxiliar: {{model}}.",
+        "needsModel": "Escolha um modelo auxiliar acima para a rotina de memória funcionar."
+      },
       "auxModel": "Modelo auxiliar",
       "auxModelNone": "O mesmo da conversa",
       "auxModelHint": "Usado para títulos, compactação do histórico e sugestões de prompt. Um modelo rápido e barato economiza sem afetar as respostas.",
