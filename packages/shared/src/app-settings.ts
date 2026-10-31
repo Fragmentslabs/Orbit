@@ -172,8 +172,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   transientRetries: 3,
   autoContinues: 3,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
-  // Opening together with the system is intrusive: only when the person asks for it.
-  launchAtLogin: false,
+  // Opening with the system is what makes a routine a routine — the app has to be
+  // there to fire it. It comes up with the window closed (wasOpenedAtLogin), so the
+  // login is not interrupted, and Preferences can still turn it off.
+  launchAtLogin: true,
   // Closing to the tray is the requested behavior (like Claude/Codex): the X
   // hides the app, which stays alive serving the connected apps.
   closeToTray: true,

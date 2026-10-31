@@ -76,9 +76,13 @@ export async function applyLaunchAtLogin(enabled: boolean): Promise<{ ok: boolea
       openAtLogin: enabled,
       path: command,
       ...(args.length > 0 ? { args } : {}),
-      // Only macOS understands it: it opens without stealing focus, like a tray app.
-      ...(process.platform === 'darwin' ? { openAsHidden: true } : {}),
     })
+    // macOS 13+ ignores `openAsHidden`, and a call the system refuses is silent:
+    // reading it back is what keeps a failure from disappearing. The app decides to
+    // start hidden by asking who opened it (see openedAtLogin in main.ts).
+    if (enabled && !app.getLoginItemSettings().openAtLogin) {
+      console.warn('[autostart] the system did not register the login item')
+    }
     return { ok: true }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

@@ -210,7 +210,7 @@ import * as pipeline from './lib/pipeline'
 import { createChatWorktree, listWorktrees, removeChatWorktree, validateWorktreesFolder } from './lib/worktrees/service'
 import { folderInMainRepository } from './lib/worktrees/main'
 import * as routines from './lib/routines'
-import { installBackgroundAgent } from './lib/routines/background'
+import { removeLegacyBackgroundAgent } from './lib/routines/legacy-agent'
 import { approvePendingRoutine, discardPendingRoutine, listPendingRoutines } from './lib/routines/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
@@ -323,10 +323,18 @@ registerSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
-// --hidden (background LaunchAgent): the window is ready but invisible — the
-// routines fire in the background and whoever brings the window back is the
-// Dock/menu, like any closed window.
-const oculto = process.argv.includes('--hidden')
+// The window is ready but invisible when the SYSTEM opened the app: the routines
+// fire in the background and whoever brings the window back is the Dock/menu, like
+// any closed window. It used to be the --hidden argument the LaunchAgent passed;
+// now the app asks the login item who opened it.
+function openedAtLogin(): boolean {
+  if (process.platform !== 'darwin') return false
+  try {
+    return app.getLoginItemSettings().wasOpenedAtLogin
+  } catch {
+    return false
+  }
+}
 
 /**
  * Is the app really LEAVING? The `close` of the window consults this before
@@ -504,9 +512,6 @@ function queueOpenFolder(directory: string) {
 }
 
 app.on("second-instance", (_event, argv) => {
-  // Born from the LaunchAgent (--hidden): it comes from launchd, not from someone
-  // opening the app, so it must not pull the window to the front.
-  if (argv.includes('--hidden')) return
   // Relaunching the app is a per-window request: on macOS it may have been closed
   // (the app stays alive in the Dock), and without this the relaunch would do nothing.
   showMainWindow()
@@ -571,8 +576,8 @@ function createWindow() {
   const showWindow = () => {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   }
-  // --hidden: ready-to-show shows nothing — the app runs only for the routines.
-  if (!oculto) {
+  // Opened at login: ready-to-show shows nothing — the app runs only for the routines.
+  if (!openedAtLogin()) {
     win.once('ready-to-show', showWindow)
     setTimeout(showWindow, 5000)
   }
@@ -1893,9 +1898,10 @@ app.whenReady().then(() => {
   ipcMain.handle('routines:approvePending', (_e, id: string) => approvePendingRoutine(id))
   ipcMain.handle('routines:discardPending', (_e, id: string) => discardPendingRoutine(id))
   routines.startScheduler()
-  // Residency (macOS): the LaunchAgent that brings the app back at login and
-  // after a crash, hidden. Routines are what it exists for.
-  void installBackgroundAgent()
+  // Residency (macOS): the LaunchAgent that used to bring the app back is gone —
+  // the login item (Preferences → General) does it now, under the app's own name.
+  // What 0.1.4 left behind is removed here.
+  void removeLegacyBackgroundAgent()
 
   // Media gallery ("Media" tab of the right panel)
   ipcMain.handle('media:list', (_event, filter?: MediaFilter) => listMedia(filter))
