@@ -1,7 +1,21 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { spawnBackground, killProcess, listProcesses, getProcessOutput } from '../process-manager'
+import type { ProcessInfo } from '../process-manager'
 import type { ToolContext } from './context'
+
+/**
+ * Entries a restart replaces: same label, and not running.
+ *
+ * A running one with the same label is a real second process — replacing it would
+ * hide something alive. A stopped one is the card of a job that is over, and
+ * restarting that job should take its place instead of piling another.
+ */
+export function stoppedWithLabel(processes: readonly ProcessInfo[], label: string): number[] {
+  return processes
+    .filter((process) => process.label === label && process.status !== 'running')
+    .map((process) => process.pid)
+}
 
 export function createBackgroundTools(ctx: ToolContext) {
   const bashBackground = tool({
@@ -9,18 +23,27 @@ export function createBackgroundTools(ctx: ToolContext) {
       'Runs a command in BACKGROUND in the working folder and returns immediately. ' +
       'Use for dev servers (npm run dev), long builds, watchers, etc. ' +
       'The process keeps running between tool calls. ' +
-      'Use bash_list to see active processes and bash_kill to kill one.',
+      'Use bash_list to see active processes and bash_kill to kill one. ' +
+      'Starting a label whose previous process is no longer running replaces that ' +
+      'entry, so restarting a dev server keeps a single card instead of a pile.',
     inputSchema: z.object({
       label: z.string().describe('Friendly name to identify the process (e.g.: "Dev Server")'),
       command: z.string().describe('Command to run in background'),
     }),
     execute: async ({ label, command }) => {
       const info = spawnBackground(label, command, ctx.directory, ctx.sessionId)
+      // A restart takes over the stopped card of the same label. Done AFTER the spawn
+      // so a command that fails to start does not cost the previous output, and only
+      // for entries that are not running (see stoppedWithLabel).
+      const replaced = stoppedWithLabel(listProcesses(ctx.sessionId), label)
+      for (const pid of replaced) await killProcess(pid, ctx.sessionId)
       return {
         pid: info.pid,
         label: info.label,
         status: info.status,
-        message: `Process "${label}" started (PID ${info.pid}).`,
+        message: `Process "${label}" started (PID ${info.pid}).${
+          replaced.length > 0 ? ' Replaced the stopped entry of the same label.' : ''
+        }`,
       }
     },
   })
