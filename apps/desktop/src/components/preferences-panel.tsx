@@ -17,6 +17,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control"
 import { ModelField } from "@/src/components/model-field"
 import { ModelThinkingMenu, ThinkingMenu } from "@/src/components/thinking-menu"
 import { GeneralSettings } from "@/src/components/general-settings"
+import { PermissionRulesSection } from "@/src/components/permission-rules-section"
 import { WorktreeSettings } from "@/src/components/worktree-settings"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { PERSONA_NOTE_MAX, personaPromptLines, type PersonaStyle } from "@shared/persona"
@@ -361,6 +362,7 @@ export function PreferencesPanel() {
       <LanguageSection />
       <BehaviorSection />
       <GeneralSettings />
+      <PermissionRulesSection />
 
       <div className="border-t pt-4">
         <p className="mb-2 text-xs font-medium text-muted-foreground">{t("preferences.byMode")}</p>

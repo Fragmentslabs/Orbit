@@ -47,6 +47,11 @@ function PermissionBody({ ask, submitted, onReply }: {
               {claim.critical ? `${t("ask.critical")}` : ""}{claim.detail}
             </p>
           )}
+          {claim.learned && (
+            <p className="mt-1 text-[11px] leading-tight text-muted-foreground/80">
+              {t("permissions.learned", { count: claim.learned.count })}
+            </p>
+          )}
         </div>
         {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} t={t} />}
       </div>
@@ -76,6 +81,11 @@ function PermissionBody({ ask, submitted, onReply }: {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
                 {t("permissions.always")}
+                {claim.learned && (
+                  <Badge variant="outline" className="ml-1.5 px-1 py-0 text-[10px] text-primary">
+                    {t("permissions.recommended")}
+                  </Badge>
+                )}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

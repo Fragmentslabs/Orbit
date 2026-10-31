@@ -977,6 +977,12 @@ export interface PermissionClaim {
   /** Asks even in unrestricted mode (e.g. removing a worktree): switching the mode
    *  to unrestricted does not approve this request by itself. */
   alwaysAsk?: boolean
+  /**
+   * How many times this same rule was already approved, across turns and chats.
+   * It arrives only when the count is worth mentioning, and it is what the card
+   * uses to say so and to make "Always" visible.
+   */
+  learned?: { count: number }
 }
 
 /** Structured question of the question tool */

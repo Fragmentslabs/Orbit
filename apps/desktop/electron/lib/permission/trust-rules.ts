@@ -7,6 +7,12 @@ const TRUST_FILE = 'trust-rules.json'
 interface TrustEntry {
   ruleId: string
   createdAt: number
+  /**
+   * The label the card showed when the rule was made permanent ("bash: git push").
+   * Missing in files written before the rules screen existed; the screen falls back
+   * to the ruleId, which is ugly but honest.
+   */
+  label?: string
 }
 
 let rules: TrustEntry[] = []
@@ -34,9 +40,18 @@ export function checkTrust(ruleId: string): boolean {
   return rules.some((r) => r.ruleId === ruleId)
 }
 
-export async function addTrust(ruleId: string): Promise<void> {
-  if (rules.some((r) => r.ruleId === ruleId)) return
-  rules.push({ ruleId, createdAt: Date.now() })
+export async function addTrust(ruleId: string, label?: string): Promise<void> {
+  const existing = rules.find((r) => r.ruleId === ruleId)
+  if (existing) {
+    // A rule trusted before the label existed gets one the first time it is
+    // re-approved, instead of staying as a raw id on the rules screen.
+    if (label && !existing.label) {
+      existing.label = label
+      await save()
+    }
+    return
+  }
+  rules.push({ ruleId, createdAt: Date.now(), ...(label ? { label } : {}) })
   await save()
 }
 

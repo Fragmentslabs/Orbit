@@ -469,6 +469,38 @@ export const appPreferencesApi = {
   },
 }
 
+/**
+ * Permission rules (Preferences → Rules). `trusted` is what the user allowed for
+ * good ("Always"); `learned` is what only kept being approved and has not been
+ * settled yet — the two sides of the same screen.
+ */
+export interface TrustedRule {
+  ruleId: string
+  createdAt: number
+  /** Missing in rules trusted before the screen existed. */
+  label?: string
+}
+
+export interface LearnedRule {
+  ruleId: string
+  label: string
+  approvals: number
+  firstAt: number
+  lastAt: number
+}
+
+export const permissionsApi = {
+  rules: () =>
+    window.ipcRenderer.invoke("permissions:rules") as Promise<{
+      trusted: TrustedRule[]
+      learned: LearnedRule[]
+    }>,
+  allowAlways: (ruleId: string, label?: string) =>
+    window.ipcRenderer.invoke("permissions:rules:add", ruleId, label) as Promise<void>,
+  revoke: (ruleId: string) =>
+    window.ipcRenderer.invoke("permissions:rules:remove", ruleId) as Promise<void>,
+}
+
 export const skillsApi = {
   list: (directory?: string) =>
     window.ipcRenderer.invoke("skills:list", directory) as Promise<Skill[]>,

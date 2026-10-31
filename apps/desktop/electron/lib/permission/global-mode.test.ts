@@ -17,6 +17,14 @@ vi.mock('../mcp', () => ({
   isMcpServerName: (name: string) => name === 'server',
 }))
 vi.mock('./trust-rules', () => ({ checkTrust: () => false, addTrust: vi.fn() }))
+// The counters are a file on disk and have their own test (learning.test.ts):
+// here they must not touch anything, and nothing is learned.
+vi.mock('./learning', () => ({
+  approvalCount: () => 0,
+  noteApproval: vi.fn(),
+  forgetApprovals: vi.fn(),
+  SUGGEST_AFTER: 3,
+}))
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp' } }))
 
 const { createToolApproval } = await import('./index')
@@ -111,7 +119,9 @@ describe('allow lasts for the turn', () => {
     requests.answer = 'always'
     const turn = createToolApproval('ask', 'chat_c', null, 'm1')
     expect(await turn(act('com.apple.TextEdit'))).toBe('approved')
-    expect(addTrust).toHaveBeenCalledWith('cu:app:com.apple.TextEdit')
+    // The second argument is the label the rules screen shows — the wording is
+    // not this test's business, only that a readable one goes along.
+    expect(addTrust).toHaveBeenCalledWith('cu:app:com.apple.TextEdit', expect.any(String))
   })
 
   it('unrestricted mode approves on its own, like bash', async () => {

@@ -107,7 +107,8 @@ import {
 import { authorizeMcp, initMcp, listMcpStatus, mcpDescriptionsState, oauthRedirectUrl, optimizeMcpServer, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
-import { loadTrustRules } from './lib/permission/trust-rules'
+import { forgetApprovals, listLearnedRules, loadApprovalLearning } from './lib/permission/learning'
+import { addTrust, listTrustRules, loadTrustRules, removeTrust } from './lib/permission/trust-rules'
 import { abortSession, dispatchSend, lastSendInput } from './lib/send-dispatch'
 import { setupComputerPanels } from './lib/computer/panels'
 import { shotView } from './lib/computer/shots'
@@ -2510,6 +2511,24 @@ app.whenReady().then(() => {
     watchFractaSettings()
   })
   void loadTrustRules()
+  void loadApprovalLearning()
+
+  // Permission rules (Preferences → Rules): the permanent ones the user allowed
+  // ("Always") and the ones only being counted, which can be promoted from there
+  // instead of waiting for the next request to show the dropdown.
+  ipcMain.handle('permissions:rules', () => ({
+    trusted: listTrustRules(),
+    learned: listLearnedRules(),
+  }))
+  ipcMain.handle('permissions:rules:add', async (_event, ruleId: string, label?: string) => {
+    if (typeof ruleId !== 'string' || !ruleId) return
+    await addTrust(ruleId, label)
+    // Settled from the screen: the counter belongs to what is still being asked.
+    await forgetApprovals(ruleId)
+  })
+  ipcMain.handle('permissions:rules:remove', (_event, ruleId: string) =>
+    typeof ruleId === 'string' && ruleId ? removeTrust(ruleId) : undefined,
+  )
 
   // Background processes
   ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))

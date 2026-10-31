@@ -257,7 +257,9 @@
     "allow": "Allow",
     "once": "This turn",
     "alwaysChat": "Always in this chat",
-    "always": "Always"
+    "always": "Always",
+    "learned": "You already allowed this {{count}} times — \"Always\" stops asking.",
+    "recommended": "recommended"
   },
   "send": {
     "send": "Send",
@@ -2003,6 +2005,15 @@
     "description": "Configure default models and active modes for each mode.",
     "tabChat": "Chat",
     "tabCode": "Code",
+    "rules": {
+      "title": "Learned permission rules",
+      "description": "What Orbit stopped asking for, and what it is still counting.",
+      "pending": "Still asked",
+      "times": "{{count}}×",
+      "makePermanent": "Make permanent",
+      "revoke": "Revoke",
+      "empty": "Nothing learned yet — allowing the same action a few times brings the rule here."
+    },
     "language": {
       "title": "Language",
       "description": "Interface language and the assistant's reply language.",

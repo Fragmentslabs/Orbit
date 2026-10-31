@@ -257,7 +257,9 @@
     "allow": "Permitir",
     "once": "Neste turno",
     "alwaysChat": "Sempre neste chat",
-    "always": "Sempre"
+    "always": "Sempre",
+    "learned": "Você já liberou isto {{count}} vezes — \"Sempre\" para de perguntar.",
+    "recommended": "recomendado"
   },
   "send": {
     "send": "Enviar",
@@ -2003,6 +2005,15 @@
     "description": "Configure modelos padrão e modos ativos para cada modo.",
     "tabChat": "Chat",
     "tabCode": "Código",
+    "rules": {
+      "title": "Regras de permissão aprendidas",
+      "description": "O que o Orbit parou de perguntar e o que ele ainda está contando.",
+      "pending": "Ainda pergunta",
+      "times": "{{count}}×",
+      "makePermanent": "Tornar permanente",
+      "revoke": "Revogar",
+      "empty": "Nada aprendido ainda — permitir a mesma ação algumas vezes traz a regra para cá."
+    },
     "language": {
       "title": "Idioma",
       "description": "Idioma da interface e das respostas do assistente.",

@@ -3,6 +3,7 @@ import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
 import { getMcpPermissionMode } from '../mcp'
+import { approvalCount, forgetApprovals, noteApproval, SUGGEST_AFTER } from './learning'
 import { assess, isForbidden } from './rules'
 import { checkTrust, addTrust } from './trust-rules'
 
@@ -63,6 +64,9 @@ export function createToolApproval(
     if (mcpMode === 'full' && !assessment.alwaysAsk) return 'approved' as const
 
     const ruleId = assessment.ruleId
+    // How many times the user already allowed this same rule, before this request.
+    // An action that always asks is not counted: the count would never change anything.
+    const prior = assessment.alwaysAsk ? 0 : approvalCount(ruleId)
 
     if (!assessment.alwaysAsk && checkTrust(ruleId)) return 'approved' as const
     if (!assessment.alwaysAsk && turnTrust.has(ruleId)) return 'approved' as const
@@ -80,7 +84,14 @@ export function createToolApproval(
         {
           requestId,
           kind: 'permission',
-          claim: assessment.alwaysAsk ? { ...assessment.claim, alwaysAsk: true } : assessment.claim,
+          claim: {
+            ...assessment.claim,
+            ...(assessment.alwaysAsk ? { alwaysAsk: true } : {}),
+            // "You already allowed this N times": what turns the arrow next to
+            // "Allow once" into something worth opening. Never for an action that
+            // asks on purpose (alwaysAsk) — there the suggestion would be a lie.
+            ...(prior >= SUGGEST_AFTER ? { learned: { count: prior } } : {}),
+          },
           origin: isWorker
             ? { workerSessionId: sessionId, workerTitle: workerTitle ?? 'worker' }
             : undefined,
@@ -92,11 +103,14 @@ export function createToolApproval(
         const set = sessionTrust.get(sessionId) ?? new Set<string>()
         set.add(ruleId)
         sessionTrust.set(sessionId, set)
+        if (!assessment.alwaysAsk) void noteApproval(ruleId, assessment.claim.title)
         return 'approved' as const
       }
 
       if (reply === 'always') {
-        await addTrust(ruleId)
+        await addTrust(ruleId, assessment.claim.title)
+        // Settled: the counter belongs to what is still being asked.
+        await forgetApprovals(ruleId)
         const set = sessionTrust.get(sessionId) ?? new Set<string>()
         set.add(ruleId)
         sessionTrust.set(sessionId, set)
@@ -105,7 +119,12 @@ export function createToolApproval(
 
       if (reply === 'allow') {
         // An action that always asks (e.g. removing a worktree) still goes one by one.
-        if (!assessment.alwaysAsk) turnTrust.add(ruleId)
+        if (!assessment.alwaysAsk) {
+          turnTrust.add(ruleId)
+          // "Allow once" is the approval that repeats most — counting only the
+          // permanent choices would hide exactly the case worth suggesting.
+          void noteApproval(ruleId, assessment.claim.title)
+        }
         return 'approved' as const
       }
 
