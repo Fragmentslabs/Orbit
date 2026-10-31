@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, tool } from 'ai'
+import { generateText, stepCountIs, tool, type ModelMessage } from 'ai'
 import { z } from 'zod'
 import type { OrchestrationTask, SendMessageInput } from '@shared/chat'
 import { SUBAGENT_EMPTY_OUTPUT, SUBAGENT_NO_FOLDER_NOTICE } from '@shared/chat'
@@ -22,7 +22,17 @@ import { fileDisputes, normalizePath, waitsFor } from '../orchestration/ownershi
  *   the planning phase of Orchestra mode).
  */
 
-export const SUBAGENT_MAX_STEPS = 25
+export const SUBAGENT_MAX_STEPS = 30
+
+/**
+ * The last step of a subagent: no tools, a text answer required. Without it a worker
+ * that reached the ceiling on a tool call returned empty text, and everything it had
+ * done was lost to the parent — the same guard as the orchestrator's planning pass.
+ */
+const SUBAGENT_LAST_STEP_PROMPT = `STEP LIMIT REACHED. Tools are now disabled — answer with text ONLY, for the agent that delegated this task:
+- what you did and found (with exact paths, commands, results),
+- what is still unfinished or unverified,
+- the next concrete step to finish it.`
 
 function newTaskId() {
   return `task_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
@@ -130,12 +140,32 @@ export function createSubagentTool(
         stopWhen: stepCountIs(maxSteps),
         abortSignal: ctx?.abort,
         providerOptions: await buildProviderOptions(workerInput),
-        prepareStep: agentPrepareStep(workerProvider, worker.modelId, { directory: ctx?.directory }),
+        prepareStep: lastStepGuard(agentPrepareStep(workerProvider, worker.modelId, { directory: ctx?.directory }), maxSteps),
       })
       const notice = codeUnavailable ? `${SUBAGENT_NO_FOLDER_NOTICE}\n\n` : ''
       return notice + (result.text || SUBAGENT_EMPTY_OUTPUT)
     },
   })
+}
+
+/**
+ * The SDK calls prepareStep with stepNumber = steps already completed, so the last
+ * one that runs is `maxSteps - 1` (see the same guard in orchestrator.ts).
+ */
+export function lastStepGuard(
+  base: ReturnType<typeof agentPrepareStep>,
+  maxSteps: number,
+) {
+  return ({ stepNumber, messages }: { stepNumber: number; messages: ModelMessage[] }) => {
+    const prepared = base({ messages })
+    if (stepNumber < maxSteps - 1) return prepared
+    const current = 'messages' in prepared && prepared.messages ? prepared.messages : messages
+    return {
+      activeTools: [] as string[],
+      toolChoice: 'none' as const,
+      messages: [...current, { role: 'user' as const, content: SUBAGENT_LAST_STEP_PROMPT }],
+    }
+  }
 }
 
 export interface CreateTaskArgs {
