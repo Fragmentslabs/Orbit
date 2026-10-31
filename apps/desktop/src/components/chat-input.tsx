@@ -41,7 +41,7 @@ import { SlashPalette } from "@/src/components/slash-palette"
 import { ReferencePalette } from "@/src/components/reference-palette"
 import { useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { useWorkspace } from "@/lib/workspace-context"
-import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
+import { useBrainEnabled, useBrainPrefs, useChatContext, useSkillHints } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { useComputerMode } from "@/src/stores/computer-mode"
@@ -93,6 +93,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const brain = useBrainEnabled(sessionId, chatActiveModes.brain)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useChatContext()
+  const skillHints = useSkillHints()
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
@@ -167,10 +168,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     simple,
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
+    skillHints: skillHints === "all" ? true : skillHints === "memory" ? brain : false,
     reasoning: { enabled: thinking, variantId },
     toolsServers: toolsServers ?? undefined,
     computer: computer.active || undefined,
-  }), [search, browser, simple, brain, brainContext, thinking, variantId, toolsServers, computer.active])
+  }), [search, browser, simple, brain, brainContext, skillHints, thinking, variantId, toolsServers, computer.active])
 
   /** The call's turn already tied to ONE session: it never uses the active session. The
    *  busy state is read from the store at the instant of the utterance — the call may

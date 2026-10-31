@@ -47,7 +47,7 @@ import { useInputHistory } from "@/src/hooks/use-input-history"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { FolderHintCard } from "@/src/components/folder-hint-card"
 import { useWorkspace } from "@/lib/workspace-context"
-import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
+import { useBrainEnabled, useBrainPrefs, useCodeContext, useSkillHints } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { useComputerMode } from "@/src/stores/computer-mode"
@@ -143,6 +143,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const brain = useBrainEnabled(sessionId, codeActiveModes.brain)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useCodeContext()
+  const skillHints = useSkillHints()
   // Autonomy PER CHAT: the selector changes only this conversation.
   const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = useCallback(
@@ -218,6 +219,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     simple,
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
+    skillHints: skillHints === "all" ? true : skillHints === "memory" ? brain : false,
     permissionMode,
     // Mode coming from the selector: switching in the middle of the reply counts right away.
     followGlobalPermission: true,
@@ -228,7 +230,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     loop: orchestra && mode === "code" ? undefined : loop,
     toolsServers: toolsServers ?? undefined,
     computer: computer.active || undefined,
-  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, toolsServers, mode, computer.active])
+  }), [plan, search, simple, brain, brainContext, skillHints, permissionMode, thinking, variantId, subagents, orchestra, loop, toolsServers, mode, computer.active])
 
   const getDirs = useCallback(() => {
     const [directory, ...extraDirectories] = folders

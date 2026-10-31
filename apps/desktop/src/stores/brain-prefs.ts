@@ -13,14 +13,18 @@ import { create } from "zustand"
  *   "off" = off
  *   "all" = on in all chats
  *   "memory" = on only in chats with memory mode on
+ * - skillHints: the per-turn skill suggestion line — the same three values, ONE
+ *   setting for both modes (a skill is not per conversation).
  */
 
 export type BrainContextMode = "off" | "all" | "memory"
+export type SkillHintsMode = "off" | "all" | "memory"
 
 const STORAGE_KEY = "orbit-brain-prefs"
 const DRAFT_KEY = "draft"
 const CHAT_CONTEXT_KEY = "orbit-chat-brain-context"
 const CODE_CONTEXT_KEY = "orbit-code-brain-context"
+const SKILL_HINTS_KEY = "orbit-skill-hints"
 
 function load(): Record<string, boolean> {
   try {
@@ -53,9 +57,11 @@ interface BrainPrefsState {
   overrides: Record<string, boolean>
   chatContext: BrainContextMode
   codeContext: BrainContextMode
+  skillHints: SkillHintsMode
   setEnabled: (sessionId: string | null | undefined, enabled: boolean) => void
   setChatContext: (mode: BrainContextMode) => void
   setCodeContext: (mode: BrainContextMode) => void
+  setSkillHints: (mode: SkillHintsMode) => void
   /** Transfers the draft's override to the newly created session */
   adopt: (sessionId: string) => void
 }
@@ -64,6 +70,7 @@ export const useBrainPrefs = create<BrainPrefsState>((set, get) => ({
   overrides: load(),
   chatContext: loadContext(CHAT_CONTEXT_KEY, "all"),
   codeContext: loadContext(CODE_CONTEXT_KEY, "all"),
+  skillHints: loadContext(SKILL_HINTS_KEY, "all"),
   setEnabled: (sessionId, enabled) => {
     const key = sessionId ?? DRAFT_KEY
     const overrides = { ...get().overrides }
@@ -79,6 +86,10 @@ export const useBrainPrefs = create<BrainPrefsState>((set, get) => ({
   setCodeContext: (mode) => {
     localStorage.setItem(CODE_CONTEXT_KEY, JSON.stringify(mode))
     set({ codeContext: mode })
+  },
+  setSkillHints: (mode) => {
+    localStorage.setItem(SKILL_HINTS_KEY, JSON.stringify(mode))
+    set({ skillHints: mode })
   },
   adopt: (sessionId) => {
     const overrides = { ...get().overrides }
@@ -105,4 +116,8 @@ export function useChatContext(): BrainContextMode {
 
 export function useCodeContext(): BrainContextMode {
   return useBrainPrefs((s) => s.codeContext)
+}
+
+export function useSkillHints(): SkillHintsMode {
+  return useBrainPrefs((s) => s.skillHints)
 }

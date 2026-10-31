@@ -24,7 +24,7 @@ import { PERSONA_NOTE_MAX, personaPromptLines, type PersonaStyle } from "@shared
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
-import type { BrainContextMode } from "@/src/stores/brain-prefs"
+import type { BrainContextMode, SkillHintsMode } from "@/src/stores/brain-prefs"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LOCALE_LABELS, SUPPORTED_LOCALES, useLocaleStore, type AppLocale } from "@/src/stores/locale-store"
@@ -86,20 +86,23 @@ function useContextOptions(): { value: BrainContextMode; label: string; hint: st
   ]
 }
 
-function ContextSelect({ value, onChange }: {
+function ContextSelect({ value, onChange, options }: {
   value: BrainContextMode
   onChange: (v: BrainContextMode) => void
+  /** Another list of the same three values (the skill hints reuse this select) */
+  options?: { value: BrainContextMode; label: string; hint: string }[]
 }) {
-  const options = useContextOptions()
+  const fallback = useContextOptions()
+  const list = options ?? fallback
   return (
     <Select value={value} onValueChange={(v) => v && onChange(v as BrainContextMode)}>
       <SelectTrigger className="min-w-48">
         <SelectValue>
-          {(v) => options.find((o) => o.value === v)?.label ?? v}
+          {(v) => list.find((o) => o.value === v)?.label ?? v}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {options.map((opt) => (
+        {list.map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
             {opt.label}
           </SelectItem>
@@ -133,6 +136,36 @@ function MemorySection({ isCode }: { isCode: boolean }) {
   )
 }
 
+function useSkillHintOptions(): { value: SkillHintsMode; label: string; hint: string }[] {
+  const { t } = useTranslation()
+  return [
+    { value: "off", label: t("preferences.skillHints.off.label"), hint: t("preferences.skillHints.off.hint") },
+    { value: "all", label: t("preferences.skillHints.all.label"), hint: t("preferences.skillHints.all.hint") },
+    { value: "memory", label: t("preferences.skillHints.memory.label"), hint: t("preferences.skillHints.memory.hint") },
+  ]
+}
+
+/**
+ * One setting for both modes — a skill hint is not per conversation. It shows in the chat
+ * and in the code preferences reading the SAME value, so nobody thinks it is per tab.
+ */
+function SkillHintsSection() {
+  const { t } = useTranslation()
+  const skillHints = useBrainPrefs((s) => s.skillHints)
+  const setSkillHints = useBrainPrefs((s) => s.setSkillHints)
+  const options = useSkillHintOptions()
+
+  return (
+    <div className="border-t pt-3">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground">{t("preferences.skillHints.title")}</p>
+        <ContextSelect value={skillHints} onChange={setSkillHints} options={options} />
+      </div>
+      <p className="text-[11px] leading-tight text-muted-foreground">{t("preferences.skillHints.description")}</p>
+    </div>
+  )
+}
+
 function ChatPrefs() {
   const { t } = useTranslation()
   const { chatModel, setChatModel, chatActiveModes, setChatActiveMode } = useModelModePrefs()
@@ -142,6 +175,7 @@ function ChatPrefs() {
       <ModelField label={t("preferences.defaultModel")} value={chatModel} onChange={setChatModel} action={<ModelThinkingMenu model={chatModel} />} />
       <ActiveModesSection modes={chatActiveModes} onChange={setChatActiveMode} isCode={false} />
       <MemorySection isCode={false} />
+      <SkillHintsSection />
     </div>
   )
 }
@@ -188,6 +222,7 @@ function CodePrefs() {
       />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemorySection isCode={true} />
+      <SkillHintsSection />
       <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
           <FolderIcon className="size-4 text-muted-foreground" />
