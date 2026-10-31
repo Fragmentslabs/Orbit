@@ -105,8 +105,8 @@ function HookForm({ initial, onDone }: { initial?: HookWithRun; onDone: () => vo
       <div className="grid grid-cols-2 gap-3">
         <div>
           <p className="mb-1 text-xs font-medium">{t("hooks.form.event")}</p>
-          <Select value={event} onValueChange={(v) => setEvent(v as HookEvent)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <Select value={event} onValueChange={(v) => setEvent((v ?? "pre_tool_call") as HookEvent)}>
+            <SelectTrigger className="w-full"><SelectValue>{t(`hooks.event.${event}`)}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="pre_tool_call">{t("hooks.event.pre_tool_call")}</SelectItem>
               <SelectItem value="post_tool_call">{t("hooks.event.post_tool_call")}</SelectItem>
@@ -138,7 +138,9 @@ function HookForm({ initial, onDone }: { initial?: HookWithRun; onDone: () => vo
         <div>
           <p className="mb-1 text-xs font-medium">{t("hooks.form.scope")}</p>
           <Select value={scope} onValueChange={(v) => setScope(v ?? GLOBAL)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full">
+              <SelectValue>{scope === GLOBAL ? t("hooks.scope.global") : folderName(scope)}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value={GLOBAL}>{t("hooks.scope.global")}</SelectItem>
               {scopes.map((dir) => (
@@ -152,6 +154,7 @@ function HookForm({ initial, onDone }: { initial?: HookWithRun; onDone: () => vo
           <Input type="number" min={1} max={60} value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} placeholder="10" />
         </div>
       </div>
+      <p className="-mt-1 text-[10px] text-muted-foreground">{t("hooks.form.timeoutHint")}</p>
       {error && <p className="text-[11px] text-destructive">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onDone}>{t("common.cancel")}</Button>

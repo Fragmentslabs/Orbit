@@ -3586,7 +3586,8 @@
       "description": "Para que serve",
       "descriptionPlaceholder": "Formatar arquivos editados",
       "scope": "Onde vale",
-      "timeout": "Tempo (s)",
+      "timeout": "Tempo máximo (s)",
+      "timeoutHint": "Se passar disso, o comando é encerrado e a chamada segue sem ele. Padrão 10, máximo 60.",
       "commandHintPre": "Recebe a chamada em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 bloqueia e o stderr vira o motivo.",
       "commandHintPost": "Recebe a chamada e o resultado em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 manda o stderr de volta ao agente."
     }

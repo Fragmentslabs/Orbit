@@ -1065,20 +1065,6 @@ export function McpSkillsPanel() {
         )}
       </div>
 
-      {/* Hooks: a button and a count; the list lives in a dialog (see hooks-dialog.tsx) */}
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold">{t("hooks.title")}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.sectionDescription")}</p>
-          </div>
-          <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => setHooksOpen(true)}>
-            <Webhook className="size-3.5" />
-            {hookCount > 0 ? t("hooks.count", { count: hookCount }) : t("hooks.manage")}
-          </Button>
-        </div>
-      </div>
-
       {/* Skills */}
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -1189,6 +1175,20 @@ export function McpSkillsPanel() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Hooks: a button and a count; the list lives in a dialog (see hooks-dialog.tsx) */}
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">{t("hooks.title")}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.sectionDescription")}</p>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => setHooksOpen(true)}>
+            <Webhook className="size-3.5" />
+            {hookCount > 0 ? t("hooks.count", { count: hookCount }) : t("hooks.manage")}
+          </Button>
+        </div>
       </div>
 
       {/* Dialogs */}
