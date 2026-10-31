@@ -1314,6 +1314,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       throw new Error(i18n.t("chat.noModelSelected"))
     }
 
+    // Level the new chat is running with — the one the composer shows and the turn
+    // sends. Pinning it on the first send keeps the chat on it when the model's
+    // default is touched later.
+    const reasoningFallback = config.options.reasoning
+
     let sessionId = config.sessionId ?? get().activeIds[mode]
     if (sessionId) get().clearSuggestion(sessionId)
     let session = get().sessions.find((s) => s.id === sessionId)
@@ -1353,10 +1358,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Thinking and autonomy of the new chat also become the session's: without a
       // choice in the draft, it pins the level in force (the model's / the default),
       // so the chat does not change when the default is touched later.
-      useSessionReasoning.getState().adopt(
-        sessionId,
-        sessionReasoningFor(null, selected.providerId, selected.modelId),
-      )
+      useSessionReasoning.getState().adopt(sessionId, reasoningFallback)
       usePermissionPrefs.getState().adopt(sessionId)
       // The rotation chosen in the new chat (draft) starts counting for the session
       useModelRotationStore.getState().adoptRotation(sessionId)
@@ -1373,6 +1375,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           }),
         )
       }
+    }
+
+    // The session may have been born a moment before this send — the side panel's new
+    // chat, the voice call, "send to the side panel" — and then it never went through
+    // the adoption above: the level chosen in the new chat stayed in the draft and the
+    // chat opened "off" right after the first message. Only a chat that has not started
+    // yet receives it; an ongoing one is never repainted by a stale draft.
+    if (get().messages[sessionId!]?.length === 0 && !useSessionReasoning.getState().overrides[sessionId!]) {
+      useSessionReasoning.getState().adopt(sessionId!, reasoningFallback)
     }
 
     // Clears an implemented/finished plan review and a finished orchestration

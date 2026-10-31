@@ -1,14 +1,17 @@
 import { useCallback } from "react"
 import { create } from "zustand"
 
+import type { SessionInfo } from "@shared/chat"
 import type { ModelReasoningPref } from "@shared/companion"
 import { useReasoningPrefsStore } from "@/src/stores/reasoning-prefs"
+import { useSessionStore } from "@/src/stores/session-store"
 
 /**
  * Thinking PER CHAT (toggle + variant), in the same design as the per-chat model:
  * `overrides` keeps each session's choice, the new chat uses the DRAFT key
- * until the first send (adopt) and, with no override, the PER MODEL level from the
- * Preferences (reasoning-prefs) applies — which remains the default.
+ * until the first send (adopt) and, with no override, the level of the LAST CHAT USED
+ * applies — the same rule the model already follows — falling back to the PER MODEL
+ * level from the Preferences (reasoning-prefs), which remains the default.
  *
  * Before, the level was only per model: choosing "high" in one chat changed the thinking
  * of ALL the chats of that model. Now the switch in the chat's selector writes
@@ -91,14 +94,29 @@ export const useSessionReasoning = create<SessionReasoningState>((set, get) => (
   },
 }))
 
-/** Effective level of a chat: session override > model level (Preferences). */
+/** Most recent session that is not archived and not a worker — the one whose
+ *  thinking the next new chat follows (the same rule the per-chat model uses). */
+function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
+  return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+}
+
+/** Effective level of a chat: session override > level of the last chat used (new chat) >
+ *  model level (Preferences). */
 export function sessionReasoningFor(
   sessionId: string | null | undefined,
   providerId: string | undefined,
   modelId: string | undefined,
 ): ModelReasoningPref | undefined {
-  const override = useSessionReasoning.getState().overrides[sessionId ?? DRAFT_KEY]
+  const { overrides } = useSessionReasoning.getState()
+  const override = overrides[sessionId ?? DRAFT_KEY]
   if (override) return override
+  if (!sessionId) {
+    // A new chat with no choice of its own opens with the thinking of the last chat
+    // used, instead of falling back to the model's default and changing level.
+    const latest = latestSession(useSessionStore.getState().sessions)
+    const inherited = latest ? overrides[latest.id] : undefined
+    if (inherited) return inherited
+  }
   if (!providerId || !modelId) return undefined
   return useReasoningPrefsStore.getState().prefs[`${providerId}/${modelId}`]
 }
@@ -113,11 +131,16 @@ export function useSessionReasoningPref(
   const modelPref = useReasoningPrefsStore((s) =>
     providerId && modelId ? s.prefs[`${providerId}/${modelId}`] : undefined,
   )
+  // New chat: subscribed to the sessions so the selector already shows the level it
+  // inherits from the last chat used, before the first send.
+  const sessions = useSessionStore((s) => (sessionId ? undefined : s.sessions))
+  const latest = !sessionId && sessions ? latestSession(sessions) : undefined
+  const inherited = useSessionReasoning((s) => (latest ? s.overrides[latest.id] : undefined))
   const setPref = useSessionReasoning((s) => s.setPref)
 
   // The same reference on both sides avoids a needless re-render when only the other
   // store changed: the override, when it exists, is the only source.
-  const pref = override ?? modelPref
+  const pref = override ?? inherited ?? modelPref
 
   const update = useCallback(
     (next: ModelReasoningPref) => {

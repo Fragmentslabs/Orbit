@@ -74,8 +74,9 @@ export function ThinkingMenu({
 }
 
 /**
- * Level stored PER MODEL — the same one the chat reasoning selector reads and
- * writes. Choosing the level of the default model here makes the new chat start on it.
+ * Level stored PER MODEL: the default a chat inherits when neither it nor the last
+ * chat used has a choice of its own. The chat selector writes per session, so a level
+ * chosen in a conversation never changes the others.
  */
 export function ModelThinkingMenu({ model }: { model: DefaultModel | null }) {
   const { enabled, variantId, update } = useReasoningPrefs(model?.providerId, model?.modelId)
