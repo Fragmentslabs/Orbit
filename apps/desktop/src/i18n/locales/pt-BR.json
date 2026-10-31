@@ -2030,11 +2030,17 @@
     "rules": {
       "title": "Regras de permissão aprendidas",
       "description": "O que o Orbit parou de perguntar e o que ele ainda está contando.",
+      "row": "Permissões",
+      "back": "Voltar",
+      "trusted": "Liberadas",
+      "allowed_one": "{{count}} liberada",
+      "allowed_other": "{{count}} liberadas",
       "pending": "Ainda pergunta",
       "times": "{{count}}×",
       "makePermanent": "Tornar permanente",
       "revoke": "Revogar",
-      "empty": "Nada aprendido ainda — permitir a mesma ação algumas vezes traz a regra para cá."
+      "empty": "Nada aprendido ainda — permitir a mesma ação algumas vezes traz a regra para cá.",
+      "mcpNote": "Servidores MCP têm modo de permissão próprio, ajustado no servidor."
     },
     "language": {
       "title": "Idioma",

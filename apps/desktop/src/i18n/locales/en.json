@@ -2030,11 +2030,17 @@
     "rules": {
       "title": "Learned permission rules",
       "description": "What Orbit stopped asking for, and what it is still counting.",
+      "row": "Permissions",
+      "back": "Back",
+      "trusted": "Allowed",
+      "allowed_one": "{{count}} allowed",
+      "allowed_other": "{{count}} allowed",
       "pending": "Still asked",
       "times": "{{count}}×",
       "makePermanent": "Make permanent",
       "revoke": "Revoke",
-      "empty": "Nothing learned yet — allowing the same action a few times brings the rule here."
+      "empty": "Nothing learned yet — allowing the same action a few times brings the rule here.",
+      "mcpNote": "MCP servers have a permission mode of their own, set on the server."
     },
     "language": {
       "title": "Language",

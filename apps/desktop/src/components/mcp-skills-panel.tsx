@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { fractaApi, hooksApi, mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
+import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
 import { HooksDialog } from "@/src/components/hooks-dialog"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
@@ -266,6 +266,11 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       config.servers.push(entry)
     }
     await mcpApi.save(config)
+    // "Ask" has to actually ask: a rule trusted in the past approves the call
+    // before the mode is ever consulted (electron/lib/permission/index.ts), so
+    // going back to ask means giving the released rule back. The mode select is
+    // the one control for a server, and it settles what was released too.
+    if (entry.permissionMode === "ask") await permissionsApi.revoke(`mcp:${entry.name}`)
     await refresh()
     setSaving(false)
     onOpenChange(false)

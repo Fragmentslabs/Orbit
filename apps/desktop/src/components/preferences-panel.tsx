@@ -17,7 +17,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control"
 import { ModelField } from "@/src/components/model-field"
 import { ModelThinkingMenu, ThinkingMenu } from "@/src/components/thinking-menu"
 import { GeneralSettings } from "@/src/components/general-settings"
-import { PermissionRulesSection } from "@/src/components/permission-rules-section"
+import { PermissionRulesPanel, PermissionRulesRow } from "@/src/components/permission-rules-section"
 import { WorktreeSettings } from "@/src/components/worktree-settings"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { PERSONA_NOTE_MAX, personaPromptLines, type PersonaStyle } from "@shared/persona"
@@ -383,6 +383,13 @@ function BehaviorSection() {
 export function PreferencesPanel() {
   const { t } = useTranslation()
   const [tab, setTab] = useState<PrefsTab>("chat")
+  const [view, setView] = useState<"main" | "permissions">("main")
+
+  // A sub-screen replaces the tab's content, the way the appearance panel
+  // already does with the visible modes — the settings nav stays put.
+  if (view === "permissions") {
+    return <PermissionRulesPanel onBack={() => setView("main")} />
+  }
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
@@ -397,7 +404,7 @@ export function PreferencesPanel() {
       <LanguageSection />
       <BehaviorSection />
       <GeneralSettings />
-      <PermissionRulesSection />
+      <PermissionRulesRow onOpen={() => setView("permissions")} />
 
       <div className="border-t pt-4">
         <p className="mb-2 text-xs font-medium text-muted-foreground">{t("preferences.byMode")}</p>
