@@ -392,6 +392,8 @@ export function createMotionTools(
       description:
         'Renders a composition to a video file inside the app (no network) by capturing every frame through window.orbitMotion.seek(frame) — deterministic — and puts it in the Media gallery. ONLY when the user explicitly asks for the video/file (or you need the clip as an overlay in an EDL): the live preview in the Motion tab is how they watch it, and the tab has its own Render button. Never render to check your work (motion_frame is the cheap look). ' +
         'format: mp4 (normal clip), mov (ProRes 4444) or webm; transparent: true with mov/webm gives an alpha overlay. ' +
+        'quality (high/balanced/small) is the FILE weight — the same choice as the tab\'s Render dialog — and it does NOT make the render faster: to make a render cheap, lower width/height and fps. ' +
+        'bands: 1 forces a single sequential pass (the deterministic path for a composition that cannot be pure). ' +
         (project
           ? '`output` (code mode): ALSO copy the finished file into the working folder at this path — only when the user wants the video in the project or an EDL needs it there. `audio`: a one-off audio file of the working folder mixed from the start (normally declare tracks in audio.json inside the composition instead). '
           : '') +
@@ -405,6 +407,21 @@ export function createMotionTools(
         width: z.number().int().positive().max(4096).optional(),
         height: z.number().int().positive().max(4096).optional(),
         fps: z.number().positive().max(60).optional(),
+        quality: z
+          .enum(['high', 'balanced', 'small'])
+          .optional()
+          .describe(
+            "File weight (CRF/preset), the same choice as the tab's Render dialog. It changes the FILE, not the speed of the render — to make a render cheap, lower width/height and fps. Default balanced",
+          ),
+        bands: z
+          .number()
+          .int()
+          .min(1)
+          .max(16)
+          .optional()
+          .describe(
+            'Parallel bands the frame range is split into (default: follows the cores). 1 = one sequential pass — the deterministic path for a composition that cannot be pure',
+          ),
         output: z.string().optional().describe('Code mode only: a path in the working folder to ALSO copy the video to'),
         audio: z.string().optional().describe('Code mode only: an audio file of the working folder, mixed from the start of the piece'),
         show: z.boolean().optional().describe('Show it in your reply as a player (default true)'),
