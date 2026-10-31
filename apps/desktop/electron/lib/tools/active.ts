@@ -84,15 +84,36 @@ export function priorToolCalls(history: readonly ChatMessage[]): { role: 'assist
   return content.length > 0 ? [{ role: 'assistant', content }] : []
 }
 
+function fold(text: string): string {
+  return text
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+}
+
+/** Whole-word (or whole-phrase) match of a tag in already-folded text. */
+function hasTag(folded: string, tag: string): boolean {
+  const words = fold(tag)
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  if (words.length === 0 || !words[0]) return false
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])${words.join('\\s+')}(?![\\p{L}\\p{N}])`, 'u')
+  return re.test(folded)
+}
+
 /**
  * Families cited in the text — deterministic self-activation, zero tokens.
  *
- * Two forms of citation, and the criterion that separates the two:
+ * Three forms of citation, and the criterion that separates them:
  * - `@mcp:<server>`: explicit, unambiguous.
  * - **tool name**: only counts for names with `_` and 5+ characters. A bare "git"
  *   is an everyday word ("do a git pull"); `git_status` is the tool. Without that
  *   filter, half the messages would activate a family by accident, which is worse
  *   than not activating: it pays context and dilutes the core.
+ * - **family tag** (`ToolFamily.tags`, curated pt+en): whole word, case and accents
+ *   folded on both sides. No length rule — `pdf` is short and specific; what protects is
+ *   the curation and the corpus test, not the size.
  */
 export function familiesMentionedInText(
   text: string,
@@ -103,6 +124,7 @@ export function familiesMentionedInText(
   if (families.length === 0) return [...found]
 
   const normalized = text.toLowerCase()
+  const folded = fold(text)
   for (const family of families) {
     if (family.unavailable || found.has(family.id)) continue
     for (const name of family.tools) {
@@ -112,6 +134,8 @@ export function familiesMentionedInText(
         break
       }
     }
+    if (found.has(family.id)) continue
+    if (family.tags?.some((tag) => hasTag(folded, tag))) found.add(family.id)
   }
   return [...found]
 }

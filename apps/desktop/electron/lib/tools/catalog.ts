@@ -30,6 +30,12 @@ export interface ToolFamily {
   unavailable?: string
   /** MCP server family (the id is the server name). */
   mcp?: boolean
+  /**
+   * Words the user would type to ask for this family, pt and en together. Code, not a
+   * generated card. Only `familiesMentionedInText` reads them — they never enter the
+   * prompt map (the description line already says what the family is).
+   */
+  tags?: readonly string[]
 }
 
 /**
@@ -102,12 +108,15 @@ export const MAX_TOOLS_PER_FAMILY = 40
 /**
  * Families active from the FIRST turn, without the model having to load them.
  *
+ * `skills` for the same reason: the prompt tells the model to call `skill_read`, which
+ * lives in that family.
+ *
  * `subchats` is here by evidence: the system prompt orders `suggest_subchat` on the
  * agent's own initiative, but a tool that is not declared cannot be called — with
  * the family behind `tools_load`, the suggestion only appeared when the user asked
  * for a new chat out loud.
  */
-export const DEFAULT_ACTIVE_FAMILIES: readonly string[] = ['subchats', 'history']
+export const DEFAULT_ACTIVE_FAMILIES: readonly string[] = ['subchats', 'history', 'skills']
 
 /** Declared families. The order here is the map's order (deterministic). */
 interface FamilyDecl {
@@ -117,6 +126,8 @@ interface FamilyDecl {
   manual?: string
   /** Name prefixes that belong to the family. */
   prefixes: string[]
+  /** See `ToolFamily.tags`. Curated: whole words, nothing from everyday speech. */
+  tags?: readonly string[]
   /** Exact names that do not follow a prefix. */
   exact?: string[]
   /** Unavailability rule, when the family has no tool at all. */
@@ -143,6 +154,7 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'documents',
     label: 'documents',
     description: 'PDF, DOCX, spreadsheets and Orbit documents: read, query, extract, create.',
+    tags: ['pdf', 'docx', 'xlsx', 'planilha', 'spreadsheet'],
     prefixes: ['doc_', 'docx_', 'pdf_', 'document_'],
     exact: ['sheet_query', 'create_document', 'update_document', 'read_document', 'list_documents'],
   },
@@ -150,6 +162,7 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'image',
     label: 'image',
     description: 'Edit images pixel by pixel: crop, compress, color, background, text.',
+    tags: ['remover fundo', 'remove background', 'recortar imagem', 'crop image'],
     prefixes: ['image_', 'describe_image'],
     exact: ['show_image'],
   },
@@ -157,12 +170,14 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'svg',
     label: 'svg',
     description: 'Vector: create, recolor, rasterize and vectorize.',
+    tags: ['svg', 'vetorizar', 'vectorize'],
     prefixes: ['svg_'],
   },
   {
     id: 'video',
     label: 'video',
     description: 'EDL-based video editing: probe, transcribe, timeline, render, cut.',
+    tags: ['legenda', 'legendas', 'shorts', 'clipe', 'ffmpeg'],
     prefixes: ['video_'],
     exact: ['transcribe'],
     unavailable: (i) => (i.mode === 'chat' ? undefined : undefined),
@@ -171,30 +186,35 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'media',
     label: 'media',
     description: 'Compress/convert video and audio to a byte ceiling.',
+    tags: ['comprimir video', 'compress video', 'comprimir audio', 'compress audio'],
     prefixes: ['media_'],
   },
   {
     id: 'ytdlp',
     label: 'ytdlp',
     description: 'Media from a link: download video/audio and read the transcript.',
+    tags: ['youtube', 'yt-dlp', 'baixar video', 'baixar audio', 'download video'],
     prefixes: ['ytdlp_'],
   },
   {
     id: 'motion',
     label: 'motion',
     description: 'Animated piece (intro, kinetic text, lower third) in the Motion tab.',
+    tags: ['animacao', 'animacoes', 'animar', 'animation', 'animate', 'motion graphics'],
     prefixes: ['motion_'],
   },
   {
     id: 'design',
     label: 'design',
     description: 'Design canvas: screens, mockups, logos, variants.',
+    tags: ['mockup', 'wireframe', 'logotipo'],
     prefixes: ['design_'],
   },
   {
     id: 'slides',
     label: 'slides',
     description: 'Slide presentation, with speaker notes.',
+    tags: ['slides', 'slide', 'pptx', 'powerpoint'],
     prefixes: ['slides_'],
   },
   {
@@ -207,6 +227,7 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'fonts',
     label: 'fonts',
     description: 'Font catalog: search and install into the app library.',
+    tags: ['fonts', 'tipografia', 'typeface'],
     prefixes: ['font_'],
   },
   {
@@ -235,6 +256,7 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'artifacts',
     label: 'artifacts',
     description: 'Interactive HTML page inside the response (dashboard, prototype, simulator).',
+    tags: ['dashboard', 'artifact', 'artefato'],
     prefixes: ['create_artifact', 'update_artifact', 'edit_artifact', 'read_artifact'],
   },
   {
@@ -246,7 +268,7 @@ const FAMILIES: readonly FamilyDecl[] = [
   {
     id: 'skills',
     label: 'skills',
-    description: 'Read a skill on demand and propose a new one.',
+    description: 'Read or search a skill on demand and propose a new one.',
     prefixes: ['skill_', 'create_skill'],
   },
   {
@@ -261,6 +283,7 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'subagent',
     label: 'subagent',
     description: 'Delegate a subtask to an isolated worker.',
+    tags: ['subagent', 'subagente'],
     prefixes: ['subagent'],
     unavailable: (i) => (i.options.subagents ? undefined : 'delegation is off in this conversation'),
   },
@@ -290,12 +313,14 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'pipeline',
     label: 'pipeline',
     description: 'Turn work into a task on a board and read the state.',
+    tags: ['kanban'],
     prefixes: ['pipeline_'],
   },
   {
     id: 'routines',
     label: 'routines',
     description: 'Schedule: create, list, run, pause and remove routines.',
+    tags: ['cron'],
     prefixes: ['routines_'],
     unavailable: (i) => (i.options.plan ? 'plan mode does not create routines' : undefined),
   },
@@ -303,12 +328,14 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'hooks',
     label: 'hooks',
     description: 'Automate around your own tool calls ("every time you X, do Y"): create, list and remove shell hooks.',
+    tags: ['hook', 'hooks'],
     prefixes: ['hook_'],
   },
   {
     id: 'worktrees',
     label: 'worktrees',
     description: 'Isolated copies of the repository on another branch.',
+    tags: ['worktree', 'worktrees'],
     prefixes: ['worktree_'],
   },
   {
@@ -328,6 +355,7 @@ const FAMILIES: readonly FamilyDecl[] = [
     id: 'audio',
     label: 'audio',
     description: 'Generate speech from text.',
+    tags: ['tts', 'narracao', 'text to speech'],
     prefixes: ['audio_'],
     unavailable: () => '"Text to speech" is off in Preferences',
   },
@@ -429,6 +457,7 @@ export function classifyFamilies(
         description: family.description,
         manual: family.manual,
         tools: present,
+        ...(family.tags ? { tags: family.tags } : {}),
       })
     } else {
       const reason = family.unavailable?.(input)
@@ -436,7 +465,14 @@ export function classifyFamilies(
       // (e.g. `fonts` in the chat is never assembled) — it does not go to the map as
       // "disabled" so as not to suggest a capability the mode does not have.
       if (reason) {
-        families.push({ id: family.id, label: family.label, description: family.description, tools: [], unavailable: reason })
+        families.push({
+          id: family.id,
+          label: family.label,
+          description: family.description,
+          tools: [],
+          unavailable: reason,
+          ...(family.tags ? { tags: family.tags } : {}),
+        })
       }
     }
   }
