@@ -188,7 +188,7 @@ export function createChatSearchTools(input: Pick<SendMessageInput, 'sessionId' 
       ].join(' '),
       inputSchema: z.object({
         id: z.string().min(1).describe('Chat id from chat_search (the part after #)'),
-        around: z.string().optional().describe('Message id from chat_search ("msg …") to center the window on'),
+        around: z.string().optional().describe('Message id from chat_search ("msg …") to center the window on, or "latest" for the end of the chat'),
         before: z.number().int().min(0).max(MAX_WINDOW).optional().describe(`Messages before the anchor. Default ${DEFAULT_WINDOW}.`),
         after: z.number().int().min(0).max(MAX_WINDOW).optional().describe(`Messages after the anchor. Default ${DEFAULT_WINDOW}.`),
         maxChars: z.number().int().min(500).max(20_000).optional().describe(`Ceiling on the text returned. Default ${DEFAULT_MAX_CHARS}.`),
@@ -220,7 +220,9 @@ export function createChatSearchTools(input: Pick<SendMessageInput, 'sessionId' 
         const back = before ?? DEFAULT_WINDOW
         const ahead = after ?? DEFAULT_WINDOW
         let anchor = 0
-        if (around) {
+        if (around === 'latest') {
+          anchor = all.length - 1
+        } else if (around) {
           anchor = all.findIndex((m) => m.id === around)
           if (anchor < 0) return `Error: message ${around} is not in chat ${id}. Omit "around" to read from the start.`
         }

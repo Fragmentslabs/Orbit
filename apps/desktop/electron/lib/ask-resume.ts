@@ -8,6 +8,7 @@ import { listCredentialProviders } from './auth'
 import { broadcastChatEvent } from './broadcast'
 import { runChat } from './chat-engine'
 import { createContinuationRecord, createSubchatRecord } from './subchats'
+import { wakeParentOf } from './subchat-wake'
 import { listKeys, readJson, removeJson, writeJson } from './storage'
 
 /**
@@ -91,7 +92,10 @@ async function openSavedSubchat(win: BrowserWindow, sessionId: string, item: Sav
       mode: child.mode,
       directory: child.directory,
       extraDirectories: child.extraDirectories,
-    }).catch((err) => console.error('[subchat] saved subchat turn failed:', err))
+    })
+      // Same as a subchat opened during the run: its result wakes the parent up.
+      .then(() => wakeParentOf(win, input, child))
+      .catch((err) => console.error('[subchat] saved subchat turn failed:', err))
   } catch (err) {
     // The chat already exists in the sidebar: it is opened, waiting for the person.
     console.warn('[subchat] saved subchat created without a starting turn:', err)

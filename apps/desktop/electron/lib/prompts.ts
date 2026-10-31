@@ -1,4 +1,5 @@
-import type { SendMessageInput } from '@shared/chat'
+import type { SendMessageInput, SessionInfo } from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { PERSONA_MIRROR, personaPromptLines } from '@shared/persona'
 import { uiDestinationCatalog } from '@shared/ui-destinations'
@@ -7,12 +8,13 @@ import { isComputerAvailable } from './computer'
 import { loadPromptContext } from './memory/service'
 import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
-import { formatSubchatsBlock, listSubchats } from './subchats'
 import { loadSkills } from './skills'
 import { resolveFfmpeg } from './video/ffmpeg'
 import { listMcpToolDescriptions } from './mcp'
 import { overlayOpenContext, overlayOpenContextLine } from './overlay/open-context'
 import { folderInMainRepository } from './worktrees/main'
+import { conversationOriginBlock } from './subchats'
+import { readJson } from './storage'
 import { projectContextBlock } from './project-context'
 
 /**
@@ -169,7 +171,9 @@ When the subject is THIS CONVERSATION being long — compactions already stackin
 
 Only when the user explicitly asked for a new chat ("do this in a new chat", "open a chat for this") use open_subchat and create it without asking. Never open a chat on your own initiative.
 
-Subchats that already exist are listed with their ids further down. To follow one, read it with read_subchat; to hand it a new instruction (a fix, a follow-up, the next step) use send_to_subchat — it asks the user first and does not wait for the reply. Prefer that over opening another subchat for the same work.`
+Subchats that already exist are listed with their ids further down. To follow one, read it with read_subchat; to hand it a new instruction (a fix, a follow-up, the next step) use send_to_subchat — it asks the user first and does not wait for the reply. Prefer that over opening another subchat for the same work.
+
+When a subchat you started (its brief, or send_to_subchat) finishes a turn, its final message comes back to you as a new message that starts with "The subchat … finished" (in the app language) — the USER did not type it. Carry on with whatever part of what the user asked it unblocks; when nothing is left for you to do, tell the user in a line or two what the subchat did and where. Do not answer it as a question from the user, and do not send the subchat more work unless the user's request needs it.`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 
@@ -992,14 +996,16 @@ export async function buildSystemPrompt(
     )
   }
 
-  // Subchats: how to open one, and the RESULT of the ones already attached to this
-  // conversation (the parent sees the last result of each child, never the whole
-  // history — see subchats.ts).
+  // Subchats: how to open one. The RESULT of the ones already attached is NOT here:
+  // it changes every time a child answers, and the system prompt is the cache prefix
+  // of the whole conversation — it travels in the turn's message (chat-engine).
   if (input.orchestrationRole !== 'worker') {
     parts.push(SUBCHAT_INSTRUCTION)
     parts.push(PAST_CHATS_INSTRUCTION)
-    const subchats = formatSubchatsBlock(await listSubchats(input.sessionId))
-    if (subchats) parts.push(subchats)
+    // A subchat knows its parent reads its answers; a continuation knows where its
+    // history lives. Fixed for the conversation's life, so it may sit in the system.
+    const origin = await conversationOriginBlock(await readJson<SessionInfo>(StorageKeys.session(input.sessionId)).catch(() => null))
+    if (origin) parts.push(origin)
   }
 
   // Past conversations: injects snippets of previous chats only when the user

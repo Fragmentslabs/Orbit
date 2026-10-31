@@ -46,6 +46,7 @@ import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransient
 import { selectDraftImages } from './image-drafts'
 import { hasStreamedContent, resolveRotation, retryDelay, waitUnlessAborted } from './model-rotation'
 import { buildSystemPrompt, promptMemoryIds } from './prompts'
+import { subchatsTurnBlock } from './subchats'
 import { retrieveForTurn } from './memory/service'
 import { renderMemorySuggestions } from './memory/retrieval'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
@@ -1612,6 +1613,14 @@ export function abortChat(sessionId: string) {
 
 /** Sessions with a runChat in progress — the main re-emits the status after a
  *  renderer reload, so the UI goes back to showing the spinner/stop button. */
+/** Sessions whose LAST turn ended stopped (by the user, or replaced by a newer send). */
+const abortedTurns = new Set<string>()
+
+/** Did this session's last turn end stopped? A subchat the user stopped must not wake its parent. */
+export function lastTurnAborted(sessionId: string): boolean {
+  return abortedTurns.has(sessionId)
+}
+
 export function getRunningSessionIds(): string[] {
   return [...abortControllers.keys()]
 }
@@ -1771,7 +1780,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       // orchestrationRole is only filled by the main process: in a worker, what
       // sent it was the orchestrator. Without the mark, it was the user typing in
       // the worker's chat.
-      origin: input.orchestrationRole === 'worker' ? 'orchestrator' : undefined,
+      origin: input.orchestrationRole === 'worker' ? 'orchestrator' : input.messageOrigin,
     }
     history.push(userMessage)
     emit(win, { type: 'message', sessionId, message: userMessage })
@@ -2255,8 +2264,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         ? await describeFrontScreen(input.visionModel, input.text, input.language).catch(() => null)
         : null
     const prefetchedScreen = goodWindowText || screenDescription
+    // Subchats' latest results and the chats that continue this one: they change between
+    // turns, so they ride in the message like the memories (see subchats.ts).
+    const subchatsBlock =
+      input.orchestrationRole !== 'worker' ? await subchatsTurnBlock(input.sessionId).catch(() => '') : ''
     const turnBlock = [
       memoryBlock,
+      subchatsBlock,
       prefetchedScreen
         ? prefetchedScreenBlock({
             windowText: goodWindowText ?? (overlayScreen && 'text' in overlayScreen ? overlayScreen.text : null),
@@ -3262,6 +3276,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // End of the turn = end of computer control: the indicator goes away, the panic
     // shortcut is released and the apps' accessibility flags are given back.
     endActivity(sessionId)
+    if (controller.signal.aborted) abortedTurns.add(sessionId)
+    else abortedTurns.delete(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     const activeCmd = activeBashCommands.get(sessionId)
     activeBashCommands.delete(sessionId)

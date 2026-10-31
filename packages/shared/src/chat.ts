@@ -134,6 +134,12 @@ export interface SessionInfo {
   orchestration?: SessionOrchestration
   /** Parent session in the sidebar tree (shortcut of orchestration.parentSessionId) */
   parentId?: string
+  /**
+   * The conversation this one continues (a long chat moved to a fresh context). Not a
+   * parent: the new chat is top-level. It is the link both ways — the new chat knows
+   * where to look back, the old one lists where the work went.
+   */
+  continuedFrom?: string
   /** Run of a scheduled routine: the session lives in the "Routines" group of
    *  the sidebar (never in a folder) and is deleted together with the routine. */
   routineId?: string
@@ -943,8 +949,9 @@ export interface ChatMessage {
   todoReminder?: boolean
   /** User message written by the orchestrator into a worker (not by the
    *  person). Absent = the user typed it in the worker's chat — that is how the
-   *  orchestrator tells that you stepped into a worker and gave it a command. */
-  origin?: "orchestrator"
+   *  orchestrator tells that you stepped into a worker and gave it a command.
+   *  "subchat" = the result of a subchat that woke its parent up (subchat-wake.ts). */
+  origin?: "orchestrator" | "subchat"
 }
 
 export interface ModelVariant {
@@ -1494,6 +1501,9 @@ export interface SendMessageInput {
   visionModel?: WorkerModelConfig
   /** Filled by the main process in worker runs — never by the renderer */
   orchestrationRole?: "orchestrator" | "worker"
+  /** The user message of this turn was not typed by the person: a subchat finished and
+   *  woke its parent up with its result (see subchat-wake.ts). */
+  messageOrigin?: "subchat"
   /** Session of the orchestrator that created this worker (filled by the main process) */
   parentSessionId?: string
   /** Short title of the worker task, for origin badges (filled by the main process) */

@@ -11,7 +11,7 @@ vi.mock('./skills', () => ({ loadSkills: async () => [] }))
 vi.mock('./mcp', () => ({ listMcpToolDescriptions: () => [] }))
 vi.mock('./past-chats', () => ({ buildPastChatsContext: async () => '', detectPastChatsIntent: () => false }))
 // Subchats read the storage (app.getPath), which does not exist outside Electron.
-vi.mock('./subchats', () => ({ listSubchats: async () => [], formatSubchatsBlock: () => '' }))
+vi.mock('./subchats', () => ({ listSubchats: async () => [], formatSubchatsBlock: () => '', conversationOriginBlock: async () => '' }))
 /** Voice as in Preferences; each test turns the halves on/off. */
 const voiceFlags = { tts: true, stt: true }
 vi.mock('./app-settings', async () => {

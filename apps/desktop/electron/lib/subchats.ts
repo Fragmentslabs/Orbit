@@ -143,12 +143,14 @@ async function createRecord({
   title,
   body,
   parentId,
+  continuedFrom,
   fallbackTitle,
 }: {
   source: SessionInfo
   title: string
   body: string
   parentId?: string
+  continuedFrom?: string
   fallbackTitle: string
 }): Promise<SessionInfo> {
   const now = Date.now()
@@ -162,6 +164,7 @@ async function createRecord({
     directory: source.directory,
     extraDirectories: source.extraDirectories,
     ...(parentId ? { parentId } : {}),
+    ...(continuedFrom ? { continuedFrom } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -203,10 +206,10 @@ export async function createSubchatRecord({ parentId, title, body }: NewSubchat)
 export async function createContinuationRecord({ sourceId, title, body }: NewContinuation): Promise<SessionInfo | null> {
   const source = await readJson<SessionInfo>(StorageKeys.session(sourceId))
   if (!source) return null
-  return createRecord({ source, title, body, fallbackTitle: 'New chat' })
+  return createRecord({ source, title, body, continuedFrom: source.id, fallbackTitle: 'New chat' })
 }
 
-/** The system prompt block: the parent sees the RESULT of each child. */
+/** The turn block: the parent sees the RESULT of each child. */
 export function formatSubchatsBlock(summaries: SubchatSummary[]): string {
   if (summaries.length === 0) return ''
   const lines = summaries.map(({ session, result }) => {
@@ -220,4 +223,64 @@ export function formatSubchatsBlock(summaries: SubchatSummary[]): string {
     'Separate conversations with their own context, attached to this one. You see each one\'s LATEST result here, not its history: read_subchat reads more when you need it. Stay consistent with what they did and do not redo their work; when the user asks about one, answer from this line and point them to the chat. To give one a new instruction use send_to_subchat — the user is asked before it goes.',
     ...lines,
   ].join('\n')
+}
+
+/** Conversations that continue this one (newest first) — where the work went after it got long. */
+export async function listContinuations(sessionId: string): Promise<SessionInfo[]> {
+  const keys = await listKeys(StorageKeys.sessionPrefix)
+  const sessions = (await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))).filter(
+    (s): s is SessionInfo => s != null && s.continuedFrom === sessionId && !s.archived,
+  )
+  return sessions.sort((a, b) => b.createdAt - a.createdAt)
+}
+
+/**
+ * What changes between turns about this conversation's relatives: the latest result of
+ * each subchat and the chats that continue it. It travels in the turn's message, never in
+ * the system prompt — a child answering would otherwise throw away the cache prefix of
+ * the whole conversation.
+ */
+export async function subchatsTurnBlock(sessionId: string): Promise<string> {
+  const [children, continuations] = await Promise.all([listSubchats(sessionId), listContinuations(sessionId)])
+  const parts = [formatSubchatsBlock(children)]
+  if (continuations.length > 0) {
+    parts.push(
+      [
+        '## This conversation continues elsewhere',
+        'The work moved to a fresh conversation when this one got long. What happened there is NOT in this context: say so when asked, and read it with chat_read (around "latest") instead of guessing.',
+        ...continuations.map((c) => `- **${c.title}** (id: ${c.id}, opened ${relativeTime(c.createdAt)})`),
+      ].join('\n'),
+    )
+  }
+  return parts.filter(Boolean).join('\n\n')
+}
+
+/**
+ * Who this conversation is to another one — stable for its whole life, so it may live in
+ * the system prompt. A subchat learns it has a parent that reads its answers; a
+ * continuation learns where its history lives.
+ */
+export async function conversationOriginBlock(session: SessionInfo | null): Promise<string> {
+  if (!session || session.orchestration?.role === 'worker') return ''
+  const lines: string[] = []
+  if (session.parentId) {
+    const parent = await readJson<SessionInfo>(StorageKeys.session(session.parentId))
+    if (parent) {
+      lines.push(
+        `## You are a subchat of "${parent.title}" (id: ${parent.id})`,
+        'That conversation opened you for one piece of work and is waiting on it. When a turn of yours was started by it (its brief, or a message marked as coming from it), your FINAL message goes back to it and wakes it up — so end that turn with what it needs: the result (what changed, exact paths, what was verified, what was not), or the one decision only it can make, asked plainly. Do not end with a question to the user for something the parent conversation can decide.',
+        `To look at what it is doing, read it with chat_read({ id: "${parent.id}", around: "latest" }). The user can also talk to you directly here: then answer the user.`,
+      )
+    }
+  }
+  if (session.continuedFrom) {
+    const source = await readJson<SessionInfo>(StorageKeys.session(session.continuedFrom))
+    if (source) {
+      lines.push(
+        `## This conversation continues "${source.title}" (id: ${source.id})`,
+        `It was opened with a brief because that one got long; its full history stays there. When the brief is not enough, read it with chat_read({ id: "${source.id}", around: "latest" }) instead of guessing.`,
+      )
+    }
+  }
+  return lines.join('\n')
 }

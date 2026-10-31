@@ -243,6 +243,18 @@ export const MESSAGES = {
     'pt-BR': 'Pode começar. Trabalhe até concluir — o resumo acima tem o contexto, então não pare para perguntar o que ele já responde.',
     en: "Go ahead. Work through to the end — the summary above has the context, so don't stop to ask what it already answers.",
   },
+  'subchat.finished': {
+    'pt-BR': 'O subchat "{{title}}" (#{{id}}) terminou:',
+    en: 'The subchat "{{title}}" (#{{id}}) finished:',
+  },
+  'subchat.finishedEmpty': {
+    'pt-BR': '(sem resposta em texto — leia com read_subchat)',
+    en: '(no text answer — read it with read_subchat)',
+  },
+  'subchat.finishedError': {
+    'pt-BR': 'O turno falhou:',
+    en: 'The turn failed:',
+  },
   'subchat.fromParent': {
     'pt-BR': 'Mensagem do chat principal: ',
     en: 'Message from the main chat: ',

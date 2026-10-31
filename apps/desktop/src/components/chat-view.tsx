@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { AudioPlayerCard } from "@/src/components/messages/audio-part"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
-import { ArrowDown, HelpCircle, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
+import { ArrowDown, ChevronDown, GitBranch, HelpCircle, History, PaperclipIcon, Plug, Sparkles } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
@@ -188,6 +188,12 @@ const MessageItem = memo(
       void sendMessage(mode, messageText(prevUser), { options: {}, sessionId, retryOf: msg.id })
     }
   }, [messages, index, mode, sessionId, sendMessage, msg.id])
+
+  // A subchat's result that woke this conversation up: not something the user typed,
+  // so it does not get a user bubble (see electron/lib/subchat-wake.ts).
+  if (msg.role === "user" && msg.origin === "subchat") {
+    return <SubchatResultNotice message={msg} />
+  }
 
   if (msg.role === "user") {
     const files = msg.parts.filter((p): p is FilePart => p.type === "file")
@@ -1594,6 +1600,33 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           onFoldersChange={handleFoldersChange}
         />
       )}
+    </div>
+  )
+}
+
+/** The result a subchat sent back: its first line as the title, the rest folded. */
+function SubchatResultNotice({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const text = messageText(message)
+  const [head, ...rest] = text.split("\n")
+  const body = rest.join("\n").trim()
+  return (
+    <div data-msg-id={message.id} data-msg-role="user" className="my-1 flex flex-col gap-1 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs">
+      <button
+        type="button"
+        className="flex items-center gap-2 text-left font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <GitBranch className="size-3.5 shrink-0" />
+        <span className="flex-1">{head}</span>
+        {body && <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />}
+      </button>
+      {body && (
+        <p className={cn("whitespace-pre-wrap break-words text-muted-foreground", !open && "line-clamp-2")}>{body}</p>
+      )}
+      {!body && <p className="text-muted-foreground">{t("subchat.noResult")}</p>}
     </div>
   )
 }

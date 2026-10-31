@@ -10,6 +10,7 @@ import { broadcastSessionEvent } from '../companion-server'
 import { createContinuationRecord, createSubchatRecord, findSubchat, readSubchatMessages } from '../subchats'
 import { detachFromTurn } from '../session/write-journal'
 import { tNow } from '../i18n'
+import { wakeParentOf } from '../subchat-wake'
 
 // The first message of the new chat (`subchat.kickoff`) is in the voice of whoever
 // authorized the opening: the child starts working on its own, so the summary
@@ -18,7 +19,8 @@ import { tNow } from '../i18n'
 // not look like the user's. Both follow the app language (`electron/lib/i18n.ts`).
 
 /**
- * Fires a turn in the child, in parallel to the parent's and without waiting for it. The
+ * Fires a turn in the child, in parallel to the parent's and without waiting for it — and,
+ * when it ends, wakes the parent up with the result (subchat-wake.ts). The
  * child is ANOTHER conversation in the same folder, with its own revert: it runs outside the
  * parent's write scope, otherwise what it writes would count as the work of the parent's
  * turn.
@@ -39,7 +41,10 @@ function startChildTurn(input: SendMessageInput, win: BrowserWindow, child: Sess
     extraDirectories: child.extraDirectories,
     visionModel: input.visionModel,
     language: input.language,
-  })).catch((err) => console.error('[subchat] child turn failed:', err))
+  }))
+    // A turn the parent started reports back: its final message wakes the parent up.
+    .then(() => wakeParentOf(win, input, child))
+    .catch((err) => console.error('[subchat] child turn failed:', err))
 }
 
 /** Where the suggestion is going: attached to this conversation, or a new top-level chat. */
@@ -88,7 +93,7 @@ async function openAndStart(
   if (scope === 'chat') {
     return `New chat opened: "${child.title}" (#${child.id}). It is a top-level conversation in the same folder — not a subchat — starts from your brief and is already working on it in parallel. Tell the user where the work went.`
   }
-  return `Subchat opened: "${child.title}" (#${child.id}). It is attached to this conversation, starts from your brief and is already working on it in parallel.`
+  return `Subchat opened: "${child.title}" (#${child.id}). It is attached to this conversation, starts from your brief and is already working on it in parallel. When it finishes, its final message comes back to you as a new turn — do not wait for it or poll it.`
 }
 
 const TITLE_INPUT = z
@@ -211,8 +216,8 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         'Sends a new instruction to a subchat you opened and lets it work on it in parallel, in its own',
         'context — it remembers everything it did there. The user is asked to approve every instruction before it',
         'goes. Prefer this over opening a new subchat when one already has the context (a fix, a follow-up, the next',
-        'step). It does not wait for the reply: the subchat\'s result shows up in the subchats list on your next turn,',
-        'or read it with read_subchat. A subchat that is still running a turn is refused — wait or read it first.',
+        'step). It does not wait for the reply: when the subchat finishes, its final message comes back to you as a new turn',
+        '(marked as coming from the subchat), or read it with read_subchat. A subchat that is still running a turn is refused — wait or read it first.',
       ].join(' '),
       inputSchema: z.object({
         subchatId: z.string().describe('The id from the subchats list'),
@@ -235,7 +240,7 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         } finally {
           setTimeout(() => inFlight.delete(child.id), 1_000)
         }
-        return `Instruction sent to "${child.title}" (#${child.id}). It is working on it in parallel — its result appears in the subchats list on your next turn, or read it with read_subchat.`
+        return `Instruction sent to "${child.title}" (#${child.id}). It is working on it in parallel — when it finishes, its final message comes back to you as a new turn.`
       },
     }),
   }

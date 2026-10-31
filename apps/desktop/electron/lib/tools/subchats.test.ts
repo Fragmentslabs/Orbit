@@ -3,6 +3,7 @@ import type { SendMessageInput } from '@shared/chat'
 
 const mocks = vi.hoisted(() => ({
   runChat: vi.fn(async (_win: unknown, _input: SendMessageInput) => {}),
+  wakeParentOf: vi.fn(),
   running: [] as string[],
   findSubchat: vi.fn(async (parentId: string, id: string) =>
     parentId === 'ses_pai' && id === 'ses_filho'
@@ -53,6 +54,7 @@ vi.mock('../chat-engine', () => ({ runChat: mocks.runChat, getRunningSessionIds:
 vi.mock('../companion-server', () => ({ broadcastSessionEvent: mocks.broadcastSessionEvent }))
 vi.mock('../broadcast', () => ({ broadcastChatEvent: mocks.broadcastChatEvent }))
 vi.mock('../ask-dispatch', () => ({ dispatchAsk: mocks.dispatchAsk }))
+vi.mock('../subchat-wake', () => ({ wakeParentOf: mocks.wakeParentOf }))
 vi.mock('../subchats', () => ({
   createSubchatRecord: mocks.createSubchatRecord,
   createContinuationRecord: mocks.createContinuationRecord,
@@ -281,6 +283,8 @@ describe('send_to_subchat', () => {
     // In the child's chat the message says where it came from, in the app language.
     expect(filho.text).toBe('Mensagem do chat principal: Agora cubra aspas escapadas')
     expect(String(r)).toContain('Instruction sent')
+    // When the child's turn ends, its result goes back to the parent.
+    await vi.waitFor(() => expect(mocks.wakeParentOf).toHaveBeenCalledWith(win, expect.anything(), expect.objectContaining({ id: 'ses_filho' })))
     // It does not ask on its own: the card is the permission gate (rules.ts).
     expect(mocks.dispatchAsk).not.toHaveBeenCalled()
   })

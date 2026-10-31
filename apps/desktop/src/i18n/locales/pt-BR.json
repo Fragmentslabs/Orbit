@@ -3590,5 +3590,8 @@
       "commandHintPre": "Recebe a chamada em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 bloqueia e o stderr vira o motivo.",
       "commandHintPost": "Recebe a chamada e o resultado em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 manda o stderr de volta ao agente."
     }
+  },
+  "subchat": {
+    "noResult": "Sem resposta em texto."
   }
 }
