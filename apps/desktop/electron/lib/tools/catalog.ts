@@ -300,6 +300,12 @@ const FAMILIES: readonly FamilyDecl[] = [
     unavailable: (i) => (i.options.plan ? 'plan mode does not create routines' : undefined),
   },
   {
+    id: 'hooks',
+    label: 'hooks',
+    description: 'Automate around your own tool calls ("every time you X, do Y"): create, list and remove shell hooks.',
+    prefixes: ['hook_'],
+  },
+  {
     id: 'worktrees',
     label: 'worktrees',
     description: 'Isolated copies of the repository on another branch.',

@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trash2,
   Wand2,
+  Webhook,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -46,7 +47,8 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { fractaApi, mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
+import { fractaApi, hooksApi, mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
+import { HooksDialog } from "@/src/components/hooks-dialog"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -807,6 +809,14 @@ export function McpSkillsPanel() {
   const [mcpDialogOpen, setMcpDialogOpen] = useState(false)
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
+  const [hooksOpen, setHooksOpen] = useState(false)
+  const [hookCount, setHookCount] = useState(0)
+  useEffect(() => {
+    const load = () => void hooksApi.list().then((list) => setHookCount(list.length))
+    load()
+    const listener = window.ipcRenderer.on("hooks:changed", load)
+    return () => window.ipcRenderer.off("hooks:changed", listener)
+  }, [hooksOpen])
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
@@ -1055,6 +1065,20 @@ export function McpSkillsPanel() {
         )}
       </div>
 
+      {/* Hooks: a button and a count; the list lives in a dialog (see hooks-dialog.tsx) */}
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">{t("hooks.title")}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.sectionDescription")}</p>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => setHooksOpen(true)}>
+            <Webhook className="size-3.5" />
+            {hookCount > 0 ? t("hooks.count", { count: hookCount }) : t("hooks.manage")}
+          </Button>
+        </div>
+      </div>
+
       {/* Skills */}
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -1168,6 +1192,7 @@ export function McpSkillsPanel() {
       </div>
 
       {/* Dialogs */}
+      <HooksDialog open={hooksOpen} onOpenChange={setHooksOpen} />
       <McpServerDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} initial={mcpEdit} />
       <CreateSkillDialog open={skillDialogOpen} onOpenChange={setSkillDialogOpen} initial={skillEdit} />
       <SkillContentDialog

@@ -44,6 +44,7 @@ import type {
 } from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
+import type { Hook, HookInput, HookWithRun } from "@shared/hooks"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
 import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
 import type { PanelEvent } from "@/src/stores/panel-store"
@@ -499,6 +500,14 @@ export const permissionsApi = {
     window.ipcRenderer.invoke("permissions:rules:add", ruleId, label) as Promise<void>,
   revoke: (ruleId: string) =>
     window.ipcRenderer.invoke("permissions:rules:remove", ruleId) as Promise<void>,
+}
+
+export const hooksApi = {
+  list: () => window.ipcRenderer.invoke("hooks:list") as Promise<HookWithRun[]>,
+  add: (input: HookInput) => window.ipcRenderer.invoke("hooks:add", input) as Promise<Hook>,
+  update: (id: string, input: HookInput) => window.ipcRenderer.invoke("hooks:update", id, input) as Promise<Hook | null>,
+  toggle: (id: string, enabled: boolean) => window.ipcRenderer.invoke("hooks:toggle", id, enabled) as Promise<void>,
+  remove: (id: string) => window.ipcRenderer.invoke("hooks:remove", id) as Promise<void>,
 }
 
 export const skillsApi = {

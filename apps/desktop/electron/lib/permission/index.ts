@@ -3,6 +3,7 @@ import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
 import { getMcpPermissionMode } from '../mcp'
+import { runPreToolHooks } from '../hooks/run'
 import { approvalCount, forgetApprovals, noteApproval, SUGGEST_AFTER } from './learning'
 import { assess, isForbidden } from './rules'
 import { checkTrust, addTrust } from './trust-rules'
@@ -55,6 +56,14 @@ export function createToolApproval(
     if (isForbidden(toolCall.toolName, toolCall.input, dir)) {
       denialReasons.set(toolCall.toolCallId, 'Action blocked by the security policy.')
       return { type: 'denied' as const, reason: 'This action is blocked by the security policy. Look for a safe alternative.' }
+    }
+
+    // The user's own pre_tool_call hooks, in every permission mode: "full" is about
+    // what Orbit asks, not about the rules the user wrote for their project.
+    const hookVerdict = await runPreToolHooks({ toolName: toolCall.toolName, input: toolCall.input, sessionId, directory: dir })
+    if (hookVerdict) {
+      denialReasons.set(toolCall.toolCallId, `Blocked by a hook: ${hookVerdict}`)
+      return { type: 'denied' as const, reason: `A pre_tool_call hook of the user blocked this call: ${hookVerdict}` }
     }
 
     const assessment = assess(toolCall.toolName, toolCall.input, dir)

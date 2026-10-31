@@ -6,6 +6,7 @@ import { computerRegistry } from '../computer/registry'
 import { approvalKey, isBrowserId, isDeniedQuery } from '../computer/safety'
 import type { PermissionClaim } from '@shared/chat'
 import { tNow } from '../i18n'
+import { getHook } from '../hooks/store'
 
 export interface Assessment {
   claim: PermissionClaim
@@ -630,6 +631,38 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
         detail:
           tNow('perm.worktree.removeDetail') +
           (args.deleteBranch === true ? tNow('perm.worktree.branchDeleted') : tNow('perm.worktree.branchKept')),
+      },
+    }
+  }
+  // A hook runs a command on its own, around every matching call, with no card of
+  // its own afterwards: creating one is the only moment the user sees the command,
+  // so it always asks — and removing one may be taking a guard down, so that too.
+  if (toolName === 'hook_create') {
+    const event = args.event === 'post_tool_call' ? tNow('perm.hook.after') : tNow('perm.hook.before')
+    const match = typeof args.match === 'string' && args.match.trim() && args.match.trim() !== '*' ? args.match.trim() : tNow('perm.hook.anyTool')
+    const scope = args.scope === 'global' || !dir ? tNow('perm.hook.scopeGlobal') : tNow('perm.hook.scopeProject', { dir })
+    return {
+      ruleId: 'hook:create',
+      alwaysAsk: true,
+      claim: {
+        tool: toolName,
+        title: tNow('perm.hook.create', { event, match: shorten(match, 40) }),
+        detail: tNow('perm.hook.createDetail', {
+          command: typeof args.command === 'string' ? args.command : '',
+          scope,
+        }),
+      },
+    }
+  }
+  if (toolName === 'hook_remove') {
+    const hook = typeof args.id === 'string' ? getHook(args.id) : undefined
+    return {
+      ruleId: 'hook:remove',
+      alwaysAsk: true,
+      claim: {
+        tool: toolName,
+        title: tNow('perm.hook.remove'),
+        detail: hook ? `${hook.description ? `${hook.description}\n` : ''}${hook.command}` : String(args.id ?? '?'),
       },
     }
   }

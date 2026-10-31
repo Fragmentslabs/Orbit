@@ -3549,5 +3549,46 @@
     "openTab": "Open the deck in the panel",
     "deck": "Slide deck",
     "gone": "This deck is no longer registered — ask the agent to write it again."
+  },
+  "hooks": {
+    "title": "Hooks",
+    "newTitle": "New hook",
+    "editTitle": "Edit hook",
+    "description": "Your own commands that run on their own before or after each of the agent's tools, without going through the model. Exit 2 blocks the call (before) or sends stderr back to the agent (after).",
+    "manage": "Manage hooks",
+    "sectionDescription": "Commands that run on their own around the agent's tools: format on edit, block a push --force, log commands. Ask in the chat (\"every time you edit, run prettier\") or create one here.",
+    "count_one": "{{count}} hook",
+    "count_other": "{{count}} hooks",
+    "add": "New hook",
+    "empty": "No hooks. Ask the agent (\"every time you edit a file, run prettier\") or create one here.",
+    "anyTool": "any tool",
+    "byAgent": "created by the agent",
+    "toggle": "Turn on or off",
+    "event": {
+      "pre_tool_call": "Before the tool",
+      "post_tool_call": "After the tool"
+    },
+    "scope": {
+      "global": "Every conversation"
+    },
+    "run": {
+      "never": "Has not run yet",
+      "ok": "ok",
+      "blocked": "blocked (exit 2)",
+      "timedOut": "timed out",
+      "failed": "failed (exit {{code}})",
+      "on": "on {{tool}} at {{time}} · {{ms}} ms"
+    },
+    "form": {
+      "event": "When",
+      "match": "Tool (regex)",
+      "command": "Command",
+      "description": "What it is for",
+      "descriptionPlaceholder": "Format edited files",
+      "scope": "Where it applies",
+      "timeout": "Timeout (s)",
+      "commandHintPre": "Receives the call as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 blocks and stderr becomes the reason.",
+      "commandHintPost": "Receives the call and its result as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 sends stderr back to the agent."
+    }
   }
 }

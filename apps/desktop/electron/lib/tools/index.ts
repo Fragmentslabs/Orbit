@@ -59,6 +59,8 @@ import { createMotionTools } from './motion'
 import { createDesignTools } from './design'
 import { createSlidesTools } from './slides'
 import { createPieceExportTool } from './piece-export'
+import { createHookTools } from './hooks'
+import { attachPostToolHooks } from '../hooks/run'
 import { createPanelTools } from './panel'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { createFontTools } from './fonts'
@@ -301,8 +303,13 @@ export function buildToolSet(
     // the state. They only propose — the card in the conversation applies it —,
     // so they are not a toggle: they hold in any conversation, like the
     // pipeline and the chats.
-    if (input.orchestrationRole !== 'worker') Object.assign(tools, createMcpTools())
-    return tools
+    if (input.orchestrationRole !== 'worker') {
+      Object.assign(tools, createMcpTools())
+      // Hooks: "every time you X, do Y". Creating one always goes through the card
+      // (see permission/rules.ts) — global only here, there is no folder to scope to.
+      Object.assign(tools, createHookTools(null))
+    }
+    return attachPostToolHooks(tools, { sessionId: input.sessionId, directory: null })
   }
 
   // Code mode: MCP available (configured servers) + skill flow, with the
@@ -506,6 +513,8 @@ export function buildToolSet(
     // Out of the workers — whoever decides to open a conversation is whoever talks to the person.
     if (win) Object.assign(tools, createSubchatTools(input, win))
     Object.assign(tools, createUsageTools())
+    // Hooks: never in plan, where nothing should be set to run later on its own.
+    if (!input.options.plan) Object.assign(tools, createHookTools(ctx?.directory ?? null))
     // Worktrees: switching the chat's folder is the main session's decision — a
     // worker changing the folder of whoever called it would derail the conversation.
     if (ctx) Object.assign(tools, createWorktreeTools(ctx))
@@ -524,5 +533,6 @@ export function buildToolSet(
     tools.run_tools = createRunToolsTool({ input, ctx, tools: () => tools })
   }
 
-  return tools
+  // Last: the user's post_tool_call hooks wrap every tool assembled above, run_tools included.
+  return attachPostToolHooks(tools, { sessionId: input.sessionId, directory: ctx?.directory ?? null })
 }

@@ -109,6 +109,8 @@ import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBrid
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
 import { forgetApprovals, listLearnedRules, loadApprovalLearning } from './lib/permission/learning'
 import { addTrust, listTrustRules, loadTrustRules, removeTrust } from './lib/permission/trust-rules'
+import { addHook, listHooks, loadHooks, onHooksChanged, removeHook, setHookEnabled, updateHook } from './lib/hooks/store'
+import type { HookInput } from '@shared/hooks'
 import { abortSession, dispatchSend, lastSendInput } from './lib/send-dispatch'
 import { setupComputerPanels } from './lib/computer/panels'
 import { shotView } from './lib/computer/shots'
@@ -2533,6 +2535,22 @@ app.whenReady().then(() => {
   ipcMain.handle('permissions:rules:remove', (_event, ruleId: string) =>
     typeof ruleId === 'string' && ruleId ? removeTrust(ruleId) : undefined,
   )
+
+  // Shell hooks (Tools → Hooks): what the user writes on the screen is active right
+  // away; what an agent writes already went through its permission card.
+  void loadHooks()
+  onHooksChanged(() => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('hooks:changed')
+    }
+  })
+  ipcMain.handle('hooks:list', () => listHooks())
+  ipcMain.handle('hooks:add', (_event, input: HookInput) => addHook(input, 'user'))
+  ipcMain.handle('hooks:update', (_event, id: string, input: HookInput) => updateHook(id, input))
+  ipcMain.handle('hooks:toggle', (_event, id: string, enabled: boolean) => setHookEnabled(id, enabled === true))
+  ipcMain.handle('hooks:remove', async (_event, id: string) => {
+    await removeHook(id)
+  })
 
   // Background processes
   ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))

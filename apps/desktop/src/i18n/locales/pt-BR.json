@@ -3549,5 +3549,46 @@
     "openTab": "Abrir o deck no painel",
     "deck": "Deck de slides",
     "gone": "Este deck não está mais no registro — peça para o agente escrevê-lo de novo."
+  },
+  "hooks": {
+    "title": "Hooks",
+    "newTitle": "Novo hook",
+    "editTitle": "Editar hook",
+    "description": "Comandos seus que rodam sozinhos antes ou depois de cada tool do agente, sem passar pelo modelo. Exit 2 bloqueia a chamada (antes) ou devolve o stderr ao agente (depois).",
+    "manage": "Gerenciar hooks",
+    "sectionDescription": "Comandos que rodam sozinhos em volta das tools do agente: formatar ao editar, bloquear um push --force, registrar comandos. Peça no chat (\"toda vez que editar, rode o prettier\") ou crie aqui.",
+    "count_one": "{{count}} hook",
+    "count_other": "{{count}} hooks",
+    "add": "Novo hook",
+    "empty": "Nenhum hook. Peça ao agente (\"toda vez que você editar um arquivo, rode o prettier\") ou crie um aqui.",
+    "anyTool": "qualquer tool",
+    "byAgent": "criado pelo agente",
+    "toggle": "Ligar ou desligar",
+    "event": {
+      "pre_tool_call": "Antes da tool",
+      "post_tool_call": "Depois da tool"
+    },
+    "scope": {
+      "global": "Todas as conversas"
+    },
+    "run": {
+      "never": "Ainda não rodou",
+      "ok": "ok",
+      "blocked": "bloqueou (exit 2)",
+      "timedOut": "estourou o tempo",
+      "failed": "falhou (exit {{code}})",
+      "on": "em {{tool}} às {{time}} · {{ms}} ms"
+    },
+    "form": {
+      "event": "Quando",
+      "match": "Tool (regex)",
+      "command": "Comando",
+      "description": "Para que serve",
+      "descriptionPlaceholder": "Formatar arquivos editados",
+      "scope": "Onde vale",
+      "timeout": "Tempo (s)",
+      "commandHintPre": "Recebe a chamada em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 bloqueia e o stderr vira o motivo.",
+      "commandHintPost": "Recebe a chamada e o resultado em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 manda o stderr de volta ao agente."
+    }
   }
 }

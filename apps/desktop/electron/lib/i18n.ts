@@ -655,6 +655,20 @@ export const MESSAGES = {
     'pt-BR': 'lockfile de dependências',
     en: 'dependency lockfile',
   },
+  'perm.hook.create': {
+    'pt-BR': 'Criar hook: {{event}} {{match}}',
+    en: 'Create hook: {{event}} {{match}}',
+  },
+  'perm.hook.createDetail': {
+    'pt-BR': 'Roda sozinho, sem passar pelo agente ({{scope}}):\n{{command}}',
+    en: 'Runs on its own, without going through the agent ({{scope}}):\n{{command}}',
+  },
+  'perm.hook.before': { 'pt-BR': 'antes de', en: 'before' },
+  'perm.hook.after': { 'pt-BR': 'depois de', en: 'after' },
+  'perm.hook.anyTool': { 'pt-BR': 'qualquer tool', en: 'any tool' },
+  'perm.hook.scopeGlobal': { 'pt-BR': 'em todas as conversas', en: 'in every conversation' },
+  'perm.hook.scopeProject': { 'pt-BR': 'só em {{dir}}', en: 'only in {{dir}}' },
+  'perm.hook.remove': { 'pt-BR': 'Remover hook', en: 'Remove hook' },
   'perm.worktree.remove': {
     'pt-BR': 'Remover o worktree {{name}}',
     en: 'Remove the worktree {{name}}',
