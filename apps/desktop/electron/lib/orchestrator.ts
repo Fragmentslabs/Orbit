@@ -19,6 +19,7 @@ import { forwardChatEvent } from './companion-server'
 import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
 import { hasStreamedContent, resolveRotation } from './model-rotation'
 import { conductorInput } from './orchestrator-conductor'
+import { registerOrchestrator } from './orchestration/questions'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
@@ -905,6 +906,7 @@ async function approvePlanTurn(
   const controller = new AbortController()
   controllers.set(sessionId, controller)
 
+  let unregisterQuestions: (() => void) | undefined
   const selected = taskIds ? plan.tasks.filter((t) => taskIds.includes(t.id)) : plan.tasks
   if (selected.length === 0 && !opts?.resume) {
     plan.status = 'rejected'
@@ -1006,6 +1008,14 @@ async function approvePlanTurn(
     const reviewerModel = await resolveModel(reviewer.providerId, reviewer.modelId)
     const reviewerProvider = await getProvider(reviewer.providerId)
     const reviewerOptions = await buildProviderOptions(reviewer)
+    // The workers' questions go to the conductor first, with the request and the plan
+    // (orchestration/questions.ts). It is woken per question — nothing stays running.
+    unregisterQuestions = registerOrchestrator(sessionId, () => ({
+      providerId: reviewer.providerId,
+      modelId: reviewer.modelId,
+      request: input.text,
+      plan,
+    }))
     const repoRoot = await repositoryRoot(input.directory!).catch(() => undefined)
 
     /**
@@ -1248,6 +1258,7 @@ async function approvePlanTurn(
       error: aborted ? undefined : message,
     })
   } finally {
+    unregisterQuestions?.()
     activeWorkers.delete(sessionId)
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId)
   }

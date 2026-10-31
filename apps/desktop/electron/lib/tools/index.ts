@@ -61,6 +61,7 @@ import { createSlidesTools } from './slides'
 import { createPieceExportTool } from './piece-export'
 import { createHookTools } from './hooks'
 import { attachPostToolHooks } from '../hooks/run'
+import { hasOrchestrator } from '../orchestration/questions'
 import { createPanelTools } from './panel'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { createFontTools } from './fonts'
@@ -147,10 +148,14 @@ export function buildToolSet(
   const allowDelegation = input.options.subagents === true && !input.options.orchestrate
   // Brain: memory tools — workers stay out too
   const allowBrain = input.options.brain === true && input.orchestrationRole !== 'worker'
-  // question: main session always; workers only when the parent is not in "full"
-  // (in "ask" the question goes up to the user; in "approve" it is auto-answered)
+  // question: main session always; workers when the parent is not in "full" (in "ask"
+  // the question goes up to the user; in "approve" it is auto-answered) — and an
+  // orchestra worker always, since its orchestrator answers first (orchestration/questions.ts)
   const allowQuestion =
-    input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
+    input.orchestrationRole !== 'worker' ||
+    (input.options.permissionMode ?? 'ask') !== 'full' ||
+    // An orchestra worker in full mode asks its orchestrator, which answers everything.
+    hasOrchestrator(input.parentSessionId)
 
   // Routines: the agent schedules from the chat. The "create" action only
   // PROPOSES — the conversation card is what creates it; the other actions are
