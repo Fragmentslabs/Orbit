@@ -6,11 +6,9 @@ import {
   ChevronDown,
   ExternalLink,
   FileUp,
-  FileText,
   Folder,
   KeyRound,
   LoaderCircle,
-  Pencil,
   PenLine,
   PlusIcon,
   RefreshCw,
@@ -53,6 +51,8 @@ import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSkillsStore } from "@/src/stores/skills-store"
+import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
+import { SkillRow } from "@/src/components/skill-row"
 import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
 import type { FractaStatus } from "@shared/fracta"
 import type { NodaraStatus } from "@shared/nodara"
@@ -805,7 +805,13 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
 
 export function McpSkillsPanel() {
   const { t } = useTranslation()
-  const { skills, mcpServers, refresh } = useSkillsStore()
+  const { skills, meta, mcpServers, refresh, directory: skillsDirectory } = useSkillsStore()
+  const activeLocale = useLocaleStore((st) => st.activeLocale)
+  const language = LOCALE_PROMPT_NAME[activeLocale]
+  // Slugs being optimized, and progress of "optimize all"
+  const [optimizingSlugs, setOptimizingSlugs] = useState<string[]>([])
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
+  const [skillOptimizeError, setSkillOptimizeError] = useState("")
   const [mcpDialogOpen, setMcpDialogOpen] = useState(false)
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
@@ -898,6 +904,42 @@ export function McpSkillsPanel() {
       config.servers = config.servers.map((server) => (server.name === name ? { ...server, enabled } : server))
       await mcpApi.save(config)
     })
+
+  const optimizeOne = async (slug: string): Promise<boolean> => {
+    setOptimizingSlugs((prev) => [...prev, slug])
+    try {
+      const result = await skillsApi.optimize(slug, skillsDirectory, language)
+      if ("error" in result) {
+        setSkillOptimizeError(
+          result.error === "no-aux-model"
+            ? t("mcp.skills.noAuxModel")
+            : t("mcp.skills.optimizeFailed", { message: result.message ?? result.error }),
+        )
+        return false
+      }
+      setSkillOptimizeError("")
+      return true
+    } finally {
+      setOptimizingSlugs((prev) => prev.filter((s) => s !== slug))
+      await refresh()
+    }
+  }
+  // In sequence, with progress: one request at a time keeps the auxiliary model's rate limit calm.
+  const withoutCard = skills.filter((s) => s.source !== "builtin" && (meta[s.slug]?.state ?? "none") !== "valid")
+  const optimizeAll = async () => {
+    const queue = withoutCard.map((s) => s.slug)
+    setBatch({ done: 0, total: queue.length })
+    for (const [i, slug] of queue.entries()) {
+      const ok = await optimizeOne(slug)
+      setBatch({ done: i + 1, total: queue.length })
+      if (!ok) break
+    }
+    setBatch(null)
+  }
+  const setPref = async (slug: string, patch: { pin?: boolean; never?: boolean }) => {
+    await skillsApi.setPref(slug, patch)
+    await refresh()
+  }
 
   const importSkill = async () => {
     setImportError("")
@@ -1114,6 +1156,21 @@ export function McpSkillsPanel() {
         {importError && (
           <p className="mb-2 text-[11px] text-destructive">{importError}</p>
         )}
+        {skillOptimizeError && <p className="mb-2 text-[11px] text-destructive">{skillOptimizeError}</p>}
+        {withoutCard.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="mb-2 gap-1"
+            disabled={batch !== null}
+            onClick={() => void optimizeAll()}
+          >
+            {batch ? <LoaderCircle className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+            {batch
+              ? t("mcp.skills.optimizing", { done: batch.done, total: batch.total })
+              : t("mcp.skills.optimizeAll", { count: withoutCard.length })}
+          </Button>
+        )}
         {skills.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <Sparkles className="size-6 text-muted-foreground/50" />
@@ -1122,59 +1179,26 @@ export function McpSkillsPanel() {
         ) : (
           <div className="flex flex-col gap-2">
             {skills.map((skill) => (
-              <div key={skill.slug} className="flex items-start gap-3 rounded-lg border p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Sparkles className="size-4 text-muted-foreground/50" />
-                </div>
-                <div className="flex-1 min-w-0 overflow-hidden">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">@{skill.slug}</span>
-                    <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                      {skill.source === "builtin" ? t("mcp.skills.builtin") : skill.source}
-                    </span>
-                    {skill.scripts && skill.scripts.length > 0 && (
-                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                        {t("mcp.skills.scripts", { count: skill.scripts.length })}
-                      </span>
-                    )}
-                  </div>
-                  {skill.description && (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{skill.description}</p>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-1 h-auto p-0 text-[10px] text-muted-foreground hover:text-foreground"
-                    onClick={() => setViewContent(skill.slug)}
-                  >
-                    <FileText className="mr-1 size-3" />
-                    {t("mcp.skills.viewContent")}
-                  </Button>
-                </div>
-                {/* Native skills of the app are read-only: to customize,
-                    the user creates their own skill with the same slug (the global
-                    overrides the native one). */}
-                {skill.source !== "builtin" && (
-                  <div className="flex items-center gap-1 self-start pt-1">
-                    <Hint label={t("mcp.skills.edit")}>
-                      <Button size="icon-sm" variant="ghost"  onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
-                        <Pencil className="size-3.5" />
-                      </Button>
-                    </Hint>
-                    <Hint label={t("mcp.skills.remove")}>
-                      <Button size="icon-sm" variant="ghost"  className="text-destructive hover:text-destructive" onClick={async () => {
-                        await skillsApi.remove(skill.slug)
-                        await refresh()
-                      }}>
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </Hint>
-                  </div>
-                )}
-              </div>
+              <SkillRow
+                key={skill.slug}
+                skill={skill}
+                meta={meta[skill.slug]}
+                optimizing={optimizingSlugs.includes(skill.slug)}
+                languageDiffers={Boolean(meta[skill.slug]?.card && meta[skill.slug]!.card!.lang !== language)}
+                onView={() => setViewContent(skill.slug)}
+                onEdit={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}
+                onRemove={async () => {
+                  await skillsApi.remove(skill.slug)
+                  await refresh()
+                }}
+                onOptimize={() => void optimizeOne(skill.slug)}
+                onTogglePin={() => void setPref(skill.slug, { pin: !meta[skill.slug]?.prefs.pin })}
+                onToggleNever={() => void setPref(skill.slug, { never: !meta[skill.slug]?.prefs.never })}
+              />
             ))}
           </div>
         )}
+        <p className="mt-2 text-[11px] text-muted-foreground">{t("mcp.skills.rulesHint")}</p>
       </div>
 
       {/* Hooks: a button and a count; the list lives in a dialog (see hooks-dialog.tsx) */}

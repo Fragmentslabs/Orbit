@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Skill, SkillProposal } from "@shared/skills"
+import type { Skill, SkillMetaView, SkillProposal } from "@shared/skills"
 import type { McpServerStatus } from "@shared/mcp"
 import { mcpApi, skillsApi } from "@/src/lib/ipc"
 
@@ -18,6 +18,8 @@ const DISCARDED_KEY = "orbit_skill_proposals_discarded"
 interface SkillsState {
   initialized: boolean
   skills: Skill[]
+  /** Card state, preferences and usage of each skill, by slug */
+  meta: Record<string, SkillMetaView>
   /** Agent proposals (create_skill) awaiting approval in the card */
   pending: SkillProposal[]
   mcpServers: McpServerStatus[]
@@ -43,6 +45,7 @@ function loadDiscarded(): string[] {
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   initialized: false,
   skills: [],
+  meta: {},
   pending: [],
   mcpServers: [],
   discarded: loadDiscarded(),
@@ -61,12 +64,19 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   refresh: async (directory) => {
     const dir = directory ?? get().directory
-    const [skills, pending, mcpServers] = await Promise.all([
+    const [skills, pending, mcpServers, metaList] = await Promise.all([
       skillsApi.list(dir),
       skillsApi.pending(),
       mcpApi.status(),
+      skillsApi.meta(dir).catch(() => []),
     ])
-    set({ skills, pending, mcpServers, directory: dir })
+    set({
+      skills,
+      pending,
+      mcpServers,
+      meta: Object.fromEntries(metaList.map((m) => [m.slug, m])),
+      directory: dir,
+    })
   },
 
   approve: async (slug) => {

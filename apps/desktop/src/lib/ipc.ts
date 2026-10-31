@@ -43,7 +43,7 @@ import type {
   RoutineRun,
 } from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
-import type { Skill, SkillProposal } from "@shared/skills"
+import type { Skill, SkillCard, SkillMetaView, SkillProposal } from "@shared/skills"
 import type { Hook, HookInput, HookWithRun } from "@shared/hooks"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
 import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
@@ -516,6 +516,15 @@ export const skillsApi = {
   create: (data: { name: string; description?: string; content: string; slug?: string; oldSlug?: string }) =>
     window.ipcRenderer.invoke("skills:create", data) as Promise<{ filePath: string }>,
   remove: (slug: string) => window.ipcRenderer.invoke("skills:remove", slug) as Promise<void>,
+  /** Card state, preferences and usage per skill */
+  meta: (directory?: string) => window.ipcRenderer.invoke("skills:meta", directory) as Promise<SkillMetaView[]>,
+  /** Writes the card with the auxiliary model, in the user's language */
+  optimize: (slug: string, directory?: string, language?: string) =>
+    window.ipcRenderer.invoke("skills:optimize", slug, directory, language) as Promise<
+      { card: SkillCard } | { error: "not-found" | "no-aux-model" | "failed"; message?: string }
+    >,
+  setPref: (slug: string, patch: { pin?: boolean; never?: boolean }) =>
+    window.ipcRenderer.invoke("skills:set-pref", slug, patch) as Promise<void>,
   import: () =>
     window.ipcRenderer.invoke("skills:import") as Promise<{
       imported: boolean

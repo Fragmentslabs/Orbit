@@ -1753,7 +1753,32 @@
         "content": "Content (markdown)",
         "contentPlaceholder": "Use conventional commits: feat:, fix:, chore:...",
         "createButton": "Create skill"
-      }
+      },
+      "optimize": "Optimize",
+      "reoptimize": "Optimize again",
+      "optimizeAll": "Optimize all without a card ({{count}})",
+      "optimizing": "Optimizing {{done}}/{{total}}…",
+      "optimizeInLanguage": "Optimize in the current language",
+      "stale": "Outdated",
+      "staleHint": "The file changed since the card was written.",
+      "noCard": "No card",
+      "noCardHint": "Works, but matches worse. Optimizing writes a short summary and tags.",
+      "tagsLabel": "Tags",
+      "pin": "Always list",
+      "pinHint": "Keeps it in the prompt index. It still has to be opened with skill_read to apply.",
+      "never": "Never suggest",
+      "neverHint": "Out of the index and the suggestions — only reachable by @slug.",
+      "usedIn_one": "used in {{count}} conversation",
+      "usedIn_other": "used in {{count}} conversations",
+      "lastUsed_zero": "last today",
+      "lastUsed_one": "last {{count}} day ago",
+      "lastUsed_other": "last {{count}} days ago",
+      "neverUsed": "never used",
+      "usageGlobal": "global count",
+      "optimizeNudge": "used {{count}} times · optimizing improves search",
+      "noAuxModel": "Choose an auxiliary model in Preferences to optimize skills.",
+      "optimizeFailed": "Could not optimize: {{message}}",
+      "rulesHint": "A skill is not a standing rule. For something that must always apply, use AGENTS.md / CLAUDE.md in the repository or the general preferences in memory."
     }
   },
   "analytics": {
@@ -2083,6 +2108,22 @@
       },
       "descriptionCode": "Project memories (decisions, conventions, structure) are injected into the prompt automatically. The agent fetches the rest on demand with the memory_graph tool.",
       "descriptionChat": "Permanent facts, preferences, and seasonal memories are injected into the prompt for more personalized, natural replies."
+    },
+    "skillHints": {
+      "title": "Skill suggestions",
+      "description": "One line per turn pointing at skills that fit the request. Their content is only loaded when the agent decides to use them.",
+      "off": {
+        "label": "Never",
+        "hint": "Skills are never suggested; the index and @slug keep working"
+      },
+      "all": {
+        "label": "Always",
+        "hint": "Suggests in every conversation, and in code mode too"
+      },
+      "memory": {
+        "label": "Only when active",
+        "hint": "Suggests only with the Memory toggle on"
+      }
     },
     "autoFolders": {
       "title": "Automatic folders",

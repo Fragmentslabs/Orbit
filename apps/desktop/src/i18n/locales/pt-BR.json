@@ -1753,7 +1753,32 @@
         "content": "Conteúdo (markdown)",
         "contentPlaceholder": "Use conventional commits: feat:, fix:, chore:...",
         "createButton": "Criar skill"
-      }
+      },
+      "optimize": "Otimizar",
+      "reoptimize": "Otimizar de novo",
+      "optimizeAll": "Otimizar todas sem cartão ({{count}})",
+      "optimizing": "Otimizando {{done}}/{{total}}…",
+      "optimizeInLanguage": "Otimizar no idioma atual",
+      "stale": "Desatualizada",
+      "staleHint": "O arquivo mudou depois que o cartão foi escrito.",
+      "noCard": "Sem cartão",
+      "noCardHint": "Funciona, mas casa pior. Otimizar escreve um resumo curto e etiquetas.",
+      "tagsLabel": "Etiquetas",
+      "pin": "Sempre listar",
+      "pinHint": "Mantém no índice do prompt. Ainda é preciso abrir com skill_read para aplicar.",
+      "never": "Nunca sugerir",
+      "neverHint": "Fora do índice e das sugestões — só por @slug.",
+      "usedIn_one": "usada em {{count}} conversa",
+      "usedIn_other": "usada em {{count}} conversas",
+      "lastUsed_zero": "última hoje",
+      "lastUsed_one": "última há {{count}} dia",
+      "lastUsed_other": "última há {{count}} dias",
+      "neverUsed": "nunca usada",
+      "usageGlobal": "contagem global",
+      "optimizeNudge": "usada {{count}} vezes · otimizar melhora a busca",
+      "noAuxModel": "Escolha um modelo auxiliar nas Preferências para otimizar skills.",
+      "optimizeFailed": "Não foi possível otimizar: {{message}}",
+      "rulesHint": "Skill não é regra permanente. Para o que deve valer sempre, use o AGENTS.md / CLAUDE.md do repositório ou as preferências gerais da memória."
     }
   },
   "analytics": {
@@ -2083,6 +2108,22 @@
       },
       "descriptionCode": "Memórias de projeto (decisões, convenções, estrutura) são injetadas no prompt automaticamente. O agente busca o restante sob demanda com a ferramenta memory_graph.",
       "descriptionChat": "Fatos permanentes, preferências e memórias sazonais são injetados no prompt pra respostas mais personalizadas e naturais."
+    },
+    "skillHints": {
+      "title": "Sugestões de skill",
+      "description": "Uma linha por turno apontando skills que combinam com o pedido. O conteúdo só é carregado quando o agente decide usar.",
+      "off": {
+        "label": "Nunca",
+        "hint": "Skills não são sugeridas; o índice e o @slug continuam funcionando"
+      },
+      "all": {
+        "label": "Sempre",
+        "hint": "Sugere em toda conversa, e também no modo código"
+      },
+      "memory": {
+        "label": "Só quando ativo",
+        "hint": "Sugere apenas com o toggle Memória ativado"
+      }
     },
     "autoFolders": {
       "title": "Pastas automáticas",
