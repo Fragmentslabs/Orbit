@@ -82,6 +82,8 @@ Editing before the plan is approved · re-transcribing unchanged files · scanni
 
 const MOTION = `# Motion graphics (motion_write + motion_edit + motion_frame + motion_render)
 
+Three companion guides: video_guide("motion-style") (the user gives a reference video or says "like this one" — read the reference and write a style brief first), video_guide("motion-craft") (direction: shot list, easing, layers, sound — read it before the FIRST composition) and video_guide("motion-3d") (three.js — read it before any 3D, WebGL or canvas piece).
+
 A composition is an Orbit piece: a FOLDER in Orbit's own storage (never in the user's project), with an index.html entry plus its dependencies sitting next to it (the images, the clips, the fonts, a local gsap.min.js). It is addressed by NAME in every motion tool — the same tools in chat and in code mode. Everything loads by relative path — no CDN, no remote fetch: the render runs offline and a script that fails to load silently is a broken render.
 
 ## Contract: time is the whole FRAME, at 30 fps
@@ -98,10 +100,10 @@ A composition is an Orbit piece: a FOLDER in Orbit's own storage (never in the u
 ## The tools (both modes)
 - motion_write({ name, html }) creates or replaces the composition and opens the Motion tab; motion_edit({ name, edits }) changes it with exact text replacements; motion_read({ name }) returns the current HTML; motion_preview({ name }) reopens it (and reports layers and lint) when the tab was closed; motion_frame({ name, times }) looks at instants; motion_render({ name }) makes the video only when asked; motion_delete({ name }) removes it when the user asks. A piece from another conversation is reached by its id (mv_…) instead of the name.
 - Never write the composition with write/edit/bash, and never put it in the project: every change through these tools is what keeps the piece in the Media gallery and lets the user undo the message.
-- Bringing material in: motion_asset copies a file into the composition folder — an attachment by its ref, or (code mode) a file of the working folder by path. A library is the same: motion_asset({ name, path: "node_modules/gsap/dist/gsap.min.js" }) when the project has it. With no local copy there is no gsap: animate with CSS @keyframes / transitions or the Web Animations API (both are seeked automatically), or drive everything from window.orbitMotion.seek(frame) yourself. Fonts: system fonts or a Google Fonts <link>.
+- Bringing material in: motion_asset copies a file into the composition folder — an attachment by its ref, or (code mode) a file of the working folder by path. A library is the same: motion_asset({ name, path: "node_modules/gsap/dist/gsap.min.js" }) when the project has it. three.js needs no motion_asset: it is native (import * as THREE from 'three' in a module script — see video_guide("motion-3d")). With no local copy there is no gsap: animate with CSS @keyframes / transitions or the Web Animations API (both are seeked automatically), or drive everything from window.orbitMotion.seek(frame) yourself. Fonts: system fonts or a Google Fonts <link>.
 
 ## Looking without eyes — the turns are lost here
-Looking is the exception. motion_frame saves a contact sheet for the USER and, by default, does not load it into your context (see: true does, for ONE genuinely visual doubt): do NOT spend turns trying to see the piece — no panel screenshots, no image_edit/describe_image on the sheet, no loop of panel_eval/run_browser_script over the composition to inspect pixels. What you read instead is the STRUCTURE: the data-layer tree (the Motion tab draws one track per layer, with the frames where it enters and leaves), what the calls return (msPerFrame, failedFonts, the cut points of a render) and — when a doubt is genuinely geometric (a width, an overlap, a centring) — ONE targeted measurement that answers it. Look, measure once, decide. The back-and-forth of transferring images to look at pixels is what makes a motion piece take forever, and it does not make the piece better.
+Looking is the exception (for a 3D piece the rule relaxes: one contact sheet per shot, see video_guide("motion-3d")). motion_frame saves a contact sheet for the USER and, by default, does not load it into your context (see: true does, for ONE genuinely visual doubt): do NOT spend turns trying to see the piece — no panel screenshots, no image_edit/describe_image on the sheet, no loop of panel_eval/run_browser_script over the composition to inspect pixels. What you read instead is the STRUCTURE: the data-layer tree (the Motion tab draws one track per layer, with the frames where it enters and leaves), what the calls return (msPerFrame, failedFonts, the cut points of a render) and — when a doubt is genuinely geometric (a width, an overlap, a centring) — ONE targeted measurement that answers it. Look, measure once, decide. The back-and-forth of transferring images to look at pixels is what makes a motion piece take forever, and it does not make the piece better.
 
 ## Transitions: orbitMotion.transition
 Do not hand-write the swap between two scenes — declare it. The runtime turns it into paused animations that the seek already positions (so it is deterministic in the tab, in motion_frame and in the render), and it composes with the transform/opacity you already wrote:
@@ -180,7 +182,7 @@ motion_preview / motion_write / motion_edit end with a "Lint:" block, and motion
 - Text must be readable on a phone: large, high contrast, short.
 - Fonts: load them from local files with @font-face; motion_render warns when a font failed (the fallback is silent otherwise).
 - After the user approved it and you rendered the clip, check it with video_timeline at the key moments before placing it in the EDL.
-- WebGL/Canvas pieces: create the context with antialias: false. MSAA costs nothing in the tab (GPU) and can take a render from seconds to minutes under software rasterization — see "Render", COST.
+- WebGL/Canvas/three.js pieces: create the context with antialias: false (and setPixelRatio(1)). MSAA costs nothing in the tab (GPU) and can take a render from seconds to minutes under software rasterization — see "Render", COST.
 - Several independent animations? Delegate each to a sub-agent in parallel (subagent tool) with a self-contained brief: the composition name, size/fps/durationInFrames, exact text, the payoff frame, palette, mp4 or alpha. Each worker writes its own piece with motion_write and reports its motion id (mv_…); show each one to the user with motion_preview({ id }).
 
 ## Minimal skeleton
@@ -199,6 +201,155 @@ window.orbitMotion = {
   seek(frame) { tl.seek(frame / 30, false) },
 }
 </script></body></html>`
+
+const MOTION_3D = `# 3D in a motion piece (three.js) — read after video_guide("motion")
+
+three.js is NATIVE: write <script type="module"> and import * as THREE from 'three' / from 'three/addons/…' (GLTFLoader, RoomEnvironment, RoundedBoxGeometry…). The runtime already maps those names; never copy three.js into the piece, never load it from a CDN, never use a UMD three.min.js. A 3D piece is NOT a web scene: there is no animation loop, no controls, no clock. The render calls seek(frame) once per frame and draws exactly that frame.
+
+## The shape of every 3D piece: orbit-three
+\`orbit-three\` is the helper that owns what breaks a render when done by hand (renderer defaults, the seek, shader warm-up, loading handles, a seeded generator, the camera rig). You write the world and what moves.
+<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=8">   (modules run after parsing: declare the format here too)
+<script type="module">
+import { mountThree } from 'orbit-three'
+mountThree({
+  background: '#0b0d12',            // null = transparent canvas (for an alpha overlay)
+  fog: { near: 20, far: 90 },       // per-pixel fog in the background colour
+  shadows: true,                    // PCF shadow maps; give ONE light castShadow
+  fov: 40, near: 0.5, far: 200,
+  shots: [                          // the camera rig — see "Cameras and scenes"
+    { from: 0,  to: 90,  orbit: { center: [0, 1, 0], radius: { from: 14, to: 9 }, height: { from: 6, to: 2.5 }, angle: { from: 0, to: 1.2 } }, drift: 0.1 },
+    { from: 90, to: 180, pos: { from: [6, 1, 8], to: [2, 1.4, 3] }, look: [0, 1, 0], fov: { from: 45, to: 30 }, ease: 'inOut' },
+  ],
+  setup({ THREE, scene, rng, wait }) {
+    // build the world ONCE: geometry, materials, lights. rng(seed) is a seeded generator.
+    // async loading: wait(new GLTFLoader().loadAsync('hero.glb').then(...)) holds the seek until it settles.
+    const hero = new THREE.Mesh(new THREE.IcosahedronGeometry(1.2, 2), new THREE.MeshStandardMaterial({ color: '#7c3aed', roughness: 0.35, metalness: 0.2 }))
+    scene.add(hero)
+    return { hero }                 // available as ctx.state
+  },
+  update(t, frame, { state, shot }) {
+    // everything that moves is a formula of t (seconds); \`shot\` is the index of the current camera shot
+    state.hero.rotation.y = t * 0.8
+  },
+})
+</script>
+html, body { margin:0; width:1920px; height:1080px; overflow:hidden; background:#000 }
+- Defaults it sets for you: antialias false, pixel ratio 1, size = the declared width/height, ACES tone mapping, sRGB output, a RoomEnvironment for reflections (environment: false turns it off), shader compile before the first captured frame.
+- Shot fields: from/to (frames), then pos / look / fov (each a value or { from, to }) OR orbit { center, radius, height, angle } (angle in radians, each a value or { from, to }); ease 'inOut' (default) | 'out' | 'in' | 'back' | 'linear'; drift = metres of a slow deterministic sway so a "still" shot is never frozen. Between shots the camera cuts; before the first / after the last it holds.
+- Exports: rng, ease, applyShot, if you need them (import { rng } from 'orbit-three').
+- Raw three.js with no helper is still possible (import * as THREE from 'three' + your own window.orbitMotion.seek) — then YOU owe every default above: antialias: false, setPixelRatio(1), renderer.compile before the first frame, render inside seek.
+
+## Determinism (the same rules as 2D, with the 3D ways to break them)
+- Position, rotation, scale, colour, uniforms = a formula of t. Never mesh.rotation.y += 0.01, never a counter, never lerping "toward" a target frame after frame.
+- Randomness: a seeded generator per element (mulberry32(index)), drawn when the world is BUILT, or recomputed from the index every frame. Particles: position = f(seed, t) — never integrate velocity.
+- Skeletal / clip animation: action.play(); mixer.setTime(t) — absolute time. mixer.update(dt) accumulates and drifts between bands.
+- No Clock, Timer, setAnimationLoop, OrbitControls/damping, physics steps, VideoTexture. A canvas texture redrawn from t inside update() is fine.
+- Anything async (GLTFLoader, TextureLoader, FontLoader) sits inside delayRender()/continueRender(); the file comes from motion_asset. Prefer uncompressed or meshopt glTF — Draco needs its decoder files next to the piece.
+- Text: put it in HTML above the canvas (crisp, editable, themeable, in the layer list), not as TextGeometry.
+
+## Render cost — fill rate, not triangles (software rasterizer)
+- antialias: false and setPixelRatio(1), always. Smooth edges come from rendering at the final size (or 1.5× and letting ffmpeg scale), never from MSAA.
+- Budget: < ~200 draw calls (InstancedMesh for repeats, merge static geometry), ONE shadow-casting light with a 1024–2048 map and a tight shadow camera, textures ≤ 2048 and power-of-two, no more than 1–2 post passes (a full-screen pass is a full frame of fill). Skip SSAO, DOF, SSR. Fake glow with additive sprites / emissive + a single bloom pass at most.
+- Fog: scene.fog (per pixel). Per-vertex fog bands at the horizon.
+- Hide with object.visible = false (or scale 0). An instance parked at y = -9999 still rasterizes and comes back as a stray white polygon.
+- z-fighting: raise camera.near first, then separate surfaces by geometry, not by hoping.
+- Custom BufferGeometry/shaders: vertexAttribPointer state is GLOBAL — a second buffer (sky dome, particles) can steal attribute 0 from the main program. Give each program explicit attribute locations and re-bind per draw.
+- Heights: when you scale terrain, divide when you mean divide (h / 0.4), do not round-trip through Math.round — it flattens the relief.
+
+## Look
+- Three-point light: a warm key (the only shadow), a cool low fill, a rim from behind; plus the RoomEnvironment for reflections. A scene lit by one ambient + one directional is the "default three.js" look.
+- Every surface gets roughness/metalness decisions; flat MeshBasicMaterial everywhere reads as a wireframe demo. Rounded edges (RoundedBoxGeometry) catch the rim light.
+- Background is never a flat colour: gradient sky (a large inverted sphere or a CSS gradient behind a transparent canvas), distance fog in the horizon colour, a ground that fades out.
+- Choose a palette first (one dominant, one accent) and tint lights, fog and sky from it.
+
+## Cameras and scenes — the piece must not be one static shot
+Write the SHOT LIST before the code (see video_guide("motion-craft")). In 3D that means a camera RIG per shot and a world built so every shot has something to look at:
+- A shot = { from, to (frames), position path A→B, look-at path, fov, easing }. camera.position.lerpVectors(a, b, ease(u)); camera.lookAt(lookTarget); camera.fov = …; camera.updateProjectionMatrix(). u = (frame − from) / (to − from), clamped, eased (never linear).
+- Vary SCALE, ANGLE and MOVEMENT between consecutive shots (change at least two of: distance, height, direction, fov): aerial establishing → orbit around the hero → push-in on a detail → low-angle reveal → top-down/orthographic → tracking side-on → pull-back finale. Two shots in a row with the same distance and height are one boring shot.
+- Movement types: dolly (along the view axis), truck (sideways), orbit (around a pivot), crane (up/down), push-in with a fov change (dolly-zoom for tension), a slow drift on the "still" shots so nothing is ever frozen.
+- Cut on movement, or hide the cut behind a DOM flash/wipe overlay with orbitMotion.transition. Scenes of the world are groups whose visible flag is a function of the frame; shared elements (the hero object) can carry through a cut for a match cut.
+- Rhythm: a new camera position, a new element or a new beat at least every ~90 frames (3 s); a hold of 15–20 still frames after a big move.
+
+## Looking is allowed here
+Unlike 2D, 3D has errors that structure never shows (z-fighting, black sky, wrong exposure, a hidden object peeking in). Take ONE contact sheet per shot — its middle and its last frame, motion_frame with see: true — after the first complete draft, and one more after big changes. Fix what you see, then go back to reading the lint and the call results. Do not loop on screenshots.`
+
+const MOTION_CRAFT = `# Motion craft — direction, not just code (read before the first composition)
+
+A piece that animates is not a piece that looks designed. The "generic AI video" look is: linear easing, opacity-only fades, everything entering together, a flat background, no texture, no holds, one static shot. Each rule below removes one of those.
+
+## Plan before code (write it down, 6–10 lines, before motion_write)
+1. Format and length in frames. 2. The palette (a dark or light base, ONE hero colour, one accent, neutrals — the hero colour on at most one element per frame) and the type (a display face at weight 600–800 for heroes, tight tracking −0.03em, a clean sans for the rest; fonts loaded locally). 3. The SHOT LIST: each shot = what is on screen, the camera/composition (wide, medium, detail; angle; movement), its frames, and how it ends (cut, wipe, match cut). 4. Where the audio hits go.
+Structure that works for 15–60 s: HOOK (0–1.5 s, the boldest visual, something moves within the first 15 frames) → CONTEXT → BODY in 3–4 beats (each beat: HIT → hold 15–20 still frames → build) → PAYOFF (the biggest animation) → CTA (calm). Something new on screen at least every 90 frames.
+
+## Motion rules
+- Never linear. Ease out for entrances (power3.out / cubic-bezier(.16,1,.3,1)), in-out for travels, in for exits. A spring-like overshoot (back.out(1.4)) for playful UI.
+- An entrance animates 2–3 properties together (opacity + translateY 30–60px + scale .94→1, or a clip-path/mask reveal). A lone opacity fade is forbidden.
+- Stagger: lists, words, cards, rays enter 3–6 frames apart, never together. Words 3, cards 4–5, big blocks 6.
+- Exits exist and are faster than entrances (~10 frames vs ~20).
+- Holds are a design tool: fast move → complete stillness → next move. Constant motion reads amateur; contrast reads expensive.
+- Everything on screen longer than 2 s breathes (a 1–2% scale or a 3px float as a sine of t), every still image gets a slow Ken Burns (scale 1→1.08 + a small pan, alternating in/out between shots).
+- Parallax gives depth for free: 3 layers moving at 0.3 / 0.6 / 1× the same travel.
+- Fast moves (> 30 px/frame) get a blur ONLY if cheap: a brief filter: blur(8px) on a small element during the move — not on a full-screen layer.
+- Timing comes from the frame arithmetic: delays and durations are multiples of fps fractions, with one \`theme\` object at the top of the script (colours, easings, durations, fonts). No inline hex colours scattered through the code.
+
+## Layers of a scene (bottom → top)
+background (gradient / mesh / 3D world — never a flat colour) → assets → graphics and type → colour grade (a soft-light tint at 10–25%) → grain + vignette on top. The grade unifies mismatched assets.
+COST WARNING (render is a software rasterizer, see video_guide("motion"), Render): the usual recipes for these layers are fill-rate traps. Do NOT use feTurbulence grain, mix-blend-mode over the whole frame, or filter: blur(40px) on a full-screen blob. Instead: a pre-made noise tile (a PNG, e.g. made once with ffmpeg: ffmpeg -f lavfi -i "color=gray:s=256x256,noise=alls=60:allf=t" -frames:v 1 grain.png, brought in with motion_asset) shifted in steps per frame; radial-gradient() backgrounds (they are cheap) instead of blurred divs; one vignette as a radial-gradient overlay.
+
+## Type and layout
+- Hero text 80–140 px at 1080 wide (100–160 at 1920). One highlighted word per headline (hero colour, an underline that draws, or a pill that scales in 5 frames after the word lands).
+- Pixel gaps (not em) between big text blocks in flex rows: em resolves against the PARENT's font size.
+- 9:16: keep critical content inside the middle ~75% vertically — platform UI covers the top and bottom.
+- Emoji are not icons (they ignore the palette): draw icons in SVG/CSS with theme colours.
+- Numbers count up with font-variant-numeric: tabular-nums.
+
+## Sound is half of it
+Never ship a motion piece silent unless asked. Hits get a short whoosh/click starting 2–3 frames BEFORE the visual lands; cuts get a low hit on the cut; a riser leads into a big reveal; a music bed at −18 to −22 dB, ducked under narration (audio.json, "duck"). With no sound library, synthesize a small kit with ffmpeg lavfi (anoisesrc + afade + lowpass for a whoosh, a short sine with a fast decay for a hit/pop) in code mode, or use audio_generate for narration. Pick music FIRST when there is one: framesPerBeat = fps × 60 / BPM, cuts on beats.
+
+## Before saying "done" (the checklist)
+- [ ] no linear easing; entrances multi-property and staggered; exits faster
+- [ ] a background that is not flat; grade/grain/vignette on top (cheap versions)
+- [ ] at least 3 holds; a new element or camera every ≤ 90 frames
+- [ ] a shot list with varied scale/angle/movement — not one static composition
+- [ ] one hero colour, one highlighted word per headline, hero text ≥ weight 600 in a deliberate face
+- [ ] text inside the safe zone; nothing touching the frame edges
+- [ ] sound on the major hits (or the user said silent)
+- [ ] lint clean; motion_frame at the entrance, each shot, the payoff and the end hold (see: true once per shot for 3D pieces)`
+
+const MOTION_STYLE = `# Recreating the style of a reference video (motion-style)
+
+The goal is the LOOK and the RHYTHM of a reference — never its content or its assets. You rebuild the style with your own text, shapes, footage and 3D; you do not copy its footage, its logos, its music or its artwork. Say that to the user once if they ask for "the same video".
+
+## 1. Read the reference (cheap, in this order)
+- video_probe: duration, size, fps, audio. Ask which part of the reference to follow if it is long — a style is read from 15–40 s.
+- CUTS (code mode, ffmpeg on the PATH): the cut list gives the rhythm.
+  ffmpeg -hide_banner -i ref.mp4 -vf "select='gt(scene,0.3)',showinfo" -an -f null - 2>&1 | grep -o "pts_time:[0-9.]*"
+  Average shot length = duration / (cuts + 1). Lower the threshold to 0.15–0.2 for soft dissolves; the list is cut times, so differences are shot lengths. Short, equal shots = a beat-driven edit; long and uneven = a documentary rhythm.
+- PALETTE: the average colour of one frame per second, as hex (the video's overall grade and its dominant tones):
+  ffmpeg -v error -i ref.mp4 -vf "fps=1,scale=1:1" -f rawvideo -pix_fmt rgb24 - | xxd -p -c3
+  Then look at 3–4 frames with video_timeline (hook, middle, payoff, end) and pick the base, the hero colour and the accent BY EYE from them — the averages tell you the grade and the contrast, the frames tell you which colour is the hero.
+- MOTION ENERGY: how much changes between frames, per half second (high = fast kinetic edit, low = calm):
+  ffmpeg -hide_banner -i ref.mp4 -vf "fps=2,signalstats,metadata=print:key=lavfi.signalstats.YDIF" -an -f null - 2>&1 | grep YDIF
+- WORDS and timing of any text/narration: transcribe({ detail: "words" }) when it speaks; the pacing of the words is part of the style.
+- Chat mode has no bash: video_timeline windows (and transcribe) are the whole toolset — take more windows instead of cut detection.
+
+## 2. Write the STYLE BRIEF (10–15 lines) and show it before building
+- Format: aspect, fps, length, structure (hook / body / payoff, with the times of each from the cut list).
+- Rhythm: average shot length, fastest and slowest shot, where the holds are, whether cuts land on a beat (bpm from the music, framesPerBeat = fps × 60 / bpm).
+- Palette: base, hero, accent, text (hex) + the grade (warm / cool / crushed blacks / lifted blacks / saturated / desaturated) + grain, vignette, glow, halation: yes or no.
+- Type: the category (grotesque, serif, mono, handwritten), weight, case, tracking, size relative to the frame, how it enters (per word, per line, a mask reveal, a scale-pop), how it leaves. Name a free font from the same family (Google Fonts) — fonts are never identified by guess; say it is the nearest match.
+- Camera / composition: shot scales in order, camera moves (push-in, whip, orbit, handheld sway), depth (parallax layers, 3D), symmetry vs asymmetry, safe zones.
+- Motion language: the easing (snappy-out / floaty / overshoot), the stagger, the transition vocabulary (hard cut, whip, wipe, zoom-through, glitch, iris), the typical duration of an entrance in frames.
+- Sound: music genre and tempo, the SFX on hits, silence moments.
+Then ASK the user to confirm or correct it — two lines of corrections now save a rebuilt piece.
+
+## 3. Build from the brief
+- Turn the brief into a \`theme\` object (colours, easings, durations, fonts) and a SHOT LIST with frame numbers measured from the reference cut list, scaled to your piece's length (video_guide("motion-craft")). Keep the reference's proportions: if its hook is 8% of the length, so is yours.
+- Choose the technique that gives the look at a render cost the software rasterizer can pay: kinetic type and shapes in HTML/GSAP; depth, objects and camera moves in three.js (video_guide("motion-3d")); a photo/footage style with Ken Burns and a grade layer. A glitch, a film burn or a grain is a pre-made PNG/WebM looped in steps, not a full-screen SVG filter.
+- Transitions are the signature: reproduce the reference's own (orbitMotion.transition covers fade / push / cover / reveal / wipe / zoom / blur / iris; a whip is a fast translate with a small blur on a SMALL layer; a zoom-through is a scale + fade on the outgoing scene).
+
+## 4. Check against the reference, not against your taste
+After the first draft take the SAME instants of both (hook, a mid beat, the payoff) — video_timeline on the reference, motion_frame (see: true, once) on your piece — and compare: palette, scale of the type, density of the frame, shot length. Fix the biggest difference first. State what you matched and what you could not (a licensed font, a footage-specific look) instead of claiming it is identical.`
 
 const REMOTION = `# Remotion (React video) — when the user wants it
 
@@ -220,5 +371,12 @@ npx remotion render remotion/index.ts Main edit/animations/main.mp4
 - Preview for the user: npx remotion studio (runs a local server; use the panel browser to look at it).
 Then place the clip in the EDL as an overlay, or show_video it.`
 
-export const VIDEO_GUIDES = { editing: EDITING, motion: MOTION, remotion: REMOTION } as const
+export const VIDEO_GUIDES = {
+  editing: EDITING,
+  motion: MOTION,
+  'motion-3d': MOTION_3D,
+  'motion-craft': MOTION_CRAFT,
+  'motion-style': MOTION_STYLE,
+  remotion: REMOTION,
+} as const
 export type VideoGuideTopic = keyof typeof VIDEO_GUIDES

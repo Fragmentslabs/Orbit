@@ -125,8 +125,8 @@ export function createVideoTools(
   const tools: ToolSet = {
     video_guide: tool({
       description:
-        'Returns the craft guide for video work. Call it ONCE per conversation before your first edit plan (topic "editing"), before writing a motion composition ("motion"), or before setting up Remotion ("remotion").',
-      inputSchema: z.object({ topic: z.enum(['editing', 'motion', 'remotion']) }),
+        'Returns the craft guide for video work. Call it ONCE per conversation before your first edit plan (topic "editing"), before writing a motion composition ("motion" for the contract, "motion-craft" for direction: shot list, easing, layers, sound), before any 3D / WebGL / three.js piece ("motion-3d"), before recreating the style of a reference video ("motion-style"), or before setting up Remotion ("remotion").',
+      inputSchema: z.object({ topic: z.enum(['editing', 'motion', 'motion-3d', 'motion-craft', 'motion-style', 'remotion']) }),
       execute: async ({ topic }) => VIDEO_GUIDES[topic],
     }),
 
