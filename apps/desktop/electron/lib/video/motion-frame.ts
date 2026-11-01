@@ -211,6 +211,7 @@ interface MotionPageSpec {
   fps?: number
   durationInFrames?: number
   failedFonts?: string[]
+  scriptErrors?: string[]
 }
 
 /** The runtime exposes the seek through an accessor; without it, there is nothing to capture. */
@@ -242,6 +243,8 @@ export interface MotionFrameResult {
   height: number
   /** Fonts that failed (the text fell back, silently). */
   failedFonts: string[]
+  /** Errors thrown by the composition's scripts. */
+  scriptErrors: string[]
   /** One per requested instant, in the SAME order. */
   cells: { timeMs: number; frame: number }[]
 }
@@ -330,6 +333,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       width,
       height,
       failedFonts: spec.failedFonts ?? [],
+      scriptErrors: spec.scriptErrors ?? [],
       cells: shots.map((shot) => ({ timeMs: shot.timeMs, frame: shot.frame })),
     }
   } finally {

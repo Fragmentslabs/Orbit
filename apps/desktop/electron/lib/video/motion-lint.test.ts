@@ -21,6 +21,26 @@ const rules = (html: string) => lint(html).map((f) => f.rule)
 /** A composition that animates, so the rules do not trip on `static-piece`. */
 const ANIMATED = '<style>@keyframes a { to { opacity: 1 } }</style>'
 
+describe('three.js / WebGL rules', () => {
+  const script = (js: string) => rules(page(`<script>${js}</script>${ANIMATED}`))
+
+  it('flags MSAA, wall-clock three loops and devicePixelRatio', () => {
+    expect(script('new THREE.WebGLRenderer({ antialias: true })')).toContain('webgl-msaa')
+    expect(script('new THREE.WebGLRenderer({ antialias: false })')).not.toContain('webgl-msaa')
+    expect(script('const c = new THREE.Clock()')).toContain('three-clock')
+    expect(script('renderer.setAnimationLoop(tick)')).toContain('three-clock')
+    expect(script('mixer.update(clock.getDelta())')).toContain('three-clock')
+    expect(script('renderer.setPixelRatio(window.devicePixelRatio)')).toContain('three-pixel-ratio')
+    expect(script('renderer.setPixelRatio(1)')).not.toContain('three-pixel-ratio')
+  })
+
+  it('flags an object parked far away instead of hidden', () => {
+    expect(script('mesh.position.y = -9999')).toContain('three-offscreen-hide')
+    expect(script('mesh.position.set(0, -5000, 0)')).toContain('three-offscreen-hide')
+    expect(script('mesh.position.y = -2')).not.toContain('three-offscreen-hide')
+  })
+})
+
 describe('maskJs', () => {
   it('hides comments and the string contents, without touching sizes or lines', () => {
     const source = `const a = "Math.random()" // Date.now()\n/* setInterval( */ const b = 'x'`

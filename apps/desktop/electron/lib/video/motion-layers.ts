@@ -61,6 +61,8 @@ export interface MotionLayers {
   durationInFrames: number
   layers: MotionLayer[]
   failedFonts: string[]
+  /** Errors thrown by the composition's own scripts (silent otherwise). */
+  scriptErrors: string[]
   /** The transitions the composition registered (orbitMotion.transition). */
   transitions: MotionTransitionInfo[]
   /** The page's `<video>`s, so their sound enters the audio plan. */
@@ -229,6 +231,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       fps?: number
       durationInFrames?: number
       failedFonts?: string[]
+      scriptErrors?: string[]
       transitions?: MotionTransitionInfo[]
       videos?: MotionVideoFact[]
     } | null
@@ -256,6 +259,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       durationInFrames: spec.durationInFrames,
       layers: pickLayers(raw.layers ?? [], spec.durationInFrames),
       failedFonts: spec.failedFonts ?? [],
+      scriptErrors: spec.scriptErrors ?? [],
       transitions: spec.transitions ?? [],
       videos: spec.videos ?? [],
     }

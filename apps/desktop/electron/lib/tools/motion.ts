@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { openMotionAndReport } from '../video/motion-open'
 import { getMotion, motionIdFor, registerMotion } from '../video/motion-store'
 import { pieceFileName, recordMotionFile } from '../video/motion-files'
+import { planPieceFiles, resolveEditFile, truncationReason } from '../video/motion-source'
 import { MAX_FRAME_TIMES, captureMotionFrames, frameLabel, sheetFileName } from '../video/motion-frame'
 import { renderMotion } from '../video/motion'
 import { addVideoToGallery } from '../video/video-gallery'
@@ -191,19 +192,23 @@ export function createMotionTools(
   const tools: ToolSet = {
     video_guide: tool({
       description:
-        'Returns the craft guide for video work. Call it ONCE per conversation before your first edit plan (topic "editing"), before writing a motion composition ("motion"), or before setting up Remotion ("remotion").',
-      inputSchema: z.object({ topic: z.enum(['editing', 'motion', 'remotion']) }),
+        'Returns the craft guide for video work. Call it ONCE per conversation before your first edit plan (topic "editing"), before writing a motion composition ("motion" for the contract, "motion-craft" for direction: shot list, easing, layers, sound), before any 3D / WebGL / three.js piece ("motion-3d"), before recreating the style of a reference video ("motion-style"), or before setting up Remotion ("remotion").',
+      inputSchema: z.object({ topic: z.enum(['editing', 'motion', 'motion-3d', 'motion-craft', 'motion-style', 'remotion']) }),
       execute: async ({ topic }) => VIDEO_GUIDES[topic],
     }),
 
     motion_read: tool({
       description:
         'Returns the current HTML of a motion composition (of this conversation by name, or any one by id). The user may have asked for changes since you wrote it, and edits need the exact text.',
-      inputSchema: z.object({ name: NAME.optional(), id: ID }),
-      execute: async ({ name, id }) => {
+      inputSchema: z.object({
+        name: NAME.optional(),
+        id: ID,
+        file: z.string().optional().describe('Text file of the piece to read (e.g. scenes/intro.js). Default: the entry index.html'),
+      }),
+      execute: async ({ name, id, file }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
-        return fsp.readFile(target.file, 'utf8')
+        return fsp.readFile(resolveEditFile(target.folder, target.file, file), 'utf8')
       },
     }),
   }
@@ -228,14 +233,27 @@ export function createMotionTools(
         'Creates (or fully replaces) an HTML motion composition and opens it in the Motion tab of the right panel, where the user watches it live — play/pause, a frame slider and a track per layer showing when each element enters and leaves. The composition lives in Orbit (not in the project) and is addressed by its name. ' +
         'Use this — NOT create_artifact — whenever the user wants an animation as a video/motion piece: an intro, an animated title, kinetic text, a logo reveal, a lower third. ' +
         'Call video_guide("motion") once before writing your first composition. The page must declare its format (<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=6">) and move only through seek: CSS animations, the Web Animations API, or window.orbitMotion.seek(frame) for script-driven motion. A library such as GSAP must be a local file next to index.html (motion_asset copies it from the working folder in code mode); with no local copy, use CSS/Web Animations or your own seek. Fonts: system fonts or a Google Fonts <link>. ' +
-        'The result says whether it loaded and lists the layers with their enter/leave frames. After this, change it with motion_edit (small, exact replacements), not by rewriting everything.',
+        'A big piece goes in several files: a short index.html plus "files" (scenes/*.js as <script type="module" src>, theme.css, data.json) — one huge html is how a call comes out cut off, and such an html is refused. The result says whether it loaded and lists the layers with their enter/leave frames. After this, change it with motion_edit (small, exact replacements), not by rewriting everything.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
-        html: z.string().min(1).describe('The COMPLETE, self-contained HTML of the composition'),
+        html: z.string().min(1).describe('The COMPLETE HTML of the entry (index.html), closed with </html>'),
+        files: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe(
+            'Extra TEXT files of the piece, path → content (scenes/intro.js, theme.css, data.json). Reference them from the HTML by relative path (<script type="module" src="scenes/intro.js">). Use this to split a big piece: a single huge html is how a call comes out cut off.',
+          ),
       }),
-      execute: async ({ name, id, html }) => {
+      execute: async ({ name, id, html, files }) => {
         const target = await resolveTarget({ name, id })
+        const cut = truncationReason(html)
+        if (cut) {
+          throw new Error(
+            `The html looks CUT OFF (${cut}) — nothing was written. Send it again in smaller pieces: keep index.html short and move the scripts/styles into "files" (e.g. scenes/01.js, theme.css), or write a skeleton now and fill the rest with motion_edit.`,
+          )
+        }
+        const extra = planPieceFiles(target.folder, target.file, files)
         const existed = await writing(target, async () => {
           await fsp.mkdir(target.folder, { recursive: true })
           // The placeholder from the live opening (openMotionLive) does not count as
@@ -245,6 +263,10 @@ export function createMotionTools(
             existed = (await fsp.readFile(target.file, 'utf8')) !== MOTION_PLACEHOLDER
           } catch {
             existed = false
+          }
+          for (const file of extra) {
+            await fsp.mkdir(path.dirname(file.absolute), { recursive: true })
+            await writeFileAtomic(file.absolute, file.content)
           }
           await writeFileAtomic(target.file, html)
           return existed
@@ -260,20 +282,27 @@ export function createMotionTools(
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
+        file: z
+          .string()
+          .optional()
+          .describe('Text file of the piece to edit (e.g. scenes/intro.js). Default: the entry index.html'),
         edits: z.array(EDIT_OP).min(1),
       }),
-      execute: async ({ name, id, edits }) => {
+      execute: async ({ name, id, file, edits }) => {
         const target = await resolveTarget({ name, id })
+        const editing = resolveEditFile(target.folder, target.file, file)
         // Reading and writing under the same lock: if another chat wrote in the middle, the
         // oldText do not match and the edit fails instead of overwriting.
         await writing(target, async () => {
           let source: string
           try {
-            source = await fsp.readFile(target.file, 'utf8')
+            source = await fsp.readFile(editing, 'utf8')
           } catch {
-            throw new Error(`no composition named "${target.name}" — create it with motion_write`)
+            throw new Error(
+              file ? `no file "${file}" in "${target.name}"` : `no composition named "${target.name}" — create it with motion_write`,
+            )
           }
-          await writeFileAtomic(target.file, applyTextEdits(source, edits))
+          await writeFileAtomic(editing, applyTextEdits(source, edits))
         })
         return report(target, `${edits.length} edit${edits.length === 1 ? '' : 's'} applied`)
       },
@@ -359,6 +388,9 @@ export function createMotionTools(
             .join(' · ')}.`,
           result.failedFonts.length
             ? `Fonts failed to load (the text fell back to another font): ${[...new Set(result.failedFonts)].join(', ')}.`
+            : '',
+          result.scriptErrors.length
+            ? `[error] The composition's scripts threw: ${result.scriptErrors.join(' | ')}. Fix this before anything else.`
             : '',
           see
             ? 'Check the moments you will be judged on (entrance, payoff, hold) — motion_render only after the user approves.'

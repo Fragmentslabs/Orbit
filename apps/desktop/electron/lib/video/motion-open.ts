@@ -127,6 +127,9 @@ export async function openMotionAndReport(input: {
     return [
       `Motion "${name}" is open in the Motion tab of the right panel (${input.label}) and loads fine: ${measured.width}x${measured.height}, ${measured.durationInFrames} frames at ${measured.fps} fps (${(measured.durationInFrames / measured.fps).toFixed(2)} s).`,
       measured.failedFonts.length ? `Fonts that failed to load: ${measured.failedFonts.join(', ')}.` : '',
+      measured.scriptErrors.length
+        ? `[error] The composition's scripts threw: ${measured.scriptErrors.join(' | ')}. Fix this before anything else — the piece is probably not moving.`
+        : '',
       audio,
       describeTransitions(measured.transitions),
       'Layers (when each enters and leaves the frame):',
