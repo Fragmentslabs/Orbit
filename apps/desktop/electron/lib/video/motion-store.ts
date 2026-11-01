@@ -15,6 +15,8 @@ import {
 } from './motion-render-args'
 import { renderMotion } from './motion'
 import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './motion-runtime'
+import { MOTION_THREE_PREFIX, findThreeRoot, resolveThreeFile } from './motion-three'
+import { MOTION_THREE_HELPER, MOTION_THREE_HELPER_PATH } from './motion-three-helper'
 import { journalPath } from '../session/media-journal'
 
 /**
@@ -579,6 +581,17 @@ export function registerMotionProtocol(): void {
     // Reserved path: the runtime script, the same one the render injects.
     if (url.pathname === MOTION_RUNTIME_PATH) {
       return respond(MOTION_RUNTIME, 'text/javascript; charset=utf-8')
+    }
+    // Reserved path: the three.js the app ships (the import map points here).
+    if (url.pathname === MOTION_THREE_PREFIX + MOTION_THREE_HELPER_PATH) {
+      return respond(MOTION_THREE_HELPER, 'text/javascript; charset=utf-8')
+    }
+    if (url.pathname.startsWith(MOTION_THREE_PREFIX)) {
+      const root = findThreeRoot(app.getAppPath())
+      const three = root ? resolveThreeFile(root, url.pathname) : null
+      const text = three ? await fsp.readFile(three, 'utf8').catch(() => null) : null
+      if (text === null) return respond('not found', 'text/plain; charset=utf-8', 404)
+      return respond(text, 'text/javascript; charset=utf-8')
     }
     const file = resolveMotionFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)

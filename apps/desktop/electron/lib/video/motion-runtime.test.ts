@@ -427,9 +427,21 @@ describe('injectMotionRuntime', () => {
 
   it('creates a head when there is none, and prefixes when not even <html> is there', () => {
     const withHtml = injectMotionRuntime('<html><body><h1>oi</h1></body></html>', 'orbit-motion', 'mv_abc')
-    expect(withHtml).toContain(`<head>${TAG}</head>`)
+    expect(withHtml).toContain(`<head>${TAG}`)
     const fragment = injectMotionRuntime('<div>oi</div>', 'orbit-motion', 'mv_abc')
     expect(fragment.startsWith(TAG)).toBe(true)
+  })
+
+  it('adds the import map for the native three.js right after the runtime', () => {
+    const out = injectMotionRuntime('<head><script type="module">import * as THREE from "three"</script></head>', 'orbit-motion', 'mv_abc')
+    expect(out).toContain('"three":"orbit-motion://mv_abc/__orbit-three/three.module.js"')
+    expect(out).toContain('"three/addons/":"orbit-motion://mv_abc/__orbit-three/addons/"')
+    expect(out.indexOf('importmap')).toBeLessThan(out.indexOf('type="module"'))
+  })
+
+  it('respects an import map the composition brings itself', () => {
+    const html = '<head><script type="importmap">{"imports":{"three":"./three.js"}}</script></head>'
+    expect(injectMotionRuntime(html, 'orbit-motion', 'mv_abc')).not.toContain('__orbit-three')
   })
 
   it('never injects twice', () => {

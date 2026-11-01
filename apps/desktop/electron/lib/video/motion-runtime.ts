@@ -1,5 +1,6 @@
 import { MOTION_TIMING_SCRIPT } from './motion-timing'
 import { MOTION_TRANSITIONS_SCRIPT } from './motion-transitions'
+import { hasOwnImportMap, motionImportMapTag } from './motion-three'
 
 /**
  * The seek runtime of motion compositions — the ONLY place where the seek
@@ -56,6 +57,27 @@ export const MOTION_RUNTIME = `(() => {
   const declared = {}          // numbers the COMPOSITION declared
   const resolved = { width: 1920, height: 1080, fps: FPS, duration: undefined, durationInFrames: undefined }
   let failedFonts = []
+  // Script errors of the composition (a throw, a rejected promise, a script or module that
+  // did not load). Silent otherwise: the piece "loaded" with 1 s and no seek, and the only
+  // clue was a console nobody reads. They travel in the spec and reach the tool result.
+  const scriptErrors = []
+  function noteScriptError(text) {
+    text = String(text).slice(0, 300)
+    if (scriptErrors.indexOf(text) === -1 && scriptErrors.length < 8) scriptErrors.push(text)
+  }
+  window.addEventListener('error', function (ev) {
+    const t = ev && ev.target
+    if (t && t !== window && t.tagName) {
+      noteScriptError('failed to load <' + t.tagName.toLowerCase() + '> ' + (t.src || t.href || ''))
+    } else if (ev) {
+      const where = ev.filename ? ' (' + String(ev.filename).split('/').pop() + ':' + ev.lineno + ')' : ''
+      noteScriptError((ev.message || (ev.error && ev.error.message) || 'script error') + where)
+    }
+  }, true)
+  window.addEventListener('unhandledrejection', function (ev) {
+    const r = ev && ev.reason
+    noteScriptError('unhandled promise rejection: ' + (r && r.message ? r.message : String(r)))
+  })
   let customSeek = null        // the composition own seek (canvas/three.js)
   let currentFrame = 0
 
@@ -578,6 +600,7 @@ ${MOTION_TIMING_SCRIPT}
       duration: resolved.duration,
       durationInFrames: resolved.durationInFrames,
       failedFonts: failedFonts.slice(),
+      scriptErrors: scriptErrors.slice(),
       devicePixelRatio: window.devicePixelRatio || 1,
       transitions: transitions.map(function (t) { return Object.assign({}, t) }),
       videos: videoFacts(),
@@ -929,7 +952,8 @@ export function motionRuntimeTag(scheme: string, id: string): string {
  */
 export function injectMotionRuntime(html: string, scheme: string, id: string): string {
   if (html.includes(RUNTIME_MARK)) return html
-  const tag = motionRuntimeTag(scheme, id)
+  // The runtime, then the import map for the native three.js (before any module script).
+  const tag = motionRuntimeTag(scheme, id) + (hasOwnImportMap(html) ? '' : motionImportMapTag(scheme, id))
   const head = /<head[^>]*>/i.exec(html)
   if (head) return `${html.slice(0, head.index + head[0].length)}${tag}${html.slice(head.index + head[0].length)}`
   const htmlTag = /<html[^>]*>/i.exec(html)

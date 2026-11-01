@@ -34,6 +34,11 @@
     "node_modules/node-pty/**/*",
     "node_modules/pdf-parse/**/*",
     "node_modules/pdfjs-dist/**/*",
+    // three.js for motion compositions: served by the orbit-motion:// scheme (motion-three.ts).
+    "node_modules/three/package.json",
+    "node_modules/three/build/three.module.js",
+    "node_modules/three/build/three.core.js",
+    "node_modules/three/examples/jsm/**/*",
     "node_modules/@napi-rs/canvas*/**/*",
     // Dependencies of the voice engine. They stay in node_modules/ because the child
     // process resolves them by name, from the folder of the engine.
