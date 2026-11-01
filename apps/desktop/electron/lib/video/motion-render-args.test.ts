@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  nativeScaleEmulation,
   MAX_MOTION_BANDS,
   assertFrameBytes,
   audioExtractFfmpegArgs,
@@ -518,5 +519,17 @@ describe('piece audio', () => {
     ])
     expect(graph).toContain('sidechaincompress=threshold=0.01:ratio=6:attack=50:release=800')
     expect(graph).not.toContain('attack=15')
+  })
+})
+
+describe('nativeScaleEmulation', () => {
+  it('pins the device scale to 1 at the declared size', () => {
+    const e = nativeScaleEmulation(1080, 1920)
+    expect(e.deviceScaleFactor).toBe(1)
+    expect(e.viewSize).toEqual({ width: 1080, height: 1920 })
+    expect(e.screenSize).toEqual({ width: 1080, height: 1920 })
+  })
+  it('rounds fractional sizes and never goes below 1', () => {
+    expect(nativeScaleEmulation(1602.6, 0).viewSize).toEqual({ width: 1603, height: 1 })
   })
 })

@@ -578,3 +578,30 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     spec.output,
   ]
 }
+
+/**
+ * A render window must capture at 1 device pixel per CSS pixel. An offscreen window inherits the
+ * scale of the screen it was born on: on a Retina display a 1080×1920 piece was captured at
+ * 2160×3840 (33 MB per frame, ~11 GB for a short piece) only for ffmpeg to throw three quarters away.
+ * The emulation parameters for Electron's `enableDeviceEmulation`; `ORBIT_MOTION_NATIVE_SCALE=0`
+ * turns the whole thing off (the probe + ffmpeg scale still bring the video back to size).
+ */
+export function nativeScaleEmulation(width: number, height: number): {
+  screenPosition: 'desktop'
+  screenSize: { width: number; height: number }
+  viewPosition: { x: number; y: number }
+  viewSize: { width: number; height: number }
+  deviceScaleFactor: 1
+  scale: 1
+} {
+  const w = Math.max(1, Math.round(width))
+  const h = Math.max(1, Math.round(height))
+  return {
+    screenPosition: 'desktop',
+    screenSize: { width: w, height: h },
+    viewPosition: { x: 0, y: 0 },
+    viewSize: { width: w, height: h },
+    deviceScaleFactor: 1,
+    scale: 1,
+  }
+}

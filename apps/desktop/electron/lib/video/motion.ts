@@ -19,6 +19,7 @@ import {
   motionAudioMixFfmpegArgs,
   motionFfmpegArgs,
   motionFormatFor,
+  nativeScaleEmulation,
   splitBands,
   unpremultiplyBgra,
   type MotionFormat,
@@ -200,6 +201,21 @@ function ms(value: number): number {
   return Math.round(value * 100) / 100
 }
 
+/**
+ * Sets the window's content size AND pins its device scale to 1 (see nativeScaleEmulation).
+ * Best-effort: if the emulation is refused the capture simply stays at the screen scale, which
+ * the probe and the ffmpeg scale already handle.
+ */
+function sizeRenderWindow(win: BrowserWindow, width: number, height: number): void {
+  win.setContentSize(width, height)
+  if (process.env.ORBIT_MOTION_NATIVE_SCALE === '0') return
+  try {
+    win.webContents.enableDeviceEmulation(nativeScaleEmulation(width, height))
+  } catch {
+    // keep the screen scale
+  }
+}
+
 function createRenderWindow(width: number, height: number, transparent: boolean): BrowserWindow {
   const win = new BrowserWindow({
     show: false,
@@ -210,7 +226,10 @@ function createRenderWindow(width: number, height: number, transparent: boolean)
     transparent,
     backgroundColor: transparent ? '#00000000' : '#000000',
     webPreferences: {
-      offscreen: true,
+      // EXPERIMENT (unmeasured): ORBIT_MOTION_GPU=1 renders in a hidden NORMAL window, where
+      // Chromium may use the GPU, instead of the offscreen path that rasterizes in software.
+      // Compare msPerFrame AND the wall-clock of the render before making it a default.
+      offscreen: process.env.ORBIT_MOTION_GPU !== '1',
       backgroundThrottling: false,
       sandbox: true,
       contextIsolation: true,
@@ -410,7 +429,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     if (page.failedFonts.length) {
       warnings.push(`fonts failed to load (the text fell back to another font): ${[...new Set(page.failedFonts)].join(', ')}`)
     }
-    primary.setContentSize(width, height)
+    sizeRenderWindow(primary, width, height)
     // Time runs in FRAMES: the EFFECTIVE fps (which may have come from the options, and
     // not from the page) has to enter the runtime, otherwise the seek converts the frame
     // with the composition's fps and the animation runs at the wrong speed.
@@ -463,7 +482,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
           win = createRenderWindow(width, height, alpha)
           windows.push(win)
           await loadComposition(win, url)
-          win.setContentSize(width, height)
+          sizeRenderWindow(win, width, height)
           await win.webContents.executeJavaScript(`window.orbitMotion.fps = ${fps}`, true)
         }
         const name = `band_${String(index).padStart(3, '0')}${path.extname(opts.output) || '.mp4'}`
