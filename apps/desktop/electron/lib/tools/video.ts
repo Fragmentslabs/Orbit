@@ -8,7 +8,7 @@ import { VIDEO_GUIDES } from '../video/guide'
 import { probeMedia, type MediaProbe } from '../video/ffmpeg'
 import { addVideoToGallery } from '../video/video-gallery'
 import { renderEdl } from '../video/render'
-import { registerVideo } from '../video/store'
+import { registerVideo, videoFilePath, videoIdFromUrl } from '../video/store'
 import { renderTimeline } from '../video/timeline'
 import { editDirFor, packTranscript, plainText, readCachedTranscript, sec, transcribeVideo, wordsText } from '../video/transcript'
 import { saveDocument, saveMedia } from '../media'
@@ -96,11 +96,26 @@ export function createVideoTools(
   const rel = (abs: string) => path.relative(ctx.directory, abs) || abs
 
   /**
-   * The file of a READ tool: a path in the working folder, or the
-   * reference of a chat attachment (vdo_…). The reference is the only way for the
-   * agent to reach what is outside the folder — the app translates it to its file.
+   * The file of a READ tool, by three doors: a path in the working folder, the
+   * reference of a chat attachment (vdo_…), or the player URL these same tools hand
+   * out (`orbit-video://vid_…`). The last two are the only way for the agent to reach
+   * what is outside the folder — the app translates them to its file.
    */
   const mediaFile = async (p: string): Promise<{ file: string; label: string }> => {
+    // A render or a download read back by the URL it was delivered with. The registry
+    // holds only files the APP registered (chat output, ytdlp collection), so it is a
+    // closed list — never an arbitrary path.
+    const videoId = videoIdFromUrl(p)
+    if (videoId) {
+      const file = await videoFilePath(videoId)
+      const stat = file ? await fs.stat(file).catch(() => null) : null
+      if (!file || !stat?.isFile()) {
+        throw new Error(
+          `video not found: ${p} — it was moved or deleted after being shown; pass the file path or the attachment ref`,
+        )
+      }
+      return { file, label: path.basename(file) }
+    }
     if (looksLikeAttachmentRef(p)) {
       const attachment = await resolveAttachmentRef(p)
       if (!attachment) throw new Error(`attachment not found: ${p} — use the ref from the attachment note`)
@@ -134,7 +149,12 @@ export function createVideoTools(
       description:
         'Inspects video/audio files: duration, resolution (as displayed, rotation applied), fps, codecs, audio tracks. Cheap — call it first on any footage.',
       inputSchema: z.object({
-        paths: z.array(z.string()).min(1).describe('Files relative to the working folder, or the ref (vdo_… / aud_…) of an attachment'),
+        paths: z
+            .array(z.string())
+            .min(1)
+            .describe(
+              'Files relative to the working folder, the ref (vdo_… / aud_…) of an attachment, or the orbit-video:// URL of a video already shown',
+            ),
       }),
       execute: async ({ paths }) => {
         const lines: string[] = []
@@ -165,7 +185,11 @@ export function createVideoTools(
           .array(
             z.object({
               id: z.string().optional().describe('Short id used in the EDL and in the transcript (default: A, B, C…)'),
-              path: z.string().describe('File in the working folder, or the ref (aud_… / vdo_…) of an attachment'),
+              path: z
+                .string()
+                .describe(
+                  'File in the working folder, the ref (aud_… / vdo_…) of an attachment, or the orbit-video:// URL of a video already shown',
+                ),
             }),
           )
           .min(1),
@@ -268,7 +292,9 @@ export function createVideoTools(
         'Use it at DECISION POINTS — an ambiguous pause, comparing two takes, checking a cut in a rendered output (pass its cut times as marks) — not to scan whole videos. Keep windows short (2–20 s). ' +
         'The sheet is saved to the media gallery: it is YOUR look at the footage and the user does NOT see it, unless you pass show: true (or show it later with show_image, using the media ref this tool returns).',
       inputSchema: z.object({
-        path: z.string().describe('File in the working folder, or the ref (vdo_…) of an attached video'),
+        path: z
+          .string()
+          .describe('File in the working folder, the ref (vdo_…) of an attached video, or its orbit-video:// URL'),
         start: z.number().min(0).describe('Seconds'),
         end: z.number().positive().describe('Seconds'),
         frames: z.number().int().min(1).max(16).optional().describe('Filmstrip frames, default 8'),
@@ -359,7 +385,7 @@ export function createVideoTools(
         'Renders an EDL (edit decision list) into a video in the edit/ folder next to the first source, and shows it to the user as a player. ' +
         'The code enforces the production rules: cut edges snapped OUT of words with a little air (needs transcribe first), 30 ms audio fades at every cut, ranges concatenated without a second re-encode, overlays time-shifted into their window, subtitles burned LAST, loudness normalized (default -14 LUFS, true peak -1 dBTP) and measured. ' +
         'Render a preview (720p, fast) first, check the cut points it returns with video_timeline, then the final. ' +
-        'Pass the EDL inline or as a JSON file path (edl/edlPath). Times: ranges in SOURCE seconds; overlays/subtitle files in OUTPUT seconds. A source, overlay or music file can be the ref (vdo_…, img_…, aud_…) of an attachment — no need to copy it anywhere first.',
+        'Pass the EDL inline or as a JSON file path (edl/edlPath). Times: ranges in SOURCE seconds; overlays/subtitle files in OUTPUT seconds. A source, overlay or music file can be the ref (vdo_…, img_…, aud_…) of an attachment — no need to copy it anywhere first — or the orbit-video:// URL of a video already shown.',
       inputSchema: z.object({
         edl: edlSchema.optional(),
         edlPath: z.string().optional().describe('JSON file with the EDL (relative to the working folder)'),
@@ -428,17 +454,20 @@ export function createVideoTools(
 
   if (scope.canShow) {
     tools.show_video = tool({
-      description: 'Shows a video file from the working folder IN YOUR REPLY as a player (e.g. a render made with bash/ffmpeg, or a source the user asked to see).',
+      description:
+        'Shows a video IN YOUR REPLY as a player (e.g. a render made with bash/ffmpeg, a source the user asked to see, or a video already delivered, by its orbit-video:// URL).',
       inputSchema: z.object({
-        path: z.string(),
+        path: z
+          .string()
+          .describe('File in the working folder, the ref (vdo_…) of an attachment, or the orbit-video:// URL of a video already shown'),
         title: z.string().optional(),
       }),
       execute: async ({ path: p, title }) => {
-        const abs = resolveSafePath(ctx, p)
+        const { file: abs, label } = await mediaFile(p)
         const probe = await probeMedia(abs)
         if (!probe.video.length) throw new Error(`${p} has no video stream`)
         return {
-          message: `Showing ${rel(abs)} (${sec(probe.durationMs)} s) in your reply.`,
+          message: `Showing ${label} (${sec(probe.durationMs)} s) in your reply.`,
           ...(await show(abs, title || path.basename(abs), probe.durationMs)),
         }
       },

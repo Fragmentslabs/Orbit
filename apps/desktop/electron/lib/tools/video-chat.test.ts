@@ -76,6 +76,22 @@ describe.skipIf(!hasFfmpeg)('video in chat mode (real ffmpeg)', () => {
     expect(String(await run(tools, 'video_probe', { paths: ['vdo_naoexiste.mp4'] }))).toMatch(/attachment not found/)
   })
 
+  it('reads a video back by the player URL it handed out', async () => {
+    const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
+    // The URL the render hands over is what the agent has in hand afterwards.
+    const result = (await run(tools, 'video_render', {
+      edl: { sources: { A: refA }, ranges: [{ source: 'A', start: 0, end: 1 }], snap: false },
+    })) as { videoUrl: string; path: string }
+
+    const out = String(await run(tools, 'video_probe', { paths: [result.videoUrl] }))
+    expect(out).toContain(path.basename(result.path))
+    expect(out).toContain('640x360')
+    // A dropped slash does not send it back to a relative path.
+    expect(String(await run(tools, 'video_probe', { paths: [result.videoUrl.replace('://', ':/')] }))).toContain('640x360')
+    // An id no longer in the registry says what happened.
+    expect(String(await run(tools, 'video_probe', { paths: ['orbit-video://vid_naoexiste'] }))).toMatch(/video not found/)
+  }, 60_000)
+
   it('video_timeline saves the sheet in the gallery and only puts it in the reply with show: true', async () => {
     const tools = createMotionTools({ sessionId: 'chat1', canRender: true })
 

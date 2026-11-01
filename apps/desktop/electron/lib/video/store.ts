@@ -106,6 +106,20 @@ export async function unregisterVideosFor(file: string): Promise<void> {
 }
 
 /**
+ * The player URL (`orbit-video://<id>`) back to the registry id — it is what the agent
+ * receives every time a video is shown, so it is also what it has in hand to read that
+ * video again. A missing slash (`orbit-video:/<id>`) is accepted too: that single
+ * character is the difference between reading the render back and ffprobe dying on a
+ * path that never existed.
+ */
+export function videoIdFromUrl(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed.toLowerCase().startsWith(`${VIDEO_SCHEME}:`)) return null
+  const id = trimmed.slice(VIDEO_SCHEME.length + 1).replace(/^\/+/, '')
+  return SAFE_VIDEO_ID.test(id) ? id : null
+}
+
+/**
  * File path of a registered video (`null` if the id is invalid or the
  * registry does not exist). It is what the companion's HTTP server uses to serve the
  * video by Range to the phone, which does not have the orbit-video:// scheme.
