@@ -9,9 +9,11 @@ import path from 'node:path'
  * on, the X hides Orbit (which keeps serving the apps connected over
  * MCP) and only the tray brings it back. Without a tray, hiding would be losing the app.
  *
- * Only Windows and Linux have it: on macOS the X closes the window and the app stays alive
- * in the Dock, which is already the way back — the main does not even create it there. The
- * `darwin` branches below stay as what it would need to come back to the Mac.
+ * On macOS the "tray" is the MENU BAR icon (a status item) — same idea ruled by the
+ * same preference. There the icon is a TEMPLATE image (black + alpha): the system
+ * paints it in the menu bar's own color, so it holds up on a light bar and on a
+ * dark one. The click opens the menu ("Open"/"Quit"), which is what the Mac expects
+ * from an icon up there; the Dock stays as the short way back to the window.
  *
  * Theme: the menu is NATIVE, so whoever draws it follows `nativeTheme.themeSource`
  * — it is the main that adjusts it from the app's theme (channel `theme:sync`), and that is why
@@ -46,14 +48,25 @@ let currentLabels: TrayLabels | null = null
  * (in dev it is public/, and in the packaged app it is dist/, which is what the builder takes
  * along). The `build/` folder only exists in dev — a tray.png there is a
  * development shortcut, it does not reach the installed app.
+ *
+ * macOS has its own file: `trayTemplate.png` (18px, plus the `@2x` sibling the
+ * loader picks up on Retina). Template means black + alpha — the colored app icon
+ * would be a dark square glued into the menu bar instead of a glyph that follows it.
  */
+const inDir = (dir: string | undefined, file: string) => (dir ? path.join(dir, file) : '')
+
 function trayIconPath(): string {
-  const candidates = [
-    path.join(process.env.VITE_PUBLIC ?? '', 'tray.png'),
-    path.join(process.env.APP_ROOT ?? '', 'build', 'tray.png'),
-    path.join(process.env.APP_ROOT ?? '', 'build', 'icon.png'),
-    path.join(process.env.VITE_PUBLIC ?? '', 'logo.png'),
-  ]
+  const publicDir = process.env.VITE_PUBLIC
+  const root = process.env.APP_ROOT
+  const candidates =
+    process.platform === 'darwin'
+      ? [inDir(publicDir, 'trayTemplate.png'), inDir(root, 'build/trayTemplate.png')]
+      : [
+          inDir(publicDir, 'tray.png'),
+          inDir(root, 'build/tray.png'),
+          inDir(root, 'build/icon.png'),
+          inDir(publicDir, 'logo.png'),
+        ]
   return candidates.find((candidate) => candidate && existsSync(candidate)) ?? ''
 }
 
@@ -62,7 +75,13 @@ function trayIcon() {
   if (!file) return nativeImage.createEmpty()
   const image = nativeImage.createFromPath(file)
   if (image.isEmpty()) return image
-  const size = process.platform === 'darwin' ? 18 : process.platform === 'linux' ? 22 : 16
+  if (process.platform === 'darwin') {
+    // Already in the menu bar's size; resizing would flatten the @2x representation
+    // into a single one and blur it on Retina.
+    image.setTemplateImage(true)
+    return image
+  }
+  const size = process.platform === 'linux' ? 22 : 16
   return image.resize({ width: size, height: size, quality: 'best' })
 }
 
@@ -103,19 +122,15 @@ export function createTray(labels: TrayLabels, handlers: TrayHandlers): Tray | n
     return null
   }
   tray.setToolTip(labels.tooltip)
-  if (process.platform === 'darwin') {
-    // On macOS setContextMenu hijacks the left click (the menu would open on
-    // any click); for "left opens, right shows options" the menu is
-    // raised by hand, on the right button.
-    tray.on('click', () => handlers.onOpen())
-    tray.on('right-click', () => tray?.popUpContextMenu(buildMenu(labels, handlers)))
-  } else {
-    // Windows/Linux: the right-button menu is registered at once. On
-    // Linux some desktops (appindicator) ignore the left click — the menu
-    // remains the way to open.
-    tray.setContextMenu(buildMenu(labels, handlers))
-    tray.on('click', () => handlers.onOpen())
-  }
+  // The menu is registered everywhere. On macOS it is what any click on the menu
+  // bar icon opens — the way a Mac user expects to reach "Open" and "Quit"; the
+  // Dock (and `activate`) is the short way back to the window, so clicking the
+  // icon must not fight the menu for the same click.
+  tray.setContextMenu(buildMenu(labels, handlers))
+  // Windows/Linux: the click opens the window, the menu comes along. On Linux
+  // some desktops (appindicator) ignore the left click — the menu stays as the
+  // way to open.
+  if (process.platform !== 'darwin') tray.on('click', () => handlers.onOpen())
   return tray
 }
 
@@ -124,7 +139,7 @@ export function refreshTray(labels: TrayLabels, handlers: TrayHandlers): void {
   currentLabels = labels
   if (!hasTray()) return
   tray?.setToolTip(labels.tooltip)
-  if (process.platform !== 'darwin') tray?.setContextMenu(buildMenu(labels, handlers))
+  tray?.setContextMenu(buildMenu(labels, handlers))
 }
 
 /** Labels in use — for whoever needs to rebuild the menu without having them at hand. */

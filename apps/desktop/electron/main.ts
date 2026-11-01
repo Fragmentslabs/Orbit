@@ -360,6 +360,10 @@ function showMainWindow(): void {
     createWindow()
     return
   }
+  // macOS: the menu bar menu belongs to a background app often enough — without
+  // bringing the process forward, `focus()` alone would leave the window behind
+  // whatever was on screen.
+  if (process.platform === 'darwin') app.focus({ steal: true })
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()
@@ -380,18 +384,14 @@ function trayHandlers() {
  * host the app without a window: off, the X goes back to quitting and the icon goes
  * with it — leaving it would be an icon of an app that does not stay alive.
  *
- * On macOS it does not exist: closing the window already leaves the app alive in the Dock (see
- * `window-all-closed`), which is the way back — the icon would be a second
- * door to the same thing, occupying the menu bar.
+ * On macOS the tray is the menu bar icon, ruled by the same preference: with the
+ * X hiding the window, it is what stays on screen to bring Orbit back — and its
+ * menu is where the real exit lives, since ⌘Q only closes the window.
  *
  * If the tray cannot be created (no icon), `hasTray()` stays false and the
  * close keeps quitting: hiding the window would be losing the app.
  */
 async function syncTray(): Promise<void> {
-  if (process.platform === 'darwin') {
-    destroyTray()
-    return
-  }
   if (!getAppSettings().closeToTray) {
     destroyTray()
     // Preference off with the window hidden: without a tray there would be no
@@ -592,9 +592,9 @@ function createWindow() {
 
   // Close to tray: the X hides the app instead of quitting it — it is what
   // keeps it alive serving the apps connected over MCP while there is no window in
-  // sight. Without a tray created, close follows the normal path: hiding with no way
-  // back would be losing the app — which is what happens on macOS, where there is no tray
-  // and the Dock is what brings the window back (see `window-all-closed`).
+  // sight (on macOS the tray is the menu bar icon). Without a tray created, close
+  // follows the normal path: on macOS the window really closes and the Dock brings it
+  // back (see `window-all-closed`); hiding with no way back would be losing the app.
   win.on('close', (event) => {
     if (quitting || !getAppSettings().closeToTray || !hasTray()) return
     event.preventDefault()
