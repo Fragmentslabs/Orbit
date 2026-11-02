@@ -27,6 +27,7 @@ import {
 } from './oauth'
 import { attachSamplingHandler, samplingCapabilities } from './sampling'
 import { descriptionsState, optimizedFor, optimizeServerDescriptions } from './describe'
+import { capToolDescription } from '../tools/catalog'
 
 /**
  * MCP manager: connects the servers of mcp-config.json (stdio/streamable HTTP),
@@ -48,6 +49,9 @@ interface ServerRuntime {
    *  is built per turn in getMcpTools: the result depends on the session (where to
    *  store the images) and on what the turn offers (show_image, describe_image). */
   tools: McpToolDef[]
+  /** `instructions` of the initialize result (raw, untrusted) — the catalog turns it
+   *  into the server's one-line description. Fixed for the life of the connection. */
+  instructions?: string
   state: McpServerStatus['state']
   error?: string
   lastAttempt: number
@@ -258,6 +262,7 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
     const prefix = sanitizeName(runtime.config.name)
     runtime.client = client
     runtime.tools = toToolDefs(prefix, discovered)
+    runtime.instructions = client.getInstructions()
     runtime.state = 'connected'
     runtime.retryCount = 0
     if (url) runtime.authorized = await hasOAuthTokens(url)
@@ -267,6 +272,7 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
   } catch (err) {
     runtime.client = null
     runtime.tools = []
+    runtime.instructions = undefined
     runtime.retryCount++
     runtime.error =
       describeOAuthError(err, Boolean(runtime.config.oauth?.clientId?.trim())) ??
@@ -362,6 +368,7 @@ async function disconnect(runtime: ServerRuntime): Promise<void> {
   }
   runtime.client = null
   runtime.tools = []
+  runtime.instructions = undefined
   if (runtime.config.type === 'http' && runtime.config.url) {
     cancelPendingAuth(runtime.config.url)
   }
@@ -491,7 +498,9 @@ export function getMcpTools(scope: McpToolScope): ToolSet {
     const rewritten = optimizedFor(runtime.config.name, runtime.tools)
     for (const def of runtime.tools) {
       merged[def.name] = tool({
-        description: `[MCP ${runtime.config.name}] ${rewritten?.[def.mcpName] ?? def.description ?? def.mcpName}`,
+        description: `[MCP ${runtime.config.name}] ${capToolDescription(
+          rewritten?.[def.mcpName] ?? def.description ?? def.mcpName,
+        )}`,
         inputSchema: jsonSchema((def.inputSchema ?? { type: 'object' }) as Record<string, unknown>),
         execute: async (input) => {
           const result = await client.callTool({
@@ -575,6 +584,20 @@ export function listMcpServerPrefixes(): string[] {
   return [...servers.values()]
     .filter((runtime) => runtime.state === 'connected' && runtime.tools.length > 0)
     .map((runtime) => sanitizeName(runtime.config.name))
+}
+
+/**
+ * `instructions` of the connected servers, by the same SANITIZED prefix as
+ * `listMcpServerPrefixes` — the catalog derives each server's one-line description
+ * from it. Raw text: the catalog sanitizes it (it is the server's, not ours).
+ */
+export function listMcpServerInstructions(): Record<string, string> {
+  const byPrefix: Record<string, string> = {}
+  for (const runtime of servers.values()) {
+    if (runtime.state !== 'connected' || !runtime.instructions) continue
+    byPrefix[sanitizeName(runtime.config.name)] = runtime.instructions
+  }
+  return byPrefix
 }
 
 /**

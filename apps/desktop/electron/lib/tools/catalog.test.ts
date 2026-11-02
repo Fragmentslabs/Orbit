@@ -8,6 +8,11 @@ import {
   mapBudget,
   estimateTokens,
   CORE_SET,
+  MAX_MCP_TOOLS_WHOLE,
+  MAX_TOOLS_PER_FAMILY,
+  capToolDescription,
+  loadsWhole,
+  mcpFamilyDescription,
 } from './catalog'
 import { search } from './search'
 import { createToolBridgeTools, queryFamily } from './load'
@@ -309,5 +314,128 @@ describe('bridge and derivation agree', () => {
 
   it('naming a core tool is not an error', async () => {
     expect(await run({ tools: ['read'] })).toMatch(/^Loaded: read/)
+  })
+})
+
+describe('MCP family description', () => {
+  const names = [
+    'apply_migration',
+    'confirm_cost',
+    'create_branch',
+    'execute_sql',
+    'get_logs',
+    'list_tables',
+    'list_projects',
+    'search_docs',
+  ].map((n) => `Fragments_Supabase_${n}`).sort()
+
+  it('prefers the server instructions, sanitized to one line', () => {
+    const description = mcpFamilyDescription(
+      'Fragments_Supabase',
+      names,
+      '# Supabase MCP\n\nManage `Supabase` projects: <b>SQL</b>, migrations\n  and   branches. ## Notes',
+    )
+    expect(description).toBe('Manage Supabase projects: b SQL /b , migrations and branches. Notes')
+    expect(description).not.toMatch(/[`<>#\n]/)
+  })
+
+  it('cuts long instructions at a word boundary with a visible mark', () => {
+    const description = mcpFamilyDescription('s', names, 'word '.repeat(100))
+    expect(description.length).toBeLessThanOrEqual(160)
+    expect(description.endsWith('…')).toBe(true)
+    expect(description).not.toMatch(/wor…$/)
+  })
+
+  it('without instructions, a deterministic summary of the names without the server prefix', () => {
+    const a = mcpFamilyDescription('Fragments_Supabase', names)
+    expect(a).toBe('Tools: apply_migration, confirm_cost, create_branch, execute_sql, get_logs, list_projects, … (+2 more).')
+    // Byte-stable: it lives in the cached prompt prefix.
+    expect(mcpFamilyDescription('Fragments_Supabase', [...names])).toBe(a)
+    // Blank instructions are no instructions.
+    expect(mcpFamilyDescription('Fragments_Supabase', names, '  \n# Title only\n')).toBe(a)
+  })
+
+  it('classifyFamilies puts it on the family, and the tool names stay exact', () => {
+    const tools = Object.fromEntries(names.map((n) => [n, {}])) as unknown as ToolSet
+    const withInstructions = classifyFamilies(tools, input(), ['Fragments_Supabase'], [], {
+      Fragments_Supabase: 'Postgres, auth and storage of the Fragments project.',
+    })
+    const family = withInstructions.find((f) => f.id === 'mcp:Fragments_Supabase')
+    expect(family?.description).toBe('Postgres, auth and storage of the Fragments project.')
+    expect(family?.tools).toEqual(names)
+    const fallback = classifyFamilies(tools, input(), ['Fragments_Supabase'])
+    expect(fallback.find((f) => f.id === 'mcp:Fragments_Supabase')?.description).toMatch(/^Tools: apply_migration/)
+  })
+
+  it('a failed server keeps a plain description', () => {
+    const families = classifyFamilies({} as ToolSet, input(), [], [{ prefix: 'Nodara', reason: 'x' }])
+    expect(families.find((f) => f.id === 'mcp:Nodara')?.description).toBe('MCP server Nodara.')
+  })
+})
+
+describe('MCP tool description cap', () => {
+  it('leaves a short description alone', () => {
+    expect(capToolDescription('Runs SQL.')).toBe('Runs SQL.')
+  })
+
+  it('cuts a long one with a visible marker', () => {
+    const capped = capToolDescription('x'.repeat(5000))
+    expect(capped.startsWith('x'.repeat(1000))).toBe(true)
+    expect(capped).not.toContain('x'.repeat(1001))
+    expect(capped).toMatch(/… \[description cut at 1000 characters\]$/)
+  })
+})
+
+describe('whole-load limit: MCP is smaller than native', () => {
+  const mcpTools = Array.from({ length: MAX_MCP_TOOLS_WHOLE + 1 }, (_, i) => `srv_t${String(i).padStart(2, '0')}`)
+  const mcpFamily = { id: 'mcp:srv', label: '@mcp:srv', description: '', tools: mcpTools, mcp: true }
+  const smallMcp = { ...mcpFamily, tools: mcpTools.slice(0, MAX_MCP_TOOLS_WHOLE) }
+  const native = { id: 'documents', label: 'documents', description: '', tools: mcpTools.map((n) => n.replace('srv_', 'doc_')) }
+
+  it('the same size loads whole as native and not as MCP', () => {
+    expect(loadsWhole(native)).toBe(true)
+    expect(loadsWhole(mcpFamily)).toBe(false)
+    expect(loadsWhole(smallMcp)).toBe(true)
+    expect(loadsWhole({ tools: Array.from({ length: MAX_TOOLS_PER_FAMILY + 1 }, (_, i) => `n${i}`) })).toBe(false)
+  })
+
+  const tools = Object.fromEntries(
+    [...mcpTools, ...native.tools].map((n) => [n, { description: n === 'srv_t03' ? 'create invoice' : `thing ${n}` }]),
+  ) as unknown as ToolSet
+  const families = [native, mcpFamily]
+  const bridges = createToolBridgeTools({ families, tools })
+  const run = (input: Record<string, unknown>) =>
+    (bridges.tools_load as unknown as { execute: (i: unknown, o: unknown) => Promise<string> }).execute(input, {})
+  const derive = (input: Record<string, unknown>) =>
+    deriveActive(
+      [{ role: 'assistant', content: [{ type: 'tool-call', toolName: 'tools_load', input }] }],
+      families,
+      new Set(Object.keys(tools)),
+      { resolveQuery: (family, query) => queryFamily(tools, family, query) },
+    )
+
+  it('the bridge refuses the MCP server without query, and nothing becomes active', async () => {
+    expect(await run({ server: 'srv' })).toMatch(/too large to load whole.*server: "srv", query/)
+    expect(derive({ server: 'srv' }).names).toEqual([])
+  })
+
+  it('the native family of the same size loads whole, on both sides', async () => {
+    expect(await run({ family: 'documents' })).toMatch(/ACTIVE/)
+    expect(derive({ family: 'documents' }).families.has('documents')).toBe(true)
+  })
+
+  it('a query on the MCP server activates only what it answered', async () => {
+    expect(await run({ server: 'srv', query: 'invoice' })).toMatch(/srv_t03/)
+    expect(derive({ server: 'srv', query: 'invoice' }).names).toEqual(['srv_t03'])
+  })
+
+  it('using one tool of the large server activates only that name', () => {
+    const active = deriveActive(
+      [{ role: 'assistant', content: [{ type: 'tool-call', toolName: 'srv_t05', input: {} }] }],
+      families,
+      new Set(Object.keys(tools)),
+    )
+    expect(active.names).toEqual(['srv_t05'])
+    expect(active.families.has('mcp:srv')).toBe(false)
   })
 })

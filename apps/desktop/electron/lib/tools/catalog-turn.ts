@@ -13,7 +13,7 @@ import {
   type ToolFamily,
 } from './catalog'
 import { createToolBridgeTools } from './load'
-import { listMcpServerPrefixes, listUnavailableMcpServers } from '../mcp'
+import { listMcpServerInstructions, listMcpServerPrefixes, listUnavailableMcpServers } from '../mcp'
 
 /**
  * Assembles the turn's ToolSet **and** the catalog families — the input of the
@@ -38,6 +38,7 @@ export function buildCatalog(
     input,
     listMcpServerPrefixes(),
     listUnavailableMcpServers(),
+    listMcpServerInstructions(),
   )
   // A worker has no bridges: it gets the whole static set, with no map and no
   // trimming — a round-trip costs it proportionally more (§6.7 of the plan).

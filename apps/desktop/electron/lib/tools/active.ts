@@ -1,6 +1,6 @@
 import type { ChatMessage } from '@shared/chat'
 import type { ToolFamily } from './catalog'
-import { CORE_SET, MAX_TOOLS_PER_FAMILY } from './catalog'
+import { CORE_SET, loadsWhole } from './catalog'
 
 /**
  * Active set DERIVED from the history — never mutated.
@@ -27,9 +27,13 @@ interface Activation {
   names: string[]
 }
 
-/** Small family loads whole; a large one only through the names it was asked for. */
+/**
+ * Small family loads whole; a large one only through the names it was asked for.
+ * "Small" is `loadsWhole` — the very rule the bridge refuses by (an MCP server has a
+ * lower limit than a native family), so the refusal and the activation never disagree.
+ */
 function isWhole(family: ToolFamily): boolean {
-  return family.tools.length <= MAX_TOOLS_PER_FAMILY
+  return loadsWhole(family)
 }
 
 /**

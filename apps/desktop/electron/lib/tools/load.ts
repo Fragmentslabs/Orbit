@@ -2,7 +2,7 @@ import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import { search } from './search'
 import type { ToolFamily } from './catalog'
-import { CORE_SET, MAX_TOOLS_PER_FAMILY, estimateTokens } from './catalog'
+import { CORE_SET, MAX_TOOLS_PER_FAMILY, estimateTokens, loadsWhole, sanitizeUntrusted } from './catalog'
 
 /**
  * The funnel's two bridges: `tools_load` and `tools_list`.
@@ -26,11 +26,7 @@ function descriptionOf(tools: ToolSet, name: string): string {
   const raw = def?.description ?? ''
   // A third-party MCP description is UNTRUSTED TEXT: a single line, without
   // instruction markers, truncated. The cut is marked — never silently.
-  const clean = raw
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/[`<>#]/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+  const clean = sanitizeUntrusted(raw)
   if (!clean) return ''
   return clean.length > 200 ? `${clean.slice(0, 200)}… (full description when loading)` : clean
 }
@@ -112,9 +108,14 @@ export function createToolBridgeTools(ctx: BridgeContext) {
         return `${label(requested)} is DISABLED in this turn: ${requested.unavailable}. Do not insist: explain it to the user or use another family.`
       }
       if (requested) {
-        // Large server: it does not load whole even with an empty query.
-        if (requested.tools.length > MAX_TOOLS_PER_FAMILY && !query) {
-          return `${label(requested)} has ${requested.tools.length} tools — too large to load whole. Use tools_load({ server: "${label(requested).replace(/^@mcp:/, '')}", query: "<what you need>" }).`
+        // Large family (an MCP server above MAX_MCP_TOOLS_WHOLE, a native one above
+        // MAX_TOOLS_PER_FAMILY): it does not load whole even with an empty query.
+        // `loadsWhole` is the same rule `deriveActive` reads, so this refusal activates nothing.
+        if (!loadsWhole(requested) && !query) {
+          const target = requested.mcp
+            ? `server: "${requested.id.replace(/^mcp:/, '')}"`
+            : `family: "${requested.id}"`
+          return `${label(requested)} has ${requested.tools.length} tools — too large to load whole. Use tools_load({ ${target}, query: "<what you need>" }) to load the matching ones, or tools_load({ tools: [<exact names>] }); tools_list({ ${target} }) shows the names.`
         }
         if (query) {
           const found = queryFamily(ctx.tools, requested, query)

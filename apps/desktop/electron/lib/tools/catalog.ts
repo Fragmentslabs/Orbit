@@ -106,6 +106,23 @@ export const CORE_SET: ReadonlySet<string> = new Set(CORE)
 export const MAX_TOOLS_PER_FAMILY = 40
 
 /**
+ * The same limit, much smaller, for an MCP server. A native family is curated (its
+ * schemas are short and written for this app); a third-party server ships long
+ * descriptions and wide schemas, so loading 29 of them whole costs more than the
+ * round-trip of a `query` that brings the 8 that matter.
+ */
+export const MAX_MCP_TOOLS_WHOLE = 10
+
+/**
+ * Does `tools_load` without `query` load this family whole? The ONE rule both the
+ * bridge (`load.ts`, what it answers) and the derivation (`active.ts`, what it
+ * activates) read — two copies would drift and the refusal would become a lie.
+ */
+export function loadsWhole(family: Pick<ToolFamily, 'tools' | 'mcp'>): boolean {
+  return family.tools.length <= (family.mcp ? MAX_MCP_TOOLS_WHOLE : MAX_TOOLS_PER_FAMILY)
+}
+
+/**
  * Families active from the FIRST turn, without the model having to load them.
  *
  * `skills` for the same reason: the prompt tells the model to call `skill_read`, which
@@ -408,6 +425,77 @@ function mcpServer(name: string, servers: ReadonlySet<string>): string | null {
 }
 
 /**
+ * Third-party text (an MCP tool description, a server's `instructions`) made safe for
+ * the prompt: a single line, without instruction markers (backticks, tags, markdown
+ * headings), whitespace collapsed. It never cuts — each caller decides its own cap and
+ * marks it.
+ */
+export function sanitizeUntrusted(raw: string): string {
+  return raw
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[`<>#]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+/** Cap of an MCP tool's description as declared to the model once loaded. */
+export const MCP_TOOL_DESCRIPTION_MAX = 1000
+
+/**
+ * The description an MCP tool is declared with. A server is free to ship a
+ * multi-page manual per tool, and every loaded tool pays it on every step; past the
+ * cap the text is cut with a visible marker (the model knows there was more). Only
+ * the description: the input schema is the call's contract and goes intact.
+ */
+export function capToolDescription(text: string, max = MCP_TOOL_DESCRIPTION_MAX): string {
+  if (text.length <= max) return text
+  return `${text.slice(0, max).trimEnd()}… [description cut at ${max} characters]`
+}
+
+/** Cap of an MCP family's line — it is one line of the map, not the server's manual. */
+const MCP_DESCRIPTION_MAX = 160
+/** Names quoted by the fallback summary; the rest becomes a count. */
+const MCP_SUMMARY_NAMES = 6
+
+/**
+ * ONE line saying what an MCP server is for — `ToolFamily.description` of `mcp:<server>`.
+ *
+ * Preferred: the server's own `instructions` (initialize result). It is untrusted and
+ * usually a manual, so it is sanitized and cut at a word boundary with a visible `…`;
+ * leading markdown headings ("# Supabase MCP") are dropped because they name the server,
+ * which the label already does. Fallback: a summary built from the tool names, without
+ * the `<server>_` prefix (only here, for reading — the callable names stay intact).
+ *
+ * It must be byte-stable across turns (it lives in the cached prompt prefix): only
+ * the input decides it — the names arrive sorted, nothing reads the clock or the order
+ * of connection.
+ */
+export function mcpFamilyDescription(
+  server: string,
+  tools: readonly string[],
+  instructions?: string,
+): string {
+  const lines = (instructions ?? '').split(/\r?\n/)
+  while (lines.length > 0 && (/^\s*#/.test(lines[0]) || !lines[0].trim())) lines.shift()
+  const clean = sanitizeUntrusted(lines.join('\n'))
+  if (clean) return capLine(clean, MCP_DESCRIPTION_MAX)
+
+  if (tools.length === 0) return `MCP server ${server}.`
+  const short = tools.map((name) => (name.startsWith(`${server}_`) ? name.slice(server.length + 1) : name))
+  const quoted = short.slice(0, MCP_SUMMARY_NAMES).join(', ')
+  const rest = short.length - MCP_SUMMARY_NAMES
+  return capLine(`Tools: ${quoted}${rest > 0 ? `, … (+${rest} more)` : ''}.`, MCP_DESCRIPTION_MAX)
+}
+
+/** Cuts at the last word boundary before `max`, marking the cut — never silently. */
+function capLine(text: string, max: number): string {
+  if (text.length <= max) return text
+  const head = text.slice(0, max - 1)
+  const space = head.lastIndexOf(' ')
+  return `${(space > max / 2 ? head.slice(0, space) : head).replace(/[\s,;:.]+$/, '')}…`
+}
+
+/**
  * Groups the REAL ToolSet into families.
  *
  * The classification is done after assembly (and not with `add()` on each
@@ -423,6 +511,8 @@ export function classifyFamilies(
   mcpServers: readonly string[] = [],
   /** Servers turned on that did not come up: an empty family, with the reason. */
   unavailableMcp: readonly { prefix: string; reason: string }[] = [],
+  /** Raw `instructions` of the initialize result, by prefix (untrusted text). */
+  mcpInstructions: Readonly<Record<string, string | undefined>> = {},
 ): ToolFamily[] {
   const names = Object.keys(tools)
   const servers = new Set(mcpServers)
@@ -485,7 +575,7 @@ export function classifyFamilies(
     families.push({
       id: `mcp:${server}`,
       label: `@mcp:${server}`,
-      description: `MCP server ${server}.`,
+      description: mcpFamilyDescription(server, present, mcpInstructions[server]),
       tools: present,
       ...(present.length === 0
         ? { unavailable: `failed to connect: ${failedMcp.get(server)}` }
