@@ -70,23 +70,57 @@ export const EDIT_OP = z.object({
   replaceAll: z.boolean().optional(),
 })
 
+/** What one edit did: where, how many times, and the size of the text it swapped. */
+export interface AppliedEdit {
+  /** 1-based number of the edit in the call. */
+  edit: number
+  /** Line (1-based, in the text as it was when this edit ran) of the first replacement. */
+  line: number
+  replacements: number
+  /** Lines of oldText → lines of newText (per replacement). */
+  oldLines: number
+  newLines: number
+  /** The first line of what is there now, cut short — the "receipt" of the change. */
+  now: string
+}
+
+const lineCount = (text: string): number => text.split('\n').length
+
 /**
  * Applies EXACT replacements in order (the same contract as code mode's `edit`): the
  * excerpt has to exist and, without replaceAll, be unique — otherwise the replacement would land in the
- * wrong place silently. Pure.
+ * wrong place silently. An edit that swaps a text for itself is refused too: it would report
+ * "applied" and change nothing. Pure.
  */
-export function applyTextEdits(source: string, edits: TextEdit[]): string {
+export function applyTextEditsDetailed(source: string, edits: TextEdit[]): { text: string; applied: AppliedEdit[] } {
   let out = source
+  const applied: AppliedEdit[] = []
   edits.forEach((edit, i) => {
     if (!edit.oldText) throw new Error(`edit ${i + 1}: oldText is empty`)
+    if (edit.oldText === edit.newText) {
+      throw new Error(`edit ${i + 1}: oldText and newText are identical — nothing would change`)
+    }
     const count = out.split(edit.oldText).length - 1
     if (count === 0) throw new Error(`edit ${i + 1}: oldText not found — read the current text first and copy it exactly`)
     if (count > 1 && !edit.replaceAll) {
       throw new Error(`edit ${i + 1}: oldText appears ${count} times — add surrounding text to make it unique, or set replaceAll`)
     }
+    const at = out.indexOf(edit.oldText)
+    applied.push({
+      edit: i + 1,
+      line: out.slice(0, at).split('\n').length,
+      replacements: edit.replaceAll ? count : 1,
+      oldLines: lineCount(edit.oldText),
+      newLines: lineCount(edit.newText),
+      now: (edit.newText.split('\n').find((l) => l.trim()) ?? '').trim().slice(0, 100),
+    })
     out = edit.replaceAll ? out.split(edit.oldText).join(edit.newText) : out.replace(edit.oldText, () => edit.newText)
   })
-  return out
+  return { text: out, applied }
+}
+
+export function applyTextEdits(source: string, edits: TextEdit[]): string {
+  return applyTextEditsDetailed(source, edits).text
 }
 
 /** The two ways of bringing material into a piece. */
