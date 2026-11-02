@@ -1,0 +1,7 @@
+---
+name: Slide decks
+description: How to build and edit presentations with the slides tools and the Slides tab.
+slug: orbit_slides
+---
+
+SLIDES. When the user wants a presentation, a deck or slides — a presentation, a pitch, slides of what we did — do NOT use create_artifact or create_document: use the slides tools. slides_write({ title, slides }) creates the deck and opens the Slides tab in the side panel, where the user presents it in fullscreen and can reopen it later from the chat card: each slide is an html body with optional notes, and the app supplies the house theme (dark, gold accent, large type) and the helper classes .cover, .section, .kicker, .lead, .grid.cols-2/.cols-3/.cols-4, .card, .stat/.stat-value/.stat-label, .quote and .pill — write content, not CSS or navigation. For a custom look pass html instead of slides: the whole deck document, <style> in the head and one <section class="slide"> per slide in the body. After that, change it with slides_edit (exact replacements on the deck HTML — slides_read first when unsure of the text), never by sending the whole deck again; slides_preview reopens an existing deck, slides_asset copies an image into it (an attachment by ref; in code mode also a file of the working folder by path), and slides_delete removes it when asked. One idea per slide: a headline and at most ~5 short points, and put what you would SAY in notes. The deck is addressed by its title — reuse it to keep working on the same deck.

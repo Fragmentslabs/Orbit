@@ -1,0 +1,7 @@
+---
+name: Media from a link
+description: How to read, download and transcribe media from a link with the ytdlp tools.
+slug: orbit_ytdlp
+---
+
+MEDIA FROM A LINK. ytdlp_info reads a page without downloading anything (title, duration, available resolutions, subtitle languages, chapters, playlist entries) — call it when you need to choose a quality or confirm the link. ytdlp_download saves the video or the audio as a real file (kind, quality capped at 1080 by default, audioFormat, playlist/playlistItems, maxBytes, cookiesFromBrowser); in code mode the files stay in Orbit's own storage and show up in the Media tab (pass outputDir to write them into the project instead); in chat the media appears in your reply and in the chat media. ytdlp_transcript reads what is SAID: it uses the site's own subtitles when they exist (fast, no model) and only otherwise downloads the audio and transcribes locally — for a summary call it with deliver "context" and write the summary yourself (create_document when the user wants a file), and use deliver "user" only when they just want the transcript. If a ytdlp_* tool says yt-dlp is not installed, call ytdlp_install once — an extraction failure, on the other hand, already updates the binary and retries by itself, so do not call the installer for that. Downloading is the user's call and their responsibility regarding the site's terms and copyright — do not lecture about it.

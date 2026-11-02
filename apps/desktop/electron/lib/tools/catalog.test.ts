@@ -102,14 +102,41 @@ describe('buildMap', () => {
     const b = buildMap(families, { active: new Set(['documents']) }).text
     expect(a).toBe(b)
     expect(a).toMatch(/documents — .*\(ACTIVE\)/)
-    expect(a).toMatch(/disabled:/)
+    expect(a).toMatch(/^Disabled in this turn/m)
   })
 
-  it('a large family degrades to "use tools_load" instead of blowing the budget', () => {
+  it('groups disabled families by reason, after the available ones', () => {
+    const families = [
+      { id: 'design', label: 'design', description: 'Visual design.', tools: ['design_write'] },
+      { id: 'files', label: 'files', description: 'Files.', tools: [], unavailable: 'code mode only' },
+      { id: 'code-index', label: 'code-index', description: 'Index.', tools: [], unavailable: 'code mode only' },
+      { id: 'mcp:x', label: '@mcp:x', description: 'MCP server x.', tools: [], unavailable: 'failed to connect', mcp: true },
+    ]
+    const lines = buildMap(families).text.split('\n')
+    expect(lines).toEqual([
+      '- design — Visual design.',
+      'Disabled in this turn (tell the user why; never claim they do not exist):',
+      '- files, code-index: code mode only',
+      '- @mcp:x: failed to connect',
+    ])
+  })
+
+  it('an MCP server is one line with its description, not its tool names', () => {
     const large = {
       id: 'mcp:gigante',
       label: '@mcp:gigante',
       description: 'Large server.',
+      tools: Array.from({ length: 80 }, (_, i) => `gigante_tool_${i}`),
+      mcp: true,
+    }
+    expect(buildMap([large], { budget: 30 }).text).toBe('- @mcp:gigante — 80 tools: Large server.')
+  })
+
+  it('a family that does not fit degrades to "use tools_load" instead of blowing the budget', () => {
+    const large = {
+      id: 'mcp:gigante',
+      label: '@mcp:gigante',
+      description: 'x'.repeat(500),
       tools: Array.from({ length: 80 }, (_, i) => `gigante_tool_${i}`),
       mcp: true,
     }

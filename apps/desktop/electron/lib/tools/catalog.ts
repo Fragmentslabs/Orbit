@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
+import { familyGuide } from '../skills/builtin'
 
 /**
  * On-demand tool catalog — the plan's four-layer funnel
@@ -170,7 +171,7 @@ const FAMILIES: readonly FamilyDecl[] = [
   {
     id: 'documents',
     label: 'documents',
-    description: 'PDF, DOCX, spreadsheets and Orbit documents: read, query, extract, create.',
+    description: 'Deliver a document (report, proposal, "a PDF"/"a Word file") with create_document; edit an attached .docx keeping its format (docx_edit, never rebuild it); merge, reorder or fill PDFs.',
     tags: ['pdf', 'docx', 'xlsx', 'planilha', 'spreadsheet'],
     prefixes: ['doc_', 'docx_', 'pdf_', 'document_'],
     exact: ['sheet_query', 'create_document', 'update_document', 'read_document', 'list_documents'],
@@ -178,7 +179,7 @@ const FAMILIES: readonly FamilyDecl[] = [
   {
     id: 'image',
     label: 'image',
-    description: 'Edit images pixel by pixel: crop, compress, color, background, text.',
+    description: 'Edit an existing image: crop, resize, compress, colour, remove background, write text on it. Never say you cannot.',
     tags: ['remover fundo', 'remove background', 'recortar imagem', 'crop image'],
     prefixes: ['image_', 'describe_image'],
     exact: ['show_image'],
@@ -186,14 +187,14 @@ const FAMILIES: readonly FamilyDecl[] = [
   {
     id: 'svg',
     label: 'svg',
-    description: 'Vector: create, recolor, rasterize and vectorize.',
+    description: 'SVG files: icons, badges, simple marks — create, recolour, rasterize (favicon, app icon), vectorize a flat logo.',
     tags: ['svg', 'vetorizar', 'vectorize'],
     prefixes: ['svg_'],
   },
   {
     id: 'video',
     label: 'video',
-    description: 'EDL-based video editing: probe, transcribe, timeline, render, cut.',
+    description: 'Edit real footage (cuts, joins, subtitles, loudness) and transcribe audio or video.',
     tags: ['legenda', 'legendas', 'shorts', 'clipe', 'ffmpeg'],
     prefixes: ['video_'],
     exact: ['transcribe'],
@@ -202,35 +203,35 @@ const FAMILIES: readonly FamilyDecl[] = [
   {
     id: 'media',
     label: 'media',
-    description: 'Compress/convert video and audio to a byte ceiling.',
+    description: 'Shrink or convert a video/audio file to a size limit or quality (images: use image).',
     tags: ['comprimir video', 'compress video', 'comprimir audio', 'compress audio'],
     prefixes: ['media_'],
   },
   {
     id: 'ytdlp',
     label: 'ytdlp',
-    description: 'Media from a link: download video/audio and read the transcript.',
+    description: 'Media from a link (YouTube and similar): download video/audio, read what is said.',
     tags: ['youtube', 'yt-dlp', 'baixar video', 'baixar audio', 'download video'],
     prefixes: ['ytdlp_'],
   },
   {
     id: 'motion',
     label: 'motion',
-    description: 'Animated piece (intro, kinetic text, lower third) in the Motion tab.',
+    description: 'Animation as a video/motion piece (intro, animated title, kinetic text, logo reveal, lower third), in the Motion tab — never an artifact.',
     tags: ['animacao', 'animacoes', 'animar', 'animation', 'animate', 'motion graphics'],
     prefixes: ['motion_'],
   },
   {
     id: 'design',
     label: 'design',
-    description: 'Design canvas: screens, mockups, logos, variants.',
+    description: 'Visual design judged on LOOK (logo, UI mockup, wireframe, landing page, poster, screens or variants), in the Design tab — never an artifact or a plain image.',
     tags: ['mockup', 'wireframe', 'logotipo'],
     prefixes: ['design_'],
   },
   {
     id: 'slides',
     label: 'slides',
-    description: 'Slide presentation, with speaker notes.',
+    description: 'Presentation, deck or pitch told in sequence, with speaker notes, in the Slides tab — never an artifact or a document.',
     tags: ['slides', 'slide', 'pptx', 'powerpoint'],
     prefixes: ['slides_'],
   },
@@ -272,8 +273,8 @@ const FAMILIES: readonly FamilyDecl[] = [
   {
     id: 'artifacts',
     label: 'artifacts',
-    description: 'Interactive HTML page inside the response (dashboard, prototype, simulator).',
-    tags: ['dashboard', 'artifact', 'artefato'],
+    description: 'FUNCTIONAL HTML page inside the reply that needs real code: dashboard, prototype, simulator, calculator, interactive tool (a simple calculator or chart fits an inline orbit-ui block instead).',
+    tags: ['dashboard', 'artifact', 'artefato', 'simulador', 'simulator', 'calculadora', 'calculator'],
     prefixes: ['create_artifact', 'update_artifact', 'edit_artifact', 'read_artifact'],
   },
   {
@@ -545,7 +546,7 @@ export function classifyFamilies(
         id: family.id,
         label: family.label,
         description: family.description,
-        manual: family.manual,
+        manual: family.manual ?? familyGuide(family.id),
         tools: present,
         ...(family.tags ? { tags: family.tags } : {}),
       })
@@ -676,54 +677,50 @@ export function buildMap(
   let remaining = budget
 
   const cost = (line: string) => estimateTokens(line)
-  const marker = (family: ToolFamily) => {
-    if (family.unavailable) return ` (disabled: ${family.unavailable})`
-    if (active.has(family.id)) return ' (ACTIVE)'
-    return ''
-  }
-  // A native family has predictable names (the model knows that `documents` has
-  // doc_read); an MCP server is unknown vocabulary — there the names are what
-  // decides. Too many names do not fit: it degrades to the count.
-  const MAX_NAMES_IN_MAP = 12
-  const fullLine = (family: ToolFamily) => {
-    const names = family.mcp
-      ? family.tools.slice(0, MAX_NAMES_IN_MAP).join(', ') +
-        (family.tools.length > MAX_NAMES_IN_MAP ? ', …' : '')
-      : family.description
-    return `- ${family.label} — ${family.tools.length} tools: ${names}${marker(family)}`
-  }
+  const marker = (family: ToolFamily) => (active.has(family.id) ? ' (ACTIVE)' : '')
+  // A native line is WHEN to use the family — the routing the model needs before
+  // loading anything; the count does not help it choose. An MCP server keeps the
+  // count: past the whole-load limit it says the server is searched, not loaded.
+  const fullLine = (family: ToolFamily) =>
+    family.mcp
+      ? `- ${family.label} — ${family.tools.length} tools: ${family.description}${marker(family)}`
+      : `- ${family.label} — ${family.description}${marker(family)}`
+  const namesLine = (family: ToolFamily) => `- ${family.label} — ${family.tools.join(', ')}${marker(family)}`
+  const groupLine = (family: ToolFamily) =>
+    `- ${family.label} — ${family.tools.length} tools (names not listed; use tools_load)${marker(family)}`
 
+  const available = families.filter((f) => !f.unavailable && f.tools.length > 0)
   // Degradation order: the largest ones lose detail first.
-  const ordered = [...families].sort((a, b) => b.tools.length - a.tools.length)
+  const ordered = [...available].sort((a, b) => b.tools.length - a.tools.length)
   const form = new Map<string, 'full' | 'names' | 'groups'>()
   for (const family of ordered) {
     const full = fullLine(family)
-    const namesOnly = `- ${family.label} — ${family.tools.join(', ')}${marker(family)}`
-    const group = `- ${family.label} — ${family.tools.length} tools (names not listed; use tools_load)${marker(family)}`
-    if (family.unavailable || family.tools.length === 0) {
-      form.set(family.id, 'full')
-      continue
-    }
+    const namesOnly = namesLine(family)
     if (cost(full) <= remaining) form.set(family.id, 'full')
     else if (cost(namesOnly) <= remaining) form.set(family.id, 'names')
     else form.set(family.id, 'groups')
-    remaining -= cost(
-      form.get(family.id) === 'full' ? full : form.get(family.id) === 'names' ? namesOnly : group,
-    )
+    const f = form.get(family.id)
+    remaining -= cost(f === 'full' ? full : f === 'names' ? namesOnly : groupLine(family))
   }
 
   // Emission in the declared order (byte-stable), with the form decided above.
-  for (const family of families) {
+  for (const family of available) {
     const f = form.get(family.id) ?? 'full'
-    if (family.unavailable || family.tools.length === 0) {
-      lines.push(`- ${family.label} — 0 tools${marker(family)}`)
-    } else if (f === 'full') {
-      lines.push(fullLine(family))
-    } else if (f === 'names') {
-      lines.push(`- ${family.label} — ${family.tools.join(', ')}${marker(family)}`)
-    } else {
-      lines.push(`- ${family.label} — ${family.tools.length} tools (names not listed; use tools_load)${marker(family)}`)
-    }
+    lines.push(f === 'full' ? fullLine(family) : f === 'names' ? namesLine(family) : groupLine(family))
+  }
+
+  // Disabled families, one line per REASON: the reason is what the model must say
+  // to the user, and thirteen lines of "0 tools" only repeated it. They still all
+  // appear — vanishing from the map would be claiming the capability does not exist.
+  const byReason = new Map<string, string[]>()
+  for (const family of families) {
+    if (available.includes(family)) continue
+    const reason = family.unavailable ?? 'unavailable in this turn'
+    byReason.set(reason, [...(byReason.get(reason) ?? []), family.label])
+  }
+  if (byReason.size > 0) {
+    lines.push('Disabled in this turn (tell the user why; never claim they do not exist):')
+    for (const [reason, labels] of byReason) lines.push(`- ${labels.join(', ')}: ${reason}`)
   }
   const text = lines.join('\n')
   return { text, tokens: estimateTokens(text) }

@@ -106,6 +106,7 @@ import type { ImageToolHooks, ToolContext, TurnSnapshot } from './tools'
 import { buildCatalog } from './tools/catalog-turn'
 import { DEFAULT_ACTIVE_FAMILIES, buildMap, type ToolFamily } from './tools/catalog'
 import { deriveActive, familiesMentionedInText, priorToolCalls } from './tools/active'
+import { activeFamilyGuides } from './tools/guides'
 import { queryFamily } from './tools/load'
 import { recordTurn } from './tools/metrics'
 import { hoistToolImages } from './tool-images'
@@ -2321,27 +2322,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     const subchatsBlock =
       input.orchestrationRole !== 'worker' ? await subchatsTurnBlock(input.sessionId).catch(() => '') : ''
     const skillsBlock = await skillsTurnBlock(input, recentTurns(history), turnEmbed)
-    const turnBlock = [
-      memoryBlock,
-      skillsBlock,
-      subchatsBlock,
-      prefetchedScreen
-        ? prefetchedScreenBlock({
-            windowText: goodWindowText ?? (overlayScreen && 'text' in overlayScreen ? overlayScreen.text : null),
-            description: screenDescription,
-          })
-        : '',
-      // Last on purpose: it is what the model needs to have read most
-      // recently before answering (see session/retry-note.ts).
-      retryNote,
-    ]
-      .filter(Boolean)
-      .join('\n\n')
     const modelHistory = input.options.overlay ? recentOverlayHistory(history.slice(0, -1)) : history.slice(0, -1)
-    const initialMessages = normalizeMessages(
-      withMemoryBlock(toModelMessages(modelHistory, modelVision), turnBlock),
-      interleavedReasoningField(provider, primary.modelId),
-    )
     let autoContinues = 0
     const filterLeaks = input.options.overlay === true || input.options.voiceCall === true
     const rawTexts = new Map<string, string>()
@@ -2384,7 +2365,35 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       : {}
     const deriveTurn = (messages: readonly unknown[]) =>
       onDemand ? deriveActive([...priorCalls, ...messages], onDemand.families, existingNames, deriveOptions) : null
-    const initialActive = deriveTurn(initialMessages)
+    // The model history carries only text (toModelMessages), so the tool calls that
+    // keep a family active come from `priorCalls` alone — the turn block below is
+    // built from this set, which is why it is derived before the messages exist.
+    const initialActive = deriveTurn([])
+    // A family loaded in an earlier turn (or activated by a tag in this message) is
+    // declared, but the tools_load result that carried its guide is not resent:
+    // without this the model would call motion_write having never read how.
+    const guidesBlock = onDemand && initialActive ? activeFamilyGuides(onDemand.families, initialActive.families) : ''
+    const turnBlock = [
+      memoryBlock,
+      skillsBlock,
+      guidesBlock,
+      subchatsBlock,
+      prefetchedScreen
+        ? prefetchedScreenBlock({
+            windowText: goodWindowText ?? (overlayScreen && 'text' in overlayScreen ? overlayScreen.text : null),
+            description: screenDescription,
+          })
+        : '',
+      // Last on purpose: it is what the model needs to have read most
+      // recently before answering (see session/retry-note.ts).
+      retryNote,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    const initialMessages = normalizeMessages(
+      withMemoryBlock(toModelMessages(modelHistory, modelVision), turnBlock),
+      interleavedReasoningField(provider, primary.modelId),
+    )
     // Largest set declared in a step — what the telemetry calls "offered".
     let offeredTools = initialActive?.names.length ?? 0
     // The map is the index: families, what each one solves, what is ACTIVE and
