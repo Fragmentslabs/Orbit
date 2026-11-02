@@ -232,8 +232,12 @@ export function parseMasterFx(value: unknown): MasterFx | null {
   const where = 'audio.json: master'
   if (typeof value !== 'object' || Array.isArray(value)) fail(where, 'must be an object like { "limit": -1, "loudness": -16 }')
   const m = value as Record<string, unknown>
+  // "limiter" is what people write for it; a key that means nothing would silently leave the mix without one.
+  const unknown = Object.keys(m).filter((key) => !['limit', 'limiter', 'loudness'].includes(key))
+  if (unknown.length) fail(where, `unknown key "${unknown[0]}" — use "limit" (dB ceiling) and/or "loudness" (LUFS target)`)
   const master: MasterFx = {}
-  if (m.limit !== undefined) master.limit = bounded(m.limit, where, 'limit', -24, 0)
+  const ceiling = m.limit ?? m.limiter
+  if (ceiling !== undefined) master.limit = bounded(ceiling, where, 'limit', -24, 0)
   if (m.loudness !== undefined) master.loudness = bounded(m.loudness, where, 'loudness', -40, -5)
   return master.limit === undefined && master.loudness === undefined ? null : master
 }

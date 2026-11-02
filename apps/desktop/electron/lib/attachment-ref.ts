@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { audioFilePath, audioIdFrom } from './audio-store'
+import { audioDir, audioFilePath, audioIdFrom } from './audio-store'
 import type { MediaCredit } from '@shared/media'
 import { getMediaEntry, mediaIdFromUrl, setMediaDeleteHook } from './media'
 import { unregisterVideosFor } from './video/store'
@@ -193,6 +193,17 @@ export function looksLikeAttachmentRef(ref: string): boolean {
   return /^(?:ref\s+)?(?:orbit-(?:audio|media):\/\/)?(?:vdo|aud|img)_[a-z0-9]/i.test(ref.trim())
 }
 
+/** `aud_k3x9a1b2` → `aud_k3x9a1b2.wav`: the stored file that begins with the id, if there is exactly one. */
+function audioIdWithoutExtension(ref: string): string | null {
+  if (!/^aud_[a-z0-9]+$/.test(ref)) return null
+  try {
+    const found = fs.readdirSync(audioDir()).filter((name) => name.startsWith(`${ref}.`) && audioIdFrom(name))
+    return found.length === 1 ? found[0] : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * The reference the agent passed → the attachment. It accepts the id, the scheme URL or the
  * path the attachment's note delivers; it refuses everything else (including a path
@@ -213,7 +224,8 @@ export async function resolveAttachmentRef(raw: string): Promise<ResolvedAttachm
     return { kind: 'video', id: videoId, file, name: names[videoId]?.name || videoId }
   }
 
-  const audioId = audioIdFrom(ref)
+  // The ref of an audio without its extension ("aud_k3x9…"): the file is the one that starts with it.
+  const audioId = audioIdFrom(ref) ?? audioIdWithoutExtension(ref)
   if (audioId) {
     const file = audioFilePath(audioId)
     if (!fs.existsSync(file)) return null

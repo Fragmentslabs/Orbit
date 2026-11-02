@@ -173,4 +173,9 @@ describe('master', () => {
     expect(() => parseMasterFx({ loudness: 3 })).toThrow(/audio\.json: master: loudness 3/)
     expect(() => parseMasterFx([])).toThrow(/must be an object/)
   })
+
+  it('accepts "limiter" for the ceiling and refuses a key that means nothing', () => {
+    expect(parseMasterFx({ limiter: -1 })).toEqual({ limit: -1 })
+    expect(() => parseMasterFx({ limiter: -1, peak: -2 })).toThrow(/unknown key "peak"/)
+  })
 })
