@@ -87,3 +87,45 @@ export function motionAudioRate(drift: number, engaged: boolean): number {
   const nudge = Math.max(-MOTION_AUDIO_MAX_NUDGE, Math.min(MOTION_AUDIO_MAX_NUDGE, -drift * 0.5))
   return 1 + nudge
 }
+
+export type MotionTrackLevel = {
+  start: number
+  gainDb?: number
+  fadeIn?: number
+  fadeOut?: number
+  /** Points of the volume curve: dB at that second OF THE PIECE. */
+  automation?: { at: number; db: number }[]
+}
+
+/**
+ * The linear level (0…1) the render would give the track at the piece's second `at` — the
+ * same arithmetic as the ffmpeg chain (gain, `afade` in/out relative to the track, and the
+ * volume curve interpolated in a straight line and pinned at the extremes). An <audio>
+ * element cannot go above 1, so a positive net gain is clamped there.
+ */
+export function motionTrackVolume(track: MotionTrackLevel, end: number | null, at: number): number {
+  let db = track.gainDb ?? 0
+  let ramp = 1
+  const local = at - track.start
+  const fadeIn = track.fadeIn ?? 0
+  const fadeOut = track.fadeOut ?? 0
+  if (fadeIn > 0) ramp *= Math.min(1, Math.max(0, local / fadeIn))
+  if (fadeOut > 0 && end !== null) ramp *= Math.min(1, Math.max(0, (end - at) / fadeOut))
+  const points = track.automation ?? []
+  if (points.length === 1) db += points[0].db
+  else if (points.length > 1) {
+    if (at <= points[0].at) db += points[0].db
+    else if (at >= points[points.length - 1].at) db += points[points.length - 1].db
+    else {
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i]
+        const b = points[i + 1]
+        if (at < b.at) {
+          db += a.db + ((b.db - a.db) * (at - a.at)) / (b.at - a.at)
+          break
+        }
+      }
+    }
+  }
+  return Math.min(1, Math.max(0, Math.pow(10, db / 20) * ramp))
+}

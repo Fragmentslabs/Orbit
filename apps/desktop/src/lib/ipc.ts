@@ -926,7 +926,17 @@ export interface MotionLayersResult {
    * second OF THE FILE at which the sound starts (the initial cut of a page video).
    */
   audio: {
-    tracks: { name: string; url: string | null; start: number; end: number | null; offset?: number }[]
+    tracks: {
+      name: string
+      url: string | null
+      start: number
+      end: number | null
+      offset?: number
+      gainDb?: number
+      fadeIn?: number
+      fadeOut?: number
+      automation?: { at: number; db: number }[]
+    }[]
     error: string | null
   } | null
 }

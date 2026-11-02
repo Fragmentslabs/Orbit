@@ -44,6 +44,7 @@ import {
 } from "@/src/lib/ipc"
 import {
   MOTION_AUDIO_SEEK_S,
+  motionTrackVolume,
   motionAudioRate,
   motionTrackEnd,
   motionTrackIsLive,
@@ -294,7 +295,17 @@ export function MotionTab({
    *  resolution the render uses: what the timeline draws and what plays in the
    *  preview are the files that go in the video, at the same instants. */
   const [audio, setAudio] = useState<{
-    tracks: { name: string; url: string | null; start: number; end: number | null; offset?: number }[]
+    tracks: {
+      name: string
+      url: string | null
+      start: number
+      end: number | null
+      offset?: number
+      gainDb?: number
+      fadeIn?: number
+      fadeOut?: number
+      automation?: { at: number; db: number }[]
+    }[]
     error: string | null
   } | null>(null)
   /** The REAL length of each file, measured by the element itself when the
@@ -352,6 +363,9 @@ export function MotionTab({
       // The window comes from the SAME function that draws the bar: without `end` in the manifest
       // it is closed by the real length of the file, and not by the end of the piece.
       const within = motionTrackIsLive(track, trackDuration(track), at)
+      // The level the render would mix at this instant (gain, ramps, volume curve): the
+      // element follows it, so the fade that was asked for is also the one that is heard.
+      el.volume = motionTrackVolume(track, motionTrackEnd(track, trackDuration(track)), at)
       if (!within) {
         if (!el.paused) el.pause()
         if (el.playbackRate !== 1) el.playbackRate = 1

@@ -1818,6 +1818,11 @@ app.whenReady().then(() => {
             start: track.start,
             end: track.end ?? null,
             offset: track.offset ?? 0,
+            // What the render applies to the level: the preview follows the same numbers.
+            gainDb: track.gainDb,
+            fadeIn: track.fadeIn,
+            fadeOut: track.fadeOut,
+            automation: track.fx?.automation ?? [],
           })),
           error: null,
         }
