@@ -28,7 +28,7 @@ import {
 } from '@shared/chat'
 import { isRoutineSessionId } from '@shared/routines'
 import { getProvider, modelSupportsVision } from './catalog'
-import { resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitle } from './chat-title'
+import { attachmentTextHint, resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitle } from './chat-title'
 import {
   compactHistory,
   countSummaries,
@@ -1445,9 +1445,17 @@ function namingPrompt(input: SendMessageInput, projectName: string | null): stri
     .slice(0, 5)
   const attached = names.length > 0 ? `\n\nAttached files: ${names.join(', ')}` : ''
   // Attachment only: with the empty prompt the chat stayed on the default title forever.
+  // The model cannot read the files — saying "the user sent files" and giving it
+  // nothing to read made one answer "Não consigo acessar os arquivos anexados",
+  // and that refusal became the title. What it can use is the beginning of a text
+  // file (a pasted text, a .md), which is where the subject is.
   if (!text) {
+    const hint = attachmentTextHint(input.files)
+    if (hint) {
+      return `The user sent a file with no message. Its beginning is below — name the conversation after what it is about.\n\n${hint}`
+    }
     return names.length > 0
-      ? `The user sent files with no message yet. Name the conversation after what the files are about.${attached}`
+      ? `The user sent files with no message. You cannot open the files: name the conversation from what their NAMES say.${attached}`
       : ''
   }
   return text.slice(0, 2000) + attached

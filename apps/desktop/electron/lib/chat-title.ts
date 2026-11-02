@@ -43,6 +43,21 @@ export function looksLikeToolCall(text: string): boolean {
   return /^[{[]/.test(text.trim())
 }
 
+// A title model can answer the PROMPT instead of naming the chat. Told that "the
+// user sent files" and given nothing it can read, it replies "Não consigo acessar
+// os arquivos anexados" — and that sentence became the conversation's title.
+const REFUSAL_MARKERS = [
+  /\b(?:n[ãa]o|nao)\s+(?:consigo|posso)\b/i,
+  /\b(?:n[ãa]o|no)\s+(?:tenho|tengo)\s+acesso\b/i,
+  /\bno\s+puedo\b/i,
+  /\b(?:can'?t|cannot|unable\s+to|not\s+able\s+to)\b[^.!?\n]{0,30}\b(?:access|read|see|open|view|process)\b/i,
+]
+
+/** A refusal is never a title. */
+export function looksLikeRefusal(text: string): boolean {
+  return REFUSAL_MARKERS.some((re) => re.test(text))
+}
+
 export function truncateTitle(text: string): string {
   const cleaned = stripThinkingAndArtifacts(text)
     .trim()
@@ -95,6 +110,37 @@ export function titleFromAttachmentNames(
  * `fallback` — the title derived from the user's message.
  */
 export function resolveTitle(modelText: string, fallback: string): string {
-  if (looksLikeToolCall(modelText)) return fallback
+  if (looksLikeToolCall(modelText) || looksLikeRefusal(modelText)) return fallback
   return truncateTitle(modelText) || fallback
+}
+
+/** Text of a data URL, cut to a window: the title needs the beginning, not the file. */
+function dataUrlText(url: string): string {
+  const comma = url.indexOf(',')
+  if (!url.startsWith('data:') || comma < 0) return ''
+  const meta = url.slice(0, comma)
+  const payload = url.slice(comma + 1, comma + 1200)
+  if (meta.includes(';base64')) return Buffer.from(payload, 'base64').toString('utf8')
+  try {
+    // The window may cut a %XX escape in half; dropping it avoids a decode error.
+    return decodeURIComponent(payload.replace(/%[0-9a-f]?$/i, ''))
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Beginning of a text attachment, as material for the title model. A pasted text
+ * arrives as a data URL and its name ("Texto colado (1,6 KB)") says nothing about
+ * the subject — the first lines do.
+ */
+export function attachmentTextHint(
+  files: { url?: string; mime?: string }[] | undefined,
+): string {
+  for (const file of files ?? []) {
+    if (!/^text\//i.test(file.mime ?? '')) continue
+    const text = dataUrlText(file.url ?? '').trim()
+    if (text) return text.slice(0, 600)
+  }
+  return ''
 }

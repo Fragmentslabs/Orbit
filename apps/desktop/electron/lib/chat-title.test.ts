@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  attachmentTextHint,
+  looksLikeRefusal,
   looksLikeToolCall,
   resolveTitle,
   titleFromAttachmentNames,
@@ -54,6 +56,44 @@ describe('resolveTitle', () => {
 
   it('uses the fallback when the cleanup leaves nothing', () => {
     expect(resolveTitle('<think></think>  ', fallback)).toBe(fallback)
+  })
+})
+
+/**
+ * Told that "the user sent files" and given nothing it could read, the title
+ * model answered the prompt instead of naming the chat: "Não consigo acessar os
+ * arquivos anexados" became the title of the conversation.
+ */
+describe('looksLikeRefusal', () => {
+  it('rejects what a model answers when it cannot read the attachments', () => {
+    for (const raw of [
+      'Não consigo acessar os arquivos anexados',
+      'Não tenho acesso aos arquivos.',
+      "I can't access the attached files.",
+      'I am unable to open the files you attached.',
+      'No puedo acceder a los archivos adjuntos.',
+    ]) {
+      expect(looksLikeRefusal(raw)).toBe(true)
+      expect(resolveTitle(raw, 'Relatório')).toBe('Relatório')
+    }
+  })
+
+  it('keeps a title that only sounds like a problem', () => {
+    expect(looksLikeRefusal('Painel de vendas sem acesso')).toBe(false)
+    expect(resolveTitle('Painel de vendas sem acesso', 'x')).toBe('Painel de vendas sem acesso')
+  })
+})
+
+describe('attachmentTextHint', () => {
+  it('reads the beginning of a text data URL (base64)', () => {
+    const url = `data:text/markdown;base64,${Buffer.from('# Orçamento\nconteúdo').toString('base64')}`
+    expect(attachmentTextHint([{ url, mime: 'text/markdown' }])).toBe('# Orçamento\nconteúdo')
+  })
+
+  it('ignores what is not text, and what is not a data URL', () => {
+    expect(attachmentTextHint([{ url: 'data:image/png;base64,AAAA', mime: 'image/png' }])).toBe('')
+    expect(attachmentTextHint([{ url: 'blob:x', mime: 'text/plain' }])).toBe('')
+    expect(attachmentTextHint(undefined)).toBe('')
   })
 })
 
