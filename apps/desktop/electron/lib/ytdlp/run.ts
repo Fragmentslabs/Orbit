@@ -66,6 +66,8 @@ export function looksStale(res: { stdout: string; stderr: string }): boolean {
 export interface YtdlpRunOptions {
   signal?: AbortSignal
   cwd?: string
+  /** Ceiling for the whole run: past it the process is killed and the call fails (no turn stays stuck). */
+  timeoutMs?: number
   /** Default: true — an error that looks like an old binary updates and repeats once. */
   retryOnStale?: boolean
 }
@@ -94,6 +96,33 @@ export async function runYtdlp(args: string[], opts: YtdlpRunOptions = {}): Prom
   return { ...(await runYtdlpOnce(args, opts)), refresh }
 }
 
+/** After the kill, how long to wait for 'close' before settling anyway. */
+const SETTLE_GRACE_MS = 3000
+
+/**
+ * Kills yt-dlp AND its children. The official macOS binary is a PyInstaller
+ * onefile: the process we spawn is only the bootloader, the real Python runs
+ * in a child that also holds the pipes — killing just the bootloader left that
+ * child downloading and 'close' never arrived (the stop button did nothing until
+ * the app was reloaded). The spawn is detached so the group can be killed whole.
+ */
+function killTree(pid: number | undefined): void {
+  if (pid == null) return
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(-pid, 'SIGKILL')
+      return
+    } catch {
+      // no group of its own — falls back to the direct kill
+    }
+  }
+  try {
+    process.kill(pid, 'SIGKILL')
+  } catch {
+    // already exited
+  }
+}
+
 function runYtdlpOnce(args: string[], opts: YtdlpRunOptions = {}): Promise<YtdlpRunResult> {
   const { bin } = requireYtdlp()
   return new Promise((resolve, reject) => {
@@ -101,15 +130,35 @@ function runYtdlpOnce(args: string[], opts: YtdlpRunOptions = {}): Promise<Ytdlp
       cwd: opts.cwd,
       env: userShellEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
       windowsHide: true,
     })
     const out: Buffer[] = []
     let outBytes = 0
     let err = ''
+    let settled = false
+    let timedOut = false
+    let settleTimer: ReturnType<typeof setTimeout> | undefined
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutTimer)
+      clearTimeout(settleTimer)
+      opts.signal?.removeEventListener('abort', onAbort)
+      fn()
+    }
+    // Kill, then settle even if 'close' never comes: a pipe held by an orphan
+    // must not keep the agent's turn pending forever.
+    const stop = (reason: () => Error) => {
+      killTree(proc.pid)
+      settleTimer ??= setTimeout(() => finish(() => reject(reason())), SETTLE_GRACE_MS)
+    }
+    const timeoutError = () =>
+      new Error(`yt-dlp did not finish within ${Math.round((opts.timeoutMs ?? 0) / 1000)} s and was stopped (the site may be slow or blocking; try again later).`)
     proc.stdout.on('data', (chunk: Buffer) => {
       outBytes += chunk.length
       if (outBytes > MAX_STDOUT) {
-        proc.kill('SIGKILL')
+        killTree(proc.pid)
         return
       }
       out.push(chunk)
@@ -118,17 +167,23 @@ function runYtdlpOnce(args: string[], opts: YtdlpRunOptions = {}): Promise<Ytdlp
       err += chunk.toString()
       if (err.length > 400_000) err = err.slice(-200_000)
     })
-    const onAbort = () => proc.kill('SIGKILL')
-    opts.signal?.addEventListener('abort', onAbort, { once: true })
-    proc.on('error', (error) => {
-      opts.signal?.removeEventListener('abort', onAbort)
-      reject(error)
-    })
+    const onAbort = () => stop(() => new Error('cancelled'))
+    if (opts.signal?.aborted) onAbort()
+    else opts.signal?.addEventListener('abort', onAbort, { once: true })
+    const timeoutTimer = opts.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true
+          stop(timeoutError)
+        }, opts.timeoutMs)
+      : undefined
+    proc.on('error', (error) => finish(() => reject(error)))
     proc.on('close', (code) => {
-      opts.signal?.removeEventListener('abort', onAbort)
-      if (opts.signal?.aborted) return reject(new Error('cancelled'))
-      if (outBytes > MAX_STDOUT) return reject(new Error('yt-dlp produced more output than Orbit can read (playlist too large?)'))
-      resolve({ code: code ?? 1, stdout: Buffer.concat(out).toString('utf8'), stderr: err })
+      finish(() => {
+        if (opts.signal?.aborted) return reject(new Error('cancelled'))
+        if (timedOut) return reject(timeoutError())
+        if (outBytes > MAX_STDOUT) return reject(new Error('yt-dlp produced more output than Orbit can read (playlist too large?)'))
+        resolve({ code: code ?? 1, stdout: Buffer.concat(out).toString('utf8'), stderr: err })
+      })
     })
   })
 }
@@ -200,6 +255,10 @@ export function buildDownloadArgs(plan: DownloadPlan): string[] {
   const args: string[] = [plan.url, '-o', plan.output, '--windows-filenames', '--trim-filenames', '150']
   args.push(plan.playlist ? '--yes-playlist' : '--no-playlist')
   if (plan.playlist && plan.playlistItems) args.push('-I', plan.playlistItems)
+  // A single download is ONE item. Without the cap, a link that yt-dlp reads as
+  // a list anyway (a search results page, a channel tab) downloads every entry —
+  // endlessly, in the case of a search page. -I is ignored on a plain video.
+  if (!plan.playlist) args.push('-I', '1')
   if (plan.cookiesFromBrowser) args.push('--cookies-from-browser', plan.cookiesFromBrowser)
   if (plan.maxBytes && plan.maxBytes > 0) args.push('--max-filesize', String(Math.round(plan.maxBytes)))
 
@@ -217,6 +276,34 @@ export function buildDownloadArgs(plan: DownloadPlan): string[] {
 /** Name template: readable title + id, so two videos with the same name do not collide. */
 export function nameTemplate(playlist: boolean): string {
   return playlist ? '%(playlist_index)03d - %(title).100B [%(id)s].%(ext)s' : '%(title).120B [%(id)s].%(ext)s'
+}
+
+/** How many results a search lists. */
+export const SEARCH_RESULTS = 8
+
+/**
+ * A search runs through yt-dlp's own search prefix (`ytsearchN:`) — a flat list
+ * of results with their URLs, without opening each video. The model then picks a
+ * link instead of guessing one.
+ */
+export function searchArgs(query: string, results = SEARCH_RESULTS): string[] {
+  const clean = query.replace(/\s+/g, ' ').trim()
+  return [`ytsearch${results}:${clean}`, '-J', '--flat-playlist']
+}
+
+/**
+ * A search results page (youtube.com/results?search_query=…) is not a video: as a
+ * download target it lists results without end. Recognized so the tool can point to
+ * the search instead.
+ */
+export function searchQueryFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    if (!/(^|\.)youtube\.com$/i.test(parsed.hostname) || parsed.pathname !== '/results') return null
+    return parsed.searchParams.get('search_query') ?? parsed.searchParams.get('q') ?? ''
+  } catch {
+    return null
+  }
 }
 
 export function infoArgs(input: { url: string; playlist?: boolean; cookiesFromBrowser?: CookieBrowser }): string[] {

@@ -12,8 +12,8 @@ vi.mock('electron', () => ({
 }))
 
 const { assetName, describeBinary, versionAgeDays } = await import('./binary')
-const { buildDownloadArgs, infoArgs, looksStale, nameTemplate, subtitleArgs, subtitleLangPattern, ytdlpError } = await import('./run')
-const { describeInfo, durationText, parseInfo, videoHeights } = await import('./info')
+const { buildDownloadArgs, infoArgs, looksStale, nameTemplate, searchArgs, searchQueryFromUrl, subtitleArgs, subtitleLangPattern, ytdlpError } = await import('./run')
+const { describeInfo, describeSearch, durationText, parseInfo, videoHeights } = await import('./info')
 const { cleanCueLine, cueText, matchLanguage, parseSubtitleFile, parseTimestamp, timestampedCues } = await import('./subtitles')
 
 describe('assetName', () => {
@@ -321,5 +321,32 @@ describe('old binary (retry with update)', () => {
     expect(managed).toContain('managed copy')
     expect(managed).toMatch(/days old/)
     expect(describeBinary({ bin: '/x/yt-dlp', source: 'path' }, null)).toContain('unknown version')
+  })
+})
+
+describe('search', () => {
+  it('searches through the ytsearch prefix, flat, without opening each video', () => {
+    expect(searchArgs('  Kendrick   PRIDE ', 5)).toEqual(['ytsearch5:Kendrick PRIDE', '-J', '--flat-playlist'])
+  })
+
+  it('recognizes a YouTube results page as a search, not a video', () => {
+    expect(searchQueryFromUrl('https://www.youtube.com/results?search_query=Kendrick+Lamar+PRIDE')).toBe('Kendrick Lamar PRIDE')
+    expect(searchQueryFromUrl('https://www.youtube.com/watch?v=abc')).toBeNull()
+    expect(searchQueryFromUrl('not a url')).toBeNull()
+  })
+
+  it('a single download never takes more than one item (a list read anyway cannot run on)', () => {
+    const single = buildDownloadArgs({ url: 'https://example.com/v', output: '/tmp/x', kind: 'audio' })
+    expect(single[single.indexOf('-I') + 1]).toBe('1')
+    const list = buildDownloadArgs({ url: 'https://example.com/p', output: '/tmp/x', kind: 'audio', playlist: true })
+    expect(list).not.toContain('-I')
+  })
+
+  it('lists each result with the URL to use next', () => {
+    const text = describeSearch('pride', {
+      entries: [{ id: 'abc', title: 'PRIDE.', channel: 'Kendrick Lamar', duration: 275, url: 'https://www.youtube.com/watch?v=abc' }],
+    })
+    expect(text).toContain('1. PRIDE. — Kendrick Lamar (4:35) — https://www.youtube.com/watch?v=abc')
+    expect(describeSearch('nada', { entries: [] })).toMatch(/No results/)
   })
 })

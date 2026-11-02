@@ -13,12 +13,14 @@ import { addVideoToGallery } from '../video/video-gallery'
 import { transcribeAudioPcm } from '../voice'
 import { decodeAudioFile } from '../voice/decode'
 import { describeBinary, installYtdlp, requireYtdlp, resolveYtdlp, ytdlpVersion } from '../ytdlp/binary'
-import { bytesText, describeInfo, durationText, parseInfo } from '../ytdlp/info'
+import { bytesText, describeInfo, describeSearch, durationText, parseInfo } from '../ytdlp/info'
 import {
   buildDownloadArgs,
   infoArgs,
   nameTemplate,
   runYtdlp,
+  searchArgs,
+  searchQueryFromUrl,
   subtitleArgs,
   ytdlpError,
   type AudioFormat,
@@ -57,6 +59,8 @@ const SUB_EXT = new Set(['json3', 'vtt', 'srt', 'srv'])
 const COOKIE_BROWSERS = ['chrome', 'safari', 'firefox', 'edge', 'brave', 'chromium', 'opera', 'vivaldi'] as const
 /** Text longer than this does not enter the context whole (the file/document has everything). */
 const MAX_TRANSCRIPT_CHARS = 40_000
+/** Reading a page (or a search) never takes this long — past it, yt-dlp is stuck. */
+const INFO_TIMEOUT_MS = 90_000
 /** Leftovers from interrupted runs disappear after this. */
 const STALE_TMP_MS = 24 * 60 * 60 * 1000
 
@@ -74,6 +78,15 @@ function downloadsDir(sessionId: string): string {
 }
 
 function assertLink(url: string): void {
+  const search = searchQueryFromUrl(url)
+  if (search !== null) {
+    throw new Error(
+      `that is a search results page, not a video — call ytdlp_info with search: "${search || 'the words'}" to list the results, then use the URL of the one you pick.`,
+    )
+  }
+  if (/^\s*\w*search\d*:/i.test(url)) {
+    throw new Error('search prefixes do not go in url — call ytdlp_info with search: "<words>" to find the video, then use its URL.')
+  }
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -311,7 +324,7 @@ export function createYtdlpTools(
       'Downloading may violate a site\'s terms or copyright; it is the user\'s call and their responsibility. ' +
       'For what is SAID in the media, call ytdlp_transcript instead of downloading the video first.',
     inputSchema: z.object({
-      url: z.string().min(1).describe('The page URL of the video, the audio or the playlist.'),
+      url: z.string().min(1).describe('The page URL of the video, the audio or the playlist (not a search page — find it with ytdlp_info search first).'),
       kind: z.enum(['video', 'audio']).optional().describe('"video" (default) or "audio" (extracts the audio track).'),
       quality: z
         .enum(['best', '2160', '1440', '1080', '720', '480', '360'])
@@ -466,10 +479,12 @@ export function createYtdlpTools(
     ytdlp_info: tool({
       description:
         'Reads a page WITHOUT downloading anything: title, uploader, duration, available resolutions, whether h264 exists, subtitle languages (manual and auto-generated), chapters, live status and, for a playlist, its entries. ' +
+        'With search instead of url it searches YouTube and lists the top results with their URLs — use it whenever you do not have the link (a song, a talk, "the official video of X"), then pass the chosen URL to ytdlp_download or ytdlp_transcript. Never invent or guess a video URL. ' +
         'Call it first when you need to choose a quality, decide whether the transcription can come from subtitles, or confirm the link is the video the user meant. ' +
         'It never downloads media, so it is cheap — but do not call it when the user already said exactly what they want and the choice is obvious.',
       inputSchema: z.object({
-        url: z.string().min(1).describe('The page URL.'),
+        url: z.string().optional().describe('The page URL. Omit it when using search.'),
+        search: z.string().optional().describe('Words to search on YouTube (e.g. "Kendrick Lamar PRIDE official audio"). Lists results with URLs; use instead of url.'),
         playlist: z.boolean().optional().describe('Read the link as a playlist: list its first 50 entries instead of the single video.'),
         cookiesFromBrowser: z
           .enum(COOKIE_BROWSERS)
@@ -477,9 +492,17 @@ export function createYtdlpTools(
           .describe('Read cookies from this browser — for private, age-restricted or subscriber-only pages.'),
       }),
       execute: async (input, { abortSignal }) => {
+        const query = input.search?.trim() || (input.url ? searchQueryFromUrl(input.url) : null)
+        if (query) {
+          const res = await runYtdlp(searchArgs(query), { signal: abortSignal, timeoutMs: INFO_TIMEOUT_MS })
+          if (res.code !== 0) throw new Error(ytdlpError(res))
+          return describeSearch(query, parseInfo(res.stdout))
+        }
+        if (!input.url?.trim()) throw new Error('pass url (a page link) or search (words to look up on YouTube).')
         assertLink(input.url)
         const res = await runYtdlp(infoArgs({ url: input.url, playlist: input.playlist, cookiesFromBrowser: input.cookiesFromBrowser as CookieBrowser | undefined }), {
           signal: abortSignal,
+          timeoutMs: INFO_TIMEOUT_MS,
         })
         if (res.code !== 0) throw new Error(ytdlpError(res))
         const text = describeInfo(parseInfo(res.stdout), { maxEntries: input.playlist ? 50 : 25 })
@@ -544,7 +567,7 @@ export function createYtdlpTools(
         try {
           const infoRes = await runYtdlp(
             infoArgs({ url: input.url, cookiesFromBrowser: input.cookiesFromBrowser as CookieBrowser | undefined }),
-            { signal: abortSignal },
+            { signal: abortSignal, timeoutMs: INFO_TIMEOUT_MS },
           )
           if (infoRes.code !== 0) throw new Error(ytdlpError(infoRes))
           updated = refreshNote(infoRes)

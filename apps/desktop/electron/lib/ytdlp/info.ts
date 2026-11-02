@@ -32,6 +32,7 @@ export interface YtdlpEntry {
   webpage_url?: string
   url?: string
   uploader?: string
+  channel?: string
   _type?: string
   entries?: YtdlpEntry[]
 }
@@ -191,5 +192,22 @@ export function describeInfo(info: YtdlpInfo, opts: { maxEntries?: number } = {}
   if (description) lines.push(`Description: ${description.slice(0, 400)}${description.length > 400 ? '…' : ''}`)
   if (info.webpage_url) lines.push(`URL: ${info.webpage_url}`)
 
+  return lines.join('\n')
+}
+
+/** Search results: one line per hit, with the link the next call must use. */
+export function describeSearch(query: string, info: YtdlpInfo): string {
+  const entries = (info.entries ?? []).filter((entry) => entry.webpage_url || entry.url || entry.id)
+  if (!entries.length) return `No results for "${query}". Try other words (artist + title, without extra terms).`
+  const lines = [`Search results for "${query}" (${entries.length}):`]
+  for (const [i, entry] of entries.entries()) {
+    const url = entry.webpage_url ?? entry.url ?? `https://www.youtube.com/watch?v=${entry.id}`
+    const author = entry.uploader ?? entry.channel
+    const by = author ? ` — ${author}` : ''
+    lines.push(`${i + 1}. ${entry.title ?? '(untitled)'}${by} (${durationText(entry.duration)}) — ${url}`)
+  }
+  lines.push(
+    'Pick the result that matches what the user asked for (official upload, right duration) and pass its URL to ytdlp_download / ytdlp_transcript. Say which one you picked.',
+  )
   return lines.join('\n')
 }
