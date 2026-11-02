@@ -13,7 +13,7 @@ vi.mock('electron', async () => {
   }
 })
 
-const { MAX_FRAME_TIMES, frameLabel, framesFromTimes, renderFrameSheet, sheetCell, sheetColumns, sheetFileName, sheetLayout } =
+const { MAX_FRAME_TIMES, describeFrameContent, frameLabel, framesFromTimes, renderFrameSheet, sheetCell, sheetColumns, sheetFileName, sheetLayout } =
   await import('./motion-frame')
 
 /** A fake "frame": any PNG works, the sheet only draws. */
@@ -186,5 +186,38 @@ describe('sheet assembly (canvas, no Electron)', () => {
 
   it('with no frame at all, it is an error (never an empty sheet)', async () => {
     await expect(renderFrameSheet({ title: 'title', fps: 30, shots: [] })).rejects.toThrow(/no frames/)
+  })
+})
+
+describe('describeFrameContent', () => {
+  const size = { width: 1080, height: 1920 }
+
+  it('says plainly when a frame has no visible text, and how many blocks are hidden', () => {
+    const line = describeFrameContent('0.50s · f15', { texts: [], hiddenTexts: 40, media: 1 }, size)
+    expect(line).toBe('0.50s · f15: NO visible text — 1 image/video/canvas/svg visible; 40 text block(s) on the page are invisible here.')
+  })
+
+  it('words animated one by one read as one line', () => {
+    const word = (text: string, x: number, width: number) => ({ text, x, y: 918, width, height: 62, opacity: 1 })
+    const line = describeFrameContent('1.00s · f30', { texts: [word('gonna', 363, 139), word("Love's", 219, 143), word('get', 502, 73)], hiddenTexts: 0, media: 0 }, size)
+    expect(line).toContain('"Love\'s gonna get" (middle-center, 356x62px)')
+  })
+
+  it('lists each text with its zone, size, faintness and framing', () => {
+    const line = describeFrameContent(
+      '2.00s · f60',
+      {
+        texts: [
+          { text: 'PRIDE.', x: 340, y: 100, width: 400, height: 120, opacity: 1 },
+          { text: 'Love\'s gonna get you', x: 900, y: 1500, width: 400, height: 60, opacity: 0.4 },
+        ],
+        hiddenTexts: 0,
+        media: 0,
+      },
+      size,
+    )
+    expect(line).toContain('"PRIDE." (top-center, 400x120px)')
+    expect(line).toContain('(bottom-right, 400x60px, opacity 0.4, partly off-frame)')
+    expect(line).toContain('no image/video/canvas/svg visible')
   })
 })

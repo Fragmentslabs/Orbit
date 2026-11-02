@@ -1,3 +1,4 @@
+import { MOTION_AUDIO_LOADER_SCRIPT, MOTION_HELPERS_SCRIPT } from './motion-helpers'
 import { MOTION_TIMING_SCRIPT } from './motion-timing'
 import { MOTION_TRANSITIONS_SCRIPT } from './motion-transitions'
 import { hasOwnImportMap, motionImportMapTag } from './motion-three'
@@ -101,6 +102,7 @@ export const MOTION_RUNTIME = `(() => {
 ${MOTION_TRANSITIONS_SCRIPT}
   // The time of media (video and GIF) as a function of the piece instant (motion-timing.ts).
 ${MOTION_TIMING_SCRIPT}
+${MOTION_HELPERS_SCRIPT}
   const transitions = []       // what the composition registered (lint and report)
   // The animations the runtime created (the transitions ones). document.getAnimations()
   // only returns the RELEVANT ones: an animation that ended, without a fill keeping it in effect,
@@ -199,6 +201,7 @@ ${MOTION_TIMING_SCRIPT}
   function continueRender(handle) {
     if (openHandles.delete(handle) && openHandles.size === 0) flushWaiters()
   }
+${MOTION_AUDIO_LOADER_SCRIPT}
   function waitForHandles() {
     if (openHandles.size === 0) return Promise.resolve()
     return new Promise(function (resolve, reject) {
@@ -562,6 +565,12 @@ ${MOTION_TIMING_SCRIPT}
     api.delayRender = delayRender
     api.continueRender = continueRender
     api.transition = addTransition
+    // Remotion-style primitives (motion-helpers.ts): pure functions of the frame.
+    api.interpolate = orbitInterpolate
+    api.spring = function (o) { return orbitSpring(Object.assign({ fps: resolved.fps }, o)) }
+    api.Easing = orbitEasing
+    api.sequence = orbitSequence
+    api.audio = audioApi
     Object.defineProperty(api, 'transitions', {
       configurable: true,
       enumerable: true,

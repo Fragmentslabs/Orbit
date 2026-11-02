@@ -204,7 +204,18 @@ describe('audio', () => {
   const ruleList = (p: MotionAudioPlan, seconds = 10) => lintMotionAudio(p, seconds).map((f) => f.rule)
 
   it('a healthy track has nothing to say', () => {
-    expect(ruleList(plan([track(), track({ name: 'cama', duck: true, start: 1, fadeOut: 2 })]))).toEqual([])
+    expect(ruleList(plan([track(), track({ name: 'cama', file: '/x/b.wav', duck: true, start: 1, fadeOut: 2 })]))).toEqual([])
+  })
+
+  it('a gain between 0 and 1 reads as linear but is dB — it plays at full volume', () => {
+    const [finding] = lintMotionAudio(plan([track({ gainDb: 0.15 })]), 10)
+    expect(finding).toMatchObject({ rule: 'audio-gain-linear', severity: 'warning' })
+    expect(finding.hint).toMatch(/"volume": 0.15/)
+  })
+
+  it('the same file entering twice without offset restarts from 0:00', () => {
+    expect(ruleList(plan([track({ end: 4 }), track({ start: 4 })]))).toContain('audio-restarts')
+    expect(ruleList(plan([track({ end: 4 }), track({ start: 4, offset: 4 })]))).not.toContain('audio-restarts')
   })
 
   it('a track that enters after the end is never heard (error)', () => {

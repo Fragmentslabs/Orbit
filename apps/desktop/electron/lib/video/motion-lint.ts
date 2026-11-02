@@ -477,6 +477,14 @@ export function lintMotionAudio(plan: MotionAudioPlan, durationSeconds: number):
         hint: 'shorten the fades — as written the track never reaches full level',
       })
     }
+    if (track.gainDb > 0 && track.gainDb <= 1) {
+      out.push({
+        rule: 'audio-gain-linear',
+        severity: 'warning',
+        message: `${label} has "gain": ${track.gainDb} — gain is in dB, so this plays at FULL volume (slightly boosted), not at ${Math.round(track.gainDb * 100)}%`,
+        hint: `for a quiet bed use "volume": ${track.gainDb} (linear) or "gain": -18 (dB)`,
+      })
+    }
     if (track.gainDb > 6 && master?.limit === undefined) {
       out.push({
         rule: 'audio-hot',
@@ -496,6 +504,20 @@ export function lintMotionAudio(plan: MotionAudioPlan, durationSeconds: number):
         break
       }
     }
+  }
+  // The same file entering again without an offset starts over from 0:00 every time —
+  // a song cut into scenes that keeps replaying its intro.
+  const restarts = new Map<string, number>()
+  for (const track of tracks) if (!track.offset && !track.loop) restarts.set(track.file, (restarts.get(track.file) ?? 0) + 1)
+  for (const [file, count] of restarts) {
+    if (count < 2) continue
+    const name = tracks.find((t) => t.file === file)?.name ?? file
+    out.push({
+      rule: 'audio-restarts',
+      severity: 'warning',
+      message: `audio "${name}" enters ${count} times without "offset" — each entry plays the file again from 0:00`,
+      hint: 'use ONE track for a continuous song (change its level with "automation" or "duck"), or give each entry the "offset" of the file second it should start from',
+    })
   }
   const beds = tracks.filter((t) => t.duck)
   if (beds.length > 0 && beds.length === tracks.length) {

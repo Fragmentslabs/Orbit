@@ -77,7 +77,14 @@ interface ManifestTrack {
   name?: string
   start?: number
   end?: number
+  /** Second OF THE FILE where the sound begins (play the chorus without its intro). */
+  offset?: number
+  /** Repeats the file until `end` (or the end of the piece). */
+  loop?: boolean
+  /** Level in dB. */
   gain?: number
+  /** Linear level (1 = as it is, 0.2 = quiet bed) — the alternative to `gain`. */
+  volume?: number
   fadeIn?: number
   fadeOut?: number
   /** `true`, or `{ threshold, ratio, attack, release }` to customize. */
@@ -169,13 +176,30 @@ async function one(
     // made a mistake, and the most useful thing is to play the whole file from `start`
     // rather than make the track vanish without saying anything.
     ...(isAfter(spec.end, start) ? { end: spec.end as number } : {}),
-    gainDb: number(spec.gain, 0),
+    gainDb: gainOf(spec, where),
     fadeIn: Math.max(0, seconds(spec.fadeIn, 0)),
     fadeOut: Math.max(0, seconds(spec.fadeOut, 0)),
     duck: duck.duck,
     ...(duck.settings ? { duckSettings: duck.settings } : {}),
     fx: parseTrackFx(spec as Record<string, unknown>, where),
+    ...(seconds(spec.offset, 0) > 0 ? { offset: seconds(spec.offset, 0) } : {}),
+    ...(spec.loop === true ? { loop: true } : {}),
   }
+}
+
+/**
+ * The level in dB, from `gain` (dB) or `volume` (linear). Both at once is a
+ * contradiction the author has to resolve — guessing which one they meant is how
+ * a bed ended up at full volume under a narration.
+ */
+function gainOf(spec: Omit<ManifestTrack, 'file'>, where: string): number {
+  const hasVolume = typeof spec.volume === 'number' && Number.isFinite(spec.volume)
+  if (hasVolume && typeof spec.gain === 'number') throw new Error(`${where}: use "gain" (dB) or "volume" (linear), not both`)
+  if (!hasVolume) return number(spec.gain, 0)
+  const volume = spec.volume as number
+  if (volume < 0) throw new Error(`${where}: "volume" is linear (0 = silent, 1 = as it is) and cannot be negative`)
+  // Silence is a level too: -120 dB is below anything audible, and it keeps the math finite.
+  return volume === 0 ? -120 : Math.round(20 * Math.log10(volume) * 100) / 100
 }
 
 /**

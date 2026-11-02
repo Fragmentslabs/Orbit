@@ -7,7 +7,7 @@ import { openMotionAndReport } from '../video/motion-open'
 import { getMotion, motionIdFor, registerMotion } from '../video/motion-store'
 import { pieceFileName, recordMotionFile } from '../video/motion-files'
 import { planPieceFiles, resolveEditFile, truncationReason } from '../video/motion-source'
-import { MAX_FRAME_TIMES, captureMotionFrames, frameLabel, sheetFileName } from '../video/motion-frame'
+import { MAX_FRAME_TIMES, captureMotionFrames, describeFrameContent, frameLabel, sheetFileName } from '../video/motion-frame'
 import { renderMotion } from '../video/motion'
 import { addVideoToGallery } from '../video/video-gallery'
 import { VIDEO_GUIDES } from '../video/guide'
@@ -359,8 +359,9 @@ export function createMotionTools(
 
     tools.motion_frame = tool({
       description:
-        'Captures ONLY the instants you ask for in a composition as a contact sheet (time and frame number in each cell) — milliseconds, no video, no ffmpeg — and reports what loaded (fonts that failed, frame timing). times in SECONDS from the start, 1–8 instants inside the declared duration. ' +
-        'The sheet is saved for the user; it enters YOUR context only with see: true. Load it only for a doubt that is genuinely visual (an overlap, a centring, an element that may be off-frame) — once, not after every edit, and never to show yourself that you are done. Use it BEFORE any render: the final render only runs once the user approved the composition.',
+        'Captures ONLY the instants you ask for in a composition as a contact sheet (time and frame number in each cell) — milliseconds, no video, no ffmpeg — and reports what loaded (fonts that failed, frame timing) and, per instant, WHAT IS ON SCREEN read from the page: each visible text with its position, size and opacity, how many text blocks are invisible there, and visible images/media. times in SECONDS from the start, 1–8 instants inside the declared duration. ' +
+          'Call it after writing a piece, on the key moments (each scene\'s entrance, a caption, the payoff): "NO visible text" where words should be is a bug to fix before showing the user. ' +
+        'The image is saved for the user; it enters YOUR context only with see: true. Load it only for a doubt that is genuinely visual (an overlap, a centring, an element that may be off-frame) — once, not after every edit, and never to show yourself that you are done. Use it BEFORE any render: the final render only runs once the user approved the composition.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
@@ -382,10 +383,17 @@ export function createMotionTools(
         const sheetFile = path.join(root, '.frames', sheetFileName(result.name))
         await fsp.mkdir(path.dirname(sheetFile), { recursive: true })
         await fsp.writeFile(sheetFile, result.image)
+        // What each frame shows, as text: the check a model without vision can make
+        // (and the cheap one for those with it) — "no visible text" at the moment the
+        // lyrics should be up is a bug found without looking at an image.
+        const content = result.cells
+          .filter((c) => c.content)
+          .map((c) => describeFrameContent(frameLabel(c.timeMs, c.frame), c.content!, { width: result.width, height: result.height }))
         const text = [
           `Frames of ${result.name} (${result.width}x${result.height} · ${result.fps} fps · ${result.durationInFrames} frames): ${result.cells
             .map((c) => frameLabel(c.timeMs, c.frame))
             .join(' · ')}.`,
+          content.length ? `On screen (read from the page):\n${content.join('\n')}` : '',
           result.failedFonts.length
             ? `Fonts failed to load (the text fell back to another font): ${[...new Set(result.failedFonts)].join(', ')}.`
             : '',
@@ -394,7 +402,7 @@ export function createMotionTools(
             : '',
           see
             ? 'Check the moments you will be judged on (entrance, payoff, hold) — motion_render only after the user approves.'
-            : `Contact sheet saved for the user: ${sheetFile}. It was NOT loaded into your context — pass see: true only if a doubt is visual. Ask the user to look at the Motion tab — motion_render only after they approve.`,
+            : `Contact sheet saved for the user: ${sheetFile}. It was NOT loaded into your context — the "On screen" lines above are your check (text, position, opacity); pass see: true only if a doubt is purely visual. Ask the user to look at the Motion tab — motion_render only after they approve.`,
         ]
           .filter(Boolean)
           .join('\n')

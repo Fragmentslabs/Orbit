@@ -39,6 +39,24 @@ beforeEach(async () => {
 })
 
 describe('motionAudioTracks', () => {
+  it('offset starts the file midway, loop repeats it, volume is linear', async () => {
+    await touch(path.join(composition, 'song.mp3'))
+    await writeManifest([
+      { file: 'song.mp3', start: 2, offset: 63.5, volume: 0.1, loop: true },
+      { file: 'song.mp3', start: 0, end: 2, volume: 0 },
+    ])
+    const [chorus, silent] = await motionAudioTracks(composition)
+    expect(chorus).toMatchObject({ start: 2, offset: 63.5, loop: true, gainDb: -20 })
+    expect(silent.gainDb).toBe(-120)
+    expect(silent).not.toHaveProperty('offset')
+  })
+
+  it('gain and volume together is a contradiction, not a guess', async () => {
+    await touch(path.join(composition, 'song.mp3'))
+    await writeManifest([{ file: 'song.mp3', gain: -6, volume: 0.5 }])
+    await expect(motionAudioTracks(composition)).rejects.toThrow(/not both/)
+  })
+
   it('a piece with no audio at all is silent', async () => {
     expect(await motionAudioTracks(composition)).toEqual([])
   })

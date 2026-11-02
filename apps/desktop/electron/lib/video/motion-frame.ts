@@ -202,6 +202,113 @@ export async function renderFrameSheet(sheet: FrameSheet): Promise<Buffer> {
   return canvas.encode('webp', 82)
 }
 
+// ------------------------------------------------------- visible content
+
+/** One block of text the viewer can actually see on a frame. */
+export interface VisibleText {
+  text: string
+  /** Box in composition pixels. */
+  x: number
+  y: number
+  width: number
+  height: number
+  /** Effective opacity (the element's times every ancestor's), 0–1. */
+  opacity: number
+}
+
+/** What a frame shows, read from the DOM — for models that cannot look at the image. */
+export interface FrameContent {
+  texts: VisibleText[]
+  /** Text blocks that exist on the page but are invisible on this frame (opacity 0, hidden, off-frame). */
+  hiddenTexts: number
+  /** Visible images, videos, canvases and SVGs. */
+  media: number
+}
+
+/** Text blocks listed per frame: past this it is a wall, not a check. */
+const MAX_TEXTS_PER_FRAME = 12
+
+/**
+ * Runs in the page after a seek: every element that directly holds text, with
+ * its box and its EFFECTIVE opacity. An element whose own opacity is 1 inside a
+ * parent at 0 is invisible — the classic "the words never appear" bug — so the
+ * opacity is multiplied up the tree.
+ */
+const VISIBLE_CONTENT = `(() => {
+  const W = window.innerWidth, H = window.innerHeight
+  const op = (el) => { let o = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return 0; o *= parseFloat(cs.opacity || '1') } return o }
+  const shown = (el, r) => { const cs = getComputedStyle(el); return cs.visibility !== 'hidden' && r.width > 1 && r.height > 1 && r.right > 0 && r.bottom > 0 && r.left < W && r.top < H }
+  const texts = []; let hidden = 0
+  const seen = new Set()
+  const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const el = node.parentElement
+    if (!el || seen.has(el) || !node.textContent.trim() || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(el.tagName)) continue
+    seen.add(el)
+    const r = el.getBoundingClientRect(); const o = op(el)
+    const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim()
+    if (!text) continue
+    if (o < 0.05 || !shown(el, r)) { hidden++; continue }
+    texts.push({ text: text.slice(0, 80), x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), opacity: Math.round(o * 100) / 100 })
+  }
+  let media = 0
+  for (const el of document.querySelectorAll('img, video, canvas, svg')) {
+    if (el.parentElement && el.parentElement.closest('svg')) continue
+    const r = el.getBoundingClientRect()
+    if (op(el) >= 0.05 && shown(el, r)) media++
+  }
+  // Nested text blocks repeat their children's words: keep the innermost ones.
+  const inner = texts.filter((t) => !texts.some((u) => u !== t && u.text !== t.text && t.text.includes(u.text) && u.x >= t.x && u.y >= t.y && u.x + u.width <= t.x + t.width + 1 && u.y + u.height <= t.y + t.height + 1))
+  return { texts: inner, hiddenTexts: hidden, media }
+})()`
+
+/**
+ * Words animated one by one are separate elements; the agent reads a LINE. Boxes
+ * on the same baseline, same height and same opacity, side by side, become one
+ * entry (in reading order). Pure.
+ */
+export function mergeTextLines(texts: VisibleText[]): VisibleText[] {
+  const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x)
+  const out: VisibleText[] = []
+  for (const t of sorted) {
+    const last = out[out.length - 1]
+    const sameLine =
+      last &&
+      Math.abs(last.y - t.y) <= 3 &&
+      Math.abs(last.height - t.height) <= 3 &&
+      Math.abs(last.opacity - t.opacity) < 0.05 &&
+      t.x >= last.x + last.width - 2 &&
+      t.x - (last.x + last.width) <= t.height
+    if (sameLine) {
+      out[out.length - 1] = { ...last, text: `${last.text} ${t.text}`, width: t.x + t.width - last.x }
+    } else out.push({ ...t })
+  }
+  return out
+}
+
+/** One line per frame for the agent: what is on screen, where, and how faint. Pure. */
+export function describeFrameContent(label: string, content: FrameContent, size: { width: number; height: number }): string {
+  const { hiddenTexts, media } = content
+  const texts = mergeTextLines(content.texts)
+  const hidden = hiddenTexts ? `; ${hiddenTexts} text block(s) on the page are invisible here` : ''
+  const mediaText = media ? `${media} image/video/canvas/svg visible` : 'no image/video/canvas/svg visible'
+  if (!texts.length) return `${label}: NO visible text — ${mediaText}${hidden}.`
+  const zone = (t: VisibleText) => {
+    const cx = (t.x + t.width / 2) / size.width
+    const cy = (t.y + t.height / 2) / size.height
+    const v = cy < 1 / 3 ? 'top' : cy > 2 / 3 ? 'bottom' : 'middle'
+    const h = cx < 1 / 3 ? 'left' : cx > 2 / 3 ? 'right' : 'center'
+    return `${v}-${h}`
+  }
+  const shown = texts.slice(0, MAX_TEXTS_PER_FRAME).map((t) => {
+    const faint = t.opacity < 0.95 ? `, opacity ${t.opacity}` : ''
+    const partial = t.x < 0 || t.y < 0 || t.x + t.width > size.width || t.y + t.height > size.height ? ', partly off-frame' : ''
+    return `"${t.text}" (${zone(t)}, ${t.width}x${t.height}px${faint}${partial})`
+  })
+  const more = texts.length > MAX_TEXTS_PER_FRAME ? ` +${texts.length - MAX_TEXTS_PER_FRAME} more` : ''
+  return `${label}: ${shown.join(' · ')}${more} — ${mediaText}${hidden}.`
+}
+
 // -------------------------------------------------------------- capture
 
 /** Snapshot of the state of the composition published by the runtime (see MOTION_SPEC). */
@@ -246,7 +353,7 @@ export interface MotionFrameResult {
   /** Errors thrown by the composition's scripts. */
   scriptErrors: string[]
   /** One per requested instant, in the SAME order. */
-  cells: { timeMs: number; frame: number }[]
+  cells: { timeMs: number; frame: number; content: FrameContent | null }[]
 }
 
 /**
@@ -304,6 +411,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
     await win.webContents.executeJavaScript(`window.orbitMotion.fps = ${fps}`, true)
 
     const shots: FrameShot[] = []
+    const contents: (FrameContent | null)[] = []
     let width = Math.round(spec.width ?? 1920)
     let height = Math.round(spec.height ?? 1080)
     for (let i = 0; i < frames.length; i++) {
@@ -311,6 +419,8 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       // Whole frame, in the requested order: the runtime converts to seconds in there.
       await win.webContents.executeJavaScript(`window.orbitMotion.seek(${frames[i]})`, true)
       const image = await capturePageReliably(win.webContents)
+      // Read AFTER the capture: the paint has settled, so the DOM says what the image shows.
+      contents.push(((await win.webContents.executeJavaScript(VISIBLE_CONTENT, true).catch(() => null)) as FrameContent | null) ?? null)
       if (i === 0) {
         const size = image.getSize()
         if (size.width > 0 && size.height > 0) {
@@ -334,7 +444,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       height,
       failedFonts: spec.failedFonts ?? [],
       scriptErrors: spec.scriptErrors ?? [],
-      cells: shots.map((shot) => ({ timeMs: shot.timeMs, frame: shot.frame })),
+      cells: shots.map((shot, i) => ({ timeMs: shot.timeMs, frame: shot.frame, content: contents[i] ?? null })),
     }
   } finally {
     req.signal?.removeEventListener('abort', onAbort)

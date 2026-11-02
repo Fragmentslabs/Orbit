@@ -103,10 +103,12 @@ export async function openMotionAndReport(input: {
           .map((track) => {
             const span = track.end === undefined ? `${track.start}s→end` : `${track.start}s→${track.end}s`
             const level = track.gainDb === 0 ? '' : `, ${track.gainDb}dB`
+            const from = track.offset ? `, file from ${track.offset}s` : ''
+            const looped = track.loop ? ', looped' : ''
             const bed = track.duck ? ', ducked under the others' : ''
             const treated = describeTrackFx(track.fx)
             const where = track.path ? '' : ', OUTSIDE the composition folder (the tab cannot play it)'
-            return `"${track.name}" (${span}${level}${bed}${treated ? `, ${treated}` : ''}${where})`
+            return `"${track.name}" (${span}${from}${looped}${level}${bed}${treated ? `, ${treated}` : ''}${where})`
           })
           .join('; ')}.`
         const finish = describeMasterFx(master)
