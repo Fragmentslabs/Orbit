@@ -8,6 +8,7 @@ import { getAppSettings } from '../app-settings'
 import { saveAudio } from '../audio-store'
 import type { TimedWord } from '../video/edl'
 import { transcribeVideo } from '../video/transcript'
+import { describeSpokenDiff, spokenDiff, writeWordsSidecar } from '../video/motion-words'
 import { synthesizeToWav } from '../voice'
 import { resolveWritePath, type ToolContext } from './context'
 
@@ -67,11 +68,13 @@ function secs(ms: number): string {
 /**
  * Times of what was just spoken, measured on the generated audio by the local
  * dictation engine. Runs on a throwaway copy: the transcript cache lands next to the
- * file it reads, and the audio store is not the place for it.
+ * file it reads, and the audio store is not the place for it. `words` is what the engine
+ * heard word by word (the sidecar a composition reads); `message` is what the agent reads.
  */
-async function measureCues(wav: Buffer, lang: string | undefined): Promise<string> {
+async function measureCues(wav: Buffer, lang: string | undefined, written: string): Promise<{ message: string; words: TimedWord[] }> {
+  const none = (message: string) => ({ message, words: [] as TimedWord[] })
   if (!getAppSettings().voice.stt.enabled) {
-    return 'Caption times unavailable: Speech to text is off (Settings → Voice). Do not estimate them — ask the user to enable it, or keep captions to whole scenes.'
+    return none('Caption times unavailable: Speech to text is off (Settings → Voice). Do not estimate them — ask the user to enable it, or keep captions to whole scenes.')
   }
   const dir = path.join(os.tmpdir(), `orbit-tts-cues-${randomBytes(4).toString('hex')}`)
   try {
@@ -80,13 +83,21 @@ async function measureCues(wav: Buffer, lang: string | undefined): Promise<strin
     await fs.writeFile(file, wav)
     const { transcript } = await transcribeVideo(file, { language: lang, force: true })
     const cues = captionCues(transcript.words)
-    if (!cues.length) return 'Caption times unavailable: the engine recognized no words in the generated audio.'
-    return [
-      'Caption lines with their real times in THIS audio (seconds from its start; add the second where the track starts in the piece):',
-      ...cues.map((cue) => `[${secs(cue.startMs)}–${secs(cue.endMs)}] ${cue.text}`),
-    ].join('\n')
+    if (!cues.length) return none('Caption times unavailable: the engine recognized no words in the generated audio.')
+    const diff = describeSpokenDiff(spokenDiff(written, transcript.words))
+    return {
+      words: transcript.words,
+      message: [
+        'Caption lines with their real times in THIS audio (seconds from its start; add the second where the track starts in the piece):',
+        ...cues.map((cue) => `[${secs(cue.startMs)}–${secs(cue.endMs)}] ${cue.text}`),
+        `The time of EVERY word (${transcript.words.length}) is saved with the audio: once it goes into a composition with motion_asset it is read there with orbitMotion.audio.words() / lines() / find() — do not type these times into the HTML or divide a line by the length of its words.`,
+        diff,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    }
   } catch (error) {
-    return `Caption times unavailable: ${(error as Error).message}`
+    return none(`Caption times unavailable: ${(error as Error).message}`)
   } finally {
     await fs.rm(dir, { recursive: true, force: true })
   }
@@ -100,7 +111,7 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
       'The audio appears in your reply as a player and in the chat media; do not repeat the whole text after it, just say what it is. ' +
       'Write the text exactly as it should be SPOKEN: no Markdown, lists or URLs; numbers and symbols the way they are said. ' +
       'The result gives the exact duration — a narration for a video sets the length of its scene, not the other way around. ' +
-      'Pass timings: true when the audio goes into a video or motion piece with captions/subtitles: it returns caption lines with their real start and end in the audio.',
+      'Pass timings: true when the audio goes into a video or motion piece with captions/subtitles: it returns caption lines with their real start and end in the audio, saves the time of every word for the composition, and warns when the voice did not say what you wrote (a name or an ALL-CAPS word read wrongly: write it as it should sound).',
     inputSchema: z.object({
       text: z.string().min(1).describe('What will be spoken, as plain spoken text'),
       title: z.string().optional().describe('Short title for the audio (shown on the player and in the chat media)'),
@@ -138,7 +149,7 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
       // The language is that of the TEXT the agent wrote, not the fixed one from Preferences:
       // asking "generate in English" with the reading in Portuguese has to come out in English.
       const { wav, durationMs } = await synthesizeToWav(text, { voice, speed, lang: lang ?? 'auto' })
-      const { url } = await saveAudio(wav, 'wav', { sessionId, name: title || undefined, source: 'chat' })
+      const { url, path: audioFile } = await saveAudio(wav, 'wav', { sessionId, name: title || undefined, source: 'chat' })
       let savedTo: string | null = null
       if (savePath && ctx) {
         const file = resolveWritePath(ctx, savePath.endsWith('.wav') ? savePath : `${savePath}.wav`)
@@ -146,7 +157,9 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
         await fs.writeFile(file, wav)
         savedTo = file
       }
-      const cues = timings ? await measureCues(wav, lang) : ''
+      const measured = timings ? await measureCues(wav, lang, text) : null
+      if (measured?.words.length) await writeWordsSidecar(audioFile, measured.words).catch(() => {})
+      const cues = measured?.message ?? ''
       return {
         audioUrl: url,
         title: title ?? '',

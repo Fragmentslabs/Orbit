@@ -4,6 +4,7 @@ import path from 'node:path'
 import { resolveAttachmentRef, type AttachmentKind, type ResolvedAttachment } from '../attachment-ref'
 import { describeVideoFacts } from './attachment-note'
 import { probeMedia } from './ffmpeg'
+import { copyWordsSidecar, readWordsSidecar, WORDS_SUFFIX } from './motion-words'
 
 /**
  * Bringing an ATTACHMENT from the chat into a piece: the video the user sent,
@@ -151,6 +152,14 @@ async function importSourceInto(
       facts = 'could not read the file'
     }
   }
+  // A voice generated with timings carries the time of each word: it travels with the audio.
+  let wordsNote = ''
+  if (resolved.kind === 'audio') {
+    const has = (await copyWordsSidecar(resolved.file, target)) || (await readWordsSidecar(target)) !== null
+    wordsNote = has
+      ? `Word times: ${name}${WORDS_SUFFIX} sits next to it — once the track is in audio.json, orbitMotion.audio.words() / lines() / find() give every word on the PIECE clock (see video_guide("motion"), "Text in sync with the voice"). Do not type the times into the HTML.`
+      : `No word times for this audio. Text that follows it (karaoke, lyrics, captions per word) needs them: call motion_asset again with words: true (needs Speech to text on) — do not estimate them.`
+  }
   const isGif = resolved.kind === 'image' && path.extname(name).toLowerCase() === '.gif'
   const label = isGif ? 'GIF' : resolved.kind
   return {
@@ -160,6 +169,7 @@ async function importSourceInto(
     report: [
       `${reuse ? 'Already in the folder' : 'Copied'}: ${label} "${resolved.name}" → ${name}${facts ? ` (${facts})` : ''}.`,
       typeof opts.usageNote === 'function' ? opts.usageNote(resolved.kind, name) : (opts.usageNote ?? usage(resolved.kind, name, isGif, hasSound)),
+      wordsNote,
       // The license usually requires the credit next to the image: it travels with it into the piece.
       resolved.credit
         ? `CREDIT REQUIRED by the license (${resolved.credit.license}) — show it in the piece (a caption, or a credits card at the end): ${resolved.credit.attribution}`
