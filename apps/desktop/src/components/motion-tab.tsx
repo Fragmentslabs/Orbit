@@ -228,12 +228,15 @@ export function MotionTab({
   entry,
   path,
   title,
+  sessionId,
 }: {
   motionId?: string
   entry?: string
   /** Absolute path of the entry — the address the chat note hands to the agent. */
   path?: string
   title: string
+  /** Conversation that owns the tab — the fullscreen dock talks to it (chat or code mode). */
+  sessionId?: string
 }) {
   const { t } = useTranslation()
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -1506,9 +1509,12 @@ export function MotionTab({
       {/* Fullscreen: conversation on the left, agent actions on the right and composer
           below — collapsed at the edge, they open on hover or pinned, the same as the
           browser. */}
-      {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
+      {fullscreen && (
+        <FullscreenChatFeed sessionId={sessionId} pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />
+      )}
       {fullscreen && (
         <ActionsFeed
+          sessionId={sessionId}
           pinned={actionsPinned}
           onTogglePin={() => setActionsPinned((v) => !v)}
           icon={Sparkles}
@@ -1517,6 +1523,7 @@ export function MotionTab({
       )}
       {fullscreen && (
         <FullscreenComposer
+          sessionId={sessionId}
           pinned={composerPinned}
           onTogglePin={() => setComposerPinned((v) => !v)}
           onSent={() => setChatPinned(true)}

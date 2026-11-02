@@ -280,7 +280,13 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
     case "motion":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <MotionTab motionId={tab.motionId} entry={tab.motionEntry} path={tab.motionPath} title={tab.title} />
+          <MotionTab
+            motionId={tab.motionId}
+            entry={tab.motionEntry}
+            path={tab.motionPath}
+            title={tab.title}
+            sessionId={tab.sessionId ?? sessionId}
+          />
         </div>
       )
     case "slides":
@@ -298,6 +304,7 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
             path={tab.designPath}
             playFile={tab.designPlay}
             playFullscreen={tab.designFullscreen}
+            sessionId={tab.sessionId ?? sessionId}
           />
         </div>
       )

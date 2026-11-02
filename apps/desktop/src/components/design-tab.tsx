@@ -168,7 +168,18 @@ const gridStep = (zoom: number) => {
 const pathKey = (file: string, path: ElementPath) => `${file}|${path.join(".")}`
 const encodeFile = (file: string) => file.split("/").map(encodeURIComponent).join("/")
 
-function DesignEditor({ designId, title, path }: { designId?: string; title: string; path?: string }) {
+function DesignEditor({
+  designId,
+  title,
+  path,
+  sessionId,
+}: {
+  designId?: string
+  title: string
+  path?: string
+  /** Conversation that owns the tab — the fullscreen composer talks to it (chat or code mode). */
+  sessionId?: string
+}) {
   const { t } = useTranslation()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -1775,7 +1786,11 @@ function DesignEditor({ designId, title, path }: { designId?: string; title: str
                 {renderInspectorBody(rightTab)}
               </div>
             </FloatingSidebar>
-            <FullscreenComposer pinned={composerPinned} onTogglePin={() => setComposerPinned((v) => !v)} />
+            <FullscreenComposer
+              sessionId={sessionId}
+              pinned={composerPinned}
+              onTogglePin={() => setComposerPinned((v) => !v)}
+            />
           </>
         )}
       </div>
@@ -1795,6 +1810,7 @@ export function DesignTab({
   path,
   playFile,
   playFullscreen,
+  sessionId,
 }: {
   designId?: string
   title: string
@@ -1802,8 +1818,10 @@ export function DesignTab({
   playFile?: string
   /** The presentation was born from the fullscreen editor — the tab already enters like this. */
   playFullscreen?: boolean
+  /** Conversation that owns the tab — the fullscreen composer talks to it (chat or code mode). */
+  sessionId?: string
 }) {
   if (designId && playFile)
     return <DesignPresenter designId={designId} title={title} startFile={playFile} initialFullscreen={playFullscreen} />
-  return <DesignEditor designId={designId} title={title} path={path} />
+  return <DesignEditor designId={designId} title={title} path={path} sessionId={sessionId} />
 }

@@ -330,10 +330,13 @@ export function BrowserTab({
         <AgentIndicator />
         {fullscreen && <ActivityFeed pinned={activityPinned} onTogglePin={() => setActivityPinned((v) => !v)} />}
         <PanelBrowserBody persistKey={persistKey} onUrlChange={onUrlChange} />
-        {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
+        {fullscreen && (
+          <FullscreenChatFeed sessionId={sessionId} pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />
+        )}
         {fullscreen && (
           <FullscreenComposer
             fromBrowser
+            sessionId={sessionId}
             pinned={composerPinned}
             onTogglePin={() => setComposerPinned((v) => !v)}
             onSent={() => setChatPinned(true)}

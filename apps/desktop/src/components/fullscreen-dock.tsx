@@ -11,6 +11,7 @@ import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { UserMessageQuote, UserMessageText } from "@/src/components/messages/shared"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
+import { useWorkspaceMode } from "@/lib/workspace-context"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
@@ -66,6 +67,7 @@ export function FullscreenComposer({
   onTogglePin,
   onSent,
   fromBrowser = false,
+  sessionId: fixedSessionId,
 }: {
   pinned: boolean
   onTogglePin: () => void
@@ -73,12 +75,20 @@ export function FullscreenComposer({
   /** Request made from the browser itself: the agent can use it even with the
    *  browser tools turned off in Preferences. */
   fromBrowser?: boolean
+  /** Conversation this fullscreen belongs to — the chat of the panel it was opened
+   *  from, whatever its mode. Without it, the active chat of the current workspace. */
+  sessionId?: string
 }) {
   const { t } = useTranslation()
+  const mode = useWorkspaceMode()
   const { hovered, handleEnter, handleLeave } = useEdgeHover()
   const expanded = pinned || hovered
-  const activeSession = useActiveSession("code")
-  const sessionId = activeSession?.id
+  const activeSession = useActiveSession(mode)
+  const sessionId = fixedSessionId ?? activeSession?.id
+  // The mode goes with the SESSION, not with the screen: a fullscreen opened over a
+  // chat-mode conversation answers in THAT conversation instead of the code chat.
+  const sessionMode = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId)?.mode : undefined))
+  const sendMode = sessionMode ?? mode
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const status = useSessionStatus(sessionId)
@@ -92,7 +102,7 @@ export function FullscreenComposer({
       extraDirectories: string[],
       files?: FilePart[],
     ) => {
-      void sendMessage("code", text, {
+      void sendMessage(sendMode, text, {
         options: fromBrowser ? { ...options, fromBrowser: true } : options,
         directory,
         extraDirectories,
@@ -101,7 +111,7 @@ export function FullscreenComposer({
       })
       onSent?.()
     },
-    [sendMessage, sessionId, onSent, fromBrowser],
+    [sendMessage, sendMode, sessionId, onSent, fromBrowser],
   )
 
   const handleStop = useCallback(() => {
@@ -257,7 +267,8 @@ const NO_ASKS: PendingAskUI[] = []
 
 /** Live conversation — panel collapsed on the left edge of the fullscreen screens
  *  (browser, Motion) and of the Computer Use panels. It shows the agent's streaming
- *  in real time. Without `sessionId`, it follows the active code session.
+ *  in real time. Without `sessionId`, it follows the active chat of the current
+ *  workspace mode — the one the panel is showing, in any mode.
  *  `onHoverChange` warns when the mouse enters/leaves (the window of the
  *  Computer Use panels only captures clicks over them). */
 export function FullscreenChatFeed({
@@ -277,7 +288,8 @@ export function FullscreenChatFeed({
   footer?: ReactNode
 }) {
   const { t } = useTranslation()
-  const activeSession = useActiveSession("code")
+  const mode = useWorkspaceMode()
+  const activeSession = useActiveSession(mode)
   const sessionId = fixedSessionId ?? activeSession?.id
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const status = useSessionStatus(sessionId)
@@ -555,7 +567,8 @@ export function ActionsFeed({
   limit?: number
 }) {
   const { t } = useTranslation()
-  const activeSession = useActiveSession("code")
+  const mode = useWorkspaceMode()
+  const activeSession = useActiveSession(mode)
   const sessionId = fixedSessionId ?? activeSession?.id
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const status = useSessionStatus(sessionId)

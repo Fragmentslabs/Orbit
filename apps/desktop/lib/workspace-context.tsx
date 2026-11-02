@@ -74,3 +74,12 @@ export function useWorkspace() {
   if (!ctx) throw new Error("useWorkspace must be used within WorkspaceProvider")
   return ctx
 }
+
+/**
+ * The current workspace mode, read also OUTSIDE the provider — the Computer Use panels
+ * window has no workspace, and there the caller always brings the fixed session, so the
+ * fallback never decides which chat answers.
+ */
+export function useWorkspaceMode(): WorkspaceMode {
+  return useContext(WorkspaceContext)?.mode ?? loadDefaultMode()
+}
