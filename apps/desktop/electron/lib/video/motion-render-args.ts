@@ -484,7 +484,15 @@ export function audioExtractFfmpegArgs(spec: { video: string; output: string }):
   return ['-v', 'error', '-i', spec.video, '-vn', '-c:a', 'pcm_s16le', '-ar', '48000', spec.output]
 }
 
-export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
+/**
+ * The filter graph of the mix and the label of its output. `firstInput` is the ffmpeg input index of
+ * the first track: 1 when the video is input 0 (the render), 0 when only the tracks are inputs
+ * (measuring the mix without a video).
+ */
+export function motionAudioGraph(
+  spec: Pick<MotionAudioMixSpec, 'duration' | 'events' | 'master'>,
+  firstInput = 1,
+): { graph: string[]; output: string } {
   const graph: string[] = []
   const labels = spec.events.map((event, index) => {
     const out = `t${index}`
@@ -527,7 +535,7 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     // needs a filter anyway — `[1:a][t0]` without a filter between the labels is
     // an invalid graph, and ffmpeg answers "No such filter: ''". `anull` is the
     // pass-through.
-    graph.push(`[${index + 1}:a]${(chain.length ? chain : ['anull']).join(',')}[${out}]`)
+    graph.push(`[${index + firstInput}:a]${(chain.length ? chain : ['anull']).join(',')}[${out}]`)
     return out
   })
 
@@ -563,7 +571,11 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     graph.push(`[${output}]${finish.join(',')}[master]`)
     output = 'master'
   }
+  return { graph, output }
+}
 
+export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
+  const { graph, output } = motionAudioGraph(spec)
   return [
     '-v', 'error',
     '-i', spec.video,

@@ -309,6 +309,92 @@ export function describeFrameContent(label: string, content: FrameContent, size:
   return `${label}: ${shown.join(' · ')}${more} — ${mediaText}${hidden}.`
 }
 
+// ------------------------------------------------------------------ probe
+
+/** The numbers of ONE element at one instant: what the agent used to guess from a contact sheet. */
+export interface ProbeMatch {
+  /** data-layer, else #id, else the selector with its index. */
+  label: string
+  /** Effective opacity (the element's times every ancestor's), 0–1. */
+  opacity: number
+  /** The element's OWN transform, decomposed. */
+  scale: number
+  rotate: number
+  x: number
+  y: number
+  z: number
+  /** Box on the stage, composition pixels. */
+  box: { x: number; y: number; width: number; height: number }
+  /** Where the box is relative to the frame. */
+  frame: 'in' | 'partly' | 'out' | 'hidden'
+  filter?: string
+}
+
+export interface ProbeReading {
+  selector: string
+  /** How many elements match (only the first few are listed). */
+  count: number
+  matches: ProbeMatch[]
+  /** The selector is not valid CSS. */
+  error?: string
+}
+
+export const MAX_PROBE_SELECTORS = 8
+const MAX_PROBE_MATCHES = 4
+
+/**
+ * Runs in the page after a seek: for each selector, the first matches with their effective
+ * opacity, own transform, box and whether they are inside the frame. Numbers, not pixels: "is
+ * the previous word still at 18% at 1:17.25?" is a read, not a contact sheet.
+ */
+export const probeScript = (selectors: string[]): string => `((selectors) => {
+  const W = window.innerWidth, H = window.innerHeight
+  const op = (el) => { let o = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return 0; o *= parseFloat(cs.opacity || '1') } return o }
+  const r2 = (x) => Math.round(x * 100) / 100
+  return selectors.map((selector) => {
+    let list
+    try { list = Array.from(document.querySelectorAll(selector)) } catch (err) { return { selector, count: 0, matches: [], error: String(err && err.message ? err.message : err) } }
+    const matches = list.slice(0, ${MAX_PROBE_MATCHES}).map((el, i) => {
+      const cs = getComputedStyle(el)
+      const r = el.getBoundingClientRect()
+      let m
+      try { m = new DOMMatrixReadOnly(cs.transform === 'none' ? undefined : cs.transform) } catch (err) { m = new DOMMatrixReadOnly() }
+      const o = op(el)
+      const hidden = o < 0.01 || cs.visibility === 'hidden' || r.width < 1 || r.height < 1
+      const fully = r.left >= 0 && r.top >= 0 && r.right <= W && r.bottom <= H
+      const outside = r.right <= 0 || r.bottom <= 0 || r.left >= W || r.top >= H
+      return {
+        label: el.getAttribute('data-layer') || (el.id ? '#' + el.id : selector + (list.length > 1 ? '[' + i + ']' : '')),
+        opacity: r2(o), scale: r2(Math.hypot(m.a, m.b)), rotate: r2(Math.atan2(m.b, m.a) * 180 / Math.PI),
+        x: r2(m.e), y: r2(m.f), z: r2(m.m43),
+        box: { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) },
+        frame: hidden ? 'hidden' : outside ? 'out' : fully ? 'in' : 'partly',
+        filter: cs.filter && cs.filter !== 'none' ? cs.filter.slice(0, 60) : undefined,
+      }
+    })
+    return { selector, count: list.length, matches }
+  })
+})(${JSON.stringify(selectors)})`
+
+/** One line per selector for the agent, at one instant. Pure. */
+export function describeProbe(label: string, readings: ProbeReading[]): string {
+  const lines = readings.map((reading) => {
+    if (reading.error) return `  ${reading.selector}: invalid selector (${reading.error})`
+    if (reading.count === 0) return `  ${reading.selector}: no element matches`
+    const rows = reading.matches.map((m) => {
+      if (m.frame === 'hidden') return `${m.label}: not visible (opacity ${m.opacity})`
+      const moved = m.x || m.y || m.z ? ` · move ${m.x}, ${m.y}${m.z ? `, z ${m.z}` : ''}` : ''
+      const turned = m.rotate ? ` · rotate ${m.rotate}°` : ''
+      const filter = m.filter ? ` · ${m.filter}` : ''
+      const where = m.frame === 'in' ? 'inside the frame' : m.frame === 'partly' ? 'PARTLY off-frame' : 'OUTSIDE the frame'
+      return `${m.label}: opacity ${m.opacity} · scale ${m.scale}${moved}${turned}${filter} · box ${m.box.x},${m.box.y} ${m.box.width}x${m.box.height} · ${where}`
+    })
+    const more = reading.count > reading.matches.length ? ` (+${reading.count - reading.matches.length} more)` : ''
+    return `  ${reading.selector} ×${reading.count}${more}: ${rows.join(' | ')}`
+  })
+  return `${label} probe:\n${lines.join('\n')}`
+}
+
 // -------------------------------------------------------------- capture
 
 /** Snapshot of the state of the composition published by the runtime (see MOTION_SPEC). */
@@ -329,6 +415,8 @@ export interface MotionFrameRequest {
   target: string
   /** Instants in SECONDS, in the order they must be captured. */
   times: number[]
+  /** CSS selectors to read as numbers at each instant (opacity, transform, box, inside the frame). */
+  probe?: string[]
   /** Working folder that registers the composition and the session. */
   root?: string
   sessionId?: string
@@ -353,7 +441,7 @@ export interface MotionFrameResult {
   /** Errors thrown by the composition's scripts. */
   scriptErrors: string[]
   /** One per requested instant, in the SAME order. */
-  cells: { timeMs: number; frame: number; content: FrameContent | null }[]
+  cells: { timeMs: number; frame: number; content: FrameContent | null; probe: ProbeReading[] | null }[]
 }
 
 /**
@@ -412,6 +500,8 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
 
     const shots: FrameShot[] = []
     const contents: (FrameContent | null)[] = []
+    const probes: (ProbeReading[] | null)[] = []
+    const probeSelectors = (req.probe ?? []).slice(0, MAX_PROBE_SELECTORS)
     let width = Math.round(spec.width ?? 1920)
     let height = Math.round(spec.height ?? 1080)
     for (let i = 0; i < frames.length; i++) {
@@ -421,6 +511,11 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       const image = await capturePageReliably(win.webContents)
       // Read AFTER the capture: the paint has settled, so the DOM says what the image shows.
       contents.push(((await win.webContents.executeJavaScript(VISIBLE_CONTENT, true).catch(() => null)) as FrameContent | null) ?? null)
+      probes.push(
+        probeSelectors.length
+          ? (((await win.webContents.executeJavaScript(probeScript(probeSelectors), true).catch(() => null)) as ProbeReading[] | null) ?? null)
+          : null,
+      )
       if (i === 0) {
         const size = image.getSize()
         if (size.width > 0 && size.height > 0) {
@@ -444,7 +539,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       height,
       failedFonts: spec.failedFonts ?? [],
       scriptErrors: spec.scriptErrors ?? [],
-      cells: shots.map((shot, i) => ({ timeMs: shot.timeMs, frame: shot.frame, content: contents[i] ?? null })),
+      cells: shots.map((shot, i) => ({ timeMs: shot.timeMs, frame: shot.frame, content: contents[i] ?? null, probe: probes[i] ?? null })),
     }
   } finally {
     req.signal?.removeEventListener('abort', onAbort)

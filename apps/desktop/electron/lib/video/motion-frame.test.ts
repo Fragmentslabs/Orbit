@@ -13,7 +13,7 @@ vi.mock('electron', async () => {
   }
 })
 
-const { MAX_FRAME_TIMES, describeFrameContent, frameLabel, framesFromTimes, renderFrameSheet, sheetCell, sheetColumns, sheetFileName, sheetLayout } =
+const { MAX_FRAME_TIMES, describeProbe, probeScript, describeFrameContent, frameLabel, framesFromTimes, renderFrameSheet, sheetCell, sheetColumns, sheetFileName, sheetLayout } =
   await import('./motion-frame')
 
 /** A fake "frame": any PNG works, the sheet only draws. */
@@ -219,5 +219,43 @@ describe('describeFrameContent', () => {
     expect(line).toContain('"PRIDE." (top-center, 400x120px)')
     expect(line).toContain('(bottom-right, 400x60px, opacity 0.4, partly off-frame)')
     expect(line).toContain('no image/video/canvas/svg visible')
+  })
+})
+
+describe('probe', () => {
+  it('builds a script that is valid JavaScript and carries the selectors as data', () => {
+    const code = probeScript(['.w3', '[data-layer="title"]', 'a"b'])
+    expect(() => new Function(code)).not.toThrow()
+    expect(code).toContain('".w3"')
+    expect(code).toContain('[data-layer=\\"title\\"]')
+  })
+
+  it('says opacity, scale, move and where the box is, per selector', () => {
+    const text = describeProbe('1:17.25 (f2317)', [
+      {
+        selector: '.w3',
+        count: 1,
+        matches: [{ label: 'w3', opacity: 0.18, scale: 0.96, rotate: 0, x: 0, y: 24, z: 0, box: { x: 120, y: 640, width: 540, height: 96 }, frame: 'in' }],
+      },
+      { selector: '.gone', count: 0, matches: [] },
+      { selector: '.bad[', count: 0, matches: [], error: 'not a valid selector' },
+      {
+        selector: '.fan',
+        count: 6,
+        matches: [
+          { label: 'fan[0]', opacity: 0, scale: 1, rotate: 0, x: 0, y: 0, z: 0, box: { x: 0, y: 0, width: 0, height: 0 }, frame: 'hidden' },
+          { label: 'fan[1]', opacity: 1, scale: 1.2, rotate: 4, x: 10, y: -5, z: 620, box: { x: -30, y: 10, width: 400, height: 90 }, frame: 'partly', filter: 'blur(3px)' },
+        ],
+      },
+    ])
+    expect(text).toContain('1:17.25 (f2317) probe:')
+    expect(text).toContain('.w3 ×1: w3: opacity 0.18 · scale 0.96 · move 0, 24 · box 120,640 540x96 · inside the frame')
+    expect(text).toContain('.gone: no element matches')
+    expect(text).toContain('invalid selector (not a valid selector)')
+    expect(text).toContain('fan[0]: not visible (opacity 0)')
+    expect(text).toContain('rotate 4° · blur(3px)')
+    expect(text).toContain('z 620')
+    expect(text).toContain('PARTLY off-frame')
+    expect(text).toContain('(+4 more)')
   })
 })
