@@ -18,6 +18,19 @@ const MAX_RESULT = 600
 /** With no result yet, the brief serves as a summary (it is what the child knows). */
 const MAX_BRIEF = 400
 
+/**
+ * First line the MODEL reads on a subchat's result that woke the parent up (a user
+ * message with `origin: 'subchat'`, see subchat-wake.ts). It is added when the history
+ * is turned into model messages, never persisted: the screens (desktop notice, mobile
+ * bubble) show the stored text, and older wake messages get it too.
+ *
+ * It says on its own what the message is and what to do, so the system prompt does not
+ * have to. A single "[SYSTEM: …]" line with no "]" inside, like ENGINE_CONTEXT_HEADER:
+ * if the model ever echoes it, stripEngineMarkers removes it from the visible answer.
+ */
+export const SUBCHAT_RESULT_MARKER =
+  "[SYSTEM: a subchat you started finished a turn; this is its result, delivered by the app — the user did not type it. Carry on with whatever part of the user's request it unblocks; if nothing is left, tell the user in a line or two what the subchat did and where. Do not answer it as a question from the user, and do not send the subchat more work unless the user's request needs it.]"
+
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }

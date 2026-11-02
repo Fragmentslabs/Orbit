@@ -130,7 +130,8 @@ async function closeCard(
   broadcastChatEvent({ type: 'ask:done', sessionId, requestId })
 }
 
-function responseBlock(item: SavedRequest, value: unknown, texts: Texts): string | null {
+/** The user message an answer to a dead card becomes (null: nothing to tell the agent). Exported for tests. */
+export function responseBlock(item: SavedRequest, value: unknown, texts: Texts): string | null {
   // Worker question: the request was made to the orchestrator's chat, and the
   // worker that asked no longer exists — saying whose it was keeps the agent from
   // reading the answers as if they belonged to its own turn.
@@ -140,7 +141,10 @@ function responseBlock(item: SavedRequest, value: unknown, texts: Texts): string
   // "here" resumes the conversation asking for the work to be done in it.
   if (item.kind === 'subchat') {
     if (value !== 'here') return null
-    return `${origin}${texts.subchatHere}`
+    // The task travels with the choice: the turn that proposed it is gone, and "do this
+    // here" alone left the agent guessing what "this" was.
+    const task = [item.subchat?.title, item.subchat?.brief].filter(Boolean).join(' — ')
+    return `${origin}${texts.subchatHere}${task ? `\n\n${task}` : ''}`
   }
 
   if (item.kind === 'permission') {

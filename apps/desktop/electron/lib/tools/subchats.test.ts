@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
 
 const mocks = vi.hoisted(() => ({
@@ -175,7 +176,8 @@ describe('suggest_subchat', () => {
     )
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(mocks.runChat).not.toHaveBeenCalled()
-    expect(String(r)).toContain('THIS conversation')
+    // The task comes back with the choice, so the agent does not lose track of it.
+    expect(String(r)).toBe(`The user chose to do it here. Do it now in this conversation, without opening a chat: Parser de CSV — ${BRIEF}`)
   })
 
   it('"decline" leaves the matter aside', async () => {
@@ -371,5 +373,28 @@ describe('read_subchat', () => {
     )
     expect(String(r)).toContain('No subchat')
     expect(mocks.readSubchatMessages).not.toHaveBeenCalled()
+  })
+})
+
+describe('tool descriptions', () => {
+  // How to call each tool lives here, not in the system prompt (SUBCHAT_INSTRUCTION
+  // keeps only the proactive triggers) — so these lines must not go missing.
+  const tools = createSubchatTools(input(), win) as unknown as Record<string, { description: string; inputSchema: unknown }>
+
+  it('open_subchat is only for an explicit request', () => {
+    expect(tools.open_subchat.description).toContain('ONLY when the user explicitly asked')
+    expect(tools.open_subchat.description).toContain('suggest_subchat')
+  })
+
+  it('send_to_subchat is preferred over opening another subchat', () => {
+    expect(tools.send_to_subchat.description).toContain('Prefer this over opening a new subchat')
+    expect(tools.read_subchat.description).toContain('subchats list')
+  })
+
+  it('suggest_subchat leaves the choice to the user, and its schema carries the brief and the scope rules', () => {
+    expect(tools.suggest_subchat.description).toContain('you never open a chat by yourself')
+    const schema = JSON.stringify(z.toJSONSchema(tools.suggest_subchat.inputSchema as z.ZodType))
+    expect(schema).toContain('exact paths')
+    expect(schema).toContain('NEW top-level conversation')
   })
 })

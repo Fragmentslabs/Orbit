@@ -168,16 +168,15 @@ WORKING WITH EXISTING PDFs. pdf_merge joins files; pdf_transform picks, REORDERS
 
 const PAST_CHATS_INSTRUCTION = `When the user refers to something discussed or decided in an earlier conversation ("what did we decide about X", "that bug from last week") and memory has no answer, call chat_search with the distinctive words of the subject, then chat_read on the best passage before relying on it. Say which chat and date it came from; if nothing is found, say so instead of guessing.`
 
+/**
+ * Only the proactive triggers live here: nobody asks for a suggestion, so the model has to
+ * know to make one before it ever reads a tool description. How each subchat tool is
+ * called (brief contents, scope, open-only-on-request, read/send) is in the tool
+ * descriptions, and the "subchat finished" message explains itself (see
+ * SUBCHAT_RESULT_MARKER in subchats.ts).
+ */
 const SUBCHAT_INSTRUCTION = `## Subchats
-When something shows up that does not belong in this conversation — a separate task, a side investigation, a problem the user mentioned in passing, work for another project or another folder — do not decide it alone and do not announce that you are separating it: call suggest_subchat with the title, the brief you would use and scope "subchat", and let the user choose. This is on your own initiative: nobody has to ask for it, and waiting to be asked is how the suggestion never happens. One card per subject. Write the brief as if it were the only thing the new chat knew: the goal, what is already done and verified, the files that matter (exact paths) and the next concrete step. If they pick the new chat, it opens attached to this one, in the same folder, and starts working from the brief right away; if they pick this chat, do the work here; if they decline, leave it aside.
-
-When the subject is THIS CONVERSATION being long — compactions already stacking, the beginning of the work being lost — a fresh context is better than another compaction, and the right move is a NEW chat, not a subchat: call suggest_subchat with scope "chat". The brief then carries the state of the work (what is done, what was decided and why, the files, the next step), because it is a summary of a summary that is at stake. It is still a suggestion: the user decides, and a compaction on its own is theirs to choose.
-
-Only when the user explicitly asked for a new chat ("do this in a new chat", "open a chat for this") use open_subchat and create it without asking. Never open a chat on your own initiative.
-
-Subchats that already exist are listed with their ids further down. To follow one, read it with read_subchat; to hand it a new instruction (a fix, a follow-up, the next step) use send_to_subchat — it asks the user first and does not wait for the reply. Prefer that over opening another subchat for the same work.
-
-When a subchat you started (its brief, or send_to_subchat) finishes a turn, its final message comes back to you as a new message that starts with "The subchat … finished" (in the app language) — the USER did not type it. Carry on with whatever part of what the user asked it unblocks; when nothing is left for you to do, tell the user in a line or two what the subchat did and where. Do not answer it as a question from the user, and do not send the subchat more work unless the user's request needs it.`
+When something shows up that does not belong in this conversation — a second task, a problem the user mentioned in passing, work for another folder — call suggest_subchat with scope "subchat" on your own initiative: nobody will ask for it. When this conversation itself is getting long (compactions stacking), suggest a new chat with scope "chat" instead.`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 
@@ -1071,7 +1070,7 @@ export async function buildSystemPrompt(
     )
   }
 
-  // Subchats: how to open one. The RESULT of the ones already attached is NOT here:
+  // Subchats: when to propose one. The RESULT of the ones already attached is NOT here:
   // it changes every time a child answers, and the system prompt is the cache prefix
   // of the whole conversation — it travels in the turn's message (chat-engine).
   if (input.orchestrationRole !== 'worker') {

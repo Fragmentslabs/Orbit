@@ -96,6 +96,11 @@ async function openAndStart(
   return `Subchat opened: "${child.title}" (#${child.id}). It is attached to this conversation, starts from your brief and is already working on it in parallel. When it finishes, its final message comes back to you as a new turn — do not wait for it or poll it.`
 }
 
+/** Tool result when the user picks "do it in this conversation" — the task comes back with it. */
+function doItHere(title: string, brief: string): string {
+  return `The user chose to do it here. Do it now in this conversation, without opening a chat: ${title} — ${brief}`
+}
+
 const TITLE_INPUT = z
   .string()
   .min(3)
@@ -106,9 +111,9 @@ const BRIEF_INPUT = z
   .string()
   .min(20)
   .describe(
-    "The opening message of the new chat, in the user's language: the goal, what is already done and " +
-      'verified, the files that matter with exact paths, and the next concrete step. It must stand alone — ' +
-      'the new chat has none of this conversation.',
+    "The opening message of the new chat, in the user's language. Write it as if it were the only thing " +
+      'the new chat knew — it has none of this conversation: the goal, what is already done and verified, ' +
+      'what was decided and why, the files that matter with exact paths, and the next concrete step.',
   )
 
 const SCOPE_INPUT = z
@@ -128,17 +133,11 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
   return {
     suggest_subchat: tool({
       description: [
-        'Proposes moving work that does not belong in this conversation to its own chat. Call it ON YOUR OWN',
-        'INITIATIVE, without being asked, as soon as you notice any of these: a second task inside the',
-        'request, a bug or a doubt the user mentioned in passing and that is not what you were asked to do,',
-        'an investigation that would drag unrelated context in here, work for another project or another',
-        'folder, or a conversation getting long enough that a fresh context is worth more than another',
-        'compaction. The `scope` says WHERE it goes: a different subject is a subchat (attached to this',
-        'one); when the subject is this conversation itself being long, it is a NEW chat (top-level,',
-        'continuing the work with a fresh context — never a subchat of this one). One suggestion per',
-        'subject — do not pile up cards. The user decides: open it (it starts working from your brief',
-        'right away), do it here, or leave it aside; you never open a chat by yourself. Silence is the',
-        'failure mode: if nothing was suggested in a long conversation, nothing was happening in it.',
+        'Shows the user a card proposing to move work to its own chat, with your title and brief, and lets',
+        'them choose: open it (it starts working from the brief right away, in the same folder), do it here,',
+        'or leave it aside. Nothing opens unless they pick it — you never open a chat by yourself. Call it',
+        'directly instead of announcing that you are separating the work: the card is the announcement.',
+        'One card per subject — do not pile them up.',
       ].join(' '),
       inputSchema: z.object({ title: TITLE_INPUT, brief: BRIEF_INPUT, scope: SCOPE_INPUT }),
       execute: async ({ title, brief, scope: requestedScope }, { abortSignal }) => {
@@ -165,19 +164,19 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
           broadcastChatEvent({ type: 'ask:done', sessionId: input.sessionId, requestId })
         }
         if (answer === 'new') return openAndStart(input, win, title, brief, scope)
-        if (answer === 'here') {
-          return 'The user chose to do it in THIS conversation. Do it here now, without opening a chat.'
-        }
+        // Restates the task: after a long brief and a card, a small model answered "ok"
+        // and lost track of what "it" was.
+        if (answer === 'here') return doItHere(title, brief)
         return 'The user declined: do not open a chat and leave that work aside for now.'
       },
     }),
 
     open_subchat: tool({
       description: [
-        'Opens a new chat attached to this one and starts working in it immediately, from the brief you',
-        'write. Use it ONLY when the user explicitly asked for a new chat ("do this in a new chat",',
-        '"open a chat for this") — otherwise use suggest_subchat and let them choose. Never open a subchat',
-        'on your own initiative.',
+        'Opens a new chat attached to this one, in the same folder, and starts working in it immediately',
+        'from the brief you write. Use it ONLY when the user explicitly asked for a new chat ("do this in a',
+        'new chat", "open a chat for this") — then open it without asking. Otherwise use suggest_subchat and',
+        'let them choose; never open a subchat on your own initiative.',
       ].join(' '),
       inputSchema: z.object({ title: TITLE_INPUT, brief: BRIEF_INPUT }),
       execute: async ({ title, brief }) => openAndStart(input, win, title, brief),
@@ -185,9 +184,9 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
 
     read_subchat: tool({
       description: [
-        'Reads a subchat you opened from this conversation: its most recent messages, oldest first,',
-        'with tool calls shown by name. Use it when the "Latest" line in the subchats list is not enough',
-        '(what it found, where it stopped, whether it failed). Read-only.',
+        'Reads a subchat you opened from this conversation (ids are in the subchats list of the turn): its',
+        'most recent messages, oldest first, with tool calls shown by name. Use it to follow one when the',
+        '"Latest" line in that list is not enough (what it found, where it stopped, whether it failed). Read-only.',
       ].join(' '),
       inputSchema: z.object({
         subchatId: z.string().describe('The id from the subchats list'),
@@ -216,7 +215,7 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         'Sends a new instruction to a subchat you opened and lets it work on it in parallel, in its own',
         'context — it remembers everything it did there. The user is asked to approve every instruction before it',
         'goes. Prefer this over opening a new subchat when one already has the context (a fix, a follow-up, the next',
-        'step). It does not wait for the reply: when the subchat finishes, its final message comes back to you as a new turn',
+        'step) — never open another subchat for the same work. It does not wait for the reply: when the subchat finishes, its final message comes back to you as a new turn',
         '(marked as coming from the subchat), or read it with read_subchat. A subchat that is still running a turn is refused — wait or read it first.',
       ].join(' '),
       inputSchema: z.object({

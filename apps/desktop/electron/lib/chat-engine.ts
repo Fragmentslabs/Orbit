@@ -51,7 +51,7 @@ import { loadSkills } from './skills'
 import { skillHash, slugsUsedInSession, usageScope } from './skills/meta'
 import { snapshotOf } from './skills/mention'
 import { renderSkillHints, resolveHintMode, skillHintsForTurn, skillMentionTurnBlock } from './skills/turn'
-import { subchatsTurnBlock } from './subchats'
+import { SUBCHAT_RESULT_MARKER, subchatsTurnBlock } from './subchats'
 import { retrieveForTurn } from './memory/service'
 import { renderMemorySuggestions } from './memory/retrieval'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
@@ -1369,7 +1369,10 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
     }
     // ToolParts are never resent to the model outside the streaming of the call
     // that generated them — what survives from the previous turn are the notes.
-    const text = [takePending(), partText(message.parts, 'text')]
+    // A subchat's result that woke this conversation up explains itself to the model
+    // (not typed by the user, what to do with it) right before its text.
+    const marker = message.role === 'user' && message.origin === 'subchat' ? SUBCHAT_RESULT_MARKER : ''
+    const text = [takePending(), marker, partText(message.parts, 'text')]
       .filter((p) => p.trim())
       .join('\n\n')
     // Chips (`chip` flag) are only UI decoration — the real content is already in
