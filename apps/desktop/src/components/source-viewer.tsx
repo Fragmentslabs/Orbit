@@ -20,6 +20,7 @@ import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selecti
 import { MessageResponse } from "@/src/components/ai/message"
 import { DocumentSourceBadge } from "@/src/components/ai/document-actions"
 import { locateLines } from "@/src/lib/document-quote"
+import { isHtmlDocument } from "@/src/lib/html-source"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
@@ -117,6 +118,18 @@ function isMarkdownSource(doc: Pick<SourceText, "kind" | "filename"> | null | un
   return !!doc && doc.kind === "text" && MARKDOWN_SOURCE.test(doc.filename)
 }
 
+/**
+ * The source as one Markdown text.
+ *
+ * It joins the synthetic pages (the `.md` is paginated for the model's READING, ~3k
+ * characters per page) with a blank line between them: without that the last paragraph
+ * of one page would stick to the first of the next, and a document with a page broken
+ * in the middle of a table would come out wrong.
+ */
+function markdownOf(doc: Pick<SourceText, "pages">): string {
+  return doc.pages.map((p) => p.lines.join("\n")).join("\n\n")
+}
+
 export function SourceViewer({
   sessionId,
   docId,
@@ -210,7 +223,25 @@ export function SourceViewer({
    * before asking for the file: the document existed and was never read.
    */
   const viewSession = sessionId ?? ""
-  const markdown = isMarkdownSource(data)
+  /** The whole Markdown for Document mode. */
+  const markdownBody = useMemo(
+    () =>
+      data
+        ? markdownOf(data)
+            // `\pagebreak` is an instruction of the document renderer, not
+            // content: in the viewer it would come out as loose text in the middle of the
+            // prose (the synthetic page of the source no longer corresponds to it).
+            .replace(/^[ \t]*\\pagebreak[ \t]*$/gm, "")
+        : "",
+    [data],
+  )
+  /**
+   * Document mode belongs to what IS Markdown. A `.md` that holds an HTML page (a page
+   * saved from the browser, an exported app) has nothing to render: the markup is parsed
+   * as HTML, the sanitizer drops it and the text of the `<title>` is what is left
+   * ("Orbit") on an empty page. That one opens in Text, which shows the file.
+   */
+  const markdown = isMarkdownSource(data) && !isHtmlDocument(markdownBody)
   /** Label of the type in the header — the extension when it exists, otherwise the type
    *  word. Same rule as the Sources tab list. */
   const typeLabel = data
@@ -228,6 +259,7 @@ export function SourceViewer({
       if (!alive) return
       setData(result)
       setLoading(false)
+      const body = result ? markdownOf(result) : ""
       // The document opens as it is whenever there is an original — including
       // coming from a citation in the PDF, where the highlight is drawn too. In
       // .docx the HTML document does not know how to mark the cited line: coming from
@@ -237,7 +269,9 @@ export function SourceViewer({
           ? "original"
           : // Markdown opens as a document, EXCEPT when coming from a citation: the
             // citation points at page and line, and only Text knows how to mark the line.
-            isMarkdownSource(result) && !citedRef.current
+            // And except when the file is not Markdown at all — an HTML page saved with a
+            // `.md` name loses everything in the render but the `<title>`.
+            isMarkdownSource(result) && !citedRef.current && !isHtmlDocument(body)
             ? "doc"
             : "text",
       )
@@ -313,28 +347,6 @@ export function SourceViewer({
     }
     return out
   }, [data, page])
-
-  /**
-   * The whole Markdown for Document mode.
-   *
-   * It joins the synthetic pages (the `.md` is paginated for the model's READING,
-   * ~3k characters per page) with a blank line between them: without that the
-   * last paragraph of one page would stick to the first of the next, and a
-   * document with a page broken in the middle of a table would come out wrong.
-   */
-  const markdownBody = useMemo(
-    () =>
-      data
-        ? data.pages
-            .map((p) => p.lines.join("\n"))
-            // `\pagebreak` is an instruction of the document renderer, not
-            // content: in the viewer it would come out as loose text in the middle of the
-            // prose (the synthetic page of the source no longer corresponds to it).
-            .join("\n\n")
-            .replace(/^[ \t]*\\pagebreak[ \t]*$/gm, "")
-        : "",
-    [data],
-  )
 
   useLayoutEffect(() => {
     if (!data || loading || mode !== "text") return

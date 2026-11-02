@@ -6,6 +6,7 @@ import { DocumentDownloadMenu, DocumentSourceBadge } from "@/src/components/ai/d
 import { MessageResponse } from "@/src/components/ai/message"
 import { QuoteSelection } from "@/src/components/quote-selection"
 import { artifactApi, documentApi } from "@/src/lib/ipc"
+import { isHtmlDocument } from "@/src/lib/html-source"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
@@ -80,11 +81,16 @@ export function DocumentTab({
       setMissing(true)
       return
     }
+    const first = savedRef.current === null
     savedRef.current = found.markdown
     baseRef.current = found.revision
     setMarkdown(found.markdown)
     conflictRef.current = null
     setConflict(null)
+    // On the FIRST read, a document that is an HTML page opens on the source: the
+    // preview parses the markup and keeps only the `<title>` on an empty page. After
+    // that the mode is the user's, and a reload does not take them out of it.
+    if (first) setMode(isHtmlDocument(found.markdown) ? "edit" : "preview")
   }, [documentId])
 
   useEffect(() => {
