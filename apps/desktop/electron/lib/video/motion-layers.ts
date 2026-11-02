@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { MOTION_SPEC } from './motion-runtime'
+import type { MotionSceneInfo } from './motion-scenes'
 import type { MotionTransitionInfo } from './motion-transitions'
 import type { MotionVideoFact } from './motion-video-audio'
 
@@ -65,6 +66,8 @@ export interface MotionLayers {
   scriptErrors: string[]
   /** The transitions the composition registered (orbitMotion.transition). */
   transitions: MotionTransitionInfo[]
+  /** The scenes the composition laid out (orbitMotion.scenes). */
+  scenes: MotionSceneInfo[]
   /** The page's `<video>`s, so their sound enters the audio plan. */
   videos: MotionVideoFact[]
 }
@@ -233,6 +236,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       failedFonts?: string[]
       scriptErrors?: string[]
       transitions?: MotionTransitionInfo[]
+      scenes?: MotionSceneInfo[]
       videos?: MotionVideoFact[]
     } | null
     if (!spec) {
@@ -261,6 +265,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       failedFonts: spec.failedFonts ?? [],
       scriptErrors: spec.scriptErrors ?? [],
       transitions: spec.transitions ?? [],
+      scenes: spec.scenes ?? [],
       videos: spec.videos ?? [],
     }
   } catch (err) {
