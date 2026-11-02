@@ -4,6 +4,7 @@ import {
   type MediaAttachmentRef,
   type SourceAttachmentRef,
 } from "@/src/components/ai/prompt-input"
+import { isFetchableAttachmentUrl } from "@/src/lib/attachment-url"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { usePanelStore } from "@/src/stores/panel-store"
 import type { FilePart } from "@shared/chat"
@@ -35,6 +36,13 @@ async function restoreAttachments(parts: FilePart[]): Promise<{
       }
       if (part.mediaId) {
         media.push({ id: part.mediaId, name: part.filename, mime: part.mime, url: part.url })
+        return
+      }
+      // No bytes to rebuild from: if the attachment became a source of the conversation, it
+      // comes back as a REFERENCE to it (the content is stored there); otherwise it is dropped
+      // rather than replaced by whatever the empty URL resolves to.
+      if (!isFetchableAttachmentUrl(part.url)) {
+        if (part.documentId) sources.push({ id: part.documentId, name: part.filename, kind: part.mime })
         return
       }
       try {
