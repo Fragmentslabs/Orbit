@@ -6,11 +6,18 @@ import { z } from 'zod'
 import { openMotionAndReport } from '../video/motion-open'
 import { getMotion, motionIdFor, registerMotion } from '../video/motion-store'
 import { pieceFileName, recordMotionFile } from '../video/motion-files'
-import { planPieceFiles, resolveEditFile, truncationReason } from '../video/motion-source'
-import { MAX_FRAME_TIMES, captureMotionFrames, describeFrameContent, frameLabel, sheetFileName } from '../video/motion-frame'
+import { planPieceFiles, resolveEditFile, truncationReason, unflattenHtml } from '../video/motion-source'
+import { MAX_FRAME_TIMES, MAX_PROBE_SELECTORS, captureMotionFrames, describeFrameContent, describeProbe, frameLabel, sheetFileName } from '../video/motion-frame'
+import { motionAudioPlan } from '../video/motion-audio'
+import { measureMotionAudio } from '../video/motion-audio-measure'
 import { renderMotion } from '../video/motion'
+import { copyPieceFolder } from '../video/motion-copy'
+import { describeEditReceipt, fileHash, viewFile } from '../video/motion-view'
+import { readWordsSidecar, writeWordsSidecar } from '../video/motion-words'
+import { transcribeVideo } from '../video/transcript'
 import { addVideoToGallery } from '../video/video-gallery'
 import { VIDEO_GUIDES } from '../video/guide'
+import { GUIDE_FIRST, hasReadGuide, markGuideRead } from '../video/guide-gate'
 import { panelMotionPreview } from '../panel-browser'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
@@ -19,7 +26,7 @@ import { createVideoTools } from './video'
 import {
   ASSET_SOURCE,
   EDIT_OP,
-  applyTextEdits,
+  applyTextEditsDetailed,
   deletePiece,
   importIntoPiece,
   journalPiece,
@@ -172,7 +179,7 @@ export function createMotionTools(
       label: `composition "${target.name}", ${verb}`,
       openTab: canShow,
       nextStep:
-        'Keep refining with motion_edit (exact text replacements) — the tab reloads live at the same frame, so tell the user what you changed and let them watch. Check yourself with motion_frame. Render only if the user asks for the video file (they also have a Render button in the tab).',
+        'Keep refining with motion_edit (exact text replacements) — the tab reloads live at the same frame, so tell the user what you changed and let them watch. Check yourself with motion_frame (probe: selectors as numbers, audio: true for the sound). Already built into window.orbitMotion, do not rewrite by hand: interpolate, spring, Easing, sequence, scenes, random(seed), fitText, audio.words/lines/find — detail in video_guide("motion"). Render only if the user asks for the video file (they also have a Render button in the tab).',
       fixHint: 'fix it with motion_edit or motion_write (the tab reloads by itself) and read this result again.',
     })
     // In a worker there is no tab: what shows the piece is the main session, and it only
@@ -192,23 +199,33 @@ export function createMotionTools(
   const tools: ToolSet = {
     video_guide: tool({
       description:
-        'Returns the craft guide for video work. Call it ONCE per conversation before your first edit plan (topic "editing"), before writing a motion composition ("motion" for the contract, "motion-craft" for direction: shot list, easing, layers, sound), before any 3D / WebGL / three.js piece ("motion-3d"), before recreating the style of a reference video ("motion-style"), or before setting up Remotion ("remotion").',
+        'Returns the craft guide for video work. Call it before your first edit plan (topic "editing"), before writing a motion composition ("motion" for the contract, "motion-craft" for direction: shot list, easing, layers, sound), before any 3D / WebGL / three.js piece ("motion-3d"), before recreating the style of a reference video ("motion-style"), or before setting up Remotion ("remotion").',
       inputSchema: z.object({ topic: z.enum(['editing', 'motion', 'motion-3d', 'motion-craft', 'motion-style', 'remotion']) }),
-      execute: async ({ topic }) => VIDEO_GUIDES[topic],
+      execute: async ({ topic }) => {
+        markGuideRead(scope.sessionId, topic)
+        return VIDEO_GUIDES[topic]
+      },
     }),
 
     motion_read: tool({
       description:
-        'Returns the current HTML of a motion composition (of this conversation by name, or any one by id). The user may have asked for changes since you wrote it, and edits need the exact text.',
+        'Returns the current HTML of a motion composition (of this conversation by name, or any one by id), behind a one-line header with its line count and HASH. The user may have asked for changes since you wrote it, and edits need the exact text. ' +
+        'A big file: do NOT re-read it all to copy one string — pass `from`/`to` (lines) or `find` (a piece of text; returns the matching lines with `context` lines around, numbered). Line numbers are only for locating: never put them in oldText.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
         file: z.string().optional().describe('Text file of the piece to read (e.g. scenes/intro.js). Default: the entry index.html'),
+        from: z.number().int().positive().optional().describe('First line to return (1-based)'),
+        to: z.number().int().positive().optional().describe('Last line to return'),
+        find: z.string().optional().describe('Return only the lines that contain this text (case-sensitive), with context'),
+        context: z.number().int().min(0).max(10).optional().describe('Lines around each match for `find` (default 2)'),
       }),
-      execute: async ({ name, id, file }) => {
+      execute: async ({ name, id, file, from, to, find, context }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
-        return fsp.readFile(resolveEditFile(target.folder, target.file, file), 'utf8')
+        const absolute = resolveEditFile(target.folder, target.file, file)
+        const text = await fsp.readFile(absolute, 'utf8')
+        return viewFile(file ?? 'index.html', text, { from, to, find, context })
       },
     }),
   }
@@ -232,12 +249,25 @@ export function createMotionTools(
       description:
         'Creates (or fully replaces) an HTML motion composition and opens it in the Motion tab of the right panel, where the user watches it live — play/pause, a frame slider and a track per layer showing when each element enters and leaves. The composition lives in Orbit (not in the project) and is addressed by its name. ' +
         'Use this — NOT create_artifact — whenever the user wants an animation as a video/motion piece: an intro, an animated title, kinetic text, a logo reveal, a lower third. ' +
-        'Call video_guide("motion") once before writing your first composition. The page must declare its format (<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=6">) and move only through seek: CSS animations, the Web Animations API, or window.orbitMotion.seek(frame) for script-driven motion. A library such as GSAP must be a local file next to index.html (motion_asset copies it from the working folder in code mode); with no local copy, use CSS/Web Animations or your own seek. Fonts: system fonts or a Google Fonts <link>. ' +
-        'A big piece goes in several files: a short index.html plus "files" (scenes/*.js as <script type="module" src>, theme.css, data.json) — one huge html is how a call comes out cut off, and such an html is refused. The result says whether it loaded and lists the layers with their enter/leave frames. After this, change it with motion_edit (small, exact replacements), not by rewriting everything.',
+        'Call video_guide("motion") once before writing your first composition (text that follows a voice or a song — karaoke, lyrics — reads its word times from orbitMotion.audio.words(): never type them; scenes are laid out from their durations with orbitMotion.scenes([{ name, dur }]) and duration=auto in the meta). The page must declare its format (<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=6">) and move only through seek: CSS animations, the Web Animations API, or window.orbitMotion.seek(frame) for script-driven motion. A library such as GSAP must be a local file next to index.html (motion_asset copies it from the working folder in code mode); with no local copy, use CSS/Web Animations or your own seek. Fonts: system fonts or a Google Fonts <link>. ' +
+        'A big piece goes in several files: a short index.html plus "files" (scenes/*.js as <script type="module" src>, theme.css, data.json) — one huge html is how a call comes out cut off, and such an html is refused. The result says whether it loaded and lists the layers with their enter/leave frames. After this, change it with motion_edit (small, exact replacements), not by rewriting everything. ' +
+        'copyFrom clones an existing piece WITH its audio, images and audio.json (variations, A/B) — never recreate a piece by rewriting its html. ' +
+        'Built in on window.orbitMotion (video_guide("motion") has the detail): interpolate(frame, [in…], [out…], { easing }), spring, Easing.easeOut/bezier, sequence, scenes, random(seed) instead of Math.random, fitText(text, { maxWidth, maxLines }) / measureText for text that must fit, audio.words/lines/find/level/bands.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
-        html: z.string().min(1).describe('The COMPLETE HTML of the entry (index.html), closed with </html>'),
+        html: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('The COMPLETE HTML of the entry (index.html), closed with </html>. Optional only with copyFrom (then the clone keeps the original html until you edit it)'),
+        copyFrom: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            'CLONE an existing composition first — its name in this conversation or its motion id (mv_…) — with EVERY file: audio, images, fonts, audio.json and the word times. For variations (A/B), a new version, a template. Without html the clone is the same piece; with html it replaces the entry. Never recreate a piece by rewriting its html: the clone would come out mute.',
+          ),
         files: z
           .record(z.string(), z.string())
           .optional()
@@ -245,15 +275,29 @@ export function createMotionTools(
             'Extra TEXT files of the piece, path → content (scenes/intro.js, theme.css, data.json). Reference them from the HTML by relative path (<script type="module" src="scenes/intro.js">). Use this to split a big piece: a single huge html is how a call comes out cut off.',
           ),
       }),
-      execute: async ({ name, id, html, files }) => {
+      execute: async ({ name, id, html: sent, copyFrom, files }) => {
         const target = await resolveTarget({ name, id })
-        const cut = truncationReason(html)
+        if (sent === undefined && !copyFrom) throw new Error('pass `html` (the whole composition) or `copyFrom` (a composition to clone)')
+        const { html, fixed: unflattened } = sent === undefined ? { html: undefined, fixed: false } : unflattenHtml(sent)
+        const cut = html === undefined ? null : truncationReason(html)
         if (cut) {
           throw new Error(
             `The html looks CUT OFF (${cut}) — nothing was written. Send it again in smaller pieces: keep index.html short and move the scripts/styles into "files" (e.g. scenes/01.js, theme.css), or write a skeleton now and fill the rest with motion_edit.`,
           )
         }
+        // The first NEW piece of a conversation asks for the contract first: a clone, or
+        // rewriting a piece that exists, already has one to go by.
+        if (!copyFrom && !hasReadGuide(scope.sessionId, 'motion')) {
+          const current = await fsp.readFile(target.file, 'utf8').catch(() => MOTION_PLACEHOLDER)
+          if (current === MOTION_PLACEHOLDER) throw new Error(GUIDE_FIRST)
+        }
+        let origin: Target | null = null
+        if (copyFrom) {
+          origin = await resolveTarget(/^mv_/.test(copyFrom.trim()) ? { id: copyFrom.trim() } : { name: copyFrom })
+          await mustExist(origin)
+        }
         const extra = planPieceFiles(target.folder, target.file, files)
+        let copied = 0
         const existed = await writing(target, async () => {
           await fsp.mkdir(target.folder, { recursive: true })
           // The placeholder from the live opening (openMotionLive) does not count as
@@ -264,21 +308,31 @@ export function createMotionTools(
           } catch {
             existed = false
           }
+          if (origin) {
+            if (existed) {
+              throw new Error(`"${target.name}" already exists — a clone needs a name that is free (pick another, or delete it first)`)
+            }
+            copied = await copyPieceFolder(origin.folder, target.folder)
+          }
           for (const file of extra) {
             await fsp.mkdir(path.dirname(file.absolute), { recursive: true })
             await writeFileAtomic(file.absolute, file.content)
           }
-          await writeFileAtomic(target.file, html)
+          if (html !== undefined) await writeFileAtomic(target.file, html)
           return existed
         })
-        return report(target, existed ? 'replaced' : 'created')
+        const result = await report(target, origin ? `cloned from "${origin.name}" (${copied} files)` : existed ? 'replaced' : 'created')
+        return unflattened
+          ? `[fixed] The html arrived as ONE line with literal \\n instead of line breaks (escaped twice); the breaks were restored. Send real line breaks next time.\n${result}`
+          : result
       },
     })
 
     tools.motion_edit = tool({
       description:
-        'Edits a motion composition with EXACT text replacements, applied in order (oldText must exist and be unique unless replaceAll). The Motion tab reloads live at the same frame, so the user watches each change. ' +
-        'This is how you iterate on timing, easing, colors and copy — small edits, not full rewrites. If you are unsure of the current text, motion_read first.',
+        'Edits a motion composition with EXACT text replacements, applied in order (oldText must exist and be unique unless replaceAll; an edit that swaps a text for itself is refused). The Motion tab reloads live at the same frame, so the user watches each change. ' +
+        'The answer starts with a RECEIPT: per edit the line where it landed and what is there now, and the file\'s hash before → after — if the receipt does not show your change, it did not land. Pass `baseHash` (from motion_read or the last receipt) to refuse the edit when the file is no longer the one you looked at. ' +
+        'This is how you iterate on timing, easing, colors and copy — small edits, not full rewrites. If you are unsure of the current text, motion_read (with find or a line range) first.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
@@ -287,13 +341,14 @@ export function createMotionTools(
           .optional()
           .describe('Text file of the piece to edit (e.g. scenes/intro.js). Default: the entry index.html'),
         edits: z.array(EDIT_OP).min(1),
+        baseHash: z.string().optional().describe('Hash of the file you are editing, as motion_read / the last receipt gave it. A different current hash = nothing is applied'),
       }),
-      execute: async ({ name, id, file, edits }) => {
+      execute: async ({ name, id, file, edits, baseHash }) => {
         const target = await resolveTarget({ name, id })
         const editing = resolveEditFile(target.folder, target.file, file)
         // Reading and writing under the same lock: if another chat wrote in the middle, the
         // oldText do not match and the edit fails instead of overwriting.
-        await writing(target, async () => {
+        const receipt = await writing(target, async () => {
           let source: string
           try {
             source = await fsp.readFile(editing, 'utf8')
@@ -302,9 +357,17 @@ export function createMotionTools(
               file ? `no file "${file}" in "${target.name}"` : `no composition named "${target.name}" — create it with motion_write`,
             )
           }
-          await writeFileAtomic(editing, applyTextEdits(source, edits))
+          if (baseHash && baseHash !== fileHash(source)) {
+            throw new Error(
+              `${file ?? 'index.html'} is not the file you looked at (hash ${fileHash(source)}, not ${baseHash}) — someone changed it since. Nothing was applied: motion_read it again.`,
+            )
+          }
+          const { text, applied } = applyTextEditsDetailed(source, edits)
+          if (text === source) throw new Error('the edits leave the file exactly as it was — nothing was applied')
+          await writeFileAtomic(editing, text)
+          return describeEditReceipt(file ?? 'index.html', source, text, applied)
         })
-        return report(target, `${edits.length} edit${edits.length === 1 ? '' : 's'} applied`)
+        return `${receipt}\n${await report(target, `${edits.length} edit${edits.length === 1 ? '' : 's'} applied`)}`
       },
     })
 
@@ -317,8 +380,14 @@ export function createMotionTools(
         ...ASSET_SOURCE,
         name: NAME.optional(),
         id: ID,
+        words: z
+          .boolean()
+          .optional()
+          .describe(
+            'Audio only: ALSO measure the time of every word (a sung line, a narration that came without timings) and save it next to the file, so the piece reads it with orbitMotion.audio.words(). Needs Speech to text on; a narration made with audio_generate({ timings: true }) already has them',
+          ),
       }),
-      execute: async ({ ref, path: source, filename, name, id }) => {
+      execute: async ({ ref, path: source, filename, name, id, words }) => {
         const target = await resolveTarget({ name, id })
         // The source is resolved BEFORE importing: the `id` that comes out of here
         // (`aud_x.wav`, `img_x.png`) is the same identity the media has in the
@@ -338,6 +407,19 @@ export function createMotionTools(
             ...(source && project ? { source: resolveSafePath(project, source) } : {}),
           },
         )
+        if (words && imported.kind === 'audio' && !(await readWordsSidecar(imported.file))) {
+          if (!scope.sttEnabled) {
+            return `${imported.report}\nWord times NOT measured: Speech to text is off (Settings → Voice). Ask the user to enable it, or keep the text to whole lines.`
+          }
+          try {
+            const { transcript } = await transcribeVideo(imported.file)
+            if (!transcript.words.length) return `${imported.report}\nWord times NOT measured: the engine recognized no words in ${imported.name}.`
+            await writeWordsSidecar(imported.file, transcript.words)
+            return `${imported.report}\nMeasured ${transcript.words.length} words → ${imported.name}.words.json: read them with orbitMotion.audio.words() once the track is in audio.json. Check them against the lyrics/script you know (music makes the engine less sure).`
+          } catch (error) {
+            return `${imported.report}\nWord times NOT measured: ${(error as Error).message}`
+          }
+        }
         return imported.report
       },
     })
@@ -366,14 +448,28 @@ export function createMotionTools(
         name: NAME.optional(),
         id: ID,
         times: z.array(z.number().positive()).min(1).max(MAX_FRAME_TIMES),
+        probe: z
+          .array(z.string().min(1))
+          .max(MAX_PROBE_SELECTORS)
+          .optional()
+          .describe(
+            'CSS selectors (e.g. ".w3", "[data-layer=title]") read as NUMBERS at each instant: effective opacity, scale/move/rotate, box, and whether it is inside the frame. The answer to "is the previous word still at 18% at 77.25 s?" — instead of looking at a picture.',
+          ),
+        audio: z
+          .boolean()
+          .optional()
+          .describe(
+            'ALSO measure the sound at those instants: RMS and peak (dBFS) of the mix exactly as the render builds it (gain, automation, fades, duck, master) and of each track alone. Checks a mix you reasoned about ("-22 dB under the voice") with a number.',
+          ),
         see: z.boolean().optional().describe('Load the contact sheet into your context (default false). Images are slow and costly: only for a visual doubt'),
       }),
-      execute: async ({ name, id, times, see }, { toolCallId, abortSignal }) => {
+      execute: async ({ name, id, times, probe, audio, see }, { toolCallId, abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         const result = await captureMotionFrames({
           target: target.file,
           times,
+          probe,
           root: target.root,
           sessionId: scope.sessionId,
           signal: abortSignal,
@@ -389,16 +485,30 @@ export function createMotionTools(
         const content = result.cells
           .filter((c) => c.content)
           .map((c) => describeFrameContent(frameLabel(c.timeMs, c.frame), c.content!, { width: result.width, height: result.height }))
+        const probed = result.cells
+          .filter((c) => c.probe)
+          .map((c) => describeProbe(frameLabel(c.timeMs, c.frame), c.probe!))
+        let sound = ''
+        if (audio) {
+          try {
+            const plan = await motionAudioPlan(target.folder)
+            sound = await measureMotionAudio(plan, times, result.durationInFrames / result.fps, abortSignal)
+          } catch (err) {
+            sound = `Sound NOT measured: ${err instanceof Error ? err.message : String(err)}`
+          }
+        }
         const text = [
           `Frames of ${result.name} (${result.width}x${result.height} · ${result.fps} fps · ${result.durationInFrames} frames): ${result.cells
             .map((c) => frameLabel(c.timeMs, c.frame))
             .join(' · ')}.`,
           content.length ? `On screen (read from the page):\n${content.join('\n')}` : '',
+          probed.length ? `Probe (numbers read from the page; the transform is the element's own):\n${probed.join('\n')}` : '',
+          sound,
           result.failedFonts.length
             ? `Fonts failed to load (the text fell back to another font): ${[...new Set(result.failedFonts)].join(', ')}.`
             : '',
           result.scriptErrors.length
-            ? `[error] The composition's scripts threw: ${result.scriptErrors.join(' | ')}. Fix this before anything else.`
+            ? `[error] The composition's scripts threw: ${result.scriptErrors.join(' | ')}. The piece is BROKEN — fix this before anything else and do not tell the user it works.`
             : '',
           see
             ? 'Check the moments you will be judged on (entrance, payoff, hold) — motion_render only after the user approves.'

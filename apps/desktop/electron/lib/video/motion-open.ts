@@ -8,6 +8,8 @@ import { describeLint } from './motion-lint'
 import { lintMotionComposition } from './motion-lint-run'
 import { describeMasterFx, describeTrackFx } from './motion-audio-fx'
 import { prepareMotionPreview } from './motion-preview'
+import { readWordsSidecar } from './motion-words'
+import { describeScenes } from './motion-scenes'
 import { describeTransitions } from './motion-transitions'
 import { motionVideoAudioTracks } from './motion-video-audio'
 import { getMotion, registerMotion } from './motion-store'
@@ -99,8 +101,9 @@ export async function openMotionAndReport(input: {
       plan = await motionAudioPlan(preview.folder, undefined, await motionVideoAudioTracks(preview.folder, measured.videos))
       const { tracks, master } = plan
       if (tracks.length) {
+        const spoken = await Promise.all(tracks.map(async (track) => (await readWordsSidecar(track.file))?.length ?? 0))
         audio = `Audio (${tracks.length} track${tracks.length > 1 ? 's' : ''}, mixed by the render — from audio.json and from the <video> elements that are not muted): ${tracks
-          .map((track) => {
+          .map((track, index) => {
             const span = track.end === undefined ? `${track.start}s→end` : `${track.start}s→${track.end}s`
             const level = track.gainDb === 0 ? '' : `, ${track.gainDb}dB`
             const from = track.offset ? `, file from ${track.offset}s` : ''
@@ -108,7 +111,8 @@ export async function openMotionAndReport(input: {
             const bed = track.duck ? ', ducked under the others' : ''
             const treated = describeTrackFx(track.fx)
             const where = track.path ? '' : ', OUTSIDE the composition folder (the tab cannot play it)'
-            return `"${track.name}" (${span}${from}${looped}${level}${bed}${treated ? `, ${treated}` : ''}${where})`
+            const timed = spoken[index] ? `, ${spoken[index]} words timed (orbitMotion.audio.words())` : ''
+            return `"${track.name}" (${span}${from}${looped}${level}${bed}${treated ? `, ${treated}` : ''}${timed}${where})`
           })
           .join('; ')}.`
         const finish = describeMasterFx(master)
@@ -123,17 +127,18 @@ export async function openMotionAndReport(input: {
     const lint = await lintMotionComposition({
       entry: preview.file,
       folder: preview.folder,
-      runtime: { fps: measured.fps, durationInFrames: measured.durationInFrames, transitions: measured.transitions },
+      runtime: { fps: measured.fps, durationInFrames: measured.durationInFrames, transitions: measured.transitions, scenes: measured.scenes },
       audio: plan,
     })
     return [
       `Motion "${name}" is open in the Motion tab of the right panel (${input.label}) and loads fine: ${measured.width}x${measured.height}, ${measured.durationInFrames} frames at ${measured.fps} fps (${(measured.durationInFrames / measured.fps).toFixed(2)} s).`,
       measured.failedFonts.length ? `Fonts that failed to load: ${measured.failedFonts.join(', ')}.` : '',
       measured.scriptErrors.length
-        ? `[error] The composition's scripts threw: ${measured.scriptErrors.join(' | ')}. Fix this before anything else — the piece is probably not moving.`
+        ? `[error] The composition's scripts threw: ${measured.scriptErrors.join(' | ')}. The piece is BROKEN (no animation, empty layer list) — fix this before anything else and do not tell the user it works.`
         : '',
       audio,
       describeTransitions(measured.transitions),
+      describeScenes(measured.scenes),
       'Layers (when each enters and leaves the frame):',
       describeLayers(measured.layers, measured.fps),
       describeLint(lint),

@@ -98,7 +98,7 @@ A composition is an Orbit piece: a FOLDER in Orbit's own storage (never in the u
 - Size the page exactly to the declared width/height (html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden }). That is the composition's OWN document size, not a suggestion: the render opens the capture window at exactly this size, and the Motion tab scales the whole document down to fit the stage. Never make a composition adapt to the viewport (no vw/vh units, no %-based layout). If a preview ever looks cropped, off-centre or shifted, the fault is in the STAGE, not in the composition — report it to the user; do not rewrite the piece to please the preview.
 
 ## The tools (both modes)
-- motion_write({ name, html }) creates or replaces the composition and opens the Motion tab; motion_edit({ name, edits }) changes it with exact text replacements; motion_read({ name }) returns the current HTML; motion_preview({ name }) reopens it (and reports layers and lint) when the tab was closed; motion_frame({ name, times }) looks at instants; motion_render({ name }) makes the video only when asked; motion_delete({ name }) removes it when the user asks. A piece from another conversation is reached by its id (mv_…) instead of the name.
+- motion_write({ name, html }) creates or replaces the composition and opens the Motion tab; motion_edit({ name, edits }) changes it with exact text replacements; motion_read({ name }) returns the current HTML behind a header with its hash (for a big file pass from/to or find instead of re-reading it all); motion_edit answers with a RECEIPT — the line where each edit landed, what is there now, the hash before → after: if the receipt does not show your change it did not land, so never assume; motion_preview({ name }) reopens it (and reports layers and lint) when the tab was closed; motion_frame({ name, times, probe, audio }) looks at instants — probe: ['.w3', '[data-layer=title]'] reads those elements as NUMBERS at each instant (opacity, scale/move, box, inside the frame) and audio: true MEASURES the sound there (dBFS of the mix as the render builds it, and of each track alone): use them to answer a numeric doubt instead of loading an image or reasoning a mix in the dark; motion_render({ name }) makes the video only when asked; motion_delete({ name }) removes it when the user asks. A piece from another conversation is reached by its id (mv_…) instead of the name.
 - Never write the composition with write/edit/bash, and never put it in the project: every change through these tools is what keeps the piece in the Media gallery and lets the user undo the message.
 - Bringing material in: motion_asset copies a file into the composition folder — an attachment by its ref, or (code mode) a file of the working folder by path. A library is the same: motion_asset({ name, path: "node_modules/gsap/dist/gsap.min.js" }) when the project has it. three.js needs no motion_asset: it is native (import * as THREE from 'three' in a module script — see video_guide("motion-3d")). With no local copy there is no gsap: animate with CSS @keyframes / transitions or the Web Animations API (both are seeked automatically), or drive everything from window.orbitMotion.seek(frame) yourself. Fonts: system fonts or a Google Fonts <link>.
 
@@ -155,12 +155,56 @@ Typical script-driven piece:
   }
 Stagger a list by giving each item its own delay (frame - i * 4). Words that appear one by one: an opacity/transform per word from interpolate — and check with motion_frame that they are really visible.
 
+## Text that must fit, and randomness: orbitMotion.fitText / measureText / random
+- fitText(textOrElement, { maxWidth: 952, maxLines: 1, maxHeight, min: 8, max: 600 }) → { fontSize, lines, width, height, fits } — the LARGEST size at which the text stays inside the box, measured in the page with the real font. "EQUILIBRIO at 104 px in 952 px?" is a call, not a guess: const { fontSize } = M.fitText('EQUILÍBRIO', { maxWidth: 952, fontWeight: 800, fontFamily: 'Inter' }). Pass the style (fontFamily, fontWeight, letterSpacing, textTransform, lineHeight) or an element to copy it from. fits: false means not even min fits — shorten the text or widen the box.
+- measureText(textOrElement, { fontSize, maxWidth, …style }) → { width, height, lines, overflowX } for a size you already chose. Without maxWidth it is one line at its natural width.
+- Call them once at the start, after the fonts are in (document.fonts.ready) — the answer depends on the font that rendered. They only read; nothing moves between seeks.
+- random(seed) → [0, 1), the same number for the same seed in every frame and render: M.random('p' + i + ':x') for the x of particle i. Never Math.random (the lint refuses it).
+
+## Scenes: write DURATIONS, never start times
+A piece of several scenes with a start time typed on each (and again in audio.json) breaks the moment one scene changes: cutting 10 s from the middle means retyping every number after it, and the one you forget misaligns everything without an error. Declare the durations and let the sum place them:
+  const M = window.orbitMotion
+  const S = M.scenes([
+    { name: 'intro', dur: 4 },                    // seconds
+    { name: 'verse', dur: 20, overlap: 0.5 },     // starts 0.5 s before intro ends (crossfade)
+    { name: 'payoff', dur: 3, gap: 0.4 },         // 0.4 s of nothing before it
+  ])
+  M.seek = (frame) => {
+    const t = frame / M.fps
+    const v = S.local('verse', t)                  // { active, t: seconds into the scene, progress 0..1 }
+    verse.style.opacity = v.active ? M.interpolate(v.t, [0, 0.4], [0, 1]) : 0
+  }
+- S.verse.start / S.get('verse').end / S.total are seconds on the piece clock; S.at(t) is the scene on screen (the incoming one during an overlap). A scene called "list", "total", "get", "at" or "local" is reached only through S.get(name).
+- With <meta name="orbit-motion" content="width=1080,height=1920,fps=30,duration=auto"> (or no duration at all) the SUM of the scenes is the length of the piece — nothing else to keep in step. A fixed duration in the meta still works; the lint then says if the scenes are cut off by it or leave a tail.
+- A scene as long as its narration (the length follows the voice, never the other way): wait for the word times, then lay the scenes out —
+    let S = null
+    const hold = M.delayRender()
+    M.audio.ready().then(() => {
+      const v = M.audio.span('nar-s01.wav')            // { start, end } of the voice, piece seconds (null without word times)
+      S = M.scenes([{ name: 's1', dur: v.end + 1.2 }, /* … */])
+      M.continueRender(hold)
+    })
+    M.seek = (frame) => { if (!S) return; /* … */ }
+- To retime later: motion_edit the ONE dur (or gap/overlap); audio.json tracks that belong to a scene change their "start" by the same amount — read S.get(name).start from the motion_preview report ("Scenes: …") to know the new value.
+
 ## Sound-reactive visuals: orbitMotion.audio
 A waveform, an equalizer or a pulse must come from the REAL sound — never Math.sin or random bars. The runtime analyses the tracks of audio.json (placed on the piece timeline with their start/offset/end/level) once, and then reads them by frame:
 - orbitMotion.audio.load() at the top of the script (seeks wait for the analysis); load('song.mp3') analyses one track alone.
 - orbitMotion.audio.level(frame) → 0..1 loudness (1 = loudest moment of the piece) — a pulse, a glow, a scale.
 - orbitMotion.audio.bands(frame, 24) → 24 values 0..1, low to high frequencies — the bars of a spectrum/waveform. Pass the track as the last argument to follow only the music under a voice: bands(frame, 24, 'song.mp3').
 Smooth a jumpy bar by averaging with the frames around it (bands(frame - 1) and bands(frame + 1)), never with state kept between seeks.
+
+## Text in sync with the voice (karaoke, lyrics, captions per word)
+The pain of this kind of piece is the TIME of each word. It never comes from your arithmetic — not by hand, not by dividing a line by the length of its words (that puts the red on the wrong syllable) — it comes from the audio:
+1. Narration: audio_generate({ text, timings: true }). It prints caption lines, saves the time of EVERY word with the audio and warns when the voice did not say what you wrote ("PRIDE" read as another word: write it as it should sound, lowercase or spelled out, and generate that phrase again). A sung line or a narration that came without timings: motion_asset({ ref, words: true }).
+2. motion_asset(ref) copies the audio and its word times (nar.wav + nar.wav.words.json); declare the track in audio.json with its "start".
+3. In the script, call orbitMotion.audio.load() at the top, then read the words ALREADY on the piece clock (track start and offset applied, so moving the track in audio.json moves the words with it):
+  - audio.words('nar.wav') → [{ text, start, end }] in seconds (no argument = every track).
+  - audio.lines('nar.wav', { maxWords: 7, pause: 0.35 }) → [{ start, end, text, words }]: one caption/line each.
+  - audio.wordAt(t) → index of the word being spoken at t (-1 before the first); audio.find('humilde', { after: 56 }) → when it is spoken (-1 if never) — use it for the keyword that turns red instead of computing it.
+  Karaoke: lines.forEach(line => line.words.forEach(w => word.classList.toggle('on', t >= w.start))). Show a word ~0.5 s BEFORE it is sung (t >= w.start - 0.5) and a phrase before its first word; hold the last one past its end.
+4. The duration of each block is the narration plus a visual tail, never the other way. Check with motion_frame at the moment of a keyword: the "On screen" line must show it lit.
+Check the words against the script you know (music makes the engine less sure) and keep what the engine measured; fix the SPELLING in your own text, not the times.
 
 ## Subtitles and text that will change: keep them in the piece
 - A motion piece gets its subtitles INSIDE the composition by default — a DOM layer driven by seek — and not burned into a video beforehand. A line edited afterwards is then an exact text edit that the tab reloads in a second; burned-in text costs a full re-render for a comma.
