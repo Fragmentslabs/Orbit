@@ -30,6 +30,17 @@ export function truncationReason(html: string): string | null {
   return null
 }
 
+/**
+ * An HTML that came out FLATTENED: the model escaped the line breaks twice, so the file holds the
+ * two characters `\n` where a break belongs (one single line, text full of "\n", scripts dying on
+ * "Invalid or unexpected token"). Only fixed when it is unmistakable — no real break at all and
+ * several `>\n` — so a legitimately minified page with "\n" inside a JS string is left alone.
+ */
+export function unflattenHtml(html: string): { html: string; fixed: boolean } {
+  if (html.includes('\n') || (html.match(/>\\n/g) ?? []).length < 3) return { html, fixed: false }
+  return { html: html.replace(/\\r\\n|\\n/g, '\n').replace(/\\t/g, '\t'), fixed: true }
+}
+
 export interface PieceFile {
   /** Path relative to the piece's folder, with `/`. */
   name: string

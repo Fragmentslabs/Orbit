@@ -7,7 +7,7 @@ vi.mock('electron', () => ({
   protocol: { handle: () => {} },
 }))
 
-const { planPieceFiles, resolveEditFile, truncationReason } = await import('./motion-source')
+const { planPieceFiles, resolveEditFile, truncationReason, unflattenHtml } = await import('./motion-source')
 
 const FOLDER = path.resolve('/pieces/intro')
 const ENTRY = path.join(FOLDER, 'index.html')
@@ -52,5 +52,20 @@ describe('resolveEditFile', () => {
     expect(resolveEditFile(FOLDER, ENTRY, 'scenes/a.js')).toBe(path.join(FOLDER, 'scenes', 'a.js'))
     expect(() => resolveEditFile(FOLDER, ENTRY, '../a.js')).toThrow()
     expect(() => resolveEditFile(FOLDER, ENTRY, 'clip.mp4')).toThrow(/text file/)
+  })
+})
+
+describe('unflattenHtml', () => {
+  const flat = '<!doctype html>\\n<html>\\n<head></head>\\n<body>\\n<p>oi</p>\\n</body>\\n</html>'
+  it('restores the line breaks of an html that arrived on ONE line with literal \\n', () => {
+    const out = unflattenHtml(flat)
+    expect(out.fixed).toBe(true)
+    expect(out.html.split('\n')).toHaveLength(7)
+    expect(out.html).not.toContain('\\n')
+  })
+  it('leaves a real document, and a minified page with a "\\n" inside a string, alone', () => {
+    expect(unflattenHtml('<p>a</p>\n<p>b</p>')).toEqual({ html: '<p>a</p>\n<p>b</p>', fixed: false })
+    const minified = '<script>const s="a\\nb"</script>'
+    expect(unflattenHtml(minified)).toEqual({ html: minified, fixed: false })
   })
 })
