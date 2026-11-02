@@ -134,7 +134,7 @@ const JS_RULES: Rule[] = [
     severity: 'error',
     pattern: /\bMath\.random\s*\(/g,
     message: () => 'Math.random() gives a different frame every render (and a different one per parallel band)',
-    hint: 'use a seeded generator keyed by the element index (e.g. mulberry32(i)) so frame N always draws the same',
+    hint: 'use orbitMotion.random(seed) — the same seed gives the same number: orbitMotion.random("p" + i + ":x") for the x of particle i',
   },
   {
     rule: 'interval',

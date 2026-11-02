@@ -149,6 +149,87 @@ export const MOTION_HELPERS_SCRIPT = `
     return { active: active, frame: local, progress: progress }
   }
 
+  // ------------------------------------------------------------- scenes
+  // The piece as a list of scenes with a DURATION each (seconds); the start of each one comes
+  // from the sum, so cutting 10 s from the middle is changing one number — not retyping every
+  // time after it. dur: seconds · overlap: seconds the scene starts BEFORE the previous one
+  // ends (a crossfade; per scene, or opts.overlap for all) · gap: seconds of nothing before it.
+  //   const S = orbitScenes([{ name: "intro", dur: 4 }, { name: "verse", dur: 20, overlap: 0.5 }])
+  //   S.verse.start · S.total · S.at(t) · S.local("verse", t) → { active, t, progress }
+  function orbitScenes(list, opts) {
+    const o = opts || {}
+    if (!Array.isArray(list) || !list.length) throw new Error('scenes: pass a list like [{ name: "intro", dur: 4 }, ...] (dur in seconds)')
+    const reserved = ['list', 'total', 'get', 'at', 'local']
+    const round = function (x) { return Math.round(x * 1000000) / 1000000 }
+    const items = []
+    const byName = {}
+    let cursor = 0
+    for (let i = 0; i < list.length; i++) {
+      const sc = list[i] || {}
+      const label = 'scene ' + (i + 1) + (sc.name ? ' "' + sc.name + '"' : '')
+      if (typeof sc.name !== 'string' || !sc.name) throw new Error('scenes: ' + label + ' needs a name')
+      if (byName[sc.name]) throw new Error('scenes: two scenes are called "' + sc.name + '"')
+      const dur = Number(sc.dur)
+      if (!isFinite(dur) || dur <= 0) throw new Error('scenes: ' + label + ' needs dur > 0 (seconds)')
+      const gap = Math.max(0, Number(sc.gap) || 0)
+      const wanted = sc.overlap !== undefined ? Number(sc.overlap) : (o.overlap || 0)
+      const overlap = i === 0 ? 0 : Math.max(0, Math.min(wanted || 0, dur, items[i - 1].dur))
+      const start = Math.max(0, cursor + gap - overlap)
+      const item = { name: sc.name, start: round(start), end: round(start + dur), dur: dur }
+      items.push(item)
+      byName[sc.name] = item
+      cursor = start + dur
+    }
+    const result = { list: items, total: round(cursor) }
+    result.get = function (name) {
+      const found = byName[name]
+      if (!found) throw new Error('scenes: no scene "' + name + '" — they are ' + items.map(function (x) { return x.name }).join(', '))
+      return found
+    }
+    // The scene on screen at t; during an overlap, the one that is coming in.
+    result.at = function (t) {
+      let found = null
+      for (const it of items) if (t >= it.start && t < it.end) found = it
+      return found
+    }
+    result.local = function (name, t) {
+      const it = result.get(name)
+      const local = t - it.start
+      return { active: local >= 0 && local < it.dur, t: local, progress: Math.min(1, Math.max(0, local / it.dur)) }
+    }
+    for (const it of items) if (reserved.indexOf(it.name) < 0) result[it.name] = it
+    return result
+  }
+
+  // ------------------------------------------------------------- random
+  // The same seed always gives the same number in [0, 1): the deterministic replacement of
+  // Math.random (a pure function of the seed, so frame N draws the same in every band and render).
+  // The seed is any string or number: random('p' + i + ':x') for the x of particle i.
+  function orbitRandom(seed) {
+    const text = String(seed)
+    let h = 1779033703 ^ text.length
+    for (let i = 0; i < text.length; i++) {
+      h = Math.imul(h ^ text.charCodeAt(i), 3432918353)
+      h = (h << 13) | (h >>> 19)
+    }
+    h = Math.imul(h ^ (h >>> 16), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    h ^= h >>> 16
+    return (h >>> 0) / 4294967296
+  }
+
+  // ------------------------------------------------------------- fit text
+  // The largest whole font size in [min, max] for which fits(size) holds (fits is monotone: if
+  // a size fits, every smaller one does). null when not even min fits.
+  function orbitFitSize(fits, min, max) {
+    let lo = Math.ceil(min), hi = Math.floor(max), best = null
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2)
+      if (fits(mid)) { best = mid; lo = mid + 1 } else { hi = mid - 1 }
+    }
+    return best
+  }
+
   // ------------------------------------------------------------- audio analysis
   // In-place radix-2 FFT (re, im of power-of-two length).
   function orbitFft(re, im) {
@@ -267,6 +348,80 @@ export const MOTION_HELPERS_SCRIPT = `
     }
     return out
   }
+
+  // ------------------------------------------------------------- spoken words
+  // A word as it is compared: no accents, no case, no punctuation. "Humilde," == "humilde".
+  const ORBIT_ACCENTS = new RegExp('[' + String.fromCharCode(0x300) + '-' + String.fromCharCode(0x36f) + ']', 'g')
+  function orbitNormWord(text) {
+    const plain = String(text).normalize('NFD').replace(ORBIT_ACCENTS, '').toLowerCase()
+    let out = ''
+    for (const c of plain) if ((c >= '0' && c <= '9') || c.toLowerCase() !== c.toUpperCase() || c.charCodeAt(0) > 0x2e7f) out += c
+    return out
+  }
+
+  // The words of one track of audio.json (the sidecar is { words: [{ text, startMs, endMs }] },
+  // in seconds OF THE FILE) moved to the PIECE clock: track.start + (word - track.offset). Words
+  // outside what the track plays (before its offset, after its end) are dropped.
+  function orbitTrackWords(track, sidecar) {
+    const list = sidecar && Array.isArray(sidecar.words) ? sidecar.words : []
+    const start = track.start || 0
+    const offset = track.offset || 0
+    const out = []
+    for (const w of list) {
+      const from = w.startMs / 1000, to = w.endMs / 1000
+      if (to <= offset) continue
+      const s = start + Math.max(from, offset) - offset
+      const e = start + to - offset
+      if (typeof track.end === 'number' && s >= track.end) continue
+      out.push({ text: String(w.text).trim(), start: s, end: typeof track.end === 'number' ? Math.min(e, track.end) : e, track: track.name || track.file, file: track.file })
+    }
+    return out
+  }
+
+  // Words → lines: a line closes at a pause, at punctuation or after maxWords. The same rule
+  // that cut the caption lines audio_generate prints, so both agree.
+  function orbitWordLines(words, opts) {
+    const o = opts || {}
+    const maxWords = o.maxWords || 7
+    const pause = typeof o.pause === 'number' ? o.pause : 0.35
+    const lines = []
+    let cur = []
+    function close() {
+      if (!cur.length) return
+      lines.push({ start: cur[0].start, end: cur[cur.length - 1].end, text: cur.map(function (w) { return w.text }).join(' '), words: cur })
+      cur = []
+    }
+    for (const w of words) {
+      const last = cur[cur.length - 1]
+      if (last && w.start - last.end >= pause) close()
+      cur.push(w)
+      if (/[.!?;:,]$/.test(w.text) || cur.length >= maxWords) close()
+    }
+    close()
+    return lines
+  }
+
+  // Index of the word being spoken at piece time t (the last one that started), or -1 before the first.
+  function orbitWordAt(words, t) {
+    let at = -1
+    for (let i = 0; i < words.length; i++) { if (words[i].start <= t) at = i; else break }
+    return at
+  }
+
+  // Start time (piece seconds) of the first word equal to text at or after "after" (default 0),
+  // or -1. A phrase ("quase silencio") finds the start of its first word when the rest follows.
+  function orbitFindWord(words, text, after) {
+    const target = String(text).split(' ').map(orbitNormWord).filter(Boolean)
+    if (!target.length) return -1
+    const from = typeof after === 'number' ? after : 0
+    for (let i = 0; i + target.length <= words.length; i++) {
+      if (words[i].start < from) continue
+      let ok = true
+      for (let k = 0; k < target.length; k++) if (orbitNormWord(words[i + k].text) !== target[k]) { ok = false; break }
+      if (ok) return words[i].start
+    }
+    return -1
+  }
 `
 
 /**
@@ -294,10 +449,39 @@ export const MOTION_AUDIO_LOADER_SCRIPT = `
     }
     return data
   }
+  async function readManifestTracks() {
+    const manifest = await fetch(rootUrl('audio.json')).then(function (r) { return r.ok ? r.json() : null }).catch(function () { return null })
+    return manifest ? (Array.isArray(manifest) ? manifest : manifest.tracks || []) : []
+  }
+  // The words of every track that has a sidecar (file + '.words.json'), on the piece clock.
+  // Silent when there is none: a track without words is a track without words, not an error.
+  let wordsAll = null
+  let wordsPending = null
+  function ensureWords() {
+    if (wordsAll) return Promise.resolve(wordsAll)
+    if (wordsPending) return wordsPending
+    const handle = delayRender()
+    wordsPending = readManifestTracks().then(async function (list) {
+      const out = []
+      for (const t of list) {
+        if (!t || !t.file) continue
+        const sidecar = await fetch(rootUrl(t.file + '.words.json')).then(function (r) { return r.ok ? r.json() : null }).catch(function () { return null })
+        if (sidecar) for (const w of orbitTrackWords(t, sidecar)) out.push(w)
+      }
+      return out
+    }).catch(function () { return [] }).then(function (all) {
+      wordsAll = all
+      return all
+    }).finally(function () { continueRender(handle) })
+    return wordsPending
+  }
+  function wordsOf(which) {
+    if (!wordsAll) { ensureWords(); return [] }
+    return which ? wordsAll.filter(function (w) { return w.track === which || w.file === which }) : wordsAll
+  }
   async function analyse(which) {
     let tracks = []
-    const manifest = await fetch(rootUrl('audio.json')).then(function (r) { return r.ok ? r.json() : null }).catch(function () { return null })
-    const list = manifest ? (Array.isArray(manifest) ? manifest : manifest.tracks || []) : []
+    const list = await readManifestTracks()
     if (list.length) tracks = list.filter(function (t) { return t && t.file && (!which || t.file === which || t.name === which) })
     else if (which) tracks = [{ file: which }]
     if (!tracks.length) throw new Error(which ? 'audio "' + which + '" is not in audio.json' : 'no audio.json tracks to analyse')
@@ -317,6 +501,7 @@ export const MOTION_AUDIO_LOADER_SCRIPT = `
     // Start analysing (the mix of audio.json, or one track by file/name). Seeks wait for
     // it, so call it at the top of the composition script.
     load: function (which) {
+      ensureWords()
       const key = audioKey(which)
       if (audioCache[key]) return Promise.resolve(audioCache[key])
       if (audioPending[key]) return audioPending[key]
@@ -343,6 +528,27 @@ export const MOTION_AUDIO_LOADER_SCRIPT = `
       const data = audioCache[audioKey(which)]
       if (!data) { audioApi.load(which); return new Array(n || 32).fill(0) }
       return orbitReadBands(data, frame, n)
+    },
+    // The REAL words of the voice (or the sung line), moved to the piece clock:
+    // [{ text, start, end, track }] in seconds. Needs audio.load() at the top. The times come
+    // from audio_generate({ timings: true }) / motion_asset({ words: true }) — never typed by hand.
+    words: function (which) { return wordsOf(which) },
+    // The same words grouped in lines: [{ start, end, text, words }]. opts: { maxWords: 7, pause: 0.35 }.
+    lines: function (which, opts) { return orbitWordLines(wordsOf(which), opts) },
+    // A promise that settles once the word times are loaded (spans and scenes sized by the voice need them).
+    ready: function () { return ensureWords() },
+    // From the first word's start to the last word's end of a track (piece seconds): the length
+    // of a narration, to size a scene by it. null until the words are loaded (see audio.load()).
+    span: function (which) {
+      const list = wordsOf(which)
+      return list.length ? { start: list[0].start, end: list[list.length - 1].end } : null
+    },
+    // Index (in words()) of the word being spoken at t seconds, -1 before the first one.
+    wordAt: function (t, which) { return orbitWordAt(wordsOf(which), t) },
+    // When a word or phrase is first spoken (piece seconds), -1 if it never is: find('humilde', { after: 56 }).
+    find: function (text, opts) {
+      const o = opts || {}
+      return orbitFindWord(wordsOf(o.track), text, o.after)
     },
   }
 `

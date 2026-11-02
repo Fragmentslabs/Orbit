@@ -139,6 +139,8 @@ function makePage(
     elements?: Record<string, unknown>
     /** Lists that `querySelectorAll` returns, per selector (the <video>s, for example). */
     lists?: Record<string, unknown[]>
+    /** More members of the fake document (createElement, body…). */
+    doc?: Record<string, unknown>
   } = {},
 ) {
   const posted: Array<Record<string, unknown>> = []
@@ -174,6 +176,7 @@ function makePage(
     querySelectorAll: (selector: string) => (options.lists?.[selector] ?? []) as unknown[],
     getAnimations: () => [animation],
     fonts: Object.assign([] as unknown[], { ready: Promise.resolve() }),
+    ...(options.doc ?? {}),
   }
   // The play is a rAF loop with the performance clock: to look frame by
   // frame, the test controls both. In `manual` mode the callbacks stay in a
@@ -228,6 +231,152 @@ async function step(page: FakePage, ms: number): Promise<void> {
     if (timeFrames(page).length > before) return
   }
 }
+
+/** A document whose boxes lay text out with a simple model: every glyph is 0.5em wide, a line is 1.2em tall. */
+function textLayoutDoc() {
+  const body = { appendChild: () => {}, removeChild: () => {} }
+  const createElement = () => {
+    const box = {
+      style: {} as Record<string, string>,
+      textContent: '',
+      get offsetWidth() {
+        return this.metrics().width
+      },
+      get offsetHeight() {
+        return this.metrics().height
+      },
+      get scrollWidth() {
+        return this.metrics().scrollWidth
+      },
+      metrics() {
+        const size = parseFloat(this.style.fontSize || '16')
+        const glyph = size * 0.5
+        const line = size * 1.2
+        const text = this.textContent
+        if (this.style.whiteSpace === 'nowrap') return { width: text.length * glyph, height: line, scrollWidth: text.length * glyph }
+        const width = parseFloat(this.style.width)
+        let lines = 1
+        let used = 0
+        let widest = 0
+        for (const word of text.split(' ')) {
+          const w = word.length * glyph
+          widest = Math.max(widest, w)
+          const next = used === 0 ? w : used + glyph + w
+          if (next > width && used > 0) {
+            lines++
+            used = w
+          } else used = next
+        }
+        return { width, height: lines * line, scrollWidth: Math.max(width, widest) }
+      },
+    }
+    return box
+  }
+  return { body, createElement }
+}
+
+describe('orbitMotion.measureText / fitText in the page', () => {
+  const api = () => makePage({ meta: 'fps=30,duration=2', doc: textLayoutDoc() }).api as unknown as Record<string, (...a: unknown[]) => any>
+
+  it('measures a single line and a wrapped block', () => {
+    const { measureText } = api()
+    expect(measureText('EQUILIBRIO', { fontSize: 100 })).toMatchObject({ width: 500, height: 120, lines: 1 })
+    const wrapped = measureText('um dois tres quatro', { fontSize: 20, maxWidth: 100 })
+    expect(wrapped.lines).toBeGreaterThan(1)
+    expect(wrapped.overflowX).toBe(false)
+    expect(measureText('supercalifragilistic', { fontSize: 20, maxWidth: 100 }).overflowX).toBe(true)
+  })
+
+  it('finds the largest size that keeps one line inside the box', () => {
+    const { fitText } = api()
+    // 10 glyphs at 0.5em: 5 * size <= 952 -> 190
+    expect(fitText('EQUILIBRIO', { maxWidth: 952 })).toMatchObject({ fontSize: 190, lines: 1, fits: true })
+    expect(fitText('EQUILIBRIO', { maxWidth: 952, max: 104 }).fontSize).toBe(104)
+  })
+
+  it('fits on several lines and within a height', () => {
+    const { fitText } = api()
+    const two = fitText('um dois tres quatro cinco seis', { maxWidth: 200, maxLines: 2 })
+    expect(two.lines).toBeLessThanOrEqual(2)
+    expect(two.fits).toBe(true)
+    const one = fitText('um dois tres quatro cinco seis', { maxWidth: 200, maxLines: 1 })
+    expect(two.fontSize).toBeGreaterThan(one.fontSize)
+    const tall = fitText('um dois tres quatro cinco seis', { maxWidth: 200, maxLines: 9, maxHeight: 60 })
+    expect(tall.height).toBeLessThanOrEqual(60)
+  })
+
+  it('says fits: false (at the minimum size) when nothing fits, and asks for maxWidth', () => {
+    const { fitText } = api()
+    expect(fitText('supercalifragilistic', { maxWidth: 10, min: 12 })).toMatchObject({ fontSize: 12, fits: false })
+    expect(() => fitText('x', {})).toThrow(/maxWidth/)
+  })
+})
+
+describe('orbitMotion.scenes in the page', () => {
+  const scenes = (api: unknown) => (api as { scenes: (l: unknown[], o?: unknown) => any }).scenes
+
+  it('sets the length of the piece when the meta does not pin one (duration=auto)', () => {
+    const { api, posted } = makePage({ meta: 'width=1080,height=1920,fps=30,duration=auto' })
+    const S = scenes(api)([{ name: 'a', dur: 4 }, { name: 'b', dur: 2.5 }])
+    expect(S.total).toBe(6.5)
+    expect(api.durationInFrames).toBe(195)
+    expect(posted.filter((m) => m.type === 'ready').pop()?.durationInFrames).toBe(195)
+  })
+
+  it('follows the scenes when they are laid out again (a duration was cut)', () => {
+    const { api } = makePage({ meta: 'fps=30,duration=auto' })
+    scenes(api)([{ name: 'a', dur: 4 }, { name: 'b', dur: 20 }])
+    expect(api.durationInFrames).toBe(720)
+    scenes(api)([{ name: 'a', dur: 4 }, { name: 'b', dur: 9.5 }])
+    expect(api.durationInFrames).toBe(405)
+  })
+
+  it('leaves a length the piece pinned alone, and reports the scenes to the host', () => {
+    const { api, win } = makePage({ meta: 'fps=30,duration=10' })
+    scenes(api)([{ name: 'a', dur: 4 }, { name: 'b', dur: 20 }])
+    expect(api.durationInFrames).toBe(300)
+    const spec = (win as unknown as { __orbitMotionSpec: () => { scenes: unknown[] } }).__orbitMotionSpec()
+    expect(spec.scenes).toEqual([{ name: 'a', start: 0, end: 4 }, { name: 'b', start: 4, end: 24 }])
+  })
+})
+
+describe('orbitMotion.audio.words in the page', () => {
+  it('reads the sidecar of each track of audio.json and answers on the piece clock', async () => {
+    const files: Record<string, unknown> = {
+      '/audio.json': { tracks: [{ file: 'nar.wav', name: 'Narração', start: 10 }, { file: 'base.mp3' }] },
+      '/nar.wav.words.json': {
+        words: [
+          { text: 'Existe', startMs: 300, endMs: 800 },
+          { text: 'humilde,', startMs: 900, endMs: 1500 },
+        ],
+      },
+    }
+    const g = globalThis as Record<string, unknown>
+    const saved = { fetch: g.fetch, location: g.location }
+    g.location = { href: 'http://orbit.test/index.html' }
+    g.fetch = async (url: string) => {
+      const body = files[new URL(url).pathname]
+      return { ok: body !== undefined, json: async () => body }
+    }
+    try {
+      const { api } = makePage({ meta: 'fps=30,duration=20' })
+      const audio = (api as unknown as { audio: Record<string, (...a: unknown[]) => any> }).audio
+      expect(audio.words()).toEqual([]) // the first call only starts the load…
+      await tick(10)
+      const words = audio.words()
+      expect(words.map((w: { text: string }) => w.text)).toEqual(['Existe', 'humilde,'])
+      expect(words[0].start).toBeCloseTo(10.3)
+      expect(audio.words('Narração')).toHaveLength(2)
+      expect(audio.words('nar.wav')).toHaveLength(2)
+      expect(audio.find('humilde')).toBeCloseTo(10.9)
+      expect(audio.wordAt(10.5)).toBe(0)
+      expect(audio.lines()[0].text).toBe('Existe humilde,')
+    } finally {
+      g.fetch = saved.fetch
+      g.location = saved.location
+    }
+  })
+})
 
 describe('MOTION_RUNTIME in the page', () => {
   it('anuncia o ready em QUADROS e o formato resolvido', () => {

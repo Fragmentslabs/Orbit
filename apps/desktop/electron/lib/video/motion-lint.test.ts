@@ -68,7 +68,7 @@ describe('regras de determinismo', () => {
     const found = lint(page(`<script>const t = Date.now(); const r = Math.random(); setInterval(tick, 10); ${'/*'}x${'*/'}</script>`, ANIMATED))
     const errors = found.filter((f) => f.severity === 'error').map((f) => f.rule)
     expect(errors).toEqual(expect.arrayContaining(['wall-clock', 'random', 'interval']))
-    expect(found.find((f) => f.rule === 'random')?.hint).toMatch(/seeded/)
+    expect(found.find((f) => f.rule === 'random')?.hint).toMatch(/orbitMotion\.random/)
   })
 
   it('setTimeout and requestAnimationFrame are only a warning (waiting to load is legitimate)', () => {
@@ -286,7 +286,7 @@ describe('describeLint', () => {
     expect(lintCounts(findings)).toEqual({ errors: 1, warnings: 1 })
     expect(text.split('\n')[0]).toBe('Lint: 1 error, 1 warning.')
     expect(text.split('\n')[1]).toMatch(/^- \[error\] random \(line \d+\)/)
-    expect(text).toMatch(/→ use a seeded generator/)
+    expect(text).toMatch(/→ use orbitMotion\.random\(seed\)/)
   })
 
   it('limits the report size', () => {

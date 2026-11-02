@@ -519,6 +519,105 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     return Object.assign({ end: spec.at + spec.duration }, info)
   }
 
+  // ------------------------------------------------------------- scenes
+  // orbitMotion.scenes([{ name, dur }]) (motion-helpers.ts) lays the scenes out one after the
+  // other. When the piece does not pin its own length (no duration in the meta, none declared,
+  // no timeline), the sum of the scenes IS the length — one fewer number to keep in step.
+  let sceneInfo = []
+  let scenesSetLength = false
+  function declareScenes(list, opts) {
+    const laid = orbitScenes(list, opts)
+    sceneInfo = laid.list.map(function (s) { return { name: s.name, start: s.start, end: s.end } })
+    const fps = refresh().fps
+    if (scenesSetLength || (!declared.durationInFrames && !declared.duration && !readMeta().duration && !timelineDuration())) {
+      scenesSetLength = true
+      declared.durationInFrames = Math.max(1, Math.ceil(laid.total * fps - 1e-6))
+    }
+    announce()
+    return laid
+  }
+
+  // ------------------------------------------------------------- measure text
+  // Text measured IN THE PAGE with its real font (a hidden box laid out by the browser), so
+  // "does 'EQUILIBRIO' at 104 px fit in 952 px?" is answered before it is written. Layout units
+  // (offsetWidth/Height), so a scaled preview does not change the answer. Call it once at the
+  // start (after the fonts are in): the result is a pure function of the arguments.
+  const TEXT_STYLE_KEYS = ['fontFamily', 'fontWeight', 'fontStyle', 'letterSpacing', 'textTransform', 'lineHeight', 'fontVariant']
+  const textCache = new Map()
+  function textStyleOf(source, opts) {
+    const style = {}
+    if (source && source.nodeType === 1) {
+      const cs = getComputedStyle(source)
+      for (const k of TEXT_STYLE_KEYS) style[k] = cs[k]
+      style.fontSize = parseFloat(cs.fontSize)
+    }
+    for (const k of TEXT_STYLE_KEYS.concat(['fontSize'])) if (opts && opts[k] !== undefined) style[k] = opts[k]
+    return style
+  }
+  function layoutText(text, style, size, maxWidth, nowrap) {
+    const box = document.createElement('div')
+    const s = box.style
+    s.position = 'fixed'; s.left = '-99999px'; s.top = '0'; s.visibility = 'hidden'
+    s.margin = '0'; s.padding = '0'; s.border = '0'
+    s.whiteSpace = nowrap ? 'nowrap' : 'normal'
+    s.width = nowrap || !maxWidth ? 'max-content' : maxWidth + 'px'
+    for (const k of TEXT_STYLE_KEYS) if (style[k]) s[k] = style[k]
+    s.fontSize = size + 'px'
+    box.textContent = text
+    document.body.appendChild(box)
+    const out = { width: box.offsetWidth, height: box.offsetHeight, scrollWidth: box.scrollWidth }
+    document.body.removeChild(box)
+    return out
+  }
+  function measureNow(text, style, size, maxWidth) {
+    const one = layoutText('Hg', style, size, 0, true).height || size * 1.2
+    if (!maxWidth) {
+      const m = layoutText(text, style, size, 0, true)
+      return { width: m.width, height: m.height, lines: 1, overflowX: false }
+    }
+    const m = layoutText(text, style, size, maxWidth, false)
+    return { width: Math.min(maxWidth, m.scrollWidth), height: m.height, lines: Math.max(1, Math.round(m.height / one)), overflowX: m.scrollWidth > maxWidth + 0.5 }
+  }
+  function textArg(first, opts) {
+    const source = first && first.nodeType === 1 ? first : null
+    const text = source ? (source.innerText || source.textContent || '') : String(first)
+    return { text: text.replace(/\\s+/g, ' ').trim(), style: textStyleOf(source, opts) }
+  }
+  // orbitMotion.measureText(textOrElement, { fontSize, fontFamily, fontWeight, letterSpacing, maxWidth })
+  //   → { width, height, lines, overflowX }. Without maxWidth: one line, its natural width.
+  function measureTextDom(first, opts) {
+    const a = textArg(first, opts)
+    return measureNow(a.text, a.style, a.style.fontSize || 16, opts && opts.maxWidth)
+  }
+  // orbitMotion.fitText(textOrElement, { maxWidth, maxLines: 1, maxHeight, min: 8, max: 600, …style })
+  //   → { fontSize, lines, width, height, fits }: the largest size at which the text stays inside the box.
+  function fitTextDom(first, opts) {
+    const o = opts || {}
+    if (!(o.maxWidth > 0)) throw new Error('fitText: pass { maxWidth } in px')
+    const a = textArg(first, o)
+    const maxLines = o.maxLines || 1
+    const key = JSON.stringify([a.text, a.style, o.maxWidth, maxLines, o.maxHeight, o.min, o.max])
+    const loading = document.fonts && document.fonts.status === 'loading'
+    if (!loading && textCache.has(key)) return Object.assign({}, textCache.get(key))
+    function at(size) {
+      return maxLines === 1 && !o.maxHeight ? measureNow(a.text, a.style, size, 0) : measureNow(a.text, a.style, size, o.maxWidth)
+    }
+    function ok(size) {
+      const m = at(size)
+      if (maxLines === 1 && !o.maxHeight) return m.width <= o.maxWidth + 0.5
+      return !m.overflowX && m.lines <= maxLines && (!o.maxHeight || m.height <= o.maxHeight)
+    }
+    const best = orbitFitSize(ok, o.min || 8, o.max || 600)
+    const size = best === null ? Math.ceil(o.min || 8) : best
+    const m = at(size)
+    const result = { fontSize: size, lines: m.lines, width: m.width, height: m.height, fits: best !== null }
+    if (!loading) {
+      if (textCache.size > 500) textCache.clear()
+      textCache.set(key, result)
+    }
+    return Object.assign({}, result)
+  }
+
   // --------------------------------------------------------------- API
   // window.orbitMotion is the contract: the composition reads fps/width/height/
   // durationInFrames and uses delayRender/continueRender; the host calls seek(frame).
@@ -570,6 +669,10 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     api.spring = function (o) { return orbitSpring(Object.assign({ fps: resolved.fps }, o)) }
     api.Easing = orbitEasing
     api.sequence = orbitSequence
+    api.scenes = declareScenes
+    api.random = orbitRandom
+    api.measureText = measureTextDom
+    api.fitText = fitTextDom
     api.audio = audioApi
     Object.defineProperty(api, 'transitions', {
       configurable: true,
@@ -612,6 +715,7 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
       scriptErrors: scriptErrors.slice(),
       devicePixelRatio: window.devicePixelRatio || 1,
       transitions: transitions.map(function (t) { return Object.assign({}, t) }),
+      scenes: sceneInfo.map(function (s) { return Object.assign({}, s) }),
       videos: videoFacts(),
     }
   }
