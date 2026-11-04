@@ -14,6 +14,8 @@ import {
   MessageSquarePlus,
   Minimize2,
   Music,
+  PanelBottomClose,
+  PanelBottomOpen,
   Pause,
   Play,
   Repeat,
@@ -99,6 +101,26 @@ const LOAD_TIMEOUT_MS = 10_000
 /** Fraction of the panel height the stage may occupy — the rest belongs to the timeline. */
 const STAGE_MAX_RATIO = 0.5
 const STAGE_MAX_RATIO_FULLSCREEN = 0.62
+
+/** The tab remounts on every switch: the split the person chose is kept between them. */
+const STAGE_HEIGHT_KEY = "orbit.motion.stageHeight"
+const readStageHeight = (): number | null => {
+  try {
+    const value = Number(localStorage.getItem(STAGE_HEIGHT_KEY))
+    if (Number.isFinite(value) && value >= 120) return value
+  } catch {
+    // no storage (or blocked): the default rule is enough
+  }
+  return null
+}
+const writeStageHeight = (value: number | null) => {
+  try {
+    if (value === null) localStorage.removeItem(STAGE_HEIGHT_KEY)
+    else localStorage.setItem(STAGE_HEIGHT_KEY, String(value))
+  } catch {
+    // no storage: the split lives only as long as the tab
+  }
+}
 
 interface MotionSpec {
   width: number
@@ -274,6 +296,15 @@ export function MotionTab({
     setActionsPinned(false)
   }, [fullscreen])
   const [box, setBox] = useState({ width: 0, height: 0 })
+  /** Height of the stage area once the divider above the timeline is dragged (px).
+   *  `null` = nobody decided it: the stage keeps the panel's rule. */
+  const [stageHeight, setStageHeight] = useState<number | null>(() => readStageHeight())
+  /** Timeline/layers card open? Closed, the stage is the whole tab and the piece plays clean.
+   *  The card is HIDDEN, not unmounted: the <audio> elements live inside it. */
+  const [timelineOpen, setTimelineOpen] = useState(true)
+  /** During the drag the wrapper is sized straight in the DOM (no render per frame);
+   *  this flag is what tells the measuring effect to trust that height. */
+  const stageDragging = useRef(false)
   const [render, setRender] = useState<RenderState>({ status: "idle" })
   const [project, setProject] = useState<ProjectState>({ status: "idle" })
   /**
@@ -780,7 +811,20 @@ export function MotionTab({
       const width = wrap.clientWidth
       const height = root.clientHeight
       if (width <= 0 || height <= 0) return
-      const maxHeight = Math.max(140, height * (fullscreen ? STAGE_MAX_RATIO_FULLSCREEN : STAGE_MAX_RATIO))
+      // The tab got shorter than the split the person chose: the stage gives back the room
+      // (otherwise it would push the timeline out of the panel).
+      const room = Math.max(120, height - 180)
+      if (timelineOpen && stageHeight !== null && !stageDragging.current && stageHeight > room) {
+        setStageHeight(room)
+        return
+      }
+      // Without the timeline the wrapper itself takes the leftover height; with it open,
+      // once the divider is dragged, the room is what the wrapper has (minus the `pt-3`) —
+      // the stage fills it instead of a fraction of the panel.
+      const maxHeight =
+        !timelineOpen || stageDragging.current || stageHeight !== null
+          ? Math.max(120, wrap.clientHeight - 12)
+          : Math.max(140, height * (fullscreen ? STAGE_MAX_RATIO_FULLSCREEN : STAGE_MAX_RATIO))
       const scale = Math.min(width / layout.width, maxHeight / layout.height)
       setBox({
         width: Math.max(1, Math.floor(layout.width * scale)),
@@ -792,7 +836,7 @@ export function MotionTab({
     observer.observe(wrap)
     observer.observe(root)
     return () => observer.disconnect()
-  }, [layout.width, layout.height, fullscreen])
+  }, [layout.width, layout.height, fullscreen, stageHeight, timelineOpen])
 
   // --------------------------------------------------------------- ruler
   const dragging = useRef(false)
@@ -926,6 +970,44 @@ export function MotionTab({
   const nameColumn = fullscreen ? "w-44" : "w-32"
   const failed = loadError
 
+  /**
+   * Divider above the timeline. Dragging DOWN gives room to the stage; dragging UP gives it
+   * to the layers/timeline — the timeline keeps taking what is left. Double click undoes it.
+   */
+  const startStageResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const wrap = stageWrapRef.current
+    const root = rootRef.current
+    if (!wrap || !root || e.button !== 0) return
+    e.preventDefault()
+    const handle = e.currentTarget
+    handle.setPointerCapture(e.pointerId)
+    stageDragging.current = true
+    const startY = e.clientY
+    const startHeight = wrap.getBoundingClientRect().height
+    // The timeline never disappears: the stage stops with enough room left for it.
+    const max = Math.max(160, root.clientHeight - 180)
+    const heightAt = (clientY: number) => Math.round(Math.min(max, Math.max(120, startHeight + (clientY - startY))))
+    const onMove = (ev: PointerEvent) => {
+      // Straight into the style: the effect above measures the wrapper and refits the stage.
+      wrap.style.height = `${heightAt(ev.clientY)}px`
+    }
+    const onEnd = (ev: PointerEvent) => {
+      handle.removeEventListener("pointermove", onMove)
+      handle.removeEventListener("pointerup", onEnd)
+      handle.removeEventListener("pointercancel", onEnd)
+      if (handle.hasPointerCapture(ev.pointerId)) handle.releasePointerCapture(ev.pointerId)
+      document.body.style.cursor = ""
+      stageDragging.current = false
+      const size = heightAt(ev.clientY)
+      setStageHeight(size)
+      writeStageHeight(size)
+    }
+    handle.addEventListener("pointermove", onMove)
+    handle.addEventListener("pointerup", onEnd)
+    handle.addEventListener("pointercancel", onEnd)
+    document.body.style.cursor = "row-resize"
+  }
+
   return (
     // In fullscreen the SAME node becomes the fixed overlay (like the panel browser):
     // the iframe is not remounted, so the playhead and the bridge survive.
@@ -963,6 +1045,13 @@ export function MotionTab({
             disabled={project.status === "saving"}
           />
           <IconAction icon={RotateCw} label={t("motion.reload")} onClick={reload} />
+          {/* The same card as the Design tab's: closed, only the stage is left — the icon
+              points DOWN, the side the timeline card comes from. */}
+          <IconAction
+            icon={timelineOpen ? PanelBottomClose : PanelBottomOpen}
+            label={t(timelineOpen ? "motion.hideLayers" : "motion.showLayers")}
+            onClick={() => setTimelineOpen((v) => !v)}
+          />
           <IconAction
             icon={fullscreen ? Minimize2 : Maximize2}
             label={t(fullscreen ? "motion.exitFullscreen" : "motion.fullscreen")}
@@ -1093,7 +1182,15 @@ export function MotionTab({
 
       {/* Stage at the top: the composition in the native proportion, with no black band
           around it — what is left of the height belongs to the timeline. */}
-      <div ref={stageWrapRef} className="flex shrink-0 justify-center px-3 pt-3">
+      <div
+        ref={stageWrapRef}
+        className={cn(
+          "flex items-center justify-center px-3 pt-3",
+          // Closed timeline: the stage is the whole tab and centers itself in the leftover.
+          timelineOpen ? "shrink-0" : "min-h-0 flex-1",
+        )}
+        style={timelineOpen && stageHeight !== null ? { height: stageHeight } : undefined}
+      >
         {/* The stage is only the WINDOW: what carries the size of the piece is the iframe.
             `maxWidth` keeps the iframe still unscaled (the document has the declared
             size) from overflowing the panel on the first frame. */}
@@ -1253,7 +1350,26 @@ export function MotionTab({
       {/* Timeline: ruler + one track per layer, with the same scale and the
           same playhead. Clicking or dragging anywhere seeks the frame;
           clicking the name selects the layer for the chat note. */}
-      <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
+      {/* The card's edge: dragging it decides how much of the tab the stage and the
+          timeline each get. Double click hands the stage back to the panel's rule. */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t("motion.resizeTimeline")}
+        title={t("motion.resizeTimeline")}
+        onPointerDown={startStageResize}
+        onDoubleClick={() => {
+          setStageHeight(null)
+          writeStageHeight(null)
+        }}
+        className={cn(
+          "group/timeline h-1.5 w-full shrink-0 cursor-row-resize touch-none items-center justify-center border-t border-border/60",
+          timelineOpen ? "flex" : "hidden",
+        )}
+      >
+        <div className="h-0.5 w-8 rounded-full bg-transparent transition-colors group-hover/timeline:bg-primary/60" />
+      </div>
+      <div className={cn("min-h-0 flex-col", timelineOpen ? "flex flex-1" : "hidden")}>
         {/* The ruler lives INSIDE the scrollable area, stuck to the top. Outside it, the
             ruler width did not match the width of the rows as soon as the scroll
             bar appeared (it takes 6px — see `*::-webkit-scrollbar`), and the

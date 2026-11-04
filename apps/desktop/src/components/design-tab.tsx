@@ -122,6 +122,11 @@ const MIN_ZOOM = 0.05
 const MAX_ZOOM = 4
 const FIT_PADDING = 56
 const WIDE_LAYOUT_PX = 720
+/** Inspector card: the drag starts/stops here (px), and the CSS caps it at a share of the tab. */
+const INSPECTOR_MIN_PX = 180
+const INSPECTOR_MAX_PX = 640
+const INSPECTOR_DEFAULT_PX = 288
+const INSPECTOR_MAX_RATIO = 0.7
 const UNDO_LIMIT = 50
 /** How long the disk change notice is ignored after a write of
  *  OURS that is already applied live — reloading there would only blink the screen. */
@@ -168,6 +173,26 @@ const gridStep = (zoom: number) => {
 const pathKey = (file: string, path: ElementPath) => `${file}|${path.join(".")}`
 const encodeFile = (file: string) => file.split("/").map(encodeURIComponent).join("/")
 
+/** The tab remounts on every switch: the size the person chose is kept between them. */
+const INSPECTOR_HEIGHT_KEY = "orbit.design.inspectorHeight"
+const INSPECTOR_WIDTH_KEY = "orbit.design.inspectorWidth"
+const readInspectorSize = (key: string) => {
+  try {
+    const value = Number(localStorage.getItem(key))
+    if (Number.isFinite(value) && value >= INSPECTOR_MIN_PX && value <= INSPECTOR_MAX_PX) return value
+  } catch {
+    // no storage (or blocked): the default is enough
+  }
+  return INSPECTOR_DEFAULT_PX
+}
+const writeInspectorSize = (key: string, value: number) => {
+  try {
+    localStorage.setItem(key, String(value))
+  } catch {
+    // no storage: the size lives only as long as the tab
+  }
+}
+
 function DesignEditor({
   designId,
   title,
@@ -183,6 +208,10 @@ function DesignEditor({
   const { t } = useTranslation()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  /** The inspector card, measured by the drag: its size is what the canvas gives away. */
+  const inspectorRef = useRef<HTMLDivElement | null>(null)
+  /** Canvas + inspector: it is the room the drag of the card can use. */
+  const layoutRef = useRef<HTMLDivElement | null>(null)
   const iframes = useRef(new Map<string, HTMLIFrameElement>())
 
   const [state, setState] = useState<LoadState>({ status: "loading" })
@@ -222,7 +251,12 @@ function DesignEditor({
   /** Size of the canvas viewport: it is what decides which artboards mount. */
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("properties")
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  /** The card is born CLOSED: the canvas is what the tab is for, and whoever wants
+   *  properties/layers/code opens it with the header button. */
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  /** Size of the card in each orientation: height of the strip below, width of the column. */
+  const [inspectorHeight, setInspectorHeight] = useState(() => readInspectorSize(INSPECTOR_HEIGHT_KEY))
+  const [inspectorWidth, setInspectorWidth] = useState(() => readInspectorSize(INSPECTOR_WIDTH_KEY))
   const [codeFile, setCodeFile] = useState<string | null>(null)
   const [codeVersion, setCodeVersion] = useState(0)
   const [overrides, setOverrides] = useState<Record<string, Partial<DesignBoardView>>>({})
@@ -412,6 +446,17 @@ function DesignEditor({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  // The inspector's size lives in the DOM, not in a style prop: during the drag it is
+  // written straight into the element (a render in the middle — the canvas measuring
+  // itself — would undo it). This is what applies the value committed at the end and what
+  // restores it when the card is opened again.
+  useLayoutEffect(() => {
+    const card = inspectorRef.current
+    if (!card) return
+    card.style.width = wide ? `${inspectorWidth}px` : ""
+    card.style.height = wide ? "" : `${inspectorHeight}px`
+  }, [wide, inspectorWidth, inspectorHeight, inspectorOpen])
 
   // The canvas is a transformed layer: to know what is in view one needs
   // the viewport size (the pan and the zoom come from `view`). `useLayoutEffect`
@@ -1204,6 +1249,61 @@ function DesignEditor({
     beginDrag({ kind: "pan", startX: e.clientX, startY: e.clientY, origin: viewRef.current, moved: false, clearOnClick })
   }
 
+  /**
+   * Divider of the inspector card: what moves is the EDGE of the card. Dragging it up
+   * grows the strip below; dragging it left grows the column on the right — in both cases
+   * the canvas gives the room. Double click goes back to the default size.
+   */
+  const startInspectorResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const card = inspectorRef.current
+    const layout = layoutRef.current
+    if (!card || !layout || e.button !== 0) return
+    e.preventDefault()
+    const handle = e.currentTarget
+    handle.setPointerCapture(e.pointerId)
+    const below = !wide
+    const start = below ? e.clientY : e.clientX
+    const startSize = below ? card.getBoundingClientRect().height : card.getBoundingClientRect().width
+    const room = below ? layout.clientHeight : layout.clientWidth
+    // The card never takes the canvas' last third — the same ceiling the CSS applies.
+    const max = Math.max(INSPECTOR_MIN_PX, Math.min(INSPECTOR_MAX_PX, room * INSPECTOR_MAX_RATIO))
+    const sizeAt = (clientX: number, clientY: number) =>
+      Math.round(Math.min(max, Math.max(INSPECTOR_MIN_PX, startSize + (start - (below ? clientY : clientX)))))
+    // The size is written straight into the element while the drag lasts: a render in the
+    // middle (the canvas measuring itself) would put the previous size back.
+    const fit = (clientX: number, clientY: number) => {
+      const size = sizeAt(clientX, clientY)
+      if (below) card.style.height = `${size}px`
+      else card.style.width = `${size}px`
+    }
+    const onMove = (ev: PointerEvent) => fit(ev.clientX, ev.clientY)
+    const onEnd = (ev: PointerEvent) => {
+      handle.removeEventListener("pointermove", onMove)
+      handle.removeEventListener("pointerup", onEnd)
+      handle.removeEventListener("pointercancel", onEnd)
+      if (handle.hasPointerCapture(ev.pointerId)) handle.releasePointerCapture(ev.pointerId)
+      document.body.style.cursor = ""
+      const size = sizeAt(ev.clientX, ev.clientY)
+      if (below) {
+        setInspectorHeight(size)
+        writeInspectorSize(INSPECTOR_HEIGHT_KEY, size)
+      } else {
+        setInspectorWidth(size)
+        writeInspectorSize(INSPECTOR_WIDTH_KEY, size)
+      }
+    }
+    handle.addEventListener("pointermove", onMove)
+    handle.addEventListener("pointerup", onEnd)
+    handle.addEventListener("pointercancel", onEnd)
+    document.body.style.cursor = below ? "row-resize" : "col-resize"
+  }
+  const resetInspectorSize = () => {
+    setInspectorHeight(INSPECTOR_DEFAULT_PX)
+    setInspectorWidth(INSPECTOR_DEFAULT_PX)
+    writeInspectorSize(INSPECTOR_HEIGHT_KEY, INSPECTOR_DEFAULT_PX)
+    writeInspectorSize(INSPECTOR_WIDTH_KEY, INSPECTOR_DEFAULT_PX)
+  }
+
   const panning = tool === "hand" || spaceHeld
   const dragging = drag !== null
 
@@ -1369,9 +1469,10 @@ function DesignEditor({
 
   const inspector = (
     <div
+      ref={inspectorRef}
       className={cn(
-        "flex min-h-0 flex-col bg-sidebar",
-        wide ? "w-72 shrink-0 border-l border-border/60" : "h-[45%] min-h-48 shrink-0 border-t border-border/60",
+        "flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden bg-sidebar",
+        wide ? "max-w-[70%] border-l border-border/60" : "max-h-[70%] border-t border-border/60",
       )}
     >
       {renderTabStrip(["properties", "layers", "code"], inspectorTab)}
@@ -1385,9 +1486,17 @@ function DesignEditor({
   // If the active tab was "layers", the right one falls back to "properties".
   const rightTab: InspectorTab = inspectorTab === "layers" ? "properties" : inspectorTab
 
-  // The inspector is a column on the right when the tab is wide and a strip at the
-  // bottom when it is not: the icon follows the place the panel actually takes.
-  const InspectorIcon = inspectorOpen ? (wide ? PanelRightClose : PanelBottomClose) : (wide ? PanelRightOpen : PanelBottomOpen)
+  // The card is a column on the right when the tab is wide and a strip at the bottom when
+  // it is not. ONE variable decides the layout and the icon, so the button can never point
+  // at a side the card is not on.
+  const inspectorBelow = !wide
+  const InspectorIcon = inspectorOpen
+    ? inspectorBelow
+      ? PanelBottomClose
+      : PanelRightClose
+    : inspectorBelow
+      ? PanelBottomOpen
+      : PanelRightOpen
 
   return (
     <div
@@ -1508,7 +1617,7 @@ function DesignEditor({
         </div>
       )}
 
-      <div className={cn("relative flex min-h-0 flex-1", wide ? "flex-row" : "flex-col")}>
+      <div ref={layoutRef} className={cn("relative flex min-h-0 flex-1", wide ? "flex-row" : "flex-col")}>
         {/* Infinite canvas: a transformed layer (translate + scale) with the
             artboards at the coordinates of canvas.json. */}
         <div
@@ -1753,7 +1862,32 @@ function DesignEditor({
           )}
         </div>
 
-        {!fullscreen && inspectorOpen && inspector}
+        {/* The card's edge: dragging it resizes the inspector (height below, width on the
+            right) — the same gesture as the app's panels. Double click resets it. */}
+        {!fullscreen && inspectorOpen && (
+          <>
+            <div
+              role="separator"
+              aria-orientation={wide ? "vertical" : "horizontal"}
+              aria-label={t("design.resizeInspector")}
+              title={t("design.resizeInspector")}
+              onPointerDown={startInspectorResize}
+              onDoubleClick={resetInspectorSize}
+              className={cn(
+                "group/card flex shrink-0 touch-none items-center justify-center",
+                wide ? "h-full w-1.5 cursor-col-resize" : "h-1.5 w-full cursor-row-resize",
+              )}
+            >
+              <div
+                className={cn(
+                  "rounded-full bg-transparent transition-colors group-hover/card:bg-primary/60",
+                  wide ? "h-8 w-0.5" : "h-0.5 w-8",
+                )}
+              />
+            </div>
+            {inspector}
+          </>
+        )}
 
         {/* Fullscreen: the canvas takes everything and the sidebars float over it, with the
             look of the standard sidebar (round, floating, opens on the edge hover

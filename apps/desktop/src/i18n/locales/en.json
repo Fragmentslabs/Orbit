@@ -2899,7 +2899,10 @@
     "error": "The composition failed",
     "fontsFailed": "Fonts that failed to load",
     "timeline": "Timeline",
+    "resizeTimeline": "Drag to split the space between the stage and the timeline; double-click restores the default",
     "layers": "Layers",
+    "showLayers": "Show the layers panel",
+    "hideLayers": "Hide the layers panel",
     "layersLoading": "Measuring when each element enters and leaves…",
     "layersEmpty": "No element enters or leaves the frame. Ask the agent to name the parts with data-layer.",
     "audioHint": "A track of the piece: plays with the preview at the instant it declares, and goes into the rendered file.",
@@ -2979,6 +2982,7 @@
     "showInspector": "Show the properties panel",
     "hideLayers": "Hide the layers panel",
     "showLayers": "Show the layers panel",
+    "resizeInspector": "Drag to resize the panel; double-click restores the default size",
     "saveFailed": "Could not save: {{error}}",
     "inspector": {
       "properties": "Properties",

@@ -2899,7 +2899,10 @@
     "error": "A composição falhou",
     "fontsFailed": "Fontes que não carregaram",
     "timeline": "Linha de tempo",
+    "resizeTimeline": "Arraste para dividir o espaço entre o palco e a linha do tempo; duplo clique volta ao padrão",
     "layers": "Camadas",
+    "showLayers": "Mostrar o painel de camadas",
+    "hideLayers": "Esconder o painel de camadas",
     "layersLoading": "Medindo quando cada elemento entra e sai…",
     "layersEmpty": "Nenhum elemento entra ou sai de cena. Peça ao agente para nomear as partes com data-layer.",
     "audioHint": "Trilha da peça: toca com o preview no instante declarado e vai no arquivo renderizado.",
@@ -2979,6 +2982,7 @@
     "showInspector": "Mostrar o painel de propriedades",
     "hideLayers": "Esconder o painel de camadas",
     "showLayers": "Mostrar o painel de camadas",
+    "resizeInspector": "Arraste para redimensionar o painel; duplo clique volta ao tamanho padrão",
     "saveFailed": "Não foi possível salvar: {{error}}",
     "inspector": {
       "properties": "Propriedades",
