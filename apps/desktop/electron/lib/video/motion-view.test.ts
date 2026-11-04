@@ -55,3 +55,61 @@ describe('edit receipt', () => {
     expect(() => applyTextEditsDetailed('abc', [{ oldText: 'b', newText: 'b' }])).toThrow(/identical/)
   })
 })
+
+describe('viewFile by symbol and several finds', () => {
+  const code = [
+    '<style>',
+    '.word { opacity: 0; }',
+    '.word.on {',
+    '  color: #c2352c;',
+    '}',
+    '</style>',
+    '<script>',
+    'const KW = ["a", "b"]',
+    'const lerp = (a, b, t) => a + (b - a) * t;',
+    'function buildK(lines, out) {',
+    "  const s = 'a { not a block';",
+    '  lines.forEach((c) => {',
+    '    // } a comment brace',
+    '    out.push({ el: c, on: false })',
+    '  })',
+    '  return out',
+    '}',
+    'const state = {',
+    '  tick(frame) {',
+    '    return frame / 30',
+    '  },',
+    '}',
+    'buildK(lines, out)',
+    '</script>',
+  ].join('\n')
+
+  it('returns the whole function, closed for you, ignoring braces in strings and comments', () => {
+    const out = viewFile('index.html', code, { symbol: 'buildK' })
+    expect(out).toContain('"buildK": lines 10–17')
+    expect(out).toContain('10\tfunction buildK(lines, out) {')
+    expect(out).toContain('17\t}')
+    expect(out).not.toContain('18\t')
+  })
+
+  it('finds an arrow const that has no braces, a method, a const object and a CSS rule', () => {
+    expect(viewFile('x', code, { symbol: 'lerp' })).toContain('"lerp": lines 9–9')
+    expect(viewFile('x', code, { symbol: 'tick' })).toContain('"tick": lines 19–21')
+    expect(viewFile('x', code, { symbol: 'state' })).toContain('"state": lines 18–22')
+    expect(viewFile('x', code, { symbol: '.word.on' })).toContain('".word.on": lines 3–5')
+  })
+
+  it('does not take a CALL for a declaration, and says when there is none', () => {
+    const out = viewFile('x', code, { symbol: 'buildK' })
+    expect(out).not.toContain('more declaration')
+    expect(viewFile('x', code, { symbol: 'nothing' })).toMatch(/No declaration of "nothing"/)
+  })
+
+  it('accepts several finds in one call and merges the windows', () => {
+    const out = viewFile('x', code, { find: ['KW', 'lerp'], context: 0 })
+    expect(out).toContain('2 lines contain "KW" / "lerp"')
+    expect(out).toContain('8\tconst KW')
+    expect(out).toContain('9\tconst lerp')
+    expect(out).not.toContain('…')
+  })
+})

@@ -204,6 +204,32 @@ export async function renderFrameSheet(sheet: FrameSheet): Promise<Buffer> {
 
 // ------------------------------------------------------- visible content
 
+/**
+ * Page JS shared by the readers below: what share (0–1) of an element's box survives the
+ * ancestors that CLIP (overflow hidden/clip/auto/scroll). A carousel of eight lines inside a box that
+ * shows two is eight elements with opacity 1 and a box on the stage — and six of them are
+ * not seen. An absolutely positioned element is only clipped by its containing block's chain.
+ */
+export const CLIP_SHARE = `const clipShare = (el, r) => {
+    const area = Math.max(1, r.width * r.height)
+    let l = r.left, t = r.top, rt = r.right, b = r.bottom
+    let mode = getComputedStyle(el).position
+    for (let n = el.parentElement; n && n.nodeType === 1; n = n.parentElement) {
+      const cs = getComputedStyle(n)
+      const skip = mode === 'fixed' || (mode === 'absolute' && cs.position === 'static')
+      if (!skip) {
+        const cx = cs.overflowX !== 'visible', cy = cs.overflowY !== 'visible'
+        if (cx || cy) {
+          const c = n.getBoundingClientRect()
+          if (cx) { l = Math.max(l, c.left); rt = Math.min(rt, c.right) }
+          if (cy) { t = Math.max(t, c.top); b = Math.min(b, c.bottom) }
+        }
+        mode = cs.position
+      }
+    }
+    return Math.max(0, rt - l) * Math.max(0, b - t) / area
+  }`
+
 /** One block of text the viewer can actually see on a frame. */
 export interface VisibleText {
   text: string
@@ -214,6 +240,8 @@ export interface VisibleText {
   height: number
   /** Effective opacity (the element's times every ancestor's), 0–1. */
   opacity: number
+  /** Share of the box left after the ancestors that clip it (absent = all of it). */
+  visible?: number
 }
 
 /** What a frame shows, read from the DOM — for models that cannot look at the image. */
@@ -221,6 +249,8 @@ export interface FrameContent {
   texts: VisibleText[]
   /** Text blocks that exist on the page but are invisible on this frame (opacity 0, hidden, off-frame). */
   hiddenTexts: number
+  /** Of those, the ones an ancestor with overflow hidden/clip cuts away entirely. */
+  clippedTexts?: number
   /** Visible images, videos, canvases and SVGs. */
   media: number
 }
@@ -238,7 +268,8 @@ const VISIBLE_CONTENT = `(() => {
   const W = window.innerWidth, H = window.innerHeight
   const op = (el) => { let o = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return 0; o *= parseFloat(cs.opacity || '1') } return o }
   const shown = (el, r) => { const cs = getComputedStyle(el); return cs.visibility !== 'hidden' && r.width > 1 && r.height > 1 && r.right > 0 && r.bottom > 0 && r.left < W && r.top < H }
-  const texts = []; let hidden = 0
+  ${CLIP_SHARE}
+  const texts = []; let hidden = 0; let clipped = 0
   const seen = new Set()
   const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT)
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -249,17 +280,19 @@ const VISIBLE_CONTENT = `(() => {
     const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim()
     if (!text) continue
     if (o < 0.05 || !shown(el, r)) { hidden++; continue }
-    texts.push({ text: text.slice(0, 80), x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), opacity: Math.round(o * 100) / 100 })
+    const share = clipShare(el, r)
+    if (share < 0.05) { hidden++; clipped++; continue }
+    texts.push({ text: text.slice(0, 80), x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), opacity: Math.round(o * 100) / 100, visible: share < 0.95 ? Math.round(share * 100) / 100 : undefined })
   }
   let media = 0
   for (const el of document.querySelectorAll('img, video, canvas, svg')) {
     if (el.parentElement && el.parentElement.closest('svg')) continue
     const r = el.getBoundingClientRect()
-    if (op(el) >= 0.05 && shown(el, r)) media++
+    if (op(el) >= 0.05 && shown(el, r) && clipShare(el, r) >= 0.05) media++
   }
   // Nested text blocks repeat their children's words: keep the innermost ones.
   const inner = texts.filter((t) => !texts.some((u) => u !== t && u.text !== t.text && t.text.includes(u.text) && u.x >= t.x && u.y >= t.y && u.x + u.width <= t.x + t.width + 1 && u.y + u.height <= t.y + t.height + 1))
-  return { texts: inner, hiddenTexts: hidden, media }
+  return { texts: inner, hiddenTexts: hidden, clippedTexts: clipped, media }
 })()`
 
 /**
@@ -280,7 +313,7 @@ export function mergeTextLines(texts: VisibleText[]): VisibleText[] {
       t.x >= last.x + last.width - 2 &&
       t.x - (last.x + last.width) <= t.height
     if (sameLine) {
-      out[out.length - 1] = { ...last, text: `${last.text} ${t.text}`, width: t.x + t.width - last.x }
+      out[out.length - 1] = { ...last, text: `${last.text} ${t.text}`, width: t.x + t.width - last.x, visible: Math.min(last.visible ?? 1, t.visible ?? 1) < 1 ? Math.min(last.visible ?? 1, t.visible ?? 1) : undefined }
     } else out.push({ ...t })
   }
   return out
@@ -290,7 +323,8 @@ export function mergeTextLines(texts: VisibleText[]): VisibleText[] {
 export function describeFrameContent(label: string, content: FrameContent, size: { width: number; height: number }): string {
   const { hiddenTexts, media } = content
   const texts = mergeTextLines(content.texts)
-  const hidden = hiddenTexts ? `; ${hiddenTexts} text block(s) on the page are invisible here` : ''
+  const clippedNote = content.clippedTexts ? ` (${content.clippedTexts} of them cut away by a parent with overflow hidden)` : ''
+  const hidden = hiddenTexts ? `; ${hiddenTexts} text block(s) on the page are invisible here${clippedNote}` : ''
   const mediaText = media ? `${media} image/video/canvas/svg visible` : 'no image/video/canvas/svg visible'
   if (!texts.length) return `${label}: NO visible text — ${mediaText}${hidden}.`
   const zone = (t: VisibleText) => {
@@ -303,7 +337,8 @@ export function describeFrameContent(label: string, content: FrameContent, size:
   const shown = texts.slice(0, MAX_TEXTS_PER_FRAME).map((t) => {
     const faint = t.opacity < 0.95 ? `, opacity ${t.opacity}` : ''
     const partial = t.x < 0 || t.y < 0 || t.x + t.width > size.width || t.y + t.height > size.height ? ', partly off-frame' : ''
-    return `"${t.text}" (${zone(t)}, ${t.width}x${t.height}px${faint}${partial})`
+    const cut = t.visible !== undefined ? `, only ${Math.round(t.visible * 100)}% visible (clipped by a parent)` : ''
+    return `"${t.text}" (${zone(t)}, ${t.width}x${t.height}px${faint}${partial}${cut})`
   })
   const more = texts.length > MAX_TEXTS_PER_FRAME ? ` +${texts.length - MAX_TEXTS_PER_FRAME} more` : ''
   return `${label}: ${shown.join(' · ')}${more} — ${mediaText}${hidden}.`
@@ -326,8 +361,10 @@ export interface ProbeMatch {
   /** Box on the stage, composition pixels. */
   box: { x: number; y: number; width: number; height: number }
   /** Where the box is relative to the frame. */
-  frame: 'in' | 'partly' | 'out' | 'hidden'
+  frame: 'in' | 'partly' | 'out' | 'hidden' | 'clipped'
   filter?: string
+  /** Share of the box that survives the ancestors that clip it (absent = all). */
+  visible?: number
 }
 
 export interface ProbeReading {
@@ -351,6 +388,7 @@ export const probeScript = (selectors: string[]): string => `((selectors) => {
   const W = window.innerWidth, H = window.innerHeight
   const op = (el) => { let o = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none') return 0; o *= parseFloat(cs.opacity || '1') } return o }
   const r2 = (x) => Math.round(x * 100) / 100
+  ${CLIP_SHARE}
   return selectors.map((selector) => {
     let list
     try { list = Array.from(document.querySelectorAll(selector)) } catch (err) { return { selector, count: 0, matches: [], error: String(err && err.message ? err.message : err) } }
@@ -363,12 +401,14 @@ export const probeScript = (selectors: string[]): string => `((selectors) => {
       const hidden = o < 0.01 || cs.visibility === 'hidden' || r.width < 1 || r.height < 1
       const fully = r.left >= 0 && r.top >= 0 && r.right <= W && r.bottom <= H
       const outside = r.right <= 0 || r.bottom <= 0 || r.left >= W || r.top >= H
+      const share = hidden || outside ? 1 : clipShare(el, r)
       return {
         label: el.getAttribute('data-layer') || (el.id ? '#' + el.id : selector + (list.length > 1 ? '[' + i + ']' : '')),
         opacity: r2(o), scale: r2(Math.hypot(m.a, m.b)), rotate: r2(Math.atan2(m.b, m.a) * 180 / Math.PI),
         x: r2(m.e), y: r2(m.f), z: r2(m.m43),
         box: { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) },
-        frame: hidden ? 'hidden' : outside ? 'out' : fully ? 'in' : 'partly',
+        frame: hidden ? 'hidden' : outside ? 'out' : share < 0.05 ? 'clipped' : share < 0.95 ? 'partly' : fully ? 'in' : 'partly',
+        visible: share < 0.95 ? r2(share) : undefined,
         filter: cs.filter && cs.filter !== 'none' ? cs.filter.slice(0, 60) : undefined,
       }
     })
@@ -383,16 +423,77 @@ export function describeProbe(label: string, readings: ProbeReading[]): string {
     if (reading.count === 0) return `  ${reading.selector}: no element matches`
     const rows = reading.matches.map((m) => {
       if (m.frame === 'hidden') return `${m.label}: not visible (opacity ${m.opacity})`
+      if (m.frame === 'clipped') return `${m.label}: opacity ${m.opacity} but CLIPPED AWAY by a parent with overflow hidden — not seen`
       const moved = m.x || m.y || m.z ? ` · move ${m.x}, ${m.y}${m.z ? `, z ${m.z}` : ''}` : ''
       const turned = m.rotate ? ` · rotate ${m.rotate}°` : ''
       const filter = m.filter ? ` · ${m.filter}` : ''
-      const where = m.frame === 'in' ? 'inside the frame' : m.frame === 'partly' ? 'PARTLY off-frame' : 'OUTSIDE the frame'
+      const where =
+        m.visible !== undefined
+          ? `only ${Math.round(m.visible * 100)}% visible (clipped by a parent or the frame)`
+          : m.frame === 'in'
+            ? 'inside the frame'
+            : m.frame === 'partly'
+              ? 'PARTLY off-frame'
+              : 'OUTSIDE the frame'
       return `${m.label}: opacity ${m.opacity} · scale ${m.scale}${moved}${turned}${filter} · box ${m.box.x},${m.box.y} ${m.box.width}x${m.box.height} · ${where}`
     })
     const more = reading.count > reading.matches.length ? ` (+${reading.count - reading.matches.length} more)` : ''
     return `  ${reading.selector} ×${reading.count}${more}: ${rows.join(' | ')}`
   })
   return `${label} probe:\n${lines.join('\n')}`
+}
+
+// -------------------------------------------------------------------- eval
+
+/** The value of one JS expression read from the page at one instant. */
+export interface EvalReading {
+  expr: string
+  ok: boolean
+  /** The value, as text (cut short). */
+  value?: string
+  error?: string
+}
+
+export const MAX_EVAL_EXPRESSIONS = 6
+export const MAX_EVAL_LENGTH = 600
+
+/**
+ * Runs in the page after a seek: ONE expression, read as text. The expression is part of the
+ * script (not passed to eval), so a page without 'unsafe-eval' reads it all the same. A syntax
+ * error rejects the whole call and is reported by the caller.
+ */
+export const evalScript = (expr: string): string => `(() => {
+  const ser = (v) => {
+    if (v === undefined) return 'undefined'
+    if (v === null) return 'null'
+    if (typeof v === 'function') return 'function ' + (v.name || '')
+    if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint') return String(v)
+    if (typeof v === 'string') return JSON.stringify(v.length > 200 ? v.slice(0, 200) + '…' : v)
+    if (v.nodeType === 1) return '<' + v.tagName.toLowerCase() + (v.id ? '#' + v.id : '') + (typeof v.className === 'string' && v.className.trim() ? '.' + v.className.trim().split(' ')[0] : '') + '>'
+    try {
+      const out = JSON.stringify(v, (k, x) => (typeof x === 'function' ? 'function' : x && x.nodeType === 1 ? '<element>' : x))
+      return out === undefined ? String(v) : out.length > 400 ? out.slice(0, 400) + '…' : out
+    } catch (err) { return String(v) }
+  }
+  try { return { ok: true, value: ser((${expr})) } } catch (err) { return { ok: false, error: String(err && err.message ? err.name + ': ' + err.message : err) } }
+})()`
+
+/** The expressions, one line each, with the value at every instant. Pure. */
+export function describeEvals(rows: Array<{ label: string; readings: EvalReading[] }>): string {
+  const expressions = rows[0]?.readings.map((r) => r.expr) ?? []
+  return expressions
+    .map((expr, i) => {
+      const parts = rows.map((row) => {
+        const r = row.readings[i]
+        if (!r) return `${row.label} → ?`
+        return r.ok ? `${row.label} → ${r.value}` : `${row.label} → ERROR ${r.error}`
+      })
+      const notGlobal = rows.some((row) => /is not defined/.test(row.readings[i]?.error ?? ''))
+        ? ' (only globals are visible: a variable inside a function or a type="module" script is not — expose it as window.name)'
+        : ''
+      return `  ${expr}: ${parts.join(' · ')}${notGlobal}`
+    })
+    .join('\n')
 }
 
 // -------------------------------------------------------------- capture
@@ -417,6 +518,8 @@ export interface MotionFrameRequest {
   times: number[]
   /** CSS selectors to read as numbers at each instant (opacity, transform, box, inside the frame). */
   probe?: string[]
+  /** JS expressions evaluated in the page at each instant, after the seek. */
+  evaluate?: string[]
   /** Working folder that registers the composition and the session. */
   root?: string
   sessionId?: string
@@ -441,7 +544,7 @@ export interface MotionFrameResult {
   /** Errors thrown by the composition's scripts. */
   scriptErrors: string[]
   /** One per requested instant, in the SAME order. */
-  cells: { timeMs: number; frame: number; content: FrameContent | null; probe: ProbeReading[] | null }[]
+  cells: { timeMs: number; frame: number; content: FrameContent | null; probe: ProbeReading[] | null; evals: EvalReading[] | null }[]
 }
 
 /**
@@ -502,6 +605,8 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
     const contents: (FrameContent | null)[] = []
     const probes: (ProbeReading[] | null)[] = []
     const probeSelectors = (req.probe ?? []).slice(0, MAX_PROBE_SELECTORS)
+    const evals: (EvalReading[] | null)[] = []
+    const expressions = (req.evaluate ?? []).slice(0, MAX_EVAL_EXPRESSIONS).map((e) => e.slice(0, MAX_EVAL_LENGTH))
     let width = Math.round(spec.width ?? 1920)
     let height = Math.round(spec.height ?? 1080)
     for (let i = 0; i < frames.length; i++) {
@@ -516,6 +621,17 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
           ? (((await win.webContents.executeJavaScript(probeScript(probeSelectors), true).catch(() => null)) as ProbeReading[] | null) ?? null)
           : null,
       )
+      if (expressions.length) {
+        const readings: EvalReading[] = []
+        for (const expr of expressions) {
+          const read = (await win.webContents.executeJavaScript(evalScript(expr), true).catch((err: unknown) => ({
+            ok: false,
+            error: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+          }))) as Omit<EvalReading, 'expr'>
+          readings.push({ expr, ...read })
+        }
+        evals.push(readings)
+      } else evals.push(null)
       if (i === 0) {
         const size = image.getSize()
         if (size.width > 0 && size.height > 0) {
@@ -539,7 +655,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
       height,
       failedFonts: spec.failedFonts ?? [],
       scriptErrors: spec.scriptErrors ?? [],
-      cells: shots.map((shot, i) => ({ timeMs: shot.timeMs, frame: shot.frame, content: contents[i] ?? null, probe: probes[i] ?? null })),
+      cells: shots.map((shot, i) => ({ timeMs: shot.timeMs, frame: shot.frame, content: contents[i] ?? null, probe: probes[i] ?? null, evals: evals[i] ?? null })),
     }
   } finally {
     req.signal?.removeEventListener('abort', onAbort)

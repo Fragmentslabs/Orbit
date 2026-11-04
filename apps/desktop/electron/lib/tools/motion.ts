@@ -7,7 +7,7 @@ import { openMotionAndReport } from '../video/motion-open'
 import { getMotion, motionIdFor, registerMotion } from '../video/motion-store'
 import { pieceFileName, recordMotionFile } from '../video/motion-files'
 import { planPieceFiles, resolveEditFile, truncationReason, unflattenHtml } from '../video/motion-source'
-import { MAX_FRAME_TIMES, MAX_PROBE_SELECTORS, captureMotionFrames, describeFrameContent, describeProbe, frameLabel, sheetFileName } from '../video/motion-frame'
+import { MAX_FRAME_TIMES, MAX_EVAL_EXPRESSIONS, MAX_EVAL_LENGTH, MAX_PROBE_SELECTORS, captureMotionFrames, describeEvals, describeFrameContent, describeProbe, frameLabel, sheetFileName } from '../video/motion-frame'
 import { motionAudioPlan } from '../video/motion-audio'
 import { measureMotionAudio } from '../video/motion-audio-measure'
 import { renderMotion } from '../video/motion'
@@ -210,22 +210,29 @@ export function createMotionTools(
     motion_read: tool({
       description:
         'Returns the current HTML of a motion composition (of this conversation by name, or any one by id), behind a one-line header with its line count and HASH. The user may have asked for changes since you wrote it, and edits need the exact text. ' +
-        'A big file: do NOT re-read it all to copy one string — pass `from`/`to` (lines) or `find` (a piece of text; returns the matching lines with `context` lines around, numbered). Line numbers are only for locating: never put them in oldText.',
+        'A big file: do NOT re-read it all to copy one string — pass `symbol` (a function, class, const or CSS rule by name: returns the whole block), `from`/`to` (lines) or `find` (one text or several; returns the matching lines with `context` lines around, numbered). Line numbers are only for locating: never put them in oldText.',
       inputSchema: z.object({
         name: NAME.optional(),
         id: ID,
         file: z.string().optional().describe('Text file of the piece to read (e.g. scenes/intro.js). Default: the entry index.html'),
         from: z.number().int().positive().optional().describe('First line to return (1-based)'),
         to: z.number().int().positive().optional().describe('Last line to return'),
-        find: z.string().optional().describe('Return only the lines that contain this text (case-sensitive), with context'),
+        find: z
+          .union([z.string(), z.array(z.string()).max(8)])
+          .optional()
+          .describe('Return only the lines that contain this text (case-sensitive), with context — or ANY of several texts, in one call'),
+        symbol: z
+          .string()
+          .optional()
+          .describe('A function, class, const/let/var or CSS rule by name (buildK, .word, tick): returns the WHOLE block, closed for you — instead of guessing line ranges'),
         context: z.number().int().min(0).max(10).optional().describe('Lines around each match for `find` (default 2)'),
       }),
-      execute: async ({ name, id, file, from, to, find, context }) => {
+      execute: async ({ name, id, file, from, to, find, context, symbol }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         const absolute = resolveEditFile(target.folder, target.file, file)
         const text = await fsp.readFile(absolute, 'utf8')
-        return viewFile(file ?? 'index.html', text, { from, to, find, context })
+        return viewFile(file ?? 'index.html', text, { from, to, find, context, symbol })
       },
     }),
   }
@@ -455,6 +462,13 @@ export function createMotionTools(
           .describe(
             'CSS selectors (e.g. ".w3", "[data-layer=title]") read as NUMBERS at each instant: effective opacity, scale/move/rotate, box, and whether it is inside the frame. The answer to "is the previous word still at 18% at 77.25 s?" — instead of looking at a picture.',
           ),
+        evaluate: z
+          .array(z.string().min(1).max(MAX_EVAL_LENGTH))
+          .max(MAX_EVAL_EXPRESSIONS)
+          .optional()
+          .describe(
+            'JavaScript EXPRESSIONS read from the running piece at each instant, after the seek — e.g. "p.on", "words.length", "document.querySelector(\'.w3\').style.opacity", "window.orbitMotion.scenes ? 1 : 0". The value you would have deduced from opacities, read directly. Only globals are visible (a variable inside a function or a type=module script is not: expose it as window.name); statements go in an IIFE. Read-only use — do not change the page.',
+          ),
         audio: z
           .boolean()
           .optional()
@@ -463,13 +477,14 @@ export function createMotionTools(
           ),
         see: z.boolean().optional().describe('Load the contact sheet into your context (default false). Images are slow and costly: only for a visual doubt'),
       }),
-      execute: async ({ name, id, times, probe, audio, see }, { toolCallId, abortSignal }) => {
+      execute: async ({ name, id, times, probe, evaluate, audio, see }, { toolCallId, abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         const result = await captureMotionFrames({
           target: target.file,
           times,
           probe,
+          evaluate,
           root: target.root,
           sessionId: scope.sessionId,
           signal: abortSignal,
@@ -488,6 +503,9 @@ export function createMotionTools(
         const probed = result.cells
           .filter((c) => c.probe)
           .map((c) => describeProbe(frameLabel(c.timeMs, c.frame), c.probe!))
+        const evaluated = result.cells.some((c) => c.evals)
+          ? describeEvals(result.cells.filter((c) => c.evals).map((c) => ({ label: frameLabel(c.timeMs, c.frame), readings: c.evals! })))
+          : ''
         let sound = ''
         if (audio) {
           try {
@@ -503,6 +521,7 @@ export function createMotionTools(
             .join(' · ')}.`,
           content.length ? `On screen (read from the page):\n${content.join('\n')}` : '',
           probed.length ? `Probe (numbers read from the page; the transform is the element's own):\n${probed.join('\n')}` : '',
+          evaluated ? `Evaluate (read from the running page after each seek):\n${evaluated}` : '',
           sound,
           result.failedFonts.length
             ? `Fonts failed to load (the text fell back to another font): ${[...new Set(result.failedFonts)].join(', ')}.`

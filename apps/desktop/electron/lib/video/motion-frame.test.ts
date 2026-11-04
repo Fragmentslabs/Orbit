@@ -13,7 +13,7 @@ vi.mock('electron', async () => {
   }
 })
 
-const { MAX_FRAME_TIMES, describeProbe, probeScript, describeFrameContent, frameLabel, framesFromTimes, renderFrameSheet, sheetCell, sheetColumns, sheetFileName, sheetLayout } =
+const { MAX_FRAME_TIMES, CLIP_SHARE, describeEvals, evalScript, describeProbe, probeScript, describeFrameContent, frameLabel, framesFromTimes, renderFrameSheet, sheetCell, sheetColumns, sheetFileName, sheetLayout } =
   await import('./motion-frame')
 
 /** A fake "frame": any PNG works, the sheet only draws. */
@@ -257,5 +257,103 @@ describe('probe', () => {
     expect(text).toContain('z 620')
     expect(text).toContain('PARTLY off-frame')
     expect(text).toContain('(+4 more)')
+  })
+})
+
+describe('clipShare (overflow clipping, page script on a fake DOM)', () => {
+  type Box = { left: number; top: number; right: number; bottom: number; width: number; height: number }
+  type Node = { nodeType: 1; parentElement: Node | null; rect: Box; css: Record<string, string>; getBoundingClientRect(): Box }
+  const box = (left: number, top: number, width: number, height: number): Box => ({ left, top, width, height, right: left + width, bottom: top + height })
+  const node = (rect: Box, css: Record<string, string> = {}, parent: Node | null = null): Node => ({
+    nodeType: 1,
+    parentElement: parent,
+    rect,
+    css: { position: 'static', overflowX: 'visible', overflowY: 'visible', ...css },
+    getBoundingClientRect() {
+      return this.rect
+    },
+  })
+  const clipShare = new Function('getComputedStyle', `${CLIP_SHARE}; return clipShare`)((n: Node) => n.css) as (el: Node, r: Box) => number
+
+  it('is 1 when nothing clips, and 0 for a line a box that shows two lines cuts away', () => {
+    const free = node(box(0, 0, 100, 20), {}, node(box(0, 0, 500, 500)))
+    expect(clipShare(free, free.rect)).toBe(1)
+    // a 2-line window (y 100..180); lines of 40 px stacked from y 100
+    const window = node(box(0, 100, 300, 80), { overflowY: 'hidden' })
+    const lines = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => node(box(0, 100 + i * 40, 300, 40), {}, window))
+    expect(lines.map((l) => clipShare(l, l.rect))).toEqual([1, 1, 0, 0, 0, 0, 0, 0])
+  })
+
+  it('reports the share left when a line is cut in half', () => {
+    const window = node(box(0, 100, 300, 80), { overflowY: 'hidden' })
+    const half = node(box(0, 160, 300, 40), {}, window)
+    expect(clipShare(half, half.rect)).toBe(0.5)
+  })
+
+  it('an overflow:visible parent does not clip, and an absolutely positioned child escapes a static clipper', () => {
+    const clipper = node(box(0, 0, 100, 100), { overflowX: 'hidden', overflowY: 'hidden' })
+    const out = node(box(200, 200, 50, 50), { position: 'absolute' }, clipper)
+    expect(clipShare(out, out.rect)).toBe(1)
+    // …but a positioned clipper IS its containing block, so it cuts the child
+    clipper.css.position = 'relative'
+    expect(clipShare(out, out.rect)).toBe(0)
+  })
+})
+
+describe('what a frame shows when a parent clips', () => {
+  it('says how much of a line is visible and how many blocks the clip cut away', () => {
+    const text = describeFrameContent(
+      '0:01',
+      { texts: [{ text: 'half line', x: 0, y: 0, width: 200, height: 40, opacity: 1, visible: 0.5 }], hiddenTexts: 6, clippedTexts: 6, media: 0 },
+      { width: 1080, height: 1920 },
+    )
+    expect(text).toContain('only 50% visible (clipped by a parent)')
+    expect(text).toContain('6 text block(s) on the page are invisible here (6 of them cut away by a parent with overflow hidden)')
+  })
+  it('the probe calls an element clipped away by name', () => {
+    const text = describeProbe('0:01', [
+      { selector: '.line', count: 1, matches: [{ label: 'line[3]', opacity: 1, scale: 1, rotate: 0, x: 0, y: 0, z: 0, box: { x: 0, y: 400, width: 300, height: 40 }, frame: 'clipped' }] },
+    ])
+    expect(text).toContain('CLIPPED AWAY by a parent with overflow hidden')
+  })
+})
+
+describe('evaluate (expressions read from the page)', () => {
+  const run = (expr: string, globals: Record<string, unknown> = {}) =>
+    new Function(...Object.keys(globals), `return ${evalScript(expr)}`)(...Object.values(globals)) as { ok: boolean; value?: string; error?: string }
+
+  it('reads numbers, booleans, strings, undefined and objects as text', () => {
+    expect(run('1 + 2')).toEqual({ ok: true, value: '3' })
+    expect(run('p.on', { p: { on: undefined } })).toEqual({ ok: true, value: 'undefined' })
+    expect(run('p.on', { p: { on: true } })).toEqual({ ok: true, value: 'true' })
+    expect(run('"oi"')).toEqual({ ok: true, value: '"oi"' })
+    expect(run('xs', { xs: [1, { a: 2 }] })).toEqual({ ok: true, value: '[1,{"a":2}]' })
+    expect(run('f', { f: function pulse() {} })).toEqual({ ok: true, value: 'function pulse' })
+  })
+
+  it('says what an element is, and cuts a long value short', () => {
+    expect(run('el', { el: { nodeType: 1, tagName: 'DIV', id: 'title', className: 'big hero' } }).value).toBe('<div#title.big>')
+    const long = run('"x".repeat(900)').value!
+    expect(long.length).toBeLessThan(260)
+  })
+
+  it('reports a thrown error instead of failing, with its name', () => {
+    expect(run('missing.thing')).toMatchObject({ ok: false, error: expect.stringContaining('ReferenceError') })
+    expect(run('null.x')).toMatchObject({ ok: false, error: expect.stringContaining('TypeError') })
+  })
+
+  it('does not hand the expression to eval: it is part of the script', () => {
+    expect(evalScript('a + b')).not.toMatch(/\beval\b|new Function/)
+  })
+
+  it('groups one line per expression with the value at every instant', () => {
+    const text = describeEvals([
+      { label: '1:17.25', readings: [{ expr: 'p.on', ok: true, value: 'undefined' }, { expr: 'n', ok: true, value: '4' }] },
+      { label: '1:20', readings: [{ expr: 'p.on', ok: false, error: 'ReferenceError: p is not defined' }, { expr: 'n', ok: true, value: '5' }] },
+    ])
+    expect(text).toContain('p.on: 1:17.25 → undefined · 1:20 → ERROR ReferenceError: p is not defined')
+    expect(text).toContain('only globals are visible')
+    expect(text).toContain('n: 1:17.25 → 4 · 1:20 → 5')
+    expect(text.split('\n').filter((l) => l.includes('only globals'))).toHaveLength(1)
   })
 })

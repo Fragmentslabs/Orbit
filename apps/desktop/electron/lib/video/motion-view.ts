@@ -22,9 +22,11 @@ export function fileHash(text: string): string {
 export interface ViewRequest {
   from?: number
   to?: number
-  /** Plain text (case-sensitive): the lines that contain it, with context around. */
-  find?: string
+  /** Plain text (case-sensitive), or several: the lines that contain any of them, with context around. */
+  find?: string | string[]
   context?: number
+  /** A function, class, const or CSS rule by name: the WHOLE block, found and closed for you. */
+  symbol?: string
 }
 
 const numbered = (lines: string[], first: number, last: number): string => {
@@ -35,6 +37,80 @@ const numbered = (lines: string[], first: number, last: number): string => {
     .join('\n')
 }
 
+const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Lines (0-based) where a declaration of `name` begins: function, class, const/let/var, method, object member, CSS rule. */
+function declarations(lines: string[], name: string): number[] {
+  const n = escapeRe(name)
+  const css = /^[.#[:]/.test(name) ? new RegExp(`(^|[\\s,}>+~])${n}\\s*[,{:]`) : null
+  const code = [
+    new RegExp(`(^|[^\\w$.])function\\s*\\*?\\s*${n}\\s*\\(`),
+    new RegExp(`(^|[^\\w$.])class\\s+${n}\\b`),
+    new RegExp(`(^|[^\\w$.])(const|let|var)\\s+${n}\\s*[=:;,]`),
+    new RegExp(`^\\s*(async\\s+)?${n}\\s*\\([^)]*\\)\\s*\\{`),
+    new RegExp(`^\\s*${n}\\s*:\\s*(async\\s*)?(function\\b|\\()`),
+    new RegExp(`(^|[^\\w$])${n}\\s*=\\s*(async\\s*)?(function\\b|\\()`),
+  ]
+  const hits: number[] = []
+  lines.forEach((line, i) => {
+    if (css ? css.test(line) : code.some((re) => re.test(line))) hits.push(i)
+  })
+  return hits
+}
+
+/**
+ * Last line (0-based) of the block that begins at `start`: counts { } and ignores strings,
+ * template literals and comments. A declaration with no braces (an arrow const) ends at the
+ * first line that closes with ";" or after a few lines. A heuristic: a regex literal with a quote
+ * or a brace inside can fool it, and the answer says where it stopped.
+ */
+export function blockEnd(lines: string[], start: number): number {
+  const limit = Math.min(lines.length, start + MAX_VIEW_LINES)
+  let depth = 0
+  let opened = false
+  let quote: string | null = null
+  let comment = false
+  for (let i = start; i < limit; i++) {
+    const line = lines[i]
+    for (let j = 0; j < line.length; j++) {
+      const c = line[j]
+      const next = line[j + 1]
+      if (comment) {
+        if (c === '*' && next === '/') {
+          comment = false
+          j++
+        }
+        continue
+      }
+      if (quote) {
+        if (c === '\\') j++
+        else if (c === quote) quote = null
+        continue
+      }
+      if (c === '/' && next === '/') break
+      if (c === '/' && next === '*') {
+        comment = true
+        j++
+        continue
+      }
+      if (c === "'" || c === '"' || c === '`') {
+        quote = c
+        continue
+      }
+      if (c === '{') {
+        depth++
+        opened = true
+      } else if (c === '}') {
+        depth--
+        if (opened && depth <= 0) return i
+      }
+    }
+    if (quote && quote !== '`') quote = null
+    if (!opened && (line.trimEnd().endsWith(';') || i - start >= 6)) return i
+  }
+  return limit - 1
+}
+
 /**
  * What motion_read returns. No request = the file as it is (it is what edits copy from);
  * `from`/`to` = those lines, numbered; `find` = the matching lines with context, numbered.
@@ -43,16 +119,29 @@ const numbered = (lines: string[], first: number, last: number): string => {
 export function viewFile(name: string, text: string, req: ViewRequest = {}): string {
   const lines = text.split('\n')
   const head = `${name} · ${lines.length} lines · hash ${fileHash(text)}`
-  if (req.find === undefined && req.from === undefined && req.to === undefined) return `[${head}]\n${text}`
+  if (req.find === undefined && req.from === undefined && req.to === undefined && !req.symbol) return `[${head}]\n${text}`
+
+  if (req.symbol) {
+    const found = declarations(lines, req.symbol)
+    if (found.length === 0) {
+      return `[${head}]\nNo declaration of ${JSON.stringify(req.symbol)} (function, class, const/let/var, method or CSS rule). Try find: ${JSON.stringify(req.symbol)} to see every line that mentions it.`
+    }
+    const first = found[0]
+    const last = blockEnd(lines, first)
+    const others = found.length > 1 ? `\n(${found.length - 1} more declaration${found.length > 2 ? 's' : ''} at line${found.length > 2 ? 's' : ''} ${found.slice(1, 6).map((i) => i + 1).join(', ')})` : ''
+    return `[${head}] ${JSON.stringify(req.symbol)}: lines ${first + 1}–${last + 1}; line numbers are not part of the file:\n${numbered(lines, first + 1, last + 1)}${others}`
+  }
 
   if (req.find !== undefined) {
-    if (!req.find) return `[${head}]\nfind is empty.`
+    const needles = (Array.isArray(req.find) ? req.find : [req.find]).filter(Boolean)
+    if (needles.length === 0) return `[${head}]\nfind is empty.`
+    const label = needles.map((n) => JSON.stringify(n)).join(' / ')
     const context = Math.max(0, Math.min(10, req.context ?? 2))
     const hits: number[] = []
     lines.forEach((line, i) => {
-      if (line.includes(req.find as string)) hits.push(i + 1)
+      if (needles.some((n) => line.includes(n))) hits.push(i + 1)
     })
-    if (hits.length === 0) return `[${head}]\nNo line contains ${JSON.stringify(req.find)}. (Case matters; try a shorter piece of the text.)`
+    if (hits.length === 0) return `[${head}]\nNo line contains ${label}. (Case matters; try a shorter piece of the text.)`
     const shown = hits.slice(0, MAX_MATCHES)
     // Merge the windows around each hit so close matches read as one block.
     const blocks: Array<[number, number]> = []
@@ -65,7 +154,7 @@ export function viewFile(name: string, text: string, req: ViewRequest = {}): str
     }
     const body = blocks.map(([a, b]) => numbered(lines, a, b)).join('\n   …\n')
     const more = hits.length > shown.length ? `\n(+${hits.length - shown.length} more matches — narrow the text)` : ''
-    return `[${head}] ${hits.length} line${hits.length === 1 ? '' : 's'} contain ${JSON.stringify(req.find)}; line numbers are not part of the file:\n${body}${more}`
+    return `[${head}] ${hits.length} line${hits.length === 1 ? '' : 's'} contain ${label}; line numbers are not part of the file:\n${body}${more}`
   }
 
   const first = Math.max(1, Math.floor(req.from ?? 1))
