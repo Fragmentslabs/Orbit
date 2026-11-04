@@ -27,6 +27,7 @@ import {
 } from './motion-render-args'
 import { capturePageReliably } from './capture'
 import { MOTION_SPEC } from './motion-runtime'
+import { checkOverrides, withOverrides } from './motion-props'
 import type { MotionTransitionInfo } from './motion-transitions'
 
 /**
@@ -99,6 +100,11 @@ export interface MotionOptions extends MotionSpec {
    * when the piece has sound — without tracks, the render creates no file at all.
    */
   separateAudio?: boolean
+  /**
+   * Props of this render (see motion-props.ts): overrides of what the composition's props.json
+   * declares. Validated before any frame; an unknown or ill-typed one is an error.
+   */
+  props?: Record<string, unknown>
   /** Called at every CAPTURED frame (not in order: it is the count that went up). */
   onProgress?: (frame: number, total: number) => void
   signal?: AbortSignal
@@ -398,6 +404,15 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     if (registration.created) registeredId = id
   }
   if (!id || !url) throw new Error(`unknown motion composition: ${opts.id ?? opts.file}`)
+  if (opts.props && Object.keys(opts.props).length) {
+    const folder = (await registry.getMotion(id))?.folder
+    const problems = folder ? await checkOverrides(folder, [{ label: 'props', props: opts.props }]) : []
+    if (problems.length) {
+      if (registeredId) await registry.unregisterMotion(registeredId).catch(() => undefined)
+      throw new Error(`invalid props — ${problems.join('; ')}`)
+    }
+    url = withOverrides(url, opts.props)
+  }
 
   const windows: BrowserWindow[] = []
   const counters: Counters = { done: 0, seekPaint: 0, capture: 0, encodeWrite: 0 }

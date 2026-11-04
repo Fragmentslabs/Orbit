@@ -11,6 +11,7 @@ import { MAX_FRAME_TIMES, MAX_EVAL_EXPRESSIONS, MAX_EVAL_LENGTH, MAX_PROBE_SELEC
 import { motionAudioPlan } from '../video/motion-audio'
 import { measureMotionAudio } from '../video/motion-audio-measure'
 import { renderMotion } from '../video/motion'
+import { MAX_VARIATIONS, checkOverrides, variationLabels } from '../video/motion-props'
 import { copyPieceFolder } from '../video/motion-copy'
 import { describeEditReceipt, fileHash, viewFile } from '../video/motion-view'
 import { readWordsSidecar, writeWordsSidecar } from '../video/motion-words'
@@ -563,6 +564,8 @@ export function createMotionTools(
         'format: mp4 (normal clip), mov (ProRes 4444) or webm; transparent: true with mov/webm gives an alpha overlay. ' +
         'quality (high/balanced/small) is the FILE weight — the same choice as the tab\'s Render dialog — and it does NOT make the render faster: to make a render cheap, lower width/height and fps. ' +
         'bands: 1 forces a single sequential pass (the deterministic path for a composition that cannot be pure). ' +
+        'PROPS: a composition that declares props.json (title, price, colour, logo…) is rendered with other values by `props` ({ title: "Oferta A" }) — the rest keep their defaults; an undeclared or ill-typed prop is refused with the list of what is declared. ' +
+        `VIDEOS IN BULK: \`variations\` ([{ name: "oferta-a", props: {...} }, …], up to ${MAX_VARIATIONS}) renders the SAME piece once per item, one file each, named after the piece and the variation, all checked before the first frame; they go to the Media gallery and are listed in the result (not played one by one).` +
         (project
           ? '`output` (code mode): ALSO copy the finished file into the working folder at this path — only when the user wants the video in the project or an EDL needs it there. `audio`: a one-off audio file of the working folder mixed from the start (normally declare tracks in audio.json inside the composition instead). '
           : '') +
@@ -594,15 +597,68 @@ export function createMotionTools(
         output: z.string().optional().describe('Code mode only: a path in the working folder to ALSO copy the video to'),
         audio: z.string().optional().describe('Code mode only: an audio file of the working folder, mixed from the start of the piece'),
         show: z.boolean().optional().describe('Show it in your reply as a player (default true)'),
+        props: z.record(z.string(), z.unknown()).optional().describe('Values for the props declared in props.json, for this render (the rest keep their defaults)'),
+        variations: z
+          .array(z.object({ name: z.string().optional().describe('Short label for the file name (default: its number)'), props: z.record(z.string(), z.unknown()) }))
+          .min(1)
+          .max(MAX_VARIATIONS)
+          .optional()
+          .describe(`One render per item, each with its own props — a batch of videos from one piece (max ${MAX_VARIATIONS}). In code mode \`output\` is then a FOLDER that receives them all.`),
       }),
-      execute: async ({ name, id, format, transparent, output, audio, show: showIt = true, ...spec }, { abortSignal }) => {
+      execute: async ({ name, id, format, transparent, output, audio, show: showIt = true, props, variations, ...spec }, { abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         if ((output || audio) && !project) throw new Error('`output` and `audio` need a working folder (code mode)')
-        const exported = output ? resolveWritePath(project!, output) : null
+        if (variations && props) throw new Error('pass `props` for one render or `variations` for several, not both')
         const ext = format ?? 'mp4'
         // The output lives next to the conversation's compositions, OUTSIDE the piece's folder
         // (which is watched for the live reload).
+        await fsp.mkdir(path.join(root, 'renders'), { recursive: true })
+
+        // BULK: every variation is checked against props.json before the first frame, so a typo in
+        // the 37th does not come out after thirty-six renders.
+        if (variations) {
+          const labels = variationLabels(variations)
+          const problems = await checkOverrides(
+            path.dirname(target.file),
+            variations.map((v, i) => ({ label: `variation ${i + 1}${v.name ? ` "${v.name}"` : ''}`, props: v.props })),
+          )
+          if (problems.length) throw new Error(`not rendered — ${problems.join('; ')}`)
+          const folder = output ? resolveWritePath(project!, output) : null
+          if (folder) await fsp.mkdir(folder, { recursive: true })
+          const done: string[] = []
+          const lines: string[] = []
+          for (let i = 0; i < variations.length; i += 1) {
+            if (abortSignal?.aborted) {
+              lines.push(`Stopped by the user after ${done.length} of ${variations.length}.`)
+              break
+            }
+            const file = path.join(root, 'renders', `${target.name}-${labels[i]}.${ext}`)
+            const result = await renderMotion({
+              file: target.file,
+              output: file,
+              signal: abortSignal,
+              root: target.root,
+              sessionId: scope.sessionId,
+              transparent,
+              audio: audio ? resolveSafePath(project!, audio) : undefined,
+              props: variations[i].props,
+              ...spec,
+            })
+            await addVideoToGallery({ file, name: path.basename(file), sessionId: scope.sessionId, source: 'chat' })
+            if (folder) await fsp.copyFile(file, path.join(folder, path.basename(file)))
+            done.push(path.basename(file))
+            lines.push(`${i + 1}/${variations.length} ${path.basename(file)} — ${result.duration}s, ${result.width}x${result.height}${result.warnings.length ? ` · ${result.warnings.join('; ')}` : ''}`)
+          }
+          return {
+            message: [
+              `Rendered ${done.length} of ${variations.length} variations of "${target.name}" — all in the Media gallery${folder ? `, and copied to ${path.relative(project!.directory, folder) || folder}` : ''}.`,
+              ...lines,
+            ].join('\n'),
+          }
+        }
+
+        const exported = output ? resolveWritePath(project!, output) : null
         const out = path.join(root, 'renders', `${target.name}.${ext}`)
         await fsp.mkdir(path.dirname(out), { recursive: true })
         const result = await renderMotion({
@@ -613,6 +669,7 @@ export function createMotionTools(
           sessionId: scope.sessionId,
           transparent,
           audio: audio ? resolveSafePath(project!, audio) : undefined,
+          props,
           ...spec,
         })
         if (exported) {

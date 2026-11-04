@@ -208,6 +208,24 @@ The look of a kinetic-type piece or an app tour is rarely a cut between scenes: 
 - The camera OWNS the transform of the world's direct children: animate what is inside them (a wrapper), never the layer itself. It runs after your seek, so it is a pure function of the frame like the rest. Read it with motion_frame evaluate: ["cam.at(2.5)"] (expose it as window.cam).
 - Do not fake a camera move with a CSS transition or a blur on the whole frame: the lint refuses the first and the second is a render trap.
 
+## Props: ONE piece, MANY videos
+When the same piece has to come out many times with other data (a title, a price, a name, a colour, a logo — an offer per product, a card per person), do NOT copy the piece and edit its text: declare the parts that change and render it with other values.
+  props.json (next to index.html; write it with motion_write files):
+    { "title": { "type": "text", "default": "Black Friday" },
+      "price": { "type": "number", "default": 99, "min": 0 },
+      "color": { "type": "color", "default": "#c93b64" },
+      "tone":  { "type": "select", "options": ["warm", "cool"], "default": "warm" },
+      "logo":  { "type": "image", "default": "logo.png" },
+      "badge": "NEW" }                      <!-- shorthand: a bare value is its own default (text, number, true/false or #colour) -->
+  in the page:   const { title, price, color } = orbitMotion.props     // fixed for the whole render: a frame stays a function of its number
+  one render:    motion_render({ name, props: { title: "Oferta A", price: 49 } })       // the rest keep their defaults
+  in bulk:       motion_render({ name, variations: [{ name: "oferta-a", props: {...} }, { name: "oferta-b", props: {...} }] })   // up to 50, one file each
+- Types: text, number (min, max), color (#hex), boolean, select (options), image (a path inside the piece folder: put the file there with motion_asset first). An undeclared name or a wrong type is refused with the list of what IS declared, and every variation is checked BEFORE the first frame.
+- Design the piece for the data it will get: size text with fitText (a long name must fit), never hard-code a value that is also a prop, and give each prop a default that makes a good video by itself (the preview and a render without props use them).
+- A prop that changes the LENGTH (a longer name, more items) must not change the declared duration silently: derive scenes from durations (orbitMotion.scenes with duration=auto) and test the longest case with motion_frame.
+- The lint says when the page reads a prop that props.json does not declare (error) or declares one the page never reads (warning). motion_preview lists the declared props.
+- For many items from a list the user gave you, build the variations array from it (one name per item); render a first variation alone and look at it before launching fifty.
+
 ## Sound-reactive visuals: orbitMotion.audio
 A waveform, an equalizer or a pulse must come from the REAL sound — never Math.sin or random bars. The runtime analyses the tracks of audio.json (placed on the piece timeline with their start/offset/end/level) once, and then reads them by frame:
 - orbitMotion.audio.load() at the top of the script (seeks wait for the analysis); load('song.mp3') analyses one track alone.

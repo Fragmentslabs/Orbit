@@ -12,6 +12,7 @@ import {
   type LintSource,
 } from './motion-lint'
 import { lintMotionScenes, type MotionSceneInfo } from './motion-scenes'
+import { lintProps, readPropsFile } from './motion-props'
 import type { MotionTransitionInfo } from './motion-transitions'
 
 /**
@@ -87,6 +88,9 @@ export async function lintMotionComposition(input: MotionLintInput): Promise<Lin
     const findings = lintMotionSources({ name: path.basename(input.entry), text: html }, scripts, {
       assetStatus: (ref) => status.get(ref) ?? 'ok',
     })
+    // Props: props.json against what the page reads from orbitMotion.props.
+    const propsFile = await readPropsFile(input.folder)
+    findings.push(...lintProps(propsFile, [html, ...scripts.map((x) => x.text)]))
     if (input.runtime) {
       const seconds = input.runtime.durationInFrames / input.runtime.fps
       findings.push(...lintMotionTransitions(input.runtime.transitions, seconds))

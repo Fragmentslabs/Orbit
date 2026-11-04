@@ -141,6 +141,8 @@ function makePage(
     lists?: Record<string, unknown[]>
     /** More members of the fake document (createElement, body…). */
     doc?: Record<string, unknown>
+    /** What the scheme handler injects as window.__orbitProps (the props of this render). */
+    props?: Record<string, unknown>
   } = {},
 ) {
   const posted: Array<Record<string, unknown>> = []
@@ -162,6 +164,7 @@ function makePage(
     devicePixelRatio: 2,
     parent,
     orbitMotion: (options.predeclared ?? {}) as Record<string, unknown>,
+    ...(options.props ? { __orbitProps: options.props } : {}),
     addEventListener: (type: string, fn: FakeListener) => {
       if (type === 'message') listeners.push(fn)
     },
@@ -839,5 +842,52 @@ describe('orbitMotion.camera', () => {
     expect(cam.at(0.5)).toMatchObject({ x: 540, y: 960 })
     expect(cam.at(1.1).x).not.toBe(540)
     expect(cam.at(3)).toMatchObject({ x: 540, y: 960 })
+  })
+})
+
+describe('orbitMotion.props', () => {
+  type PropsApi = FakeApi & { props: Record<string, unknown> }
+
+  it('exposes what the handler injected, frozen', () => {
+    const { api } = makePage({ meta: 'fps=30,duration=2', props: { title: 'Oferta A', price: 49 } }) as unknown as { api: PropsApi }
+    expect(api.props).toEqual({ title: 'Oferta A', price: 49 })
+    expect(Object.isFrozen(api.props)).toBe(true)
+    expect(() => {
+      'use strict'
+      ;(api.props as Record<string, unknown>).title = 'x'
+    }).toThrow()
+  })
+
+  it('is an empty object when the composition declares no props', () => {
+    const { api } = makePage({ meta: 'fps=30,duration=2' }) as unknown as { api: PropsApi }
+    expect(api.props).toEqual({})
+  })
+
+  it('a change to the injected object after boot does not leak into a read already made', () => {
+    const page = makePage({ meta: 'fps=30,duration=2', props: { n: 1 } }) as unknown as { api: PropsApi; win: Record<string, unknown> }
+    const first = page.api.props
+    ;(page.win.__orbitProps as Record<string, unknown>).n = 2
+    expect(first.n).toBe(1)
+  })
+})
+
+describe('injectMotionRuntime with props', () => {
+  it('puts the values BEFORE the runtime, so the runtime finds them', () => {
+    const out = injectMotionRuntime('<head></head><body></body>', 'orbit-motion', 'mv_abc', { title: 'Oferta', price: 49 })
+    expect(out.indexOf('window.__orbitProps=')).toBeGreaterThan(-1)
+    expect(out.indexOf('window.__orbitProps=')).toBeLessThan(out.indexOf(TAG.slice(0, 40)))
+    expect(out).toContain('"title":"Oferta"')
+  })
+
+  it('adds nothing without props, and never twice', () => {
+    const plain = injectMotionRuntime('<head></head>', 'orbit-motion', 'mv_abc')
+    expect(plain).not.toContain('__orbitProps')
+    const once = injectMotionRuntime('<head></head>', 'orbit-motion', 'mv_abc', { a: 1 })
+    expect(injectMotionRuntime(once, 'orbit-motion', 'mv_abc', { a: 2 })).toBe(once)
+  })
+
+  it('a value that tries to close the script stays inert', () => {
+    const out = injectMotionRuntime('<head></head>', 'orbit-motion', 'mv_abc', { t: '</script><img src=x onerror=alert(1)>' })
+    expect(out).not.toContain('</script><img')
   })
 })

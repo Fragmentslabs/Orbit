@@ -1,3 +1,4 @@
+import { describeProps, readPropsFile } from './motion-props'
 import path from 'node:path'
 import { listMedia } from '../media'
 import { panelMotionPreview } from '../panel-browser'
@@ -130,6 +131,12 @@ export async function openMotionAndReport(input: {
       runtime: { fps: measured.fps, durationInFrames: measured.durationInFrames, transitions: measured.transitions, scenes: measured.scenes },
       audio: plan,
     })
+    // The props the piece declares: what can change from one video to the next.
+    const propsFile = await readPropsFile(preview.folder).catch(() => null)
+    const props =
+      propsFile?.exists && !propsFile.errors.length && Object.keys(propsFile.schema).length
+        ? `Props (props.json — set them per render with motion_render props / variations; read in the page with orbitMotion.props): ${describeProps(propsFile.schema)}.`
+        : ''
     return [
       `Motion "${name}" is open in the Motion tab of the right panel (${input.label}) and loads fine: ${measured.width}x${measured.height}, ${measured.durationInFrames} frames at ${measured.fps} fps (${(measured.durationInFrames / measured.fps).toFixed(2)} s).`,
       measured.failedFonts.length ? `Fonts that failed to load: ${measured.failedFonts.join(', ')}.` : '',
@@ -137,6 +144,7 @@ export async function openMotionAndReport(input: {
         ? `[error] The composition's scripts threw: ${measured.scriptErrors.join(' | ')}. The piece is BROKEN (no animation, empty layer list) — fix this before anything else and do not tell the user it works.`
         : '',
       audio,
+      props,
       describeTransitions(measured.transitions),
       describeScenes(measured.scenes),
       'Layers (when each enters and leaves the frame):',

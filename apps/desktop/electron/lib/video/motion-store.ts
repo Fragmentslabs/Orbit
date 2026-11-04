@@ -15,6 +15,7 @@ import {
 } from './motion-render-args'
 import { renderMotion } from './motion'
 import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './motion-runtime'
+import { PROPS_QUERY, propsForPage } from './motion-props'
 import { MOTION_THREE_PREFIX, findThreeRoot, resolveThreeFile } from './motion-three'
 import { MOTION_THREE_HELPER, MOTION_THREE_HELPER_PATH } from './motion-three-helper'
 import { journalPath } from '../session/media-journal'
@@ -602,7 +603,9 @@ export function registerMotionProtocol(): void {
     if (ext === '.html' || ext === '.htm') {
       const html = await fsp.readFile(file, 'utf8').catch(() => null)
       if (html === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
-      return respond(injectMotionRuntime(html, MOTION_SCHEME, id), type)
+      // The props of this page: props.json defaults + the overrides the render put in the URL.
+      const props = await propsForPage(entry.folder, url.searchParams.get(PROPS_QUERY)).catch(() => null)
+      return respond(injectMotionRuntime(html, MOTION_SCHEME, id, props), type)
     }
     const size = await fsp
       .stat(file)

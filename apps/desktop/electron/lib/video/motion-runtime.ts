@@ -1,3 +1,4 @@
+import { propsScriptTag } from './motion-props'
 import { MOTION_AUDIO_LOADER_SCRIPT, MOTION_HELPERS_SCRIPT } from './motion-helpers'
 import { MOTION_TIMING_SCRIPT } from './motion-timing'
 import { MOTION_TRANSITIONS_SCRIPT } from './motion-transitions'
@@ -756,6 +757,12 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     api.continueRender = continueRender
     api.transition = addTransition
     api.camera = addCamera
+    // Props of the piece (props.json + the overrides of this render): fixed for the whole run.
+    Object.defineProperty(api, 'props', {
+      configurable: true,
+      enumerable: true,
+      get: function () { return Object.freeze(Object.assign({}, window.__orbitProps || {})) },
+    })
     // Remotion-style primitives (motion-helpers.ts): pure functions of the frame.
     api.interpolate = orbitInterpolate
     api.spring = function (o) { return orbitSpring(Object.assign({ fps: resolved.fps }, o)) }
@@ -1155,10 +1162,11 @@ export function motionRuntimeTag(scheme: string, id: string): string {
  * Without `<head>`, the script is prefixed to the document — the parser executes it before
  * any script of the composition anyway.
  */
-export function injectMotionRuntime(html: string, scheme: string, id: string): string {
+export function injectMotionRuntime(html: string, scheme: string, id: string, props?: Record<string, string | number | boolean> | null): string {
   if (html.includes(RUNTIME_MARK)) return html
-  // The runtime, then the import map for the native three.js (before any module script).
-  const tag = motionRuntimeTag(scheme, id) + (hasOwnImportMap(html) ? '' : motionImportMapTag(scheme, id))
+  // The props of this render (props.json defaults + the overrides), then the runtime that exposes them,
+  // then the import map for the native three.js (before any module script).
+  const tag = (props ? propsScriptTag(props) : '') + motionRuntimeTag(scheme, id) + (hasOwnImportMap(html) ? '' : motionImportMapTag(scheme, id))
   const head = /<head[^>]*>/i.exec(html)
   if (head) return `${html.slice(0, head.index + head[0].length)}${tag}${html.slice(head.index + head[0].length)}`
   const htmlTag = /<html[^>]*>/i.exec(html)
