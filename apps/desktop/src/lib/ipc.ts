@@ -1,3 +1,4 @@
+import type { MotionPropsInfo } from "./motion-props-form"
 import type {
   Catalog,
   CatalogProvider,
@@ -787,6 +788,8 @@ export const motionApi = {
     )
     return () => window.ipcRenderer.off("motion:render:progress", wrapper)
   },
+  /** The props the composition declares (props.json), to build the form; { exists: false } when it has none. */
+  props: (id: string) => window.ipcRenderer.invoke("motion:props", id) as Promise<MotionPropsInfo>,
   /** Who enters and leaves the scene, and when (measured in main, offscreen). */
   layers: (id: string) => window.ipcRenderer.invoke("motion:layers", id) as Promise<MotionLayersResult>,
   /** The composition's folder changed on disk: remounts the iframe. */
@@ -979,6 +982,8 @@ export interface MotionRenderOptions {
   fps?: number
   /** Also write the track on its own, in WAV, next to the video. */
   separateAudio?: boolean
+  /** The values of the props form that differ from the defaults (main checks them again). */
+  props?: Record<string, string | number | boolean>
 }
 
 /** Agent documents (orbit-data/documents). The source is Markdown: the panel's

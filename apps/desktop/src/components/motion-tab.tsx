@@ -22,6 +22,7 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
+  SlidersHorizontal,
   Sparkles,
   Type,
   X,
@@ -56,6 +57,8 @@ import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
 import { Truncate } from "@/components/ui/truncated-text"
+import { MotionPropsForm } from "@/src/components/motion-props-form"
+import { changedCount, defaultValues, srcWithProps, toOverrides, type MotionPropsInfo, type PropFormValues } from "@/src/lib/motion-props-form"
 
 /**
  * Preview of a motion composition in the right panel tab — the stage where the
@@ -313,6 +316,10 @@ export function MotionTab({
    * before paying the capture minutes, instead of finding out afterwards.
    */
   const [renderOpen, setRenderOpen] = useState(false)
+  // Props of the piece (props.json): the form, the values the person typed, and what the preview shows.
+  const [propsInfo, setPropsInfo] = useState<MotionPropsInfo | null>(null)
+  const [propValues, setPropValues] = useState<PropFormValues>({})
+  const [propsOpen, setPropsOpen] = useState(false)
   const [renderOptions, setRenderOptions] = useState<{
     format: MotionRenderFormat
     quality: MotionRenderQuality
@@ -470,10 +477,52 @@ export function MotionTab({
   const layout = spec ?? DEFAULT_SPEC
   const total = spec?.durationInFrames ?? 0
 
-  const src = useMemo(
-    () => (motionId && entry ? `${MOTION_SCHEME}://${motionId}/${entryPath(entry)}?r=${reloads}` : ""),
-    [motionId, entry, reloads],
+  const propsSchema = propsInfo?.exists && !propsInfo.errors.length ? propsInfo.schema : null
+  // What differs from the defaults AND is valid: it is what the preview loads and the render receives.
+  const form = useMemo(
+    () => (propsSchema ? toOverrides(propsSchema, propValues) : { overrides: {}, errors: {} }),
+    [propsSchema, propValues],
   )
+  const overridesKey = JSON.stringify(form.overrides)
+  // The preview waits for the person to stop typing: every change reloads the composition.
+  const [appliedKey, setAppliedKey] = useState(overridesKey)
+  useEffect(() => {
+    const timer = setTimeout(() => setAppliedKey(overridesKey), 350)
+    return () => clearTimeout(timer)
+  }, [overridesKey])
+
+  const src = useMemo(() => {
+    const base = motionId && entry ? `${MOTION_SCHEME}://${motionId}/${entryPath(entry)}?r=${reloads}` : ""
+    return srcWithProps(base, JSON.parse(appliedKey) as Record<string, string | number | boolean>)
+  }, [motionId, entry, reloads, appliedKey])
+
+  // The props the piece declares: the form is built from props.json, and it is read again whenever the
+  // folder changes (the agent may have just added or edited one).
+  useEffect(() => {
+    if (!motionId) {
+      setPropsInfo(null)
+      return
+    }
+    let alive = true
+    void motionApi
+      .props(motionId)
+      .then((info) => {
+        if (!alive) return
+        setPropsInfo(info)
+        if (info.exists && !info.errors.length) {
+          // Keep what was typed for the props that still exist; new ones start at their default.
+          setPropValues((prev) => {
+            const next = defaultValues(info.schema)
+            for (const name of Object.keys(next)) if (name in prev) next[name] = prev[name]
+            return next
+          })
+        } else setPropValues({})
+      })
+      .catch(() => alive && setPropsInfo(null))
+    return () => {
+      alive = false
+    }
+  }, [motionId, reloads])
 
   /** Panel → iframe command. With no window mounted, there is no one to send it to. */
   const post = useCallback((message: Record<string, unknown>) => {
@@ -664,6 +713,15 @@ export function MotionTab({
     setFailedFonts([])
     setReloads((n) => n + 1)
   }, [stopClock])
+
+  // A prop changed (after the person stopped typing): the page is loaded again with the new values, going
+  // back to the same frame — the same path as a reload, so the transport and the errors reset alike.
+  const appliedRef = useRef(appliedKey)
+  useEffect(() => {
+    if (appliedRef.current === appliedKey) return
+    appliedRef.current = appliedKey
+    reload()
+  }, [appliedKey, reload])
 
   // The agent rewrote the file (main fs.watch): it reloads going back to the
   // same frame, which is what allows comparing the before and the after of the adjustment.
@@ -904,7 +962,7 @@ export function MotionTab({
       setRenderOpen(false)
       setRender({ status: "running", frame: 0, total: 0 })
       motionApi
-        .render(motionId, options)
+        .render(motionId, { ...options, ...(changedCount(form.overrides) ? { props: form.overrides } : {}) })
         .then((result) => {
           // The render starts with a system save dialog: cancelling is not
           // a failure, it is the person giving up — the tab goes back to rest.
@@ -918,7 +976,7 @@ export function MotionTab({
           setRender({ status: "error", message: err instanceof Error ? err.message : String(err) }),
         )
     },
-    [motionId, rendering],
+    [motionId, rendering, form.overrides],
   )
 
   /**
@@ -1038,6 +1096,20 @@ export function MotionTab({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          {/* Only a piece that declares props has this: the form of props.json. The dot says that
+              something differs from the defaults. */}
+          {propsInfo?.exists && (
+            <span className="relative">
+              <IconAction
+                icon={SlidersHorizontal}
+                label={t("motion.propsTitle")}
+                onClick={() => setPropsOpen((v) => !v)}
+              />
+              {changedCount(form.overrides) > 0 && (
+                <span className="pointer-events-none absolute right-0.5 top-0.5 size-1.5 rounded-full bg-primary" />
+              )}
+            </span>
+          )}
           <IconAction
             icon={project.status === "saving" ? Loader2 : Download}
             label={t("motion.saveProject")}
@@ -1177,6 +1249,29 @@ export function MotionTab({
             <AlertTitle>{t("motion.fontsFailed")}</AlertTitle>
             <AlertDescription className="break-words">{failedFonts.join(", ")}</AlertDescription>
           </Alert>
+        </div>
+      )}
+
+      {/* The props form: above the stage, only when the piece declares props. A broken props.json is
+          said here too, instead of the piece silently having no form. */}
+      {propsInfo?.exists && propsInfo.errors.length > 0 && (
+        <div className="shrink-0 px-3 pt-2">
+          <Alert>
+            <AlertTriangle className="text-amber-500" />
+            <AlertTitle>{t("motion.propsBroken", { errors: propsInfo.errors.join("; ") })}</AlertTitle>
+          </Alert>
+        </div>
+      )}
+      {propsOpen && propsSchema && (
+        <div className="shrink-0 px-3 pt-2">
+          <MotionPropsForm
+            schema={propsSchema}
+            values={propValues}
+            errors={form.errors}
+            changed={changedCount(form.overrides)}
+            onChange={(name, value) => setPropValues((prev) => ({ ...prev, [name]: value }))}
+            onReset={() => setPropValues(defaultValues(propsSchema))}
+          />
         </div>
       )}
 
@@ -1716,6 +1811,14 @@ export function MotionTab({
                 onCheckedChange={(checked) => setRenderOptions((o) => ({ ...o, separateAudio: checked }))}
               />
             </div>
+            {changedCount(form.overrides) > 0 && (
+              <p className="text-[11px] leading-tight text-foreground">
+                {t("motion.renderWithProps", { count: changedCount(form.overrides) })}
+              </p>
+            )}
+            {Object.keys(form.errors).length > 0 && (
+              <p className="text-[11px] leading-tight text-destructive">{t("motion.renderFixProps")}</p>
+            )}
             <p className="text-[11px] leading-tight text-muted-foreground">
               {t("motion.renderCostHint", { frames: renderFrames })}
             </p>
@@ -1724,6 +1827,7 @@ export function MotionTab({
             <Button
               size="sm"
               className="gap-1.5"
+              disabled={Object.keys(form.errors).length > 0}
               onClick={() =>
                 onRender({
                   format: renderOptions.format,

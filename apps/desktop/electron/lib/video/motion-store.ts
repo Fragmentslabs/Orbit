@@ -671,6 +671,11 @@ export interface MotionRenderRequest {
   quality?: MotionQuality
   /** Also write the track alone, in WAV, next to the video. */
   separateAudio?: boolean
+  /**
+   * Values for the props the composition declares in props.json (the tab's form). Checked against the
+   * file before any frame is made: an undeclared or ill-typed one is an error, not a default.
+   */
+  props?: Record<string, unknown>
 }
 
 export interface MotionRenderResult {
@@ -761,6 +766,7 @@ export async function renderRegisteredMotion(
     duration: req.duration,
     quality: req.quality,
     separateAudio: req.separateAudio,
+    props: req.props,
     onProgress,
   })
   return {

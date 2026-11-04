@@ -28,6 +28,7 @@ import {
 } from './lib/video/motion-store'
 import { measureMotionLayers } from './lib/video/motion-layers'
 import { listMotionBundles } from './lib/video/motion-files'
+import { readPropsFile } from './lib/video/motion-props'
 import { exportMotionProject } from './lib/video/motion-project'
 import { motionAudioTracks } from './lib/video/motion-audio'
 import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
@@ -1767,6 +1768,13 @@ app.whenReady().then(() => {
   // name, size, type and whether the composition references each one (used / discarded).
   // The list comes from the FOLDER — the renderer knows no piece path at all, and the
   // card updates when the folder changes, without anything being written into the message.
+  // The props a composition declares (props.json): what the tab turns into a form. A piece with
+  // none answers { exists: false }, and a broken file answers its errors so the tab can say so.
+  ipcMain.handle('motion:props', async (_event, id: string) => {
+    const entry = typeof id === 'string' ? await getMotion(id) : undefined
+    return entry ? readPropsFile(entry.folder) : { exists: false, schema: {}, errors: [] }
+  })
+
   ipcMain.handle('motion:bundles', async (_event, sessionId: string) => listMotionBundles(sessionId))
 
   // "Save project": the whole composition folder into a .zip (HTML, media,
