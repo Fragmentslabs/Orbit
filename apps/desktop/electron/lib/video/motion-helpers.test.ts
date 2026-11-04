@@ -3,7 +3,7 @@ import { MOTION_HELPERS_SCRIPT } from './motion-helpers'
 
 type Easing = Record<string, any>
 const h = new Function(
-  `${MOTION_HELPERS_SCRIPT}; return { interpolate: orbitInterpolate, spring: orbitSpring, Easing: orbitEasing, sequence: orbitSequence, analyze: orbitAnalyzeAudio, bands: orbitReadBands, mix: orbitMixTracks, gain: orbitTrackGain, trackWords: orbitTrackWords, wordLines: orbitWordLines, wordAt: orbitWordAt, findWord: orbitFindWord, normWord: orbitNormWord, scenes: orbitScenes, random: orbitRandom, fitSize: orbitFitSize }`,
+  `${MOTION_HELPERS_SCRIPT}; return { interpolate: orbitInterpolate, spring: orbitSpring, Easing: orbitEasing, sequence: orbitSequence, analyze: orbitAnalyzeAudio, bands: orbitReadBands, mix: orbitMixTracks, gain: orbitTrackGain, trackWords: orbitTrackWords, wordLines: orbitWordLines, wordAt: orbitWordAt, findWord: orbitFindWord, normWord: orbitNormWord, scenes: orbitScenes, random: orbitRandom, fitSize: orbitFitSize, camProgress: orbitCameraProgress, camPlan: orbitCameraPlan, camState: orbitCameraState, camShake: orbitCameraShake, camMatrix: orbitCameraMatrix, camFit: orbitCameraFit }`,
 )() as {
   interpolate(v: number, i: number[], o: number[], opts?: Record<string, unknown>): number
   spring(o: Record<string, unknown>): number
@@ -21,7 +21,15 @@ const h = new Function(
   scenes(list: Record<string, unknown>[], opts?: Record<string, unknown>): Scenes
   random(seed: string | number): number
   fitSize(fits: (size: number) => boolean, min: number, max: number): number | null
+  camProgress(style: string, p: number, o?: Record<string, unknown>): number
+  camPlan(initial: Cam, list: Record<string, unknown>[]): CamMove[]
+  camState(initial: Cam, plan: CamMove[], t: number): Cam
+  camShake(shakes: Record<string, unknown>[], t: number): { x: number; y: number; rot: number }
+  camMatrix(st: Cam, depth: number, w: number, h: number): number[]
+  camFit(rect: { x: number; y: number; w: number; h: number }, vw: number, vh: number, o?: Record<string, unknown>): { x: number; y: number; zoom: number }
 }
+type Cam = { x: number; y: number; zoom: number; rot: number }
+type CamMove = { at: number; dur: number; style: string; from: Cam; to: Cam }
 type Scene = { name: string; start: number; end: number; dur: number }
 type Scenes = {
   list: Scene[]
@@ -241,5 +249,110 @@ describe('fit size search', () => {
   })
   it('says null when not even the smallest fits', () => {
     expect(h.fitSize(() => false, 8, 600)).toBeNull()
+  })
+})
+
+describe('camera', () => {
+  const home: Cam = { x: 540, y: 960, zoom: 1, rot: 0 }
+  /** Where a point of the world lands on screen with this matrix. */
+  const project = (m: number[], x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] })
+
+  it('every style starts at 0 and ends at 1', () => {
+    for (const style of ['ease', 'linear', 'push', 'pull', 'slingshot', 'whip']) {
+      expect(h.camProgress(style, 0)).toBeCloseTo(0, 6)
+      expect(h.camProgress(style, 1)).toBeCloseTo(1, 6)
+    }
+  })
+
+  it('push accelerates into the lens and pull settles', () => {
+    expect(h.camProgress('push', 0.5)).toBeLessThan(0.3)
+    expect(h.camProgress('pull', 0.5)).toBeGreaterThan(0.7)
+    expect(h.camProgress('ease', 0.5)).toBeCloseTo(0.5, 6)
+  })
+
+  it('slingshot winds up the other way, then overshoots, then settles on the target', () => {
+    const values = Array.from({ length: 101 }, (_, i) => h.camProgress('slingshot', i / 100))
+    expect(Math.min(...values)).toBeLessThan(-0.05)
+    expect(Math.max(...values)).toBeGreaterThan(1.02)
+    expect(values[100]).toBeCloseTo(1, 6)
+    // and it is continuous: no jump at the end of the wind-up
+    for (let i = 1; i < values.length; i++) expect(Math.abs(values[i] - values[i - 1])).toBeLessThan(0.2)
+  })
+
+  it('a move only says what changes; the rest stays where the previous one left it', () => {
+    const plan = h.camPlan(home, [
+      { at: 1, dur: 1, to: { zoom: 2 } },
+      { at: 3, dur: 1, to: { x: 100 } },
+    ])
+    expect(plan[0].to).toEqual({ x: 540, y: 960, zoom: 2, rot: 0 })
+    expect(plan[1].from.zoom).toBe(2)
+    expect(plan[1].to).toEqual({ x: 100, y: 960, zoom: 2, rot: 0 })
+  })
+
+  it('refuses overlapping moves, a bad style, no duration and a zero zoom — with the reason', () => {
+    expect(() => h.camPlan(home, [{ at: 0, dur: 2, to: { zoom: 2 } }, { at: 1, dur: 1, to: { zoom: 3 } }])).toThrow(/cannot overlap/)
+    expect(() => h.camPlan(home, [{ at: 0, style: 'bounce' }])).toThrow(/does not exist/)
+    expect(() => h.camPlan(home, [{ at: 0, dur: 0 }])).toThrow(/dur > 0/)
+    expect(() => h.camPlan(home, [{ at: 0, to: { zoom: 0 } }])).toThrow(/zoom > 0/)
+  })
+
+  it('holds before, between and after the moves', () => {
+    const plan = h.camPlan(home, [{ at: 1, dur: 1, to: { x: 200, zoom: 4 } }])
+    expect(h.camState(home, plan, 0.5)).toEqual(home)
+    expect(h.camState(home, plan, 5)).toEqual({ x: 200, y: 960, zoom: 4, rot: 0 })
+  })
+
+  it('zooms geometrically: half the time is half the ratio, not half the zoom', () => {
+    const plan = h.camPlan(home, [{ at: 0, dur: 2, style: 'linear', to: { zoom: 4 } }])
+    expect(h.camState(home, plan, 1).zoom).toBeCloseTo(2, 6)
+  })
+
+  it('is a pure function of time', () => {
+    const plan = h.camPlan(home, [{ at: 0, dur: 2, style: 'slingshot', to: { x: 900, zoom: 3 } }])
+    const a = h.camState(home, plan, 0.77)
+    expect(h.camState(home, plan, 0.1)).not.toEqual(a)
+    expect(h.camState(home, plan, 0.77)).toEqual(a)
+  })
+
+  it('the matrix puts the camera centre in the middle of the frame, at any zoom and rotation', () => {
+    for (const st of [home, { x: 800, y: 300, zoom: 2.5, rot: 0 }, { x: 100, y: 1500, zoom: 0.5, rot: 33 }]) {
+      const p = project(h.camMatrix(st, 1, 1080, 1920), st.x, st.y)
+      expect(p.x).toBeCloseTo(540, 4)
+      expect(p.y).toBeCloseTo(960, 4)
+    }
+  })
+
+  it('zoom scales around the centre: a point 100 px to the right lands 200 px away at zoom 2', () => {
+    const p = project(h.camMatrix({ ...home, zoom: 2 }, 1, 1080, 1920), 640, 960)
+    expect(p.x - 540).toBeCloseTo(200, 4)
+  })
+
+  it('depth is parallax: a far layer moves less than the near one for the same pan', () => {
+    const st = { x: 740, y: 960, zoom: 1, rot: 0 } // panned 200 px right
+    const move = (depth: number) => 540 - project(h.camMatrix(st, depth, 1080, 1920), 540, 960).x
+    expect(move(1)).toBeCloseTo(200, 4)
+    expect(move(2)).toBeCloseTo(100, 4)
+    expect(move(0.5)).toBeCloseTo(400, 4)
+  })
+
+  it('fit contain keeps the rectangle in view; cover fills the frame with it', () => {
+    const rect = { x: 100, y: 200, w: 400, h: 200 }
+    const contain = h.camFit(rect, 1080, 1920)
+    expect(contain).toMatchObject({ x: 300, y: 300 })
+    expect(contain.zoom).toBeCloseTo(2.7, 6) // limited by the width: 1080 / 400
+    const cover = h.camFit(rect, 1080, 1920, { fit: 'cover' })
+    expect(cover.zoom).toBeCloseTo(9.6, 6) // limited by the height: 1920 / 200
+    expect(h.camFit(rect, 1080, 1920, { padding: 40 }).zoom).toBeCloseTo(2.5, 6)
+  })
+
+  it('shake is zero outside its window, dies out by the end and is deterministic', () => {
+    const s = [{ at: 1, dur: 0.5, amp: 20, rot: 1, freq: 20, seed: 'a' }]
+    expect(h.camShake(s, 0.5)).toEqual({ x: 0, y: 0, rot: 0 })
+    expect(h.camShake(s, 2)).toEqual({ x: 0, y: 0, rot: 0 })
+    const early = Math.abs(h.camShake(s, 1.05).x)
+    expect(early).toBeGreaterThan(0)
+    expect(Math.abs(h.camShake(s, 1.499).x)).toBeLessThan(0.5)
+    expect(h.camShake(s, 1.2)).toEqual(h.camShake(s, 1.2))
+    expect(Math.max(...Array.from({ length: 50 }, (_, i) => Math.abs(h.camShake(s, 1 + i * 0.01).x)))).toBeLessThanOrEqual(20)
   })
 })

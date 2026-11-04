@@ -218,6 +218,137 @@ export const MOTION_HELPERS_SCRIPT = `
     return (h >>> 0) / 4294967296
   }
 
+  // ------------------------------------------------------------- camera
+  // A flat world seen through a virtual camera: pan (x, y in WORLD pixels = the point at the
+  // centre of the frame), zoom (1 = natural size) and rot (degrees). Depth is FAKED: a layer with
+  // depth d moves 1/d as far and zooms zoom^(1/d) — parallax with no 3D. All of it is a pure
+  // function of time, so a frame is the same in the tab, in motion_frame and in the render.
+  const ORBIT_CAMERA_STYLES = ['ease', 'linear', 'push', 'pull', 'slingshot', 'whip']
+
+  // How far along (0..1, it may leave that range on purpose) a move is at progress p.
+  //   ease      in-out cubic: the calm default
+  //   push      accelerates toward the lens (a zoom-in that lunges)
+  //   pull      starts fast and settles (a pull-back, a settle)
+  //   slingshot winds up the OTHER way (back, a fraction of the travel), then launches and overshoots
+  //   whip      holds, snaps across and stops short: a fast pan
+  function orbitCameraProgress(style, p, o) {
+    const q = Math.min(1, Math.max(0, p))
+    const opt = o || {}
+    if (style === 'linear') return q
+    if (style === 'push') return Math.pow(q, 2.2)
+    if (style === 'pull') return 1 - Math.pow(1 - q, 2.2)
+    if (style === 'whip') return orbitBezier(0.8, 0, 0.1, 1)(q)
+    if (style === 'slingshot') {
+      const back = opt.back === undefined ? 0.12 : opt.back
+      const over = opt.overshoot === undefined ? 1.2 : opt.overshoot
+      const wind = 0.3
+      if (q < wind) { const u = q / wind; return -back * u * u * (3 - 2 * u) }
+      const r = (q - wind) / (1 - wind)
+      const out = 1 + (over + 1) * Math.pow(r - 1, 3) + over * Math.pow(r - 1, 2)
+      return -back + (1 + back) * out
+    }
+    return q < 0.5 ? 4 * q * q * q : 1 - Math.pow(-2 * q + 2, 3) / 2
+  }
+
+  // The list of moves with every FROM resolved: a move only says what changes; the rest stays
+  // where the previous move left it. Moves are in SECONDS and may not overlap.
+  function orbitCameraPlan(initial, list) {
+    const sorted = list.slice().sort(function (a, b) { return a.at - b.at })
+    const out = []
+    let cur = { x: initial.x, y: initial.y, zoom: initial.zoom, rot: initial.rot }
+    let free = 0
+    for (let i = 0; i < sorted.length; i++) {
+      const m = sorted[i]
+      const label = 'camera move ' + (i + 1) + ' (at ' + m.at + ' s)'
+      const at = Number(m.at)
+      const dur = Number(m.dur === undefined ? 0.6 : m.dur)
+      if (!isFinite(at) || at < 0) throw new Error('camera: ' + label + ' needs at >= 0 (seconds)')
+      if (!isFinite(dur) || dur <= 0) throw new Error('camera: ' + label + ' needs dur > 0 (seconds)')
+      const style = m.style || 'ease'
+      if (ORBIT_CAMERA_STYLES.indexOf(style) < 0) throw new Error('camera: style "' + style + '" does not exist — use ' + ORBIT_CAMERA_STYLES.join(', '))
+      if (at < free - 1e-9) throw new Error('camera: ' + label + ' starts before the previous move ends (' + Math.round(free * 1000) / 1000 + ' s) — moves cannot overlap')
+      const to = { x: cur.x, y: cur.y, zoom: cur.zoom, rot: cur.rot }
+      const keys = ['x', 'y', 'zoom', 'rot']
+      for (let k = 0; k < keys.length; k++) {
+        const v = m.to ? m.to[keys[k]] : undefined
+        if (v === undefined) continue
+        if (!isFinite(Number(v))) throw new Error('camera: ' + label + ' has a to.' + keys[k] + ' that is not a number')
+        to[keys[k]] = Number(v)
+      }
+      if (!(to.zoom > 0)) throw new Error('camera: ' + label + ' needs zoom > 0')
+      out.push({ at: at, dur: dur, style: style, from: cur, to: to, back: m.back, overshoot: m.overshoot })
+      cur = to
+      free = at + dur
+    }
+    return out
+  }
+
+  // Where the camera is at time t. Zoom is interpolated GEOMETRICALLY (equal ratio per frame):
+  // that is what a real zoom feels like; a linear zoom seems to crawl and then rush.
+  function orbitCameraState(initial, plan, t) {
+    let m = null
+    for (let i = 0; i < plan.length; i++) { if (plan[i].at <= t) m = plan[i]; else break }
+    if (!m) return { x: initial.x, y: initial.y, zoom: initial.zoom, rot: initial.rot }
+    if (t >= m.at + m.dur) return { x: m.to.x, y: m.to.y, zoom: m.to.zoom, rot: m.to.rot }
+    const f = orbitCameraProgress(m.style, (t - m.at) / m.dur, m)
+    return {
+      x: m.from.x + (m.to.x - m.from.x) * f,
+      y: m.from.y + (m.to.y - m.from.y) * f,
+      zoom: m.from.zoom * Math.pow(m.to.zoom / m.from.zoom, f),
+      rot: m.from.rot + (m.to.rot - m.from.rot) * f,
+    }
+  }
+
+  // A camera shake: smooth random offsets (not white noise), dying out by the end. Additive.
+  // amp is in world pixels, rot in degrees, freq in "new directions per second".
+  function orbitCameraShake(shakes, t) {
+    let x = 0, y = 0, rot = 0
+    for (let k = 0; k < shakes.length; k++) {
+      const s = shakes[k]
+      const local = t - s.at
+      if (local < 0 || local > s.dur) continue
+      const decay = Math.pow(1 - local / s.dur, 2)
+      const n = local * s.freq
+      const i = Math.floor(n)
+      const fr = n - i
+      const sm = fr * fr * (3 - 2 * fr)
+      const pick = function (axis) {
+        const a = orbitRandom(s.seed + ':' + axis + ':' + i)
+        const b = orbitRandom(s.seed + ':' + axis + ':' + (i + 1))
+        return (a + (b - a) * sm - 0.5) * 2
+      }
+      x += pick('x') * s.amp * decay
+      y += pick('y') * s.amp * decay
+      rot += pick('r') * s.rot * decay
+    }
+    return { x: x, y: y, rot: rot }
+  }
+
+  // The CSS matrix [a, b, c, d, e, f] that puts a layer of the given depth where the camera sees
+  // it: translate(w/2, h/2) rotate(rot) scale(zoom) translate(-x, -y), with depth applied.
+  // The layer must have transform-origin 0 0.
+  function orbitCameraMatrix(st, depth, w, h) {
+    const d = depth > 0 ? depth : 1
+    const cx = w / 2 + (st.x - w / 2) / d
+    const cy = h / 2 + (st.y - h / 2) / d
+    const z = Math.pow(st.zoom, 1 / d)
+    const ang = (st.rot * Math.PI) / 180
+    const a = Math.cos(ang) * z, b = Math.sin(ang) * z
+    const c = -b, dd = a
+    return [a, b, c, dd, w / 2 - (a * cx + c * cy), h / 2 - (b * cx + dd * cy)]
+  }
+
+  // The camera that frames a rectangle of the world ({ x, y, w, h }). fit "contain" (default)
+  // keeps all of it in view; "cover" fills the frame with it — the zoom-through, where the object
+  // BECOMES the background. padding in px (contain), scale multiplies the final zoom.
+  function orbitCameraFit(rect, viewW, viewH, o) {
+    const opt = o || {}
+    const pad = opt.padding || 0
+    const contain = Math.min(Math.max(1, viewW - 2 * pad) / rect.w, Math.max(1, viewH - 2 * pad) / rect.h)
+    const cover = Math.max(viewW / rect.w, viewH / rect.h)
+    return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, zoom: (opt.fit === 'cover' ? cover : contain) * (opt.scale || 1) }
+  }
+
   // ------------------------------------------------------------- fit text
   // The largest whole font size in [min, max] for which fits(size) holds (fits is monotone: if
   // a size fits, every smaller one does). null when not even min fits.

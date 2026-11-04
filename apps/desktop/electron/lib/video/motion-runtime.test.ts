@@ -759,3 +759,85 @@ describe('<video> in the page', () => {
     ])
   })
 })
+
+describe('orbitMotion.camera', () => {
+  type Layer = { style: Record<string, string>; attrs: Record<string, string>; tagName: string; getAttribute(n: string): string | null; getBoundingClientRect(): Record<string, number> }
+  const layer = (depth?: string, rect = { left: 0, top: 0, width: 1080, height: 1920 }): Layer => ({
+    style: {},
+    attrs: depth ? { 'data-depth': depth } : {},
+    tagName: 'DIV',
+    getAttribute(n: string) {
+      return this.attrs[n] ?? null
+    },
+    getBoundingClientRect: () => rect,
+  })
+  type CameraApi = FakeApi & { camera(o: Record<string, unknown>): CamCtl }
+  type CamCtl = {
+    move(m: Record<string, unknown>): CamCtl
+    focus(t: unknown, m?: Record<string, unknown>): CamCtl
+    zoomThrough(t: unknown, m?: Record<string, unknown>): CamCtl
+    shake(s: Record<string, unknown>): CamCtl
+    at(t: number): { x: number; y: number; zoom: number; rot: number }
+    plan(): Array<{ at: number; to: { x: number; y: number; zoom: number } }>
+  }
+  const matrixOf = (el: Layer) => (el.style.transform.match(/matrix\((.*)\)/)![1].split(',').map(Number))
+
+  function setup(layers: Layer[], extra: Record<string, unknown> = {}) {
+    const world = { children: layers, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1080, height: 1920 }) }
+    const page = makePage({ meta: 'width=1080,height=1920,fps=30,duration=6', elements: { '#world': world, ...extra } })
+    return { api: page.api as CameraApi, page }
+  }
+
+  it('moves the layers on every seek, on the piece clock (frame / fps)', async () => {
+    const a = layer()
+    const { api } = setup([a])
+    api.camera({ world: '#world' }).move({ at: 1, dur: 1, style: 'linear', to: { zoom: 2 } })
+    await api.seek(0)
+    expect(matrixOf(a)[0]).toBeCloseTo(1, 6)
+    await api.seek(45) // 1.5 s: halfway, geometrically sqrt(2)
+    expect(matrixOf(a)[0]).toBeCloseTo(Math.SQRT2, 3)
+    await api.seek(90) // 3 s: it stayed where it ended
+    expect(matrixOf(a)[0]).toBeCloseTo(2, 6)
+    expect(a.style.transformOrigin).toBe('0 0')
+  })
+
+  it('a layer with data-depth moves less than the world for the same pan', async () => {
+    const near = layer()
+    const far = layer('2')
+    const { api } = setup([near, far])
+    api.camera({ world: '#world' }).move({ at: 0, dur: 0.1, to: { x: 740 } })
+    await api.seek(30)
+    expect(-matrixOf(near)[4] + 0).toBeCloseTo(200, 3)
+    expect(-matrixOf(far)[4]).toBeCloseTo(100, 3)
+  })
+
+  it('focus frames an element measured in the world, and zoomThrough fills the frame with it', async () => {
+    const a = layer()
+    const target = layer(undefined, { left: 100, top: 200, width: 400, height: 200 })
+    const { api } = setup([a], { '#hero': target })
+    const cam = api.camera({ world: '#world' })
+    cam.focus('#hero', { at: 0, dur: 1 })
+    cam.zoomThrough('#hero', { at: 2, dur: 1 })
+    await api.seek(0)
+    const plan = cam.plan()
+    expect(plan[0].to).toMatchObject({ x: 300, y: 300 })
+    expect(plan[0].to.zoom).toBeCloseTo(2.7, 6)
+    expect(plan[1].to.zoom).toBeCloseTo(9.6 * 1.02, 6)
+  })
+
+  it('explains itself when the world or the target is missing, or the target has no size', () => {
+    const { api } = setup([layer()])
+    expect(() => api.camera({ world: '#nope' })).toThrow(/world not found/)
+    const cam = api.camera({ world: '#world' })
+    cam.focus('#ghost', { at: 0 })
+    expect(() => cam.plan()).toThrow(/focus target not found/)
+  })
+
+  it('shake adds to the camera only inside its window', async () => {
+    const { api } = setup([layer()])
+    const cam = api.camera({ world: '#world' }).shake({ at: 1, dur: 0.5, amp: 30 })
+    expect(cam.at(0.5)).toMatchObject({ x: 540, y: 960 })
+    expect(cam.at(1.1).x).not.toBe(540)
+    expect(cam.at(3)).toMatchObject({ x: 540, y: 960 })
+  })
+})

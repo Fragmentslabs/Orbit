@@ -188,6 +188,25 @@ A piece of several scenes with a start time typed on each (and again in audio.js
     M.seek = (frame) => { if (!S) return; /* … */ }
 - To retime later: motion_edit the ONE dur (or gap/overlap); audio.json tracks that belong to a scene change their "start" by the same amount — read S.get(name).start from the motion_preview report ("Scenes: …") to know the new value.
 
+## Camera: build a WORLD, then move the camera through it
+The look of a kinetic-type piece or an app tour is rarely a cut between scenes: it is ONE flat world and a camera that zooms into an object until it fills the frame, flies past layers (parallax), snaps to the next spot like a slingshot, or pulls back to show that what looked like a background was an object. Do not fake it with a different animation per element: put everything in a world and move the camera.
+  <div id="world">                      <!-- the element whose DIRECT children are the layers -->
+    <div class="layer">…the near stuff…</div>
+    <div class="layer" data-depth="2">…farther: moves half as much…</div>   <!-- data-depth 0.5 = nearer, moves double -->
+  </div>
+  const cam = orbitMotion.camera({ world: '#world' })      // start: { x, y, zoom, rot } (default: centre, 1, 0)
+  cam.focus('#price', { at: 1, dur: 0.8, padding: 80 })    // frame an element (fit 'contain'); { rect: {x,y,w,h} } to give it by hand
+     .move({ at: 3, dur: 0.9, style: 'slingshot', to: { x: 1600, y: 400, zoom: 2 } })   // a move only says what changes
+     .zoomThrough('#ring', { at: 5, dur: 0.7 })            // flies INTO the element until it fills the frame
+     .shake({ at: 5.7, dur: 0.4, amp: 18 })                // an impact; amp in world px
+- Positions are WORLD pixels (x, y = the point at the centre of the frame), times are SECONDS, zoom 1 = natural size. Moves are in order and cannot overlap (the error says which); between moves the camera holds.
+- style: 'ease' (calm default, in-out) · 'push' (accelerates toward the lens: the lunge before an impact or a zoom-through) · 'pull' (fast, then settles: a pull-back) · 'slingshot' (winds up the OTHER way, launches, overshoots, settles: the move between two spots of an app) · 'whip' (holds, snaps, stops: a fast pan) · 'linear'. slingshot takes back (0.12 = wind-up as a fraction of the travel) and overshoot (1.2).
+- ZOOM-THROUGH (match cut): give the object the colour/texture of the next scene's background. The camera flies into it (zoomThrough), it fills the frame, and from there the next scene is already "behind": show the next layers and pull back ({ style: 'pull', to: { zoom: 1 } }) and the object is revealed inside its new context. Hide layers with opacity or visibility, NEVER display:none (focus cannot measure an element with no box).
+- FOR AN APP: focus the card, hold for the line of narration, slingshot to the next panel. One focus per idea; a hold of 0.6–1 s after each move.
+- Fake depth: parallax (data-depth) + a zoom that accelerates is enough; there is no real 3D here. For real 3D use three.js (video_guide("motion-3d")).
+- The camera OWNS the transform of the world's direct children: animate what is inside them (a wrapper), never the layer itself. It runs after your seek, so it is a pure function of the frame like the rest. Read it with motion_frame evaluate: ["cam.at(2.5)"] (expose it as window.cam).
+- Do not fake a camera move with a CSS transition or a blur on the whole frame: the lint refuses the first and the second is a render trap.
+
 ## Sound-reactive visuals: orbitMotion.audio
 A waveform, an equalizer or a pulse must come from the REAL sound — never Math.sin or random bars. The runtime analyses the tracks of audio.json (placed on the piece timeline with their start/offset/end/level) once, and then reads them by frame:
 - orbitMotion.audio.load() at the top of the script (seeks wait for the analysis); load('song.mp3') analyses one track alone.
@@ -423,7 +442,7 @@ Then ASK the user to confirm or correct it — two lines of corrections now save
 ## 3. Build from the brief
 - Turn the brief into a \`theme\` object (colours, easings, durations, fonts) and a SHOT LIST with frame numbers measured from the reference cut list, scaled to your piece's length (video_guide("motion-craft")). Keep the reference's proportions: if its hook is 8% of the length, so is yours.
 - Choose the technique that gives the look at a render cost the software rasterizer can pay: kinetic type and shapes in HTML/GSAP; depth, objects and camera moves in three.js (video_guide("motion-3d")); a photo/footage style with Ken Burns and a grade layer. A glitch, a film burn or a grain is a pre-made PNG/WebM looped in steps, not a full-screen SVG filter.
-- Transitions are the signature: reproduce the reference's own (orbitMotion.transition covers fade / push / cover / reveal / wipe / zoom / blur / iris; a whip is a fast translate with a small blur on a SMALL layer; a zoom-through is a scale + fade on the outgoing scene).
+- Transitions are the signature: reproduce the reference's own (orbitMotion.transition covers fade / push / cover / reveal / wipe / zoom / blur / iris; a whip is orbitMotion.camera's style 'whip'; a zoom-through is camera.zoomThrough). FIRST decide which kind of piece the reference is: cuts between scenes (transition), or ONE continuous camera through a flat world where an object grows to fill the frame and becomes the next background, layers fly past at different speeds and the camera slings to the next spot (camera, see "Camera" in video_guide("motion")). Most kinetic-type edits and app tours are the second kind: look for objects that scale up past the frame and for a pull-back that reveals them.
 
 ## 4. Check against the reference, not against your taste
 After the first draft take the SAME instants of both (hook, a mid beat, the payoff) — video_timeline on the reference, motion_frame (see: true, once) on your piece — and compare: palette, scale of the type, density of the frame, shot length. Fix the biggest difference first. State what you matched and what you could not (a licensed font, a footage-specific look) instead of claiming it is identical.`

@@ -359,6 +359,8 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
         else g.globalTimeline.seek(gsapBase + t, false)
       }
     }
+    // The cameras go AFTER the composition's own seek: they own the transform of their layers.
+    for (const c of cameras) c.apply(frame)
     positionAnimations(t)
     await Promise.all(videos().map(function (v) {
       return new Promise(function (res) {
@@ -462,6 +464,95 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     playing = false
     if (rafId) cancelAnimationFrame(rafId)
     rafId = 0
+  }
+
+  // ------------------------------------------------------------- camera
+  // orbitMotion.camera({ world: '#world', start: { x, y, zoom, rot } }) → a controller.
+  // The DIRECT CHILDREN of the world element are the layers: the camera owns their transform
+  // (animate what is inside them, not them) and gives each one a depth with data-depth="2"
+  // (farther: moves less) or "0.5" (nearer: moves more). The camera is applied by the runtime on
+  // every seek, after the composition's own seek, so it is a pure function of the frame.
+  const cameras = []
+  function addCamera(opts) {
+    const o = opts || {}
+    const worldEl = typeof o.world === 'string' ? document.querySelector(o.world) : o.world
+    if (!worldEl || !worldEl.children) throw new Error('camera: world not found — pass { world: "#world" }, the element whose children are the layers')
+    const items = []   // moves and focus() requests, in the order given
+    const shakes = []
+    let cache = null   // { initial, plan }, built the first time it is needed (fonts and layout are in by then)
+    function viewSize() { return { w: o.width || resolved.width, h: o.height || resolved.height } }
+    function layers() {
+      return Array.prototype.filter.call(worldEl.children, function (el) { return !/^(SCRIPT|STYLE|LINK|META|TEMPLATE|NOSCRIPT)$/.test(el.tagName) })
+    }
+    function measure(target) {
+      const el = typeof target === 'string' ? document.querySelector(target) : target
+      if (!el) throw new Error('camera: focus target not found: ' + target)
+      const ls = layers()
+      const saved = ls.map(function (l) { return l.style.transform })
+      ls.forEach(function (l) { l.style.transform = 'none' })
+      const wr = worldEl.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      ls.forEach(function (l, i) { l.style.transform = saved[i] })
+      if (r.width < 1 || r.height < 1) throw new Error('camera: focus target ' + target + ' has no size — it is display:none or empty. Hide a layer with opacity/visibility, not display:none, or pass { rect: { x, y, w, h } }')
+      return { x: r.left - wr.left, y: r.top - wr.top, w: r.width, h: r.height }
+    }
+    function build() {
+      if (cache) return cache
+      const v = viewSize()
+      const start = o.start || {}
+      const initial = {
+        x: start.x === undefined ? v.w / 2 : start.x,
+        y: start.y === undefined ? v.h / 2 : start.y,
+        zoom: start.zoom === undefined ? 1 : start.zoom,
+        rot: start.rot === undefined ? 0 : start.rot,
+      }
+      const list = items.map(function (it) {
+        if (!it.focus) return it.move
+        const rect = it.move.rect || measure(it.target)
+        const fit = orbitCameraFit(rect, v.w, v.h, it.move)
+        return Object.assign({}, it.move, { to: { x: fit.x, y: fit.y, zoom: fit.zoom, rot: it.move.rot === undefined ? undefined : it.move.rot } })
+      })
+      cache = { initial: initial, plan: orbitCameraPlan(initial, list) }
+      return cache
+    }
+    const cam = {
+      // { at, dur, to: { x, y, zoom, rot }, style: 'ease'|'linear'|'push'|'pull'|'slingshot'|'whip', back, overshoot } — seconds
+      move: function (m) { items.push({ move: m || {} }); cache = null; return cam },
+      // Frames an element (or { rect }) — fit: 'contain' | 'cover', padding (px), scale.
+      focus: function (target, m) { items.push({ focus: true, target: target, move: Object.assign({}, m) }); cache = null; return cam },
+      // The camera flies INTO the element until it fills the frame (the zoom-through): build the
+      // next scene in the same colour/texture and the object becomes its background.
+      zoomThrough: function (target, m) {
+        const mm = Object.assign({ style: 'push', fit: 'cover', scale: 1.02 }, m)
+        items.push({ focus: true, target: target, move: mm }); cache = null; return cam
+      },
+      shake: function (s) {
+        const x = s || {}
+        shakes.push({ at: x.at || 0, dur: x.dur || 0.4, amp: x.amp === undefined ? 18 : x.amp, rot: x.rot === undefined ? 0.6 : x.rot, freq: x.freq || 24, seed: x.seed === undefined ? 'shake' + shakes.length : x.seed })
+        return cam
+      },
+      // The camera at time t (seconds), shake included — read it with motion_frame evaluate.
+      at: function (t) {
+        const b = build()
+        const s = orbitCameraState(b.initial, b.plan, t)
+        const k = orbitCameraShake(shakes, t)
+        return { x: s.x + k.x, y: s.y + k.y, zoom: s.zoom, rot: s.rot + k.rot }
+      },
+      plan: function () { return build().plan.map(function (m) { return { at: m.at, dur: m.dur, style: m.style, from: m.from, to: m.to } }) },
+      apply: function (frame) {
+        const s = cam.at(frame / resolved.fps)
+        const v = viewSize()
+        const round = function (n) { return Math.round(n * 10000) / 10000 }
+        layers().forEach(function (el) {
+          const depth = parseFloat(el.getAttribute('data-depth')) || 1
+          const m = orbitCameraMatrix(s, depth, v.w, v.h)
+          el.style.transformOrigin = '0 0'
+          el.style.transform = 'matrix(' + m.map(round).join(',') + ')'
+        })
+      },
+    }
+    cameras.push(cam)
+    return cam
   }
 
   // ------------------------------------------------------------- transition
@@ -664,6 +755,7 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     api.delayRender = delayRender
     api.continueRender = continueRender
     api.transition = addTransition
+    api.camera = addCamera
     // Remotion-style primitives (motion-helpers.ts): pure functions of the frame.
     api.interpolate = orbitInterpolate
     api.spring = function (o) { return orbitSpring(Object.assign({ fps: resolved.fps }, o)) }
