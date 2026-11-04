@@ -42,7 +42,8 @@ import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
-import { sessionReasoningFor, useSessionReasoning } from "@/src/stores/session-reasoning"
+import { inheritSessionConfig } from "@/src/stores/inherit-session-config"
+import { useSessionReasoning } from "@/src/stores/session-reasoning"
 import { permissionFor, usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
@@ -728,17 +729,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
     loadedMessages.add(child.id)
     emitChatEvent({ type: "session", sessionId: child.id, session: child })
-    // It continues on the SAME model as the parent: the new chat swaps the context, not the
-    // configuration. Without this it fell into the global default (another provider).
-    const parentModel = sessionModelFor(parentId)
-    if (parentModel) {
-      useSessionModelPrefs.getState().selectModel(child.id, parentModel.providerId, parentModel.modelId)
-    }
-    // Thinking and autonomy are also the parent's: the fork swaps the context, not the
+    // Model, thinking and autonomy are the parent's: the fork swaps the context, not the
     // configuration the conversation was running with.
-    const parentReasoning = sessionReasoningFor(parentId, parentModel?.providerId, parentModel?.modelId)
-    if (parentReasoning) useSessionReasoning.getState().setPref(child.id, parentReasoning)
-    usePermissionPrefs.getState().applyRemoteMode(child.id, permissionFor(parentId))
+    inheritSessionConfig(parentId, child.id)
     return child
   },
 

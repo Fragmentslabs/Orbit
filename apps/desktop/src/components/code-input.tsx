@@ -60,6 +60,7 @@ import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useSessionReasoningPref } from "@/src/stores/session-reasoning"
 import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
+import { inheritSessionConfig } from "@/src/stores/inherit-session-config"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useToolsServers } from "@/src/stores/session-tools"
@@ -342,6 +343,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       if (dir) {
         const force = resolved.input.includes("--force") || resolved.action.command === "/init-force"
         createSession("code", { directory: dir, extraDirectories: folders.slice(1) }).then((session) => {
+          // /init opens a new chat: it keeps the model (and thinking/permission) of this one.
+          inheritSessionConfig(sessionId, session.id)
           const text = force ? "/init --force" : "/init"
           sendMessage("code", text, { options: { initMode: true }, sessionId: session.id, directory: dir, extraDirectories: folders.slice(1) })
         })

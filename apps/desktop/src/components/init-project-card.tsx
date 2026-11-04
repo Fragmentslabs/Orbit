@@ -4,6 +4,7 @@ import { FolderSearch } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { subscribeInitEvents, useInitStore } from "@/src/stores/init-store"
+import { inheritSessionConfig } from "@/src/stores/inherit-session-config"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
@@ -42,6 +43,8 @@ export function InitProjectCard({ directory, sessionId }: {
   const handleAnalyze = async () => {
     dismiss(directory)
     const session = await createSession("code", { directory })
+    // The analysis chat keeps the model (and thinking/permission) of the chat that shows the card.
+    inheritSessionConfig(sessionId, session.id)
     await sendMessage("code", "/init", { options: { initMode: true }, sessionId: session.id, directory })
     selectSession("code", session.id)
   }
