@@ -41,6 +41,7 @@ const NATIVE_TOOLS = new Set([
   'panel_type',
   'panel_resize',
   'panel_screenshot',
+  'panel_sheet',
   'panel_console',
   'panel_hover',
   'panel_drag',

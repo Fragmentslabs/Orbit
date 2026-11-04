@@ -16,9 +16,24 @@ import {
   panelNavigate,
   panelRead,
   panelResize,
+  panelRunScript,
   panelScreenshot,
   panelType,
 } from '../panel-browser'
+import {
+  DEFAULT_COLS,
+  DEFAULT_PER_SHEET,
+  DEFAULT_TILE,
+  composeSheet,
+  dataUrlsToBuffers,
+  describeSheet,
+  planSheets,
+  sampleTimes,
+  seekScript,
+  timeLabel,
+  videoCaptureScript,
+  videoProbeScript,
+} from '../panel-sheet'
 import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
 import { describeImage } from '../vision'
 
@@ -62,6 +77,35 @@ const SCREENSHOT_SCHEMA = z.object({
     ),
 })
 
+/** panel_sheet input. Like SCREENSHOT_SCHEMA, `see` is removed from what the model is told when no vision exists. */
+const SHEET_SCHEMA = z.object({
+  mode: z
+    .enum(['video', 'seek'])
+    .optional()
+    .describe(
+      '"video" reads the <video> of the page (default when there is no seekCode); "seek" runs your seekCode to put ANY page at time t and screenshots the panel.',
+    ),
+  from: z.number().min(0).optional().describe('First instant in seconds (default 0)'),
+  to: z.number().positive().optional().describe('Last instant in seconds (default: the end of the video; REQUIRED in seek mode)'),
+  step: z.number().positive().optional().describe('Seconds between frames (default: about 24 frames from..to). 0.2 reads motion; 0.05–0.1 reads an easing curve'),
+  count: z.number().int().min(1).max(120).optional().describe('Number of frames, evenly spaced from..to. Wins over step'),
+  perSheet: z.number().int().min(4).max(40).optional().describe(`Frames per sheet (default ${DEFAULT_PER_SHEET}); more frames make more sheets`),
+  cols: z.number().int().min(1).max(8).optional().describe(`Columns of the grid (default ${DEFAULT_COLS})`),
+  tile: z.number().int().min(120).max(480).optional().describe(`Width of each frame in px (default ${DEFAULT_TILE}); raise it to read small type`),
+  selector: z.string().optional().describe('CSS selector of the <video> (or a container of it) when the page has several'),
+  seekCode: z
+    .string()
+    .optional()
+    .describe(
+      'Seek mode: the body of an async function with `t` (seconds) and `i` (frame index) in scope that puts the page at that time, e.g. `await window.orbitMotion.seek(Math.round(t * 30))` or `anim.goToAndStop(t * 1000)` or `document.getAnimations().forEach(a => { a.pause(); a.currentTime = t * 1000 })`.',
+    ),
+  settleMs: z.number().int().min(0).max(2000).optional().describe('Seek mode: wait after each seek before the screenshot (default 150)'),
+  see: z
+    .boolean()
+    .optional()
+    .describe('Loads the sheets (up to 3) into your context so you can SEE them — natively with vision, or described by the vision model. Default false: only the media URLs come back.'),
+})
+
 /** Mouse target: a panel_read ref, a CSS selector or viewport coordinates. */
 const TARGET_SCHEMA = z.object({
   ref: z.number().int().optional().describe('Numeric ref from panel_read'),
@@ -86,6 +130,13 @@ const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | 
  * (content file) when the agent asks for `see: true` on a model with vision; the
  * base64 stays in a stash per toolCallId so as not to inflate the persisted history.
  */
+
+/** The sheets of panel_sheet that should enter the context (see: true), per toolCallId. */
+const sheetStash = new Map<string, { images: Array<{ base64: string; format: 'webp' | 'jpeg' }> } | { text: string }>()
+/** A sheet is sent to the model at most this many times per call. */
+const MAX_SEEN_SHEETS = 3
+/** The whole panel_sheet call: capture, composition and storage. */
+const SHEET_TIMEOUT_MS = 240_000
 
 const screenshotStash = new Map<
   string,
@@ -318,6 +369,146 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
             type: 'text',
             text: `[Screenshot omitted: ${Math.round(raw.length / 1024)}KB — exceeds the ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB limit. The image is saved in the media gallery (and on disk, if savePath was given).]`,
           })
+        }
+        return { type: 'content', value: parts }
+      },
+    }),
+    panel_sheet: tool({
+      description:
+        'Reads ANYTHING that plays in the panel browser as a CONTACT SHEET: a grid of frames with the time written on each, images only (no audio, no words). ' +
+        'Use it to analyse a reference you can only watch — a video playing on a site (YouTube, Vimeo…: nothing is downloaded), an animation, a Motion piece, an app demo — before writing a style brief, or to check your own piece over time. ' +
+        'Open the page first (panel_navigate); for a video it samples the <video> by seeking, so the times are exact and the frames are at the video\'s own resolution. ' +
+        'For anything that is not a <video>, pass seekCode (mode "seek"): it puts the page at time t and the panel is screenshotted. ' +
+        'Many frames make several numbered sheets (24 each by default). The images are saved to the media gallery and do NOT enter your context unless see: true. ' +
+        'If the site blocks reading the video (cross-origin without CORS, DRM) it says so: use seek mode, or ask the user for the file.',
+      inputSchema: (ctx.modelVision || ctx.visionModel ? SHEET_SCHEMA : SHEET_SCHEMA.omit({ see: true })) as typeof SHEET_SCHEMA,
+      execute: async (input, { toolCallId }) => {
+        const run = async (): Promise<string> => {
+          const { from, to, step, count, selector, seekCode, settleMs, see } = input
+          const mode = input.mode ?? (seekCode ? 'seek' : 'video')
+          const tile = input.tile ?? DEFAULT_TILE
+          const cols = input.cols ?? DEFAULT_COLS
+          const perSheet = input.perSheet ?? DEFAULT_PER_SHEET
+          const notes: string[] = []
+          let times: number[]
+          let labels: number[]
+          let frames: Buffer[] = []
+
+          if (mode === 'video') {
+            const probe = (await panelRunScript(ctx.sessionId, videoProbeScript(selector))) as Record<string, unknown>
+            if (probe.__error) return `Could not read the page: ${String(probe.__error)}`
+            if (!probe.found) {
+              const n = Number(probe.videos ?? 0)
+              return (
+                (n
+                  ? `The page has ${n} <video> element(s) but none is ready (not loaded yet, or not the one you meant) — start it, wait a moment, or pass selector.`
+                  : 'No <video> in the page.') +
+                ' For an animation or a canvas pass seekCode (mode "seek"); to open a page use panel_navigate first.'
+              )
+            }
+            const duration = Number(probe.duration)
+            try {
+              times = sampleTimes({ from, to, step, count, duration })
+            } catch (err) {
+              return `panel_sheet: ${(err as Error).message}`
+            }
+            if (duration < 1) notes.push(`The video reports only ${duration.toFixed(2)} s: on a site with ads the player may be showing one — check the time of the first frame.`)
+            const actual: number[] = []
+            for (let i = 0; i < times.length; i += 24) {
+              const batch = times.slice(i, i + 24)
+              const got = (await panelRunScript(
+                ctx.sessionId,
+                videoCaptureScript({ selector, times: batch, tile: Math.min(480, Math.max(tile, 160)) }),
+                60_000,
+              )) as { error?: string; message?: string; frames?: string[]; actual?: number[]; __error?: string }
+              if (got.__error) return `Could not read the video: ${got.__error}`
+              if (got.error === 'tainted') {
+                return (
+                  'The page does not let its video be read (a cross-origin source without CORS, or DRM): ' + String(got.message ?? '').slice(0, 160) + '\n' +
+                  'Use mode "seek" with a seekCode that positions the page and the panel is screenshotted, or ask the user for the file.'
+                )
+              }
+              if (got.error || !got.frames) return `Could not read the video: ${got.error ?? 'unknown error'} ${got.message ?? ''}`
+              frames.push(...dataUrlsToBuffers(got.frames))
+              actual.push(...(got.actual ?? batch))
+            }
+            labels = actual
+          } else {
+            if (!seekCode) return 'panel_sheet: seek mode needs seekCode — the code that puts the page at time `t`.'
+            try {
+              times = sampleTimes({ from, to, step, count })
+            } catch (err) {
+              return `panel_sheet: ${(err as Error).message}`
+            }
+            labels = times
+            for (let i = 0; i < times.length; i += 1) {
+              const res = (await panelRunScript(ctx.sessionId, seekScript(seekCode, times[i], i), 20_000)) as { __error?: string } | undefined
+              if (res && typeof res === 'object' && res.__error) {
+                return `seekCode failed at t=${times[i]} s (frame ${i + 1}): ${String(res.__error).slice(0, 300)}`
+              }
+              await delay(settleMs ?? 150)
+              frames.push(await panelScreenshot(ctx.sessionId, false, { format: 'webp', maxWidth: Math.max(tile * 2, 480) }))
+            }
+          }
+
+          const plan = planSheets(times, perSheet)
+          const lines: string[] = []
+          const seen: Array<{ base64: string; format: 'webp' | 'jpeg' }> = []
+          let offset = 0
+          for (let s = 0; s < plan.length; s += 1) {
+            const n = plan[s].length
+            const sheet = await composeSheet(frames.slice(offset, offset + n), labels.slice(offset, offset + n).map(timeLabel), { cols, tile })
+            const media = await saveMedia(sheet.buffer, 'webp', {
+              source: 'screenshot',
+              sessionId: ctx.sessionId,
+              name: `Sheet ${s + 1}/${plan.length} ${timeLabel(labels[offset])}–${timeLabel(labels[offset + n - 1])}`,
+            })
+            lines.push(
+              describeSheet({ index: s + 1, total: plan.length, times: labels.slice(offset, offset + n), cols: sheet.cols, rows: sheet.rows, media }),
+            )
+            if (see === true && seen.length < MAX_SEEN_SHEETS) seen.push({ base64: sheet.buffer.toString('base64'), format: sheet.format })
+            offset += n
+          }
+
+          let loaded = ''
+          if (see === true) {
+            if (ctx.visionModel) {
+              const parts: string[] = []
+              for (let i = 0; i < seen.length; i += 1) {
+                const desc = await describeImage({ model: ctx.visionModel, imageDataUrl: `data:image/${seen[i].format};base64,${seen[i].base64}` })
+                if (desc) parts.push(`[Sheet ${i + 1} — description by the vision model] ${desc}`)
+              }
+              if (parts.length) {
+                sheetStash.set(toolCallId, { text: parts.join('\n\n') })
+                loaded = ` Description of ${parts.length} sheet(s) loaded into your context (vision model ${ctx.visionModel.modelId}).`
+              } else loaded = ' (see: true — the vision model could not describe the sheets.)'
+            } else if (ctx.modelVision) {
+              sheetStash.set(toolCallId, { images: seen })
+              loaded = ` ${seen.length} sheet(s) loaded into your context${plan.length > seen.length ? ` (the first ${seen.length} of ${plan.length}; call again with from/to for the rest)` : ''}.`
+            } else {
+              loaded = ' (see: true ignored — this model has no vision; the sheets were NOT loaded into the context.)'
+            }
+          }
+          const header = `${times.length} frames in ${plan.length} sheet(s) — ${mode === 'video' ? 'read from the page\'s video' : 'by seeking the page with your seekCode'}.`
+          return [header, ...lines, ...notes].join('\n') + loaded
+        }
+        const TIMED_OUT = Symbol('sheetTimedOut')
+        const outcome = await Promise.race([run(), delay(SHEET_TIMEOUT_MS).then(() => TIMED_OUT)])
+        if (outcome === TIMED_OUT) {
+          return `panel_sheet exceeded ${Math.round(SHEET_TIMEOUT_MS / 1000)} s and was abandoned. Ask for fewer frames (count/step) or a shorter from/to.`
+        }
+        return outcome
+      },
+      toModelOutput: ({ toolCallId, output }) => {
+        const stashed = sheetStash.get(toolCallId)
+        sheetStash.delete(toolCallId)
+        if (!stashed) return { type: 'text', value: String(output) }
+        if ('text' in stashed) return { type: 'text', value: `${String(output)}\n\n${stashed.text}` }
+        const parts: ({ type: 'text'; text: string } | { type: 'image-data'; data: string; mediaType: string })[] = [{ type: 'text', text: String(output) }]
+        for (const [i, img] of stashed.images.entries()) {
+          if (Buffer.from(img.base64, 'base64').length <= MAX_MODEL_IMAGE_BYTES) {
+            parts.push({ type: 'image-data', data: img.base64, mediaType: `image/${img.format}` })
+          } else parts.push({ type: 'text', text: `[Sheet ${i + 1} omitted: it exceeds the ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB limit — ask again with a smaller tile or fewer perSheet.]` })
         }
         return { type: 'content', value: parts }
       },

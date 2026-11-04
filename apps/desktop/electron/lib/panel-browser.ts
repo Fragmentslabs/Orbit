@@ -487,6 +487,25 @@ export async function panelEval(sessionId: string, code: string): Promise<string
   return evaluateInPage(wc, code)
 }
 
+/**
+ * Runs a script in the panel page and returns its RAW value (an object, not the formatted JSON text
+ * panelEval gives). For internal tools that move data — frames as data URLs — which the eval
+ * formatting would stringify and truncate. Never reachable with agent-written text except through the
+ * tool that builds the script; a thrown error comes back as { __error }.
+ */
+export async function panelRunScript(sessionId: string, script: string, timeoutMs = 30_000): Promise<unknown> {
+  const wc = await ensurePanelBrowser(sessionId)
+  activity(tNow('panel.activity.eval'), sessionId)
+  const TIMED_OUT = Symbol('scriptTimedOut')
+  try {
+    const outcome = await Promise.race([wc.executeJavaScript(script, true), delay(timeoutMs).then(() => TIMED_OUT)])
+    if (outcome === TIMED_OUT) return { __error: `the page did not answer within ${Math.round(timeoutMs / 1000)} s` }
+    return outcome
+  } catch (err) {
+    return { __error: (err as Error)?.message ?? String(err) }
+  }
+}
+
 /** Hovers the mouse over an element (menus, tooltips, :hover states). */
 export async function panelHover(sessionId: string, target: BrowserTarget): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
