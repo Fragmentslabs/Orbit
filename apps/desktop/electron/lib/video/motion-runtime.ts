@@ -480,6 +480,12 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     if (!worldEl || !worldEl.children) throw new Error('camera: world not found — pass { world: "#world" }, the element whose children are the layers')
     const items = []   // moves and focus() requests, in the order given
     const shakes = []
+    const conflicts = new Set()   // layers whose transform is also written by the page itself
+    // A name the agent can find: data-layer, id, first class — else its position among the layers.
+    function layerName(el) {
+      const named = el.getAttribute('data-layer') || el.id || String(el.className || '').split(' ')[0]
+      return named || 'layer ' + (layers().indexOf(el) + 1)
+    }
     let cache = null   // { initial, plan }, built the first time it is needed (fonts and layout are in by then)
     function viewSize() { return { w: o.width || resolved.width, h: o.height || resolved.height } }
     function layers() {
@@ -545,11 +551,36 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
         const v = viewSize()
         const round = function (n) { return Math.round(n * 10000) / 10000 }
         layers().forEach(function (el) {
+          // Somebody else owns this transform too? The camera is about to overwrite it, so that
+          // animation never shows — the report and the lint say so instead of leaving it silent.
+          const written = el.style.transform
+          if (written && written !== el.__orbitCamera) conflicts.add(layerName(el))
+          else if (!written && el.__orbitCamera === undefined && typeof getComputedStyle === 'function') {
+            try { if (getComputedStyle(el).transform !== 'none') conflicts.add(layerName(el)) } catch (err) {}
+          }
+          if (typeof el.getAnimations === 'function') {
+            try {
+              const animated = el.getAnimations().some(function (a) {
+                return a.effect && typeof a.effect.getKeyframes === 'function' && a.effect.getKeyframes().some(function (k) { return k.transform !== undefined })
+              })
+              if (animated) conflicts.add(layerName(el))
+            } catch (err) {}
+          }
           const depth = parseFloat(el.getAttribute('data-depth')) || 1
           const m = orbitCameraMatrix(s, depth, v.w, v.h)
           el.style.transformOrigin = '0 0'
           el.style.transform = 'matrix(' + m.map(round).join(',') + ')'
+          el.__orbitCamera = el.style.transform
         })
+      },
+      // What the page tells the report and the lint: the plan, the layers, the conflicts.
+      info: function () {
+        let moves = []
+        let error
+        try {
+          moves = build().plan.map(function (m) { return { at: m.at, dur: m.dur, style: m.style, from: m.from, to: m.to } })
+        } catch (err) { error = String((err && err.message) || err) }
+        return { layers: layers().length, moves: moves, shakes: shakes.length, conflicts: Array.from(conflicts), error: error }
       },
     }
     cameras.push(cam)
@@ -815,6 +846,7 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
       devicePixelRatio: window.devicePixelRatio || 1,
       transitions: transitions.map(function (t) { return Object.assign({}, t) }),
       scenes: sceneInfo.map(function (s) { return Object.assign({}, s) }),
+      cameras: cameras.map(function (c) { try { return c.info() } catch (err) { return { layers: 0, moves: [], shakes: 0, conflicts: [], error: String((err && err.message) || err) } } }),
       videos: videoFacts(),
     }
   }

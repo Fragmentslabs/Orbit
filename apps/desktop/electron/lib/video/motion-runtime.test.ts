@@ -836,6 +836,47 @@ describe('orbitMotion.camera', () => {
     expect(() => cam.plan()).toThrow(/focus target not found/)
   })
 
+  it('info() reports the plan, the layers and the shakes', async () => {
+    const { api } = setup([layer(), layer('2')])
+    const cam = api.camera({ world: '#world' }).move({ at: 1, dur: 1, to: { zoom: 2 } }).shake({ at: 3 })
+    const info = (cam as unknown as { info(): Record<string, unknown> }).info()
+    expect(info).toMatchObject({ layers: 2, shakes: 1, conflicts: [] })
+    expect((info.moves as unknown[]).length).toBe(1)
+  })
+
+  it('reports a plan that cannot be built instead of throwing', () => {
+    const { api } = setup([layer()])
+    const cam = api.camera({ world: '#world' }).focus('#ghost', { at: 0 })
+    expect((cam as unknown as { info(): { error?: string } }).info().error).toMatch(/focus target not found/)
+  })
+
+  it('flags a layer whose transform the page also writes — set before, or rewritten between frames', async () => {
+    const own = layer()
+    own.style.transform = 'translateX(10px)' // an inline transform from the page
+    const clean = layer()
+    const rewritten = layer()
+    const { api } = setup([own, clean, rewritten])
+    const cam = api.camera({ world: '#world' }).move({ at: 0, dur: 1, to: { zoom: 2 } })
+    await api.seek(0)
+    rewritten.style.transform = 'rotate(5deg)' // the page's own seek wrote it after the camera did
+    await api.seek(1)
+    const { conflicts } = (cam as unknown as { info(): { conflicts: string[] } }).info()
+    // the inline one and the rewritten one, named by position; the clean layer (2) is not flagged
+    expect(conflicts.sort()).toEqual(['layer 1', 'layer 3'])
+    expect(clean.style.transform).toMatch(/^matrix\(/)
+  })
+
+  it('flags a layer animated with a transform keyframe (WAAPI / CSS animation)', async () => {
+    const animated = layer()
+    ;(animated as unknown as Record<string, unknown>).getAnimations = () => [{ effect: { getKeyframes: () => [{ opacity: 0 }, { transform: 'scale(2)' }] } }]
+    const fade = layer()
+    ;(fade as unknown as Record<string, unknown>).getAnimations = () => [{ effect: { getKeyframes: () => [{ opacity: 0 }, { opacity: 1 }] } }]
+    const { api } = setup([animated, fade])
+    const cam = api.camera({ world: '#world' }).move({ at: 0, dur: 1, to: { zoom: 2 } })
+    await api.seek(0)
+    expect((cam as unknown as { info(): { conflicts: string[] } }).info().conflicts).toHaveLength(1)
+  })
+
   it('shake adds to the camera only inside its window', async () => {
     const { api } = setup([layer()])
     const cam = api.camera({ world: '#world' }).shake({ at: 1, dur: 0.5, amp: 30 })

@@ -11,6 +11,7 @@ import {
   type LintFinding,
   type LintSource,
 } from './motion-lint'
+import { lintMotionCameras, type MotionCameraInfo } from './motion-camera'
 import { lintMotionScenes, type MotionSceneInfo } from './motion-scenes'
 import { lintProps, readPropsFile } from './motion-props'
 import type { MotionTransitionInfo } from './motion-transitions'
@@ -35,7 +36,7 @@ export interface MotionLintInput {
   /** Folder served by the scheme: what is outside it the preview never reaches. */
   folder: string
   /** What the runtime announced, when the composition has already been loaded. */
-  runtime?: { fps: number; durationInFrames: number; transitions: MotionTransitionInfo[]; scenes?: MotionSceneInfo[] }
+  runtime?: { fps: number; durationInFrames: number; transitions: MotionTransitionInfo[]; scenes?: MotionSceneInfo[]; cameras?: MotionCameraInfo[] }
   /** The tracks of the audio manifest, when resolved. */
   audio?: MotionAudioPlan | null
 }
@@ -95,6 +96,7 @@ export async function lintMotionComposition(input: MotionLintInput): Promise<Lin
       const seconds = input.runtime.durationInFrames / input.runtime.fps
       findings.push(...lintMotionTransitions(input.runtime.transitions, seconds))
       findings.push(...lintMotionScenes(input.runtime.scenes ?? [], seconds))
+      findings.push(...lintMotionCameras(input.runtime.cameras ?? [], seconds))
       if (input.audio) findings.push(...lintMotionAudio(input.audio, seconds))
     }
     return findings

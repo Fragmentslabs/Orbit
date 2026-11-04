@@ -10,6 +10,7 @@ import { lintMotionComposition } from './motion-lint-run'
 import { describeMasterFx, describeTrackFx } from './motion-audio-fx'
 import { prepareMotionPreview } from './motion-preview'
 import { readWordsSidecar } from './motion-words'
+import { describeCameras } from './motion-camera'
 import { describeScenes } from './motion-scenes'
 import { describeTransitions } from './motion-transitions'
 import { motionVideoAudioTracks } from './motion-video-audio'
@@ -128,7 +129,7 @@ export async function openMotionAndReport(input: {
     const lint = await lintMotionComposition({
       entry: preview.file,
       folder: preview.folder,
-      runtime: { fps: measured.fps, durationInFrames: measured.durationInFrames, transitions: measured.transitions, scenes: measured.scenes },
+      runtime: { fps: measured.fps, durationInFrames: measured.durationInFrames, transitions: measured.transitions, scenes: measured.scenes, cameras: measured.cameras },
       audio: plan,
     })
     // The props the piece declares: what can change from one video to the next.
@@ -147,6 +148,7 @@ export async function openMotionAndReport(input: {
       props,
       describeTransitions(measured.transitions),
       describeScenes(measured.scenes),
+      describeCameras(measured.cameras),
       'Layers (when each enters and leaves the frame):',
       describeLayers(measured.layers, measured.fps),
       describeLint(lint),

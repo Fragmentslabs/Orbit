@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { MOTION_SPEC } from './motion-runtime'
+import type { MotionCameraInfo } from './motion-camera'
 import type { MotionSceneInfo } from './motion-scenes'
 import type { MotionTransitionInfo } from './motion-transitions'
 import type { MotionVideoFact } from './motion-video-audio'
@@ -68,6 +69,8 @@ export interface MotionLayers {
   transitions: MotionTransitionInfo[]
   /** The scenes the composition laid out (orbitMotion.scenes). */
   scenes: MotionSceneInfo[]
+  /** The cameras the composition created (orbitMotion.camera): plan, layers and transform conflicts. */
+  cameras: MotionCameraInfo[]
   /** The page's `<video>`s, so their sound enters the audio plan. */
   videos: MotionVideoFact[]
 }
@@ -237,6 +240,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       scriptErrors?: string[]
       transitions?: MotionTransitionInfo[]
       scenes?: MotionSceneInfo[]
+      cameras?: MotionCameraInfo[]
       videos?: MotionVideoFact[]
     } | null
     if (!spec) {
@@ -256,6 +260,11 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       durationInFrames: number
       layers: RawLayer[]
     }
+    // The cameras are read AFTER the scan: it is while seeking that a camera is applied, and that is
+    // when a layer whose transform the page also writes shows itself.
+    const cameras = (await win.webContents
+      .executeJavaScript('window.__orbitMotionSpec ? window.__orbitMotionSpec().cameras : []', true)
+      .catch(() => spec.cameras ?? [])) as MotionCameraInfo[]
     return {
       width,
       height,
@@ -266,6 +275,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       scriptErrors: spec.scriptErrors ?? [],
       transitions: spec.transitions ?? [],
       scenes: spec.scenes ?? [],
+      cameras: cameras ?? [],
       videos: spec.videos ?? [],
     }
   } catch (err) {
