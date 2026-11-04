@@ -144,3 +144,19 @@ export function attachmentTextHint(
   }
   return ''
 }
+
+/** Names the composer gives a text pasted into the field ("Pasted text (1.4 KB).txt",
+ *  "Texto colado (1,4 KB).txt") — they say nothing about the subject. */
+const PASTED_NAME = /^(?:pasted text|texto colado)\b/i
+
+/**
+ * Fallback title for a PASTED text sent with no message: the generic name is no title, so
+ * the first sentence of the pasted content is (the same rule as a typed message). Only for
+ * the composer's own paste names — a file someone named ("Rental agreement.txt") keeps its name.
+ */
+export function titleFromPastedContent(
+  files: { url?: string; mime?: string; filename?: string; chip?: boolean }[] | undefined,
+): string {
+  const pasted = (files ?? []).filter((f) => !f.chip && PASTED_NAME.test(f.filename?.trim() ?? ''))
+  return titleFromUserText(attachmentTextHint(pasted))
+}

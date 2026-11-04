@@ -28,7 +28,7 @@ import {
 } from '@shared/chat'
 import { isRoutineSessionId } from '@shared/routines'
 import { getProvider, modelSupportsVision } from './catalog'
-import { attachmentTextHint, resolveTitle, titleFromAttachmentNames, titleFromUserText, truncateTitle } from './chat-title'
+import { attachmentTextHint, resolveTitle, titleFromAttachmentNames, titleFromPastedContent, titleFromUserText, truncateTitle } from './chat-title'
 import {
   compactHistory,
   countSummaries,
@@ -1416,13 +1416,14 @@ function isDefaultTitle(title: string): boolean {
 /**
  * Title that appears BEFORE any model answers: the message itself already
  * says what it is about, and a command (`/init`) does not serve as a title — then the
- * hint is the project name. Without text, the attachment name is left.
+ * hint is the project name. Without text, a pasted text names itself by its beginning and
+ * any other attachment by its file name.
  */
 function provisionalTitle(input: SendMessageInput): string {
   if (input.text.trim().startsWith('/')) {
     return input.directory ? truncateTitle(basename(input.directory)) : ''
   }
-  return titleFromUserText(input.text) || titleFromAttachmentNames(input.files)
+  return titleFromUserText(input.text) || titleFromPastedContent(input.files) || titleFromAttachmentNames(input.files)
 }
 
 /**
@@ -1532,7 +1533,7 @@ async function refineSessionTitle(
     // A command (`/init` etc.) does not serve as a title; then the fallback is the project.
     const fallback = isCommand
       ? (projectName ?? '')
-      : titleFromUserText(input.text) || titleFromAttachmentNames(input.files) || provisional
+      : titleFromUserText(input.text) || titleFromPastedContent(input.files) || titleFromAttachmentNames(input.files) || provisional
     const title = resolveTitle(text, fallback)
     if (!title) return
 

@@ -5,6 +5,7 @@ import {
   looksLikeToolCall,
   resolveTitle,
   titleFromAttachmentNames,
+  titleFromPastedContent,
   titleFromUserText,
   truncateTitle,
 } from './chat-title'
@@ -128,5 +129,24 @@ describe('titleFromAttachmentNames', () => {
   it('returns empty when there is nothing usable', () => {
     expect(titleFromAttachmentNames(undefined)).toBe('')
     expect(titleFromAttachmentNames([{}])).toBe('')
+  })
+})
+
+describe('titleFromPastedContent', () => {
+  const data = (text: string) => `data:text/plain;base64,${Buffer.from(text).toString('base64')}`
+
+  it('a pasted text is named by its beginning, not by "Texto colado (2,1 KB)"', () => {
+    const files = [{ url: data('Implemente a autenticação com refresh token.\nMais detalhes...'), mime: 'text/plain', filename: 'Texto colado (2,1 KB).txt' }]
+    expect(titleFromPastedContent(files)).toBe('Implemente a autenticação com refresh token')
+    expect(titleFromPastedContent([{ ...files[0], filename: 'Pasted text (5.6 KB).txt' }])).toBe('Implemente a autenticação com refresh token')
+  })
+
+  it('a file the person named keeps its name (it is the better title)', () => {
+    expect(titleFromPastedContent([{ url: data('conteúdo'), mime: 'text/plain', filename: 'Rental agreement.txt' }])).toBe('')
+  })
+
+  it('returns empty when the content cannot be read', () => {
+    expect(titleFromPastedContent([{ url: 'blob:x', mime: 'text/plain', filename: 'Texto colado (1 KB).txt' }])).toBe('')
+    expect(titleFromPastedContent(undefined)).toBe('')
   })
 })
