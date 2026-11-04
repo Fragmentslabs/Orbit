@@ -16,7 +16,7 @@ export const MAX_SHEET_CELLS = 8
 const THUMB_TIMEOUT_MS = 10_000
 const MAX_THUMB_BYTES = 1_500_000
 
-async function thumbnail(result: ImageResult, fetcher: Fetcher): Promise<Buffer | null> {
+async function thumbnail(result: Pick<ImageResult, 'thumbUrl'>, fetcher: Fetcher): Promise<Buffer | null> {
   try {
     const res = await fetcher(result.thumbUrl, {
       headers: { 'User-Agent': USER_AGENT, Accept: 'image/*' },
@@ -36,7 +36,7 @@ function label(n: number): Buffer {
 }
 
 /** Builds the sheet; `null` when no thumbnail could be read. */
-export async function buildContactSheet(results: ImageResult[], fetcher: Fetcher = fetch): Promise<Buffer | null> {
+export async function buildContactSheet(results: Array<Pick<ImageResult, 'thumbUrl'>>, fetcher: Fetcher = fetch): Promise<Buffer | null> {
   const picked = results.slice(0, MAX_SHEET_CELLS)
   const thumbs = await Promise.all(picked.map((r) => thumbnail(r, fetcher)))
   const rows = Math.ceil(picked.length / COLUMNS)

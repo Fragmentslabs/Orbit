@@ -145,6 +145,7 @@ import {
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
+import { readWebImage, registerWebImageProtocol } from './lib/web-images/store'
 import {
   fontFaceCss,
   listFonts,
@@ -1590,6 +1591,8 @@ app.whenReady().then(() => {
 
   // Images of the assistant answers (orbit-media://)
   registerMediaProtocol()
+  // Web images shown in the chat (orbit-web:// — a cache, not the gallery)
+  registerWebImageProtocol()
   // Attached and generated audio (orbit-audio://)
   registerAudioProtocol()
   // Videos the agent showed (orbit-video://) and the app's ffmpeg in the PATH
@@ -2111,6 +2114,7 @@ app.whenReady().then(() => {
     if (dataUrl) {
       return { buffer: Buffer.from(dataUrl[2], 'base64'), contentType: dataUrl[1] }
     }
+    if (ref.startsWith('orbit-web://')) return readWebImage(ref)
     const id = mediaIdFromUrl(ref)
     return id ? readMedia(id) : null
   }

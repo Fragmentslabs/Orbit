@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, Monitor, PlusIcon, Quote, Search, X } from "lucide-react"
+import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, Monitor, PlusIcon, Quote, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -88,6 +88,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const browser = useModeActive("browser", sessionId, chatActiveModes.browser)
   const computer = useComputerMode(sessionId)
   const setModeActive = useModeOverrides((s) => s.setMode)
+  // In the chat, search and browser are ONE toggle ("Web"): either stored flag turns it on
+  // (a chat saved with only one of them keeps working) and switching sets both.
+  const web = search || browser
+  const setWeb = useCallback((v: boolean) => {
+    setModeActive("search", sessionId, v)
+    setModeActive("browser", sessionId, v)
+  }, [sessionId, setModeActive])
   const simple = useSimpleMode(sessionId, chatActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId, chatActiveModes.brain)
@@ -137,8 +144,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const actionCommands = useSlashActionCommands("chat")
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
-    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setModeActive("search", sessionId, v) },
-    { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setModeActive("browser", sessionId, v) },
+    { icon: Globe, label: t("input.modes.web.label"), active: web, onChange: setWeb },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
     {
@@ -160,11 +166,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     ...(computer.visible
       ? [{ icon: Monitor, label: t("input.modes.computer.label"), active: computer.active, onChange: (v: boolean) => setModeActive("computer", sessionId, v) }]
       : []),
-  ], [search, browser, simple, brain, vision, visionModel, computer.visible, computer.active, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
+  ], [web, setWeb, simple, brain, vision, visionModel, computer.visible, computer.active, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
-    research: search,
-    browser,
+    research: web,
+    browser: web,
     simple,
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
@@ -172,7 +178,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     reasoning: { enabled: thinking, variantId },
     toolsServers: toolsServers ?? undefined,
     computer: computer.active || undefined,
-  }), [search, browser, simple, brain, brainContext, skillHints, thinking, variantId, toolsServers, computer.active])
+  }), [web, simple, brain, brainContext, skillHints, thinking, variantId, toolsServers, computer.active])
 
   /** The call's turn already tied to ONE session: it never uses the active session. The
    *  busy state is read from the store at the instant of the utterance — the call may
@@ -229,8 +235,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
       setText("")
     }
     return [
-      { id: "search", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modes" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
-      { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["browser", "web"], group: "Modes" as const, active: browser, run: toggle(() => setModeActive("browser", sessionId, !browser)) },
+      { id: "web", label: t("input.modes.web.label"), description: t("input.slash.webDescription"), keywords: ["web", "search", "browser", "pesquisa", "navegador"], group: "Modes" as const, active: web, run: toggle(() => setWeb(!web)) },
       { id: "plain", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["plain", "text"], group: "Modes" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memory", "brain"], group: "Modes" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       // Vision: first activation with no model configured opens the settings.
@@ -242,7 +247,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
       { id: "new-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "reset", "new"], group: "Actions" as const, run: toggle(() => void selectSession(mode, null)) },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Actions" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, actionCommands, selectSession, mode, openSettings, t])
+  }, [web, setWeb, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, actionCommands, selectSession, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
@@ -434,23 +439,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
       </PromptInput>
       <PromptInputTools>
         <div className="mt-2 flex flex-wrap items-center gap-1">
-          {modesInRow.includes("search") && (
-            <ModeToggle
-              icon={Search}
-              label={t("input.modes.search.label")}
-              description={t("input.modes.search.description")}
-              active={search}
-              onToggle={() => setModeActive("search", sessionId, !search)}
-              iconOnly={modeLabelStyle === "icon"}
-            />
-          )}
-          {modesInRow.includes("browser") && (
+          {(modesInRow.includes("search") || modesInRow.includes("browser")) && (
             <ModeToggle
               icon={Globe}
-              label={t("input.modes.browser.label")}
-              description={t("input.modes.browser.description")}
-              active={browser}
-              onToggle={() => setModeActive("browser", sessionId, !browser)}
+              label={t("input.modes.web.label")}
+              description={t("input.modes.web.description")}
+              active={web}
+              onToggle={() => setWeb(!web)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}

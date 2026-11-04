@@ -1,6 +1,7 @@
 import { tool } from 'ai'
 import { BrowserWindow } from 'electron'
 import { z } from 'zod'
+import { WEB_PARTITION } from '../web-images/store'
 
 /**
  * Native browser tools: the model controls a hidden Electron window to navigate,
@@ -19,11 +20,18 @@ function getBrowserWindow(sessionId: string): BrowserWindow {
     show: false,
     width: 1280,
     height: 900,
-    webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true },
+    // Its own persistent session: a login the user makes once (Pinterest, Behance) stays.
+    webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, partition: WEB_PARTITION },
   })
   win.webContents.setAudioMuted(true)
   browserWindows.set(sessionId, win)
   return win
+}
+
+/** The window this session already opened, if any (never creates one). */
+export function openBrowserWindow(sessionId: string): BrowserWindow | null {
+  const win = browserWindows.get(sessionId)
+  return win && !win.isDestroyed() ? win : null
 }
 
 export function destroyBrowserWindow(sessionId: string) {
@@ -32,7 +40,7 @@ export function destroyBrowserWindow(sessionId: string) {
   browserWindows.delete(sessionId)
 }
 
-async function navigate(sessionId: string, url: string): Promise<BrowserWindow> {
+export async function navigate(sessionId: string, url: string): Promise<BrowserWindow> {
   const win = getBrowserWindow(sessionId)
   await win.loadURL(url).catch((err) => {
     // ERR_ABORTED happens on redirects/SPAs; the page still loads

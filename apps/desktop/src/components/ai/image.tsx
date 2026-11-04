@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, ChevronLeft, ChevronRight, Copy, Download, ImageOff } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, ImageOff } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { mediaApi } from "@/src/lib/ipc"
+import { appSettingsApi, mediaApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
-import type { ImagePart } from "@shared/chat"
+import type { ImagePart, ImageSource } from "@shared/chat"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
 
@@ -12,10 +12,12 @@ import { Truncate } from "@/components/ui/truncated-text"
  * Image sent by the assistant in the reply (tool show_image → ImagePart).
  * Framed preview in the flow of the message; a click opens the lightbox.
  */
-export function Image({ src, alt, className }: {
+export function Image({ src, alt, className, source }: {
   src: string
   alt?: string
   className?: string
+  /** Set for a web image: shows where it came from, in the caption and in the lightbox */
+  source?: ImageSource
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -51,9 +53,10 @@ export function Image({ src, alt, className }: {
         {alt && (
           <figcaption className="mt-1 px-0.5 text-[11px] text-muted-foreground">{alt}</figcaption>
         )}
+        {source && <SourceLink source={source} className="mt-0.5 px-0.5" />}
       </figure>
 
-      <ImageLightbox src={src} alt={alt} open={open} onOpenChange={setOpen} />
+      <ImageLightbox src={src} alt={alt} source={source} open={open} onOpenChange={setOpen} />
     </>
   )
 }
@@ -61,6 +64,27 @@ export function Image({ src, alt, className }: {
 export interface LightboxImage {
   src: string
   alt?: string
+  source?: ImageSource
+}
+
+/** Opens a web address in the system browser — the only way out of the app for a source link. */
+function openSource(url: string) {
+  if (/^https?:\/\//i.test(url)) appSettingsApi.openExternal(url)
+}
+
+/** "host · page address", clickable: where the picture lives for real. */
+function SourceLink({ source, className }: { source: ImageSource; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => openSource(source.pageUrl)}
+      title={source.pageUrl}
+      className={cn("flex max-w-full cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground", className)}
+    >
+      <ExternalLink className="size-3 shrink-0" />
+      <span className="truncate">{source.host || source.pageUrl}</span>
+    </button>
+  )
 }
 
 /**
@@ -75,6 +99,7 @@ export interface LightboxImage {
 export function ImageLightbox({
   src,
   alt,
+  source,
   open,
   onOpenChange,
   images,
@@ -83,6 +108,7 @@ export function ImageLightbox({
 }: {
   src: string
   alt?: string
+  source?: ImageSource
   open: boolean
   onOpenChange: (open: boolean) => void
   images?: LightboxImage[]
@@ -202,6 +228,23 @@ export function ImageLightbox({
             <p className="ml-auto truncate text-xs text-muted-foreground">{alt}</p>
           </Truncate>}
         </div>
+        {source && (
+          // The full address, not just the host: the user decides whether to trust it, and
+          // it is also what they copy to find the original.
+          <div className="flex items-center gap-2 px-1 pb-1">
+            <button
+              type="button"
+              onClick={() => openSource(source.pageUrl)}
+              title={source.pageUrl}
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ExternalLink className="size-3.5 shrink-0" />
+              <span className="shrink-0 font-medium text-foreground">{t("images.source")}</span>
+              <span className="truncate">{source.pageUrl}</span>
+            </button>
+            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{t("images.sourceNote")}</span>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -209,7 +252,7 @@ export function ImageLightbox({
 
 /** Straight from a single ImagePart. */
 export function ImagePartView({ part }: { part: ImagePart }) {
-  return <Image src={part.src} alt={part.alt} />
+  return <Image src={part.src} alt={part.alt} source={part.source} />
 }
 
 /**
@@ -228,7 +271,55 @@ export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
     return parts[0] ? <ImagePartView part={parts[0]} /> : null
   }
 
-  const images = parts.map((p) => ({ src: p.src, alt: p.alt }))
+  const images = parts.map((p) => ({ src: p.src, alt: p.alt, source: p.source }))
+  // References from the web are LOOKED at (that is the point of fetching them): a grid of
+  // large tiles with the site on each, not the 80px strip of an edit's steps.
+  const web = parts.every((p) => p.source)
+
+  if (web) {
+    return (
+      <>
+        <div className="not-prose my-2 grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
+          {parts.map((part, i) =>
+            failed.has(part.id) ? (
+              <div key={part.id} className="flex aspect-[4/3] items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+                <ImageOff className="size-4" />
+              </div>
+            ) : (
+              <button
+                key={part.id}
+                type="button"
+                onClick={() => setOpenIndex(i)}
+                title={part.alt || part.source?.pageUrl}
+                className="group relative block aspect-[4/3] cursor-zoom-in overflow-hidden rounded-xl border bg-muted/30 transition-colors hover:border-ring"
+              >
+                <img
+                  src={part.src}
+                  alt={part.alt ?? t("images.assistantImage")}
+                  loading="lazy"
+                  onError={() => setFailed((prev) => new Set(prev).add(part.id))}
+                  className="size-full object-cover"
+                />
+                <span className="absolute bottom-1.5 left-1.5 max-w-[85%] truncate rounded-full bg-background/80 px-2 py-0.5 text-[10px] text-foreground backdrop-blur">
+                  {part.source?.host}
+                </span>
+              </button>
+            ),
+          )}
+        </div>
+        <ImageLightbox
+          src={openIndex !== null ? images[openIndex].src : images[0].src}
+          alt={openIndex !== null ? images[openIndex].alt : images[0].alt}
+          source={openIndex !== null ? images[openIndex].source : images[0].source}
+          open={openIndex !== null}
+          onOpenChange={(next) => setOpenIndex(next ? (openIndex ?? 0) : null)}
+          images={images}
+          index={openIndex ?? 0}
+          onNavigate={setOpenIndex}
+        />
+      </>
+    )
+  }
 
   return (
     <>
@@ -270,6 +361,7 @@ export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
       <ImageLightbox
         src={openIndex !== null ? images[openIndex].src : images[0].src}
         alt={openIndex !== null ? images[openIndex].alt : images[0].alt}
+        source={openIndex !== null ? images[openIndex].source : images[0].source}
         open={openIndex !== null}
         onOpenChange={(next) => setOpenIndex(next ? (openIndex ?? 0) : null)}
         images={images}

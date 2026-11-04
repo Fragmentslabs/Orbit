@@ -235,6 +235,11 @@ const NATIVE_TOOLS = new Set([
   // network traffic to two known providers, and the file lands in the app's storage.
   'image_search',
   'image_import',
+  // References from the open web (the hidden browser reads the search page; the picture
+  // is cached, never saved to the gallery or the project) and the picture list of an open page.
+  'web_image_search',
+  'web_image_show',
+  'browser_images',
   'motion_frame',
   'show_video',
   'video_guide',

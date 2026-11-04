@@ -111,6 +111,10 @@
     "submit": "Submit",
     "uploadFiles": "Upload files",
     "modes": {
+      "web": {
+        "label": "Web",
+        "description": "Searches and browses the web: search, read pages (JavaScript ones too) and show reference images with their source."
+      },
       "search": {
         "label": "Research",
         "description": "Searches and reads web pages via HTTP. Fast, but doesn't run JavaScript."
@@ -141,6 +145,7 @@
       }
     },
     "slash": {
+      "webDescription": "Search and browse the web, with reference images",
       "searchDescription": "Toggles web search (websearch/webfetch)",
       "browserDescription": "Toggles JavaScript navigation",
       "simpleDescription": "Toggles concise replies (fewer tool calls)",
@@ -1081,7 +1086,9 @@
     "group_other": "{{count}} images",
     "previous": "Previous image",
     "next": "Next image",
-    "counter": "{{current}} of {{total}}"
+    "counter": "{{current}} of {{total}}",
+    "source": "Source",
+    "sourceNote": "Third-party reference — not saved in Orbit"
   },
   "todo": {
     "stale": "TODO ({{count}}/{{total}} done) — updated below",

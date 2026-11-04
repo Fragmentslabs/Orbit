@@ -65,6 +65,7 @@ import { attachPostToolHooks } from '../hooks/run'
 import { hasOrchestrator } from '../orchestration/questions'
 import { createPanelTools } from './panel'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
+import { createWebImageTools } from './web-images'
 import { createFontTools } from './fonts'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
@@ -179,14 +180,17 @@ export function buildToolSet(
     // each toggle exposes only its own. MCP servers are the exception:
     // they exist whenever there is a server on, sliced by this
     // conversation's choice (`toolsServers`; absent = all).
-    if (input.options.research) {
+    // "Web" is ONE toggle in the chat: the UI sets research and browser together, and
+    // either flag (an old conversation, a routine, a sub-agent) opens the whole set.
+    // The agent chooses by cost: websearch/webfetch first, the browser for pages that
+    // need JavaScript and for pictures.
+    if (input.options.research || input.options.browser) {
       tools.websearch = createWebSearchTool()
       tools.webfetch = createWebFetchTool()
       // In the chat `ctx` is null by construction: the turn's vision comes from the
       // `modelVision` parameter (that is why it exists — see the comment above).
       Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: modelVision !== false }))
-    }
-    if (input.options.browser) {
+      Object.assign(tools, createWebImageTools({ sessionId: input.sessionId, modelVision: modelVision !== false }))
       tools.browser_open = createBrowserOpenTool(input.sessionId)
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
@@ -399,6 +403,7 @@ export function buildToolSet(
     tools.websearch = createWebSearchTool()
     tools.webfetch = createWebFetchTool()
     Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: ctx?.modelVision !== false }))
+    Object.assign(tools, createWebImageTools({ sessionId: input.sessionId, modelVision: ctx?.modelVision !== false }))
   }
   if (ctx) {
     tools.read = createReadTool(ctx)

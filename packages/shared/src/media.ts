@@ -236,6 +236,8 @@ export interface MediaUsage {
 }
 
 export const MEDIA_SCHEME = "orbit-media"
+/** Web images shown in the chat (cached copy on disk, NOT in the gallery). */
+export const WEB_IMAGE_SCHEME = "orbit-web"
 export const ARTIFACT_SCHEME = "orbit-artifact"
 /** Audio (attached and generated): its own scheme, with the `stream` privilege that <audio> requires. */
 export const AUDIO_SCHEME = "orbit-audio"

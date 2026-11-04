@@ -66,9 +66,11 @@ Do NOT read the rows and do the arithmetic yourself. Over hundreds of rows that 
 
 The result tells you how many rows were scanned and whether any cells were skipped for not being numeric. Pass that on when it matters: a total that ignored 300 cells is not the total the user asked for.`
 
-const IMAGE_SEARCH_INSTRUCTION = `FINDING IMAGES. image_search looks for openly licensed photos (Wikimedia Commons, Openverse) and shows you a numbered sheet of thumbnails; choose by what the picture shows, not by the title, and search in English. image_import brings the chosen ones in — they appear in your reply on their own, and it gives you each image's credit line. The license usually requires that credit to be shown with the image: include it in what you write (or in the piece you build) and say it to the user. Only use images found this way for a published piece; do not hotlink or download images from other sites.`
+const IMAGE_SEARCH_INSTRUCTION = `FINDING IMAGES. image_search looks for openly licensed photos (Wikimedia Commons, Openverse) and shows you a numbered sheet of thumbnails; choose by what the picture shows, not by the title, and search in English. image_import brings the chosen ones in — they appear in your reply on their own, and it gives you each image's credit line. The license usually requires that credit to be shown with the image: include it in what you write (or in the piece you build) and say it to the user. Only use images found this way for a published piece; do not import or download pictures from other sites for a piece (web_image_show is for showing references only).`
 
-const IMAGE_DISPLAY_INSTRUCTION = `SHOWING IMAGES. The chat does NOT render markdown images: ![alt](url) is replaced by "[Image blocked]", for web URLs and for orbit-media:// alike. An image reaches the user only through a tool — image_import and image_edit put theirs in your reply on their own, and show_image({ media }) shows one that is already in the app. Never link or embed an image in text; describe it by number or title and let the tool show it.`
+const WEB_IMAGE_INSTRUCTION = `PICTURES FROM THE WEB. When the user wants to SEE something — a person, a place, a product, design references (Dribbble, Behance, Pinterest), "show me", "find references" — do not just describe it: call web_image_search (site: "dribbble", "behance" or "pinterest" for design references; "any" otherwise), choose by looking at the sheet, then web_image_show with the ids. They appear in your reply as a grid, each carrying the page it came from. browser_images does the same for a page the user pointed you at. Show 3-6, not a wall. Name the source sites in your text. These are other people's work, shown as references only: they are not saved to the app, and you must not use them in a published piece, a video or a deliverable — if the user asks for that, warn about the copyright and the license first; if they insist after the warning it is their decision, but prefer image_search (open licenses) for anything that will be published. If a site asks for a login or a human check, say so instead of trying to bypass it.`
+
+const IMAGE_DISPLAY_INSTRUCTION = `SHOWING IMAGES. The chat does NOT render markdown images: ![alt](url) is replaced by "[Image blocked]", for web URLs and for orbit-media:// alike. An image reaches the user only through a tool — image_import, web_image_show and image_edit put theirs in your reply on their own, and show_image({ media }) shows one that is already in the app. Never link or embed an image in text; describe it by number or title and let the tool show it.`
 
 /**
  * What to tell the agent about LOOKING at the image before editing it.
@@ -888,7 +890,7 @@ export async function buildSystemPrompt(
     }
     if (input.options.browser) {
       parts.push(
-        'You also have browser_open and browser_links to navigate JavaScript-powered pages like a real browser.',
+        'You also have browser_open and browser_links to navigate JavaScript-powered pages like a real browser, and browser_images to list the pictures of the open page.',
       )
     }
   }
@@ -937,7 +939,7 @@ export async function buildSystemPrompt(
     // Whether the agent can SEE is about the model, not about a family: it stays here.
     parts.push(imageVisionGuidance(modelVision, Boolean(input.visionModel)).trimStart())
     parts.push(IMAGE_DISPLAY_INSTRUCTION)
-    if (input.options.research) parts.push(IMAGE_SEARCH_INSTRUCTION)
+    if (input.options.research || input.options.browser) parts.push(IMAGE_SEARCH_INSTRUCTION, WEB_IMAGE_INSTRUCTION)
   }
 
   // Documents: the doc_* tools exist in both modes (the attachment may arrive in

@@ -111,6 +111,10 @@
     "submit": "Enviar",
     "uploadFiles": "Enviar arquivos",
     "modes": {
+      "web": {
+        "label": "Web",
+        "description": "Pesquisa e navega na web: busca, lê páginas (também as que usam JavaScript) e mostra imagens de referência com a fonte."
+      },
       "search": {
         "label": "Pesquisa",
         "description": "Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript."
@@ -141,6 +145,7 @@
       }
     },
     "slash": {
+      "webDescription": "Pesquisar e navegar na web, com imagens de referência",
       "searchDescription": "Alterna busca web (websearch/webfetch)",
       "browserDescription": "Alterna navegação com JavaScript",
       "simpleDescription": "Alterna respostas diretas e concisas",
@@ -1081,7 +1086,9 @@
     "group_other": "{{count}} imagens",
     "previous": "Imagem anterior",
     "next": "Próxima imagem",
-    "counter": "{{current}} de {{total}}"
+    "counter": "{{current}} de {{total}}",
+    "source": "Fonte",
+    "sourceNote": "Referência de terceiros — não é salva no Orbit"
   },
   "todo": {
     "stale": "TODO ({{count}}/{{total}} concluídos) — atualizada mais abaixo",

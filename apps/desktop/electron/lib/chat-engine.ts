@@ -8,6 +8,7 @@ import type {
   CatalogModel,
   ChatMessage,
   FilePart,
+  ImageSource,
   MessagePart,
   PermissionMode,
   ReasoningPart,
@@ -2855,6 +2856,23 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                     alt: image.alt || undefined,
                   })
                   void attachMediaMessage(image.mediaUrl, assistantMessage.id, sessionId)
+                })
+              }
+            }
+            // web_image_show: pictures from the web, with the page each came from. Not
+            // media of the gallery (nothing to attach): the part points at the cache
+            // copy and carries the source the lightbox shows.
+            if (part.toolName === 'web_image_show') {
+              const output = part.output as { images?: Array<{ src: string; alt?: string; source: ImageSource }> } | string
+              if (typeof output === 'object' && Array.isArray(output?.images)) {
+                output.images.forEach((image, index) => {
+                  upsertPart({
+                    id: `${part.toolCallId}-web-${index}`,
+                    type: 'image',
+                    src: image.src,
+                    alt: image.alt || undefined,
+                    source: image.source,
+                  })
                 })
               }
             }

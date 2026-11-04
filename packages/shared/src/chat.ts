@@ -320,6 +320,23 @@ export interface ImagePart {
   /** orbit-media:// URL served by the main's protocol (file in orbit-data/media) */
   src: string
   alt?: string
+  /**
+   * Set when the image comes from a web page (web_image_show): where the user can
+   * see it for real. `src` is then an orbit-web:// copy kept in the app's cache (not in
+   * the gallery) and this is the credit the lightbox shows.
+   */
+  source?: ImageSource
+}
+
+/** Where a web image came from — shown in the lightbox, always. */
+export interface ImageSource {
+  /** Page the image was found on (what the user opens to see it in context) */
+  pageUrl: string
+  /** Direct address of the image file */
+  imageUrl: string
+  /** Host of the page, without "www." */
+  host: string
+  title?: string
 }
 
 /**
