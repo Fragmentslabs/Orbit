@@ -38,7 +38,7 @@ const SEED_PROVIDERS: CatalogProvider[] = [
     id: 'ollama',
     name: 'Ollama',
     env: [],
-    api: 'http://localhost:11434/v1',
+    api: 'http://127.0.0.1:11434/v1',
     models: {},
   },
   {

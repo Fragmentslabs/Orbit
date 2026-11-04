@@ -290,8 +290,8 @@ function slugify(value: string): string {
  * hand and the detected one point to the same place.
  */
 const LOCAL_PRESETS = [
-  { id: "ollama", name: "Ollama", baseURL: "http://localhost:11434/v1" },
-  { id: "lmstudio", name: "LM Studio", baseURL: "http://localhost:1234/v1" },
+  { id: "ollama", name: "Ollama", baseURL: "http://127.0.0.1:11434/v1" },
+  { id: "lmstudio", name: "LM Studio", baseURL: "http://127.0.0.1:1234/v1" },
   { id: "vllm", name: "vLLM", baseURL: "http://localhost:8000/v1" },
   { id: "llamacpp", name: "llama.cpp", baseURL: "http://localhost:8080/v1" },
 ] as const

@@ -22,8 +22,8 @@ export interface DetectResult {
 }
 
 const DETECTORS = [
-  { id: 'ollama', name: 'Ollama', baseURL: 'http://localhost:11434/v1' },
-  { id: 'lmstudio', name: 'LM Studio', baseURL: 'http://localhost:1234/v1' },
+  { id: 'ollama', name: 'Ollama', baseURL: 'http://127.0.0.1:11434/v1' },
+  { id: 'lmstudio', name: 'LM Studio', baseURL: 'http://127.0.0.1:1234/v1' },
 ]
 
 export async function detectLocal(): Promise<DetectResult[]> {
