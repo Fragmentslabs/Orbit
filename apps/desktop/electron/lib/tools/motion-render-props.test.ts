@@ -26,6 +26,15 @@ vi.mock('../video/video-gallery', () => ({
   }),
 }))
 
+const frameCalls: Array<Record<string, unknown>> = []
+vi.mock('../video/motion-frame', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../video/motion-frame')>()),
+  captureMotionFrames: vi.fn(async (req: Record<string, unknown>) => {
+    frameCalls.push(req)
+    return { image: Buffer.from('x'), name: 'promo', file: 'f', url: 'u', fps: 30, durationInFrames: 60, width: 1080, height: 1920, failedFonts: [], scriptErrors: [], cells: [] }
+  }),
+}))
+
 const SESSION = 'PropsTestSession1'
 const { createMotionTools, motionPiecesDir } = await import('./motion')
 
@@ -115,5 +124,31 @@ describe('motion_render — variations (videos in bulk)', () => {
     expect(schema.safeParse({ name: 'p', variations: [] }).success).toBe(false)
     expect(schema.safeParse({ name: 'p', variations: Array.from({ length: 51 }, () => ({ props: {} })) }).success).toBe(false)
     expect(schema.safeParse({ name: 'p', variations: [{ props: { a: 1 } }] }).success).toBe(true)
+  })
+})
+
+describe('motion_frame — props', () => {
+  const frame = async (input: Record<string, unknown>) => {
+    const tools = createMotionTools({ sessionId: SESSION, canRender: true, canShow: true } as never) as unknown as Record<string, { execute: (i: unknown, o: unknown) => Promise<unknown> }>
+    return tools.motion_frame.execute({ name: 'promo', times: [1], ...input }, { toolCallId: 'f', messages: [], abortSignal: undefined })
+  }
+
+  it('looks at the piece with the props asked (the longest name, say), not the defaults', async () => {
+    frameCalls.length = 0
+    await frame({ props: { title: 'Um nome muito, muito comprido para caber' } })
+    expect(frameCalls).toHaveLength(1)
+    expect(frameCalls[0].props).toEqual({ title: 'Um nome muito, muito comprido para caber' })
+  })
+
+  it('refuses bad props before opening a window', async () => {
+    frameCalls.length = 0
+    await expect(frame({ props: { price: -5 } })).rejects.toThrow(/invalid props — props: price: -5 is below the minimum 0/)
+    expect(frameCalls).toHaveLength(0)
+  })
+
+  it('without props it behaves as before', async () => {
+    frameCalls.length = 0
+    await frame({})
+    expect(frameCalls[0].props).toBeUndefined()
   })
 })

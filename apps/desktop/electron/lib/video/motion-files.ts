@@ -58,10 +58,10 @@ const MAX_SOURCE_FILES = 40
 const SOURCE_EXTENSIONS = new Set(['.html', '.htm', '.css', '.js', '.mjs', '.json', '.svg', '.srt', '.vtt', '.txt'])
 /**
  * Files of the folder that do NOT enter the list: the entry HTML (the piece itself) and
- * the internal manifests. `audio.json` is still READ — but as a source of
+ * the internal manifests (audio.json, props.json). `audio.json` is still READ — but as a source of
  * citations, not as an item of the list.
  */
-const INTERNAL_FILES = new Set(['index.html', 'audio.json', 'orbit.json'])
+const INTERNAL_FILES = new Set(['index.html', 'audio.json', 'orbit.json', 'props.json'])
 
 const EXT_KIND: Record<string, MotionBundleFile['kind']> = {
   '.mp3': 'audio',

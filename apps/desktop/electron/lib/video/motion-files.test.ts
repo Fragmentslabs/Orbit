@@ -38,6 +38,9 @@ beforeAll(async () => {
   await fsp.mkdir(path.join(folder, 'fonts'), { recursive: true })
   await fsp.writeFile(path.join(folder, 'index.html'), '<video src="clipe.mp4"></video><style>@font-face{src:url("fonts/inter.woff2")}</style>')
   await fsp.writeFile(path.join(folder, 'audio.json'), JSON.stringify({ tracks: [{ src: 'narracao.wav' }] }))
+  // An image cited ONLY by a prop default (props.json), which is not the page itself.
+  await fsp.writeFile(path.join(folder, 'props.json'), JSON.stringify({ logo: { type: 'image', default: 'logo.png' } }))
+  await fsp.writeFile(path.join(folder, 'logo.png'), Buffer.alloc(12))
   await fsp.writeFile(path.join(folder, 'clipe.mp4'), Buffer.alloc(64))
   await fsp.writeFile(path.join(folder, 'narracao.wav'), Buffer.alloc(32))
   // The old one: `audio.json` does not speak of it.
@@ -59,6 +62,9 @@ describe('listMotionBundles', () => {
     // index.html is the piece, audio.json is a manifest: neither one is an item of the list.
     expect(byName['index.html']).toBeUndefined()
     expect(byName['audio.json']).toBeUndefined()
+    // props.json is a manifest too (it must not show up as "discarded"), but what it cites is USED.
+    expect(byName['props.json']).toBeUndefined()
+    expect(byName['logo.png'].used).toBe(true)
     expect(byName['.DS_Store']).toBeUndefined()
     expect(byName['clipe.mp4'].used).toBe(true)
     expect(byName['narracao.wav'].used).toBe(true)
@@ -67,7 +73,7 @@ describe('listMotionBundles', () => {
     // The narration the composition does not cite: it stays in the folder, labelled.
     expect(byName['narracao-2.wav'].used).toBe(false)
     expect(bundle.discarded).toBe(1)
-    expect(bundle.totalBytes).toBe(64 + 32 + 16 + 8)
+    expect(bundle.totalBytes).toBe(64 + 32 + 16 + 8 + 12)
     expect(bundle.files.find((file) => file.name === 'clipe.mp4')?.kind).toBe('video')
     expect(bundle.files.find((file) => file.name === 'narracao.wav')?.kind).toBe('audio')
     expect(bundle.files.find((file) => file.name === 'fonts/inter.woff2')?.kind).toBe('font')

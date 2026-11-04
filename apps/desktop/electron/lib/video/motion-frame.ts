@@ -1,3 +1,4 @@
+import { withOverrides } from './motion-props'
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
 import { capturePageReliably } from './capture'
@@ -524,6 +525,8 @@ export interface MotionFrameRequest {
   root?: string
   sessionId?: string
   signal?: AbortSignal
+  /** Props of the composition (props.json) to look at — a variation, e.g. the one with the longest name. */
+  props?: Record<string, unknown>
 }
 
 export interface MotionFrameResult {
@@ -581,7 +584,7 @@ export async function captureMotionFrames(req: MotionFrameRequest): Promise<Moti
   try {
     // The runtime enters as the FIRST script of the <head> — it is the protocol of the scheme
     // that serves the entry (the same path as the preview).
-    await win.loadURL(preview.url)
+    await win.loadURL(withOverrides(preview.url, req.props))
     await win.webContents.executeJavaScript('document.fonts.ready.then(() => true)', true)
     const spec = (await win.webContents.executeJavaScript(MOTION_SPEC, true)) as MotionPageSpec | null
     if (!spec) throw new Error('motion runtime did not load in the capture window')

@@ -222,7 +222,7 @@ When the same piece has to come out many times with other data (a title, a price
   in bulk:       motion_render({ name, variations: [{ name: "oferta-a", props: {...} }, { name: "oferta-b", props: {...} }] })   // up to 50, one file each
 - Types: text, number (min, max), color (#hex), boolean, select (options), image (a path inside the piece folder: put the file there with motion_asset first). An undeclared name or a wrong type is refused with the list of what IS declared, and every variation is checked BEFORE the first frame.
 - Design the piece for the data it will get: size text with fitText (a long name must fit), never hard-code a value that is also a prop, and give each prop a default that makes a good video by itself (the preview and a render without props use them).
-- A prop that changes the LENGTH (a longer name, more items) must not change the declared duration silently: derive scenes from durations (orbitMotion.scenes with duration=auto) and test the longest case with motion_frame.
+- A prop that changes the LENGTH (a longer name, more items) must not change the declared duration silently: derive scenes from durations (orbitMotion.scenes with duration=auto) and test the longest case with motion_frame({ props: { … } }).
 - The lint says when the page reads a prop that props.json does not declare (error) or declares one the page never reads (warning). motion_preview lists the declared props.
 - For many items from a list the user gave you, build the variations array from it (one name per item); render a first variation alone and look at it before launching fifty.
 

@@ -476,12 +476,21 @@ export function createMotionTools(
           .describe(
             'ALSO measure the sound at those instants: RMS and peak (dBFS) of the mix exactly as the render builds it (gain, automation, fades, duck, master) and of each track alone. Checks a mix you reasoned about ("-22 dB under the voice") with a number.',
           ),
+        props: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Look at the piece with these props (props.json) instead of the defaults — a variation, e.g. the one with the longest name or the biggest number. Checked like in motion_render.'),
         see: z.boolean().optional().describe('Load the contact sheet into your context (default false). Images are slow and costly: only for a visual doubt'),
       }),
-      execute: async ({ name, id, times, probe, evaluate, audio, see }, { toolCallId, abortSignal }) => {
+      execute: async ({ name, id, times, probe, evaluate, audio, props, see }, { toolCallId, abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
+        if (props) {
+          const problems = await checkOverrides(path.dirname(target.file), [{ label: 'props', props }])
+          if (problems.length) throw new Error(`invalid props — ${problems.join('; ')}`)
+        }
         const result = await captureMotionFrames({
+          props,
           target: target.file,
           times,
           probe,
