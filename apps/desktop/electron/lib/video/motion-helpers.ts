@@ -349,6 +349,84 @@ export const MOTION_HELPERS_SCRIPT = `
     return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, zoom: (opt.fit === 'cover' ? cover : contain) * (opt.scale || 1) }
   }
 
+  // ------------------------------------------------------------- text effects
+  // orbitMotion.text('#title', { by: 'chars' | 'words' | 'lines', style: 'rise', at: 0.4 }) splits the text
+  // of an element into units and reveals them one after the other. Everything here is pure: where a unit
+  // is at time t depends only on t. The splitting and the styles are what the page script applies.
+  const ORBIT_TEXT_STYLES = ['fade', 'rise', 'drop', 'pop', 'mask', 'blur', 'slide', 'typewriter']
+  const ORBIT_TEXT_BY = ['chars', 'words', 'lines']
+  const ORBIT_TEXT_ORDERS = ['forward', 'reverse', 'center', 'random']
+
+  // The words of a text, each with its characters (a character is a code point: an emoji is ONE).
+  // Whitespace of any kind separates words and is not kept: the page puts a plain space between them.
+  function orbitWords(text) {
+    const words = []
+    let cur = ''
+    for (const ch of String(text)) {
+      const code = ch.codePointAt(0)
+      if (code === 32 || code === 9 || code === 10 || code === 13) {
+        if (cur) { words.push(cur); cur = '' }
+      } else cur += ch
+    }
+    if (cur) words.push(cur)
+    return words.map(function (w) { return { text: w, chars: Array.from(w) } })
+  }
+
+  // The start time of each of n units. The rank is the position in the reveal order (forward, reverse,
+  // from the centre outward, or a fixed shuffle): start = at + rank * stagger.
+  function orbitTextStarts(n, o) {
+    const at = o.at || 0
+    const stagger = o.stagger === undefined ? 0.05 : o.stagger
+    const order = o.order || 'forward'
+    const idx = []
+    for (let i = 0; i < n; i++) idx.push(i)
+    let ranked
+    if (order === 'reverse') ranked = idx.slice().reverse()
+    else if (order === 'center') {
+      const mid = (n - 1) / 2
+      ranked = idx.slice().sort(function (a, b) { return Math.abs(a - mid) - Math.abs(b - mid) || a - b })
+    } else if (order === 'random') {
+      const key = function (i) { return orbitRandom(String(o.seed === undefined ? 'text' : o.seed) + ':' + i) }
+      ranked = idx.slice().sort(function (a, b) { return key(a) - key(b) })
+    } else ranked = idx
+    const starts = new Array(n)
+    for (let r = 0; r < n; r++) starts[ranked[r]] = at + r * stagger
+    return starts
+  }
+
+  // Easing of the reveal by name; every style has its own default.
+  function orbitTextEase(name) {
+    if (name === 'linear') return orbitEasing.linear
+    if (name === 'back') return orbitEasing.out(orbitEasing.back(1.8))
+    if (name === 'inOut') return orbitEasing.easeInOut
+    return orbitEasing.easeOut
+  }
+  const ORBIT_TEXT_DEFAULT_EASE = { fade: 'out', rise: 'out', drop: 'out', pop: 'back', mask: 'out', blur: 'out', slide: 'out', typewriter: 'linear' }
+
+  // The look of a unit at progress p (0 = hidden, 1 = in place). Distances are in em (the font size of the
+  // text), blur in px, the mask offset in % of the unit's own height. p = 1 is ALWAYS the untouched text.
+  function orbitTextState(style, p, o) {
+    const opt = o || {}
+    const q = Math.min(1, Math.max(0, p))
+    const e = orbitTextEase(opt.ease || ORBIT_TEXT_DEFAULT_EASE[style])(q)
+    const dist = opt.distance === undefined ? 0.6 : opt.distance
+    const fade = Math.min(1, q * 1.6)
+    const out = { opacity: 1, x: 0, y: 0, scale: 1, blur: 0, mask: 0 }
+    if (style === 'fade') out.opacity = e
+    else if (style === 'rise') { out.opacity = fade; out.y = (1 - e) * dist }
+    else if (style === 'drop') { out.opacity = fade; out.y = -(1 - e) * dist }
+    else if (style === 'pop') { out.opacity = q > 0 ? 1 : 0; out.scale = Math.max(0, e) }
+    else if (style === 'mask') { out.opacity = q > 0 ? 1 : 0; out.mask = (1 - e) * 110 }
+    else if (style === 'blur') { out.opacity = fade; out.blur = (1 - q) * (opt.blur === undefined ? 14 : opt.blur) }
+    else if (style === 'slide') { out.opacity = fade; out.x = (opt.direction === 'right' ? -1 : 1) * (1 - e) * dist * 2 }
+    else if (style === 'typewriter') out.opacity = q > 0 ? 1 : 0
+    else throw new Error('text: style "' + style + '" does not exist — use ' + ORBIT_TEXT_STYLES.join(', '))
+    // No negative zero: p = 1 must be exactly the untouched text.
+    out.x = out.x || 0
+    out.y = out.y || 0
+    return out
+  }
+
   // ------------------------------------------------------------- fit text
   // The largest whole font size in [min, max] for which fits(size) holds (fits is monotone: if
   // a size fits, every smaller one does). null when not even min fits.

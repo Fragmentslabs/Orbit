@@ -208,6 +208,17 @@ The look of a kinetic-type piece or an app tour is rarely a cut between scenes: 
 - The camera OWNS the transform of the world's direct children: animate what is inside them (a wrapper), never the layer itself. It runs after your seek, so it is a pure function of the frame like the rest. Read it with motion_frame evaluate: ["cam.at(2.5)"] (expose it as window.cam).
 - Do not fake a camera move with a CSS transition or a blur on the whole frame: the lint refuses the first and the second is a render trap.
 
+## Text effects: orbitMotion.text
+Do not write a per-letter animation by hand (a loop of delays, opacity and transform): ask for the effect.
+  const t = orbitMotion.text('#title', { by: 'chars', style: 'rise', at: 0.4 })     // reveals the text of the element
+  orbitMotion.text('#sub', { by: 'words', style: 'mask', at: t.end - 0.2, exitAt: 4 })   // t.end = when the last unit has landed
+- by: 'chars' (a code point: an emoji is one; a word is never broken across lines) · 'words' · 'lines' (grouped after layout, so it needs the fonts in). Default 'words'.
+- style: 'rise' (up from below, calm default) · 'drop' (down from above) · 'fade' · 'pop' (scale with overshoot: playful) · 'mask' (slides up out of a clip: the clean title reveal) · 'blur' (comes into focus: small text only) · 'slide' (from the side; direction: 'right') · 'typewriter' (appears with no easing).
+- Timing, in SECONDS: at (first unit starts), dur (per unit, default 0.6), stagger (between units: default 0.03 chars, 0.08 words, 0.14 lines), order: 'forward' | 'reverse' | 'center' (from the middle out) | 'random' (a fixed shuffle, seed to change it). exitAt (and exitDur) plays the same style backwards.
+- The element must hold ONLY text (no child elements); style each part of a headline as its own element with its own text() call. The text stays readable for assistive tech (aria-label). Use t.end to lay the next thing out, never a guessed time.
+- Rules of taste: chars on a short headline (under ~25 characters) and words or lines for anything longer; one effect per piece of text; the same style for the same role across the piece (all titles mask, all captions fade); an exit shorter than the entrance. blur is a render cost: keep it to a line.
+- It runs after your seek and writes the units' own transform/opacity: do not animate the same element by hand as well.
+
 ## Props: ONE piece, MANY videos
 When the same piece has to come out many times with other data (a title, a price, a name, a colour, a logo — an offer per product, a card per person), do NOT copy the piece and edit its text: declare the parts that change and render it with other values.
   props.json (next to index.html; write it with motion_write files):

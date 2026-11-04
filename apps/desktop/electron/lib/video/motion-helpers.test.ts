@@ -3,7 +3,7 @@ import { MOTION_HELPERS_SCRIPT } from './motion-helpers'
 
 type Easing = Record<string, any>
 const h = new Function(
-  `${MOTION_HELPERS_SCRIPT}; return { interpolate: orbitInterpolate, spring: orbitSpring, Easing: orbitEasing, sequence: orbitSequence, analyze: orbitAnalyzeAudio, bands: orbitReadBands, mix: orbitMixTracks, gain: orbitTrackGain, trackWords: orbitTrackWords, wordLines: orbitWordLines, wordAt: orbitWordAt, findWord: orbitFindWord, normWord: orbitNormWord, scenes: orbitScenes, random: orbitRandom, fitSize: orbitFitSize, camProgress: orbitCameraProgress, camPlan: orbitCameraPlan, camState: orbitCameraState, camShake: orbitCameraShake, camMatrix: orbitCameraMatrix, camFit: orbitCameraFit }`,
+  `${MOTION_HELPERS_SCRIPT}; return { interpolate: orbitInterpolate, spring: orbitSpring, Easing: orbitEasing, sequence: orbitSequence, analyze: orbitAnalyzeAudio, bands: orbitReadBands, mix: orbitMixTracks, gain: orbitTrackGain, trackWords: orbitTrackWords, wordLines: orbitWordLines, wordAt: orbitWordAt, findWord: orbitFindWord, normWord: orbitNormWord, scenes: orbitScenes, random: orbitRandom, fitSize: orbitFitSize, camProgress: orbitCameraProgress, camPlan: orbitCameraPlan, camState: orbitCameraState, camShake: orbitCameraShake, camMatrix: orbitCameraMatrix, camFit: orbitCameraFit, words: orbitWords, textStarts: orbitTextStarts, textState: orbitTextState }`,
 )() as {
   interpolate(v: number, i: number[], o: number[], opts?: Record<string, unknown>): number
   spring(o: Record<string, unknown>): number
@@ -26,8 +26,12 @@ const h = new Function(
   camState(initial: Cam, plan: CamMove[], t: number): Cam
   camShake(shakes: Record<string, unknown>[], t: number): { x: number; y: number; rot: number }
   camMatrix(st: Cam, depth: number, w: number, h: number): number[]
+  words(text: string): Array<{ text: string; chars: string[] }>
+  textStarts(n: number, o: Record<string, unknown>): number[]
+  textState(style: string, p: number, o?: Record<string, unknown>): TextState
   camFit(rect: { x: number; y: number; w: number; h: number }, vw: number, vh: number, o?: Record<string, unknown>): { x: number; y: number; zoom: number }
 }
+type TextState = { opacity: number; x: number; y: number; scale: number; blur: number; mask: number }
 type Cam = { x: number; y: number; zoom: number; rot: number }
 type CamMove = { at: number; dur: number; style: string; from: Cam; to: Cam }
 type Scene = { name: string; start: number; end: number; dur: number }
@@ -354,5 +358,54 @@ describe('camera', () => {
     expect(Math.abs(h.camShake(s, 1.499).x)).toBeLessThan(0.5)
     expect(h.camShake(s, 1.2)).toEqual(h.camShake(s, 1.2))
     expect(Math.max(...Array.from({ length: 50 }, (_, i) => Math.abs(h.camShake(s, 1 + i * 0.01).x)))).toBeLessThanOrEqual(20)
+  })
+})
+
+describe('text effects (pure)', () => {
+  const styles = ['fade', 'rise', 'drop', 'pop', 'mask', 'blur', 'slide', 'typewriter']
+
+  it('splits into words and code points, whatever the whitespace', () => {
+    expect(h.words('  Olá\t\nmundo  ').map((w) => w.text)).toEqual(['Olá', 'mundo'])
+    expect(h.words('a 👍b')[1].chars).toEqual(['👍', 'b'])
+    expect(h.words('   ')).toEqual([])
+  })
+
+  it('every style ends untouched at p = 1 and is hidden at p = 0', () => {
+    for (const style of styles) {
+      expect(h.textState(style, 1)).toEqual({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, mask: 0 })
+      const hidden = h.textState(style, 0)
+      const out = hidden.opacity === 0 || hidden.scale === 0 || hidden.mask > 100
+      expect(out, style).toBe(true)
+    }
+  })
+
+  it('rise comes from below and drop from above; slide follows the direction; blur clears', () => {
+    expect(h.textState('rise', 0.2).y).toBeGreaterThan(0)
+    expect(h.textState('drop', 0.2).y).toBeLessThan(0)
+    expect(h.textState('slide', 0.2).x).toBeGreaterThan(0)
+    expect(h.textState('slide', 0.2, { direction: 'right' }).x).toBeLessThan(0)
+    expect(h.textState('blur', 0.1).blur).toBeGreaterThan(h.textState('blur', 0.9).blur)
+  })
+
+  it('pop overshoots before it settles', () => {
+    const peak = Math.max(...Array.from({ length: 101 }, (_, i) => h.textState('pop', i / 100).scale))
+    expect(peak).toBeGreaterThan(1.02)
+  })
+
+  it('refuses a style that does not exist, with the list', () => {
+    expect(() => h.textState('spin', 0.5)).toThrow(/does not exist — use fade, rise/)
+  })
+
+  it('stagger orders: forward, reverse, from the centre, a fixed shuffle', () => {
+    const base = { at: 1, stagger: 0.1 }
+    expect(h.textStarts(4, base)).toEqual([1, 1.1, 1.2, 1.3])
+    expect(h.textStarts(4, { ...base, order: 'reverse' })).toEqual([1.3, 1.2, 1.1, 1])
+    const center = h.textStarts(5, { ...base, order: 'center' })
+    expect(center[2]).toBe(1) // the middle first
+    expect(Math.max(center[0], center[4])).toBeCloseTo(1.4, 6) // the ends last
+    const a = h.textStarts(6, { ...base, order: 'random', seed: 'x' })
+    expect(a).toEqual(h.textStarts(6, { ...base, order: 'random', seed: 'x' }))
+    expect([...a].sort((x, y) => x - y)).toEqual([1, 1.1, 1.2, 1.3, 1.4, 1.5].map((n) => expect.closeTo(n, 6)))
+    expect(a).not.toEqual(h.textStarts(6, { ...base, order: 'random', seed: 'y' }))
   })
 })

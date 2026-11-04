@@ -361,6 +361,7 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
       }
     }
     // The cameras go AFTER the composition's own seek: they own the transform of their layers.
+    for (const x of texts) x.apply(frame)
     for (const c of cameras) c.apply(frame)
     positionAnimations(t)
     await Promise.all(videos().map(function (v) {
@@ -587,6 +588,127 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     return cam
   }
 
+  // ------------------------------------------------------------- text effects
+  // orbitMotion.text(target, { by, style, at, dur, stagger, order, exitAt, … }) → a controller.
+  // Splits the element's text into units (characters, words or lines), each in an outer + inner span,
+  // and every frame puts every unit where its time says (pure of the frame, applied after the seek).
+  const texts = []
+  function addText(target, opts) {
+    const o = opts || {}
+    const el = typeof target === 'string' ? document.querySelector(target) : target
+    if (!el) throw new Error('text: element not found: ' + target)
+    const by = o.by || 'words'
+    const style = o.style || 'rise'
+    if (ORBIT_TEXT_BY.indexOf(by) < 0) throw new Error('text: by "' + by + '" does not exist — use ' + ORBIT_TEXT_BY.join(', '))
+    if (ORBIT_TEXT_STYLES.indexOf(style) < 0) throw new Error('text: style "' + style + '" does not exist — use ' + ORBIT_TEXT_STYLES.join(', '))
+    if (o.order && ORBIT_TEXT_ORDERS.indexOf(o.order) < 0) throw new Error('text: order "' + o.order + '" does not exist — use ' + ORBIT_TEXT_ORDERS.join(', '))
+    if (el.children && el.children.length) throw new Error('text: ' + String(target) + ' has child elements — use an element that holds only text (give each styled part its own element and its own text() call)')
+    const text = String(el.textContent || '')
+    const words = orbitWords(text)
+    if (!words.length) throw new Error('text: ' + String(target) + ' has no text')
+
+    // Build: word wrappers (never broken across lines) with plain spaces between them.
+    const make = function (css) { const e = document.createElement('span'); Object.assign(e.style, css); return e }
+    const outers = []   // one per unit of the element own 'by' (chars and words; lines are grouped below)
+    const wordOuters = []
+    el.textContent = ''
+    if (el.setAttribute) el.setAttribute('aria-label', text)
+    words.forEach(function (w, wi) {
+      if (wi > 0) el.appendChild(document.createTextNode(' '))
+      const wordEl = make({ display: 'inline-block', whiteSpace: 'nowrap' })
+      const mk = function (label) {
+        const outer = make({ display: 'inline-block', overflow: style === 'mask' ? 'hidden' : 'visible', verticalAlign: 'top' })
+        const inner = make({ display: 'inline-block', willChange: 'transform, opacity' })
+        inner.textContent = label
+        outer.appendChild(inner)
+        return { outer: outer, inner: inner }
+      }
+      if (by === 'chars') {
+        w.chars.forEach(function (c) { const u = mk(c); wordEl.appendChild(u.outer); outers.push(u) })
+      } else {
+        const u = mk(w.text)
+        wordEl.appendChild(u.outer)
+        wordOuters.push(u)
+        if (by === 'words') outers.push(u)
+      }
+      el.appendChild(wordEl)
+    })
+
+    let units = by === 'lines' ? null : outers.map(function (u) { return [u] })
+    // Lines are only known after layout (fonts in): group the words by their vertical position, once.
+    function groupLines() {
+      if (units) return units
+      const rows = []
+      let lastTop = null
+      wordOuters.forEach(function (u) {
+        const top = Math.round(u.outer.offsetTop || 0)
+        if (lastTop === null || Math.abs(top - lastTop) > 2) { rows.push([]); lastTop = top }
+        rows[rows.length - 1].push(u)
+      })
+      units = rows
+      return units
+    }
+
+    const dur = o.dur === undefined ? 0.6 : o.dur
+    const stagger = o.stagger !== undefined ? o.stagger : by === 'chars' ? 0.03 : by === 'words' ? 0.08 : 0.14
+    const exitAt = o.exitAt
+    const exitDur = o.exitDur === undefined ? dur : o.exitDur
+    let starts = null
+    let exits = null
+    function timing() {
+      if (starts) return
+      const n = groupLines().length
+      starts = orbitTextStarts(n, { at: o.at || 0, stagger: stagger, order: o.order, seed: o.seed })
+      if (exitAt !== undefined) exits = orbitTextStarts(n, { at: exitAt, stagger: stagger, order: o.order, seed: o.seed })
+    }
+    const ctl = {
+      // Where the unit i is at time t (seconds): the state apply() writes. Exposed for motion_frame evaluate.
+      stateAt: function (i, t) {
+        timing()
+        let p = Math.min(1, Math.max(0, (t - starts[i]) / dur))
+        if (exits) {
+          const pe = Math.min(1, Math.max(0, (t - exits[i]) / exitDur))
+          if (pe > 0) p = 1 - pe
+        }
+        return orbitTextState(style, p, o)
+      },
+      apply: function (frame) {
+        const t = frame / resolved.fps
+        const list = groupLines()
+        list.forEach(function (unit, i) {
+          const st = ctl.stateAt(i, t)
+          const identity = st.opacity === 1 && !st.x && !st.y && st.scale === 1 && !st.blur && !st.mask
+          unit.forEach(function (u) {
+            const s = u.inner.style
+            if (identity) { s.opacity = '1'; s.transform = 'none'; s.filter = 'none'; return }
+            s.opacity = String(Math.round(st.opacity * 1000) / 1000)
+            const parts = []
+            if (st.x || st.y) parts.push('translate(' + Math.round(st.x * 1000) / 1000 + 'em,' + Math.round(st.y * 1000) / 1000 + 'em)')
+            if (st.mask) parts.push('translateY(' + Math.round(st.mask * 100) / 100 + '%)')
+            if (st.scale !== 1) parts.push('scale(' + Math.round(st.scale * 1000) / 1000 + ')')
+            s.transform = parts.length ? parts.join(' ') : 'none'
+            s.filter = st.blur > 0.01 ? 'blur(' + Math.round(st.blur * 100) / 100 + 'px)' : 'none'
+          })
+        })
+      },
+      // When the last unit has finished appearing (seconds): lay the next scene out from it.
+      get end() {
+        timing()
+        return Math.max.apply(null, starts) + dur
+      },
+      get exitEnd() {
+        timing()
+        return exits ? Math.max.apply(null, exits) + exitDur : undefined
+      },
+      info: function () {
+        timing()
+        return { by: by, style: style, units: starts.length, at: Math.min.apply(null, starts), end: ctl.end, exitAt: exitAt }
+      },
+    }
+    texts.push(ctl)
+    return ctl
+  }
+
   // ------------------------------------------------------------- transition
   // orbitMotion.transition({ out, in, at, duration, type, direction, easing, amount })
   // becomes one paused animation per element. There is NOTHING to do per frame: the
@@ -788,6 +910,7 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     api.continueRender = continueRender
     api.transition = addTransition
     api.camera = addCamera
+    api.text = addText
     // Props of the piece (props.json + the overrides of this render): fixed for the whole run.
     Object.defineProperty(api, 'props', {
       configurable: true,

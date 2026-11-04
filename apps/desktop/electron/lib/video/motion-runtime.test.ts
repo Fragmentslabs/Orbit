@@ -932,3 +932,127 @@ describe('injectMotionRuntime with props', () => {
     expect(out).not.toContain('</script><img')
   })
 })
+
+describe('orbitMotion.text', () => {
+  type El = {
+    tag: string
+    style: Record<string, string>
+    children: El[]
+    childNodes: unknown[]
+    attrs: Record<string, string>
+    offsetTop?: number
+    textContent: string
+    appendChild(c: unknown): unknown
+    setAttribute(k: string, v: string): void
+  }
+  /** A tiny DOM: elements with children, text nodes, and a textContent that behaves like the real one. */
+  const el = (tag = 'span', text = ''): El => {
+    let own = text
+    const e: El = {
+      tag,
+      style: {},
+      children: [],
+      childNodes: [],
+      attrs: {},
+      get textContent() {
+        return e.children.length ? e.children.map((c) => c.textContent).join('') : own
+      },
+      set textContent(v: string) {
+        own = v
+        e.children = []
+        e.childNodes = []
+      },
+      appendChild(c) {
+        e.childNodes.push(c)
+        if ((c as El).tag) e.children.push(c as El)
+        return c
+      },
+      setAttribute(k, v) {
+        e.attrs[k] = v
+      },
+    } as El
+    return e
+  }
+  type TextApi = FakeApi & { text(t: unknown, o?: Record<string, unknown>): TextCtl }
+  type TextCtl = {
+    apply(frame: number): void
+    stateAt(i: number, t: number): { opacity: number; y: number }
+    end: number
+    exitEnd?: number
+    info(): { units: number; by: string; style: string; at: number; end: number }
+  }
+  const setup = (text: string) => {
+    const target = el('h1', text)
+    const page = makePage({
+      meta: 'width=1080,height=1920,fps=30,duration=6',
+      elements: { '#t': target },
+      doc: { createElement: (tag: string) => el(tag), createTextNode: (data: string) => ({ nodeType: 3, data }) },
+    })
+    return { api: page.api as TextApi, target }
+  }
+  /** The inner span of each unit, in order. */
+  const inners = (target: El, by: 'words' | 'chars') =>
+    target.children.flatMap((word) => (by === 'chars' ? word.children.map((u) => u.children[0]) : [word.children[0].children[0] ?? word.children[0]]))
+
+  it('splits into words, keeps the text for assistive tech and reports the end', () => {
+    const { api, target } = setup('Olá mundo lindo')
+    const t = api.text('#t', { by: 'words', style: 'rise', at: 1, dur: 0.6, stagger: 0.1 })
+    expect(t.info()).toMatchObject({ units: 3, by: 'words', style: 'rise', at: 1 })
+    expect(t.end).toBeCloseTo(1 + 2 * 0.1 + 0.6, 6)
+    expect(target.attrs['aria-label']).toBe('Olá mundo lindo')
+    expect(target.children).toHaveLength(3)
+  })
+
+  it('splits into characters, one unit per code point, words never broken', () => {
+    const { api, target } = setup('oi 👍')
+    const t = api.text('#t', { by: 'chars', style: 'pop' })
+    expect(t.info().units).toBe(3)
+    expect(target.children).toHaveLength(2) // the two words
+  })
+
+  it('hidden before its time, untouched after, on the piece clock (frame / fps)', async () => {
+    const { api, target } = setup('um dois')
+    api.text('#t', { by: 'words', style: 'rise', at: 1, dur: 0.5, stagger: 0.5 })
+    await api.seek(0)
+    const first = inners(target, 'words')[0]
+    expect(first.style.opacity).toBe('0')
+    await api.seek(45) // 1.5 s: the first unit is done (1.0 + 0.5)
+    expect(first.style.opacity).toBe('1')
+    expect(first.style.transform).toBe('none')
+    const second = inners(target, 'words')[1]
+    await api.seek(30) // 1.0 s: the second has not started (starts at 1.5)
+    expect(second.style.opacity).toBe('0')
+  })
+
+  it('exit reverses the reveal after exitAt', async () => {
+    const { api, target } = setup('um')
+    const t = api.text('#t', { by: 'words', style: 'fade', at: 0, dur: 0.5, exitAt: 3, exitDur: 0.5 })
+    expect(t.exitEnd).toBeCloseTo(3.5, 6)
+    const unit = inners(target, 'words')[0]
+    await api.seek(60) // 2 s: in place
+    expect(unit.style.opacity).toBe('1')
+    await api.seek(105) // 3.5 s: gone
+    expect(unit.style.opacity).toBe('0')
+  })
+
+  it('mask clips on the outer span and moves the inner one', async () => {
+    const { api, target } = setup('um')
+    api.text('#t', { by: 'words', style: 'mask', at: 0, dur: 1 })
+    expect(target.children[0].children[0].style.overflow).toBe('hidden')
+    await api.seek(0)
+    expect(inners(target, 'words')[0].style.transform).toMatch(/translateY\(110%\)/)
+  })
+
+  it('refuses what cannot work, with the reason', () => {
+    const { api, target } = setup('um dois')
+    expect(() => api.text('#nope')).toThrow(/element not found/)
+    expect(() => api.text('#t', { by: 'letters' })).toThrow(/by "letters" does not exist/)
+    expect(() => api.text('#t', { style: 'spin' })).toThrow(/style "spin" does not exist/)
+    expect(() => api.text('#t', { order: 'zigzag' })).toThrow(/order "zigzag" does not exist/)
+    target.children.push(el('b'))
+    expect(() => api.text('#t')).toThrow(/has child elements/)
+    const empty = setup('   ')
+    expect(() => empty.api.text('#t')).toThrow(/has no text/)
+  })
+})
+
