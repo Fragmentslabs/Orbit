@@ -737,6 +737,10 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     const outEl = transitionTarget(raw.out, 'out')
     const inEl = transitionTarget(raw.in, 'in')
     if (outEl && outEl === inEl) throw new Error('orbit-motion transition: "out" and "in" are the same element')
+    // The 3D types need the size of the piece (the depth of a cube): it is the runtime that knows it.
+    // (refresh() reads the <meta>: without it a transition registered while the page loads sees the 1920x1080 default.)
+    refresh()
+    spec.size = { w: resolved.width, h: resolved.height }
     const plan = orbitTransitionKeyframes(spec)
     const now = (currentFrame / resolved.fps) * 1000
     function run(el, frames, fill) {
@@ -752,6 +756,20 @@ ${MOTION_AUDIO_LOADER_SCRIPT}
     }
     if (outEl) run(outEl, plan.out, 'forwards')
     if (inEl) run(inEl, plan.in, 'backwards')
+    // The 3D types need a perspective: on the PARENT of the scenes, for the span of the transition only,
+    // so the scenes themselves never get a transform that would trample their own.
+    const persp = orbitTransitionPerspective(spec)
+    if (persp > 0) {
+      const parents = []
+      for (const el of [outEl, inEl]) if (el && el.parentElement && parents.indexOf(el.parentElement) < 0) parents.push(el.parentElement)
+      for (const parent of parents) {
+        const keep = { perspective: persp + 'px' }
+        const animation = parent.animate([keep, keep], { delay: spec.at * 1000, duration: spec.duration * 1000, fill: 'none' })
+        animation.pause()
+        try { animation.currentTime = now } catch (err) {}
+        ownAnimations.push(animation)
+      }
+    }
     const info = {
       type: spec.type,
       direction: spec.direction,

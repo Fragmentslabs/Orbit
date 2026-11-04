@@ -630,6 +630,28 @@ describe('orbitMotion.transition', () => {
     transitions: Array<Record<string, unknown>>
   }
 
+  it('a 3D transition also animates a perspective on the PARENT of the scenes, only for its span', () => {
+    const parent = fakeElement('stage')
+    const a = Object.assign(fakeElement('a'), { parentElement: parent })
+    const b = Object.assign(fakeElement('b'), { parentElement: parent })
+    const page = makePage({ meta: 'width=1080,height=1920,fps=30,duration=4', elements: { '.a': a, '.b': b } })
+    ;(page.api as TransitionApi).transition({ out: '.a', in: '.b', at: 1, duration: 0.8, type: 'cube', direction: 'left' })
+    expect(parent.calls).toHaveLength(1) // once, though both scenes share it
+    expect(parent.calls[0].frames).toEqual([{ perspective: '2496px' }, { perspective: '2496px' }]) // 1920 × 1.3 (the long side of 1080×1920)
+    expect(parent.calls[0].timing).toEqual({ delay: 1000, duration: 800, fill: 'none' })
+    expect(parent.animations[0].paused).toBe(true)
+    // the scenes got the depth of a cube of THIS piece: half the width
+    expect(a.calls[0].frames[0].transformOrigin).toBe('50% 50% -540px')
+  })
+
+  it('a flat transition leaves the parent alone', () => {
+    const parent = fakeElement('stage')
+    const a = Object.assign(fakeElement('a'), { parentElement: parent })
+    const page = makePage({ meta: 'width=1080,height=1920,fps=30,duration=4', elements: { '.a': a } })
+    ;(page.api as TransitionApi).transition({ out: '.a', at: 1, type: 'push' })
+    expect(parent.calls).toHaveLength(0)
+  })
+
   it('creates one paused animation per side, timed on the piece clock', () => {
     const a = fakeElement('scene-a')
     const b = fakeElement()

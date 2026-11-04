@@ -23,7 +23,7 @@
  */
 
 /** The transition types the runtime knows how to assemble. */
-export const MOTION_TRANSITION_TYPES = ['fade', 'push', 'cover', 'reveal', 'wipe', 'zoom', 'blur', 'iris'] as const
+export const MOTION_TRANSITION_TYPES = ['fade', 'push', 'cover', 'reveal', 'wipe', 'zoom', 'blur', 'iris', 'cube', 'flip', 'door'] as const
 export type MotionTransitionType = (typeof MOTION_TRANSITION_TYPES)[number]
 
 /** Where the movement goes. `in`/`out` only apply to the zoom. */
@@ -107,6 +107,30 @@ export const MOTION_TRANSITIONS_SCRIPT = `
     return { spec: { type: type, direction: direction, at: raw.at, duration: duration, easing: easing, amount: amount } }
   }
 
+  // ---- the 3D ones (cube, flip, door): individual rotate + a perspective on the PARENT ----
+  // Per direction: the axis a face turns about and the sign of the turn that sends it THAT way
+  // (left: the face turns to look left, so the next one comes in from the right).
+  const ORBIT_TURN = { left: ['Y', -1], right: ['Y', 1], up: ['X', 1], down: ['X', -1] }
+  // The door is hinged on the side it opens toward: [transform-origin, axis, sign].
+  const ORBIT_HINGE = { left: ['0% 50%', 'Y', -1], right: ['100% 50%', 'Y', 1], up: ['50% 0%', 'X', 1], down: ['50% 100%', 'X', -1] }
+  // The size of the piece, as the runtime hands it over (a plain call without it still works).
+  function orbitPieceSize(spec) { return spec.size || { w: 1920, h: 1080 } }
+  // How strong the perspective is: amount (px) when given, else a multiple of the long side.
+  function orbitPerspective(spec, factor) {
+    if (spec.amount !== undefined) return Math.round(spec.amount)
+    const size = orbitPieceSize(spec)
+    return Math.round(Math.max(size.w, size.h) * factor)
+  }
+
+  // The perspective (px) the PARENT of the scenes needs while a 3D transition runs; 0 for the flat ones.
+  // It lives on the parent so the scenes never need a transform of their own.
+  function orbitTransitionPerspective(spec) {
+    if (spec.type === 'cube') return orbitPerspective(spec, 1.3)
+    if (spec.type === 'flip') return orbitPerspective(spec, 1.6)
+    if (spec.type === 'door') return orbitPerspective(spec, 2)
+    return 0
+  }
+
   function orbitPct(n) { return (Math.round(n * 10000) / 100) + '%' }
   function orbitShift(x, y) { return orbitPct(x) + ' ' + orbitPct(y) }
 
@@ -187,6 +211,43 @@ export const MOTION_TRANSITIONS_SCRIPT = `
             mix(inShown, { clipPath: 'circle(75% at 50% 50%)' }),
           ],
         }
+      case 'cube': {
+        // The two scenes are two faces of a cube that turns: the face leaving looks away while the next
+        // one comes round, the far one darkening a little for depth. The pivot is the axis of the cube,
+        // half a scene BEHIND the screen (a 3-value transform-origin), so only the rotate property is needed.
+        const turn = ORBIT_TURN[dir]
+        const size = orbitPieceSize(spec)
+        const depth = Math.round((turn[0] === 'Y' ? size.w : size.h) / 2)
+        const pivot = { transformOrigin: '50% 50% -' + depth + 'px' }
+        const face = function (deg) { return turn[0].toLowerCase() + ' ' + deg + 'deg' }
+        return {
+          out: [mix(outShown, mix(pivot, { rotate: face(0), filter: 'brightness(1)' })), mix(outGone, mix(pivot, { rotate: face(90 * turn[1]), filter: 'brightness(0.55)' }))],
+          in: [mix(inHidden, mix(pivot, { rotate: face(-90 * turn[1]), filter: 'brightness(0.55)' })), mix(inShown, mix(pivot, { rotate: face(0), filter: 'brightness(1)' }))],
+        }
+      }
+      case 'flip': {
+        // One card turned over: both scenes turn a half-turn together, the leaving one as the front and
+        // the entering one as the back. backface-visibility hides each face once it looks away, so the
+        // swap happens by itself at the midpoint (when both are edge-on).
+        const turn = ORBIT_TURN[dir]
+        const spin = function (deg) { return turn[0].toLowerCase() + ' ' + deg + 'deg' }
+        const card = { transformOrigin: '50% 50%', backfaceVisibility: 'hidden' }
+        return {
+          out: [mix(outShown, mix(card, { rotate: spin(0) })), mix(outGone, mix(card, { rotate: spin(180 * turn[1]) }))],
+          in: [mix(inHidden, mix(card, { rotate: spin(-180 * turn[1]) })), mix(inShown, mix(card, { rotate: spin(0) }))],
+        }
+      }
+      case 'door': {
+        // The leaving scene swings open on a hinge, toward the viewer, and uncovers the entering one
+        // that was waiting behind it. It needs the leaving scene ABOVE the other in the stacking.
+        const hinge = ORBIT_HINGE[dir]
+        const swing = function (deg) { return hinge[1].toLowerCase() + ' ' + deg + 'deg' }
+        const origin = { transformOrigin: hinge[0] }
+        return {
+          out: [mix(outShown, mix(origin, { rotate: swing(0), filter: 'brightness(1)' })), mix(outGone, mix(origin, { rotate: swing(90 * hinge[2]), filter: 'brightness(0.6)' }))],
+          in: [mix(inHidden, { scale: '0.92', filter: 'brightness(0.6)' }), mix(inShown, { scale: '1', filter: 'brightness(1)' })],
+        }
+      }
       default:
         return {
           out: [mix(outShown, { opacity: '1' }), mix(outGone, { opacity: '0' })],
@@ -204,6 +265,8 @@ export interface NormalizedTransition {
   duration: number
   easing: string
   amount?: number
+  /** The piece's size in px, handed over by the runtime (the 3D types need the depth of a cube). */
+  size?: { w: number; h: number }
 }
 
 /** One line per transition for the report the agent reads (time of the PIECE, in seconds). */
