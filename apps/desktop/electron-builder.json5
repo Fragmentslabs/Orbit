@@ -18,6 +18,9 @@
     "**/node_modules/sherpa-onnx-*/**"
   ],
   "productName": "Orbit",
+  // Fails the build (before signing) when the packaged main process imports a chunk the
+  // asar does not hold — another process writing dist-electron/ mid-build (release 0.1.4).
+  "afterPack": "./scripts/verify-packaged-entry.cjs",
   "directories": {
     "output": "release/${version}"
   },
