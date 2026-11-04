@@ -1078,3 +1078,36 @@ describe('orbitMotion.text', () => {
   })
 })
 
+describe('duration from props', () => {
+  type DurApi = FakeApi & {
+    props: Record<string, number>
+    durationInFrames: number
+    duration: number
+    scenes(list: Array<Record<string, unknown>>): Record<string, unknown>
+  }
+
+  it('a piece can set its length from a prop, so each variation has its own', () => {
+    for (const items of [2, 5]) {
+      const { api } = makePage({ meta: 'width=1080,height=1920,fps=30', props: { items } }) as unknown as { api: DurApi }
+      api.durationInFrames = api.props.items * 60 // two seconds per item
+      expect(api.durationInFrames).toBe(items * 60)
+      expect(api.duration).toBe(items * 2)
+    }
+  })
+
+  it('with duration=auto the scenes set the length, and the scenes can come from props', () => {
+    const lengths = [1, 3].map((seconds) => {
+      const { api } = makePage({ meta: 'width=1080,height=1920,fps=30,duration=auto', props: { seconds } }) as unknown as { api: DurApi }
+      api.scenes([{ name: 'intro', dur: 1 }, { name: 'name', dur: api.props.seconds }])
+      return api.durationInFrames
+    })
+    expect(lengths).toEqual([60, 120]) // (1 + 1) s and (1 + 3) s at 30 fps
+  })
+
+  it('the render spec reports the length of THIS variation', () => {
+    const { win, api } = makePage({ meta: 'width=1080,height=1920,fps=30', props: { items: 4 } }) as unknown as { win: Record<string, unknown>; api: DurApi }
+    api.durationInFrames = api.props.items * 45
+    const spec = (win.__orbitMotionSpec as () => { durationInFrames: number })()
+    expect(spec.durationInFrames).toBe(180)
+  })
+})

@@ -228,7 +228,7 @@ describe('on disk', () => {
   })
 
   it('the limit of variations is stated', () => {
-    expect(MAX_VARIATIONS).toBe(50)
+    expect(MAX_VARIATIONS).toBe(200)
   })
 })
 

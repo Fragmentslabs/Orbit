@@ -337,6 +337,14 @@ export const MESSAGES = {
     'pt-BR': 'Executando JavaScript na página',
     en: 'Running JavaScript on the page',
   },
+  'panel.activity.motionBatch': {
+    'pt-BR': 'Renderizando vídeo {{n}}/{{total}}',
+    en: 'Rendering video {{n}}/{{total}}',
+  },
+  'panel.activity.motionBatchEta': {
+    'pt-BR': 'Renderizando vídeo {{n}}/{{total}} — faltam cerca de {{left}}',
+    en: 'Rendering video {{n}}/{{total}} — about {{left}} left',
+  },
   'panel.activity.hover': {
     'pt-BR': 'Passando o mouse',
     en: 'Hovering',

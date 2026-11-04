@@ -27,7 +27,7 @@ export const PROPS_FILE = 'props.json'
 /** The query parameter that carries the overrides of one render (base64url of a JSON object). */
 export const PROPS_QUERY = 'orbitProps'
 /** How many variations one call may ask for. */
-export const MAX_VARIATIONS = 50
+export const MAX_VARIATIONS = 200
 
 export const PROP_TYPES = ['text', 'number', 'color', 'boolean', 'select', 'image'] as const
 export type PropType = (typeof PROP_TYPES)[number]

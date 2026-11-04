@@ -11,7 +11,10 @@ import { MAX_FRAME_TIMES, MAX_EVAL_EXPRESSIONS, MAX_EVAL_LENGTH, MAX_PROBE_SELEC
 import { motionAudioPlan } from '../video/motion-audio'
 import { measureMotionAudio } from '../video/motion-audio-measure'
 import { renderMotion } from '../video/motion'
-import { MAX_VARIATIONS, checkOverrides, variationLabels } from '../video/motion-props'
+import { MAX_VARIATIONS, checkOverrides, readPropsFile, variationLabels } from '../video/motion-props'
+import { batchProgress, formatDuration, parseTable, stageImageProps, variationsFromTable } from '../video/motion-batch'
+import { tNow } from '../i18n'
+import { panelActivity } from '../panel-browser'
 import { copyPieceFolder } from '../video/motion-copy'
 import { describeEditReceipt, fileHash, viewFile } from '../video/motion-view'
 import { readWordsSidecar, writeWordsSidecar } from '../video/motion-words'
@@ -22,7 +25,7 @@ import { GUIDE_FIRST, hasReadGuide, markGuideRead } from '../video/guide-gate'
 import { panelMotionPreview } from '../panel-browser'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import { resolveSafePath, resolveWritePath, type ToolContext } from './context'
-import { resolveAttachmentRef } from '../attachment-ref'
+import { looksLikeAttachmentRef, resolveAttachmentRef } from '../attachment-ref'
 import { createVideoTools } from './video'
 import {
   ASSET_SOURCE,
@@ -196,6 +199,39 @@ export function createMotionTools(
       await journalPiece('motion', target.folder, { entry: target.file, root: target.root, sessionId: scope.sessionId })
       return fn()
     })
+
+  /** Where an image prop may come from outside the piece: an attachment, or a file of the project. */
+  const findImage = async (value: string): Promise<string | null> => {
+    if (looksLikeAttachmentRef(value)) return (await resolveAttachmentRef(value))?.file ?? null
+    if (!project) return null
+    try {
+      const file = resolveSafePath(project, value)
+      return (await fsp.stat(file).catch(() => null))?.isFile() ? file : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Props ready to render: the images that come from the project or an attachment are copied INTO the
+   * piece (under its lock and journal, like any write to it) so the page loads them by a relative path.
+   * Throws with every problem, labelled, before any frame is made.
+   */
+  const stageProps = async (target: Target, sets: Array<{ label: string; name?: string; props: Record<string, unknown> }>) => {
+    const folder = path.dirname(target.file)
+    const schema = (await readPropsFile(folder)).schema
+    const out: Array<{ name?: string; props: Record<string, unknown> }> = []
+    const problems: string[] = []
+    await writing(target, async () => {
+      for (const set of sets) {
+        const res = await stageImageProps({ folder, schema, props: set.props, find: findImage })
+        out.push({ name: set.name, props: res.props })
+        for (const e of res.errors) problems.push(`${set.label}: ${e}`)
+      }
+    })
+    if (problems.length) throw new Error(`not rendered — ${problems.join('; ')}`)
+    return out
+  }
 
   const tools: ToolSet = {
     video_guide: tool({
@@ -485,12 +521,14 @@ export function createMotionTools(
       execute: async ({ name, id, times, probe, evaluate, audio, props, see }, { toolCallId, abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
+        let frameProps = props
         if (props) {
-          const problems = await checkOverrides(path.dirname(target.file), [{ label: 'props', props }])
+          frameProps = (await stageProps(target, [{ label: 'props', props }]))[0].props
+          const problems = await checkOverrides(path.dirname(target.file), [{ label: 'props', props: frameProps }])
           if (problems.length) throw new Error(`invalid props — ${problems.join('; ')}`)
         }
         const result = await captureMotionFrames({
-          props,
+          props: frameProps,
           target: target.file,
           times,
           probe,
@@ -613,60 +651,109 @@ export function createMotionTools(
           .max(MAX_VARIATIONS)
           .optional()
           .describe(`One render per item, each with its own props — a batch of videos from one piece (max ${MAX_VARIATIONS}). In code mode \`output\` is then a FOLDER that receives them all.`),
+        variationsFrom: z
+          .object({
+            data: z.string().min(1).optional().describe('The table itself: CSV (comma, semicolon or tab; the first line is the header) or JSON (an array of objects). One row = one video'),
+            path: z.string().min(1).optional().describe('Code mode: a CSV/JSON file of the working folder instead of `data`'),
+          })
+          .optional()
+          .describe(
+            'A TABLE of videos instead of writing `variations` by hand: each column header is a declared prop, each row a video, an empty cell keeps the default. A column called `file` (or `_name`) names the output file. An image column takes a path of the project, an attachment ref (img_…) or a file of the piece. A column that is not a declared prop is an error. ' +
+              `Max ${MAX_VARIATIONS} rows.`,
+          ),
       }),
-      execute: async ({ name, id, format, transparent, output, audio, show: showIt = true, props, variations, ...spec }, { abortSignal }) => {
+      execute: async ({ name, id, format, transparent, output, audio, show: showIt = true, props, variations: variationsGiven, variationsFrom, ...spec }, { abortSignal }) => {
         const target = await resolveTarget({ name, id })
         await mustExist(target)
         if ((output || audio) && !project) throw new Error('`output` and `audio` need a working folder (code mode)')
-        if (variations && props) throw new Error('pass `props` for one render or `variations` for several, not both')
+        if ((variationsGiven || variationsFrom) && props) throw new Error('pass `props` for one render or `variations` / `variationsFrom` for several, not both')
+        if (variationsGiven && variationsFrom) throw new Error('pass `variations` or `variationsFrom`, not both')
         const ext = format ?? 'mp4'
         // The output lives next to the conversation's compositions, OUTSIDE the piece's folder
         // (which is watched for the live reload).
         await fsp.mkdir(path.join(root, 'renders'), { recursive: true })
 
-        // BULK: every variation is checked against props.json before the first frame, so a typo in
-        // the 37th does not come out after thirty-six renders.
+        // BULK. Where the variations come from: written out, or a table (one row per video).
+        let variations = variationsGiven
+        if (variationsFrom) {
+          let text = variationsFrom.data
+          if (!text && variationsFrom.path) {
+            if (!project) throw new Error('`variationsFrom.path` needs a working folder (code mode) — pass the table as `data`')
+            text = await fsp.readFile(resolveSafePath(project, variationsFrom.path), 'utf8')
+          }
+          if (!text) throw new Error('`variationsFrom` needs `data` (the table) or `path` (code mode)')
+          const file = await readPropsFile(path.dirname(target.file))
+          if (!file.exists || file.errors.length) throw new Error(file.errors.length ? `props.json: ${file.errors.join('; ')}` : 'this composition declares no props (props.json), so a table has nothing to fill')
+          const table = parseTable(text)
+          if (table.rows.length > MAX_VARIATIONS) throw new Error(`${table.rows.length} rows (max ${MAX_VARIATIONS} per call) — render it in parts`)
+          const built = variationsFromTable(file.schema, table)
+          if (built.errors.length) throw new Error(`the table was not used — ${built.errors.slice(0, 8).join('; ')}${built.errors.length > 8 ? `; … and ${built.errors.length - 8} more` : ''}`)
+          variations = built.variations
+        }
         if (variations) {
-          const labels = variationLabels(variations)
+          const folder = path.dirname(target.file)
+          const staged = await stageProps(
+            target,
+            variations.map((v, i) => ({ label: `variation ${i + 1}${v.name ? ` "${v.name}"` : ''}`, name: v.name, props: v.props })),
+          )
+          const labels = variationLabels(staged)
+          // Every variation is checked against props.json before the first frame, so a typo in the 37th
+          // does not come out after thirty-six renders.
           const problems = await checkOverrides(
-            path.dirname(target.file),
-            variations.map((v, i) => ({ label: `variation ${i + 1}${v.name ? ` "${v.name}"` : ''}`, props: v.props })),
+            folder,
+            staged.map((v, i) => ({ label: `variation ${i + 1}${v.name ? ` "${v.name}"` : ''}`, props: v.props })),
           )
           if (problems.length) throw new Error(`not rendered — ${problems.join('; ')}`)
-          const folder = output ? resolveWritePath(project!, output) : null
-          if (folder) await fsp.mkdir(folder, { recursive: true })
+          const outDir = output ? resolveWritePath(project!, output) : null
+          if (outDir) await fsp.mkdir(outDir, { recursive: true })
           const done: string[] = []
+          const failed: string[] = []
           const lines: string[] = []
-          for (let i = 0; i < variations.length; i += 1) {
-            if (abortSignal?.aborted) {
-              lines.push(`Stopped by the user after ${done.length} of ${variations.length}.`)
-              break
-            }
+          const took: number[] = []
+          const started = Date.now()
+          for (let i = 0; i < staged.length; i += 1) {
+            if (abortSignal?.aborted) break
+            const progress = batchProgress(i, staged.length, took)
+            panelActivity(tNow(progress.left ? 'panel.activity.motionBatchEta' : 'panel.activity.motionBatch', { n: progress.n, total: progress.total, left: progress.left ?? '' }))
             const file = path.join(root, 'renders', `${target.name}-${labels[i]}.${ext}`)
-            const result = await renderMotion({
-              file: target.file,
-              output: file,
-              signal: abortSignal,
-              root: target.root,
-              sessionId: scope.sessionId,
-              transparent,
-              audio: audio ? resolveSafePath(project!, audio) : undefined,
-              props: variations[i].props,
-              ...spec,
-            })
-            await addVideoToGallery({ file, name: path.basename(file), sessionId: scope.sessionId, source: 'chat' })
-            if (folder) await fsp.copyFile(file, path.join(folder, path.basename(file)))
-            done.push(path.basename(file))
-            lines.push(`${i + 1}/${variations.length} ${path.basename(file)} — ${result.duration}s, ${result.width}x${result.height}${result.warnings.length ? ` · ${result.warnings.join('; ')}` : ''}`)
+            const t0 = Date.now()
+            try {
+              const result = await renderMotion({
+                file: target.file,
+                output: file,
+                signal: abortSignal,
+                root: target.root,
+                sessionId: scope.sessionId,
+                transparent,
+                audio: audio ? resolveSafePath(project!, audio) : undefined,
+                props: staged[i].props,
+                ...spec,
+              })
+              await addVideoToGallery({ file, name: path.basename(file), sessionId: scope.sessionId, source: 'chat' })
+              if (outDir) await fsp.copyFile(file, path.join(outDir, path.basename(file)))
+              took.push(Date.now() - t0)
+              done.push(path.basename(file))
+              lines.push(`${i + 1}/${staged.length} ${path.basename(file)} — ${result.duration}s, ${result.width}x${result.height}, ${formatDuration(Date.now() - t0)}${result.warnings.length ? ` · ${result.warnings.join('; ')}` : ''}`)
+            } catch (err) {
+              // Stopped by the user: not a failure of this video. Anything else: say which and go on.
+              if (abortSignal?.aborted) break
+              failed.push(`${i + 1} "${staged[i].name ?? labels[i]}": ${err instanceof Error ? err.message : String(err)}`)
+            }
           }
+          const stopped = abortSignal?.aborted && done.length + failed.length < staged.length
           return {
             message: [
-              `Rendered ${done.length} of ${variations.length} variations of "${target.name}" — all in the Media gallery${folder ? `, and copied to ${path.relative(project!.directory, folder) || folder}` : ''}.`,
+              `Rendered ${done.length} of ${staged.length} variations of "${target.name}" in ${formatDuration(Date.now() - started)} — all in the Media gallery${outDir ? `, and copied to ${path.relative(project!.directory, outDir) || outDir}` : ''}.`,
+              stopped ? `Stopped by the user after ${done.length + failed.length} of ${staged.length}; the rest were NOT rendered.` : '',
+              failed.length ? `FAILED (${failed.length}) — the others were not affected: ${failed.join(' | ')}` : '',
               ...lines,
-            ].join('\n'),
+            ]
+              .filter(Boolean)
+              .join('\n'),
           }
         }
 
+        const renderProps = props ? (await stageProps(target, [{ label: 'props', props }]))[0].props : undefined
         const exported = output ? resolveWritePath(project!, output) : null
         const out = path.join(root, 'renders', `${target.name}.${ext}`)
         await fsp.mkdir(path.dirname(out), { recursive: true })
@@ -678,7 +765,7 @@ export function createMotionTools(
           sessionId: scope.sessionId,
           transparent,
           audio: audio ? resolveSafePath(project!, audio) : undefined,
-          props,
+          props: renderProps,
           ...spec,
         })
         if (exported) {
