@@ -715,6 +715,14 @@ export interface RejectOrchestrationRequest {
   sessionId: string
 }
 
+/** "Continue" on a plan that stopped halfway (the app closed, or the run was cut). */
+export interface ResumeOrchestrationRequest {
+  type: 'orchestration:resume'
+  sessionId: string
+  providerId?: string
+  modelId?: string
+}
+
 export type CompanionRequest =
   | AuthRequest
   | ListSessionsRequest
@@ -790,6 +798,7 @@ export type CompanionRequest =
   | RevisePlanReviewRequest
   | ApproveOrchestrationRequest
   | RejectOrchestrationRequest
+  | ResumeOrchestrationRequest
   | GetMessageQueueRequest
   | MessageQueueOpRequest
 

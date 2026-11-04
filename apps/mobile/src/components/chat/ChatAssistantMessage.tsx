@@ -2,6 +2,8 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { View, Text, Pressable, ActivityIndicator, Linking, ScrollView, TouchableOpacity } from 'react-native'
 import {
   ChevronDown,
+  ChevronUp,
+  GitBranch,
   ChevronRight,
   AlertCircle,
   Brain,
@@ -63,6 +65,38 @@ interface ChatAssistantMessageProps {
 }
 
 // ─── User Message Attachments & Bubble ───────────────────────────────────────
+
+/** A subchat's result that woke this chat up: not typed by the person, so no user bubble —
+ *  its first line as the title, the rest folded (same as the desktop). */
+function SubchatResultNotice({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const [open, setOpen] = useState(false)
+  const [head, ...rest] = messageText(message).split('\n')
+  const body = rest.join('\n').trim()
+  return (
+    <View
+      className="my-1 gap-1 rounded-lg px-3 py-2"
+      style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tokens.border, backgroundColor: tokens.muted }}
+    >
+      <Pressable
+        onPress={() => body && setOpen((v) => !v)}
+        className="flex-row items-center gap-2"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+      >
+        <GitBranch size={14} color={tokens.mutedForeground} />
+        <Text className="flex-1 text-xs font-medium" style={{ color: tokens.mutedForeground }}>{head}</Text>
+        {body ? (open ? <ChevronUp size={14} color={tokens.mutedForeground} /> : <ChevronDown size={14} color={tokens.mutedForeground} />) : null}
+      </Pressable>
+      {body ? (
+        <Text className="text-xs" style={{ color: tokens.mutedForeground }} numberOfLines={open ? undefined : 2}>{body}</Text>
+      ) : (
+        <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('subchatNotice.noResult')}</Text>
+      )}
+    </View>
+  )
+}
 
 function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onRevert?: () => void; onReply?: () => void }) {
   const text = visibleMessageText(message)
@@ -694,6 +728,10 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(messageText(message))
   }, [message])
+
+  if (isUser && message.origin === 'subchat') {
+    return <SubchatResultNotice message={message} />
+  }
 
   if (isUser) {
     return <UserMessage message={message} onRevert={onRevert} onReply={onReply ? handleReply : undefined} />

@@ -65,7 +65,7 @@ import { getRunningSessionIds } from './chat-engine'
 import { abortSession, dispatchSend } from './send-dispatch'
 import { readAppLanguage } from './app-language'
 import { getLoopRunningSessionIds } from './loop-engine'
-import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan } from './orchestrator'
+import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan, resumePlan } from './orchestrator'
 import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
@@ -1375,6 +1375,40 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           break
         }
         await rejectPlan(win, req.sessionId)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'orchestration:resume': {
+        const win = BrowserWindow.getAllWindows()[0]
+        if (!win) {
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.noMainWindow'))
+          break
+        }
+        const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
+        if (!session?.directory) {
+          sendResponse(ws, requestId, false, undefined, tNow('companion.server.sessionNotFound'))
+          break
+        }
+        // Same door as the desktop card: the models and settings the plan runs with come
+        // from the worker config the desktop already holds (resumePlan keeps the plan's own).
+        const cfg = getWorkerConfigCache()
+        await resumePlan(win, {
+          sessionId: req.sessionId,
+          text: '',
+          providerId: req.providerId ?? 'openai',
+          modelId: req.modelId ?? 'gpt-4o',
+          mode: 'code',
+          options: { followGlobalPermission: true },
+          directory: session.directory,
+          extraDirectories: session.extraDirectories,
+          workerModel: cfg.workerModel
+            ? { ...cfg.workerModel, reasoning: cfg.workerReasoning ?? undefined }
+            : undefined,
+          orchestratorModel: cfg.orchestratorModel
+            ? { ...cfg.orchestratorModel, reasoning: cfg.orchestratorReasoning ?? undefined }
+            : undefined,
+        })
         sendResponse(ws, requestId, true)
         break
       }

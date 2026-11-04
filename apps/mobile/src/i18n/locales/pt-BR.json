@@ -388,7 +388,9 @@
     "noteLabel": "Observação",
     "dismiss": "Dispensar",
     "advance": "Avançar",
-    "answer": "Responder"
+    "answer": "Responder",
+    "learned": "Você já liberou isto {{count}} vezes — \"Sempre\" para de perguntar.",
+    "recommended": "recomendado"
   },
   "configSheet": {
     "title": "Configurações",
@@ -443,7 +445,10 @@
     "browser": "Browser",
     "readOnly": "Só leitura",
     "subagents": "subagentes",
-    "vision": "visão"
+    "vision": "visão",
+    "interrupted": "Orquestração interrompida",
+    "interruptedHint": "Parou antes de terminar. Continuar roda as tarefas pendentes.",
+    "continue": "Continuar"
   },
   "subAgentCard": {
     "defaultTask": "Subtarefa delegada",
@@ -1466,5 +1471,8 @@
   "codeBlock": {
     "copy": "Copiar",
     "copied": "Copiado"
+  },
+  "subchatNotice": {
+    "noResult": "Sem resposta em texto."
   }
 }

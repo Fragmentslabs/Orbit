@@ -71,10 +71,14 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const approvePlan = useSessionStore((s) => s.approvePlan)
   const rejectPlan = useSessionStore((s) => s.rejectPlan)
+  const resumePlan = useSessionStore((s) => s.resumePlan)
+  const [continuing, setContinuing] = useState(false)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
 
   const proposed = plan.status === 'proposed'
   const running = plan.status === 'approved' || plan.status === 'running'
+  // Closed as `done` after the app stopped mid-run: where it stopped, and a way to go on.
+  const interrupted = !running && !!plan.interrupted
   const selectedCount = plan.tasks.length - excluded.size
 
   const formatCost = (cost: number) => {
@@ -107,8 +111,10 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
           <Text className="font-medium text-sm" style={{ color: tokens.foreground }}>
             {proposed
               ? t('orchestrationPlan.proposed', { count: plan.tasks.length })
-              : plan.status === 'done'
-                ? t('orchestrationPlan.done')
+              : interrupted
+                ? t('orchestrationPlan.interrupted')
+                : plan.status === 'done'
+                  ? t('orchestrationPlan.done')
                 : t('orchestrationPlan.rejected')}
           </Text>
         )}
@@ -166,6 +172,25 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
             tokens: formatTokens(plan.usage.input + plan.usage.output),
           })}
         </Text>
+      )}
+
+      {interrupted && (
+        <View className="flex-row items-center gap-2 mt-3">
+          <Text className="flex-1 text-[11px]" style={{ color: tokens.mutedForeground }}>
+            {t('orchestrationPlan.interruptedHint')}
+          </Text>
+          <Pressable
+            disabled={continuing}
+            onPress={() => {
+              setContinuing(true)
+              void resumePlan(sessionId).finally(() => setContinuing(false))
+            }}
+            className="px-3 py-1.5 rounded-md"
+            style={{ backgroundColor: tokens.primary, opacity: continuing ? 0.6 : 1 }}
+          >
+            <Text className="text-xs font-medium" style={{ color: '#fff' }}>{t('orchestrationPlan.continue')}</Text>
+          </Pressable>
+        </View>
       )}
 
       {proposed && (

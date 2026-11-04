@@ -388,7 +388,9 @@
     "noteLabel": "Note",
     "dismiss": "Dismiss",
     "advance": "Next",
-    "answer": "Answer"
+    "answer": "Answer",
+    "learned": "You already allowed this {{count}} times — \"Always\" stops asking.",
+    "recommended": "recommended"
   },
   "configSheet": {
     "title": "Settings",
@@ -443,7 +445,10 @@
     "browser": "Browser",
     "readOnly": "Read-only",
     "subagents": "subagents",
-    "vision": "vision"
+    "vision": "vision",
+    "interrupted": "Orchestration stopped",
+    "interruptedHint": "Stopped before finishing. Continue runs the pending tasks.",
+    "continue": "Continue"
   },
   "subAgentCard": {
     "defaultTask": "Delegated subtask",
@@ -1466,5 +1471,8 @@
   "codeBlock": {
     "copy": "Copy",
     "copied": "Copied"
+  },
+  "subchatNotice": {
+    "noResult": "No text answer."
   }
 }

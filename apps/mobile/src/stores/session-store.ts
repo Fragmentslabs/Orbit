@@ -235,6 +235,8 @@ interface SessionState {
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => Promise<void>
   /** Rejects an orchestration plan. */
   rejectPlan: (sessionId: string) => Promise<void>
+  /** "Continue" on a plan that stopped halfway: the desktop runs what was not accepted. */
+  resumePlan: (sessionId: string) => Promise<void>
   /** Applies a chat event received via WS. */
   applyChatEvent: (event: ChatEvent) => void
 }
@@ -916,6 +918,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { wsClient } = useConnectionStore.getState()
     try {
       await wsClient.send({ type: 'orchestration:approve', sessionId, planId, taskIds })
+    } catch {
+      // Silently fail
+    }
+  },
+
+  resumePlan: async (sessionId) => {
+    const { wsClient } = useConnectionStore.getState()
+    const model = sessionModelFor(sessionId) ?? useSettingsStore.getState().selectedModel
+    try {
+      await wsClient.send({
+        type: 'orchestration:resume',
+        sessionId,
+        providerId: model?.providerId,
+        modelId: model?.modelId,
+      })
     } catch {
       // Silently fail
     }

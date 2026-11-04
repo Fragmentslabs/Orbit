@@ -161,6 +161,11 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
             {critical ? t('askCard.criticalAction') : ''}{ask.claim.detail}
           </Text>
         )}
+        {ask.claim.learned && (
+          <Text style={{ fontSize: 11, lineHeight: 15, color: tokens.mutedForeground, marginTop: ask.claim.detail ? -6 : 0, marginBottom: 10 }}>
+            {t('askCard.learned', { count: ask.claim.learned.count })}
+          </Text>
+        )}
 
         {/* Actions row: Deny | Allow this time [˅] — the arrow opens only the durable permissions */}
         <View style={{ flexDirection: 'row', gap: 8, position: 'relative' }}>
@@ -231,7 +236,7 @@ export function AskCard({ ask, onReply, style }: AskCardProps) {
               onPress={() => { setPermitOpen(false); reply('always') }}
               style={{ paddingVertical: 11, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontSize: 13, color: tokens.foreground }}>{t('askCard.always')}</Text>
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>{t('askCard.always')}{ask.claim.learned ? ` · ${t('askCard.recommended')}` : ''}</Text>
             </Pressable>
           </View>
         )}
