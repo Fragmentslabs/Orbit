@@ -2752,7 +2752,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               part.toolName === 'audio_generate' ||
               part.toolName === 'media_compress' ||
               // Download by link: the audio extracted from a video plays here.
-              part.toolName === 'ytdlp_download'
+              part.toolName === 'ytdlp_download' ||
+              // Audio returned by an MCP server (e.g. a TTS): stored by mcp/result.ts, plays here.
+              (typeof part.output === 'object' && (part.output as { fromMcp?: boolean } | null)?.fromMcp === true)
             ) {
               const output = part.output as { audioUrl?: string; title?: string; durationMs?: number } | string
               if (typeof output === 'object' && output?.audioUrl) {

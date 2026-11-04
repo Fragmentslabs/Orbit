@@ -12,7 +12,8 @@ import type { McpConfig, McpServerConfig, McpServerStatus } from '@shared/mcp'
 import type { PermissionMode } from '@shared/chat'
 import { dataDir } from '../storage'
 import { saveMedia } from '../media'
-import { mcpResultToText, type SavedImage } from './result'
+import { audioExt, saveAudio } from '../audio-store'
+import { mcpResultToOutput, type SavedAudio, type SavedImage } from './result'
 import {
   awaitPendingAuth,
   cancelPendingAuth,
@@ -144,6 +145,19 @@ async function saveMcpImage(
   // cleanup while it is not shown in any message.
   const url = await saveMedia(buffer, ext, { source: 'script', sessionId, name })
   return { url, width: meta?.width, height: meta?.height, bytes: buffer.length }
+}
+
+/** Audio returned by an MCP tool: stored in the chat's audio collection (it gets a player). */
+async function saveMcpAudio(
+  data: Buffer,
+  mimeType: string,
+  sessionId: string,
+  name: string,
+): Promise<SavedAudio | null> {
+  const ext = audioExt(mimeType)
+  if (!ext) return null
+  const { url } = await saveAudio(data, ext, { sessionId, name, source: 'chat' })
+  return { url, bytes: data.length }
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -507,11 +521,16 @@ export function getMcpTools(scope: McpToolScope): ToolSet {
             name: def.mcpName,
             arguments: (input ?? {}) as Record<string, unknown>,
           })
-          return mcpResultToText(result, {
-            saveImage: (data, mimeType) => saveMcpImage(data, mimeType, scope.sessionId, def.name),
-            canShow: scope.canShow,
-            canDescribe: scope.canDescribe,
-          })
+          return mcpResultToOutput(
+            result,
+            {
+              saveImage: (data, mimeType) => saveMcpImage(data, mimeType, scope.sessionId, def.name),
+              saveAudio: (data, mimeType) => saveMcpAudio(data, mimeType, scope.sessionId, def.name),
+              canShow: scope.canShow,
+              canDescribe: scope.canDescribe,
+            },
+            def.name,
+          )
         },
       })
     }

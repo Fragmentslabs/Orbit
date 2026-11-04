@@ -11,6 +11,10 @@
  * the orbit-media:// reference. Showing it to the user (show_image) and looking at it
  * (describe_image, Vision mode) become the agent's decisions, on demand — the same
  * contract as run_browser_script.
+ *
+ * Audio is the exception that goes the other way: it is stored in the chat's audio
+ * collection (like audio_generate / ytdlp) and the result carries its `audioUrl`, so the
+ * engine puts a player in the answer without the agent having to do anything.
  */
 
 /** Ceiling for the text of a result (~25k tokens). A server that dumps a whole file
@@ -24,7 +28,23 @@ export interface SavedImage {
   bytes: number
 }
 
+export interface SavedAudio {
+  url: string
+  bytes: number
+}
+
+/** Result of an MCP tool that returned audio: the engine renders `audioUrl` as a player. */
+export interface McpAudioOutput {
+  audioUrl: string
+  title: string
+  message: string
+  /** marks the output as coming from an MCP server (the engine only trusts this one to make a player) */
+  fromMcp: true
+}
+
 export interface McpResultScope {
+  /** Stores an audio in the chat's audio collection; undefined/null = audio stays out, as before. */
+  saveAudio?: (data: Buffer, mimeType: string) => Promise<SavedAudio | null>
   /** Stores the image in the gallery; null when it did not work (the model is warned). */
   saveImage: (data: Buffer, mimeType: string) => Promise<SavedImage | null>
   /** show_image is in this turn's toolset */
@@ -66,12 +86,13 @@ function resourceText(block: Block): string {
   return `[Resource: ${uri}]`
 }
 
-export async function mcpResultToText(result: unknown, scope: McpResultScope): Promise<string> {
+async function convert(result: unknown, scope: McpResultScope): Promise<{ text: string; audios: SavedAudio[] }> {
   const content = (result as { content?: unknown })?.content
-  if (!Array.isArray(content)) return capText(safeJson(result))
+  if (!Array.isArray(content)) return { text: capText(safeJson(result)), audios: [] }
 
   const parts: string[] = []
   const saved: SavedImage[] = []
+  const audios: SavedAudio[] = []
   for (const raw of content) {
     if (!raw || typeof raw !== 'object') continue
     const block = raw as Block
@@ -94,7 +115,15 @@ export async function mcpResultToText(result: unknown, scope: McpResultScope): P
       }
       case 'audio': {
         const mime = typeof block.mimeType === 'string' ? block.mimeType : 'audio'
-        parts.push(`[Audio omitted (${mime})]`)
+        const data = typeof block.data === 'string' ? block.data : ''
+        const audio =
+          data && scope.saveAudio ? await scope.saveAudio(Buffer.from(data, 'base64'), mime).catch(() => null) : null
+        if (audio) {
+          audios.push(audio)
+          parts.push(`[Audio saved: ${audio.url} (${kb(audio.bytes)}) — shown to the user as a player in your reply]`)
+        } else {
+          parts.push(`[Audio omitted (${mime})]`)
+        }
         break
       }
       case 'resource':
@@ -111,8 +140,27 @@ export async function mcpResultToText(result: unknown, scope: McpResultScope): P
   const text = capText(parts.join('\n'))
   // The guidance comes after the ceiling: a giant text before it cannot cut exactly the
   // line that says how to see the image.
-  if (saved.length > 0) return `${text}\n${imageGuidance(scope)}`
-  return text || '(no return)'
+  if (saved.length > 0) return { text: `${text}\n${imageGuidance(scope)}`, audios }
+  return { text: text || '(no return)', audios }
+}
+
+/** The text that goes to the model (audio, if any, is only mentioned in it). */
+export async function mcpResultToText(result: unknown, scope: McpResultScope): Promise<string> {
+  return (await convert(result, scope)).text
+}
+
+/**
+ * What the tool returns to the engine: the text, or — when the server returned audio and it
+ * was stored — an object with `audioUrl` (the first one), so the answer gets a player.
+ */
+export async function mcpResultToOutput(
+  result: unknown,
+  scope: McpResultScope,
+  title: string,
+): Promise<string | McpAudioOutput> {
+  const { text, audios } = await convert(result, scope)
+  if (audios.length === 0) return text
+  return { audioUrl: audios[0].url, title, message: text, fromMcp: true }
 }
 
 function safeJson(value: unknown): string {

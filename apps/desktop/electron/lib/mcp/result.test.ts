@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { MAX_MCP_TEXT_CHARS, mcpResultToText, type McpResultScope } from './result'
+import { MAX_MCP_TEXT_CHARS, mcpResultToOutput, mcpResultToText, type McpResultScope } from './result'
 
 /**
  * The original defect: the `image` block of a Nodara screenshot became JSON.stringify —
@@ -109,5 +109,32 @@ describe('mcpResultToText', () => {
   it('keeps the old format for a result with no content', async () => {
     expect(await mcpResultToText({ toolResult: 42 }, scope())).toBe('{"toolResult":42}')
     expect(await mcpResultToText({ content: [] }, scope())).toBe('(no return)')
+  })
+
+  it('audio is stored and becomes an audioUrl for the player', async () => {
+    const saveAudio = async (_d: Buffer, mime: string) => ({ url: `orbit-audio://aud_x.${mime === 'audio/mp4' ? 'm4a' : 'wav'}`, bytes: 4096 })
+    const out = await mcpResultToOutput(
+      { content: [{ type: 'text', text: 'OK: /tmp/a.wav' }, { type: 'audio', data: PNG_B64, mimeType: 'audio/wav' }] },
+      scope({ saveAudio }),
+      'audio8_speak',
+    )
+    expect(typeof out).toBe('object')
+    const o = out as { audioUrl: string; message: string; fromMcp: boolean; title: string }
+    expect(o.audioUrl).toBe('orbit-audio://aud_x.wav')
+    expect(o.fromMcp).toBe(true)
+    expect(o.title).toBe('audio8_speak')
+    expect(o.message).toContain('OK: /tmp/a.wav')
+    expect(o.message).toContain('[Audio saved: orbit-audio://aud_x.wav')
+    expect(o.message).not.toContain(PNG_B64)
+  })
+
+  it('without audio it still returns plain text; audio that cannot be stored stays omitted', async () => {
+    expect(await mcpResultToOutput({ content: [{ type: 'text', text: 'oi' }] }, scope(), 't')).toBe('oi')
+    const failed = await mcpResultToOutput(
+      { content: [{ type: 'audio', data: PNG_B64, mimeType: 'audio/wav' }] },
+      scope({ saveAudio: async () => null }),
+      't',
+    )
+    expect(failed).toContain('[Audio omitted')
   })
 })
