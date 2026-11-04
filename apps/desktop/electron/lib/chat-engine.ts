@@ -2751,6 +2751,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // like the image from show_image.
             if (
               part.toolName === 'audio_generate' ||
+              part.toolName === 'sfx_generate' ||
               part.toolName === 'media_compress' ||
               // Download by link: the audio extracted from a video plays here.
               part.toolName === 'ytdlp_download' ||

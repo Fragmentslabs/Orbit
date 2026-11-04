@@ -52,7 +52,7 @@ import { isComputerAvailable, markOverlaySession } from '../computer'
 import { createComputerTools } from './computer'
 import { createComputerTaskTool } from './computer-task'
 import { createEndCallTool, createOverlayTools } from './overlay'
-import { createAudioGenerateTool } from './audio'
+import { createAudioGenerateTool, createSfxGenerateTool } from './audio'
 import { createMediaTools } from './media-compress'
 import { createVideoTools } from './video'
 import { createYtdlpTools } from './ytdlp'
@@ -130,6 +130,8 @@ export function buildToolSet(
   const voice = getAppSettings().voice
   const addAudioTools = (scope: ToolContext | null) => {
     if (voice.tts.enabled) tools.audio_generate = createAudioGenerateTool(input.sessionId, scope)
+    // Sound effects are synthesised locally: no model, no switch.
+    tools.sfx_generate = createSfxGenerateTool(input.sessionId, scope)
   }
   // Overlay (⇧⌘space): the question is about what is on the SCREEN. Without these two
   // tools the agent would answer in the dark and ask the person to paste the text.

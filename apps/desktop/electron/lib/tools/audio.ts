@@ -10,6 +10,8 @@ import type { TimedWord } from '../video/edl'
 import { transcribeVideo } from '../video/transcript'
 import { describeSpokenDiff, spokenDiff, writeWordsSidecar } from '../video/motion-words'
 import { synthesizeToWav } from '../voice'
+import { encodeWavPcm16 } from '../voice/audio'
+import { describeSfx, SFX_KINDS, synthesizeSfx } from '../video/sfx'
 import { resolveWritePath, type ToolContext } from './context'
 
 /**
@@ -168,6 +170,60 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
           `Audio generated (${clock(durationMs)} — exactly ${secs(durationMs)} s) and shown in your reply as a player; it is also in the chat media.` +
           (savedTo ? ` Saved to ${savedTo}.` : '') +
           (cues ? `\n${cues}` : ''),
+      }
+    },
+  })
+}
+
+/**
+ * Sound effects made from scratch (video/sfx.ts): whoosh, hit, pop, bell, riser, glitch, tick.
+ * No switch: it is local, deterministic and needs no model, so it exists in both modes. The result
+ * is an audio the chat plays AND a ref (aud_…) that motion_asset brings into a composition.
+ */
+export function createSfxGenerateTool(sessionId: string, ctx: ToolContext | null) {
+  return tool({
+    description:
+      'Creates a short SOUND EFFECT from scratch (synthesised, no licence to credit, the same request always gives the same sound): ' +
+      'whoosh (a transition sweep), hit (an impact), pop (a small UI/letter pop), bell (a ding), riser (the swell before an impact), glitch (a digital stutter), tick (a tiny click). ' +
+      'Use it for a motion piece or an edit that needs a sound tied to something visible; the user\'s own file always wins over this. ' +
+      'A whoosh or a riser swells TOWARD its peak: the result says how many seconds before the moment it must land to start the track. ' +
+      'It sounds like a clean library effect, not a recording: if the user wants something cinematic, ask for their file. ' +
+      'Then motion_asset({ name, ref }) brings it into the composition and audio.json places it (a few dB under the music, never on every transition).',
+    inputSchema: z.object({
+      kind: z.enum(SFX_KINDS).describe('whoosh | hit | pop | bell | riser | glitch | tick'),
+      duration: z.number().positive().optional().describe('Seconds. Defaults per kind (whoosh 0.7, hit 0.8, pop 0.14, bell 1.8, riser 1.5, glitch 0.4, tick 0.03); clamped to a sensible range.'),
+      pitch: z.number().min(30).max(4000).optional().describe('Hz of the body: hit (default 90), pop (520), bell (880 = A5). Ignored by the noise kinds.'),
+      direction: z.enum(['up', 'down']).optional().describe('whoosh only: "up" sweeps dark to bright (default), "down" bright to dark. A riser always rises.'),
+      seed: z.number().int().optional().describe('Another take of the noise (whoosh, hit click, glitch). Default 1.'),
+      peakDb: z.number().min(-24).max(-0.5).optional().describe('Peak of the file in dBFS (default -3). The level in the piece is set with gain in audio.json.'),
+      title: z.string().optional().describe('Short title for the media list (default: the kind)'),
+      ...(ctx
+        ? { savePath: z.string().optional().describe('Also write the .wav into the working folder at this path. Only when the user asked for the file in the project.') }
+        : {}),
+    }),
+    execute: async (input) => {
+      const { title, ...request } = input
+      const savePath = (input as { savePath?: string }).savePath
+      try {
+        const sfx = synthesizeSfx(request)
+        const wav = encodeWavPcm16(sfx.samples, sfx.rate)
+        const { id, url } = await saveAudio(wav, 'wav', { sessionId, name: title || sfx.params.kind, source: 'chat' })
+        let savedTo: string | null = null
+        if (savePath && ctx) {
+          const file = resolveWritePath(ctx, savePath.endsWith('.wav') ? savePath : `${savePath}.wav`)
+          await fs.mkdir(path.dirname(file), { recursive: true })
+          await fs.writeFile(file, wav)
+          savedTo = file
+        }
+        return {
+          audioUrl: url,
+          title: title ?? sfx.params.kind,
+          durationMs: Math.round(sfx.durationSec * 1000),
+          ref: id,
+          message: describeSfx(sfx, { ref: id }) + (savedTo ? `\nSaved to ${savedTo}.` : ''),
+        }
+      } catch (error) {
+        return { message: `sfx_generate: ${(error as Error).message}` }
       }
     },
   })

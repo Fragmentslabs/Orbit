@@ -103,6 +103,7 @@ const NATIVE_TOOLS = new Set([
   // savePath, restricted to an explicit request. Same convention as the image ones.
   // (Transcribing is `transcribe`, listed along with the video ones.)
   'audio_generate',
+  'sfx_generate',
   // Overlay: reading the screen and the selection of the front app is what the person asked for
   // when opening the panel; ending the call is the "bye, Orbit". Neither writes.
   'see_screen',
