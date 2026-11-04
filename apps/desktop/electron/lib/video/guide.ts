@@ -136,6 +136,7 @@ A <video> or a GIF <img> is an element like any other: copy the file next to ind
   - a single loose file named audio.mp3 (.wav/.m4a/.aac/.ogg/.opus/.flac) — one track, the whole piece;
   - or, in code mode, pass a file of the working folder for a one-off: motion_render({ name, audio: "edit/voz.mp3" }) — it plays from the start, and the tab does not hear it.
 - VOICE-OVER with the native TTS: write the lines, call audio_generate with the text EXACTLY as it should be spoken (no Markdown, no lists, numbers spelled out) and timings: true, bring the file into the composition with motion_asset (its aud_… ref, or in code mode its savePath) so the tab plays it too, then declare it in audio.json. The NARRATION sets the scene: the result gives its exact duration — the scene lasts that plus a short breath, never a window planned before the voice existed (a 24 s narration in a 60 s scene is 36 s of dead air). Captions come from the caption lines it returns (real start/end in that audio; add the track's start on the piece) — never space captions evenly or by a guessed rate.
+- ON THE BEAT: the beat times of a song come from audio_bpm({ path, fps: the piece fps }) — bpm, confidence and the beat list in seconds. Pulses, cuts and letter pops snap to those times (frame = round(second × fps)), never to a typed bpm. For a pulse that follows loudness rather than the grid use orbitMotion.audio.level/bands.
 - SONG LYRICS on screen: the times come from transcribe({ sources: [the song], detail: "words" }) (music makes the engine less sure — check the words against the known lyrics and keep the times). Never time lyrics at a fixed rate per word.
 - The COMPOSITION sets the length: a track running past the end is cut there, one that ends early leaves the rest to the others. The render WARNS when a track overflows the piece — read that warning instead of guessing. The <audio> element in the page is not part of the capture and does not reach the video; the sound of a <video> does (see "Video and GIF inside a composition").
 
@@ -406,6 +407,7 @@ The goal is the LOOK and the RHYTHM of a reference — never its content or its 
 - MOTION ENERGY: how much changes between frames, per half second (high = fast kinetic edit, low = calm):
   ffmpeg -hide_banner -i ref.mp4 -vf "fps=2,signalstats,metadata=print:key=lavfi.signalstats.YDIF" -an -f null - 2>&1 | grep YDIF
 - WORDS and timing of any text/narration: transcribe({ detail: "words" }) when it speaks; the pacing of the words is part of the style.
+- TEMPO and BEATS of the music: audio_bpm({ path, fps }) returns the bpm, a confidence, the double/half-time readings, framesPerBeat and the real beat times. Compare them with the cut list: cuts that fall on the beat times = a beat-driven edit. Never assume 120 bpm.
 - Chat mode has no bash: video_timeline windows (and transcribe) are the whole toolset — take more windows instead of cut detection.
 
 ## 2. Write the STYLE BRIEF (10–15 lines) and show it before building

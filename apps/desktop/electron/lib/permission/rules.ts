@@ -237,6 +237,7 @@ const NATIVE_TOOLS = new Set([
   'show_video',
   'video_guide',
   'video_probe',
+  'audio_bpm',
   'transcribe',
   'video_timeline',
   'video_render',

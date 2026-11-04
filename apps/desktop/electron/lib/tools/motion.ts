@@ -656,7 +656,7 @@ export function createMotionTools(
       sttEnabled: scope.sttEnabled,
       chat: { outputDir: 'renders' },
     })
-    for (const key of ['video_probe', 'transcribe', 'video_timeline'] as const) {
+    for (const key of ['video_probe', 'audio_bpm', 'transcribe', 'video_timeline'] as const) {
       if (base[key]) tools[key] = base[key]
     }
     if (scope.canRender && base.video_render) tools.video_render = base.video_render

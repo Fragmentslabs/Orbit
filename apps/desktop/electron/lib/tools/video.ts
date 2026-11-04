@@ -6,7 +6,8 @@ import { looksLikeAttachmentRef, resolveAttachmentRef } from '../attachment-ref'
 import { edlSchema, type Edl } from '../video/edl'
 import { VIDEO_GUIDES } from '../video/guide'
 import { markGuideRead } from '../video/guide-gate'
-import { probeMedia, type MediaProbe } from '../video/ffmpeg'
+import { analyzeBeats, describeBeats } from '../video/beat-detect'
+import { probeMedia, runFfmpeg, type MediaProbe } from '../video/ffmpeg'
 import { addVideoToGallery } from '../video/video-gallery'
 import { renderEdl } from '../video/render'
 import { registerVideo, videoFilePath, videoIdFromUrl } from '../video/store'
@@ -35,6 +36,9 @@ import { tNow } from '../i18n'
 const MAX_MODEL_IMAGE_BYTES = 300_000
 /** A packed transcript larger than this stays only in the file. */
 const MAX_PACKED_CHARS = 40_000
+
+/** Sample rate the beat detector reads at: plenty for rhythm, cheap to decode. */
+const BEAT_RATE = 22050
 
 const timelineStash = new Map<string, { base64: string }>()
 
@@ -171,6 +175,46 @@ export function createVideoTools(
           }
         }
         return lines.join('\n')
+      },
+    }),
+
+    audio_bpm: tool({
+      description:
+        'Measures the TEMPO and the BEAT TIMES of a song or any rhythmic audio/video (local, nothing leaves the machine). ' +
+        'Returns bpm, a confidence, the double/half-time readings, framesPerBeat for the piece fps (fps × 60 / bpm) and the beat times in seconds. ' +
+        'Use it before syncing a motion piece, a cut or a pulse to music — never guess a bpm or assume 120. ' +
+        'Analyses up to 2 minutes (from/duration pick the section; a chorus of 15–40 s is plenty). ' +
+        'Low confidence or a tempo that changes → say so and ask the user for the bpm; do not extrapolate a grid past a tempo change. ' +
+        'This finds beats, not words: for lyrics use transcribe with detail "words".',
+      inputSchema: z.object({
+        path: z.string().describe('File relative to the working folder, the ref (aud_… / vdo_…) of an attachment, or the orbit-video:// URL of a video already shown'),
+        from: z.number().min(0).optional().describe('Start of the section, in seconds of the file (default 0). The beat times returned already include it.'),
+        duration: z.number().min(4).max(120).optional().describe('Length of the section in seconds (default 60, max 120).'),
+        fps: z.number().min(1).max(240).optional().describe('fps of the piece, for framesPerBeat (default 30).'),
+        minBpm: z.number().min(30).max(250).optional().describe('Lowest tempo to consider (default 60).'),
+        maxBpm: z.number().min(30).max(300).optional().describe('Highest tempo to consider (default 200).'),
+      }),
+      execute: async ({ path: p, from, duration, fps, minBpm, maxBpm }) => {
+        try {
+          const { file, label } = await mediaFile(p)
+          const start = from ?? 0
+          const length = Math.min(120, duration ?? 60)
+          const { stdout } = await runFfmpeg([
+            '-v', 'error',
+            '-ss', start.toFixed(3),
+            '-t', length.toFixed(3),
+            '-i', file,
+            '-vn', '-ac', '1', '-ar', String(BEAT_RATE),
+            '-f', 'f32le', 'pipe:1',
+          ])
+          // Buffer memory may not be 4-byte aligned: copy into a fresh one.
+          const copy = new Uint8Array(stdout.length - (stdout.length % 4))
+          copy.set(stdout.subarray(0, copy.length))
+          const analysis = analyzeBeats(new Float32Array(copy.buffer), BEAT_RATE, { minBpm, maxBpm })
+          return describeBeats(analysis, { fps: fps ?? 30, label, offsetSec: start })
+        } catch (err) {
+          return `${p}: ${err instanceof Error ? err.message : String(err)}`
+        }
       },
     }),
 
