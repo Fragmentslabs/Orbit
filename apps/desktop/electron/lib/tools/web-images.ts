@@ -172,14 +172,14 @@ export function createWebImageTools(scope: { sessionId: string; modelVision: boo
               alt: candidate.title,
               source: { pageUrl: candidate.pageUrl, imageUrl: candidate.imageUrl, host: candidate.host, title: candidate.title || undefined },
             })
-            lines.push(`${id}: shown · ${cached.width}x${cached.height} · from ${candidate.host} (${candidate.pageUrl})`)
+            lines.push(`${id}: shown · ${cached.width}x${cached.height} · from ${candidate.host} · ref ${cached.src} · page ${candidate.pageUrl}`)
           } catch (err) {
             lines.push(`${id}: could not be loaded — ${err instanceof Error ? err.message : String(err)}`)
           }
         }
         lines.push(
           images.length > 0
-            ? 'The pictures already appear in your reply. Say where they come from (the site) and, if the user may use them for something beyond looking, remind them they are other people\'s work.'
+            ? 'The pictures already appear in your reply as a grid. To introduce the MAIN subject with a picture beside the text instead, use an orbit-ui entity block with that picture\'s ref and page (then show only the others, if any). Say where they come from (the site) and, if the user may use them for something beyond looking, remind them they are other people\'s work.'
             : 'Nothing was shown.',
         )
         return { message: lines.join('\n'), images }

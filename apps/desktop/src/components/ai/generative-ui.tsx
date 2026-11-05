@@ -49,9 +49,10 @@ import {
 } from "@/src/lib/orbit-expr"
 import { INPUT_TYPES, parseOrbitUi, type OrbitUiBlock } from "@/src/lib/orbit-ui"
 import { SETTINGS_TAB_LABEL_KEY } from "@/src/lib/settings-tabs"
-import { windowApi } from "@/src/lib/ipc"
+import { appSettingsApi, windowApi } from "@/src/lib/ipc"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { Truncate } from "@/components/ui/truncated-text"
+import { ImageLightbox } from "@/src/components/ai/image"
 
 /**
  * Inline blocks of the assistant reply (```orbit-ui fence, see
@@ -812,6 +813,48 @@ function NavBlock({ destination, note }: Of<"nav">) {
   )
 }
 
+function Entity({ title, text, image, source, tag }: Of<"entity">) {
+  const tx = useText()
+  const [open, setOpen] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const host = source ? new URL(source).hostname.replace(/^www\./, "") : ""
+  const imageSource = source ? { pageUrl: source, imageUrl: image ?? "", host } : undefined
+  return (
+    <div className="flex gap-3.5">
+      {image && !failed && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="block h-36 w-28 shrink-0 cursor-zoom-in overflow-hidden rounded-xl border bg-muted/30 transition-colors hover:border-ring sm:h-44 sm:w-32"
+          >
+            <img src={image} alt={title} loading="lazy" onError={() => setFailed(true)} className="size-full object-cover" />
+          </button>
+          <ImageLightbox src={image} alt={title} source={imageSource} open={open} onOpenChange={setOpen} />
+        </>
+      )}
+      <div className="min-w-0 flex-1 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-base font-semibold">{tx(title)}</span>
+          {tag && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{tx(tag)}</span>}
+        </div>
+        <p className="mt-1 text-foreground/90">{tx(text)}</p>
+        {source && (
+          <button
+            type="button"
+            onClick={() => appSettingsApi.openExternal(source)}
+            title={source}
+            className="mt-1.5 flex max-w-full cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowUpRightIcon className="size-3 shrink-0" />
+            <span className="truncate">{host}</span>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Block({ block }: { block: OrbitUiBlock }) {
   switch (block.type) {
     case "stats":
@@ -848,6 +891,8 @@ function Block({ block }: { block: OrbitUiBlock }) {
       return <Buttons {...block} />
     case "nav":
       return <NavBlock {...block} />
+    case "entity":
+      return <Entity {...block} />
   }
 }
 

@@ -75,6 +75,10 @@ function Block({ block }: { block: OrbitUiBlock }) {
       // navigation path); this case exists for whoever renders a whole fence
       // at once.
       return <NavCard destination={block.destination} note={block.note} />
+    case 'entity':
+      // The picture is a copy that lives on the desktop (orbit-web://), which the app does
+      // not know how to open: the subject still reads, as a note.
+      return <Callout type="callout" tone="info" title={block.title} text={block.text} />
   }
 }
 

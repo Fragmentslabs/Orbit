@@ -93,3 +93,17 @@ describe("navigation card", () => {
     expect(blocks[0]).toMatchObject({ destination: "nao-existe" })
   })
 })
+
+describe("entity block", () => {
+  const line = (extra: object) => JSON.stringify({ type: "entity", title: "Kendrick Lamar", text: "Rapper.", ...extra })
+
+  it("accepts an app-held picture ref and a page link", () => {
+    const { blocks } = parseOrbitUi(line({ image: "orbit-web://a1b2c3d4e5.webp", source: "https://en.wikipedia.org/wiki/Kendrick_Lamar" }), false)
+    expect(blocks).toHaveLength(1)
+  })
+
+  it("refuses a picture that is a web address, and a source that is not http(s)", () => {
+    expect(parseOrbitUi(line({ image: "https://evil.example/a.png" }), false).blocks).toHaveLength(0)
+    expect(parseOrbitUi(line({ source: "javascript:alert(1)" }), false).blocks).toHaveLength(0)
+  })
+})

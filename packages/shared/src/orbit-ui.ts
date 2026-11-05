@@ -224,6 +224,22 @@ const nav = z.object({
   note: text(160).optional(),
 })
 
+/**
+ * A subject introduced with a picture beside the text — the opening of an answer about
+ * a person, a place, a product, a work. The picture is never an address from the model:
+ * only the copy the app itself holds (the ref web_image_show / image_import returned),
+ * so a block cannot make the chat load something from an arbitrary server. `source` is
+ * the page the picture came from, shown as a link.
+ */
+const entity = z.object({
+  type: z.literal("entity"),
+  title: text(120),
+  text: text(1200),
+  image: z.string().regex(/^orbit-(web|media):\/\/[\w.-]{1,80}$/).optional(),
+  source: z.string().max(600).refine((v) => /^https?:\/\//i.test(v)).optional(),
+  tag: text(40).optional(),
+})
+
 /** The types that store a value and enter the scope of the expressions. */
 export const INPUT_TYPES = ["slider", "number", "select", "tabs", "toggle", "text"] as const
 
@@ -245,6 +261,7 @@ export const orbitUiBlock = z.discriminatedUnion("type", [
   textInput.extend(showIf),
   buttons.extend(showIf),
   nav.extend(showIf),
+  entity.extend(showIf),
 ])
 
 export type OrbitUiBlock = z.infer<typeof orbitUiBlock>
