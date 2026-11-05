@@ -2565,6 +2565,8 @@
     "worktreePerTaskHint": "Each task works on its own branch and copy, so several can run at once without touching each other. Starts from the current branch (uncommitted changes are left out) and applies to tasks that haven't started yet.",
     "worktreeBase": "Created from {{base}}",
     "openWorktree": "Open folder",
+    "openInChat": "Open in chat",
+    "openInChatPrompt": "Analyze what was done in task {{number}} (\"{{title}}\") of pipeline \"{{pipeline}}\".",
     "linkedDependencies": "node_modules linked to the main checkout",
     "status": {
       "pending": "Pending",

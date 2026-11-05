@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, Loader2Icon, MessageSquarePlusIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, Loader2Icon, MessageSquarePlusIcon, MessageSquareQuoteIcon, MessagesSquareIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Pipeline, Task } from "@shared/pipeline"
 import { instructionsForRound, notesForRound, returnForRound, taskRound } from "@shared/pipeline"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -18,6 +18,9 @@ import { ReturnTaskDialog } from "./return-task-dialog"
 import { ResumeInstructionDialog } from "./resume-instruction-dialog"
 import { EMPTY_TASKS, usePipelineStore } from "@/src/stores/pipeline-store"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { useSessionStore } from "@/src/stores/session-store"
+import { useDraftInput } from "@/src/stores/draft-input"
+import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 import { formatCost, formatDuration } from "./task-card"
 import { Truncate } from "@/components/ui/truncated-text"
@@ -45,6 +48,8 @@ export function TaskModal({
   const pauseTask = usePipelineStore((s) => s.pauseTask)
   const resumeTask = usePipelineStore((s) => s.resumeTask)
   const tasks = usePipelineStore((s) => s.tasksPerPipeline[pipeline.id] ?? EMPTY_TASKS)
+  const projectFolders = usePipelineStore((s) => s.projects.find((p) => p.id === pipeline.projectId)?.folders)
+  const { setMode, setView, setFolders } = useWorkspace()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [activePhase, setActivePhase] = useState(0)
@@ -112,6 +117,30 @@ export function TaskModal({
     }
   }
 
+  // New chat in the task's worktree (or the project folder without one), with the
+  // question typed and NOT sent: the person edits it and sends. The chat reads the
+  // task through the pipeline_task_read tool, so nothing else needs to be injected.
+  const openInChat = async () => {
+    const folders = task.worktree?.folder
+      ? [task.worktree.folder, ...(projectFolders ?? []).slice(1)]
+      : (projectFolders ?? [])
+    const directory = folders[0]
+    if (!directory) return
+    const session = await useSessionStore.getState().createSession("code", { directory, setActive: true })
+    useDraftInput.getState().setDraft(
+      session.id,
+      t("pipeline.openInChatPrompt", {
+        number: task.number !== undefined ? `#${task.number}` : task.id,
+        title: task.title,
+        pipeline: pipeline.name,
+      }),
+    )
+    setMode("code")
+    setView("chat")
+    setFolders(folders)
+    onOpenChange(false)
+  }
+
   const shortDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleString(i18n.language, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"
 
@@ -168,12 +197,26 @@ export function TaskModal({
         )}
 
         <div className="flex items-center gap-2 px-4 pt-4">
+          {task.number !== undefined && (
+            <span className="shrink-0 font-mono text-sm text-muted-foreground">#{task.number}</span>
+          )}
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => title !== task.title && saveField({ title })}
             className="h-8 flex-1 border-0 bg-transparent px-1.5 text-base font-semibold shadow-none focus-visible:ring-0"
           />
+          <Hint label={t("pipeline.openInChat")}>
+            <button
+              type="button"
+              aria-label={t("pipeline.openInChat")}
+              onClick={() => void openInChat()}
+              className="flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+            >
+              <MessagesSquareIcon className="size-3.5" />
+              {t("pipeline.openInChat")}
+            </button>
+          </Hint>
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
             {t(`pipeline.status.${task.status}`)}
           </span>

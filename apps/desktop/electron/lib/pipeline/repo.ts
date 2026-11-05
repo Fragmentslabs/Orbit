@@ -154,6 +154,7 @@ function mapPipeline(raw: Json): Pipeline {
     projectId: String(pick(raw, 'projectId', 'projetoId')),
     name: pick<string>(raw, 'name', 'nome') ?? '',
     phases: asArray<Json>(pick(raw, 'phases', 'fases')).map(mapPhaseConfig),
+    ...(typeof raw.nextTaskNumber === 'number' ? { nextTaskNumber: raw.nextTaskNumber } : {}),
     ...(raw.branch !== undefined ? { branch: String(raw.branch) } : {}),
     ...(raw.worktree !== undefined ? { worktree: String(raw.worktree) } : {}),
     ...(pick(raw, 'worktreePerTask', 'worktreePorTask') !== undefined
@@ -180,6 +181,7 @@ function mapTask(raw: Json): Task {
   const diff = raw.diff as Json | undefined
   return {
     id: String(raw.id),
+    ...(typeof raw.number === 'number' ? { number: raw.number } : {}),
     pipelineId: String(pick(raw, 'pipelineId', 'esteiraId')),
     title: pick<string>(raw, 'title', 'titulo') ?? '',
     description: pick<string>(raw, 'description', 'descricao') ?? '',
@@ -349,6 +351,39 @@ async function migrateLegacyData(): Promise<void> {
     if (await migrateFile(path.join(current, name))) rewritten++
   }
   if (rewritten > 0) console.log(`[pipeline] migrated ${rewritten} data file(s) to the English field names`)
+  await backfillTaskNumbers(current).catch((err) => console.error('[pipeline] task numbering failed:', err))
+}
+
+/**
+ * Gives a number to tasks written before numbering existed: in creation order,
+ * per pipeline, and moves the pipeline's counter past the highest one. Runs with
+ * the rest of the one-shot migration, before anything else reads the files.
+ */
+async function backfillTaskNumbers(dir: string): Promise<void> {
+  const pipelinesFile = path.join(dir, 'pipelines.json')
+  const pipelines = (JSON.parse((await fsp.readFile(pipelinesFile, 'utf8').catch(() => '[]')) || '[]') as Json[]).map(mapPipeline)
+  let pipelinesChanged = false
+  for (const pipeline of pipelines) {
+    const file = path.join(dir, `tasks-${pipeline.id}.json`)
+    const raw = await fsp.readFile(file, 'utf8').catch(() => undefined)
+    if (!raw) continue
+    let tasks: Task[]
+    try {
+      tasks = (JSON.parse(raw) as Json[]).map(mapTask)
+    } catch {
+      continue
+    }
+    const highest = tasks.reduce((max, t) => Math.max(max, t.number ?? 0), 0)
+    let next = Math.max(highest + 1, pipeline.nextTaskNumber ?? 1)
+    const missing = tasks.filter((t) => t.number === undefined).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    for (const task of missing) task.number = next++
+    if (missing.length > 0) await rewriteIfChanged(file, tasks)
+    if (pipeline.nextTaskNumber !== next && (missing.length > 0 || pipeline.nextTaskNumber === undefined)) {
+      pipeline.nextTaskNumber = next
+      pipelinesChanged = true
+    }
+  }
+  if (pipelinesChanged) await rewriteIfChanged(pipelinesFile, pipelines)
 }
 
 /** Runs the migration once per process, before the first read or write. */
@@ -416,6 +451,25 @@ export function listPipelines(): Promise<Pipeline[]> {
 
 export function savePipelines(pipelines: Pipeline[]): Promise<void> {
   return withLock('pipelines.json', () => write('pipelines.json', pipelines))
+}
+
+/**
+ * Hands out the next task number of a pipeline (`#123`). Under the pipelines
+ * file's lock and persisted in the pipeline itself, so a number is never reused
+ * even if the highest task is removed.
+ */
+export function allocateTaskNumber(pipelineId: string): Promise<number> {
+  return withLock('pipelines.json', async () => {
+    const pipelines = await read<Pipeline[]>('pipelines.json', [])
+    const pipeline = pipelines.find((p) => p.id === pipelineId)
+    if (!pipeline) throw new Error(`pipeline not found: ${pipelineId}`)
+    const tasks = await read<Task[]>(tasksFile(pipelineId), [])
+    const highest = tasks.reduce((max, t) => Math.max(max, t.number ?? 0), 0)
+    const number = Math.max(pipeline.nextTaskNumber ?? 1, highest + 1)
+    pipeline.nextTaskNumber = number + 1
+    await write('pipelines.json', pipelines)
+    return number
+  })
 }
 
 // ─── Phase templates edited by the user ──────────────────────────────────────

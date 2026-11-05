@@ -122,6 +122,8 @@ export interface Pipeline {
   name: string
   /** Copy of the templates, editable without touching the master */
   phases: PhaseConfig[]
+  /** Next task number to hand out (`Task.number`); never goes back. */
+  nextTaskNumber?: number
   /** Working branch (absent = the repo's current branch) */
   branch?: string
   /** Legacy: fixed worktree path for the whole pipeline (no UI) */
@@ -231,6 +233,12 @@ export interface TaskWorktree {
 
 export interface Task {
   id: string
+  /**
+   * Short handle (`#123`) the person and the chat tools use to refer to the task.
+   * Per pipeline, assigned in order and never reused, even when a task is removed.
+   * Absent only on data written before numbering existed (backfilled on load).
+   */
+  number?: number
   pipelineId: string
   title: string
   description: string

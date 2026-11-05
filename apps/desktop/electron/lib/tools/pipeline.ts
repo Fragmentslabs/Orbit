@@ -1,6 +1,13 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import { loadAll, createPipeline, createProject, createTask, listPipelines, listTasks, startTask } from '../pipeline'
+import { loadAll, createPipeline, createProject, createTask, listPipelines, listTasks, startTask, updateTaskFields } from '../pipeline'
+import { isEditable, resolveTask, summarizeTask, taskDiff, taskLabel, taskNotes } from '../pipeline/task-ref'
+
+/** Every pipeline with its tasks, for resolving "#12" references. */
+async function pipelinesWithTasks() {
+  const pipelines = await listPipelines()
+  return Promise.all(pipelines.map(async (pipeline) => ({ pipeline, tasks: await listTasks(pipeline.id) })))
+}
 
 /**
  * Pipeline tools in the chat: they turn what was discussed in the conversation
@@ -200,9 +207,61 @@ export function createPipelineTools(
           .map((t) => {
             const phase = t.currentPhase != null ? (target.phases[t.currentPhase]?.name ?? `phase ${t.currentPhase}`) : '—'
             const error = t.pauseReason === 'error' ? ` · error: ${t.error ?? 'no details'}` : ''
-            return `- [${t.status}] ${t.title} (phase: ${phase})${error}`
+            return `- ${taskLabel(t)} [${t.status}] ${t.title} (phase: ${phase})${error}`
           })
           .join('\n')
+      },
+    }),
+
+    pipeline_task_read: tool({
+      description: [
+        'Reads what happened in a pipeline task: status, phase notes, rounds, commits and files changed.',
+        'Refer to a task by its number as the person says it ("#12") or by id. Numbers are per pipeline: pass `pipelineId`/`pipeline` when the board is known, and if the tool lists several matches, ask the user (question tool).',
+        'Default `section` is "summary" (short). Use "notes" for the full phase notes (add `phase` to read one), and "diff" for the files changed (add `file` to read one patch). Read narrowly — notes and patches are long.',
+      ].join(' '),
+      inputSchema: z.object({
+        task: z.string().describe('Task number ("#12" or "12") or task id'),
+        pipelineId: z.string().optional().describe('Exact pipeline id, from pipeline_list'),
+        pipeline: z.string().optional().describe('Pipeline name (or fragment), when the id is unknown'),
+        section: z.enum(['summary', 'notes', 'diff']).optional().describe('What to read (default: summary)'),
+        phase: z.string().optional().describe('With section "notes": only the phase whose name matches'),
+        file: z.string().optional().describe('With section "diff": the patch of this one file'),
+      }),
+      execute: async ({ task, pipelineId, pipeline, section, phase, file }) => {
+        const found = resolveTask(task, await pipelinesWithTasks(), { pipelineId, pipeline })
+        if (!found.ok) return found.message
+        if (section === 'notes') return taskNotes(found.task, phase)
+        if (section === 'diff') return taskDiff(found.task, file)
+        const all = await listTasks(found.pipeline.id)
+        return summarizeTask(found.pipeline, found.task, all)
+      },
+    }),
+
+    pipeline_task_edit: tool({
+      description: [
+        'Edits the title and/or description of a pipeline task. Only while the task is pending or paused: a running phase has already built its prompt and would not see the change.',
+        'The description is the full brief for an agent that did not see the conversation — keep it self-contained. Pass only what changes; `description` replaces the old text entirely, so read the task first (pipeline_task_read) and send the complete new text.',
+      ].join(' '),
+      inputSchema: z.object({
+        task: z.string().describe('Task number ("#12" or "12") or task id'),
+        pipelineId: z.string().optional().describe('Exact pipeline id, from pipeline_list'),
+        pipeline: z.string().optional().describe('Pipeline name (or fragment), when the id is unknown'),
+        title: z.string().optional().describe('New title (one line)'),
+        description: z.string().optional().describe('New complete description'),
+      }),
+      execute: async ({ task, pipelineId, pipeline, title, description }) => {
+        if (title === undefined && description === undefined) return 'Nothing to change: pass a title and/or a description.'
+        const found = resolveTask(task, await pipelinesWithTasks(), { pipelineId, pipeline })
+        if (!found.ok) return found.message
+        if (!isEditable(found.task)) {
+          return `Task ${taskLabel(found.task)} is ${found.task.status}: it can only be edited while pending or paused. Pause it from the board first, or create a new task.`
+        }
+        const patch: { title?: string; description?: string } = {}
+        if (title !== undefined && title.trim()) patch.title = title.trim()
+        if (description !== undefined && description.trim()) patch.description = description.trim()
+        if (Object.keys(patch).length === 0) return 'Nothing to change: the title and description cannot be empty.'
+        await updateTaskFields(found.pipeline.id, found.task.id, patch)
+        return `Task ${taskLabel(found.task)} updated (${Object.keys(patch).join(' and ')}).`
       },
     }),
   }

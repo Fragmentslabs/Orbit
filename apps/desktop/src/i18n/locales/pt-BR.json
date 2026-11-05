@@ -2565,6 +2565,8 @@
     "worktreePerTaskHint": "Cada task trabalha num branch e numa cópia próprios, então dá para rodar várias ao mesmo tempo sem uma mexer na outra. Parte do branch atual (alterações não commitadas ficam de fora) e vale para tasks que ainda não começaram.",
     "worktreeBase": "Criado a partir de {{base}}",
     "openWorktree": "Abrir pasta",
+    "openInChat": "Abrir no chat",
+    "openInChatPrompt": "Analise o que foi feito na task {{number}} (\"{{title}}\") da esteira \"{{pipeline}}\".",
     "linkedDependencies": "node_modules vinculados ao repositório principal",
     "status": {
       "pending": "Pendente",

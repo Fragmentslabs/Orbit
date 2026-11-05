@@ -91,7 +91,12 @@ export function TaskCard({
     >
       <div className="flex items-start gap-2">
         <Truncate text={task.title}>
-          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{task.title}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+            {task.number !== undefined && (
+              <span className="mr-1 font-mono text-[10px] font-normal text-muted-foreground">#{task.number}</span>
+            )}
+            {task.title}
+          </span>
         </Truncate>
         {running ? (
           <Hint label={t("pipeline.pause")}>

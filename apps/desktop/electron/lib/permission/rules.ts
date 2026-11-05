@@ -174,6 +174,8 @@ const NATIVE_TOOLS = new Set([
   'pipeline_list',
   'pipeline_create_task',
   'pipeline_task_status',
+  'pipeline_task_read',
+  'pipeline_task_edit',
   // Vision mode: describes attached images with the configured vision model
   // (pure read, first-party) — it fell into the MCP catch-all as the
   // "describe" server and asked permission on every call.

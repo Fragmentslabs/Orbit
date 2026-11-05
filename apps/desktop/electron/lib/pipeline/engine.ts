@@ -14,7 +14,7 @@ import { capture, diff } from '../snapshot'
 import { userShellEnv } from '../shell-env'
 import { createsCycle, pendingDependencies } from './contract'
 import { runPhase, type ToolProgress } from './runner'
-import { updateTask, listPipelines, listProjects, listTasks, modifyTasks } from './repo'
+import { allocateTaskNumber, updateTask, listPipelines, listProjects, listTasks, modifyTasks } from './repo'
 import { broadcastPipelineEvent } from '../broadcast'
 import { loadPromptContext, search as searchMemory } from '../memory/service'
 import { getProvider } from '../catalog'
@@ -1054,6 +1054,7 @@ export function abortAll(): void {
 export async function createTask(input: NewTaskInput): Promise<Task> {
   const task: Task = {
     id: newId('task_'),
+    number: await allocateTaskNumber(input.pipelineId),
     pipelineId: input.pipelineId,
     title: input.title,
     description: input.description,
