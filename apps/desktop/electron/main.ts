@@ -1901,6 +1901,7 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
   ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
+  ipcMain.handle('routines:rotateChat', (_e, id: string) => routines.rotateChat(id))
   ipcMain.handle('routines:pruneRuns', (_e, sessionIds: string[]) => routines.pruneOrphanRuns(sessionIds))
   ipcMain.handle(
     'routines:generate',

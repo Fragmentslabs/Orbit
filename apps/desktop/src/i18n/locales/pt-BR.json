@@ -1037,6 +1037,15 @@
       "failed": "Não foi possível gerar o resumo de continuidade. Tente de novo.",
       "dismiss": "Dispensar"
     },
+    "routineChatFull": {
+      "title": "Começar um chat novo para esta rotina?",
+      "body_one": "O chat desta rotina já foi compactado {{count}} vez. A próxima compactação resume um resumo, e as execuções mais antigas começam a se perder.",
+      "body_other": "O chat desta rotina já foi compactado {{count}} vezes. A próxima compactação resume um resumo, e as execuções mais antigas começam a se perder.",
+      "newChat": "Novo chat, arquivar este",
+      "keep": "Manter este chat",
+      "hint": "O chat novo abre com um resumo deste, e a rotina continua rodando nele.",
+      "failed": "Não foi possível abrir um chat novo. Tente de novo."
+    },
     "brokenMessage": "Não foi possível mostrar esta mensagem.",
     "earlierMessages_one": "Mostrar {{count}} mensagem anterior",
     "earlierMessages_other": "Mostrar {{count}} mensagens anteriores",
@@ -2690,6 +2699,11 @@
       "title": "Nova rotina",
       "placeholderChat": "Ex.: todo dia às 8h, monte um briefing matinal com as notícias de tecnologia do dia e um resumo das minhas memórias recentes.",
       "modeChatHint": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
+    },
+    "reuseChat": {
+      "label": "Manter todas as execuções em um chat",
+      "hintOn": "Cada execução continua o mesmo chat, então enxerga as anteriores. Quando o chat ficar longo, é oferecido um novo.",
+      "hintOff": "Cada execução abre um chat próprio. Uma rotina frequente enche a barra lateral de chats."
     },
     "review": {
       "title": "Revisar rotina",

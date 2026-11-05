@@ -1037,6 +1037,15 @@
       "failed": "Could not generate the continuation summary. Try again.",
       "dismiss": "Dismiss"
     },
+    "routineChatFull": {
+      "title": "Start a new chat for this routine?",
+      "body_one": "This routine's chat has been compacted {{count}} time. The next compaction summarizes a summary, and the oldest runs start to blur.",
+      "body_other": "This routine's chat has been compacted {{count}} times. The next compaction summarizes a summary, and the oldest runs start to blur.",
+      "newChat": "New chat, archive this one",
+      "keep": "Keep this chat",
+      "hint": "The new chat opens with a summary of this one, and the routine keeps running there.",
+      "failed": "Could not open a new chat. Try again."
+    },
     "brokenMessage": "This message could not be displayed.",
     "earlierMessages_one": "Show {{count}} earlier message",
     "earlierMessages_other": "Show {{count}} earlier messages",
@@ -2690,6 +2699,11 @@
       "title": "New routine",
       "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
       "modeChatHint": "Chat mode: the routine runs with no working folders — just the conversation and the chat tools."
+    },
+    "reuseChat": {
+      "label": "Keep every run in one chat",
+      "hintOn": "Each run continues the same chat, so it can see the previous ones. When the chat gets long, you are offered a new one.",
+      "hintOff": "Each run opens its own chat. A frequent routine fills the sidebar with chats."
     },
     "review": {
       "title": "Review routine",

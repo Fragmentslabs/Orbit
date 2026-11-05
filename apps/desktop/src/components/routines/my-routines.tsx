@@ -35,7 +35,7 @@ import { useProviderStore, type SelectedModel } from "@/src/stores/provider-stor
 import { useSessionStore } from "@/src/stores/session-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { describeSchedule } from "./schedule"
-import { ActiveSwitch, ModeBadges, ModesEditor, ScheduleEditor } from "./schedule-editor"
+import { ActiveSwitch, ModeBadges, ModesEditor, ReuseChatField, ScheduleEditor } from "./schedule-editor"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
@@ -157,6 +157,7 @@ function EditRoutineDialog({
   const [schedule, setSchedule] = useState<Schedule>(routine.schedule)
   const [modes, setModes] = useState<RoutineModes>(routine.modes)
   const [model, setModel] = useState<SelectedModel | null>(routine.model)
+  const [reuseChat, setReuseChat] = useState(!!routine.reuseChat)
 
   // Reopening the dialog starts over from the persisted routine (the scheduler
   // may have touched it while it was closed).
@@ -170,6 +171,7 @@ function EditRoutineDialog({
       setSchedule(routine.schedule)
       setModes(routine.modes)
       setModel(routine.model)
+      setReuseChat(!!routine.reuseChat)
     }
   }
 
@@ -183,6 +185,7 @@ function EditRoutineDialog({
       schedule,
       modes,
       model,
+      reuseChat,
     })
     onOpenChange(false)
   }
@@ -216,6 +219,7 @@ function EditRoutineDialog({
             <p className="text-xs font-medium">{t("routines.create.model")}</p>
             <ModelPicker value={model} onValueChange={setModel} />
           </div>
+          <ReuseChatField value={reuseChat} onChange={setReuseChat} />
         </div>
         <div className="flex justify-end gap-2 border-t pt-3">
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>

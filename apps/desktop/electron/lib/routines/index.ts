@@ -8,7 +8,7 @@ import {
   removeRoutineRuns,
   updateRoutine,
 } from './repo'
-import { emit, runNow, startScheduler, stopScheduler } from './scheduler'
+import { emit, rotateChat, runNow, startScheduler, stopScheduler } from './scheduler'
 
 /**
  * Routines facade: this is what the IPC consumes (same shape as
@@ -16,7 +16,7 @@ import { emit, runNow, startScheduler, stopScheduler } from './scheduler'
  */
 
 export { generateRoutine } from './generator'
-export { runNow, startScheduler, stopScheduler }
+export { rotateChat, runNow, startScheduler, stopScheduler }
 
 function newId(): string {
   return `rout_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
@@ -46,6 +46,7 @@ export async function createRoutine(input: NewRoutineInput): Promise<Routine> {
     mode: input.mode ?? 'code',
     folders: [...input.folders],
     visionModel: input.visionModel,
+    reuseChat: input.reuseChat,
     active: input.active ?? true,
     createdAt: Date.now(),
   }

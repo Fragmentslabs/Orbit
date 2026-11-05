@@ -3,7 +3,7 @@ import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { Routine, RoutineEvent, RoutineRun } from '@shared/routines'
 import { nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
-import { runChat } from '../chat-engine'
+import { continuationBrief, getRunningSessionIds, runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration } from '../orchestrator'
 import { broadcastChatEvent, broadcastRoutineEvent } from '../broadcast'
@@ -62,7 +62,9 @@ async function createSession(routine: Routine, when: number): Promise<SessionInf
   const chat = routine.mode === 'chat'
   const session: SessionInfo = {
     id: `${ROUTINE_SESSION_PREFIX}${routine.id}_${when.toString(36)}`,
-    title: `${routine.title} — ${stamp(when)}`,
+    // A reused chat holds many executions, so a timestamp in the title would be a
+    // lie after the first one: it carries only the routine's name.
+    title: routine.reuseChat ? routine.title : `${routine.title} — ${stamp(when)}`,
     mode: routine.mode,
     pinned: false,
     archived: false,
@@ -81,14 +83,22 @@ async function createSession(routine: Routine, when: number): Promise<SessionInf
   return session
 }
 
-/** Metrics of what the execution consumed: sums the assistant turns. */
-async function collectResult(sessionId: string): Promise<{ tokens: number; cost: number; error?: string }> {
+/**
+ * Metrics of what the execution consumed: sums the assistant turns.
+ *
+ * `since` keeps a reused chat honest: its history holds every previous
+ * execution, and counting those would charge each run for all the ones before it.
+ */
+async function collectResult(
+  sessionId: string,
+  since = 0,
+): Promise<{ tokens: number; cost: number; error?: string }> {
   const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
   let tokens = 0
   let cost = 0
   let error: string | undefined
   for (const msg of messages) {
-    if (msg.role !== 'assistant') continue
+    if (msg.role !== 'assistant' || msg.createdAt < since) continue
     if (msg.tokens) {
       tokens += msg.tokens.input + msg.tokens.output + msg.tokens.reasoning
       cost += msg.tokens.cost ?? 0
@@ -115,6 +125,70 @@ async function notify(routine: Routine, run: RoutineRun): Promise<void> {
   new Notification({ title: routine.title, body, silent: ok }).show()
 }
 
+// ─── Reused chat ─────────────────────────────────────────────────────────────
+
+/**
+ * The chat a reusing routine continues, or null when there is none to continue:
+ * never created, deleted, or archived (archiving is how the person closes a chat
+ * that got too long — the next execution starts a fresh one).
+ */
+async function findReusableSession(routine: Routine): Promise<SessionInfo | null> {
+  if (!routine.reuseChat || !routine.chatSessionId) return null
+  const session = await readJson<SessionInfo>(StorageKeys.session(routine.chatSessionId))
+  if (!session || session.archived) return null
+  return session
+}
+
+/** Rebinds the routine to the chat its next execution will continue. */
+async function bindChat(routine: Routine, sessionId: string): Promise<void> {
+  const updated = await updateRoutine(routine.id, (r) => ({ ...r, chatSessionId: sessionId }))
+  if (updated) emit({ type: 'routine', routine: updated })
+}
+
+/**
+ * "New chat for this routine": opens the next chat, carries a brief of the old one
+ * over (the same continuation brief the compaction card uses, so the routine does
+ * not start from zero) and archives the old chat. Returns the new session id.
+ *
+ * The new chat is created BEFORE the old one is archived: if anything fails in
+ * between, the routine still has a chat to continue.
+ */
+export async function rotateChat(routineId: string): Promise<string | null> {
+  const routine = (await listRoutines()).find((r) => r.id === routineId)
+  if (!routine || !routine.reuseChat) return null
+  const previousId = routine.chatSessionId
+  // A turn in the old chat would be writing to a history we are about to leave.
+  if (previousId && getRunningSessionIds().includes(previousId)) return null
+
+  const fresh = await createSession(routine, Date.now())
+  if (previousId) {
+    const brief = await continuationBrief(previousId).catch(() => null)
+    if (brief) {
+      const seed: ChatMessage = {
+        id: `${fresh.id}_brief`,
+        role: 'assistant',
+        summary: true,
+        // The brief that opened the chat, not a compaction of it (the UI labels it so).
+        continuation: true,
+        parts: [{ id: `${fresh.id}_brief_text`, type: 'text', text: brief.text, state: 'done' }],
+        createdAt: fresh.createdAt,
+      }
+      await writeJson(StorageKeys.messages(fresh.id), [seed])
+    }
+  }
+  await bindChat(routine, fresh.id)
+
+  if (previousId) {
+    const previous = await readJson<SessionInfo>(StorageKeys.session(previousId))
+    if (previous && !previous.archived) {
+      const archived: SessionInfo = { ...previous, archived: true, archivedAt: Date.now() }
+      await writeJson(StorageKeys.session(previousId), archived)
+      broadcastChatEvent({ type: 'session', sessionId: previousId, session: archived })
+    }
+  }
+  return fresh.id
+}
+
 // ─── Execution ───────────────────────────────────────────────────────────────
 
 /**
@@ -132,9 +206,18 @@ export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'
     return null
   }
 
+  const reusable = await findReusableSession(routine)
+  // The person is talking in the routine's chat: firing now would start a second
+  // turn over the same history. Skip this firing; the next tick tries again.
+  if (reusable && getRunningSessionIds().includes(reusable.id)) {
+    console.warn(`[routines] "${routine.title}" skipped — its chat is busy`)
+    return null
+  }
+
   running.add(routine.id)
   const start = Date.now()
-  const session = await createSession(routine, start)
+  const session = reusable ?? (await createSession(routine, start))
+  if (routine.reuseChat && session.id !== routine.chatSessionId) await bindChat(routine, session.id)
 
   let run: RoutineRun = {
     routineId: routine.id,
@@ -193,11 +276,11 @@ export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'
     if (options.orchestrate) await runOrchestration(win, input)
     else if (options.loop) await runChatWithLoop(win, input, input.loopConfig!)
     else await runChat(win, input)
-    const { tokens, cost, error } = await collectResult(session.id)
+    const { tokens, cost, error } = await collectResult(session.id, start)
     run = { ...run, completedAt: Date.now(), status: error ? 'error' : 'ok', error, tokens, cost }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
-    const { tokens, cost } = await collectResult(session.id)
+    const { tokens, cost } = await collectResult(session.id, start)
     run = { ...run, completedAt: Date.now(), status: 'error', error: detail, tokens, cost }
   } finally {
     running.delete(routine.id)

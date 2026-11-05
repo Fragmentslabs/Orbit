@@ -50,6 +50,8 @@ interface RoutinesState {
   update: (id: string, patch: Partial<Routine>) => Promise<void>
   remove: (id: string) => Promise<void>
   runNow: (id: string) => Promise<string | null>
+  /** Fresh chat for a routine that keeps one; archives the current one. Returns the new session id. */
+  rotateChat: (id: string) => Promise<string | null>
   /** Discards metrics of executions whose chat no longer exists. */
   prune: (liveSessionIds: string[]) => Promise<void>
 
@@ -199,6 +201,8 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
   },
 
   runNow: (id) => routinesApi.runNow(id),
+
+  rotateChat: (id) => routinesApi.rotateChat(id),
 
   prune: async (liveSessionIds) => {
     const live = new Set(liveSessionIds)

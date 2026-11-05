@@ -17,7 +17,7 @@ import type { SelectedModel } from "@/src/stores/provider-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useRoutinesStore } from "@/src/stores/routines-store"
-import { ModesEditor, ScheduleEditor } from "./schedule-editor"
+import { ModesEditor, ReuseChatField, ScheduleEditor } from "./schedule-editor"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
@@ -75,6 +75,7 @@ export function CreateRoutineDialog({
   const [prompt, setPrompt] = useState("")
   const [schedule, setSchedule] = useState<Schedule>({ time: "09:00" })
   const [modes, setModes] = useState<RoutineModes>({ permissionMode: DEFAULT_ROUTINE_PERMISSION })
+  const [reuseChat, setReuseChat] = useState(false)
   const [saving, setSaving] = useState(false)
 
   /**
@@ -101,6 +102,7 @@ export function CreateRoutineDialog({
     setGenerating(false)
     setModel(fallback)
     setMode(defaultMode)
+    setReuseChat(false)
     setFolders(defaultMode === "chat" ? [] : workspaceFolders)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fallback])
@@ -160,6 +162,7 @@ export function CreateRoutineDialog({
         mode,
         folders: mode === "chat" ? [] : folders,
         visionModel: modes.vision ? (visionModel ?? undefined) : undefined,
+        reuseChat: reuseChat || undefined,
         active: true,
       })
       // Recents are global and shared with the chats. The model enters the list
@@ -220,6 +223,8 @@ export function CreateRoutineDialog({
               <Field label={t("routines.create.model")}>
                 <ModelPicker value={model} onValueChange={setModel} />
               </Field>
+
+              <ReuseChatField value={reuseChat} onChange={setReuseChat} />
 
               {mode === "code" && (
                 <Field label={t("routines.review.folders")} hint={t("routines.review.foldersHint")}>

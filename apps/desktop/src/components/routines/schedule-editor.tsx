@@ -331,6 +331,25 @@ export function ModeBadges({
 }
 
 /** Enable/disable switch reused by the card and the detail header. */
+/**
+ * "Keep every run in one chat" row. A routine that fires often would otherwise
+ * fill the sidebar with one chat per firing.
+ */
+export function ReuseChatField({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 space-y-1">
+        <p className="text-xs font-medium">{t("routines.reuseChat.label")}</p>
+        <p className="text-[11px] text-muted-foreground">
+          {t(value ? "routines.reuseChat.hintOn" : "routines.reuseChat.hintOff")}
+        </p>
+      </div>
+      <Switch checked={value} onCheckedChange={onChange} aria-label={t("routines.reuseChat.label")} />
+    </div>
+  )
+}
+
 export function ActiveSwitch({ active, onChange }: { active: boolean; onChange: (v: boolean) => void }) {
   const { t } = useTranslation()
   return (
