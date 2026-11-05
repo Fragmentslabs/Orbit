@@ -179,7 +179,7 @@ export function IntegrationBar({
               <Button
                 size="sm"
                 variant="default"
-                className="h-7 rounded-r-none border border-primary"
+                className="h-7 rounded-r-none border border-primary disabled:opacity-100"
                 disabled={!target || busy !== null || nothingToMerge}
                 onClick={() => void merge()}
               >
