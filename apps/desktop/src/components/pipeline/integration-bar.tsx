@@ -68,7 +68,6 @@ export function IntegrationBar({
 
   const target = destination ?? defaultBranch
   const pendingCompleted = tasks.filter((x) => x.status === "completed" && !x.deliveryId).length
-  const delivered = tasks.some((x) => x.deliveryId)
   const nothingToMerge = !status || (status.ahead === 0 && status.dirty.length === 0)
 
   const merge = async () => {
@@ -159,14 +158,12 @@ export function IntegrationBar({
             {message.text}
           </span>
         )}
-        {delivered && (
-          <Hint label={t("pipeline.history.open")}>
-            <Button size="sm" variant="ghost" onClick={onOpenHistory}>
-              <HistoryIcon className="size-3.5" />
-              {t("pipeline.history.title")}
-            </Button>
-          </Hint>
-        )}
+        <Hint label={t("pipeline.history.open")}>
+          <Button size="sm" variant="ghost" onClick={onOpenHistory}>
+            <HistoryIcon className="size-3.5" />
+            {t("pipeline.history.title")}
+          </Button>
+        </Hint>
         {flow === "simple" ? (
           pendingCompleted > 0 && (
             <Button size="sm" variant="outline" disabled={busy === "archive"} onClick={() => void archive()}>
