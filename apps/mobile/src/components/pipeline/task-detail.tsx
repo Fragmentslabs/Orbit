@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { AlertTriangle, Check, Loader2, Pause, Play, Search, Terminal, Trash2, X } from 'lucide-react-native'
+import { AlertTriangle, Check, Loader2, Pause, Play, RotateCcw, Search, Terminal, Trash2, X } from 'lucide-react-native'
 import type { Pipeline, PhaseNote, Task } from '@orbit/shared'
 import { Input } from '~/components/ui/input'
 import { Textarea } from '~/components/ui/textarea'
@@ -43,6 +43,8 @@ export function TaskDetail({
   const startTask = usePipelineStore((s) => s.startTask)
   const pauseTask = usePipelineStore((s) => s.pauseTask)
   const resumeTask = usePipelineStore((s) => s.resumeTask)
+  const retryIntegration = usePipelineStore((s) => s.retryIntegration)
+  const reopenTask = usePipelineStore((s) => s.reopenTask)
 
   // Initial state from the props: the route mounts it with key={task.id}, so
   // switching task remounts and clears everything (no reset effect).
@@ -52,6 +54,8 @@ export function TaskDetail({
   const [depPicker, setDepPicker] = useState(false)
   const [depError, setDepError] = useState<string | null>(null)
 
+  // Delivered (archived) tasks are history: read-only, with "Reopen" as the way back.
+  const archived = !!task.deliveryId
   const hasError = task.pauseReason === 'error'
   const running = task.status === 'in_progress'
 
@@ -77,6 +81,23 @@ export function TaskDetail({
       setDepError(null)
     } catch (err) {
       setDepError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const reopen = async () => {
+    try {
+      await reopenTask(pipeline.id, task.id)
+      onClose()
+    } catch (err) {
+      Alert.alert(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const retry = async () => {
+    try {
+      await retryIntegration(pipeline.id, task.id)
+    } catch (err) {
+      Alert.alert(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -140,6 +161,9 @@ export function TaskDetail({
                 </Text>
               )}
             </View>
+            <Pressable onPress={() => void retry()} style={[s.bannerButton, { backgroundColor: tokens.primary }]}>
+              <Text style={[s.bannerButtonText, { color: tokens.primaryForeground }]}>{t('pipeline.integration.retry')}</Text>
+            </Pressable>
           </View>
         )}
 
@@ -161,9 +185,10 @@ export function TaskDetail({
             value={title}
             onChangeText={setTitle}
             onBlur={() => title.trim() !== task.title && title.trim() && void saveField({ title: title.trim() })}
+            editable={!archived}
             style={{ flex: 1 }}
           />
-          <Badge variant="secondary">{t(`pipeline.status.${task.status}`)}</Badge>
+          <Badge variant="secondary">{archived ? t('pipeline.archived') : t(`pipeline.status.${task.status}`)}</Badge>
         </View>
 
         {task.diff && task.diff.files.length > 0 && (
@@ -181,6 +206,7 @@ export function TaskDetail({
             value={description}
             onChangeText={setDescription}
             onBlur={() => description !== task.description && void saveField({ description })}
+            editable={!archived}
             style={{ minHeight: 72, maxHeight: 200 }}
           />
         </View>
@@ -287,7 +313,13 @@ export function TaskDetail({
           { borderTopColor: tokens.border, backgroundColor: tokens.background, paddingBottom: 12 + insets.bottom },
         ]}
       >
-        {task.status !== 'completed' && (
+        {archived && (
+          <Pressable onPress={() => void reopen()} style={[s.primaryAction, { backgroundColor: tokens.primary }]}>
+            <RotateCcw size={16} color={tokens.primaryForeground} />
+            <Text style={[s.primaryActionText, { color: tokens.primaryForeground }]}>{t('pipeline.reopen')}</Text>
+          </Pressable>
+        )}
+        {!archived && task.status !== 'completed' && (
           <Pressable
             onPress={() => {
               if (task.status === 'in_progress') void pauseTask(pipeline.id, task.id)
@@ -306,9 +338,11 @@ export function TaskDetail({
             </Text>
           </Pressable>
         )}
-        <Pressable onPress={confirmDeletion} style={[s.deleteAction, { borderColor: tokens.border }]}>
-          <Trash2 size={15} color={tokens.destructive} />
-        </Pressable>
+        {!archived && (
+          <Pressable onPress={confirmDeletion} style={[s.deleteAction, { borderColor: tokens.border }]}>
+            <Trash2 size={15} color={tokens.destructive} />
+          </Pressable>
+        )}
       </View>
 
       {depPicker && (

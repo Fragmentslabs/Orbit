@@ -2,7 +2,7 @@
  * Pipeline create/edit form — mirror of the desktop PipelineCreateDialog as a
  * route: name, folders (FolderSelector), default model, phases (add from the
  * templates via bottom sheet, reorder by drag & drop, edit, remove) and the
- * push/screenshots toggles. On creation the project is born together (owner of
+ * worktree / commit switches and parallel tasks. On creation the project is born together (owner of
  * the folders), with the same name — same flow as the desktop.
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -156,6 +156,9 @@ function PipelineFormBody({
     editing ? (projects.find((p) => p.id === editing.projectId)?.folders ?? []) : [],
   )
   const [commitAtEnd, setCommitAtEnd] = useState(editing?.commitAtEnd !== false)
+  const [worktreePerTask, setWorktreePerTask] = useState(editing ? !!editing.worktreePerTask : true)
+  const [parallelTasks, setParallelTasks] = useState(editing?.parallelTasks ?? 1)
+
   const [commitPrompt, setCommitPrompt] = useState(editing?.commitPrompt ?? '')
   const [promptOpen, setPromptOpen] = useState(false)
   // Editing starts from the REAL model of the pipeline (every phase shares it);
@@ -165,8 +168,27 @@ function PipelineFormBody({
       ? { providerId: editing.phases[0].providerId, modelId: editing.phases[0].modelId }
       : null,
   )
+  // Answer of the desktop for one folder; ignored once the first folder changes.
+  const [gitCheck, setGitCheck] = useState<{ folder: string; ok: boolean } | null>(null)
+  const hasGitCheck = usePipelineStore((st) => st.hasGit)
+  const hasGit = gitCheck && gitCheck.folder === folders[0] ? gitCheck.ok : null
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const folder = folders[0]
+    if (!folder) return
+    let cancelled = false
+    hasGitCheck(folder)
+      .then((ok) => !cancelled && setGitCheck({ folder, ok }))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [folders, hasGitCheck])
+
+  const useWorktrees = worktreePerTask && hasGit !== false
+  const mergeFlow = useWorktrees && commitAtEnd
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [addPhaseOpen, setAddPhaseOpen] = useState(false)
@@ -222,6 +244,9 @@ function PipelineFormBody({
         await updatePipeline(editing.id, {
           name: name.trim(),
           commitAtEnd,
+          worktreePerTask: useWorktrees,
+          parallelTasks: mergeFlow ? parallelTasks : 1,
+          ...(modelChanged ? { model: { providerId: model.providerId, modelId: model.modelId, reasoning: null } } : {}),
           ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : { commitPrompt: '' }),
           phases: phases.map((phase, order): PhaseConfig => {
             const previous = editing.phases[order]
@@ -258,6 +283,8 @@ function PipelineFormBody({
         providerId: model.providerId,
         modelId: model.modelId,
         commitAtEnd,
+        worktreePerTask: useWorktrees,
+        ...(mergeFlow && parallelTasks > 1 ? { parallelTasks } : {}),
         ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : {}),
       })
       onDone(pipeline)
@@ -351,14 +378,61 @@ function PipelineFormBody({
           </Pressable>
         </View>
 
-        <View style={{ gap: 10 }}>
-          <View style={s.switchRow}>
-            <Switch checked={commitAtEnd} onCheckedChange={setCommitAtEnd} />
-            <Text style={[s.switchText, { color: tokens.foreground }]}>{t('pipeline.commit')}</Text>
-            <Pressable onPress={() => setPromptOpen(true)} hitSlop={8}>
-              <Settings2 size={14} color={tokens.mutedForeground} />
-            </Pressable>
+        <View style={{ gap: 12 }}>
+          <View style={{ gap: 4 }}>
+            <View style={[s.switchRow, hasGit === false && { opacity: 0.6 }]}>
+              <Switch checked={useWorktrees} onCheckedChange={setWorktreePerTask} disabled={hasGit === false} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[s.switchText, { color: tokens.foreground }]}>{t('pipeline.worktreePerTask')}</Text>
+                <Text style={[s.hint, { color: tokens.mutedForeground }]}>{t('pipeline.worktreePerTaskHint')}</Text>
+              </View>
+            </View>
+            {hasGit === false && <Text style={[s.notice, { color: '#d97706' }]}>{t('pipeline.noGitNotice')}</Text>}
+            {hasGit !== false && !worktreePerTask && (
+              <Text style={[s.notice, { color: '#d97706' }]}>{t('pipeline.worktreeOffNotice')}</Text>
+            )}
           </View>
+
+          <View style={{ gap: 4 }}>
+            <View style={s.switchRow}>
+              <Switch checked={commitAtEnd} onCheckedChange={setCommitAtEnd} />
+              <Text style={[s.switchText, { color: tokens.foreground }]}>{t('pipeline.commit')}</Text>
+              <Pressable onPress={() => setPromptOpen(true)} hitSlop={8}>
+                <Settings2 size={14} color={tokens.mutedForeground} />
+              </Pressable>
+            </View>
+            {!commitAtEnd && (
+              <Text style={[s.notice, { color: '#d97706' }]}>
+                {t(useWorktrees ? 'pipeline.commitOffSharedNotice' : 'pipeline.commitOffNotice')}
+              </Text>
+            )}
+          </View>
+
+          {mergeFlow && (
+            <View style={{ gap: 6 }}>
+              <Text style={[s.switchText, { color: tokens.foreground }]}>{t('pipeline.parallelTasks')}</Text>
+              <Text style={[s.hint, { color: tokens.mutedForeground }]}>{t('pipeline.parallelTasksHint')}</Text>
+              <View style={s.stepper}>
+                {[1, 2, 3, 4].map((n) => (
+                  <Pressable
+                    key={n}
+                    onPress={() => setParallelTasks(n)}
+                    style={[
+                      s.stepperOption,
+                      { borderColor: tokens.border },
+                      parallelTasks === n && { backgroundColor: tokens.primary, borderColor: tokens.primary },
+                    ]}
+                  >
+                    <Text
+                      style={{ color: parallelTasks === n ? tokens.primaryForeground : tokens.foreground, fontWeight: '600' }}
+                    >
+                      {n}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         {error && (
@@ -541,6 +615,9 @@ const s = StyleSheet.create({
   addPhaseText: { fontSize: 11 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   switchText: { fontSize: 13 },
+  notice: { fontSize: 11, lineHeight: 15, paddingLeft: 52 },
+  stepper: { flexDirection: 'row', gap: 8 },
+  stepperOption: { width: 44, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 8 },
   error: { fontSize: 12, lineHeight: 17 },
   footer: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
   secondaryButton: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },

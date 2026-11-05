@@ -1,6 +1,10 @@
 import i18n from '~/i18n'
 import { create } from 'zustand'
 import type {
+  Delivery,
+  IntegrationStatus,
+  MergeOutcome,
+  PlannedTask,
   Pipeline,
   PipelineEvent,
   NewPipelineInput,
@@ -49,6 +53,8 @@ interface PipelineState {
   pipelines: Pipeline[]
   tasksByPipeline: Record<string, Task[]>
   templates: PhaseTemplate[]
+  /** Deliveries (Merge button history) by pipeline */
+  deliveriesByPipeline: Record<string, Delivery[]>
   /** Automatic queues that are on (pipeline id) */
   queuesEnabled: Record<string, boolean>
   /** Live text of the running phase, by task */
@@ -86,12 +92,37 @@ interface PipelineState {
   toggleQueue: (pipelineId: string, enabled: boolean) => Promise<void>
 
   tasksOf: (pipelineId: string) => Task[]
+
+  // Integration branch, Merge button, history and planner (all run on the desktop)
+  hasGit: (folder: string) => Promise<boolean>
+  loadDeliveries: (pipelineId: string) => Promise<void>
+  integrationStatus: (pipelineId: string) => Promise<IntegrationStatus | null>
+  destinations: (pipelineId: string) => Promise<{ branches: string[]; default?: string }>
+  merge: (pipelineId: string, destination?: string) => Promise<MergeOutcome>
+  commitIntegration: (pipelineId: string) => Promise<{ ok: boolean; hash?: string; error?: string }>
+  retryIntegration: (pipelineId: string, taskId: string) => Promise<void>
+  archiveCompleted: (pipelineId: string) => Promise<void>
+  deleteDelivery: (pipelineId: string, deliveryId: string) => Promise<void>
+  reopenTask: (pipelineId: string, taskId: string) => Promise<Task>
+  taskDiff: (pipelineId: string, taskId: string) => Promise<{ files: string[]; patch: string } | null>
+  removeTaskImage: (pipelineId: string, taskId: string, url: string) => Promise<void>
+  planTasks: (pipelineId: string, request: string) => Promise<PlannedTask[]>
+  createPlanned: (pipelineId: string, tasks: PlannedTask[]) => Promise<Task[]>
+}
+
+/** One request to the desktop; throws the desktop's message when it fails. */
+async function call<T>(request: Parameters<ReturnType<typeof useConnectionStore.getState>['wsClient']['send']>[0], fallback: string): Promise<T> {
+  const { wsClient } = useConnectionStore.getState()
+  const res = await wsClient.send(request)
+  if (!res.ok) throw new Error(res.error ?? fallback)
+  return res.data as T
 }
 
 export const usePipelineStore = create<PipelineState>((set, get) => ({
   projects: [],
   pipelines: [],
   tasksByPipeline: {},
+  deliveriesByPipeline: {},
   templates: [],
   queuesEnabled: {},
   progress: {},
@@ -182,6 +213,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       case 'tasks':
         set((state) => ({
           tasksByPipeline: { ...state.tasksByPipeline, [event.pipelineId]: event.tasks },
+        }))
+        break
+      case 'deliveries':
+        set((state) => ({
+          deliveriesByPipeline: { ...state.deliveriesByPipeline, [event.pipelineId]: event.deliveries },
         }))
         break
       case 'phase-progress':
@@ -338,4 +374,61 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   },
 
   tasksOf: (pipelineId) => get().tasksByPipeline[pipelineId] ?? EMPTY_TASKS,
+
+  hasGit: (folder) => call<boolean>({ type: 'pipeline:has-git', folder }, 'Failed to check git'),
+
+  loadDeliveries: async (pipelineId) => {
+    const deliveries = await call<Delivery[]>({ type: 'pipeline:deliveries', pipelineId }, 'Failed to load the history')
+    set((state) => ({ deliveriesByPipeline: { ...state.deliveriesByPipeline, [pipelineId]: deliveries } }))
+  },
+
+  integrationStatus: (pipelineId) =>
+    call<IntegrationStatus | null>({ type: 'pipeline:integration', pipelineId }, 'Failed to read the integration'),
+
+  destinations: (pipelineId) =>
+    call<{ branches: string[]; default?: string }>({ type: 'pipeline:destinations', pipelineId }, 'Failed to list branches'),
+
+  merge: (pipelineId, destination) =>
+    call<MergeOutcome>({ type: 'pipeline:merge', pipelineId, destination }, 'Failed to merge'),
+
+  commitIntegration: (pipelineId) =>
+    call<{ ok: boolean; hash?: string; error?: string }>({ type: 'pipeline:commit-integration', pipelineId }, 'Failed to commit'),
+
+  retryIntegration: async (pipelineId, taskId) => {
+    await call<void>({ type: 'pipeline:retry-integration', pipelineId, taskId }, 'Failed to retry the merge')
+  },
+
+  archiveCompleted: async (pipelineId) => {
+    await call<void>({ type: 'pipeline:archive-completed', pipelineId }, 'Failed to archive')
+  },
+
+  deleteDelivery: async (pipelineId, deliveryId) => {
+    await call<void>({ type: 'pipeline:delete-delivery', pipelineId, deliveryId }, 'Failed to delete the delivery')
+    set((state) => ({
+      deliveriesByPipeline: {
+        ...state.deliveriesByPipeline,
+        [pipelineId]: (state.deliveriesByPipeline[pipelineId] ?? []).filter((d) => d.id !== deliveryId),
+      },
+      // The delivery's archived tasks are removed with it.
+      tasksByPipeline: {
+        ...state.tasksByPipeline,
+        [pipelineId]: (state.tasksByPipeline[pipelineId] ?? []).filter((x) => x.deliveryId !== deliveryId),
+      },
+    }))
+  },
+
+  reopenTask: (pipelineId, taskId) => call<Task>({ type: 'pipeline:reopen-task', pipelineId, taskId }, 'Failed to reopen the task'),
+
+  taskDiff: (pipelineId, taskId) =>
+    call<{ files: string[]; patch: string } | null>({ type: 'pipeline:task-diff', pipelineId, taskId }, 'Failed to read the diff'),
+
+  removeTaskImage: async (pipelineId, taskId, url) => {
+    await call<unknown>({ type: 'pipeline:remove-task-image', pipelineId, taskId, url }, 'Failed to remove the image')
+  },
+
+  planTasks: (pipelineId, request) =>
+    call<PlannedTask[]>({ type: 'pipeline:plan-tasks', pipelineId, request }, 'Failed to plan the tasks'),
+
+  createPlanned: (pipelineId, tasks) =>
+    call<Task[]>({ type: 'pipeline:create-planned', pipelineId, tasks }, 'Failed to create the tasks'),
 }))

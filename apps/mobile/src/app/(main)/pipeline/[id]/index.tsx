@@ -98,7 +98,7 @@ export default function PipelineBoardScreen() {
           </Text>
           <Text style={[s.subtitle, { color: tokens.mutedForeground }]} numberOfLines={1}>
             {pipeline.phases.map((p) => p.name).join(' → ')}
-            {pipeline.branch ? ` · ${pipeline.branch}` : ''}
+            {(pipeline.integration?.branch ?? pipeline.branch) ? ` · ${pipeline.integration?.branch ?? pipeline.branch}` : ''}
           </Text>
         </View>
         {/* Automatic queue: ghost icon — grey play (off) / yellow pause (on) */}

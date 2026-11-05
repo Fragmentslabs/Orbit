@@ -41,6 +41,8 @@ export default function MainLayout() {
             <Stack.Screen name="pipeline/new" />
             <Stack.Screen name="pipeline/[id]/index" />
             <Stack.Screen name="pipeline/[id]/edit" />
+            <Stack.Screen name="pipeline/[id]/history" />
+            <Stack.Screen name="pipeline/[id]/task/plan" />
             <Stack.Screen name="pipeline/[id]/task/new" />
             <Stack.Screen name="pipeline/[id]/task/[taskId]" />
 

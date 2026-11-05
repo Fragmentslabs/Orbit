@@ -27,6 +27,7 @@ import { usePipelineStore, EMPTY_TASKS } from '~/stores/pipeline-store'
 import { formatCost, formatDuration, formatTokens } from '~/lib/format'
 import { Spin } from '~/components/ui/spin'
 import { TaskCard } from './task-card'
+import { IntegrationStrip } from './integration-strip'
 import { BoardDragProvider, DraggableCard, useBoardDrag } from './board-drag'
 import { blockingDependency, nextInQueue, validPhasesForDrop } from './pipeline-utils'
 
@@ -114,9 +115,12 @@ function BoardBody({ pipeline }: { pipeline: Pipeline }) {
         scrollEventThrottle={16}
         contentContainerStyle={{ padding: 12, gap: 8, paddingBottom: 96 }}
       >
-        {/* Add task — full width, at the top of the board */}
+        {/* Integration branch, pipeline model, history and Merge */}
+        <IntegrationStrip pipeline={pipeline} tasks={allTasks} />
+
+        {/* Add task (one entry: it opens the planner, which has a way to skip to the manual form) */}
         <Pressable
-          onPress={() => router.push(`/(main)/pipeline/${pipeline.id}/task/new`)}
+          onPress={() => router.push(`/(main)/pipeline/${pipeline.id}/task/plan`)}
           style={[s.newTaskBtn, { backgroundColor: tokens.primary }]}
         >
           <Plus size={16} color={tokens.primaryForeground} />
@@ -160,7 +164,7 @@ function BoardBody({ pipeline }: { pipeline: Pipeline }) {
                     {t('pipeline.noPending')}
                   </Text>
                   <Pressable
-                    onPress={() => router.push(`/(main)/pipeline/${pipeline.id}/task/new`)}
+                    onPress={() => router.push(`/(main)/pipeline/${pipeline.id}/task/plan`)}
                     style={[s.pendingEmptyBtn, { borderColor: tokens.border }]}
                   >
                     <Plus size={13} color={tokens.foreground} />

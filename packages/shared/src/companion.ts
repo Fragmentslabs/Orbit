@@ -10,6 +10,7 @@ import type { AnalyticsRange } from './analytics'
 import type { NewRoutineInput, Routine, RoutineEvent, RoutineModel } from './routines'
 import type {
   NewPipelineInput,
+  PlannedTask,
   NewTaskInput,
   PhaseTemplate,
   Pipeline,
@@ -669,6 +670,88 @@ export interface SavePipelineTemplateRequest {
   template: PhaseTemplate
 }
 
+// Integration branch, Merge button, history and planner (mirror of the desktop IPC).
+
+export interface PipelineHasGitRequest {
+  type: 'pipeline:has-git'
+  folder: string
+}
+
+export interface PipelineDeliveriesRequest {
+  type: 'pipeline:deliveries'
+  pipelineId: string
+}
+
+export interface PipelineIntegrationRequest {
+  type: 'pipeline:integration'
+  pipelineId: string
+}
+
+export interface PipelineDestinationsRequest {
+  type: 'pipeline:destinations'
+  pipelineId: string
+}
+
+export interface PipelineMergeRequest {
+  type: 'pipeline:merge'
+  pipelineId: string
+  destination?: string
+}
+
+export interface PipelineCommitIntegrationRequest {
+  type: 'pipeline:commit-integration'
+  pipelineId: string
+}
+
+export interface PipelineRetryIntegrationRequest {
+  type: 'pipeline:retry-integration'
+  pipelineId: string
+  taskId: string
+}
+
+export interface PipelineArchiveCompletedRequest {
+  type: 'pipeline:archive-completed'
+  pipelineId: string
+}
+
+export interface PipelineDeleteDeliveryRequest {
+  type: 'pipeline:delete-delivery'
+  pipelineId: string
+  deliveryId: string
+}
+
+export interface PipelineReopenTaskRequest {
+  type: 'pipeline:reopen-task'
+  pipelineId: string
+  taskId: string
+}
+
+export interface PipelineTaskDiffRequest {
+  type: 'pipeline:task-diff'
+  pipelineId: string
+  taskId: string
+}
+
+export interface PipelineRemoveTaskImageRequest {
+  type: 'pipeline:remove-task-image'
+  pipelineId: string
+  taskId: string
+  url: string
+}
+
+/** Asks the pipeline model to split a request into tasks (nothing is created yet). */
+export interface PipelinePlanTasksRequest {
+  type: 'pipeline:plan-tasks'
+  pipelineId: string
+  request: string
+}
+
+export interface PipelineCreatePlannedRequest {
+  type: 'pipeline:create-planned'
+  pipelineId: string
+  tasks: PlannedTask[]
+}
+
 // ─── Plan Review (Plan mode) ──────────────────────────────────────────────────
 
 export interface ReadPlanFileRequest {
@@ -789,6 +872,20 @@ export type CompanionRequest =
   | ResumePipelineTaskRequest
   | TogglePipelineQueueRequest
   | SavePipelineTemplateRequest
+  | PipelineHasGitRequest
+  | PipelineDeliveriesRequest
+  | PipelineIntegrationRequest
+  | PipelineDestinationsRequest
+  | PipelineMergeRequest
+  | PipelineCommitIntegrationRequest
+  | PipelineRetryIntegrationRequest
+  | PipelineArchiveCompletedRequest
+  | PipelineDeleteDeliveryRequest
+  | PipelineReopenTaskRequest
+  | PipelineTaskDiffRequest
+  | PipelineRemoveTaskImageRequest
+  | PipelinePlanTasksRequest
+  | PipelineCreatePlannedRequest
   | RevertSessionRequest
   | UnrevertSessionRequest
   | RevertUncertainSessionRequest

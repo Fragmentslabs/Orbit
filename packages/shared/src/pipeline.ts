@@ -493,6 +493,18 @@ export interface NewPipelineInput {
   operationMode?: 'manual' | 'automatic'
 }
 
+/** The integration branch at a glance (what the Merge button acts on). */
+export interface IntegrationStatus {
+  branch: string
+  base: string
+  /** Commits on the integration that its base does not have */
+  ahead: number
+  /** Uncommitted files in the integration worktree */
+  dirty: string[]
+  /** Tasks waiting or being merged */
+  queued: number
+}
+
 /** A task proposed by the planner, before the person approves it. */
 export interface PlannedTask {
   title: string
