@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2Icon, SparklesIcon, Trash2Icon } from "lucide-react"
+import { Loader2Icon, PencilIcon, SparklesIcon, Trash2Icon } from "lucide-react"
 import type { PlannedTask, Pipeline } from "@shared/pipeline"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -19,6 +19,7 @@ export function TaskPlanDialog({
   onOpenChange,
   initialRequest = "",
   onCreated,
+  onManual,
 }: {
   pipeline: Pipeline
   open: boolean
@@ -27,6 +28,8 @@ export function TaskPlanDialog({
   initialRequest?: string
   /** After the approved tasks were created */
   onCreated?: (count: number) => void
+  /** Skip the planner and fill the task by hand */
+  onManual?: () => void
 }) {
   const { t } = useTranslation()
   const [request, setRequest] = useState("")
@@ -103,6 +106,19 @@ export function TaskPlanDialog({
             />
             {error && <p className="text-xs text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
+              {onManual && (
+                <Button
+                  variant="outline"
+                  className="mr-auto"
+                  onClick={() => {
+                    onOpenChange(false)
+                    onManual()
+                  }}
+                >
+                  <PencilIcon className="size-3.5" />
+                  {t("pipeline.plan.manual")}
+                </Button>
+              )}
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 {t("common.cancel")}
               </Button>

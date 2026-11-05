@@ -174,15 +174,16 @@ export function IntegrationBar({
             </Button>
           )
         ) : (
-          <div className="flex items-center">
+          <div className={cn("flex items-center -space-x-px", (!target || nothingToMerge) && "opacity-50")}>
             <Hint label={t("pipeline.merge.hint", { branch: target ?? "…" })}>
               <Button
                 size="sm"
-                className="rounded-r-none"
+                variant="default"
+                className="h-7 rounded-r-none border border-primary"
                 disabled={!target || busy !== null || nothingToMerge}
                 onClick={() => void merge()}
               >
-                {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : <GitMergeIcon className="size-3.5" />}
+                {busy ? <Loader2Icon className="size-4 animate-spin" /> : <GitMergeIcon className="size-4" />}
                 {target ? t("pipeline.merge.into", { branch: target }) : t("pipeline.merge.button")}
               </Button>
             </Hint>
@@ -190,9 +191,9 @@ export function IntegrationBar({
               <DropdownMenuTrigger
                 aria-label={t("pipeline.merge.chooseBranch")}
                 disabled={busy !== null || branches.length === 0}
-                className="flex h-7 items-center rounded-r-md border-l border-primary-foreground/20 bg-primary px-1.5 text-primary-foreground disabled:opacity-50"
+                className="flex h-7 items-center justify-center rounded-l-none rounded-r-md border border-primary bg-primary px-1.5 text-primary-foreground shadow hover:bg-primary/90 disabled:pointer-events-none"
               >
-                <ChevronDownIcon className="size-3.5" />
+                <ChevronDownIcon className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="max-h-72 min-w-44 overflow-y-auto">
                 {branches.map((branch) => (
