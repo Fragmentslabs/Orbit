@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { formatDesignQuoteText } from "@shared/chat"
-import { DESIGN_SOURCE, boardForHref, hexToRgb, hsvToHex, isTextPath, orderAfterMove, parseRuntimeMessage, rgbToHex, rgbToHsv, samePath, splitDeclarations, toHex, withDeclaration } from "./design-protocol"
+import { DESIGN_SOURCE, boardForHref, stepOrder, hexToRgb, hsvToHex, isTextPath, orderAfterMove, parseRuntimeMessage, rgbToHex, rgbToHsv, samePath, splitDeclarations, toHex, withDeclaration } from "./design-protocol"
 
 describe("boardForHref", () => {
   const files = ["Tela1.html", "Pricing.html", "sub/Detail.html"]
@@ -291,5 +291,14 @@ describe("formatDesignQuoteText", () => {
     expect(text).toContain("Canvas folder: C:/proj/design/logo")
     expect(text).toContain("Selection: the whole artboard.")
     expect(text).not.toContain("---")
+  })
+})
+
+describe("stepOrder", () => {
+  it("steps a child up and down, and refuses at the edges", () => {
+    expect(stepOrder(3, 1, "up")).toEqual([1, 0, 2])
+    expect(stepOrder(3, 1, "down")).toEqual([0, 2, 1])
+    expect(stepOrder(3, 0, "up")).toBeNull()
+    expect(stepOrder(3, 2, "down")).toBeNull()
   })
 })

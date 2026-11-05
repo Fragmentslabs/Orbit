@@ -2,7 +2,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   Code2,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  FileImage,
+  Group,
+  LayoutPanelLeft,
+  Trash2,
   Hand,
   Layers,
   LayoutGrid,
@@ -32,10 +42,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { IconAction } from "@/src/components/ai/artifact-part"
 import { DesignCode } from "@/src/components/design/design-code"
+import { DesignContextMenu, type DesignMenuItem } from "@/src/components/design/design-context-menu"
 import { DesignLayers } from "@/src/components/design/design-layers"
 import { DesignPresenter } from "@/src/components/design/design-presenter"
 import { planDesignReload } from "@/src/components/design/design-reload"
@@ -44,6 +57,7 @@ import { DesignProperties, type DesignBoardView, type DesignPropertiesTarget } f
 import {
   DESIGN_SOURCE,
   applyWrap,
+  duplicateNodes,
   boardForHref,
   editHtml,
   isTextPath,
@@ -56,6 +70,7 @@ import {
   samePath,
   setInlineStyle,
   setTextNode,
+  stepOrder,
   type DesignElementInfo,
   type DesignRect,
   type DesignTreeNode,
@@ -310,6 +325,35 @@ function DesignEditor({
     setFileVersions({})
     load()
   }, [load])
+
+  /** Export in progress (hidden Chromium windows) and its failure. */
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  /** Artboards hidden by the eye (view state; never written to the files). */
+  const [hiddenBoards, setHiddenBoards] = useState<Set<string>>(() => new Set())
+  /** Right-click menu: where it is and what it acts on. */
+  const [menu, setMenu] = useState<{ x: number; y: number; scope: "element" | "frame"; file: string } | null>(null)
+  const exportDesign = useCallback(
+    async (format: "pdf" | "png", files?: string[]) => {
+      if (!designId || exporting) return
+      setExporting(true)
+      setExportError(null)
+      try {
+        const result = await designApi.export(
+          designId,
+          format,
+          title,
+          files,
+        )
+        if (!result.ok && !result.canceled) setExportError(result.error ?? t("design.exportFailed"))
+      } catch {
+        setExportError(t("design.exportFailed"))
+      } finally {
+        setExporting(false)
+      }
+    },
+    [designId, exporting, title, t],
+  )
 
   const boards = useMemo<DesignBoardView[]>(() => {
     if (state.status !== "ready") return []
@@ -869,8 +913,70 @@ function DesignEditor({
     [groupRects, mutateSourceHtml, post, selRect],
   )
 
+  /** Duplicates the selection (or the whole group): each clone enters right after its original. */
+  const duplicateSelected = useCallback(() => {
+    const sel = selectionRef.current
+    if (!sel?.path || sel.path.length === 0) return
+    const group = groupPathsRef.current.filter((p) => p.length > 0)
+    const paths = group.length > 1 ? group : [sel.path]
+    // Not quiet: the structure changed, so the disk notice reloads the artboard.
+    void mutateSourceHtml(sel.file, (html) => duplicateNodes(html, paths), false)
+  }, [mutateSourceHtml])
+
+  /** Moves the selected element one step up/down among its siblings (in the Layers order). */
+  const stepSelected = useCallback(
+    (direction: "up" | "down") => {
+      const sel = selectionRef.current
+      if (!sel?.path || sel.path.length === 0) return
+      const index = sel.path[sel.path.length - 1]
+      if (index < 0) return
+      const parent = sel.path.slice(0, -1)
+      const planRef = { current: null as number[] | null }
+      void mutateSourceHtml(
+        sel.file,
+        (html) =>
+          editHtml(html, parent, (el) => {
+            const order = stepOrder(el.children.length, index, direction)
+            planRef.current = order
+            if (order) reorderChildren(el, order)
+          }),
+        true,
+      ).then(() => {
+        if (!planRef.current) return
+        post(sel.file, { type: "reorder", parent, order: planRef.current })
+        select({ file: sel.file, path: [...parent, direction === "up" ? index - 1 : index + 1] })
+      })
+    },
+    [mutateSourceHtml, post, select],
+  )
+
+  /** The eye: hides/shows an element (bridge, live DOM) or a whole artboard. */
+  const toggleHidden = useCallback(
+    (file: string, path: ElementPath | null) => {
+      if (path && path.length > 0) {
+        post(file, { type: "hide", path })
+        return
+      }
+      setHiddenBoards((prev) => {
+        const next = new Set(prev)
+        if (next.has(file)) next.delete(file)
+        else next.add(file)
+        return next
+      })
+    },
+    [post],
+  )
+
+  const toggleHiddenSelected = useCallback(() => {
+    const sel = selectionRef.current
+    if (!sel) return
+    const group = groupPathsRef.current.filter((p) => p.length > 0)
+    if (sel.path && sel.path.length > 0) for (const p of group.length > 1 ? group : [sel.path]) toggleHidden(sel.file, p)
+    else toggleHidden(sel.file, null)
+  }, [toggleHidden])
+
   const handleKey = useCallback(
-    (key: { key: string; code: string; ctrl: boolean; meta: boolean; shift: boolean; phase: "down" | "up" }): boolean => {
+    (key: { key: string; code: string; ctrl: boolean; meta: boolean; shift: boolean; alt?: boolean; phase: "down" | "up" }): boolean => {
       if (key.key === " ") {
         setSpaceHeld(key.phase === "down")
         return true
@@ -892,6 +998,18 @@ function DesignEditor({
       }
       if (mod && key.key === "0") {
         zoomCenter(() => 1)
+        return true
+      }
+      if (mod && lower === "d") {
+        duplicateSelected()
+        return true
+      }
+      if (mod && key.shift && lower === "h") {
+        toggleHiddenSelected()
+        return true
+      }
+      if (key.alt && (key.key === "ArrowUp" || key.key === "ArrowDown")) {
+        stepSelected(key.key === "ArrowUp" ? "up" : "down")
         return true
       }
       if (mod && lower === "g") {
@@ -935,7 +1053,7 @@ function DesignEditor({
       }
       return false
     },
-    [deleteSelected, fit, select, undo, wrapSelected, zoomCenter],
+    [deleteSelected, duplicateSelected, fit, select, stepSelected, toggleHiddenSelected, undo, wrapSelected, zoomCenter],
   )
 
   useEffect(() => {
@@ -1033,6 +1151,17 @@ function DesignEditor({
         case "key":
           handleKey(msg)
           break
+        case "context": {
+          // The bridge reports the pointer inside the iframe (artboard pixels); the canvas is
+          // scaled, so the screen position comes from the iframe's real rectangle.
+          const frame = iframes.current.get(file)
+          const board = boardsRef.current.find((b) => b.file === file)
+          if (!frame || !board) break
+          const rect = frame.getBoundingClientRect()
+          const scale = rect.width / Math.max(1, board.w)
+          setMenu({ x: rect.left + msg.x * scale, y: rect.top + msg.y * scale, scope: "element", file })
+          break
+        }
         case "focus": {
           // Fallback: usually the native mousedown of the double click has already given
           // focus to the iframe. We only intervene if it is still in the panel —
@@ -1438,6 +1567,18 @@ function DesignEditor({
             group={groupPaths}
             onSelect={selectLayer}
             onMove={moveLayer}
+            hiddenBoards={hiddenBoards}
+            onToggleHidden={toggleHidden}
+            onContextMenu={(file, p, x, y) => {
+              const target = p && p.length > 0 ? p : null
+              const current = selectionRef.current
+              const inSelection =
+                target &&
+                current?.file === file &&
+                (samePath(current.path, target) || groupPathsRef.current.some((g) => samePath(g, target)))
+              if (!inSelection) selectLayer(file, target, false)
+              setMenu({ x, y, scope: target ? "element" : "frame", file })
+            }}
             onHover={(file, p) => {
               if (!file) {
                 for (const each of iframes.current.keys()) post(each, { type: "hover", path: null })
@@ -1489,6 +1630,56 @@ function DesignEditor({
   // The card is a column on the right when the tab is wide and a strip at the bottom when
   // it is not. ONE variable decides the layout and the icon, so the button can never point
   // at a side the card is not on.
+  const mod = /mac|iphone|ipad/i.test(navigator.platform) ? "⌘" : "Ctrl+"
+  const contextItems = (m: { scope: "element" | "frame"; file: string }): DesignMenuItem[] => {
+    if (m.scope === "frame") {
+      const frameHidden = hiddenBoards.has(m.file)
+      return [
+        { label: t("design.present.playHere"), icon: Play, disabled: !canPlay(m.file), onSelect: () => startPlay(m.file) },
+        {
+          label: t("design.present.playTab"),
+          icon: ExternalLink,
+          disabled: !canPlay(m.file) || !designId,
+          onSelect: () => designId && usePanelStore.getState().openDesignPlayTab(designId, m.file, fullscreen),
+        },
+        { separator: true },
+        { label: t("design.exportPdf"), icon: Download, disabled: exporting, onSelect: () => void exportDesign("pdf", [m.file]) },
+        { label: t("design.exportPng"), icon: FileImage, disabled: exporting, onSelect: () => void exportDesign("png", [m.file]) },
+        { separator: true },
+        {
+          label: t(frameHidden ? "design.layersShow" : "design.layersHide"),
+          icon: frameHidden ? Eye : EyeOff,
+          onSelect: () => toggleHidden(m.file, null),
+        },
+      ]
+    }
+    const sel = selectionRef.current
+    const members = groupPaths.filter((p) => p.length > 0)
+    const multi = members.length >= 2
+    const selTree = sel?.path && sel.path.length > 0 ? trees[sel.file] : undefined
+    const nodeAt = (node: DesignTreeNode | undefined, p: ElementPath): DesignTreeNode | undefined =>
+      p.reduce<DesignTreeNode | undefined>((acc, i) => (i >= 0 ? acc?.children.find((c) => c.path[c.path.length - 1] === i) : undefined), node)
+    const isHidden = Boolean(sel?.path && nodeAt(selTree, sel.path)?.hidden)
+    const hasEl = Boolean(sel?.path && sel.path.length > 0)
+    return [
+      { label: t("design.ctx.duplicate"), icon: Copy, shortcut: `${mod}D`, disabled: !hasEl, onSelect: duplicateSelected },
+      { label: t("design.ctx.delete"), icon: Trash2, shortcut: "⌫", disabled: !hasEl, destructive: true, onSelect: deleteSelected },
+      { separator: true },
+      { label: t("design.ctx.group"), icon: Group, shortcut: `${mod}G`, disabled: !multi, onSelect: () => wrapSelected("block") },
+      { label: t("design.ctx.autoLayout"), icon: LayoutPanelLeft, shortcut: "⇧A", disabled: !multi, onSelect: () => wrapSelected("flex") },
+      { separator: true },
+      { label: t("design.ctx.moveUp"), icon: ArrowUp, shortcut: "⌥↑", disabled: !hasEl || multi, onSelect: () => stepSelected("up") },
+      { label: t("design.ctx.moveDown"), icon: ArrowDown, shortcut: "⌥↓", disabled: !hasEl || multi, onSelect: () => stepSelected("down") },
+      {
+        label: t(isHidden ? "design.layersShow" : "design.layersHide"),
+        icon: isHidden ? Eye : EyeOff,
+        shortcut: `${mod}⇧H`,
+        disabled: !hasEl,
+        onSelect: toggleHiddenSelected,
+      },
+    ]
+  }
+
   const inspectorBelow = !wide
   const InspectorIcon = inspectorOpen
     ? inspectorBelow
@@ -1584,6 +1775,30 @@ function DesignEditor({
               load()
             }}
           />
+          <DropdownMenu>
+            <Hint label={exporting ? t("design.exporting") : t("design.export")}>
+              <DropdownMenuTrigger
+                disabled={exporting || !designId || boards.length === 0}
+                aria-label={t("design.export")}
+                className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              >
+                {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              </DropdownMenuTrigger>
+            </Hint>
+            <DropdownMenuContent align="end" className="min-w-44">
+              <DropdownMenuLabel>{t("design.exportAll")}</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => exportDesign("pdf")}>{t("design.exportPdf")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportDesign("png")}>{t("design.exportPng")}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t("design.exportSelection")}</DropdownMenuLabel>
+              <DropdownMenuItem disabled={!selection} onClick={() => exportDesign("pdf", selection ? [selection.file] : undefined)}>
+                {t("design.exportPdf")}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!selection} onClick={() => exportDesign("png", selection ? [selection.file] : undefined)}>
+                {t("design.exportPng")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <IconAction
             icon={fullscreen ? Minimize2 : Maximize2}
             label={t(fullscreen ? "design.exitFullscreen" : "design.fullscreen")}
@@ -1605,6 +1820,18 @@ function DesignEditor({
         <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="break-words">{state.message}</span>
+        </div>
+      )}
+      {menu && (
+        <DesignContextMenu x={menu.x} y={menu.y} items={contextItems(menu)} onClose={() => setMenu(null)} />
+      )}
+      {exportError && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 break-words">{exportError}</span>
+          <button type="button" aria-label={t("common.close")} onClick={() => setExportError(null)}>
+            <X className="size-3" />
+          </button>
         </div>
       )}
       {saveError && (
@@ -1683,9 +1910,16 @@ function DesignEditor({
                       <div
                         className={cn(
                           "min-w-0 cursor-default truncate font-medium whitespace-nowrap",
+                          hiddenBoards.has(board.file) && "opacity-50",
                           isBoardSelected || isPlaying ? "text-primary" : "text-muted-foreground hover:text-foreground",
                         )}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          select({ file: board.file, path: null })
+                          setMenu({ x: e.clientX, y: e.clientY, scope: "frame", file: board.file })
+                        }}
                         onPointerDown={(e) => {
+                          if (e.button === 2) return
                           if (panning || e.button !== 0) return startPan(e, false)
                           e.preventDefault()
                           e.stopPropagation()
@@ -1747,6 +1981,7 @@ function DesignEditor({
                     style={{
                       width: board.w,
                       height: board.h,
+                      visibility: hiddenBoards.has(board.file) ? "hidden" : undefined,
                       outline: isPlaying
                         ? `${2 / zoom}px solid var(--primary)`
                         : `${1 / zoom}px solid color-mix(in oklab, var(--border) 80%, transparent)`,

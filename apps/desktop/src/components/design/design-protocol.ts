@@ -25,6 +25,8 @@ export interface DesignTreeNode {
   text: string
   kind: DesignNodeKind
   path: ElementPath
+  /** Hidden by the eye of the Layers list (view state of the live DOM). */
+  hidden?: boolean
   children: DesignTreeNode[]
 }
 
@@ -63,6 +65,7 @@ export type RuntimeMessage =
   | { type: "wheel"; dx: number; dy: number; mode: number; ctrl: boolean; shift: boolean; x: number; y: number }
   | { type: "key"; phase: "down" | "up"; key: string; code: string; ctrl: boolean; meta: boolean; shift: boolean; alt: boolean }
   | { type: "focus" }
+  | { type: "context"; x: number; y: number }
   | { type: "textEdited"; path: ElementPath; html: string }
   | { type: "reorder"; parent: ElementPath; order: number[] }
   | { type: "move"; paths: ElementPath[]; parent: ElementPath; index: number }
@@ -147,6 +150,7 @@ function asTree(value: unknown, depth = 0): DesignTreeNode | null {
     text: typeof n.text === "string" ? n.text.slice(0, 80) : "",
     kind: KINDS.has(n.kind as DesignNodeKind) ? (n.kind as DesignNodeKind) : "box",
     path,
+    ...(n.hidden === true ? { hidden: true } : {}),
     children,
   }
 }
@@ -201,6 +205,8 @@ export function parseRuntimeMessage(raw: unknown): RuntimeMessage | null {
       return { type: "info", path: asPath(m.path), info: asInfo(m.info) }
     case "rects":
       return { type: "rects", selected: asRect(m.selected), hover: asRect(m.hover), group: asRectList(m.group) }
+    case "context":
+      return isNum(m.x) && isNum(m.y) ? { type: "context", x: m.x, y: m.y } : null
     case "wheel":
       return isNum(m.dx) && isNum(m.dy)
         ? { type: "wheel", dx: m.dx, dy: m.dy, mode: isNum(m.mode) ? m.mode : 0, ctrl: m.ctrl === true, shift: m.shift === true, x: isNum(m.x) ? m.x : 0, y: isNum(m.y) ? m.y : 0 }
@@ -665,4 +671,34 @@ export function hsvToHex({ h, s, v }: Hsv): string {
   else if (h < 300) rgb = [x, 0, c]
   else rgb = [c, 0, x]
   return rgbToHex({ r: (rgb[0] + m) * 255, g: (rgb[1] + m) * 255, b: (rgb[2] + m) * 255 })
+}
+
+/**
+ * Duplicates the nodes of `paths`: each clone enters right after its original.
+ * Addresses are resolved BEFORE any change (same contract as removeNodes).
+ */
+export function duplicateNodes(html: string, paths: ElementPath[]): string {
+  const doc = new DOMParser().parseFromString(html, "text/html")
+  const nodes: Node[] = []
+  for (const path of paths) {
+    const el = elementAt(doc, path)
+    const node: Node | null = el ?? textNodeAt(doc, path)
+    if (node && nodes.indexOf(node) < 0) nodes.push(node)
+  }
+  if (nodes.length === 0) throw new Error("duplicate: node not found in the artboard source")
+  for (const node of nodes) node.parentNode?.insertBefore(node.cloneNode(true), node.nextSibling)
+  return serializeHtml(doc, html)
+}
+
+/**
+ * The new order of a parent's ELEMENT children when the child `index` moves one
+ * step up (earlier in the list) or down. `null` when it is already at the edge.
+ */
+export function stepOrder(count: number, index: number, direction: "up" | "down"): number[] | null {
+  const target = direction === "up" ? index - 1 : index + 1
+  if (index < 0 || index >= count || target < 0 || target >= count) return null
+  const order = Array.from({ length: count }, (_, i) => i)
+  order[index] = target
+  order[target] = index
+  return order
 }

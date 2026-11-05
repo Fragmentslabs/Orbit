@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Box, ChevronRight, ImageIcon, LayoutGrid, Loader2, MousePointerClick, Shapes, Type, type LucideIcon } from "lucide-react"
+import { Box, ChevronRight, Eye, EyeOff, ImageIcon, LayoutGrid, Loader2, MousePointerClick, Shapes, Type, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { samePath, type DesignNodeKind, type DesignTreeNode, type DropMode, type ElementPath } from "./design-protocol"
 import type { DesignBoardView } from "./design-properties"
@@ -46,9 +46,26 @@ interface Props {
   onHover: (file: string | null, path: ElementPath | null) => void
   /** Layer drag: `fromPath` was dropped over `targetPath`. */
   onMove: (file: string, fromPath: ElementPath, targetPath: ElementPath, mode: DropMode) => void
+  /** Artboards hidden on the canvas (the element ones come in the tree as `hidden`). */
+  hiddenBoards: Set<string>
+  /** The eye: `path` null = the whole artboard. */
+  onToggleHidden: (file: string, path: ElementPath | null) => void
+  /** Right click on a row (`path` null = the artboard), at the pointer's screen position. */
+  onContextMenu: (file: string, path: ElementPath | null, x: number, y: number) => void
 }
 
-export function DesignLayers({ boards, trees, selection, group, onSelect, onHover, onMove }: Props) {
+export function DesignLayers({
+  boards,
+  trees,
+  selection,
+  group,
+  onSelect,
+  onHover,
+  onMove,
+  hiddenBoards,
+  onToggleHidden,
+  onContextMenu,
+}: Props) {
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   /** Where the dropped row is going to land (row + mode) — the drag guide. */
@@ -84,22 +101,23 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
     })
 
   const rows = useMemo(() => {
-    const out: { file: string; node: DesignTreeNode | null; board?: DesignBoardView; depth: number; key: string; hasChildren: boolean }[] = []
+    const out: { file: string; node: DesignTreeNode | null; board?: DesignBoardView; depth: number; key: string; hasChildren: boolean; inheritedHidden: boolean }[] = []
     for (const board of boards) {
       const tree = trees[board.file]
       const boardKey = keyOf(board.file, [])
-      out.push({ file: board.file, node: null, board, depth: 0, key: boardKey, hasChildren: Boolean(tree?.children.length) })
+      out.push({ file: board.file, node: null, board, depth: 0, key: boardKey, hasChildren: Boolean(tree?.children.length), inheritedHidden: false })
       if (!tree || collapsed.has(boardKey)) continue
-      const walk = (node: DesignTreeNode, depth: number) => {
+      const boardHidden = hiddenBoards.has(board.file)
+      const walk = (node: DesignTreeNode, depth: number, ancestorHidden: boolean) => {
         const key = keyOf(board.file, node.path)
-        out.push({ file: board.file, node, depth, key, hasChildren: node.children.length > 0 })
+        out.push({ file: board.file, node, depth, key, hasChildren: node.children.length > 0, inheritedHidden: ancestorHidden })
         if (collapsed.has(key)) return
-        for (const child of node.children) walk(child, depth + 1)
+        for (const child of node.children) walk(child, depth + 1, ancestorHidden || Boolean(node.hidden))
       }
-      for (const child of tree.children) walk(child, 1)
+      for (const child of tree.children) walk(child, 1, boardHidden)
     }
     return out
-  }, [boards, trees, collapsed])
+  }, [boards, trees, collapsed, hiddenBoards])
 
   if (boards.length === 0) {
     return <p className="px-3 py-3 text-[11px] text-muted-foreground">{t("design.empty")}</p>
@@ -140,6 +158,8 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
         const name = row.node
           ? row.node.label || row.node.text || row.node.tag
           : (row.board?.title ?? row.file)
+        const ownHidden = row.node ? Boolean(row.node.hidden) : hiddenBoards.has(row.file)
+        const dimmed = ownHidden || row.inheritedHidden
         const isDropTarget = drop?.key === row.key
         const hint = isDropTarget ? drop.mode : null
         return (
@@ -149,7 +169,12 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
               "group/layer relative flex h-6 items-center pr-2 text-[11px]",
               isSelected ? "bg-primary/15 text-foreground" : inGroup ? "bg-primary/10 text-foreground" : "text-foreground/85 hover:bg-accent/50",
               hint === "inside" && "bg-primary/15",
+              dimmed && "opacity-50",
             )}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              onContextMenu(row.file, path, e.clientX, e.clientY)
+            }}
             style={{ paddingLeft: 6 + row.depth * 12 }}
             onMouseEnter={() => onHover(row.file, path)}
             onDragOver={(e) => {
@@ -218,6 +243,22 @@ export function DesignLayers({ boards, trees, selection, group, onSelect, onHove
               )}
             </button>
             </Hint>
+            {/* The eye: grows in from the right on hover (same motion as the app sidebar
+                actions) and stays visible while the layer is hidden. */}
+            <button
+              type="button"
+              aria-label={t(ownHidden ? "design.layersShow" : "design.layersHide")}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleHidden(row.file, path)
+              }}
+              className={cn(
+                "ml-auto flex h-5 shrink-0 items-center justify-center overflow-hidden rounded-sm p-0 text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground focus-visible:w-5 focus-visible:opacity-100 [&>svg]:size-3.5 [&>svg]:shrink-0",
+                ownHidden ? "w-5 opacity-100" : "w-0 opacity-0 group-hover/layer:w-5 group-hover/layer:opacity-100",
+              )}
+            >
+              {ownHidden ? <EyeOff /> : <Eye />}
+            </button>
             {!row.node && !trees[row.file] && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
           </div>
         )

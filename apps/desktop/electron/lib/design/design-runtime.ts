@@ -98,7 +98,9 @@ export const DESIGN_RUNTIME = `(() => {
     'html.__orbit-select [contenteditable="true"], html.__orbit-select [contenteditable="true"] * { cursor: text !important; user-select: text !important; -webkit-user-select: text !important }' +
     'html.__orbit-select [contenteditable="true"] { outline: none !important }' +
     'html.__orbit-select [data-orbit-ui] { cursor: grab !important }' +
-    'html.__orbit-drag, html.__orbit-drag * { cursor: grabbing !important }'
+    'html.__orbit-drag, html.__orbit-drag * { cursor: grabbing !important }' +
+    // Layer hidden by the eye of the Layers list: a VIEW state, never written to the source.
+    '[data-orbit-hidden], [data-orbit-hidden] * { visibility: hidden !important; pointer-events: none !important }'
   ;(document.head || document.documentElement).appendChild(surface)
   document.documentElement.classList.add('__orbit-select')
 
@@ -273,6 +275,7 @@ export const DESIGN_RUNTIME = `(() => {
       text: kind === 'text' || kind === 'input' ? textOf(el) : '',
       kind,
       path,
+      hidden: el.hasAttribute('data-orbit-hidden'),
       children: [],
     }
     if (kind === 'svg') return node
@@ -1090,6 +1093,26 @@ export const DESIGN_RUNTIME = `(() => {
     sendRects()
   }, true)
 
+  // Right click: selects what is under the pointer (unless it already is part of the
+  // selection, so the menu acts on the whole group) and asks the panel to open its menu.
+  document.addEventListener('contextmenu', (e) => {
+    if (!selectMode) return
+    if (e.target && e.target.closest && e.target.closest('[data-orbit-ui]')) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (editing) finishEditing(true)
+    const el = targetAt(e.clientX, e.clientY, e.target)
+    const node = el === document.body ? null : el
+    const inside = node && selected && (group.some((member) => member === node || member.contains(node)) || selected === node || selected.contains(node))
+    if (!inside) {
+      selected = node
+      group = node && node.nodeType === 1 ? [node] : []
+      post({ type: 'select', path: selected ? pathOfNode(selected) : null, info: infoFor(selected), shift: false, group: groupPaths() })
+      sendRects()
+    }
+    post({ type: 'context', x: e.clientX, y: e.clientY })
+  }, true)
+
   document.addEventListener('dblclick', (e) => {
     if (!selectMode) return
     if (e.target && e.target.closest && e.target.closest('[data-orbit-ui]')) return
@@ -1182,6 +1205,23 @@ export const DESIGN_RUNTIME = `(() => {
       members.sort(domOrder)
       group = selected && selected.nodeType === 1 ? [selected].concat(members) : []
       sendInfo()
+      sendRects()
+      return
+    }
+    // The eye of the Layers list: marks (or unmarks) the element as hidden in the live
+    // DOM. Only a view state — the panel never writes it to the source.
+    if (msg.type === 'hide') {
+      const el = byPath(msg.path)
+      if (!el || el.nodeType !== 1 || el === document.body) return
+      const next = typeof msg.hidden === 'boolean' ? msg.hidden : !el.hasAttribute('data-orbit-hidden')
+      if (next) el.setAttribute('data-orbit-hidden', '')
+      else el.removeAttribute('data-orbit-hidden')
+      if (next && selected && (selected === el || el.contains(selected))) {
+        selected = null
+        group = []
+        post({ type: 'select', path: null, info: null, shift: false, group: [] })
+      }
+      sendTree()
       sendRects()
       return
     }
