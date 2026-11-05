@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { PhaseTemplate, Pipeline, PipelineEvent, Project, Task } from "@shared/pipeline"
+import type { Delivery, PhaseTemplate, Pipeline, PipelineEvent, Project, Task } from "@shared/pipeline"
 import { pipelineApi, type NewPipelineInput } from "@/src/lib/ipc"
 
 /**
@@ -17,6 +17,9 @@ interface PipelineState {
   pipelines: Pipeline[]
   tasksPerPipeline: Record<string, Task[]>
   templates: PhaseTemplate[]
+  /** History of deliveries per pipeline (loaded when the history panel opens) */
+  deliveriesPerPipeline: Record<string, Delivery[]>
+  loadDeliveries: (pipelineId: string) => Promise<void>
   /** Automatic queues that are on (pipeline id) */
   queueEnabled: Record<string, boolean>
   /** Live text of the running phase, per task */
@@ -84,6 +87,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   pipelines: [],
   tasksPerPipeline: {},
   templates: [],
+  deliveriesPerPipeline: {},
   queueEnabled: {},
   progress: {},
   activity: {},
@@ -102,8 +106,18 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     })
   },
 
+  loadDeliveries: async (pipelineId) => {
+    const deliveries = await pipelineApi.deliveries(pipelineId)
+    set((state) => ({ deliveriesPerPipeline: { ...state.deliveriesPerPipeline, [pipelineId]: deliveries } }))
+  },
+
   applyEvent: (event) => {
     switch (event.type) {
+      case "deliveries":
+        set((state) => ({
+          deliveriesPerPipeline: { ...state.deliveriesPerPipeline, [event.pipelineId]: event.deliveries },
+        }))
+        break
       case "projects":
         set({ projects: event.projects })
         break

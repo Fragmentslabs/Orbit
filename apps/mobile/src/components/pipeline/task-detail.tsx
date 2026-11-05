@@ -129,14 +129,16 @@ export function TaskDetail({
           </View>
         )}
 
-        {!!task.pushError && (
-          <View style={[s.banner, { backgroundColor: tokens.muted, borderColor: '#eab308' }]}>
-            <AlertTriangle size={16} color="#eab308" />
+        {task.integration?.state === 'failed' && (
+          <View style={[s.banner, { backgroundColor: tokens.muted, borderColor: tokens.destructive }]}>
+            <AlertTriangle size={16} color={tokens.destructive} />
             <View style={{ flex: 1, gap: 3 }}>
-              <Text style={[s.bannerTitle, { color: tokens.foreground }]}>{t('pipeline.pushFailed')}</Text>
-              <Text style={[s.bannerText, { color: tokens.mutedForeground }]} numberOfLines={3}>
-                {task.pushError}
-              </Text>
+              <Text style={[s.bannerTitle, { color: tokens.foreground }]}>{t('pipeline.integration.failed')}</Text>
+              {!!task.integration.detail && (
+                <Text style={[s.bannerText, { color: tokens.mutedForeground }]} numberOfLines={4}>
+                  {task.integration.detail}
+                </Text>
+              )}
             </View>
           </View>
         )}

@@ -1,7 +1,7 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import { loadAll, createPipeline, createProject, createTask, listPipelines, listTasks, startTask, updateTaskFields } from '../pipeline'
-import { isEditable, resolveTask, summarizeTask, taskDiff, taskLabel, taskNotes } from '../pipeline/task-ref'
+import { archivedTaskDiff, loadAll, createPipeline, createProject, createTask, listPipelines, listTasks, startTask, updateTaskFields } from '../pipeline'
+import { formatDiff, isEditable, resolveTask, summarizeTask, taskLabel, taskNotes } from '../pipeline/task-ref'
 
 /** Every pipeline with its tasks, for resolving "#12" references. */
 async function pipelinesWithTasks() {
@@ -201,15 +201,22 @@ export function createPipelineTools(
         if (!target) {
           return `Specify the pipeline. Available:\n${pipelines.map((p) => `- ${p.name} — id: ${p.id}`).join('\n')}`
         }
-        const tasks = await listTasks(target.id)
-        if (tasks.length === 0) return `Pipeline "${target.name}" has no tasks.`
-        return tasks
-          .map((t) => {
-            const phase = t.currentPhase != null ? (target.phases[t.currentPhase]?.name ?? `phase ${t.currentPhase}`) : '—'
-            const error = t.pauseReason === 'error' ? ` · error: ${t.error ?? 'no details'}` : ''
-            return `- ${taskLabel(t)} [${t.status}] ${t.title} (phase: ${phase})${error}`
-          })
-          .join('\n')
+        const all = await listTasks(target.id)
+        const tasks = all.filter((t) => !t.deliveryId)
+        const delivered = all.length - tasks.length
+        if (tasks.length === 0) {
+          return delivered > 0
+            ? `Pipeline "${target.name}" has no open tasks (${delivered} delivered, in the history — pipeline_task_read reads them).`
+            : `Pipeline "${target.name}" has no tasks.`
+        }
+        const lines = tasks.map((t) => {
+          const phase = t.currentPhase != null ? (target.phases[t.currentPhase]?.name ?? `phase ${t.currentPhase}`) : '—'
+          const error = t.pauseReason === 'error' ? ` · error: ${t.error ?? 'no details'}` : ''
+          const merge = t.integration ? ` · merge: ${t.integration.state}${t.integration.state === 'failed' && t.integration.detail ? ` (${t.integration.detail.slice(0, 120)})` : ''}` : ''
+          return `- ${taskLabel(t)} [${t.status}] ${t.title} (phase: ${phase})${error}${merge}`
+        })
+        if (delivered > 0) lines.push(`(${delivered} delivered task(s) are in the history)`)
+        return lines.join('\n')
       },
     }),
 
@@ -231,7 +238,10 @@ export function createPipelineTools(
         const found = resolveTask(task, await pipelinesWithTasks(), { pipelineId, pipeline })
         if (!found.ok) return found.message
         if (section === 'notes') return taskNotes(found.task, phase)
-        if (section === 'diff') return taskDiff(found.task, file)
+        if (section === 'diff') {
+          const diff = found.task.deliveryId ? await archivedTaskDiff(found.pipeline.id, found.task) : found.task.diff
+          return formatDiff(diff, file)
+        }
         const all = await listTasks(found.pipeline.id)
         return summarizeTask(found.pipeline, found.task, all)
       },

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { PhaseChoice, PhaseConfig, Pipeline, Task } from "@shared/pipeline"
+import { isTaskSatisfied } from "@shared/pipeline"
 import { Button } from "@/components/ui/button"
 import { EMPTY_TASKS, usePipelineStore } from "@/src/stores/pipeline-store"
 import { cn } from "@/lib/utils"
@@ -18,6 +19,8 @@ import { ReturnTaskDialog } from "./return-task-dialog"
 import { ResumeInstructionDialog } from "./resume-instruction-dialog"
 import { TaskCreateDialog } from "./task-create-dialog"
 import { PipelineFooter } from "./pipeline-footer"
+import { IntegrationBar } from "./integration-bar"
+import { HistoryPanel } from "./history-panel"
 import { TaskCard } from "./task-card"
 import { TaskModal } from "./task-modal"
 import { Hint } from "@/components/ui/hint"
@@ -104,7 +107,7 @@ function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
       ) : (
         <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
           {pipelines.map((pipeline) => {
-            const tasks = tasksPerPipeline[pipeline.id] ?? []
+            const tasks = (tasksPerPipeline[pipeline.id] ?? []).filter((x) => !x.deliveryId)
             const project = projects.find((p) => p.id === pipeline.projectId)
             const inProgress = tasks.filter((t) => t.status === "in_progress").length
             const completed = tasks.filter((t) => t.status === "completed").length
@@ -182,7 +185,10 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
   const createTaskInStore = usePipelineStore((s) => s.createTask)
   const removePipeline = usePipelineStore((s) => s.removePipeline)
   const toggleQueue = usePipelineStore((s) => s.toggleQueue)
-  const tasks = usePipelineStore((s) => s.tasksPerPipeline[pipeline.id] ?? EMPTY_TASKS)
+  const allTasks = usePipelineStore((s) => s.tasksPerPipeline[pipeline.id] ?? EMPTY_TASKS)
+  // Delivered tasks left the board for the history panel.
+  const tasks = useMemo(() => allTasks.filter((x) => !x.deliveryId), [allTasks])
+  const [historyOpen, setHistoryOpen] = useState(false)
   const queueEnabled = usePipelineStore((s) => s.queueEnabled[pipeline.id] ?? false)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
@@ -261,7 +267,7 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
   const nextId = queueEnabled
     ? tasks
         .filter(
-          (x) => x.status === "pending" && x.dependsOn.every((id) => tasks.some((t) => t.id === id && t.status === "completed")),
+          (x) => x.status === "pending" && x.dependsOn.every((id) => allTasks.some((t) => t.id === id && isTaskSatisfied(t))),
         )
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]?.id
     : undefined
@@ -270,7 +276,7 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
   const waitingTitle = (task: Task): string | undefined => {
     for (const id of task.dependsOn) {
       const dep = tasks.find((t) => t.id === id)
-      if (dep && dep.status !== "completed") return dep.title
+      if (dep && !isTaskSatisfied(dep)) return dep.title
     }
     return undefined
   }
@@ -361,6 +367,8 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
         </div>
       </div>
 
+      <IntegrationBar pipeline={pipeline} tasks={allTasks} onOpenHistory={() => setHistoryOpen(true)} />
+
       <DndContext sensors={sensors} onDragEnd={handleDrop}>
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
           {columns.map((column) => (
@@ -422,9 +430,17 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
         onOpenChange={(v) => !v && setInstructing(null)}
       />
 
+      <HistoryPanel
+        pipeline={pipeline}
+        tasks={allTasks}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        onOpenTask={setOpenTaskId}
+      />
+
       <TaskModal
         pipeline={pipeline}
-        task={tasks.find((x) => x.id === openTaskId) ?? null}
+        task={allTasks.find((x) => x.id === openTaskId) ?? null}
         open={!!openTaskId}
         onOpenChange={(open) => !open && setOpenTaskId(null)}
       />

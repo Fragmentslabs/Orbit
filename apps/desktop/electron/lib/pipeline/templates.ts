@@ -28,7 +28,7 @@ export const ID_REVIEW = 'review'
 export const ID_INFRA = 'infra'
 
 /** Block common to every phase: how to close the phase. */
-const CONTRACT = `
+export const CONTRACT = `
 ## How to finish this phase
 End your turn with the phase note in Markdown, inside a fenced block tagged \`note\`:
 

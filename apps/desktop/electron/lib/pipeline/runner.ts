@@ -53,7 +53,7 @@ const MAX_STEPS = 60
  * asks. Description precedence applies to HOW to do the phase's own work, not
  * to WHAT each phase's work is.
  */
-const PRECEDENCE = `The task description in the user message is your PRIMARY brief and takes precedence over this phase prompt. Where the two conflict — including how to commit, whether to create a commit at all, or how to validate — follow the task description, not this prompt. This precedence does NOT change your scope: you still do only your phase's job as defined here, and never push (the engine pushes).`
+const PRECEDENCE = `The task description in the user message is your PRIMARY brief and takes precedence over this phase prompt. Where the two conflict — including how to commit, whether to create a commit at all, or how to validate — follow the task description, not this prompt. This precedence does NOT change your scope: you still do only your phase's job as defined here, and never push or pull (nothing leaves this machine on its own).`
 
 export interface PhaseContext {
   pipeline: Pipeline
@@ -117,9 +117,7 @@ function buildTools(ctx: PhaseContext, toolCtx: ToolContext, recordCommand: (cmd
   if (allowed.has('shell')) {
     tools.bash = withCommandPolicy(createBashTool(toolCtx), ctx, recordCommand)
   }
-  // With screenshots enabled, the phase gets the browser even without asking for
-  // it: the instruction to capture would be impossible to follow without the tools.
-  if (allowed.has('browser') || ctx.pipeline.resultScreenshots) {
+  if (allowed.has('browser')) {
     // The panel browser is per session; the pipeline uses the task's synthetic
     // id, so each task has its own and does not dispute an open chat's panel.
     Object.assign(tools, createPanelBrowserTools(toolCtx))
@@ -308,8 +306,10 @@ export function buildMessage(ctx: PhaseContext): string {
     // Isolated worktree: the agent must know the folder is its own, that the main
     // repository is not, and what it may do with the dependencies.
     repo.push(
-      `Isolated worktree for this task: ${wt.path}, on branch \`${wt.branch}\` (created from \`${wt.base}\`). ` +
-        `Work, run commands and commit only inside it — the main checkout belongs to the user and to other tasks running in parallel.`,
+      wt.shared
+        ? `Pipeline worktree: ${wt.path}, on branch \`${wt.branch}\`. Work and run commands only inside it — the main checkout belongs to the user.`
+        : `Isolated worktree for this task: ${wt.path}, on branch \`${wt.branch}\` (created from \`${wt.base}\`, the pipeline's integration branch). ` +
+          `Work, run commands and commit only inside it — the main checkout belongs to the user and to other tasks running in parallel. Do not merge: the pipeline merges your branch when the task is done.`,
     )
     repo.push(
       wt.dependencies === 'cloned'
@@ -323,9 +323,11 @@ export function buildMessage(ctx: PhaseContext): string {
     repo.push(`Branch: ${ctx.pipeline.branch}`)
   }
   if (ctx.pipeline.worktree) repo.push(`Worktree: ${ctx.pipeline.worktree}`)
-  repo.push(
-    `Push at the end: ${ctx.pipeline.pushAtEnd ? 'yes — the engine runs git push when the last phase succeeds, do not push yourself' : 'no (local commits only)'}`,
-  )
+  if (wt?.shared) {
+    repo.push(
+      'This worktree is shared by the pipeline\'s tasks, which run one at a time here. Leave your changes uncommitted: the pipeline commits them together when the person merges.',
+    )
+  }
   parts.push(`\n## Repository\n${repo.join('\n')}`)
 
   const { blocked, controlled } = ctx.pipeline.commandPolicy
@@ -336,21 +338,20 @@ export function buildMessage(ctx: PhaseContext): string {
       `- Anything else: free. A refused command counts as a phase failure — work around it.`,
   )
 
-  // Screenshots of the result: an explicit instruction, otherwise the agent
-  // describes the visual change in text and the user never sees what came out on
-  // screen. The limits exist because over-capturing is the biggest token waste
-  // of the pipeline: the image enters the context (see:true) and stays in the
-  // history for every following turn of the phase.
-  if (ctx.pipeline.resultScreenshots) {
+  // Screenshots of the result are the agent's call: only phases that already
+  // have the browser get the paragraph, so the rest pay nothing for it. The
+  // limits exist because over-capturing is the biggest token waste of the
+  // pipeline: the image enters the context (see:true) and stays in the history
+  // for every following turn of the phase.
+  if (ctx.phase.tools.includes('browser')) {
     parts.push(
-      `\n## Screenshots of the result (enabled for this pipeline)\n` +
-        `If this task changed anything visible in a UI, capture the MINIMUM evidence needed (a few images, not a series):\n` +
+      `\n## Screenshots of the result\n` +
+        `If this task changed something visible in a UI, attach the MINIMUM evidence that helps the person judge it (a few images, not a series). If it changed nothing visible, capture nothing and say nothing about it.\n` +
         `- Static screens of known URLs/viewports: capture_batch — one call, the images stay out of your context.\n` +
         `- Timing/state (animations, waiting for a render, resizing): run_browser_script with waitFor/wait/resize — one call too.\n` +
         `- Interacting with the app (click, type, inspect): use the panel browser (panel_navigate / panel_read / panel_click / panel_type). panel_screenshot returns a media URL WITHOUT loading the image into your context; pass see:true only when you must see the capture yourself, at most once or twice per phase.\n` +
-        `- If a previous phase already attached screenshots of this change and nothing visible changed since, do NOT recapture — say so in your note.\n` +
-        `Attach the screenshots to your note with their orbit-media:// URLs and say what each one shows. Keep it short — the user reads the note, not a photo album.\n` +
-        `If the change is not visible in a UI, say so in the note instead of capturing something unrelated.`,
+        `- If a previous phase already attached screenshots of this change and nothing visible changed since, do NOT recapture.\n` +
+        `Attach the screenshots to your note with their orbit-media:// URLs and say what each one shows. Keep it short — the person reads the note, not a photo album.`,
     )
   }
 

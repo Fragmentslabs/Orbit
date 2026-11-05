@@ -1280,7 +1280,13 @@
     "resume": "Resume",
     "paused": "Paused",
     "error": "Error",
-    "pushFailed": "Push failed",
+    "integration": {
+      "failed": "Could not be merged",
+      "queuedShort": "Queued to merge",
+      "integratingShort": "Merging",
+      "integratedShort": "Merged",
+      "failedShort": "Merge failed"
+    },
     "pausedByError": "Task paused after failing the phase",
     "queueOn": "Auto queue on",
     "queueOff": "Auto queue off",
@@ -1371,8 +1377,6 @@
         "description": "Deploy and environment checklist"
       }
     },
-    "push": "Push the branch when finishing",
-    "prints": "Capture screenshots of the result",
     "newTask": "New task",
     "createTask": "Create task",
     "taskTitle": "Title",

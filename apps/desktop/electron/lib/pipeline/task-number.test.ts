@@ -19,7 +19,6 @@ const pipeline = (id: string, extra: object = {}) => ({
   name: id,
   phases: [],
   operationMode: 'manual',
-  pushAtEnd: false,
   commitAtEnd: true,
   commandPolicy: { blocked: [], controlled: [] },
   createdAt: '2024-01-01T00:00:00.000Z',

@@ -44,7 +44,9 @@ function BoardBody({ pipeline }: { pipeline: Pipeline }) {
   const router = useRouter()
   const { registerScrollRef, registerViewport, registerScrollOffset, dragging } = useBoardDrag()
 
-  const tasks = usePipelineStore((s) => s.tasksByPipeline[pipeline.id] ?? EMPTY_TASKS)
+  const allTasks = usePipelineStore((s) => s.tasksByPipeline[pipeline.id] ?? EMPTY_TASKS)
+  // Delivered tasks left the board for the history (desktop).
+  const tasks = useMemo(() => allTasks.filter((x) => !x.deliveryId), [allTasks])
   const queueEnabled = usePipelineStore((s) => s.queuesEnabled[pipeline.id] ?? false)
   const progress = usePipelineStore((s) => s.progress)
   const startTask = usePipelineStore((s) => s.startTask)
@@ -143,8 +145,8 @@ function BoardBody({ pipeline }: { pipeline: Pipeline }) {
                     task={task}
                     pipeline={pipeline}
                     progress={progress[task.id]}
-                    waitingFor={blockingDependency(task, tasks)}
-                    isNext={queueEnabled && nextInQueue(task, tasks)}
+                    waitingFor={blockingDependency(task, allTasks)}
+                    isNext={queueEnabled && nextInQueue(task, allTasks)}
                     onOpen={() => openTask(task.id)}
                     onStart={() => void startTask(pipeline.id, task.id)}
                     onPause={() => void pauseTask(pipeline.id, task.id)}

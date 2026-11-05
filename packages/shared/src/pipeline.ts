@@ -124,24 +124,37 @@ export interface Pipeline {
   phases: PhaseConfig[]
   /** Next task number to hand out (`Task.number`); never goes back. */
   nextTaskNumber?: number
+  /**
+   * The pipeline model: chosen when the pipeline is created, default of every
+   * phase, and the one called when something must be decided outside a phase
+   * (a merge conflict, a failed check, a commit message). Absent on older
+   * pipelines — the first phase's model stands in (`pipelineModel`).
+   */
+  model?: { providerId: string; modelId: string; reasoning?: ReasoningConfig | null }
+  /**
+   * The integration branch and its worktree (see `pipelineFlow`). Born on the
+   * first task that needs it; finished tasks are merged into it, and the
+   * Merge button delivers it to a branch of the person's choice.
+   */
+  integration?: TaskWorktree
+  /** How many automatic tasks run at once (1–4). Only with the `merge` flow; 1 otherwise. */
+  parallelTasks?: number
   /** Working branch (absent = the repo's current branch) */
   branch?: string
   /** Legacy: fixed worktree path for the whole pipeline (no UI) */
   worktree?: string
   /**
-   * Each task works in its own `git worktree`, on its own branch — parallel
-   * tasks do not step on each other, and each one's work stays isolated until
-   * it is merged.
+   * Each task works in its own `git worktree`, on its own branch, and its work
+   * is merged into the pipeline's integration branch. On by default; a folder
+   * without git cannot use it (simple mode).
    */
   worktreePerTask?: boolean
   operationMode: OperationMode
-  /** The engine pushes the branch when the last phase completes (default false — local commit) */
-  pushAtEnd: boolean
   /**
    * The engine creates a final commit when the last phase completes, containing
    * only what the task changed (default true). Phases after development cannot
    * commit (templates), so without this their adjustments would live only in the
-   * working tree — and a push (pushAtEnd) would upload a branch without them.
+   * working tree and could not be merged. Off = the pipeline creates no commits.
    */
   commitAtEnd: boolean
   /**
@@ -152,11 +165,6 @@ export interface Pipeline {
    * Conventional Commits.
    */
   commitPrompt?: string
-  /**
-   * Instructs the phases to capture screenshots of the visual result of the
-   * changes (run_browser_script / panel_screenshot) and attach them to the note.
-   */
-  resultScreenshots?: boolean
   commandPolicy: CommandPolicy
   templateId?: string
   createdAt: string
@@ -165,6 +173,28 @@ export interface Pipeline {
 // ─── Task ────────────────────────────────────────────────────────────────────
 
 export type TaskStatus = 'pending' | 'in_progress' | 'paused' | 'completed'
+
+/**
+ * Merge-queue state of a completed task (flow `merge`). The task keeps status
+ * `completed`; this says whether its work reached the integration branch.
+ *
+ * - `queued`: waiting its turn (or for a file the person is editing)
+ * - `integrating`: the update-then-merge step is running
+ * - `integrated`: merged into the integration branch — dependents may start
+ * - `failed`: the pipeline model gave up (or git refused); the person decides
+ */
+export interface TaskIntegration {
+  state: 'queued' | 'integrating' | 'integrated' | 'failed'
+  /** Why it failed, or what the step is doing */
+  detail?: string
+  /** Files in the integration worktree the queue is waiting on */
+  waitingFor?: string[]
+  /** The `--no-ff` merge commit in the integration branch */
+  mergeHash?: string
+  /** Fix attempts the pipeline model has spent on this integration */
+  attempts?: number
+  updatedAt: string
+}
 
 export interface PhaseNote {
   phaseId: string
@@ -229,6 +259,11 @@ export interface TaskWorktree {
    */
   dependencies: 'cloned' | 'linked' | 'none'
   createdAt: string
+  /**
+   * The folder is the pipeline's integration worktree, shared (flow `shared`:
+   * commits off). Never removed with the task.
+   */
+  shared?: boolean
 }
 
 export interface Task {
@@ -264,11 +299,6 @@ export interface Task {
   tokens: number
   cost: number
   /**
-   * Final push failed (pushAtEnd on): the task completed, but the branch did not
-   * go up — the error stays here for the user to solve (the task does not pause).
-   */
-  pushError?: string
-  /**
    * Final commit failed (commitAtEnd on): the git error stays here — the task
    * does not pause, the work is done; commit and push are delivery.
    */
@@ -281,6 +311,13 @@ export interface Task {
   returns?: TaskReturn[]
   /** Isolated worktree of the task (pipeline with worktreePerTask) */
   worktree?: TaskWorktree
+  /** Where the task stands in the merge queue (pipeline flow `merge`). */
+  integration?: TaskIntegration
+  /** Delivery that carried the task away; set = archived (history, read-only). */
+  deliveryId?: string
+  archivedAt?: string
+  /** Id of the archived task this one follows up ("reopen"). */
+  followUpOf?: string
   /** Instructions given when resuming the paused task, in order */
   instructions?: ResumeInstruction[]
   /** Final commits of previous rounds (the current round's is finalCommitHash) */
@@ -311,6 +348,45 @@ export function taskRound(task: Pick<Task, 'round'>): number {
   return task.round ?? 1
 }
 
+/**
+ * How a pipeline moves work around, from its two switches:
+ * - `merge`: a worktree per task, commit per task, merged into the integration
+ * - `shared`: worktrees on, commits off — tasks run one at a time inside the
+ *   integration worktree and their changes pile up uncommitted
+ * - `simple`: no worktree — tasks run in the project folder (no git needed)
+ */
+export type PipelineFlow = 'merge' | 'shared' | 'simple'
+
+export function pipelineFlow(pipeline: Pick<Pipeline, 'worktreePerTask' | 'commitAtEnd'>): PipelineFlow {
+  if (!pipeline.worktreePerTask) return 'simple'
+  return pipeline.commitAtEnd === false ? 'shared' : 'merge'
+}
+
+/** The model used outside a phase: the pipeline's own, or the first phase's on older pipelines. */
+export function pipelineModel(pipeline: Pick<Pipeline, 'model' | 'phases'>): {
+  providerId: string
+  modelId: string
+  reasoning?: ReasoningConfig | null
+} | null {
+  if (pipeline.model?.providerId && pipeline.model.modelId) return pipeline.model
+  const phase = pipeline.phases[0]
+  return phase ? { providerId: phase.providerId, modelId: phase.modelId, reasoning: phase.reasoning } : null
+}
+
+/**
+ * A dependency is satisfied when the task is completed AND, in a pipeline that
+ * merges, its work reached the integration branch — otherwise a dependent task
+ * would start without it. Delivered (archived) tasks always count.
+ */
+export function isTaskSatisfied(task: Pick<Task, 'status' | 'integration' | 'deliveryId'>): boolean {
+  if (task.deliveryId) return true
+  if (task.status !== 'completed') return false
+  return !task.integration || task.integration.state === 'integrated'
+}
+
+/** Max attempts the pipeline model gets to resolve a conflict / fix failed checks. */
+export const PIPELINE_INTEGRATION_ATTEMPTS = 3
+
 /** Notes written in a round. */
 export function notesForRound(task: Pick<Task, 'notes'>, round: number): PhaseNote[] {
   return task.notes.filter((n) => (n.round ?? 1) === round)
@@ -325,6 +401,31 @@ export function instructionsForRound(task: Pick<Task, 'instructions'>, round: nu
 export function returnForRound(task: Pick<Task, 'returns'>, round: number): TaskReturn | undefined {
   return task.returns?.find((r) => r.round === round)
 }
+
+// ─── Delivery ────────────────────────────────────────────────────────────────
+
+/** One Merge of the integration branch into a destination: the history entry. */
+export interface Delivery {
+  id: string
+  pipelineId: string
+  /** 1, 2, 3… per pipeline */
+  number: number
+  createdAt: string
+  /** Branch the work went into (absent on "archive completed" in simple mode) */
+  destination?: string
+  /** Destination's head after the merge */
+  mergeHash?: string
+  taskIds: string[]
+  taskNumbers: number[]
+}
+
+export type MergeOutcome =
+  | { status: 'delivered'; delivery: Delivery }
+  /** Uncommitted changes in the integration worktree: offer Commit or Cancel */
+  | { status: 'dirty'; files: string[] }
+  /** Destination checked out somewhere with uncommitted changes in files involved */
+  | { status: 'blocked'; files: string[]; where: string }
+  | { status: 'failed'; message: string }
 
 // ─── Report ──────────────────────────────────────────────────────────────────
 
@@ -348,6 +449,7 @@ export type PipelineEvent =
   | { type: 'tasks'; pipelineId: string; tasks: Task[] }
   | { type: 'pipeline'; pipeline: Pipeline }
   | { type: 'projects'; projects: Project[] }
+  | { type: 'deliveries'; pipelineId: string; deliveries: Delivery[] }
   /** Text progress of the running phase (live feed on the card) */
   | { type: 'phase-progress'; pipelineId: string; taskId: string; phaseIndex: number; text: string }
   /** Model thinking (reasoning) of the running phase, delta by delta */
@@ -380,15 +482,14 @@ export interface NewPipelineInput {
   reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
-  /** Each task in its own git worktree */
+  /** Each task in its own git worktree (default true; needs git) */
   worktreePerTask?: boolean
-  pushAtEnd?: boolean
+  /** Automatic tasks running at once, 1–4 (needs worktrees and commits) */
+  parallelTasks?: number
   /** Engine's final commit when the last phase completes (default true) */
   commitAtEnd?: boolean
   /** Prompt of the final commit message (absent = PIPELINE_COMMIT_PROMPT_DEFAULT) */
   commitPrompt?: string
-  /** Instructs the phases to capture screenshots of the visual result */
-  resultScreenshots?: boolean
   operationMode?: 'manual' | 'automatic'
 }
 
@@ -399,6 +500,8 @@ export interface NewTaskInput {
   description: string
   dependsOn?: string[]
   originSessionId?: string
+  /** Archived task this one follows up (reopen) */
+  followUpOf?: string
 }
 
 /**

@@ -1280,7 +1280,13 @@
     "resume": "Retomar",
     "paused": "Pausada",
     "error": "Erro",
-    "pushFailed": "Push falhou",
+    "integration": {
+      "failed": "Não foi possível mesclar",
+      "queuedShort": "Na fila de merge",
+      "integratingShort": "Mesclando",
+      "integratedShort": "Mesclada",
+      "failedShort": "Merge falhou"
+    },
     "pausedByError": "Task pausada após falhar na fase",
     "queueOn": "Fila automática ligada",
     "queueOff": "Fila automática desligada",
@@ -1371,8 +1377,6 @@
         "description": "Checklist de deploy e ambiente"
       }
     },
-    "push": "Fazer push ao finalizar",
-    "prints": "Capturar prints do resultado",
     "newTask": "Nova task",
     "createTask": "Criar task",
     "taskTitle": "Título",

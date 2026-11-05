@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, Loader2Icon, MessageSquarePlusIcon, MessageSquareQuoteIcon, MessagesSquareIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, Loader2Icon, MessageSquarePlusIcon, MessageSquareQuoteIcon, MessagesSquareIcon, PauseIcon, PlayIcon, PlusIcon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Pipeline, Task } from "@shared/pipeline"
-import { instructionsForRound, notesForRound, returnForRound, taskRound } from "@shared/pipeline"
+import { instructionsForRound, isTaskSatisfied, notesForRound, returnForRound, taskRound } from "@shared/pipeline"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Hint } from "@/components/ui/hint"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -12,11 +12,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AssistantMarkdown, GenericToolView, ReasoningPartView } from "@/src/components/messages/shared"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
-import { MediaEmbed } from "./media-embed"
+import { MediaEmbed, extractMediaUrls } from "./media-embed"
 import { SearchableTaskList } from "./task-picker"
 import { ReturnTaskDialog } from "./return-task-dialog"
 import { ResumeInstructionDialog } from "./resume-instruction-dialog"
 import { EMPTY_TASKS, usePipelineStore } from "@/src/stores/pipeline-store"
+import { pipelineApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useDraftInput } from "@/src/stores/draft-input"
@@ -96,6 +97,9 @@ export function TaskModal({
   if (!task) return null
 
   const hasError = task.pauseReason === "error"
+  // Delivered: part of the history, read-only (Reopen starts a follow-up task).
+  const archived = !!task.deliveryId
+  const integration = task.integration
   const onCurrentRound = viewedRound === currentRound
   const viewedReturn = returnForRound(task, viewedRound)
   const dependencies = task.dependsOn
@@ -141,6 +145,15 @@ export function TaskModal({
     onOpenChange(false)
   }
 
+  const removeImage = (url: string) => {
+    if (window.confirm(t("pipeline.removeImageConfirm"))) void pipelineApi.removeTaskImage(pipeline.id, task.id, url)
+  }
+
+  const reopen = async () => {
+    await pipelineApi.reopenTask(pipeline.id, task.id)
+    onOpenChange(false)
+  }
+
   const shortDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleString(i18n.language, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"
 
@@ -176,13 +189,54 @@ export function TaskModal({
           </div>
         )}
 
-        {task.pushError && (
-          <div className="flex items-start gap-2 rounded-t-lg border-b border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5">
-            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
+        {archived && (
+          <div className="flex items-start gap-2 rounded-t-lg border-b bg-muted/40 px-4 py-2.5">
+            <CheckIcon className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+            <p className="min-w-0 flex-1 text-[11px] text-muted-foreground">{t("pipeline.archivedNotice")}</p>
+            <button
+              type="button"
+              onClick={() => void reopen()}
+              className="shrink-0 rounded-md border px-3 py-1.5 text-[11px] font-medium hover:bg-accent"
+            >
+              {t("pipeline.reopen")}
+            </button>
+          </div>
+        )}
+
+        {!archived && integration && integration.state !== "integrated" && (
+          <div
+            className={cn(
+              "flex items-start gap-2 rounded-t-lg border-b px-4 py-2.5",
+              integration.state === "failed" ? "border-destructive/30 bg-destructive/10" : "bg-muted/40",
+            )}
+          >
+            {integration.state === "failed" ? (
+              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
+            ) : (
+              <Loader2Icon className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+            )}
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300">{t("pipeline.pushFailed")}</p>
-              <p className="mt-0.5 break-all text-[11px] text-yellow-700/80 dark:text-yellow-300/80">{task.pushError}</p>
+              <p className={cn("text-xs font-medium", integration.state === "failed" && "text-destructive")}>
+                {t(`pipeline.integration.${integration.state}`)}
+              </p>
+              {integration.waitingFor && integration.waitingFor.length > 0 ? (
+                <p className="mt-0.5 break-all text-[11px] text-muted-foreground">
+                  {t("pipeline.integration.waitingFor", { files: integration.waitingFor.join(", ") })}
+                </p>
+              ) : integration.detail ? (
+                <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{integration.detail}</p>
+              ) : null}
             </div>
+            {integration.state === "failed" && (
+              <button
+                type="button"
+                onClick={() => void pipelineApi.retryIntegration(pipeline.id, task.id)}
+                className="flex shrink-0 items-center gap-1 rounded-md border border-destructive/40 px-3 py-1.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+              >
+                <RotateCcwIcon className="size-3" />
+                {t("pipeline.integration.retry")}
+              </button>
+            )}
           </div>
         )}
 
@@ -204,6 +258,7 @@ export function TaskModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => title !== task.title && saveField({ title })}
+            readOnly={archived}
             className="h-8 flex-1 border-0 bg-transparent px-1.5 text-base font-semibold shadow-none focus-visible:ring-0"
           />
           <Hint label={t("pipeline.openInChat")}>
@@ -276,13 +331,14 @@ export function TaskModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onBlur={() => description !== task.description && saveField({ description })}
+                readOnly={archived}
                 className="min-h-0 w-full flex-1 resize-none rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
               />
               {/* orbit-media:// URLs pasted into the description become images
                   (the text remains the source of truth for the phases). Height
                   limited so the images do not push the phase area. */}
               <div className="max-h-28 shrink-0 overflow-y-auto">
-                <MediaEmbed text={description} />
+                <MediaEmbed text={description} onRemove={removeImage} />
               </div>
             </div>
 
@@ -400,6 +456,7 @@ export function TaskModal({
                     <>
                       {instructionBlock}
                       <AssistantMarkdown>{note.content}</AssistantMarkdown>
+                      <NoteImages text={note.content} onRemove={removeImage} />
                       {note.controlledCommands.length > 0 && (
                         <div className="mt-3 rounded-md bg-muted/50 p-2">
                           <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -440,7 +497,7 @@ export function TaskModal({
               <ul className="space-y-1">
                 {dependencies.map((dep) => (
                   <li key={dep.id} className="flex items-center gap-1.5">
-                    <span className={cn("size-1.5 shrink-0 rounded-full", dep.status === "completed" ? "bg-emerald-500" : "bg-amber-500")} />
+                    <span className={cn("size-1.5 shrink-0 rounded-full", isTaskSatisfied(dep) ? "bg-emerald-500" : "bg-amber-500")} />
                     <Truncate text={dep.title}>
                       <span className="min-w-0 flex-1 truncate">{dep.title}</span>
                     </Truncate>
@@ -488,7 +545,9 @@ export function TaskModal({
         </div>
 
         <div className="flex items-center gap-2 border-t px-4 py-2.5">
-          {task.status === "in_progress" ? (
+          {archived ? (
+            <ActionButton icon={<RotateCcwIcon className="size-3.5" />} label={t("pipeline.reopen")} onClick={() => void reopen()} />
+          ) : task.status === "in_progress" ? (
             <ActionButton icon={<PauseIcon className="size-3.5" />} label={t("pipeline.pause")} onClick={() => void pauseTask(pipeline.id, task.id)} />
           ) : task.status !== "completed" ? (
             <>
@@ -509,21 +568,23 @@ export function TaskModal({
               />
             )}
             </>
-          ) : (
+          ) : integration?.state === "integrating" ? null : (
             <ActionButton
               icon={<CornerUpLeftIcon className="size-3.5" />}
               label={t("pipeline.return")}
               onClick={() => setReturning(true)}
             />
           )}
-          <button
-            type="button"
-            onClick={() => setConfirmingRemoval(true)}
-            className="ml-auto flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2Icon className="size-3.5" />
-            {t("pipeline.deleteTask")}
-          </button>
+          {!archived && (
+            <button
+              type="button"
+              onClick={() => setConfirmingRemoval(true)}
+              className="ml-auto flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2Icon className="size-3.5" />
+              {t("pipeline.deleteTask")}
+            </button>
+          )}
         </div>
 
         <ReturnTaskDialog task={task} pipeline={pipeline} open={returning} onOpenChange={setReturning} />
@@ -595,6 +656,32 @@ function LiveRun({ taskId, phaseIndex }: { taskId: string; phaseIndex: number })
           label={entry.tool}
           subtitle={entry.summary || undefined}
         />
+      ))}
+    </div>
+  )
+}
+
+/** Small thumbnails of the images stored with a note, each with a delete button. */
+function NoteImages({ text, onRemove }: { text: string; onRemove: (url: string) => void }) {
+  const { t } = useTranslation()
+  const urls = useMemo(() => extractMediaUrls(text), [text])
+  if (urls.length === 0) return null
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("pipeline.images")}</span>
+      {urls.map((url) => (
+        <span key={url} className="group relative">
+          <img src={url} alt="" className="size-10 rounded border object-cover" />
+          <Hint label={t("pipeline.removeImage")}>
+            <button
+              type="button"
+              onClick={() => onRemove(url)}
+              className="absolute -right-1 -top-1 hidden size-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
+            >
+              <XIcon className="size-2.5" />
+            </button>
+          </Hint>
+        </span>
       ))}
     </div>
   )

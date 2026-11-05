@@ -1887,6 +1887,31 @@ app.whenReady().then(() => {
     return pipeline.isQueueEnabled(pipelineId)
   })
   ipcMain.handle('pipeline:report', (_e, pipelineId: string) => pipeline.report(pipelineId))
+  ipcMain.handle('pipeline:hasGit', (_e, folder: string) => pipeline.hasGit(folder))
+  ipcMain.handle('pipeline:deliveries', (_e, pipelineId: string) => pipeline.listDeliveries(pipelineId))
+  ipcMain.handle('pipeline:integration', (_e, pipelineId: string) => pipeline.integrationStatus(pipelineId))
+  ipcMain.handle('pipeline:destinations', (_e, pipelineId: string) => pipeline.destinationBranches(pipelineId))
+  ipcMain.handle('pipeline:merge', (_e, pipelineId: string, destination?: string) =>
+    pipeline.mergeIntegration(pipelineId, destination),
+  )
+  ipcMain.handle('pipeline:commitIntegration', (_e, pipelineId: string) => pipeline.commitIntegration(pipelineId))
+  ipcMain.handle('pipeline:retryIntegration', (_e, pipelineId: string, taskId: string) =>
+    pipeline.retryIntegration(pipelineId, taskId),
+  )
+  ipcMain.handle('pipeline:archiveCompleted', (_e, pipelineId: string) => pipeline.archiveCompleted(pipelineId))
+  ipcMain.handle('pipeline:deleteDelivery', (_e, pipelineId: string, deliveryId: string) =>
+    pipeline.deleteDelivery(pipelineId, deliveryId),
+  )
+  ipcMain.handle('pipeline:reopenTask', (_e, pipelineId: string, taskId: string) =>
+    pipeline.reopenTask(pipelineId, taskId),
+  )
+  ipcMain.handle('pipeline:taskDiff', async (_e, pipelineId: string, taskId: string) => {
+    const task = (await pipeline.listTasks(pipelineId)).find((t) => t.id === taskId)
+    return task ? pipeline.archivedTaskDiff(pipelineId, task) : null
+  })
+  ipcMain.handle('pipeline:removeTaskImage', (_e, pipelineId: string, taskId: string, url: string) =>
+    pipeline.removeTaskImage(pipelineId, taskId, url),
+  )
   // The engine's `running` map lives in memory: a task left in progress by an
   // abrupt shutdown would keep "running" on the board forever.
   void pipeline.reconcileExecutions().catch((err) => console.error('[pipeline] reconciliation failed:', err))

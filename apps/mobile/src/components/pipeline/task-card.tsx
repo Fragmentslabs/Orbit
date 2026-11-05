@@ -57,7 +57,14 @@ export const TaskCard = memo(function TaskCard({
   if (isNext) chips.push({ key: 'next', icon: 'play', text: t('pipeline.next'), tone: 'primary' })
   if (running && phaseName) chips.push({ key: 'phase', icon: 'play', text: phaseName, tone: 'primary' })
   if (hasError) chips.push({ key: 'error', icon: 'alert', text: t('pipeline.error'), tone: 'destructive' })
-  if (task.pushError) chips.push({ key: 'push', icon: 'alert', text: t('pipeline.pushFailed'), tone: 'warning' })
+  if (task.integration) {
+    chips.push({
+      key: 'merge',
+      icon: task.integration.state === 'failed' ? 'alert' : 'clock',
+      text: t(`pipeline.integration.${task.integration.state}Short`),
+      tone: task.integration.state === 'failed' ? 'destructive' : task.integration.state === 'integrated' ? 'primary' : 'muted',
+    })
+  }
   if (task.commitError) chips.push({ key: 'commit', icon: 'alert', text: t('pipeline.commitFailed'), tone: 'warning' })
   if (task.status === 'paused' && !hasError) chips.push({ key: 'paused', icon: 'pause', text: phaseName ?? t('pipeline.paused'), tone: 'muted' })
   if (task.workTimeMs > 0) extras.push({ key: 'time', icon: 'clock', text: formatDuration(task.workTimeMs) })

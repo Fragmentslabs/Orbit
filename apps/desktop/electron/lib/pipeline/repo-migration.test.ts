@@ -153,9 +153,7 @@ describe('legacy data migration', () => {
       name: 'Board',
       worktreePerTask: true,
       operationMode: 'automatic',
-      pushAtEnd: false,
       commitAtEnd: true,
-      resultScreenshots: true,
       commandPolicy: { blocked: ['rm -rf'], controlled: ['git push'] },
       // The built-in template ids are English now; `infra` never changed.
       templateId: 'development,validation,infra',

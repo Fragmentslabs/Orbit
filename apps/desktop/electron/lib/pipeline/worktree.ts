@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { Task, TaskWorktree } from '@shared/pipeline'
+import type { Pipeline, Task, TaskWorktree } from '@shared/pipeline'
 import { discardSnapshots } from '../snapshot'
 import {
   currentBase,
@@ -64,6 +64,8 @@ export async function createWorktree(opts: {
   projectId: string
   task: Pick<Task, 'id' | 'title' | 'worktree'>
   base?: string
+  /** Branch name when it is not the task's own (the integration branch) */
+  branch?: string
   signal?: AbortSignal
 }): Promise<TaskWorktree> {
   const repo = await repositoryRoot(opts.mainFolder)
@@ -74,7 +76,7 @@ export async function createWorktree(opts: {
   }
   const worktreePath =
     opts.task.worktree?.path ?? (await worktreeLocation(repo, opts.projectId, opts.task.id))
-  const branch = opts.task.worktree?.branch ?? branchName(opts.task)
+  const branch = opts.task.worktree?.branch ?? opts.branch ?? branchName(opts.task)
   const base = opts.task.worktree?.base ?? opts.base ?? (await currentBase(repo))
 
   // Stale record of a worktree whose folder was deleted by hand: without the
@@ -99,6 +101,35 @@ export async function createWorktree(opts: {
   }
 }
 
+/** Folder name (and pseudo task id) of a pipeline's integration worktree. */
+export const integrationFolderId = (pipelineId: string): string => `integration-${pipelineId}`
+
+/** `pipeline/<name>-<id>/integration`: readable in `git branch`, unique through the id. */
+export function integrationBranchName(pipeline: Pick<Pipeline, 'id' | 'name'>): string {
+  return `${BRANCH_PREFIX}/${slug(pipeline.name)}-${pipeline.id.slice(-6).toLowerCase()}/integration`
+}
+
+/**
+ * Creates (or recreates, when the folder is gone) the pipeline's integration
+ * worktree. It starts from the pipeline's working branch, or the repository's
+ * current one; recreating just checks the existing branch out again.
+ */
+export function createIntegrationWorktree(opts: {
+  mainFolder: string
+  projectId: string
+  pipeline: Pick<Pipeline, 'id' | 'name' | 'branch' | 'integration'>
+  signal?: AbortSignal
+}): Promise<TaskWorktree> {
+  return createWorktree({
+    mainFolder: opts.mainFolder,
+    projectId: opts.projectId,
+    task: { id: integrationFolderId(opts.pipeline.id), title: opts.pipeline.name, worktree: opts.pipeline.integration },
+    branch: integrationBranchName(opts.pipeline),
+    base: opts.pipeline.branch?.trim() || undefined,
+    signal: opts.signal,
+  })
+}
+
 /**
  * Removes the task's worktree (folder, git record and snapshots). The branch
  * only goes with `deleteBranch` — without it, the committed work stays
@@ -107,7 +138,7 @@ export async function createWorktree(opts: {
 export async function removeWorktree(
   mainFolder: string | undefined,
   worktree: TaskWorktree,
-  opts: { deleteBranch?: boolean } = {},
+  opts: { deleteBranch?: boolean; keepSnapshots?: boolean } = {},
 ): Promise<void> {
   const repo = mainFolder ? await repositoryRoot(mainFolder).catch(() => undefined) : undefined
   // Before git: it walks through the node_modules links and would delete the
@@ -121,7 +152,7 @@ export async function removeWorktree(
     await git(repo, ['worktree', 'prune']).catch(() => {})
     if (opts.deleteBranch) await git(repo, ['branch', '-D', worktree.branch]).catch(() => {})
   }
-  await discardSnapshots(worktree.folder).catch(() => {})
+  if (!opts.keepSnapshots) await discardSnapshots(worktree.folder).catch(() => {})
 }
 
 /**

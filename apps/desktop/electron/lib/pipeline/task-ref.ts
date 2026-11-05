@@ -77,6 +77,8 @@ export function summarizeTask(pipeline: Pipeline, task: Task, all: Task[]): stri
     deps.length ? `Depends on: ${deps.join('; ')}` : '',
     `Cost: ${task.cost.toFixed(4)} · tokens: ${task.tokens}`,
     task.worktree ? `Branch: ${task.worktree.branch} (worktree ${task.worktree.folder})` : '',
+    task.integration ? `Integration: ${task.integration.state}${task.integration.detail ? ` — ${clip(task.integration.detail, 300)}` : ''}` : '',
+    task.deliveryId ? 'Delivered: archived in the history (read-only).' : '',
     task.finalCommitHash ? `Final commit: ${task.finalCommitHash}` : '',
     task.previousCommits?.length ? `Earlier rounds' commits: ${task.previousCommits.join(', ')}` : '',
     task.diff?.files.length
@@ -108,7 +110,11 @@ export function taskNotes(task: Task, phase?: string, perNote = 6000): string {
 
 /** The patch of ONE file out of the task's accumulated diff (or the list of files). */
 export function taskDiff(task: Task, file?: string, max = 20_000): string {
-  const diff = task.diff
+  return formatDiff(task.diff, file, max)
+}
+
+/** Same, for a diff that came from elsewhere (an archived task reads it from git). */
+export function formatDiff(diff: { files: string[]; patch: string } | null | undefined, file?: string, max = 20_000): string {
   if (!diff || diff.files.length === 0) return 'This task has no recorded diff.'
   if (!file) return `Files changed (${diff.files.length}):\n${diff.files.join('\n')}\n\nAsk again with "file" to read one patch.`
   const target = file.trim()

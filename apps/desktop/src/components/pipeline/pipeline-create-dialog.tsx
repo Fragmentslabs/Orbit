@@ -23,6 +23,7 @@ import { BranchSelector } from "@/src/components/branch-selector"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ThinkingMenu } from "@/src/components/thinking-menu"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
+import { pipelineApi } from "@/src/lib/ipc"
 import { useReasoningPrefsStore } from "@/src/stores/reasoning-prefs"
 import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { cn } from "@/lib/utils"
@@ -73,12 +74,13 @@ export function PipelineCreateDialog({
   const [name, setName] = useState("")
   const [folders, setFolders] = useState<string[]>([])
   const [phases, setPhases] = useState<PhaseChoice[]>([])
-  const [pushAtEnd, setPushAtEnd] = useState(false)
   const [commitAtEnd, setCommitAtEnd] = useState(true)
   const [commitPrompt, setCommitPrompt] = useState("")
   const [promptOpen, setPromptOpen] = useState(false)
-  const [screenshots, setScreenshots] = useState(false)
-  const [worktreePerTask, setWorktreePerTask] = useState(false)
+  const [worktreePerTask, setWorktreePerTask] = useState(true)
+  const [parallelTasks, setParallelTasks] = useState(1)
+  // null = not checked yet. Worktrees need a git repository in the main folder.
+  const [hasGit, setHasGit] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<{ index: number | null; phase: PhaseChoice | null } | null>(null)
   const [defaultReasoning, setDefaultReasoning] = useState<ReasoningConfig | null>(null)
@@ -129,11 +131,10 @@ export function PipelineCreateDialog({
     setFolders(existingProject?.folders ?? [])
     if (editingPipeline) {
       setName(editingPipeline.name)
-      setPushAtEnd(editingPipeline.pushAtEnd)
       setCommitAtEnd(editingPipeline.commitAtEnd !== false)
       setCommitPrompt(editingPipeline.commitPrompt ?? "")
-      setScreenshots(!!editingPipeline.resultScreenshots)
       setWorktreePerTask(!!editingPipeline.worktreePerTask)
+      setParallelTasks(editingPipeline.parallelTasks ?? 1)
       // Editing starts from the pipeline's REAL phases (they are already copies,
       // D4), not from the templates: the user may have edited them only for this
       // pipeline. Each one carries the model and reasoning it already has.
@@ -155,11 +156,10 @@ export function PipelineCreateDialog({
     setAlignedModel(modelKey)
     setDefaultReasoning(model ? savedLevel(model.providerId, model.modelId) : null)
     setName("")
-    setPushAtEnd(false)
     setCommitAtEnd(true)
     setCommitPrompt("")
-    setScreenshots(false)
-    setWorktreePerTask(false)
+    setWorktreePerTask(true)
+    setParallelTasks(1)
     setPhases(templates.filter((tpl) => tpl.isDefault).map(fromTemplate))
     // The reset is triggered by the dialog OPENING; fromTemplate is a helper
     // recreated on every render and as a dep would clear the form by itself.
@@ -223,11 +223,24 @@ export function PipelineCreateDialog({
 
   // Push depends on the final commit: turning the commit off turns the push off
   // with it — a push without the complete state committed would upload
-  // unfinished work.
-  const onChangeCommit = (enabled: boolean) => {
-    setCommitAtEnd(enabled)
-    if (!enabled) setPushAtEnd(false)
-  }
+  // Which flow the switches add up to (see pipelineFlow in @shared/pipeline).
+  const mergeFlow = worktreePerTask && hasGit !== false && commitAtEnd
+
+  // Worktrees need git: look at the main folder whenever it changes.
+  useEffect(() => {
+    const folder = folders[0]
+    if (!open || !folder) {
+      setHasGit(null)
+      return
+    }
+    let cancelled = false
+    void pipelineApi.hasGit(folder).then((ok) => {
+      if (!cancelled) setHasGit(ok)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, folders])
 
   const create = async () => {
     if (!canCreate || saving || !phasesModel) return
@@ -239,11 +252,10 @@ export function PipelineCreateDialog({
         // the "Default model".
         await updatePipeline(editingPipeline.id, {
           name: name.trim(),
-          pushAtEnd,
           commitAtEnd,
           ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : { commitPrompt: "" }),
-          resultScreenshots: screenshots,
-          worktreePerTask,
+          worktreePerTask: worktreePerTask && hasGit !== false,
+          parallelTasks: mergeFlow ? parallelTasks : 1,
           phases: phases.map((phase, order) => {
             const previous = editingPipeline.phases[order]
             return {
@@ -276,11 +288,10 @@ export function PipelineCreateDialog({
         providerId: phasesModel.providerId,
         modelId: phasesModel.modelId,
         reasoning: defaultReasoning,
-        pushAtEnd,
         commitAtEnd,
         ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : {}),
-        resultScreenshots: screenshots,
-        worktreePerTask,
+        worktreePerTask: worktreePerTask && hasGit !== false,
+        ...(mergeFlow && parallelTasks > 1 ? { parallelTasks } : {}),
       })
       // Recents are global and shared with the chats. The model enters the list
       // here, and not when it is picked: the app's criterion is "actually used"
@@ -412,43 +423,70 @@ export function PipelineCreateDialog({
             </Field>
 
             <div className="space-y-2">
-              {/* Worktree per task: each task on its own branch and in its own
-                  copy. Applies to tasks that have not started yet — the ones in
-                  progress stay where they are. */}
-              <label className="flex cursor-pointer items-start gap-2">
-                <Switch checked={worktreePerTask} onCheckedChange={setWorktreePerTask} className="mt-0.5" />
+              {/* Worktrees: the flow is built around them (tasks merge into one
+                  integration branch). Without git there is nothing to merge, so the
+                  switch is off and explains why. */}
+              <label className={cn("flex items-start gap-2", hasGit === false ? "opacity-60" : "cursor-pointer")}>
+                <Switch
+                  checked={worktreePerTask && hasGit !== false}
+                  onCheckedChange={setWorktreePerTask}
+                  disabled={hasGit === false}
+                  className="mt-0.5"
+                />
                 <span>
                   <span className="block text-xs text-foreground">{t("pipeline.worktreePerTask")}</span>
                   <span className="block text-[11px] text-muted-foreground">{t("pipeline.worktreePerTaskHint")}</span>
+                  {hasGit === false && (
+                    <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+                      {t("pipeline.noGitNotice")}
+                    </span>
+                  )}
+                  {hasGit !== false && !worktreePerTask && (
+                    <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+                      {t("pipeline.worktreeOffNotice")}
+                    </span>
+                  )}
                 </span>
               </label>
-              <div className="flex items-center gap-2">
-                <Switch checked={commitAtEnd} onCheckedChange={onChangeCommit} />
-                <span className="text-xs text-foreground">{t("pipeline.commit")}</span>
-                <Hint label={t("pipeline.commitPromptTitle")}>
-                  <button
-                    type="button"
-                    onClick={() => setPromptOpen(true)}
-                    className="cursor-pointer text-muted-foreground hover:text-foreground"
-                  >
-                    <Settings2Icon className="size-3.5" />
-                  </button>
-                </Hint>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Switch checked={commitAtEnd} onCheckedChange={setCommitAtEnd} />
+                  <span className="text-xs text-foreground">{t("pipeline.commit")}</span>
+                  <Hint label={t("pipeline.commitPromptTitle")}>
+                    <button
+                      type="button"
+                      onClick={() => setPromptOpen(true)}
+                      className="cursor-pointer text-muted-foreground hover:text-foreground"
+                    >
+                      <Settings2Icon className="size-3.5" />
+                    </button>
+                  </Hint>
+                </div>
+                {!commitAtEnd && (
+                  <p className="pl-10 text-[11px] text-amber-600 dark:text-amber-400">
+                    {t(worktreePerTask && hasGit !== false ? "pipeline.commitOffSharedNotice" : "pipeline.commitOffNotice")}
+                  </p>
+                )}
               </div>
-              <label className="flex cursor-pointer items-center gap-2">
-                {/* Push depends on the final commit: without it, the push would
-                    upload a branch without the task's complete state. */}
-                <Switch
-                  checked={pushAtEnd}
-                  onCheckedChange={setPushAtEnd}
-                  disabled={!commitAtEnd}
-                />
-                <span className="text-xs text-foreground">{t("pipeline.push")}</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2">
-                <Switch checked={screenshots} onCheckedChange={setScreenshots} />
-                <span className="text-xs text-foreground">{t("pipeline.prints")}</span>
-              </label>
+              {mergeFlow && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={parallelTasks}
+                    onChange={(e) => setParallelTasks(Number(e.target.value))}
+                    className="h-7 rounded-md border bg-background px-1.5 text-xs"
+                  >
+                    {[1, 2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  <span>
+                    <span className="block text-xs text-foreground">{t("pipeline.parallelTasks")}</span>
+                    <span className="block text-[11px] text-muted-foreground">{t("pipeline.parallelTasksHint")}</span>
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

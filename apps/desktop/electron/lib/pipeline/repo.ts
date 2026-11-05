@@ -6,6 +6,7 @@ import type {
   PhaseConfig,
   PhaseKind,
   PhaseNote,
+  Delivery,
   PhaseTemplate,
   Pipeline,
   Project,
@@ -147,6 +148,19 @@ function mapPhaseTemplate(raw: Json): PhaseTemplate {
   }
 }
 
+function mapWorktree(worktree: Json): NonNullable<Task['worktree']> {
+  return {
+    path: pick<string>(worktree, 'path', 'caminho') ?? '',
+    folder: pick<string>(worktree, 'folder', 'pasta') ?? '',
+    branch: String(worktree.branch),
+    base: String(worktree.base),
+    dependencies: (legacyValue(worktree.dependencies ?? worktree.dependencias, DEPENDENCIES) ??
+      'none') as NonNullable<Task['worktree']>['dependencies'],
+    createdAt: pick<string>(worktree, 'createdAt', 'criadoEm') ?? '',
+    ...(worktree.shared ? { shared: true } : {}),
+  }
+}
+
 function mapPipeline(raw: Json): Pipeline {
   const policy = (pick<Json>(raw, 'commandPolicy', 'politicaComandos') ?? {}) as Json
   return {
@@ -155,18 +169,17 @@ function mapPipeline(raw: Json): Pipeline {
     name: pick<string>(raw, 'name', 'nome') ?? '',
     phases: asArray<Json>(pick(raw, 'phases', 'fases')).map(mapPhaseConfig),
     ...(typeof raw.nextTaskNumber === 'number' ? { nextTaskNumber: raw.nextTaskNumber } : {}),
+    ...(typeof raw.parallelTasks === 'number' ? { parallelTasks: raw.parallelTasks } : {}),
+    ...(raw.model && typeof raw.model === 'object' ? { model: raw.model as Pipeline['model'] } : {}),
+    ...(raw.integration && typeof raw.integration === 'object' ? { integration: mapWorktree(raw.integration as Json) } : {}),
     ...(raw.branch !== undefined ? { branch: String(raw.branch) } : {}),
     ...(raw.worktree !== undefined ? { worktree: String(raw.worktree) } : {}),
     ...(pick(raw, 'worktreePerTask', 'worktreePorTask') !== undefined
       ? { worktreePerTask: Boolean(pick(raw, 'worktreePerTask', 'worktreePorTask')) }
       : {}),
     operationMode: legacyValue<Pipeline['operationMode']>(pick(raw, 'operationMode', 'modoOperacao'), MODE) ?? 'manual',
-    pushAtEnd: Boolean(pick<boolean>(raw, 'pushAtEnd', 'pushAoFinal') ?? false),
     commitAtEnd: Boolean(pick<boolean>(raw, 'commitAtEnd', 'commitAoFinal') ?? true),
     ...(raw.commitPrompt !== undefined ? { commitPrompt: String(raw.commitPrompt) } : {}),
-    ...(pick(raw, 'resultScreenshots', 'printsDoResultado') !== undefined
-      ? { resultScreenshots: Boolean(pick(raw, 'resultScreenshots', 'printsDoResultado')) }
-      : {}),
     commandPolicy: {
       blocked: asArray<string>(pick(policy, 'blocked', 'bloqueados')),
       controlled: asArray<string>(pick(policy, 'controlled', 'controlados')),
@@ -223,9 +236,6 @@ function mapTask(raw: Json): Task {
     workTimeMs: (pick<number>(raw, 'workTimeMs', 'tempoTrabalhoMs') ?? 0) as number,
     tokens: (raw.tokens as number) ?? 0,
     cost: (pick<number>(raw, 'cost', 'custo') ?? 0) as number,
-    ...(pick(raw, 'pushError', 'pushFalha') !== undefined
-      ? { pushError: String(pick(raw, 'pushError', 'pushFalha')) }
-      : {}),
     ...(pick(raw, 'commitError', 'commitFalha') !== undefined
       ? { commitError: String(pick(raw, 'commitError', 'commitFalha')) }
       : {}),
@@ -245,19 +255,11 @@ function mapTask(raw: Json): Task {
           })),
         }
       : {}),
-    ...(worktree
-      ? {
-          worktree: {
-            path: pick<string>(worktree, 'path', 'caminho') ?? '',
-            folder: pick<string>(worktree, 'folder', 'pasta') ?? '',
-            branch: String(worktree.branch),
-            base: String(worktree.base),
-            dependencies: (legacyValue(worktree.dependencies ?? worktree.dependencias, DEPENDENCIES) ??
-              'none') as NonNullable<Task['worktree']>['dependencies'],
-            createdAt: pick<string>(worktree, 'createdAt', 'criadoEm') ?? '',
-          },
-        }
-      : {}),
+    ...(worktree ? { worktree: mapWorktree(worktree) } : {}),
+    ...(raw.integration && typeof raw.integration === 'object' ? { integration: raw.integration as Task['integration'] } : {}),
+    ...(typeof raw.deliveryId === 'string' ? { deliveryId: raw.deliveryId } : {}),
+    ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {}),
+    ...(typeof raw.followUpOf === 'string' ? { followUpOf: raw.followUpOf } : {}),
     ...(pick(raw, 'instructions', 'instrucoes') !== undefined
       ? {
           instructions: asArray<Json>(pick(raw, 'instructions', 'instrucoes')).map((instruction): ResumeInstruction => ({
@@ -445,6 +447,18 @@ export function saveProjects(projects: Project[]): Promise<void> {
 
 // ─── Pipelines ───────────────────────────────────────────────────────────────
 
+/** Read-modify-write of ONE pipeline under the file lock (no lost update against a number allocation). */
+export function patchPipeline(id: string, fn: (pipeline: Pipeline) => Pipeline): Promise<Pipeline | null> {
+  return withLock('pipelines.json', async () => {
+    const pipelines = await read<Pipeline[]>('pipelines.json', [])
+    const index = pipelines.findIndex((p) => p.id === id)
+    if (index < 0) return null
+    pipelines[index] = fn(pipelines[index])
+    await write('pipelines.json', pipelines)
+    return pipelines[index]
+  })
+}
+
 export function listPipelines(): Promise<Pipeline[]> {
   return read<Pipeline[]>('pipelines.json', [])
 }
@@ -480,6 +494,44 @@ export function allocateTaskNumber(pipelineId: string): Promise<number> {
  * prompts without erasing what the user wrote, and the shared id tells which
  * built-in one is overwritten.
  */
+// ─── Deliveries (history of the Merge button) ────────────────────────────────
+
+const deliveriesFile = (pipelineId: string): string => {
+  if (!SAFE_ID.test(pipelineId)) throw new Error(`invalid pipeline id: ${pipelineId}`)
+  return `deliveries-${pipelineId}.json`
+}
+
+export function listDeliveries(pipelineId: string): Promise<Delivery[]> {
+  return read<Delivery[]>(deliveriesFile(pipelineId), [])
+}
+
+/** Adds a delivery with the next number of its pipeline. */
+export function addDelivery(
+  pipelineId: string,
+  data: Omit<Delivery, 'id' | 'number' | 'createdAt' | 'pipelineId'>,
+): Promise<Delivery> {
+  return withLock(deliveriesFile(pipelineId), async () => {
+    const all = await read<Delivery[]>(deliveriesFile(pipelineId), [])
+    const delivery: Delivery = {
+      ...data,
+      id: `deliv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      pipelineId,
+      number: all.reduce((max, d) => Math.max(max, d.number), 0) + 1,
+      createdAt: new Date().toISOString(),
+    }
+    await write(deliveriesFile(pipelineId), [...all, delivery])
+    return delivery
+  })
+}
+
+export function removeDelivery(pipelineId: string, deliveryId: string): Promise<Delivery[]> {
+  return withLock(deliveriesFile(pipelineId), async () => {
+    const remaining = (await read<Delivery[]>(deliveriesFile(pipelineId), [])).filter((d) => d.id !== deliveryId)
+    await write(deliveriesFile(pipelineId), remaining)
+    return remaining
+  })
+}
+
 export function listCustomTemplates(): Promise<PhaseTemplate[]> {
   return read<PhaseTemplate[]>('templates.json', [])
 }
@@ -524,6 +576,8 @@ export async function removeTasks(pipelineId: string): Promise<void> {
   const file = tasksFile(pipelineId)
   await ensureMigrated()
   await withLock(file, () => fsp.rm(path.join(baseDir(), file), { force: true }))
+  const deliveries = deliveriesFile(pipelineId)
+  await withLock(deliveries, () => fsp.rm(path.join(baseDir(), deliveries), { force: true }))
 }
 
 /**

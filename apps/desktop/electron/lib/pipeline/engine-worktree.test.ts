@@ -11,6 +11,8 @@ vi.mock('./repo', () => ({
   listPipelines: async () => db.pipelines,
   listProjects: async () => db.projects,
   listTasks: async () => db.tasks,
+  patchPipeline: async () => null,
+  allocateTaskNumber: async () => 1,
   modifyTasks: async (_p: string, fn: (tasks: Task[]) => unknown) => fn(db.tasks),
   updateTask: async (_p: string, taskId: string, patch: (t: Task) => Task) => {
     const i = db.tasks.findIndex((t) => t.id === taskId)
@@ -27,7 +29,18 @@ const wt = vi.hoisted(() => ({
   exists: vi.fn(async () => true),
   cleanOrphans: vi.fn(async () => {}),
 }))
-vi.mock('./worktree', () => wt)
+vi.mock('./worktree', () => ({ ...wt, integrationFolderId: (id: string) => `integration-${id}` }))
+const integ = vi.hoisted(() => ({
+  ensureIntegration: vi.fn(),
+  enqueueIntegration: vi.fn(async () => {}),
+  recoverIntegrations: vi.fn(async () => {}),
+  abortIntegrations: vi.fn(),
+  onIntegrationSettled: vi.fn(),
+  queuedState: () => ({ state: 'queued' as const, updatedAt: '' }),
+}))
+vi.mock('./integration', () => integ)
+const commit = vi.hoisted(() => ({ tryCommit: vi.fn(async () => ({ hash: 'abc1234', tokens: 0, cost: 0 })) }))
+vi.mock('./commit', () => commit)
 vi.mock('../process-manager', () => ({ listProcesses: () => [], killProcess: vi.fn() }))
 vi.mock('../snapshot', () => ({ capture: vi.fn(async () => undefined), diff: vi.fn() }))
 vi.mock('../broadcast', () => ({ broadcastPipelineEvent: vi.fn() }))
@@ -36,6 +49,7 @@ vi.mock('../catalog', () => ({ getProvider: vi.fn() }))
 vi.mock('../providers', () => ({ resolveModel: vi.fn() }))
 
 const { startTask, removeTask } = await import('./engine')
+const { pendingDependencies } = await import('./contract')
 
 const worktree = (id: string): TaskWorktree => ({
   path: `/wt/${id}`,
@@ -77,8 +91,7 @@ beforeEach(() => {
         { id: 'dev', name: 'dev', description: '', prompt: '', providerId: 'p', modelId: 'm', thinkingLevel: 0, tools: [], order: 0 },
       ],
       operationMode: 'manual',
-      pushAtEnd: false,
-      commitAtEnd: false,
+      commitAtEnd: true,
       commandPolicy: { blocked: [], controlled: [] },
       worktreePerTask: true,
       createdAt: '',
@@ -92,6 +105,10 @@ beforeEach(() => {
   wt.removeWorktree.mockClear()
   wt.exists.mockReset()
   wt.exists.mockResolvedValue(true)
+  integ.ensureIntegration.mockReset()
+  integ.ensureIntegration.mockResolvedValue({ ...worktree('integration'), branch: 'pipeline/e-1/integration' })
+  integ.enqueueIntegration.mockClear()
+  commit.tryCommit.mockClear()
 })
 
 describe('per-task worktree in the engine', () => {
@@ -171,12 +188,66 @@ describe('per-task worktree in the engine', () => {
     expect(db.tasks[0].error).toContain('is not a git repository')
   })
 
-  it('starts from the dependency branch when there is exactly one with a worktree', async () => {
-    db.tasks = [newTask('dep', { status: 'completed', worktree: worktree('dep') }), newTask('t1', { dependsOn: ['dep'] })]
+  it('starts every task from the integration branch', async () => {
     await startTask('pipe_1', 't1')
     await waitForRun()
 
-    expect(wt.createWorktree.mock.calls[0][0].base).toBe('pipeline/dep')
+    expect(wt.createWorktree.mock.calls[0][0].base).toBe('pipeline/e-1/integration')
+  })
+
+  it('a finished task goes to the merge queue, and its dependants wait for the integration', async () => {
+    db.tasks = [newTask('t1'), newTask('t2', { dependsOn: ['t1'] })]
+    await startTask('pipe_1', 't1')
+    await waitForRun()
+
+    expect(db.tasks[0].status).toBe('completed')
+    expect(db.tasks[0].integration?.state).toBe('queued')
+    expect(db.tasks[0].finalCommitHash).toBe('abc1234')
+    expect(integ.enqueueIntegration).toHaveBeenCalledWith('pipe_1', 't1')
+    expect(pendingDependencies(db.tasks[1], db.tasks)).toHaveLength(1)
+
+    db.tasks[0] = { ...db.tasks[0], integration: { state: 'integrated', updatedAt: '' } }
+    expect(pendingDependencies(db.tasks[1], db.tasks)).toHaveLength(0)
+  })
+
+  it('a failed final commit does not queue the task: it is marked failed with the reason', async () => {
+    commit.tryCommit.mockResolvedValueOnce({ error: 'nothing to commit', tokens: 0, cost: 0 } as never)
+    await startTask('pipe_1', 't1')
+    await waitForRun()
+
+    expect(db.tasks[0].integration?.state).toBe('failed')
+    expect(db.tasks[0].integration?.detail).toContain('nothing to commit')
+    expect(integ.enqueueIntegration).not.toHaveBeenCalled()
+  })
+
+  it('with commits off, tasks work in the shared integration worktree and never queue', async () => {
+    db.pipelines[0].commitAtEnd = false
+    await startTask('pipe_1', 't1')
+    await waitForRun()
+
+    expect(wt.createWorktree).not.toHaveBeenCalled()
+    expect(db.tasks[0].worktree?.shared).toBe(true)
+    expect(commit.tryCommit).not.toHaveBeenCalled()
+    expect(db.tasks[0].integration).toBeUndefined()
+    expect(integ.enqueueIntegration).not.toHaveBeenCalled()
+  })
+
+  it('with commits off, a second task cannot start while one is running', async () => {
+    db.pipelines[0].commitAtEnd = false
+    db.tasks = [newTask('t1', { status: 'in_progress', currentPhase: 0 }), newTask('t2')]
+    await expect(startTask('pipe_1', 't2')).rejects.toThrow(/one at a time/)
+  })
+
+  it('removing a task on the shared worktree leaves the integration worktree alone', async () => {
+    db.tasks = [newTask('t1', { status: 'completed', worktree: { ...worktree('integration'), shared: true } })]
+    await removeTask('pipe_1', 't1')
+
+    expect(wt.removeWorktree).not.toHaveBeenCalled()
+  })
+
+  it('a delivered task is history and cannot be removed', async () => {
+    db.tasks = [newTask('t1', { status: 'completed', deliveryId: 'deliv_1' })]
+    await expect(removeTask('pipe_1', 't1')).rejects.toThrow(/delivery/)
   })
 
   it('removing the task removes its worktree', async () => {

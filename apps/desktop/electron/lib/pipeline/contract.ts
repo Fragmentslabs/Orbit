@@ -1,4 +1,5 @@
 import type { Task } from '@shared/pipeline'
+import { isTaskSatisfied } from '@shared/pipeline'
 
 /**
  * Phase output contract and dependency rules. Deliberately pure (only type
@@ -32,11 +33,11 @@ export function extractCommit(text: string): string | undefined {
   return withContext?.[1]
 }
 
-/** Dependencies not completed yet — they block the automatic start (D15). */
+/** Dependencies not satisfied yet — they block the automatic start (D15). */
 export function pendingDependencies(task: Task, all: Task[]): Task[] {
   return task.dependsOn
     .map((id) => all.find((t) => t.id === id))
-    .filter((t): t is Task => !!t && t.status !== 'completed')
+    .filter((t): t is Task => !!t && !isTaskSatisfied(t))
 }
 
 /**

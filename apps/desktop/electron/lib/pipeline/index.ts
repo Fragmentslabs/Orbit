@@ -28,11 +28,17 @@ import {
   listProjects,
   listTasks,
   listCustomTemplates,
+  patchPipeline,
   removeTasks,
   savePipelines,
   saveProjects,
   saveCustomTemplates,
 } from './repo'
+import { repositoryRoot } from '../worktrees/core'
+import { followUpTitle } from './integration'
+import { deleteMediaUrls, stripMediaUrls } from './media-cleanup'
+import { persist } from './store'
+import { taskLabel } from './task-ref'
 import { PHASE_TEMPLATES, DEFAULT_POLICY, defaultTemplates } from './templates'
 
 /**
@@ -58,6 +64,17 @@ export {
   listPipelines,
 }
 export { abortAll, reconcileExecutions } from './engine'
+export {
+  archiveCompleted,
+  archivedTaskDiff,
+  commitIntegration,
+  deleteDelivery,
+  destinationBranches,
+  integrationStatus,
+  mergeIntegration,
+  retryIntegration,
+} from './integration'
+export { listDeliveries } from './repo'
 
 function newId(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
@@ -184,14 +201,21 @@ async function copyPhases(input: NewPipelineInput): Promise<PhaseConfig[]> {
   }))
 }
 
+/** Whether the project's main folder is inside a git repository (worktrees need one). */
+export async function hasGit(folder: string | undefined): Promise<boolean> {
+  if (!folder) return false
+  return repositoryRoot(folder).then(
+    () => true,
+    () => false,
+  )
+}
+
 export async function createPipeline(input: NewPipelineInput): Promise<Pipeline> {
-  // A push without the final commit would upload a branch without the task's full
-  // state (the phases after development did not commit) — a required dependency,
-  // validated here because the IPC can bypass the UI.
-  if (input.pushAtEnd && input.commitAtEnd === false) {
-    throw new Error('Push at the end requires the final commit to be enabled.')
-  }
   const commitPrompt = input.commitPrompt?.trim()
+  // Worktrees are the default — the flow is built around them — but a folder
+  // without git cannot have them: that pipeline runs in simple mode.
+  const owner = (await listProjects()).find((p) => p.id === input.projectId)
+  const worktreePerTask = (input.worktreePerTask ?? true) && (await hasGit(owner?.folders[0]))
   const pipeline: Pipeline = {
     id: newId('pipe_'),
     projectId: input.projectId,
@@ -199,12 +223,12 @@ export async function createPipeline(input: NewPipelineInput): Promise<Pipeline>
     phases: await copyPhases(input),
     branch: input.branch,
     worktree: input.worktree,
-    ...(input.worktreePerTask ? { worktreePerTask: true } : {}),
+    worktreePerTask,
+    ...(input.parallelTasks ? { parallelTasks: Math.min(4, Math.max(1, Math.trunc(input.parallelTasks))) } : {}),
+    model: { providerId: input.providerId, modelId: input.modelId, reasoning: input.reasoning ?? null },
     operationMode: input.operationMode ?? 'manual',
-    pushAtEnd: input.pushAtEnd ?? false,
     commitAtEnd: input.commitAtEnd ?? true,
     ...(commitPrompt ? { commitPrompt } : {}),
-    resultScreenshots: input.resultScreenshots ?? false,
     commandPolicy: { blocked: [...DEFAULT_POLICY.blocked], controlled: [...DEFAULT_POLICY.controlled] },
     templateId: input.phases?.map((f) => f.templateId ?? 'custom').join(',') ?? input.templateIds?.join(','),
     createdAt: now(),
@@ -227,25 +251,27 @@ export async function updatePipeline(
   id: string,
   patch: Partial<Omit<Pipeline, 'id' | 'projectId' | 'createdAt'>>,
 ): Promise<Pipeline | null> {
-  const pipelines = await listPipelines()
-  const index = pipelines.findIndex((p) => p.id === id)
+  const index = (await listPipelines()).findIndex((p) => p.id === id)
   if (index < 0) return null
-  const previous = pipelines[index]
-  const commitAtEnd = patch.commitAtEnd ?? previous.commitAtEnd
-  const pushAtEnd = patch.pushAtEnd ?? previous.pushAtEnd
-  if (pushAtEnd && commitAtEnd === false) {
-    throw new Error('Push at the end requires the final commit to be enabled.')
-  }
   // An empty prompt in the patch = back to the default (PIPELINE_COMMIT_PROMPT_DEFAULT).
   if (typeof patch.commitPrompt === 'string') {
     const clean = patch.commitPrompt.trim()
-    if (clean) patch = { ...patch, commitPrompt: clean }
-    else delete patch.commitPrompt
+    patch = { ...patch, commitPrompt: clean || undefined }
   }
-  pipelines[index] = { ...previous, ...patch }
-  await savePipelines(pipelines)
-  emit({ type: 'pipeline', pipeline: pipelines[index] })
-  return pipelines[index]
+  if (patch.worktreePerTask === true) {
+    const owner = (await listPipelines())[index]
+    const project = (await listProjects()).find((p) => p.id === owner.projectId)
+    if (!(await hasGit(project?.folders[0]))) throw new Error('Worktrees need a git repository in the project folder.')
+  }
+  if (patch.parallelTasks !== undefined) {
+    patch = { ...patch, parallelTasks: Math.min(4, Math.max(1, Math.trunc(patch.parallelTasks))) }
+  }
+  // Under the file lock: a whole-file write here could undo a task number or an
+  // integration worktree recorded a moment ago by the engine.
+  const updated = await patchPipeline(id, (p) => ({ ...p, ...patch, nextTaskNumber: p.nextTaskNumber, integration: p.integration }))
+  if (!updated) return null
+  emit({ type: 'pipeline', pipeline: updated })
+  return updated
 }
 
 export async function removePipeline(id: string): Promise<void> {
@@ -309,4 +335,38 @@ export async function loadAll(): Promise<{
     tasksPerPipeline[pipeline.id] = await listTasks(pipeline.id)
   }
   return { projects, pipelines, tasksPerPipeline }
+}
+
+// ─── History: reopen and image removal ───────────────────────────────────────
+
+/** Reopen: a NEW pending task that follows up a delivered one; the original stays read-only. */
+export async function reopenTask(pipelineId: string, taskId: string): Promise<Task> {
+  const original = (await listTasks(pipelineId)).find((t) => t.id === taskId)
+  if (!original?.deliveryId) throw new Error('Only a delivered task can be reopened.')
+  const last = original.notes.filter((n) => n.status === 'ok').at(-1)
+  const description = [
+    `Follow-up of task ${taskLabel(original)} ("${original.title}"), which was already delivered. Its work is part of the code now; build on it.`,
+    '',
+    '## Original request',
+    original.description.trim() || '(empty)',
+    ...(last ? ['', `## What the last phase (${last.phaseName}) reported`, last.content.trim().slice(0, 2000)] : []),
+    '',
+    '## What to do now',
+    '',
+  ].join('\n')
+  return createTask({ pipelineId, title: followUpTitle(original), description, followUpOf: original.id })
+}
+
+/**
+ * Deletes one stored image from a task (description or notes) and leaves a
+ * placeholder where it was. Works on delivered tasks too: freeing the space is
+ * the point.
+ */
+export async function removeTaskImage(pipelineId: string, taskId: string, url: string): Promise<Task | null> {
+  await deleteMediaUrls([url])
+  return persist(pipelineId, taskId, (t) => ({
+    ...t,
+    description: stripMediaUrls(t.description, [url]),
+    notes: t.notes.map((n) => ({ ...n, content: stripMediaUrls(n.content, [url]) })),
+  }))
 }

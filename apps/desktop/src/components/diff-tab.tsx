@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDownIcon } from "lucide-react";
 import type { ChatMessage } from "@shared/chat";
 import { useSessionStore } from "@/src/stores/session-store";
 import { EMPTY_TASKS, usePipelineStore } from "@/src/stores/pipeline-store";
+import { pipelineApi } from "@/src/lib/ipc";
 import { parsePatch, type FileDiff } from "@/lib/unified-diff";
 import { HighlightedDiffFile } from "@/src/components/diff-lines";
 import { cn } from "@/lib/utils";
@@ -92,7 +93,21 @@ export function DiffTab({
       : undefined,
   );
 
-  const patch = fromPipeline ? task?.diff?.patch : message?.snapshot?.patch;
+  // A delivered task keeps no patch: it is read back from git by its merge commit.
+  const [archivedPatch, setArchivedPatch] = useState<string | null>(null);
+  const needsGit = !!(fromPipeline && task?.deliveryId && !task.diff?.patch);
+  useEffect(() => {
+    if (!needsGit || !pipelineId || !taskId) return;
+    let cancelled = false;
+    void pipelineApi.taskDiff(pipelineId, taskId).then((result) => {
+      if (!cancelled) setArchivedPatch(result?.patch ?? "");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsGit, pipelineId, taskId]);
+
+  const patch = fromPipeline ? task?.diff?.patch || archivedPatch || undefined : message?.snapshot?.patch;
   const totalFiles = fromPipeline
     ? task?.diff?.files?.length
     : message?.snapshot?.files?.length;

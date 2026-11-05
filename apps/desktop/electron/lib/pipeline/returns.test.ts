@@ -75,7 +75,6 @@ beforeEach(() => {
       name: 'P',
       phases: [phase('dev', 0), phase('val', 1)],
       operationMode: 'manual',
-      pushAtEnd: false,
       commitAtEnd: false,
       commandPolicy: { blocked: [], controlled: [] },
       createdAt: '',

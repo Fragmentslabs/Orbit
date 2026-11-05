@@ -1,4 +1,5 @@
 import type { PhaseChoice, PhaseTemplate, Task } from '@orbit/shared'
+import { isTaskSatisfied } from '@orbit/shared'
 import type { TFunction } from 'i18next'
 
 /**
@@ -55,7 +56,7 @@ export function validPhasesForDrop(task: Task, totalPhases: number): number[] {
 export function blockingDependency(task: Task, tasks: Task[]): string | undefined {
   for (const id of task.dependsOn) {
     const dep = tasks.find((t) => t.id === id)
-    if (dep && dep.status !== 'completed') return dep.title
+    if (dep && !isTaskSatisfied(dep)) return dep.title
   }
   return undefined
 }
@@ -66,7 +67,7 @@ export function blockingDependency(task: Task, tasks: Task[]): string | undefine
  */
 export function nextInQueue(task: Task, tasks: Task[]): boolean {
   const candidates = tasks
-    .filter((t) => t.status === 'pending' && t.dependsOn.every((id) => tasks.some((x) => x.id === id && x.status === 'completed')))
+    .filter((t) => t.status === 'pending' && t.dependsOn.every((id) => tasks.some((x) => x.id === id && isTaskSatisfied(x))))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   return candidates[0]?.id === task.id
 }

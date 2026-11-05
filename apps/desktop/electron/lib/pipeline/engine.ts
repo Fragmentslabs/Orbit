@@ -1,32 +1,22 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-import { generateText } from 'ai'
-import type { NewTaskInput, PhaseNote, Pipeline, PipelineEvent, Project, Task, TaskWorktree } from '@shared/pipeline'
-import {
-  PIPELINE_COMMIT_PROMPT_DEFAULT,
-  PIPELINE_RETRY_DEFAULT,
-  notesForRound,
-  returnForRound,
-  taskRound,
-} from '@shared/pipeline'
-import type { SendMessageInput } from '@shared/chat'
+import type { NewTaskInput, PhaseNote, Pipeline, Project, Task, TaskWorktree } from '@shared/pipeline'
+import { PIPELINE_RETRY_DEFAULT, notesForRound, pipelineFlow, taskRound } from '@shared/pipeline'
 import { capture, diff } from '../snapshot'
-import { userShellEnv } from '../shell-env'
 import { createsCycle, pendingDependencies } from './contract'
 import { runPhase, type ToolProgress } from './runner'
-import { allocateTaskNumber, updateTask, listPipelines, listProjects, listTasks, modifyTasks } from './repo'
-import { broadcastPipelineEvent } from '../broadcast'
-import { loadPromptContext, search as searchMemory } from '../memory/service'
-import { getProvider } from '../catalog'
-import { resolveModel } from '../providers'
-import { withProviderSession } from '../provider-session'
-import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from '../reasoning'
-import { toTokenUsage } from '../usage'
+import { allocateTaskNumber, listPipelines, listProjects, listTasks, modifyTasks } from './repo'
+import { emit, loadContext, newId, now, persist } from './store'
 import { killProcess, listProcesses } from '../process-manager'
 import { createWorktree, exists, cleanOrphans, removeWorktree } from './worktree'
-import type { Memory } from '@shared/memory'
-
-const execFileAsync = promisify(execFile)
+import { tryCommit } from './commit'
+import {
+  abortIntegrations,
+  enqueueIntegration,
+  ensureIntegration,
+  onIntegrationSettled,
+  queuedState,
+  recoverIntegrations,
+} from './integration'
+import { integrationFolderId } from './worktree'
 
 /**
  * State machine and queue of pipeline mode (§5, §6, §9 of the design).
@@ -62,35 +52,7 @@ const activeQueues = new Set<string>()
 /** Pause requested by the user: the task stops when the current phase ends. */
 const pauseRequested = new Set<string>()
 
-function now(): string {
-  return new Date().toISOString()
-}
-
-function newId(prefix: string): string {
-  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-}
-
-/**
- * Single funnel of the pipeline events: windows (renderer) + companions (mobile
- * app) — the mobile app mirrors the whole board through this channel.
- */
-export function emit(event: PipelineEvent): void {
-  broadcastPipelineEvent(event)
-}
-
-async function loadContext(pipelineId: string): Promise<{ pipeline: Pipeline; project: Project } | null> {
-  const pipeline = (await listPipelines()).find((p) => p.id === pipelineId)
-  if (!pipeline) return null
-  const project = (await listProjects()).find((p) => p.id === pipeline.projectId)
-  if (!project) return null
-  return { pipeline, project }
-}
-
-async function persist(pipelineId: string, taskId: string, patch: (t: Task) => Task): Promise<Task | null> {
-  const task = await updateTask(pipelineId, taskId, patch)
-  if (task) emit({ type: 'task', pipelineId, task })
-  return task
-}
+export { emit } from './store'
 
 // ─── Dependencies ────────────────────────────────────────────────────────────
 
@@ -117,11 +79,12 @@ async function ensureWorktree(
   const tasks = await listTasks(pipelineId)
   const task = tasks.find((t) => t.id === taskId)
   if (!task) return undefined
+  const flow = pipelineFlow(pipeline)
   if (task.worktree) {
     if (await exists(task.worktree.path)) return task.worktree
   } else {
     const firstRun = taskRound(task) === 1 && task.notes.every((n) => n.status === 'skipped')
-    if (!pipeline.worktreePerTask || !firstRun) return undefined
+    if (flow === 'simple' || !firstRun) return undefined
   }
   const mainFolder = project.folders[0]
   if (!mainFolder) throw new Error('The project has no main folder.')
@@ -133,28 +96,28 @@ async function ensureWorktree(
     phaseIndex: task.currentPhase ?? 0,
     text: task.worktree ? 'Recriando o worktree da task…\n\n' : 'Preparando o worktree da task…\n\n',
   })
+
+  // Commits off: tasks work inside the integration worktree itself, one at a
+  // time, and their changes pile up there (see PipelineFlow).
+  if (flow === 'shared' || task.worktree?.shared) {
+    const integration = await ensureIntegration(pipelineId, signal)
+    const shared: TaskWorktree = { ...integration, shared: true }
+    await persist(pipelineId, taskId, (t) => ({ ...t, worktree: shared }))
+    return shared
+  }
+
+  // Every task starts from the integration branch, so a task that depends on
+  // others already has their work in it, however many they are.
+  const integration = task.worktree ? undefined : await ensureIntegration(pipelineId, signal)
   const created = await createWorktree({
     mainFolder,
     projectId: project.id,
     task,
-    base: task.worktree ? undefined : branchFromDependencies(task, tasks),
+    base: integration?.branch,
     signal,
   })
   await persist(pipelineId, taskId, (t) => ({ ...t, worktree: created }))
   return created
-}
-
-/**
- * A task that depends on ONE task with a worktree starts from its branch: the
- * dependency's work was not merged into the base yet, and without this the
- * dependent task would start without it. With several, there is no single branch
- * — start from the base.
- */
-function branchFromDependencies(task: Task, tasks: Task[]): string | undefined {
-  const withBranch = task.dependsOn
-    .map((id) => tasks.find((t) => t.id === id)?.worktree)
-    .filter((w): w is TaskWorktree => !!w)
-  return withBranch.length === 1 ? withBranch[0].branch : undefined
 }
 
 /**
@@ -166,7 +129,8 @@ function branchFromDependencies(task: Task, tasks: Task[]): string | undefined {
 async function discardTaskWorktree(task: Task, mainFolder: string | undefined): Promise<void> {
   running.get(task.id)?.abort()
   await stopAndWait(task.id)
-  if (!task.worktree) return
+  // The shared (commits off) worktree is the pipeline's integration: it outlives the task.
+  if (!task.worktree || task.worktree.shared) return
   for (const process of listProcesses(`pipeline_${task.id}`)) {
     if (process.status === 'running') await killProcess(process.pid).catch(() => false)
   }
@@ -180,6 +144,12 @@ export async function discardPipelineWorktrees(pipelineId: string): Promise<void
   const context = await loadContext(pipelineId)
   for (const task of await listTasks(pipelineId)) {
     await discardTaskWorktree(task, context?.project.folders[0])
+  }
+  // The integration worktree goes too; its branch stays, with whatever was never delivered.
+  if (context?.pipeline.integration) {
+    await removeWorktree(context.project.folders[0], context.pipeline.integration).catch((err) =>
+      console.error('[pipeline] integration worktree removal failed:', err),
+    )
   }
 }
 
@@ -369,21 +339,14 @@ async function runTask(pipelineId: string, taskId: string, resumingInterrupted: 
       }
 
       const lastPhase = index >= pipeline.phases.length - 1
-      // Deterministic final commit + push (D10): the phases after development
-      // cannot commit, so the commit here captures the task's complete work —
-      // including the validation adjustments — instead of leaving it loose in the
-      // working tree. Push implies commit: there is no delivering a branch without
-      // the final state committed.
-      const wantsFinalCommit = lastPhase && (pipeline.commitAtEnd !== false || pipeline.pushAtEnd)
+      // Deterministic final commit (D10): the phases after development cannot
+      // commit, so the commit here captures the task's complete work — including
+      // the validation adjustments — instead of leaving it loose in the working
+      // tree, where it could not be merged.
+      const wantsFinalCommit = lastPhase && pipeline.commitAtEnd !== false
       const commit = wantsFinalCommit
         ? await tryCommit(root, pipeline, task, folders, controller.signal)
         : undefined
-      const pushError =
-        lastPhase && pipeline.pushAtEnd
-          ? commit?.error
-            ? 'The final commit failed; the push was cancelled so as not to upload incomplete work.'
-            : await tryPush(root, controller.signal)
-          : undefined
       const currentDiff = await measureDiff()
       // The pause landed AFTER the model finished (during commit/push/diff): the
       // phase does not count as completed yet — resuming runs it again from
@@ -391,6 +354,7 @@ async function runTask(pipelineId: string, taskId: string, resumingInterrupted: 
       // overwrote the pause with 'completed' on the last phase (race between
       // pauseTask and the completion write).
       if (controller.signal.aborted) break
+      const merges = pipelineFlow(pipeline) === 'merge' && !!worktree && !worktree.shared
       const updated = await persist(pipelineId, taskId, (t) => ({
         ...t,
         diff: currentDiff ?? t.diff,
@@ -399,13 +363,22 @@ async function runTask(pipelineId: string, taskId: string, resumingInterrupted: 
         cost: t.cost + result.cost + (commit?.cost ?? 0),
         commitError: commit?.error,
         finalCommitHash: commit?.hash,
-        pushError,
+        // A task that merges goes to the queue as soon as it completes.
+        integration:
+          lastPhase && t.status === 'in_progress' && merges
+            ? commit?.error
+              ? { state: 'failed', detail: `The final commit failed: ${commit.error}`, updatedAt: now() }
+              : queuedState()
+            : t.integration,
         currentPhase: lastPhase ? t.currentPhase : index + 1,
         // Extra guard: if the pause won this write, do not complete.
         status: lastPhase && t.status === 'in_progress' ? 'completed' : t.status,
         completedAt: lastPhase && t.status === 'in_progress' ? now() : t.completedAt,
         workTimeMs: lastPhase ? t.workTimeMs + (Date.now() - runStart) : t.workTimeMs,
       }))
+      if (lastPhase && updated?.status === 'completed' && updated.integration?.state === 'queued') {
+        void enqueueIntegration(pipelineId, taskId)
+      }
       if (lastPhase || !updated) break
 
       // SOFT stop — today only turning the automatic queue off goes through here
@@ -460,372 +433,45 @@ async function complete(pipelineId: string, taskId: string, runStart: number): P
   )
 }
 
-// ─── Final commit ────────────────────────────────────────────────────────────
-
-interface CommitResult {
-  /** git error while measuring/staging/committing (message NOT generated is NOT an error — it becomes a fallback) */
-  error?: string
-  /** Short hash of the created commit */
-  hash?: string
-  tokens: number
-  cost: number
-}
-
-/** How many paths per `git add` before falling back to add -A of the whole tree. */
-const MAX_ADD_PATHS = 2000
-
-/**
- * Deterministic final commit when `commitAtEnd` is on (D10).
- *
- * Without it, the adjustments from the phases after development would live only
- * in the working tree (the templates forbid them from committing) — and the push
- * would upload a branch without that work. The message is generated by a
- * one-shot call (no tools) with the SAME context a phase receives: task
- * description, notes from the previous phases, the user's commit preferences in
- * memory and the style of the repo's recent commits. Without a diff nothing is
- * committed — the previous phases may already have committed everything, and an
- * empty commit does not exist.
- *
- * Failure does NOT revert the task's completion (same as the push): the error
- * goes to `task.commitError` and the push is cancelled, so that incomplete work
- * is not uploaded.
- */
-async function tryCommit(
-  root: string,
-  pipeline: Pipeline,
-  task: Task,
-  folders: string[],
-  signal: AbortSignal,
-): Promise<CommitResult> {
-  // 1) Real diff of the worktree (porcelain -z + untracked-files=all: includes
-  //    new files and does not break on paths with spaces/quotes).
-  let status: string
-  try {
-    const { stdout } = await execFileAsync(
-      'git',
-      ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-      { cwd: root, env: userShellEnv(), timeout: 30_000, signal },
-    )
-    status = stdout
-  } catch (err) {
-    if (signal.aborted) return { tokens: 0, cost: 0 }
-    const e = err as { stderr?: string; message?: string }
-    return { error: e.stderr?.trim() || e.message || String(err), tokens: 0, cost: 0 }
-  }
-  if (!status.trim()) return { tokens: 0, cost: 0 }
-
-  const { message, tokens, cost } = await generateCommitMessage(root, pipeline, task, folders, status, signal)
-
-  // 3) Only the files the task changed (git status respects .gitignore): no
-  //    scanning of the whole tree, nothing that is not the task's work.
-  const paths = pathsFromStatus(status)
-  const addArgs = paths.length > MAX_ADD_PATHS ? ['add', '-A'] : ['add', '-A', '--', ...paths]
-  try {
-    await execFileAsync('git', addArgs, { cwd: root, env: userShellEnv(), timeout: 120_000, signal })
-  } catch (err) {
-    if (signal.aborted) return { tokens, cost }
-    const e = err as { stderr?: string; message?: string }
-    return { error: e.stderr?.trim() || e.message || String(err), tokens, cost }
-  }
-
-  // 4) Commit — header and body as separate -m (git joins them with a blank
-  //    line). An empty/fallback message falls back to the task title.
-  const [header, ...body] = message.split('\n')
-  const bodyJoined = body.join('\n').trim()
-  const commitArgs = bodyJoined
-    ? ['commit', '-m', header.trim() || task.title, '-m', bodyJoined]
-    : ['commit', '-m', header.trim() || task.title]
-  try {
-    await execFileAsync('git', commitArgs, { cwd: root, env: userShellEnv(), timeout: 120_000, signal })
-  } catch (err) {
-    if (signal.aborted) return { tokens, cost }
-    const e = err as { stderr?: string; message?: string }
-    return { error: e.stderr?.trim() || e.message || String(err), tokens, cost }
-  }
-
-  try {
-    const { stdout } = await execFileAsync('git', ['rev-parse', '--short', 'HEAD'], {
-      cwd: root,
-      env: userShellEnv(),
-      timeout: 15_000,
-      signal,
-    })
-    return { hash: stdout.trim() || undefined, tokens, cost }
-  } catch {
-    // An unreadable hash does not invalidate the commit — carry on without it in the report.
-    return { tokens, cost }
-  }
-}
-
-/**
- * Paths of `git status --porcelain=v1 -z`: each entry is `XY <path>`, except for
- * rename/copy (`R`/`C`) — with -z the current field is the DESTINATION and the
- * next field carries the origin (which no longer exists and does not need to go
- * into `git add`).
- */
-function pathsFromStatus(status: string): string[] {
-  const fields = status.split('\0')
-  const paths: string[] = []
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i]
-    if (!field) continue
-    const first = field[0]
-    const path = field.slice(3)
-    if (first === 'R' || first === 'C') {
-      if (path) paths.push(path)
-      i++
-    } else if (path) {
-      paths.push(path)
-    }
-  }
-  return paths
-}
-
-/**
- * Generates the final commit message with a one-shot call (no tools) on the
- * pipeline's default model. The system prompt is the pipeline's `commitPrompt`
- * or the default (what the task asks; without that, the style of the last
- * commit; without history, preferences in memory; Conventional Commits as
- * fallback). A failed call does NOT fail the commit: it falls back to the task
- * title.
- */
-async function generateCommitMessage(
-  root: string,
-  pipeline: Pipeline,
-  task: Task,
-  folders: string[],
-  status: string,
-  signal: AbortSignal,
-): Promise<{ message: string; tokens: number; cost: number }> {
-  const phase = pipeline.phases[0]
-  if (!phase) return { message: task.title, tokens: 0, cost: 0 }
-  let provider
-  try {
-    provider = await getProvider(phase.providerId)
-  } catch {
-    provider = undefined
-  }
-  let model
-  try {
-    model = await resolveModel(phase.providerId, phase.modelId)
-  } catch (err) {
-    console.error('[pipeline] final commit model unavailable — fallback message:', err)
-    return { message: task.title, tokens: 0, cost: 0 }
-  }
-
-  // User's commit preferences: general ones by weight + a targeted search (the
-  // lexical search finds "commit messages in English" even outside the top
-  // results).
-  const ctx = await loadPromptContext('code', root)
-  const commitPrefs = await searchMemory({ query: 'commit', kinds: ['general'], limit: 5 }).catch(() => [])
-  const memories = [...ctx.general, ...commitPrefs.filter((m) => !ctx.general.includes(m))]
-
-  // Real style of the repo: the most recent commit is the de facto preference;
-  // the headers list serves as a pattern when the last one is not enough to infer
-  // the format.
-  let log = ''
-  let lastCommit = ''
-  try {
-    const [list, last] = await Promise.all([
-      execFileAsync('git', ['log', '--oneline', '-20'], {
-        cwd: root,
-        env: userShellEnv(),
-        timeout: 15_000,
-        signal,
-      }),
-      execFileAsync('git', ['log', '-1', '--format=%B'], {
-        cwd: root,
-        env: userShellEnv(),
-        timeout: 15_000,
-        signal,
-      }),
-    ])
-    log = list.stdout.trim()
-    lastCommit = last.stdout.trim().slice(0, 4000)
-  } catch {
-    // repository without commits yet — carry on without the style block
-  }
-
-  const input: SendMessageInput = {
-    sessionId: `pipeline_${task.id}`,
-    text: task.description,
-    providerId: phase.providerId,
-    modelId: phase.modelId,
-    mode: 'code',
-    options: { permissionMode: 'full' },
-    directory: root,
-    extraDirectories: folders.filter((p) => p !== root),
-  }
-
-  const providerOptions = await buildProviderOptions(input)
-  try {
-    // withProviderSession: providers that require a stable conversation
-    // identifier (e.g. the x-opencode-session header) receive the task's, as in
-    // the phases.
-    const { text, usage } = await withProviderSession(`pipeline_${task.id}`, () =>
-      generateText({
-        model,
-        system: pipeline.commitPrompt?.trim() || PIPELINE_COMMIT_PROMPT_DEFAULT,
-        messages: normalizeMessages(
-          [
-            {
-              role: 'user',
-              content: buildCommitPrompt({ pipeline, task, folders, status, memories, log, lastCommit }),
-            },
-          ],
-          interleavedReasoningField(provider, phase.modelId),
-        ),
-        abortSignal: signal,
-        providerOptions,
-      }),
-    )
-    const tok = toTokenUsage(usage, provider?.models[phase.modelId]?.cost)
-    const message = cleanCommitMessage(text)
-    return {
-      message: message || task.title,
-      tokens: tok.input + tok.output + (tok.reasoning ?? 0),
-      cost: tok.cost ?? 0,
-    }
-  } catch (err) {
-    console.error('[pipeline] final commit message generation failed — falling back to the title:', err)
-    return { message: task.title, tokens: 0, cost: 0 }
-  }
-}
-
-/**
- * Context of the commit message — mirrors what a phase receives (buildMessage in
- * the runner): the agent must know what the previous phases did to write a good
- * commit, not guess it from the diff.
- */
-function buildCommitPrompt(ctx: {
-  pipeline: Pipeline
-  task: Task
-  folders: string[]
-  status: string
-  memories: Memory[]
-  log: string
-  lastCommit: string
-}): string {
-  const parts: string[] = []
-  parts.push(`# Task: ${ctx.task.title}`)
-  if (ctx.task.description.trim()) parts.push(ctx.task.description.trim())
-
-  const phases = ctx.pipeline.phases
-  const phaseList = phases.map((p) => `${p.name} — ${p.description}`).join('\n')
-  parts.push(`\n## Pipeline\nThis task ran through ${phases.length} phases:\n${phaseList}`)
-
-  // Review round: the commit describes the FIX the user asked for, with this
-  // round's notes (the previous ones were already committed in their rounds).
-  const round = taskRound(ctx.task)
-  const taskReturn = returnForRound(ctx.task, round)
-  if (taskReturn) {
-    parts.push(
-      `\n## Review round ${round}\nThe user reviewed the previous round and sent the task back with this feedback — this commit is the fix for it:\n${taskReturn.text}`,
-    )
-  }
-
-  const earlier = notesForRound(ctx.task, round).filter((n) => n.status !== 'skipped')
-  if (earlier.length > 0) {
-    parts.push('\n## Notes from the phases')
-    for (const n of earlier) {
-      parts.push(`### ${n.phaseName} (${n.status})\n${n.content}`)
-    }
-  }
-
-  const repo: string[] = [`Working folder: ${ctx.folders[0] ?? '(none)'}`]
-  if (ctx.task.worktree) repo.push(`Branch: ${ctx.task.worktree.branch} (isolated worktree of this task)`)
-  else if (ctx.pipeline.branch) repo.push(`Branch: ${ctx.pipeline.branch}`)
-  if (ctx.pipeline.worktree) repo.push(`Worktree: ${ctx.pipeline.worktree}`)
-  parts.push(`\n## Repository\n${repo.join('\n')}`)
-
-  parts.push(`\n## Changed files (working tree)\n${ctx.status.trim() || '(none)'}`)
-
-  // Style precedence, in the same order as the default prompt: what the task asks
-  // (brief, at the top), the repo's most recent commit, the headers and, last,
-  // the preferences from memory — only when there is no commit above to imitate.
-  if (ctx.lastCommit) {
-    parts.push(
-      `\n## Most recent commit in this repository (match its language, format and scope)\n${ctx.lastCommit}`,
-    )
-  }
-  if (ctx.log) {
-    parts.push(`\n## Recent commit headers (pattern reference)\n${ctx.log}`)
-  }
-  if (ctx.memories.length > 0) {
-    parts.push(
-      `\n## User's commit preferences (from memory — use them only when there is no commit above to imitate)\n${ctx.memories.map((m) => `- ${m.text}`).join('\n')}`,
-    )
-  }
-  return parts.join('\n')
-}
-
-/** Strips markdown fences and leftover blank lines from the model's response. */
-function cleanCommitMessage(text: string): string {
-  const withoutFences = text.trim().replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '')
-  return withoutFences.trim()
-}
-
-// ─── Final push ──────────────────────────────────────────────────────────────
-
-/**
- * Deterministic push of the branch when `pushAtEnd` is on. It used to be an
- * instruction in the Report phase prompt (removed): the model could forget or
- * fail, and the push was one more LLM cost. Now the engine runs it when the last
- * phase completes and records the result.
- *
- * Failure does NOT revert the task's completion: the work is done, the push is
- * delivery — the error goes to `task.pushError` for the user to solve. First
- * `git push`; if it fails without upstream, tries `git push -u origin HEAD`.
- */
-async function tryPush(root: string, signal: AbortSignal): Promise<string | undefined> {
-  const attempts: string[][] = [
-    ['git', 'push'],
-    ['git', 'push', '-u', 'origin', 'HEAD'],
-  ]
-  let lastError = 'git push failed with no details.'
-  for (const args of attempts) {
-    try {
-      await execFileAsync('git', args, { cwd: root, env: userShellEnv(), timeout: 120_000, signal })
-      return undefined
-    } catch (err) {
-      // Pause in the middle of the push: the task is going to be paused anyway,
-      // so recording a push failure in the state makes no sense.
-      if (signal.aborted) return undefined
-      const e = err as { stderr?: string; stdout?: string; message?: string }
-      lastError = e.stderr?.trim() || e.stdout?.trim() || e.message || String(err)
-    }
-  }
-  return lastError
-}
-
 // ─── Automatic queue (D9) ────────────────────────────────────────────────────
 
 /**
- * One task at a time: the queue only fires the next one when the current
- * automatic task has completed ALL phases. The guard uses the PERSISTED state
- * (the Task's `auto` field), not an in-memory registry — a pause, an error, a
- * manual resume or turning the queue off/on never let the queue advance with the
- * previous one halfway through. Manually started tasks (`auto` absent) run in
- * parallel on purpose and neither block nor are blocked by the queue.
+ * The automatic queue starts up to `parallelTasks` tasks at once (1 unless the
+ * pipeline merges — parallel tasks need worktrees of their own). The guard uses
+ * the PERSISTED state (the Task's `auto` field), not an in-memory registry — a
+ * pause, an error, a manual resume or turning the queue off/on never let the
+ * queue advance with the previous ones halfway through. Manually started tasks
+ * (`auto` absent) run in parallel on purpose and neither block nor are blocked
+ * by the queue.
  */
 const queueRunning = new Set<string>()
+
+/** How many automatic tasks may run together. */
+export function parallelLimit(pipeline: Pipeline): number {
+  if (pipelineFlow(pipeline) !== 'merge') return 1
+  return Math.min(4, Math.max(1, Math.trunc(pipeline.parallelTasks ?? 1)))
+}
 
 async function advanceQueue(pipelineId: string): Promise<void> {
   if (!activeQueues.has(pipelineId) || queueRunning.has(pipelineId)) return
   queueRunning.add(pipelineId)
   try {
+    const context = await loadContext(pipelineId)
+    if (!context) return
+    const limit = parallelLimit(context.pipeline)
     const tasks = await listTasks(pipelineId)
-    // An automatic task that is not completed (running, paused or failed) holds
-    // the queue: the next one only enters once the current one went all the way.
-    // Solving that is up to the user (resume, remove or turn the queue off).
-    const automaticUnfinished = tasks.some((t) => t.auto === true && t.status !== 'completed')
-    if (automaticUnfinished) return
+    // An automatic task that is not completed (running, paused or failed) holds a
+    // slot: the next one only enters once it went all the way. Solving that is up
+    // to the user (resume, remove or turn the queue off).
+    let active = tasks.filter((t) => t.auto === true && t.status !== 'completed' && !t.deliveryId).length
     const candidates = tasks
       .filter((t) => t.status === 'pending' && pendingDependencies(t, tasks).length === 0)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    const next = candidates[0]
-    if (!next) return
-    await startTask(pipelineId, next.id, 0, true)
+    for (const next of candidates) {
+      if (active >= limit) break
+      await startTask(pipelineId, next.id, 0, true)
+      active++
+    }
   } finally {
     queueRunning.delete(pipelineId)
   }
@@ -862,6 +508,12 @@ export async function startTask(pipelineId: string, taskId: string, startPhase =
   const context = await loadContext(pipelineId)
   if (!context) return
   const { pipeline } = context
+  if (pipelineFlow(pipeline) === 'shared') {
+    // Commits off: every task works inside the integration worktree, so two at a
+    // time would write over each other.
+    const other = (await listTasks(pipelineId)).find((t) => t.id !== taskId && t.status === 'in_progress')
+    if (other) throw new Error('With commits off, tasks run one at a time. Wait for the running one to finish.')
+  }
 
   const skipped: PhaseNote[] = pipeline.phases.slice(0, startPhase).map((phase) => ({
     phaseId: phase.id,
@@ -941,6 +593,8 @@ export async function returnTask(
     // Only a completed and stopped task: returning in the middle of an execution
     // would mix the notes of two rounds.
     if (t.status !== 'completed' || running.has(t.id)) return t
+    // Delivered tasks are history; one being merged right now must finish first.
+    if (t.deliveryId || t.integration?.state === 'integrating') return t
     returned = true
     const round = taskRound(t) + 1
     return {
@@ -953,7 +607,6 @@ export async function returnTask(
       error: undefined,
       phaseInterrupted: undefined,
       commitError: undefined,
-      pushError: undefined,
       // The final commit of the round that ended stays in the history (report).
       previousCommits: t.finalCommitHash ? [...(t.previousCommits ?? []), t.finalCommitHash] : t.previousCommits,
       finalCommitHash: undefined,
@@ -961,7 +614,7 @@ export async function returnTask(
       auto: undefined,
     }
   })
-  if (!returned) throw new Error('Only a completed task can be returned.')
+  if (!returned) throw new Error('Only a completed task that was not delivered or being merged can be returned.')
   void executeTask(pipelineId, taskId)
 }
 
@@ -1029,6 +682,10 @@ export async function reconcileExecutions(): Promise<void> {
       )
     }
   }
+  // Tasks that were being merged when the app closed go back to the queue.
+  for (const pipeline of await listPipelines()) {
+    await recoverIntegrations(pipeline.id).catch((err) => console.error('[pipeline] integration recovery failed:', err))
+  }
   // Worktrees of tasks that no longer exist (removed with the app closed or in a
   // removal that failed halfway) would only take up disk.
   const projects = await listProjects()
@@ -1036,6 +693,7 @@ export async function reconcileExecutions(): Promise<void> {
   for (const pipeline of await listPipelines()) {
     const ids = alive.get(pipeline.projectId) ?? new Set<string>()
     for (const task of await listTasks(pipeline.id)) if (task.worktree) ids.add(task.id)
+    if (pipeline.integration) ids.add(integrationFolderId(pipeline.id))
     alive.set(pipeline.projectId, ids)
   }
   await cleanOrphans(projects, alive).catch((err) => console.error('[pipeline] worktree cleanup failed:', err))
@@ -1047,7 +705,13 @@ export function abortAll(): void {
   running.clear()
   activeQueues.clear()
   queueRunning.clear()
+  abortIntegrations()
 }
+
+// A task that reached the integration branch may unblock dependants.
+onIntegrationSettled((pipelineId) => {
+  if (activeQueues.has(pipelineId)) void advanceQueue(pipelineId)
+})
 
 // ─── Task CRUD ───────────────────────────────────────────────────────────────
 
@@ -1067,6 +731,7 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
     tokens: 0,
     cost: 0,
     originSessionId: input.originSessionId,
+    ...(input.followUpOf ? { followUpOf: input.followUpOf } : {}),
   }
   // Append inside the lock (modifyTasks): concurrent creations are not lost.
   await modifyTasks(input.pipelineId, (tasks) => {
@@ -1093,8 +758,9 @@ export async function updateTaskFields(
 }
 
 export async function removeTask(pipelineId: string, taskId: string): Promise<void> {
-  running.get(taskId)?.abort()
   const removed = (await listTasks(pipelineId)).find((t) => t.id === taskId)
+  if (removed?.deliveryId) throw new Error('A delivered task is history: delete its delivery instead.')
+  running.get(taskId)?.abort()
   if (removed?.worktree) {
     const context = await loadContext(pipelineId)
     await discardTaskWorktree(removed, context?.project.folders[0])

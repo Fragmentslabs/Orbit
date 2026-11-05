@@ -43,7 +43,6 @@ const pipeline = {
     },
   ],
   operationMode: 'manual',
-  pushAtEnd: false,
   commitAtEnd: true,
   commandPolicy: { blocked: [], controlled: [] },
   createdAt: '2026-10-07T00:00:00.000Z',

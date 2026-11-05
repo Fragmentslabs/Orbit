@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GitBranchIcon, GlobeIcon, Loader2Icon, MessageSquarePlusIcon, PauseIcon, PlayIcon } from "lucide-react"
+import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GitBranchIcon, GitMergeIcon, GlobeIcon, Loader2Icon, MessageSquarePlusIcon, PauseIcon, PlayIcon } from "lucide-react"
 import type { Pipeline, Task } from "@shared/pipeline"
 import { taskRound } from "@shared/pipeline"
 import { cn } from "@/lib/utils"
@@ -216,13 +216,26 @@ export function TaskCard({
             {t("pipeline.error")}
           </span>
         )}
-        {task.pushError && (
+        {task.integration && (
           <span
-            title={task.pushError}
-            className="flex items-center gap-1 rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-yellow-600 dark:text-yellow-400"
+            title={task.integration.waitingFor?.length ? t("pipeline.integration.waitingFor", { files: task.integration.waitingFor.join(", ") }) : task.integration.detail}
+            className={cn(
+              "flex items-center gap-1 rounded-full px-1.5 py-0.5",
+              task.integration.state === "failed"
+                ? "bg-destructive/10 text-destructive"
+                : task.integration.state === "integrated"
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-muted",
+            )}
           >
-            <AlertTriangleIcon className="size-2.5" />
-            {t("pipeline.pushFailed")}
+            {task.integration.state === "failed" ? (
+              <AlertTriangleIcon className="size-2.5" />
+            ) : task.integration.state === "integrated" ? (
+              <GitMergeIcon className="size-2.5" />
+            ) : (
+              <Loader2Icon className="size-2.5 animate-spin" />
+            )}
+            {t(`pipeline.integration.${task.integration.state}Short`)}
           </span>
         )}
         {task.commitError && (

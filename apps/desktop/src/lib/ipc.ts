@@ -22,6 +22,8 @@ import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
 import type {
+  Delivery,
+  MergeOutcome,
   NewTaskInput,
   PhaseChoice,
   PhaseTemplate,
@@ -660,10 +662,48 @@ export const pipelineApi = {
     window.ipcRenderer.invoke("pipeline:toggleQueue", pipelineId, enabled) as Promise<boolean>,
   report: (pipelineId: string) =>
     window.ipcRenderer.invoke("pipeline:report", pipelineId) as Promise<PipelineReport>,
+  /** Whether the folder is in a git repository (worktrees need one). */
+  hasGit: (folder: string) => window.ipcRenderer.invoke("pipeline:hasGit", folder) as Promise<boolean>,
+  deliveries: (pipelineId: string) =>
+    window.ipcRenderer.invoke("pipeline:deliveries", pipelineId) as Promise<Delivery[]>,
+  integration: (pipelineId: string) =>
+    window.ipcRenderer.invoke("pipeline:integration", pipelineId) as Promise<PipelineIntegrationStatus | null>,
+  destinations: (pipelineId: string) =>
+    window.ipcRenderer.invoke("pipeline:destinations", pipelineId) as Promise<{ branches: string[]; default?: string }>,
+  merge: (pipelineId: string, destination?: string) =>
+    window.ipcRenderer.invoke("pipeline:merge", pipelineId, destination) as Promise<MergeOutcome>,
+  commitIntegration: (pipelineId: string) =>
+    window.ipcRenderer.invoke("pipeline:commitIntegration", pipelineId) as Promise<{
+      ok: boolean
+      hash?: string
+      error?: string
+    }>,
+  retryIntegration: (pipelineId: string, taskId: string) =>
+    window.ipcRenderer.invoke("pipeline:retryIntegration", pipelineId, taskId) as Promise<void>,
+  archiveCompleted: (pipelineId: string) =>
+    window.ipcRenderer.invoke("pipeline:archiveCompleted", pipelineId) as Promise<Delivery | null>,
+  deleteDelivery: (pipelineId: string, deliveryId: string) =>
+    window.ipcRenderer.invoke("pipeline:deleteDelivery", pipelineId, deliveryId) as Promise<void>,
+  reopenTask: (pipelineId: string, taskId: string) =>
+    window.ipcRenderer.invoke("pipeline:reopenTask", pipelineId, taskId) as Promise<Task>,
+  /** Diff of a delivered task, read from git. */
+  taskDiff: (pipelineId: string, taskId: string) =>
+    window.ipcRenderer.invoke("pipeline:taskDiff", pipelineId, taskId) as Promise<{ files: string[]; patch: string } | null>,
+  removeTaskImage: (pipelineId: string, taskId: string, url: string) =>
+    window.ipcRenderer.invoke("pipeline:removeTaskImage", pipelineId, taskId, url) as Promise<Task | null>,
   onEvent: (listener: (event: PipelineEvent) => void) => {
     const wrapper = window.ipcRenderer.on("pipeline:event", (event) => listener(event as PipelineEvent))
     return () => window.ipcRenderer.off("pipeline:event", wrapper)
   },
+}
+
+/** The integration branch at a glance (mirrors IntegrationStatus in the main process). */
+export interface PipelineIntegrationStatus {
+  branch: string
+  base: string
+  ahead: number
+  dirty: string[]
+  queued: number
 }
 
 /** Pipeline creation input (mirrors NewPipelineInput in the main process). */
@@ -681,15 +721,14 @@ export interface NewPipelineInput {
   reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
-  /** Each task in its own git worktree */
+  /** Each task in its own git worktree (default true; needs git) */
   worktreePerTask?: boolean
-  pushAtEnd?: boolean
+  /** Automatic tasks running at once, 1–4 */
+  parallelTasks?: number
   /** Engine's final commit when the last phase completes (default true) */
   commitAtEnd?: boolean
   /** Final commit message prompt (absent = PIPELINE_COMMIT_PROMPT_DEFAULT) */
   commitPrompt?: string
-  /** Tells the phases to capture screenshots of the visual result */
-  resultScreenshots?: boolean
   operationMode?: "manual" | "automatic"
 }
 

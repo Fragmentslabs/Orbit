@@ -155,11 +155,9 @@ function PipelineFormBody({
   const [folders, setFolders] = useState<string[]>(
     editing ? (projects.find((p) => p.id === editing.projectId)?.folders ?? []) : [],
   )
-  const [pushAtEnd, setPushAtEnd] = useState(editing?.pushAtEnd ?? false)
   const [commitAtEnd, setCommitAtEnd] = useState(editing?.commitAtEnd !== false)
   const [commitPrompt, setCommitPrompt] = useState(editing?.commitPrompt ?? '')
   const [promptOpen, setPromptOpen] = useState(false)
-  const [screenshots, setScreenshots] = useState(editing?.resultScreenshots ?? false)
   // Editing starts from the REAL model of the pipeline (every phase shares it);
   // without this the form opened with no model and the "Default model" stayed empty.
   const [model, setModel] = useState<ChosenModel | null>(() =>
@@ -209,14 +207,6 @@ function PipelineFormBody({
   const canSubmit =
     name.trim().length > 0 && phases.length > 0 && !!model && folders.length > 0 && !saving
 
-  // Push depends on the final commit: turning the commit off turns the push off
-  // with it — without the complete state committed, the push would upload
-  // unfinished work.
-  const onCommitChange = (enabled: boolean) => {
-    setCommitAtEnd(enabled)
-    if (!enabled) setPushAtEnd(false)
-  }
-
   const submit = async () => {
     if (!canSubmit || !model) return
     setSaving(true)
@@ -231,10 +221,8 @@ function PipelineFormBody({
           !original || original.providerId !== model.providerId || original.modelId !== model.modelId
         await updatePipeline(editing.id, {
           name: name.trim(),
-          pushAtEnd,
           commitAtEnd,
           ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : { commitPrompt: '' }),
-          resultScreenshots: screenshots,
           phases: phases.map((phase, order): PhaseConfig => {
             const previous = editing.phases[order]
             // Changing the "Default model" changes the model of every phase.
@@ -269,10 +257,8 @@ function PipelineFormBody({
         phases: phases.map(({ rowKey: _rowKey, ...phase }) => phase),
         providerId: model.providerId,
         modelId: model.modelId,
-        pushAtEnd,
         commitAtEnd,
         ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : {}),
-        resultScreenshots: screenshots,
       })
       onDone(pipeline)
     } catch (err) {
@@ -367,30 +353,11 @@ function PipelineFormBody({
 
         <View style={{ gap: 10 }}>
           <View style={s.switchRow}>
-            <Switch checked={commitAtEnd} onCheckedChange={onCommitChange} />
+            <Switch checked={commitAtEnd} onCheckedChange={setCommitAtEnd} />
             <Text style={[s.switchText, { color: tokens.foreground }]}>{t('pipeline.commit')}</Text>
             <Pressable onPress={() => setPromptOpen(true)} hitSlop={8}>
               <Settings2 size={14} color={tokens.mutedForeground} />
             </Pressable>
-          </View>
-          <View style={s.switchRow}>
-            <Switch
-              checked={pushAtEnd}
-              onCheckedChange={setPushAtEnd}
-              disabled={!commitAtEnd}
-            />
-            <Text
-              style={[
-                s.switchText,
-                { color: commitAtEnd ? tokens.foreground : tokens.mutedForeground },
-              ]}
-            >
-              {t('pipeline.push')}
-            </Text>
-          </View>
-          <View style={s.switchRow}>
-            <Switch checked={screenshots} onCheckedChange={setScreenshots} />
-            <Text style={[s.switchText, { color: tokens.foreground }]}>{t('pipeline.prints')}</Text>
           </View>
         </View>
 
