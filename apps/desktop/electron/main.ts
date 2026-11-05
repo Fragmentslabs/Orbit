@@ -37,11 +37,13 @@ import {
   designIdForName,
   designIdForPath,
   readDesignBoard,
+  getDesign,
   registerDesignProtocol,
   updateDesignBoard,
   writeDesignBoard,
 } from './lib/design/design-store'
 import { reopenDesign } from './lib/design/design-open'
+import { renderDesignBoards, renderDesignPdf } from './lib/design/design-export'
 import {
   getSlides,
   registerSlidesProtocol,
@@ -1724,6 +1726,44 @@ app.whenReady().then(() => {
     (_event, input: { id: string; file: string; patch: { title?: string; x?: number; y?: number; w?: number; h?: number } }) =>
       updateDesignBoard(input.id, input.file, input.patch),
   )
+
+  // Export of the canvas requested by the design tab: PDF (one page per artboard)
+  // or PNG (one image per artboard). Rendering is the main process's; canceling in
+  // the dialog is not an error.
+  ipcMain.handle('design:export', async (_event, id: string, format: 'pdf' | 'png', suggestedName?: string, files?: string[]) => {
+    const only = Array.isArray(files) && files.length > 0 ? files.filter((f) => typeof f === 'string') : undefined
+    const entry = await getDesign(id)
+    if (!entry) return { ok: false as const, error: 'Design not found.' }
+    const base = (suggestedName ?? path.basename(entry.folder)).replace(/\.(pdf|png)$/i, '').trim() || 'design'
+    if (format === 'pdf') {
+      const pdf = await renderDesignPdf(id, only)
+      if (!pdf) return { ok: false as const, error: 'Could not generate the PDF for this design.' }
+      const target = await saveExport(null, { fileName: `${base}.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+      if (!target) return { ok: false as const, canceled: true as const }
+      await fs.writeFile(target, pdf)
+      return { ok: true as const, path: target }
+    }
+    const boards = await renderDesignBoards(id, 'png', only)
+    if (!boards) return { ok: false as const, error: 'Could not generate the images for this design.' }
+    if (boards.length === 1 && boards[0].png) {
+      const target = await saveExport(null, { fileName: `${base}.png`, filters: [{ name: 'PNG', extensions: ['png'] }] })
+      if (!target) return { ok: false as const, canceled: true as const }
+      await fs.writeFile(target, boards[0].png)
+      return { ok: true as const, path: target }
+    }
+    const picked = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('downloads') })
+    if (picked.canceled || !picked.filePaths[0]) return { ok: false as const, canceled: true as const }
+    const used = new Set<string>()
+    for (const board of boards) {
+      if (!board.png) continue
+      const stem = board.title.replace(/[\\/:*?"<>|\0]/g, '_').trim().slice(0, 80) || 'board'
+      let name = `${stem}.png`
+      for (let n = 2; used.has(name.toLowerCase()); n++) name = `${stem}-${n}.png`
+      used.add(name.toLowerCase())
+      await fs.writeFile(path.join(picked.filePaths[0], name), board.png)
+    }
+    return { ok: true as const, path: picked.filePaths[0] }
+  })
 
   // Render of a REGISTERED composition, requested by the motion tab of the panel. The
   // renderer sends only the id and the format; the entry path is revalidated in the

@@ -906,6 +906,12 @@ export const designApi = {
   /** Moves, resizes or renames an artboard in canvas.json. */
   updateBoard: (id: string, file: string, patch: { title?: string; x?: number; y?: number; w?: number; h?: number }) =>
     window.ipcRenderer.invoke("design:updateBoard", { id, file, patch }) as Promise<void>,
+  /** Exports the canvas (or only the artboard `files`): PDF (one page per artboard) or PNG (one image per artboard).
+   *  `canceled` is the user giving up in the dialog, not a failure. */
+  export: (id: string, format: "pdf" | "png", suggestedName?: string, files?: string[]) =>
+    window.ipcRenderer.invoke("design:export", id, format, suggestedName, files) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
 }
 
 /**
