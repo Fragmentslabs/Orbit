@@ -135,7 +135,7 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
       description: [
         'Shows the user a card proposing to move work to its own chat, with your title and brief, and lets',
         'them choose: open it (it starts working from the brief right away, in the same folder), do it here,',
-        'or leave it aside. Nothing opens unless they pick it — you never open a chat by yourself. Call it',
+        'send it to a pipeline (when one exists) or leave it aside. Nothing opens unless they pick it — you never open a chat by yourself. Call it',
         'directly instead of announcing that you are separating the work: the card is the announcement.',
         'One card per subject — do not pile them up.',
       ].join(' '),
@@ -167,6 +167,10 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         // Restates the task: after a long brief and a card, a small model answered "ok"
         // and lost track of what "it" was.
         if (answer === 'here') return doItHere(title, brief)
+        if (answer.startsWith('pipeline:')) {
+          const [, count, ...name] = answer.split(':')
+          return `The user sent this work to the pipeline "${name.join(':')}" (${count} task(s) created, waiting for them to start). Do not do it here and do not open a chat: ${title}.`
+        }
         return 'The user declined: do not open a chat and leave that work aside for now.'
       },
     }),

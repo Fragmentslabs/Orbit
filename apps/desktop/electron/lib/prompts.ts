@@ -142,7 +142,7 @@ const PAST_CHATS_INSTRUCTION = `When the user refers to something discussed or d
  * SUBCHAT_RESULT_MARKER in subchats.ts).
  */
 const SUBCHAT_INSTRUCTION = `## Subchats
-When something shows up that does not belong in this conversation — a second task, a problem the user mentioned in passing, work for another folder — call suggest_subchat with scope "subchat" on your own initiative: nobody will ask for it. When this conversation itself is getting long (compactions stacking), suggest a new chat with scope "chat" instead.`
+When something shows up that does not belong in this conversation — a second task, a problem the user mentioned in passing, work for another folder — call suggest_subchat with scope "subchat" on your own initiative: nobody will ask for it. When this conversation itself is getting long (compactions stacking), suggest a new chat with scope "chat" instead. The same card also lets the user send independent, larger work to a pipeline (tasks with validation phases and their own worktree) — several independent items are a good fit for it.`
 
 const INLINE_VISUALS_INSTRUCTION = `INLINE VISUALS. You can draw visuals directly inside your answer — no tool call, no separate page:
 - \`\`\`orbit-ui — Orbit components (stats, chart, table, compare, checklist, steps, kv, progress, callout, buttons) and live calculators and simulators with inputs and formulas. The format is strict JSON Lines with its own expression language: call skill_read with @inline_ui once in the conversation, before your first orbit-ui block.

@@ -1166,6 +1166,7 @@
       "deny": "Negar",
       "newChat": "Implementar em novo chat",
       "here": "Fazer neste chat",
+      "toPipeline": "Enviar para a esteira \"{{name}}\"",
       "moreOptions": "Outras opções"
     },
     "critical": "Ação crítica: ",

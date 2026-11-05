@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, MessageSquare, MessagesSquare, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { Question } from "@shared/chat"
 import { formatAskAnswer } from "@shared/chat"
+import type { Pipeline } from "@shared/pipeline"
+import { TaskPlanDialog } from "@/src/components/pipeline/task-plan-dialog"
+import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { chatApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -338,6 +341,15 @@ function SubchatBody({ ask, submitted, onReply }: {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const sugestao = ask.subchat ?? { title: "", brief: "" }
+  // The third destination: independent, larger work goes to a pipeline, through the
+  // same two-step approval as "Plan tasks" on the board.
+  const pipelines = usePipelineStore((s) => s.pipelines)
+  const pipelinesLoaded = usePipelineStore((s) => s.loaded)
+  const loadPipelines = usePipelineStore((s) => s.load)
+  const [planning, setPlanning] = useState<Pipeline | null>(null)
+  useEffect(() => {
+    if (!pipelinesLoaded) void loadPipelines()
+  }, [pipelinesLoaded, loadPipelines])
   // A new top-level chat (conversation got long) is not a subchat: it does not nest
   // under this one, and the card says so — with a chat icon, not the two-bubble one.
   const newChat = sugestao.scope === "chat"
@@ -383,10 +395,24 @@ function SubchatBody({ ask, submitted, onReply }: {
               <DropdownMenuItem onClick={() => { setOpen(false); onReply("here") }}>
                 {t("ask.subchat.here")}
               </DropdownMenuItem>
+              {pipelines.map((p) => (
+                <DropdownMenuItem key={p.id} onClick={() => { setOpen(false); setPlanning(p) }}>
+                  {t("ask.subchat.toPipeline", { name: p.name })}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
+      {planning && (
+        <TaskPlanDialog
+          pipeline={planning}
+          open
+          initialRequest={`${sugestao.title}\n\n${sugestao.brief}`}
+          onOpenChange={(v) => !v && setPlanning(null)}
+          onCreated={(count) => onReply(`pipeline:${count}:${planning.name}`)}
+        />
+      )}
     </>
   )
 }

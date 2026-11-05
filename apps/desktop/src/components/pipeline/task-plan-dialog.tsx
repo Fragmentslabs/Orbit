@@ -18,12 +18,15 @@ export function TaskPlanDialog({
   open,
   onOpenChange,
   initialRequest = "",
+  onCreated,
 }: {
   pipeline: Pipeline
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Text to start from (a chat handing over a plan) */
   initialRequest?: string
+  /** After the approved tasks were created */
+  onCreated?: (count: number) => void
 }) {
   const { t } = useTranslation()
   const [request, setRequest] = useState("")
@@ -55,8 +58,9 @@ export function TaskPlanDialog({
     setBusy(true)
     setError(null)
     try {
-      await pipelineApi.createPlanned(pipeline.id, plan)
+      const created = await pipelineApi.createPlanned(pipeline.id, plan)
       onOpenChange(false)
+      onCreated?.(created.length)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

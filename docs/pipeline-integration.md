@@ -8,7 +8,7 @@ The pipeline is built for **minimum user interference**: the agents do the work,
 
 ## Status
 
-**Stages A, B, C, G, H and D are implemented** (E and F pending). Deviations from the draft: the merge-queue state lives in `Task.integration` (the task stays `completed`) instead of three new statuses, and a task that fails to integrate shows `integration.state = failed` with a Retry button instead of pause reason `integration`. The open decisions of the first draft are settled (see *Decisions*); a few new, smaller ones are at the bottom.
+**All stages (A–H) are implemented.** Deviations from the draft: the merge-queue state lives in `Task.integration` (the task stays `completed`) instead of three new statuses, and a task that fails to integrate shows `integration.state = failed` with a Retry button instead of pause reason `integration`. The open decisions of the first draft are settled (see *Decisions*); a few new, smaller ones are at the bottom.
 
 ---
 

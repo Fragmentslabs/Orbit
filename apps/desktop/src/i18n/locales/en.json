@@ -1166,6 +1166,7 @@
       "deny": "Decline",
       "newChat": "Implement in a new chat",
       "here": "Do it in this chat",
+      "toPipeline": "Send to pipeline \"{{name}}\"",
       "moreOptions": "More options"
     },
     "critical": "Critical action: ",
