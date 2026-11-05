@@ -49,7 +49,7 @@ import {
 } from "@/src/lib/orbit-expr"
 import { INPUT_TYPES, parseOrbitUi, type OrbitUiBlock } from "@/src/lib/orbit-ui"
 import { SETTINGS_TAB_LABEL_KEY } from "@/src/lib/settings-tabs"
-import { appSettingsApi, windowApi } from "@/src/lib/ipc"
+import { windowApi } from "@/src/lib/ipc"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { Truncate } from "@/components/ui/truncated-text"
 import { ImageLightbox } from "@/src/components/ai/image"
@@ -839,17 +839,6 @@ function Entity({ title, text, image, source, tag }: Of<"entity">) {
           {tag && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{tx(tag)}</span>}
         </div>
         <p className="mt-1 text-foreground/90">{tx(text)}</p>
-        {source && (
-          <button
-            type="button"
-            onClick={() => appSettingsApi.openExternal(source)}
-            title={source}
-            className="mt-1.5 flex max-w-full cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowUpRightIcon className="size-3 shrink-0" />
-            <span className="truncate">{host}</span>
-          </button>
-        )}
       </div>
     </div>
   )

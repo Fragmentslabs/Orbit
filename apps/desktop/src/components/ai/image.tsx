@@ -53,7 +53,6 @@ export function Image({ src, alt, className, source }: {
         {alt && (
           <figcaption className="mt-1 px-0.5 text-[11px] text-muted-foreground">{alt}</figcaption>
         )}
-        {source && <SourceLink source={source} className="mt-0.5 px-0.5" />}
       </figure>
 
       <ImageLightbox src={src} alt={alt} source={source} open={open} onOpenChange={setOpen} />
@@ -70,21 +69,6 @@ export interface LightboxImage {
 /** Opens a web address in the system browser — the only way out of the app for a source link. */
 function openSource(url: string) {
   if (/^https?:\/\//i.test(url)) appSettingsApi.openExternal(url)
-}
-
-/** "host · page address", clickable: where the picture lives for real. */
-function SourceLink({ source, className }: { source: ImageSource; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={() => openSource(source.pageUrl)}
-      title={source.pageUrl}
-      className={cn("flex max-w-full cursor-pointer items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground", className)}
-    >
-      <ExternalLink className="size-3 shrink-0" />
-      <span className="truncate">{source.host || source.pageUrl}</span>
-    </button>
-  )
 }
 
 /**
@@ -273,7 +257,7 @@ export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
 
   const images = parts.map((p) => ({ src: p.src, alt: p.alt, source: p.source }))
   // References from the web are LOOKED at (that is the point of fetching them): a grid of
-  // large tiles with the site on each, not the 80px strip of an edit's steps.
+  // large tiles — the source is in the lightbox, not on the tile — not the 80px strip of an edit's steps.
   const web = parts.every((p) => p.source)
 
   if (web) {
@@ -300,9 +284,6 @@ export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
                   onError={() => setFailed((prev) => new Set(prev).add(part.id))}
                   className="size-full object-cover"
                 />
-                <span className="absolute bottom-1.5 left-1.5 max-w-[85%] truncate rounded-full bg-background/80 px-2 py-0.5 text-[10px] text-foreground backdrop-blur">
-                  {part.source?.host}
-                </span>
               </button>
             ),
           )}
