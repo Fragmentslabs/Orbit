@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SparklesIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { PhaseChoice, PhaseConfig, Pipeline, Task } from "@shared/pipeline"
 import { isTaskSatisfied } from "@shared/pipeline"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,7 @@ import { PhaseEditor, useModelLabel, useSavePhaseTemplate, type PhaseDestination
 import { ReturnTaskDialog } from "./return-task-dialog"
 import { ResumeInstructionDialog } from "./resume-instruction-dialog"
 import { TaskCreateDialog } from "./task-create-dialog"
+import { TaskPlanDialog } from "./task-plan-dialog"
 import { PipelineFooter } from "./pipeline-footer"
 import { IntegrationBar } from "./integration-bar"
 import { HistoryPanel } from "./history-panel"
@@ -189,6 +190,7 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
   // Delivered tasks left the board for the history panel.
   const tasks = useMemo(() => allTasks.filter((x) => !x.deliveryId), [allTasks])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const queueEnabled = usePipelineStore((s) => s.queueEnabled[pipeline.id] ?? false)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
@@ -323,6 +325,12 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <Hint label={t("pipeline.plan.hint")}>
+            <Button size="lg" variant="outline" onClick={() => setPlanOpen(true)}>
+              <SparklesIcon className="size-4" />
+              {t("pipeline.plan.button")}
+            </Button>
+          </Hint>
           <Button size="lg" onClick={() => setCreateTaskOpen(true)}>
             <PlusIcon className="size-4" />
             {t("pipeline.addTask")}
@@ -400,6 +408,8 @@ function PipelineBoardView({ pipeline, onBack }: { pipeline: Pipeline; onBack: (
           createTaskInStore(pipeline.id, title, description, dependsOn).then(() => undefined)
         }
       />
+
+      <TaskPlanDialog pipeline={pipeline} open={planOpen} onOpenChange={setPlanOpen} />
 
       <PipelineCreateDialog
         open={editOpen}

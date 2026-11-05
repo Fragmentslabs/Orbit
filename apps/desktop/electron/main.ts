@@ -216,7 +216,7 @@ import { removeLegacyBackgroundAgent } from './lib/routines/legacy-agent'
 import { approvePendingRoutine, discardPendingRoutine, listPendingRoutines } from './lib/routines/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
-import type { NewPipelineInput, NewTaskInput, PhaseTemplate } from '@shared/pipeline'
+import type { NewPipelineInput, NewTaskInput, PhaseTemplate, PlannedTask } from '@shared/pipeline'
 import type { NewRoutineInput, Routine, RoutineModel } from '@shared/routines'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
@@ -1887,6 +1887,12 @@ app.whenReady().then(() => {
     return pipeline.isQueueEnabled(pipelineId)
   })
   ipcMain.handle('pipeline:report', (_e, pipelineId: string) => pipeline.report(pipelineId))
+  ipcMain.handle('pipeline:planTasks', (_e, pipelineId: string, request: string) =>
+    pipeline.planTasks(pipelineId, request),
+  )
+  ipcMain.handle('pipeline:createPlanned', (_e, pipelineId: string, tasks: PlannedTask[]) =>
+    pipeline.createPlannedTasks(pipelineId, tasks),
+  )
   ipcMain.handle('pipeline:hasGit', (_e, folder: string) => pipeline.hasGit(folder))
   ipcMain.handle('pipeline:deliveries', (_e, pipelineId: string) => pipeline.listDeliveries(pipelineId))
   ipcMain.handle('pipeline:integration', (_e, pipelineId: string) => pipeline.integrationStatus(pipelineId))

@@ -493,6 +493,16 @@ export interface NewPipelineInput {
   operationMode?: 'manual' | 'automatic'
 }
 
+/** A task proposed by the planner, before the person approves it. */
+export interface PlannedTask {
+  title: string
+  description: string
+  /** Files or folders it will probably touch */
+  files: string[]
+  /** Indexes (in the same list) of earlier tasks it waits for */
+  dependsOn: number[]
+}
+
 /** Task creation input — used by the UI and the chat tools. */
 export interface NewTaskInput {
   pipelineId: string

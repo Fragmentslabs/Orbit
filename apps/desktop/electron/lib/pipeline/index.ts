@@ -75,6 +75,7 @@ export {
   retryIntegration,
 } from './integration'
 export { listDeliveries } from './repo'
+export { createPlannedTasks, planTasks } from './planner'
 
 function newId(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`

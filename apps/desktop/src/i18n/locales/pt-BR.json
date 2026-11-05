@@ -2566,6 +2566,18 @@
     "openWorktree": "Abrir pasta",
     "openInChat": "Abrir no chat",
     "openInChatPrompt": "Analise o que foi feito na task {{number}} (\"{{title}}\") da esteira \"{{pipeline}}\".",
+    "plan": {
+      "button": "Planejar tasks",
+      "hint": "Descreva o que quer; o modelo da esteira propõe as tasks",
+      "title": "Planejar tasks",
+      "describeHint": "Descreva o que quer fazer, do jeito que vier. O modelo da esteira propõe as tasks e você aprova.",
+      "reviewHint": "Revise a proposta. Nada é criado até você aprovar; tasks que mexem nos mesmos arquivos ficam em sequência.",
+      "placeholder": "ex.: Adicionar modo escuro na página de configurações e corrigir o formato de data na exportação de faturas",
+      "propose": "Propor tasks",
+      "back": "Voltar",
+      "create": "Criar {{count}} task(s)",
+      "waitsFor": "depois de {{tasks}}"
+    },
     "archivedNotice": "Entregue: esta task faz parte do histórico e é somente leitura.",
     "reopen": "Reabrir como continuação",
     "images": "Imagens",

@@ -2566,6 +2566,18 @@
     "openWorktree": "Open folder",
     "openInChat": "Open in chat",
     "openInChatPrompt": "Analyze what was done in task {{number}} (\"{{title}}\") of pipeline \"{{pipeline}}\".",
+    "plan": {
+      "button": "Plan tasks",
+      "hint": "Describe what you want; the pipeline model proposes the tasks",
+      "title": "Plan tasks",
+      "describeHint": "Describe what you want done, as loosely as you like. The pipeline model proposes the tasks and you approve them.",
+      "reviewHint": "Review the proposal. Nothing is created until you approve; tasks that touch the same files are chained.",
+      "placeholder": "e.g. Add dark mode to the settings page, and fix the date format in the invoices export",
+      "propose": "Propose tasks",
+      "back": "Back",
+      "create": "Create {{count}} task(s)",
+      "waitsFor": "after {{tasks}}"
+    },
     "archivedNotice": "Delivered: this task is part of the history and is read-only.",
     "reopen": "Reopen as follow-up",
     "images": "Images",

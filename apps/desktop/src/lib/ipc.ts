@@ -26,6 +26,7 @@ import type {
   MergeOutcome,
   NewTaskInput,
   PhaseChoice,
+  PlannedTask,
   PhaseTemplate,
   Pipeline,
   PipelineEvent,
@@ -664,6 +665,10 @@ export const pipelineApi = {
     window.ipcRenderer.invoke("pipeline:report", pipelineId) as Promise<PipelineReport>,
   /** Whether the folder is in a git repository (worktrees need one). */
   hasGit: (folder: string) => window.ipcRenderer.invoke("pipeline:hasGit", folder) as Promise<boolean>,
+  planTasks: (pipelineId: string, request: string) =>
+    window.ipcRenderer.invoke("pipeline:planTasks", pipelineId, request) as Promise<PlannedTask[]>,
+  createPlanned: (pipelineId: string, tasks: PlannedTask[]) =>
+    window.ipcRenderer.invoke("pipeline:createPlanned", pipelineId, tasks) as Promise<Task[]>,
   deliveries: (pipelineId: string) =>
     window.ipcRenderer.invoke("pipeline:deliveries", pipelineId) as Promise<Delivery[]>,
   integration: (pipelineId: string) =>
