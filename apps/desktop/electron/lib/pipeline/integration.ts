@@ -1,6 +1,7 @@
 import type {
   CommandPolicy,
   Delivery,
+  IntegrationStatus,
   MergeOutcome,
   PhaseConfig,
   Pipeline,
@@ -433,17 +434,6 @@ export async function recoverIntegrations(pipelineId: string): Promise<void> {
 }
 
 // ─── Status ──────────────────────────────────────────────────────────────────
-
-export interface IntegrationStatus {
-  branch: string
-  base: string
-  /** Commits on the integration that its base does not have */
-  ahead: number
-  /** Uncommitted files in the integration worktree */
-  dirty: string[]
-  /** Tasks waiting or being merged */
-  queued: number
-}
 
 export async function integrationStatus(pipelineId: string): Promise<IntegrationStatus | null> {
   const context = await loadContext(pipelineId)

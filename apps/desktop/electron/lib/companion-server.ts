@@ -1137,6 +1137,66 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         break
       }
 
+      case 'pipeline:has-git':
+        sendResponse(ws, requestId, true, await pipelineApi.hasGit(req.folder))
+        break
+
+      case 'pipeline:deliveries':
+        sendResponse(ws, requestId, true, await pipelineApi.listDeliveries(req.pipelineId))
+        break
+
+      case 'pipeline:integration':
+        sendResponse(ws, requestId, true, await pipelineApi.integrationStatus(req.pipelineId))
+        break
+
+      case 'pipeline:destinations':
+        sendResponse(ws, requestId, true, await pipelineApi.destinationBranches(req.pipelineId))
+        break
+
+      case 'pipeline:merge':
+        sendResponse(ws, requestId, true, await pipelineApi.mergeIntegration(req.pipelineId, req.destination))
+        break
+
+      case 'pipeline:commit-integration':
+        sendResponse(ws, requestId, true, await pipelineApi.commitIntegration(req.pipelineId))
+        break
+
+      case 'pipeline:retry-integration':
+        await pipelineApi.retryIntegration(req.pipelineId, req.taskId)
+        sendResponse(ws, requestId, true)
+        break
+
+      case 'pipeline:archive-completed':
+        sendResponse(ws, requestId, true, await pipelineApi.archiveCompleted(req.pipelineId))
+        break
+
+      case 'pipeline:delete-delivery':
+        await pipelineApi.deleteDelivery(req.pipelineId, req.deliveryId)
+        sendResponse(ws, requestId, true)
+        break
+
+      case 'pipeline:reopen-task':
+        sendResponse(ws, requestId, true, await pipelineApi.reopenTask(req.pipelineId, req.taskId))
+        break
+
+      case 'pipeline:task-diff': {
+        const task = (await pipelineApi.listTasks(req.pipelineId)).find((t) => t.id === req.taskId)
+        sendResponse(ws, requestId, true, task ? await pipelineApi.archivedTaskDiff(req.pipelineId, task) : null)
+        break
+      }
+
+      case 'pipeline:remove-task-image':
+        sendResponse(ws, requestId, true, await pipelineApi.removeTaskImage(req.pipelineId, req.taskId, req.url))
+        break
+
+      case 'pipeline:plan-tasks':
+        sendResponse(ws, requestId, true, await pipelineApi.planTasks(req.pipelineId, req.request))
+        break
+
+      case 'pipeline:create-planned':
+        sendResponse(ws, requestId, true, await pipelineApi.createPlannedTasks(req.pipelineId, req.tasks))
+        break
+
       case 'pipeline:save-template': {
         const templates = await pipelineApi.saveTemplate(req.template)
         sendResponse(ws, requestId, true, templates)

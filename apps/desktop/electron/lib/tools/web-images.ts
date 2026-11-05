@@ -155,8 +155,12 @@ export function createWebImageTools(scope: { sessionId: string; modelVision: boo
         'They are references and are not saved to the app.',
       inputSchema: z.object({
         ids: z.array(z.string()).min(1).max(MAX_SHOW).describe('Ids from web_image_search (web:…)'),
+        display: z
+          .enum(['grid', 'refs'])
+          .optional()
+          .describe('grid (default): shown here as a grid. refs: NOT shown — only prepared, and you get the ref + page of each to place it yourself in an orbit-ui entity block, wherever it fits in your text'),
       }),
-      execute: async ({ ids }) => {
+      execute: async ({ ids, display = 'grid' }) => {
         const lines: string[] = []
         const images: Array<{ src: string; alt: string; source: ImageSource }> = []
         for (const id of ids) {
@@ -179,9 +183,14 @@ export function createWebImageTools(scope: { sessionId: string; modelVision: boo
         }
         lines.push(
           images.length > 0
-            ? 'The pictures already appear in your reply as a grid. To introduce the MAIN subject with a picture beside the text instead, use an orbit-ui entity block with that picture\'s ref and page (then show only the others, if any). Say where they come from (the site) and, if the user may use them for something beyond looking, remind them they are other people\'s work.'
+            ? 'The pictures already appear in your reply as a grid at this point of the text. (To place a picture INSIDE your text instead, as an entity block, call web_image_show with display "refs" for it.) Say where they come from (the site) and, if the user may use them for something beyond looking, remind them they are other people\'s work.'
             : 'Nothing was shown.',
         )
+        // refs: the pictures are only prepared; where they appear is up to the text (entity block).
+        if (display === 'refs') {
+          const note = images.length > 0 ? 'Not shown yet: place each one with an orbit-ui entity block (image = its ref, source = its page) where it fits in your text.' : 'Nothing was prepared.'
+          return { message: [...lines.filter((l) => !l.startsWith('The pictures already')), note].join('\n'), images: [] }
+        }
         return { message: lines.join('\n'), images }
       },
       toModelOutput: ({ output }) => ({ type: 'text', value: typeof output === 'string' ? output : (output as { message: string }).message }),
