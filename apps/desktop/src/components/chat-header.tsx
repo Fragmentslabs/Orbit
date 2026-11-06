@@ -113,7 +113,10 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
     // z-50 and not z-20: the persona at the top of the chat is `absolute z-40` in a later
     // sibling, so with z-20 it stayed over the header — and the folders
     // dropdown, trapped in the @container stacking context, opened below it.
-    <div className="@container relative z-50 flex h-12 items-center gap-2 px-4">
+    //
+    // The top padding (pt-2.5) puts the title on the same line as the Chat/Code tabs of the
+    // sidebar, which start below the floating sidebar's own padding.
+    <div className="@container relative z-50 flex h-[58px] items-center gap-2 px-4 pt-2.5">
       {onToggleSidebar && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleSidebar}>
           <PanelLeft className="size-4" />
