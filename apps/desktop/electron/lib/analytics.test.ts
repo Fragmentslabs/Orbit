@@ -310,7 +310,7 @@ describe('computeAnalytics: detailed', () => {
       msg('user', DAY(12, 9, 0), 'now'),
       msg('assistant', DAY(12, 10, 0), 'ok'),
     ])
-    const r = await computeAnalytics({ type: 'custom', from: DAY(12, 0), to: DAY(12, 23, 59, 59) }, { detailed: true })
+    const r = await computeAnalytics({ type: 'custom', from: DAY(12, 0), to: DAY(12, 23, 59) }, { detailed: true })
     expect(r.totalHours).toBeCloseTo(1, 5)
     expect(r.previous?.hours).toBeCloseTo(0.5, 5)
     expect(r.previous?.sessions).toBe(1)

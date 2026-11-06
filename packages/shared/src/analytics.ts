@@ -129,3 +129,17 @@ export interface CustomAnalyticsRange {
 }
 
 export type AnalyticsRange = 'total' | '30d' | '7d' | 'today' | CustomAnalyticsRange
+
+/** What "summarize the work" asks for: a project (or all) on a day or over the period. */
+export interface UsageSummaryRequest {
+  /** The project's id as the usage screen has it; null = every project. */
+  projectId: string | null
+  /** A day (YYYY-MM-DD) wins over the period. */
+  day?: string
+  range?: AnalyticsRange
+  language?: string
+}
+
+export type UsageSummaryResponse =
+  | { ok: true; text: string }
+  | { ok: false; error: 'no-aux-model' | 'nothing' | 'failed'; message?: string }

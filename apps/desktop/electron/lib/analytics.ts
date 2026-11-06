@@ -15,7 +15,7 @@ import { listKeys, readJson } from './storage'
 import { projectIdOf } from './memory/domain'
 import { folderInMainRepository } from './worktrees/main'
 
-function computeRange(range: AnalyticsRange): { since: number; until?: number } {
+export function computeRange(range: AnalyticsRange): { since: number; until?: number } {
   const now = Date.now()
   if (typeof range === 'object' && range.type === 'custom') {
     return { since: range.from, until: range.to }
