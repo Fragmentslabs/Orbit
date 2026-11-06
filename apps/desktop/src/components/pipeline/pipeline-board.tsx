@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { PhaseChoice, PhaseConfig, Pipeline, Task } from "@shared/pipeline"
 import { isTaskSatisfied } from "@shared/pipeline"
 import { Button } from "@/components/ui/button"
@@ -13,8 +13,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ListToolbar } from "@/src/components/list-toolbar"
 import { PipelineCreateDialog } from "./pipeline-create-dialog"
+import { PipelineList } from "./pipeline-list"
 import { PhaseEditor, useModelLabel, useSavePhaseTemplate, type PhaseDestination } from "./phase-editor"
 import { ReturnTaskDialog } from "./return-task-dialog"
 import { ResumeInstructionDialog } from "./resume-instruction-dialog"
@@ -70,130 +70,6 @@ export function PipelineBoard() {
     <PipelineBoardView pipeline={open} onBack={() => setOpenPipelineId(null)} />
   ) : (
     <PipelineList onOpen={setOpenPipelineId} />
-  )
-}
-
-// ─── Level 1: pipeline list ──────────────────────────────────────────────────
-
-function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
-  const { t } = useTranslation()
-  const pipelines = usePipelineStore((s) => s.pipelines)
-  const projects = usePipelineStore((s) => s.projects)
-  const tasksPerPipeline = usePipelineStore((s) => s.tasksPerPipeline)
-  const [createOpen, setCreateOpen] = useState(false)
-
-  const [query, setQuery] = useState("")
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return pipelines
-    return pipelines.filter((pipeline) => {
-      const project = projects.find((p) => p.id === pipeline.projectId)
-      return [pipeline.name, pipeline.branch, ...pipeline.phases.map((p) => p.name), ...(project?.folders ?? [])].some((field) =>
-        field?.toLowerCase().includes(q),
-      )
-    })
-  }, [pipelines, projects, query])
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* With no pipeline at all the screen is just the empty state with the call to create. */}
-      {pipelines.length > 0 && (
-        <ListToolbar
-          query={query}
-          onQueryChange={setQuery}
-          placeholder={t("pipeline.search")}
-          actionLabel={t("pipeline.newPipeline")}
-          actionIcon={PlusIcon}
-          onAction={() => setCreateOpen(true)}
-        />
-      )}
-
-      {pipelines.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-          <LayersIcon className="size-10 text-muted-foreground/50" />
-          <div>
-            <p className="text-sm font-medium">{t("pipeline.emptyTitle")}</p>
-            <p className="mx-auto max-w-sm text-xs text-muted-foreground">{t("pipeline.emptySubtitle")}</p>
-          </div>
-          <Button size="lg" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            {t("pipeline.createFirst")}
-          </Button>
-        </div>
-      ) : visible.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
-          {t("pipeline.noResults", { query: query.trim() })}
-        </p>
-      ) : (
-        <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((pipeline) => {
-            const tasks = (tasksPerPipeline[pipeline.id] ?? []).filter((x) => !x.deliveryId)
-            const project = projects.find((p) => p.id === pipeline.projectId)
-            const inProgress = tasks.filter((t) => t.status === "in_progress").length
-            const completed = tasks.filter((t) => t.status === "completed").length
-            const failed = tasks.some((t) => t.pauseReason === "error")
-            return (
-              <button
-                key={pipeline.id}
-                type="button"
-                onClick={() => onOpen(pipeline.id)}
-                className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:border-ring"
-              >
-                <div className="flex items-center gap-2">
-                  <LayersIcon className="size-4 shrink-0 text-muted-foreground" />
-                  
-                    <Truncate>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{pipeline.name}</span>
-                    </Truncate>
-                  {inProgress > 0 && (
-                    <span title={t("pipeline.inProgress")}>
-                      <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
-                    </span>
-                  )}
-                  {completed > 0 && (
-                    <span
-                      className="size-1.5 shrink-0 rounded-full bg-yellow-500"
-                      title={t("pipeline.tasksSummary", { total: tasks.length, completed })}
-                    />
-                  )}
-                  {failed && (
-                    <span
-                      className="size-1.5 shrink-0 rounded-full bg-destructive"
-                      title={t("pipeline.error")}
-                    />
-                  )}
-                </div>
-                
-                  <Truncate>
-                      <p className="truncate text-[11px] text-muted-foreground">
-                      {pipeline.phases.map((p) => p.name).join(" → ")}
-                    </p>
-                  </Truncate>
-                {project && project.folders.length > 0 && (
-                  
-                    <Truncate>
-                      <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
-                      <FolderIcon className="size-3 shrink-0" />
-                      {project.folders[0]}
-                      {project.folders.length > 1 && ` +${project.folders.length - 1}`}
-                    </p>
-                    </Truncate>
-                )}
-                <div className="mt-auto flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span>{t("pipeline.tasksSummary", { total: tasks.length, completed })}</span>
-                  {pipeline.branch && 
-                    <Truncate>
-                        <span className="truncate">· {pipeline.branch}</span>
-                    </Truncate>}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      <PipelineCreateDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onOpen} />
-    </div>
   )
 }
 
