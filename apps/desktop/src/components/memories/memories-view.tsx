@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, List, Network, Search, SlidersHorizontal, X } from "lucide-react"
+import { Check, List, Network, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -15,7 +14,7 @@ import { useMemoryStore } from "@/src/stores/memory-store"
 import { useActiveSession } from "@/src/stores/session-store"
 import { useViewScope } from "@/src/stores/view-scope-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
-import { type FilterGroup, MemoryFilters } from "./memory-filters"
+import { type FilterGroup, MemoryFilterSelects, MemoryFilters } from "./memory-filters"
 import { MemoryListItem } from "./memory-list-item"
 import { MemoryGraph } from "./memory-graph"
 import { CATEGORY_LABEL, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
@@ -36,7 +35,7 @@ import { CATEGORY_LABEL, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 const ALL = "__all__"
 
-/** Below this width of the page the filters leave their column for a popover. */
+/** Below this width of the page the filters leave their column for selects at the top. */
 const STACK_BELOW_PX = 700
 
 /** Cards rendered at a time — the rest enters as one scrolls. */
@@ -250,7 +249,6 @@ export function MemoriesView() {
 
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const stacked = useStacked(root, STACK_BELOW_PX)
-  const activeFilters = [projectFilter, kindFilter, categoryFilter].filter((f) => f !== ALL).length
 
   // Folder of the focused project — files dropped in the graph become memories of it
   const projectDirectory = useMemo(() => {
@@ -353,6 +351,9 @@ export function MemoriesView() {
             </ul>
           </div>
         )}
+        {/* Narrow page (the side panel is open): the filters leave their column on the right and
+            become selects at the top, above the search. */}
+        {stacked && <MemoryFilterSelects groups={filterGroups} label={t("memories.filters.label")} />}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-48 flex-1">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -363,26 +364,6 @@ export function MemoriesView() {
               className="pl-8"
             />
           </div>
-          {/* Narrow page (the side panel is open): the filters leave their column and live in a
-              popover of the toolbar, with the number of the ones that are on. */}
-          {stacked && (
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs">
-                    <SlidersHorizontal className="size-3.5" />
-                    {t("memories.filters.button")}
-                    {activeFilters > 0 && (
-                      <span className="rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">{activeFilters}</span>
-                    )}
-                  </Button>
-                }
-              />
-              <PopoverContent align="end" className="w-auto p-2">
-                <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} inline />
-              </PopoverContent>
-            </Popover>
-          )}
           <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "graph")}>
             <TabsList>
               <TabsTrigger value="list" className="gap-1.5">
