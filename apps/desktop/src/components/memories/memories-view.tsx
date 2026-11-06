@@ -11,7 +11,7 @@ import { searchMemories, visibleIn } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { useActiveSession } from "@/src/stores/session-store"
-import { useMemoriesScope } from "@/src/stores/memories-scope-store"
+import { useViewScope } from "@/src/stores/view-scope-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { type FilterGroup, MemoryFilters } from "./memory-filters"
 import { MemoryListItem } from "./memory-list-item"
@@ -89,8 +89,7 @@ export function MemoriesView() {
   const { mode: workspaceMode } = useWorkspace()
   // What the page lists is chosen in the header (chat, code or both); until then it follows
   // the workspace mode, as it always did.
-  const chosenScope = useMemoriesScope((s) => s.scope)
-  const scope = chosenScope ?? workspaceMode
+  const [scope] = useViewScope("memories", workspaceMode)
   const initialize = useMemoryStore((s) => s.initialize)
   const index = useMemoryStore((s) => s.index)
   const loading = useMemoryStore((s) => s.loading)

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { SegmentedControl } from "@/components/ui/segmented-control"
-import type { ViewScope } from "@/src/stores/memories-scope-store"
+import type { ViewScope } from "@/src/stores/view-scope-store"
 
 /**
  * Header toggle of the pages that can show the chat's data, the code's or both (Memories,

@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { analyticsApi } from "@/src/lib/ipc"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
-import type { ViewScope } from "@/src/stores/memories-scope-store"
+import type { ViewScope } from "@/src/stores/view-scope-store"
 
 interface AnalyticsState {
   data: AnalyticsSummary | null

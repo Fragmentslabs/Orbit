@@ -23,7 +23,7 @@ import { MemoriesView } from "@/src/components/memories/memories-view"
 import { UsageRangeControls } from "@/src/components/usage/usage-range"
 import { ViewScopeToggle } from "@/src/components/view-scope-toggle"
 import { useAnalyticsStore } from "@/src/stores/analytics-store"
-import { useMemoriesScope } from "@/src/stores/memories-scope-store"
+import { useViewScope } from "@/src/stores/view-scope-store"
 import { PipelineBoard } from "@/src/components/pipeline/pipeline-board"
 import { RoutinesView } from "@/src/components/routines/routines-view"
 import { ToolsView } from "@/src/components/tools-view"
@@ -67,11 +67,10 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
   )
 }
 
-/** Memories: chat, code or both — until the user picks, it follows the workspace mode. */
-function MemoriesScopeToggle({ workspaceMode }: { workspaceMode: "chat" | "code" }) {
-  const scope = useMemoriesScope((s) => s.scope)
-  const setScope = useMemoriesScope((s) => s.setScope)
-  return <ViewScopeToggle value={scope ?? workspaceMode} onChange={setScope} />
+/** Memories and Routines: chat, code or both — until the user picks, it follows the workspace mode. */
+function PageScopeToggle({ page, workspaceMode }: { page: "memories" | "routines"; workspaceMode: "chat" | "code" }) {
+  const [scope, setScope] = useViewScope(page, workspaceMode)
+  return <ViewScopeToggle value={scope} onChange={setScope} />
 }
 
 /** Usage: the same toggle, plus the period. */
@@ -387,7 +386,13 @@ function Layout() {
                   }
                   // The Memories page has no project or branch in the header (that is
                   // the conversation's context): it only says WHICH memories are showing.
-                  extra={view === "memories" ? <MemoriesScopeToggle workspaceMode={workspaceMode} /> : view === "analytics" ? <UsageHeaderControls /> : undefined}
+                  extra={
+                    view === "memories" || view === "routines" ? (
+                      <PageScopeToggle page={view} workspaceMode={workspaceMode} />
+                    ) : view === "analytics" ? (
+                      <UsageHeaderControls />
+                    ) : undefined
+                  }
                   onFoldersChange={
                     remoteEnv || view === "pipeline" || view === "routines" || view === "memories" || view === "analytics"
                       ? undefined
