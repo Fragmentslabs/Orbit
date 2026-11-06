@@ -26,7 +26,18 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
  * What the page shows on the right while no routine is open: how the routines are doing
  * (active, failures, spend) and what is coming and what just ran. Every row opens its routine.
  */
-export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; onSelect: (id: string) => void }) {
+/**
+ * `full` is the column beside the routines; `side` the same column when the page is narrow
+ * (numbers in rows, fewer columns per row); `strip` the one that goes below the routines when
+ * not even a narrow column fits (the numbers in a line and what runs next).
+ */
+export type SummaryVariant = "full" | "side" | "strip"
+
+export function RoutinesSummary({ routines, variant = "full", onSelect }: {
+  routines: Routine[]
+  variant?: SummaryVariant
+  onSelect: (id: string) => void
+}) {
   const { t, i18n } = useTranslation()
   const locale = i18n.language
   const runs = useRoutinesStore((s) => s.runs)
@@ -82,45 +93,85 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
     },
   ]
 
+  const compact = variant !== "full"
+  // Rows of "next": the same in every variant, only the columns change.
+  const nextRows =
+    summary.running.length === 0 && summary.upcoming.length === 0 ? (
+      <p className="py-2 text-[11px] text-muted-foreground">{t("routines.summary.nothingNext")}</p>
+    ) : (
+      <>
+        {summary.running.map((run) => {
+          const routine = summary.byId.get(run.routineId)
+          if (!routine) return null
+          return (
+            <Row key={`running:${run.sessionId}`} onClick={() => onSelect(routine.id)}>
+              <span className={cn("shrink-0 text-primary", compact ? "w-[5.5rem]" : "w-28")}>{t("routines.summary.now")}</span>
+              <span className="min-w-0 flex-1 truncate">{routine.title}</span>
+              <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+            </Row>
+          )
+        })}
+        {(variant === "strip" ? summary.upcoming.slice(0, 3) : summary.upcoming).map(({ routine, at }) => (
+          <Row key={`${routine.id}:${at}`} onClick={() => onSelect(routine.id)}>
+            <span className={cn("shrink-0 tabular-nums text-muted-foreground", compact ? "w-[5.5rem]" : "w-28")}>
+              {formatWhen(at, locale, summary.now)}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{routine.title}</span>
+            {variant !== "side" && (
+              <span className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+              </span>
+            )}
+          </Row>
+        ))}
+      </>
+    )
+
+  // Below the routines: one line with the numbers and what runs next, nothing more.
+  if (variant === "strip") {
+    return (
+      <div className="flex flex-col gap-2 rounded-xl border bg-card p-3">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-xs">
+          {kpis.map((k) => (
+            <span key={k.label} className="flex items-baseline gap-1.5">
+              <span className="text-muted-foreground">{k.label}</span>
+              <span className="font-semibold tabular-nums">{k.value}</span>
+            </span>
+          ))}
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold text-muted-foreground">{t("routines.summary.next")}</p>
+          {nextRows}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3">
-        {kpis.map((k) => (
-          <div key={k.label} className="flex flex-col gap-0.5 rounded-xl border bg-card px-3.5 py-3">
-            <span className="text-[11px] text-muted-foreground">{k.label}</span>
-            <span className="text-lg font-semibold tabular-nums">{k.value}</span>
-            <span className="text-[11px] text-muted-foreground">{k.meta}</span>
-          </div>
-        ))}
-      </div>
+      {variant === "side" ? (
+        <div className="flex flex-col rounded-xl border bg-card px-3.5 py-1">
+          {kpis.map((k) => (
+            <div key={k.label} className="flex items-baseline justify-between gap-3 border-t py-2 text-xs first:border-t-0">
+              <span className="text-muted-foreground">{k.label}</span>
+              <span className="font-semibold tabular-nums">{k.value}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3">
+          {kpis.map((k) => (
+            <div key={k.label} className="flex flex-col gap-0.5 rounded-xl border bg-card px-3.5 py-3">
+              <span className="text-[11px] text-muted-foreground">{k.label}</span>
+              <span className="text-lg font-semibold tabular-nums">{k.value}</span>
+              <span className="text-[11px] text-muted-foreground">{k.meta}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <Card title={t("routines.summary.next")} subtitle={t("routines.summary.nextHint")}>
-        {summary.running.length === 0 && summary.upcoming.length === 0 ? (
-          <p className="py-2 text-[11px] text-muted-foreground">{t("routines.summary.nothingNext")}</p>
-        ) : (
-          <>
-            {summary.running.map((run) => {
-              const routine = summary.byId.get(run.routineId)
-              if (!routine) return null
-              return (
-                <Row key={`running:${run.sessionId}`} onClick={() => onSelect(routine.id)}>
-                  <span className="w-28 shrink-0 text-primary">{t("routines.summary.now")}</span>
-                  <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-                  <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
-                </Row>
-              )
-            })}
-            {summary.upcoming.map(({ routine, at }) => (
-              <Row key={`${routine.id}:${at}`} onClick={() => onSelect(routine.id)}>
-                <span className="w-28 shrink-0 tabular-nums text-muted-foreground">{formatWhen(at, locale, summary.now)}</span>
-                <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-                <span className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
-                </span>
-              </Row>
-            ))}
-          </>
-        )}
+      <Card title={t("routines.summary.next")} subtitle={variant === "side" ? undefined : t("routines.summary.nextHint")}>
+        {nextRows}
       </Card>
 
       <Card title={t("routines.summary.recent")}>
@@ -143,7 +194,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-                <span className="w-28 shrink-0 text-muted-foreground">{formatWhen(run.startedAt, locale)}</span>
+                {variant !== "side" && <span className="w-28 shrink-0 text-muted-foreground">{formatWhen(run.startedAt, locale)}</span>}
                 <span className="w-14 shrink-0 text-right font-medium tabular-nums">{formatCost(run.cost)}</span>
               </Row>
             )
