@@ -95,9 +95,9 @@ export function ProjectsTab({ data, range }: { data: AnalyticsSummary; range: An
           key={p.projectId}
           type="button"
           onClick={() => setSelected(p.projectId)}
-          className="flex items-center gap-4 rounded-xl border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40"
+          className="flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-xl border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40"
         >
-          <span className="flex min-w-0 flex-1 flex-col gap-2">
+          <span className="flex min-w-[14rem] flex-1 flex-col gap-2">
             <span className="truncate text-xs font-semibold">{projectName(p, t)}</span>
             <HoursBar value={p.orbitHours} max={maxHours} color={ORBIT} label={formatHours(p.orbitHours, locale)} />
             <HoursBar value={p.userHours} max={maxHours} color={YOU} label={formatHours(p.userHours, locale)} />
@@ -220,7 +220,7 @@ function ProjectDetail({ data, project, range, onBack }: {
       </div>
       <SummaryBox state={summaries.state.period} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 @[38rem]:grid-cols-5">
         {kpis.map((k) => (
           <KpiCard key={k.label} label={k.label} value={k.value} meta={k.meta} />
         ))}

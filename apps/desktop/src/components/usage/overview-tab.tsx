@@ -102,7 +102,7 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @[48rem]:grid-cols-4">
         <StatCard
           label={t("usage.cards.tokens")}
           value={formatTokens(data.totalTokens)}
@@ -155,7 +155,7 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
         <DayBars points={series} metric={metric} />
       </Card>
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-3 @[48rem]:grid-cols-2">
         <Card className="flex flex-col">
           <CardHeader
             title={t("usage.models.title")}
@@ -213,7 +213,7 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
         </Card>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_16rem]">
+      <div className="grid gap-3 @[48rem]:grid-cols-[minmax(0,1fr)_16rem]">
         {data.year ? <ActivityCard year={data.year} projects={data.yearProjects} metric={metric} /> : null}
         <Card className="flex flex-col gap-1">
           <p className="mb-1 text-[13px] font-semibold">{t("usage.averages.title")}</p>
@@ -232,7 +232,7 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
       {insights.length > 0 && (
         <Card>
           <p className="mb-2 text-[13px] font-semibold">{t("usage.insights.title")}</p>
-          <ul className="grid gap-x-8 gap-y-1.5 text-[11px] text-foreground/80 lg:grid-cols-2">
+          <ul className="grid gap-x-8 gap-y-1.5 text-[11px] text-foreground/80 @[38rem]:grid-cols-2">
             {insights.map((insight) => (
               <li key={insight.key} className="flex items-baseline gap-2 leading-snug">
                 <span className="size-1.5 shrink-0 -translate-y-px rounded-full bg-primary" aria-hidden />
