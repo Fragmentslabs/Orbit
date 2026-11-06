@@ -28,7 +28,7 @@ function Badge({ label, value, tone, title }: { label: string; value: string; to
  * last 30. It is always there, whatever the width of the page — the summary beside the routines
  * can be compact, these three cannot be missing.
  */
-export function RoutinesStatsBar({ routines }: { routines: Routine[] }) {
+export function RoutinesStatsBar({ routines, separated }: { routines: Routine[]; /** A line under the badges, for when something comes right after them. */ separated?: boolean }) {
   const { t } = useTranslation()
   const runs = useRoutinesStore((s) => s.runs)
 
@@ -48,7 +48,7 @@ export function RoutinesStatsBar({ routines }: { routines: Routine[] }) {
   }, [routines, runs])
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t pt-2.5">
+    <div className={cn("flex shrink-0 flex-wrap items-center gap-1.5", separated && "border-b pb-2.5")}>
       <Badge
         label={t("routines.summary.active")}
         value={t("routines.summary.activeOf", { active: stats.active, total: routines.length })}
