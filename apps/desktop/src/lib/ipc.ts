@@ -34,7 +34,6 @@ import type {
   Project,
   Task,
 } from "@shared/pipeline"
-import type { ModelsSnapshot } from "@shared/models"
 import type { NodaraStatus } from "@shared/nodara"
 import type { FractaStatus } from "@shared/fracta"
 import type {
@@ -62,7 +61,6 @@ export type MenuAction =
   | "new-code"
   | "view-chats"
   | "view-memories"
-  | "view-models"
   | "how-to"
 
 /** Typed wrapper over the IPC bridge exposed by the preload. */
@@ -221,11 +219,6 @@ export const catalogApi = {
     const wrapper = window.ipcRenderer.on("catalog:updated", () => listener())
     return () => window.ipcRenderer.off("catalog:updated", wrapper)
   },
-}
-
-export const modelsApi = {
-  list: () => window.ipcRenderer.invoke("models:list") as Promise<ModelsSnapshot>,
-  refresh: () => window.ipcRenderer.invoke("models:refresh") as Promise<ModelsSnapshot>,
 }
 
 export const authApi = {

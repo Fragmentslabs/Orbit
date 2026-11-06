@@ -88,7 +88,6 @@ import { detectLocal, discoverProviderModels, refreshProviderModels } from './li
 import { discoverModels, type DiscoverOptions } from './lib/discover-models'
 import type { CustomProviderInput, CustomProviderPatch } from '@shared/chat'
 import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
-import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import {
   revert as revertSession,
   revertUncertain as revertUncertainSession,
@@ -737,7 +736,6 @@ function createAppMenu() {
       submenu: [
         { label: 'Chats', click: () => send('view-chats') },
         { label: 'Memories', click: () => send('view-memories') },
-        { label: 'Models', click: () => send('view-models') },
         { type: 'separator' },
         { role: 'togglefullscreen', label: 'Toggle Full Screen' },
         { role: 'reload', label: 'Reload' },
@@ -1414,13 +1412,6 @@ app.whenReady().then(() => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send('catalog:updated')
     }
-  })
-
-  // Unified catalog of the Models tab (OpenRouter + Artificial Analysis)
-  ipcMain.handle('models:list', () => getModelsSnapshot())
-  ipcMain.handle('models:refresh', () => {
-    invalidateModelsSnapshot()
-    return getModelsSnapshot(true)
   })
 
   // Per-message revert (git snapshots of code mode)
