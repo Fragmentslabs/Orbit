@@ -196,7 +196,8 @@ export function RoutinesView() {
         )}
         {/* Fixed: the numbers are always in sight, under the list and under the agenda alike. */}
         <div className="mt-2.5 shrink-0">
-          <RoutinesStatsBar routines={inScope} />
+          {/* The line only exists when the summary comes right below (the narrow page). */}
+          <RoutinesStatsBar routines={inScope} separated={tier === "narrow"} />
         </div>
       </div>
 

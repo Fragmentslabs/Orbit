@@ -153,7 +153,7 @@ function Row({ onClick, children }: { onClick: () => void; children: React.React
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 border-t py-[9px] text-left text-xs transition-colors first:border-t-0 hover:bg-muted/40"
+      className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2.5 rounded-lg px-2 py-[9px] text-left text-xs transition-colors hover:bg-muted/50"
     >
       {children}
     </button>
