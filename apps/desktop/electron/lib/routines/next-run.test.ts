@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { nextRun } from '@shared/routines'
+import { nextRun, upcomingRuns } from '@shared/routines'
+import type { Routine, Schedule } from '@shared/routines'
 
 /**
  * Tests of the next-run computation — the heart of the scheduler. Times chosen
@@ -79,5 +80,52 @@ describe('nextRun — once', () => {
       DAY('2026-10-29', '08:00'),
     )
     expect(target).toBe(DAY('2026-11-05', '08:30'))
+  })
+})
+
+describe('upcomingRuns', () => {
+  const routine = (schedule: Schedule, active = true): Routine => ({
+    id: 'r',
+    title: 't',
+    prompt: 'p',
+    schedule,
+    model: { providerId: 'p', modelId: 'm' },
+    modes: { permissionMode: 'approve' },
+    mode: 'code',
+    folders: [],
+    active,
+    createdAt: 0,
+  })
+
+  it('lists each firing of the window in order', () => {
+    // Daily at 09:00, from the 29th 00:00 to the 1st 00:00: three firings
+    const runs = upcomingRuns(routine({ time: '09:00' }), DAY('2026-10-29', '00:00'), DAY('2026-11-01', '00:00'))
+    expect(runs).toEqual([DAY('2026-10-29', '09:00'), DAY('2026-10-30', '09:00'), DAY('2026-10-31', '09:00')])
+  })
+
+  it('includes a firing exactly at the start and excludes one exactly at the end', () => {
+    const runs = upcomingRuns(routine({ time: '09:00' }), DAY('2026-10-29', '09:00'), DAY('2026-10-30', '09:00'))
+    expect(runs).toEqual([DAY('2026-10-29', '09:00')])
+  })
+
+  it('follows the marked weekdays', () => {
+    // Monday and Thursday (1 and 4) at 12:00, from Sunday the 25th to Sunday the 1st
+    const runs = upcomingRuns(routine({ time: '12:00', days: [1, 4] }), DAY('2026-10-25', '00:00'), DAY('2026-11-01', '00:00'))
+    expect(runs).toEqual([DAY('2026-10-26', '12:00'), DAY('2026-10-29', '12:00')])
+  })
+
+  it('returns nothing for a paused routine unless asked for what it would do', () => {
+    const paused = routine({ time: '09:00' }, false)
+    const from = DAY('2026-10-29', '00:00')
+    const until = DAY('2026-10-31', '00:00')
+    expect(upcomingRuns(paused, from, until)).toEqual([])
+    expect(upcomingRuns(paused, from, until, { includeInactive: true })).toHaveLength(2)
+  })
+
+  it('stops at the limit and with a one-time schedule that already passed', () => {
+    const hourly = routine({ time: '00:00', intervalHours: 1 })
+    expect(upcomingRuns(hourly, DAY('2026-10-29', '00:00'), DAY('2026-12-01', '00:00'), { limit: 5 })).toHaveLength(5)
+    const once = routine({ time: '09:00', onceDate: '2026-10-01' })
+    expect(upcomingRuns(once, DAY('2026-10-29', '00:00'), DAY('2026-11-29', '00:00'))).toEqual([])
   })
 })

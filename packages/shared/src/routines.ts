@@ -404,3 +404,31 @@ export function nextRoutineRun(routine: Routine, now = Date.now()): number | nul
   if (!routine.active) return null
   return nextRun(routine.schedule, now, routine.lastRun)
 }
+
+/**
+ * Every firing of a routine inside `[from, until)`, in order — what the agenda draws and the
+ * "next 24 hours" list reads. It walks `nextRun` one step at a time, so it follows exactly the
+ * rules the scheduler uses (weekdays, every N days or hours, one-time).
+ *
+ * An inactive routine returns nothing, unless `includeInactive` asks for what it WOULD do
+ * (the agenda shows paused routines as outlines). `limit` is the net against a schedule that
+ * fires every hour over a long window.
+ */
+export function upcomingRuns(
+  routine: Routine,
+  from: number,
+  until: number,
+  options: { limit?: number; includeInactive?: boolean } = {},
+): number[] {
+  if (!routine.active && !options.includeInactive) return []
+  const limit = options.limit ?? 200
+  const out: number[] = []
+  let cursor = from - 1
+  while (out.length < limit) {
+    const target = nextRun(routine.schedule, cursor, routine.lastRun)
+    if (target === null || target >= until) break
+    out.push(target)
+    cursor = target
+  }
+  return out
+}
