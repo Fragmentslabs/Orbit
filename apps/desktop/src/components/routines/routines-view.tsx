@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { useWorkspace } from "@/lib/workspace-context"
 import { ListToolbar } from "@/src/components/list-toolbar"
@@ -26,6 +27,25 @@ import { RoutinesSummary } from "./routines-summary"
  * is that routine's.
  */
 type RoutinesLayout = "list" | "agenda"
+/** What the toggle can show: the two layouts, plus the summary when there is no room beside it. */
+type RoutinesPane = RoutinesLayout | "summary"
+
+/** Below this width of the page the summary stops sitting beside the routines. */
+const WIDE_PX = 960
+
+/** Whether the page has room for two columns — its own width, not the window's: the side panel eats it. */
+function useIsWide(element: HTMLElement | null): boolean {
+  const [wide, setWide] = useState(true)
+  useLayoutEffect(() => {
+    if (!element) return
+    const measure = () => setWide(element.clientWidth >= WIDE_PX)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element])
+  return wide
+}
 const LAYOUT_KEY = "orbit-routines-layout"
 
 function savedLayout(): RoutinesLayout {
@@ -51,6 +71,9 @@ export function RoutinesView() {
   // the workspace mode, as it always did.
   const [scope] = useViewScope("routines", mode)
   const [query, setQuery] = useState("")
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const wide = useIsWide(root)
+  const [summaryOnly, setSummaryOnly] = useState(false)
   // List or agenda: the choice is remembered between sessions.
   const [layout, setLayout] = useState<RoutinesLayout>(savedLayout)
   const chooseLayout = (next: RoutinesLayout) => {
@@ -118,7 +141,7 @@ export function RoutinesView() {
   // search field and an empty panel on the side would be noise.
   if (inScope.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div ref={setRoot} className="flex min-h-0 flex-1 flex-col">
         <RoutineList
           routines={inScope}
           scope={scope}
@@ -132,10 +155,28 @@ export function RoutinesView() {
     )
   }
 
+  // Wide: the routines on the left and the summary on the right. Narrow (the side panel is
+  // open, or the window is small): one column, and the summary becomes a third view of the
+  // same toggle, so nothing is squeezed and nothing is lost.
+  const view: RoutinesPane = !wide && summaryOnly ? "summary" : layout
+  const chooseView = (next: RoutinesPane) => {
+    if (next === "summary") {
+      setSummaryOnly(true)
+      return
+    }
+    setSummaryOnly(false)
+    chooseLayout(next)
+  }
+  const options: { value: RoutinesPane; label: string }[] = [
+    { value: "list", label: t("routines.view.list") },
+    { value: "agenda", label: t("routines.view.agenda") },
+    ...(wide ? [] : [{ value: "summary" as const, label: t("routines.view.summary") }]),
+  ]
+
   return (
-    <div className="flex min-h-0 flex-1 gap-4">
-      {/* Left: the routines, as a list or as the week; the toggle sits with the search. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r pr-4">
+    <div ref={setRoot} className={cn("flex min-h-0 flex-1 gap-4", !wide && "flex-col gap-0")}>
+      {/* The routines, as a list or as the week; the toggle sits with the search. */}
+      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", wide && "border-r pr-4")}>
         <ListToolbar
           query={query}
           onQueryChange={setQuery}
@@ -144,17 +185,13 @@ export function RoutinesView() {
           actionIcon={PlusIcon}
           onAction={() => setCreateOpen(true)}
         >
-          <SegmentedControl<RoutinesLayout>
-            size="sm"
-            value={layout}
-            onChange={chooseLayout}
-            options={[
-              { value: "list", label: t("routines.view.list") },
-              { value: "agenda", label: t("routines.view.agenda") },
-            ]}
-          />
+          <SegmentedControl<RoutinesPane> size="sm" value={view} onChange={chooseView} options={options} />
         </ListToolbar>
-        {layout === "list" ? (
+        {view === "summary" ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <RoutinesSummary routines={inScope} onSelect={openRoutine} />
+          </div>
+        ) : view === "list" ? (
           <RoutineList
             routines={inScope}
             scope={scope}
@@ -168,10 +205,12 @@ export function RoutinesView() {
         )}
       </div>
 
-      {/* Right: how the routines are doing and what is next; a routine opens in the side panel. */}
-      <div className="flex min-h-0 w-[27rem] max-w-[45%] shrink-0 flex-col overflow-y-auto">
-        <RoutinesSummary routines={inScope} onSelect={openRoutine} />
-      </div>
+      {/* How the routines are doing and what is next; a routine opens in the side panel. */}
+      {wide && (
+        <div className="flex min-h-0 w-[27rem] shrink-0 flex-col overflow-y-auto">
+          <RoutinesSummary routines={inScope} onSelect={openRoutine} />
+        </div>
+      )}
       {dialog}
     </div>
   )

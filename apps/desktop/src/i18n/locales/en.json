@@ -2870,7 +2870,8 @@
     "timePlaceholder": "HH:MM",
     "view": {
       "list": "List",
-      "agenda": "Agenda"
+      "agenda": "Agenda",
+      "summary": "Summary"
     },
     "detail": {
       "close": "Close",

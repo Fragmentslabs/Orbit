@@ -18,7 +18,7 @@ export function ListToolbar({ query, onQueryChange, placeholder, actionLabel, ac
   children?: React.ReactNode
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 pb-3">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
       <div className="relative min-w-48 flex-1">
         <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input

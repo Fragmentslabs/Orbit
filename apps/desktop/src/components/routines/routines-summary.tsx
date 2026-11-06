@@ -84,7 +84,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3">
         {kpis.map((k) => (
           <div key={k.label} className="flex flex-col gap-0.5 rounded-xl border bg-card px-3.5 py-3">
             <span className="text-[11px] text-muted-foreground">{k.label}</span>
