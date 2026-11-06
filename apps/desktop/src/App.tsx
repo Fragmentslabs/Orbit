@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
-import { FolderOpen } from "lucide-react"
+import { Code2, FolderOpen, MessageSquare } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
@@ -58,6 +58,17 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
       style={{ width: HOVER_ZONE_WIDTH }}
       onMouseEnter={onShow}
     />
+  )
+}
+
+function MemoriesModeBadge({ mode }: { mode: "chat" | "code" }) {
+  const { t } = useTranslation()
+  const Icon = mode === "code" ? Code2 : MessageSquare
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+      <Icon className="size-3.5" />
+      {t(mode === "code" ? "memories.modeCode" : "memories.modeChat")}
+    </span>
   )
 }
 
@@ -331,7 +342,7 @@ function Layout() {
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={view === "pipeline" ? pipelineFolders[0] : view === "routines" ? undefined : folders[0]}
+                  repoPath={view === "pipeline" ? pipelineFolders[0] : view === "routines" || view === "memories" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
                   // On the Pipeline page the header follows the OPEN pipeline,
@@ -345,14 +356,17 @@ function Layout() {
                       ? pipelineFolders.length
                         ? pipelineFolders
                         : undefined
-                      : view === "routines"
+                      : view === "routines" || view === "memories"
                         ? undefined
                         : workspaceMode === "code"
                           ? folders
                           : undefined
                   }
+                  // The Memories page has no project or branch in the header (that is
+                  // the conversation's context): it only says WHICH memories are showing.
+                  extra={view === "memories" ? <MemoriesModeBadge mode={workspaceMode} /> : undefined}
                   onFoldersChange={
-                    view === "pipeline" || view === "routines"
+                    view === "pipeline" || view === "routines" || view === "memories"
                       ? undefined
                       : workspaceMode === "code"
                         ? setFolders

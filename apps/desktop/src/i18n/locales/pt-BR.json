@@ -464,8 +464,6 @@
   "memories": {
     "searchPlaceholder": "Buscar memórias…",
     "allProjects": "Todos",
-    "allProjectsFull": "Todos os projetos",
-    "allCategories": "Todas as categorias",
     "routine": {
       "off": "Desligada",
       "daily": "Diária — só captura",
@@ -560,7 +558,16 @@
     "dropFile": "Solte o arquivo para criar memória",
     "tooltipWeight": "peso {{weight}}",
     "tooltipStale": "(sem uso há mais de 30 dias)",
-    "tooltipCollapsed": "(colapsado)"
+    "tooltipCollapsed": "(colapsado)",
+    "modeChat": "Memórias do chat",
+    "modeCode": "Memórias de código",
+    "filters": {
+      "label": "Filtros de memórias",
+      "project": "Projeto",
+      "kind": "Tipo",
+      "category": "Categoria",
+      "all": "Todas"
+    }
   },
   "sidebar": {
     "newChat": "Novo Chat",

@@ -4,40 +4,34 @@ import { Check, List, Network, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import type { Memory, MemoryKind, ProjectCategory } from "@shared/memory"
+import type { MemoryKind, ProjectCategory } from "@shared/memory"
 import { searchMemories, visibleIn } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
 import { useMemoryStore } from "@/src/stores/memory-store"
-import { MemoryCard } from "./memory-card"
-import { MemoryDetailPanel } from "./memory-detail-panel"
+import { useActiveSession } from "@/src/stores/session-store"
+import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
+import { type FilterGroup, MemoryFilters } from "./memory-filters"
+import { MemoryListItem } from "./memory-list-item"
 import { MemoryGraph } from "./memory-graph"
-import { CATEGORY_LABEL, lastActivity } from "./meta"
-
-/** Stable reference for memories without neighbors — it avoids breaking the memo. */
-const EMPTY_RELATED: Memory[] = []
+import { CATEGORY_LABEL, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 /**
  * Memories view: list of cards or tree of connections (SVG with zoom/pan),
  * with an automatic filter by the workspace mode — chat shows
- * core+seasonal+general, code shows project+general (project selector).
+ * core+seasonal+general, code shows project+general (project filter).
  *
- * Choosing a project in the selector restricts the view to what belongs to it: the
- * project memories plus the general ones created there. General ones from other projects
- * stay out — to see them, set the selector back to "all projects".
+ * The filters live in a menu on the right (same shape as the Tools page). Choosing a
+ * project restricts the view to what belongs to it: the project memories plus the
+ * general ones created there. General ones from other projects stay out — to see them,
+ * set the filter back to "all projects".
+ *
+ * Opening a memory (card or graph node) does not take over the page: the detail opens
+ * as a tab of the side panel, the same one a citation in the chat opens.
  */
 
-const ALL_PROJECTS = "__all__"
-const ALL_CATEGORIES = "__all__"
+const ALL = "__all__"
 
 /** Cards rendered at a time — the rest enters as one scrolls. */
 const PAGE_SIZE = 24
@@ -97,11 +91,20 @@ export function MemoriesView() {
   const loading = useMemoryStore((s) => s.loading)
   const updateMemory = useMemoryStore((s) => s.update)
   const removeMemory = useMemoryStore((s) => s.remove)
+  const openMemoryTab = usePanelStore((s) => s.openMemoryTab)
   const [query, setQuery] = useState("")
-  const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
-  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES)
+  const [projectFilter, setProjectFilter] = useState(ALL)
+  const [kindFilter, setKindFilter] = useState(ALL)
+  const [categoryFilter, setCategoryFilter] = useState(ALL)
   const [tab, setTab] = useState<"list" | "graph">("list")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // The panel belongs to the active conversation of the mode (same key the layout uses).
+  const activeKey = useActiveSession(mode)?.id ?? ORPHAN_KEY
+  // Memory open in the active tab of the panel — it is the highlighted card/node.
+  const openedId = usePanelStore((s) => {
+    const activeTab = s.activeTabBySession[activeKey]
+    return s.tabsBySession[activeKey]?.find((tb) => tb.id === activeTab && tb.type === "memory")?.memoryId
+  })
 
   useEffect(() => {
     void initialize()
@@ -112,7 +115,7 @@ export function MemoriesView() {
     for (const m of index) {
       if (m.kind === "project" && m.projectId) map.set(m.projectId, m.projectName ?? m.projectId)
       // A project whose memories are all general still deserves an entry in the
-      // selector — otherwise they would become unreachable through the filter.
+      // filter — otherwise they would become unreachable through it.
       else if (m.originProjectId && !map.has(m.originProjectId)) {
         map.set(m.originProjectId, m.originProjectName ?? m.originProjectId)
       }
@@ -128,8 +131,8 @@ export function MemoriesView() {
    */
   const proposals = useMemo(() => index.filter((m) => m.proposed), [index])
 
-  // Visible pool (mode + project, without search and without category) — the graph highlights
-  // instead of hiding, and it is from it that the filter counts come.
+  // Visible pool (mode + project, without kind, search and category) — the filter
+  // counts come from it.
   const basePool = useMemo(() => {
     const now = Date.now()
     return index.filter((m) => {
@@ -144,22 +147,20 @@ export function MemoriesView() {
       // general memory created inside another project does not belong to this view.
       // The ones without a recorded origin (work preferences) keep counting in
       // any project — what decides that is matchesProjectFilter.
-      if (projectFilter !== ALL_PROJECTS && !matchesProjectFilter(m, projectFilter)) return false
+      if (projectFilter !== ALL && !matchesProjectFilter(m, projectFilter)) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mode, projectFilter])
 
-  /** Only the categories that exist in the view become an option — with the count next to it. */
-  const categories = useMemo(() => {
-    const counts = new Map<ProjectCategory, number>()
-    for (const m of basePool) if (m.category) counts.set(m.category, (counts.get(m.category) ?? 0) + 1)
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])
-  }, [basePool])
+  const kindPool = useMemo(
+    () => (kindFilter === ALL ? basePool : basePool.filter((m) => m.kind === kindFilter)),
+    [basePool, kindFilter],
+  )
 
   const pool = useMemo(
-    () => (categoryFilter === ALL_CATEGORIES ? basePool : basePool.filter((m) => m.category === categoryFilter)),
-    [basePool, categoryFilter],
+    () => (categoryFilter === ALL ? kindPool : kindPool.filter((m) => m.category === categoryFilter)),
+    [kindPool, categoryFilter],
   )
 
   const filtered = useMemo(() => {
@@ -167,38 +168,89 @@ export function MemoriesView() {
     return [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
   }, [pool, query])
 
+  // Filter menu: only the options that exist in the view, each with its count.
+  const filterGroups = useMemo<FilterGroup[]>(() => {
+    const groups: FilterGroup[] = []
+
+    if (mode === "code" && projects.length > 1) {
+      const counts = new Map<string, number>()
+      let total = 0
+      for (const m of index) {
+        if (m.proposed || !kinds.includes(m.kind) || !visibleIn(m, mode)) continue
+        total++
+        for (const p of projects) if (matchesProjectFilter(m, p.id)) counts.set(p.id, (counts.get(p.id) ?? 0) + 1)
+      }
+      groups.push({
+        id: "project",
+        label: t("memories.filters.project"),
+        value: projectFilter,
+        onChange: setProjectFilter,
+        options: [
+          { value: ALL, label: t("memories.allProjects"), count: total },
+          ...projects.map((p) => ({ value: p.id, label: p.name, count: counts.get(p.id) ?? 0 })),
+        ],
+      })
+    }
+
+    groups.push({
+      id: "kind",
+      label: t("memories.filters.kind"),
+      value: kindFilter,
+      onChange: setKindFilter,
+      options: [
+        { value: ALL, label: t("memories.filters.all"), count: basePool.length },
+        ...kinds.map((kind) => ({
+          value: kind,
+          label: t(`memories.kinds.${kind}`, { defaultValue: KIND_LABEL[kind] }),
+          count: basePool.filter((m) => m.kind === kind).length,
+          color: KIND_COLOR[kind],
+        })),
+      ],
+    })
+
+    const counts = new Map<ProjectCategory, number>()
+    for (const m of kindPool) if (m.category) counts.set(m.category, (counts.get(m.category) ?? 0) + 1)
+    if (counts.size > 0) {
+      groups.push({
+        id: "category",
+        label: t("memories.filters.category"),
+        value: categoryFilter,
+        onChange: setCategoryFilter,
+        options: [
+          { value: ALL, label: t("memories.filters.all"), count: kindPool.length },
+          ...[...counts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([category, count]) => ({
+              value: category,
+              label: t(`memories.categories.${category}`, { defaultValue: CATEGORY_LABEL[category] }),
+              count,
+            })),
+        ],
+      })
+    }
+    return groups
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, mode, projects, index, projectFilter, kindFilter, categoryFilter, basePool, kindPool])
+
   // Folder of the focused project — files dropped in the graph become memories of it
   const projectDirectory = useMemo(() => {
-    const focusId = projectFilter !== ALL_PROJECTS ? projectFilter : projects.length === 1 ? projects[0].id : null
+    const focusId = projectFilter !== ALL ? projectFilter : projects.length === 1 ? projects[0].id : null
     if (!focusId) return undefined
     return pool.find((m) => m.projectId === focusId && m.directory)?.directory
   }, [pool, projectFilter, projects])
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
-  const selected = selectedId ? byId.get(selectedId) : undefined
 
-  /**
-   * Neighbors resolved once per index. Before, this was recalculated per card
-   * on every render, creating a new array — which nullified the MemoryCard memo.
-   */
-  const relatedByMemory = useMemo(() => {
-    const map = new Map<string, Memory[]>()
-    for (const memory of index) {
-      const list = memory.relatedIds
-        .map((id) => byId.get(id))
-        .filter((m): m is Memory => m != null)
-      if (list.length > 0) map.set(memory.id, list)
-    }
-    return map
-  }, [index, byId])
-  const relatedOf = useCallback(
-    (memory: Memory) => relatedByMemory.get(memory.id) ?? EMPTY_RELATED,
-    [relatedByMemory],
-  )
-
-  const handleSelect = useCallback(
-    (id: string) => setSelectedId((prev) => (prev === id ? null : id)),
-    [],
+  // Card or node: both open the memory as a tab of the side panel. Clicking the
+  // background of the graph (null) only deselects — nothing to close here.
+  const openMemory = useCallback(
+    (id: string | null) => {
+      if (!id) return
+      const memory = byId.get(id)
+      const text = memory?.title?.trim() || memory?.text.replace(/\s+/g, " ").trim() || id
+      openMemoryTab(activeKey, { memoryId: id, title: text.length > 40 ? `${text.slice(0, 40).trimEnd()}…` : text })
+    },
+    [byId, openMemoryTab, activeKey],
   )
 
   // Accepting keeps the memory (and the weekly promotion may promote it); discarding
@@ -218,13 +270,19 @@ export function MemoriesView() {
   // search would inherit the already expanded total of the previous one.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [query, projectFilter, mode, tab])
+  }, [query, projectFilter, kindFilter, categoryFilter, mode, tab])
 
-  // Switching mode or project may leave the chosen category out of the
-  // view — it goes back to "all" instead of showing an empty list for no reason.
+  // Switching mode or project may leave the chosen kind/category out of the
+  // view — they go back to "all" instead of showing an empty list for no reason.
   useEffect(() => {
-    setCategoryFilter(ALL_CATEGORIES)
+    setKindFilter(ALL)
+    setCategoryFilter(ALL)
   }, [mode, projectFilter])
+
+  // A kind change may also leave the category out of the view.
+  useEffect(() => {
+    setCategoryFilter(ALL)
+  }, [kindFilter])
 
   const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
   const hasMore = visibleCount < filtered.length
@@ -245,162 +303,108 @@ export function MemoriesView() {
   }, [hasMore, tab, visible.length])
 
   return (
-    <div className="flex h-full min-w-0 flex-col gap-3 overflow-hidden">
-      {/* Routine proposals: the switch itself lives in Preferences → General. */}
-      {proposals.length > 0 && (
-        <div className="rounded-lg border bg-card px-3 py-2">
-          <ul className="space-y-1">
-            {proposals.map((proposal) => (
-              <li key={proposal.id} className="flex items-start gap-2 text-xs">
-                <span className="min-w-0 flex-1 leading-snug">{proposal.text}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 shrink-0 gap-1 px-1.5 text-[11px]"
-                  onClick={() => acceptProposal(proposal.id)}
-                >
-                  <Check className="size-3" /> {t("memories.routine.accept")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 shrink-0 gap-1 px-1.5 text-[11px] text-muted-foreground"
-                  onClick={() => discardProposal(proposal.id)}
-                >
-                  <X className="size-3" /> {t("memories.routine.discard")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("memories.searchPlaceholder")}
-            className="pl-8"
-          />
-        </div>
-        {mode === "code" && projects.length > 1 && (
-          <Select value={projectFilter} onValueChange={(v) => setProjectFilter(v ?? ALL_PROJECTS)}>
-            <SelectTrigger className="w-44">
-              <SelectValue>
-                {projectFilter === ALL_PROJECTS ? t("memories.allProjects") : projects.find((p) => p.id === projectFilter)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={ALL_PROJECTS}>{t("memories.allProjectsFull")}</SelectItem>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+    <div className="flex h-full min-w-0 gap-3 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+        {/* Routine proposals: the switch itself lives in Preferences → General. */}
+        {proposals.length > 0 && (
+          <div className="rounded-lg border bg-card px-3 py-2">
+            <ul className="space-y-1">
+              {proposals.map((proposal) => (
+                <li key={proposal.id} className="flex items-start gap-2 text-xs">
+                  <span className="min-w-0 flex-1 leading-snug">{proposal.text}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 shrink-0 gap-1 px-1.5 text-[11px]"
+                    onClick={() => acceptProposal(proposal.id)}
+                  >
+                    <Check className="size-3" /> {t("memories.routine.accept")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 shrink-0 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                    onClick={() => discardProposal(proposal.id)}
+                  >
+                    <X className="size-3" /> {t("memories.routine.discard")}
+                  </Button>
+                </li>
               ))}
-            </SelectContent>
-          </Select>
+            </ul>
+          </div>
         )}
-        {categories.length > 1 && (
-          <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? ALL_CATEGORIES)}>
-            <SelectTrigger className="w-40">
-              <SelectValue>
-                {categoryFilter === ALL_CATEGORIES
-                  ? t("memories.allCategories")
-                  : t(`memories.categories.${categoryFilter}`, {
-                      defaultValue: CATEGORY_LABEL[categoryFilter as ProjectCategory],
-                    })}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={ALL_CATEGORIES}>{t("memories.allCategories")}</SelectItem>
-              {categories.map(([category, count]) => (
-                <SelectItem key={category} value={category}>
-                  {t(`memories.categories.${category}`, { defaultValue: CATEGORY_LABEL[category] })} ({count})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "graph")}>
-          <TabsList>
-            <TabsTrigger value="list" className="gap-1.5">
-              <List className="size-3.5" /> {t("memories.tabList")}
-            </TabsTrigger>
-            <TabsTrigger value="graph" className="gap-1.5">
-              <Network className="size-3.5" /> {t("memories.tabGraph")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-48 flex-1">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("memories.searchPlaceholder")}
+              className="pl-8"
+            />
+          </div>
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "graph")}>
+            <TabsList>
+              <TabsTrigger value="list" className="gap-1.5">
+                <List className="size-3.5" /> {t("memories.tabList")}
+              </TabsTrigger>
+              <TabsTrigger value="graph" className="gap-1.5">
+                <Network className="size-3.5" /> {t("memories.tabGraph")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
 
-      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-      {loading ? (
-        <MemoriesSkeleton graph={tab === "graph"} />
-      ) : (tab === "graph" ? pool : filtered).length === 0 ? (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-1 text-center">
-            <p className="text-sm font-medium">{t(query ? "memories.emptyTitleQuery" : "memories.emptyTitleNone")}</p>
-            <p className="max-w-sm text-xs text-muted-foreground">
-              {query
-                ? t("memories.emptyQuery")
-                : mode === "chat"
-                  ? t("memories.emptyChat")
-                  : t("memories.emptyCode")}
-            </p>
-          </div>
-        </div>
-      ) : tab === "list" ? (
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
-          {/* One column less with the panel open — the remaining space does not
-              fit three cards without squeezing the text. */}
-          <div
-            className={cn(
-              "grid grid-cols-1 gap-2",
-              selected ? "xl:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
-            )}
-          >
-            {visible.map((memory) => (
-              <MemoryCard
-                key={memory.id}
-                memory={memory}
-                related={relatedOf(memory)}
-                selected={memory.id === selectedId}
-                onSelect={handleSelect}
-                // Before this it jumped to the Graph tab; with the shared panel
-                // swapping the selection is enough, without taking the user out of the list.
-                onSelectRelated={setSelectedId}
-              />
-            ))}
-          </div>
-          {hasMore && (
-            <div ref={sentinelRef} className="grid grid-cols-1 gap-2 pt-2">
-              <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/5" />
-                <Skeleton className="h-3 w-2/3" />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {loading ? (
+            <MemoriesSkeleton graph={tab === "graph"} />
+          ) : (tab === "graph" ? pool : filtered).length === 0 ? (
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex flex-col items-center gap-1 text-center">
+                <p className="text-sm font-medium">{t(query ? "memories.emptyTitleQuery" : "memories.emptyTitleNone")}</p>
+                <p className="max-w-sm text-xs text-muted-foreground">
+                  {query
+                    ? t("memories.emptyQuery")
+                    : mode === "chat"
+                      ? t("memories.emptyChat")
+                      : t("memories.emptyCode")}
+                </p>
               </div>
             </div>
+          ) : tab === "list" ? (
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                {visible.map((memory) => (
+                  <MemoryListItem
+                    key={memory.id}
+                    memory={memory}
+                    selected={memory.id === openedId}
+                    onOpen={openMemory}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <div ref={sentinelRef} className="grid grid-cols-1 gap-2 pt-2">
+                  <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <MemoryGraph
+              pool={pool}
+              query={query}
+              selectedId={openedId ?? null}
+              onSelect={openMemory}
+              projectDirectory={projectDirectory}
+            />
           )}
         </div>
-      ) : (
-        <MemoryGraph
-          pool={pool}
-          query={query}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          projectDirectory={projectDirectory}
-        />
-      )}
-      {/* Single panel of the two tabs: clicking a card or a node of the graph opens
-          the same detail, with the document filling the remaining height. */}
-      {selected && (
-        <MemoryDetailPanel
-          memory={selected}
-          related={relatedOf(selected)}
-          onSelectRelated={setSelectedId}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
       </div>
+
+      <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} />
     </div>
   )
 }
