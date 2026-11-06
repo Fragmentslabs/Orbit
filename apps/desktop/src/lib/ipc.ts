@@ -20,7 +20,7 @@ import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
 import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from "@shared/worktrees"
-import type { McpConfig, McpServerStatus } from "@shared/mcp"
+import type { McpConfig, McpGenerationResult, McpServerStatus } from "@shared/mcp"
 import type { PeerGrants, PeersEvent, PeersSnapshot, RemoteFileContent, RemoteFileTree } from "@shared/peers"
 import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
 import type {
@@ -48,7 +48,7 @@ import type {
   RoutineRun,
 } from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
-import type { Skill, SkillCard, SkillMetaView, SkillProposal } from "@shared/skills"
+import type { Skill, SkillCard, SkillGenerationResult, SkillMetaView, SkillProposal } from "@shared/skills"
 import type { Hook, HookGenerationResult, HookInput, HookWithRun } from "@shared/hooks"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
 import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
@@ -518,6 +518,9 @@ export const skillsApi = {
   create: (data: { name: string; description?: string; content: string; slug?: string; oldSlug?: string }) =>
     window.ipcRenderer.invoke("skills:create", data) as Promise<{ filePath: string }>,
   remove: (slug: string) => window.ipcRenderer.invoke("skills:remove", slug) as Promise<void>,
+  /** The model drafts a skill from a description; nothing is saved. */
+  generate: (description: string, model: { providerId: string; modelId: string }, folders: string[], language?: string) =>
+    window.ipcRenderer.invoke("skills:generate", description, model, folders, language) as Promise<SkillGenerationResult>,
   /** Card state, preferences and usage per skill */
   meta: (directory?: string) => window.ipcRenderer.invoke("skills:meta", directory) as Promise<SkillMetaView[]>,
   /** Writes the card with the auxiliary model, in the user's language */
@@ -557,6 +560,9 @@ export const fractaApi = {
 }
 
 export const mcpApi = {
+  /** The model configures a server from a description; nothing is saved or started. */
+  generate: (description: string, model: { providerId: string; modelId: string }, folders: string[], language?: string) =>
+    window.ipcRenderer.invoke("mcp:generate", description, model, folders, language) as Promise<McpGenerationResult>,
   config: () => window.ipcRenderer.invoke("mcp:config") as Promise<McpConfig>,
   status: () => window.ipcRenderer.invoke("mcp:status") as Promise<McpServerStatus[]>,
   save: (config: McpConfig) =>

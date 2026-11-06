@@ -68,3 +68,8 @@ export interface McpServerStatus {
   /** An OAuth token is already saved — false = never authorized on this device */
   authorized?: boolean
 }
+
+/** Result of asking the model to configure an MCP server from a description. Nothing is saved from it. */
+export type McpGenerationResult =
+  | { ok: true; suggestion: McpServerConfig }
+  | { ok: false; error: string }
