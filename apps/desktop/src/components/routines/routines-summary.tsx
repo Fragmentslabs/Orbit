@@ -16,7 +16,7 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
   return (
     <div className="rounded-xl border bg-card p-3.5">
       <p className="text-[13px] font-semibold">{title}</p>
-      {subtitle && <p className="mb-1 text-[11px] text-muted-foreground">{subtitle}</p>}
+      {subtitle && <p className="mb-1 hidden text-[11px] text-muted-foreground @[24rem]:block">{subtitle}</p>}
       <div className={cn(!subtitle && "mt-1")}>{children}</div>
     </div>
   )
@@ -27,12 +27,12 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
  * (active, failures, spend) and what is coming and what just ran. Every row opens its routine.
  */
 /**
- * `full` is the column beside the routines; `side` the same column when the page is narrow
- * (fewer columns per row); `strip` the one that goes below the routines when not even a narrow
- * column fits (just what runs next). The numbers (active, failures, spend) are in the footer of
+ * `full` is the column beside the routines — it adapts to its own width (container queries: a
+ * narrow column drops the dates and the mode chips); `strip` the one that goes below the routines
+ * when not even a narrow column fits (just what runs next). The numbers (active, failures, spend) are in the footer of
  * the list, not here.
  */
-export type SummaryVariant = "full" | "side" | "strip"
+export type SummaryVariant = "full" | "strip"
 
 export function RoutinesSummary({ routines, variant = "full", onSelect }: {
   routines: Routine[]
@@ -65,7 +65,6 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
     }
   }, [routines, runs])
 
-  const compact = variant !== "full"
   // Rows of "next": the same in every variant, only the columns change.
   const nextRows =
     summary.running.length === 0 && summary.upcoming.length === 0 ? (
@@ -77,7 +76,7 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
           if (!routine) return null
           return (
             <Row key={`running:${run.sessionId}`} onClick={() => onSelect(routine.id)}>
-              <span className={cn("shrink-0 text-primary", compact ? "w-[5.5rem]" : "w-28")}>{t("routines.summary.now")}</span>
+              <span className="w-[5.5rem] shrink-0 text-primary @[24rem]:w-28">{t("routines.summary.now")}</span>
               <span className="min-w-0 flex-1 truncate">{routine.title}</span>
               <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
             </Row>
@@ -85,15 +84,13 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
         })}
         {(variant === "strip" ? summary.upcoming.slice(0, 3) : summary.upcoming).map(({ routine, at }) => (
           <Row key={`${routine.id}:${at}`} onClick={() => onSelect(routine.id)}>
-            <span className={cn("shrink-0 tabular-nums text-muted-foreground", compact ? "w-[5.5rem]" : "w-28")}>
+            <span className="w-[5.5rem] shrink-0 tabular-nums text-muted-foreground @[24rem]:w-28">
               {formatWhen(at, locale, summary.now)}
             </span>
             <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-            {variant !== "side" && (
-              <span className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
-              </span>
-            )}
+            <span className="hidden shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground @[24rem]:inline">
+              {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+            </span>
           </Row>
         ))}
       </>
@@ -113,7 +110,7 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
 
   return (
     <div className="flex flex-col gap-3">
-      <Card title={t("routines.summary.next")} subtitle={variant === "side" ? undefined : t("routines.summary.nextHint")}>
+      <Card title={t("routines.summary.next")} subtitle={t("routines.summary.nextHint")}>
         {nextRows}
       </Card>
 
@@ -137,7 +134,7 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-                {variant !== "side" && <span className="w-28 shrink-0 text-muted-foreground">{formatWhen(run.startedAt, locale)}</span>}
+                <span className="hidden w-28 shrink-0 text-muted-foreground @[24rem]:inline">{formatWhen(run.startedAt, locale)}</span>
                 <span className="w-14 shrink-0 text-right font-medium tabular-nums">{formatCost(run.cost)}</span>
               </Row>
             )
