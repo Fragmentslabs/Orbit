@@ -2714,9 +2714,6 @@
     "search": "Buscar esteira",
     "noResults": "Nada encontrado para \"{{query}}\".",
     "summary": {
-      "all": "Todas as esteiras",
-      "seeAll": "Ver todas",
-      "openBoard": "Abrir quadro",
       "running": "Em andamento agora",
       "runningHint": "Tasks rodando · clique para abrir",
       "nothingRunning": "Nenhuma task rodando.",

@@ -2714,9 +2714,6 @@
     "search": "Search pipelines",
     "noResults": "Nothing found for \"{{query}}\".",
     "summary": {
-      "all": "All pipelines",
-      "seeAll": "See all",
-      "openBoard": "Open board",
       "running": "Running now",
       "runningHint": "Tasks running · click to open",
       "nothingRunning": "No task running.",

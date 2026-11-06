@@ -19,8 +19,8 @@ const DAY_MS = 86_400_000
 /**
  * Level 1 of the pipeline page, like the Routines page: the pipelines as cards on the left, and
  * on the right what is running, what needs the user and what was finished lately, with the
- * numbers as badges at the bottom. A click on a card selects it (the summary follows it) and
- * "Open board" goes to its phases. When the page is narrow the summary goes under the list.
+ * numbers as badges at the bottom. A click on a card opens its board (the phases); the summary
+ * always shows everything and scrolls. When the page is narrow it goes under the list.
  */
 export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t } = useTranslation()
@@ -29,7 +29,6 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
   const tasksPerPipeline = usePipelineStore((s) => s.tasksPerPipeline)
   const [createOpen, setCreateOpen] = useState(false)
   const [query, setQuery] = useState("")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const stacked = useStacked(root, STACK_BELOW_PX)
 
@@ -44,15 +43,13 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
     })
   }, [pipelines, projects, query])
 
-  const selected = pipelines.find((p) => p.id === selectedId) ?? null
-  const scope = useMemo(() => (selected ? [selected] : pipelines), [selected, pipelines])
 
   const stats = useMemo(() => {
     const since = Date.now() - 30 * DAY_MS
     let running = 0
     let failed = 0
     let cost = 0
-    for (const pipeline of scope) {
+    for (const pipeline of pipelines) {
       for (const task of realTasks(tasksPerPipeline[pipeline.id] ?? EMPTY_TASKS)) {
         if (task.status === "in_progress") running++
         if (task.status === "paused" && task.pauseReason === "error") failed++
@@ -60,7 +57,7 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
       }
     }
     return { running, failed, cost }
-  }, [scope, tasksPerPipeline])
+  }, [pipelines, tasksPerPipeline])
 
   const dialog = <PipelineCreateDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onOpen} />
 
@@ -88,7 +85,7 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
     <StatBadges
       separated={stacked}
       items={[
-        { label: t("pipeline.stats.pipelines"), value: String(scope.length) },
+        { label: t("pipeline.stats.pipelines"), value: String(pipelines.length) },
         { label: t("pipeline.inProgress"), value: String(stats.running) },
         { label: t("pipeline.stats.failed"), value: String(stats.failed), tone: stats.failed > 0 ? "bad" : undefined },
         { label: t("pipeline.stats.spent"), value: formatCost(stats.cost), title: t("pipeline.stats.spentHint") },
@@ -96,24 +93,11 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
     />
   )
 
+  // Everything, always: what is running, what is stuck and what was done, across all pipelines;
+  // when there is a lot, the column scrolls.
   const summary = (
-    <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-      <div className="flex min-h-[30px] shrink-0 items-center gap-2">
-        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{selected ? selected.name : t("pipeline.summary.all")}</p>
-        {selected && (
-          <>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setSelectedId(null)}>
-              {t("pipeline.summary.seeAll")}
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 gap-1 px-2.5 text-xs" onClick={() => onOpen(selected.id)}>
-              {t("pipeline.summary.openBoard")} <span aria-hidden>→</span>
-            </Button>
-          </>
-        )}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <PipelineSummary pipelines={scope} tasksPerPipeline={tasksPerPipeline} onOpen={onOpen} />
-      </div>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <PipelineSummary pipelines={pipelines} tasksPerPipeline={tasksPerPipeline} onOpen={onOpen} />
     </div>
   )
 
@@ -135,12 +119,7 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-1">
             {visible.map((pipeline) => (
-              <PipelineCard
-                key={pipeline.id}
-                pipeline={pipeline}
-                selected={pipeline.id === selectedId}
-                onSelect={() => setSelectedId(pipeline.id === selectedId ? null : pipeline.id)}
-              />
+              <PipelineCard key={pipeline.id} pipeline={pipeline} onOpen={() => onOpen(pipeline.id)} />
             ))}
           </div>
         )}
@@ -160,7 +139,7 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
   )
 }
 
-function PipelineCard({ pipeline, selected, onSelect }: { pipeline: Pipeline; selected: boolean; onSelect: () => void }) {
+function PipelineCard({ pipeline, onOpen }: { pipeline: Pipeline; onOpen: () => void }) {
   const { t } = useTranslation()
   const projects = usePipelineStore((s) => s.projects)
   const tasks = realTasks(usePipelineStore((s) => s.tasksPerPipeline[pipeline.id]) ?? EMPTY_TASKS)
@@ -176,12 +155,8 @@ function PipelineCard({ pipeline, selected, onSelect }: { pipeline: Pipeline; se
   return (
     <button
       type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "flex items-start gap-2.5 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors hover:border-ring",
-        selected && "border-primary/70",
-      )}
+      onClick={onOpen}
+      className="flex items-start gap-2.5 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors hover:border-ring"
     >
       <span
         className={cn(

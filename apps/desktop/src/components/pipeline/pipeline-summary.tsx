@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils"
 import { formatDuration, formatWhen } from "@/src/lib/format"
 import { EMPTY_TASKS } from "@/src/stores/pipeline-store"
 
-/** Rows of each list: enough to read at a glance, the rest is on the board. */
-const MAX_ROWS = 5
+/** Completed tasks are only the latest ones: they pile up forever, the others are all shown. */
+const MAX_DONE = 30
 
 /** Tasks of the pipeline board, not the ones that are a delivery of the merge flow. */
 export const realTasks = (tasks: Task[]) => tasks.filter((t) => !t.deliveryId)
@@ -38,8 +38,8 @@ const label = (task: Task) => (task.number ? `#${task.number}` : "")
 
 /**
  * What the pipeline page shows beside the list: what is running now, what needs the user (a
- * failure or a pause) and what was finished lately. It follows the pipeline selected in the
- * list — or all of them —, and every row opens that pipeline's board.
+ * failure or a pause) and what was finished lately, across all the pipelines; every row opens
+ * that pipeline's board.
  */
 export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
   pipelines: Pipeline[]
@@ -61,7 +61,7 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
       done: entries
         .filter((e) => e.task.status === "completed" && e.task.completedAt)
         .sort((a, b) => Date.parse(b.task.completedAt!) - Date.parse(a.task.completedAt!))
-        .slice(0, MAX_ROWS),
+        .slice(0, MAX_DONE),
     }
   }, [pipelines, tasksPerPipeline])
 
@@ -73,7 +73,7 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
         {summary.running.length === 0 ? (
           <p className="py-2 text-[11px] text-muted-foreground">{t("pipeline.summary.nothingRunning")}</p>
         ) : (
-          summary.running.slice(0, MAX_ROWS).map(({ pipeline, task, phase }) => (
+          summary.running.map(({ pipeline, task, phase }) => (
             <Row key={task.id} onClick={() => onOpen(pipeline.id)}>
               <span className="flex w-full items-center gap-2">
                 <Loader2 className="size-3 shrink-0 animate-spin text-blue-400" />
@@ -103,7 +103,7 @@ export function PipelineSummary({ pipelines, tasksPerPipeline, onOpen }: {
         {summary.attention.length === 0 ? (
           <p className="py-2 text-[11px] text-muted-foreground">{t("pipeline.summary.nothingStuck")}</p>
         ) : (
-          summary.attention.slice(0, MAX_ROWS).map(({ pipeline, task, phase }) => {
+          summary.attention.map(({ pipeline, task, phase }) => {
             const failed = task.pauseReason === "error"
             return (
               <Row key={task.id} onClick={() => onOpen(pipeline.id)}>
