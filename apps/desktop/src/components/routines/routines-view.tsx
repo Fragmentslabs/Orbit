@@ -12,6 +12,7 @@ import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { CreateRoutineDialog } from "./create-routine-dialog"
 import { RoutineList, routineMatches } from "./my-routines"
 import { RoutinesAgenda } from "./routines-agenda"
+import { RoutinesStatsBar } from "./routines-stats"
 import { RoutinesSummary } from "./routines-summary"
 
 type RoutinesLayout = "list" | "agenda"
@@ -193,6 +194,10 @@ export function RoutinesView() {
         ) : (
           <RoutinesAgenda routines={filtered} selectedId={openedId ?? null} onSelect={openRoutine} />
         )}
+        {/* Fixed: the numbers are always in sight, under the list and under the agenda alike. */}
+        <div className="mt-2.5 shrink-0">
+          <RoutinesStatsBar routines={inScope} />
+        </div>
       </div>
 
       {/* How the routines are doing and what is next; a routine opens in the side panel. It never

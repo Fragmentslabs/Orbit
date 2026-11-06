@@ -2895,8 +2895,6 @@
       "paused_one": "{{count}} pausada",
       "paused_other": "{{count}} pausadas",
       "failures": "Falhas em 7 dias",
-      "failuresMeta_one": "em {{count}} rotina",
-      "failuresMeta_other": "em {{count}} rotinas",
       "spent": "Gasto em 30 dias",
       "executions_one": "{{count}} execução",
       "executions_other": "{{count}} execuções",
