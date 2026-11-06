@@ -20,7 +20,8 @@ const DAY_MS = 86_400_000
  * Level 1 of the pipeline page, like the Routines page: the pipelines as cards on the left, and
  * on the right what is running, what needs the user and what was finished lately, with the
  * numbers as badges at the bottom. A click on a card opens its board (the phases); the summary
- * always shows everything and scrolls. When the page is narrow it goes under the list.
+ * always shows everything and scrolls. When the page is narrow it goes away and only the number
+ * badges stay, under the list.
  */
 export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t } = useTranslation()
@@ -83,7 +84,6 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
 
   const badges = (
     <StatBadges
-      separated={stacked}
       items={[
         { label: t("pipeline.stats.pipelines"), value: String(pipelines.length) },
         { label: t("pipeline.inProgress"), value: String(stats.running) },
@@ -126,9 +126,9 @@ export function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
         {stacked && <div className="mt-2.5 shrink-0">{badges}</div>}
       </div>
 
-      {stacked ? (
-        <div className="max-h-[40%] shrink-0 overflow-y-auto">{summary}</div>
-      ) : (
+      {/* Narrow page (the side panel is open): the right column goes away and only the
+          badges stay, under the list. */}
+      {!stacked && (
         <div className="@container flex min-h-0 w-[clamp(17rem,40%,27rem)] shrink-0 flex-col">
           {summary}
           <div className="mt-2.5 shrink-0">{badges}</div>
