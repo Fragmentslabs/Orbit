@@ -637,7 +637,7 @@
       "dark": "Dark",
       "system": "System",
       "support": "Support development",
-      "connectApp": "Connect App"
+      "connectApp": "Connect devices"
     }
   },
   "titlebar": {
@@ -1193,7 +1193,7 @@
     }
   },
   "connectApp": {
-    "title": "Connect App",
+    "title": "Connect devices",
     "description": "Scan the QR code with the Orbit app to connect.",
     "statusError": "Could not fetch the server status.",
     "serverInactive": "Server inactive",
@@ -3765,5 +3765,110 @@
   },
   "subchat": {
     "noResult": "No text answer."
+  },
+  "peers": {
+    "title": "Connect devices",
+    "description": "Pair a phone or another computer on this network.",
+    "tabPhone": "Phone",
+    "tabComputer": "Another computer",
+    "discoverable": "Allow this computer to be found",
+    "discoverableHint": "Other Orbits on this network can ask to see your chats. You accept each one here.",
+    "found": "Computers on this network",
+    "searching": "Looking for other Orbits…",
+    "nobody": "No other Orbit found yet. On the other computer, turn on \"Allow this computer to be found\".",
+    "connect": "Connect",
+    "connected": "Connected",
+    "manualLabel": "Or type its address",
+    "manualPlaceholder": "192.168.0.20",
+    "pairingConnecting": "Reaching the other computer…",
+    "pairingWaiting": "Waiting for {{name}} to accept. Check that the code is the same on both screens.",
+    "pairingAccepted": "{{name}} accepted. It now shows in the environment selector.",
+    "pairingDeclined": "The other computer declined.",
+    "pairingExpired": "The request expired. Try again.",
+    "pairingError_unreachable": "Couldn't reach that computer. Check the address and the network.",
+    "pairingError_not_discoverable": "That computer isn't accepting requests. Turn on \"Allow this computer to be found\" there.",
+    "pairingError_rate_limited": "Too many attempts. Wait a few seconds.",
+    "pairingError_busy": "That computer has too many requests waiting.",
+    "pairingError_version": "That computer runs an incompatible version of Orbit.",
+    "pairingError_invalid": "The pairing failed. Try again.",
+    "cancel": "Cancel",
+    "done": "Done",
+    "tryAgain": "Try again",
+    "canSee": "Computers you can see",
+    "seeYou": "Devices that can see this computer",
+    "revoke": "Revoke",
+    "forget": "Remove",
+    "online": "Online",
+    "offline": "Offline",
+    "error_unreachable": "Unreachable",
+    "error_certificate_changed": "Certificate changed — pair again",
+    "error_revoked": "Access revoked",
+    "error_version": "Incompatible version",
+    "grantView": "View chats",
+    "grantSend": "Send messages",
+    "grantFiles": "See project files",
+    "kindPhone": "Phone",
+    "kindComputer": "Computer",
+    "serverError": "The secure connection for computers couldn't start: {{error}}",
+    "request": {
+      "title": "{{name}} wants to see your chats",
+      "address": "From {{address}}",
+      "code": "Code",
+      "codeHint": "Accept only if the other screen shows the same code.",
+      "allowSend": "Allow sending messages",
+      "allowFiles": "Allow seeing project files",
+      "viewNote": "It will see your chats, motions, designs and media. Approvals for the agent stay on this computer.",
+      "accept": "Accept",
+      "decline": "Decline",
+      "expires": "Expires in {{seconds}}s"
+    },
+    "env": {
+      "local": "This computer",
+      "connect": "Connect devices…",
+      "label": "Environment",
+      "remoteBanner": "Remote environment: {{name}}",
+      "viewOnly": "View only",
+      "canSend": "View and send",
+      "offline": "{{name}} is offline",
+      "back": "Back to this computer"
+    },
+    "running": {
+      "title": "Running on other computers",
+      "waiting": "waiting for approval"
+    },
+    "remote": {
+      "empty": "No chats on {{name}} yet.",
+      "pick": "Pick a chat from {{name}} in the sidebar.",
+      "loading": "Loading…",
+      "loadError": "Couldn't load this chat: {{error}}",
+      "inputPlaceholder": "Message this chat on {{name}}",
+      "runsThere": "Runs on {{name}}, with its models and permissions.",
+      "viewOnlyNote": "{{name}} allowed viewing only.",
+      "busyNote": "This chat is running. Wait for it to finish or stop it.",
+      "approvalNote": "Approvals for this chat happen on {{name}}.",
+      "stop": "Stop",
+      "send": "Send",
+      "files": "Files",
+      "reload": "Reload",
+      "sendError": "Couldn't send: {{error}}"
+    },
+    "files": {
+      "title": "Files on {{name}}",
+      "noFolder": "This chat has no project folder.",
+      "empty": "Empty folder",
+      "truncated": "Only the first part of the file was loaded.",
+      "binary": "Binary file — no preview.",
+      "error": "Couldn't open: {{error}}",
+      "close": "Close",
+      "up": "Up"
+    },
+    "copy": "Copy",
+    "copied": "Copied",
+    "address": "Address",
+    "thisComputer": "This computer",
+    "connectedComputers": "Connected computers",
+    "youSee": "You see",
+    "seesYou": "Sees you",
+    "refresh": "Search again"
   }
 }

@@ -15,6 +15,9 @@ import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
+import { RemoteChatView } from "@/src/components/peers/remote-chat-view"
+import { PairRequestCards } from "@/src/components/peers/pair-request-cards"
+import { useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
@@ -70,7 +73,12 @@ function Layout() {
   // The panel belongs to the CHAT, not to the window. The agent may be working in a
   // session that is not the one on the screen: the tab (and the opening) are born there, and only
   // on going back to that chat does the panel appear — nothing is opened here.
-  const activeKey = activeSession?.id ?? ORPHAN_KEY
+  // Another desktop in the environment selector: the panel bucket is its chat (the
+  // namespaced id), so its motion/design/slides tabs live apart from the local ones.
+  const peersEnv = usePeersStore((s) => s.env)
+  const remoteEnv = peersEnv !== "local"
+  const remoteActive = useActiveRemoteSession()
+  const activeKey = remoteEnv ? (remoteActive?.sessionId ?? ORPHAN_KEY) : (activeSession?.id ?? ORPHAN_KEY)
   const rightPanelOpen = usePanelStore((s) => s.openBySession[activeKey] ?? false)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
@@ -92,9 +100,11 @@ function Layout() {
       // The motion event does not carry the session (the contract is {id, entry, title}):
       // without it the tab would be born in the orphan bucket, hidden behind the open chat.
       // The bucket is the ACTIVE chat's — it is where the panel is pointed now.
+      const peers = usePeersStore.getState()
+      const remoteBucket = peers.env !== "local" ? (peers.activeByPeer[peers.env] ?? undefined) : undefined
       const resolved =
         (event.type === "motion" || event.type === "design" || event.type === "slides") && !event.sessionId
-          ? { ...event, sessionId: useSessionStore.getState().activeIds[modeRef.current] ?? undefined }
+          ? { ...event, sessionId: remoteBucket ?? useSessionStore.getState().activeIds[modeRef.current] ?? undefined }
           : event
       store.applyEvent(resolved)
       if (event.type === "ensure") {
@@ -317,21 +327,23 @@ function Layout() {
                               ? t("sidebar.tools")
                               : view === "analytics"
                                 ? t("sidebar.usage")
-                                : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
+                                : remoteEnv
+                                  ? remoteActive?.session?.title ?? ""
+                                  : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   // The menu works in both modes: pin, rename, archive,
                   // delete and search belong to the SESSION, and the sidebar already offers them
                   // for a code conversation through the row menu.
-                  hasMenu={view === "chat" && !!activeSession}
-                  session={view === "chat" ? activeSession : undefined}
+                  hasMenu={!remoteEnv && view === "chat" && !!activeSession}
+                  session={!remoteEnv && view === "chat" ? activeSession : undefined}
                   // Agent browser indicator: works in both modes of the
                   // conversation (chat and code), since the browser tools are
                   // keyed by the session id, not by the mode.
-                  sessionId={view === "chat" ? activeSession?.id : undefined}
+                  sessionId={!remoteEnv && view === "chat" ? activeSession?.id : undefined}
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={view === "pipeline" ? pipelineFolders[0] : view === "routines" ? undefined : folders[0]}
+                  repoPath={remoteEnv ? undefined : view === "pipeline" ? pipelineFolders[0] : view === "routines" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
                   // On the Pipeline page the header follows the OPEN pipeline,
@@ -341,7 +353,9 @@ function Layout() {
                   // INSIDE the creation dialog (one per routine) — the header has
                   // no "screen" folder to show.
                   folders={
-                    view === "pipeline"
+                    remoteEnv
+                      ? undefined
+                      : view === "pipeline"
                       ? pipelineFolders.length
                         ? pipelineFolders
                         : undefined
@@ -352,7 +366,7 @@ function Layout() {
                           : undefined
                   }
                   onFoldersChange={
-                    view === "pipeline" || view === "routines"
+                    remoteEnv || view === "pipeline" || view === "routines"
                       ? undefined
                       : workspaceMode === "code"
                         ? setFolders
@@ -360,8 +374,10 @@ function Layout() {
                   }
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
-                  <MissingFoldersBanner />
-                  {view === "memories" ? (
+                  {remoteEnv ? null : <MissingFoldersBanner />}
+                  {remoteEnv ? (
+                    <RemoteChatView />
+                  ) : view === "memories" ? (
                     <MemoriesView />
                   ) : view === "models" ? (
                     <ModelsView />
@@ -394,6 +410,7 @@ function Layout() {
         </PanelGroup>
         {!rightPanelOpen && <RightPanelDropZone />}
       </div>
+      <PairRequestCards />
       </DndContext>
     </VoiceCallProvider>
   )

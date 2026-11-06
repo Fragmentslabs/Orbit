@@ -100,6 +100,10 @@ import {
   type SidebarDropTarget,
 } from "@/src/components/session-drag"
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
+import { EnvironmentSelector } from "@/src/components/peers/environment-selector"
+import { RunningElsewhere } from "@/src/components/peers/running-elsewhere"
+import { RemoteSessionList } from "@/src/components/peers/remote-session-list"
+import { startPeersMirror, usePeersStore } from "@/src/stores/peers-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -1555,11 +1559,14 @@ export function AppSidebar() {
   const initialize = useSessionStore((s) => s.initialize)
   const initQueue = useMessageQueueStore((s) => s.initialize)
   const openSettings = useSettingsUi((s) => s.openSettings)
+  // Another desktop picked in the environment selector: the list is that machine's.
+  const env = usePeersStore((s) => s.env)
 
   useEffect(() => {
     void initialize()
     void initQueue()
     startMessageScheduler()
+    startPeersMirror()
   }, [initialize, initQueue])
 
   return (
@@ -1567,8 +1574,15 @@ export function AppSidebar() {
       <Sidebar variant="floating" collapsible="offcanvas">
         <SidebarHeader>
           <ModeTabs />
+          <EnvironmentSelector />
         </SidebarHeader>
         <SidebarContent>
+          {env !== "local" ? (
+            <div className="flex min-w-0 flex-col overflow-x-hidden pt-2 select-none">
+              <RunningElsewhere />
+              <RemoteSessionList peerId={env} />
+            </div>
+          ) : (
           <div className="flex min-w-0 flex-col overflow-x-hidden select-none">
             <div className="px-2 py-2">
               <NewChatButton />
@@ -1582,8 +1596,12 @@ export function AppSidebar() {
               <McpSkillsButton />
             </div>
             <SidebarSeparator className="mx-3" />
+            <div className="pt-2">
+              <RunningElsewhere />
+            </div>
             <ChatHistory />
           </div>
+          )}
         </SidebarContent>
         <SidebarFooter className="p-0">
           <AccountSection onOpenSettings={() => openSettings()} />
@@ -1595,7 +1613,9 @@ export function AppSidebar() {
 
 function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { t } = useTranslation()
-  const [connectOpen, setConnectOpen] = useState(false)
+  // In the peers store: the environment selector opens the same modal.
+  const connectOpen = usePeersStore((s) => s.connectOpen)
+  const setConnectOpen = usePeersStore((s) => s.setConnectOpen)
 
   return (
     <>
