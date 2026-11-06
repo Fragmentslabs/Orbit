@@ -2602,7 +2602,6 @@
       "paused": "Paused",
       "completed": "Done"
     },
-    "subtitle": "Pipelines that run tasks phase by phase, without chats",
     "createFirst": "Create the first pipeline",
     "mainRepository": "Main repository",
     "back": "Back to the list",
@@ -2707,11 +2706,12 @@
     "commitPromptTitle": "Final commit message",
     "commitPromptHint": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase, the changed files and the repository's most recent commit — exactly the same context a phase gets. Empty uses the default: what the task asks about the commit; with none, the style of the most recent commit; with no history, the memory preferences; and finally Conventional Commits (header + body of summarized topics).",
     "commitPromptEmpty": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
-    "commitFailed": "Final commit failed"
+    "commitFailed": "Final commit failed",
+    "search": "Search pipelines",
+    "noResults": "Nothing found for \"{{query}}\"."
   },
   "routines": {
     "title": "Routines",
-    "subtitle": "Sessions that come back on their own: the agent runs the same prompt on schedule.",
     "loading": "Loading routines…",
     "tabs": {
       "create": "Create",
@@ -2844,7 +2844,9 @@
       "deleteTitle": "Delete routine",
       "deleteDescription": "\"{{title}}\" and ALL the sessions it produced will be deleted. This cannot be undone.",
       "new": "New routine",
-      "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check."
+      "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
+      "search": "Search routines",
+      "noResults": "Nothing found for \"{{query}}\"."
     },
     "runs": {
       "title": "Sessions",
@@ -2859,7 +2861,6 @@
       "chat": "Chat mode",
       "code": "Code mode"
     },
-    "subtitleChat": "Chat sessions that come back on their own — no working folders, just conversation and the chat tools.",
     "timePlaceholder": "HH:MM"
   },
   "queue": {

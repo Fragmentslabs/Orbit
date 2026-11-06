@@ -2602,7 +2602,6 @@
       "paused": "Pausada",
       "completed": "Concluída"
     },
-    "subtitle": "Esteiras que executam tasks fase a fase, sem chats",
     "createFirst": "Criar a primeira esteira",
     "mainRepository": "Repositório principal",
     "back": "Voltar para a lista",
@@ -2707,11 +2706,12 @@
     "commitPromptTitle": "Mensagem do commit final",
     "commitPromptHint": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases, os arquivos alterados e o último commit do repositório — o mesmo contexto que uma fase recebe. Vazio usa o padrão: o que a task pedir sobre o commit; sem isso, o estilo do último commit; sem histórico, as preferências da memória; e por fim Conventional Commits (header + body de tópicos resumidos).",
     "commitPromptEmpty": "Vazio = prompt padrão (pedido da task → último commit → memória → Conventional Commits).",
-    "commitFailed": "Commit final falhou"
+    "commitFailed": "Commit final falhou",
+    "search": "Buscar esteira",
+    "noResults": "Nada encontrado para \"{{query}}\"."
   },
   "routines": {
     "title": "Rotinas",
-    "subtitle": "Sessões que voltam sozinhas: o agente roda o mesmo prompt na hora marcada.",
     "loading": "Carregando rotinas…",
     "tabs": {
       "create": "Criar",
@@ -2844,7 +2844,9 @@
       "deleteTitle": "Excluir rotina",
       "deleteDescription": "\"{{title}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer.",
       "new": "Nova rotina",
-      "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias."
+      "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias.",
+      "search": "Buscar rotina",
+      "noResults": "Nada encontrado para \"{{query}}\"."
     },
     "runs": {
       "title": "Sessões",
@@ -2859,7 +2861,6 @@
       "chat": "Modo chat",
       "code": "Modo código"
     },
-    "subtitleChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat.",
     "timePlaceholder": "HH:MM"
   },
   "queue": {

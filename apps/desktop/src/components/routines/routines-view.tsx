@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MessageSquareIcon, PlusIcon, TerminalIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { PlusIcon } from "lucide-react"
 import { useWorkspace } from "@/lib/workspace-context"
+import { ListToolbar } from "@/src/components/list-toolbar"
+import { useViewScope } from "@/src/stores/view-scope-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { CreateRoutineDialog } from "./create-routine-dialog"
@@ -14,8 +15,8 @@ import { RoutineDetail, RoutineList } from "./my-routines"
  *
  *   routine list  →  [open]  →  routine detail (executed sessions)
  *
- * The page inherits the workspace mode: in chat it lists/creates only chat
- * routines, in code only the code ones. Creating is a MODAL, not a tab: the
+ * The header chooses what the page lists: the chat routines, the code ones or both (until the
+ * user picks, it follows the workspace mode). Creating is a MODAL, not a tab: the
  * page is the list, and creating is an action on it. In the detail the list
  * header disappears — whoever is there is inside ONE routine, and the header
  * is that routine's.
@@ -33,8 +34,12 @@ export function RoutinesView() {
   const sessionsLoaded = useSessionStore((s) => s.initialized)
   const [createOpen, setCreateOpen] = useState(false)
 
-  const open = openId ? routines.find((r) => r.id === openId && r.mode === mode) : undefined
-  const inMode = routines.filter((r) => r.mode === mode)
+  // What the page lists is chosen in the header (chat, code or both); until then it follows
+  // the workspace mode, as it always did.
+  const [scope] = useViewScope("routines", mode)
+  const [query, setQuery] = useState("")
+  const inScope = routines.filter((r) => scope === "all" || r.mode === scope)
+  const open = openId ? inScope.find((r) => r.id === openId) : undefined
 
   useEffect(() => {
     if (!loaded) void load()
@@ -74,37 +79,26 @@ export function RoutinesView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* With no routine at all the screen is just the empty state with the
-          call to create — a header with a button on top of "nothing here"
-          would be redundant. */}
-      {inMode.length > 0 && (
-        <div className="flex shrink-0 items-center gap-2 pb-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-              {t("routines.title")}
-              <span className="inline-flex items-center gap-1 rounded-md border border-transparent bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {mode === "chat" ? <MessageSquareIcon className="size-3" /> : <TerminalIcon className="size-3" />}
-                {mode === "chat" ? t("routines.mode.chat") : t("routines.mode.code")}
-              </span>
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {mode === "chat" ? t("routines.subtitleChat") : t("routines.subtitle")}
-            </p>
-          </div>
-          <Button size="lg" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            {t("routines.list.new")}
-          </Button>
-        </div>
+      {/* With no routine at all the screen is just the empty state with the call to create —
+          a search field on top of "nothing here" would be noise. */}
+      {inScope.length > 0 && (
+        <ListToolbar
+          query={query}
+          onQueryChange={setQuery}
+          placeholder={t("routines.list.search")}
+          actionLabel={t("routines.list.new")}
+          actionIcon={PlusIcon}
+          onAction={() => setCreateOpen(true)}
+        />
       )}
 
-      <RoutineList mode={mode} onCreateNew={() => setCreateOpen(true)} />
+      <RoutineList routines={inScope} scope={scope} query={query} onCreateNew={() => setCreateOpen(true)} />
 
       <CreateRoutineDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={(id) => setOpen(id)}
-        defaultMode={mode}
+        defaultMode={scope === "all" ? mode : scope}
       />
     </div>
   )

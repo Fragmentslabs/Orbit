@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { ListToolbar } from "@/src/components/list-toolbar"
 import { PipelineCreateDialog } from "./pipeline-create-dialog"
 import { PhaseEditor, useModelLabel, useSavePhaseTemplate, type PhaseDestination } from "./phase-editor"
 import { ReturnTaskDialog } from "./return-task-dialog"
@@ -81,18 +82,31 @@ function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
   const tasksPerPipeline = usePipelineStore((s) => s.tasksPerPipeline)
   const [createOpen, setCreateOpen] = useState(false)
 
+  const [query, setQuery] = useState("")
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return pipelines
+    return pipelines.filter((pipeline) => {
+      const project = projects.find((p) => p.id === pipeline.projectId)
+      return [pipeline.name, pipeline.branch, ...pipeline.phases.map((p) => p.name), ...(project?.folders ?? [])].some((field) =>
+        field?.toLowerCase().includes(q),
+      )
+    })
+  }, [pipelines, projects, query])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 pb-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-foreground">{t("pipeline.title")}</h2>
-          <p className="text-xs text-muted-foreground">{t("pipeline.subtitle")}</p>
-        </div>
-        <Button size="lg" onClick={() => setCreateOpen(true)}>
-          <PlusIcon className="size-4" />
-          {t("pipeline.newPipeline")}
-        </Button>
-      </div>
+      {/* With no pipeline at all the screen is just the empty state with the call to create. */}
+      {pipelines.length > 0 && (
+        <ListToolbar
+          query={query}
+          onQueryChange={setQuery}
+          placeholder={t("pipeline.search")}
+          actionLabel={t("pipeline.newPipeline")}
+          actionIcon={PlusIcon}
+          onAction={() => setCreateOpen(true)}
+        />
+      )}
 
       {pipelines.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
@@ -106,9 +120,13 @@ function PipelineList({ onOpen }: { onOpen: (id: string) => void }) {
             {t("pipeline.createFirst")}
           </Button>
         </div>
+      ) : visible.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+          {t("pipeline.noResults", { query: query.trim() })}
+        </p>
       ) : (
         <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-          {pipelines.map((pipeline) => {
+          {visible.map((pipeline) => {
             const tasks = (tasksPerPipeline[pipeline.id] ?? []).filter((x) => !x.deliveryId)
             const project = projects.find((p) => p.id === pipeline.projectId)
             const inProgress = tasks.filter((t) => t.status === "in_progress").length

@@ -8,9 +8,11 @@ import {
   ExternalLinkIcon,
   FolderIcon,
   Loader2,
+  MessageSquareIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlayIcon,
+  TerminalIcon,
   Trash2Icon,
 } from "lucide-react"
 import type { SessionInfo } from "@shared/chat"
@@ -49,27 +51,30 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export function RoutineList({ mode, onCreateNew }: { mode: "chat" | "code"; onCreateNew: () => void }) {
+export function RoutineList({ routines, scope, query, onCreateNew }: {
+  routines: Routine[]
+  scope: "chat" | "code" | "all"
+  query: string
+  onCreateNew: () => void
+}) {
   const { t } = useTranslation()
-  const routines = useRoutinesStore((s) => s.routines)
   const setOpen = useRoutinesStore((s) => s.setOpen)
 
-  // The page belongs to the mode that opened it: the chat one lists only chat
-  // routines and the code one only code routines (the sidebar splits the
-  // sessions the same way).
-  const sorted = useMemo(
-    () => routines.filter((r) => r.mode === mode).sort((a, b) => b.createdAt - a.createdAt),
-    [routines, mode],
-  )
+  const sorted = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return [...routines]
+      .filter((r) => !q || r.title.toLowerCase().includes(q) || r.prompt.toLowerCase().includes(q) || describeSchedule(r.schedule, t).toLowerCase().includes(q))
+      .sort((a, b) => b.createdAt - a.createdAt)
+  }, [routines, query, t])
 
-  if (sorted.length === 0) {
+  if (routines.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
         <CalendarClockIcon className="size-10 text-muted-foreground/50" />
         <div>
           <p className="text-sm font-medium">{t("routines.list.emptyTitle")}</p>
           <p className="mx-auto max-w-sm text-xs text-muted-foreground">
-            {t(mode === "chat" ? "routines.list.emptySubtitleChat" : "routines.list.emptySubtitle")}
+            {t(scope === "chat" ? "routines.list.emptySubtitleChat" : "routines.list.emptySubtitle")}
           </p>
         </div>
         <Button size="lg" onClick={onCreateNew}>
@@ -80,16 +85,24 @@ export function RoutineList({ mode, onCreateNew }: { mode: "chat" | "code"; onCr
     )
   }
 
+  if (sorted.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+        {t("routines.list.noResults", { query: query.trim() })}
+      </p>
+    )
+  }
+
   return (
     <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
       {sorted.map((routine) => (
-        <RoutineCard key={routine.id} routine={routine} onOpen={() => setOpen(routine.id)} />
+        <RoutineCard key={routine.id} routine={routine} showMode={scope === "all"} onOpen={() => setOpen(routine.id)} />
       ))}
     </div>
   )
 }
 
-function RoutineCard({ routine, onOpen }: { routine: Routine; onOpen: () => void }) {
+function RoutineCard({ routine, showMode, onOpen }: { routine: Routine; /** The page lists both modes: say which one this is. */ showMode?: boolean; onOpen: () => void }) {
   const { t, i18n } = useTranslation()
   const update = useRoutinesStore((s) => s.update)
   const running = useRoutinesStore((s) => s.runs.some((r) => r.routineId === routine.id && r.status === "running"))
@@ -106,6 +119,15 @@ function RoutineCard({ routine, onOpen }: { routine: Routine; onOpen: () => void
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-sm font-medium">
           {routine.title}
         </button>
+        {showMode && (
+          <span
+            title={routine.mode === "chat" ? t("routines.mode.chat") : t("routines.mode.code")}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+          >
+            {routine.mode === "chat" ? <MessageSquareIcon className="size-3" /> : <TerminalIcon className="size-3" />}
+            {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+          </span>
+        )}
         {running && (
           <span title={t("routines.runs.running")}>
             <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
