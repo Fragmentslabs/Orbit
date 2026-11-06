@@ -44,6 +44,7 @@ import {
 import { cn } from "@/lib/utils"
 import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
 import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { useStacked } from "@/src/hooks/use-stacked"
 import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { HooksPanel } from "@/src/components/hooks-panel"
@@ -752,9 +753,9 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
       : t("mcp.integrations.download", { name: def.name })
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card p-3">
       {def.icon}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[11rem] flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{def.name}</span>
           {def.beta && (
@@ -829,6 +830,8 @@ export function McpSkillsPanel() {
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   // The page shows one section at a time; the menu on the right switches it.
   const [section, setSection] = useState<ToolsSection>("integrations")
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const stacked = useStacked(root, STACK_BELOW_PX)
   // Search of the page filters the open section; the skills also have an origin filter.
   const [query, setQuery] = useState("")
   const [skillFilter, setSkillFilter] = useState<"all" | "mine" | "builtin">("all")
@@ -1018,11 +1021,62 @@ export function McpSkillsPanel() {
   )
   const mcpAttention = mcpServers.some((server) => server.state === "error" || needsAuth(server))
 
+  // The sections: a menu on the right when there is room, a row of tabs above the content when the
+  // page is narrow (the side panel is open) — the same sections, only laid out to fit.
+  const menu = (compact: boolean) => (
+    <>
+      <ToolsNavItem
+        icon={Blocks}
+        label={t("toolsPage.integrations")}
+        count={INTEGRATIONS.length}
+        active={section === "integrations"}
+        compact={compact}
+        onClick={() => pickSection("integrations")}
+      />
+      {compact ? (
+        <span className="mx-1 w-px shrink-0 self-stretch bg-border" role="separator" />
+      ) : (
+        <div className="mx-2 my-2 h-px bg-border" role="separator" />
+      )}
+      <ToolsNavItem
+        icon={Cable}
+        label={t("mcp.servers.title")}
+        count={mcpServers.length}
+        attention={mcpAttention}
+        active={section === "mcp"}
+        compact={compact}
+        onClick={() => pickSection("mcp")}
+      />
+      <ToolsNavItem
+        icon={Sparkles}
+        label={t("mcp.skills.title")}
+        count={skills.length}
+        active={section === "skills"}
+        compact={compact}
+        onClick={() => pickSection("skills")}
+      />
+      <ToolsNavItem
+        icon={Webhook}
+        label={t("hooks.title")}
+        count={hookCount}
+        active={section === "hooks"}
+        compact={compact}
+        onClick={() => pickSection("hooks")}
+      />
+    </>
+  )
+
   return (
-    <div className="flex h-full min-w-0">
-      <div className="min-w-0 flex-1 overflow-y-auto pr-4">
+    <div ref={setRoot} className="flex h-full min-w-0 flex-col">
+      {stacked && (
+        <nav aria-label={t("toolsPage.navLabel")} className="mb-3 flex shrink-0 gap-1 overflow-x-auto border-b pb-2">
+          {menu(true)}
+        </nav>
+      )}
+      <div className="flex min-h-0 flex-1">
+      <div className="@container min-w-0 flex-1 overflow-y-auto pr-4">
         {section !== "integrations" && (
-          <div className="sticky top-0 z-10 -mt-px mb-3 flex items-center gap-2 bg-background pb-1 pt-px">
+          <div className="sticky top-0 z-10 -mt-px mb-3 flex flex-wrap items-center gap-2 bg-background pb-1 pt-px">
             <div className="relative min-w-40 flex-1">
               <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -1102,11 +1156,11 @@ export function McpSkillsPanel() {
             {visibleMcp.map((server) => {
               const active = server.state === "connected"
               return (
-                <div key={server.config.name} className="flex items-start gap-3 rounded-lg border bg-card p-3">
+                <div key={server.config.name} className="flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border bg-card p-3">
                   <div className={cn("flex size-8 items-center justify-center rounded-full", active ? "bg-emerald-500/10" : "bg-muted")}>
                     <Server className={cn("size-4", active ? "text-emerald-500" : "text-muted-foreground/50")} />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-[11rem] flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{server.config.name}</span>
                       <StatusBadge state={server.state} error={server.error} />
@@ -1316,39 +1370,12 @@ export function McpSkillsPanel() {
         {section === "hooks" && <HooksPanel query={query} />}
       </div>
 
-      {/* Section menu */}
-      <nav aria-label={t("toolsPage.navLabel")} className="flex w-52 shrink-0 flex-col gap-0.5 border-l pl-3">
-        <ToolsNavItem
-          icon={Blocks}
-          label={t("toolsPage.integrations")}
-          count={INTEGRATIONS.length}
-          active={section === "integrations"}
-          onClick={() => pickSection("integrations")}
-        />
-        <div className="mx-2 my-2 h-px bg-border" role="separator" />
-        <ToolsNavItem
-          icon={Cable}
-          label={t("mcp.servers.title")}
-          count={mcpServers.length}
-          attention={mcpAttention}
-          active={section === "mcp"}
-          onClick={() => pickSection("mcp")}
-        />
-        <ToolsNavItem
-          icon={Sparkles}
-          label={t("mcp.skills.title")}
-          count={skills.length}
-          active={section === "skills"}
-          onClick={() => pickSection("skills")}
-        />
-        <ToolsNavItem
-          icon={Webhook}
-          label={t("hooks.title")}
-          count={hookCount}
-          active={section === "hooks"}
-          onClick={() => pickSection("hooks")}
-        />
-      </nav>
+      {!stacked && (
+        <nav aria-label={t("toolsPage.navLabel")} className="flex w-52 shrink-0 flex-col gap-0.5 border-l pl-3">
+          {menu(false)}
+        </nav>
+      )}
+      </div>
 
       {/* Dialogs */}
       <McpServerDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} initial={mcpEdit} draft={mcpDraft} />
@@ -1383,12 +1410,17 @@ export function McpSkillsPanel() {
 
 type ToolsSection = "integrations" | "mcp" | "skills" | "hooks"
 
-function ToolsNavItem({ icon: Icon, label, count, attention, active, onClick }: {
+/** Below this width of the page the section menu becomes a row of tabs above the content. */
+const STACK_BELOW_PX = 700
+
+function ToolsNavItem({ icon: Icon, label, count, attention, active, compact, onClick }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   count: number
   attention?: boolean
   active: boolean
+  /** In the row of tabs above the content (narrow page). */
+  compact?: boolean
   onClick: () => void
 }) {
   return (
@@ -1397,12 +1429,13 @@ function ToolsNavItem({ icon: Icon, label, count, attention, active, onClick }: 
       aria-current={active ? "page" : undefined}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
+        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left font-medium transition-colors",
+        compact ? "shrink-0 whitespace-nowrap text-xs" : "text-sm",
         active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
       )}
     >
       <Icon className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className={cn(!compact && "min-w-0 flex-1 truncate")}>{label}</span>
       {attention ? <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden /> : null}
       <span className="text-[11px] font-normal text-muted-foreground">{count}</span>
     </button>
