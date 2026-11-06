@@ -34,9 +34,8 @@ export function SegmentedControl<T extends string>({
       {options.map((opt) => {
         const active = opt.value === value
         return (
-          <Hint label={opt.hint ?? ""}>
+          <Hint key={opt.value} label={opt.hint ?? ""}>
             <button
-              key={opt.value}
               type="button"
               onClick={() => onChange(opt.value)}
               className={cn(
@@ -49,9 +48,8 @@ export function SegmentedControl<T extends string>({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-       
-               {opt.label}
-          </button>
+              {opt.label}
+            </button>
           </Hint>
         )
       })}
