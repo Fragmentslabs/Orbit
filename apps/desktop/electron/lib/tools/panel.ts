@@ -19,6 +19,7 @@ function describeTab(tab: PanelSnapshotTab): string {
   if (tab.designId) ids.push(`design id ${tab.designId}${tab.designPath ? `, path ${tab.designPath}` : ''}`)
   if (tab.documentId) ids.push(`document id ${tab.documentId}`)
   if (tab.memoryId) ids.push(`memory id ${tab.memoryId}`)
+  if (tab.routineId) ids.push(`routine id ${tab.routineId}`)
   if (tab.url) ids.push(`url ${tab.url}`)
   return `${tab.type} "${tab.title}"${ids.length ? ` (${ids.join('; ')})` : ''}`
 }

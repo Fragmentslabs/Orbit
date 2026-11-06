@@ -667,6 +667,10 @@
       "memory": {
         "label": "Memory",
         "description": "A memory cited in the conversation"
+      },
+      "routine": {
+        "label": "Routine",
+        "description": "A routine opened from the Routines page"
       }
     },
     "unreadMessages": "Unread messages",
@@ -2904,6 +2908,9 @@
       "noRuns": "No executions yet.",
       "activeOf": "{{active}} of {{total}}",
       "noFailures": "no failures"
+    },
+    "tab": {
+      "notFound": "This routine no longer exists."
     }
   },
   "queue": {

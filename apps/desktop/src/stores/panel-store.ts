@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import type { PanelSnapshot, PanelSnapshotTab } from "@shared/panel"
 
-export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides" | "memory"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides" | "memory" | "routine"
 
 export interface PanelTab {
   id: string
@@ -47,6 +47,8 @@ export interface PanelTab {
   designFullscreen?: boolean
   /** Memory tab: registry id (mem_xxx) opened by a citation in the conversation. */
   memoryId?: string
+  /** Routine tab: the routine opened from the Routines page. */
+  routineId?: string
   /** Source tab: document opened by a citation, and the stretch to highlight. */
   sourceDocId?: string
   sourcePage?: number
@@ -258,6 +260,9 @@ interface PanelState {
   /** Opens (or reuses) the tab with a memory cited in the conversation. Same
    *  idea as openSourceTab: one tab per memory, reopening focuses the existing one. */
   openMemoryTab: (sessionId: string, ref: { memoryId: string; title: string }) => void
+  /** Opens (or reuses) the tab with a routine from the Routines page: one tab per routine,
+   *  clicking it again focuses the existing one. */
+  openRoutineTab: (sessionId: string, ref: { routineId: string; title: string }) => void
   /** New chat became a session: the tabs opened in the orphan bucket now belong to it. */
   adoptOrphanTabs: (sessionId: string) => void
   getTabs: (sessionId: string) => PanelTab[]
@@ -764,6 +769,35 @@ export const usePanelStore = create<PanelState>((set, get) => {
         }
       }),
 
+    openRoutineTab: (sessionId, ref) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        const existing = tabs.find((t) => t.type === "routine" && t.routineId === ref.routineId)
+        if (existing) {
+          return {
+            ...openPanel(state, sessionId),
+            tabsBySession: {
+              ...state.tabsBySession,
+              // The title follows the routine if it was renamed since the tab opened.
+              [sessionId]: tabs.map((t) => (t.id === existing.id ? { ...t, title: ref.title } : t)),
+            },
+            activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `routine-${nextTabId()}`,
+          type: "routine",
+          title: ref.title,
+          sessionId: tabSession(sessionId),
+          routineId: ref.routineId,
+        }
+        return {
+          ...openPanel(state, sessionId),
+          tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
+        }
+      }),
+
     adoptOrphanTabs: (sessionId) =>
       set((state) => {
         const orphans = state.tabsBySession[ORPHAN_KEY]
@@ -1093,6 +1127,7 @@ function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): v
       url: t.url,
       sourceDocId: t.sourceDocId,
       memoryId: t.memoryId,
+      routineId: t.routineId,
     }))
     const key = JSON.stringify({ activeTabId, snapshotTabs })
     if (lastPanelSnapshots.get(sessionId) === key) continue

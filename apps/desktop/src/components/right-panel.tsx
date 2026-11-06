@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { Brain, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
+import { Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -23,6 +23,7 @@ import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
 import { MemoryTab } from "@/src/components/memory-tab"
+import { RoutineTab } from "@/src/components/routines/routine-tab"
 import { Hint } from "@/components/ui/hint"
 import { Truncate, TruncatedText } from "@/components/ui/truncated-text"
 
@@ -76,8 +77,10 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
     type === "design" ||
     type === "slides" ||
     // "memory" also only exists pointing at a memory — it is born from the click
-    // on the citation, inside the conversation.
-    type === "memory"
+    // on the citation, inside the conversation. "routine" is the same: it is born from the
+    // click on a routine in the Routines page.
+    type === "memory" ||
+    type === "routine"
   )
     return false
   if (mode === "code") return true
@@ -104,6 +107,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     design: { icon: LayoutGrid, label: t("panel.tabs.design.label"), description: t("panel.tabs.design.description") },
     slides: { icon: Presentation, label: t("panel.tabs.slides.label"), description: t("panel.tabs.slides.description") },
     memory: { icon: Brain, label: t("panel.tabs.memory.label"), description: t("panel.tabs.memory.description") },
+    routine: { icon: CalendarClock, label: t("panel.tabs.routine.label"), description: t("panel.tabs.routine.description") },
   }
 }
 
@@ -328,6 +332,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <MemoryTab memoryId={tab.memoryId} sessionId={tab.sessionId ?? sessionId} />
+        </div>
+      )
+    case "routine":
+      return (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <RoutineTab routineId={tab.routineId} tabId={tab.id} sessionId={tab.sessionId ?? sessionId} />
         </div>
       )
     case "source":
