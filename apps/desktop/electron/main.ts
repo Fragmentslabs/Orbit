@@ -2661,7 +2661,8 @@ app.whenReady().then(() => {
   })
 
   // Analytics: usage summary
-  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range, { detailed: true }))
+  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange, mode?: 'chat' | 'code') =>
+    computeAnalytics(range, { detailed: true, mode }))
   // "What was done" of a project/day: the auxiliary model reads the work report; nothing is saved.
   ipcMain.handle('analytics:summarize', (_event, input: UsageSummaryInput) => summarizeWork(input))
 

@@ -40,6 +40,8 @@ export interface AnalyticsDay {
   totalHours: number
   orbitHours: number
   userHours: number
+  /** Conversations with activity on the day. */
+  sessions: number
   totalMessages: number
   totalCost: number
   byModel: ModelDayBreakdown[]
@@ -117,8 +119,10 @@ export interface AnalyticsSummary {
   sessions?: AnalyticsSession[]
   /** The period before this one, same length. Absent for "total". */
   previous?: AnalyticsPeriodTotals
-  /** The last 53 weeks, whatever the period is — the activity card. Models and projects stripped. */
+  /** The last 53 weeks, whatever the period is — the activity card (with each day's models and projects). */
   year?: AnalyticsDay[]
+  /** Names of the projects that appear in `year`, which may include some outside the period. */
+  yearProjects?: Array<{ projectId: string; name: string; directory?: string }>
 }
 
 /** Period chosen in the date range picker (ms, bounds already at the start/end of the day). */

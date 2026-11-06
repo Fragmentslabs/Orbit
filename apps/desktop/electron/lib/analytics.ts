@@ -258,6 +258,7 @@ function addSession(
         totalHours: 0,
         orbitHours: 0,
         userHours: 0,
+        sessions: 0,
         totalMessages: 0,
         totalCost: 0,
         byModel: [],
@@ -265,6 +266,7 @@ function addSession(
       }
       acc.dayMap.set(day, entry)
     }
+    entry.sessions++
 
     const sessionDay: AnalyticsSession = {
       id: session.id,
@@ -446,6 +448,8 @@ export interface ComputeAnalyticsOptions {
    * another cut over every message read.
    */
   detailed?: boolean
+  /** Only the conversations of one mode; absent = both. */
+  mode?: 'chat' | 'code'
 }
 
 export async function computeAnalytics(
@@ -467,6 +471,7 @@ export async function computeAnalytics(
   for (const key of sessionKeys) {
     const session = await readJson<SessionInfo>(key)
     if (!session) continue
+    if (options.mode && session.mode !== options.mode) continue
     // One read per session: the complete history serves the hour segments
     // (an interval may cross the period's border) and the cut comes from
     // it, without a second pass over the disk. The same read feeds the
@@ -497,8 +502,10 @@ export async function computeAnalytics(
     }
   }
   if (year) {
-    // Only the totals of each day: the card paints squares, it does not open models or projects.
-    summary.year = finishAccumulator(year).days.map((d) => ({ ...d, byModel: [], byProject: [] }))
+    // Each day keeps its models and projects: the card opens a day as badges.
+    const y = finishAccumulator(year)
+    summary.year = y.days
+    summary.yearProjects = y.byProject.map((p) => ({ projectId: p.projectId, name: p.name, directory: p.directory }))
   }
   return summary
 }

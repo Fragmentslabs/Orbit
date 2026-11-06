@@ -323,3 +323,39 @@ describe('computeAnalytics: detailed', () => {
     expect(r.previous).toBeUndefined()
   })
 })
+
+describe('computeAnalytics: mode filter', () => {
+  it('keeps only the conversations of the asked mode', async () => {
+    // saveSession marks a conversation as code when it has a folder, chat otherwise
+    saveSession('code1', '/repo/alpha', [msg('user', DAY(10, 9, 0), 'go'), msg('assistant', DAY(10, 10, 0), 'ok')])
+    saveSession('chat1', undefined, [msg('user', DAY(10, 11, 0), 'hi'), msg('assistant', DAY(10, 11, 30), 'ok')])
+    const range = { type: 'custom' as const, from: DAY(10, 0), to: DAY(10, 23, 59) }
+
+    const all = await computeAnalytics(range)
+    const code = await computeAnalytics(range, { mode: 'code' })
+    const chat = await computeAnalytics(range, { mode: 'chat' })
+
+    expect(all.totalSessions).toBe(2)
+    expect(code.totalSessions).toBe(1)
+    expect(code.totalHours).toBeCloseTo(1, 5)
+    expect(chat.totalSessions).toBe(1)
+    expect(chat.totalHours).toBeCloseTo(0.5, 5)
+  })
+})
+
+describe('computeAnalytics: sessions per day', () => {
+  it('counts each conversation once on each day it had activity', async () => {
+    saveSession('a', '/repo/alpha', [msg('user', DAY(10, 9, 0), 'go'), msg('assistant', DAY(10, 9, 10), 'ok')])
+    saveSession('b', '/repo/alpha', [
+      msg('user', DAY(10, 11, 0), 'go'),
+      msg('assistant', DAY(10, 11, 10), 'ok'),
+      msg('user', DAY(11, 11, 0), 'again'),
+      msg('assistant', DAY(11, 11, 10), 'ok'),
+    ])
+    const r = await computeAnalytics({ type: 'custom', from: DAY(10, 0), to: DAY(11, 23, 59) })
+    expect(r.days.map((d) => [d.date, d.sessions])).toEqual([
+      ['2026-03-10', 2],
+      ['2026-03-11', 1],
+    ])
+  })
+})

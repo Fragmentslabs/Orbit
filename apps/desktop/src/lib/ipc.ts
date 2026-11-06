@@ -592,8 +592,8 @@ export const mcpApi = {
 }
 
 export const analyticsApi = {
-  summary: (range: AnalyticsRange) =>
-    window.ipcRenderer.invoke("analytics:summary", range) as Promise<AnalyticsSummary>,
+  summary: (range: AnalyticsRange, mode?: "chat" | "code") =>
+    window.ipcRenderer.invoke("analytics:summary", range, mode) as Promise<AnalyticsSummary>,
   /** The auxiliary model summarizes what was done in a project (or all), on a day or in the period. */
   summarize: (input: UsageSummaryRequest) =>
     window.ipcRenderer.invoke("analytics:summarize", input) as Promise<UsageSummaryResponse>,
