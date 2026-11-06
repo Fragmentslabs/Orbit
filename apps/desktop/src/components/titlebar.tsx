@@ -14,7 +14,6 @@ import {
   Menu as MenuIcon,
   Minus,
   PanelLeft,
-  PanelRightOpen,
   Redo2,
   RefreshCw,
   Scissors,
@@ -162,10 +161,6 @@ function HamburgerMenu() {
               <PanelLeft className="size-4" />
               {t("titlebar.view.chats")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setView("models")}>
-              <PanelRightOpen className="size-4" />
-              {t("header.models")}
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => windowApi.toggleFullscreen()}>
               <Maximize2 className="size-4" />
@@ -238,9 +233,6 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
           break
         case "view-memories":
           setView("memories")
-          break
-        case "view-models":
-          setView("models")
           break
         case "how-to":
           openSettings("howto")

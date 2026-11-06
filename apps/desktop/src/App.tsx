@@ -17,7 +17,6 @@ import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
 import { MemoriesView } from "@/src/components/memories/memories-view"
-import { ModelsView } from "@/src/components/models/models-view"
 import { PipelineBoard } from "@/src/components/pipeline/pipeline-board"
 import { RoutinesView } from "@/src/components/routines/routines-view"
 import { ToolsView } from "@/src/components/tools-view"
@@ -318,17 +317,15 @@ function Layout() {
                   title={
                     view === "memories"
                       ? t("sidebar.memories")
-                      : view === "models"
-                        ? t("header.models")
-                        : view === "pipeline"
-                          ? t("pipeline.title")
-                          : view === "routines"
-                            ? t("routines.title")
-                            : view === "tools"
-                              ? t("sidebar.tools")
-                              : view === "analytics"
-                                ? t("sidebar.usage")
-                                : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
+                      : view === "pipeline"
+                        ? t("pipeline.title")
+                        : view === "routines"
+                          ? t("routines.title")
+                          : view === "tools"
+                            ? t("sidebar.tools")
+                            : view === "analytics"
+                              ? t("sidebar.usage")
+                              : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   // The menu works in both modes: pin, rename, archive,
                   // delete and search belong to the SESSION, and the sidebar already offers them
@@ -377,8 +374,6 @@ function Layout() {
                   <MissingFoldersBanner />
                   {view === "memories" ? (
                     <MemoriesView />
-                  ) : view === "models" ? (
-                    <ModelsView />
                   ) : view === "pipeline" ? (
                     <PipelineBoard />
                   ) : view === "routines" ? (
