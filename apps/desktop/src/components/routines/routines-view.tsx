@@ -25,18 +25,32 @@ type Tier = "wide" | "medium" | "narrow"
 const WIDE_PX = 960
 const MEDIUM_PX = 640
 
+/** How long the width has to stay put before the page changes size (the sidebar animates). */
+const SETTLE_MS = 160
+
+function tierOf(width: number): Tier {
+  return width >= WIDE_PX ? "wide" : width >= MEDIUM_PX ? "medium" : "narrow"
+}
+
 function useTier(element: HTMLElement | null): Tier {
   const [tier, setTier] = useState<Tier>("wide")
   useLayoutEffect(() => {
     if (!element) return
-    const measure = () => {
-      const width = element.clientWidth
-      setTier(width >= WIDE_PX ? "wide" : width >= MEDIUM_PX ? "medium" : "narrow")
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
+    // The first measure counts at once; the next ones wait for the width to settle. Opening the
+    // sidebar slides the page's width through the thresholds for a fraction of a second, and
+    // changing the whole layout on each of them made the screen flicker: the columns are
+    // flexible, so they just follow the animation and the size changes once, at the end.
+    setTier(tierOf(element.clientWidth))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => setTier(tierOf(element.clientWidth)), SETTLE_MS)
+    })
     observer.observe(element)
-    return () => observer.disconnect()
+    return () => {
+      clearTimeout(timer)
+      observer.disconnect()
+    }
   }, [element])
   return tier
 }
