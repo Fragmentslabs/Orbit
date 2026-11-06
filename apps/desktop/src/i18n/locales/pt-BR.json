@@ -3641,7 +3641,19 @@
   },
   "toolsPage": {
     "navLabel": "Seções de ferramentas",
-    "integrations": "Integrações"
+    "integrations": "Integrações",
+    "search": {
+      "mcp": "Buscar servidor ou ferramenta",
+      "skills": "Buscar skill",
+      "hooks": "Buscar hook"
+    },
+    "skillFilter": {
+      "all": "Todas {{count}}",
+      "mine": "Minhas {{count}}",
+      "builtin": "Nativas {{count}}"
+    },
+    "noResults": "Nada encontrado para \"{{query}}\".",
+    "noSkillsInFilter": "Nenhuma skill neste filtro."
   },
   "peers": {
     "title": "Conectar dispositivos",

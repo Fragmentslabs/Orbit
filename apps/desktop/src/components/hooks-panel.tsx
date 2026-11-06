@@ -171,7 +171,7 @@ function HookForm({ initial, draft, onDone }: {
   )
 }
 
-export function HooksPanel() {
+export function HooksPanel({ query = "" }: { query?: string }) {
   const { t } = useTranslation()
   const [hooks, setHooks] = useState<HookWithRun[]>([])
   // undefined = list; null = new hook; a hook = editing it
@@ -195,6 +195,15 @@ export function HooksPanel() {
       window.ipcRenderer.off("hooks:changed", listener)
     }
   }, [refresh])
+
+  const needle = query.trim().toLowerCase()
+  const visibleHooks = needle
+    ? hooks.filter((hook) =>
+        [hook.description, hook.command, hook.match, hook.directory ? folderName(hook.directory) : ""].some((field) =>
+          field?.toLowerCase().includes(needle),
+        ),
+      )
+    : hooks
 
   const done = () => {
     setEditing(undefined)
@@ -248,9 +257,13 @@ export function HooksPanel() {
           <Webhook className="size-6 text-muted-foreground/50" />
           <p className="text-xs text-muted-foreground">{t("hooks.empty")}</p>
         </div>
+      ) : visibleHooks.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+          {t("toolsPage.noResults", { query: query.trim() })}
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {hooks.map((hook) => (
+          {visibleHooks.map((hook) => (
             <div key={hook.id} className={cn("flex items-start gap-3 rounded-lg border p-3", !hook.enabled && "opacity-60")}>
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
