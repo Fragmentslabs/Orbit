@@ -17,34 +17,29 @@ import { RoutinesSummary } from "./routines-summary"
 
 type RoutinesLayout = "list" | "agenda"
 /**
- * The page has three sizes, by ITS OWN width (the side panel eats it, not only the window):
- * wide (the summary column beside the routines), medium (a narrower, compact one) and narrow
- * (the summary below the routines).
+ * The summary column follows the width of the page continuously, and only when there is no room
+ * for it beside the routines (less than 640px: the side panel eats the page, not only the window)
+ * does it go below them.
  */
-type Tier = "wide" | "medium" | "narrow"
-const WIDE_PX = 960
-const MEDIUM_PX = 640
+const STACK_BELOW_PX = 640
 
 /** How long the width has to stay put before the page changes size (the sidebar animates). */
 const SETTLE_MS = 160
 
-function tierOf(width: number): Tier {
-  return width >= WIDE_PX ? "wide" : width >= MEDIUM_PX ? "medium" : "narrow"
-}
-
-function useTier(element: HTMLElement | null): Tier {
-  const [tier, setTier] = useState<Tier>("wide")
+/** Whether the page is too narrow for the summary beside the routines. */
+function useStacked(element: HTMLElement | null): boolean {
+  const [stacked, setStacked] = useState(false)
   useLayoutEffect(() => {
     if (!element) return
     // The first measure counts at once; the next ones wait for the width to settle. Opening the
     // sidebar slides the page's width through the thresholds for a fraction of a second, and
     // changing the whole layout on each of them made the screen flicker: the columns are
     // flexible, so they just follow the animation and the size changes once, at the end.
-    setTier(tierOf(element.clientWidth))
+    setStacked(element.clientWidth < STACK_BELOW_PX)
     let timer: ReturnType<typeof setTimeout> | undefined
     const observer = new ResizeObserver(() => {
       clearTimeout(timer)
-      timer = setTimeout(() => setTier(tierOf(element.clientWidth)), SETTLE_MS)
+      timer = setTimeout(() => setStacked(element.clientWidth < STACK_BELOW_PX), SETTLE_MS)
     })
     observer.observe(element)
     return () => {
@@ -52,7 +47,7 @@ function useTier(element: HTMLElement | null): Tier {
       observer.disconnect()
     }
   }, [element])
-  return tier
+  return stacked
 }
 const LAYOUT_KEY = "orbit-routines-layout"
 
@@ -92,7 +87,7 @@ export function RoutinesView() {
   const [scope] = useViewScope("routines", mode)
   const [query, setQuery] = useState("")
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
-  const tier = useTier(root)
+  const stacked = useStacked(root)
   // List or agenda: the choice is remembered between sessions.
   const [layout, setLayout] = useState<RoutinesLayout>(savedLayout)
   const chooseLayout = (next: RoutinesLayout) => {
@@ -175,9 +170,9 @@ export function RoutinesView() {
   }
 
   return (
-    <div ref={setRoot} className={cn("flex min-h-0 flex-1", tier === "narrow" ? "flex-col gap-3" : "gap-4")}>
+    <div ref={setRoot} className={cn("flex min-h-0 flex-1", stacked ? "flex-col gap-3" : "gap-4")}>
       {/* The routines, as a list or as the week; the toggle sits with the search. */}
-      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", tier !== "narrow" && "border-r pr-4")}>
+      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !stacked && "border-r pr-4")}>
         <ListToolbar
           query={query}
           onQueryChange={setQuery}
@@ -209,7 +204,7 @@ export function RoutinesView() {
           <RoutinesAgenda routines={filtered} selectedId={openedId ?? null} onSelect={openRoutine} />
         )}
         {/* Narrow page: the numbers go under the list, with a line before the summary strip. */}
-        {tier === "narrow" && (
+        {stacked && (
           <div className="mt-2.5 shrink-0">
             <RoutinesStatsBar routines={inScope} separated />
           </div>
@@ -218,14 +213,15 @@ export function RoutinesView() {
 
       {/* How the routines are doing and what is next; a routine opens in the side panel. It never
           goes away: it narrows, and when even that does not fit it goes below the routines. */}
-      {tier === "narrow" ? (
+      {stacked ? (
         <div className="max-h-[40%] shrink-0 overflow-y-auto">
           <RoutinesSummary routines={inScope} variant="strip" onSelect={openRoutine} />
         </div>
       ) : (
-        <div className={cn("flex min-h-0 shrink-0 flex-col", tier === "wide" ? "w-[27rem]" : "w-[17rem]")}>
+        // Its width follows the page continuously (17rem to 27rem), so there is nothing to wait for.
+        <div className="@container flex min-h-0 w-[clamp(17rem,40%,27rem)] shrink-0 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <RoutinesSummary routines={inScope} variant={tier === "wide" ? "full" : "side"} onSelect={openRoutine} />
+            <RoutinesSummary routines={inScope} onSelect={openRoutine} />
           </div>
           {/* Fixed at the bottom of the column: the summary scrolls, the numbers stay. */}
           <div className="mt-2.5 shrink-0">
