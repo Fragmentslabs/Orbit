@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { useWorkspace } from "@/lib/workspace-context"
+import { useStacked } from "@/src/hooks/use-stacked"
 import { ListToolbar } from "@/src/components/list-toolbar"
 import { useViewScope } from "@/src/stores/view-scope-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
@@ -23,32 +24,6 @@ type RoutinesLayout = "list" | "agenda"
  */
 const STACK_BELOW_PX = 640
 
-/** How long the width has to stay put before the page changes size (the sidebar animates). */
-const SETTLE_MS = 160
-
-/** Whether the page is too narrow for the summary beside the routines. */
-function useStacked(element: HTMLElement | null): boolean {
-  const [stacked, setStacked] = useState(false)
-  useLayoutEffect(() => {
-    if (!element) return
-    // The first measure counts at once; the next ones wait for the width to settle. Opening the
-    // sidebar slides the page's width through the thresholds for a fraction of a second, and
-    // changing the whole layout on each of them made the screen flicker: the columns are
-    // flexible, so they just follow the animation and the size changes once, at the end.
-    setStacked(element.clientWidth < STACK_BELOW_PX)
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const observer = new ResizeObserver(() => {
-      clearTimeout(timer)
-      timer = setTimeout(() => setStacked(element.clientWidth < STACK_BELOW_PX), SETTLE_MS)
-    })
-    observer.observe(element)
-    return () => {
-      clearTimeout(timer)
-      observer.disconnect()
-    }
-  }, [element])
-  return stacked
-}
 const LAYOUT_KEY = "orbit-routines-layout"
 
 function savedLayout(): RoutinesLayout {
@@ -87,7 +62,7 @@ export function RoutinesView() {
   const [scope] = useViewScope("routines", mode)
   const [query, setQuery] = useState("")
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
-  const stacked = useStacked(root)
+  const stacked = useStacked(root, STACK_BELOW_PX)
   // List or agenda: the choice is remembered between sessions.
   const [layout, setLayout] = useState<RoutinesLayout>(savedLayout)
   const chooseLayout = (next: RoutinesLayout) => {

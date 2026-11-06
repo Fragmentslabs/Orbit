@@ -2712,7 +2712,36 @@
     "commitPromptEmpty": "Empty = default prompt (task's request → most recent commit → memory → Conventional Commits).",
     "commitFailed": "Final commit failed",
     "search": "Search pipelines",
-    "noResults": "Nothing found for \"{{query}}\"."
+    "noResults": "Nothing found for \"{{query}}\".",
+    "summary": {
+      "all": "All pipelines",
+      "seeAll": "See all",
+      "openBoard": "Open board",
+      "running": "Running now",
+      "runningHint": "Tasks running · click to open",
+      "nothingRunning": "No task running.",
+      "attention": "Need attention",
+      "nothingStuck": "Nothing stuck.",
+      "failedIn": "Failed in {{phase}} · {{reason}}",
+      "pausedIn": "Paused in {{phase}}",
+      "done": "Recently completed",
+      "nothingDone": "No task completed yet."
+    },
+    "stats": {
+      "pipelines": "Pipelines",
+      "failed": "Failed",
+      "spent": "Spent in 30 days",
+      "spentHint": "Cost of the tasks started in the last 30 days"
+    },
+    "card": {
+      "running_one": "{{count}} running",
+      "running_other": "{{count}} running",
+      "failed_one": "{{count}} failed",
+      "failed_other": "{{count}} failed",
+      "paused_one": "{{count}} paused",
+      "paused_other": "{{count}} paused",
+      "done": "{{done}} of {{total}} completed"
+    }
   },
   "routines": {
     "title": "Routines",

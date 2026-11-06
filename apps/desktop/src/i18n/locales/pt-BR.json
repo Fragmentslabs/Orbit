@@ -2712,7 +2712,36 @@
     "commitPromptEmpty": "Vazio = prompt padrão (pedido da task → último commit → memória → Conventional Commits).",
     "commitFailed": "Commit final falhou",
     "search": "Buscar esteira",
-    "noResults": "Nada encontrado para \"{{query}}\"."
+    "noResults": "Nada encontrado para \"{{query}}\".",
+    "summary": {
+      "all": "Todas as esteiras",
+      "seeAll": "Ver todas",
+      "openBoard": "Abrir quadro",
+      "running": "Em andamento agora",
+      "runningHint": "Tasks rodando · clique para abrir",
+      "nothingRunning": "Nenhuma task rodando.",
+      "attention": "Precisam de atenção",
+      "nothingStuck": "Nada travado.",
+      "failedIn": "Falhou em {{phase}} · {{reason}}",
+      "pausedIn": "Pausada em {{phase}}",
+      "done": "Concluídas recentemente",
+      "nothingDone": "Nenhuma task concluída ainda."
+    },
+    "stats": {
+      "pipelines": "Esteiras",
+      "failed": "Com erro",
+      "spent": "Gasto em 30 dias",
+      "spentHint": "Custo das tasks iniciadas nos últimos 30 dias"
+    },
+    "card": {
+      "running_one": "{{count}} em andamento",
+      "running_other": "{{count}} em andamento",
+      "failed_one": "{{count}} com erro",
+      "failed_other": "{{count}} com erro",
+      "paused_one": "{{count}} pausada",
+      "paused_other": "{{count}} pausadas",
+      "done": "{{done}} de {{total}} concluídas"
+    }
   },
   "routines": {
     "title": "Rotinas",

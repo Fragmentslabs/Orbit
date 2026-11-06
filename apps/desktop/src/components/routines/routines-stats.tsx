@@ -1,26 +1,11 @@
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import type { Routine } from "@shared/routines"
-import { cn } from "@/lib/utils"
+import { StatBadges } from "@/src/components/stat-badges"
 import { formatCost } from "@/src/lib/format"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 
 const DAY_MS = 86_400_000
-
-function Badge({ label, value, tone, title }: { label: string; value: string; tone?: "bad"; title?: string }) {
-  return (
-    <span
-      title={title}
-      className={cn(
-        "inline-flex items-baseline gap-1.5 rounded-md px-2 py-1 text-[11px]",
-        tone === "bad" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground",
-      )}
-    >
-      {label}
-      <span className={cn("font-semibold tabular-nums", tone !== "bad" && "text-foreground")}>{value}</span>
-    </span>
-  )
-}
 
 /**
  * The numbers of the routines in a fixed footer under the list or the agenda, as small badges:
@@ -48,23 +33,26 @@ export function RoutinesStatsBar({ routines, separated }: { routines: Routine[];
   }, [routines, runs])
 
   return (
-    <div className={cn("flex shrink-0 flex-wrap items-center gap-1.5", separated && "border-b pb-2.5")}>
-      <Badge
-        label={t("routines.summary.active")}
-        value={t("routines.summary.activeOf", { active: stats.active, total: routines.length })}
-        title={t("routines.summary.paused", { count: routines.length - stats.active })}
-      />
-      <Badge
-        label={t("routines.summary.failures")}
-        value={String(stats.failures)}
-        tone={stats.failures > 0 ? "bad" : undefined}
-        title={stats.failedTitles.length > 0 ? stats.failedTitles.join(", ") : t("routines.summary.noFailures")}
-      />
-      <Badge
-        label={t("routines.summary.spent")}
-        value={formatCost(stats.cost)}
-        title={t("routines.summary.executions", { count: stats.executions })}
-      />
-    </div>
+    <StatBadges
+      separated={separated}
+      items={[
+        {
+          label: t("routines.summary.active"),
+          value: t("routines.summary.activeOf", { active: stats.active, total: routines.length }),
+          title: t("routines.summary.paused", { count: routines.length - stats.active }),
+        },
+        {
+          label: t("routines.summary.failures"),
+          value: String(stats.failures),
+          tone: stats.failures > 0 ? "bad" : undefined,
+          title: stats.failedTitles.length > 0 ? stats.failedTitles.join(", ") : t("routines.summary.noFailures"),
+        },
+        {
+          label: t("routines.summary.spent"),
+          value: formatCost(stats.cost),
+          title: t("routines.summary.executions", { count: stats.executions }),
+        },
+      ]}
+    />
   )
 }
