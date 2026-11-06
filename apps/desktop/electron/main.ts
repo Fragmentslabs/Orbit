@@ -2660,7 +2660,7 @@ app.whenReady().then(() => {
   })
 
   // Analytics: usage summary
-  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range))
+  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range, { detailed: true }))
 
   // MCP: config + status + reconnection (the tools come in via buildToolSet)
   ipcMain.handle('mcp:config', () => readMcpConfig())

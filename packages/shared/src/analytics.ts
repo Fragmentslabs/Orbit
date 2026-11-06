@@ -1,3 +1,12 @@
+/** What one model did inside one project, over the whole period. */
+export interface ModelProjectSlice {
+  projectId: string
+  hours: number
+  tokens: number
+  messages: number
+  cost: number
+}
+
 export interface ModelDayBreakdown {
   providerId: string
   modelId: string
@@ -5,13 +14,20 @@ export interface ModelDayBreakdown {
   hours: number
   messages: number
   cost: number
+  /** Only on the period totals (`AnalyticsSummary.byModel`): where the model was used. */
+  byProject?: ModelProjectSlice[]
 }
 
 /** The same day seen per project — what the heatmap uses when the filter leaves
  *  "all" and starts showing the hours spent in a single project. */
 export interface ProjectDayBreakdown {
   projectId: string
+  /** Work time: Orbit generating + the user's counted gaps (`orbitHours` + `userHours`). */
   hours: number
+  /** Time the agent spent answering (user message → assistant answer). */
+  orbitHours: number
+  /** Estimate of the time the user was active: the counted gaps between an answer and the next message. */
+  userHours: number
   tokens: number
   messages: number
   cost: number
@@ -20,7 +36,10 @@ export interface ProjectDayBreakdown {
 export interface AnalyticsDay {
   date: string
   totalTokens: number
+  /** Work time (`orbitHours` + `userHours`) — what the charts and the heatmap draw. */
   totalHours: number
+  orbitHours: number
+  userHours: number
   totalMessages: number
   totalCost: number
   byModel: ModelDayBreakdown[]
@@ -34,10 +53,48 @@ export interface ProjectBreakdown {
   name: string
   directory?: string
   hours: number
+  orbitHours: number
+  userHours: number
   tokens: number
   messages: number
   cost: number
   sessions: number
+}
+
+/**
+ * One conversation on one day: the unit of the history. A conversation that
+ * continued over three days shows up as three entries, each with the work of its day.
+ */
+export interface AnalyticsSession {
+  id: string
+  title: string
+  projectId: string
+  /** Day (YYYY-MM-DD) this entry covers. */
+  date: string
+  /** First and last message of the conversation inside that day (ms). */
+  startAt: number
+  endAt: number
+  hours: number
+  orbitHours: number
+  userHours: number
+  /** Assistant answers in the day. */
+  messages: number
+  tokens: number
+  cost: number
+  /** Model with the most answers in the day. */
+  providerId: string
+  modelId: string
+}
+
+/** The numbers the period is compared with (the previous one, with the same length). */
+export interface AnalyticsPeriodTotals {
+  tokens: number
+  hours: number
+  orbitHours: number
+  userHours: number
+  cost: number
+  sessions: number
+  messages: number
 }
 
 export interface AnalyticsSummary {
@@ -49,10 +106,19 @@ export interface AnalyticsSummary {
   totalTokens: number
   totalHours: number
   totalCost: number
+  /** Split of `totalHours`: the agent answering, and the user's counted gaps (an estimate). */
+  orbitHours: number
+  userHours: number
   activeDays: number
   currentStreak: number
   longestStreak: number
   peakHour: number
+  /** Only with `detailed` (the desktop screen; the phone does not ask for it). */
+  sessions?: AnalyticsSession[]
+  /** The period before this one, same length. Absent for "total". */
+  previous?: AnalyticsPeriodTotals
+  /** The last 53 weeks, whatever the period is — the activity card. Models and projects stripped. */
+  year?: AnalyticsDay[]
 }
 
 /** Period chosen in the date range picker (ms, bounds already at the start/end of the day). */
