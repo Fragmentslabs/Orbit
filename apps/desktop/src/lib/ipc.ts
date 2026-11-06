@@ -50,7 +50,7 @@ import type {
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillCard, SkillGenerationResult, SkillMetaView, SkillProposal } from "@shared/skills"
 import type { Hook, HookGenerationResult, HookInput, HookWithRun } from "@shared/hooks"
-import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
+import type { AnalyticsSummary, AnalyticsRange, UsageSummaryRequest, UsageSummaryResponse } from "@shared/analytics"
 import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
 import type { PanelEvent } from "@/src/stores/panel-store"
 
@@ -594,6 +594,9 @@ export const mcpApi = {
 export const analyticsApi = {
   summary: (range: AnalyticsRange) =>
     window.ipcRenderer.invoke("analytics:summary", range) as Promise<AnalyticsSummary>,
+  /** The auxiliary model summarizes what was done in a project (or all), on a day or in the period. */
+  summarize: (input: UsageSummaryRequest) =>
+    window.ipcRenderer.invoke("analytics:summarize", input) as Promise<UsageSummaryResponse>,
 }
 
 export const panelApi = {

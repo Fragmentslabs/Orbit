@@ -934,29 +934,127 @@
     "citationLineRange": "p. {{page}}, lines {{from}}-{{to}}"
   },
   "usage": {
-    "inputIn": "{{count}} in",
-    "outputOut": "{{count}} out",
-    "inputLine": "Input: {{count}} tokens",
-    "outputLine": "Output: {{count}} tokens",
-    "costLine": "Cost: {{cost}}",
-    "currentContext": "Current context: {{count}} tokens",
-    "note": "(input/output above sum all tool calls in this reply — not the context size)",
-    "context": "Context",
-    "contextUsed": "Context used",
-    "input": "Input",
-    "output": "Output",
-    "reasoning": "Reasoning",
-    "noCache": "No cache",
-    "cacheRead": "Read from cache",
-    "cacheWrite": "Written to cache",
-    "tokensWord": "tokens",
-    "compacted": "Compacted — previous history summarized",
-    "nearLimit": "Near the limit — history will be compacted soon",
-    "atLimit": "Limit reached — automatic compaction failed",
-    "estimated": "Estimate",
-    "live": "Live",
-    "compactWaitTurn": "Wait for the reply to finish to compact.",
-    "compactNow": "Compact history now"
+    "nav": {
+      "label": "Usage sections",
+      "overview": "Overview",
+      "models": "Models",
+      "projects": "Projects",
+      "sessions": "Sessions",
+      "rhythm": "Rhythm"
+    },
+    "header": "{{active}} active days in the period",
+    "noData": "No data in this period.",
+    "noComparison": "no previous period",
+    "vsPrevious": "vs previous period",
+    "estimated": "estimated",
+    "ofTotal": "{{pct}}% of total",
+    "others": "Others ({{count}})",
+    "cards": {
+      "tokens": "Tokens",
+      "orbitHours": "Orbit hours",
+      "yourHours": "Your active hours",
+      "cost": "Spent"
+    },
+    "legend": {
+      "orbit": "Orbit",
+      "you": "You (estimated)"
+    },
+    "perDay": {
+      "title": "Usage per day",
+      "subtitle": "Total in the period: {{total}}"
+    },
+    "models": {
+      "title": "Models",
+      "seeAll": "See models",
+      "hint": "Click a model to see where and when it was used.",
+      "model": "Model",
+      "messages": "Msgs",
+      "costPerMillion": "$ / 1M tok.",
+      "costPerHour": "$ per hour",
+      "avgPeriod": "period average",
+      "tokensEach": "{{value}} tokens each",
+      "back": "All models",
+      "hoursPerDay": "Hours per day with this model",
+      "whereUsed": "Where it was used",
+      "recentSessions": "Recent sessions"
+    },
+    "projects": {
+      "title": "Projects",
+      "seeAll": "See projects",
+      "hint": "Orbit hours (agent running) and your active hours (estimated). Click for the history.",
+      "project": "Project",
+      "sessions": "Sessions",
+      "spent": "Spent",
+      "back": "All projects",
+      "agentRunning": "agent running",
+      "inPeriod": "in the period",
+      "inputOutput": "input and output",
+      "perHour": "{{value}} per hour",
+      "perDay": "Hours per day, last 14 days",
+      "estimateNote": "Your part is an estimate: it adds the time between Orbit's answer and your next message, dropping long pauses.",
+      "history": "History",
+      "dayMeta": "Orbit {{orbit}} · you {{you}} · {{sessions}} sessions · {{cost}}"
+    },
+    "sessions": {
+      "search": "Search sessions",
+      "allProjects": "All",
+      "count": "{{shown}} of {{total}}",
+      "when": "When",
+      "session": "Session",
+      "duration": "Duration",
+      "showMore": "Show more",
+      "open": "Open the conversation",
+      "deleted": "This conversation was deleted",
+      "untitled": "Untitled"
+    },
+    "summary": {
+      "period": "Summarize the period",
+      "day": "Summarize the day",
+      "loading": "Summarizing…",
+      "hide": "Hide summary",
+      "generated": "Summary written by Orbit",
+      "error": {
+        "no-aux-model": "Choose an auxiliary model in Preferences to generate summaries.",
+        "nothing": "There are no conversations in this cut to summarize.",
+        "failed": "The summary could not be generated."
+      }
+    },
+    "activity": {
+      "title": "Activity in the last year: {{total}}",
+      "subtitle": "{{count}} active days",
+      "less": "less",
+      "more": "more",
+      "none": "no activity",
+      "noActivityOn": "{{date}} — no activity",
+      "dayDetail": "{{date}} — Orbit {{orbit}} · you {{you}} · {{messages}} answers · {{cost}}"
+    },
+    "averages": {
+      "title": "Averages",
+      "perActiveDay": "Per active day",
+      "perSession": "Per session",
+      "perMessage": "Per answer",
+      "costPerHour": "Cost per hour",
+      "sessionsPerActiveDay": "Sessions per active day",
+      "yourHoursPerActiveDay": "Your hours per active day",
+      "messages": "{{count}} answers",
+      "tokens": "{{value}} tokens",
+      "span": "{{active}} active days in {{days}}"
+    },
+    "insights": {
+      "title": "Highlights",
+      "topModel": "{{model}} was your most used model, with {{pct}}% of the tokens.",
+      "costlyModel": "{{model}} produced {{cost}}% of the spend with only {{tokens}}% of the tokens.",
+      "busiestWeekday": "Your heaviest day is {{day}}, with {{hours}} on average.",
+      "cheapestModel": "{{model}} cost {{cost}} per hour, the cheapest among the paid ones.",
+      "topProject": "{{pct}}% of the hours were on the {{project}} project.",
+      "activeDaysStreak": "You used Orbit on {{active}} of {{total}} days; the current streak is {{streak}} days.",
+      "activeDays": "You used Orbit on {{active}} of {{total}} days."
+    },
+    "rhythm": {
+      "byWeekday": "Hours per weekday",
+      "byWeekdayHint": "Sum of the period, Orbit and you.",
+      "activeOf": "{{active}} of {{total}}"
+    }
   },
   "images": {
     "copy": "Copy",
@@ -1679,22 +1777,12 @@
     "title": "Orbit Usage",
     "loading": "Loading...",
     "noData": "No usage data available.",
-    "usageByModel": "Usage by model",
-    "dimensions": {
-      "model": "Models",
-      "project": "Projects"
-    },
-    "hoursByProject": "Hours per project",
     "hoursByProjectInfoTitle": "How hours are counted",
     "hoursByProjectInfo": "The total estimates the combined working time (Orbit + you), not raw clock time. Orbit's generation time always counts. Your breaks enter with an inactivity margin: up to 30 min count in full (reading, testing or reviewing); 30–60 min count in full if you return with a detailed message; 1–1.5 h count only half, and only with a very long message. Longer breaks — or ones without a message that shows work — don't count.",
     "noProject": "No project",
-    "messagesShort_one": "{{count}} msg",
-    "messagesShort_other": "{{count}} msgs",
     "tokens": "Tokens",
     "hours": "Hours",
-    "totalTokens": "Total tokens",
     "cost": "Cost",
-    "spent": "spent",
     "ranges": {
       "total": "Total",
       "30d": "30d",
@@ -1711,13 +1799,6 @@
       "peakHour": "Peak hour",
       "days_one": "{{count}} day",
       "days_other": "{{count}} days"
-    },
-    "heatmap": {
-      "less": "Less",
-      "more": "More",
-      "noActivity": "No activity",
-      "total": "Total",
-      "hoursPerDay": "Hours per day"
     }
   },
   "howto": {

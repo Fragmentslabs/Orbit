@@ -193,6 +193,7 @@ import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } 
 import { importSkillSelection } from './lib/skills/import'
 import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { computeAnalytics } from './lib/analytics'
+import { summarizeWork, type UsageSummaryInput } from './lib/usage-summary'
 import type { AnalyticsRange } from '@shared/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { metaViews, pruneOrphanCards, setPref, usageScope } from './lib/skills/meta'
@@ -2660,7 +2661,9 @@ app.whenReady().then(() => {
   })
 
   // Analytics: usage summary
-  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range))
+  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range, { detailed: true }))
+  // "What was done" of a project/day: the auxiliary model reads the work report; nothing is saved.
+  ipcMain.handle('analytics:summarize', (_event, input: UsageSummaryInput) => summarizeWork(input))
 
   // MCP: config + status + reconnection (the tools come in via buildToolSet)
   ipcMain.handle('mcp:config', () => readMcpConfig())

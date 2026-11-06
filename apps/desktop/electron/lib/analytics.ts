@@ -1,12 +1,21 @@
 import path from 'node:path'
 import type { ChatMessage, SessionInfo, TokenUsage } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown, ProjectBreakdown, ProjectDayBreakdown } from '@shared/analytics'
+import type {
+  AnalyticsDay,
+  AnalyticsRange,
+  AnalyticsSession,
+  AnalyticsSummary,
+  ModelDayBreakdown,
+  ModelProjectSlice,
+  ProjectBreakdown,
+  ProjectDayBreakdown,
+} from '@shared/analytics'
 import { listKeys, readJson } from './storage'
 import { projectIdOf } from './memory/domain'
 import { folderInMainRepository } from './worktrees/main'
 
-function computeRange(range: AnalyticsRange): { since: number; until?: number } {
+export function computeRange(range: AnalyticsRange): { since: number; until?: number } {
   const now = Date.now()
   if (typeof range === 'object' && range.type === 'custom') {
     return { since: range.from, until: range.to }
@@ -54,6 +63,8 @@ interface WorkSegment {
    *  depending on the session's createdAt, which may be much earlier. */
   at: number
   ms: number
+  /** 'orbit': the agent answering. 'user': the counted gap before the user's next message (an estimate of their active time). */
+  kind: 'orbit' | 'user'
   providerId: string
   modelId: string
 }
@@ -84,6 +95,7 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
         day: getDateKey(prev.createdAt),
         at: prev.createdAt,
         ms: gapMs,
+        kind: 'orbit',
         providerId: curr.providerId ?? 'unknown',
         modelId: curr.modelId ?? 'unknown',
       })
@@ -103,6 +115,7 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
           day: getDateKey(prev.createdAt),
           at: prev.createdAt,
           ms: countedMs,
+          kind: 'user',
           providerId: prev.providerId ?? 'unknown',
           modelId: prev.modelId ?? 'unknown',
         })
@@ -113,187 +126,381 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
   return segments
 }
 
-export async function computeAnalytics(range: AnalyticsRange): Promise<AnalyticsSummary> {
-  const { since, until } = computeRange(range)
-  const upperBound = until ?? Number.POSITIVE_INFINITY
+/** The window right before the one asked for, with the same length — what the deltas compare with. */
+function previousWindow(range: AnalyticsRange, since: number, until: number | undefined): { since: number; until: number } | undefined {
+  if (range === 'total') return undefined
+  if (range === 'today') {
+    // Same hours of yesterday: comparing a half day with a whole one would always show a drop.
+    const DAY_MS = 86_400_000
+    return { since: since - DAY_MS, until: since - DAY_MS + (Date.now() - since) }
+  }
+  const length = (until ?? Date.now()) - since
+  return { since: since - length - 1, until: since - 1 }
+}
 
-  const sessionKeys = await listKeys(StorageKeys.sessionPrefix)
+interface Accumulator {
+  since: number
+  until: number
+  /** The history list is only built for the screen that shows it (not for the phone, nor for the comparison). */
+  collectSessions: boolean
+  dayMap: Map<string, AnalyticsDay>
+  modelTotals: Map<string, ModelDayBreakdown>
+  /** model → project → what the model did there (attached to the totals at the end). */
+  modelProjects: Map<string, Map<string, ModelProjectSlice>>
+  projectTotals: Map<string, ProjectBreakdown>
+  hourCounts: number[]
+  sessions: AnalyticsSession[]
+  sessionsWithActivity: number
+  totalMessages: number
+  totalTokens: number
+}
 
-  const dayMap = new Map<string, AnalyticsDay>()
-  const modelTotals = new Map<string, ModelDayBreakdown>()
-  const projectTotals = new Map<string, ProjectBreakdown>()
-  const hourCounts = new Array<number>(24).fill(0)
-  let sessionsWithActivity = 0
-  let totalMessages = 0
-  let totalTokensVal = 0
+function newAccumulator(since: number, until: number | undefined, collectSessions: boolean): Accumulator {
+  return {
+    since,
+    until: until ?? Number.POSITIVE_INFINITY,
+    collectSessions,
+    dayMap: new Map(),
+    modelTotals: new Map(),
+    modelProjects: new Map(),
+    projectTotals: new Map(),
+    hourCounts: new Array<number>(24).fill(0),
+    sessions: [],
+    sessionsWithActivity: 0,
+    totalMessages: 0,
+    totalTokens: 0,
+  }
+}
 
-  for (const key of sessionKeys) {
-    const session = await readJson<SessionInfo>(key)
-    if (!session) continue
-    // One read per session: the complete history serves the hour segments
-    // (an interval may cross the period's border) and the cut comes from
-    // it, without a second pass over the disk.
-    const history = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
-    if (!history) continue
+function modelProjectSlice(acc: Accumulator, modelKey: string, projectId: string): ModelProjectSlice {
+  let byProject = acc.modelProjects.get(modelKey)
+  if (!byProject) {
+    byProject = new Map()
+    acc.modelProjects.set(modelKey, byProject)
+  }
+  let slice = byProject.get(projectId)
+  if (!slice) {
+    slice = { projectId, hours: 0, tokens: 0, messages: 0, cost: 0 }
+    byProject.set(projectId, slice)
+  }
+  return slice
+}
 
-    // The period cuts MESSAGES, not the session's creation date. Filtering
-    // by session made "last 7 days" hide this week's work in a
-    // conversation opened last month and, at the same time, add the whole
-    // history of a conversation created yesterday.
-    const messages = history.filter((m) => m.createdAt >= since && m.createdAt <= upperBound)
-    if (messages.length === 0) continue
-    sessionsWithActivity++
+/** Adds one conversation's messages (already read) to the totals of a period. */
+function addSession(
+  acc: Accumulator,
+  session: SessionInfo,
+  history: ChatMessage[],
+  projectId: string,
+  projectFolder: string | undefined,
+): void {
+  const { since, until: upperBound } = acc
 
-    for (const msg of messages) hourCounts[new Date(msg.createdAt).getHours()]++
+  // The period cuts MESSAGES, not the session's creation date. Filtering
+  // by session made "last 7 days" hide this week's work in a
+  // conversation opened last month and, at the same time, add the whole
+  // history of a conversation created yesterday.
+  const messages = history.filter((m) => m.createdAt >= since && m.createdAt <= upperBound)
+  if (messages.length === 0) return
+  acc.sessionsWithActivity++
 
-    // The session's project: directory in code mode; chat without a folder = its own bucket.
-    // A chat in a worktree counts in the main repository's project.
-    const projectFolder = session.directory ? await folderInMainRepository(session.directory) : undefined
-    const projectId = projectFolder ? projectIdOf(projectFolder) : NO_PROJECT_ID
-    let pt = projectTotals.get(projectId)
-    if (!pt) {
-      pt = {
-        projectId,
-        name: projectFolder ? path.basename(projectFolder) : '',
-        directory: projectFolder,
-        hours: 0,
-        tokens: 0,
-        messages: 0,
-        cost: 0,
-        sessions: 0,
-      }
-      projectTotals.set(projectId, pt)
+  for (const msg of messages) acc.hourCounts[new Date(msg.createdAt).getHours()]++
+
+  let pt = acc.projectTotals.get(projectId)
+  if (!pt) {
+    pt = {
+      projectId,
+      name: projectFolder ? path.basename(projectFolder) : '',
+      directory: projectFolder,
+      hours: 0,
+      orbitHours: 0,
+      userHours: 0,
+      tokens: 0,
+      messages: 0,
+      cost: 0,
+      sessions: 0,
     }
-    pt.sessions++
+    acc.projectTotals.set(projectId, pt)
+  }
+  pt.sessions++
 
-    // Group messages by day for hours estimation
-    const msgsByDay = new Map<string, ChatMessage[]>()
-    for (const msg of messages) {
-      const day = getDateKey(msg.createdAt)
-      const bucket = msgsByDay.get(day) ?? []
-      bucket.push(msg)
-      msgsByDay.set(day, bucket)
+  // Group messages by day for hours estimation
+  const msgsByDay = new Map<string, ChatMessage[]>()
+  for (const msg of messages) {
+    const day = getDateKey(msg.createdAt)
+    const bucket = msgsByDay.get(day) ?? []
+    bucket.push(msg)
+    msgsByDay.set(day, bucket)
+  }
+
+  /** This project's slice within a day — the heatmap filters by it. */
+  const projectSlice = (entry: AnalyticsDay): ProjectDayBreakdown => {
+    let slice = entry.byProject.find((p) => p.projectId === projectId)
+    if (!slice) {
+      slice = { projectId, hours: 0, orbitHours: 0, userHours: 0, tokens: 0, messages: 0, cost: 0 }
+      entry.byProject.push(slice)
+    }
+    return slice
+  }
+
+  /** This conversation on each day — the history entry. */
+  const sessionDays = new Map<string, AnalyticsSession>()
+  const sessionModelCounts = new Map<string, Map<string, number>>()
+
+  for (const [day, msgs] of msgsByDay) {
+    msgs.sort((a, b) => a.createdAt - b.createdAt)
+
+    let entry = acc.dayMap.get(day)
+    if (!entry) {
+      entry = {
+        date: day,
+        totalTokens: 0,
+        totalHours: 0,
+        orbitHours: 0,
+        userHours: 0,
+        totalMessages: 0,
+        totalCost: 0,
+        byModel: [],
+        byProject: [],
+      }
+      acc.dayMap.set(day, entry)
     }
 
-    /** This project's slice within a day — the heatmap filters by it. */
-    const projectSlice = (entry: AnalyticsDay): ProjectDayBreakdown => {
-      let slice = entry.byProject.find((p) => p.projectId === projectId)
-      if (!slice) {
-        slice = { projectId, hours: 0, tokens: 0, messages: 0, cost: 0 }
-        entry.byProject.push(slice)
-      }
-      return slice
+    const sessionDay: AnalyticsSession = {
+      id: session.id,
+      title: session.title,
+      projectId,
+      date: day,
+      startAt: msgs[0].createdAt,
+      endAt: msgs[msgs.length - 1].createdAt,
+      hours: 0,
+      orbitHours: 0,
+      userHours: 0,
+      messages: 0,
+      tokens: 0,
+      cost: 0,
+      providerId: 'unknown',
+      modelId: 'unknown',
     }
+    sessionDays.set(day, sessionDay)
+    const modelCounts = new Map<string, number>()
+    sessionModelCounts.set(day, modelCounts)
 
-    for (const [day, msgs] of msgsByDay) {
-      msgs.sort((a, b) => a.createdAt - b.createdAt)
+    for (const msg of msgs) {
+      if (msg.role !== 'assistant') continue
+      const tokens = sumTokens(msg.tokens)
+      const cost = msg.tokens?.cost ?? 0
+      entry.totalTokens += tokens
+      entry.totalCost += cost
+      acc.totalTokens += tokens
+      entry.totalMessages++
+      acc.totalMessages++
 
-      let entry = dayMap.get(day)
-      if (!entry) {
-        entry = { date: day, totalTokens: 0, totalHours: 0, totalMessages: 0, totalCost: 0, byModel: [], byProject: [] }
-        dayMap.set(day, entry)
-      }
+      pt.tokens += tokens
+      pt.messages++
+      pt.cost += cost
 
-      for (const msg of msgs) {
-        if (msg.role !== 'assistant') continue
-        const tokens = sumTokens(msg.tokens)
-        const cost = msg.tokens?.cost ?? 0
-        entry.totalTokens += tokens
-        entry.totalCost += cost
-        totalTokensVal += tokens
-        entry.totalMessages++
-        totalMessages++
+      sessionDay.messages++
+      sessionDay.tokens += tokens
+      sessionDay.cost += cost
 
-        pt.tokens += tokens
-        pt.messages++
-        pt.cost += cost
+      const ps = projectSlice(entry)
+      ps.tokens += tokens
+      ps.messages++
+      ps.cost += cost
 
-        const ps = projectSlice(entry)
-        ps.tokens += tokens
-        ps.messages++
-        ps.cost += cost
+      const providerId = msg.providerId ?? 'unknown'
+      const modelId = msg.modelId ?? 'unknown'
+      const modelKey = `${providerId}::${modelId}`
+      modelCounts.set(modelKey, (modelCounts.get(modelKey) ?? 0) + 1)
 
-        const modelKey = `${msg.providerId ?? 'unknown'}::${msg.modelId ?? 'unknown'}`
-        let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
-        if (!mb) {
-          mb = { providerId: msg.providerId ?? 'unknown', modelId: msg.modelId ?? 'unknown', tokens: 0, hours: 0, messages: 0, cost: 0 }
-          entry.byModel.push(mb)
-        }
-        mb.tokens += tokens
-        mb.messages++
-        mb.cost += cost
-
-        let mt = modelTotals.get(modelKey)
-        if (!mt) {
-          mt = { providerId: msg.providerId ?? 'unknown', modelId: msg.modelId ?? 'unknown', tokens: 0, hours: 0, messages: 0, cost: 0 }
-          modelTotals.set(modelKey, mt)
-        }
-        mt.tokens += tokens
-        mt.messages++
-        mt.cost += cost
-      }
-    }
-
-    // Hours = distance between consecutive messages (generation + gaps that
-    // pass the computeSessionSegments rules), no longer the first-to-last message
-    // span of the day. Orchestration worker sessions come in normally (they are
-    // not filtered) — each worker counts its own time.
-    for (const segment of computeSessionSegments(history)) {
-      if (segment.at < since || segment.at > upperBound) continue
-      const entry = dayMap.get(segment.day)
-      if (!entry) continue // day with no message at all (should not happen)
-      const hours = segment.ms / 3_600_000
-      entry.totalHours += hours
-      pt.hours += hours
-      projectSlice(entry).hours += hours
-
-      const modelKey = `${segment.providerId}::${segment.modelId}`
       let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
       if (!mb) {
-        mb = { providerId: segment.providerId, modelId: segment.modelId, tokens: 0, hours: 0, messages: 0, cost: 0 }
+        mb = { providerId, modelId, tokens: 0, hours: 0, messages: 0, cost: 0 }
         entry.byModel.push(mb)
       }
-      mb.hours += hours
+      mb.tokens += tokens
+      mb.messages++
+      mb.cost += cost
+
+      let mt = acc.modelTotals.get(modelKey)
+      if (!mt) {
+        mt = { providerId, modelId, tokens: 0, hours: 0, messages: 0, cost: 0 }
+        acc.modelTotals.set(modelKey, mt)
+      }
+      mt.tokens += tokens
+      mt.messages++
+      mt.cost += cost
+
+      const slice = modelProjectSlice(acc, modelKey, projectId)
+      slice.tokens += tokens
+      slice.messages++
+      slice.cost += cost
     }
   }
 
+  // Hours = distance between consecutive messages (generation + gaps that
+  // pass the computeSessionSegments rules), no longer the first-to-last message
+  // span of the day. Orchestration worker sessions come in normally (they are
+  // not filtered) — each worker counts its own time.
+  for (const segment of computeSessionSegments(history)) {
+    if (segment.at < since || segment.at > upperBound) continue
+    const entry = acc.dayMap.get(segment.day)
+    if (!entry) continue // day with no message at all (should not happen)
+    const hours = segment.ms / 3_600_000
+    const orbit = segment.kind === 'orbit'
+    entry.totalHours += hours
+    if (orbit) entry.orbitHours += hours
+    else entry.userHours += hours
+    pt.hours += hours
+    if (orbit) pt.orbitHours += hours
+    else pt.userHours += hours
+    const slice = projectSlice(entry)
+    slice.hours += hours
+    if (orbit) slice.orbitHours += hours
+    else slice.userHours += hours
+
+    const sessionDay = sessionDays.get(segment.day)
+    if (sessionDay) {
+      sessionDay.hours += hours
+      if (orbit) sessionDay.orbitHours += hours
+      else sessionDay.userHours += hours
+    }
+
+    const modelKey = `${segment.providerId}::${segment.modelId}`
+    let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
+    if (!mb) {
+      mb = { providerId: segment.providerId, modelId: segment.modelId, tokens: 0, hours: 0, messages: 0, cost: 0 }
+      entry.byModel.push(mb)
+    }
+    mb.hours += hours
+    modelProjectSlice(acc, modelKey, projectId).hours += hours
+  }
+
+  if (!acc.collectSessions) return
+  for (const [day, sessionDay] of sessionDays) {
+    const counts = sessionModelCounts.get(day)
+    const top = counts && [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+    if (top) {
+      const [providerId, modelId] = top[0].split('::')
+      sessionDay.providerId = providerId
+      sessionDay.modelId = modelId
+    }
+    acc.sessions.push(sessionDay)
+  }
+}
+
+/** How many history entries the screen receives at most (newest first). */
+const MAX_SESSION_ENTRIES = 1500
+
+function finishAccumulator(acc: Accumulator): AnalyticsSummary {
   // Distribute model totals hours proportionally (approximation)
-  for (const [modelKey, mt] of modelTotals) {
-    const dayHoursSum = [...dayMap.values()].reduce(
+  for (const [modelKey, mt] of acc.modelTotals) {
+    const dayHoursSum = [...acc.dayMap.values()].reduce(
       (sum, d) => sum + (d.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)?.hours ?? 0),
       0,
     )
     mt.hours = dayHoursSum
+    const byProject = acc.modelProjects.get(modelKey)
+    if (byProject) mt.byProject = [...byProject.values()].sort((a, b) => b.hours - a.hours)
   }
 
-  const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date))
-  const byModel = [...modelTotals.values()].sort((a, b) => b.tokens - a.tokens)
-  const byProject = [...projectTotals.values()].sort((a, b) => b.hours - a.hours)
+  const days = [...acc.dayMap.values()].sort((a, b) => a.date.localeCompare(b.date))
+  const byModel = [...acc.modelTotals.values()].sort((a, b) => b.tokens - a.tokens)
+  const byProject = [...acc.projectTotals.values()].sort((a, b) => b.hours - a.hours)
 
   // Stats
   const activeDays = days.filter((d) => d.totalMessages > 0).length
   const { currentStreak, longestStreak } = computeStreaks(days)
 
   // Peak hour: counted in the pass above, over the period's messages.
-  const peakHour = hourCounts.indexOf(Math.max(...hourCounts))
+  const peakHour = acc.hourCounts.indexOf(Math.max(...acc.hourCounts))
 
-  const totalHours = days.reduce((s, d) => s + d.totalHours, 0)
-  const totalCost = days.reduce((s, d) => s + d.totalCost, 0)
+  const sessions = acc.collectSessions
+    ? [...acc.sessions].sort((a, b) => b.startAt - a.startAt).slice(0, MAX_SESSION_ENTRIES)
+    : undefined
 
   return {
     days,
     byModel,
     byProject,
-    totalSessions: sessionsWithActivity,
-    totalMessages,
-    totalTokens: totalTokensVal,
-    totalHours,
-    totalCost,
+    totalSessions: acc.sessionsWithActivity,
+    totalMessages: acc.totalMessages,
+    totalTokens: acc.totalTokens,
+    totalHours: days.reduce((s, d) => s + d.totalHours, 0),
+    orbitHours: days.reduce((s, d) => s + d.orbitHours, 0),
+    userHours: days.reduce((s, d) => s + d.userHours, 0),
+    totalCost: days.reduce((s, d) => s + d.totalCost, 0),
     activeDays,
     currentStreak,
     longestStreak,
     peakHour,
+    ...(sessions ? { sessions } : {}),
   }
+}
+
+export interface ComputeAnalyticsOptions {
+  /**
+   * What only the desktop screen shows: the history of conversations, the comparison with the
+   * previous period and the last year. The phone does not ask for it — each extra window is
+   * another cut over every message read.
+   */
+  detailed?: boolean
+}
+
+export async function computeAnalytics(
+  range: AnalyticsRange,
+  options: ComputeAnalyticsOptions = {},
+): Promise<AnalyticsSummary> {
+  const { since, until } = computeRange(range)
+  const detailed = options.detailed === true
+
+  const main = newAccumulator(since, until, detailed)
+  const previousSpan = detailed ? previousWindow(range, since, until) : undefined
+  const previous = previousSpan ? newAccumulator(previousSpan.since, previousSpan.until, false) : undefined
+  // 53 weeks back from today: the activity card shows a full year whatever period is chosen.
+  const year = detailed ? newAccumulator(Date.now() - 53 * 7 * 86_400_000, undefined, false) : undefined
+  const accumulators = [main, previous, year].filter((a): a is Accumulator => a !== undefined)
+
+  const sessionKeys = await listKeys(StorageKeys.sessionPrefix)
+
+  for (const key of sessionKeys) {
+    const session = await readJson<SessionInfo>(key)
+    if (!session) continue
+    // One read per session: the complete history serves the hour segments
+    // (an interval may cross the period's border) and the cut comes from
+    // it, without a second pass over the disk. The same read feeds the
+    // comparison window and the year.
+    const history = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
+    if (!history) continue
+
+    // The session's project: directory in code mode; chat without a folder = its own bucket.
+    // A chat in a worktree counts in the main repository's project.
+    const projectFolder = session.directory ? await folderInMainRepository(session.directory) : undefined
+    const projectId = projectFolder ? projectIdOf(projectFolder) : NO_PROJECT_ID
+    for (const acc of accumulators) addSession(acc, session, history, projectId, projectFolder)
+  }
+
+  const summary = finishAccumulator(main)
+  if (!detailed) return summary
+
+  if (previous) {
+    const p = finishAccumulator(previous)
+    summary.previous = {
+      tokens: p.totalTokens,
+      hours: p.totalHours,
+      orbitHours: p.orbitHours,
+      userHours: p.userHours,
+      cost: p.totalCost,
+      sessions: p.totalSessions,
+      messages: p.totalMessages,
+    }
+  }
+  if (year) {
+    // Only the totals of each day: the card paints squares, it does not open models or projects.
+    summary.year = finishAccumulator(year).days.map((d) => ({ ...d, byModel: [], byProject: [] }))
+  }
+  return summary
 }
 
 function computeStreaks(days: AnalyticsDay[]): { currentStreak: number; longestStreak: number } {

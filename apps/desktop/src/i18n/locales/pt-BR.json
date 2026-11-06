@@ -934,29 +934,127 @@
     "citationLineRange": "p. {{page}}, linhas {{from}}-{{to}}"
   },
   "usage": {
-    "inputIn": "{{count}} de entrada",
-    "outputOut": "{{count}} de saída",
-    "inputLine": "Entrada: {{count}} tokens",
-    "outputLine": "Saída: {{count}} tokens",
-    "costLine": "Custo: {{cost}}",
-    "currentContext": "Contexto atual: {{count}} tokens",
-    "note": "(entrada/saída acima somam todas as chamadas de tool desta resposta — não é o tamanho do contexto)",
-    "context": "Contexto",
-    "contextUsed": "Contexto usado",
-    "input": "Entrada",
-    "output": "Saída",
-    "reasoning": "Raciocínio",
-    "noCache": "Sem cache",
-    "cacheRead": "Lido do cache",
-    "cacheWrite": "Gravado no cache",
-    "tokensWord": "tokens",
-    "compacted": "Compactado — histórico anterior resumido",
-    "nearLimit": "Próximo do limite — o histórico será compactado em breve",
-    "atLimit": "Limite atingido — a compactação automática falhou",
-    "estimated": "Estimativa",
-    "live": "Ao vivo",
-    "compactWaitTurn": "Espere a resposta terminar para compactar.",
-    "compactNow": "Compactar histórico agora"
+    "nav": {
+      "label": "Seções de uso",
+      "overview": "Visão geral",
+      "models": "Modelos",
+      "projects": "Projetos",
+      "sessions": "Sessões",
+      "rhythm": "Ritmo"
+    },
+    "header": "{{active}} dias ativos no período",
+    "noData": "Sem dados neste período.",
+    "noComparison": "sem período anterior",
+    "vsPrevious": "vs período anterior",
+    "estimated": "estimado",
+    "ofTotal": "{{pct}}% do total",
+    "others": "Outros ({{count}})",
+    "cards": {
+      "tokens": "Tokens",
+      "orbitHours": "Horas do Orbit",
+      "yourHours": "Suas horas ativas",
+      "cost": "Gasto"
+    },
+    "legend": {
+      "orbit": "Orbit",
+      "you": "Você (estimado)"
+    },
+    "perDay": {
+      "title": "Uso por dia",
+      "subtitle": "Total no período: {{total}}"
+    },
+    "models": {
+      "title": "Modelos",
+      "seeAll": "Ver modelos",
+      "hint": "Clique em um modelo para ver onde e quando ele foi usado.",
+      "model": "Modelo",
+      "messages": "Msgs",
+      "costPerMillion": "US$ / 1M tok.",
+      "costPerHour": "US$ por hora",
+      "avgPeriod": "média do período",
+      "tokensEach": "{{value}} tokens cada",
+      "back": "Todos os modelos",
+      "hoursPerDay": "Horas por dia com este modelo",
+      "whereUsed": "Onde foi usado",
+      "recentSessions": "Sessões recentes"
+    },
+    "projects": {
+      "title": "Projetos",
+      "seeAll": "Ver projetos",
+      "hint": "Horas do Orbit (agente rodando) e suas horas ativas (estimadas). Clique para ver o histórico.",
+      "project": "Projeto",
+      "sessions": "Sessões",
+      "spent": "Gasto",
+      "back": "Todos os projetos",
+      "agentRunning": "agente rodando",
+      "inPeriod": "no período",
+      "inputOutput": "entrada e saída",
+      "perHour": "{{value}} por hora",
+      "perDay": "Horas por dia, últimos 14 dias",
+      "estimateNote": "Sua parte é uma estimativa: soma o tempo entre a resposta do Orbit e a sua mensagem seguinte, descartando pausas longas.",
+      "history": "Histórico",
+      "dayMeta": "Orbit {{orbit}} · você {{you}} · {{sessions}} sessões · {{cost}}"
+    },
+    "sessions": {
+      "search": "Buscar sessão",
+      "allProjects": "Todos",
+      "count": "{{shown}} de {{total}}",
+      "when": "Quando",
+      "session": "Sessão",
+      "duration": "Duração",
+      "showMore": "Mostrar mais",
+      "open": "Abrir a conversa",
+      "deleted": "Esta conversa foi excluída",
+      "untitled": "Sem título"
+    },
+    "summary": {
+      "period": "Resumir o período",
+      "day": "Resumir o dia",
+      "loading": "Resumindo…",
+      "hide": "Ocultar resumo",
+      "generated": "Resumo gerado pelo Orbit",
+      "error": {
+        "no-aux-model": "Escolha um modelo auxiliar em Preferências para gerar resumos.",
+        "nothing": "Não há conversas neste recorte para resumir.",
+        "failed": "Não foi possível gerar o resumo."
+      }
+    },
+    "activity": {
+      "title": "Atividade no último ano: {{total}}",
+      "subtitle": "{{count}} dias ativos",
+      "less": "menos",
+      "more": "mais",
+      "none": "sem atividade",
+      "noActivityOn": "{{date}} — sem atividade",
+      "dayDetail": "{{date}} — Orbit {{orbit}} · você {{you}} · {{messages}} respostas · {{cost}}"
+    },
+    "averages": {
+      "title": "Médias",
+      "perActiveDay": "Por dia ativo",
+      "perSession": "Por sessão",
+      "perMessage": "Por resposta",
+      "costPerHour": "Custo por hora",
+      "sessionsPerActiveDay": "Sessões por dia ativo",
+      "yourHoursPerActiveDay": "Suas horas por dia ativo",
+      "messages": "{{count}} respostas",
+      "tokens": "{{value}} tokens",
+      "span": "{{active}} dias ativos em {{days}}"
+    },
+    "insights": {
+      "title": "Destaques",
+      "topModel": "{{model}} foi o modelo mais usado, com {{pct}}% dos tokens.",
+      "costlyModel": "{{model}} gerou {{cost}}% do gasto com só {{tokens}}% dos tokens.",
+      "busiestWeekday": "O dia mais pesado é {{day}}, com {{hours}} em média.",
+      "cheapestModel": "{{model}} custou {{cost}} por hora, o mais barato entre os que cobram.",
+      "topProject": "{{pct}}% das horas foram no projeto {{project}}.",
+      "activeDaysStreak": "Você usou o Orbit em {{active}} de {{total}} dias; a sequência atual é de {{streak}} dias.",
+      "activeDays": "Você usou o Orbit em {{active}} de {{total}} dias."
+    },
+    "rhythm": {
+      "byWeekday": "Horas por dia da semana",
+      "byWeekdayHint": "Soma do período, Orbit e você.",
+      "activeOf": "{{active}} de {{total}}"
+    }
   },
   "images": {
     "copy": "Copiar",
@@ -1679,22 +1777,12 @@
     "title": "Uso do Orbit",
     "loading": "Carregando...",
     "noData": "Nenhum dado de uso disponível.",
-    "usageByModel": "Uso por modelo",
-    "dimensions": {
-      "model": "Modelos",
-      "project": "Projetos"
-    },
-    "hoursByProject": "Horas por projeto",
     "hoursByProjectInfoTitle": "Como as horas são contadas",
     "hoursByProjectInfo": "O total estima o tempo de trabalho em conjunto (Orbit + você), não o tempo bruto de relógio. O tempo de geração do Orbit conta sempre. Suas pausas entram com uma margem de inatividade: até 30 min contam inteiro (lendo, testando ou revisando); de 30 a 60 min contam inteiro se você voltar com uma mensagem detalhada; de 1 h a 1 h 30 contam só metade, e apenas com uma mensagem bem longa. Pausas acima disso — ou sem uma mensagem que indique trabalho — não contam.",
     "noProject": "Sem projeto",
-    "messagesShort_one": "{{count}} msg",
-    "messagesShort_other": "{{count}} msgs",
     "tokens": "Tokens",
     "hours": "Horas",
-    "totalTokens": "Tokens totais",
     "cost": "Custo",
-    "spent": "gasto",
     "ranges": {
       "total": "Total",
       "30d": "30d",
@@ -1711,13 +1799,6 @@
       "peakHour": "Horário de pico",
       "days_one": "{{count}} dia",
       "days_other": "{{count}} dias"
-    },
-    "heatmap": {
-      "less": "Menos",
-      "more": "Mais",
-      "noActivity": "Sem atividade",
-      "total": "Total",
-      "hoursPerDay": "Horas por dia"
     }
   },
   "howto": {

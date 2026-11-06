@@ -227,3 +227,99 @@ describe('computeAnalytics', () => {
     expect(alpha?.messages).toBe(1)
   })
 })
+
+describe('computeAnalytics: orbit and user hours', () => {
+  it('splits the work time between the agent answering and the counted gap before the user', async () => {
+    // 09:00 user → 09:40 answer (40 min of Orbit), 09:40 → 09:50 gap before the next message (10 min of the user)
+    saveSession('a', '/repo/alpha', [
+      msg('user', DAY(10, 9, 0), 'go'),
+      msg('assistant', DAY(10, 9, 40), 'ok'),
+      msg('user', DAY(10, 9, 50), 'more'),
+      msg('assistant', DAY(10, 10, 0), 'ok'),
+    ])
+
+    const r = await computeAnalytics({ type: 'custom', from: DAY(10, 0), to: DAY(10, 23, 59) })
+    expect(r.orbitHours).toBeCloseTo(50 / 60, 5)
+    expect(r.userHours).toBeCloseTo(10 / 60, 5)
+    // The total is still what the charts always drew: the sum of both.
+    expect(r.totalHours).toBeCloseTo(1, 5)
+    expect(r.days[0].orbitHours + r.days[0].userHours).toBeCloseTo(r.days[0].totalHours, 5)
+    expect(r.byProject[0].orbitHours).toBeCloseTo(50 / 60, 5)
+    expect(r.byProject[0].userHours).toBeCloseTo(10 / 60, 5)
+    expect(r.days[0].byProject[0].userHours).toBeCloseTo(10 / 60, 5)
+  })
+
+  it('does not count a long pause as the user being active', async () => {
+    saveSession('a', '/repo/alpha', [
+      msg('user', DAY(10, 9, 0), 'go'),
+      msg('assistant', DAY(10, 9, 10), 'ok'),
+      msg('user', DAY(10, 13, 0), 'back'),
+      msg('assistant', DAY(10, 13, 10), 'ok'),
+    ])
+    const r = await computeAnalytics({ type: 'custom', from: DAY(10, 0), to: DAY(10, 23, 59) })
+    expect(r.userHours).toBe(0)
+    expect(r.orbitHours).toBeCloseTo(20 / 60, 5)
+  })
+})
+
+describe('computeAnalytics: detailed', () => {
+  it('keeps the phone payload as it was: no history, comparison or year', async () => {
+    saveSession('a', '/repo/alpha', [msg('user', DAY(10, 9, 0), 'go'), msg('assistant', DAY(10, 9, 10), 'ok')])
+    const r = await computeAnalytics({ type: 'custom', from: DAY(10, 0), to: DAY(10, 23, 59) })
+    expect(r.sessions).toBeUndefined()
+    expect(r.previous).toBeUndefined()
+    expect(r.year).toBeUndefined()
+  })
+
+  it('lists each conversation once per day, with the model that answered most', async () => {
+    saveSession('a', '/repo/alpha', [
+      msg('user', DAY(10, 9, 0), 'day one'),
+      msg('assistant', DAY(10, 9, 30), 'ok'),
+      msg('user', DAY(11, 9, 0), 'day two'),
+      msg('assistant', DAY(11, 9, 20), 'ok'),
+    ])
+    const r = await computeAnalytics({ type: 'custom', from: DAY(10, 0), to: DAY(11, 23, 59) }, { detailed: true })
+    expect(r.sessions).toHaveLength(2)
+    // Newest first
+    expect(r.sessions!.map((s) => s.date)).toEqual(['2026-03-11', '2026-03-10'])
+    const first = r.sessions![1]
+    expect(first.title).toBe('conversation a')
+    expect(first.messages).toBe(1)
+    expect(first.cost).toBeCloseTo(0.25, 5)
+    expect(first.modelId).toBe('opus')
+    expect(first.orbitHours).toBeCloseTo(0.5, 5)
+    expect(first.endAt).toBeGreaterThan(first.startAt)
+  })
+
+  it('shows where each model was used, by project', async () => {
+    saveSession('a', '/repo/alpha', [msg('user', DAY(10, 9, 0), 'go'), msg('assistant', DAY(10, 10, 0), 'ok')])
+    saveSession('b', '/repo/beta', [msg('user', DAY(10, 11, 0), 'go'), msg('assistant', DAY(10, 11, 30), 'ok')])
+    const r = await computeAnalytics({ type: 'custom', from: DAY(10, 0), to: DAY(10, 23, 59) }, { detailed: true })
+    const model = r.byModel[0]
+    expect(model.byProject).toHaveLength(2)
+    const alphaId = r.byProject.find((p) => p.name === 'alpha')!.projectId
+    expect(model.byProject!.find((p) => p.projectId === alphaId)?.hours).toBeCloseTo(1, 5)
+    expect(model.byProject!.reduce((s, p) => s + p.hours, 0)).toBeCloseTo(model.hours, 5)
+  })
+
+  it('compares with the window right before, with the same length', async () => {
+    // Asked: the 12th. Previous: the 11th (same length).
+    saveSession('a', '/repo/alpha', [
+      msg('user', DAY(11, 9, 0), 'before'),
+      msg('assistant', DAY(11, 9, 30), 'ok'),
+      msg('user', DAY(12, 9, 0), 'now'),
+      msg('assistant', DAY(12, 10, 0), 'ok'),
+    ])
+    const r = await computeAnalytics({ type: 'custom', from: DAY(12, 0), to: DAY(12, 23, 59) }, { detailed: true })
+    expect(r.totalHours).toBeCloseTo(1, 5)
+    expect(r.previous?.hours).toBeCloseTo(0.5, 5)
+    expect(r.previous?.sessions).toBe(1)
+    expect(r.previous?.cost).toBeCloseTo(0.25, 5)
+  })
+
+  it('has no previous period for "total"', async () => {
+    saveSession('a', '/repo/alpha', [msg('user', DAY(10, 9, 0), 'go'), msg('assistant', DAY(10, 9, 10), 'ok')])
+    const r = await computeAnalytics('total', { detailed: true })
+    expect(r.previous).toBeUndefined()
+  })
+})
