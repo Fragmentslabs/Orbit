@@ -2846,7 +2846,8 @@
       "new": "New routine",
       "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
       "search": "Search routines",
-      "noResults": "Nothing found for \"{{query}}\"."
+      "noResults": "Nothing found for \"{{query}}\".",
+      "failed": "Failed last time"
     },
     "runs": {
       "title": "Sessions",
@@ -2861,7 +2862,37 @@
       "chat": "Chat mode",
       "code": "Code mode"
     },
-    "timePlaceholder": "HH:MM"
+    "timePlaceholder": "HH:MM",
+    "view": {
+      "list": "List",
+      "agenda": "Agenda"
+    },
+    "detail": {
+      "close": "Close"
+    },
+    "agenda": {
+      "prev": "Previous week",
+      "next": "Next week",
+      "today": "Today"
+    },
+    "summary": {
+      "active": "Active",
+      "paused_one": "{{count}} paused",
+      "paused_other": "{{count}} paused",
+      "failures": "Failures in 7 days",
+      "failuresMeta_one": "in {{count}} routine",
+      "failuresMeta_other": "in {{count}} routines",
+      "spent": "Spent in 30 days",
+      "executions_one": "{{count}} execution",
+      "executions_other": "{{count}} executions",
+      "next": "Next executions",
+      "nextHint": "In the next 24 hours · click to open",
+      "nothingNext": "Nothing scheduled for the next 24 hours.",
+      "now": "now",
+      "tomorrow": "tomorrow",
+      "recent": "Latest executions",
+      "noRuns": "No executions yet."
+    }
   },
   "queue": {
     "count_one": "{{count}} message queued",

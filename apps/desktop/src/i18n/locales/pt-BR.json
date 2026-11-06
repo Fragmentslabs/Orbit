@@ -2846,7 +2846,8 @@
       "new": "Nova rotina",
       "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias.",
       "search": "Buscar rotina",
-      "noResults": "Nada encontrado para \"{{query}}\"."
+      "noResults": "Nada encontrado para \"{{query}}\".",
+      "failed": "Falhou na última"
     },
     "runs": {
       "title": "Sessões",
@@ -2861,7 +2862,37 @@
       "chat": "Modo chat",
       "code": "Modo código"
     },
-    "timePlaceholder": "HH:MM"
+    "timePlaceholder": "HH:MM",
+    "view": {
+      "list": "Lista",
+      "agenda": "Agenda"
+    },
+    "detail": {
+      "close": "Fechar"
+    },
+    "agenda": {
+      "prev": "Semana anterior",
+      "next": "Próxima semana",
+      "today": "Hoje"
+    },
+    "summary": {
+      "active": "Ativas",
+      "paused_one": "{{count}} pausada",
+      "paused_other": "{{count}} pausadas",
+      "failures": "Falhas em 7 dias",
+      "failuresMeta_one": "em {{count}} rotina",
+      "failuresMeta_other": "em {{count}} rotinas",
+      "spent": "Gasto em 30 dias",
+      "executions_one": "{{count}} execução",
+      "executions_other": "{{count}} execuções",
+      "next": "Próximas execuções",
+      "nextHint": "Nas próximas 24 horas · clique para abrir",
+      "nothingNext": "Nada agendado para as próximas 24 horas.",
+      "now": "agora",
+      "tomorrow": "amanhã",
+      "recent": "Últimas execuções",
+      "noRuns": "Nenhuma execução ainda."
+    }
   },
   "queue": {
     "count_one": "{{count}} mensagem na fila",
