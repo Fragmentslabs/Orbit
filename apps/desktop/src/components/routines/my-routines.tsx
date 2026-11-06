@@ -140,59 +140,63 @@ function RoutineCard({ routine, selected, onOpen }: {
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-1.5 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-ring",
+        "relative flex items-start gap-2.5 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-ring",
         selected && "border-primary/70",
       )}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "size-2 shrink-0 rounded-full",
-            state === "running" && "bg-blue-400",
-            state === "failed" && "bg-destructive",
-            state === "paused" && "bg-muted-foreground/60",
-            state === "ok" && "bg-emerald-500",
+      {/* The state is a bullet on the far left of the card, like the memories: everything else
+          sits in a column beside it, so the lines under the title line up with the title. */}
+      <span
+        className={cn(
+          "mt-[7px] size-2 shrink-0 rounded-full",
+          state === "running" && "bg-blue-400",
+          state === "failed" && "bg-destructive",
+          state === "paused" && "bg-muted-foreground/60",
+          state === "ok" && "bg-emerald-500",
+        )}
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          {/* The title is a button that stretches over the whole card; the switch sits above it. */}
+          <button
+            type="button"
+            onClick={onOpen}
+            className="min-w-0 flex-1 truncate text-left text-sm font-medium after:absolute after:inset-0 after:content-['']"
+          >
+            {routine.title}
+          </button>
+          <span className="relative z-10">
+            <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
+          </span>
+        </div>
+
+        <Truncate>
+          <p className="truncate text-xs text-muted-foreground">{describeSchedule(routine.schedule, t)}</p>
+        </Truncate>
+
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 rounded-md bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
+            {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+          </span>
+          {state === "running" && (
+            <span className="shrink-0 rounded-md bg-blue-500/15 px-1.5 py-px text-[10px] text-blue-600 dark:text-blue-300">
+              {t("routines.list.runningNow")}
+            </span>
           )}
-          aria-hidden
-        />
-        {/* The title is a button that stretches over the whole card; the switch sits above it. */}
-        <button
-          type="button"
-          onClick={onOpen}
-          className="min-w-0 flex-1 truncate text-left text-sm font-medium after:absolute after:inset-0 after:content-['']"
-        >
-          {routine.title}
-        </button>
-        <span className="relative z-10">
-          <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
-        </span>
-      </div>
-
-      <Truncate>
-        <p className="truncate text-xs text-muted-foreground">{describeSchedule(routine.schedule, t)}</p>
-      </Truncate>
-
-      <div className="flex items-center gap-1.5">
-        <span className="shrink-0 rounded-md bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
-          {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
-        </span>
-        {state === "running" && (
-          <span className="shrink-0 rounded-md bg-blue-500/15 px-1.5 py-px text-[10px] text-blue-600 dark:text-blue-300">
-            {t("routines.list.runningNow")}
-          </span>
-        )}
-        {state === "failed" && (
-          <span className="shrink-0 rounded-md bg-destructive/10 px-1.5 py-px text-[10px] text-destructive">
-            {t("routines.list.failed")}
-          </span>
-        )}
-        {!routine.active && (
-          <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-600 dark:text-amber-400">
-            {t("routines.list.paused")}
-          </span>
-        )}
-        <span className="flex-1" />
-        {next && <span className="shrink-0 text-[11px] text-muted-foreground">{formatWhen(next, i18n.language)}</span>}
+          {state === "failed" && (
+            <span className="shrink-0 rounded-md bg-destructive/10 px-1.5 py-px text-[10px] text-destructive">
+              {t("routines.list.failed")}
+            </span>
+          )}
+          {!routine.active && (
+            <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-600 dark:text-amber-400">
+              {t("routines.list.paused")}
+            </span>
+          )}
+          <span className="flex-1" />
+          {next && <span className="shrink-0 text-[11px] text-muted-foreground">{formatWhen(next, i18n.language)}</span>}
+        </div>
       </div>
     </div>
   )
