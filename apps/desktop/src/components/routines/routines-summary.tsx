@@ -4,8 +4,9 @@ import { Loader2 } from "lucide-react"
 import type { Routine } from "@shared/routines"
 import { upcomingRuns } from "@shared/routines"
 import { cn } from "@/lib/utils"
-import { formatCost, formatDateTimeShort, formatTime } from "@/src/lib/format"
+import { formatCost, formatWhen } from "@/src/lib/format"
 import { useRoutinesStore } from "@/src/stores/routines-store"
+import { useOpenRun } from "./use-open-run"
 
 const DAY_MS = 86_400_000
 /** Rows of each list: enough to read at a glance, the rest is in the list and the agenda. */
@@ -29,6 +30,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
   const { t, i18n } = useTranslation()
   const locale = i18n.language
   const runs = useRoutinesStore((s) => s.runs)
+  const openRun = useOpenRun()
 
   const summary = useMemo(() => {
     const now = Date.now()
@@ -57,9 +59,6 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
       executions: last30.length,
     }
   }, [routines, runs])
-
-  const tomorrow = new Date(summary.now + DAY_MS).getDate()
-  const dayOf = (at: number) => (new Date(at).getDate() === tomorrow ? t("routines.summary.tomorrow") : "")
 
   const kpis = [
     {
@@ -105,7 +104,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
               if (!routine) return null
               return (
                 <Row key={`running:${run.sessionId}`} onClick={() => onSelect(routine.id)}>
-                  <span className="w-16 shrink-0 text-primary">{t("routines.summary.now")}</span>
+                  <span className="w-28 shrink-0 text-primary">{t("routines.summary.now")}</span>
                   <span className="min-w-0 flex-1 truncate">{routine.title}</span>
                   <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
                 </Row>
@@ -113,10 +112,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
             })}
             {summary.upcoming.map(({ routine, at }) => (
               <Row key={`${routine.id}:${at}`} onClick={() => onSelect(routine.id)}>
-                <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
-                  {formatTime(at, locale)}
-                  {dayOf(at) && <span className="ml-1 text-[10px]">{dayOf(at)}</span>}
-                </span>
+                <span className="w-28 shrink-0 tabular-nums text-muted-foreground">{formatWhen(at, locale, summary.now)}</span>
                 <span className="min-w-0 flex-1 truncate">{routine.title}</span>
                 <span className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
@@ -134,8 +130,9 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
           summary.recent.map((run) => {
             const routine = summary.byId.get(run.routineId)
             if (!routine) return null
+            // The row is an execution: it goes to ITS conversation; when that was deleted, to the routine.
             return (
-              <Row key={run.sessionId} onClick={() => onSelect(routine.id)}>
+              <Row key={run.sessionId} onClick={() => (openRun(run.sessionId) ? undefined : onSelect(routine.id))}>
                 <span
                   className={cn(
                     "size-2 shrink-0 rounded-full",
@@ -146,7 +143,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-                <span className="w-28 shrink-0 text-muted-foreground">{formatDateTimeShort(run.startedAt, locale)}</span>
+                <span className="w-28 shrink-0 text-muted-foreground">{formatWhen(run.startedAt, locale)}</span>
                 <span className="w-14 shrink-0 text-right font-medium tabular-nums">{formatCost(run.cost)}</span>
               </Row>
             )

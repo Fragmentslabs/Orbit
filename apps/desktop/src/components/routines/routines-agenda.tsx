@@ -5,7 +5,7 @@ import type { Routine } from "@shared/routines"
 import { upcomingRuns } from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { formatTime } from "@/src/lib/format"
+import { formatHourOfDay, formatTime } from "@/src/lib/format"
 
 /** Pixels per hour of the grid, and the height of one event (about 54 minutes of it). */
 const HOUR_PX = 40
@@ -144,7 +144,7 @@ export function RoutinesAgenda({ routines, selectedId, onSelect }: {
         )}
       </div>
 
-      <div className="grid shrink-0 grid-cols-[2.5rem_repeat(7,minmax(0,1fr))] border-b">
+      <div className="grid shrink-0 grid-cols-[3.25rem_repeat(7,minmax(0,1fr))] border-b">
         <span />
         {week.days.map((d, i) => (
           <span
@@ -158,7 +158,7 @@ export function RoutinesAgenda({ routines, selectedId, onSelect }: {
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[2.5rem_repeat(7,minmax(0,1fr))]" style={{ height: hourCount * HOUR_PX }}>
+        <div className="grid grid-cols-[3.25rem_repeat(7,minmax(0,1fr))]" style={{ height: hourCount * HOUR_PX }}>
           <div className="flex flex-col">
             {Array.from({ length: hourCount }, (_, i) => (
               <span
@@ -166,7 +166,7 @@ export function RoutinesAgenda({ routines, selectedId, onSelect }: {
                 className="box-border border-t pr-1.5 pt-0.5 text-right text-[9px] text-muted-foreground first:border-t-0"
                 style={{ height: HOUR_PX }}
               >
-                {String(layout.from + i).padStart(2, "0")}
+                {formatHourOfDay(layout.from + i, locale)}
               </span>
             ))}
           </div>

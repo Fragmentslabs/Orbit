@@ -2877,7 +2877,9 @@
       "pause": "Pause",
       "activate": "Activate",
       "runsCount_one": "{{count}} execution",
-      "runsCount_other": "{{count}} executions"
+      "runsCount_other": "{{count}} executions",
+      "showMore": "Show all",
+      "showLess": "Show less"
     },
     "agenda": {
       "prev": "Previous week",
@@ -2898,7 +2900,6 @@
       "nextHint": "In the next 24 hours · click to open",
       "nothingNext": "Nothing scheduled for the next 24 hours.",
       "now": "now",
-      "tomorrow": "tomorrow",
       "recent": "Latest executions",
       "noRuns": "No executions yet.",
       "activeOf": "{{active}} of {{total}}",

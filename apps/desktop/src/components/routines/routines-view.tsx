@@ -129,7 +129,7 @@ export function RoutinesView() {
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       {/* Left: the routines, as a list or as the week; the toggle sits with the search. */}
-      <div className="flex min-h-0 w-[36rem] max-w-[58%] shrink-0 flex-col border-r pr-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r pr-4">
         <ListToolbar
           query={query}
           onQueryChange={setQuery}
@@ -163,7 +163,7 @@ export function RoutinesView() {
       </div>
 
       {/* Right: the routine that is open, or — with none — how they are doing and what is next. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 w-[27rem] max-w-[45%] shrink-0 flex-col overflow-y-auto">
         {open ? (
           <RoutineDetail key={open.id} routine={open} onClose={() => setOpen(null)} />
         ) : (
