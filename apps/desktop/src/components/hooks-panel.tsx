@@ -264,7 +264,7 @@ export function HooksPanel({ query = "" }: { query?: string }) {
       ) : (
         <div className="flex flex-col gap-2">
           {visibleHooks.map((hook) => (
-            <div key={hook.id} className={cn("flex items-start gap-3 rounded-lg border p-3", !hook.enabled && "opacity-60")}>
+            <div key={hook.id} className={cn("flex items-start gap-3 rounded-lg border bg-card p-3", !hook.enabled && "opacity-60")}>
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{t(`hooks.event.${hook.event}`)}</span>

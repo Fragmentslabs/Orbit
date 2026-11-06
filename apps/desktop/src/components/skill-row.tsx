@@ -54,7 +54,7 @@ export function SkillRow({
   const showNudge = state === "none" && !builtin && conversations >= NUDGE_AFTER
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
+    <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
       <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
         <Sparkles className="size-4 text-muted-foreground/50" />
       </div>

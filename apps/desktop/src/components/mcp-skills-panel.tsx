@@ -750,7 +750,7 @@ function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: (
       : t("mcp.integrations.download", { name: def.name })
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
+    <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
       {def.icon}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -1100,7 +1100,7 @@ export function McpSkillsPanel() {
             {visibleMcp.map((server) => {
               const active = server.state === "connected"
               return (
-                <div key={server.config.name} className="flex items-start gap-3 rounded-lg border p-3">
+                <div key={server.config.name} className="flex items-start gap-3 rounded-lg border bg-card p-3">
                   <div className={cn("flex size-8 items-center justify-center rounded-full", active ? "bg-emerald-500/10" : "bg-muted")}>
                     <Server className={cn("size-4", active ? "text-emerald-500" : "text-muted-foreground/50")} />
                   </div>
