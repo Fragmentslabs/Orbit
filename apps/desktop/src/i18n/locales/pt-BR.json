@@ -3759,6 +3759,19 @@
       "timeoutHint": "Se passar disso, o comando é encerrado e a chamada segue sem ele. Padrão 10, máximo 60.",
       "commandHintPre": "Recebe a chamada em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 bloqueia e o stderr vira o motivo.",
       "commandHintPost": "Recebe a chamada e o resultado em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 manda o stderr de volta ao agente."
+    },
+    "create": {
+      "hint": "Diga o que deve acontecer sozinho em volta das tools do agente. O modelo escreve o comando e você revisa antes de salvar.",
+      "placeholder": "Toda vez que o agente editar um arquivo TypeScript, rode o prettier nele.",
+      "example1": "Rodar o prettier depois de editar arquivos",
+      "example2": "Bloquear git push --force",
+      "example3": "Registrar todo comando de shell em um arquivo",
+      "generate": "Gerar hook",
+      "generating": "Escrevendo…",
+      "manual": "Preencher manualmente",
+      "noModel": "Escolha um modelo para gerar.",
+      "reviewTitle": "Revise o hook",
+      "reviewHint": "O comando roda sozinho na sua máquina, então confira antes de salvar. Tudo pode ser editado."
     }
   },
   "subchat": {

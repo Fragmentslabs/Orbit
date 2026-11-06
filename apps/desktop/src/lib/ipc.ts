@@ -48,7 +48,7 @@ import type {
 } from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillCard, SkillMetaView, SkillProposal } from "@shared/skills"
-import type { Hook, HookInput, HookWithRun } from "@shared/hooks"
+import type { Hook, HookGenerationResult, HookInput, HookWithRun } from "@shared/hooks"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
 import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
 import type { PanelEvent } from "@/src/stores/panel-store"
@@ -512,6 +512,9 @@ export const hooksApi = {
   update: (id: string, input: HookInput) => window.ipcRenderer.invoke("hooks:update", id, input) as Promise<Hook | null>,
   toggle: (id: string, enabled: boolean) => window.ipcRenderer.invoke("hooks:toggle", id, enabled) as Promise<void>,
   remove: (id: string) => window.ipcRenderer.invoke("hooks:remove", id) as Promise<void>,
+  /** The model writes a hook from a description (nothing is saved until the user confirms the form). */
+  generate: (description: string, model: { providerId: string; modelId: string }, folders: string[], language?: string) =>
+    window.ipcRenderer.invoke("hooks:generate", description, model, folders, language) as Promise<HookGenerationResult>,
 }
 
 export const skillsApi = {

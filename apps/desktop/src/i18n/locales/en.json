@@ -3759,6 +3759,19 @@
       "timeoutHint": "If it runs longer, the command is stopped and the call goes on without it. Default 10, max 60.",
       "commandHintPre": "Receives the call as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 blocks and stderr becomes the reason.",
       "commandHintPost": "Receives the call and its result as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 sends stderr back to the agent."
+    },
+    "create": {
+      "hint": "Say what should happen on its own around the agent's tools. The model writes the command and you review it before saving.",
+      "placeholder": "Every time the agent edits a TypeScript file, run prettier on it.",
+      "example1": "Run prettier after editing files",
+      "example2": "Block git push --force",
+      "example3": "Log every shell command to a file",
+      "generate": "Generate hook",
+      "generating": "Writing…",
+      "manual": "Fill in by hand",
+      "noModel": "Pick a model to generate.",
+      "reviewTitle": "Review the hook",
+      "reviewHint": "The command runs on its own on your machine, so check it before saving. Everything is editable."
     }
   },
   "subchat": {

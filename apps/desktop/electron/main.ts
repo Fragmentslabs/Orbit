@@ -113,6 +113,7 @@ import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSett
 import { forgetApprovals, listLearnedRules, loadApprovalLearning } from './lib/permission/learning'
 import { addTrust, listTrustRules, loadTrustRules, removeTrust } from './lib/permission/trust-rules'
 import { addHook, listHooks, loadHooks, onHooksChanged, removeHook, setHookEnabled, updateHook } from './lib/hooks/store'
+import { generateHook } from './lib/hooks/generator'
 import type { HookInput } from '@shared/hooks'
 import { abortSession, dispatchSend, lastSendInput } from './lib/send-dispatch'
 import { setupComputerPanels } from './lib/computer/panels'
@@ -2667,6 +2668,10 @@ app.whenReady().then(() => {
   ipcMain.handle('hooks:remove', async (_event, id: string) => {
     await removeHook(id)
   })
+  // Like routines:generate: the model writes the hook from a description; nothing is saved
+  // here — the screen shows the command and the user confirms it.
+  ipcMain.handle('hooks:generate', (_event, description: string, model: RoutineModel, folders: string[], language?: string) =>
+    generateHook(description, model, folders, language))
 
   // Background processes
   ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))

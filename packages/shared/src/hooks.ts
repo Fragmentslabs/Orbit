@@ -57,3 +57,8 @@ export function hookMatcher(match: string): RegExp | null {
     return null
   }
 }
+
+/** Result of asking the model to write a hook from a description (like routines:generate). */
+export type HookGenerationResult =
+  | { ok: true; suggestion: HookInput }
+  | { ok: false; error: string }
