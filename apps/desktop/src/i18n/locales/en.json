@@ -3634,19 +3634,6 @@
       "timeoutHint": "If it runs longer, the command is stopped and the call goes on without it. Default 10, max 60.",
       "commandHintPre": "Receives the call as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 blocks and stderr becomes the reason.",
       "commandHintPost": "Receives the call and its result as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 sends stderr back to the agent."
-    },
-    "create": {
-      "hint": "Say what should happen on its own around the agent's tools. The model writes the command and you review it before saving.",
-      "placeholder": "Every time the agent edits a TypeScript file, run prettier on it.",
-      "example1": "Run prettier after editing files",
-      "example2": "Block git push --force",
-      "example3": "Log every shell command to a file",
-      "generate": "Generate hook",
-      "generating": "Writing…",
-      "manual": "Fill in by hand",
-      "noModel": "Pick a model to generate.",
-      "reviewTitle": "Review the hook",
-      "reviewHint": "The command runs on its own on your machine, so check it before saving. Everything is editable."
     }
   },
   "subchat": {
@@ -3760,5 +3747,45 @@
     "youSee": "You see",
     "seesYou": "Sees you",
     "refresh": "Search again"
+  },
+  "askOrbit": {
+    "noModel": "Pick a model to generate.",
+    "generate": "Generate",
+    "generating": "Generating…",
+    "menu": {
+      "manual": "Create manually",
+      "mcp": {
+        "title": "Ask Orbit",
+        "description": "Name the service and the model sets it up",
+        "manualDescription": "Name, type, command or URL"
+      },
+      "skills": {
+        "title": "Ask Orbit",
+        "description": "Describe the skill and the model writes the instructions"
+      },
+      "hooks": {
+        "title": "Ask Orbit",
+        "description": "Describe what should happen and the model writes the command",
+        "manualDescription": "Event, tool and command yourself"
+      }
+    },
+    "mcp": {
+      "title": "Ask Orbit for an MCP server",
+      "description": "Say which service or tool you want to connect. The model sets up the configuration (command or URL) and you fill in the keys and review it in the next step.",
+      "placeholder": "E.g.: connect the GitHub MCP server so the agent can read issues and pull requests.\n\nOr: a local files server restricted to the ~/Documents folder.",
+      "review": "Suggested by Orbit. Replace the values between < > with your keys and check the command before saving."
+    },
+    "skills": {
+      "title": "Ask Orbit for a skill",
+      "description": "Describe what the skill should teach the agent and when to use it. The model writes the name, description and instructions — you review everything in the next step.",
+      "placeholder": "E.g.: a skill to review pull requests my way: check tests, naming and security risks, and answer in short bullets with what blocks the merge.\n\nOr: a skill that writes commit messages as type(scope): sentence.",
+      "review": "Suggested by Orbit. Review the name, description and instructions before saving."
+    },
+    "hooks": {
+      "title": "Ask Orbit for a hook",
+      "description": "Say what should happen on its own around the agent's tools. The model writes the command — you check it in the next step.",
+      "placeholder": "E.g.: every time the agent edits a TypeScript file, run prettier on it.\n\nOr: block any git push --force before it runs.",
+      "review": "Suggested by Orbit. The command runs on its own on your machine, so check it before saving. Everything is editable."
+    }
   }
 }
