@@ -235,7 +235,7 @@ function NewChatButton() {
     // text size of the sidebar rows — SidebarMenuButton's own outline variant has another look.
     <Button
       variant="outline"
-      className="h-8 w-full justify-start gap-2 p-2 text-xs [&_svg:not([class*='size-'])]:size-4"
+      className="h-8 w-full justify-start gap-2 p-2 text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&_svg:not([class*='size-'])]:size-4"
       onClick={() => {
         setView("chat")
         // New session inherits the working folders of the last chat of the mode
@@ -330,7 +330,7 @@ function ModeTabs() {
 
   return (
     <Tabs value={mode} onValueChange={(v) => setMode(v as WorkspaceMode)}>
-      <TabsList className="w-full">
+      <TabsList className="h-10 w-full">
         <TabsTrigger value="chat" className="flex-1 gap-2 px-2">
           <MessageSquare className="size-4" />
           Chat
