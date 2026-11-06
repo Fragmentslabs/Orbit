@@ -51,9 +51,12 @@ function FilterItem({ option, active, onClick }: {
   )
 }
 
-export function MemoryFilters({ groups, label }: { groups: FilterGroup[]; label: string }) {
+export function MemoryFilters({ groups, label, inline }: { groups: FilterGroup[]; label: string; /** Inside a popover (narrow page): no column of its own. */ inline?: boolean }) {
   return (
-    <nav aria-label={label} className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-l pl-3">
+    <nav
+      aria-label={label}
+      className={cn("flex flex-col gap-0.5 overflow-y-auto", inline ? "max-h-[70vh] w-60" : "w-52 shrink-0 border-l pl-3")}
+    >
       {groups.map((group, i) => (
         <div key={group.id} className="flex flex-col gap-0.5">
           {i > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" />}
