@@ -392,6 +392,20 @@ function quitApp(): void {
   app.quit()
 }
 
+// A termination signal is a real exit, never "close the window". On macOS the app is
+// resident (see `before-quit`), and without this a SIGTERM was turned into hiding the
+// window: the old process stayed alive holding the single-instance lock, so in
+// `vite dev` — which restarts Electron by killing the old one with SIGTERM — the new
+// instance found the lock taken and quit, the dev server went down with it and the old
+// window stayed open and black, with nothing behind it. The timer is the way out if some
+// cleanup in `before-quit` hangs, so the lock is never left behind.
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+  process.once(signal, () => {
+    quitApp()
+    setTimeout(() => app.exit(0), 4000).unref()
+  })
+}
+
 function trayHandlers() {
   return { onOpen: showMainWindow, onQuit: quitApp }
 }
