@@ -1012,7 +1012,7 @@ export function McpSkillsPanel() {
               {t("mcp.servers.description")}
             </p>
           </div>
-          <Button size="sm" className="gap-1" onClick={() => { setMcpEdit(undefined); setMcpDialogOpen(true) }}>
+          <Button size="sm" className="h-8 gap-1 px-3 text-xs" onClick={() => { setMcpEdit(undefined); setMcpDialogOpen(true) }}>
             <PlusIcon className="size-3.5" />
             {t("mcp.servers.add")}
           </Button>

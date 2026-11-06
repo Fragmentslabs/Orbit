@@ -202,7 +202,7 @@ export function HooksPanel() {
           <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.description")}</p>
         </div>
         {editing === undefined && (
-          <Button size="sm" className="shrink-0 gap-1" onClick={() => setEditing(null)}>
+          <Button size="sm" className="h-8 shrink-0 gap-1 px-3 text-xs" onClick={() => setEditing(null)}>
             <PlusIcon className="size-3.5" />
             {t("hooks.add")}
           </Button>
