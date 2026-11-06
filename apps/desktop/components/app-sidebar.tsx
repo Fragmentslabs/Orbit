@@ -330,12 +330,12 @@ function ModeTabs() {
 
   return (
     <Tabs value={mode} onValueChange={(v) => setMode(v as WorkspaceMode)}>
-      <TabsList className="h-10 w-full">
-        <TabsTrigger value="chat" className="flex-1 gap-2 px-2">
+      <TabsList className="w-full rounded-xl group-data-horizontal/tabs:h-9">
+        <TabsTrigger value="chat" className="flex-1 gap-2 rounded-lg px-2">
           <MessageSquare className="size-4" />
           Chat
         </TabsTrigger>
-        <TabsTrigger value="code" className="flex-1 gap-2 px-2">
+        <TabsTrigger value="code" className="flex-1 gap-2 rounded-lg px-2">
           <Terminal className="size-4" />
           {t("sidebar.code")}
         </TabsTrigger>
