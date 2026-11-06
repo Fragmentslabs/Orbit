@@ -61,14 +61,14 @@ export function ModelsTab({ data }: { data: AnalyticsSummary }) {
         />
       </div>
       <Card className="overflow-hidden p-0">
-        <div className="grid grid-cols-[1.5rem_minmax(0,1.6fr)_repeat(5,minmax(0,1fr))] gap-2 border-b px-4 py-2 text-[11px] text-muted-foreground">
+        <div className="grid grid-cols-[1.5rem_minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] gap-2 border-b px-4 py-2 text-[11px] text-muted-foreground @[36rem]:grid-cols-[1.5rem_minmax(0,1.6fr)_repeat(5,minmax(0,1fr))]">
           <span />
           <span>{t("usage.models.model")}</span>
           <span className="text-right">{t("analytics.tokens")}</span>
           <span className="text-right">{t("analytics.hours")}</span>
-          <span className="text-right">{t("usage.models.messages")}</span>
+          <span className="hidden text-right @[36rem]:block">{t("usage.models.messages")}</span>
           <span className="text-right">{t("analytics.cost")}</span>
-          <span className="text-right">{t("usage.models.costPerMillion")}</span>
+          <span className="hidden text-right @[36rem]:block">{t("usage.models.costPerMillion")}</span>
         </div>
         {sorted.map((m, i) => {
           const key = modelKeyOf(m)
@@ -77,7 +77,7 @@ export function ModelsTab({ data }: { data: AnalyticsSummary }) {
               key={key}
               type="button"
               onClick={() => setSelected(key)}
-              className="grid w-full grid-cols-[1.5rem_minmax(0,1.6fr)_repeat(5,minmax(0,1fr))] items-center gap-2 border-b px-4 py-3 text-left text-xs tabular-nums transition-colors last:border-b-0 hover:bg-muted/40"
+              className="grid w-full grid-cols-[1.5rem_minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] items-center gap-2 border-b px-4 py-3 @[36rem]:grid-cols-[1.5rem_minmax(0,1.6fr)_repeat(5,minmax(0,1fr))] text-left text-xs tabular-nums transition-colors last:border-b-0 hover:bg-muted/40"
             >
               <span className="text-center text-muted-foreground">{i + 1}</span>
               <span className="flex min-w-0 flex-col gap-1.5">
@@ -94,9 +94,9 @@ export function ModelsTab({ data }: { data: AnalyticsSummary }) {
               </span>
               <span className="text-right">{formatTokens(m.tokens)}</span>
               <span className="text-right">{formatHours(m.hours, locale)}</span>
-              <span className="text-right">{m.messages}</span>
+              <span className="hidden text-right @[36rem]:block">{m.messages}</span>
               <span className="text-right">{formatCost(m.cost)}</span>
-              <span className="text-right">{m.tokens > 0 ? formatCost((m.cost / m.tokens) * 1_000_000) : "—"}</span>
+              <span className="hidden text-right @[36rem]:block">{m.tokens > 0 ? formatCost((m.cost / m.tokens) * 1_000_000) : "—"}</span>
             </button>
           )
         })}
@@ -172,7 +172,7 @@ function ModelDetail({ data, model, color, onBack }: {
         <span className="text-xs text-muted-foreground">{model.providerId}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 @[38rem]:grid-cols-3 @[48rem]:grid-cols-6">
         {kpis.map((k) => (
           <KpiCard key={k.label} label={k.label} value={k.value} meta={k.meta} />
         ))}
@@ -183,7 +183,7 @@ function ModelDetail({ data, model, color, onBack }: {
         <DayBars points={points} metric="hours" height={110} color={color} />
       </Card>
 
-      <div className="grid gap-3 xl:grid-cols-[1fr_1.4fr]">
+      <div className="grid gap-3 @[48rem]:grid-cols-[1fr_1.4fr]">
         <Card>
           <CardHeader title={t("usage.models.whereUsed")} />
           {projects.length === 0 ? (

@@ -49,7 +49,7 @@ export function SessionList({ sessions, data, compact, showDay }: {
 
   const grid = compact
     ? "grid-cols-[4.5rem_minmax(0,1fr)_4.5rem_4.5rem]"
-    : "grid-cols-[6.5rem_minmax(0,1fr)_8rem_9rem_3.5rem_4.5rem_4.5rem]"
+    : "grid-cols-[6.5rem_minmax(0,1fr)_4.5rem_4.5rem] @[44rem]:grid-cols-[6.5rem_minmax(0,1fr)_8rem_9rem_3.5rem_4.5rem_4.5rem]"
 
   return (
     <div>
@@ -72,9 +72,9 @@ export function SessionList({ sessions, data, compact, showDay }: {
           >
             <span className="text-muted-foreground">{when}</span>
             <span className="truncate">{s.title || t("usage.sessions.untitled")}</span>
-            {!compact && <span className="truncate text-muted-foreground">{project ? projectName(project, t) : "—"}</span>}
-            {!compact && <span className="truncate text-muted-foreground">{s.modelId}</span>}
-            {!compact && <span className="text-right text-muted-foreground">{s.messages}</span>}
+            {!compact && <span className="hidden truncate text-muted-foreground @[44rem]:block">{project ? projectName(project, t) : "—"}</span>}
+            {!compact && <span className="hidden truncate text-muted-foreground @[44rem]:block">{s.modelId}</span>}
+            {!compact && <span className="hidden text-right text-muted-foreground @[44rem]:block">{s.messages}</span>}
             <span className="text-right">{formatDuration(s.hours)}</span>
             <span className="text-right font-medium">{formatCost(s.cost)}</span>
           </button>
@@ -133,12 +133,12 @@ export function SessionsTab({ data }: { data: AnalyticsSummary }) {
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_8rem_9rem_3.5rem_4.5rem_4.5rem] gap-2.5 px-4 py-2 text-[11px] text-muted-foreground">
+        <div className="grid grid-cols-[6.5rem_minmax(0,1fr)_4.5rem_4.5rem] gap-2.5 px-4 py-2 text-[11px] text-muted-foreground @[44rem]:grid-cols-[6.5rem_minmax(0,1fr)_8rem_9rem_3.5rem_4.5rem_4.5rem]">
           <span>{t("usage.sessions.when")}</span>
           <span>{t("usage.sessions.session")}</span>
-          <span>{t("usage.projects.project")}</span>
-          <span>{t("usage.models.model")}</span>
-          <span className="text-right">{t("usage.models.messages")}</span>
+          <span className="hidden @[44rem]:block">{t("usage.projects.project")}</span>
+          <span className="hidden @[44rem]:block">{t("usage.models.model")}</span>
+          <span className="hidden text-right @[44rem]:block">{t("usage.models.messages")}</span>
           <span className="text-right">{t("usage.sessions.duration")}</span>
           <span className="text-right">{t("analytics.cost")}</span>
         </div>

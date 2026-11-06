@@ -24,7 +24,7 @@ export function RhythmTab({ data }: { data: AnalyticsSummary }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-3 @[48rem]:grid-cols-2">
         <Card>
           <CardHeader title={t("usage.rhythm.byWeekday")} subtitle={t("usage.rhythm.byWeekdayHint")} />
           <div className="flex flex-col gap-2.5">
