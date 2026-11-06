@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import {
   AlertCircleIcon,
-  ArrowLeftIcon,
   CalendarClockIcon,
   CheckCircle2Icon,
   ExternalLinkIcon,
@@ -14,6 +14,7 @@ import {
   PlayIcon,
   TerminalIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react"
 import type { SessionInfo } from "@shared/chat"
 import type { Routine, RoutineModes, RoutineRun, Schedule } from "@shared/routines"
@@ -51,21 +52,32 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export function RoutineList({ routines, scope, query, onCreateNew }: {
+/** The search of the page: title, prompt or the schedule as the user reads it. */
+export function routineMatches(routine: Routine, query: string, t: TFunction): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return (
+    routine.title.toLowerCase().includes(q) ||
+    routine.prompt.toLowerCase().includes(q) ||
+    describeSchedule(routine.schedule, t).toLowerCase().includes(q)
+  )
+}
+
+export function RoutineList({ routines, scope, query, selectedId, onSelect, onCreateNew }: {
   routines: Routine[]
   scope: "chat" | "code" | "all"
   query: string
+  selectedId: string | null
+  /** A click on the open routine closes it (back to the summary). */
+  onSelect: (id: string | null) => void
   onCreateNew: () => void
 }) {
   const { t } = useTranslation()
-  const setOpen = useRoutinesStore((s) => s.setOpen)
 
-  const sorted = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return [...routines]
-      .filter((r) => !q || r.title.toLowerCase().includes(q) || r.prompt.toLowerCase().includes(q) || describeSchedule(r.schedule, t).toLowerCase().includes(q))
-      .sort((a, b) => b.createdAt - a.createdAt)
-  }, [routines, query, t])
+  const sorted = useMemo(
+    () => routines.filter((r) => routineMatches(r, query, t)).sort((a, b) => b.createdAt - a.createdAt),
+    [routines, query, t],
+  )
 
   if (routines.length === 0) {
     return (
@@ -94,18 +106,37 @@ export function RoutineList({ routines, scope, query, onCreateNew }: {
   }
 
   return (
-    <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-1">
       {sorted.map((routine) => (
-        <RoutineCard key={routine.id} routine={routine} showMode={scope === "all"} onOpen={() => setOpen(routine.id)} />
+        <RoutineCard
+          key={routine.id}
+          routine={routine}
+          showMode={scope === "all"}
+          selected={routine.id === selectedId}
+          onOpen={() => onSelect(routine.id === selectedId ? null : routine.id)}
+        />
       ))}
     </div>
   )
 }
 
-function RoutineCard({ routine, showMode, onOpen }: { routine: Routine; /** The page lists both modes: say which one this is. */ showMode?: boolean; onOpen: () => void }) {
+function RoutineCard({ routine, showMode, selected, onOpen }: {
+  routine: Routine
+  /** The page lists both modes: say which one this is. */
+  showMode?: boolean
+  /** Open in the panel on the right. */
+  selected?: boolean
+  onOpen: () => void
+}) {
   const { t, i18n } = useTranslation()
   const update = useRoutinesStore((s) => s.update)
   const running = useRoutinesStore((s) => s.runs.some((r) => r.routineId === routine.id && r.status === "running"))
+  // The last execution failed: the card says so, instead of waiting for the user to open it.
+  const failed = useRoutinesStore((s) => {
+    let last: RoutineRun | undefined
+    for (const r of s.runs) if (r.routineId === routine.id && (!last || r.startedAt > last.startedAt)) last = r
+    return last?.status === "error"
+  })
   const modelName = useProviderStore(
     (s) => s.catalog[routine.model.providerId]?.models[routine.model.modelId]?.name ?? routine.model.modelId,
   )
@@ -113,7 +144,7 @@ function RoutineCard({ routine, showMode, onOpen }: { routine: Routine; /** The 
   const next = nextRoutineRun(routine)
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-ring">
+    <div className={cn("flex flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-ring", selected && "border-primary/70")}>
       <div className="flex items-center gap-2">
         <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-sm font-medium">
@@ -126,6 +157,11 @@ function RoutineCard({ routine, showMode, onOpen }: { routine: Routine; /** The 
           >
             {routine.mode === "chat" ? <MessageSquareIcon className="size-3" /> : <TerminalIcon className="size-3" />}
             {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+          </span>
+        )}
+        {failed && (
+          <span className="shrink-0 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+            {t("routines.list.failed")}
           </span>
         )}
         {running && (
@@ -263,7 +299,7 @@ function EditRoutineDialog({
  * header (back, title, schedule, switch, run, ellipsis). The list header
  * disappears — whoever is here is inside ONE routine.
  */
-export function RoutineDetail({ routine, onBack }: { routine: Routine; onBack: () => void }) {
+export function RoutineDetail({ routine, onClose }: { routine: Routine; onClose: () => void }) {
   const { t, i18n } = useTranslation()
   const update = useRoutinesStore((s) => s.update)
   const runNow = useRoutinesStore((s) => s.runNow)
@@ -292,9 +328,6 @@ export function RoutineDetail({ routine, onBack }: { routine: Routine; onBack: (
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 items-center gap-2">
-        <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label={t("routines.review.back")}>
-          <ArrowLeftIcon className="size-3.5" />
-        </Button>
         <div className="min-w-0 flex-1">
           <Truncate>
             <h2 className="flex items-center gap-2 truncate text-base font-semibold text-foreground">
@@ -332,6 +365,9 @@ export function RoutineDetail({ routine, onBack }: { routine: Routine; onBack: (
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("routines.detail.close")}>
+          <XIcon className="size-4" />
+        </Button>
       </div>
 
       <div className="shrink-0 space-y-1.5 rounded-lg border bg-card p-3">

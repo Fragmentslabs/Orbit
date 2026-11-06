@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon } from "lucide-react"
+import { SegmentedControl } from "@/components/ui/segmented-control"
 import { useWorkspace } from "@/lib/workspace-context"
 import { ListToolbar } from "@/src/components/list-toolbar"
 import { useViewScope } from "@/src/stores/view-scope-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { CreateRoutineDialog } from "./create-routine-dialog"
-import { RoutineDetail, RoutineList } from "./my-routines"
+import { RoutineDetail, RoutineList, routineMatches } from "./my-routines"
+import { RoutinesAgenda } from "./routines-agenda"
+import { RoutinesSummary } from "./routines-summary"
 
 /**
  * Routines page (in the sidebar, of the chat and code modes). Two levels, like
@@ -21,6 +24,17 @@ import { RoutineDetail, RoutineList } from "./my-routines"
  * header disappears — whoever is there is inside ONE routine, and the header
  * is that routine's.
  */
+type RoutinesLayout = "list" | "agenda"
+const LAYOUT_KEY = "orbit-routines-layout"
+
+function savedLayout(): RoutinesLayout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === "agenda" ? "agenda" : "list"
+  } catch {
+    return "list"
+  }
+}
+
 export function RoutinesView() {
   const { t } = useTranslation()
   const { mode } = useWorkspace()
@@ -38,6 +52,16 @@ export function RoutinesView() {
   // the workspace mode, as it always did.
   const [scope] = useViewScope("routines", mode)
   const [query, setQuery] = useState("")
+  // List or agenda: the choice is remembered between sessions.
+  const [layout, setLayout] = useState<RoutinesLayout>(savedLayout)
+  const chooseLayout = (next: RoutinesLayout) => {
+    setLayout(next)
+    try {
+      localStorage.setItem(LAYOUT_KEY, next)
+    } catch {
+      /* private mode: the choice just does not stick */
+    }
+  }
   const inScope = routines.filter((r) => scope === "all" || r.mode === scope)
   const open = openId ? inScope.find((r) => r.id === openId) : undefined
 
@@ -73,15 +97,39 @@ export function RoutinesView() {
     return <p className="p-6 text-center text-xs text-muted-foreground">{t("routines.loading")}</p>
   }
 
-  if (open) {
-    return <RoutineDetail routine={open} onBack={() => setOpen(null)} />
+  const filtered = inScope.filter((r) => routineMatches(r, query, t))
+
+  const dialog = (
+    <CreateRoutineDialog
+      open={createOpen}
+      onOpenChange={setCreateOpen}
+      onCreated={(id) => setOpen(id)}
+      defaultMode={scope === "all" ? mode : scope}
+    />
+  )
+
+  // With no routine at all the screen is just the empty state with the call to create — a
+  // search field and an empty panel on the side would be noise.
+  if (inScope.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <RoutineList
+          routines={inScope}
+          scope={scope}
+          query=""
+          selectedId={null}
+          onSelect={setOpen}
+          onCreateNew={() => setCreateOpen(true)}
+        />
+        {dialog}
+      </div>
+    )
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* With no routine at all the screen is just the empty state with the call to create —
-          a search field on top of "nothing here" would be noise. */}
-      {inScope.length > 0 && (
+    <div className="flex min-h-0 flex-1 gap-4">
+      {/* Left: the routines, as a list or as the week; the toggle sits with the search. */}
+      <div className="flex min-h-0 w-[36rem] max-w-[58%] shrink-0 flex-col border-r pr-4">
         <ListToolbar
           query={query}
           onQueryChange={setQuery}
@@ -89,17 +137,40 @@ export function RoutinesView() {
           actionLabel={t("routines.list.new")}
           actionIcon={PlusIcon}
           onAction={() => setCreateOpen(true)}
-        />
-      )}
+        >
+          <SegmentedControl<RoutinesLayout>
+            size="sm"
+            value={layout}
+            onChange={chooseLayout}
+            options={[
+              { value: "list", label: t("routines.view.list") },
+              { value: "agenda", label: t("routines.view.agenda") },
+            ]}
+          />
+        </ListToolbar>
+        {layout === "list" ? (
+          <RoutineList
+            routines={inScope}
+            scope={scope}
+            query={query}
+            selectedId={open?.id ?? null}
+            onSelect={setOpen}
+            onCreateNew={() => setCreateOpen(true)}
+          />
+        ) : (
+          <RoutinesAgenda routines={filtered} selectedId={open?.id ?? null} onSelect={(id) => setOpen(id === open?.id ? null : id)} />
+        )}
+      </div>
 
-      <RoutineList routines={inScope} scope={scope} query={query} onCreateNew={() => setCreateOpen(true)} />
-
-      <CreateRoutineDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={(id) => setOpen(id)}
-        defaultMode={scope === "all" ? mode : scope}
-      />
+      {/* Right: the routine that is open, or — with none — how they are doing and what is next. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {open ? (
+          <RoutineDetail key={open.id} routine={open} onClose={() => setOpen(null)} />
+        ) : (
+          <RoutinesSummary routines={inScope} onSelect={setOpen} />
+        )}
+      </div>
+      {dialog}
     </div>
   )
 }

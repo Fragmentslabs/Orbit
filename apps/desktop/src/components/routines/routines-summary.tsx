@@ -1,0 +1,164 @@
+import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
+import { AlertCircleIcon, CheckCircle2Icon, Loader2 } from "lucide-react"
+import type { Routine } from "@shared/routines"
+import { upcomingRuns } from "@shared/routines"
+import { cn } from "@/lib/utils"
+import { formatCost, formatDateTimeShort, formatTime } from "@/src/lib/format"
+import { useRoutinesStore } from "@/src/stores/routines-store"
+
+const DAY_MS = 86_400_000
+/** Rows of each list: enough to read at a glance, the rest is in the list and the agenda. */
+const MAX_ROWS = 6
+
+function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border bg-card p-3.5">
+      <p className="text-[13px] font-semibold">{title}</p>
+      {subtitle && <p className="mb-1 text-[11px] text-muted-foreground">{subtitle}</p>}
+      <div className={cn(!subtitle && "mt-1")}>{children}</div>
+    </div>
+  )
+}
+
+/**
+ * What the page shows on the right while no routine is open: how the routines are doing
+ * (active, failures, spend) and what is coming and what just ran. Every row opens its routine.
+ */
+export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; onSelect: (id: string) => void }) {
+  const { t, i18n } = useTranslation()
+  const locale = i18n.language
+  const runs = useRoutinesStore((s) => s.runs)
+
+  const summary = useMemo(() => {
+    const now = Date.now()
+    const byId = new Map(routines.map((r) => [r.id, r]))
+    const mine = runs.filter((r) => byId.has(r.routineId))
+
+    const running = mine.filter((r) => r.status === "running")
+    const upcoming = routines
+      .flatMap((routine) => upcomingRuns(routine, now, now + DAY_MS, { limit: 12 }).map((at) => ({ routine, at })))
+      .sort((a, b) => a.at - b.at)
+
+    const recent = [...mine].sort((a, b) => b.startedAt - a.startedAt).slice(0, MAX_ROWS)
+    const last30 = mine.filter((r) => r.startedAt >= now - 30 * DAY_MS)
+    const failures = mine.filter((r) => r.status === "error" && r.startedAt >= now - 7 * DAY_MS)
+
+    return {
+      now,
+      byId,
+      running,
+      upcoming: upcoming.slice(0, MAX_ROWS),
+      recent,
+      active: routines.filter((r) => r.active).length,
+      failures: failures.length,
+      failedRoutines: new Set(failures.map((r) => byId.get(r.routineId)?.title).filter(Boolean)).size,
+      cost: last30.reduce((s, r) => s + r.cost, 0),
+      executions: last30.length,
+    }
+  }, [routines, runs])
+
+  const tomorrow = new Date(summary.now + DAY_MS).getDate()
+  const dayOf = (at: number) => (new Date(at).getDate() === tomorrow ? t("routines.summary.tomorrow") : "")
+
+  const kpis = [
+    {
+      label: t("routines.summary.active"),
+      value: `${summary.active}/${routines.length}`,
+      meta: t("routines.summary.paused", { count: routines.length - summary.active }),
+    },
+    {
+      label: t("routines.summary.failures"),
+      value: String(summary.failures),
+      meta: t("routines.summary.failuresMeta", { count: summary.failedRoutines }),
+    },
+    {
+      label: t("routines.summary.spent"),
+      value: formatCost(summary.cost),
+      meta: t("routines.summary.executions", { count: summary.executions }),
+    },
+  ]
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-3 gap-3">
+        {kpis.map((k) => (
+          <div key={k.label} className="flex flex-col gap-0.5 rounded-xl border bg-card px-3.5 py-3">
+            <span className="text-[11px] text-muted-foreground">{k.label}</span>
+            <span className="text-lg font-semibold tabular-nums">{k.value}</span>
+            <span className="text-[11px] text-muted-foreground">{k.meta}</span>
+          </div>
+        ))}
+      </div>
+
+      <Card title={t("routines.summary.next")} subtitle={t("routines.summary.nextHint")}>
+        {summary.running.length === 0 && summary.upcoming.length === 0 ? (
+          <p className="py-2 text-[11px] text-muted-foreground">{t("routines.summary.nothingNext")}</p>
+        ) : (
+          <>
+            {summary.running.map((run) => {
+              const routine = summary.byId.get(run.routineId)
+              if (!routine) return null
+              return (
+                <Row key={`running:${run.sessionId}`} onClick={() => onSelect(routine.id)}>
+                  <span className="w-16 shrink-0 text-primary">{t("routines.summary.now")}</span>
+                  <span className="min-w-0 flex-1 truncate">{routine.title}</span>
+                  <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+                </Row>
+              )
+            })}
+            {summary.upcoming.map(({ routine, at }) => (
+              <Row key={`${routine.id}:${at}`} onClick={() => onSelect(routine.id)}>
+                <span className="w-16 shrink-0 tabular-nums text-muted-foreground">
+                  {formatTime(at, locale)}
+                  {dayOf(at) && <span className="ml-1 text-[10px]">{dayOf(at)}</span>}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{routine.title}</span>
+                <span className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+                </span>
+              </Row>
+            ))}
+          </>
+        )}
+      </Card>
+
+      <Card title={t("routines.summary.recent")}>
+        {summary.recent.length === 0 ? (
+          <p className="py-2 text-[11px] text-muted-foreground">{t("routines.summary.noRuns")}</p>
+        ) : (
+          summary.recent.map((run) => {
+            const routine = summary.byId.get(run.routineId)
+            if (!routine) return null
+            return (
+              <Row key={run.sessionId} onClick={() => onSelect(routine.id)}>
+                {run.status === "running" ? (
+                  <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+                ) : run.status === "error" ? (
+                  <AlertCircleIcon className="size-3.5 shrink-0 text-destructive" />
+                ) : (
+                  <CheckCircle2Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="min-w-0 flex-1 truncate">{routine.title}</span>
+                <span className="shrink-0 text-muted-foreground">{formatDateTimeShort(run.startedAt, locale)}</span>
+                <span className="w-14 shrink-0 text-right tabular-nums">{formatCost(run.cost)}</span>
+              </Row>
+            )
+          })
+        )}
+      </Card>
+    </div>
+  )
+}
+
+function Row({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 border-t py-2 text-left text-xs transition-colors first:border-t-0 hover:bg-muted/40"
+    >
+      {children}
+    </button>
+  )
+}
