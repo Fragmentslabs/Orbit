@@ -263,17 +263,10 @@ function PipelineButton() {
   const active = view === "pipeline"
   if (mode !== "code") return null
   return (
-    <Button
-      variant="ghost"
-      className={cn(
-        "w-full justify-start gap-2 text-sm",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-      onClick={() => setView(active ? "chat" : "pipeline")}
-    >
+    <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "pipeline")}>
       <Layers className="size-4" />
       {t("pipeline.title")}
-    </Button>
+    </SidebarMenuButton>
   )
 }
 
@@ -285,17 +278,10 @@ function RoutinesButton() {
   const { view, setView } = useWorkspace()
   const active = view === "routines"
   return (
-    <Button
-      variant="ghost"
-      className={cn(
-        "w-full justify-start gap-2 text-sm",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-      onClick={() => setView(active ? "chat" : "routines")}
-    >
+    <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "routines")}>
       <CalendarClock className="size-4" />
       {t("routines.title")}
-    </Button>
+    </SidebarMenuButton>
   )
 }
 
@@ -304,17 +290,10 @@ function MemoriesButton() {
   const { view, setView } = useWorkspace()
   const active = view === "memories"
   return (
-    <Button
-      variant="ghost"
-      className={cn(
-        "w-full justify-start gap-2 text-sm",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-      onClick={() => setView(active ? "chat" : "memories")}
-    >
+    <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "memories")}>
       <BrainCircuit className="size-4" />
       {t("sidebar.memories")}
-    </Button>
+    </SidebarMenuButton>
   )
 }
 
@@ -324,17 +303,10 @@ function McpSkillsButton() {
   if (mode !== "code") return null
   const active = view === "tools"
   return (
-    <Button
-      variant="ghost"
-      className={cn(
-        "w-full justify-start gap-2 text-sm",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-      onClick={() => setView(active ? "chat" : "tools")}
-    >
+    <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "tools")}>
       <Puzzle className="size-4" />
       {t("sidebar.tools")}
-    </Button>
+    </SidebarMenuButton>
   )
 }
 
@@ -343,17 +315,10 @@ function UsageButton() {
   const { view, setView } = useWorkspace()
   const active = view === "analytics"
   return (
-    <Button
-      variant="ghost"
-      className={cn(
-        "w-full justify-start gap-2 text-sm",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-      onClick={() => setView(active ? "chat" : "analytics")}
-    >
+    <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "analytics")}>
       <BarChart3 className="size-4" />
       {t("sidebar.usage")}
-    </Button>
+    </SidebarMenuButton>
   )
 }
 
