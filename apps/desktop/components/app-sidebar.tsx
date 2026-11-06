@@ -231,9 +231,8 @@ function NewChatButton() {
   const { mode, setView, setFolders } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   return (
-    <Button
+    <SidebarMenuButton
       variant="outline"
-      className="w-full justify-start gap-2 text-sm"
       onClick={() => {
         setView("chat")
         // New session inherits the working folders of the last chat of the mode
@@ -248,7 +247,7 @@ function NewChatButton() {
     >
       <Plus className="size-4" />
       {mode === "chat" ? t("sidebar.newChat") : t("sidebar.newSession")}
-    </Button>
+    </SidebarMenuButton>
   )
 }
 
@@ -329,12 +328,12 @@ function ModeTabs() {
   return (
     <Tabs value={mode} onValueChange={(v) => setMode(v as WorkspaceMode)}>
       <TabsList className="w-full">
-        <TabsTrigger value="chat" className="flex-1 gap-1.5">
-          <MessageSquare className="size-3.5" />
+        <TabsTrigger value="chat" className="flex-1 gap-2 px-2">
+          <MessageSquare className="size-4" />
           Chat
         </TabsTrigger>
-        <TabsTrigger value="code" className="flex-1 gap-1.5">
-          <Terminal className="size-3.5" />
+        <TabsTrigger value="code" className="flex-1 gap-2 px-2">
+          <Terminal className="size-4" />
           {t("sidebar.code")}
         </TabsTrigger>
       </TabsList>
