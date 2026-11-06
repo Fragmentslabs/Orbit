@@ -11,6 +11,7 @@ import {
   KeyRound,
   LoaderCircle,
   PenLine,
+  Pencil,
   PlusIcon,
   RefreshCw,
   Search,
@@ -43,6 +44,7 @@ import {
 import { cn } from "@/lib/utils"
 import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
 import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { HooksPanel } from "@/src/components/hooks-panel"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
@@ -1184,26 +1186,35 @@ export function McpSkillsPanel() {
                       </Button>
                       </Hint>
                     )}
-                    <Hint label={t("mcp.servers.reconnect")}>
-                      <Button size="icon-sm" variant="ghost"  disabled={busy === server.config.name} onClick={() => void runServerAction(server.config.name, () => mcpApi.reconnect(server.config.name))}>
-                        <RefreshCw className={cn("size-3.5", busy === server.config.name && "animate-spin")} />
-                      </Button>
-                    </Hint>
-                    <Hint label={t("mcp.servers.edit")}>
-                      <Button size="icon-sm" variant="ghost"  onClick={() => { setMcpEdit(server.config); setMcpDraft(false); setMcpDialogOpen(true) }}>
-                        <ExternalLink className="size-3.5" />
-                      </Button>
-                    </Hint>
-                    <Hint label={t("mcp.servers.remove")}>
-                      <Button size="icon-sm" variant="ghost"  className="text-destructive hover:text-destructive" onClick={async () => {
-                        const config = await mcpApi.config()
-                        config.servers = config.servers.filter((s) => s.name !== server.config.name)
-                        await mcpApi.save(config)
-                        await refresh()
-                      }}>
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </Hint>
+                    <CardMenu
+                      items={[
+                        {
+                          id: "reconnect",
+                          label: t("mcp.servers.reconnect"),
+                          icon: RefreshCw,
+                          disabled: busy === server.config.name,
+                          onSelect: () => void runServerAction(server.config.name, () => mcpApi.reconnect(server.config.name)),
+                        },
+                        {
+                          id: "edit",
+                          label: t("mcp.servers.edit"),
+                          icon: Pencil,
+                          onSelect: () => { setMcpEdit(server.config); setMcpDraft(false); setMcpDialogOpen(true) },
+                        },
+                        {
+                          id: "remove",
+                          label: t("mcp.servers.remove"),
+                          icon: Trash2,
+                          destructive: true,
+                          onSelect: async () => {
+                            const config = await mcpApi.config()
+                            config.servers = config.servers.filter((s) => s.name !== server.config.name)
+                            await mcpApi.save(config)
+                            await refresh()
+                          },
+                        },
+                      ]}
+                    />
                   </div>
                 </div>
               )

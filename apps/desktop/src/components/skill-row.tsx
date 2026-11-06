@@ -1,8 +1,7 @@
 import { useTranslation } from "react-i18next"
-import { EyeOff, FileText, LoaderCircle, Pencil, Pin, Sparkles, Trash2, Wand2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { FileText, LoaderCircle, Pencil, Sparkles, Trash2, Wand2 } from "lucide-react"
 import { Hint } from "@/components/ui/hint"
-import { cn } from "@/lib/utils"
+import { CardMenu } from "@/src/components/card-menu"
 import type { Skill, SkillMetaView } from "@shared/skills"
 
 /** How many uses without a card before the row nudges the user to optimize. */
@@ -76,6 +75,17 @@ export function SkillRow({
               </span>
             </Hint>
           )}
+          {pinned && (
+            <Hint label={t("mcp.skills.pinHint")}>
+              <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">{t("mcp.skills.pin")}</span>
+            </Hint>
+          )}
+          {never && (
+            <Hint label={t("mcp.skills.neverHint")}>
+              <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{t("mcp.skills.never")}</span>
+            </Hint>
+          )}
+          {optimizing && <LoaderCircle className="size-3 animate-spin text-primary" aria-label={t("mcp.skills.optimize")} />}
           {!builtin && state === "none" && (
             <Hint label={t("mcp.skills.noCardHint")}>
               <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
@@ -108,61 +118,31 @@ export function SkillRow({
             {showNudge && ` · ${t("mcp.skills.optimizeNudge", { count: conversations })}`}
           </p>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-1 h-auto p-0 text-[10px] text-muted-foreground hover:text-foreground"
-          onClick={onView}
-        >
-          <FileText className="mr-1 size-3" />
-          {t("mcp.skills.viewContent")}
-        </Button>
       </div>
-      {/* Native skills are read-only: to customize, the user creates their own with the
-          same slug (the global one overrides the native one). */}
-      {!builtin && (
-        <div className="flex items-center gap-1 self-start pt-1">
-          <Hint label={t("mcp.skills.pinHint")}>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-pressed={pinned}
-              aria-label={t("mcp.skills.pin")}
-              className={cn(pinned && "text-foreground")}
-              onClick={onTogglePin}
-            >
-              <Pin className={cn("size-3.5", pinned ? "fill-current" : "text-muted-foreground")} />
-            </Button>
-          </Hint>
-          <Hint label={t("mcp.skills.neverHint")}>
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-pressed={never}
-              aria-label={t("mcp.skills.never")}
-              className={cn(never && "text-foreground")}
-              onClick={onToggleNever}
-            >
-              <EyeOff className={cn("size-3.5", !never && "text-muted-foreground")} />
-            </Button>
-          </Hint>
-          <Hint label={languageDiffers && state === "valid" ? t("mcp.skills.optimizeInLanguage") : state === "valid" ? t("mcp.skills.reoptimize") : t("mcp.skills.optimize")}>
-            <Button size="icon-sm" variant="ghost" disabled={optimizing} onClick={onOptimize}>
-              {optimizing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
-            </Button>
-          </Hint>
-          <Hint label={t("mcp.skills.edit")}>
-            <Button size="icon-sm" variant="ghost" onClick={onEdit}>
-              <Pencil className="size-3.5" />
-            </Button>
-          </Hint>
-          <Hint label={t("mcp.skills.remove")}>
-            <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={onRemove}>
-              <Trash2 className="size-3.5" />
-            </Button>
-          </Hint>
-        </div>
-      )}
+      {/* One button for everything else. The state the user wants to see at a glance (pinned,
+          hidden from suggestions, being optimized) is a badge on the card. Native skills are
+          read-only: to customize, the user creates their own with the same slug (the global one
+          overrides the native one), so their menu only opens the content. */}
+      <CardMenu
+        items={[
+          { id: "view", label: t("mcp.skills.viewContent"), icon: FileText, onSelect: onView },
+          ...(builtin
+            ? []
+            : [
+                { id: "pin", label: t("mcp.skills.pin"), checked: pinned, onSelect: onTogglePin },
+                { id: "never", label: t("mcp.skills.never"), checked: never, onSelect: onToggleNever },
+                {
+                  id: "optimize",
+                  label: languageDiffers && state === "valid" ? t("mcp.skills.optimizeInLanguage") : state === "valid" ? t("mcp.skills.reoptimize") : t("mcp.skills.optimize"),
+                  icon: Wand2,
+                  disabled: optimizing,
+                  onSelect: onOptimize,
+                },
+                { id: "edit", label: t("mcp.skills.edit"), icon: Pencil, onSelect: onEdit },
+                { id: "remove", label: t("mcp.skills.remove"), icon: Trash2, destructive: true, onSelect: onRemove },
+              ]),
+        ]}
+      />
     </div>
   )
 }
