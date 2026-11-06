@@ -231,8 +231,11 @@ function NewChatButton() {
   const { mode, setView, setFolders } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   return (
-    <SidebarMenuButton
+    // The original outline Button (its background and border), with the height, padding and
+    // text size of the sidebar rows — SidebarMenuButton's own outline variant has another look.
+    <Button
       variant="outline"
+      className="h-8 w-full justify-start gap-2 p-2 text-xs [&_svg:not([class*='size-'])]:size-4"
       onClick={() => {
         setView("chat")
         // New session inherits the working folders of the last chat of the mode
@@ -247,7 +250,7 @@ function NewChatButton() {
     >
       <Plus className="size-4" />
       {mode === "chat" ? t("sidebar.newChat") : t("sidebar.newSession")}
-    </SidebarMenuButton>
+    </Button>
   )
 }
 
