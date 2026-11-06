@@ -18,6 +18,7 @@ import {
   formatMetric,
   modelKeyOf,
   percent,
+  pickMetric,
   projectName,
   SERIES_COLORS,
   spanOfDays,
@@ -46,20 +47,23 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
   const modelColors = useMemo(() => colorsByModel(data.byModel), [data.byModel])
   const previous = data.previous
 
+  // The same metric as the "usage per day" chart rules the rankings: change it there and the
+  // models and the projects are read by tokens, hours or cost too.
+  const totalOf = { hours: data.totalHours, tokens: data.totalTokens, cost: data.totalCost }[metric]
+
   const modelRows = useMemo(() => {
-    const sorted = [...data.byModel].sort((a, b) => b.tokens - a.tokens)
+    const sorted = [...data.byModel].sort((a, b) => pickMetric(b, metric) - pickMetric(a, metric))
     const top = sorted.slice(0, TOP)
     const rest = sorted.slice(TOP)
-    const restTokens = rest.reduce((s, m) => s + m.tokens, 0)
-    return { top, rest, restTokens }
-  }, [data.byModel])
+    return { top, rest, restValue: rest.reduce((s, m) => s + pickMetric(m, metric), 0) }
+  }, [data.byModel, metric])
 
   const projectRows = useMemo(() => {
-    const sorted = [...data.byProject].sort((a, b) => b.hours - a.hours)
+    const sorted = [...data.byProject].sort((a, b) => pickMetric(b, metric) - pickMetric(a, metric))
     const top = sorted.slice(0, TOP)
     const rest = sorted.slice(TOP)
-    return { top, rest, restHours: rest.reduce((s, p) => s + p.hours, 0) }
-  }, [data.byProject])
+    return { top, rest, restValue: rest.reduce((s, p) => s + pickMetric(p, metric), 0) }
+  }, [data.byProject, metric])
 
   const nameOfProject = (id: string) => {
     const p = data.byProject.find((x) => x.projectId === id)
@@ -97,7 +101,7 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
   ]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard
           label={t("usage.cards.tokens")}
@@ -151,7 +155,7 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
         <DayBars points={series} metric={metric} />
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <Card className="flex flex-col">
           <CardHeader
             title={t("usage.models.title")}
@@ -165,16 +169,16 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
             <ShareRow
               key={modelKeyOf(m)}
               name={m.modelId}
-              value={formatTokens(m.tokens)}
-              pct={percent(m.tokens, data.totalTokens)}
+              value={formatMetric(pickMetric(m, metric), metric, locale)}
+              pct={percent(pickMetric(m, metric), totalOf)}
               color={modelColors.get(modelKeyOf(m)) ?? OTHERS_COLOR}
             />
           ))}
           {modelRows.rest.length > 0 && (
             <ShareRow
               name={t("usage.others", { count: modelRows.rest.length })}
-              value={formatTokens(modelRows.restTokens)}
-              pct={percent(modelRows.restTokens, data.totalTokens)}
+              value={formatMetric(modelRows.restValue, metric, locale)}
+              pct={percent(modelRows.restValue, totalOf)}
               color={OTHERS_COLOR}
             />
           )}
@@ -193,28 +197,28 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
             <ShareRow
               key={p.projectId}
               name={projectName(p, t)}
-              value={formatHours(p.hours, locale)}
-              pct={percent(p.hours, data.totalHours)}
+              value={formatMetric(pickMetric(p, metric), metric, locale)}
+              pct={percent(pickMetric(p, metric), totalOf)}
               color={SERIES_COLORS[0]}
             />
           ))}
           {projectRows.rest.length > 0 && (
             <ShareRow
               name={t("usage.others", { count: projectRows.rest.length })}
-              value={formatHours(projectRows.restHours, locale)}
-              pct={percent(projectRows.restHours, data.totalHours)}
+              value={formatMetric(projectRows.restValue, metric, locale)}
+              pct={percent(projectRows.restValue, totalOf)}
               color={OTHERS_COLOR}
             />
           )}
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
-        {data.year ? <ActivityCard year={data.year} metric={metric} /> : null}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_16rem]">
+        {data.year ? <ActivityCard year={data.year} projects={data.yearProjects} metric={metric} /> : null}
         <Card className="flex flex-col gap-1">
-          <p className="mb-1 text-sm font-semibold">{t("usage.averages.title")}</p>
+          <p className="mb-1 text-[13px] font-semibold">{t("usage.averages.title")}</p>
           {averages.map((a) => (
-            <div key={a.label} className="flex justify-between gap-2 border-b py-1.5 text-xs last:border-b-0">
+            <div key={a.label} className="flex justify-between gap-2 border-b py-1 text-[11px] last:border-b-0">
               <span className="text-muted-foreground">{a.label}</span>
               <span className="text-right tabular-nums">{a.value}</span>
             </div>
@@ -227,10 +231,10 @@ export function OverviewTab({ data, onNavigate }: { data: AnalyticsSummary; onNa
 
       {insights.length > 0 && (
         <Card>
-          <p className="mb-2 text-sm font-semibold">{t("usage.insights.title")}</p>
-          <ul className="grid gap-x-8 gap-y-2 text-xs text-foreground/85 lg:grid-cols-2">
+          <p className="mb-2 text-[13px] font-semibold">{t("usage.insights.title")}</p>
+          <ul className="grid gap-x-8 gap-y-1.5 text-[11px] text-foreground/80 lg:grid-cols-2">
             {insights.map((insight) => (
-              <li key={insight.key} className="flex items-baseline gap-2.5 leading-relaxed">
+              <li key={insight.key} className="flex items-baseline gap-2 leading-snug">
                 <span className="size-1.5 shrink-0 -translate-y-px rounded-full bg-primary" aria-hidden />
                 {t(`usage.insights.${insight.key}`, insight.params)}
               </li>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { cn } from "@/lib/utils"
 import { formatCost, formatTokens } from "@/src/lib/format"
-import { Card, CardHeader, DayBars, EmptyNote, ShareRow } from "./usage-ui"
+import { Card, CardHeader, DayBars, EmptyNote, KpiCard, ShareRow } from "./usage-ui"
 import { SessionList } from "./sessions-tab"
 import {
   type Metric,
@@ -46,8 +46,8 @@ export function ModelsTab({ data }: { data: AnalyticsSummary }) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{t("usage.models.title")}</p>
-          <p className="text-xs text-muted-foreground">{t("usage.models.hint")}</p>
+          <p className="text-[13px] font-semibold">{t("usage.models.title")}</p>
+          <p className="text-[11px] text-muted-foreground">{t("usage.models.hint")}</p>
         </div>
         <SegmentedControl<Metric>
           size="sm"
@@ -82,7 +82,7 @@ export function ModelsTab({ data }: { data: AnalyticsSummary }) {
               <span className="text-center text-muted-foreground">{i + 1}</span>
               <span className="flex min-w-0 flex-col gap-1.5">
                 <span className="flex items-baseline gap-2">
-                  <span className="truncate text-[13px] font-medium">{m.modelId}</span>
+                  <span className="truncate text-xs font-medium">{m.modelId}</span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">{m.providerId}</span>
                 </span>
                 <span className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -162,23 +162,19 @@ function ModelDetail({ data, model, color, onBack }: {
   ]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <Button size="sm" variant="outline" className="gap-1" onClick={onBack}>
           <ArrowLeft className="size-3" /> {t("usage.models.back")}
         </Button>
         <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} aria-hidden />
-        <span className="text-base font-semibold">{model.modelId}</span>
+        <span className="text-sm font-semibold">{model.modelId}</span>
         <span className="text-xs text-muted-foreground">{model.providerId}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {kpis.map((k) => (
-          <Card key={k.label} className="flex flex-col gap-0.5 px-3.5 py-3">
-            <span className="text-[11px] text-muted-foreground">{k.label}</span>
-            <span className="text-lg font-semibold tabular-nums">{k.value}</span>
-            <span className="text-[11px] text-muted-foreground">{k.meta}</span>
-          </Card>
+          <KpiCard key={k.label} label={k.label} value={k.value} meta={k.meta} />
         ))}
       </div>
 
@@ -187,7 +183,7 @@ function ModelDetail({ data, model, color, onBack }: {
         <DayBars points={points} metric="hours" height={110} color={color} />
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
+      <div className="grid gap-3 xl:grid-cols-[1fr_1.4fr]">
         <Card>
           <CardHeader title={t("usage.models.whereUsed")} />
           {projects.length === 0 ? (
@@ -205,7 +201,7 @@ function ModelDetail({ data, model, color, onBack }: {
           )}
         </Card>
         <Card className="overflow-hidden p-0">
-          <p className={cn("px-4 pb-2 pt-4 text-sm font-semibold")}>{t("usage.models.recentSessions")}</p>
+          <p className={cn("px-3.5 pb-2 pt-3.5 text-[13px] font-semibold")}>{t("usage.models.recentSessions")}</p>
           <SessionList sessions={sessions} data={data} compact />
         </Card>
       </div>

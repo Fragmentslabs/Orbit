@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { AnalyticsDay } from "@shared/analytics"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
   type Metric,
@@ -12,18 +13,18 @@ import {
   formatMetric,
   parseDay,
 } from "./usage-utils"
-import { formatCost } from "@/src/lib/format"
+import { formatCost, formatTokens } from "@/src/lib/format"
 
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("rounded-xl border bg-card p-4", className)}>{children}</div>
+  return <div className={cn("rounded-xl border bg-card p-3.5", className)}>{children}</div>
 }
 
 export function CardHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="mb-3 flex items-center gap-3">
+    <div className="mb-2.5 flex items-center gap-3">
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{title}</p>
-        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+        <p className="text-[13px] font-semibold">{title}</p>
+        {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -51,7 +52,7 @@ export function Delta({ current, previous, lowerIsBetter }: { current: number; p
 export function Sparkline({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(...values, Number.EPSILON)
   return (
-    <div className="flex h-9 items-end gap-0.5" aria-hidden>
+    <div className="flex h-7 items-end gap-0.5" aria-hidden>
       {values.map((v, i) => (
         <span
           key={i}
@@ -71,11 +72,11 @@ export function StatCard({ label, value, footer, spark, color }: {
   color: string
 }) {
   return (
-    <Card className="flex items-end justify-between gap-2 px-4 py-3.5">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="text-2xl font-semibold tracking-tight tabular-nums">{value}</span>
-        <span className="text-xs">{footer}</span>
+    <Card className="flex items-end justify-between gap-2 px-3.5 py-3">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[11px] text-muted-foreground">{label}</span>
+        <span className="text-lg font-semibold tabular-nums">{value}</span>
+        <span className="text-[11px]">{footer}</span>
       </div>
       {spark && spark.length > 1 && <Sparkline values={spark} color={color} />}
     </Card>
@@ -108,7 +109,7 @@ export function ShareRow({ name, sub, value, pct, color, onClick }: {
       <span className="w-16 shrink-0 text-right font-semibold tabular-nums">{value}</span>
     </>
   )
-  const cls = "flex items-center gap-3 border-b py-2.5 last:border-b-0"
+  const cls = "flex items-center gap-3 border-b py-2 text-xs last:border-b-0"
   return onClick ? (
     <button type="button" onClick={onClick} className={cn(cls, "w-full text-left transition-colors hover:bg-muted/40")}>
       {body}
@@ -118,12 +119,23 @@ export function ShareRow({ name, sub, value, pct, color, onClick }: {
   )
 }
 
+/** The small number card of every section: label, value, a line of context. */
+export function KpiCard({ label, value, meta }: { label: string; value: string; meta?: string }) {
+  return (
+    <Card className="flex flex-col gap-0.5 px-3.5 py-3">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-lg font-semibold tabular-nums">{value}</span>
+      {meta && <span className="text-[11px] text-muted-foreground">{meta}</span>}
+    </Card>
+  )
+}
+
 export function EmptyNote({ children }: { children: React.ReactNode }) {
   return <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{children}</p>
 }
 
 /** Bars of one value per day (or per week, when the period is long). */
-export function DayBars({ points, metric, height = 150, color }: {
+export function DayBars({ points, metric, height = 110, color }: {
   points: SeriesPoint[]
   metric: Metric
   height?: number
@@ -158,6 +170,13 @@ export function DayBars({ points, metric, height = 150, color }: {
   )
 }
 
+/** Cell size and gaps of the grid, in px — the width that decides how many weeks fit. */
+const CELL = 10
+const CELL_GAP = 2
+const MAX_WEEKS = 53
+const WEEKDAY_COLUMN = 26
+const COLUMN_GAP = 6
+
 const LEVELS = ["bg-muted", "bg-primary/20", "bg-primary/40", "bg-primary/65", "bg-primary"]
 
 /**
@@ -165,21 +184,42 @@ const LEVELS = ["bg-muted", "bg-primary/20", "bg-primary/40", "bg-primary/65", "
  * columns (Sunday on top), months along the top. The square's intensity is relative to the
  * most intense day of the metric chosen; clicking a day opens its detail below.
  */
-export function ActivityCard({ year, metric, subtitle }: { year: AnalyticsDay[]; metric: Metric; subtitle?: string }) {
+export function ActivityCard({ year, projects, metric }: {
+  year: AnalyticsDay[]
+  /** Names of the projects that appear in the year (the day opens as badges). */
+  projects?: Array<{ projectId: string; name: string; directory?: string }>
+  metric: Metric
+}) {
   const { t, i18n } = useTranslation()
   const locale = i18n.language
   const [selected, setSelected] = useState<string | null>(null)
+  // As many weeks as fit in the card, the most recent on the right: the card never scrolls,
+  // it shows less history when it is narrow.
+  const [weeks, setWeeks] = useState(26)
+  const fitRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = fitRef.current
+    if (!el) return
+    const measure = () => {
+      const available = el.clientWidth - WEEKDAY_COLUMN - COLUMN_GAP
+      setWeeks(Math.max(4, Math.min(MAX_WEEKS, Math.floor((available + CELL_GAP) / (CELL + CELL_GAP)))))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const grid = useMemo(() => {
     const byDate = new Map(year.map((d) => [d.date, d]))
     const end = new Date()
     end.setHours(0, 0, 0, 0)
     const start = new Date(end)
-    start.setDate(end.getDate() - end.getDay() - 52 * 7)
+    start.setDate(end.getDate() - end.getDay() - (weeks - 1) * 7)
     const cells: { date: string; day?: AnalyticsDay; value: number; inFuture: boolean }[] = []
     const pick = (d?: AnalyticsDay) =>
       !d ? 0 : metric === "hours" ? d.totalHours : metric === "tokens" ? d.totalTokens : d.totalCost
-    for (let i = 0; i < 53 * 7; i++) {
+    for (let i = 0; i < weeks * 7; i++) {
       const d = new Date(start)
       d.setDate(start.getDate() + i)
       const key = dateKey(d)
@@ -188,7 +228,7 @@ export function ActivityCard({ year, metric, subtitle }: { year: AnalyticsDay[];
     }
     const max = Math.max(...cells.map((c) => c.value), Number.EPSILON)
     const months: string[] = []
-    for (let w = 0; w < 53; w++) {
+    for (let w = 0; w < weeks; w++) {
       const cur = parseDay(cells[w * 7].date)
       const prev = w > 0 ? parseDay(cells[(w - 1) * 7].date) : null
       months.push(!prev || prev.getMonth() !== cur.getMonth() ? cur.toLocaleDateString(locale, { month: "short" }) : "")
@@ -196,7 +236,7 @@ export function ActivityCard({ year, metric, subtitle }: { year: AnalyticsDay[];
     const total = cells.reduce((s, c) => s + c.value, 0)
     const active = cells.filter((c) => c.value > 0).length
     return { cells, max, months, total, active, today: dateKey(end) }
-  }, [year, metric, locale])
+  }, [year, metric, locale, weeks])
 
   const weekdayLabels = useMemo(
     () =>
@@ -208,28 +248,31 @@ export function ActivityCard({ year, metric, subtitle }: { year: AnalyticsDay[];
 
   const shownKey = selected ?? grid.today
   const shown = grid.cells.find((c) => c.date === shownKey)
-  const detail = shown?.day
-    ? t("usage.activity.dayDetail", {
-        date: formatDayLabel(shown.date, locale),
-        orbit: formatHours(shown.day.orbitHours, locale),
-        you: formatHours(shown.day.userHours, locale),
-        messages: shown.day.totalMessages,
-        cost: formatCost(shown.day.totalCost),
-      })
-    : t("usage.activity.noActivityOn", { date: formatDayLabel(shownKey, locale) })
+  const day = shown?.day
+  const projectLabel = (id: string) => {
+    const p = projects?.find((x) => x.projectId === id)
+    return p && p.directory ? p.name : t("analytics.noProject")
+  }
+  const topProjects = day ? [...day.byProject].sort((a, b) => b.hours - a.hours) : []
+  const topModels = day ? [...day.byModel].filter((m) => m.messages > 0 || m.hours > 0).sort((a, b) => b.hours - a.hours) : []
 
   return (
     <Card className="flex min-w-0 flex-col gap-2.5">
       <div>
-        <p className="text-sm font-semibold">
-          {t("usage.activity.title", { total: formatMetric(grid.total, metric, locale) })}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {subtitle ?? t("usage.activity.subtitle", { count: grid.active })}
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[13px] font-semibold">
+            {t("usage.activity.title", { total: formatMetric(grid.total, metric, locale) })}
+          </p>
+          <p className="shrink-0 text-[11px] text-muted-foreground">
+            {t("usage.activity.subtitle", { count: grid.active, weeks })}
+          </p>
+        </div>
+        <p className="text-[11px] capitalize text-muted-foreground">
+          {parseDay(shownKey).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </p>
       </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-        <div className="flex shrink-0 flex-col gap-0.5 pt-4">
+      <div ref={fitRef} className="flex gap-1.5 overflow-hidden pb-0.5">
+        <div className="flex shrink-0 flex-col gap-0.5 pt-4" style={{ width: WEEKDAY_COLUMN }}>
           {weekdayLabels.map((label, i) => (
             <span key={i} className="h-2.5 text-[9px] leading-[10px] text-muted-foreground">
               {label}
@@ -262,8 +305,37 @@ export function ActivityCard({ year, metric, subtitle }: { year: AnalyticsDay[];
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-3 border-t pt-2">
-        <span className="min-w-0 flex-1 text-xs text-foreground/80">{detail}</span>
+
+      <div className="flex items-end gap-3 border-t pt-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {day ? (
+            <>
+              <div className="flex flex-wrap gap-1">
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {t("usage.activity.sessions", { count: day.sessions })}
+                </Badge>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {t("usage.legend.orbit")} {formatHours(day.orbitHours, locale)}
+                </Badge>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {t("usage.activity.you")} {formatHours(day.userHours, locale)}
+                </Badge>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {formatTokens(day.totalTokens)} {t("analytics.tokens").toLowerCase()}
+                </Badge>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {formatCost(day.totalCost)}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <BadgeGroup label={t("usage.activity.projects")} items={topProjects.map((p) => projectLabel(p.projectId))} />
+                <BadgeGroup label={t("usage.activity.models")} items={topModels.map((m) => m.modelId)} />
+              </div>
+            </>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">{t("usage.activity.noActivity")}</span>
+          )}
+        </div>
         <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
           {t("usage.activity.less")}
           {LEVELS.map((cls) => (
@@ -273,5 +345,22 @@ export function ActivityCard({ year, metric, subtitle }: { year: AnalyticsDay[];
         </span>
       </div>
     </Card>
+  )
+}
+
+/** A label followed by small badges; what does not fit the first few folds into "+N". */
+function BadgeGroup({ label, items, max = 3 }: { label: string; items: string[]; max?: number }) {
+  if (items.length === 0) return null
+  const shown = items.slice(0, max)
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      {shown.map((item) => (
+        <Badge key={item} variant="outline" className="max-w-40 px-1.5 py-0 text-[10px]">
+          <span className="truncate">{item}</span>
+        </Badge>
+      ))}
+      {items.length > shown.length && <span className="text-[10px] text-muted-foreground">+{items.length - shown.length}</span>}
+    </span>
   )
 }

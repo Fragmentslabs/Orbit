@@ -428,8 +428,6 @@
     "tooltipWeight": "peso {{weight}}",
     "tooltipStale": "(sem uso há mais de 30 dias)",
     "tooltipCollapsed": "(colapsado)",
-    "modeChat": "Memórias do chat",
-    "modeCode": "Memórias de código",
     "filters": {
       "label": "Filtros de memórias",
       "project": "Projeto",
@@ -1020,13 +1018,17 @@
       }
     },
     "activity": {
-      "title": "Atividade no último ano: {{total}}",
-      "subtitle": "{{count}} dias ativos",
+      "title": "Atividade: {{total}}",
+      "subtitle": "{{count}} dias ativos nas últimas {{weeks}} semanas",
       "less": "menos",
       "more": "mais",
       "none": "sem atividade",
-      "noActivityOn": "{{date}} — sem atividade",
-      "dayDetail": "{{date}} — Orbit {{orbit}} · você {{you}} · {{messages}} respostas · {{cost}}"
+      "sessions_one": "{{count}} sessão",
+      "sessions_other": "{{count}} sessões",
+      "you": "Você",
+      "projects": "Projetos",
+      "models": "Modelos",
+      "noActivity": "Sem atividade neste dia."
     },
     "averages": {
       "title": "Médias",
@@ -3880,5 +3882,11 @@
       "placeholder": "Ex.: toda vez que o agente editar um arquivo TypeScript, rode o prettier nele.\n\nOu: bloqueie qualquer git push --force antes de ele rodar.",
       "review": "Sugestão do Orbit. O comando roda sozinho na sua máquina, então confira antes de salvar. Tudo pode ser editado."
     }
+  },
+  "viewScope": {
+    "label": "Mostrar",
+    "chat": "Chat",
+    "code": "Código",
+    "all": "Todos"
   }
 }

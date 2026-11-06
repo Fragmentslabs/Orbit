@@ -71,7 +71,7 @@ export function SessionList({ sessions, data, compact, showDay }: {
             )}
           >
             <span className="text-muted-foreground">{when}</span>
-            <span className="truncate text-[13px]">{s.title || t("usage.sessions.untitled")}</span>
+            <span className="truncate">{s.title || t("usage.sessions.untitled")}</span>
             {!compact && <span className="truncate text-muted-foreground">{project ? projectName(project, t) : "—"}</span>}
             {!compact && <span className="truncate text-muted-foreground">{s.modelId}</span>}
             {!compact && <span className="text-right text-muted-foreground">{s.messages}</span>}

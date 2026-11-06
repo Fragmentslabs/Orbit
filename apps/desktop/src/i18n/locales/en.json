@@ -428,8 +428,6 @@
     "tooltipWeight": "weight {{weight}}",
     "tooltipStale": "(not used for over 30 days)",
     "tooltipCollapsed": "(collapsed)",
-    "modeChat": "Chat memories",
-    "modeCode": "Code memories",
     "filters": {
       "label": "Memory filters",
       "project": "Project",
@@ -1020,13 +1018,17 @@
       }
     },
     "activity": {
-      "title": "Activity in the last year: {{total}}",
-      "subtitle": "{{count}} active days",
+      "title": "Activity: {{total}}",
+      "subtitle": "{{count}} active days in the last {{weeks}} weeks",
       "less": "less",
       "more": "more",
       "none": "no activity",
-      "noActivityOn": "{{date}} — no activity",
-      "dayDetail": "{{date}} — Orbit {{orbit}} · you {{you}} · {{messages}} answers · {{cost}}"
+      "sessions_one": "{{count}} session",
+      "sessions_other": "{{count}} sessions",
+      "you": "You",
+      "projects": "Projects",
+      "models": "Models",
+      "noActivity": "No activity on this day."
     },
     "averages": {
       "title": "Averages",
@@ -3880,5 +3882,11 @@
       "placeholder": "E.g.: every time the agent edits a TypeScript file, run prettier on it.\n\nOr: block any git push --force before it runs.",
       "review": "Suggested by Orbit. The command runs on its own on your machine, so check it before saving. Everything is editable."
     }
+  },
+  "viewScope": {
+    "label": "Show",
+    "chat": "Chat",
+    "code": "Code",
+    "all": "All"
   }
 }

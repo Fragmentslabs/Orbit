@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { formatCost, formatTokens } from "@/src/lib/format"
 import { analyticsApi } from "@/src/lib/ipc"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
-import { Card, CardHeader, EmptyNote } from "./usage-ui"
+import { Card, CardHeader, EmptyNote, KpiCard } from "./usage-ui"
 import { SessionList } from "./sessions-tab"
 import { dateKey, formatDayLabel, formatHours, parseDay, percent, projectName, SERIES_COLORS } from "./usage-utils"
 
@@ -85,8 +85,8 @@ export function ProjectsTab({ data, range }: { data: AnalyticsSummary; range: An
     <div className="flex flex-col gap-3">
       <div className="flex items-end gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{t("usage.projects.title")}</p>
-          <p className="text-xs text-muted-foreground">{t("usage.projects.hint")}</p>
+          <p className="text-[13px] font-semibold">{t("usage.projects.title")}</p>
+          <p className="text-[11px] text-muted-foreground">{t("usage.projects.hint")}</p>
         </div>
         <Legend />
       </div>
@@ -95,10 +95,10 @@ export function ProjectsTab({ data, range }: { data: AnalyticsSummary; range: An
           key={p.projectId}
           type="button"
           onClick={() => setSelected(p.projectId)}
-          className="flex items-center gap-4 rounded-xl border bg-card px-4 py-3.5 text-left transition-colors hover:border-primary/40"
+          className="flex items-center gap-4 rounded-xl border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40"
         >
           <span className="flex min-w-0 flex-1 flex-col gap-2">
-            <span className="truncate font-semibold">{projectName(p, t)}</span>
+            <span className="truncate text-xs font-semibold">{projectName(p, t)}</span>
             <HoursBar value={p.orbitHours} max={maxHours} color={ORBIT} label={formatHours(p.orbitHours, locale)} />
             <HoursBar value={p.userHours} max={maxHours} color={YOU} label={formatHours(p.userHours, locale)} />
           </span>
@@ -204,12 +204,12 @@ function ProjectDetail({ data, project, range, onBack }: {
   ]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <Button size="sm" variant="outline" className="gap-1" onClick={onBack}>
           <ArrowLeft className="size-3" /> {t("usage.projects.back")}
         </Button>
-        <span className="truncate text-base font-semibold">{projectName(project, t)}</span>
+        <span className="truncate text-sm font-semibold">{projectName(project, t)}</span>
         <span className="flex-1" />
         <SummaryButton
           state={summaries.state.period}
@@ -222,11 +222,7 @@ function ProjectDetail({ data, project, range, onBack }: {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {kpis.map((k) => (
-          <Card key={k.label} className="flex flex-col gap-0.5 px-3.5 py-3">
-            <span className="text-[11px] text-muted-foreground">{k.label}</span>
-            <span className="text-xl font-semibold tabular-nums">{k.value}</span>
-            <span className="text-[11px] text-muted-foreground">{k.meta}</span>
-          </Card>
+          <KpiCard key={k.label} label={k.label} value={k.value} meta={k.meta} />
         ))}
       </div>
 
@@ -255,7 +251,7 @@ function ProjectDetail({ data, project, range, onBack }: {
       </Card>
 
       <div>
-        <p className="mb-2 text-sm font-semibold">{t("usage.projects.history")}</p>
+        <p className="mb-2 text-[13px] font-semibold">{t("usage.projects.history")}</p>
         {history.length === 0 ? (
           <EmptyNote>{t("usage.noData")}</EmptyNote>
         ) : (
@@ -264,10 +260,10 @@ function ProjectDetail({ data, project, range, onBack }: {
               const key = `day:${g.date}`
               return (
                 <div key={g.date} className="overflow-hidden rounded-xl border">
-                  <div className="flex items-center gap-3 bg-card px-4 py-3">
+                  <div className="flex items-center gap-3 bg-card px-3.5 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold">{formatDayLabel(g.date, locale)}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs font-semibold">{formatDayLabel(g.date, locale)}</p>
+                      <p className="text-[11px] text-muted-foreground">
                         {t("usage.projects.dayMeta", {
                           orbit: formatHours(g.orbit, locale),
                           you: formatHours(g.you, locale),

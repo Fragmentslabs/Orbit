@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import type { AnalyticsSummary } from "@shared/analytics"
-import { Card, CardHeader, EmptyNote } from "./usage-ui"
+import { Card, CardHeader, EmptyNote, KpiCard } from "./usage-ui"
 import { WEEKDAY_ORDER, formatHours, hoursByWeekday, percent, spanOfDays } from "./usage-utils"
 
 export function RhythmTab({ data }: { data: AnalyticsSummary }) {
@@ -23,8 +23,8 @@ export function RhythmTab({ data }: { data: AnalyticsSummary }) {
   ]
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 xl:grid-cols-2">
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3 xl:grid-cols-2">
         <Card>
           <CardHeader title={t("usage.rhythm.byWeekday")} subtitle={t("usage.rhythm.byWeekdayHint")} />
           <div className="flex flex-col gap-2.5">
@@ -43,17 +43,14 @@ export function RhythmTab({ data }: { data: AnalyticsSummary }) {
         </Card>
         <div className="grid grid-cols-2 content-start gap-3">
           {stats.map((s) => (
-            <Card key={s.label} className="flex flex-col gap-0.5 px-4 py-3">
-              <span className="text-[11px] text-muted-foreground">{s.label}</span>
-              <span className="text-lg font-semibold tabular-nums">{s.value}</span>
-            </Card>
+            <KpiCard key={s.label} label={s.label} value={s.value} />
           ))}
         </div>
       </div>
 
       <Card>
         <CardHeader title={t("analytics.hoursByProjectInfoTitle")} />
-        <p className="text-xs leading-relaxed text-muted-foreground">{t("analytics.hoursByProjectInfo")}</p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">{t("analytics.hoursByProjectInfo")}</p>
       </Card>
     </div>
   )

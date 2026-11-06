@@ -11,6 +11,7 @@ function day(date: string, hours: number): AnalyticsDay {
     totalHours: hours,
     orbitHours: hours,
     userHours: 0,
+    sessions: 1,
     totalMessages: 1,
     totalCost: 0,
     byModel: [],
