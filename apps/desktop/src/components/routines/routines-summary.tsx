@@ -28,8 +28,9 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
  */
 /**
  * `full` is the column beside the routines; `side` the same column when the page is narrow
- * (numbers in rows, fewer columns per row); `strip` the one that goes below the routines when
- * not even a narrow column fits (the numbers in a line and what runs next).
+ * (fewer columns per row); `strip` the one that goes below the routines when not even a narrow
+ * column fits (just what runs next). The numbers (active, failures, spend) are in the footer of
+ * the list, not here.
  */
 export type SummaryVariant = "full" | "side" | "strip"
 
@@ -54,8 +55,6 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
       .sort((a, b) => a.at - b.at)
 
     const recent = [...mine].sort((a, b) => b.startedAt - a.startedAt).slice(0, MAX_ROWS)
-    const last30 = mine.filter((r) => r.startedAt >= now - 30 * DAY_MS)
-    const failures = mine.filter((r) => r.status === "error" && r.startedAt >= now - 7 * DAY_MS)
 
     return {
       now,
@@ -63,35 +62,8 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
       running,
       upcoming: upcoming.slice(0, MAX_ROWS),
       recent,
-      active: routines.filter((r) => r.active).length,
-      failures: failures.length,
-      failedTitles: [...new Set(failures.map((r) => byId.get(r.routineId)?.title).filter((x): x is string => !!x))],
-      cost: last30.reduce((s, r) => s + r.cost, 0),
-      executions: last30.length,
     }
   }, [routines, runs])
-
-  const kpis = [
-    {
-      label: t("routines.summary.active"),
-      value: t("routines.summary.activeOf", { active: summary.active, total: routines.length }),
-      meta: t("routines.summary.paused", { count: routines.length - summary.active }),
-    },
-    {
-      label: t("routines.summary.failures"),
-      value: String(summary.failures),
-      meta: summary.failedTitles.length === 0
-        ? t("routines.summary.noFailures")
-        : summary.failedTitles.length === 1
-          ? summary.failedTitles[0]
-          : t("routines.summary.failuresMeta", { count: summary.failedTitles.length }),
-    },
-    {
-      label: t("routines.summary.spent"),
-      value: formatCost(summary.cost),
-      meta: t("routines.summary.executions", { count: summary.executions }),
-    },
-  ]
 
   const compact = variant !== "full"
   // Rows of "next": the same in every variant, only the columns change.
@@ -131,14 +103,6 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
   if (variant === "strip") {
     return (
       <div className="flex flex-col gap-2 rounded-xl border bg-card p-3">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-xs">
-          {kpis.map((k) => (
-            <span key={k.label} className="flex items-baseline gap-1.5">
-              <span className="text-muted-foreground">{k.label}</span>
-              <span className="font-semibold tabular-nums">{k.value}</span>
-            </span>
-          ))}
-        </div>
         <div>
           <p className="text-[11px] font-semibold text-muted-foreground">{t("routines.summary.next")}</p>
           {nextRows}
@@ -149,27 +113,6 @@ export function RoutinesSummary({ routines, variant = "full", onSelect }: {
 
   return (
     <div className="flex flex-col gap-3">
-      {variant === "side" ? (
-        <div className="flex flex-col rounded-xl border bg-card px-3.5 py-1">
-          {kpis.map((k) => (
-            <div key={k.label} className="flex items-baseline justify-between gap-3 border-t py-2 text-xs first:border-t-0">
-              <span className="text-muted-foreground">{k.label}</span>
-              <span className="font-semibold tabular-nums">{k.value}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3">
-          {kpis.map((k) => (
-            <div key={k.label} className="flex flex-col gap-0.5 rounded-xl border bg-card px-3.5 py-3">
-              <span className="text-[11px] text-muted-foreground">{k.label}</span>
-              <span className="text-lg font-semibold tabular-nums">{k.value}</span>
-              <span className="text-[11px] text-muted-foreground">{k.meta}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
       <Card title={t("routines.summary.next")} subtitle={variant === "side" ? undefined : t("routines.summary.nextHint")}>
         {nextRows}
       </Card>
