@@ -79,3 +79,15 @@ export interface SkillMetaView {
   scopeGlobal?: boolean
 }
 
+
+/** What the model proposes when asked to write a skill from a description. Nothing is saved from it. */
+export interface SkillSuggestion {
+  name: string
+  slug: string
+  description: string
+  content: string
+}
+
+export type SkillGenerationResult =
+  | { ok: true; suggestion: SkillSuggestion }
+  | { ok: false; error: string }

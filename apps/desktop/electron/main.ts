@@ -126,6 +126,8 @@ import { forgetApprovals, listLearnedRules, loadApprovalLearning } from './lib/p
 import { addTrust, listTrustRules, loadTrustRules, removeTrust } from './lib/permission/trust-rules'
 import { addHook, listHooks, loadHooks, onHooksChanged, removeHook, setHookEnabled, updateHook } from './lib/hooks/store'
 import { generateHook } from './lib/hooks/generator'
+import { generateSkill } from './lib/skills/generator'
+import { generateMcpServer } from './lib/mcp/generator'
 import type { HookInput } from '@shared/hooks'
 import { abortSession, dispatchSend, lastSendInput } from './lib/send-dispatch'
 import { setupComputerPanels } from './lib/computer/panels'
@@ -2708,6 +2710,10 @@ app.whenReady().then(() => {
   // here — the screen shows the command and the user confirms it.
   ipcMain.handle('hooks:generate', (_event, description: string, model: RoutineModel, folders: string[], language?: string) =>
     generateHook(description, model, folders, language))
+  ipcMain.handle('skills:generate', (_event, description: string, model: RoutineModel, folders: string[], language?: string) =>
+    generateSkill(description, model, folders, language))
+  ipcMain.handle('mcp:generate', (_event, description: string, model: RoutineModel, folders: string[], language?: string) =>
+    generateMcpServer(description, model, folders, language))
 
   // Background processes
   ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))

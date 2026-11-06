@@ -3634,19 +3634,6 @@
       "timeoutHint": "Se passar disso, o comando é encerrado e a chamada segue sem ele. Padrão 10, máximo 60.",
       "commandHintPre": "Recebe a chamada em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 bloqueia e o stderr vira o motivo.",
       "commandHintPost": "Recebe a chamada e o resultado em JSON no stdin e as variáveis ORBIT_TOOL_NAME, ORBIT_FILE e ORBIT_PROJECT_DIR. Exit 2 manda o stderr de volta ao agente."
-    },
-    "create": {
-      "hint": "Diga o que deve acontecer sozinho em volta das tools do agente. O modelo escreve o comando e você revisa antes de salvar.",
-      "placeholder": "Toda vez que o agente editar um arquivo TypeScript, rode o prettier nele.",
-      "example1": "Rodar o prettier depois de editar arquivos",
-      "example2": "Bloquear git push --force",
-      "example3": "Registrar todo comando de shell em um arquivo",
-      "generate": "Gerar hook",
-      "generating": "Escrevendo…",
-      "manual": "Preencher manualmente",
-      "noModel": "Escolha um modelo para gerar.",
-      "reviewTitle": "Revise o hook",
-      "reviewHint": "O comando roda sozinho na sua máquina, então confira antes de salvar. Tudo pode ser editado."
     }
   },
   "subchat": {
@@ -3760,5 +3747,45 @@
     "youSee": "Você vê",
     "seesYou": "Vê você",
     "refresh": "Procurar de novo"
+  },
+  "askOrbit": {
+    "noModel": "Escolha um modelo para gerar.",
+    "generate": "Gerar",
+    "generating": "Gerando…",
+    "menu": {
+      "manual": "Criar manualmente",
+      "mcp": {
+        "title": "Pedir ao Orbit",
+        "description": "Diga o serviço e o modelo monta a configuração",
+        "manualDescription": "Nome, tipo, comando ou URL"
+      },
+      "skills": {
+        "title": "Pedir ao Orbit",
+        "description": "Descreva a skill e o modelo escreve as instruções"
+      },
+      "hooks": {
+        "title": "Pedir ao Orbit",
+        "description": "Descreva o que deve acontecer e o modelo escreve o comando",
+        "manualDescription": "Evento, tool e comando você mesmo"
+      }
+    },
+    "mcp": {
+      "title": "Pedir ao Orbit um servidor MCP",
+      "description": "Diga qual serviço ou ferramenta você quer conectar. O modelo monta a configuração (comando ou URL) e você completa as chaves e revisa na etapa seguinte.",
+      "placeholder": "Ex.: conectar o servidor MCP do GitHub para o agente ler issues e pull requests.\n\nOu: um servidor local de arquivos restrito à pasta ~/Documentos.",
+      "review": "Sugestão do Orbit. Substitua os valores entre < > pelas suas chaves e confira o comando antes de salvar."
+    },
+    "skills": {
+      "title": "Pedir ao Orbit uma skill",
+      "description": "Descreva o que a skill deve ensinar ao agente e quando usá-la. O modelo escreve nome, descrição e instruções — você revisa tudo na etapa seguinte.",
+      "placeholder": "Ex.: uma skill para revisar pull requests do meu jeito: conferir testes, nomes e riscos de segurança, e responder em tópicos curtos com o que bloqueia o merge.\n\nOu: uma skill que escreve mensagens de commit no formato type(scope): frase.",
+      "review": "Sugestão do Orbit. Revise o nome, a descrição e as instruções antes de salvar."
+    },
+    "hooks": {
+      "title": "Pedir ao Orbit um hook",
+      "description": "Diga o que deve acontecer sozinho em volta das tools do agente. O modelo escreve o comando — você confere na etapa seguinte.",
+      "placeholder": "Ex.: toda vez que o agente editar um arquivo TypeScript, rode o prettier nele.\n\nOu: bloqueie qualquer git push --force antes de ele rodar.",
+      "review": "Sugestão do Orbit. O comando roda sozinho na sua máquina, então confira antes de salvar. Tudo pode ser editado."
+    }
   }
 }

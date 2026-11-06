@@ -30,12 +30,6 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -45,19 +39,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { useWorkspace } from "@/lib/workspace-context"
 import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
+import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { CreateMenu } from "@/src/components/create-menu"
 import { HooksPanel } from "@/src/components/hooks-panel"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
-import { useDraftInput } from "@/src/stores/draft-input"
-import { useSessionStore } from "@/src/stores/session-store"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { SkillRow } from "@/src/components/skill-row"
 import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
 import type { FractaStatus } from "@shared/fracta"
 import type { NodaraStatus } from "@shared/nodara"
-import type { Skill } from "@shared/skills"
+import type { Skill, SkillSuggestion } from "@shared/skills"
 import nodaraLogo from "@/src/assets/nodara-logo.png"
 import fractaLogo from "@/src/assets/fracta-logo.png"
 import { Hint } from "@/components/ui/hint"
@@ -167,10 +160,12 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
 /*  Dialog: Add / Edit MCP Server                                      */
 /* ------------------------------------------------------------------ */
 
-function McpServerDialog({ open, onOpenChange, initial }: {
+function McpServerDialog({ open, onOpenChange, initial, draft }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   initial?: McpServerConfig
+  /** `initial` is a suggestion from "ask Orbit": it is a NEW server to review, not an edit. */
+  draft?: boolean
 }) {
   const { t } = useTranslation()
   const refresh = useSkillsStore((s) => s.refresh)
@@ -260,7 +255,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       if (Object.keys(oauth).length > 0) entry.oauth = oauth
     }
 
-    const idx = config.servers.findIndex((s) => s.name === initial?.name)
+    const idx = draft ? -1 : config.servers.findIndex((s) => s.name === initial?.name)
     if (idx >= 0) {
       config.servers[idx] = entry
     } else {
@@ -281,9 +276,9 @@ function McpServerDialog({ open, onOpenChange, initial }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initial ? t("mcp.servers.dialog.editTitle") : t("mcp.servers.dialog.addTitle")}</DialogTitle>
+          <DialogTitle>{initial && !draft ? t("mcp.servers.dialog.editTitle") : t("mcp.servers.dialog.addTitle")}</DialogTitle>
           <DialogDescription>
-            {t("mcp.servers.dialog.description")}
+            {draft ? t("askOrbit.mcp.review") : t("mcp.servers.dialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -461,10 +456,12 @@ function sanitizeSlugHint(name: string): string {
     .slice(0, 60)
 }
 
-function CreateSkillDialog({ open, onOpenChange, initial }: {
+function CreateSkillDialog({ open, onOpenChange, initial, draft }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  initial?: Skill
+  initial?: Pick<Skill, "name" | "slug" | "description" | "content">
+  /** `initial` is a suggestion from "ask Orbit": it is a NEW skill to review, not an edit. */
+  draft?: boolean
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState("")
@@ -515,7 +512,7 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
         description: description.trim(),
         content: content.trim(),
         slug: slug.trim(),
-        oldSlug: initial?.slug !== slug.trim() ? initial?.slug : undefined,
+        oldSlug: !draft && initial?.slug !== slug.trim() ? initial?.slug : undefined,
       })
     } catch (err) {
       console.error("[skills] failed to create skill:", err)
@@ -529,11 +526,13 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{initial ? t("mcp.skills.dialog.editTitle") : t("mcp.skills.dialog.createTitle")}</DialogTitle>
+          <DialogTitle>{initial && !draft ? t("mcp.skills.dialog.editTitle") : t("mcp.skills.dialog.createTitle")}</DialogTitle>
           <DialogDescription>
-            {initial
-              ? t("mcp.skills.dialog.editDescription")
-              : t("mcp.skills.dialog.createDescription")}
+            {draft
+              ? t("askOrbit.skills.review")
+              : initial
+                ? t("mcp.skills.dialog.editDescription")
+                : t("mcp.skills.dialog.createDescription")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -820,6 +819,9 @@ export function McpSkillsPanel() {
   const [skillOptimizeError, setSkillOptimizeError] = useState("")
   const [mcpDialogOpen, setMcpDialogOpen] = useState(false)
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
+  // The open form holds a suggestion from "ask Orbit" (a new item to review), not an edit.
+  const [mcpDraft, setMcpDraft] = useState(false)
+  const [askMcpOpen, setAskMcpOpen] = useState(false)
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   // The page shows one section at a time; the menu on the right switches it.
   const [section, setSection] = useState<ToolsSection>("integrations")
@@ -831,13 +833,13 @@ export function McpSkillsPanel() {
     return () => window.ipcRenderer.off("hooks:changed", listener)
   }, [])
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
+  const [skillDraft, setSkillDraft] = useState<Pick<Skill, "name" | "slug" | "description" | "content"> | undefined>()
+  const [askSkillOpen, setAskSkillOpen] = useState(false)
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
   const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
   // Name of the server with an action in progress (OAuth waits for the browser, it may take a while)
   const [busy, setBusy] = useState<string | null>(null)
-
-  const { setMode, setView } = useWorkspace()
 
   useEffect(() => {
     void refresh()
@@ -955,12 +957,23 @@ export function McpSkillsPanel() {
     if (result.imported) await refresh()
   }
 
-  // Opens a new chat with "/create-skill " pre-filled
-  const askOrbitToCreate = () => {
-    useDraftInput.getState().setDraft("draft", "/create-skill ")
-    setMode("chat")
-    setView("chat")
-    void useSessionStore.getState().selectSession("chat", null)
+  // The model's suggestions open the normal forms, filled in. A name/slug that already
+  // exists gets a numeric suffix: saving a suggestion must never overwrite what is there.
+  const uniqueName = (base: string, taken: string[], sep: string) => {
+    if (!taken.includes(base)) return base
+    let n = 2
+    while (taken.includes(`${base}${sep}${n}`)) n++
+    return `${base}${sep}${n}`
+  }
+  const reviewMcp = (suggestion: McpServerConfig) => {
+    setMcpEdit({ ...suggestion, name: uniqueName(suggestion.name, mcpServers.map((s) => s.config.name), "-") })
+    setMcpDraft(true)
+    setMcpDialogOpen(true)
+  }
+  const reviewSkill = (suggestion: SkillSuggestion) => {
+    setSkillEdit(undefined)
+    setSkillDraft({ ...suggestion, slug: uniqueName(suggestion.slug, skills.map((s) => s.slug), "_") })
+    setSkillDialogOpen(true)
   }
 
   const mySkills = skills.filter((s) => s.source !== "builtin")
@@ -973,7 +986,7 @@ export function McpSkillsPanel() {
       optimizing={optimizingSlugs.includes(skill.slug)}
       languageDiffers={Boolean(meta[skill.slug]?.card && meta[skill.slug]!.card!.lang !== language)}
       onView={() => setViewContent(skill.slug)}
-      onEdit={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}
+      onEdit={() => { setSkillEdit(skill); setSkillDraft(undefined); setSkillDialogOpen(true) }}
       onRemove={async () => {
         await skillsApi.remove(skill.slug)
         await refresh()
@@ -1012,10 +1025,25 @@ export function McpSkillsPanel() {
               {t("mcp.servers.description")}
             </p>
           </div>
-          <Button size="sm" className="h-8 gap-1 px-3 text-xs" onClick={() => { setMcpEdit(undefined); setMcpDialogOpen(true) }}>
-            <PlusIcon className="size-3.5" />
-            {t("mcp.servers.add")}
-          </Button>
+          <CreateMenu
+            label={t("mcp.servers.add")}
+            options={[
+              {
+                id: "ask",
+                icon: Wand2,
+                title: t("askOrbit.menu.mcp.title"),
+                description: t("askOrbit.menu.mcp.description"),
+                onSelect: () => setAskMcpOpen(true),
+              },
+              {
+                id: "manual",
+                icon: PenLine,
+                title: t("askOrbit.menu.manual"),
+                description: t("askOrbit.menu.mcp.manualDescription"),
+                onSelect: () => { setMcpEdit(undefined); setMcpDraft(false); setMcpDialogOpen(true) },
+              },
+            ]}
+          />
         </div>
         {mcpServers.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
@@ -1117,7 +1145,7 @@ export function McpSkillsPanel() {
                       </Button>
                     </Hint>
                     <Hint label={t("mcp.servers.edit")}>
-                      <Button size="icon-sm" variant="ghost"  onClick={() => { setMcpEdit(server.config); setMcpDialogOpen(true) }}>
+                      <Button size="icon-sm" variant="ghost"  onClick={() => { setMcpEdit(server.config); setMcpDraft(false); setMcpDialogOpen(true) }}>
                         <ExternalLink className="size-3.5" />
                       </Button>
                     </Hint>
@@ -1150,42 +1178,32 @@ export function McpSkillsPanel() {
               {t("mcp.skills.description")}
             </p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <PlusIcon className="size-3.5" />
-              {t("mcp.skills.create")}
-              <ChevronDown className="size-3" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-64 p-1.5">
-              <DropdownMenuItem onClick={() => { setSkillEdit(undefined); setSkillDialogOpen(true) }}>
-                <PenLine className="size-3.5" />
-                <div className="flex flex-col">
-                  <span>{t("mcp.skills.createMenu.manual.title")}</span>
-                  <span className="text-xs text-muted-foreground">{t("mcp.skills.createMenu.manual.description")}</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void importSkill()}>
-                <FileUp className="size-3.5" />
-                <div className="flex flex-col">
-                  <span>{t("mcp.skills.createMenu.import.title")}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("mcp.skills.createMenu.import.description")}
-                  </span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={askOrbitToCreate}>
-                <Wand2 className="size-3.5" />
-                <div className="flex flex-col">
-                  <span>{t("mcp.skills.createMenu.askOrbit.title")}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("mcp.skills.createMenu.askOrbit.description")}
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <CreateMenu
+            label={t("mcp.skills.create")}
+            options={[
+              {
+                id: "ask",
+                icon: Wand2,
+                title: t("askOrbit.menu.skills.title"),
+                description: t("askOrbit.menu.skills.description"),
+                onSelect: () => setAskSkillOpen(true),
+              },
+              {
+                id: "manual",
+                icon: PenLine,
+                title: t("mcp.skills.createMenu.manual.title"),
+                description: t("mcp.skills.createMenu.manual.description"),
+                onSelect: () => { setSkillEdit(undefined); setSkillDraft(undefined); setSkillDialogOpen(true) },
+              },
+              {
+                id: "import",
+                icon: FileUp,
+                title: t("mcp.skills.createMenu.import.title"),
+                description: t("mcp.skills.createMenu.import.description"),
+                onSelect: () => void importSkill(),
+              },
+            ]}
+          />
         </div>
         {importError && (
           <p className="mb-2 text-[11px] text-destructive">{importError}</p>
@@ -1273,8 +1291,27 @@ export function McpSkillsPanel() {
       </nav>
 
       {/* Dialogs */}
-      <McpServerDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} initial={mcpEdit} />
-      <CreateSkillDialog open={skillDialogOpen} onOpenChange={setSkillDialogOpen} initial={skillEdit} />
+      <McpServerDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} initial={mcpEdit} draft={mcpDraft} />
+      <CreateSkillDialog
+        open={skillDialogOpen}
+        onOpenChange={setSkillDialogOpen}
+        initial={skillDraft ?? skillEdit}
+        draft={!!skillDraft}
+      />
+      <AskOrbitDialog
+        kind="mcp"
+        open={askMcpOpen}
+        onOpenChange={setAskMcpOpen}
+        generate={mcpApi.generate}
+        onGenerated={reviewMcp}
+      />
+      <AskOrbitDialog
+        kind="skills"
+        open={askSkillOpen}
+        onOpenChange={setAskSkillOpen}
+        generate={skillsApi.generate}
+        onGenerated={reviewSkill}
+      />
       <SkillContentDialog
         skill={viewSkill}
         open={viewContentSlug !== null}

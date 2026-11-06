@@ -1,10 +1,7 @@
-import { streamText } from 'ai'
 import type { HookGenerationResult, HookInput } from '@shared/hooks'
 import { HOOK_MAX_TIMEOUT_MS } from '@shared/hooks'
 import type { RoutineModel } from '@shared/routines'
-import { getProvider } from '../catalog'
-import { resolveModel } from '../providers'
-import { interleavedReasoningField, normalizeMessages } from '../reasoning'
+import { askModelForJson, contextLines } from '../headless-json'
 import { validateHook } from './store'
 
 /**
@@ -40,22 +37,6 @@ Rules:
 Answer with JSON ONLY — no prose, no markdown fences:
 {"event":"post_tool_call","match":"edit|write","command":"...","description":"...","timeoutSeconds":10}`
 
-const MAX_OUTPUT = 20_000
-
-/** Extracts the JSON object from the reply (models insist on fences or prose). */
-function extractJson(text: string): Record<string, unknown> | null {
-  const withoutFence = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1')
-  const start = withoutFence.indexOf('{')
-  const end = withoutFence.lastIndexOf('}')
-  if (start < 0 || end <= start) return null
-  try {
-    const parsed = JSON.parse(withoutFence.slice(start, end + 1))
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
-}
-
 /** The model's JSON as a HookInput, or null when it cannot be one. */
 export function suggestionFrom(raw: Record<string, unknown> | null): HookInput | null {
   if (!raw) return null
@@ -84,44 +65,12 @@ export async function generateHook(
   const text = description.trim()
   if (!text) return { ok: false, error: 'Describe the hook before generating.' }
 
-  const provider = await getProvider(model.providerId)
-  const context = [
-    folders.length ? `Working folders: ${folders.join(', ')}` : 'Working folders: (none selected)',
+  const context = contextLines(folders, language, [
     `Platform: ${process.platform}${process.platform === 'win32' ? ' (commands run in PowerShell)' : ' (commands run in the user shell)'}`,
-    language ? `User language: ${language}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n')
-
-  let output = ''
-  try {
-    const resolved = await resolveModel(model.providerId, model.modelId)
-    const stream = streamText({
-      model: resolved,
-      system: SYSTEM,
-      messages: normalizeMessages(
-        [{ role: 'user', content: `${context}\n\n## Hook described by the user\n${text}` }],
-        interleavedReasoningField(provider, model.modelId),
-      ),
-      onError: () => {
-        /* handled below by the accumulated error */
-      },
-    })
-    for await (const part of stream.fullStream) {
-      if (part.type === 'text-delta') {
-        output += part.text
-        if (output.length > MAX_OUTPUT) break
-      } else if (part.type === 'error') {
-        return { ok: false, error: part.error instanceof Error ? part.error.message : String(part.error) }
-      }
-    }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
-
-  const raw = extractJson(output)
-  if (!raw) return { ok: false, error: 'The model did not return valid JSON. Try again or switch models.' }
-  const suggestion = suggestionFrom(raw)
+  ])
+  const answer = await askModelForJson(SYSTEM, `${context}\n\n## Hook described by the user\n${text}`, model)
+  if (!answer.ok) return answer
+  const suggestion = suggestionFrom(answer.raw)
   if (!suggestion) return { ok: false, error: 'The model answered without a usable hook. Try again or switch models.' }
   return { ok: true, suggestion }
 }

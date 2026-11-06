@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, Ban, Pencil, PlusIcon, Trash2, Webhook } from "lucide-react"
+import { ArrowLeft, Ban, Pencil, PenLine, Trash2, Wand2, Webhook } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -15,6 +15,8 @@ import {
 import { Hint } from "@/components/ui/hint"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
+import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { CreateMenu } from "@/src/components/create-menu"
 import { hooksApi } from "@/src/lib/ipc"
 import type { HookEvent, HookInput, HookRun, HookWithRun } from "@shared/hooks"
 import { hookMatcher } from "@shared/hooks"
@@ -55,15 +57,21 @@ function LastRun({ run }: { run: HookRun }) {
   )
 }
 
-function HookForm({ initial, onDone }: { initial?: HookWithRun; onDone: () => void }) {
+function HookForm({ initial, draft, onDone }: {
+  initial?: HookWithRun
+  /** Suggestion from "ask Orbit": a NEW hook to review, never saved before the user confirms. */
+  draft?: HookInput
+  onDone: () => void
+}) {
   const { t } = useTranslation()
   const { folders } = useWorkspace()
-  const [event, setEvent] = useState<HookEvent>(initial?.event ?? "pre_tool_call")
-  const [match, setMatch] = useState(initial?.match ?? "")
-  const [command, setCommand] = useState(initial?.command ?? "")
-  const [description, setDescription] = useState(initial?.description ?? "")
+  const seed = initial ?? draft
+  const [event, setEvent] = useState<HookEvent>(seed?.event ?? "pre_tool_call")
+  const [match, setMatch] = useState(seed?.match ?? "")
+  const [command, setCommand] = useState(seed?.command ?? "")
+  const [description, setDescription] = useState(seed?.description ?? "")
   const [scope, setScope] = useState(initial?.directory ?? GLOBAL)
-  const [timeout, setTimeoutValue] = useState(initial?.timeoutMs ? String(initial.timeoutMs / 1000) : "")
+  const [timeout, setTimeoutValue] = useState(seed?.timeoutMs ? String(seed.timeoutMs / 1000) : "")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const scopes = initial?.directory && !folders.includes(initial.directory) ? [initial.directory, ...folders] : folders
@@ -94,6 +102,11 @@ function HookForm({ initial, onDone }: { initial?: HookWithRun; onDone: () => vo
 
   return (
     <div className="flex flex-col gap-3">
+      {draft && (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-400">
+          {t("askOrbit.hooks.review")}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <p className="mb-1 text-xs font-medium">{t("hooks.form.event")}</p>
@@ -163,6 +176,9 @@ export function HooksPanel() {
   const [hooks, setHooks] = useState<HookWithRun[]>([])
   // undefined = list; null = new hook; a hook = editing it
   const [editing, setEditing] = useState<HookWithRun | null | undefined>(undefined)
+  // Suggestion from "ask Orbit" being reviewed in the form of a new hook.
+  const [draft, setDraft] = useState<HookInput | undefined>()
+  const [askOpen, setAskOpen] = useState(false)
 
   const refresh = useCallback(() => {
     void hooksApi.list().then(setHooks)
@@ -182,6 +198,7 @@ export function HooksPanel() {
 
   const done = () => {
     setEditing(undefined)
+    setDraft(undefined)
     refresh()
   }
 
@@ -191,7 +208,7 @@ export function HooksPanel() {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             {editing !== undefined && (
-              <Button size="icon-sm" variant="ghost" onClick={() => setEditing(undefined)} aria-label={t("common.back")}>
+              <Button size="icon-sm" variant="ghost" onClick={done} aria-label={t("common.back")}>
                 <ArrowLeft className="size-4" />
               </Button>
             )}
@@ -202,15 +219,30 @@ export function HooksPanel() {
           <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.description")}</p>
         </div>
         {editing === undefined && (
-          <Button size="sm" className="h-8 shrink-0 gap-1 px-3 text-xs" onClick={() => setEditing(null)}>
-            <PlusIcon className="size-3.5" />
-            {t("hooks.add")}
-          </Button>
+          <CreateMenu
+            label={t("hooks.add")}
+            options={[
+              {
+                id: "ask",
+                icon: Wand2,
+                title: t("askOrbit.menu.hooks.title"),
+                description: t("askOrbit.menu.hooks.description"),
+                onSelect: () => setAskOpen(true),
+              },
+              {
+                id: "manual",
+                icon: PenLine,
+                title: t("askOrbit.menu.manual"),
+                description: t("askOrbit.menu.hooks.manualDescription"),
+                onSelect: () => { setDraft(undefined); setEditing(null) },
+              },
+            ]}
+          />
         )}
       </div>
 
       {editing !== undefined ? (
-        <HookForm initial={editing ?? undefined} onDone={done} />
+        <HookForm initial={editing ?? undefined} draft={draft} onDone={done} />
       ) : hooks.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
           <Webhook className="size-6 text-muted-foreground/50" />
@@ -262,6 +294,13 @@ export function HooksPanel() {
           ))}
         </div>
       )}
+      <AskOrbitDialog
+        kind="hooks"
+        open={askOpen}
+        onOpenChange={setAskOpen}
+        generate={hooksApi.generate}
+        onGenerated={(suggestion: HookInput) => { setDraft(suggestion); setEditing(null) }}
+      />
     </div>
   )
 }
