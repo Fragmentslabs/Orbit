@@ -8,7 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
-import { Code2, FolderOpen, MessageSquare } from "lucide-react"
+import { FolderOpen } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
@@ -20,6 +20,10 @@ import { PairRequestCards } from "@/src/components/peers/pair-request-cards"
 import { useActiveRemoteSession, usePeersStore } from "@/src/stores/peers-store"
 import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
 import { MemoriesView } from "@/src/components/memories/memories-view"
+import { UsageRangeControls } from "@/src/components/usage/usage-range"
+import { ViewScopeToggle } from "@/src/components/view-scope-toggle"
+import { useAnalyticsStore } from "@/src/stores/analytics-store"
+import { useMemoriesScope } from "@/src/stores/memories-scope-store"
 import { PipelineBoard } from "@/src/components/pipeline/pipeline-board"
 import { RoutinesView } from "@/src/components/routines/routines-view"
 import { ToolsView } from "@/src/components/tools-view"
@@ -63,14 +67,22 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
   )
 }
 
-function MemoriesModeBadge({ mode }: { mode: "chat" | "code" }) {
-  const { t } = useTranslation()
-  const Icon = mode === "code" ? Code2 : MessageSquare
+/** Memories: chat, code or both — until the user picks, it follows the workspace mode. */
+function MemoriesScopeToggle({ workspaceMode }: { workspaceMode: "chat" | "code" }) {
+  const scope = useMemoriesScope((s) => s.scope)
+  const setScope = useMemoriesScope((s) => s.setScope)
+  return <ViewScopeToggle value={scope ?? workspaceMode} onChange={setScope} />
+}
+
+/** Usage: the same toggle, plus the period. */
+function UsageHeaderControls() {
+  const scope = useAnalyticsStore((s) => s.scope)
+  const setScope = useAnalyticsStore((s) => s.setScope)
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-      <Icon className="size-3.5" />
-      {t(mode === "code" ? "memories.modeCode" : "memories.modeChat")}
-    </span>
+    <div className="flex shrink-0 items-center gap-3">
+      <ViewScopeToggle value={scope} onChange={setScope} />
+      <UsageRangeControls />
+    </div>
   )
 }
 
@@ -334,7 +346,7 @@ function Layout() {
                           : view === "tools"
                             ? t("sidebar.tools")
                             : view === "analytics"
-                              ? t("sidebar.usage")
+                              ? t("analytics.title")
                               : remoteEnv
                                 ? remoteActive?.session?.title ?? ""
                                 : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
@@ -351,7 +363,7 @@ function Layout() {
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={remoteEnv ? undefined : view === "pipeline" ? pipelineFolders[0] : view === "routines" || view === "memories" ? undefined : folders[0]}
+                  repoPath={remoteEnv ? undefined : view === "pipeline" ? pipelineFolders[0] : view === "routines" || view === "memories" || view === "analytics" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
                   // On the Pipeline page the header follows the OPEN pipeline,
@@ -367,7 +379,7 @@ function Layout() {
                       ? pipelineFolders.length
                         ? pipelineFolders
                         : undefined
-                      : view === "routines" || view === "memories"
+                      : view === "routines" || view === "memories" || view === "analytics"
                         ? undefined
                         : workspaceMode === "code"
                           ? folders
@@ -375,9 +387,9 @@ function Layout() {
                   }
                   // The Memories page has no project or branch in the header (that is
                   // the conversation's context): it only says WHICH memories are showing.
-                  extra={view === "memories" ? <MemoriesModeBadge mode={workspaceMode} /> : undefined}
+                  extra={view === "memories" ? <MemoriesScopeToggle workspaceMode={workspaceMode} /> : view === "analytics" ? <UsageHeaderControls /> : undefined}
                   onFoldersChange={
-                    remoteEnv || view === "pipeline" || view === "routines" || view === "memories"
+                    remoteEnv || view === "pipeline" || view === "routines" || view === "memories" || view === "analytics"
                       ? undefined
                       : workspaceMode === "code"
                         ? setFolders

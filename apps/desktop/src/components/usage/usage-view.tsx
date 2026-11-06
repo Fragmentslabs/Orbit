@@ -1,15 +1,6 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CalendarIcon, Clock, Cpu, FolderKanban, LayoutDashboard, MessagesSquare, Waves } from "lucide-react"
-import { format } from "date-fns"
-import { enUS, ptBR as dfPtBR } from "date-fns/locale"
-import type { DateRange } from "react-day-picker"
-import { enUS as rdpEnUS, ptBR as rdpPtBR } from "react-day-picker/locale"
-import type { AnalyticsRange } from "@shared/analytics"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { SegmentedControl } from "@/components/ui/segmented-control"
+import { Cpu, FolderKanban, LayoutDashboard, MessagesSquare, Waves } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAnalyticsStore } from "@/src/stores/analytics-store"
 import { ModelsTab } from "./models-tab"
@@ -19,44 +10,20 @@ import { RhythmTab } from "./rhythm-tab"
 import { SessionsTab } from "./sessions-tab"
 import type { UsageSection } from "./usage-utils"
 
-type PresetRange = "total" | "30d" | "7d" | "today"
-const RANGE_ORDER: PresetRange[] = ["total", "30d", "7d", "today"]
-
 /**
- * Usage page: the period on top and the sections on the right, the same shape as the Tools
- * page. The overview is the summary of everything; each other section opens the same numbers
- * in detail (models, projects with their history, every conversation, rhythm).
+ * Usage page: the sections on the right, the same shape as the Tools page. The title and the
+ * period live in the page header (App.tsx). The overview is the summary of everything; each
+ * other section opens the same numbers in detail (models, projects with their history, every
+ * conversation, rhythm).
  */
 export function UsageView() {
-  const { t, i18n } = useTranslation()
-  const { data, range, loading, load, setRange } = useAnalyticsStore()
+  const { t } = useTranslation()
+  const { data, range, loading, load } = useAnalyticsStore()
   const [section, setSection] = useState<UsageSection>("overview")
-  const [customOpen, setCustomOpen] = useState(false)
-  const [customDraft, setCustomDraft] = useState<DateRange | undefined>()
-
-  const isPt = i18n.language?.startsWith("pt") ?? true
-  const rangeIsCustom = typeof range === "object" && range.type === "custom"
 
   useEffect(() => {
     void load()
   }, [load])
-
-  const customLabel = useMemo(() => {
-    if (!rangeIsCustom) return t("analytics.ranges.custom")
-    const locale = isPt ? dfPtBR : enUS
-    return `${format(new Date(range.from), "dd MMM", { locale })} – ${format(new Date(range.to), "dd MMM", { locale })}`
-  }, [rangeIsCustom, range, t, isPt])
-
-  const handleRangeSelect = (next?: DateRange) => {
-    setCustomDraft(next)
-    if (!next?.from || !next.to) return
-    const from = new Date(next.from)
-    from.setHours(0, 0, 0, 0)
-    const to = new Date(next.to)
-    to.setHours(23, 59, 59, 999)
-    setRange({ type: "custom", from: from.getTime(), to: to.getTime() })
-    setCustomOpen(false)
-  }
 
   const nav: { id: UsageSection; label: string; icon: React.ComponentType<{ className?: string }>; count?: number | string }[] = [
     { id: "overview", label: t("usage.nav.overview"), icon: LayoutDashboard },
@@ -67,53 +34,7 @@ export function UsageView() {
   ]
 
   return (
-    <div className="flex h-full min-w-0 flex-col gap-3 overflow-hidden">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">{t("analytics.title")}</p>
-          {data && (
-            <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="size-3" />
-              {t("usage.header", { active: data.activeDays })}
-            </p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <SegmentedControl<PresetRange>
-            size="sm"
-            value={(typeof range === "string" ? range : RANGE_ORDER[0]) as PresetRange}
-            onChange={(v) => setRange(v as AnalyticsRange)}
-            options={RANGE_ORDER.map((r) => ({ value: r, label: t(`analytics.ranges.${r}`) }))}
-          />
-          <Popover
-            open={customOpen}
-            onOpenChange={(open) => {
-              setCustomOpen(open)
-              if (open) setCustomDraft(rangeIsCustom ? { from: new Date(range.from), to: new Date(range.to) } : undefined)
-            }}
-          >
-            <PopoverTrigger
-              render={
-                <Button size="sm" variant={rangeIsCustom ? "secondary" : "outline"} className="h-7 shrink-0 gap-1 px-2">
-                  <CalendarIcon className="size-3" />
-                  <span className="text-[11px]">{customLabel}</span>
-                </Button>
-              }
-            />
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                mode="range"
-                selected={customDraft}
-                onSelect={handleRangeSelect}
-                defaultMonth={customDraft?.from ?? new Date()}
-                numberOfMonths={2}
-                locale={isPt ? rdpPtBR : rdpEnUS}
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden pr-2">
           {loading && !data ? (

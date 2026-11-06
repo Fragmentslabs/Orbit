@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useWorkspace } from "@/lib/workspace-context"
-import type { MemoryKind, ProjectCategory } from "@shared/memory"
+import type { Memory, MemoryKind, ProjectCategory } from "@shared/memory"
 import { searchMemories, visibleIn } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { useActiveSession } from "@/src/stores/session-store"
+import { useMemoriesScope } from "@/src/stores/memories-scope-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { type FilterGroup, MemoryFilters } from "./memory-filters"
 import { MemoryListItem } from "./memory-list-item"
@@ -19,7 +20,7 @@ import { CATEGORY_LABEL, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 /**
  * Memories view: list of cards or tree of connections (SVG with zoom/pan),
- * with an automatic filter by the workspace mode — chat shows
+ * with a filter by scope (chosen in the header; by default the workspace mode) — chat shows
  * core+seasonal+general, code shows project+general (project filter).
  *
  * The filters live in a menu on the right (same shape as the Tools page). Choosing a
@@ -85,7 +86,11 @@ function MemoriesSkeleton({ graph }: { graph: boolean }) {
 
 export function MemoriesView() {
   const { t } = useTranslation()
-  const { mode } = useWorkspace()
+  const { mode: workspaceMode } = useWorkspace()
+  // What the page lists is chosen in the header (chat, code or both); until then it follows
+  // the workspace mode, as it always did.
+  const chosenScope = useMemoriesScope((s) => s.scope)
+  const scope = chosenScope ?? workspaceMode
   const initialize = useMemoryStore((s) => s.initialize)
   const index = useMemoryStore((s) => s.index)
   const loading = useMemoryStore((s) => s.loading)
@@ -99,7 +104,7 @@ export function MemoriesView() {
   const [tab, setTab] = useState<"list" | "graph">("list")
 
   // The panel belongs to the active conversation of the mode (same key the layout uses).
-  const activeKey = useActiveSession(mode)?.id ?? ORPHAN_KEY
+  const activeKey = useActiveSession(workspaceMode)?.id ?? ORPHAN_KEY
   // Memory open in the active tab of the panel — it is the highlighted card/node.
   const openedId = usePanelStore((s) => {
     const activeTab = s.activeTabBySession[activeKey]
@@ -123,7 +128,14 @@ export function MemoriesView() {
     return [...map.entries()].map(([id, name]) => ({ id, name }))
   }, [index])
 
-  const kinds: MemoryKind[] = mode === "chat" ? ["core", "seasonal", "general"] : ["project", "general"]
+  const kinds: MemoryKind[] =
+    scope === "chat"
+      ? ["core", "seasonal", "general"]
+      : scope === "code"
+        ? ["project", "general"]
+        : ["core", "seasonal", "general", "project"]
+  /** The memory shows up where it counts; "all" is the union of both modes. */
+  const countsInScope = (m: Memory) => (scope === "all" ? visibleIn(m, "chat") || visibleIn(m, "code") : visibleIn(m, scope))
 
   /**
    * Routine proposals. They stay OUTSIDE the pool — they are not memories yet —
@@ -141,7 +153,7 @@ export function MemoriesView() {
       if (!kinds.includes(m.kind)) return false
       // A single rule: the memory appears in the mode in which it counts. It is what keeps
       // learnings out of the chat and conversation preference out of the code.
-      if (!visibleIn(m, mode)) return false
+      if (!countsInScope(m)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
       // The project filter counts for ALL kinds, not only "project": a
       // general memory created inside another project does not belong to this view.
@@ -151,7 +163,7 @@ export function MemoriesView() {
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, mode, projectFilter])
+  }, [index, scope, projectFilter])
 
   const kindPool = useMemo(
     () => (kindFilter === ALL ? basePool : basePool.filter((m) => m.kind === kindFilter)),
@@ -172,11 +184,11 @@ export function MemoriesView() {
   const filterGroups = useMemo<FilterGroup[]>(() => {
     const groups: FilterGroup[] = []
 
-    if (mode === "code" && projects.length > 1) {
+    if (scope !== "chat" && projects.length > 1) {
       const counts = new Map<string, number>()
       let total = 0
       for (const m of index) {
-        if (m.proposed || !kinds.includes(m.kind) || !visibleIn(m, mode)) continue
+        if (m.proposed || !kinds.includes(m.kind) || !countsInScope(m)) continue
         total++
         for (const p of projects) if (matchesProjectFilter(m, p.id)) counts.set(p.id, (counts.get(p.id) ?? 0) + 1)
       }
@@ -230,7 +242,7 @@ export function MemoriesView() {
     }
     return groups
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, mode, projects, index, projectFilter, kindFilter, categoryFilter, basePool, kindPool])
+  }, [t, scope, projects, index, projectFilter, kindFilter, categoryFilter, basePool, kindPool])
 
   // Folder of the focused project — files dropped in the graph become memories of it
   const projectDirectory = useMemo(() => {
@@ -270,14 +282,14 @@ export function MemoriesView() {
   // search would inherit the already expanded total of the previous one.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [query, projectFilter, kindFilter, categoryFilter, mode, tab])
+  }, [query, projectFilter, kindFilter, categoryFilter, scope, tab])
 
   // Switching mode or project may leave the chosen kind/category out of the
   // view — they go back to "all" instead of showing an empty list for no reason.
   useEffect(() => {
     setKindFilter(ALL)
     setCategoryFilter(ALL)
-  }, [mode, projectFilter])
+  }, [scope, projectFilter])
 
   // A kind change may also leave the category out of the view.
   useEffect(() => {
@@ -365,9 +377,9 @@ export function MemoriesView() {
                 <p className="max-w-sm text-xs text-muted-foreground">
                   {query
                     ? t("memories.emptyQuery")
-                    : mode === "chat"
-                      ? t("memories.emptyChat")
-                      : t("memories.emptyCode")}
+                    : scope === "code"
+                      ? t("memories.emptyCode")
+                      : t("memories.emptyChat")}
                 </p>
               </div>
             </div>
