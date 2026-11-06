@@ -138,11 +138,11 @@ function rewriteFontUrls(text: string, base: string): string {
 function bufferAsset(
   buffer: Buffer,
   contentType: string,
-  base: string,
+  base: string | null,
   cache: string = CACHE_REWRITABLE,
 ): ResolvedAsset {
   return {
-    buffer: isTextualAsset(contentType)
+    buffer: base && isTextualAsset(contentType)
       ? Buffer.from(rewriteFontUrls(buffer.toString('utf8'), base), 'utf8')
       : buffer,
     contentType,
@@ -156,9 +156,9 @@ function bufferAsset(
  * Text comes out of the BUFFER (it is small and Range is useless on it); the rest
  * keeps coming out through the path and is streamed with Range by serveAsset.
  */
-async function fileAsset(file: string, base: string): Promise<ResolvedAsset | null> {
+async function fileAsset(file: string, base: string | null): Promise<ResolvedAsset | null> {
   const contentType = contentTypeOf(file)
-  if (!isTextualAsset(contentType)) {
+  if (!base || !isTextualAsset(contentType)) {
     return { file, contentType, cache: CACHE_REWRITABLE }
   }
   const raw = await fsp.readFile(file).catch(() => null)
@@ -180,8 +180,9 @@ async function resolveAsset(
   id: string,
   relative: string,
   /** `http://host:port` as the phone sees the desktop — the base of the font URLs
-   *  rewritten inside the HTML/CSS. */
-  base: string,
+   *  rewritten inside the HTML/CSS. `null` keeps `orbit-font://` (a desktop peer,
+   *  whose own main serves it). */
+  base: string | null,
 ): Promise<ResolvedAsset | null> {
   switch (scope) {
     case 'media': {
@@ -273,6 +274,7 @@ export async function serveAsset(
   id: string,
   token: string,
   relative: string,
+  options: { rewriteFonts?: boolean } = {},
 ): Promise<void> {
   const headers = (extra: Record<string, string>) => ({
     'Access-Control-Allow-Origin': '*',
@@ -286,7 +288,8 @@ export async function serveAsset(
     return
   }
 
-  const asset = await resolveAsset(scope, id, relative, `http://${req.headers.host ?? 'localhost'}`)
+  const base = options.rewriteFonts === false ? null : `http://${req.headers.host ?? 'localhost'}`
+  const asset = await resolveAsset(scope, id, relative, base)
   if (!asset) {
     res.writeHead(404, headers({ 'Content-Type': 'text/plain; charset=utf-8' }))
     res.end('not found')

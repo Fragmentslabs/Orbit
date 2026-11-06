@@ -95,6 +95,10 @@ import {
 } from './companion-http'
 import { createAssetToken } from './companion-token'
 import { tNow } from './i18n'
+import { normalizeGrants, type GrantedDevice, type PeerGrants } from '@shared/peers'
+import { normalizeFingerprint } from './peers/pairing'
+import { desktopMayRequest, isDesktopOnlyRequest } from './peers/permissions'
+import { handleDesktopOnlyRequest, sanitizeDesktopSend } from './peers/desktop-requests'
 
 const execFileAsync = promisify(execFile)
 
@@ -112,6 +116,17 @@ interface ConnectedClient {
   /** Hostname/IP the client used to connect — base of the rewritten media
    *  URLs (the phone only reaches the desktop through the IP it used itself). */
   mediaHost: string
+  /**
+   * 'phone': the companion app over the plain server (full API, as always).
+   * 'desktop': another Orbit over the mutual-TLS peer server — allowlisted
+   * requests only (peers/permissions.ts), raw orbit-* addresses (its own main
+   * proxies them), and none of the phone's settings broadcasts.
+   */
+  kind: 'phone' | 'desktop'
+  /** Desktop only: what the person here granted it. */
+  grants?: PeerGrants
+  /** Handle of the paired device (hash of its token) — revoke closes its sockets. */
+  deviceId?: string
 }
 
 let server: Server | null = null
@@ -134,23 +149,136 @@ interface PairedDevice {
   deviceName: string
   pairedAt: number
   lastSeenAt: number
+  /** Absent in records from before desktop peers — those are phones. */
+  kind?: 'phone' | 'desktop'
+  /** Desktop only. */
+  peerId?: string
+  /** Desktop only: fingerprint of its client certificate. The token alone is not
+   *  enough — the connection must come with this same certificate. */
+  fingerprint?: string
+  grants?: PeerGrants
 }
 
 let pairedDevices: PairedDevice[] | null = null
 
 async function loadDevices(): Promise<PairedDevice[]> {
   if (!pairedDevices) {
-    pairedDevices = (await readJson<PairedDevice[]>(DEVICES_KEY)) ?? []
+    const stored = (await readJson<PairedDevice[]>(DEVICES_KEY)) ?? []
+    pairedDevices = stored.map((d) => ({ ...d, kind: d.kind ?? 'phone' }))
   }
   return pairedDevices
+}
+
+function deviceIdOf(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex').slice(0, 16)
+}
+
+function tokenMatches(a: string, b: string): boolean {
+  // Constant-time comparison (tokens have a fixed size of 64 hex chars)
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
 
 async function registerDevice(deviceName: string): Promise<string> {
   const devices = await loadDevices()
   const token = crypto.randomBytes(32).toString('hex')
-  devices.push({ token, deviceName, pairedAt: Date.now(), lastSeenAt: Date.now() })
+  devices.push({ token, deviceName, pairedAt: Date.now(), lastSeenAt: Date.now(), kind: 'phone' })
   await writeJson(DEVICES_KEY, devices)
   return token
+}
+
+/**
+ * A desktop accepted on the pairing card. A new pairing of the same peer replaces
+ * the old record (and closes its sockets): the person just chose the grants again.
+ */
+export async function registerDesktopDevice(input: {
+  deviceName: string
+  peerId: string
+  fingerprint: string
+  grants: PeerGrants
+}): Promise<string> {
+  const devices = await loadDevices()
+  for (const old of devices.filter((d) => d.kind === 'desktop' && d.peerId === input.peerId)) {
+    closeDeviceSockets(deviceIdOf(old.token))
+  }
+  const kept = devices.filter((d) => !(d.kind === 'desktop' && d.peerId === input.peerId))
+  const token = crypto.randomBytes(32).toString('hex')
+  kept.push({
+    token,
+    deviceName: input.deviceName,
+    pairedAt: Date.now(),
+    lastSeenAt: Date.now(),
+    kind: 'desktop',
+    peerId: input.peerId,
+    fingerprint: input.fingerprint,
+    grants: normalizeGrants(input.grants),
+  })
+  pairedDevices = kept
+  await writeJson(DEVICES_KEY, kept)
+  return token
+}
+
+/**
+ * The desktop device for this token, only when the connection presented the same
+ * client certificate it paired with. A copied token on another machine is refused.
+ */
+export async function validateDesktopToken(
+  token: string,
+  fingerprint: string | null,
+  options: { touch?: boolean } = {},
+): Promise<{ deviceId: string; deviceName: string; grants: PeerGrants; peerId: string } | null> {
+  if (!token || !fingerprint) return null
+  const devices = await loadDevices()
+  const device = devices.find((d) => d.kind === 'desktop' && tokenMatches(d.token, token))
+  if (!device || !device.fingerprint || !device.peerId) return null
+  if (normalizeFingerprint(device.fingerprint) !== normalizeFingerprint(fingerprint)) return null
+  if (options.touch !== false) {
+    device.lastSeenAt = Date.now()
+    void writeJson(DEVICES_KEY, devices)
+  }
+  return { deviceId: deviceIdOf(device.token), deviceName: device.deviceName, grants: normalizeGrants(device.grants), peerId: device.peerId }
+}
+
+/** Devices that can see this machine, without their tokens (for the modal). */
+export async function listGrantedDevices(): Promise<GrantedDevice[]> {
+  const devices = await loadDevices()
+  const connected = new Set([...clients].filter((c) => c.authenticated && c.deviceId).map((c) => c.deviceId))
+  return devices.map((d) => {
+    const id = deviceIdOf(d.token)
+    return {
+      id,
+      deviceName: d.deviceName,
+      kind: d.kind ?? 'phone',
+      ...(d.kind === 'desktop' ? { grants: normalizeGrants(d.grants) } : {}),
+      pairedAt: d.pairedAt,
+      lastSeenAt: d.lastSeenAt,
+      connected: connected.has(id),
+    }
+  })
+}
+
+/** Revoke: the token stops working now and the open sockets of the device close. */
+export async function revokeDevice(id: string): Promise<boolean> {
+  const devices = await loadDevices()
+  const kept = devices.filter((d) => deviceIdOf(d.token) !== id)
+  if (kept.length === devices.length) return false
+  pairedDevices = kept
+  await writeJson(DEVICES_KEY, kept)
+  closeDeviceSockets(id)
+  return true
+}
+
+function closeDeviceSockets(deviceId: string): void {
+  for (const client of [...clients]) {
+    if (client.deviceId === deviceId) {
+      try {
+        client.ws.close(4001, 'revoked')
+      } catch {
+        /* already closing */
+      }
+      clients.delete(client)
+    }
+  }
 }
 
 /** Orchestra conductor configured on the desktop, in the SendMessageInput shape. */
@@ -159,18 +287,23 @@ function conductorFromConfig(): SendMessageInput['orchestratorModel'] {
   return orchestratorModel ? { ...orchestratorModel, reasoning: orchestratorReasoning ?? undefined } : undefined
 }
 
+/**
+ * Token of a PHONE. A desktop token is refused here on purpose: the plain server
+ * (and its HTTP API) is the phone's full API, and a desktop that someone granted
+ * "view only" must not get it by connecting to the other port.
+ */
 export async function validateDeviceToken(token: string): Promise<boolean> {
-  if (!token) return false
+  return (await phoneDeviceId(token)) !== null
+}
+
+async function phoneDeviceId(token: string): Promise<string | null> {
+  if (!token) return null
   const devices = await loadDevices()
-  const device = devices.find((d) => {
-    // Constant-time comparison (tokens have a fixed size of 64 hex chars)
-    if (d.token.length !== token.length) return false
-    return crypto.timingSafeEqual(Buffer.from(d.token), Buffer.from(token))
-  })
-  if (!device) return false
+  const device = devices.find((d) => (d.kind ?? 'phone') === 'phone' && tokenMatches(d.token, token))
+  if (!device) return null
   device.lastSeenAt = Date.now()
   void writeJson(DEVICES_KEY, devices)
-  return true
+  return deviceIdOf(device.token)
 }
 // Pairing mode: active while the "Connect App" modal is open on the
 // desktop. While active, the current PIN is exposed by the public discovery
@@ -346,11 +479,43 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
     return
   }
 
+  // Desktops authenticate in the peer server's handshake (certificate + token)
+  // before being attached; nothing here can change who they are or what they may do.
+  if (client.kind === 'desktop') {
+    const type = (req as { type: string }).type
+    if (!desktopMayRequest(type, client.grants ?? normalizeGrants(null))) {
+      sendResponse(ws, requestId, false, undefined, 'forbidden')
+      return
+    }
+    if (isDesktopOnlyRequest(type)) {
+      try {
+        const data = await handleDesktopOnlyRequest(req as unknown as { type: string; [key: string]: unknown })
+        sendResponse(ws, requestId, true, data)
+      } catch (err) {
+        sendResponse(ws, requestId, false, undefined, (err as Error).message || 'error')
+      }
+      return
+    }
+    if (req.type === 'messages:send') {
+      const clean = await sanitizeDesktopSend(req)
+      if (!clean) {
+        sendResponse(ws, requestId, false, undefined, 'invalid')
+        return
+      }
+      req = clean
+    }
+  } else if (isDesktopOnlyRequest((req as { type: string }).type)) {
+    sendResponse(ws, requestId, false, undefined, 'unknown_request')
+    return
+  }
+
   // Auth is the only request allowed without authentication
   if (req.type === 'auth') {
     // 1st: persistent token from a previous pairing
-    if (req.token && (await validateDeviceToken(req.token))) {
+    const reconnectedId = req.token ? await phoneDeviceId(req.token) : null
+    if (reconnectedId) {
       client.authenticated = true
+      client.deviceId = reconnectedId
       client.deviceName = req.deviceName ?? 'Companion'
       const resp: AuthOkResponse = {
         type: 'auth:ok',
@@ -368,6 +533,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       client.authenticated = true
       client.deviceName = req.deviceName ?? 'Companion'
       const deviceToken = await registerDevice(client.deviceName)
+      client.deviceId = deviceIdOf(deviceToken)
       const resp: AuthOkResponse = {
         type: 'auth:ok',
         deviceName: client.deviceName,
@@ -497,7 +663,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         // The mobile does not know orbit-media:// (an Electron scheme — only the
         // streaming and sessions:unrevert rewrote it). Without this, the whole
         // history reaches the app raw and the images never load.
-        const rewritten = rewriteMessages(page, mediaBaseUrl(client)) ?? page
+        // A desktop peer keeps the orbit-* addresses: its own main proxies them
+        // through the pinned TLS connection (peers/remote-assets.ts), so no signed
+        // URL ever crosses the network in plain HTTP.
+        const rewritten = client.kind === 'desktop' ? page : (rewriteMessages(page, mediaBaseUrl(client)) ?? page)
         sendResponse(ws, requestId, true, rewritten)
         break
       }
@@ -1528,6 +1697,11 @@ function clientHostFromReq(req: IncomingMessage): string {
 export function forwardChatEvent(event: ChatEvent): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (client.kind === 'desktop') {
+      // Raw: the peer's main proxies orbit-* (see messages:get).
+      client.ws.send(wrap({ type: 'chat:event', event } as CompanionEvent))
+      continue
+    }
     const base = mediaBaseUrl(client)
     let out: ChatEvent = event
     if (event.type === 'message') {
@@ -1547,7 +1721,7 @@ export function forwardChatEvent(event: ChatEvent): void {
 /** Relays a RoutineEvent to every authenticated companion. */
 export function forwardRoutineEvent(event: RoutineEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'routines:event', event } as CompanionEvent))
   }
 }
@@ -1555,7 +1729,7 @@ export function forwardRoutineEvent(event: RoutineEvent): void {
 /** Relays a PipelineEvent to every authenticated companion. */
 export function forwardPipelineEvent(event: PipelineEvent): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'pipeline:event', event } as CompanionEvent))
   }
 }
@@ -1566,7 +1740,7 @@ export function broadcastSessionModels(
   overrides: Record<string, { providerId: string; modelId: string }>,
 ): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:model-change', overrides } as unknown as CompanionEvent))
   }
 }
@@ -1575,7 +1749,7 @@ export function broadcastSessionModels(
  *  without it the phone would open without the rotations created on the desktop. */
 export function broadcastRotationConfig(config: RotationConfig): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'rotation:change', config } satisfies RotationChangeEvent))
   }
 }
@@ -1585,7 +1759,7 @@ export function broadcastRotationConfig(config: RotationConfig): void {
  *  brain) — without this the phone opens every chat on its own defaults. */
 export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
   }
 }
@@ -1594,7 +1768,7 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
  *  companions — without it the phone would open every chat on the device defaults. */
 export function broadcastSessionPrefs(prefs: SessionPrefsSnapshot): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:prefs-change', prefs } satisfies SessionPrefsChangeEvent))
   }
 }
@@ -1614,7 +1788,7 @@ export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
   }
   messageQueueCache = leve
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'queue:change', queues: leve } satisfies MessageQueueChangeEvent))
   }
 }
@@ -1623,7 +1797,7 @@ export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
  *  the mobile opens every chat with its own default thinking. */
 export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'reasoning:change', prefs } satisfies ReasoningPrefsChangeEvent))
   }
 }
@@ -1632,7 +1806,7 @@ export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
  *  vision) — global, not per chat. */
 export function broadcastWorkerConfig(config: WorkerConfigSnapshot): void {
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'worker-config:change', config } satisfies WorkerConfigChangeEvent))
   }
 }
@@ -1652,7 +1826,7 @@ export function broadcastAppPreferences(prefs: AppPreferences): void {
   setGlobalMode(prefs.permissionMode)
   const payload = wrap({ type: 'prefs:change', prefs } satisfies AppPreferencesChangeEvent)
   for (const client of clients) {
-    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(payload)
   }
 }
@@ -1677,7 +1851,7 @@ export function notifyCompanionAsk(
   }
   const payload = wrap(notification)
   for (const client of clients) {
-    if (client.authenticated && client.ws.readyState === WebSocket.OPEN) {
+    if (client.authenticated && client.kind === 'phone' && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(payload)
     }
   }
@@ -1699,10 +1873,52 @@ export function notifyCompanionMessage(
   }
   const payload = wrap(notification)
   for (const client of clients) {
-    if (client.authenticated && client.ws.readyState === WebSocket.OPEN) {
+    if (client.authenticated && client.kind === 'phone' && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(payload)
     }
   }
+}
+
+// ─── Desktop peers ───────────────────────────────────────────────────────────
+
+/**
+ * A desktop that the peer server (peers/peer-server.ts) already authenticated —
+ * mutual TLS with its paired certificate plus its token. From here on it is a
+ * client like the phone, but every request goes through the desktop allowlist.
+ */
+export function attachDesktopClient(
+  ws: WebSocket,
+  info: { deviceId: string; deviceName: string; grants: PeerGrants; host: string },
+): void {
+  const client: ConnectedClient = {
+    ws,
+    authenticated: true,
+    deviceName: info.deviceName,
+    connectedAt: Date.now(),
+    mediaHost: info.host,
+    kind: 'desktop',
+    grants: info.grants,
+    deviceId: info.deviceId,
+  }
+  clients.add(client)
+  ws.on('message', (data: Buffer) => {
+    if (data.length > 2 * 1024 * 1024) return
+    try {
+      const msg = JSON.parse(data.toString()) as WsMessage
+      if (msg.payload && typeof (msg.payload as { type?: unknown }).type === 'string' && typeof msg.id === 'string') {
+        void handleRequest(client, msg.id, msg.payload as CompanionRequest)
+      }
+    } catch {
+      /* not JSON — ignored */
+    }
+  })
+  ws.on('close', () => clients.delete(client))
+  ws.on('error', () => clients.delete(client))
+}
+
+/** Running sessions, for the peer status pushed to desktops. */
+export function runningSessionIdsForPeers(): string[] {
+  return [...runningSessionIds()]
 }
 
 // ─── Server Lifecycle ────────────────────────────────────────────────────────
@@ -1739,6 +1955,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
       deviceName: '',
       connectedAt: Date.now(),
       mediaHost: clientHostFromReq(req),
+      kind: 'phone',
     }
     clients.add(client)
 
@@ -1800,7 +2017,7 @@ export function getCompanionStatus() {
     ip: getLocalIp(),
     pin: wss ? getCurrentPin() : currentPin,
     bindError: wsBindError,
-    connectedClients: [...clients].filter(c => c.authenticated).map(c => ({
+    connectedClients: [...clients].filter(c => c.authenticated && c.kind === 'phone').map(c => ({
       deviceName: c.deviceName,
       connectedAt: c.connectedAt,
     })),
