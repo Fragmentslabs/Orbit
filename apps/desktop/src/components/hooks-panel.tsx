@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, Ban, Pencil, PenLine, Trash2, Wand2, Webhook } from "lucide-react"
+import { Ban, Pencil, PenLine, Power, PowerOff, Trash2, Wand2, Webhook } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
@@ -12,10 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Hint } from "@/components/ui/hint"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { hooksApi } from "@/src/lib/ipc"
 import type { HookEvent, HookInput, HookRun, HookWithRun } from "@shared/hooks"
@@ -215,44 +215,31 @@ export function HooksPanel({ query = "" }: { query?: string }) {
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            {editing !== undefined && (
-              <Button size="icon-sm" variant="ghost" onClick={done} aria-label={t("common.back")}>
-                <ArrowLeft className="size-4" />
-              </Button>
-            )}
-            <p className="text-sm font-semibold">
-              {editing === undefined ? t("hooks.title") : editing ? t("hooks.editTitle") : t("hooks.newTitle")}
-            </p>
-          </div>
+          <p className="text-sm font-semibold">{t("hooks.title")}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.description")}</p>
         </div>
-        {editing === undefined && (
-          <CreateMenu
-            label={t("hooks.add")}
-            options={[
-              {
-                id: "ask",
-                icon: Wand2,
-                title: t("askOrbit.menu.hooks.title"),
-                description: t("askOrbit.menu.hooks.description"),
-                onSelect: () => setAskOpen(true),
-              },
-              {
-                id: "manual",
-                icon: PenLine,
-                title: t("askOrbit.menu.manual"),
-                description: t("askOrbit.menu.hooks.manualDescription"),
-                onSelect: () => { setDraft(undefined); setEditing(null) },
-              },
-            ]}
-          />
-        )}
+        <CreateMenu
+          label={t("hooks.add")}
+          options={[
+            {
+              id: "ask",
+              icon: Wand2,
+              title: t("askOrbit.menu.hooks.title"),
+              description: t("askOrbit.menu.hooks.description"),
+              onSelect: () => setAskOpen(true),
+            },
+            {
+              id: "manual",
+              icon: PenLine,
+              title: t("askOrbit.menu.manual"),
+              description: t("askOrbit.menu.hooks.manualDescription"),
+              onSelect: () => { setDraft(undefined); setEditing(null) },
+            },
+          ]}
+        />
       </div>
 
-      {editing !== undefined ? (
-        <HookForm initial={editing ?? undefined} draft={draft} onDone={done} />
-      ) : hooks.length === 0 ? (
+      {hooks.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
           <Webhook className="size-6 text-muted-foreground/50" />
           <p className="text-xs text-muted-foreground">{t("hooks.empty")}</p>
@@ -264,7 +251,7 @@ export function HooksPanel({ query = "" }: { query?: string }) {
       ) : (
         <div className="flex flex-col gap-2">
           {visibleHooks.map((hook) => (
-            <div key={hook.id} className={cn("flex items-start gap-3 rounded-lg border bg-card p-3", !hook.enabled && "opacity-60")}>
+            <div key={hook.id} className={cn("flex items-start gap-3 rounded-lg border bg-card p-3", !hook.enabled && "opacity-70")}>
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">{t(`hooks.event.${hook.event}`)}</span>
@@ -272,6 +259,9 @@ export function HooksPanel({ query = "" }: { query?: string }) {
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                     {hook.directory ? folderName(hook.directory) : t("hooks.scope.global")}
                   </span>
+                  {!hook.enabled && (
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">{t("hooks.disabled")}</span>
+                  )}
                   {hook.createdBy === "agent" && (
                     <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{t("hooks.byAgent")}</span>
                   )}
@@ -281,32 +271,39 @@ export function HooksPanel({ query = "" }: { query?: string }) {
                 <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground">$ {hook.command}</pre>
                 {hook.lastRun ? <LastRun run={hook.lastRun} /> : <p className="mt-1.5 text-[10px] text-muted-foreground">{t("hooks.run.never")}</p>}
               </div>
-              <div className="flex items-center gap-1 self-start pt-0.5">
-                <Switch
-                  checked={hook.enabled}
-                  onCheckedChange={(enabled) => void hooksApi.toggle(hook.id, enabled).then(refresh)}
-                  aria-label={t("hooks.toggle")}
-                />
-                <Hint label={t("common.edit")}>
-                  <Button size="icon-sm" variant="ghost" onClick={() => setEditing(hook)}>
-                    <Pencil className="size-3.5" />
-                  </Button>
-                </Hint>
-                <Hint label={t("common.remove")}>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => void hooksApi.remove(hook.id).then(refresh)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </Hint>
-              </div>
+              <CardMenu
+                items={[
+                  { id: "edit", label: t("common.edit"), icon: Pencil, onSelect: () => setEditing(hook) },
+                  {
+                    id: "toggle",
+                    label: hook.enabled ? t("hooks.menu.disable") : t("hooks.menu.enable"),
+                    icon: hook.enabled ? PowerOff : Power,
+                    onSelect: () => void hooksApi.toggle(hook.id, !hook.enabled).then(refresh),
+                  },
+                  {
+                    id: "remove",
+                    label: t("common.remove"),
+                    icon: Trash2,
+                    destructive: true,
+                    onSelect: () => void hooksApi.remove(hook.id).then(refresh),
+                  },
+                ]}
+              />
             </div>
           ))}
         </div>
       )}
+      {/* Creating (by hand or from a suggestion of Orbit) and editing happen in a modal; the
+          form mounts only while it is open, so every opening starts from its own hook. */}
+      <Dialog open={editing !== undefined} onOpenChange={(open) => { if (!open) done() }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{editing ? t("hooks.editTitle") : t("hooks.newTitle")}</DialogTitle>
+            <DialogDescription>{t("hooks.description")}</DialogDescription>
+          </DialogHeader>
+          {editing !== undefined && <HookForm initial={editing ?? undefined} draft={draft} onDone={done} />}
+        </DialogContent>
+      </Dialog>
       <AskOrbitDialog
         kind="hooks"
         open={askOpen}

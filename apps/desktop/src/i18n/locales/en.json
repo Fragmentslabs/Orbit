@@ -3718,6 +3718,11 @@
       "timeoutHint": "If it runs longer, the command is stopped and the call goes on without it. Default 10, max 60.",
       "commandHintPre": "Receives the call as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 blocks and stderr becomes the reason.",
       "commandHintPost": "Receives the call and its result as JSON on stdin and the vars ORBIT_TOOL_NAME, ORBIT_FILE and ORBIT_PROJECT_DIR. Exit 2 sends stderr back to the agent."
+    },
+    "disabled": "Disabled",
+    "menu": {
+      "enable": "Enable",
+      "disable": "Disable"
     }
   },
   "subchat": {
