@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
+  Blocks,
   Cable,
   ChevronDown,
   ExternalLink,
@@ -46,7 +47,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
-import { HooksDialog } from "@/src/components/hooks-dialog"
+import { HooksPanel } from "@/src/components/hooks-panel"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -820,14 +821,15 @@ export function McpSkillsPanel() {
   const [mcpDialogOpen, setMcpDialogOpen] = useState(false)
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
-  const [hooksOpen, setHooksOpen] = useState(false)
+  // The page shows one section at a time; the menu on the right switches it.
+  const [section, setSection] = useState<ToolsSection>("integrations")
   const [hookCount, setHookCount] = useState(0)
   useEffect(() => {
     const load = () => void hooksApi.list().then((list) => setHookCount(list.length))
     load()
     const listener = window.ipcRenderer.on("hooks:changed", load)
     return () => window.ipcRenderer.off("hooks:changed", listener)
-  }, [hooksOpen])
+  }, [])
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
@@ -961,9 +963,32 @@ export function McpSkillsPanel() {
     void useSessionStore.getState().selectSession("chat", null)
   }
 
+  const mySkills = skills.filter((s) => s.source !== "builtin")
+  const builtinSkills = skills.filter((s) => s.source === "builtin")
+  const renderSkill = (skill: Skill) => (
+    <SkillRow
+      key={skill.slug}
+      skill={skill}
+      meta={meta[skill.slug]}
+      optimizing={optimizingSlugs.includes(skill.slug)}
+      languageDiffers={Boolean(meta[skill.slug]?.card && meta[skill.slug]!.card!.lang !== language)}
+      onView={() => setViewContent(skill.slug)}
+      onEdit={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}
+      onRemove={async () => {
+        await skillsApi.remove(skill.slug)
+        await refresh()
+      }}
+      onOptimize={() => void optimizeOne(skill.slug)}
+      onTogglePin={() => void setPref(skill.slug, { pin: !meta[skill.slug]?.prefs.pin })}
+      onToggleNever={() => void setPref(skill.slug, { never: !meta[skill.slug]?.prefs.never })}
+    />
+  )
+  const mcpAttention = mcpServers.some((server) => server.state === "error" || needsAuth(server))
+
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
-      {/* Official integrations */}
+    <div className="flex h-full min-w-0">
+      <div className="min-w-0 flex-1 overflow-y-auto pr-4">
+        {section === "integrations" && (
       <div>
         <div className="mb-2">
           <p className="text-sm font-semibold">{t("mcp.integrations.title")}</p>
@@ -976,7 +1001,9 @@ export function McpSkillsPanel() {
         </div>
       </div>
 
-      {/* Servidores MCP */}
+        )}
+
+        {section === "mcp" && (
       <div>
         <div className="mb-2 flex items-center justify-between">
           <div>
@@ -1112,7 +1139,9 @@ export function McpSkillsPanel() {
         )}
       </div>
 
-      {/* Skills */}
+        )}
+
+        {section === "skills" && (
       <div>
         <div className="mb-2 flex items-center justify-between">
           <div>
@@ -1182,46 +1211,68 @@ export function McpSkillsPanel() {
             <p className="text-xs text-muted-foreground">{t("mcp.skills.empty")}</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {skills.map((skill) => (
-              <SkillRow
-                key={skill.slug}
-                skill={skill}
-                meta={meta[skill.slug]}
-                optimizing={optimizingSlugs.includes(skill.slug)}
-                languageDiffers={Boolean(meta[skill.slug]?.card && meta[skill.slug]!.card!.lang !== language)}
-                onView={() => setViewContent(skill.slug)}
-                onEdit={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}
-                onRemove={async () => {
-                  await skillsApi.remove(skill.slug)
-                  await refresh()
-                }}
-                onOptimize={() => void optimizeOne(skill.slug)}
-                onTogglePin={() => void setPref(skill.slug, { pin: !meta[skill.slug]?.prefs.pin })}
-                onToggleNever={() => void setPref(skill.slug, { never: !meta[skill.slug]?.prefs.never })}
-              />
-            ))}
+          <div className="flex flex-col gap-4">
+            {mySkills.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+                  {t("mcp.skills.groupMine", { count: mySkills.length })}
+                </p>
+                <div className="flex flex-col gap-2">{mySkills.map(renderSkill)}</div>
+              </div>
+            )}
+            {builtinSkills.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+                  {t("mcp.skills.groupBuiltin", { count: builtinSkills.length })}
+                </p>
+                <div className="flex flex-col gap-2">{builtinSkills.map(renderSkill)}</div>
+              </div>
+            )}
           </div>
         )}
         <p className="mt-2 text-[11px] text-muted-foreground">{t("mcp.skills.rulesHint")}</p>
       </div>
 
-      {/* Hooks: a button and a count; the list lives in a dialog (see hooks-dialog.tsx) */}
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold">{t("hooks.title")}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t("hooks.sectionDescription")}</p>
-          </div>
-          <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => setHooksOpen(true)}>
-            <Webhook className="size-3.5" />
-            {hookCount > 0 ? t("hooks.count", { count: hookCount }) : t("hooks.manage")}
-          </Button>
-        </div>
+        )}
+
+        {section === "hooks" && <HooksPanel />}
       </div>
 
+      {/* Section menu */}
+      <nav aria-label={t("toolsPage.navLabel")} className="flex w-52 shrink-0 flex-col gap-0.5 border-l pl-3">
+        <ToolsNavItem
+          icon={Blocks}
+          label={t("toolsPage.integrations")}
+          count={INTEGRATIONS.length}
+          active={section === "integrations"}
+          onClick={() => setSection("integrations")}
+        />
+        <div className="mx-2 my-2 h-px bg-border" role="separator" />
+        <ToolsNavItem
+          icon={Cable}
+          label={t("mcp.servers.title")}
+          count={mcpServers.length}
+          attention={mcpAttention}
+          active={section === "mcp"}
+          onClick={() => setSection("mcp")}
+        />
+        <ToolsNavItem
+          icon={Sparkles}
+          label={t("mcp.skills.title")}
+          count={skills.length}
+          active={section === "skills"}
+          onClick={() => setSection("skills")}
+        />
+        <ToolsNavItem
+          icon={Webhook}
+          label={t("hooks.title")}
+          count={hookCount}
+          active={section === "hooks"}
+          onClick={() => setSection("hooks")}
+        />
+      </nav>
+
       {/* Dialogs */}
-      <HooksDialog open={hooksOpen} onOpenChange={setHooksOpen} />
       <McpServerDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} initial={mcpEdit} />
       <CreateSkillDialog open={skillDialogOpen} onOpenChange={setSkillDialogOpen} initial={skillEdit} />
       <SkillContentDialog
@@ -1230,6 +1281,34 @@ export function McpSkillsPanel() {
         onOpenChange={(o) => { if (!o) setViewContent(null) }}
       />
     </div>
+  )
+}
+
+type ToolsSection = "integrations" | "mcp" | "skills" | "hooks"
+
+function ToolsNavItem({ icon: Icon, label, count, attention, active, onClick }: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  count: number
+  attention?: boolean
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
+        active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+      )}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {attention ? <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden /> : null}
+      <span className="text-[11px] font-normal text-muted-foreground">{count}</span>
+    </button>
   )
 }
 

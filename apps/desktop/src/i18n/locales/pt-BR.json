@@ -1795,7 +1795,9 @@
       "optimizeNudge": "usada {{count}} vezes · otimizar melhora a busca",
       "noAuxModel": "Escolha um modelo auxiliar nas Preferências para otimizar skills.",
       "optimizeFailed": "Não foi possível otimizar: {{message}}",
-      "rulesHint": "Skill não é regra permanente. Para o que deve valer sempre, use o AGENTS.md / CLAUDE.md do repositório ou as preferências gerais da memória."
+      "rulesHint": "Skill não é regra permanente. Para o que deve valer sempre, use o AGENTS.md / CLAUDE.md do repositório ou as preferências gerais da memória.",
+      "groupMine": "Suas skills · {{count}}",
+      "groupBuiltin": "Nativas do Orbit · {{count}}"
     }
   },
   "analytics": {
@@ -3726,10 +3728,6 @@
     "newTitle": "Novo hook",
     "editTitle": "Editar hook",
     "description": "Comandos seus que rodam sozinhos antes ou depois de cada tool do agente, sem passar pelo modelo. Exit 2 bloqueia a chamada (antes) ou devolve o stderr ao agente (depois).",
-    "manage": "Gerenciar hooks",
-    "sectionDescription": "Comandos que rodam sozinhos em volta das tools do agente: formatar ao editar, bloquear um push --force, registrar comandos. Peça no chat (\"toda vez que editar, rode o prettier\") ou crie aqui.",
-    "count_one": "{{count}} hook",
-    "count_other": "{{count}} hooks",
     "add": "Novo hook",
     "empty": "Nenhum hook. Peça ao agente (\"toda vez que você editar um arquivo, rode o prettier\") ou crie um aqui.",
     "anyTool": "qualquer tool",
@@ -3765,5 +3763,9 @@
   },
   "subchat": {
     "noResult": "Sem resposta em texto."
+  },
+  "toolsPage": {
+    "navLabel": "Seções de ferramentas",
+    "integrations": "Integrações"
   }
 }

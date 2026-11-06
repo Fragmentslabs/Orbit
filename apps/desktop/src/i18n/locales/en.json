@@ -1795,7 +1795,9 @@
       "optimizeNudge": "used {{count}} times · optimizing improves search",
       "noAuxModel": "Choose an auxiliary model in Preferences to optimize skills.",
       "optimizeFailed": "Could not optimize: {{message}}",
-      "rulesHint": "A skill is not a standing rule. For something that must always apply, use AGENTS.md / CLAUDE.md in the repository or the general preferences in memory."
+      "rulesHint": "A skill is not a standing rule. For something that must always apply, use AGENTS.md / CLAUDE.md in the repository or the general preferences in memory.",
+      "groupMine": "Your skills · {{count}}",
+      "groupBuiltin": "Built into Orbit · {{count}}"
     }
   },
   "analytics": {
@@ -3726,10 +3728,6 @@
     "newTitle": "New hook",
     "editTitle": "Edit hook",
     "description": "Your own commands that run on their own before or after each of the agent's tools, without going through the model. Exit 2 blocks the call (before) or sends stderr back to the agent (after).",
-    "manage": "Manage hooks",
-    "sectionDescription": "Commands that run on their own around the agent's tools: format on edit, block a push --force, log commands. Ask in the chat (\"every time you edit, run prettier\") or create one here.",
-    "count_one": "{{count}} hook",
-    "count_other": "{{count}} hooks",
     "add": "New hook",
     "empty": "No hooks. Ask the agent (\"every time you edit a file, run prettier\") or create one here.",
     "anyTool": "any tool",
@@ -3765,5 +3763,9 @@
   },
   "subchat": {
     "noResult": "No text answer."
+  },
+  "toolsPage": {
+    "navLabel": "Tool sections",
+    "integrations": "Integrations"
   }
 }
