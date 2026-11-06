@@ -13,6 +13,7 @@ import {
   PenLine,
   PlusIcon,
   RefreshCw,
+  Search,
   Server,
   Sparkles,
   Trash2,
@@ -31,6 +32,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
   SelectContent,
@@ -825,6 +827,13 @@ export function McpSkillsPanel() {
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   // The page shows one section at a time; the menu on the right switches it.
   const [section, setSection] = useState<ToolsSection>("integrations")
+  // Search of the page filters the open section; the skills also have an origin filter.
+  const [query, setQuery] = useState("")
+  const [skillFilter, setSkillFilter] = useState<"all" | "mine" | "builtin">("all")
+  const pickSection = (next: ToolsSection) => {
+    setSection(next)
+    setQuery("")
+  }
   const [hookCount, setHookCount] = useState(0)
   useEffect(() => {
     const load = () => void hooksApi.list().then((list) => setHookCount(list.length))
@@ -976,8 +985,17 @@ export function McpSkillsPanel() {
     setSkillDialogOpen(true)
   }
 
-  const mySkills = skills.filter((s) => s.source !== "builtin")
-  const builtinSkills = skills.filter((s) => s.source === "builtin")
+  const needle = query.trim().toLowerCase()
+  const matches = (...fields: Array<string | undefined>) =>
+    !needle || fields.some((field) => field?.toLowerCase().includes(needle))
+  const allMySkills = skills.filter((s) => s.source !== "builtin")
+  const allBuiltinSkills = skills.filter((s) => s.source === "builtin")
+  const skillMatches = (skill: Skill) => matches(skill.name, skill.slug, skill.description)
+  const mySkills = skillFilter === "builtin" ? [] : allMySkills.filter(skillMatches)
+  const builtinSkills = skillFilter === "mine" ? [] : allBuiltinSkills.filter(skillMatches)
+  const visibleMcp = mcpServers.filter((server) =>
+    matches(server.config.name, server.config.url, server.config.command, ...server.toolNames),
+  )
   const renderSkill = (skill: Skill) => (
     <SkillRow
       key={skill.slug}
@@ -1001,6 +1019,29 @@ export function McpSkillsPanel() {
   return (
     <div className="flex h-full min-w-0">
       <div className="min-w-0 flex-1 overflow-y-auto pr-4">
+        {section !== "integrations" && (
+          <div className="sticky top-0 z-10 -mt-px mb-3 flex items-center gap-2 bg-background pb-1 pt-px">
+            <div className="relative min-w-40 flex-1">
+              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t(`toolsPage.search.${section}`)}
+                aria-label={t(`toolsPage.search.${section}`)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            {section === "skills" && (
+              <Tabs value={skillFilter} onValueChange={(v) => setSkillFilter(v as typeof skillFilter)}>
+                <TabsList>
+                  <TabsTrigger value="all">{t("toolsPage.skillFilter.all", { count: skills.length })}</TabsTrigger>
+                  <TabsTrigger value="mine">{t("toolsPage.skillFilter.mine", { count: allMySkills.length })}</TabsTrigger>
+                  <TabsTrigger value="builtin">{t("toolsPage.skillFilter.builtin", { count: allBuiltinSkills.length })}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
+        )}
         {section === "integrations" && (
       <div>
         <div className="mb-2">
@@ -1050,9 +1091,13 @@ export function McpSkillsPanel() {
             <Cable className="size-6 text-muted-foreground/50" />
             <p className="text-xs text-muted-foreground">{t("mcp.servers.empty")}</p>
           </div>
+        ) : visibleMcp.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+            {t("toolsPage.noResults", { query: query.trim() })}
+          </p>
         ) : (
           <div className="flex flex-col gap-2">
-            {mcpServers.map((server) => {
+            {visibleMcp.map((server) => {
               const active = server.state === "connected"
               return (
                 <div key={server.config.name} className="flex items-start gap-3 rounded-lg border p-3">
@@ -1228,6 +1273,10 @@ export function McpSkillsPanel() {
             <Sparkles className="size-6 text-muted-foreground/50" />
             <p className="text-xs text-muted-foreground">{t("mcp.skills.empty")}</p>
           </div>
+        ) : mySkills.length === 0 && builtinSkills.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+            {needle ? t("toolsPage.noResults", { query: query.trim() }) : t("toolsPage.noSkillsInFilter")}
+          </p>
         ) : (
           <div className="flex flex-col gap-4">
             {mySkills.length > 0 && (
@@ -1253,7 +1302,7 @@ export function McpSkillsPanel() {
 
         )}
 
-        {section === "hooks" && <HooksPanel />}
+        {section === "hooks" && <HooksPanel query={query} />}
       </div>
 
       {/* Section menu */}
@@ -1263,7 +1312,7 @@ export function McpSkillsPanel() {
           label={t("toolsPage.integrations")}
           count={INTEGRATIONS.length}
           active={section === "integrations"}
-          onClick={() => setSection("integrations")}
+          onClick={() => pickSection("integrations")}
         />
         <div className="mx-2 my-2 h-px bg-border" role="separator" />
         <ToolsNavItem
@@ -1272,21 +1321,21 @@ export function McpSkillsPanel() {
           count={mcpServers.length}
           attention={mcpAttention}
           active={section === "mcp"}
-          onClick={() => setSection("mcp")}
+          onClick={() => pickSection("mcp")}
         />
         <ToolsNavItem
           icon={Sparkles}
           label={t("mcp.skills.title")}
           count={skills.length}
           active={section === "skills"}
-          onClick={() => setSection("skills")}
+          onClick={() => pickSection("skills")}
         />
         <ToolsNavItem
           icon={Webhook}
           label={t("hooks.title")}
           count={hookCount}
           active={section === "hooks"}
-          onClick={() => setSection("hooks")}
+          onClick={() => pickSection("hooks")}
         />
       </nav>
 

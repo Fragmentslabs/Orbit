@@ -3641,7 +3641,19 @@
   },
   "toolsPage": {
     "navLabel": "Tool sections",
-    "integrations": "Integrations"
+    "integrations": "Integrations",
+    "search": {
+      "mcp": "Search server or tool",
+      "skills": "Search skills",
+      "hooks": "Search hooks"
+    },
+    "skillFilter": {
+      "all": "All {{count}}",
+      "mine": "Mine {{count}}",
+      "builtin": "Built-in {{count}}"
+    },
+    "noResults": "Nothing found for \"{{query}}\".",
+    "noSkillsInFilter": "No skills in this filter."
   },
   "peers": {
     "title": "Connect devices",
