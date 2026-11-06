@@ -2847,7 +2847,8 @@
       "emptySubtitleChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
       "search": "Search routines",
       "noResults": "Nothing found for \"{{query}}\".",
-      "failed": "Failed last time"
+      "failed": "Failed last time",
+      "runningNow": "Running now"
     },
     "runs": {
       "title": "Sessions",
@@ -2868,7 +2869,15 @@
       "agenda": "Agenda"
     },
     "detail": {
-      "close": "Close"
+      "close": "Close",
+      "when": "When",
+      "next": "Next execution",
+      "averageCost": "Average cost per execution",
+      "what": "What it does",
+      "pause": "Pause",
+      "activate": "Activate",
+      "runsCount_one": "{{count}} execution",
+      "runsCount_other": "{{count}} executions"
     },
     "agenda": {
       "prev": "Previous week",
@@ -2891,7 +2900,9 @@
       "now": "now",
       "tomorrow": "tomorrow",
       "recent": "Latest executions",
-      "noRuns": "No executions yet."
+      "noRuns": "No executions yet.",
+      "activeOf": "{{active}} of {{total}}",
+      "noFailures": "no failures"
     }
   },
   "queue": {

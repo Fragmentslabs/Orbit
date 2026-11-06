@@ -2,17 +2,13 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
-  AlertCircleIcon,
   CalendarClockIcon,
-  CheckCircle2Icon,
-  ExternalLinkIcon,
   FolderIcon,
   Loader2,
-  MessageSquareIcon,
   MoreHorizontalIcon,
+  PauseIcon,
   PencilIcon,
   PlayIcon,
-  TerminalIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react"
@@ -28,11 +24,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
-import { formatCost, formatDateTimeShort, formatDuration, formatTokens } from "@/src/lib/format"
+import { formatCost, formatDateTimeShort, formatDuration } from "@/src/lib/format"
 import { ModelPicker } from "@/src/components/model-picker"
 import { useProviderStore, type SelectedModel } from "@/src/stores/provider-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -111,7 +108,6 @@ export function RoutineList({ routines, scope, query, selectedId, onSelect, onCr
         <RoutineCard
           key={routine.id}
           routine={routine}
-          showMode={scope === "all"}
           selected={routine.id === selectedId}
           onOpen={() => onSelect(routine.id === selectedId ? null : routine.id)}
         />
@@ -120,10 +116,11 @@ export function RoutineList({ routines, scope, query, selectedId, onSelect, onCr
   )
 }
 
-function RoutineCard({ routine, showMode, selected, onOpen }: {
+/** The state the card's dot and badges say: what needs the user's eyes first. */
+type RoutineState = "running" | "failed" | "paused" | "ok"
+
+function RoutineCard({ routine, selected, onOpen }: {
   routine: Routine
-  /** The page lists both modes: say which one this is. */
-  showMode?: boolean
   /** Open in the panel on the right. */
   selected?: boolean
   onOpen: () => void
@@ -137,62 +134,66 @@ function RoutineCard({ routine, showMode, selected, onOpen }: {
     for (const r of s.runs) if (r.routineId === routine.id && (!last || r.startedAt > last.startedAt)) last = r
     return last?.status === "error"
   })
-  const modelName = useProviderStore(
-    (s) => s.catalog[routine.model.providerId]?.models[routine.model.modelId]?.name ?? routine.model.modelId,
-  )
-
   const next = nextRoutineRun(routine)
+  const state: RoutineState = running ? "running" : failed ? "failed" : !routine.active ? "paused" : "ok"
 
   return (
-    <div className={cn("flex flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-ring", selected && "border-primary/70")}>
+    <div
+      className={cn(
+        "relative flex flex-col gap-1.5 rounded-lg border bg-card px-3.5 py-3 transition-colors hover:border-ring",
+        selected && "border-primary/70",
+      )}
+    >
       <div className="flex items-center gap-2">
-        <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+        <span
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            state === "running" && "bg-blue-400",
+            state === "failed" && "bg-destructive",
+            state === "paused" && "bg-muted-foreground/60",
+            state === "ok" && "bg-emerald-500",
+          )}
+          aria-hidden
+        />
+        {/* The title is a button that stretches over the whole card; the switch sits above it. */}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="min-w-0 flex-1 truncate text-left text-sm font-medium after:absolute after:inset-0 after:content-['']"
+        >
           {routine.title}
         </button>
-        {showMode && (
-          <span
-            title={routine.mode === "chat" ? t("routines.mode.chat") : t("routines.mode.code")}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-          >
-            {routine.mode === "chat" ? <MessageSquareIcon className="size-3" /> : <TerminalIcon className="size-3" />}
-            {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+        <span className="relative z-10">
+          <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
+        </span>
+      </div>
+
+      <Truncate>
+        <p className="truncate text-xs text-muted-foreground">{describeSchedule(routine.schedule, t)}</p>
+      </Truncate>
+
+      <div className="flex items-center gap-1.5">
+        <span className="shrink-0 rounded-md bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
+          {routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}
+        </span>
+        {state === "running" && (
+          <span className="shrink-0 rounded-md bg-blue-500/15 px-1.5 py-px text-[10px] text-blue-600 dark:text-blue-300">
+            {t("routines.list.runningNow")}
           </span>
         )}
-        {failed && (
-          <span className="shrink-0 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+        {state === "failed" && (
+          <span className="shrink-0 rounded-md bg-destructive/10 px-1.5 py-px text-[10px] text-destructive">
             {t("routines.list.failed")}
           </span>
         )}
-        {running && (
-          <span title={t("routines.runs.running")}>
-            <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+        {!routine.active && (
+          <span className="shrink-0 rounded-md bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-600 dark:text-amber-400">
+            {t("routines.list.paused")}
           </span>
         )}
-        <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
+        <span className="flex-1" />
+        {next && <span className="shrink-0 text-[11px] text-muted-foreground">{formatDateTimeShort(next, i18n.language)}</span>}
       </div>
-
-      <button type="button" onClick={onOpen} className="min-w-0 space-y-1.5 text-left">
-        <Truncate>
-          <p className="truncate text-[11px] text-muted-foreground">{describeSchedule(routine.schedule, t)}</p>
-        </Truncate>
-        <p className="line-clamp-2 text-[11px] text-muted-foreground/80">{routine.prompt}</p>
-        <ModeBadges
-          modes={routine.modes}
-          permission
-          available={routine.mode === "chat" ? ROUTINE_CHAT_MODES : undefined}
-        />
-        <Truncate>
-          <p className="truncate text-[11px] text-muted-foreground">{modelName}</p>
-        </Truncate>
-        <Truncate>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {next
-              ? t("routines.list.next", { when: formatDateTimeShort(next, i18n.language) })
-              : t("routines.list.paused")}
-          </p>
-        </Truncate>
-      </button>
     </div>
   )
 }
@@ -324,28 +325,41 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; onClose:
   }, [sessions, runs, routine.id])
 
   const next = nextRoutineRun(routine)
+  const paid = runs.filter((r) => r.routineId === routine.id && r.cost > 0)
+  const averageCost = paid.length > 0 ? paid.reduce((sum, r) => sum + r.cost, 0) / paid.length : null
+
+  const infos = [
+    { label: t("routines.detail.when"), value: describeSchedule(routine.schedule, t) },
+    {
+      label: t("routines.detail.next"),
+      value: next ? formatDateTimeShort(next, i18n.language) : t("routines.list.paused"),
+    },
+    { label: t("routines.detail.averageCost"), value: averageCost === null ? "—" : formatCost(averageCost) },
+  ]
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5">
+      <div className="flex shrink-0 items-start gap-2.5">
         <div className="min-w-0 flex-1">
           <Truncate>
-            <h2 className="flex items-center gap-2 truncate text-base font-semibold text-foreground">
+            <h2 className="flex items-center gap-2 truncate text-[17px] font-semibold text-foreground">
               {routine.title}
               {running && <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />}
             </h2>
           </Truncate>
-          <Truncate>
-            <p className="truncate text-xs text-muted-foreground">
-              {describeSchedule(routine.schedule, t)}
-              {" · "}
-              {next
-                ? t("routines.list.next", { when: formatDateTimeShort(next, i18n.language) })
-                : t("routines.list.paused")}
-            </p>
-          </Truncate>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <Chip>{routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}</Chip>
+            <Chip>{modelName}</Chip>
+            {routine.folders.length > 0 && (
+              <Chip>
+                <FolderIcon className="size-3 shrink-0" />
+                <Truncate text={routine.folders.join(", ")}>
+                  <span className="max-w-48 truncate">{routine.folders.map((f) => f.split(/[\\/]/).filter(Boolean).pop() ?? f).join(", ")}</span>
+                </Truncate>
+              </Chip>
+            )}
+          </div>
         </div>
-        <ActiveSwitch active={routine.active} onChange={(v) => void update(routine.id, { active: v })} />
         <Button size="sm" variant="outline" disabled={running} onClick={() => void runNow(routine.id)}>
           <PlayIcon className="size-3.5" />
           {t("routines.list.runNow")}
@@ -354,62 +368,65 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; onClose:
           <DropdownMenuTrigger className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
             <MoreHorizontalIcon className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-40">
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuItem onClick={() => void update(routine.id, { active: !routine.active })}>
+              {routine.active ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+              {routine.active ? t("routines.detail.pause") : t("routines.detail.activate")}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setEditing(true)}>
               <PencilIcon className="size-3.5" />
               {t("routines.list.edit")}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setConfirming(true)}>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirming(true)}>
               <Trash2Icon className="size-3.5" />
               {t("routines.list.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("routines.detail.close")}>
+        <Button variant="ghost" size="icon-sm" className="size-8" onClick={onClose} aria-label={t("routines.detail.close")}>
           <XIcon className="size-4" />
         </Button>
       </div>
 
-      <div className="shrink-0 space-y-1.5 rounded-lg border bg-card p-3">
-        <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">{routine.prompt}</p>
-        <span className="flex flex-wrap items-center gap-1">
+      <div className="grid shrink-0 grid-cols-3 gap-2.5">
+        {infos.map((info) => (
+          <div key={info.label} className="min-w-0 rounded-lg border bg-card px-3.5 py-3">
+            <p className="text-[11px] text-muted-foreground">{info.label}</p>
+            <Truncate text={info.value}>
+              <p className="mt-0.5 truncate text-sm font-medium">{info.value}</p>
+            </Truncate>
+          </div>
+        ))}
+      </div>
+
+      <div className="shrink-0 rounded-lg border bg-card px-4 py-3.5">
+        <p className="mb-1.5 text-[11px] text-muted-foreground">{t("routines.detail.what")}</p>
+        <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">{routine.prompt}</p>
+        <div className="mt-2.5">
           <ModeBadges
             modes={routine.modes}
             permission
             available={routine.mode === "chat" ? ROUTINE_CHAT_MODES : undefined}
           />
-          {routine.mode === "chat" && (
-            <span className="inline-flex items-center rounded-md border border-transparent bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {t("routines.mode.chat")}
-            </span>
-          )}
-        </span>
-        <Truncate text={modelName}>
-          <p className="truncate text-[11px] text-muted-foreground">{modelName}</p>
-        </Truncate>
-        {routine.folders.length > 0 && (
-          <Truncate>
-            <p className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-              <FolderIcon className="size-3 shrink-0" />
-              <Truncate text={routine.folders.join(", ")}>
-                <span className="truncate">{routine.folders.join(", ")}</span>
-              </Truncate>
-            </p>
-          </Truncate>
-        )}
+        </div>
       </div>
 
-      <p className="shrink-0 text-xs font-medium">{t("routines.runs.title")}</p>
-
-      {executions.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">{t("routines.runs.empty")}</p>
-      ) : (
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-          {executions.map(({ session, run }) => (
-            <RunRow key={session.id} session={session} run={run} />
-          ))}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+        <div className="flex shrink-0 items-center px-4 py-3">
+          <p className="flex-1 text-[13px] font-semibold">{t("routines.runs.title")}</p>
+          <span className="text-[11px] text-muted-foreground">{t("routines.detail.runsCount", { count: executions.length })}</span>
         </div>
-      )}
+        {executions.length === 0 ? (
+          <p className="border-t px-4 py-3 text-[11px] text-muted-foreground">{t("routines.runs.empty")}</p>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {executions.map(({ session, run }) => (
+              <RunRow key={session.id} session={session} run={run} />
+            ))}
+          </div>
+        )}
+      </div>
 
       <EditRoutineDialog routine={routine} open={editing} onOpenChange={setEditing} />
       <ConfirmDialog
@@ -425,6 +442,15 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; onClose:
   )
 }
 
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-foreground/80">
+      {children}
+    </span>
+  )
+}
+
+/** One execution, as a row of the history table: state, when, what it did, how long, cost. */
 function RunRow({ session, run }: { session: SessionInfo; run?: RoutineRun }) {
   const { t, i18n } = useTranslation()
   const { mode, setMode, setView, setFolders } = useWorkspace()
@@ -449,47 +475,32 @@ function RunRow({ session, run }: { session: SessionInfo; run?: RoutineRun }) {
     setView("chat")
   }
 
-  const duration = run?.completedAt && run.startedAt ? formatDuration(run.completedAt - run.startedAt) : undefined
+  const duration = run?.completedAt && run.startedAt ? formatDuration(run.completedAt - run.startedAt) : "—"
+  const note =
+    status === "running" ? t("routines.runs.running") : status === "error" ? run?.error || t("routines.runs.error") : session.title
 
   return (
     <button
       type="button"
       onClick={openChat}
-      className="flex w-full items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left transition-colors hover:border-ring"
+      title={t("routines.runs.openChat")}
+      className="grid w-full grid-cols-[1rem_8.5rem_minmax(0,1fr)_3.5rem_4.5rem] items-center gap-2.5 border-t px-4 py-2 text-left text-xs tabular-nums transition-colors hover:bg-muted/40"
     >
-      {status === "running" ? (
-        <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
-      ) : status === "error" ? (
-        <AlertCircleIcon className="size-3.5 shrink-0 text-destructive" />
-      ) : (
-        <CheckCircle2Icon className="size-3.5 shrink-0 text-muted-foreground" />
-      )}
-      <div className="min-w-0 flex-1">
-        <Truncate>
-          <p className="truncate text-xs">
-            {formatDateTimeShort(run?.startedAt ?? session.createdAt, i18n.language)}
-          </p>
-        </Truncate>
-        <Truncate>
-          <p className={cn("truncate text-[11px]", status === "error" ? "text-destructive" : "text-muted-foreground")}>
-            {status === "running"
-              ? t("routines.runs.running")
-              : status === "error"
-                ? run?.error || t("routines.runs.error")
-                : [
-                    duration,
-                    run && run.tokens > 0 ? t("routines.runs.tokens", { value: formatTokens(run.tokens) }) : null,
-                    run && run.cost > 0 ? formatCost(run.cost) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || t("routines.runs.ok")}
-          </p>
-        </Truncate>
-      </div>
-      <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-        {t("routines.runs.openChat")}
-        <ExternalLinkIcon className="size-3" />
-      </span>
+      <span
+        className={cn(
+          "size-2 rounded-full",
+          status === "running" && "bg-blue-400",
+          status === "error" && "bg-destructive",
+          status === "ok" && "bg-emerald-500",
+        )}
+        aria-hidden
+      />
+      <span className="text-muted-foreground">{formatDateTimeShort(run?.startedAt ?? session.createdAt, i18n.language)}</span>
+      <Truncate text={note}>
+        <span className={cn("block truncate", status === "error" ? "text-destructive" : "text-foreground/85")}>{note}</span>
+      </Truncate>
+      <span className="text-right text-muted-foreground">{status === "running" ? "—" : duration}</span>
+      <span className="text-right font-medium">{run && run.cost > 0 ? formatCost(run.cost) : "—"}</span>
     </button>
   )
 }

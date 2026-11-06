@@ -2847,7 +2847,8 @@
       "emptySubtitleChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias.",
       "search": "Buscar rotina",
       "noResults": "Nada encontrado para \"{{query}}\".",
-      "failed": "Falhou na última"
+      "failed": "Falhou na última",
+      "runningNow": "Rodando agora"
     },
     "runs": {
       "title": "Sessões",
@@ -2868,7 +2869,15 @@
       "agenda": "Agenda"
     },
     "detail": {
-      "close": "Fechar"
+      "close": "Fechar",
+      "when": "Quando",
+      "next": "Próxima execução",
+      "averageCost": "Custo médio por execução",
+      "what": "O que ela faz",
+      "pause": "Pausar",
+      "activate": "Ativar",
+      "runsCount_one": "{{count}} execução",
+      "runsCount_other": "{{count}} execuções"
     },
     "agenda": {
       "prev": "Semana anterior",
@@ -2891,7 +2900,9 @@
       "now": "agora",
       "tomorrow": "amanhã",
       "recent": "Últimas execuções",
-      "noRuns": "Nenhuma execução ainda."
+      "noRuns": "Nenhuma execução ainda.",
+      "activeOf": "{{active}} de {{total}}",
+      "noFailures": "nenhuma falha"
     }
   },
   "queue": {

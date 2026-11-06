@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertCircleIcon, CheckCircle2Icon, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import type { Routine } from "@shared/routines"
 import { upcomingRuns } from "@shared/routines"
 import { cn } from "@/lib/utils"
@@ -52,7 +52,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
       recent,
       active: routines.filter((r) => r.active).length,
       failures: failures.length,
-      failedRoutines: new Set(failures.map((r) => byId.get(r.routineId)?.title).filter(Boolean)).size,
+      failedTitles: [...new Set(failures.map((r) => byId.get(r.routineId)?.title).filter((x): x is string => !!x))],
       cost: last30.reduce((s, r) => s + r.cost, 0),
       executions: last30.length,
     }
@@ -64,13 +64,17 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
   const kpis = [
     {
       label: t("routines.summary.active"),
-      value: `${summary.active}/${routines.length}`,
+      value: t("routines.summary.activeOf", { active: summary.active, total: routines.length }),
       meta: t("routines.summary.paused", { count: routines.length - summary.active }),
     },
     {
       label: t("routines.summary.failures"),
       value: String(summary.failures),
-      meta: t("routines.summary.failuresMeta", { count: summary.failedRoutines }),
+      meta: summary.failedTitles.length === 0
+        ? t("routines.summary.noFailures")
+        : summary.failedTitles.length === 1
+          ? summary.failedTitles[0]
+          : t("routines.summary.failuresMeta", { count: summary.failedTitles.length }),
     },
     {
       label: t("routines.summary.spent"),
@@ -109,7 +113,7 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
             })}
             {summary.upcoming.map(({ routine, at }) => (
               <Row key={`${routine.id}:${at}`} onClick={() => onSelect(routine.id)}>
-                <span className="w-16 shrink-0 tabular-nums text-muted-foreground">
+                <span className="w-14 shrink-0 tabular-nums text-muted-foreground">
                   {formatTime(at, locale)}
                   {dayOf(at) && <span className="ml-1 text-[10px]">{dayOf(at)}</span>}
                 </span>
@@ -132,16 +136,18 @@ export function RoutinesSummary({ routines, onSelect }: { routines: Routine[]; o
             if (!routine) return null
             return (
               <Row key={run.sessionId} onClick={() => onSelect(routine.id)}>
-                {run.status === "running" ? (
-                  <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
-                ) : run.status === "error" ? (
-                  <AlertCircleIcon className="size-3.5 shrink-0 text-destructive" />
-                ) : (
-                  <CheckCircle2Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                )}
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    run.status === "running" && "bg-blue-400",
+                    run.status === "error" && "bg-destructive",
+                    run.status !== "running" && run.status !== "error" && "bg-emerald-500",
+                  )}
+                  aria-hidden
+                />
                 <span className="min-w-0 flex-1 truncate">{routine.title}</span>
-                <span className="shrink-0 text-muted-foreground">{formatDateTimeShort(run.startedAt, locale)}</span>
-                <span className="w-14 shrink-0 text-right tabular-nums">{formatCost(run.cost)}</span>
+                <span className="w-28 shrink-0 text-muted-foreground">{formatDateTimeShort(run.startedAt, locale)}</span>
+                <span className="w-14 shrink-0 text-right font-medium tabular-nums">{formatCost(run.cost)}</span>
               </Row>
             )
           })
@@ -156,7 +162,7 @@ function Row({ onClick, children }: { onClick: () => void; children: React.React
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 border-t py-2 text-left text-xs transition-colors first:border-t-0 hover:bg-muted/40"
+      className="flex w-full items-center gap-2.5 border-t py-[9px] text-left text-xs transition-colors first:border-t-0 hover:bg-muted/40"
     >
       {children}
     </button>
