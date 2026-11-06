@@ -7,8 +7,8 @@ import type { Memory } from "@shared/memory"
 import { KIND_COLOR } from "./meta"
 
 /**
- * Compact card of the memories list: the kind color on the left, the title on top, the
- * tags below and the number of uses in the corner. Everything else (weight, dates,
+ * Compact card of the memories list: a bullet with the kind color before the title, the tags
+ * below and the number of uses in the corner. Everything else (weight, dates,
  * connections, editing) lives in the detail tab of the side panel — one click away.
  */
 function MemoryListItemImpl({ memory, selected, onOpen }: {
@@ -26,12 +26,13 @@ function MemoryListItemImpl({ memory, selected, onOpen }: {
       type="button"
       onClick={() => onOpen(memory.id)}
       className={cn(
-        "flex w-full items-stretch gap-3 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-primary/40",
+        "flex w-full items-start gap-2.5 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-primary/40",
         selected && "border-primary/70",
       )}
     >
+      {/* The kind as a bullet before the title — the same dot the routine cards have. */}
       <span
-        className="w-1 shrink-0 rounded-full"
+        className="mt-[7px] size-2 shrink-0 rounded-full"
         style={{ backgroundColor: KIND_COLOR[memory.kind] }}
         aria-hidden
       />
