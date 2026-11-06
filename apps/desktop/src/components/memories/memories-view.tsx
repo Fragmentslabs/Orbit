@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, List, Network, Search, X } from "lucide-react"
+import { Check, List, Network, Search, SlidersHorizontal, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { Memory, MemoryKind, ProjectCategory } from "@shared/memory"
 import { searchMemories, visibleIn } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
+import { useStacked } from "@/src/hooks/use-stacked"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { useActiveSession } from "@/src/stores/session-store"
 import { useViewScope } from "@/src/stores/view-scope-store"
@@ -33,6 +35,9 @@ import { CATEGORY_LABEL, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
  */
 
 const ALL = "__all__"
+
+/** Below this width of the page the filters leave their column for a popover. */
+const STACK_BELOW_PX = 700
 
 /** Cards rendered at a time — the rest enters as one scrolls. */
 const PAGE_SIZE = 24
@@ -243,6 +248,10 @@ export function MemoriesView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, scope, projects, index, projectFilter, kindFilter, categoryFilter, basePool, kindPool])
 
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const stacked = useStacked(root, STACK_BELOW_PX)
+  const activeFilters = [projectFilter, kindFilter, categoryFilter].filter((f) => f !== ALL).length
+
   // Folder of the focused project — files dropped in the graph become memories of it
   const projectDirectory = useMemo(() => {
     const focusId = projectFilter !== ALL ? projectFilter : projects.length === 1 ? projects[0].id : null
@@ -314,8 +323,8 @@ export function MemoriesView() {
   }, [hasMore, tab, visible.length])
 
   return (
-    <div className="flex h-full min-w-0 gap-3 overflow-hidden">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+    <div ref={setRoot} className="flex h-full min-w-0 gap-3 overflow-hidden">
+      <div className="@container flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
         {/* Routine proposals: the switch itself lives in Preferences → General. */}
         {proposals.length > 0 && (
           <div className="rounded-lg border bg-card px-3 py-2">
@@ -354,6 +363,26 @@ export function MemoriesView() {
               className="pl-8"
             />
           </div>
+          {/* Narrow page (the side panel is open): the filters leave their column and live in a
+              popover of the toolbar, with the number of the ones that are on. */}
+          {stacked && (
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs">
+                    <SlidersHorizontal className="size-3.5" />
+                    {t("memories.filters.button")}
+                    {activeFilters > 0 && (
+                      <span className="rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">{activeFilters}</span>
+                    )}
+                  </Button>
+                }
+              />
+              <PopoverContent align="end" className="w-auto p-2">
+                <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} inline />
+              </PopoverContent>
+            </Popover>
+          )}
           <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "graph")}>
             <TabsList>
               <TabsTrigger value="list" className="gap-1.5">
@@ -384,7 +413,7 @@ export function MemoriesView() {
             </div>
           ) : tab === "list" ? (
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
-              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 @[40rem]:grid-cols-2">
                 {visible.map((memory) => (
                   <MemoryListItem
                     key={memory.id}
@@ -415,7 +444,7 @@ export function MemoriesView() {
         </div>
       </div>
 
-      <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} />
+      {!stacked && <MemoryFilters groups={filterGroups} label={t("memories.filters.label")} />}
     </div>
   )
 }

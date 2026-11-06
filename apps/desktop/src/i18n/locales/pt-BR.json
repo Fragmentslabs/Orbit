@@ -433,7 +433,8 @@
       "project": "Projeto",
       "kind": "Tipo",
       "category": "Categoria",
-      "all": "Todas"
+      "all": "Todas",
+      "button": "Filtros"
     }
   },
   "sidebar": {
