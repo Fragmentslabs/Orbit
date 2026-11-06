@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto'
 import { AUDIO_SCHEME } from '@shared/media'
 import type { MediaSource } from '@shared/media'
 import { SAFE_AUDIO_ID, audioMediaId, getMediaEntry, registerAudioMedia } from './media'
+import { fetchRemoteAsset, isRemoteAsset } from './peers/remote-assets'
 
 export { AUDIO_SCHEME }
 
@@ -139,7 +140,8 @@ export function registerAudioProtocol(): void {
     try {
       buffer = await fs.readFile(audioFilePath(id))
     } catch {
-      return new Response('not found', { status: 404 })
+      // An audio of a paired desktop's chat: streamed from there (Range passes through).
+      return (isRemoteAsset(id) && (await fetchRemoteAsset('audio', id, '', request))) || new Response('not found', { status: 404 })
     }
     const type = CONTENT_TYPES[id.split('.').pop() ?? ''] ?? 'application/octet-stream'
     const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '')

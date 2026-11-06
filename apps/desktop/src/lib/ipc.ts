@@ -3,6 +3,7 @@ import type {
   Catalog,
   CatalogProvider,
   ChatEvent,
+  ChatMessage,
   CustomProviderInput,
   CustomProviderPatch,
   DiscoveredModel,
@@ -20,6 +21,7 @@ import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, Com
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
 import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
+import type { PeerGrants, PeersEvent, PeersSnapshot, RemoteFileContent, RemoteFileTree } from "@shared/peers"
 import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage, MotionBundle } from "@shared/media"
 import type {
   Delivery,
@@ -1519,5 +1521,41 @@ export const memoryApi = {
   onEvent: (listener: (event: MemoryEvent) => void) => {
     const wrapper = window.ipcRenderer.on("memory:event", (event) => listener(event as MemoryEvent))
     return () => window.ipcRenderer.off("memory:event", wrapper)
+  },
+}
+
+/**
+ * Other Orbit desktops on the network (electron/lib/peers). Session ids of a
+ * peer are namespaced (`peer:<peerId>:<id>`); everything goes through the main
+ * process, which holds the pinned connection — the renderer never sees a token.
+ */
+export const peersApi = {
+  snapshot: () => window.ipcRenderer.invoke("peers:snapshot") as Promise<PeersSnapshot>,
+  setDiscoverable: (value: boolean) => window.ipcRenderer.invoke("peers:setDiscoverable", value) as Promise<void>,
+  /** Listen for beacons while the "Another computer" tab is open. Balanced on/off. */
+  browse: (on: boolean) => window.ipcRenderer.invoke("peers:browse", on) as Promise<void>,
+  pair: (host: string, port?: number) => window.ipcRenderer.invoke("peers:pair", host, port) as Promise<void>,
+  cancelPair: () => window.ipcRenderer.invoke("peers:cancelPair") as Promise<void>,
+  accept: (requestId: string, grants: PeerGrants) => window.ipcRenderer.invoke("peers:accept", requestId, grants) as Promise<boolean>,
+  decline: (requestId: string) => window.ipcRenderer.invoke("peers:decline", requestId) as Promise<boolean>,
+  forget: (peerId: string) => window.ipcRenderer.invoke("peers:forget", peerId) as Promise<void>,
+  revokeDevice: (id: string) => window.ipcRenderer.invoke("peers:revokeDevice", id) as Promise<boolean>,
+  reconnect: () => window.ipcRenderer.invoke("peers:reconnect") as Promise<void>,
+  /** Re-sends the sessions and statuses of the connected peers (after a reload). */
+  resend: (peerId?: string) => window.ipcRenderer.invoke("peers:resend", peerId) as Promise<void>,
+  messages: (sessionId: string, opts?: { limit?: number; offset?: number }) =>
+    window.ipcRenderer.invoke("peers:messages", sessionId, opts) as Promise<ChatMessage[]>,
+  sessionState: (sessionId: string) =>
+    window.ipcRenderer.invoke("peers:sessionState", sessionId) as Promise<{ pendingAsks?: unknown[] } | null>,
+  send: (sessionId: string, text: string) => window.ipcRenderer.invoke("peers:send", sessionId, text) as Promise<void>,
+  abort: (sessionId: string) => window.ipcRenderer.invoke("peers:abort", sessionId) as Promise<void>,
+  fsTree: (sessionId: string, root?: number, path?: string) =>
+    window.ipcRenderer.invoke("peers:fsTree", sessionId, root, path) as Promise<RemoteFileTree>,
+  fsRead: (sessionId: string, root: number, path: string) =>
+    window.ipcRenderer.invoke("peers:fsRead", sessionId, root, path) as Promise<RemoteFileContent>,
+  onEvent: (listener: (event: PeersEvent) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("peers:event", (event) => listener(event as PeersEvent))
+    return () => window.ipcRenderer.off("peers:event", wrapper)
   },
 }

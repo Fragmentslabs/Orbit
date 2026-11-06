@@ -257,7 +257,11 @@ export async function readPropsFile(folder: string): Promise<PropsFile> {
  * lint and the render say what is wrong.
  */
 export async function propsForPage(folder: string, encodedOverrides: string | null): Promise<Record<string, PropValue> | null> {
-  const file = await readPropsFile(folder)
+  return propsForPageFromFile(await readPropsFile(folder), encodedOverrides)
+}
+
+/** Same as propsForPage, from an already read props.json (a peer's composition comes over the network). */
+export function propsForPageFromFile(file: PropsFile, encodedOverrides: string | null): Record<string, PropValue> | null {
   if (!file.exists || file.errors.length) return file.exists ? {} : null
   const overrides = decodeOverrides(encodedOverrides) ?? {}
   // Valid overrides apply; an invalid one falls back to its default (the render refuses it before getting here).

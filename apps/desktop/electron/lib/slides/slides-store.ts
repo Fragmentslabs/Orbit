@@ -8,6 +8,7 @@ import { SLIDES_SCHEME } from '@shared/media'
 import { SLIDES_RUNTIME, SLIDES_RUNTIME_PATH, injectSlidesRuntime } from './slides-runtime'
 import { slidesSlug } from './slides-slug'
 import { journalPath } from '../session/media-journal'
+import { fetchRemoteAsset, fetchRemoteText, isRemoteAsset } from '../peers/remote-assets'
 
 /**
  * Registry of the slide decks (a FOLDER with an entry HTML) and the
@@ -436,11 +437,21 @@ export function registerSlidesProtocol(): void {
     }
     const id = decodeURIComponent(url.host)
     if (!SAFE_SLIDES_ID.test(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
-    const entry = await getSlides(id)
-    if (!entry) return respond('not found', 'text/plain; charset=utf-8', 404)
-    // Reserved path: the script that builds the stage (see slides-runtime.ts).
+    // Reserved path: the script that builds the stage (see slides-runtime.ts). Before
+    // the registry: a paired desktop's deck uses this machine's runtime too.
     if (url.pathname === SLIDES_RUNTIME_PATH) {
       return respond(SLIDES_RUNTIME, 'text/javascript; charset=utf-8')
+    }
+    const entry = await getSlides(id)
+    if (!entry) {
+      if (!isRemoteAsset(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
+      const rel = url.pathname.replace(/^\/+/, '')
+      if ((/\.html?$/i.test(rel) || rel === '') && !url.searchParams.has('raw')) {
+        const remote = await fetchRemoteText('slides', id, rel)
+        if (!remote || remote.status !== 200) return respond('not found', 'text/plain; charset=utf-8', remote?.status ?? 404)
+        return respond(injectSlidesRuntime(remote.text), 'text/html; charset=utf-8')
+      }
+      return (await fetchRemoteAsset('slides', id, rel, request)) ?? respond('not found', 'text/plain; charset=utf-8', 404)
     }
     const file = resolveSlidesFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)

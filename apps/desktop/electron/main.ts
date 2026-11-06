@@ -51,6 +51,19 @@ import {
   slidesIdForPath,
 } from './lib/slides/slides-store'
 import { reopenSlides } from './lib/slides/slides-open'
+import { isRemoteSessionId } from '@shared/peers'
+import {
+  isRemotePiece,
+  openRemotePiece,
+  registerPeersIpc,
+  remoteArtifactRead,
+  remoteDesignBoard,
+  remoteDocument,
+  remoteMotionBundles,
+  remoteMotionPropsIpc,
+  resolveRemoteSlides,
+  startPeers,
+} from './lib/peers'
 import { renderSlidesPdf } from './lib/slides/slides-export'
 import {
   addSessionMaterial,
@@ -468,7 +481,10 @@ async function getOpenWithStatus(): Promise<{ supported: boolean; registered: bo
 // both would resolve the same userData and the lock would bring the second instance down.
 // Here dev gets its own database, auth and lock, and coexists with the installed app.
 if (!app.isPackaged) {
-  const devProfile = path.join(app.getPath('appData'), 'Orbit Dev')
+  // ORBIT_DEV_PROFILE (dev only): a second, isolated profile — two instances on one
+  // machine, e.g. to pair two desktops locally (docs/multi-desktop-peers.md).
+  const profileName = (process.env.ORBIT_DEV_PROFILE ?? '').replace(/[^A-Za-z0-9 _-]/g, '').trim()
+  const devProfile = path.join(app.getPath('appData'), profileName || 'Orbit Dev')
   mkdirSync(devProfile, { recursive: true })
   app.setPath('userData', devProfile)
 }
@@ -1623,6 +1639,9 @@ app.whenReady().then(() => {
   ipcMain.handle(
     'motion:open',
     async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+      // A card of a paired desktop's chat resolves THERE first: the same project path
+      // can exist on both machines and must not open the local piece.
+      if (isRemoteSessionId(ref.sessionId)) return (await openRemotePiece('motion', ref)) ?? false
       // The gallery card sends the id (its link is the motionId); the chat card
       // sends what the tool left in `input` — the project folder path
       // (motion_preview, code mode) or the NAME of the conversation composition
@@ -1631,7 +1650,9 @@ app.whenReady().then(() => {
       let id = ref.id ?? null
       if (!id && ref.path) id = await motionIdForPath(ref.path)
       if (!id && ref.sessionId && ref.name) id = await motionIdForName(ref.sessionId, ref.name)
-      return id ? reopenMotion(id) : false
+      if (id && (await reopenMotion(id))) return true
+      // Not local: a card of a paired desktop's chat (lib/peers).
+      return (await openRemotePiece('motion', ref)) ?? false
     },
   )
 
@@ -1639,10 +1660,12 @@ app.whenReady().then(() => {
   // the path (code mode, slides_preview) or the NAME of the deck with the session
   // (chat mode, slides_write), and the registry translates.
   ipcMain.handle('slides:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    if (isRemoteSessionId(ref.sessionId)) return (await openRemotePiece('slides', ref)) ?? false
     let id = ref.id ?? null
     if (!id && ref.path) id = await slidesIdForPath(ref.path)
     if (!id && ref.sessionId && ref.name) id = await slidesIdForName(ref.sessionId, ref.name)
-    return id ? reopenSlides(id) : false
+    if (id && (await reopenSlides(id))) return true
+    return (await openRemotePiece('slides', ref)) ?? false
   })
 
   // Resolve the deck WITHOUT opening a tab: the chat card shows the deck itself inline
@@ -1650,12 +1673,15 @@ app.whenReady().then(() => {
   // to build the iframe. Same resolution as `slides:open`, without the effect of
   // opening — the one that orders it to open is the sidebar button.
   ipcMain.handle('slides:resolve', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    if (isRemoteSessionId(ref.sessionId)) return (await resolveRemoteSlides(ref)) ?? null
     let id = ref.id ?? null
     if (!id && ref.path) id = await slidesIdForPath(ref.path)
     if (!id && ref.sessionId && ref.name) id = await slidesIdForName(ref.sessionId, ref.name)
-    if (!id) return null
-    const deck = await getSlides(id)
-    if (!deck) return null
+    const deck = id ? await getSlides(id) : undefined
+    if (!id || !deck) {
+      const remote = await resolveRemoteSlides(ref)
+      return remote === undefined ? null : remote
+    }
     return { id, entry: path.relative(deck.folder, deck.entry).split(path.sep).join('/') }
   })
 
@@ -1700,23 +1726,33 @@ app.whenReady().then(() => {
   // sends the folder path (code mode, design_preview) or the NAME of the canvas
   // with the session (chat mode, design_write/design_edit), and the registry translates.
   ipcMain.handle('design:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    if (isRemoteSessionId(ref.sessionId)) return (await openRemotePiece('design', ref)) ?? false
     let id = ref.id ?? null
     if (!id && ref.path) id = await designIdForPath(ref.path)
     if (!id && ref.sessionId && ref.name) id = await designIdForName(ref.sessionId, ref.name)
-    return id ? reopenDesign(id) : false
+    if (id && (await reopenDesign(id))) return true
+    return (await openRemotePiece('design', ref)) ?? false
   })
 
   // Edit made by the PERSON in the canvas (properties, text, code, moving and
   // resizing artboards). The renderer sends the id + file name; the folder and
   // the name lock stay in the main process (see design-store).
-  ipcMain.handle('design:readBoard', (_event, input: { id: string; file: string }) => readDesignBoard(input.id, input.file))
-  ipcMain.handle('design:writeBoard', (_event, input: { id: string; file: string; html: string }) =>
-    writeDesignBoard(input.id, input.file, input.html),
+  // A canvas of a paired desktop is read through it and never written: editing
+  // belongs to the machine that owns the files.
+  const remoteDesign = async (id: string) => isRemotePiece(id) && !(await getDesign(id))
+  ipcMain.handle('design:readBoard', async (_event, input: { id: string; file: string }) =>
+    (await remoteDesign(input.id)) ? remoteDesignBoard(input.id, input.file) : readDesignBoard(input.id, input.file),
   )
+  ipcMain.handle('design:writeBoard', async (_event, input: { id: string; file: string; html: string }) => {
+    if (await remoteDesign(input.id)) throw new Error('This canvas belongs to another computer and is read-only here.')
+    return writeDesignBoard(input.id, input.file, input.html)
+  })
   ipcMain.handle(
     'design:updateBoard',
-    (_event, input: { id: string; file: string; patch: { title?: string; x?: number; y?: number; w?: number; h?: number } }) =>
-      updateDesignBoard(input.id, input.file, input.patch),
+    async (_event, input: { id: string; file: string; patch: { title?: string; x?: number; y?: number; w?: number; h?: number } }) => {
+      if (await remoteDesign(input.id)) throw new Error('This canvas belongs to another computer and is read-only here.')
+      return updateDesignBoard(input.id, input.file, input.patch)
+    },
   )
 
   // Export of the canvas requested by the design tab: PDF (one page per artboard)
@@ -1804,10 +1840,11 @@ app.whenReady().then(() => {
   // none answers { exists: false }, and a broken file answers its errors so the tab can say so.
   ipcMain.handle('motion:props', async (_event, id: string) => {
     const entry = typeof id === 'string' ? await getMotion(id) : undefined
+    if (!entry && isRemotePiece(id)) return remoteMotionPropsIpc(id)
     return entry ? readPropsFile(entry.folder) : { exists: false, schema: {}, errors: [] }
   })
 
-  ipcMain.handle('motion:bundles', async (_event, sessionId: string) => listMotionBundles(sessionId))
+  ipcMain.handle('motion:bundles', async (_event, sessionId: string) => (await remoteMotionBundles(sessionId)) ?? listMotionBundles(sessionId))
 
   // "Save project": the whole composition folder into a .zip (HTML, media,
   // fonts, audio.json) with an orbit.json manifest at the root — it is what the chat
@@ -2117,6 +2154,7 @@ app.whenReady().then(() => {
   // orbit-artifact://) — it only needs the content to export.
   ipcMain.handle('artifact:read', async (_event, id: string) => {
     const artifact = await readArtifact(id)
+    if (!artifact && isRemotePiece(id)) return remoteArtifactRead(id)
     return artifact ? artifact.html : null
   })
   // Documents: export the rendering (PDF/DOCX) out of Orbit.
@@ -2124,18 +2162,25 @@ app.whenReady().then(() => {
   // save, so a write by the agent in between can be detected.
   ipcMain.handle('document:source', async (_event, id: string) => {
     const found = await readDocumentSource(id)
+    if (!found && isRemotePiece(id)) return remoteDocument('source', id)
     return found ? { markdown: found.markdown, revision: found.entry.revision ?? 1 } : null
   })
   // User edit in the panel canvas. Only the source and the preview are
   // rewritten: PDF/DOCX are rebuilt on the next download.
   ipcMain.handle(
     'document:saveSource',
-    (_event, id: string, markdown: string, baseRevision?: number) =>
-      saveDocumentEdit(id, markdown, baseRevision),
+    async (_event, id: string, markdown: string, baseRevision?: number) => {
+      // A document of a paired desktop's chat is read-only here.
+      if (isRemotePiece(id) && !(await documentInfo(id))) throw new Error('This document belongs to another computer and is read-only here.')
+      return saveDocumentEdit(id, markdown, baseRevision)
+    },
   )
   // Which tab the document opens in: a requested file goes to the viewer,
   // a live document goes to the canvas.
-  ipcMain.handle('document:info', (_event, id: string) => documentInfo(id))
+  ipcMain.handle('document:info', async (_event, id: string) => {
+    const info = await documentInfo(id)
+    return info ?? (isRemotePiece(id) ? remoteDocument('info', id) : null)
+  })
   // Promote the source of the conversation: the agent output becomes reading material
   // for it. It is an explicit act of the user, never automatic.
   ipcMain.handle('document:useAsSource', (_event, sessionId: string, id: string) =>
@@ -2764,6 +2809,9 @@ app.whenReady().then(() => {
 
   // Companion Server (WebSocket for remote control from the phone)
   const companion = startCompanionServer()
+  // Other Orbit desktops on the network (mutual TLS, port 3849) — lib/peers.
+  registerPeersIpc()
+  void startPeers().catch((err) => console.error('[Peers] could not start:', err))
   ipcMain.handle('companion:status', () => getCompanionStatus())
   ipcMain.handle('companion:pin', () => companion.pin)
   ipcMain.handle('companion:setPairingMode', (_event, active: boolean) => setPairingMode(!!active))
