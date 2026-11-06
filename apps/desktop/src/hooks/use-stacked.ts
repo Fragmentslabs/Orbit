@@ -1,30 +1,30 @@
 import { useLayoutEffect, useState } from "react"
 
-/** How long the width has to stay put before the layout changes (the sidebar animates). */
-const SETTLE_MS = 160
+/**
+ * Extra width a page needs to leave the stacked layout once it is in it. Without it, a width that
+ * hovers around the threshold (a drag that stops there, a sidebar animation) would flip the layout
+ * on every frame.
+ */
+const HYSTERESIS_PX = 32
 
 /**
  * Whether an element is too narrow for the page to keep two columns, by ITS OWN width — the
- * side panel and the sidebar eat it, not only the window. The first measure counts at once;
- * the next ones wait for the width to settle, because opening the sidebar slides the width
- * through the threshold for a fraction of a second and changing the whole layout on each frame
- * made the screen flicker (the flexible columns just follow the animation until then).
+ * side panel and the sidebar eat it, not only the window. It follows the width live (while a
+ * resizable handle is being dragged, not only when it is released); the hysteresis is what keeps
+ * it from flickering at the threshold.
  */
 export function useStacked(element: HTMLElement | null, belowPx: number): boolean {
   const [stacked, setStacked] = useState(false)
   useLayoutEffect(() => {
     if (!element) return
-    setStacked(element.clientWidth < belowPx)
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const observer = new ResizeObserver(() => {
-      clearTimeout(timer)
-      timer = setTimeout(() => setStacked(element.clientWidth < belowPx), SETTLE_MS)
-    })
-    observer.observe(element)
-    return () => {
-      clearTimeout(timer)
-      observer.disconnect()
+    const measure = () => {
+      const width = element.clientWidth
+      setStacked((was) => (was ? width < belowPx + HYSTERESIS_PX : width < belowPx))
     }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
   }, [element, belowPx])
   return stacked
 }
