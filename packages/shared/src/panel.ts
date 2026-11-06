@@ -23,6 +23,7 @@ export type PanelSnapshotTabType =
   | 'design'
   | 'slides'
   | 'memory'
+  | 'routine'
 
 export interface PanelSnapshotTab {
   id: string
@@ -40,6 +41,7 @@ export interface PanelSnapshotTab {
   url?: string
   sourceDocId?: string
   memoryId?: string
+  routineId?: string
 }
 
 export interface PanelSnapshot {

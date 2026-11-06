@@ -6,9 +6,10 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { ListToolbar } from "@/src/components/list-toolbar"
 import { useViewScope } from "@/src/stores/view-scope-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
-import { useSessionStore } from "@/src/stores/session-store"
+import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
+import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { CreateRoutineDialog } from "./create-routine-dialog"
-import { RoutineDetail, RoutineList, routineMatches } from "./my-routines"
+import { RoutineList, routineMatches } from "./my-routines"
 import { RoutinesAgenda } from "./routines-agenda"
 import { RoutinesSummary } from "./routines-summary"
 
@@ -42,8 +43,6 @@ export function RoutinesView() {
   const load = useRoutinesStore((s) => s.load)
   const routines = useRoutinesStore((s) => s.routines)
   const prune = useRoutinesStore((s) => s.prune)
-  const openId = useRoutinesStore((s) => s.openId)
-  const setOpen = useRoutinesStore((s) => s.setOpen)
   const sessions = useSessionStore((s) => s.sessions)
   const sessionsLoaded = useSessionStore((s) => s.initialized)
   const [createOpen, setCreateOpen] = useState(false)
@@ -63,7 +62,20 @@ export function RoutinesView() {
     }
   }
   const inScope = routines.filter((r) => scope === "all" || r.mode === scope)
-  const open = openId ? inScope.find((r) => r.id === openId) : undefined
+
+  // A routine opens as a tab of the side panel (the panel of the active conversation, like
+  // the memories): the page keeps the list or the agenda and the summary, and the tab has the
+  // room of the panel, which resizes. The highlighted routine is the one whose tab is active.
+  const panelKey = useActiveSession(mode)?.id ?? ORPHAN_KEY
+  const openRoutineTab = usePanelStore((s) => s.openRoutineTab)
+  const openedId = usePanelStore((s) => {
+    const active = s.activeTabBySession[panelKey]
+    return s.tabsBySession[panelKey]?.find((tab) => tab.id === active && tab.type === "routine")?.routineId
+  })
+  const openRoutine = (id: string) => {
+    const routine = routines.find((r) => r.id === id)
+    if (routine) openRoutineTab(panelKey, { routineId: id, title: routine.title })
+  }
 
   useEffect(() => {
     if (!loaded) void load()
@@ -72,12 +84,6 @@ export function RoutinesView() {
   // The scheduler's event subscription is GLOBAL (main.tsx): the store mirrors
   // the main process even with the view closed (executions finishing, routine
   // created in another window or in the mobile app).
-
-  // Routine removed (here or in another window): back to the list instead of
-  // leaving the screen stuck on a detail that no longer exists.
-  useEffect(() => {
-    if (openId && loaded && !open) setOpen(null)
-  }, [openId, loaded, open, setOpen])
 
   /**
    * Pruning of orphan metrics. The session of an execution may have been
@@ -103,7 +109,7 @@ export function RoutinesView() {
     <CreateRoutineDialog
       open={createOpen}
       onOpenChange={setCreateOpen}
-      onCreated={(id) => setOpen(id)}
+      onCreated={openRoutine}
       defaultMode={scope === "all" ? mode : scope}
     />
   )
@@ -118,7 +124,7 @@ export function RoutinesView() {
           scope={scope}
           query=""
           selectedId={null}
-          onSelect={setOpen}
+          onSelect={openRoutine}
           onCreateNew={() => setCreateOpen(true)}
         />
         {dialog}
@@ -153,22 +159,18 @@ export function RoutinesView() {
             routines={inScope}
             scope={scope}
             query={query}
-            selectedId={open?.id ?? null}
-            onSelect={setOpen}
+            selectedId={openedId ?? null}
+            onSelect={openRoutine}
             onCreateNew={() => setCreateOpen(true)}
           />
         ) : (
-          <RoutinesAgenda routines={filtered} selectedId={open?.id ?? null} onSelect={(id) => setOpen(id === open?.id ? null : id)} />
+          <RoutinesAgenda routines={filtered} selectedId={openedId ?? null} onSelect={openRoutine} />
         )}
       </div>
 
-      {/* Right: the routine that is open, or — with none — how they are doing and what is next. */}
+      {/* Right: how the routines are doing and what is next; a routine opens in the side panel. */}
       <div className="flex min-h-0 w-[27rem] max-w-[45%] shrink-0 flex-col overflow-y-auto">
-        {open ? (
-          <RoutineDetail key={open.id} routine={open} onClose={() => setOpen(null)} />
-        ) : (
-          <RoutinesSummary routines={inScope} onSelect={setOpen} />
-        )}
+        <RoutinesSummary routines={inScope} onSelect={openRoutine} />
       </div>
       {dialog}
     </div>

@@ -31,9 +31,6 @@ interface RoutinesState {
   routines: Routine[]
   runs: RoutineRun[]
   loaded: boolean
-  /** Routine open in the detail panel (null = list) */
-  openId: string | null
-  setOpen: (id: string | null) => void
 
   load: () => Promise<void>
   applyEvent: (event: RoutineEvent) => void
@@ -119,8 +116,6 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
   routines: [],
   runs: [],
   loaded: false,
-  openId: null,
-  setOpen: (id) => set({ openId: id }),
 
   load: async () => {
     const data = await routinesApi.load()
@@ -147,7 +142,6 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
         set((state) => ({
           routines: state.routines.filter((r) => r.id !== event.id),
           runs: state.runs.filter((r) => r.routineId !== event.id),
-          openId: state.openId === event.id ? null : state.openId,
         }))
         break
       case "run":
@@ -196,7 +190,6 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
     set((state) => ({
       routines: state.routines.filter((r) => r.id !== id),
       runs: state.runs.filter((r) => r.routineId !== id),
-      openId: state.openId === id ? null : state.openId,
     }))
   },
 

@@ -65,8 +65,8 @@ export function RoutineList({ routines, scope, query, selectedId, onSelect, onCr
   scope: "chat" | "code" | "all"
   query: string
   selectedId: string | null
-  /** A click on the open routine closes it (back to the summary). */
-  onSelect: (id: string | null) => void
+  /** Opens the routine in the side panel. */
+  onSelect: (id: string) => void
   onCreateNew: () => void
 }) {
   const { t } = useTranslation()
@@ -109,7 +109,7 @@ export function RoutineList({ routines, scope, query, selectedId, onSelect, onCr
           key={routine.id}
           routine={routine}
           selected={routine.id === selectedId}
-          onOpen={() => onSelect(routine.id === selectedId ? null : routine.id)}
+          onOpen={() => onSelect(routine.id)}
         />
       ))}
     </div>
@@ -300,7 +300,7 @@ function EditRoutineDialog({
  * header (back, title, schedule, switch, run, ellipsis). The list header
  * disappears — whoever is here is inside ONE routine.
  */
-export function RoutineDetail({ routine, onClose }: { routine: Routine; onClose: () => void }) {
+export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Absent when the container already has its own close (the side panel tab). */ onClose?: () => void }) {
   const { t, i18n } = useTranslation()
   const update = useRoutinesStore((s) => s.update)
   const runNow = useRoutinesStore((s) => s.runNow)
@@ -365,9 +365,11 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; onClose:
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon-sm" className="size-8" onClick={onClose} aria-label={t("routines.detail.close")}>
-            <XIcon className="size-4" />
-          </Button>
+          {onClose && (
+            <Button variant="ghost" size="icon-sm" className="size-8" onClick={onClose} aria-label={t("routines.detail.close")}>
+              <XIcon className="size-4" />
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Chip>{routine.mode === "chat" ? t("viewScope.chat") : t("viewScope.code")}</Chip>
