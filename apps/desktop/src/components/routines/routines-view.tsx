@@ -194,11 +194,12 @@ export function RoutinesView() {
         ) : (
           <RoutinesAgenda routines={filtered} selectedId={openedId ?? null} onSelect={openRoutine} />
         )}
-        {/* Fixed: the numbers are always in sight, under the list and under the agenda alike. */}
-        <div className="mt-2.5 shrink-0">
-          {/* The line only exists when the summary comes right below (the narrow page). */}
-          <RoutinesStatsBar routines={inScope} separated={tier === "narrow"} />
-        </div>
+        {/* Narrow page: the numbers go under the list, with a line before the summary strip. */}
+        {tier === "narrow" && (
+          <div className="mt-2.5 shrink-0">
+            <RoutinesStatsBar routines={inScope} separated />
+          </div>
+        )}
       </div>
 
       {/* How the routines are doing and what is next; a routine opens in the side panel. It never
@@ -208,8 +209,14 @@ export function RoutinesView() {
           <RoutinesSummary routines={inScope} variant="strip" onSelect={openRoutine} />
         </div>
       ) : (
-        <div className={cn("flex min-h-0 shrink-0 flex-col overflow-y-auto", tier === "wide" ? "w-[27rem]" : "w-[17rem]")}>
-          <RoutinesSummary routines={inScope} variant={tier === "wide" ? "full" : "side"} onSelect={openRoutine} />
+        <div className={cn("flex min-h-0 shrink-0 flex-col", tier === "wide" ? "w-[27rem]" : "w-[17rem]")}>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <RoutinesSummary routines={inScope} variant={tier === "wide" ? "full" : "side"} onSelect={openRoutine} />
+          </div>
+          {/* Fixed at the bottom of the column: the summary scrolls, the numbers stay. */}
+          <div className="mt-2.5 shrink-0">
+            <RoutinesStatsBar routines={inScope} />
+          </div>
         </div>
       )}
       {dialog}
