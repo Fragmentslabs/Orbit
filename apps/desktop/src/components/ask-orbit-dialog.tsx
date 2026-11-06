@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { useWorkspace } from "@/lib/workspace-context"
-import { FolderSelector } from "@/src/components/folder-selector"
 import { ModelPicker } from "@/src/components/model-picker"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import type { SelectedModel } from "@/src/stores/provider-store"
@@ -16,7 +14,7 @@ export type AskOrbitKind = "mcp" | "skills" | "hooks"
 
 /**
  * "Ask Orbit to create it" modal of the Tools sections — the same step 1 of the new
- * routine dialog (free text, folders, model, Generate), with its own title, description
+ * routine dialog (free text, model, Generate — no folder: these are not tied to one), with its own title, description
  * and example per section (`askOrbit.<kind>.*`).
  *
  * The model only SUGGESTS: on success the modal closes and hands the suggestion to the
@@ -37,10 +35,8 @@ export function AskOrbitDialog<T>({ kind, open, onOpenChange, generate, onGenera
   onGenerated: (suggestion: T) => void
 }) {
   const { t } = useTranslation()
-  const { folders: workspaceFolders } = useWorkspace()
   const [description, setDescription] = useState("")
   const [model, setModel] = useState<SelectedModel | null>(null)
-  const [folders, setFolders] = useState<string[]>([])
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -51,7 +47,6 @@ export function AskOrbitDialog<T>({ kind, open, onOpenChange, generate, onGenera
     setError(null)
     setGenerating(false)
     setModel(sessionModelFor(null))
-    setFolders(workspaceFolders)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -63,7 +58,7 @@ export function AskOrbitDialog<T>({ kind, open, onOpenChange, generate, onGenera
     setError(null)
     try {
       const language = LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale]
-      const result = await generate(description.trim(), model, folders, language)
+      const result = await generate(description.trim(), model, [], language)
       if (!result.ok) {
         setError(result.error)
         return
@@ -113,8 +108,7 @@ export function AskOrbitDialog<T>({ kind, open, onOpenChange, generate, onGenera
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-          <FolderSelector folders={folders} onFoldersChange={setFolders} />
+        <div className="flex items-center justify-end gap-2 border-t pt-3">
           <ModelPicker value={model} onValueChange={setModel} />
         </div>
         {!model && <p className="-mt-2 text-[11px] text-muted-foreground">{t("askOrbit.noModel")}</p>}
