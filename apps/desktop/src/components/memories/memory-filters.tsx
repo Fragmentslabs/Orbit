@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 /**
  * Filter menu on the right of the Memories page — same shape as the section menu of
@@ -51,12 +52,9 @@ function FilterItem({ option, active, onClick }: {
   )
 }
 
-export function MemoryFilters({ groups, label, inline }: { groups: FilterGroup[]; label: string; /** Inside a popover (narrow page): no column of its own. */ inline?: boolean }) {
+export function MemoryFilters({ groups, label }: { groups: FilterGroup[]; label: string }) {
   return (
-    <nav
-      aria-label={label}
-      className={cn("flex flex-col gap-0.5 overflow-y-auto", inline ? "max-h-[70vh] w-60" : "w-52 shrink-0 border-l pl-3")}
-    >
+    <nav aria-label={label} className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-l pl-3">
       {groups.map((group, i) => (
         <div key={group.id} className="flex flex-col gap-0.5">
           {i > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" />}
@@ -72,5 +70,35 @@ export function MemoryFilters({ groups, label, inline }: { groups: FilterGroup[]
         </div>
       ))}
     </nav>
+  )
+}
+
+/**
+ * The same groups as three selects in a row, for when the page is narrow and the column of the right
+ * does not fit: each one reads "Group: option" and lists the options with their counts.
+ */
+export function MemoryFilterSelects({ groups, label }: { groups: FilterGroup[]; label: string }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-2">
+      {groups.map((group) => {
+        const current = group.options.find((o) => o.value === group.value)
+        return (
+          <Select key={group.id} value={group.value} onValueChange={(value) => group.onChange(value ?? group.value)}>
+            <SelectTrigger className="h-8 min-w-32 flex-1 text-xs">
+              <SelectValue>
+                <span className="text-muted-foreground">{group.label}:</span> {current?.label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {group.options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
+      })}
+    </div>
   )
 }

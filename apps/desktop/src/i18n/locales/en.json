@@ -433,8 +433,7 @@
       "project": "Project",
       "kind": "Type",
       "category": "Category",
-      "all": "All",
-      "button": "Filters"
+      "all": "All"
     }
   },
   "sidebar": {
