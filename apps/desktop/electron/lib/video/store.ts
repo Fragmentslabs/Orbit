@@ -5,6 +5,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { VIDEO_SCHEME } from '@shared/media'
+import { fetchRemoteAsset, isRemoteAsset } from '../peers/remote-assets'
 
 /**
  * Registry of the videos shown in the chat. Unlike audio, the file is NOT
@@ -136,7 +137,10 @@ export function registerVideoProtocol(): void {
     const id = new URL(request.url).host
     if (!SAFE_VIDEO_ID.test(id)) return new Response('not found', { status: 404 })
     const entry = (await load())[id]
-    if (!entry) return new Response('not found', { status: 404 })
+    if (!entry) {
+      // A video of a paired desktop's chat: streamed from there (Range passes through).
+      return (isRemoteAsset(id) && (await fetchRemoteAsset('video', id, '', request))) || new Response('not found', { status: 404 })
+    }
     let size: number
     try {
       size = (await fsp.stat(entry.path)).size

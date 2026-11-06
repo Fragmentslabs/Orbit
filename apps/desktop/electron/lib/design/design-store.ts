@@ -10,6 +10,7 @@ import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import { allFontFacesCss } from '../fonts/store'
 import { DESIGN_RUNTIME, DESIGN_RUNTIME_PATH, injectDesignRuntime } from './design-runtime'
 import { journalPath } from '../session/media-journal'
+import { fetchRemoteAsset, fetchRemoteText, isRemoteAsset } from '../peers/remote-assets'
 
 /**
  * Registry of the design canvases (an app FOLDER: `canvas.json` + one .html per
@@ -499,16 +500,27 @@ export function registerDesignProtocol(): void {
     }
     const id = decodeURIComponent(url.host)
     if (!SAFE_DESIGN_ID.test(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
-    const entry = await getDesign(id)
-    if (!entry) return respond('not found', 'text/plain; charset=utf-8', 404)
     // Reserved path: the selection/editing bridge (see design-runtime.ts). The
     // content is a build constant of the app and the URL carries its version
     // (`?v=`, see injectDesignRuntime): it can be stored forever, and
-    // the iframe reuses the script already compiled across remounts.
+    // the iframe reuses the script already compiled across remounts. Before the
+    // registry: a paired desktop's canvas uses this machine's bridge too.
     if (url.pathname === DESIGN_RUNTIME_PATH) {
       return respond(DESIGN_RUNTIME, 'text/javascript; charset=utf-8', 200, {
         'Cache-Control': 'public, max-age=31536000, immutable',
       })
+    }
+    const entry = await getDesign(id)
+    if (!entry) {
+      // A canvas of a paired desktop: files from there, the bridge and fonts from here.
+      if (!isRemoteAsset(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
+      const rel = url.pathname.replace(/^\/+/, '')
+      if (/\.html?$/i.test(rel) && !url.searchParams.has('raw')) {
+        const remote = await fetchRemoteText('design', id, rel)
+        if (!remote || remote.status !== 200) return respond('not found', 'text/plain; charset=utf-8', remote?.status ?? 404)
+        return respond(injectDesignRuntime(remote.text, await allFontFacesCss()), 'text/html; charset=utf-8', 200, { 'Cache-Control': 'no-cache' })
+      }
+      return (await fetchRemoteAsset('design', id, rel, request)) ?? respond('not found', 'text/plain; charset=utf-8', 404)
     }
     const file = resolveDesignFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)

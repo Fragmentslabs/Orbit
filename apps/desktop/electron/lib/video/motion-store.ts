@@ -15,7 +15,8 @@ import {
 } from './motion-render-args'
 import { renderMotion } from './motion'
 import { MOTION_RUNTIME, MOTION_RUNTIME_PATH, injectMotionRuntime } from './motion-runtime'
-import { PROPS_QUERY, propsForPage } from './motion-props'
+import { PROPS_QUERY, propsForPage, propsForPageFromFile } from './motion-props'
+import { fetchRemoteAsset, fetchRemoteText, isRemoteAsset, remoteMotionProps } from '../peers/remote-assets'
 import { MOTION_THREE_PREFIX, findThreeRoot, resolveThreeFile } from './motion-three'
 import { MOTION_THREE_HELPER, MOTION_THREE_HELPER_PATH } from './motion-three-helper'
 import { journalPath } from '../session/media-journal'
@@ -577,13 +578,13 @@ export function registerMotionProtocol(): void {
     }
     const id = decodeURIComponent(url.host)
     if (!SAFE_MOTION_ID.test(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
-    const entry = await getMotion(id)
-    if (!entry) return respond('not found', 'text/plain; charset=utf-8', 404)
-    // Reserved path: the runtime script, the same one the render injects.
+    // Reserved paths come before the registry: they are the app's own runtime, the same
+    // for a local piece and for one of a paired desktop (remote-assets.ts).
+    // The runtime script, the same one the render injects.
     if (url.pathname === MOTION_RUNTIME_PATH) {
       return respond(MOTION_RUNTIME, 'text/javascript; charset=utf-8')
     }
-    // Reserved path: the three.js the app ships (the import map points here).
+    // The three.js the app ships (the import map points here).
     if (url.pathname === MOTION_THREE_PREFIX + MOTION_THREE_HELPER_PATH) {
       return respond(MOTION_THREE_HELPER, 'text/javascript; charset=utf-8')
     }
@@ -593,6 +594,20 @@ export function registerMotionProtocol(): void {
       const text = three ? await fsp.readFile(three, 'utf8').catch(() => null) : null
       if (text === null) return respond('not found', 'text/plain; charset=utf-8', 404)
       return respond(text, 'text/javascript; charset=utf-8')
+    }
+    const entry = await getMotion(id)
+    if (!entry) {
+      // A composition of a paired desktop: the file comes from there, the runtime from here.
+      if (!isRemoteAsset(id)) return respond('not found', 'text/plain; charset=utf-8', 404)
+      const rel = url.pathname.replace(/^\/+/, '')
+      if (/\.html?$/i.test(rel) || rel === '') {
+        const remote = await fetchRemoteText('motion', id, rel)
+        if (!remote || remote.status !== 200) return respond('not found', 'text/plain; charset=utf-8', remote?.status ?? 404)
+        const propsFile = await remoteMotionProps(id)
+        const props = propsFile ? propsForPageFromFile(propsFile, url.searchParams.get(PROPS_QUERY)) : null
+        return respond(injectMotionRuntime(remote.text, MOTION_SCHEME, id, props), 'text/html; charset=utf-8')
+      }
+      return (await fetchRemoteAsset('motion', id, rel, request)) ?? respond('not found', 'text/plain; charset=utf-8', 404)
     }
     const file = resolveMotionFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)

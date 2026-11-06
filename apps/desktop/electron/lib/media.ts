@@ -26,6 +26,8 @@ import { withAssetLock, writeFileAtomic } from './asset-lock'
 import { fontFacesForFamily, handleFontRequest } from './fonts/store'
 import { journalMediaIndex, journalPath, mediaJournalActive } from './session/media-journal'
 import { tNow } from './i18n'
+import { existsSync } from 'node:fs'
+import { fetchRemoteAsset, fetchRemoteText, isRemoteAsset } from './peers/remote-assets'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -721,7 +723,12 @@ export function registerMediaProtocol(): void {
     // request.url = orbit-media://img_x.png (the host carries the id on non-standard schemes)
     const id = request.url.slice(`${SCHEME}://`.length).replace(/\/+$/, '')
     if (!SAFE_ID.test(id)) return new Response('not found', { status: 404 })
-    return net.fetch(pathToFileURL(path.join(mediaDir(), id)).toString())
+    const file = path.join(mediaDir(), id)
+    // Not on this disk and seen in a paired desktop's chat: it comes from there.
+    if (isRemoteAsset(id) && !existsSync(file)) {
+      return fetchRemoteAsset('media', id, '', request).then((res) => res ?? new Response('not found', { status: 404 }))
+    }
+    return net.fetch(pathToFileURL(file).toString())
   })
 }
 
@@ -990,6 +997,21 @@ async function handleArtifactRequest(request: Request): Promise<Response> {
       },
     })
   } catch {
+    // An artifact of a paired desktop's chat: the page from there, the chrome from here.
+    if (isRemoteAsset(id)) {
+      if (id.endsWith('.html')) {
+        const remote = await fetchRemoteText('artifact', id, '')
+        if (remote && remote.status === 200) {
+          return new Response(injectArtifactChrome(remote.text), {
+            status: 200,
+            headers: { 'Content-Type': ARTIFACT_CONTENT_TYPES.html ?? 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+          })
+        }
+      } else {
+        const res = await fetchRemoteAsset('artifact', id, '', request)
+        if (res) return res
+      }
+    }
     return new Response('not found', { status: 404 })
   }
 }
