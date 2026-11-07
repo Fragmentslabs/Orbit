@@ -14,6 +14,8 @@ import { destroyWebview } from "@/src/components/browser/webview-session"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { MediaGallery } from "@/src/components/media-gallery"
+import { CreateCards, RecentMedia } from "@/src/components/panel-hub"
+import { openMediaEntryInPanel } from "@/src/lib/open-media-entry"
 import { ProcessTab } from "@/src/components/process-tab"
 import { ArtifactTab } from "@/src/components/artifact-tab"
 import { MotionTab } from "@/src/components/motion-tab"
@@ -442,39 +444,47 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
 
   return (
     <div className="@container flex flex-1 flex-col overflow-hidden">
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6">
-        <p className="text-sm font-medium text-foreground">{t("panel.selector.title")}</p>
-        <div className={cn(
-          "grid w-full max-w-xs gap-3 @xl:max-w-md @2xl:max-w-lg @4xl:max-w-2xl",
-          availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2 @3xl:grid-cols-3",
-        )}>
-          {availableTabs.map(([type, { icon: Icon, label, description }]) => {
-            // Folders follow the repository selected in the workspace: with no active
-            // chat it is still possible to open (new chat), as long as there is a project.
-            const isDisabled = folders.length === 0 && type === "folders"
-            return (
-              <button
-                key={type}
-                disabled={isDisabled}
-                onClick={() => onSelect(type)}
-                className={cn(
-                  "flex flex-col items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 text-center transition-colors",
-                  isDisabled
-                    ? "opacity-40 cursor-not-allowed"
-                    : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer",
-                )}
-              >
-                <Icon className="size-6 shrink-0" />
-                <span className="text-xs font-medium">{label}</span>
-                <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
-              </button>
-            )
-          })}
-        </div>
-
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 py-6">
+        <CreateCards />
+        <RecentMedia
+          onOpenEntry={(entry) => openMediaEntryInPanel(entry, bucketKey)}
+          onSeeAll={() => onSelect("media")}
+        />
+        <section className="flex flex-col gap-2.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("panel.hub.open")}</p>
+          <div className="grid grid-cols-3 gap-2">
+            {availableTabs.map(([type, { icon: Icon, label, description }]) => {
+              // Folders follow the repository selected in the workspace: with no active
+              // chat it is still possible to open (new chat), as long as there is a project.
+              const isDisabled = folders.length === 0 && type === "folders"
+              return (
+                <button
+                  key={type}
+                  disabled={isDisabled}
+                  onClick={() => onSelect(type)}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 rounded-xl border border-sidebar-border bg-card px-2 py-3.5 text-center transition-colors",
+                    isDisabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer",
+                  )}
+                >
+                  <Icon className="size-5 shrink-0" />
+                  <span className="text-xs font-medium">{label}</span>
+                  <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
       </div>
 
-      {allProcesses.length > 0 && (
+      {allProcesses.length === 0 ? (
+        <div className="flex shrink-0 items-center gap-2 border-t border-sidebar-border px-4 py-2.5 text-[11px] text-muted-foreground">
+          <span className="flex-1">{t("panel.processes.title")}</span>
+          <span>{t("panel.processes.none")}</span>
+        </div>
+      ) : (
         <div className="flex max-h-56 shrink-0 flex-col border-t border-sidebar-border">
           <div className="flex items-center gap-2 px-3 pt-2 pb-1">
             <p className="text-[11px] font-medium text-muted-foreground">{t("panel.processes.title")}</p>

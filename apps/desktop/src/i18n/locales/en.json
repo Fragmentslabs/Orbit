@@ -584,8 +584,33 @@
     "selector": {
       "title": "What do you want to open?"
     },
+    "hub": {
+      "create": "Create",
+      "createHint": "Opens a new chat with the message ready",
+      "recent": "Recent",
+      "seeAll": "See all media",
+      "recentEmpty": "Nothing generated yet.",
+      "open": "Open",
+      "document": {
+        "label": "Document",
+        "prompt": "Create a document about [topic], for [audience]. Start with a summary and organize it in sections."
+      },
+      "design": {
+        "label": "Design",
+        "prompt": "Create a design of [what to create] for [goal], with 3 variations for me to choose from."
+      },
+      "slides": {
+        "label": "Slides",
+        "prompt": "Create a slide deck about [topic] for [audience], with about [10] slides. Start with the outline and show it to me before building."
+      },
+      "motion": {
+        "label": "Motion",
+        "prompt": "Create an animation of [what to animate], [5] seconds long."
+      }
+    },
     "processes": {
       "title": "Terminals",
+      "none": "None",
       "scopeChat": "This chat",
       "scopeAll": "All",
       "emptyScope": "No terminals in this chat",
@@ -1501,6 +1526,11 @@
     "showMoreLines_one": "Show {{count}} more line",
     "showMoreLines_other": "Show the remaining {{count}} lines",
     "openFile": "Open file",
+    "filters": {
+      "kind": "Type",
+      "period": "Period",
+      "scope": "Where"
+    },
     "refresh": "Refresh",
     "commitsTab": "Commits",
     "loadingCommits": "Loading commits...",

@@ -584,8 +584,33 @@
     "selector": {
       "title": "O que deseja abrir?"
     },
+    "hub": {
+      "create": "Criar",
+      "createHint": "Abre um chat novo com a mensagem pronta",
+      "recent": "Recentes",
+      "seeAll": "Ver toda a mídia",
+      "recentEmpty": "Nada gerado ainda.",
+      "open": "Abrir",
+      "document": {
+        "label": "Documento",
+        "prompt": "Crie um documento sobre [tema], para [público]. Comece com um resumo e organize em seções."
+      },
+      "design": {
+        "label": "Design",
+        "prompt": "Crie um design de [o que criar] para [objetivo], com 3 variações para eu escolher."
+      },
+      "slides": {
+        "label": "Slides",
+        "prompt": "Crie uma apresentação de slides sobre [tema] para [público], com cerca de [10] slides. Comece pelo roteiro e me mostre antes de montar."
+      },
+      "motion": {
+        "label": "Motion",
+        "prompt": "Crie uma animação de [o que animar], com [5] segundos de duração."
+      }
+    },
     "processes": {
       "title": "Terminais",
+      "none": "Nenhum",
       "scopeChat": "Este chat",
       "scopeAll": "Todos",
       "emptyScope": "Nenhum terminal neste chat",
@@ -1501,6 +1526,11 @@
     "showMoreLines_one": "Mostrar mais {{count}} linha",
     "showMoreLines_other": "Mostrar as outras {{count}} linhas",
     "openFile": "Abrir arquivo",
+    "filters": {
+      "kind": "Tipo",
+      "period": "Período",
+      "scope": "Onde"
+    },
     "refresh": "Atualizar",
     "commitsTab": "Commits",
     "loadingCommits": "Carregando commits...",

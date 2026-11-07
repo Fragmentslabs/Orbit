@@ -8,20 +8,22 @@ export interface DraftPayload {
   /** Attachments returned to the input along with the text (e.g.: revert of a
    *  message that had an image — without this the attachment would vanish silently). */
   files?: FilePart[]
+  /** A ready-made message with [fields]: the input selects the first one and Tab walks the rest. */
+  fields?: boolean
 }
 
 interface DraftInputState {
   drafts: Record<string, DraftPayload>
-  setDraft: (sessionId: string | null | undefined, text: string, files?: FilePart[]) => void
+  setDraft: (sessionId: string | null | undefined, text: string, files?: FilePart[], options?: { fields?: boolean }) => void
   consume: (sessionId: string | null | undefined) => DraftPayload | null
   adopt: (sessionId: string) => void
 }
 
 export const useDraftInput = create<DraftInputState>((set, get) => ({
   drafts: {},
-  setDraft: (sessionId, text, files) => {
+  setDraft: (sessionId, text, files, options) => {
     const key = sessionId ?? DRAFT_KEY
-    set((s) => ({ drafts: { ...s.drafts, [key]: { text, files } } }))
+    set((s) => ({ drafts: { ...s.drafts, [key]: { text, files, fields: options?.fields } } }))
   },
   consume: (sessionId) => {
     const key = sessionId ?? DRAFT_KEY
