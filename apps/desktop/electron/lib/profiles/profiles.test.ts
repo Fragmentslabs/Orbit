@@ -75,12 +75,16 @@ describe('profileOf', () => {
   })
 
   it('leaves the options of a specialist turn lean', () => {
-    const lean = profiles.leanOptions({ research: true, browser: true, subagents: true, plan: true }, 'motion')
-    expect(lean.profile).toBe('motion')
-    expect(lean.research).toBe(false)
-    expect(lean.browser).toBe(false)
-    expect(lean.subagents).toBe(false)
-    expect(lean.plan).toBe(false)
+    const lean = profiles.restrictInput(
+      { ...input('x'), options: { research: true, browser: true, subagents: true, plan: true, loop: true } } as SendMessageInput,
+      'motion',
+    )
+    expect(lean.options.profile).toBe('motion')
+    expect(lean.options.research).toBe(false)
+    expect(lean.options.browser).toBe(false)
+    expect(lean.options.subagents).toBe(false)
+    expect(lean.options.plan).toBe(false)
+    expect(lean.options.loop).toBeUndefined()
   })
 })
 

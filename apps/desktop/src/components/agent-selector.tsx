@@ -22,8 +22,8 @@ export function AgentSelector({ session }: { session?: SessionInfo }) {
   if (session) {
     // A general chat shows nothing.
     const profile = specialistProfileOf(session)
-    if (!profile) return null
-    const meta = AGENT_META[profile]
+    if (!profile || !(profile in AGENT_META)) return null
+    const meta = AGENT_META[profile as AgentChoice]
     const Icon = meta.icon
     return (
       <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">

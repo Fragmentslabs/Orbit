@@ -1,8 +1,8 @@
 import { AppWindow, Clapperboard, MessageSquare, PenTool, type LucideIcon } from "lucide-react"
-import type { SessionInfo } from "@shared/chat"
+import type { SessionInfo, SpecialistProfile } from "@shared/chat"
 
 /** The agents a chat can start with. `general` is the usual chat; the others are lean specialists. */
-export type AgentChoice = "general" | "fragment" | "motion" | "design"
+export type AgentChoice = "general" | SpecialistProfile
 
 const FRAGMENT_ICON = AppWindow
 
@@ -16,5 +16,6 @@ export const AGENT_META: Record<AgentChoice, { icon: LucideIcon; name: string; d
 /** The icon the sidebar shows for a chat: the mode of a specialist, the bubble otherwise. */
 export function sessionIcon(session: Pick<SessionInfo, "profile" | "fragment">): LucideIcon | undefined {
   if (session.fragment) return FRAGMENT_ICON
-  return session.profile ? AGENT_META[session.profile].icon : undefined
+  // An agent the person made has its own icon, resolved where the list of agents is known.
+  return session.profile && session.profile in AGENT_META ? AGENT_META[session.profile as AgentChoice].icon : undefined
 }

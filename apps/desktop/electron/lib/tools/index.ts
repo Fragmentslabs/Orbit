@@ -3,7 +3,7 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
-import { profileTools } from '../profiles'
+import { profileTools, resolveProfile, restrictTools } from '../profiles'
 import { withArtifactTracking } from '../artifacts/tracking'
 import { createFragmentTools } from './fragment'
 import { createDocumentTools, createPdfViewTool } from './documents'
@@ -95,8 +95,11 @@ export function buildToolSet(
    *  Absent in ephemeral workers — there the tool is not registered. */
   win?: BrowserWindow,
 ): ToolSet {
-  // A specialist chat gets the tools of its craft and nothing else.
-  if (input.options.profile) return withArtifactTracking(profileTools(input.options.profile, input, modelVision), input)
+  // A craft profile gets the tools of its craft and nothing else. An agent the person made has
+  // no craft tools: it falls through to the usual set and is narrowed at the end.
+  const profile = input.options.profile ? resolveProfile(input.options.profile) : null
+  const craftTools = input.options.profile ? profileTools(input.options.profile, input, modelVision) : null
+  if (craftTools) return withArtifactTracking(restrictTools(craftTools, profile!), input)
   const tools: ToolSet = {}
   // Computer control: two switches (Preferences + conversation mode),
   // main session only and only where there is a driver. When off, the tools do not
@@ -334,7 +337,10 @@ export function buildToolSet(
       // (see permission/rules.ts) — global only here, there is no folder to scope to.
       Object.assign(tools, createHookTools(null))
     }
-    return attachPostToolHooks(tools, { sessionId: input.sessionId, directory: null })
+    // Same wrapping as the code-mode return below: the specialist offer and the artifact
+    // tracking apply to a chat too (they were missing here), and a profile only narrows.
+    if (profile) restrictTools(tools, profile)
+    return attachPostToolHooks(withArtifactTracking(withSpecialistOffer(tools, input, win), input), { sessionId: input.sessionId, directory: null })
   }
 
   // Code mode: MCP available (configured servers) + skill flow, with the
@@ -559,6 +565,9 @@ export function buildToolSet(
   if (ctx && !input.options.plan && input.orchestrationRole !== 'worker') {
     tools.run_tools = createRunToolsTool({ input, ctx, tools: () => tools })
   }
+  // A profile only narrows: removed in place, so run_tools (which reads this set lazily) cannot
+  // reach what was taken away.
+  if (profile) restrictTools(tools, profile)
 
   // Last: the user's post_tool_call hooks wrap every tool assembled above, run_tools included.
   return attachPostToolHooks(withArtifactTracking(withSpecialistOffer(tools, input, win), input), { sessionId: input.sessionId, directory: ctx?.directory ?? null })
