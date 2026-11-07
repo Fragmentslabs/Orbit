@@ -42,6 +42,11 @@ class FileMissing extends Error {}
 
 const FragmentIdSchema = z.string().describe('The fragmentId returned by fragment_create (frag-…)')
 
+/** The tool result for a failed action: the model reads it and decides what to do. */
+function failed(action: string, err: unknown): string {
+  return `Could not ${action}: ${err instanceof Error ? err.message : String(err)}`
+}
+
 function notFound(id: string): string {
   return `Fragment not found: ${id}. List the existing ones with fragment_list or create a new one with fragment_create.`
 }
@@ -89,7 +94,7 @@ export function createFragmentTools(sessionId: string) {
             message: await opened(manifest.id, manifest.revision, `Fragment "${manifest.name}" created`),
           }
         } catch (err) {
-          return `Could not create the fragment: ${err instanceof Error ? err.message : String(err)}`
+          return failed('create the fragment', err)
         }
       },
     }),
@@ -108,7 +113,7 @@ export function createFragmentTools(sessionId: string) {
           const manifest = await writeFragmentFile(fragmentId, rel, content)
           return await opened(fragmentId, manifest.revision, `Wrote ${rel}`)
         } catch (err) {
-          return `Could not write ${rel}: ${err instanceof Error ? err.message : String(err)}`
+          return failed(`write ${rel}`, err)
         }
       },
     }),
@@ -142,7 +147,7 @@ export function createFragmentTools(sessionId: string) {
           return await opened(fragmentId, manifest.revision, `Edited ${rel} (${appliedCount} edit${appliedCount === 1 ? '' : 's'})`)
         } catch (err) {
           if (err instanceof FileMissing) return `File not found in the fragment: ${rel}. See fragment_read_file for the file list.`
-          return `Could not edit ${rel}: ${err instanceof Error ? err.message : String(err)}`
+          return failed(`edit ${rel}`, err)
         }
       },
     }),
@@ -181,7 +186,7 @@ export function createFragmentTools(sessionId: string) {
           const manifest = await deleteFragmentFile(fragmentId, rel)
           return await opened(fragmentId, manifest.revision, `Removed ${rel}`)
         } catch (err) {
-          return `Could not remove ${rel}: ${err instanceof Error ? err.message : String(err)}`
+          return failed(`remove ${rel}`, err)
         }
       },
     }),

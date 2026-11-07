@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { ArtifactChats, ArtifactChatsEvent, ArtifactRef } from '@shared/artifacts'
 import { ARTIFACT_KINDS } from '@shared/artifacts'
+import { StorageKeys } from '@shared/chat'
 import { withAssetLock } from '../asset-lock'
 import { readJson, writeJson } from '../storage'
 
@@ -19,7 +20,7 @@ export const artifactChatEvents = new EventEmitter()
 
 function keyOf(ref: ArtifactRef): string {
   if (!ARTIFACT_KINDS.includes(ref.kind) || !SAFE_ID.test(ref.id)) throw new Error('invalid artifact')
-  return `artifactChats/${ref.kind}/${ref.id}`
+  return StorageKeys.artifactChats(ref.kind, ref.id)
 }
 
 export async function listArtifactChats(ref: ArtifactRef): Promise<ArtifactChats> {
@@ -64,7 +65,7 @@ export function associateChat(ref: ArtifactRef, sessionId: string, options: { ma
  */
 const chatIndexKey = (sessionId: string): string => {
   if (!SAFE_ID.test(sessionId)) throw new Error('invalid chat')
-  return `artifactsOfChat/${sessionId}`
+  return StorageKeys.artifactsOfChat(sessionId)
 }
 
 function indexChat(sessionId: string, ref: ArtifactRef): Promise<void> {

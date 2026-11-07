@@ -1926,4 +1926,8 @@ export const StorageKeys = {
   /** Model selected on the desktop. Read by whoever answers without a conversation in the
    *  loop: the companion HTTP and the sampling of a connected app (lib/mcp). */
   selectedModel: "companion/selected-model",
+  /** The chats that worked on one artifact (see artifacts.ts); `kind` and `id` are already validated. */
+  artifactChats: (kind: string, id: string) => `artifactChats/${kind}/${id}`,
+  /** The way back: the artifacts one chat has worked on. */
+  artifactsOfChat: (sessionId: string) => `artifactsOfChat/${sessionId}`,
 } as const
