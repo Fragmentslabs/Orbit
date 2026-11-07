@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises'
 import { StorageKeys, type SessionInfo } from '@shared/chat'
+import { viewLines } from '../artifacts/view-state'
 import { readJson } from '../storage'
 import { designPiecesDir } from '../tools/design'
 import { motionPiecesDir } from '../tools/motion'
@@ -27,12 +28,14 @@ async function namesIn(dir: string): Promise<string[]> {
 export async function motionTurnBlock(sessionId: string): Promise<string> {
   const names = await namesIn(motionPiecesDir(sessionId))
   const focus = await focusLine('motion', sessionId)
+  const view = viewLines('motion')
   return [
     '<motion-context>',
     ...(focus ? [focus] : []),
     names.length
       ? `Compositions in this conversation: ${names.join(', ')}. Read one with motion_read before changing it.`
       : 'No composition exists in this conversation yet. Create one with motion_write.',
+    ...(view ? [view] : []),
     '</motion-context>',
   ].join('\n')
 }
@@ -40,12 +43,14 @@ export async function motionTurnBlock(sessionId: string): Promise<string> {
 export async function designTurnBlock(sessionId: string): Promise<string> {
   const names = await namesIn(designPiecesDir(sessionId))
   const focus = await focusLine('design', sessionId)
+  const view = viewLines('design')
   return [
     '<design-context>',
     ...(focus ? [focus] : []),
     names.length
       ? `Canvases in this conversation: ${names.join(', ')}. Read one with design_read before changing it.`
       : 'No canvas exists in this conversation yet. Create one with design_write.',
+    ...(view ? [view] : []),
     '</design-context>',
   ].join('\n')
 }

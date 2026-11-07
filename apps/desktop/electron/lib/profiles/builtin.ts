@@ -77,7 +77,7 @@ const motion: ProfileDefinition = {
   },
   blocks: CRAFT_BLOCKS,
   turnBlock: motionTurnBlock,
-  turnContext: 'The compositions of the conversation (and the one in focus).',
+  turnContext: 'The compositions of the conversation (and the one in focus), plus what the person has selected and where the playhead is in the Motion tab.',
 }
 
 const design: ProfileDefinition = {
@@ -87,7 +87,7 @@ const design: ProfileDefinition = {
   tools: (input) => ({ ...createDesignTools({ sessionId: input.sessionId }), ...createFontTools() }),
   blocks: CRAFT_BLOCKS,
   turnBlock: designTurnBlock,
-  turnContext: 'The canvases of the conversation (and the one in focus).',
+  turnContext: 'The canvases of the conversation (and the one in focus), plus the active artboard and the selection in the Design tab.',
 }
 
 export const BUILTIN_DEFINITIONS: Record<SpecialistProfile, ProfileDefinition> = { fragment, motion, design }
