@@ -17,3 +17,18 @@ export function embeddedChatFields(
   const artifact = { kind, ...(ref ? { id: ref.id } : {}) }
   return kind === "fragment" ? { fragment: { kind: fragmentKind }, artifact } : { profile: kind, artifact }
 }
+
+/**
+ * Whether a piece card shows the very artifact its own chat belongs to. Inside that chat the
+ * artifact is already beside the conversation (and has its own card), so repeating it in the
+ * transcript is noise. A chat whose artifact has no id yet is the first chat of a brand-new
+ * one: every piece it makes is that artifact.
+ */
+export function isOwnArtifact(
+  session: Pick<SessionInfo, "artifact"> | null | undefined,
+  kind: ArtifactRef["kind"],
+  id: string,
+): boolean {
+  const own = session?.artifact
+  return Boolean(own && own.kind === kind && (!own.id || own.id === id))
+}
