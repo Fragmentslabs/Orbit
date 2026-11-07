@@ -224,10 +224,11 @@ The moment the first version exists it turns into the live fragment.
 
 **The fragment screen** fills the whole area: no border and no header of its own. The app
 header carries back, the fragment's **icon** (click to pick another from the Lucide set) and
-its **name** (click to rename). A **floating bar** sits in the corner: collapsed it is a
-small pill (it pulses while the agent works); touching it unfolds the options — model of
-`orbit.ai`, AI on/off, **Edit**, reload, see the conversation, and a menu (pin to the
-sidebar, show in the panel's "Open" list, open in the side panel, delete). **Edit mode**
+its **name** (click to rename), followed by a menu of the fragment's actions (pin to the
+sidebar, show in the panel's "Open" list, open in the side panel, delete). On the right of the
+header are the controls: a spinner while an agent works on it, the model of `orbit.ai` and the
+AI on/off switch (only when the fragment asks for it), reload and **Edit**. A request for the
+model shows as a floating badge at the top of the fragment. **Edit mode**
 docks Orbit's prompt at the bottom edge (collapsed, it opens on hover — the composer Design
 and Motion use) and opens the **activity feed** on the right, which lists what the agent is
 doing ("Editing style.css", "Checking the page for errors"). The frame reloads on every
@@ -264,7 +265,7 @@ What the screen deliberately leaves out, and why:
 - **Share/export**: waits for the package format (section 11).
 
 **Model per fragment.** Today: *header* mode — the person picks the model of `orbit.ai`
-for this fragment in the floating bar (default: the model of the chat). Planned: *app*
+for this fragment in the header (default: the model of the chat), and its **thinking level**, next to it (`reasoning` in the manifest, applied to every `orbit.ai` call; the agent that edits the fragment has its own model and thinking in the edit prompt). Planned: *app*
 mode — the fragment's own UI offers the choice through an `orbit.models` call, and the
 bar's control disappears. A fragment will declare which mode it uses.
 
@@ -491,6 +492,48 @@ This format is the base for repository import, the MCP flow and a future registr
 and it is built first because everything else reuses it. It must carry
 `dependencies` and `network` from the start.
 
+### Provenance (planned)
+
+Where a fragment came from is a record **kept by Orbit, outside the fragment folder**
+and never exported. Nothing inside the package can claim an origin, because whoever
+packs it would choose what it says.
+
+- **Local:** created in this Orbit through the creation flow. No owner is shown, only
+  "created on this computer".
+- **Third party:** anything that arrived from outside (MCP, link, repository, file).
+  The record keeps the source URL, how it arrived and when. A fragment exported from
+  one Orbit and imported in another is third party there: the import is what decides,
+  so nothing can import itself as local.
+- **Owner is derived, never typed:** from `github.com/fracta/app` the owner is
+  `fracta`. The source URL doubles as the link to the main app. A loose file with no
+  URL Orbit fetched itself is shown as "Imported file", with no derived owner.
+- **Editing a third-party fragment** does not make it local. The record notes it was
+  modified and keeps the original commit, for "changed since origin".
+- **Details panel:** the fragment's side panel (opened from the header) shows
+  weight, settings, capabilities requested and granted, token spend, the local
+  database, third-party packages (when any) and this provenance.
+
+### Install from the terminal: `npx` (planned)
+
+```bash
+npx orbit-fragments add github:fracta/app
+npx orbit-fragments add https://example.com/app.orbitfrag
+```
+
+The CLI installs nothing by itself. It hands the request to the running Orbit
+(`orbit://import?url=...` or a local port Orbit listens on). Orbit downloads,
+verifies and writes, so the provenance record is born as third party with the URL
+Orbit fetched. If Orbit is closed, the link opens it and the request waits.
+
+- **Consent card before installing:** derived owner, pinned commit, capabilities
+  requested and third-party packages. Nothing is granted on install.
+- **The terminal asks, the interface confirms:** a command pasted from a README must
+  never install code unseen.
+- **Needs first:** the `.orbitfrag` format and URL import inside Orbit, resolving
+  `github:owner/repo` to a pinned commit with integrity check, the provenance record,
+  and the tiny `orbit-fragments` package on npm. Reserve the npm name early so a
+  look-alike cannot be published.
+
 ## 12. Creating and editing live
 
 Done in the normal chat with the `fragment_*` tools; the fragment tab reloads on
@@ -504,6 +547,9 @@ bound to the `fragmentId`); `fragment_test_query` for declared queries; suggesti
 fragment when an official integration connects (for example a task summary after
 connecting Fracta), as **prompt templates** rather than prebuilt fragments, so the
 result adapts to the person's real data.
+
+See [specialist-agents.md](specialist-agents.md) for extending this lean profile to
+Design and Motion, where these chats appear, and user-made agents.
 
 ## 13. What stays out (a case for an app)
 
@@ -532,8 +578,8 @@ companion showing fragments.
 | Phase | Delivery |
 |---|---|
 | **MVP (done)** | Scheme + sandboxed iframe + closed CSP; `orbit.store`, `orbit.ai`, theme, console logs; `fragment_*` tools with live reload; panel tab and picker; user-granted AI |
-| **MVP 2 (done)** | Fragments page in the sidebar: live-preview gallery, creation canvas with starting points, the creating screen, full-bleed fragment with a floating bar, edit mode with activity feed; kinds, pins, icons; per-fragment model; the lean fragment chat |
-| **2 — Package format** | Manifest v1 (`dependencies`, `network`, `mcp`), lockfile, `.orbitfrag` import/export, import by URL with commit pinning and the consent card |
+| **MVP 2 (done)** | Fragments page in the sidebar: live-preview gallery, creation canvas with starting points, the creating screen, full-bleed fragment with its controls in the app header, edit mode with activity feed; kinds, pins, icons; per-fragment model; the lean fragment chat |
+| **2 — Package format** | Manifest v1 (`dependencies`, `network`, `mcp`), lockfile, `.orbitfrag` import/export, import by URL with commit pinning and the consent card, provenance record, details panel, `npx orbit-fragments add` |
 | **3 — Bundler and packages** | esbuild in main, shared package cache, Orbit set, third-party packages with consent, TSX |
 | **4 — Network and MCP** | `orbit.http` with host approval; `orbit.mcp` (read-only first) |
 | **5 — Discovery** | `fragments` tool detection on integration connect; curated list; the spec repository and badge |
