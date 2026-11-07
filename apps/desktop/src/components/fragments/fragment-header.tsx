@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Cpu, RotateCw } from "lucide-react"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Hint } from "@/components/ui/hint"
 import { useFragment } from "@/src/components/fragment-tab"
+import { useFragmentHeaderCompact } from "@/src/hooks/use-fragment-header-compact"
 import { fragmentApi } from "@/src/lib/ipc"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { FragmentActionsMenu } from "./fragment-actions-menu"
 import { FragmentIcon } from "./fragment-icon"
 import { FragmentIconPicker } from "./fragment-icon-picker"
+import { FragmentModelPicker } from "./fragment-model-picker"
 
 /**
  * What the app header shows while a fragment is open: back arrow, the fragment's icon
@@ -19,9 +22,13 @@ export function FragmentHeaderTitle({ fragmentId }: { fragmentId: string }) {
   const { t } = useTranslation()
   const { manifest } = useFragment(fragmentId)
   const leave = useFragmentsStore((s) => s.leave)
+  const reload = useFragmentsStore((s) => s.reload)
+  const compact = useFragmentHeaderCompact()
   const [pickingIcon, setPickingIcon] = useState(false)
+  const [pickingModel, setPickingModel] = useState(false)
 
   if (!manifest) return null
+  const usesModel = manifest.requests.includes("ai") && manifest.grants.includes("ai")
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
@@ -48,8 +55,25 @@ export function FragmentHeaderTitle({ fragmentId }: { fragmentId: string }) {
       <NameField fragmentId={manifest.id} name={manifest.name} />
       <FragmentActionsMenu
         fragment={manifest}
+        extraItems={
+          compact ? (
+            <>
+              {usesModel && (
+                <DropdownMenuItem onClick={() => setPickingModel(true)}>
+                  <Cpu className="size-3.5" />
+                  {t("fragments.model")}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={reload}>
+                <RotateCw className="size-3.5" />
+                {t("fragments.reload")}
+              </DropdownMenuItem>
+            </>
+          ) : undefined
+        }
         triggerClassName="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       />
+      {compact && usesModel && <FragmentModelPicker manifest={manifest} open={pickingModel} onOpenChange={setPickingModel} />}
       <FragmentIconPicker open={pickingIcon} onOpenChange={setPickingIcon} fragmentId={manifest.id} current={manifest.icon} />
     </div>
   )

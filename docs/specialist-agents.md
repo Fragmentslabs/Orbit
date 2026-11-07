@@ -130,6 +130,18 @@ in memory (`view-state.ts`) and `turn-blocks.ts` adds it to `<motion-context>` a
 - Not done: it reports the tab that was touched last, not a tab per piece, so two Motion tabs open
   at once are not told apart.
 
+### Where the artifact opens, and who may write to it
+
+- A subchat makes its artifact under its own session id, but the person is usually looking at the
+  parent. `resolvePanelSession` (`src/lib/panel-session.ts`) re-targets the artifact's panel
+  event along the parent chain: the chat on screen wins when it is the subchat or an ancestor,
+  otherwise the topmost ancestor does.
+- Writes to the same artifact from a parent chat and its subchat go through `withAssetLock`
+  (`electron/lib/asset-lock.ts`), the one lock motion, design and fragments share. A fragment edit
+  reads inside the lock (`editFragmentFile`), so a stale edit fails on its `oldText` instead of
+  overwriting the other chat's work.
+- The offer carries the fragment kind the agent asked for into the new subchat (`fragmentKind`).
+
 ### A specialist subchat is a normal subchat
 
 It nests under its parent and runs the same machinery: the parent sees its latest result in

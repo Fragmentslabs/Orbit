@@ -3022,6 +3022,7 @@
   },
   "fragments": {
     "reload": "Recarregar",
+    "model": "Modelo",
     "unavailable": "Fragmento indisponível",
     "pickerTitle": "Fragmentos",
     "pickerEmpty": "Nenhum fragmento ainda. Peça ao agente para criar um — um acompanhamento, uma ferramenta pequena, um painel.",

@@ -23,7 +23,7 @@ import path from 'node:path'
 const PID_FILE = '.dev-instance.pid'
 const POLL_MS = 100
 /** The old instance exits on its own within ~4s of a SIGTERM (see main.ts); this covers it. */
-export const DEV_WAIT_MS = 12_000
+const DEV_WAIT_MS = 12_000
 
 export interface InstanceLockDeps {
   /** Is this pid a live Orbit dev process? (default: alive and running the same executable) */

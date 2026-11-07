@@ -83,6 +83,7 @@ async function openSavedSubchat(win: BrowserWindow, sessionId: string, item: Sav
         title: item.subchat?.title ?? '',
         body: item.subchat?.brief ?? '',
         profile: item.subchat?.profile,
+        fragmentKind: item.subchat?.fragmentKind,
       })
   if (!child) return
   try {

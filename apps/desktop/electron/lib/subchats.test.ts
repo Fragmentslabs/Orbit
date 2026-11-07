@@ -117,6 +117,8 @@ describe('createSubchatRecord', () => {
     const fragment = await createSubchatRecord({ parentId: 'parent', title: 'F', body: 'b', profile: 'fragment' })
     expect(fragment!.fragment).toEqual({ kind: 'screen' })
     expect(fragment!.profile).toBeUndefined()
+    const widget = await createSubchatRecord({ parentId: 'parent', title: 'W', body: 'b', profile: 'fragment', fragmentKind: 'widget' })
+    expect(widget!.fragment).toEqual({ kind: 'widget' })
     const plain = await createSubchatRecord({ parentId: 'parent', title: 'P', body: 'b' })
     expect(plain!.profile).toBeUndefined()
     expect(plain!.fragment).toBeUndefined()
@@ -124,7 +126,7 @@ describe('createSubchatRecord', () => {
 
   it('creates nothing when the parent does not exist', async () => {
     store.clear()
-    expect(await createSubchatRecord({ parentId: 'fantasma', title: 'X', body: 'Y' })).toBeNull()
+    expect(await createSubchatRecord({ parentId: 'ghost', title: 'X', body: 'Y' })).toBeNull()
   })
 })
 
@@ -177,7 +179,7 @@ describe('findSubchat', () => {
     // Id from another tree, loose conversation and invented id: they never count.
     expect(await findSubchat('other', 'f1')).toBeNull()
     expect(await findSubchat('parent', 'other')).toBeNull()
-    expect(await findSubchat('parent', 'fantasma')).toBeNull()
+    expect(await findSubchat('parent', 'ghost')).toBeNull()
   })
 
   it('refuses an orchestration worker — those are workers.ts business', async () => {

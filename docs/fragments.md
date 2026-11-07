@@ -133,8 +133,8 @@ Native fragments (planned) live in `resources/fragments/`, read-only, with a
 
 ```json
 {
-  "id": "frag-controle-de-gastos-a1b2c3",
-  "name": "Controle de gastos",
+  "id": "frag-expense-tracker-a1b2c3",
+  "name": "Expense tracker",
   "sdk": 1,
   "requests": ["ai"],
   "grants": [],

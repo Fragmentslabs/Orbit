@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { FragmentKind, FragmentManifest } from "@shared/fragments"
 import { FRAGMENT_SCHEME } from "@shared/fragments"
+import { loadCreations, saveCreations, type Creation } from "@/src/lib/fragment-creations"
 import { fragmentApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 
@@ -11,13 +12,6 @@ import { usePanelStore } from "@/src/stores/panel-store"
  * the `fragment:updated` / `fragment:removed` events — the sidebar (pinned entries),
  * the page and the side panel's hub all read it.
  */
-/** A creation in progress: shown in the gallery as a card that is being made. */
-export interface Creation {
-  sessionId: string
-  kind: FragmentKind
-  startedAt: number
-}
-
 interface FragmentsState {
   items: FragmentManifest[]
   loaded: boolean
@@ -38,7 +32,8 @@ interface FragmentsState {
   /**
    * Every creation that has not produced its fragment yet, whether or not its screen is
    * showing. Leaving the creating screen does not stop it: it stays here as a card in the
-   * gallery, and comes back with a click. It disappears when its fragment exists.
+   * gallery, and comes back with a click. It disappears when its fragment exists. Kept in
+   * localStorage so a restart does not lose the card.
    */
   creations: Creation[]
 
@@ -77,7 +72,7 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
   inspecting: false,
   detailsOpen: false,
   reloads: 0,
-  creations: [],
+  creations: loadCreations(),
 
   load: async () => {
     if (!synced) {
@@ -152,3 +147,7 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
     return activeId === id
   },
 }))
+
+useFragmentsStore.subscribe((state, previous) => {
+  if (state.creations !== previous.creations) saveCreations(state.creations)
+})

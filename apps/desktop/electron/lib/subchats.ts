@@ -1,5 +1,6 @@
 import type { ChatMessage, SessionInfo, SpecialistProfile } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
+import type { FragmentKind } from '@shared/fragments'
 import { listKeys, readJson, writeJson } from './storage'
 import { SUMMARY_PREFIX } from './compaction'
 
@@ -140,6 +141,8 @@ export interface NewSubchat {
   body: string
   /** A specialist chat: it runs the lean profile of that craft for its whole life. */
   profile?: SpecialistProfile
+  /** For a fragment chat: the kind of fragment it was asked to make. Defaults to a screen. */
+  fragmentKind?: FragmentKind
 }
 
 export interface NewContinuation {
@@ -163,6 +166,7 @@ async function createRecord({
   continuedFrom,
   fallbackTitle,
   profile,
+  fragmentKind,
 }: {
   source: SessionInfo
   title: string
@@ -171,6 +175,7 @@ async function createRecord({
   continuedFrom?: string
   fallbackTitle: string
   profile?: SpecialistProfile
+  fragmentKind?: FragmentKind
 }): Promise<SessionInfo> {
   const now = Date.now()
   const session: SessionInfo = {
@@ -185,7 +190,7 @@ async function createRecord({
     ...(parentId ? { parentId } : {}),
     ...(continuedFrom ? { continuedFrom } : {}),
     // The fragment chat keeps its own field (see specialistProfileOf); the others use `profile`.
-    ...(profile === 'fragment' ? { fragment: { kind: 'screen' as const } } : profile ? { profile } : {}),
+    ...(profile === 'fragment' ? { fragment: { kind: fragmentKind ?? ('screen' as const) } } : profile ? { profile } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -212,10 +217,10 @@ async function createRecord({
 }
 
 /** Conversation attached to `parentId` — the subchat of the tools and of the card. */
-export async function createSubchatRecord({ parentId, title, body, profile }: NewSubchat): Promise<SessionInfo | null> {
+export async function createSubchatRecord({ parentId, title, body, profile, fragmentKind }: NewSubchat): Promise<SessionInfo | null> {
   const parent = await readJson<SessionInfo>(StorageKeys.session(parentId))
   if (!parent) return null
-  return createRecord({ source: parent, title, body, parentId, fallbackTitle: 'Subchat', profile })
+  return createRecord({ source: parent, title, body, parentId, fallbackTitle: 'Subchat', profile, fragmentKind })
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import type { ArtifactRef } from "@shared/artifacts"
+import { artifactKey, type ArtifactRef } from "@shared/artifacts"
 import { summarizeActivity, type ArtifactActivity } from "@/src/lib/artifact-activity"
 import { chatsOf, useArtifactChatsStore } from "@/src/stores/artifact-chats-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -12,7 +12,7 @@ import { useSessionStore } from "@/src/stores/session-store"
 export function useArtifactActivity(ref: ArtifactRef | null): ArtifactActivity {
   const ensure = useArtifactChatsStore((s) => s.ensure)
   const chats = useArtifactChatsStore((s) => chatsOf(s.byKey, ref).sessionIds)
-  const key = ref ? `${ref.kind}:${ref.id}` : ""
+  const key = ref ? artifactKey(ref) : ""
 
   useEffect(() => {
     if (ref) void ensure(ref)

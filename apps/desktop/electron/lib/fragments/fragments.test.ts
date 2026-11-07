@@ -54,10 +54,10 @@ afterAll(async () => {
 
 describe('fragment-store', () => {
   it('creates a fragment with a URL-safe id and index.html', async () => {
-    const m = await store.createFragment({ name: 'Controle de Gastos', html: '<h1>oi</h1>' })
-    expect(m.id).toMatch(/^frag-controle-de-gastos-[0-9a-f]{6}$/)
+    const m = await store.createFragment({ name: 'Expense Tracker', html: '<h1>hi</h1>' })
+    expect(m.id).toMatch(/^frag-expense-tracker-[0-9a-f]{6}$/)
     expect(store.isFragmentId(m.id)).toBe(true)
-    expect(await store.readFragmentFile(m.id, 'index.html')).toBe('<h1>oi</h1>')
+    expect(await store.readFragmentFile(m.id, 'index.html')).toBe('<h1>hi</h1>')
     expect(m.grants).toEqual([])
   })
 
@@ -99,6 +99,26 @@ describe('fragment-store', () => {
   it('keeps index.html', async () => {
     const m = await store.createFragment({ name: 'entry', html: 'x' })
     await expect(store.deleteFragmentFile(m.id, 'index.html')).rejects.toThrow()
+  })
+
+  it('serializes concurrent edits of the same file so neither is lost', async () => {
+    const m = await store.createFragment({ name: 'race', html: 'a|b' })
+    await Promise.all([
+      store.editFragmentFile(m.id, 'index.html', (cur) => (cur ?? '').replace('a', 'A')),
+      store.editFragmentFile(m.id, 'index.html', (cur) => (cur ?? '').replace('b', 'B')),
+    ])
+    expect(await store.readFragmentFile(m.id, 'index.html')).toBe('A|B')
+  })
+
+  it('rejects an edit whose transform throws and leaves the file alone', async () => {
+    const m = await store.createFragment({ name: 'reject', html: 'keep' })
+    await expect(
+      store.editFragmentFile(m.id, 'index.html', () => {
+        throw new Error('no match')
+      }),
+    ).rejects.toThrow('no match')
+    expect(await store.readFragmentFile(m.id, 'index.html')).toBe('keep')
+    expect((await store.getFragment(m.id))?.revision).toBe(m.revision)
   })
 
   it('keeps data across code rewrites', async () => {

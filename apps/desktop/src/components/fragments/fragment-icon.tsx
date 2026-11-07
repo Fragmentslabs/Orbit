@@ -5,7 +5,7 @@ import { FRAGMENT_DEFAULT_ICON } from "@shared/fragments"
 const KNOWN = new Set<string>(iconNames)
 
 /** Is this a lucide icon name we can draw? (The agent picks a name; it may guess wrong.) */
-export function isKnownIcon(name: string): name is IconName {
+function isKnownIcon(name: string): name is IconName {
   return KNOWN.has(name)
 }
 
