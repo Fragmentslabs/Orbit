@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   wakeParentOf: vi.fn(),
   running: [] as string[],
   findSubchat: vi.fn(async (parentId: string, id: string) =>
-    parentId === 'ses_pai' && id === 'ses_filho'
-      ? { id: 'ses_filho', title: 'Parser de CSV', mode: 'code' as const, directory: '/repo', extraDirectories: [] }
+    parentId === 'ses_pai' && id === 'ses_child'
+      ? { id: 'ses_child', title: 'CSV parser', mode: 'code' as const, directory: '/repo', extraDirectories: [] }
       : null),
   readSubchatMessages: vi.fn(async () => ({
     from: 1,
@@ -23,8 +23,8 @@ const mocks = vi.hoisted(() => ({
   broadcastChatEvent: vi.fn(),
   dispatchAsk: vi.fn(async (_target: string, _item: unknown, _signal?: AbortSignal) => 'deny'),
   createSubchatRecord: vi.fn(async () => ({
-    id: 'ses_filho',
-    title: 'Parser de CSV',
+    id: 'ses_child',
+    title: 'CSV parser',
     mode: 'code' as const,
     pinned: false,
     archived: false,
@@ -38,7 +38,7 @@ const mocks = vi.hoisted(() => ({
   // A new top-level chat: no parentId.
   createContinuationRecord: vi.fn(async () => ({
     id: 'ses_novo',
-    title: 'Continuação do parser',
+    title: 'Parser continuation',
     mode: 'code' as const,
     pinned: false,
     archived: false,
@@ -67,8 +67,8 @@ const { createSubchatTools, withSpecialistOffer } = await import('./subchats')
 const { currentTurnWrites, recordToolWrite, runWithWriteScope } = await import('../session/write-journal')
 const { setMainLocale } = await import('../i18n')
 
-// The child's opening lines follow the app language; these tests run the app in Portuguese.
-setMainLocale('Portuguese')
+// The child's opening lines follow the app language; these tests run the app in English.
+setMainLocale('English')
 
 type Exec = (input: unknown, options: unknown) => Promise<unknown>
 const exec = (tools: ReturnType<typeof createSubchatTools>, name: 'suggest_subchat' | 'open_subchat' | 'read_subchat' | 'send_to_subchat') =>
@@ -85,7 +85,7 @@ function input(overrides: Partial<SendMessageInput> = {}): SendMessageInput {
     mode: 'code',
     options: { permissionMode: 'ask' },
     directory: '/repo',
-    language: 'Portuguese',
+    language: 'English',
     ...overrides,
   } as SendMessageInput
 }
@@ -100,7 +100,7 @@ describe('suggest_subchat', () => {
 
   it('suggests before creating: sends the title and the brief to the card, opening nothing', async () => {
     await exec(createSubchatTools(input(), win), 'suggest_subchat')(
-      { title: 'Parser de CSV', brief: BRIEF },
+      { title: 'CSV parser', brief: BRIEF },
       {},
     )
     expect(mocks.dispatchAsk).toHaveBeenCalledTimes(1)
@@ -109,7 +109,7 @@ describe('suggest_subchat', () => {
       subchat: { title: string; brief: string; scope: string }
     }
     expect(request.kind).toBe('subchat')
-    expect(request.subchat).toEqual({ title: 'Parser de CSV', brief: BRIEF, scope: 'subchat' })
+    expect(request.subchat).toEqual({ title: 'CSV parser', brief: BRIEF, scope: 'subchat' })
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(mocks.runChat).not.toHaveBeenCalled()
   })
@@ -117,7 +117,7 @@ describe('suggest_subchat', () => {
   it('a long conversation suggests a NEW chat, not a subchat', async () => {
     mocks.dispatchAsk.mockResolvedValue('new')
     const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
-      { title: 'Continuação do parser', brief: BRIEF, scope: 'chat' },
+      { title: 'Parser continuation', brief: BRIEF, scope: 'chat' },
       {},
     )
     const request = mocks.dispatchAsk.mock.calls[0][1] as { subchat: { scope: string } }
@@ -125,7 +125,7 @@ describe('suggest_subchat', () => {
     // Top-level: no parentId, so it is not indented under (nor deleted with) this chat.
     expect(mocks.createContinuationRecord).toHaveBeenCalledWith({
       sourceId: 'ses_pai',
-      title: 'Continuação do parser',
+      title: 'Parser continuation',
       body: BRIEF,
     })
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
@@ -138,7 +138,7 @@ describe('suggest_subchat', () => {
     const webContents = { send: mocks.modelSelect }
     const realWin = { webContents } as never
     await exec(createSubchatTools(input(), realWin), 'suggest_subchat')(
-      { title: 'Continuação do parser', brief: BRIEF, scope: 'chat' },
+      { title: 'Parser continuation', brief: BRIEF, scope: 'chat' },
       {},
     )
     expect(mocks.modelSelect).toHaveBeenCalledWith('companion:model-select', {
@@ -151,19 +151,19 @@ describe('suggest_subchat', () => {
   it('"implement in a new chat" creates and already fires the child turn', async () => {
     mocks.dispatchAsk.mockResolvedValue('new')
     const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
-      { title: 'Parser de CSV', brief: BRIEF },
+      { title: 'CSV parser', brief: BRIEF },
       {},
     )
     expect(mocks.createSubchatRecord).toHaveBeenCalledWith({
       parentId: 'ses_pai',
-      title: 'Parser de CSV',
+      title: 'CSV parser',
       body: BRIEF,
     })
     expect(mocks.broadcastSessionEvent).toHaveBeenCalledTimes(1)
     expect(mocks.runChat).toHaveBeenCalledTimes(1)
     const [, filho] = mocks.runChat.mock.calls[0] as [unknown, SendMessageInput]
-    expect(filho.sessionId).toBe('ses_filho')
-    expect(filho.text).toContain('Pode começar')
+    expect(filho.sessionId).toBe('ses_child')
+    expect(filho.text).toContain('Go ahead')
     expect(filho.directory).toBe('/repo')
     expect(String(r)).toContain('already working')
   })
@@ -171,18 +171,18 @@ describe('suggest_subchat', () => {
   it('"do it in this chat" creates nothing and tells the agent to work here', async () => {
     mocks.dispatchAsk.mockResolvedValue('here')
     const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
-      { title: 'Parser de CSV', brief: BRIEF },
+      { title: 'CSV parser', brief: BRIEF },
       {},
     )
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(mocks.runChat).not.toHaveBeenCalled()
     // The task comes back with the choice, so the agent does not lose track of it.
-    expect(String(r)).toBe(`The user chose to do it here. Do it now in this conversation, without opening a chat: Parser de CSV — ${BRIEF}`)
+    expect(String(r)).toBe(`The user chose to do it here. Do it now in this conversation, without opening a chat: CSV parser — ${BRIEF}`)
   })
 
   it('"decline" leaves the matter aside', async () => {
     const r = await exec(createSubchatTools(input(), win), 'suggest_subchat')(
-      { title: 'Parser de CSV', brief: BRIEF },
+      { title: 'CSV parser', brief: BRIEF },
       {},
     )
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
@@ -191,14 +191,14 @@ describe('suggest_subchat', () => {
 
   it('the card is closed when the request ends — answered, aborted or failed', async () => {
     const tools = createSubchatTools(input(), win)
-    await exec(tools, 'suggest_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+    await exec(tools, 'suggest_subchat')({ title: 'CSV parser', brief: BRIEF }, {})
     const done = mocks.broadcastChatEvent.mock.calls.at(-1)?.[0] as { type: string; sessionId: string }
     expect(done.type).toBe('ask:done')
     expect(done.sessionId).toBe('ses_pai')
 
     vi.clearAllMocks()
     mocks.dispatchAsk.mockRejectedValueOnce(new Error('aborted'))
-    await exec(tools, 'suggest_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+    await exec(tools, 'suggest_subchat')({ title: 'CSV parser', brief: BRIEF }, {})
     expect((mocks.broadcastChatEvent.mock.calls.at(-1)?.[0] as { type: string }).type).toBe('ask:done')
   })
 })
@@ -211,7 +211,7 @@ describe('open_subchat', () => {
 
   it('creates directly, without asking — only when the user already asked', async () => {
     const r = await exec(createSubchatTools(input(), win), 'open_subchat')(
-      { title: 'Parser de CSV', brief: BRIEF },
+      { title: 'CSV parser', brief: BRIEF },
       {},
     )
     expect(mocks.dispatchAsk).not.toHaveBeenCalled()
@@ -227,14 +227,14 @@ describe('open_subchat', () => {
     mocks.runChat.mockImplementationOnce(async () => {
       filho = runWithWriteScope(async () => {
         await new Promise((resolve) => setTimeout(resolve, 5))
-        recordToolWrite('/repo/do-filho.ts')
+        recordToolWrite('/repo/from-child.ts')
       })
       await filho
     })
     await runWithWriteScope(async () => {
-      await exec(createSubchatTools(input(), win), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+      await exec(createSubchatTools(input(), win), 'open_subchat')({ title: 'CSV parser', brief: BRIEF }, {})
       await filho
-      expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['do-filho.ts'] })
+      expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['from-child.ts'] })
     })
   })
 
@@ -242,16 +242,16 @@ describe('open_subchat', () => {
     await exec(
       createSubchatTools(input({ sessionId: 'ses_worker', orchestrationRole: 'worker', parentSessionId: 'ses_pai' }), win),
       'open_subchat',
-    )({ title: 'Parser de CSV', brief: BRIEF }, {})
+    )({ title: 'CSV parser', brief: BRIEF }, {})
     expect(mocks.createSubchatRecord).toHaveBeenCalledWith({
       parentId: 'ses_pai',
-      title: 'Parser de CSV',
+      title: 'CSV parser',
       body: BRIEF,
     })
   })
 
   it('with no win it fires no turn (ephemeral subagent)', async () => {
-    await exec(createSubchatTools(input()), 'open_subchat')({ title: 'Parser de CSV', brief: BRIEF }, {})
+    await exec(createSubchatTools(input()), 'open_subchat')({ title: 'CSV parser', brief: BRIEF }, {})
     expect(mocks.createSubchatRecord).toHaveBeenCalledTimes(1)
     expect(mocks.runChat).not.toHaveBeenCalled()
   })
@@ -259,7 +259,7 @@ describe('open_subchat', () => {
   it('a nonexistent conversation returns an error and fires nothing', async () => {
     mocks.createSubchatRecord.mockResolvedValueOnce(null as never)
     const r = await exec(createSubchatTools(input(), win), 'open_subchat')(
-      { title: 'Parser de CSV', brief: BRIEF },
+      { title: 'CSV parser', brief: BRIEF },
       {},
     )
     expect(String(r)).toContain('Error')
@@ -275,25 +275,25 @@ describe('send_to_subchat', () => {
 
   it('fires a turn in the child with the instruction, without waiting for the answer', async () => {
     const r = await exec(createSubchatTools(input(), win), 'send_to_subchat')(
-      { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
+      { subchatId: 'ses_child', message: 'Now cover escaped quotes' },
       {},
     )
     expect(mocks.runChat).toHaveBeenCalledTimes(1)
     const [, filho] = mocks.runChat.mock.calls[0] as [unknown, SendMessageInput]
-    expect(filho.sessionId).toBe('ses_filho')
+    expect(filho.sessionId).toBe('ses_child')
     expect(filho.directory).toBe('/repo')
     // In the child's chat the message says where it came from, in the app language.
-    expect(filho.text).toBe('Mensagem do chat principal: Agora cubra aspas escapadas')
+    expect(filho.text).toBe('Message from the main chat: Now cover escaped quotes')
     expect(String(r)).toContain('Instruction sent')
     // When the child's turn ends, its result goes back to the parent.
-    await vi.waitFor(() => expect(mocks.wakeParentOf).toHaveBeenCalledWith(win, expect.anything(), expect.objectContaining({ id: 'ses_filho' })))
+    await vi.waitFor(() => expect(mocks.wakeParentOf).toHaveBeenCalledWith(win, expect.anything(), expect.objectContaining({ id: 'ses_child' })))
     // It does not ask on its own: the card is the permission gate (rules.ts).
     expect(mocks.dispatchAsk).not.toHaveBeenCalled()
   })
 
   it('only instructs a child of THIS conversation', async () => {
     const r = await exec(createSubchatTools(input({ sessionId: 'ses_other' }), win), 'send_to_subchat')(
-      { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
+      { subchatId: 'ses_child', message: 'Now cover escaped quotes' },
       {},
     )
     expect(mocks.runChat).not.toHaveBeenCalled()
@@ -301,9 +301,9 @@ describe('send_to_subchat', () => {
   })
 
   it('refuses a child that is still running a turn', async () => {
-    mocks.running.push('ses_filho')
+    mocks.running.push('ses_child')
     const r = await exec(createSubchatTools(input(), win), 'send_to_subchat')(
-      { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
+      { subchatId: 'ses_child', message: 'Now cover escaped quotes' },
       {},
     )
     expect(mocks.runChat).not.toHaveBeenCalled()
@@ -313,7 +313,7 @@ describe('send_to_subchat', () => {
   it('two instructions in the same step: the second is refused', async () => {
     const tools = createSubchatTools(input(), win)
     const send = exec(tools, 'send_to_subchat')
-    const args = { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' }
+    const args = { subchatId: 'ses_child', message: 'Now cover escaped quotes' }
     const [a, b] = await Promise.all([send(args, {}), send(args, {})])
     expect(mocks.runChat).toHaveBeenCalledTimes(1)
     expect([String(a), String(b)].filter((t) => t.includes('busy'))).toHaveLength(1)
@@ -324,23 +324,23 @@ describe('send_to_subchat', () => {
     mocks.runChat.mockImplementationOnce(async () => {
       filho = runWithWriteScope(async () => {
         await new Promise((resolve) => setTimeout(resolve, 5))
-        recordToolWrite('/repo/do-filho.ts')
+        recordToolWrite('/repo/from-child.ts')
       })
       await filho
     })
     await runWithWriteScope(async () => {
       await exec(createSubchatTools(input(), win), 'send_to_subchat')(
-        { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
+        { subchatId: 'ses_child', message: 'Now cover escaped quotes' },
         {},
       )
       await filho
-      expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['do-filho.ts'] })
+      expect(currentTurnWrites('/repo')).toEqual({ authored: [], others: ['from-child.ts'] })
     })
   })
 
   it('with no win it fires nothing', async () => {
     const r = await exec(createSubchatTools(input()), 'send_to_subchat')(
-      { subchatId: 'ses_filho', message: 'Agora cubra aspas escapadas' },
+      { subchatId: 'ses_child', message: 'Now cover escaped quotes' },
       {},
     )
     expect(mocks.runChat).not.toHaveBeenCalled()
@@ -355,11 +355,11 @@ describe('read_subchat', () => {
   })
 
   it('returns the child conversation with the status', async () => {
-    mocks.running.push('ses_filho')
+    mocks.running.push('ses_child')
     const r = String(
-      await exec(createSubchatTools(input(), win), 'read_subchat')({ subchatId: 'ses_filho' }, {}),
+      await exec(createSubchatTools(input(), win), 'read_subchat')({ subchatId: 'ses_child' }, {}),
     )
-    expect(r).toContain('Parser de CSV')
+    expect(r).toContain('CSV parser')
     expect(r).toContain('running a turn now')
     expect(r).toContain('Parser pronto em csv-parser.ts')
     expect(r).toContain('[tools: write]')
@@ -368,7 +368,7 @@ describe('read_subchat', () => {
 
   it('an id from another conversation reads nothing', async () => {
     const r = await exec(createSubchatTools(input({ sessionId: 'ses_other' }), win), 'read_subchat')(
-      { subchatId: 'ses_filho' },
+      { subchatId: 'ses_child' },
       {},
     )
     expect(String(r)).toContain('No subchat')

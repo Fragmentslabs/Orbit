@@ -54,10 +54,10 @@ afterAll(async () => {
 
 describe('fragment-store', () => {
   it('creates a fragment with a URL-safe id and index.html', async () => {
-    const m = await store.createFragment({ name: 'Controle de Gastos', html: '<h1>oi</h1>' })
-    expect(m.id).toMatch(/^frag-controle-de-gastos-[0-9a-f]{6}$/)
+    const m = await store.createFragment({ name: 'Expense Tracker', html: '<h1>hi</h1>' })
+    expect(m.id).toMatch(/^frag-expense-tracker-[0-9a-f]{6}$/)
     expect(store.isFragmentId(m.id)).toBe(true)
-    expect(await store.readFragmentFile(m.id, 'index.html')).toBe('<h1>oi</h1>')
+    expect(await store.readFragmentFile(m.id, 'index.html')).toBe('<h1>hi</h1>')
     expect(m.grants).toEqual([])
   })
 
