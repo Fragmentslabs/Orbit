@@ -3,7 +3,8 @@ import { Sparkles, X } from "lucide-react"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { useSessionStatus } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
-import { useFragmentsStore, type Creation } from "@/src/stores/fragments-store"
+import type { Creation } from "@/src/lib/fragment-creations"
+import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { KIND_META } from "./kind-meta"
 
 
