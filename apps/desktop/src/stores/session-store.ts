@@ -843,6 +843,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
+      void storage.remove(StorageKeys.specialistOffers(sid))
       // Attached sources: deletes the chat's own scope. When it was
       // in a folder, the scope belongs to the folder and main does not touch it here — the sources
       // keep counting for the other chats of it.

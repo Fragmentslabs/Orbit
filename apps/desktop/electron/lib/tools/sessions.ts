@@ -182,6 +182,7 @@ export function createSessionTools(): ToolSet {
           await deleteMediaJournals(id).catch(() => {})
           await removeJson(StorageKeys.planReview(id))
           await removeJson(StorageKeys.pendingAsks(id))
+          await removeJson(StorageKeys.specialistOffers(id))
           broadcastSessionEvent({ type: 'session:deleted', sessionId: id })
           deleted++
         }

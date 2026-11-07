@@ -54,6 +54,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../chat-engine', () => ({ runChat: mocks.runChat, getRunningSessionIds: () => mocks.running }))
 vi.mock('../companion-server', () => ({ broadcastSessionEvent: mocks.broadcastSessionEvent }))
 vi.mock('../broadcast', () => ({ broadcastChatEvent: mocks.broadcastChatEvent }))
+// The decision store is covered by its own test; here it is an in-memory set.
+vi.mock('./specialist-offers', () => {
+  const decided = new Set<string>()
+  return {
+    offerDecided: async (sessionId: string, profile: string) => decided.has(`${sessionId}:${profile}`),
+    recordOfferDecision: async (sessionId: string, profile: string) => void decided.add(`${sessionId}:${profile}`),
+  }
+})
 vi.mock('../ask-dispatch', () => ({ dispatchAsk: mocks.dispatchAsk }))
 vi.mock('../subchat-wake', () => ({ wakeParentOf: mocks.wakeParentOf }))
 vi.mock('../subchats', () => ({
