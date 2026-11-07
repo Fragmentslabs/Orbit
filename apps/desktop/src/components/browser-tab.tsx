@@ -33,7 +33,10 @@ import {
   WebPreviewOpenInNewTabButton,
   useWebPreview,
 } from "@/src/components/ai/web-preview"
-import { FeedPinButton, FullscreenChatFeed, FullscreenComposer, useEdgeHover } from "@/src/components/fullscreen-dock"
+import { FeedPinButton } from "@/src/components/dock-handle"
+import { FullscreenChatFeed } from "@/src/components/fullscreen-chat-feed"
+import { FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { useEdgeHover } from "@/src/hooks/use-edge-hover"
 import {
   applySelectMode,
   navigateWebview,

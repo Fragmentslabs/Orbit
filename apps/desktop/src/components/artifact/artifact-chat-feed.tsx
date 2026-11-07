@@ -1,4 +1,4 @@
-import { FullscreenChatFeed } from "@/src/components/fullscreen-dock"
+import { FullscreenChatFeed } from "@/src/components/fullscreen-chat-feed"
 import { ArtifactChatTools } from "@/src/components/artifact/artifact-chat-tools"
 import { AGENT_META } from "@/src/components/agent-meta"
 import type { useArtifactChat } from "@/src/hooks/use-artifact-chat"
