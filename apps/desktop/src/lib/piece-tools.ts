@@ -1,5 +1,6 @@
 import type { MessagePart, ToolPart } from "@shared/chat"
 import { designRefOf } from "./design-part-ref"
+import { fragmentRefOf } from "./fragment-part-ref"
 import { motionRefOf } from "./motion-part-ref"
 import { slidesRefOf } from "./slides-part-ref"
 
@@ -12,9 +13,10 @@ import { slidesRefOf } from "./slides-part-ref"
 export const MOTION_CARD_TOOLS = new Set(["motion_write", "motion_edit", "motion_preview"])
 export const DESIGN_CARD_TOOLS = new Set(["design_write", "design_edit", "design_preview"])
 export const SLIDES_CARD_TOOLS = new Set(["slides_write", "slides_edit", "slides_preview"])
+export const FRAGMENT_CARD_TOOLS = new Set(["fragment_create", "fragment_write_file", "fragment_edit_file"])
 
 export function isPieceCardTool(tool: string): boolean {
-  return MOTION_CARD_TOOLS.has(tool) || DESIGN_CARD_TOOLS.has(tool) || SLIDES_CARD_TOOLS.has(tool)
+  return MOTION_CARD_TOOLS.has(tool) || DESIGN_CARD_TOOLS.has(tool) || SLIDES_CARD_TOOLS.has(tool) || FRAGMENT_CARD_TOOLS.has(tool)
 }
 
 /**
@@ -36,6 +38,10 @@ export function pieceCardKeyOf(part: MessagePart): string | null {
     const ref = designRefOf(tool)
     const key = ref?.id ?? ref?.path ?? ref?.name
     return key ? `design:${key}` : null
+  }
+  if (FRAGMENT_CARD_TOOLS.has(tool.tool)) {
+    const ref = fragmentRefOf(tool)
+    return ref ? `fragment:${ref.id}` : null
   }
   const ref = slidesRefOf(tool)
   const key = ref?.id ?? ref?.path ?? ref?.name

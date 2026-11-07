@@ -1,3 +1,6 @@
+import { ArtifactActivity } from "@/src/components/artifact/artifact-activity"
+import { isEmbeddedArtifactChat } from "@shared/artifacts"
+import { sessionIcon } from "@/src/components/agent-meta"
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
@@ -345,6 +348,9 @@ function FragmentsButton() {
             <SidebarMenuSubItem key={fragment.id}>
               <SidebarMenuSubButton
                 isActive={active && activeId === fragment.id}
+                // A <button> does not stretch on its own (unlike the links of other rows): the
+                // row has to fill the width so the activity indicator sits at the right edge.
+                className="w-full"
                 render={<button type="button" />}
                 onClick={() => {
                   open(fragment.id)
@@ -352,7 +358,8 @@ function FragmentsButton() {
                 }}
               >
                 <FragmentIcon name={fragment.icon} className="size-4" />
-                <span>{fragment.name}</span>
+                <span className="min-w-0 flex-1 truncate">{fragment.name}</span>
+                <ArtifactActivity artifact={{ kind: "fragment", id: fragment.id }} />
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
           ))}
@@ -702,7 +709,7 @@ function persistExpandedFolder(id: string, expanded: boolean) {
   }
 }
 
-function SessionRow({ session, button: ButtonComponent, buttonClassName, actionButtonClassName, icon: Icon = MessageSquare, statusDot, trailing }: {
+function SessionRow({ session, button: ButtonComponent, buttonClassName, actionButtonClassName, icon: iconProp, statusDot, trailing }: {
   session: SessionInfo
   button: React.ElementType
   buttonClassName?: string
@@ -717,6 +724,8 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   trailing?: React.ReactNode
 }) {
   const { t } = useTranslation()
+  // A specialist chat (motion, design) wears the icon of its craft; the rest, the chat bubble.
+  const Icon = iconProp ?? sessionIcon(session) ?? MessageSquare
   const { mode, setMode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const activeId = useSessionStore((s) => s.activeIds[mode])
@@ -805,6 +814,16 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
         ? (useSessionStore.getState().sessions.find((s) => s.id === session.parentId)?.mode ?? session.mode)
         : session.mode
       if (targetMode !== mode) setMode(targetMode)
+      // A fragment's chat belongs to the fragment: opening it opens the fragment (with this
+      // conversation in its card). A chat whose fragment is gone opens as a plain chat.
+      const owner = session.fragment && !session.parentId
+        ? useFragmentsStore.getState().items.find((f) => f.sessionId === session.id)
+        : undefined
+      if (owner) {
+        setView("fragments")
+        useFragmentsStore.getState().open(owner.id)
+        return
+      }
       setView("chat")
       void selectSession(targetMode, session.id)
     }
@@ -934,7 +953,7 @@ function SessionItem({ session, childSessions = [] }: {
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
                 session={child}
-                icon={child.orchestration?.role === "worker" ? Bot : MessagesSquare}
+                icon={sessionIcon(child) ?? (child.orchestration?.role === "worker" ? Bot : MessagesSquare)}
                 statusDot={statusMap[child.id]}
               />
             </SidebarMenuSubItem>
@@ -984,7 +1003,7 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
                 session={child}
-                icon={child.orchestration?.role === "worker" ? Bot : MessagesSquare}
+                icon={sessionIcon(child) ?? (child.orchestration?.role === "worker" ? Bot : MessagesSquare)}
                 statusDot={statusMap[child.id]}
               />
             </div>
@@ -1248,7 +1267,9 @@ function ChatHistory() {
   const modeSessions = useMemo(
     () =>
       sessions
-        .filter((s) => s.mode === mode && !s.routineId && !s.fragment)
+        // A fragment's own chat belongs to the fragment (its conversation card); it only shows
+        // here as a subchat of the chat it was born in.
+        .filter((s) => s.mode === mode && !s.routineId && !isEmbeddedArtifactChat(s))
         .sort((a, b) => (activity.get(b.id) ?? b.updatedAt) - (activity.get(a.id) ?? a.updatedAt)),
     [sessions, mode, activity],
   )
@@ -1260,7 +1281,7 @@ function ChatHistory() {
   const routineSessions = useMemo(
     () =>
       sessions
-        .filter((s) => s.mode === mode && !!s.routineId && !s.fragment)
+        .filter((s) => s.mode === mode && !!s.routineId)
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions, mode],
   )

@@ -10,6 +10,7 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { ChatInput } from "@/src/components/chat-input"
 import { useWorkspace } from "@/lib/workspace-context"
 import { setInputDraft } from "@/src/stores/chat-draft"
+import { embeddedChatFields } from "@/src/lib/artifact-session"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -60,7 +61,7 @@ function Compose() {
       const store = useSessionStore.getState()
       // The fragment's own chat: lean and out of the chat list. Nothing in the prompt about
       // how to build fragments is typed here — the lean profile carries it.
-      const session = await store.createSession("chat", { setActive: false, fragment: { kind } })
+      const session = await store.createSession("chat", { setActive: false, ...embeddedChatFields("fragment", undefined, kind) })
       startCreating({ sessionId: session.id, kind })
       await store.sendMessage("chat", text, { options, sessionId: session.id, files })
     } catch (err) {
@@ -188,7 +189,7 @@ function Creating({ sessionId }: { sessionId: string }) {
           variant="secondary"
           onClick={() => usePanelStore.getState().openChatTab(sessionId, sessionTitle ?? t("fragments.title"))}
         >
-          {t("fragments.seeChat")}
+          {t("fragments.chat.show")}
         </Button>
         <Button
           size="sm"
@@ -198,7 +199,7 @@ function Creating({ sessionId }: { sessionId: string }) {
             setView("fragments")
           }}
         >
-          {t("fragments.cancel")}
+          {t("fragments.backToList")}
         </Button>
       </div>
     </div>

@@ -29,6 +29,7 @@ import { RoutinesView } from "@/src/components/routines/routines-view"
 import { ToolsView } from "@/src/components/tools-view"
 import { UsageView } from "@/src/components/usage/usage-view"
 import { FragmentsView } from "@/src/components/fragments/fragments-view"
+import { FragmentHeaderActions } from "@/src/components/fragments/fragment-header-actions"
 import { FragmentHeaderTitle } from "@/src/components/fragments/fragment-header"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
@@ -363,6 +364,7 @@ function Layout() {
                   // delete and search belong to the SESSION, and the sidebar already offers them
                   // for a code conversation through the row menu.
                   hasMenu={!remoteEnv && view === "chat" && !!activeSession}
+                  showAgent={!remoteEnv && view === "chat"}
                   session={!remoteEnv && view === "chat" ? activeSession : undefined}
                   // Agent browser indicator: works in both modes of the
                   // conversation (chat and code), since the browser tools are
@@ -400,6 +402,8 @@ function Layout() {
                       <PageScopeToggle page={view} workspaceMode={workspaceMode} />
                     ) : view === "analytics" ? (
                       <UsageHeaderControls />
+                    ) : fragmentFullscreen && openFragmentId ? (
+                      <FragmentHeaderActions fragmentId={openFragmentId} />
                     ) : undefined
                   }
                   onFoldersChange={

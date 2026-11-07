@@ -15,13 +15,11 @@ import {
   ChainOfThoughtStep,
 } from "@/src/components/ai/chain-of-thought"
 import { Shimmer } from "@/src/components/ai/shimmer"
-import { MotionPartView } from "@/src/components/ai/motion-part"
 import { MotionBundleCard } from "@/src/components/messages/motion-bundle-card"
 import { planMotionBundles } from "@/src/lib/motion-bundle"
 import { useMotionBundleIndexes } from "@/src/stores/motion-bundles-store"
-import { DesignPartView } from "@/src/components/ai/design-part"
-import { SlidesPartView } from "@/src/components/ai/slides-part"
-import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, landPieceCard } from "@/src/lib/piece-tools"
+import { DESIGN_CARD_TOOLS, FRAGMENT_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, isPieceCardTool, landPieceCard } from "@/src/lib/piece-tools"
+import { PieceCardView } from "@/src/components/ai/piece-card-view"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { ImageGroupView } from "@/src/components/ai/image"
 import { ActionsGroup } from "@/src/components/ai/actions-group"
@@ -156,6 +154,7 @@ const RENDER_PROPRIO = new Set([
   ...MOTION_CARD_TOOLS,
   ...DESIGN_CARD_TOOLS,
   ...SLIDES_CARD_TOOLS,
+  ...FRAGMENT_CARD_TOOLS,
 ])
 
 /**
@@ -290,12 +289,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SkillProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "routines_manage" ? (
           <RoutineProposalCard key={segment.id} part={segment.part} />
-        ) : MOTION_CARD_TOOLS.has(segment.part.tool) ? (
-          <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : DESIGN_CARD_TOOLS.has(segment.part.tool) ? (
-          <DesignPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : SLIDES_CARD_TOOLS.has(segment.part.tool) ? (
-          <SlidesPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : isPieceCardTool(segment.part.tool) ? (
+          <PieceCardView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update" ? (
           <McpProposalCard key={segment.id} part={segment.part} />
         ) : // The artifact card already is the result of these tools — the generic chip

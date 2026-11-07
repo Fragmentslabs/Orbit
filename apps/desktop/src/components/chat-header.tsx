@@ -28,12 +28,15 @@ import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-co
 import { useSessionStore } from "@/src/stores/session-store"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Truncate } from "@/components/ui/truncated-text"
+import { AgentSelector } from "@/src/components/agent-selector"
 
 interface ChatHeaderProps {
   title?: string
   /** Replaces the plain title (a page that needs more than text there, e.g. a fragment's back/icon/name). */
   titleSlot?: React.ReactNode
   hasMenu?: boolean
+  /** Shows which agent the conversation runs with (only on the chat view). */
+  showAgent?: boolean
   session?: SessionInfo
   /** Active session (chat or code) — for the agent browser indicator. */
   sessionId?: string
@@ -89,7 +92,7 @@ function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
   )
 }
 
-export function ChatHeader({ title, titleSlot, hasMenu, session, sessionId, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra }: ChatHeaderProps) {
+export function ChatHeader({ title, titleSlot, hasMenu, showAgent, session, sessionId, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra }: ChatHeaderProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -169,6 +172,8 @@ export function ChatHeader({ title, titleSlot, hasMenu, session, sessionId, righ
         )}
       </div>
       {extra}
+      {/* Which agent the conversation runs with: on the right, in both chat and code. */}
+      {showAgent && <AgentSelector session={session} />}
       {sessionId && <BrowserTestChip sessionId={sessionId} compact className="self-center" />}
       {sessionId && <ComputerChip sessionId={sessionId} />}
       {/* Call in progress outside its own conversation: badge in the header (the composer

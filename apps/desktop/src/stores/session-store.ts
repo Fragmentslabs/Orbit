@@ -15,6 +15,7 @@ import type {
   SessionInfo,
   SessionMediaRevert,
   SessionMode,
+  SpecialistProfile,
   TextPart,
 } from "@shared/chat"
 // normalizeFolderName/folderKey live in shared: mobile groups chats by
@@ -127,6 +128,9 @@ interface SessionState {
   /** Folder to assign to the next session created by the new chat flow.
    *  The folder's "+" does not create a session on click — only on sending the 1st message. */
   pendingFolderId: string | null
+  /** Specialist agent chosen for the next new chat (null = the general agent). Applied when the
+   *  session is created by the first message, then cleared. */
+  pendingProfile: SpecialistProfile | null
   /** Count of unread messages per session. */
   unreadCounts: Record<string, number>
   /** Orchestration plans per orchestrator session */
@@ -167,6 +171,7 @@ interface SessionState {
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   setPendingFolder: (folderId: string | null) => void
+  setPendingProfile: (profile: SpecialistProfile | null) => void
   renameSession: (id: string, title: string) => void
   togglePin: (id: string) => void
   toggleArchive: (id: string) => void
@@ -381,6 +386,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => (state.suggestions[sessionId] ? { suggestions: { ...state.suggestions, [sessionId]: undefined } } : state)),
   activeIds: { chat: null, code: null },
   pendingFolderId: null,
+  pendingProfile: null,
   orchestration: {},
   planReviews: {},
   _planReviewOutbox: {},
@@ -512,11 +518,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,
       // Navigating to another session or opening a new chat ends the pending folder intent
       pendingFolderId: null,
+      pendingProfile: null,
     }))
     if (id) await get().ensureMessages(id)
   },
 
   setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
+  setPendingProfile: (profile) => set({ pendingProfile: profile }),
 
   ensureMessages: async (sessionId) => {
     // History cap in memory: the conversations seen longest ago release
@@ -1325,7 +1333,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         directory: config.directory,
         extraDirectories: config.extraDirectories,
         ...(pendingFolder && pendingFolder.mode === mode ? { folderId: pendingFolderId } : {}),
+        // The agent picked for this new chat, in chat and in code alike.
+        // A request made from the browser itself needs the general agent (the specialists have
+        // no browser tools), so the pick does not apply there.
+        ...(get().pendingProfile && !config.options.fromBrowser ? { profile: get().pendingProfile! } : {}),
       })
+      if (get().pendingProfile) set({ pendingProfile: null })
       sessionId = session.id
       if (pendingFolderId) set({ pendingFolderId: null })
       // The new chat's Brain toggle (draft) starts counting for this session
@@ -1884,7 +1897,7 @@ case "message": {
             ? {
                 requestId: event.requestId,
                 kind: "subchat",
-                subchat: { title: event.title, brief: event.brief, scope: event.scope },
+                subchat: { title: event.title, brief: event.brief, scope: event.scope, profile: event.profile },
                 origin: event.origin,
               }
             : { requestId: event.requestId, kind: "question", questions: event.questions, origin: event.origin }

@@ -55,7 +55,9 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { TabHeader } from "@/src/components/tab-header"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
-import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { ActionsFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { ArtifactChatFeed } from "@/src/components/artifact/artifact-chat-feed"
+import { useArtifactChat } from "@/src/hooks/use-artifact-chat"
 import { Truncate } from "@/components/ui/truncated-text"
 import { MotionPropsForm } from "@/src/components/motion-props-form"
 import { changedCount, defaultValues, srcWithProps, toOverrides, type MotionPropsInfo, type PropFormValues } from "@/src/lib/motion-props-form"
@@ -265,6 +267,10 @@ export function MotionTab({
   sessionId?: string
 }) {
   const { t } = useTranslation()
+  // The conversation of the fullscreen: the chat the person picked for this composition,
+  // else the one that owns the tab (see use-artifact-chat).
+  const chat = useArtifactChat(motionId ? { kind: "motion", id: motionId } : null, { fallback: sessionId })
+  const chatSessionId = chat.sessionId ?? sessionId
   const rootRef = useRef<HTMLDivElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const stageWrapRef = useRef<HTMLDivElement | null>(null)
@@ -1720,11 +1726,11 @@ export function MotionTab({
           below — collapsed at the edge, they open on hover or pinned, the same as the
           browser. */}
       {fullscreen && (
-        <FullscreenChatFeed sessionId={sessionId} pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />
+        <ArtifactChatFeed chat={chat} title={title} pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />
       )}
       {fullscreen && (
         <ActionsFeed
-          sessionId={sessionId}
+          sessionId={chatSessionId}
           pinned={actionsPinned}
           onTogglePin={() => setActionsPinned((v) => !v)}
           icon={Sparkles}
@@ -1733,7 +1739,7 @@ export function MotionTab({
       )}
       {fullscreen && (
         <FullscreenComposer
-          sessionId={sessionId}
+          sessionId={chatSessionId}
           pinned={composerPinned}
           onTogglePin={() => setComposerPinned((v) => !v)}
           onSent={() => setChatPinned(true)}

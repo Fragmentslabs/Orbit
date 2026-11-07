@@ -1204,6 +1204,12 @@
       "options": "Options:",
       "context": "Additional context (the agent's other questions):",
       "explain": "For each option, explain:\n- Pros\n- Cons\n- The scenario where it fits best"
+    },
+    "specialist": {
+      "title": "Continue in a {{agent}} chat?",
+      "body": "A chat optimized for this: it knows the craft and uses less context. I pass a summary of what we agreed, not the whole conversation.",
+      "here": "Continue here",
+      "create": "Create {{agent}} chat"
     }
   },
   "connectApp": {
@@ -3053,7 +3059,6 @@
     "composeHint": "Describe what you need, or start from an example. Orbit builds it right here, live.",
     "creatingTitle": "Orbit is building your fragment…",
     "creatingHint": "It appears here as soon as the first version exists, and keeps updating while Orbit works.",
-    "seeChat": "See the conversation",
     "kind": {
       "screen": {
         "name": "Screen",
@@ -3113,7 +3118,22 @@
       "remove": "Removing {{path}}",
       "logs": "Checking the page for errors",
       "ai": "Declaring AI use"
-    }
+    },
+    "chat": {
+      "show": "Show conversation",
+      "hide": "Hide conversation",
+      "title": "Conversation",
+      "new": "New chat",
+      "empty": "Nothing asked yet.",
+      "history": "Chats of this fragment"
+    },
+    "creationEnded": "Did not finish",
+    "discardCreation": "Discard",
+    "backToList": "Back to the list",
+    "card": "Fragment",
+    "gone": "This fragment no longer exists.",
+    "fullscreen": "Open full screen",
+    "aiEnable": "Enable AI"
   },
   "motion": {
     "unavailable": "Composition unavailable",
@@ -3282,7 +3302,8 @@
     "inspector": {
       "properties": "Properties",
       "layers": "Layers",
-      "code": "Code"
+      "code": "Code",
+      "conversation": "Conversation"
     },
     "noSelection": "Click an element on the canvas to see and edit its properties. Click an artboard's name to move or resize it.",
     "comment": "Comment in the chat — attaches the selection to the next message",
@@ -4104,5 +4125,31 @@
     "chat": "Chat",
     "code": "Code",
     "all": "All"
+  },
+  "agent": {
+    "general": {
+      "name": "General",
+      "description": "Full prompt, memories and skills"
+    },
+    "motion": {
+      "name": "Motion",
+      "description": "Lean, animation only"
+    },
+    "design": {
+      "name": "Design",
+      "description": "Lean, screens and layouts only"
+    },
+    "fragment": {
+      "name": "Fragment",
+      "description": "Lean, Orbit pages only"
+    }
+  },
+  "artifact": {
+    "chats": "Chats of this artifact",
+    "embedded": "Inside it",
+    "subchats": "Subchats",
+    "newChat": "New chat",
+    "working": "An agent is working on it",
+    "done": "Finished — open to see"
   }
 }

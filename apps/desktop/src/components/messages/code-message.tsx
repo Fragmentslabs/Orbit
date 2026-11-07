@@ -18,13 +18,11 @@ import {
 import { ImageGroupView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
-import { MotionPartView } from "@/src/components/ai/motion-part"
 import { MotionBundleCard } from "@/src/components/messages/motion-bundle-card"
 import { planMotionBundles } from "@/src/lib/motion-bundle"
 import { useMotionBundleIndexes } from "@/src/stores/motion-bundles-store"
-import { DesignPartView } from "@/src/components/ai/design-part"
-import { SlidesPartView } from "@/src/components/ai/slides-part"
-import { DESIGN_CARD_TOOLS, MOTION_CARD_TOOLS, SLIDES_CARD_TOOLS, isPieceCardTool, landPieceCard } from "@/src/lib/piece-tools"
+import { isPieceCardTool, landPieceCard } from "@/src/lib/piece-tools"
+import { PieceCardView } from "@/src/components/ai/piece-card-view"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
@@ -354,12 +352,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <AudioPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "video" ? (
           <VideoPartView key={segment.id} part={segment.part} />
-        ) : segment.part.type === "tool" && MOTION_CARD_TOOLS.has(segment.part.tool) ? (
-          <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : segment.part.type === "tool" && DESIGN_CARD_TOOLS.has(segment.part.tool) ? (
-          <DesignPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : segment.part.type === "tool" && SLIDES_CARD_TOOLS.has(segment.part.tool) ? (
-          <SlidesPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : segment.part.type === "tool" && isPieceCardTool(segment.part.tool) ? (
+          <PieceCardView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : null,
       )}
       {message.error && (

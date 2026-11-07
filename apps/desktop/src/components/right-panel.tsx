@@ -1,3 +1,4 @@
+import { sessionIcon } from "@/src/components/agent-meta"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
@@ -115,6 +116,12 @@ function useTabMeta(): Record<TabType, TabMeta> {
     routine: { icon: CalendarClock, label: t("panel.tabs.routine.label"), description: t("panel.tabs.routine.description") },
     fragment: { icon: AppWindow, label: t("panel.tabs.fragment.label"), description: t("panel.tabs.fragment.description") },
   }
+}
+
+/** The icon of a conversation tab: the craft's icon for a specialist chat, nested bubbles otherwise. */
+function ChatTabIcon({ sessionId }: { sessionId: string }) {
+  const Icon = useSessionStore((s) => sessionIcon(s.sessions.find((x) => x.id === sessionId) ?? {})) ?? MessagesSquare
+  return <Icon className="size-3.5 shrink-0" />
 }
 
 function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
@@ -891,7 +898,9 @@ export function RightPanel() {
             // the canvas icon, so the two are not confused in the row.
             // A conversation in the panel is a conversation, not a worker: nested bubbles, the
             // same icon that identifies a sub-chat in the sidebar.
-            const TabIcon = tab.type === "chat" && tab.sessionId ? MessagesSquare : tab.type === "design" && tab.designPlay ? Play : Icon
+            // A specialist's conversation (motion, design, fragment) wears the icon of its craft.
+            const TabIcon = tab.type === "design" && tab.designPlay ? Play : Icon
+            const chatSessionId = tab.type === "chat" ? tab.sessionId : undefined
             // The three indicators speak of the CONVERSATION — it is answering, it gave
             // an error, a message arrived — and only the chat tab shows a conversation.
             // Several others carry a sessionId for being of that chat (the
@@ -933,7 +942,7 @@ export function RightPanel() {
                 }}
               >
                 {closeOnLeft && closeButton}
-                <TabIcon className="size-3.5 shrink-0" />
+                {chatSessionId ? <ChatTabIcon sessionId={chatSessionId} /> : <TabIcon className="size-3.5 shrink-0" />}
                 <TruncatedText text={tab.title} className="max-w-24" />
                 {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
                 {isError && (

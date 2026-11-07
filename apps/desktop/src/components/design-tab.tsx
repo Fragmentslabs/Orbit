@@ -22,6 +22,7 @@ import {
   Minus,
   MousePointer2,
   PanelBottomClose,
+  MessagesSquare,
   PanelBottomOpen,
   PanelRightClose,
   PanelRightOpen,
@@ -84,7 +85,12 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { TabHeader } from "@/src/components/tab-header"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
+import { ConversationBody } from "@/src/components/conversation-body"
 import { FloatingSidebar, FullscreenComposer } from "@/src/components/fullscreen-dock"
+import { ArtifactChatTools } from "@/src/components/artifact/artifact-chat-tools"
+import { AGENT_META } from "@/src/components/agent-meta"
+import { useArtifactChat } from "@/src/hooks/use-artifact-chat"
+import { useSessionStatus } from "@/src/stores/session-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
@@ -279,6 +285,14 @@ function DesignEditor({
   const [fullscreen, setFullscreen] = useState(false)
   // Fullscreen: floating sidebars (open by default) and the composer on hover
   const [leftSideOpen, setLeftSideOpen] = useState(true)
+  /** The left sidebar has two tabs: the layers and the conversation with the agent. */
+  const [leftTab, setLeftTab] = useState<"layers" | "conversation">("layers")
+  // The conversation of the fullscreen: the chat the person picked for this canvas, else the
+  // one that owns the tab (see use-artifact-chat).
+  const chat = useArtifactChat(designId ? { kind: "design", id: designId } : null, { fallback: sessionId })
+  const chatSessionId = chat.sessionId ?? sessionId
+  const agentStatus = useSessionStatus(chatSessionId)
+  const agentBusy = agentStatus === "submitted" || agentStatus === "streaming"
   const [rightSideOpen, setRightSideOpen] = useState(true)
   const [composerPinned, setComposerPinned] = useState(false)
   useEffect(() => {
@@ -367,7 +381,7 @@ function DesignEditor({
   boardsRef.current = boards
 
   /** Are the Layers in view? It is the only thing that needs the DOM tree. */
-  const layersVisible = fullscreen ? leftSideOpen : inspectorOpen && inspectorTab === "layers"
+  const layersVisible = fullscreen ? leftSideOpen && leftTab === "layers" : inspectorOpen && inspectorTab === "layers"
   const layersVisibleRef = useRef(layersVisible)
   layersVisibleRef.current = layersVisible
 
@@ -1480,27 +1494,39 @@ function DesignEditor({
   } as const
   /** The inspector tab strip: `tabs` decides which ones appear (in fullscreen
    *  the layers have their own sidebar, so the right one only has the other two). */
-  const renderTabStrip = (tabs: readonly InspectorTab[], active: InspectorTab) => (
+  const renderStrip = <T extends string,>(
+    items: readonly { value: T; Icon: typeof Layers; label: string; busy?: boolean }[],
+    active: T,
+    onSelect: (value: T) => void,
+    trailing?: React.ReactNode,
+  ) => (
     <div className="flex shrink-0 items-center gap-0.5 border-b border-border/60 px-1.5 py-1">
-      {tabs.map((value) => {
-        const [Icon, label] = inspectorTabMeta[value]
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setInspectorTab(value)}
-            className={cn(
-              "flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium transition-colors",
-              active === value ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-            )}
-          >
+      {items.map(({ value, Icon, label, busy }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onSelect(value)}
+          className={cn(
+            "flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium transition-colors",
+            active === value ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          )}
+        >
+          <span className="relative flex items-center">
             <Icon className="size-3" />
-            {label}
-          </button>
-        )
-      })}
+            {busy && <span className="absolute -right-1 -top-1 size-1.5 animate-pulse rounded-full bg-emerald-500" />}
+          </span>
+          {label}
+        </button>
+      ))}
+      {trailing && <span className="ml-auto flex items-center pr-0.5">{trailing}</span>}
     </div>
   )
+  const renderTabStrip = (tabs: readonly InspectorTab[], active: InspectorTab) =>
+    renderStrip(
+      tabs.map((value) => ({ value, Icon: inspectorTabMeta[value][0], label: inspectorTabMeta[value][1] })),
+      active,
+      setInspectorTab,
+    )
   /** The file the code tab shows (the chosen one, or the first). */
   const codeShownFile = codeFile && boards.some((b) => b.file === codeFile) ? codeFile : (boards[0]?.file ?? null)
   /** The canvas selection only highlights the code when it is from the SAME file. */
@@ -2130,11 +2156,37 @@ function DesignEditor({
               openLabel={t("design.showLayers")}
               closeLabel={t("design.hideLayers")}
             >
-              <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/60 px-3 text-[11px] font-medium">
-                <Layers className="size-3" />
-                {t("design.inspector.layers")}
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">{renderInspectorBody("layers")}</div>
+              {renderStrip(
+                [
+                  { value: "layers" as const, Icon: Layers, label: t("design.inspector.layers") },
+                  { value: "conversation" as const, Icon: chat.kind ? AGENT_META[chat.kind].icon : MessagesSquare, label: t("design.inspector.conversation"), busy: agentBusy },
+                ],
+                leftTab,
+                setLeftTab,
+                leftTab === "conversation" ? (
+                  <ArtifactChatTools
+                    kind={chat.kind}
+                    chats={chat.chats}
+                    sessionId={chatSessionId}
+                    onSelect={chat.select}
+                    onNew={() => void chat.createEmbedded()}
+                  />
+                ) : undefined,
+              )}
+              {leftTab === "layers" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">{renderInspectorBody("layers")}</div>
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <ConversationBody
+                    sessionId={chatSessionId}
+                    active={leftSideOpen && leftTab === "conversation"}
+                    onAsk={() => {
+                      setLeftSideOpen(true)
+                      setLeftTab("conversation")
+                    }}
+                  />
+                </div>
+              )}
             </FloatingSidebar>
             <FloatingSidebar
               side="right"
@@ -2149,7 +2201,7 @@ function DesignEditor({
               </div>
             </FloatingSidebar>
             <FullscreenComposer
-              sessionId={sessionId}
+              sessionId={chatSessionId}
               pinned={composerPinned}
               onTogglePin={() => setComposerPinned((v) => !v)}
             />

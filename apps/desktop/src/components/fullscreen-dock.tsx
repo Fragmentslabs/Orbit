@@ -3,13 +3,8 @@ import { useTranslation } from "react-i18next"
 import { CheckIcon, Loader2Icon, MessagesSquareIcon, PinIcon, PinOffIcon, XIcon, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, FilePart, SendMessageOptions, ToolPart } from "@shared/chat"
-import { Message, MessageContent } from "@/src/components/ai/message"
-import { AskCard } from "@/src/components/ask-card"
-import { AskCardBatch } from "@/src/components/ask-card-batch"
+import { ConversationBody } from "@/src/components/conversation-body"
 import { CodeInput } from "@/src/components/code-input"
-import { CodeAssistantMessage } from "@/src/components/messages/code-message"
-import { UserMessageQuote, UserMessageText } from "@/src/components/messages/shared"
-import { visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type PendingAskUI } from "@/src/stores/session-store"
 import { useWorkspaceMode } from "@/lib/workspace-context"
 import { Hint } from "@/components/ui/hint"
@@ -278,6 +273,8 @@ export function FullscreenChatFeed({
   title,
   onHoverChange,
   footer,
+  headerExtra,
+  icon: FeedIcon = MessagesSquareIcon,
 }: {
   pinned: boolean
   onTogglePin: () => void
@@ -286,100 +283,21 @@ export function FullscreenChatFeed({
   onHoverChange?: (over: boolean) => void
   /** Below the conversation, when open (the compact input of the Computer Use panels) */
   footer?: ReactNode
+  /** Extra controls in the header of the open feed (the artifact's chat selector…) */
+  headerExtra?: ReactNode
+  /** Icon of the feed (default: the conversation). An artifact's feed wears its kind's icon. */
+  icon?: LucideIcon
 }) {
   const { t } = useTranslation()
   const mode = useWorkspaceMode()
   const activeSession = useActiveSession(mode)
   const sessionId = fixedSessionId ?? activeSession?.id
-  const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const status = useSessionStatus(sessionId)
   const pendingAsks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const { hovered, handleEnter, handleLeave } = useEdgeHover()
-  const scrollRef = useRef<HTMLDivElement | null>(null)
   const expanded = pinned || hovered
   const hasAsks = pendingAsks.length > 0
-
-  // Loads the session history (the fullscreen may open before the chat)
-  useEffect(() => {
-    if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
-  }, [sessionId])
-
-  // Renderable messages (ignores summaries) — basis for the virtualized window.
-  const visibleMessages = useMemo(() => messages.filter((m) => !m.summary), [messages])
-
-  // "Inverted" virtualization: it shows the window of the most recent ones and loads the
-  // old ones in chunks as the user scrolls to the top (reverse infinite scroll).
-  const MIN_WINDOW = 40
-  const CHUNK = 40
-  /** Estimated pixels per old message not rendered yet (top placeholder). */
-  const OLDER_PX = 52
-  const [startOffset, setStartOffset] = useState(0)
-  const inited = useRef(false)
-  const prevLength = useRef(visibleMessages.length)
-  const prevExpanded = useRef(expanded)
-  const rendered = visibleMessages.slice(startOffset)
-  const hasOlder = startOffset > 0
-
-  // On the first render, it anchors at the end: it shows only the MIN_WINDOW most recent ones.
-  useEffect(() => {
-    if (inited.current) return
-    inited.current = true
-    setStartOffset(Math.max(0, visibleMessages.length - MIN_WINDOW))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const scrollToBottom = () => {
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }
-
-  // On opening (hover/pin), it positions at the end to show the most recent messages.
-  useEffect(() => {
-    if (expanded && !prevExpanded.current) scrollToBottom()
-    prevExpanded.current = expanded
-    // Only the opening matters here — scrollToBottom is stable.
-  }, [expanded])
-
-  // Auto-scroll: new messages / streaming deltas / asks change the list
-  useEffect(() => {
-    if (visibleMessages.length > prevLength.current) scrollToBottom()
-    prevLength.current = visibleMessages.length
-    // It depends on the length, not on the list identity (which changes on every delta).
-  }, [visibleMessages.length])
-
-  // Loads a chunk of old messages, preserving the scroll position.
-  const loadOlder = useCallback(() => {
-    const el = scrollRef.current
-    if (!el || startOffset <= 0) return
-    const prevHeight = el.scrollHeight
-    setStartOffset((s) => Math.max(0, s - CHUNK))
-    requestAnimationFrame(() => {
-      // Compensates the height added at the top so the viewport does not "jump".
-      if (el) el.scrollTop += el.scrollHeight - prevHeight
-    })
-  }, [startOffset, CHUNK])
-
-  // On getting near the top, it expands the window to the older ones.
-  const handleScroll = () => {
-    const el = scrollRef.current
-    if (!el || startOffset <= 0) return
-    if (el.scrollTop < 60) loadOlder()
-  }
-
-  // Auto-expands (pins) when a new permission request/question arrives,
-  // so the user can answer without leaving fullscreen
-  const prevAsks = useRef(0)
-  useEffect(() => {
-    if (pendingAsks.length > prevAsks.current && pendingAsks.length > 0 && !pinned) onTogglePin()
-    prevAsks.current = pendingAsks.length
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAsks.length])
-
-  const lastAssistantId = useMemo(() => {
-    const last = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)
-    return last?.id
-  }, [messages])
 
   return (
     <div
@@ -408,7 +326,7 @@ export function FullscreenChatFeed({
           >
        
            <span className="relative flex items-center justify-center">
-            <MessagesSquareIcon className="size-4" />
+            <FeedIcon className="size-4" />
             {(isBusy || hasAsks) && (
               <span className="absolute -right-1.5 -top-1.5 flex size-2">
                 <span
@@ -428,12 +346,13 @@ export function FullscreenChatFeed({
         {expanded && (
           <div className="flex min-h-0 flex-1 animate-in flex-col fade-in-0 duration-200">
             <div className="flex items-center gap-2 border-b px-3 py-2">
-              <MessagesSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <FeedIcon className="size-3.5 shrink-0 text-muted-foreground" />
               <Truncate text={title ?? (fixedSessionId ? t("computer.panels.chat") : activeSession?.title) ?? t("browser.chatFeed")}>
                 <span className="min-w-0 flex-1 truncate text-xs font-medium">
                   {title ?? (fixedSessionId ? t("computer.panels.chat") : activeSession?.title) ?? t("browser.chatFeed")}
                 </span>
               </Truncate>
+              {headerExtra}
               {isBusy && (
                 <span className="flex shrink-0 items-center gap-1 text-[11px] text-emerald-500">
                   <span className="relative flex size-1.5">
@@ -457,74 +376,21 @@ export function FullscreenChatFeed({
               </button>
               </Hint>
             </div>
-            <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-3">
-              {messages.length === 0 && !hasAsks ? (
-                <p className="px-2 py-6 text-center text-xs text-muted-foreground">{t("browser.emptyConversation")}</p>
-              ) : (
-                <div className="flex flex-col">
-                  {/* Placeholder of old messages not loaded yet —
-                      on scrolling to the top, `loadOlder` materializes them in chunks. */}
-                  {hasOlder && (
-                    <div
-                      aria-hidden
-                      className="pointer-events-none flex w-full items-center justify-center py-2 text-[10px] uppercase tracking-wide text-muted-foreground/60"
-                      style={{ height: startOffset * OLDER_PX }}
-                    >
-                      {t("browser.loadingOlder")}
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-3">
-                  {rendered.map((msg) => {
-                    if (msg.summary) return null
-                    if (msg.role === "user") {
-                      return (
-                        <Message from="user" key={msg.id} data-msg-id={msg.id}>
-                          {/* Same as the main chat: the quote of the replied message
-                              comes out as a pill above the bubble (never as raw
-                              text, `> [assistant] …`). */}
-                          <UserMessageQuote text={visibleMessageText(msg)} />
-                          <MessageContent>
-                            <div className="text-sm">
-                              <UserMessageText text={visibleMessageText(msg)} />
-                            </div>
-                          </MessageContent>
-                        </Message>
-                      )
-                    }
-                    const isLast = msg.id === lastAssistantId
-                    return (
-                      <Message from="assistant" key={msg.id} data-msg-id={msg.id}>
-                        <MessageContent>
-                          <CodeAssistantMessage message={msg} sessionId={sessionId} isLast={isLast} isBusy={isBusy} />
-                        </MessageContent>
-                      </Message>
-                    )
-                  })}
-                  {/* Tool permission requests / questions waiting for an answer —
-                      same behavior as the code chat (chat-view). */}
-                  {hasAsks && (
-                    <div className="flex flex-col gap-2 border-t pt-2">
-                      {pendingAsks
-                        .filter((a) => !a.batchId)
-                        .map((ask) => (
-                          <AskCard key={ask.requestId} ask={ask} sessionId={sessionId} />
-                        ))}
-                      {[...new Set(pendingAsks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
-                        <AskCardBatch key={batchId} items={pendingAsks.filter((a) => a.batchId === batchId)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                </div>
-              )}
-            </div>
-            {footer && <div className="shrink-0 border-t px-3 py-2">{footer}</div>}
+            <ConversationBody
+              sessionId={sessionId}
+              active={expanded}
+              onAsk={() => {
+                if (!pinned) onTogglePin()
+              }}
+              footer={footer}
+            />
           </div>
         )}
       </div>
     </div>
   )
 }
+
 
 /** One agent action in the feed: the tool, the readable label and the summary of the output. */
 export interface FeedAction {

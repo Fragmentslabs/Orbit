@@ -6,6 +6,7 @@ import { Hint } from "@/components/ui/hint"
 import { useFragment } from "@/src/components/fragment-tab"
 import { fragmentApi } from "@/src/lib/ipc"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
+import { FragmentActionsMenu } from "./fragment-actions-menu"
 import { FragmentIcon } from "./fragment-icon"
 import { FragmentIconPicker } from "./fragment-icon-picker"
 
@@ -45,6 +46,10 @@ export function FragmentHeaderTitle({ fragmentId }: { fragmentId: string }) {
         </button>
       </Hint>
       <NameField fragmentId={manifest.id} name={manifest.name} />
+      <FragmentActionsMenu
+        fragment={manifest}
+        triggerClassName="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      />
       <FragmentIconPicker open={pickingIcon} onOpenChange={setPickingIcon} fragmentId={manifest.id} current={manifest.icon} />
     </div>
   )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AppWindow, RotateCw, Sparkles, Trash2 } from "lucide-react"
+import { AppWindow, Maximize2, RotateCw, Sparkles, Trash2, X } from "lucide-react"
 import { FRAGMENT_SCHEME } from "@shared/fragments"
 import type { FragmentManifest } from "@shared/fragments"
 import {
@@ -14,6 +14,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { ArtifactToolbar, IconAction } from "@/src/components/ai/artifact-part"
 import { fragmentApi } from "@/src/lib/ipc"
+import { useWorkspace } from "@/lib/workspace-context"
+import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
@@ -157,21 +159,61 @@ export function FragmentFrame({
   )
 }
 
-/** The banner shown while a fragment asks for the model and the person has not allowed it. */
-export function FragmentAiBanner({ manifest }: { manifest: FragmentManifest }) {
+/**
+ * The ask for the model, as a floating badge over the top of the fragment — shown while it
+ * wants to use the AI and the person has not allowed it, and gone otherwise (it leaves no
+ * bar or border behind). Whoever shows it gives it a `relative` area to float in.
+ */
+export function FragmentAiBadge({ manifest }: { manifest: FragmentManifest }) {
   const { t } = useTranslation()
-  if (!manifest.requests.includes("ai") || manifest.grants.includes("ai")) return null
+  const [dismissed, dismiss] = useDismissed(`orbit-fragment-ai-badge:${manifest.id}`)
+  // Closing only hides the ask: the fragment's menu still offers to allow its AI.
+  if (dismissed || !manifest.requests.includes("ai") || manifest.grants.includes("ai")) return null
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-primary/5 px-2.5 py-1.5 text-xs text-muted-foreground">
-      <span className="flex min-w-0 items-center gap-1.5">
-        <Sparkles className="size-3.5 shrink-0 text-primary" />
-        <span className="truncate">{t("fragments.aiBanner")}</span>
-      </span>
-      <Button size="sm" variant="secondary" className="h-6 px-2 text-xs" onClick={() => void fragmentApi.grant(manifest.id, "ai", true)}>
-        {t("fragments.aiAllowButton")}
-      </Button>
+    <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
+      <div className="pointer-events-auto flex max-w-full animate-in items-center gap-2.5 rounded-full border border-primary/25 bg-background/90 py-1.5 pl-2 pr-1.5 shadow-lg ring-1 ring-black/5 backdrop-blur-md duration-300 fade-in-0 slide-in-from-top-2">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+          <Sparkles className="size-3.5" />
+        </span>
+        <span className="min-w-0 truncate text-xs text-foreground">{t("fragments.aiBanner")}</span>
+        <Button
+          size="sm"
+          className="h-6 shrink-0 rounded-full px-3 text-xs"
+          onClick={() => void fragmentApi.grant(manifest.id, "ai", true)}
+        >
+          {t("fragments.aiAllowButton")}
+        </Button>
+        <button
+          type="button"
+          aria-label={t("common.close")}
+          onClick={dismiss}
+          className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
     </div>
   )
+}
+
+/** A choice to hide something, remembered per key. Storage can be blocked: it then lasts until the view closes. */
+function useDismissed(key: string): [boolean, () => void] {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1"
+    } catch {
+      return false
+    }
+  })
+  const dismiss = useCallback(() => {
+    setDismissed(true)
+    try {
+      localStorage.setItem(key, "1")
+    } catch {
+      /* the choice is a convenience */
+    }
+  }, [key])
+  return [dismissed, dismiss]
 }
 
 /** Confirmation before a fragment and everything it saved is removed. */
@@ -235,6 +277,7 @@ function FragmentPanelView({
 }) {
   const { t } = useTranslation()
   const { manifest, missing } = useFragment(fragmentId)
+  const { setView } = useWorkspace()
   const [reloads, setReloads] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -273,12 +316,24 @@ function FragmentPanelView({
               />
             )}
             <IconAction icon={RotateCw} label={t("fragments.reload")} onClick={() => setReloads((n) => n + 1)} />
+            <IconAction
+              icon={Maximize2}
+              label={t("fragments.fullscreen")}
+              onClick={() => {
+                // The page takes over: the fragment is not kept running twice.
+                usePanelStore.getState().closeFragmentTabs([fragmentId])
+                useFragmentsStore.getState().open(fragmentId)
+                setView("fragments")
+              }}
+            />
             <IconAction icon={Trash2} label={t("fragments.delete")} onClick={() => setConfirmDelete(true)} />
           </>
         }
       />
-      {manifest && <FragmentAiBanner manifest={manifest} />}
-      {manifest && <FragmentFrame manifest={manifest} sessionId={sessionId} reloads={reloads} />}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {manifest && <FragmentAiBadge manifest={manifest} />}
+        {manifest && <FragmentFrame manifest={manifest} sessionId={sessionId} reloads={reloads} />}
+      </div>
       <DeleteFragmentDialog open={confirmDelete} onOpenChange={setConfirmDelete} fragmentId={fragmentId} />
     </div>
   )

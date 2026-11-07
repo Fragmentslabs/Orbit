@@ -1204,6 +1204,12 @@
       "options": "Opções:",
       "context": "Contexto adicional (outras perguntas do agente):",
       "explain": "Para cada opção, explique:\n- Vantagens\n- Desvantagens\n- Em qual cenário é mais indicada"
+    },
+    "specialist": {
+      "title": "Continuar num chat de {{agent}}?",
+      "body": "Um chat otimizado para isso: conhece o ofício e usa menos contexto. Eu passo um resumo do que combinamos, não a conversa inteira.",
+      "here": "Continuar aqui",
+      "create": "Criar chat de {{agent}}"
     }
   },
   "connectApp": {
@@ -3053,7 +3059,6 @@
     "composeHint": "Descreva o que precisa ou parta de um exemplo. O Orbit monta aqui mesmo, ao vivo.",
     "creatingTitle": "O Orbit está montando seu fragmento…",
     "creatingHint": "Ele aparece aqui assim que a primeira versão existir, e continua atualizando enquanto o Orbit trabalha.",
-    "seeChat": "Ver a conversa",
     "kind": {
       "screen": {
         "name": "Tela",
@@ -3113,7 +3118,22 @@
       "remove": "Removendo {{path}}",
       "logs": "Conferindo erros da página",
       "ai": "Declarando o uso de IA"
-    }
+    },
+    "chat": {
+      "show": "Mostrar conversa",
+      "hide": "Ocultar conversa",
+      "title": "Conversa",
+      "new": "Novo chat",
+      "empty": "Nada pedido ainda.",
+      "history": "Chats deste fragmento"
+    },
+    "creationEnded": "Não terminou",
+    "discardCreation": "Descartar",
+    "backToList": "Voltar à lista",
+    "card": "Fragmento",
+    "gone": "Este fragmento não existe mais.",
+    "fullscreen": "Abrir em tela cheia",
+    "aiEnable": "Habilitar IA"
   },
   "motion": {
     "unavailable": "Composição indisponível",
@@ -3282,7 +3302,8 @@
     "inspector": {
       "properties": "Propriedades",
       "layers": "Camadas",
-      "code": "Código"
+      "code": "Código",
+      "conversation": "Conversa"
     },
     "noSelection": "Clique num elemento do canvas para ver e editar as propriedades dele. Clique no nome de um artboard para movê-lo ou redimensioná-lo.",
     "comment": "Comentar no chat — anexa a seleção à próxima mensagem",
@@ -4104,5 +4125,31 @@
     "chat": "Chat",
     "code": "Código",
     "all": "Todos"
+  },
+  "agent": {
+    "general": {
+      "name": "Geral",
+      "description": "Prompt completo, memórias e skills"
+    },
+    "motion": {
+      "name": "Motion",
+      "description": "Enxuto, só animação"
+    },
+    "design": {
+      "name": "Design",
+      "description": "Enxuto, só telas e layout"
+    },
+    "fragment": {
+      "name": "Fragmento",
+      "description": "Enxuto, só páginas do Orbit"
+    }
+  },
+  "artifact": {
+    "chats": "Chats deste artefato",
+    "embedded": "Internos",
+    "subchats": "Subchats",
+    "newChat": "Novo chat",
+    "working": "Um agente está trabalhando nisso",
+    "done": "Terminou — abra para ver"
   }
 }

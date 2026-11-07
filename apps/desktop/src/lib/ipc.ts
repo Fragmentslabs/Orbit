@@ -17,6 +17,7 @@ import type {
   UnrevertResult,
 } from "@shared/chat"
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
+import { ARTIFACT_CHATS_CHANNELS, type ArtifactChats, type ArtifactChatsEvent, type ArtifactRef } from "@shared/artifacts"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
 import type { CreateWorktreeResult, WorktreeList, ValidateWorktreesFolder } from "@shared/worktrees"
@@ -846,6 +847,19 @@ export const fragmentApi = {
   onRemoved: (listener: (payload: { fragmentId: string }) => void) => {
     const wrapper = window.ipcRenderer.on("fragment:removed", (payload) => listener(payload as { fragmentId: string }))
     return () => window.ipcRenderer.off("fragment:removed", wrapper)
+  },
+}
+
+/** Which chats worked on an artifact (fragment, motion, design) — one API for every kind. */
+export const artifactChatsApi = {
+  chats: (ref: ArtifactRef) => window.ipcRenderer.invoke(ARTIFACT_CHATS_CHANNELS.list, ref) as Promise<ArtifactChats>,
+  associate: (ref: ArtifactRef, sessionId: string, makeCurrent?: boolean) =>
+    window.ipcRenderer.invoke(ARTIFACT_CHATS_CHANNELS.associate, ref, sessionId, makeCurrent) as Promise<ArtifactChats>,
+  setCurrent: (ref: ArtifactRef, sessionId: string) =>
+    window.ipcRenderer.invoke(ARTIFACT_CHATS_CHANNELS.setCurrent, ref, sessionId) as Promise<ArtifactChats>,
+  onChats: (listener: (event: ArtifactChatsEvent) => void) => {
+    const wrapper = window.ipcRenderer.on(ARTIFACT_CHATS_CHANNELS.changed, (payload) => listener(payload as ArtifactChatsEvent))
+    return () => window.ipcRenderer.off(ARTIFACT_CHATS_CHANNELS.changed, wrapper)
   },
 }
 
