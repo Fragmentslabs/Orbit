@@ -3,6 +3,7 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
+import { createFragmentTools } from './fragment'
 import { createDocumentTools, createPdfViewTool } from './documents'
 import { createSheetQueryTool } from './sheet'
 import { createDocumentAuthoringTools } from './document'
@@ -92,6 +93,8 @@ export function buildToolSet(
    *  Absent in ephemeral workers — there the tool is not registered. */
   win?: BrowserWindow,
 ): ToolSet {
+  // A fragment's chat gets the fragment tools and nothing else.
+  if (input.options.fragment) return { ...createFragmentTools(input.sessionId) }
   const tools: ToolSet = {}
   // Computer control: two switches (Preferences + conversation mode),
   // main session only and only where there is a driver. When off, the tools do not
@@ -201,6 +204,8 @@ export function buildToolSet(
     // main session.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createArtifactTools(input.sessionId))
+      // Fragments: live screens in the side panel that the agent keeps editing.
+      Object.assign(tools, createFragmentTools(input.sessionId))
       // What is open in the side tab right now — it lets the agent answer
       // "this"/"here" without the user re-attaching. Read-only, no permission.
       Object.assign(tools, createPanelTools(input.sessionId))
@@ -356,6 +361,7 @@ export function buildToolSet(
     // diagram, a comparison — things the user wants to SEE and that should not
     // become a loose file in their repository.
     Object.assign(tools, createArtifactTools(input.sessionId))
+    Object.assign(tools, createFragmentTools(input.sessionId))
     // What is open in the panel (the read_open_panel tool) — holds in both modes.
     Object.assign(tools, createPanelTools(input.sessionId))
   }

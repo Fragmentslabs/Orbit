@@ -278,6 +278,13 @@ const FAMILIES: readonly FamilyDecl[] = [
     prefixes: ['create_artifact', 'update_artifact', 'edit_artifact', 'read_artifact'],
   },
   {
+    id: 'fragments',
+    label: 'fragments',
+    description: 'A persistent, editable mini-app in the side panel the user keeps using (tracker, tool, dashboard, utility) and that stores data and can ask Orbit\'s model — built and refined live. For a one-off visual inside the reply use artifacts instead.',
+    tags: ['fragmento', 'fragmentos', 'fragment', 'mini app', 'miniapp', 'ferramenta', 'tracker', 'painel'],
+    prefixes: ['fragment_'],
+  },
+  {
     id: 'panel',
     label: 'panel',
     description: 'Read what is open in the side panel.',

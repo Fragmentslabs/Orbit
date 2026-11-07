@@ -146,6 +146,10 @@ export type PanelEvent =
   // scheme URL: the panel keeps `slidesId`/`slidesEntry` and mounts
   // `orbit-slides://<id>/<entry>`. The same id comes back to the SAME tab.
   | { type: 'slides'; id: string; entry: string; title: string; sessionId?: string; path?: string }
+  // Opens (or focuses) the panel's Fragment tab for a fragment that already exists —
+  // fragment_create/fragment_write_file are who emit it. The tab mounts
+  // `orbit-fragment://<id>/` and reloads itself when the fragment is rewritten.
+  | { type: 'fragment'; id: string; title: string; sessionId?: string }
   | { type: 'activity'; label: string; sessionId?: string }
   // Pieces that no longer exist — deleted by the agent (motion_delete,
   // design_delete, slides_delete) or undone by the revert of the message that
@@ -204,6 +208,11 @@ export function panelSlidesPreview(event: {
   sessionId?: string
 }): void {
   broadcastPanelEvent({ type: 'slides', ...event })
+}
+
+/** Opens (or focuses) the panel's Fragment tab — see the 'fragment' event. */
+export function panelFragmentOpen(event: { id: string; title: string; sessionId?: string }): void {
+  broadcastPanelEvent({ type: 'fragment', ...event })
 }
 
 /** Closes the tabs of the pieces that no longer exist (see the 'pieces-removed' event). */

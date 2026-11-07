@@ -4,6 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
 import { StorageKeys, type ChatMessage } from '@shared/chat'
+import { FRAGMENT_SCHEME } from '@shared/fragments'
 import {
   ARTIFACT_SCHEME,
   MEDIA_SCHEME,
@@ -844,6 +845,17 @@ export function registerSchemePrivileges(): void {
         corsEnabled: true,
       },
     },
+    // Fragments (see fragments/fragment-protocol.ts): the page's own files, served
+    // to an opaque-origin iframe — module scripts and fetch of its own files need CORS.
+    {
+      scheme: FRAGMENT_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
     // Orbit's font library (see fonts/store.ts): a scheme of its own because
     // the artboard, the motion composition and the app window declare the SAME
     // @font-face, each one in a different origin.
@@ -964,7 +976,7 @@ const ARTIFACT_CHROME = `${ARTIFACT_CHROME_MARK}
  * Injects the scrollbar a single time, right before the body closing tag (the
  * marker avoids duplicating it in case the artifact already brings the block).
  */
-function injectArtifactChrome(html: string): string {
+export function injectArtifactChrome(html: string): string {
   if (html.includes(ARTIFACT_CHROME_MARK)) return html
   const closes = [...html.matchAll(/<\/body\s*>/gi)]
   const at = closes.length > 0 ? closes[closes.length - 1].index : undefined

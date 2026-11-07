@@ -163,6 +163,8 @@ import {
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
+import { registerFragmentProtocol } from './lib/fragments/fragment-protocol'
+import { registerFragmentIpc } from './lib/fragments/fragment-ipc'
 import { readWebImage, registerWebImageProtocol } from './lib/web-images/store'
 import {
   fontFaceCss,
@@ -1633,6 +1635,8 @@ app.whenReady().then(() => {
   // HTML artifacts of the answers (orbit-artifact://) — the privileges of the
   // scheme were already declared at the top of the module.
   registerArtifactProtocol()
+  // Fragments (orbit-fragment://): the screens the agent builds live in the panel.
+  registerFragmentProtocol()
   // Motion compositions of the preview (orbit-motion://, see video/motion-store):
   // serves the registered FOLDER and the runtime script that the render also uses.
   registerMotionProtocol()
@@ -2166,6 +2170,8 @@ app.whenReady().then(() => {
     deleteSessionDocuments(sessionId),
   )
   ipcMain.handle('docs:clearFolder', (_event, folderId: string) => deleteFolderDocuments(folderId))
+
+  registerFragmentIpc()
 
   // HTML artifacts: the renderer never reads the file directly (it is served by
   // orbit-artifact://) — it only needs the content to export.
