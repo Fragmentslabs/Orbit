@@ -24,12 +24,14 @@ export type PanelSnapshotTabType =
   | 'slides'
   | 'memory'
   | 'routine'
+  | 'fragment'
 
 export interface PanelSnapshotTab {
   id: string
   type: PanelSnapshotTabType
   title: string
   artifactId?: string
+  fragmentId?: string
   motionId?: string
   motionPath?: string
   designId?: string

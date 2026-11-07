@@ -143,6 +143,13 @@ export interface SessionInfo {
   /** Run of a scheduled routine: the session lives in the "Routines" group of
    *  the sidebar (never in a folder) and is deleted together with the routine. */
   routineId?: string
+  /**
+   * The chat that builds a Fragment. It runs LEAN: a minimal system prompt, only the
+   * fragment tools, no memories or skills. It does not show in the chat list; its work is
+   * followed from the fragment itself (the activity feed), and the full conversation
+   * opens on demand in the side panel. `kind` is where the person asked it to live.
+   */
+  fragment?: { kind: 'screen' | 'panel' | 'widget' }
   /** Active revert (code mode) — cleared when undoing or sending a new message */
   revert?: SessionRevert
   createdAt: number
@@ -1104,6 +1111,9 @@ export interface PlanReview {
 }
 
 export interface SendMessageOptions {
+  /** Set by the main process (never the UI) for a Fragment's own chat: the lean profile —
+   *  minimal prompt, fragment tools only, no memory/skills blocks. */
+  fragment?: boolean
   /** Deep research mode (deep research prompt + web tools) */
   research?: boolean
   /** Enables native browser tools */
