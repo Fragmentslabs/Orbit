@@ -4,6 +4,7 @@ import {
   clearFragmentLogs,
   createFragment,
   deleteFragmentFile,
+  editFragmentFile,
   getFragment,
   listFragmentFiles,
   listFragments,
@@ -36,6 +37,8 @@ After writing, the panel reloads by itself. Call fragment_logs to read the page'
 
 const CREATE_DESCRIPTION = `Creates a FRAGMENT: a small interactive screen that opens in the side panel next to the chat and that the user can keep using — a tool, tracker, dashboard, mini-app or utility, not a one-off illustration of an answer (for that, create_artifact). It is saved, shows up again later, and can store data and ask Orbit's model through window.orbit. Send a complete index.html (inline CSS/JS is fine, or split into files afterwards). From then on, keep refining it with fragment_edit_file / fragment_write_file as the user asks: the panel reloads on every write, so they watch it change live.
 ${SDK_REFERENCE}`
+
+class FileMissing extends Error {}
 
 const FragmentIdSchema = z.string().describe('The fragmentId returned by fragment_create (frag-…)')
 
@@ -128,13 +131,17 @@ export function createFragmentTools(sessionId: string) {
       }),
       execute: async ({ fragmentId, path: rel, edits }) => {
         if (!(await getFragment(fragmentId))) return notFound(fragmentId)
-        const current = await readFragmentFile(fragmentId, rel)
-        if (current === null) return `File not found in the fragment: ${rel}. See fragment_read_file for the file list.`
         try {
-          const { text, applied } = applyTextEditsDetailed(current, edits)
-          const manifest = await writeFragmentFile(fragmentId, rel, text)
-          return await opened(fragmentId, manifest.revision, `Edited ${rel} (${applied.length} edit${applied.length === 1 ? '' : 's'})`)
+          let appliedCount = 0
+          const manifest = await editFragmentFile(fragmentId, rel, (current) => {
+            if (current === null) throw new FileMissing(rel)
+            const { text, applied } = applyTextEditsDetailed(current, edits)
+            appliedCount = applied.length
+            return text
+          })
+          return await opened(fragmentId, manifest.revision, `Edited ${rel} (${appliedCount} edit${appliedCount === 1 ? '' : 's'})`)
         } catch (err) {
+          if (err instanceof FileMissing) return `File not found in the fragment: ${rel}. See fragment_read_file for the file list.`
           return `Could not edit ${rel}: ${err instanceof Error ? err.message : String(err)}`
         }
       },

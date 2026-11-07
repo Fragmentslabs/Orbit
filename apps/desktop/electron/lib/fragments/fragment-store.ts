@@ -14,6 +14,7 @@ import type {
   FragmentPins,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
+import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, FRAGMENT_KINDS } from '@shared/fragments'
 
 /**
@@ -185,23 +186,16 @@ function sanitizeCaps(value: unknown): FragmentCapability[] {
 
 async function writeManifestFile(manifest: FragmentManifest): Promise<void> {
   await fsp.mkdir(fragmentDir(manifest.id), { recursive: true })
-  await fsp.writeFile(manifestFile(manifest.id), JSON.stringify(manifest, null, 2), 'utf8')
+  await writeFileAtomic(manifestFile(manifest.id), JSON.stringify(manifest, null, 2))
 }
 
 /**
- * Writes to the same fragment (manifest revision, data.json) are serialized: the agent
- * may write two files in the same step while the page saves to the store.
+ * Writes to the same fragment (manifest revision, data.json) go through the shared asset
+ * lock, like motion and design: the agent may write two files in the same step, a subchat
+ * may edit what its parent is editing, and the page saves to the store meanwhile.
  */
-const queues = new Map<string, Promise<unknown>>()
 function serialized<T>(id: string, task: () => Promise<T>): Promise<T> {
-  const previous = queues.get(id) ?? Promise.resolve()
-  const next = previous.then(task, task)
-  const tail = next.catch(() => {})
-  queues.set(id, tail)
-  void tail.then(() => {
-    if (queues.get(id) === tail) queues.delete(id)
-  })
-  return next
+  return withAssetLock(`fragment:${id}`, task)
 }
 
 function emitUpdated(manifest: FragmentManifest): void {
@@ -375,25 +369,40 @@ export async function readFragmentAsset(id: string, rel: string): Promise<{ data
   }
 }
 
-export async function writeFragmentFile(id: string, rel: string, content: string): Promise<FragmentManifest> {
+/** Must run inside the fragment's lock. */
+async function writeFileLocked(id: string, rel: string, content: string): Promise<FragmentManifest> {
   if (Buffer.byteLength(content, 'utf8') > MAX_FILE_BYTES) {
     throw new Error(`${rel} too large (limit ${Math.round(MAX_FILE_BYTES / 1024)}KB)`)
   }
-  return serialized(id, async () => {
-    const manifest = await readManifestFile(id)
-    if (!manifest) throw new Error(`Fragment not found: ${id}`)
-    const full = resolveSrcPath(id, rel)
-    const exists = await fsp.stat(full).then(() => true).catch(() => false)
-    if (!exists && (await listFragmentFiles(id)).length >= MAX_FILES) {
-      throw new Error(`too many files (limit ${MAX_FILES})`)
-    }
-    await fsp.mkdir(path.dirname(full), { recursive: true })
-    await fsp.writeFile(full, content, 'utf8')
-    const next = { ...manifest, revision: manifest.revision + 1, updatedAt: Date.now() }
-    await writeManifestFile(next)
-    emitUpdated(next)
-    return next
-  })
+  const manifest = await readManifestFile(id)
+  if (!manifest) throw new Error(`Fragment not found: ${id}`)
+  const full = resolveSrcPath(id, rel)
+  const exists = await fsp.stat(full).then(() => true).catch(() => false)
+  if (!exists && (await listFragmentFiles(id)).length >= MAX_FILES) {
+    throw new Error(`too many files (limit ${MAX_FILES})`)
+  }
+  await writeFileAtomic(full, content)
+  const next = { ...manifest, revision: manifest.revision + 1, updatedAt: Date.now() }
+  await writeManifestFile(next)
+  emitUpdated(next)
+  return next
+}
+
+export function writeFragmentFile(id: string, rel: string, content: string): Promise<FragmentManifest> {
+  return serialized(id, () => writeFileLocked(id, rel, content))
+}
+
+/**
+ * Read, transform and write one file under the same lock. An edit computed from a stale
+ * read (another chat wrote in between) would silently overwrite that work, so the read
+ * must happen here. `transform` throws to reject the edit; a missing file is `null`.
+ */
+export function editFragmentFile(
+  id: string,
+  rel: string,
+  transform: (current: string | null) => string,
+): Promise<FragmentManifest> {
+  return serialized(id, async () => writeFileLocked(id, rel, transform(await readFragmentFile(id, rel))))
 }
 
 export async function deleteFragmentFile(id: string, rel: string): Promise<FragmentManifest> {
@@ -446,7 +455,7 @@ export async function storeSet(id: string, key: string, value: unknown): Promise
     if (Buffer.byteLength(serializedData, 'utf8') > MAX_STORE_TOTAL_BYTES) {
       throw new Error(`store full (limit ${Math.round(MAX_STORE_TOTAL_BYTES / 1024 / 1024)}MB)`)
     }
-    await fsp.writeFile(dataFile(id), serializedData, 'utf8')
+    await writeFileAtomic(dataFile(id), serializedData)
   })
 }
 
@@ -455,7 +464,7 @@ export async function storeDelete(id: string, key: string): Promise<void> {
     const data = await readData(id)
     if (!Object.prototype.hasOwnProperty.call(data, key)) return
     delete data[key]
-    await fsp.writeFile(dataFile(id), JSON.stringify(data), 'utf8')
+    await writeFileAtomic(dataFile(id), JSON.stringify(data))
   })
 }
 

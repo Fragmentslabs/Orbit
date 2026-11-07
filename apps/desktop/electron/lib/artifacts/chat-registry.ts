@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { ArtifactChats, ArtifactChatsEvent, ArtifactRef } from '@shared/artifacts'
 import { ARTIFACT_KINDS } from '@shared/artifacts'
+import { withAssetLock } from '../asset-lock'
 import { readJson, writeJson } from '../storage'
 
 /**
@@ -35,12 +36,7 @@ async function save(ref: ArtifactRef, chats: ArtifactChats): Promise<ArtifactCha
 }
 
 /** Serializes the read-modify-write of one record: two chats can finish a tool at once. */
-const queues = new Map<string, Promise<unknown>>()
-function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const run = (queues.get(key) ?? Promise.resolve()).then(task, task)
-  queues.set(key, run.catch(() => undefined))
-  return run
-}
+const serialized = <T>(key: string, task: () => Promise<T>): Promise<T> => withAssetLock(`artifact-chats:${key}`, task)
 
 /**
  * A chat worked on the artifact. It joins the list once; it becomes the current one only when
