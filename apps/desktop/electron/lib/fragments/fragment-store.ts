@@ -154,7 +154,7 @@ export function sanitizeIcon(value: unknown): string {
 
 /** A new fragment is pinned where its kind lives; an old manifest without pins gets the same. */
 function defaultPins(kind: FragmentKind): FragmentPins {
-  return { sidebar: kind === 'screen', panel: kind === 'panel' }
+  return { sidebar: kind === 'screen', panel: kind === 'panel', home: kind === 'widget' }
 }
 
 function sanitizePins(value: unknown, kind: FragmentKind): FragmentPins {
@@ -164,6 +164,7 @@ function sanitizePins(value: unknown, kind: FragmentKind): FragmentPins {
   return {
     sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : base.sidebar,
     panel: typeof raw.panel === 'boolean' ? raw.panel : base.panel,
+    home: typeof raw.home === 'boolean' ? raw.home : base.home,
   }
 }
 
@@ -291,7 +292,11 @@ export async function updateFragmentMeta(id: string, patch: FragmentMetaPatch): 
     const next: FragmentManifest = { ...manifest }
     if (typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim().slice(0, 80)
     if (typeof patch.icon === 'string') next.icon = sanitizeIcon(patch.icon)
-    if (patch.pinned) next.pinned = { ...manifest.pinned, ...sanitizePins(patch.pinned, manifest.kind) }
+    if (patch.pinned) {
+      // Only the pins the patch names: a pin it leaves out keeps its value, not its kind's default.
+      const named = Object.fromEntries(Object.entries(patch.pinned).filter(([, v]) => typeof v === 'boolean'))
+      next.pinned = { ...manifest.pinned, ...sanitizePins({ ...manifest.pinned, ...named }, manifest.kind) }
+    }
     if (patch.model === null) delete next.model
     else if (patch.model) next.model = sanitizeModel(patch.model) ?? manifest.model
     if (patch.reasoning === null) delete next.reasoning

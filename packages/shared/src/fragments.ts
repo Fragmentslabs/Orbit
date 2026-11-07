@@ -54,6 +54,8 @@ export interface FragmentPins {
   sidebar: boolean
   /** Listed as its own card in the side panel's "Open" hub. */
   panel: boolean
+  /** Shown as a small live card on the home screen (the natural home of a `widget`). */
+  home: boolean
 }
 
 /** What the UI (never the agent) may change about a fragment. */
@@ -94,6 +96,13 @@ export interface FragmentManifest {
    *  registry (artifacts/chat-registry.ts), the same for every kind of artifact. */
   sessionId?: string
 }
+
+/**
+ * What a read-only frame (a widget on the home screen) may still ask Orbit: reading its own
+ * saved data. Never writes, never the model — a card on the home screen must not spend
+ * tokens or change data just by being on screen.
+ */
+export const FRAGMENT_READ_ONLY_METHODS: readonly string[] = ["store.get", "store.keys"]
 
 /** Methods the page can call through `window.orbit`. */
 export type FragmentMethod = "store.get" | "store.set" | "store.delete" | "store.keys" | "ai.generate"

@@ -49,7 +49,11 @@ export function SettingsSection({ manifest }: { manifest: FragmentManifest }) {
 }
 
 function pinsLabel(manifest: FragmentManifest, t: (key: string) => string): string {
-  const where = [manifest.pinned.sidebar && t("fragments.details.pinSidebar"), manifest.pinned.panel && t("fragments.details.pinPanel")].filter(Boolean)
+  const where = [
+    manifest.pinned.sidebar && t("fragments.details.pinSidebar"),
+    manifest.pinned.panel && t("fragments.details.pinPanel"),
+    manifest.pinned.home && t("fragments.details.pinHome"),
+  ].filter(Boolean)
   return where.length ? where.join(", ") : t("fragments.details.none")
 }
 

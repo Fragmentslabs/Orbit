@@ -3182,7 +3182,8 @@
       "database": "Local database",
       "databaseEmpty": "Nothing saved yet.",
       "packages": "Third-party packages",
-      "packagesEmpty": "None."
+      "packagesEmpty": "None.",
+      "pinHome": "home screen"
     },
     "inspect": "Pick an element to change",
     "data": {
@@ -3191,7 +3192,9 @@
       "description": "What this fragment saved with orbit.store. Read-only.",
       "refresh": "Refresh",
       "truncated": "Shown only in part."
-    }
+    },
+    "pinHome": "Show on the home screen",
+    "openFull": "Open the fragment"
   },
   "motion": {
     "unavailable": "Composition unavailable",

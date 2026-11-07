@@ -145,9 +145,9 @@ describe('fragment kind, pins and model', () => {
     const screen = await store.createFragment({ name: 's', html: 'x', kind: 'screen' })
     const panel = await store.createFragment({ name: 'p', html: 'x', kind: 'panel' })
     const widget = await store.createFragment({ name: 'w', html: 'x', kind: 'widget' })
-    expect(screen.pinned).toEqual({ sidebar: true, panel: false })
-    expect(panel.pinned).toEqual({ sidebar: false, panel: true })
-    expect(widget.pinned).toEqual({ sidebar: false, panel: false })
+    expect(screen.pinned).toEqual({ sidebar: true, panel: false, home: false })
+    expect(panel.pinned).toEqual({ sidebar: false, panel: true, home: false })
+    expect(widget.pinned).toEqual({ sidebar: false, panel: false, home: true })
     expect((await store.createFragment({ name: 'd', html: 'x' })).kind).toBe('screen')
     // an unknown kind from a model falls back instead of poisoning the manifest
     expect((await store.createFragment({ name: 'bad', html: 'x', kind: 'nope' as never })).kind).toBe('screen')
@@ -161,7 +161,8 @@ describe('fragment kind, pins and model', () => {
     })
     const next = await store.updateFragmentMeta(m.id, { name: '  Renamed  ', pinned: { sidebar: true } })
     expect(next?.name).toBe('Renamed')
-    expect(next?.pinned).toEqual({ sidebar: true, panel: false })
+    expect(next?.pinned).toEqual({ sidebar: true, panel: false, home: true })
+    // A pin the patch does not name keeps its value (the widget stays on the home screen).
     expect(next?.revision).toBe(m.revision)
     expect(seen).toEqual([m.revision]) // announced, so open views re-read the manifest
     expect((await store.getFragment(m.id))?.pinned.sidebar).toBe(true)
@@ -214,7 +215,7 @@ describe('fragment kind, pins and model', () => {
     await fsp.writeFile(file, JSON.stringify(raw), 'utf8')
     const read = await store.getFragment(m.id)
     expect(read?.kind).toBe('screen')
-    expect(read?.pinned).toEqual({ sidebar: true, panel: false })
+    expect(read?.pinned).toEqual({ sidebar: true, panel: false, home: false })
   })
 })
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AppWindow, Maximize2, RotateCw, Sparkles, Trash2, X } from "lucide-react"
-import { FRAGMENT_SCHEME } from "@shared/fragments"
+import { FRAGMENT_READ_ONLY_METHODS, FRAGMENT_SCHEME } from "@shared/fragments"
 import type { FragmentManifest } from "@shared/fragments"
 import {
   Dialog,
@@ -90,6 +90,7 @@ export function FragmentFrame({
   reloads,
   className,
   preview = false,
+  readOnly = false,
   inspecting = false,
   onInspect,
 }: {
@@ -107,6 +108,12 @@ export function FragmentFrame({
    * write data just by being on screen), it takes no input, and it is hidden from tab order.
    */
   preview?: boolean
+  /**
+   * A widget on the home screen: it may read what it saved (so it shows real data) but
+   * everything else is refused — no writes, no model — because a card must never spend or
+   * change anything just by being on screen.
+   */
+  readOnly?: boolean
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const inspectingRef = useRef(inspecting)
@@ -152,6 +159,10 @@ export function FragmentFrame({
       }
       if (typeof data.id !== "number" || typeof data.method !== "string") return
       const id = data.id
+      if (readOnly && !FRAGMENT_READ_ONLY_METHODS.includes(data.method)) {
+        frame.contentWindow?.postMessage({ __orbit: 1, id, ok: false, error: { code: "read_only", message: "this card is read-only" } }, "*")
+        return
+      }
       const reply = (payload: object) => frame.contentWindow?.postMessage({ __orbit: 1, id, ...payload }, "*")
       fragmentApi
         .call({ fragmentId, sessionId, method: data.method, params: data.params })
@@ -162,7 +173,7 @@ export function FragmentFrame({
     }
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [fragmentId, sessionId, token, preview])
+  }, [fragmentId, sessionId, token, preview, readOnly])
 
   // Mirrors the app theme into the page (it is an opaque origin and does not see our classes).
   const sendTheme = useCallback(() => {

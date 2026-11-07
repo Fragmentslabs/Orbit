@@ -3182,7 +3182,8 @@
       "database": "Banco local",
       "databaseEmpty": "Nada salvo ainda.",
       "packages": "Pacotes de terceiros",
-      "packagesEmpty": "Nenhum."
+      "packagesEmpty": "Nenhum.",
+      "pinHome": "tela inicial"
     },
     "inspect": "Escolher um elemento para mudar",
     "data": {
@@ -3191,7 +3192,9 @@
       "description": "O que este fragmento guardou com orbit.store. Somente leitura.",
       "refresh": "Atualizar",
       "truncated": "Mostrado só em parte."
-    }
+    },
+    "pinHome": "Mostrar na tela inicial",
+    "openFull": "Abrir o fragmento"
   },
   "motion": {
     "unavailable": "Composição indisponível",

@@ -29,8 +29,8 @@ export function FragmentGallery() {
     const q = query.trim().toLowerCase()
     const visible = items.filter((f) => (filter === "all" || f.kind === filter) && (!q || f.name.toLowerCase().includes(q)))
     return {
-      pinned: visible.filter((f) => f.pinned.sidebar || f.pinned.panel),
-      others: visible.filter((f) => !f.pinned.sidebar && !f.pinned.panel),
+      pinned: visible.filter((f) => f.pinned.sidebar || f.pinned.panel || f.pinned.home),
+      others: visible.filter((f) => !f.pinned.sidebar && !f.pinned.panel && !f.pinned.home),
     }
   }, [items, query, filter])
 
