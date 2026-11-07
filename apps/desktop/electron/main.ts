@@ -166,6 +166,7 @@ import {
 import { registerFragmentProtocol } from './lib/fragments/fragment-protocol'
 import { registerFragmentIpc } from './lib/fragments/fragment-ipc'
 import { registerArtifactIpc } from './lib/artifacts/artifact-ipc'
+import { registerAgentsIpc } from './lib/agents/agents-ipc'
 import { claimInstance } from './lib/instance-lock'
 import { readWebImage, registerWebImageProtocol } from './lib/web-images/store'
 import {
@@ -2183,6 +2184,7 @@ app.whenReady().then(async () => {
 
   registerFragmentIpc()
   registerArtifactIpc()
+  registerAgentsIpc()
 
   // HTML artifacts: the renderer never reads the file directly (it is served by
   // orbit-artifact://) — it only needs the content to export.

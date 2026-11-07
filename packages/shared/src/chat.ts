@@ -117,11 +117,16 @@ export interface SessionMediaRevert {
   error?: string
 }
 
+import type { UserProfileId } from './agents'
+
 /** The crafts that have a lean, specialist chat. */
 export type SpecialistProfile = 'fragment' | 'motion' | 'design'
 
-/** Which specialist profile a session runs with (the fragment chat keeps its own field). */
-export function specialistProfileOf(session: Pick<SessionInfo, 'fragment' | 'profile'> | null | undefined): SpecialistProfile | null {
+/** Any profile a chat can run with: a built-in craft or an agent the person made (`agent:<id>`). */
+export type ProfileId = SpecialistProfile | UserProfileId
+
+/** Which profile a session runs with (the fragment chat keeps its own field). */
+export function specialistProfileOf(session: Pick<SessionInfo, 'fragment' | 'profile'> | null | undefined): ProfileId | null {
   if (!session) return null
   if (session.fragment) return 'fragment'
   return session.profile ?? null
@@ -165,8 +170,9 @@ export interface SessionInfo {
    * tools of the craft, none of the usual memory/skills blocks). The Fragment chat is the
    * same thing with its own field (`fragment`) when it is embedded in a fragment; a fragment
    * agent picked for a new chat uses `profile: 'fragment'`. Use `specialistProfileOf` to read both.
+   * An agent the person made is `agent:<id>`; it is fixed when the chat starts.
    */
-  profile?: SpecialistProfile
+  profile?: ProfileId
   /**
    * Marks a chat made inside an artifact (see artifacts.ts). `id` is the artifact it was made
    * for; absent while the artifact does not exist yet (the first chat of a new fragment).
@@ -1138,7 +1144,7 @@ export interface PlanReview {
 export interface SendMessageOptions {
   /** Set by the main process (never the UI) for a specialist chat: the lean profile of
    *  its craft — focused prompt, the craft's tools only, no memory/skills blocks. */
-  profile?: SpecialistProfile
+  profile?: ProfileId
   /** Deep research mode (deep research prompt + web tools) */
   research?: boolean
   /** Enables native browser tools */
@@ -1913,6 +1919,8 @@ export const StorageKeys = {
   folders: "folders",
   orchestration: (orchestratorSessionId: string) => `orchestration/${orchestratorSessionId}`,
   planReview: (sessionId: string) => `plan-review/${sessionId}`,
+  /** The crafts whose specialist offer the person already answered in this conversation. */
+  specialistOffers: (sessionId: string) => `specialist-offers/${sessionId}`,
   pendingAsks: (sessionId: string) => `pendingAsks/${sessionId}`,
   memory: (id: string) => `memory/items/${id}`,
   memoryItemsPrefix: "memory/items/",

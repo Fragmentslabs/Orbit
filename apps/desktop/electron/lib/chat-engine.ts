@@ -124,7 +124,7 @@ import { forwardToOverlay, getOverlayWindow } from './overlay/window'
 import { globalMode } from './permission/global-mode'
 import { perfSpan } from './perf'
 import { rememberSessionModel } from './fragments/session-model'
-import { isSpecialistTurn, leanOptions, profileOf, profileTurnBlock } from './profiles'
+import { profileAllows, profileOf, profileTurnBlock, restrictInput } from './profiles'
 import { describeChatArtifacts } from './artifacts/describe'
 
 // Tools whose input (still streaming) opens the matching tab LIVE, as
@@ -1703,10 +1703,11 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   // Fragments answer `orbit.ai` with the model the person is using right now.
   rememberSessionModel(input.sessionId, input.providerId, input.modelId)
-  // A specialist chat (fragment, motion, design) runs lean (see profiles/index.ts): the profile is
-  // decided here, from the session on disk, never trusted from the UI.
+  // A chat with a profile (a craft, or an agent the person made) runs restricted (see
+  // profiles/index.ts): the profile is decided here, from the session on disk, never trusted
+  // from the UI.
   const specialist = await profileOf(input.sessionId).catch(() => null)
-  if (specialist) input = { ...input, options: leanOptions(input.options, specialist) }
+  if (specialist) input = restrictInput(input, specialist)
   // The turn's media journal (pieces and gallery) is what lets the message
   // revert undo what the agent produced outside the working folder.
   // The write journal records what the turn's tools wrote in the working
@@ -1880,7 +1881,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   // describe_image tool — or becomes a warning.
   const files = input.files ?? []
   const provider = await getProvider(primaryModel.providerId)
-  const modelVision = modelSupportsVision(provider, primaryModel.modelId)
+  const modelVision = modelSupportsVision(provider, primaryModel.modelId) && profileAllows(input, 'vision')
   // Record of the turn's images (Vision mode): the describe_image tool reads
   // from here on demand; it lives only during the turn (cleared in the finally).
   const turnImages: TurnImage[] = []
@@ -2040,7 +2041,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       try {
         const provider = await getProvider(primary.providerId)
         const model = await resolveModel(primary.providerId, primary.modelId)
-        const modelVision = modelSupportsVision(provider, primary.modelId)
+        const modelVision = modelSupportsVision(provider, primary.modelId) && profileAllows(input, 'vision')
         const catalogModel = provider?.models[primary.modelId]
         const supportsTools = catalogModel?.tool_call !== false
         // Step ceiling and per-step preparation (context trimming, reasoning,
@@ -2339,8 +2340,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Subchats' latest results and the chats that continue this one: they change between
     // turns, so they ride in the message like the memories (see subchats.ts).
     const subchatsBlock =
-      input.orchestrationRole !== 'worker' && !isSpecialistTurn(input) ? await subchatsTurnBlock(input.sessionId, describeChatArtifacts).catch(() => '') : ''
-    const skillsBlock = isSpecialistTurn(input) ? '' : await skillsTurnBlock(input, recentTurns(history), turnEmbed)
+      input.orchestrationRole !== 'worker' && profileAllows(input, 'subagents') ? await subchatsTurnBlock(input.sessionId, describeChatArtifacts).catch(() => '') : ''
+    const skillsBlock = profileAllows(input, 'skills') ? await skillsTurnBlock(input, recentTurns(history), turnEmbed) : ''
     // A specialist chat only needs to know the state of the artifact it is working on.
     const profileBlock = input.options.profile
       ? await profileTurnBlock(input.options.profile, input.sessionId).catch(() => '')
@@ -2429,7 +2430,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     for (;;) {
       const result = streamText({
         model,
-        system: await buildSystemPrompt(input, modelVision, promptMap),
+        // An agent with an empty prompt sends no system prompt at all (some providers reject an empty one).
+        system: (await buildSystemPrompt(input, modelVision, promptMap)) || undefined,
         messages:
           autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0 && screenNudges === 0
             ? initialMessages

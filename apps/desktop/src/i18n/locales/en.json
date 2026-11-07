@@ -3965,7 +3965,8 @@
     "search": {
       "mcp": "Search server or tool",
       "skills": "Search skills",
-      "hooks": "Search hooks"
+      "hooks": "Search hooks",
+      "specialists": "Search agents"
     },
     "skillFilter": {
       "all": "All {{count}}",
@@ -4142,7 +4143,17 @@
     "fragment": {
       "name": "Fragment",
       "description": "Lean, Orbit pages only"
-    }
+    },
+    "custom": {
+      "description": "Your agent"
+    },
+    "group": {
+      "builtin": "Built-in",
+      "mine": "My agents"
+    },
+    "create": "Create an agent…",
+    "manage": "Manage agents…",
+    "inspect": "See what this agent injects"
   },
   "artifact": {
     "chats": "Chats of this artifact",
@@ -4151,5 +4162,96 @@
     "newChat": "New chat",
     "working": "An agent is working on it",
     "done": "Finished — open to see"
+  },
+  "specialists": {
+    "title": "Specialists",
+    "builtin": {
+      "title": "Built-in specialists",
+      "description": "Lean agents for one craft. Each replaces the general setup for the whole conversation. Read-only.",
+      "badge": "Built-in"
+    },
+    "mine": {
+      "title": "My agents",
+      "description": "Agents you write. A new one starts empty: no prompt, and none of Orbit's features until you turn them on.",
+      "new": "New agent",
+      "empty": "You have no agents yet. Create one to start a chat with your own instructions.",
+      "noPrompt": "No prompt — nothing is injected."
+    },
+    "menu": {
+      "view": "See what it injects",
+      "duplicate": "Duplicate",
+      "copySuffix": "(copy)"
+    },
+    "editor": {
+      "newTitle": "New agent",
+      "editTitle": "Edit agent",
+      "description": "The agent is chosen when a chat starts and stays the same for the whole chat.",
+      "name": "Name",
+      "namePlaceholder": "Code reviewer",
+      "icon": "Icon",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Leave empty to inject nothing.",
+      "promptHint": "This is the whole system prompt of the chat",
+      "features": "Orbit features",
+      "featuresHint": "All off by default. Turning one on only lets the agent use it; your own settings and the model's abilities still apply."
+    },
+    "block": {
+      "memories": {
+        "title": "Memories",
+        "description": "Saved memories and the memory tools."
+      },
+      "skills": {
+        "title": "Skills",
+        "description": "The skills index and the tools to read them."
+      },
+      "subagents": {
+        "title": "Subagents",
+        "description": "Delegate parts of the work to background workers and subchats."
+      },
+      "orchestra": {
+        "title": "Orchestra",
+        "description": "Split a task into a plan with workers."
+      },
+      "loop": {
+        "title": "Loop",
+        "description": "Review and repeat until the task is done."
+      },
+      "vision": {
+        "title": "Vision",
+        "description": "Send images to the model, or to the vision model you set."
+      },
+      "web": {
+        "title": "Web",
+        "description": "Web research and the browser."
+      },
+      "computer": {
+        "title": "Computer control",
+        "description": "Control the computer."
+      },
+      "plan": {
+        "title": "Plan mode",
+        "description": "Read-only planning."
+      }
+    },
+    "view": {
+      "subtitle": "Exactly what this agent puts in front of the model. Read-only.",
+      "prompt": "System prompt",
+      "promptHintBuiltin": "The reply-language line is filled in for each person.",
+      "noPrompt": "Nothing is injected: the model gets no system prompt.",
+      "tools": "Tools",
+      "toolsUsual": "The conversation's usual tools, without Orbit's own features (skills, scheduling, pipeline, other chats, hooks) unless a switch below brings them back.",
+      "toolsNarrowed": "Only these tools, and only the ones the conversation would have anyway.",
+      "blocks": "Features",
+      "blocksHint": "On means the agent does not block it. Web, computer and plan still follow your own toggles.",
+      "on": "On",
+      "off": "Off",
+      "turn": "Added at every turn",
+      "noTurn": "Nothing."
+    },
+    "error": {
+      "name": "Give the agent a name.",
+      "limit": "You reached the limit of agents. Remove one first.",
+      "missing": "This agent no longer exists."
+    }
   }
 }

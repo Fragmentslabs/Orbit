@@ -2,8 +2,9 @@
 
 Status: built for fragments, Motion and Design through one generic layer (see "How it is
 built" in section 3): profiles, the agent selector, the sidebar icon, the suggestion card,
-and the conversation card with the chat list on all three screens. Not built yet: user-made
-agents. The first profile was the
+and the conversation card with the chat list on all three screens. User-made agents are built
+(section 5): the Specialists tab of the Tools page, the store, the header selector. Not built:
+importing and sharing agents, and a tool picker in the editor. The first profile was the
 lean fragment chat (see [fragments.md](fragments.md), "Creating and editing live").
 
 ## 1. The idea
@@ -37,15 +38,18 @@ particular depends on the third. Measure before investing: the same set of reque
 | Motion | Done, not yet measured | Craft prompt plus the motion guide; motion, font and sound tools only; compositions listed each turn |
 | Design | Done, not yet measured | Craft prompt plus the design guide; design and font tools only; canvases listed each turn |
 
-Frame feedback for Motion (`motion_frame`) already exists in the tool set. Still to do:
-measure the new profile against the general chat on a fixed set of requests, and add
-selection and timeline state to the per-turn block.
+Frame feedback for Motion (`motion_frame`) already exists in the tool set. The per-turn block
+also carries what the person has on screen (section 3, "What the person is looking at"). Still
+to do: measure the new profile against the general chat on a fixed set of requests.
 
 The engine asks `profileOf(sessionId)` (`electron/lib/profiles/index.ts`), reading the
-session on disk, never the UI. A profile gives the system prompt, the toolset and the
-per-turn block, and `leanOptions` switches off memories, research, browser, computer,
-subagents, orchestration and plan. `SessionInfo.profile` holds `motion` or `design`; the
-fragment chat keeps its own `fragment` field, and `specialistProfileOf` reads both.
+session on disk, never the UI. A profile is a `ProfileDefinition` (`profiles/types.ts`): the
+system prompt, optional craft tools, an optional tool allowlist, the `blocks` that are on, the
+per-turn block, and a default model and thinking. `restrictInput` applies it by clearing what
+its blocks switch off (memories, skills, subagents, orchestra, loop, vision, web, computer,
+plan). `SessionInfo.profile` holds a `ProfileId`: `motion`, `design`, `fragment` or
+`agent:<id>`; the embedded fragment chat keeps its own `fragment` field, and
+`specialistProfileOf` reads both.
 
 A fragment records every chat that worked on it (`sessionIds` in the manifest). The card
 lists them, starts a new one, and opens the current one in the side panel. Chats of a
@@ -91,7 +95,8 @@ one table, and nothing else in the app branches on the kind.
 | Chat registry | `electron/lib/artifacts/chat-registry.ts` | One record per artifact: the chats in order and the current one. Serialized writes |
 | Tracking | `electron/lib/artifacts/tracking.ts` | Wraps the descriptor tools: a chat that ran one joins the artifact's list |
 | IPC | `electron/lib/artifacts/artifact-ipc.ts` | list, associate, set current, and a change event |
-| Profile | `electron/lib/profiles/index.ts` | Prompt, tools and per-turn block of the lean chat |
+| Profile | `electron/lib/profiles/` | `types.ts` (definition), `builtin.ts` (the three crafts), `user.ts` (an agent as a definition), `index.ts` (resolve, `restrictInput`), `tool-blocks.ts` (what each block removes), `turn-blocks.ts`, `describe.ts` |
+| View state | `electron/lib/artifacts/view-state.ts`, `src/hooks/use-artifact-view.ts` | What the person has selected or open in a tab, told to the chat at the next turn |
 | Renderer store and hook | `stores/artifact-chats-store.ts`, `hooks/use-artifact-chat.ts` | The shown chat, the list, select, create embedded, ensure |
 | Embedded chat fields | `lib/artifact-session.ts` | The one place that knows how each kind marks its chat |
 | Card | `components/artifact/` | `ArtifactChatTools` (select, new, open in panel) and `ArtifactChatFeed` |
@@ -100,12 +105,30 @@ The chat list is shown the same way on all three screens: the floating feed on F
 Motion, and a tab of the left sidebar on Design (`ConversationBody` is the shared body).
 
 **Adding a new kind:** add its name to `SpecialistProfile`, one entry in `kinds.ts`, one
-case in `profiles/index.ts` (prompt, tools, turn block) and, if its chats are marked in a
-special way, one line in `artifact-session.ts`. The registry, tracking, IPC, hook, card and
+definition in `profiles/builtin.ts` (prompt, tools, turn block) and, if its chats are marked in
+a special way, one line in `artifact-session.ts`. The registry, tracking, IPC, hook, card and
 sidebar rule need no change.
 
 The fragment manifest no longer keeps a chat list: only the chat it was born in (`sessionId`),
 which creation and the turn block use. The list lives in the registry for every kind.
+
+### What the person is looking at (Motion and Design)
+
+The selection, the playhead and the active board only exist in the tab, so the tab reports them
+(`useArtifactView`, one call in `motion-tab.tsx` and one in `design-tab.tsx`, the text is built in
+`motion-view-state.ts` and `design/design-view-state.ts`). Main keeps the latest report per kind
+in memory (`view-state.ts`) and `turn-blocks.ts` adds it to `<motion-context>` and
+`<design-context>`.
+
+- Motion: the piece, the selected layer or sound, the frame of the playhead with its time, and the
+  timeline (the frames where each layer is in the scene).
+- Design: the canvas, its artboards with sizes, the active artboard, the selected element (tag and
+  child-index path, which is how the design tools address it, and its text) and the group size.
+- It is screen state, so it lives in memory only and a closing tab clears its own report. It is the
+  person's view, not an instruction: every value is cut to one short line, keys are validated, and
+  the block says so. It goes in the user message, never in the system prompt, to keep the cache.
+- Not done: it reports the tab that was touched last, not a tab per piece, so two Motion tabs open
+  at once are not told apart.
 
 ### A specialist subchat is a normal subchat
 
@@ -127,7 +150,10 @@ Implemented for Fragment, Motion and Design (`withSpecialistOffer` in `tools/sub
 first `fragment_create`, `motion_write` or `design_write` of a general chat shows the card instead of
 running; "create" opens a specialist subchat with the user's request as its brief,
 "continue here" runs the tool and the offer is not repeated in that conversation. It
-reuses the existing subchat ask, so it survives a restart as a plain subchat card.
+reuses the existing subchat ask, so it survives a restart as a plain subchat card. The answer
+(any answer) is saved per conversation and craft (`specialist-offers.ts`, key
+`specialist-offers/<session>`, removed with the conversation), so it also holds after a restart.
+The chat-mode toolset used to skip this wrapper and the artifact tracking; it now has both.
 A fragment created from the Fragments page does not go through the offer: it gets its own embedded chat.
 
 Treated as a subchat with the mode icon, linked to the chat it came from.
@@ -136,31 +162,68 @@ Treated as a subchat with the mode icon, linked to the chat it came from.
   fragment, not whenever a message sounds related. Detected by that gesture, not by a
   new tool in the general prompt (which would add weight to the prompt this work
   tries to slim).
-- Once per conversation. "Continue here" holds until the chat ends.
+- Once per conversation. "Continue here" holds for the life of the chat, restarts included.
 - The card is short with two clear buttons. It states the benefit ("a chat optimized
   for this") and what is passed: a summary of the context, not the whole
   conversation. The summary loses nuance and the card says so.
 - When the specialist finishes it returns one line to the parent ("animation ready:
   file X"), as subchats already do.
 
-## 5. User-made agents (later)
+## 5. User-made agents
 
-Users create agents with a custom prompt. The header shows a badge or a selector with
-the active agent.
+Built. The person writes agents in the **Specialists** tab of the Tools page (reachable from both
+chat and code mode; the Tools button is no longer code-only) and picks one in the header when a
+chat starts.
 
-- **Fixed per conversation.** Switching mid-chat breaks the prompt cache and mixes
-  instructions, so the selector applies when the chat starts; switching later means a
-  new chat or a subchat.
-- **A profile only restricts or toggles; it never grants.** It cannot give itself more
-  permission than the user has, so a custom prompt is not a way around approvals.
+- **A new agent starts empty.** No prompt means the model gets no system prompt at all, and
+  nothing else is injected. Five switches turn Orbit features on, all off by default: vision,
+  subagents, orchestra, loop and memories. "On" only means the agent does not block the feature;
+  it never forces it on, and the person's settings, the conversation toggles and the model's
+  abilities still decide.
+- **What an agent removes.** Its system prompt is exactly its prompt (the general prompt, skills
+  index, project context and memories are not there). Its toolset is the conversation's usual
+  one without Orbit's own machinery: skills, scheduling, pipeline, other chats and usage, hooks,
+  connection setup, and the subagent and subchat tools unless the subagents switch is on. Web,
+  computer and plan stay under the person's own composer toggles.
+- **Fixed per conversation.** The agent is stored on the session when the chat is created
+  (`SessionInfo.profile = agent:<id>`) and read from disk each turn. Switching mid-chat would break
+  the prompt cache and mix instructions, so the selector is only a selector for a new chat and
+  becomes a badge afterwards. Editing an agent changes its chats from their next turn (one cache
+  miss); deleting it makes its chats fall back to the general setup.
+- **A profile only restricts or toggles; it never grants.** `restrictInput` only clears options,
+  `restrictTools` only deletes tools (in place, so `run_tools` cannot reach what was removed), and
+  no field of a definition adds a permission, a tool, an approval bypass or a model. Loop and
+  orchestra are routed before the engine, so the dispatcher applies the profile too.
 - **Different from skills and modes.** A skill is knowledge loaded on demand, a mode is
-  a behavior switched on, an agent is the base identity of the conversation. The UI
-  must keep the three apart.
-- **Transparency.** The badge leads to a view of exactly what the profile injects
-  (prompt, tools, blocks).
-- **Optional connections.** By default a fragment agent is empty: no prompt injection,
-  no memories. Vision, subagents, orchestra, loop and memories are switches the user
-  turns on per fragment or per agent.
+  a behavior switched on, an agent is the base identity of the conversation. The UI keeps
+  the three apart: agents live in their own tab and in the header, not in the composer.
+- **Transparency.** The badge of a chat, and every card in the tab, opens a read-only view of
+  exactly what the profile injects: the system prompt, the tools, which blocks are on, and what is
+  added each turn. For the built-ins it is built from the same definition the engine runs
+  (`profiles/describe.ts`).
+- **Storage.** One file, `agents` under the app storage, written atomically and serialized.
+  Limits are in `AGENT_LIMITS` (50 agents, 60-character names, 20,000-character prompts, 200
+  tool names). `agents/validate.ts` is the single validator: the editor's payload and the file
+  both go through it, unknown fields are dropped, only a literal `true` turns a feature on, and
+  an invalid record in the file is skipped instead of reaching the engine.
+
+### The definition format (ready for sharing)
+
+`AgentInput` in `packages/shared/src/agents.ts` is the portable part: `name`, `icon`, `prompt`,
+`features`, and the optional `allowedTools`, `defaultModel` and `thinking`. It carries no id and
+nothing tied to this installation. A saved `AgentDefinition` adds `version` (the format version,
+`AGENT_FORMAT_VERSION`), `id`, `origin` (`user` or `imported`, reserved for the sharing flow) and
+timestamps. Export is just `AgentInput` as JSON; import would run the same `sanitizeAgentInput`.
+
+Not built, on purpose:
+
+- **Importing and sharing agents.** It needs the consent flow below. Nothing imports yet, and
+  `origin: 'imported'` is never written.
+- **A tool picker.** `allowedTools` is validated and enforced by the engine, but the editor does not
+  expose it. The names to offer would come from building the conversation's toolset.
+- **Applying `defaultModel` and `thinking`.** They are in the format and validated, but choosing an
+  agent does not change the model selector yet.
+- Nothing here has been checked in the real window: types, lint and tests only.
 
 ### Sharing and security
 
@@ -181,13 +244,13 @@ A fragment from a third party that ships a profile is covered by the same card.
 3. Design profile.
 4. Artifact id on the session, sidebar mode icon, left-card selector and history.
 5. Suggestion card in normal chats.
-6. Only then the editor for user-made agents and the header selector, once two or
-   three built-in profiles have proven the abstraction and shown what the editor must
-   expose.
+6. The editor for user-made agents and the header selector (done), once two or
+   three built-in profiles proved the abstraction.
+7. Importing and sharing agents with the consent card (not done).
 
 ## 7. Open questions
 
 - How much of the summary passed to a specialist is written by the model and how much
   is the artifact's own state.
 - Whether Design and Motion get their own tool sets or share a base with fragments.
-- Whether the "continue here" choice is per chat or remembered per artifact kind.
+- Whether the "continue here" choice is per chat (what is built) or remembered per artifact kind.

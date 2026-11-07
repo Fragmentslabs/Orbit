@@ -75,12 +75,16 @@ describe('profileOf', () => {
   })
 
   it('leaves the options of a specialist turn lean', () => {
-    const lean = profiles.leanOptions({ research: true, browser: true, subagents: true, plan: true }, 'motion')
-    expect(lean.profile).toBe('motion')
-    expect(lean.research).toBe(false)
-    expect(lean.browser).toBe(false)
-    expect(lean.subagents).toBe(false)
-    expect(lean.plan).toBe(false)
+    const lean = profiles.restrictInput(
+      { ...input('x'), options: { research: true, browser: true, subagents: true, plan: true, loop: true } } as SendMessageInput,
+      'motion',
+    )
+    expect(lean.options.profile).toBe('motion')
+    expect(lean.options.research).toBe(false)
+    expect(lean.options.browser).toBe(false)
+    expect(lean.options.subagents).toBe(false)
+    expect(lean.options.plan).toBe(false)
+    expect(lean.options.loop).toBeUndefined()
   })
 })
 
@@ -118,6 +122,20 @@ describe('turn blocks', () => {
     const dir = (await import('../tools/motion')).motionPiecesDir('with-pieces')
     await fsp.mkdir(path.join(dir, 'logo-intro'), { recursive: true })
     expect(await profiles.profileTurnBlock('motion', 'with-pieces')).toContain('logo-intro')
+  })
+
+  it('adds what the person has on screen in the Motion and Design tabs', async () => {
+    const views = await import('../artifacts/view-state')
+    views.reportView({ ref: { kind: 'motion', id: 'mv_9' }, state: { selected: 'Title', playhead: 'frame 12 of 90' } })
+    views.reportView({ ref: { kind: 'design', id: 'd_9' }, state: { 'active artboard': 'Main.html' } })
+    const motion = await profiles.profileTurnBlock('motion', 'blank')
+    const design = await profiles.profileTurnBlock('design', 'blank')
+    expect(motion).toContain('- selected: Title')
+    expect(motion).toContain('- playhead: frame 12 of 90')
+    expect(design).toContain('- active artboard: Main.html')
+    expect(motion).not.toContain('Main.html')
+    views.clearViews()
+    expect(await profiles.profileTurnBlock('motion', 'blank')).not.toContain('Title')
   })
 
   it('does the same for design', async () => {

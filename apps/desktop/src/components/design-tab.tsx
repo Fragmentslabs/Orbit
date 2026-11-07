@@ -90,6 +90,8 @@ import { FloatingSidebar, FullscreenComposer } from "@/src/components/fullscreen
 import { ArtifactChatTools } from "@/src/components/artifact/artifact-chat-tools"
 import { AGENT_META } from "@/src/components/agent-meta"
 import { useArtifactChat } from "@/src/hooks/use-artifact-chat"
+import { useArtifactView } from "@/src/hooks/use-artifact-view"
+import { designViewState } from "@/src/components/design/design-view-state"
 import { useSessionStatus } from "@/src/stores/session-store"
 import { Truncate } from "@/components/ui/truncated-text"
 
@@ -379,6 +381,11 @@ function DesignEditor({
   }, [state, overrides])
   const boardsRef = useRef(boards)
   boardsRef.current = boards
+  // The active artboard and the selection reach the chat at its next turn.
+  useArtifactView(
+    designId ? { kind: "design", id: designId } : null,
+    designViewState({ title, boards, selection, extraSelected: groupPaths.length, element: info }),
+  )
 
   /** Are the Layers in view? It is the only thing that needs the DOM tree. */
   const layersVisible = fullscreen ? leftSideOpen && leftTab === "layers" : inspectorOpen && inspectorTab === "layers"

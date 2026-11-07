@@ -10,6 +10,7 @@ import { broadcastSessionEvent } from '../companion-server'
 import { createContinuationRecord, createSubchatRecord, findSubchat, readSubchatMessages } from '../subchats'
 import { detachFromTurn } from '../session/write-journal'
 import { tNow } from '../i18n'
+import { offerDecided, recordOfferDecision } from './specialist-offers'
 import { wakeParentOf } from '../subchat-wake'
 
 // The first message of the new chat (`subchat.kickoff`) is in the voice of whoever
@@ -253,9 +254,6 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
   }
 }
 
-/** Per (conversation, craft): the person already answered the offer, so it is not repeated. */
-const offerDecided = new Set<string>()
-
 const OFFERED: Array<{ tool: string; profile: SpecialistProfile; label: string }> = [
   { tool: 'fragment_create', profile: 'fragment', label: 'Fragment' },
   { tool: 'motion_write', profile: 'motion', label: 'Motion' },
@@ -267,7 +265,8 @@ const OFFERED: Array<{ tool: string; profile: SpecialistProfile; label: string }
  * is offered a specialist chat for it (a lean agent of that craft, attached to this one).
  * It is detected here, at the gesture, so the general prompt carries no instruction about it.
  *
- * Once per conversation and craft: "continue here" (or declining) stands until the chat ends.
+ * Once per conversation and craft: "continue here" (or declining) stands for the life of the
+ * conversation, across restarts (see specialist-offers.ts).
  * Specialist chats, workers and plan turns never see the offer.
  */
 export function withSpecialistOffer(tools: ToolSet, input: SendMessageInput, win?: BrowserWindow): ToolSet {
@@ -280,8 +279,7 @@ export function withSpecialistOffer(tools: ToolSet, input: SendMessageInput, win
     wrapped[name] = {
       ...original,
       execute: async (args: unknown, options: { abortSignal?: AbortSignal }) => {
-        const key = `${input.sessionId}:${profile}`
-        if (offerDecided.has(key)) return run(args, options)
+        if (await offerDecided(input.sessionId, profile)) return run(args, options)
         const piece = typeof (args as { name?: unknown })?.name === 'string' ? (args as { name: string }).name : ''
         const title = piece ? `${label}: ${piece}` : label
         const brief = (input.text ?? '').trim().slice(0, 1500) || title
@@ -298,7 +296,7 @@ export function withSpecialistOffer(tools: ToolSet, input: SendMessageInput, win
         } finally {
           broadcastChatEvent({ type: 'ask:done', sessionId: input.sessionId, requestId })
         }
-        offerDecided.add(key)
+        await recordOfferDecision(input.sessionId, profile)
         if (answer === 'new') return openAndStart(input, win, title, brief, 'subchat', profile)
         if (answer === 'here') return run(args, options)
         return 'The user declined the specialist chat and does not want this created now: leave that work aside.'

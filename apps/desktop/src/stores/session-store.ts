@@ -15,7 +15,7 @@ import type {
   SessionInfo,
   SessionMediaRevert,
   SessionMode,
-  SpecialistProfile,
+  ProfileId,
   TextPart,
 } from "@shared/chat"
 // normalizeFolderName/folderKey live in shared: mobile groups chats by
@@ -130,7 +130,7 @@ interface SessionState {
   pendingFolderId: string | null
   /** Specialist agent chosen for the next new chat (null = the general agent). Applied when the
    *  session is created by the first message, then cleared. */
-  pendingProfile: SpecialistProfile | null
+  pendingProfile: ProfileId | null
   /** Count of unread messages per session. */
   unreadCounts: Record<string, number>
   /** Orchestration plans per orchestrator session */
@@ -171,7 +171,7 @@ interface SessionState {
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   setPendingFolder: (folderId: string | null) => void
-  setPendingProfile: (profile: SpecialistProfile | null) => void
+  setPendingProfile: (profile: ProfileId | null) => void
   renameSession: (id: string, title: string) => void
   togglePin: (id: string) => void
   toggleArchive: (id: string) => void
@@ -843,6 +843,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
+      void storage.remove(StorageKeys.specialistOffers(sid))
       // Attached sources: deletes the chat's own scope. When it was
       // in a folder, the scope belongs to the folder and main does not touch it here — the sources
       // keep counting for the other chats of it.

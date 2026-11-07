@@ -1,6 +1,7 @@
 import { ArtifactActivity } from "@/src/components/artifact/artifact-activity"
 import { isEmbeddedArtifactChat } from "@shared/artifacts"
 import { sessionIcon } from "@/src/components/agent-meta"
+import { useAgents } from "@/src/stores/agents-store"
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
@@ -371,8 +372,7 @@ function FragmentsButton() {
 
 function McpSkillsButton() {
   const { t } = useTranslation()
-  const { mode, view, setView } = useWorkspace()
-  if (mode !== "code") return null
+  const { view, setView } = useWorkspace()
   const active = view === "tools"
   return (
     <SidebarMenuButton isActive={active} onClick={() => setView(active ? "chat" : "tools")}>
@@ -724,7 +724,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   trailing?: React.ReactNode
 }) {
   const { t } = useTranslation()
-  // A specialist chat (motion, design) wears the icon of its craft; the rest, the chat bubble.
+  // A specialist chat (motion, design, or an agent the person made) wears its own icon; the
+  // rest, the chat bubble. The list of agents is subscribed to so the icon appears once it loads.
+  useAgents()
   const Icon = iconProp ?? sessionIcon(session) ?? MessageSquare
   const { mode, setMode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -922,6 +924,7 @@ function SessionItem({ session, childSessions = [] }: {
   const [expanded, setExpanded] = useState(true)
   const statusMap = useSessionStore((s) => s.status)
   const hasChildren = childSessions.length > 0
+  useAgents() // children wear the icon of their agent, which may load after this renders
 
   return (
     <SidebarMenuItem>
@@ -971,6 +974,7 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
 }) {
   const [childExpanded, setChildExpanded] = useState(true)
   const statusMap = useSessionStore((s) => s.status)
+  useAgents()
 
   return (
     <>

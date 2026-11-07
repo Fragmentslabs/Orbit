@@ -58,6 +58,8 @@ import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { ActionsFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
 import { ArtifactChatFeed } from "@/src/components/artifact/artifact-chat-feed"
 import { useArtifactChat } from "@/src/hooks/use-artifact-chat"
+import { useArtifactView } from "@/src/hooks/use-artifact-view"
+import { motionViewState } from "@/src/components/motion-view-state"
 import { Truncate } from "@/components/ui/truncated-text"
 import { MotionPropsForm } from "@/src/components/motion-props-form"
 import { changedCount, defaultValues, srcWithProps, toOverrides, type MotionPropsInfo, type PropFormValues } from "@/src/lib/motion-props-form"
@@ -602,6 +604,11 @@ export function MotionTab({
   const layerList = useMemo(
     () => (layers.status === "ready" ? layers.layers : layers.status === "loading" ? layers.previous : []),
     [layers],
+  )
+  // What the person has selected and where the playhead is reaches the chat at its next turn.
+  useArtifactView(
+    motionId ? { kind: "motion", id: motionId } : null,
+    motionViewState({ title, selected: selectedName, frame, durationInFrames: spec?.durationInFrames ?? 0, fps, layers: layerList }),
   )
 
   /**

@@ -1014,6 +1014,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           await removeJson(StorageKeys.session(id))
           await removeJson(StorageKeys.messages(id))
           await removeJson(StorageKeys.planReview(id))
+          await removeJson(StorageKeys.specialistOffers(id))
           await deleteMediaJournals(id).catch(() => {})
           broadcastSessionEvent({ type: 'session:deleted', sessionId: id })
         }

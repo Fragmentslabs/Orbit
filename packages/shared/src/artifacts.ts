@@ -45,3 +45,18 @@ export const artifactKey = (ref: ArtifactRef): string => `${ref.kind}:${ref.id}`
 export function isEmbeddedArtifactChat(session: Pick<SessionInfo, 'artifact' | 'fragment' | 'parentId'>): boolean {
   return Boolean(session.artifact || session.fragment) && !session.parentId
 }
+
+/** One value of what the person is looking at in an artifact's tab. */
+export type ArtifactViewValue = string | number | string[]
+
+/**
+ * What the person has on screen in an artifact tab (the selection, the playhead, the active
+ * board). The tab reports it; the chat that works on that kind of artifact is told at the next
+ * turn, so "make this one bigger" has a "this". `state: null` means the tab closed.
+ */
+export interface ArtifactViewReport {
+  ref: ArtifactRef
+  state: Record<string, ArtifactViewValue> | null
+}
+
+export const ARTIFACT_VIEW_CHANNEL = 'artifact-view:report'

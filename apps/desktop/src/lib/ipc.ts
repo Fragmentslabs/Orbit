@@ -17,6 +17,7 @@ import type {
   UnrevertResult,
 } from "@shared/chat"
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
+import { AGENT_CHANNELS, type AgentDefinition, type AgentInput, type AgentsSnapshot } from "@shared/agents"
 import { ARTIFACT_CHATS_CHANNELS, type ArtifactChats, type ArtifactChatsEvent, type ArtifactRef } from "@shared/artifacts"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from "@shared/companion"
@@ -847,6 +848,21 @@ export const fragmentApi = {
   onRemoved: (listener: (payload: { fragmentId: string }) => void) => {
     const wrapper = window.ipcRenderer.on("fragment:removed", (payload) => listener(payload as { fragmentId: string }))
     return () => window.ipcRenderer.off("fragment:removed", wrapper)
+  },
+}
+
+export type AgentSaveResult = { ok: true; agent: AgentDefinition } | { ok: false; reason: "name" | "limit" | "missing" }
+
+/** The Specialists page: the person's agents and what the built-in profiles inject. */
+export const agentsApi = {
+  snapshot: () => window.ipcRenderer.invoke(AGENT_CHANNELS.snapshot) as Promise<AgentsSnapshot>,
+  /** Without `id` creates an agent; with it, replaces the editable part. */
+  save: (input: AgentInput, id?: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.save, input, id) as Promise<AgentSaveResult>,
+  duplicate: (id: string, copyLabel: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.duplicate, id, copyLabel) as Promise<AgentSaveResult>,
+  remove: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.remove, id) as Promise<boolean>,
+  onChanged: (listener: () => void) => {
+    const wrapper = window.ipcRenderer.on(AGENT_CHANNELS.changed, () => listener())
+    return () => window.ipcRenderer.off(AGENT_CHANNELS.changed, wrapper)
   },
 }
 

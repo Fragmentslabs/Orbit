@@ -1,180 +1,119 @@
-import fsp from 'node:fs/promises'
 import type { ToolSet } from 'ai'
+import { isUserProfileId, agentIdOf, type ProfileBlocks } from '@shared/agents'
 import {
   StorageKeys,
   specialistProfileOf,
+  type ProfileId,
   type SendMessageInput,
-  type SendMessageOptions,
   type SessionInfo,
-  type SpecialistProfile,
 } from '@shared/chat'
-import { getAppSettings } from '../app-settings'
-import { resolveFfmpeg } from '../video/ffmpeg'
+import { getAgentSync, loadAgents } from '../agents/store'
 import { readJson } from '../storage'
-import { fragmentSystemPrompt, fragmentTurnBlock } from '../fragments/fragment-profile'
-import { familyGuide } from '../skills/builtin'
-import { createAudioGenerateTool, createSfxGenerateTool } from '../tools/audio'
-import { createDesignTools, designPiecesDir } from '../tools/design'
-import { createFontTools } from '../tools/fonts'
-import { createFragmentTools } from '../tools/fragment'
-import { createMotionTools, motionPiecesDir } from '../tools/motion'
+import { BUILTIN_DEFINITIONS } from './builtin'
+import { profileOfAgent } from './user'
+import type { ProfileDefinition } from './types'
+
+export { restrictTools } from './tool-blocks'
+export type { ProfileDefinition } from './types'
 
 /**
- * Specialist profiles: a chat that exists for ONE craft runs with the setup of that craft
- * instead of the general one.
+ * Profiles: a chat can run with a setup other than the general one — a built-in craft
+ * (fragment, motion, design) or an agent the person wrote. Both are the same thing, a
+ * ProfileDefinition (see types.ts), and the engine only ever asks this module.
  *
- * A general chat carries a long system prompt, memories, skills and dozens of tools. For a
- * narrow job most of that is noise, and what actually matters (the format, the rules, the
- * mistakes) gets diluted. A profile replaces it for the whole conversation with:
- *  - a focused system prompt that carries the craft's knowledge,
- *  - only the craft's tools,
- *  - a per-turn block with the state of the artifact being worked on,
- *  - none of the usual blocks (memories, skills, project context, subchats).
- *
- * The profile is decided HERE, from the session on disk — never trusted from the UI — and
- * is fixed for the life of the conversation.
+ * The profile is decided HERE, from the session on disk — never trusted from the UI — and is
+ * fixed for the life of the conversation. A profile can only restrict or toggle: it narrows the
+ * toolset and switches blocks off, it never grants anything the person has not turned on.
  */
 
-export const SPECIALIST_PROFILES: readonly SpecialistProfile[] = ['fragment', 'motion', 'design']
-
-/** The profile of a session, read from disk at the start of a turn (null = a general chat). */
-export async function profileOf(sessionId: string): Promise<SpecialistProfile | null> {
-  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
-  return specialistProfileOf(session)
+/** The definition behind a profile id, or null when it does not exist (a deleted agent). */
+export function resolveProfile(id: ProfileId): ProfileDefinition | null {
+  if (isUserProfileId(id)) {
+    const agent = getAgentSync(agentIdOf(id))
+    return agent ? profileOfAgent(agent) : null
+  }
+  return BUILTIN_DEFINITIONS[id] ?? null
 }
 
-/** Switches off everything a specialist chat does not use. */
-export function leanOptions(options: SendMessageOptions, profile: SpecialistProfile): SendMessageOptions {
+/**
+ * The profile of a session, read from disk at the start of a turn (null = a general chat, or
+ * an agent that has since been deleted — its chats fall back to the general setup).
+ */
+export async function profileOf(sessionId: string): Promise<ProfileId | null> {
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  const id = specialistProfileOf(session)
+  if (!id) return null
+  if (isUserProfileId(id)) await loadAgents()
+  return resolveProfile(id) ? id : null
+}
+
+/**
+ * Applies a profile to a turn: marks it and switches off what its blocks switch off. Only ever
+ * clears things, so applying it twice (the dispatcher and the engine both do) changes nothing.
+ */
+export function restrictInput(input: SendMessageInput, profile: ProfileId): SendMessageInput {
+  const def = resolveProfile(profile)
+  const b: ProfileBlocks = def?.blocks ?? NO_BLOCKS
+  const options = { ...input.options, profile }
+  if (!b.memories) {
+    options.brain = false
+    options.brainContext = false
+  }
+  if (!b.skills) options.skillHints = false
+  if (!b.subagents) options.subagents = false
+  if (!b.orchestra) options.orchestrate = undefined
+  if (!b.loop) options.loop = undefined
+  if (!b.web) {
+    options.research = false
+    options.browser = false
+  }
+  if (!b.computer) options.computer = false
+  if (!b.plan) options.plan = false
   return {
-    ...options,
-    profile,
-    brainContext: false,
-    research: false,
-    browser: false,
-    computer: false,
-    subagents: false,
-    orchestrate: undefined,
-    plan: false,
+    ...input,
+    options,
+    ...(b.loop ? {} : { loopConfig: undefined }),
+    // Vision delegated to another model is a way of seeing images too.
+    ...(b.vision ? {} : { visionModel: undefined }),
   }
 }
 
-/** True when the turn runs a specialist profile (the blocks of a general chat are skipped). */
+/** An unknown profile gets nothing: failing closed. */
+const NO_BLOCKS: ProfileBlocks = {
+  memories: false,
+  subagents: false,
+  orchestra: false,
+  loop: false,
+  vision: false,
+  web: false,
+  computer: false,
+  plan: false,
+  skills: false,
+}
+
+/** True when the turn may use a block: always for a general chat, per the profile otherwise. */
+export function profileAllows(input: Pick<SendMessageInput, 'options'>, block: keyof ProfileBlocks): boolean {
+  const id = input.options.profile
+  if (!id) return true
+  return (resolveProfile(id)?.blocks ?? NO_BLOCKS)[block]
+}
+
+/** True when the turn runs a profile (the blocks of a general chat are not all in play). */
 export function isSpecialistTurn(input: Pick<SendMessageInput, 'options'>): boolean {
   return Boolean(input.options.profile)
 }
 
-const MOTION_ROLE = [
-  "You are Orbit's motion designer. You make animation as motion pieces and refine them live while the person watches the Motion tab next to this conversation.",
-  '',
-  'How you work:',
-  '- Direction before code: decide the shot list (what appears, in what order, how long), the easing and the hierarchy of attention. A piece with no direction looks generic.',
-  '- Create with motion_write, then change it with motion_edit (small, exact replacements). The tab reloads on every write; reuse the same name to keep iterating.',
-  '- Look at a few key frames with motion_frame when the question is visual (timing, overlap, crop), not after every edit. Render the video only when the person asks.',
-  '- Start with a complete, good-looking first version, then improve it. Do not ask what a sensible default answers.',
-  '- You only work on animation. You have no other tools, and that is on purpose.',
-].join('\n')
-
-const DESIGN_ROLE = [
-  "You are Orbit's visual designer. You make screens, layouts, logos and posters as design canvases and refine them live while the person watches the Design tab next to this conversation.",
-  '',
-  'How you work:',
-  '- Decide the look first: type, color, spacing, one clear idea. A design with no point of view looks generic.',
-  '- Create with design_write, then change it with design_edit (small, exact replacements). The canvas reloads on every write; reuse the same name to keep iterating.',
-  '- Judge the result by how it looks: check it visually once when the question is visual, not after every edit.',
-  '- Start with a complete, good-looking first version, then improve it. Do not ask what a sensible default answers.',
-  '- You only work on design. You have no other tools, and that is on purpose.',
-].join('\n')
-
-function replyLine(language?: string): string {
-  return language
-    ? `Reply in ${language}, briefly: say what you made or changed in one or two sentences.`
-    : 'Reply in the language of the request, briefly: say what you made or changed in one or two sentences.'
+/** The system prompt of a profile chat — and nothing else (no general blocks). */
+export function profileSystemPrompt(profile: ProfileId, input: Pick<SendMessageInput, 'language'>): string {
+  return resolveProfile(profile)?.systemPrompt(input) ?? ''
 }
 
-/** The system prompt of a specialist chat — and nothing else (no general blocks). */
-export function profileSystemPrompt(profile: SpecialistProfile, input: Pick<SendMessageInput, 'language'>): string {
-  switch (profile) {
-    case 'fragment':
-      return fragmentSystemPrompt(input.language)
-    case 'motion':
-      return [MOTION_ROLE, '', replyLine(input.language), '', familyGuide('motion') ?? ''].join('\n').trim()
-    case 'design':
-      return [DESIGN_ROLE, '', replyLine(input.language), '', familyGuide('design') ?? ''].join('\n').trim()
-  }
-}
-
-/** The tools of the craft — the whole toolset of a specialist chat. */
-export function profileTools(profile: SpecialistProfile, input: SendMessageInput, modelVision?: boolean): ToolSet {
-  switch (profile) {
-    case 'fragment':
-      return { ...createFragmentTools(input.sessionId) }
-    case 'motion': {
-      const voice = getAppSettings().voice
-      const tools: ToolSet = {
-        ...createMotionTools({
-          sessionId: input.sessionId,
-          modelVision: modelVision !== false,
-          canRender: resolveFfmpeg() !== null,
-          language: input.language,
-          sttEnabled: voice.stt.enabled,
-        }),
-        ...createFontTools(),
-        sfx_generate: createSfxGenerateTool(input.sessionId, null),
-      }
-      if (voice.tts.enabled) tools.audio_generate = createAudioGenerateTool(input.sessionId, null)
-      return tools
-    }
-    case 'design':
-      return { ...createDesignTools({ sessionId: input.sessionId }), ...createFontTools() }
-  }
-}
-
-/**
- * A chat made for an artifact that already exists (from its card) is told which one. Motion
- * and design pieces live in the folder of the chat that made them, so the id is how another
- * chat reaches the same piece.
- */
-async function focusLine(kind: 'motion' | 'design', sessionId: string): Promise<string> {
-  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
-  const id = session?.artifact?.kind === kind ? session.artifact.id : undefined
-  return id
-    ? `Artifact in focus: id ${id}. It was made in another conversation: pass this id as \`id\` to the ${kind} tools to read and change it.`
-    : ''
-}
-
-async function namesIn(dir: string): Promise<string[]> {
-  const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])
-  return entries.filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'renders').map((e) => e.name)
+/** The craft's own tools, or null when the profile runs on the conversation's usual toolset. */
+export function profileTools(profile: ProfileId, input: SendMessageInput, modelVision?: boolean): ToolSet | null {
+  return resolveProfile(profile)?.tools?.(input, modelVision) ?? null
 }
 
 /** What this turn needs to know about the artifact: per turn, in the user message. */
-export async function profileTurnBlock(profile: SpecialistProfile, sessionId: string): Promise<string> {
-  switch (profile) {
-    case 'fragment':
-      return fragmentTurnBlock(sessionId)
-    case 'motion': {
-      const names = await namesIn(motionPiecesDir(sessionId))
-      const focus = await focusLine('motion', sessionId)
-      return [
-        '<motion-context>',
-        ...(focus ? [focus] : []),
-        names.length
-          ? `Compositions in this conversation: ${names.join(', ')}. Read one with motion_read before changing it.`
-          : 'No composition exists in this conversation yet. Create one with motion_write.',
-        '</motion-context>',
-      ].join('\n')
-    }
-    case 'design': {
-      const names = await namesIn(designPiecesDir(sessionId))
-      const focus = await focusLine('design', sessionId)
-      return [
-        '<design-context>',
-        ...(focus ? [focus] : []),
-        names.length
-          ? `Canvases in this conversation: ${names.join(', ')}. Read one with design_read before changing it.`
-          : 'No canvas exists in this conversation yet. Create one with design_write.',
-        '</design-context>',
-      ].join('\n')
-    }
-  }
+export async function profileTurnBlock(profile: ProfileId, sessionId: string): Promise<string> {
+  return (await resolveProfile(profile)?.turnBlock?.(sessionId)) ?? ''
 }

@@ -3965,7 +3965,8 @@
     "search": {
       "mcp": "Buscar servidor ou ferramenta",
       "skills": "Buscar skill",
-      "hooks": "Buscar hook"
+      "hooks": "Buscar hook",
+      "specialists": "Buscar agentes"
     },
     "skillFilter": {
       "all": "Todas {{count}}",
@@ -4142,7 +4143,17 @@
     "fragment": {
       "name": "Fragmento",
       "description": "Enxuto, só páginas do Orbit"
-    }
+    },
+    "custom": {
+      "description": "Seu agente"
+    },
+    "group": {
+      "builtin": "Nativos",
+      "mine": "Meus agentes"
+    },
+    "create": "Criar um agente…",
+    "manage": "Gerenciar agentes…",
+    "inspect": "Ver o que este agente injeta"
   },
   "artifact": {
     "chats": "Chats deste artefato",
@@ -4151,5 +4162,96 @@
     "newChat": "Novo chat",
     "working": "Um agente está trabalhando nisso",
     "done": "Terminou — abra para ver"
+  },
+  "specialists": {
+    "title": "Especialistas",
+    "builtin": {
+      "title": "Especialistas nativos",
+      "description": "Agentes enxutos para um ofício. Cada um substitui a configuração geral na conversa inteira. Somente leitura.",
+      "badge": "Nativo"
+    },
+    "mine": {
+      "title": "Meus agentes",
+      "description": "Agentes que você escreve. Um novo começa vazio: sem prompt e sem nenhum recurso do Orbit até você ligar.",
+      "new": "Novo agente",
+      "empty": "Você ainda não tem agentes. Crie um para iniciar um chat com suas próprias instruções.",
+      "noPrompt": "Sem prompt — nada é injetado."
+    },
+    "menu": {
+      "view": "Ver o que injeta",
+      "duplicate": "Duplicar",
+      "copySuffix": "(cópia)"
+    },
+    "editor": {
+      "newTitle": "Novo agente",
+      "editTitle": "Editar agente",
+      "description": "O agente é escolhido quando o chat começa e continua o mesmo até o fim dele.",
+      "name": "Nome",
+      "namePlaceholder": "Revisor de código",
+      "icon": "Ícone",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Deixe vazio para não injetar nada.",
+      "promptHint": "Este é todo o prompt de sistema do chat",
+      "features": "Recursos do Orbit",
+      "featuresHint": "Todos desligados por padrão. Ligar um só deixa o agente usá-lo; suas configurações e as capacidades do modelo continuam valendo."
+    },
+    "block": {
+      "memories": {
+        "title": "Memórias",
+        "description": "Memórias salvas e as ferramentas de memória."
+      },
+      "skills": {
+        "title": "Skills",
+        "description": "O índice de skills e as ferramentas para lê-las."
+      },
+      "subagents": {
+        "title": "Subagentes",
+        "description": "Delegar partes do trabalho a workers em segundo plano e a subchats."
+      },
+      "orchestra": {
+        "title": "Orquestra",
+        "description": "Dividir uma tarefa em um plano com workers."
+      },
+      "loop": {
+        "title": "Loop",
+        "description": "Revisar e repetir até a tarefa ficar pronta."
+      },
+      "vision": {
+        "title": "Visão",
+        "description": "Enviar imagens ao modelo, ou ao modelo de visão que você definiu."
+      },
+      "web": {
+        "title": "Web",
+        "description": "Pesquisa na web e o navegador."
+      },
+      "computer": {
+        "title": "Controle do computador",
+        "description": "Controlar o computador."
+      },
+      "plan": {
+        "title": "Modo plano",
+        "description": "Planejamento somente leitura."
+      }
+    },
+    "view": {
+      "subtitle": "Exatamente o que este agente coloca na frente do modelo. Somente leitura.",
+      "prompt": "Prompt de sistema",
+      "promptHintBuiltin": "A linha do idioma da resposta é preenchida para cada pessoa.",
+      "noPrompt": "Nada é injetado: o modelo não recebe prompt de sistema.",
+      "tools": "Ferramentas",
+      "toolsUsual": "As ferramentas de sempre da conversa, sem os recursos próprios do Orbit (skills, agendamento, pipeline, outros chats, hooks), a menos que um botão abaixo os traga de volta.",
+      "toolsNarrowed": "Somente estas ferramentas, e só as que a conversa teria de qualquer forma.",
+      "blocks": "Recursos",
+      "blocksHint": "Ligado quer dizer que o agente não bloqueia. Web, computador e plano continuam seguindo seus próprios botões.",
+      "on": "Ligado",
+      "off": "Desligado",
+      "turn": "Adicionado a cada turno",
+      "noTurn": "Nada."
+    },
+    "error": {
+      "name": "Dê um nome ao agente.",
+      "limit": "Você chegou ao limite de agentes. Remova um antes.",
+      "missing": "Este agente não existe mais."
+    }
   }
 }

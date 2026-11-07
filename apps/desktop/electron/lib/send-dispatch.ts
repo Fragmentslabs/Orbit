@@ -6,6 +6,7 @@ import { abortChat, runChat, startSessionNaming } from './chat-engine'
 import { abortLoop, runChatWithLoop } from './loop-engine'
 import { abortOrchestration, runOrchestration } from './orchestrator'
 import { clearSessionTrust } from './permission'
+import { profileOf, restrictInput } from './profiles'
 import { readJson } from './storage'
 
 /**
@@ -45,6 +46,10 @@ export async function dispatchSend(win: BrowserWindow, input: SendMessageInput):
   if (session?.orchestration?.role === 'worker') {
     input = { ...input, options: { ...input.options, orchestrate: undefined } }
   }
+  // A profile switches off what it does not use (loop, orchestra...), and the routing below reads
+  // those options, so it has to be applied before it — not only inside the engine.
+  const profile = await profileOf(input.sessionId).catch(() => null)
+  if (profile) input = restrictInput(input, profile)
   // Name the chat HERE, before the routing: it is the only point every origin
   // goes through (desktop, companion, Orchestra, Loop) and it runs before the
   // attachment preprocessing, which can take tens of seconds. The title used to
