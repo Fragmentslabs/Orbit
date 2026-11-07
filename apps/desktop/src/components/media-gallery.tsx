@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, CheckIcon, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+import { AudioLines, CheckIcon, Folder, FolderGit2, Inbox, LayoutGrid, Pause, Terminal, ChevronDown, ChevronLeft, ChevronRight, CodeXml, FileText, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
@@ -22,7 +23,8 @@ import { KIND_ICON } from "@/src/lib/media-kind-icon"
 import { openMediaEntryInPanel } from "@/src/lib/open-media-entry"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useViewScope } from "@/src/stores/view-scope-store"
-import { ViewScopeToggle } from "@/src/components/view-scope-toggle"
+import type { ViewScope } from "@/src/stores/view-scope-store"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { expandToGroups, groupMediaByRoot } from "@/src/lib/media-groups"
@@ -44,7 +46,6 @@ import { Truncate } from "@/components/ui/truncated-text"
  * deletes in bulk and sees the disk usage.
  */
 
-type PeriodFilter = "all" | "today" | "week" | "month"
 /** Filter by TYPE: what the grid shows — image, page, document, audio,
  *  motion piece or video. */
 type KindFilter = "all" | MediaKind
@@ -80,12 +81,6 @@ function isAppAsset(entry: MediaEntry): boolean {
   return kind === "design" || kind === "motion" || kind === "slides"
 }
 
-const PERIOD_MS: Record<Exclude<PeriodFilter, "all">, number> = {
-  today: 24 * 60 * 60 * 1000,
-  week: 7 * 24 * 60 * 60 * 1000,
-  month: 30 * 24 * 60 * 60 * 1000,
-}
-
 /** Backfill runs once per renderer process — it is idempotent in the main process. */
 let backfillDone = false
 
@@ -111,6 +106,16 @@ function formatDate(timestamp: number, locale: string): string {
     hour: "2-digit",
     minute: "2-digit",
   })
+}
+
+/** Icon + name, the same in the select's trigger and in its list. */
+function FilterLabel({ Icon, label }: { Icon: LucideIcon; label: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{label}</span>
+    </span>
+  )
 }
 
 function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
@@ -261,9 +266,9 @@ export function MediaGallery() {
   const sidebarFolders = useSessionStore((s) => s.folders)
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const [entries, setEntries] = useState<MediaEntry[]>([])
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [usage, setUsage] = useState({ count: 0, bytes: 0 })
   const [loading, setLoading] = useState(true)
-  const [period, setPeriod] = useState<PeriodFilter>("all")
   const [kind, setKind] = useState<KindFilter>("all")
   /** Explicit user choice; null = follows the default of the current context. */
   const [scopeOverride, setScopeOverride] = useState<string | null>(null)
@@ -487,20 +492,18 @@ export function MediaGallery() {
    */
   const { visible, versionsByHead } = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
     const filtrados = scopedEntries.filter((entry) => {
       // Type is the most direct filter that exists here ("where are the pieces?"): it goes
       // along with the scope, before the date, because it is usually the one that is wrong
       // when the grid looks empty.
       if (kind !== "all" && mediaKind(entry) !== kind) return false
       if (!isAppAsset(entry) && !matchesScope(entry, scope)) return false
-      if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
     })
     const { covers, versions } = groupMediaByRoot(scopedEntries, filtrados)
     return { visible: covers, versionsByHead: versions }
-  }, [scopedEntries, period, kind, query, scope, matchesScope])
+  }, [scopedEntries, kind, query, scope, matchesScope])
 
   /** Deleting a grid item takes its group — see expandToGroups. */
   const withVersions = useCallback(
@@ -615,74 +618,104 @@ export function MediaGallery() {
     [entries, selected],
   )
 
-  const periodFilters: PeriodFilter[] = ["all", "today", "week", "month"]
+  const activeFilters = (kind !== "all" ? 1 : 0) + (scope !== defaultScope ? 1 : 0)
   const kindFilters: KindFilter[] = ["all", ...(Object.keys(KIND_ICON) as MediaKind[])]
 
   /** The "where" select: everything, this chat, the loose ones, then folders and repositories. */
   const scopeOptions = [
-    { value: SCOPE_ALL, label: t("media.scope.all") },
-    ...(activeSessionId ? [{ value: SCOPE_SESSION, label: t("media.scope.session") }] : []),
-    ...(hasLoose ? [{ value: SCOPE_LOOSE, label: t("media.scope.loose") }] : []),
-    ...folderOptions.map((f) => ({ value: `${FOLDER_PREFIX}${f.id}`, label: f.name })),
-    ...projectOptions.map((p) => ({ value: `${PROJECT_PREFIX}${p.key}`, label: p.label })),
+    { value: SCOPE_ALL, label: t("media.scope.all"), Icon: Layers },
+    ...(activeSessionId ? [{ value: SCOPE_SESSION, label: t("media.scope.session"), Icon: MessageSquare }] : []),
+    ...(hasLoose ? [{ value: SCOPE_LOOSE, label: t("media.scope.loose"), Icon: Inbox }] : []),
+    ...folderOptions.map((f) => ({ value: `${FOLDER_PREFIX}${f.id}`, label: f.name, Icon: Folder })),
+    ...projectOptions.map((p) => ({ value: `${PROJECT_PREFIX}${p.key}`, label: p.label, Icon: FolderGit2 })),
   ]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="@container flex flex-col gap-2 px-4 pt-3 pb-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-40 flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+      <div className="@container flex flex-col gap-2.5 px-4 pt-3 pb-2.5">
+        {/* Same look as the sidebar's Chat/Code tabs. */}
+        <Tabs value={viewScope} onValueChange={(value) => setViewScope(value as ViewScope)}>
+          <TabsList className="w-full rounded-xl group-data-horizontal/tabs:h-9">
+            <TabsTrigger value="chat" className="flex-1 gap-2 rounded-lg px-2">
+              <MessageSquare className="size-4" />
+              {t("viewScope.chat")}
+            </TabsTrigger>
+            <TabsTrigger value="code" className="flex-1 gap-2 rounded-lg px-2">
+              <Terminal className="size-4" />
+              {t("viewScope.code")}
+            </TabsTrigger>
+            <TabsTrigger value="all" className="flex-1 gap-2 rounded-lg px-2">
+              <Layers className="size-4" />
+              {t("viewScope.all")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("media.searchPlaceholder")}
-              className="h-8 pl-8 text-xs"
+              className="h-9 pl-9 text-xs"
             />
           </div>
-          <ViewScopeToggle value={viewScope} onChange={setViewScope} />
           <Hint label={t("media.refresh")}>
             <button
               type="button"
               onClick={() => void refresh()}
-              className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <RefreshCw className="size-3.5" />
             </button>
           </Hint>
         </div>
-        <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
-          <Select value={kind} onValueChange={(value) => setKind((value ?? "all") as KindFilter)}>
-            <SelectTrigger className="h-8 w-full text-xs" aria-label={t("media.filters.kind")}>
-              <SelectValue>{t(`media.kind.${kind}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {kindFilters.map((value) => (
-                <SelectItem key={value} value={value}>{t(`media.kind.${value}`)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={period} onValueChange={(value) => setPeriod((value ?? "all") as PeriodFilter)}>
-            <SelectTrigger className="h-8 w-full text-xs" aria-label={t("media.filters.period")}>
-              <SelectValue>{t(`media.period.${period}`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {periodFilters.map((value) => (
-                <SelectItem key={value} value={value}>{t(`media.period.${value}`)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={scope} onValueChange={(value) => setScopeOverride(value ?? SCOPE_ALL)}>
-            <SelectTrigger className="h-8 w-full text-xs" aria-label={t("media.filters.scope")}>
-              <SelectValue>{scopeOptions.find((o) => o.value === scope)?.label}</SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {scopeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-expanded={filtersOpen}
+          className="flex w-fit cursor-pointer items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {t(filtersOpen ? "media.filters.hide" : "media.filters.show")}
+          {/* Hidden filters still filter: say how many are on, or an empty grid has no explanation. */}
+          {!filtersOpen && activeFilters > 0 && <span className="text-foreground">({activeFilters})</span>}
+          <ChevronDown className={cn("size-3 transition-transform", filtersOpen && "rotate-180")} />
+        </button>
+        {filtersOpen && (
+          <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
+            <Select value={kind} onValueChange={(value) => setKind((value ?? "all") as KindFilter)}>
+              <SelectTrigger className="h-9 w-full px-3 text-xs" aria-label={t("media.filters.kind")}>
+                <SelectValue>
+                  <FilterLabel Icon={kind === "all" ? LayoutGrid : KIND_ICON[kind]} label={t(`media.kind.${kind}`)} />
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {kindFilters.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    <FilterLabel Icon={value === "all" ? LayoutGrid : KIND_ICON[value]} label={t(`media.kind.${value}`)} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={scope} onValueChange={(value) => setScopeOverride(value ?? SCOPE_ALL)}>
+              <SelectTrigger className="h-9 w-full px-3 text-xs" aria-label={t("media.filters.scope")}>
+                <SelectValue>
+                  {(() => {
+                    const current = scopeOptions.find((o) => o.value === scope)
+                    return current ? <FilterLabel Icon={current.Icon} label={current.label} /> : null
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {scopeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <FilterLabel Icon={option.Icon} label={option.label} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {selected.size > 0 && (
@@ -716,7 +749,7 @@ export function MediaGallery() {
         ) : visible.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">{t("media.empty")}</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-3">
+          <div className="grid grid-cols-3 gap-3">
             {visible.map((entry) => (
               <Thumb
                 key={entry.id}
