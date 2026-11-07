@@ -3,6 +3,7 @@ import type { FragmentCallInput, FragmentLogEntry, FragmentMetaPatch, FragmentUp
 import { FRAGMENT_CAPABILITIES } from '@shared/fragments'
 import { handleFragmentCall } from './fragment-bridge'
 import { getFragmentData, getFragmentDetails } from './fragment-details'
+import { listRevisions, revertToBefore } from './fragment-history'
 import { getProvenance } from './fragment-provenance'
 import {
   appendFragmentLog,
@@ -40,6 +41,11 @@ export function registerFragmentIpc(): void {
   // Read-only numbers for the details panel (weight, data keys, token spend, origin).
   ipcMain.handle('fragment:details', (_event, id: string) => (isFragmentId(id) ? getFragmentDetails(id) : null))
   ipcMain.handle('fragment:data', (_event, id: string) => (isFragmentId(id) ? getFragmentData(id) : null))
+  ipcMain.handle('fragment:history', (_event, id: string) => (isFragmentId(id) ? listRevisions(id) : []))
+  // Only the person reverts, from the history dialog: the agent has no tool for it.
+  ipcMain.handle('fragment:revert', (_event, id: string, revision: number) =>
+    isFragmentId(id) && Number.isInteger(revision) ? revertToBefore(id, revision) : null,
+  )
   ipcMain.handle('fragment:call', (_event, input: FragmentCallInput) => handleFragmentCall(input))
 
   // The ONLY place a capability is granted: a click of the user in the tab.

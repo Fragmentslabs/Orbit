@@ -5,6 +5,7 @@ import { useFragmentsStore } from "@/src/stores/fragments-store"
 import {
   CapabilitiesSection,
   DatabaseSection,
+  HistorySection,
   OriginSection,
   PackagesSection,
   SettingsSection,
@@ -45,6 +46,7 @@ export function FragmentDetailsPanel({ manifest }: { manifest: FragmentManifest 
             <WeightSection details={details} />
             <TokensSection details={details} />
             <DatabaseSection details={details} fragmentId={manifest.id} />
+            <HistorySection fragmentId={manifest.id} />
             <PackagesSection details={details} />
             <OriginSection details={details} />
           </>

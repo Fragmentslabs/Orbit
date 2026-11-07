@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { tool } from 'ai'
 import { z } from 'zod'
 import {
@@ -12,6 +13,7 @@ import {
   setRequested,
   writeFragmentFile,
 } from '../fragments/fragment-store'
+import { withRevision } from '../fragments/fragment-history'
 import { panelFragmentOpen } from '../panel-browser'
 import { applyTextEditsDetailed } from './piece-common'
 
@@ -45,6 +47,10 @@ function notFound(id: string): string {
 }
 
 export function createFragmentTools(sessionId: string) {
+  // The tools are built once per agent turn, so every write below shares this id: it is what
+  // the history groups by and what the person reverts ("undo this turn").
+  const turnContext = { turn: randomUUID(), sessionId }
+
   /** Opens/focuses the tab and builds the part of the result that is the same everywhere. */
   async function opened(id: string, revision: number, lead: string): Promise<string> {
     const manifest = await getFragment(id)
@@ -103,7 +109,7 @@ export function createFragmentTools(sessionId: string) {
       execute: async ({ fragmentId, path: rel, content }) => {
         if (!(await getFragment(fragmentId))) return notFound(fragmentId)
         try {
-          const manifest = await writeFragmentFile(fragmentId, rel, content)
+          const manifest = await withRevision(fragmentId, turnContext, { path: rel }, () => writeFragmentFile(fragmentId, rel, content))
           return await opened(fragmentId, manifest.revision, `Wrote ${rel}`)
         } catch (err) {
           return `Could not write ${rel}: ${err instanceof Error ? err.message : String(err)}`
@@ -133,7 +139,7 @@ export function createFragmentTools(sessionId: string) {
         if (current === null) return `File not found in the fragment: ${rel}. See fragment_read_file for the file list.`
         try {
           const { text, applied } = applyTextEditsDetailed(current, edits)
-          const manifest = await writeFragmentFile(fragmentId, rel, text)
+          const manifest = await withRevision(fragmentId, turnContext, { path: rel }, () => writeFragmentFile(fragmentId, rel, text))
           return await opened(fragmentId, manifest.revision, `Edited ${rel} (${applied.length} edit${applied.length === 1 ? '' : 's'})`)
         } catch (err) {
           return `Could not edit ${rel}: ${err instanceof Error ? err.message : String(err)}`
@@ -172,7 +178,7 @@ export function createFragmentTools(sessionId: string) {
       execute: async ({ fragmentId, path: rel }) => {
         if (!(await getFragment(fragmentId))) return notFound(fragmentId)
         try {
-          const manifest = await deleteFragmentFile(fragmentId, rel)
+          const manifest = await withRevision(fragmentId, turnContext, { path: rel, deleting: true }, () => deleteFragmentFile(fragmentId, rel))
           return await opened(fragmentId, manifest.revision, `Removed ${rel}`)
         } catch (err) {
           return `Could not remove ${rel}: ${err instanceof Error ? err.message : String(err)}`

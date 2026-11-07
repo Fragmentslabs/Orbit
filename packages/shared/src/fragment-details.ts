@@ -29,6 +29,8 @@ export interface FragmentDetails {
   srcBytes: number
   /** Size of `data.json` (what `orbit.store` saved). */
   dataBytes: number
+  /** What the per-turn history keeps so the agent's writes can be undone. */
+  historyBytes: number
   /** The `orbit.store` keys, with the size of each value. */
   dataKeys: { key: string; bytes: number }[]
   tokens: FragmentTokenSpend
@@ -43,4 +45,19 @@ export interface FragmentDataEntry {
   /** The value as pretty JSON, clipped to a size a dialog can show. */
   json: string
   truncated: boolean
+}
+
+/** What a revision did to its file. */
+export type FragmentRevisionKind = "create" | "edit" | "delete"
+
+/** One agent write to a fragment's files, as the history shows it (never its content). */
+export interface FragmentRevisionInfo {
+  /** The fragment's `revision` right after this write. Unique and increasing. */
+  revision: number
+  at: number
+  /** All writes of one agent turn share it: that is the unit the person reverts. */
+  turn: string
+  sessionId?: string
+  path: string
+  kind: FragmentRevisionKind
 }

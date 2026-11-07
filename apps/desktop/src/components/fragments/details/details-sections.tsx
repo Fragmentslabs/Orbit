@@ -9,6 +9,7 @@ import { fragmentApi } from "@/src/lib/ipc"
 import { KIND_META } from "../kind-meta"
 import { DetailRow, DetailsSection } from "./details-section"
 import { FragmentDataDialog } from "./fragment-data-dialog"
+import { FragmentHistoryDialog } from "./fragment-history-dialog"
 import { FragmentProvenanceView } from "./fragment-provenance-view"
 
 /** The sections of the details panel, one small component each. */
@@ -19,6 +20,7 @@ export function WeightSection({ details }: { details: FragmentDetails }) {
     <DetailsSection title={t("fragments.details.weight")}>
       <DetailRow label={t("fragments.details.code")} value={formatBytes(details.srcBytes)} />
       <DetailRow label={t("fragments.details.data")} value={formatBytes(details.dataBytes)} />
+      <DetailRow label={t("fragments.details.history")} value={formatBytes(details.historyBytes)} />
       <ul className="mt-1 flex flex-col gap-0.5 text-[11px] text-muted-foreground">
         {details.files.map((f) => (
           <li key={f.path} className="flex justify-between gap-3">
@@ -134,6 +136,21 @@ export function OriginSection({ details }: { details: FragmentDetails }) {
   return (
     <DetailsSection title={t("fragments.provenance.title")}>
       <FragmentProvenanceView provenance={details.provenance} />
+    </DetailsSection>
+  )
+}
+
+/** The agent's writes, turn by turn, with the person's way back. */
+export function HistorySection({ fragmentId }: { fragmentId: string }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  return (
+    <DetailsSection title={t("fragments.history.title")}>
+      <span className="text-muted-foreground">{t("fragments.history.hint")}</span>
+      <Button size="sm" variant="outline" className="mt-1 h-7 self-start text-xs" onClick={() => setOpen(true)}>
+        {t("fragments.history.open")}
+      </Button>
+      <FragmentHistoryDialog fragmentId={fragmentId} open={open} onOpenChange={setOpen} />
     </DetailsSection>
   )
 }

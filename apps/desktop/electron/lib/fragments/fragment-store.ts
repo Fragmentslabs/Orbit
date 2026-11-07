@@ -67,7 +67,8 @@ function fragmentsRoot(): string {
 
 export { isFragmentId }
 
-function fragmentDir(id: string): string {
+/** The folder of one fragment (history keeps its `.history/` next to `src/`). */
+export function fragmentDir(id: string): string {
   if (!isFragmentId(id)) throw new Error(`invalid fragment id: ${String(id).slice(0, 60)}`)
   return path.join(fragmentsRoot(), id)
 }

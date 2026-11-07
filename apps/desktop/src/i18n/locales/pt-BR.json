@@ -3183,7 +3183,8 @@
       "databaseEmpty": "Nada salvo ainda.",
       "packages": "Pacotes de terceiros",
       "packagesEmpty": "Nenhum.",
-      "pinHome": "tela inicial"
+      "pinHome": "tela inicial",
+      "history": "Histórico"
     },
     "inspect": "Escolher um elemento para mudar",
     "data": {
@@ -3199,7 +3200,21 @@
       "ai": "Este fragmento quer usar o seu modelo de IA.",
       "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela."
     },
-    "askAllow": "Permitir"
+    "askAllow": "Permitir",
+    "history": {
+      "title": "Histórico",
+      "hint": "Cada alteração que o agente fez nos arquivos, turno a turno.",
+      "open": "Ver histórico",
+      "description": "O que o agente alterou, do mais novo ao mais antigo. Desfazer volta ao estado anterior àquele turno e descarta ele e tudo o que veio depois.",
+      "empty": "O agente ainda não alterou nada.",
+      "undo": "Desfazer daqui",
+      "confirm": "Desfazer",
+      "kind": {
+        "create": "Criou",
+        "edit": "Editou",
+        "delete": "Apagou"
+      }
+    }
   },
   "motion": {
     "unavailable": "Composição indisponível",

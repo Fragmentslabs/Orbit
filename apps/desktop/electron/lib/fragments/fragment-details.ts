@@ -5,6 +5,7 @@ import { StorageKeys } from '@shared/chat'
 import type { FragmentDataEntry, FragmentDetails, FragmentFileWeight, FragmentTokenSpend } from '@shared/fragment-details'
 import { listArtifactChats } from '../artifacts/chat-registry'
 import { readJson } from '../storage'
+import { historyBytes } from './fragment-history'
 import { getProvenance } from './fragment-provenance'
 import { getFragment, listFragmentFiles, readFragmentData, srcDir } from './fragment-store'
 
@@ -48,11 +49,12 @@ async function chatIdsOf(id: string, bornIn?: string): Promise<string[]> {
 export async function getFragmentDetails(id: string): Promise<FragmentDetails | null> {
   const manifest = await getFragment(id)
   if (!manifest) return null
-  const [files, data, chatIds, provenance] = await Promise.all([
+  const [files, data, chatIds, provenance, history] = await Promise.all([
     fileWeights(id),
     readFragmentData(id),
     chatIdsOf(id, manifest.sessionId),
     getProvenance(id, manifest.createdAt),
+    historyBytes(id),
   ])
   const histories = await Promise.all(chatIds.map(async (sid) => (await readJson<ChatMessage[]>(StorageKeys.messages(sid))) ?? []))
   const dataKeys = Object.keys(data)
@@ -62,6 +64,7 @@ export async function getFragmentDetails(id: string): Promise<FragmentDetails | 
     files,
     srcBytes: files.reduce((sum, f) => sum + f.bytes, 0),
     dataBytes: dataKeys.reduce((sum, k) => sum + k.bytes, 0),
+    historyBytes: history,
     dataKeys,
     tokens: sumSpend(histories),
     // Third-party packages arrive with the package format (docs/fragments.md, section 8).

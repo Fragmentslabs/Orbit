@@ -3183,7 +3183,8 @@
       "databaseEmpty": "Nothing saved yet.",
       "packages": "Third-party packages",
       "packagesEmpty": "None.",
-      "pinHome": "home screen"
+      "pinHome": "home screen",
+      "history": "History"
     },
     "inspect": "Pick an element to change",
     "data": {
@@ -3199,7 +3200,21 @@
       "ai": "This fragment wants to use your AI model.",
       "models": "This fragment wants to let you pick the AI model inside its screen."
     },
-    "askAllow": "Allow"
+    "askAllow": "Allow",
+    "history": {
+      "title": "History",
+      "hint": "Every change the agent made to the files, turn by turn.",
+      "open": "View history",
+      "description": "What the agent changed, newest first. Undoing goes back to before that turn and drops it and everything after it.",
+      "empty": "No changes by the agent yet.",
+      "undo": "Undo from here",
+      "confirm": "Undo",
+      "kind": {
+        "create": "Created",
+        "edit": "Edited",
+        "delete": "Deleted"
+      }
+    }
   },
   "motion": {
     "unavailable": "Composition unavailable",
