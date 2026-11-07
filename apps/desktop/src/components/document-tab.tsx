@@ -1,15 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { EyeIcon, PenLineIcon, X } from "lucide-react"
+import { EyeIcon, FileText, PenLineIcon, X } from "lucide-react"
 import { splitOnPageBreaks } from "@shared/page-breaks"
 import { DocumentDownloadMenu, DocumentSourceBadge } from "@/src/components/ai/document-actions"
+import { IconAction } from "@/src/components/ai/artifact-part"
+import { TabHeader, TabHeaderSeparator } from "@/src/components/tab-header"
 import { MessageResponse } from "@/src/components/ai/message"
 import { QuoteSelection } from "@/src/components/quote-selection"
 import { artifactApi, documentApi } from "@/src/lib/ipc"
 import { isHtmlDocument } from "@/src/lib/html-source"
-import { cn } from "@/lib/utils"
-import { Hint } from "@/components/ui/hint"
-import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * The living document, opened next to the conversation: it is read in rendered Markdown
@@ -187,18 +186,12 @@ export function DocumentTab({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Truncate text={title}>
-            <span className="truncate text-xs font-medium">{title}</span>
-          </Truncate>
-          <span className="shrink-0 text-[10px] text-muted-foreground">{status}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
+      <TabHeader icon={FileText} iconClassName="text-sky-400" title={title} tag={status}>
           {/* They write before acting: the file and the source come from what is ON
               DISK, and what stayed in the typing pause would be left out. */}
           {sessionId && (
             <DocumentSourceBadge
+              compact
               documentId={documentId}
               sessionId={sessionId}
               onError={setError}
@@ -206,48 +199,26 @@ export function DocumentTab({
             />
           )}
           <DocumentDownloadMenu
+            compact
             documentId={documentId}
             onError={setError}
             beforeDownload={save}
           />
-          <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
-            <Hint label={t("folders.editMode")}>
-              <button
-                type="button"
-                onClick={() => setMode("edit")}
-                className={cn(
-                  "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
-                  mode === "edit"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                <PenLineIcon className="size-3.5" />
-              </button>
-            </Hint>
-            <Hint label={t("folders.previewMode")}>
-              <button
-                type="button"
-                // Going back to reading writes first: the card in the conversation shows
-                // what is on disk, and lagging behind what was just written
-                // would look like the edit was lost.
-                onClick={() => {
-                  void save()
-                  setMode("preview")
-                }}
-                className={cn(
-                  "flex size-6 cursor-pointer items-center justify-center rounded-full transition-colors",
-                  mode === "preview"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                <EyeIcon className="size-3.5" />
-              </button>
-            </Hint>
-          </div>
-        </div>
-      </div>
+          <TabHeaderSeparator />
+          <IconAction icon={PenLineIcon} label={t("folders.editMode")} active={mode === "edit"} onClick={() => setMode("edit")} />
+          <IconAction
+            icon={EyeIcon}
+            label={t("folders.previewMode")}
+            active={mode === "preview"}
+            // Going back to reading writes first: the card in the conversation shows
+            // what is on disk, and lagging behind what was just written
+            // would look like the edit was lost.
+            onClick={() => {
+              void save()
+              setMode("preview")
+            }}
+          />
+        </TabHeader>
 
       {conflict !== null && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-primary/10 px-3 py-1.5 text-[11px]">

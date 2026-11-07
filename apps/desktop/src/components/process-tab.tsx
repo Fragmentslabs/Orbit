@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Globe, Trash2 } from "lucide-react"
+import { Globe, Terminal, Trash2 } from "lucide-react"
+import { IconAction } from "@/src/components/ai/artifact-part"
+import { TabHeader } from "@/src/components/tab-header"
 import { processApi, type ProcessInfo } from "@/src/lib/ipc"
 import { useProcessStore } from "@/src/stores/process-store"
 import { usePanelStore, ORPHAN_KEY } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
-import { Hint } from "@/components/ui/hint"
-import { Truncate } from "@/components/ui/truncated-text"
 
 /**
  * Tab of a background process (bash_background / promoted foreground):
@@ -68,44 +68,27 @@ export function ProcessTab({ pid, sessionId }: { pid: number; sessionId?: string
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-sidebar-border px-3 py-2">
-        {running ? (
-          <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-        ) : (
-          <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
-        )}
-        <Truncate text={current?.label ?? t("panel.tabs.process.label")}>
-          <span className="min-w-0 truncate text-xs font-medium text-foreground">
-            {current?.label ?? t("panel.tabs.process.label")}
-          </span>
-        </Truncate>
-        <span className="shrink-0 text-[10px] text-muted-foreground">PID {pid}</span>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+      <TabHeader
+        icon={Terminal}
+        iconClassName={running ? "text-emerald-400" : undefined}
+        title={current?.label ?? t("panel.tabs.process.label")}
+        tag={t("panel.processes.pid", { pid })}
+      >
           {url && (
-            <Hint label={`${t("panel.processes.openInBrowser")} — ${url}`}>
-              <button
-                onClick={() => usePanelStore.getState().openTerminalLink(sessionId ?? ORPHAN_KEY, url)}
-                className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-              >
-       
-                   <Globe className="size-3" />
-              {t("panel.processes.openInBrowser")}
-            </button>
-            </Hint>
+            <IconAction
+              icon={Globe}
+              label={`${t("panel.processes.openInBrowser")} — ${url}`}
+              onClick={() => usePanelStore.getState().openTerminalLink(sessionId ?? ORPHAN_KEY, url)}
+            />
           )}
           {running && (
-            <Hint label={t("panel.processes.kill")}>
-              <button
-                onClick={() => void useProcessStore.getState().kill(pid, sessionId)}
-
-                className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-destructive"
-              >
-                <Trash2 className="size-3" />
-              </button>
-            </Hint>
+            <IconAction
+              icon={Trash2}
+              label={t("panel.processes.kill")}
+              onClick={() => void useProcessStore.getState().kill(pid, sessionId)}
+            />
           )}
-        </div>
-      </div>
+      </TabHeader>
       {current?.command && (
         <div className="border-b border-sidebar-border px-3 py-1.5 font-mono text-[10px] break-all text-muted-foreground">
           {current.command}

@@ -31,7 +31,6 @@ import {
 import { motionTimecode } from "@shared/chat"
 import { MOTION_SCHEME } from "@shared/media"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Hint } from "@/components/ui/hint"
@@ -53,6 +52,7 @@ import {
   motionTrackIsLive,
 } from "@/src/lib/motion-audio-range"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { TabHeader } from "@/src/components/tab-header"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { ActionsFeed, FullscreenChatFeed, FullscreenComposer } from "@/src/components/fullscreen-dock"
@@ -1081,21 +1081,7 @@ export function MotionTab({
     >
       {/* Header: composition + file on the left; reload, fullscreen and
           render on the right. Same breathing room as the browser header (p-2). */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Clapperboard className="size-3.5 shrink-0 text-muted-foreground" />
-          <Truncate text={title}>
-            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
-          </Truncate>
-          {entry && (
-            <Truncate>
-                <Badge variant="outline" className="max-w-44 shrink-0 truncate font-mono" title={path ?? entry}>
-                {baseName(entry)}
-              </Badge>
-            </Truncate>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+      <TabHeader icon={Clapperboard} iconClassName="text-emerald-400" title={title} tag={entry ? baseName(entry) : undefined}>
           {/* Only a piece that declares props has this: the form of props.json. The dot says that
               something differs from the defaults. */}
           {propsInfo?.exists && (
@@ -1145,8 +1131,7 @@ export function MotionTab({
             {rendering && renderTotal > 0 ? t("motion.rendering", { percent: renderPercent }) : t("motion.render")}
           </Button>
           </Hint>
-        </div>
-      </div>
+        </TabHeader>
 
       {/* Thin line of the render progress — the button state says the number. */}
       {rendering && (
