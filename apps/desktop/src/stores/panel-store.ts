@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import type { PanelSnapshot, PanelSnapshotTab } from "@shared/panel"
 
-export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides" | "memory" | "routine"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design" | "slides" | "memory" | "routine" | "fragment"
 
 export interface PanelTab {
   id: string
@@ -19,6 +19,8 @@ export interface PanelTab {
   processPid?: number
   /** Artifact tab: registry id (art_xxx.html) the tab renders. */
   artifactId?: string
+  /** Fragment tab: id (frag-…) of the fragment it renders. Absent = the picker of existing fragments. */
+  fragmentId?: string
   /** Document tab: registry id (doc_xxx.md) opened in the Markdown canvas. */
   documentId?: string
   /** Motion tab: registry id (mv_xxx) of the composition the tab renders. */
@@ -176,6 +178,12 @@ export type PanelEvent =
    */
   | { type: "slides"; id: string; entry: string; title: string; sessionId?: string; path?: string }
   /**
+   * The agent created or rewrote a fragment and wants it on screen. `id` is the
+   * fragment's id (frag-…); the tab mounts orbit-fragment://<id>/ and reloads on its own
+   * when the fragment changes.
+   */
+  | { type: "fragment"; id: string; title: string; sessionId?: string }
+  /**
    * Pieces that no longer exist (deleted by the agent or undone by a
    * revert): their tabs close in every chat.
    */
@@ -227,6 +235,10 @@ interface PanelState {
   closeSlidesTabs: (slidesIds: string[]) => void
   /** Closes the tabs of the artifacts that were deleted (in any conversation). */
   closeArtifactTabs: (artifactIds: string[]) => void
+  /** Closes the tabs of the fragments that were deleted (in any conversation). */
+  closeFragmentTabs: (fragmentIds: string[]) => void
+  /** Opens (or focuses) a fragment. An empty picker tab of the conversation is reused. */
+  openFragmentTab: (ref: { id: string; title: string; sessionId?: string }) => void
   setActiveTab: (sessionId: string, tabId: string | null) => void
   setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
   /** Opens (or reuses) the tab that renders an artifact in full screen.
@@ -327,6 +339,17 @@ interface PanelState {
 }
 
 /** Bucket of the tabs of a chat that has not become a session yet (see adoptOrphanTabs). */
+/**
+ * The Fragments page, while it is on screen, takes over the "fragment" events of the
+ * fragment it is showing (or the one being created from it) — so the same fragment is
+ * not ALSO opened as a side-panel tab. Registered by the page; absent otherwise.
+ */
+type FragmentClaimer = (event: { id: string; sessionId?: string }) => boolean
+let fragmentClaimer: FragmentClaimer | null = null
+export function setFragmentClaimer(claimer: FragmentClaimer | null): void {
+  fragmentClaimer = claimer
+}
+
 export const ORPHAN_KEY = "__orphan__"
 
 /**
@@ -483,6 +506,53 @@ export const usePanelStore = create<PanelState>((set, get) => {
           }
         }
         return { tabsBySession, activeTabBySession }
+      }),
+
+    closeFragmentTabs: (fragmentIds) =>
+      set((state) => {
+        if (fragmentIds.length === 0) return state
+        const gone = new Set(fragmentIds)
+        const tabsBySession: typeof state.tabsBySession = {}
+        const activeTabBySession = { ...state.activeTabBySession }
+        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
+          const next = tabs.filter((t) => !(t.type === "fragment" && t.fragmentId && gone.has(t.fragmentId)))
+          tabsBySession[key] = next
+          if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
+            activeTabBySession[key] = next.length > 0 ? next[0].id : null
+          }
+        }
+        return { tabsBySession, activeTabBySession }
+      }),
+
+    // A fragment is a resource of the app, not of a message: ONE tab per fragment in
+    // each conversation (reopening focuses it). A picker tab left empty in this
+    // conversation (the "+" selector) is filled instead of stacking a second tab.
+    openFragmentTab: (ref) =>
+      set((state) => {
+        const bucket = ref.sessionId ?? state.uiBucket
+        const tabs = state.tabsBySession[bucket] ?? []
+        const existing = tabs.find((t) => t.type === "fragment" && t.fragmentId === ref.id)
+        const picker = tabs.find((t) => t.type === "fragment" && !t.fragmentId)
+        const tab: PanelTab = existing
+          ? { ...existing, title: ref.title }
+          : picker
+            ? { ...picker, fragmentId: ref.id, title: ref.title }
+            : {
+                id: `fragment-${nextTabId()}`,
+                type: "fragment",
+                title: ref.title,
+                sessionId: tabSession(bucket),
+                fragmentId: ref.id,
+              }
+        const base = existing ?? picker
+        return {
+          ...openPanel(state, bucket),
+          tabsBySession: {
+            ...state.tabsBySession,
+            [bucket]: base ? tabs.map((t) => (t === base ? tab : t)) : [...tabs, tab],
+          },
+          activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
+        }
       }),
 
     removeTab: (sessionId, tabId) =>
@@ -1019,6 +1089,11 @@ export const usePanelStore = create<PanelState>((set, get) => {
             path: event.path,
           })
           break
+        case "fragment":
+          if (fragmentClaimer?.({ id: event.id, sessionId: event.sessionId })) break
+          markActive()
+          get().openFragmentTab({ id: event.id, title: event.title, sessionId: event.sessionId })
+          break
         case "pieces-removed":
           get().closeMotionTabs(event.motion)
           get().closeDesignTabs(event.design)
@@ -1116,6 +1191,7 @@ function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): v
       type: t.type,
       title: t.title,
       artifactId: t.artifactId,
+      fragmentId: t.fragmentId,
       motionId: t.motionId,
       motionPath: t.motionPath,
       designId: t.designId,

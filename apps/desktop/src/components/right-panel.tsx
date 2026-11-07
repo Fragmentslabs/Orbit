@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
+import { AppWindow, Brain, CalendarClock, Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Presentation, Quote, MessageSquare, MessagesSquare, Terminal, X, PlusIcon, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -18,6 +18,9 @@ import { CreateCards, RecentMedia } from "@/src/components/panel-hub"
 import { openMediaEntryInPanel } from "@/src/lib/open-media-entry"
 import { ProcessTab } from "@/src/components/process-tab"
 import { ArtifactTab } from "@/src/components/artifact-tab"
+import { FragmentTab } from "@/src/components/fragment-tab"
+import { useFragmentsStore } from "@/src/stores/fragments-store"
+import { FragmentIcon } from "@/src/components/fragments/fragment-icon"
 import { MotionTab } from "@/src/components/motion-tab"
 import { DesignTab } from "@/src/components/design-tab"
 import { SlidesTab } from "@/src/components/slides-tab"
@@ -88,7 +91,7 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
   if (mode === "code") return true
   // "browser" enters chat: the browser does not depend on a working folder (the
   // input's "browser" mode already counts in both modes, and the server list comes from the session).
-  return type === "chat" || type === "media" || type === "sources" || type === "browser"
+  return type === "chat" || type === "media" || type === "sources" || type === "browser" || type === "fragment"
 }
 
 function useTabMeta(): Record<TabType, TabMeta> {
@@ -110,6 +113,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     slides: { icon: Presentation, label: t("panel.tabs.slides.label"), description: t("panel.tabs.slides.description") },
     memory: { icon: Brain, label: t("panel.tabs.memory.label"), description: t("panel.tabs.memory.description") },
     routine: { icon: CalendarClock, label: t("panel.tabs.routine.label"), description: t("panel.tabs.routine.description") },
+    fragment: { icon: AppWindow, label: t("panel.tabs.fragment.label"), description: t("panel.tabs.fragment.description") },
   }
 }
 
@@ -283,6 +287,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
           <ArtifactTab artifactId={tab.artifactId} title={tab.title} />
         </div>
       )
+    case "fragment":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <FragmentTab fragmentId={tab.fragmentId} title={tab.title} sessionId={tab.sessionId ?? sessionId} />
+        </div>
+      )
     case "motion":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -432,6 +442,13 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
     [mode, tabMeta],
   )
 
+  const fragmentItems = useFragmentsStore((s) => s.items)
+  const loadFragments = useFragmentsStore((s) => s.load)
+  useEffect(() => {
+    void loadFragments()
+  }, [loadFragments])
+  const pinnedFragments = useMemo(() => fragmentItems.filter((f) => f.pinned.panel), [fragmentItems])
+
   // The footer fetches the GLOBAL list (unfiltered) on purpose: the "this chat" mode
   // is filtered right above, and it is that same list that supports the "all chats" one.
   // Fetching unfiltered was what the store avoided; now it is explicit (fetchAll) and
@@ -475,6 +492,18 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
                 </button>
               )
             })}
+            {/* Fragments the person pinned to the panel: each one is its own card. */}
+            {pinnedFragments.map((fragment) => (
+              <button
+                key={fragment.id}
+                onClick={() => usePanelStore.getState().openFragmentTab({ id: fragment.id, title: fragment.name, sessionId: bucketKey })}
+                className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-sidebar-border bg-card px-2 py-3.5 text-center transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <FragmentIcon name={fragment.icon} className="size-5 shrink-0" />
+                <span className="line-clamp-1 text-xs font-medium">{fragment.name}</span>
+                <span className="text-[10px] leading-tight text-muted-foreground">{t("panel.tabs.fragment.label")}</span>
+              </button>
+            ))}
           </div>
         </section>
       </div>

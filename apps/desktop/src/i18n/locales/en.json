@@ -702,6 +702,10 @@
       "routine": {
         "label": "Routine",
         "description": "A routine opened from the Routines page"
+      },
+      "fragment": {
+        "label": "Fragments",
+        "description": "Live screens the agent builds and edits with you"
       }
     },
     "unreadMessages": "Unread messages",
@@ -3009,6 +3013,107 @@
     "zoomOut": "Zoom out",
     "zoomReset": "Reset zoom (100%)",
     "unavailable": "Artifact unavailable"
+  },
+  "fragments": {
+    "reload": "Reload",
+    "unavailable": "Fragment unavailable",
+    "pickerTitle": "Fragments",
+    "pickerEmpty": "No fragments yet. Ask the agent to build one — a tracker, a small tool, a dashboard.",
+    "pickerHint": "Screens the agent builds and keeps editing live.",
+    "open": "Open",
+    "usesAi": "Uses AI",
+    "aiOff": "AI off",
+    "aiOn": "AI on",
+    "aiAllow": "Allow this fragment to ask your AI model",
+    "aiRevoke": "Stop allowing AI for this fragment",
+    "aiBanner": "This fragment wants to use your AI model.",
+    "aiAllowButton": "Allow AI",
+    "delete": "Delete fragment",
+    "deleteTitle": "Delete this fragment?",
+    "deleteDescription": "The screen and everything it saved will be removed. This cannot be undone.",
+    "cancel": "Cancel",
+    "confirmDelete": "Delete",
+    "title": "Fragments",
+    "search": "Search fragments",
+    "new": "New fragment",
+    "filterAll": "All",
+    "emptyTitle": "No fragments yet",
+    "emptyHint": "A fragment is a small screen Orbit builds with you — a tracker, a dashboard, a tool. Create one and keep refining it live.",
+    "noMatch": "No fragment matches.",
+    "back": "Back to fragments",
+    "edit": "Edit",
+    "more": "More options",
+    "rename": "Rename",
+    "pinSidebar": "Pin to the sidebar",
+    "unpinSidebar": "Unpin from the sidebar",
+    "pinPanel": "Show in the panel's Open list",
+    "openInPanel": "Open in the side panel",
+    "modelFollowChat": "Model of the chat",
+    "composeTitle": "Create {{what}} with Orbit",
+    "composeHint": "Describe what you need, or start from an example. Orbit builds it right here, live.",
+    "creatingTitle": "Orbit is building your fragment…",
+    "creatingHint": "It appears here as soon as the first version exists, and keeps updating while Orbit works.",
+    "seeChat": "See the conversation",
+    "kind": {
+      "screen": {
+        "name": "Screen",
+        "description": "A full page of the app. Pin it to the sidebar.",
+        "indef": "a screen"
+      },
+      "panel": {
+        "name": "Side panel",
+        "description": "A compact tab for the side panel, next to the chat.",
+        "indef": "a side panel"
+      },
+      "widget": {
+        "name": "Widget",
+        "description": "A small card for the home screen.",
+        "indef": "a widget"
+      }
+    },
+    "kindLabel": "Where it lives",
+    "startFrom": "Or start from one of these",
+    "sectionPinned": "Pinned",
+    "sectionOthers": "Others",
+    "activity": "What Orbit is doing",
+    "changeIcon": "Change icon",
+    "iconTitle": "Choose an icon",
+    "iconHint": "Any icon from the Lucide library. Search by name, in English.",
+    "iconSearch": "Search icons (e.g. chart, wallet, timer)",
+    "iconNone": "No icon with that name.",
+    "phase1": "Creating…",
+    "phase2": "Laying out the screen…",
+    "phase3": "Writing the first version…",
+    "phase4": "Polishing the details…",
+    "phase5": "Almost there…",
+    "starters": {
+      "spending": {
+        "title": "Spending tracker",
+        "hint": "Income, expenses and a chart",
+        "prompt": "A panel to track my monthly spending: add income and expenses by category and see a chart of where the money goes."
+      },
+      "tasks": {
+        "title": "Task list",
+        "hint": "With priorities",
+        "prompt": "A task list with priorities and due dates, where I can check things off and filter by what is pending."
+      },
+      "ai": {
+        "title": "AI generator",
+        "hint": "Uses your model",
+        "prompt": "A small tool that takes a topic and uses AI to generate a draft, with a button to copy the result."
+      }
+    },
+    "action": {
+      "create": "Creating the fragment",
+      "createNamed": "Creating · {{name}}",
+      "edit": "Editing {{path}}",
+      "write": "Writing {{path}}",
+      "readFile": "Reading {{path}}",
+      "read": "Reading the fragment",
+      "remove": "Removing {{path}}",
+      "logs": "Checking the page for errors",
+      "ai": "Declaring AI use"
+    }
   },
   "motion": {
     "unavailable": "Composition unavailable",

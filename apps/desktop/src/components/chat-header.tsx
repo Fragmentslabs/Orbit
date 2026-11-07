@@ -31,6 +31,8 @@ import { Truncate } from "@/components/ui/truncated-text"
 
 interface ChatHeaderProps {
   title?: string
+  /** Replaces the plain title (a page that needs more than text there, e.g. a fragment's back/icon/name). */
+  titleSlot?: React.ReactNode
   hasMenu?: boolean
   session?: SessionInfo
   /** Active session (chat or code) — for the agent browser indicator. */
@@ -87,7 +89,7 @@ function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
   )
 }
 
-export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra }: ChatHeaderProps) {
+export function ChatHeader({ title, titleSlot, hasMenu, session, sessionId, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra }: ChatHeaderProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -128,9 +130,11 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           trapped inside it and the gradient at the top of the chat (z-10, in a later
           sibling) passes over the whole header. */}
       <div className="@container relative z-20 flex items-center gap-1 min-w-0 flex-1">
-        <Truncate text={title ?? t("header.newChat")}>
-          <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
-        </Truncate>
+        {titleSlot ?? (
+          <Truncate text={title ?? t("header.newChat")}>
+            <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
+          </Truncate>
+        )}
         {workspaceMode === 'code' && (
           <>
             {!manyFolders && (

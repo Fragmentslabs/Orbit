@@ -53,6 +53,15 @@ import type { Hook, HookGenerationResult, HookInput, HookWithRun } from "@shared
 import type { AnalyticsSummary, AnalyticsRange, UsageSummaryRequest, UsageSummaryResponse } from "@shared/analytics"
 import type { OverlayContext, OverlayEvent, OverlaySettings } from "@shared/overlay"
 import type { PanelEvent } from "@/src/stores/panel-store"
+import type {
+  FragmentCallInput,
+  FragmentCallResult,
+  FragmentCapability,
+  FragmentLogEntry,
+  FragmentManifest,
+  FragmentMetaPatch,
+  FragmentUpdatedEvent,
+} from "@shared/fragments"
 
 export type { SearchHit }
 
@@ -808,6 +817,36 @@ export const artifactApi = {
     window.ipcRenderer.invoke("artifact:export", id) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
     >,
+}
+
+/**
+ * Fragments (orbit-fragment://). The iframe loads straight from the scheme; what goes
+ * through here is the list, the user's decisions (allow AI, delete) and the courier
+ * service for the page: `call` hands a `window.orbit` request to the main process, which
+ * is the one that decides.
+ */
+export const fragmentApi = {
+  list: () => window.ipcRenderer.invoke("fragment:list") as Promise<FragmentManifest[]>,
+  get: (id: string) => window.ipcRenderer.invoke("fragment:get", id) as Promise<FragmentManifest | null>,
+  call: (input: FragmentCallInput) =>
+    window.ipcRenderer.invoke("fragment:call", input) as Promise<FragmentCallResult>,
+  /** Only the user, through the tab toolbar, allows a capability. */
+  grant: (id: string, capability: FragmentCapability, on: boolean) =>
+    window.ipcRenderer.invoke("fragment:grant", id, capability, on) as Promise<FragmentManifest | null>,
+  /** Name, pins, model, editing chat — the person's choices (never the agent's). */
+  update: (id: string, patch: FragmentMetaPatch) =>
+    window.ipcRenderer.invoke("fragment:update", id, patch) as Promise<FragmentManifest | null>,
+  remove: (id: string) => window.ipcRenderer.invoke("fragment:remove", id) as Promise<boolean>,
+  log: (id: string, entry: FragmentLogEntry) => window.ipcRenderer.send("fragment:log", id, entry),
+  /** The fragment was rewritten (or its grants changed): reload / re-read the manifest. */
+  onUpdated: (listener: (payload: FragmentUpdatedEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("fragment:updated", (payload) => listener(payload as FragmentUpdatedEvent))
+    return () => window.ipcRenderer.off("fragment:updated", wrapper)
+  },
+  onRemoved: (listener: (payload: { fragmentId: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("fragment:removed", (payload) => listener(payload as { fragmentId: string }))
+    return () => window.ipcRenderer.off("fragment:removed", wrapper)
+  },
 }
 
 /**

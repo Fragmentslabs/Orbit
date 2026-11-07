@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Folder,
   FolderPlus,
+  AppWindow,
   GitFork,
   Heart,
   Loader2,
@@ -89,6 +90,8 @@ import {
 import { sessionActivityMap, type FolderInfo, type SessionInfo } from "@shared/chat"
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
+import { useFragmentsStore } from "@/src/stores/fragments-store"
+import { FragmentIcon } from "@/src/components/fragments/fragment-icon"
 import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { KO_FI_URL } from "@/src/lib/appLinks"
@@ -296,6 +299,66 @@ function MemoriesButton() {
       <BrainCircuit className="size-4" />
       {t("sidebar.memories")}
     </SidebarMenuButton>
+  )
+}
+
+/**
+ * Fragments: a page of the app (gallery + each fragment), from both modes. The ones the
+ * person pinned to the sidebar get their own row under the button, so a screen they
+ * use every day is one click away without going through the gallery.
+ */
+function FragmentsButton() {
+  const { t } = useTranslation()
+  const { view, setView } = useWorkspace()
+  const items = useFragmentsStore((s) => s.items)
+  const activeId = useFragmentsStore((s) => s.activeId)
+  const load = useFragmentsStore((s) => s.load)
+  const open = useFragmentsStore((s) => s.open)
+  const leave = useFragmentsStore((s) => s.leave)
+  const active = view === "fragments"
+  const pinned = items.filter((f) => f.pinned.sidebar)
+
+  // The pinned rows exist before the page is ever opened.
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  return (
+    <>
+      <SidebarMenuButton
+        isActive={active && !activeId}
+        onClick={() => {
+          if (active && !activeId) {
+            setView("chat")
+            return
+          }
+          leave()
+          setView("fragments")
+        }}
+      >
+        <AppWindow className="size-4" />
+        {t("fragments.title")}
+      </SidebarMenuButton>
+      {pinned.length > 0 && (
+        <SidebarMenuSub>
+          {pinned.map((fragment) => (
+            <SidebarMenuSubItem key={fragment.id}>
+              <SidebarMenuSubButton
+                isActive={active && activeId === fragment.id}
+                render={<button type="button" />}
+                onClick={() => {
+                  open(fragment.id)
+                  setView("fragments")
+                }}
+              >
+                <FragmentIcon name={fragment.icon} className="size-4" />
+                <span>{fragment.name}</span>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      )}
+    </>
   )
 }
 
@@ -1185,7 +1248,7 @@ function ChatHistory() {
   const modeSessions = useMemo(
     () =>
       sessions
-        .filter((s) => s.mode === mode && !s.routineId)
+        .filter((s) => s.mode === mode && !s.routineId && !s.fragment)
         .sort((a, b) => (activity.get(b.id) ?? b.updatedAt) - (activity.get(a.id) ?? a.updatedAt)),
     [sessions, mode, activity],
   )
@@ -1197,7 +1260,7 @@ function ChatHistory() {
   const routineSessions = useMemo(
     () =>
       sessions
-        .filter((s) => s.mode === mode && !!s.routineId)
+        .filter((s) => s.mode === mode && !!s.routineId && !s.fragment)
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions, mode],
   )
@@ -1539,6 +1602,7 @@ export function AppSidebar() {
               <PipelineButton />
               <RoutinesButton />
               <MemoriesButton />
+              <FragmentsButton />
               <UsageButton />
               <McpSkillsButton />
             </div>

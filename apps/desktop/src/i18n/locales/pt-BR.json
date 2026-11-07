@@ -702,6 +702,10 @@
       "routine": {
         "label": "Rotina",
         "description": "Uma rotina aberta na página de Rotinas"
+      },
+      "fragment": {
+        "label": "Fragmentos",
+        "description": "Telas ao vivo que o agente cria e edita com você"
       }
     },
     "unreadMessages": "Mensagens não lidas",
@@ -3009,6 +3013,107 @@
     "zoomOut": "Diminuir zoom",
     "zoomReset": "Zoom padrão (100%)",
     "unavailable": "Artefato indisponível"
+  },
+  "fragments": {
+    "reload": "Recarregar",
+    "unavailable": "Fragmento indisponível",
+    "pickerTitle": "Fragmentos",
+    "pickerEmpty": "Nenhum fragmento ainda. Peça ao agente para criar um — um acompanhamento, uma ferramenta pequena, um painel.",
+    "pickerHint": "Telas que o agente cria e continua editando ao vivo.",
+    "open": "Abrir",
+    "usesAi": "Usa IA",
+    "aiOff": "IA desligada",
+    "aiOn": "IA ligada",
+    "aiAllow": "Permitir que este fragmento use seu modelo de IA",
+    "aiRevoke": "Parar de permitir IA neste fragmento",
+    "aiBanner": "Este fragmento quer usar o seu modelo de IA.",
+    "aiAllowButton": "Permitir IA",
+    "delete": "Excluir fragmento",
+    "deleteTitle": "Excluir este fragmento?",
+    "deleteDescription": "A tela e tudo o que ela guardou serão removidos. Não dá para desfazer.",
+    "cancel": "Cancelar",
+    "confirmDelete": "Excluir",
+    "title": "Fragmentos",
+    "search": "Buscar fragmentos",
+    "new": "Novo fragmento",
+    "filterAll": "Todos",
+    "emptyTitle": "Nenhum fragmento ainda",
+    "emptyHint": "Um fragmento é uma tela pequena que o Orbit monta com você — um acompanhamento, um painel, uma ferramenta. Crie um e continue refinando ao vivo.",
+    "noMatch": "Nenhum fragmento encontrado.",
+    "back": "Voltar aos fragmentos",
+    "edit": "Editar",
+    "more": "Mais opções",
+    "rename": "Renomear",
+    "pinSidebar": "Fixar na barra lateral",
+    "unpinSidebar": "Desafixar da barra lateral",
+    "pinPanel": "Mostrar na lista Abrir do painel",
+    "openInPanel": "Abrir no painel lateral",
+    "modelFollowChat": "Modelo do chat",
+    "composeTitle": "Crie {{what}} com o Orbit",
+    "composeHint": "Descreva o que precisa ou parta de um exemplo. O Orbit monta aqui mesmo, ao vivo.",
+    "creatingTitle": "O Orbit está montando seu fragmento…",
+    "creatingHint": "Ele aparece aqui assim que a primeira versão existir, e continua atualizando enquanto o Orbit trabalha.",
+    "seeChat": "Ver a conversa",
+    "kind": {
+      "screen": {
+        "name": "Tela",
+        "description": "Uma página inteira do app. Fixe na barra lateral.",
+        "indef": "uma tela"
+      },
+      "panel": {
+        "name": "Painel lateral",
+        "description": "Uma aba compacta para o painel lateral, ao lado do chat.",
+        "indef": "um painel lateral"
+      },
+      "widget": {
+        "name": "Widget",
+        "description": "Um cartão pequeno para a tela inicial.",
+        "indef": "um widget"
+      }
+    },
+    "kindLabel": "Onde ele vive",
+    "startFrom": "Ou comece por um destes",
+    "sectionPinned": "Fixados",
+    "sectionOthers": "Outros",
+    "activity": "O que o Orbit está fazendo",
+    "changeIcon": "Trocar ícone",
+    "iconTitle": "Escolha um ícone",
+    "iconHint": "Qualquer ícone da biblioteca Lucide. Busque pelo nome, em inglês.",
+    "iconSearch": "Buscar ícones (ex.: chart, wallet, timer)",
+    "iconNone": "Nenhum ícone com esse nome.",
+    "phase1": "Criando…",
+    "phase2": "Montando a tela…",
+    "phase3": "Escrevendo a primeira versão…",
+    "phase4": "Ajustando os detalhes…",
+    "phase5": "Quase pronto…",
+    "starters": {
+      "spending": {
+        "title": "Painel de gastos",
+        "hint": "Entradas, saídas e gráfico",
+        "prompt": "Um painel para acompanhar meus gastos do mês: lançar entradas e saídas por categoria e ver um gráfico de para onde vai o dinheiro."
+      },
+      "tasks": {
+        "title": "Lista de tarefas",
+        "hint": "Com prioridades",
+        "prompt": "Uma lista de tarefas com prioridades e prazos, onde eu marque o que foi feito e filtre o que está pendente."
+      },
+      "ai": {
+        "title": "Gerador com IA",
+        "hint": "Usa o seu modelo",
+        "prompt": "Uma ferramenta pequena que recebe um tema e usa IA para gerar um rascunho, com um botão para copiar o resultado."
+      }
+    },
+    "action": {
+      "create": "Criando o fragmento",
+      "createNamed": "Criando · {{name}}",
+      "edit": "Editando {{path}}",
+      "write": "Escrevendo {{path}}",
+      "readFile": "Lendo {{path}}",
+      "read": "Lendo o fragmento",
+      "remove": "Removendo {{path}}",
+      "logs": "Conferindo erros da página",
+      "ai": "Declarando o uso de IA"
+    }
   },
   "motion": {
     "unavailable": "Composição indisponível",

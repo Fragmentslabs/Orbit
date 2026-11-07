@@ -28,6 +28,9 @@ import { PipelineBoard } from "@/src/components/pipeline/pipeline-board"
 import { RoutinesView } from "@/src/components/routines/routines-view"
 import { ToolsView } from "@/src/components/tools-view"
 import { UsageView } from "@/src/components/usage/usage-view"
+import { FragmentsView } from "@/src/components/fragments/fragments-view"
+import { FragmentHeaderTitle } from "@/src/components/fragments/fragment-header"
+import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
 import { useSessionDragAndDrop } from "@/src/components/session-drag"
 import { ensureAgentBrowser, evictInactiveWebviews } from "@/src/components/browser/webview-session"
@@ -102,6 +105,9 @@ function Layout() {
   const activeKey = remoteEnv ? (remoteActive?.sessionId ?? ORPHAN_KEY) : (activeSession?.id ?? ORPHAN_KEY)
   const rightPanelOpen = usePanelStore((s) => s.openBySession[activeKey] ?? false)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
+  // A fragment on screen takes the whole area (no padding) and puts back/icon/name in the header.
+  const openFragmentId = useFragmentsStore((s) => s.activeId)
+  const fragmentFullscreen = view === "fragments" && !!openFragmentId
   const pendingFile = useWorkspaceSearchStore((s) => s.pending)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -335,6 +341,7 @@ function Layout() {
           <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
               <main className="relative flex h-full min-w-0 flex-col">
                 <ChatHeader
+                  titleSlot={fragmentFullscreen && openFragmentId ? <FragmentHeaderTitle fragmentId={openFragmentId} /> : undefined}
                   title={
                     view === "memories"
                       ? t("sidebar.memories")
@@ -346,7 +353,9 @@ function Layout() {
                             ? t("sidebar.tools")
                             : view === "analytics"
                               ? t("analytics.title")
-                              : remoteEnv
+                              : view === "fragments"
+                                ? t("fragments.title")
+                                : remoteEnv
                                 ? remoteActive?.session?.title ?? ""
                                 : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
@@ -362,7 +371,7 @@ function Layout() {
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={remoteEnv ? undefined : view === "pipeline" ? pipelineFolders[0] : view === "routines" || view === "memories" || view === "analytics" ? undefined : folders[0]}
+                  repoPath={remoteEnv ? undefined : view === "pipeline" ? pipelineFolders[0] : view === "routines" || view === "memories" || view === "analytics" || view === "fragments" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
                   // On the Pipeline page the header follows the OPEN pipeline,
@@ -378,7 +387,7 @@ function Layout() {
                       ? pipelineFolders.length
                         ? pipelineFolders
                         : undefined
-                      : view === "routines" || view === "memories" || view === "analytics"
+                      : view === "routines" || view === "memories" || view === "analytics" || view === "fragments"
                         ? undefined
                         : workspaceMode === "code"
                           ? folders
@@ -394,14 +403,14 @@ function Layout() {
                     ) : undefined
                   }
                   onFoldersChange={
-                    remoteEnv || view === "pipeline" || view === "routines" || view === "memories" || view === "analytics"
+                    remoteEnv || view === "pipeline" || view === "routines" || view === "memories" || view === "analytics" || view === "fragments"
                       ? undefined
                       : workspaceMode === "code"
                         ? setFolders
                         : undefined
                   }
                 />
-                <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
+                <div className={`flex min-w-0 flex-1 flex-col overflow-hidden ${fragmentFullscreen ? "" : "p-4"}`} style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                   {remoteEnv ? null : <MissingFoldersBanner />}
                   {remoteEnv ? (
                     <RemoteChatView />
@@ -415,6 +424,8 @@ function Layout() {
                     <ToolsView />
                   ) : view === "analytics" ? (
                     <UsageView />
+                  ) : view === "fragments" ? (
+                    <FragmentsView />
                   ) : (
                     <ChatView />
                   )}
