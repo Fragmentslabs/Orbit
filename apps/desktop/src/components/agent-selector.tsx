@@ -1,65 +1,121 @@
-import { ChevronDown, Check } from "lucide-react"
+import { useState } from "react"
+import { ChevronDown, Check, Settings2, Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
+import { userProfileId } from "@shared/agents"
 import { specialistProfileOf, type SessionInfo } from "@shared/chat"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useSessionStore } from "@/src/stores/session-store"
-import { AGENT_META, type AgentChoice } from "@/src/components/agent-meta"
+import { useToolsNavStore } from "@/src/stores/tools-nav-store"
+import { useAgents } from "@/src/stores/agents-store"
+import { agentView, userAgentView, type AgentChoice, type AgentView } from "@/src/components/agent-meta"
+import { ProfileDialog } from "@/src/components/specialists/profile-dialog"
 
-const CHOICES: AgentChoice[] = ["general", "fragment", "motion", "design"]
+const BUILTIN_CHOICES: AgentChoice[] = ["general", "fragment", "motion", "design"]
+
+function AgentItem({ view, selected, onSelect }: { view: AgentView; selected: boolean; onSelect: () => void }) {
+  const Icon = view.icon
+  return (
+    <DropdownMenuItem onClick={onSelect}>
+      <Icon className={cn("size-4", view.color)} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm">{view.name}</div>
+        <div className="truncate text-xs text-muted-foreground">{view.description}</div>
+      </div>
+      {selected && <Check className="size-3.5" />}
+    </DropdownMenuItem>
+  )
+}
 
 /**
  * Which agent a conversation runs with. The agent is fixed for the life of a conversation
  * (changing it mid-chat would break the prompt cache and mix instructions), so this is a
- * selector only for a NEW chat; once the chat exists it becomes a plain badge.
+ * selector only for a NEW chat; once the chat exists it becomes a badge that opens a view of
+ * exactly what the agent injects.
  */
 export function AgentSelector({ session }: { session?: SessionInfo }) {
   const { t } = useTranslation()
+  const agents = useAgents()
   const pending = useSessionStore((s) => s.pendingProfile)
   const setPending = useSessionStore((s) => s.setPendingProfile)
+  const { setView } = useWorkspace()
+  const requestSection = useToolsNavStore((s) => s.request)
+  const [inspecting, setInspecting] = useState(false)
+
+  const manage = () => {
+    requestSection("specialists")
+    setView("tools")
+  }
 
   if (session) {
-    // A general chat shows nothing.
+    // A general chat shows nothing — and neither does one whose agent has since been deleted,
+    // because it runs the general setup again.
     const profile = specialistProfileOf(session)
-    if (!profile || !(profile in AGENT_META)) return null
-    const meta = AGENT_META[profile as AgentChoice]
-    const Icon = meta.icon
+    const view = profile ? agentView(profile, agents, t) : null
+    if (!profile || !view) return null
+    const Icon = view.icon
     return (
-      <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-        <Icon className={cn("size-3", meta.color)} />
-        {t(meta.name)}
-      </span>
+      <>
+        <button
+          type="button"
+          onClick={() => setInspecting(true)}
+          title={t("agent.inspect")}
+          className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted/50"
+        >
+          <Icon className={cn("size-3", view.color)} />
+          {view.name}
+        </button>
+        <ProfileDialog profile={profile} open={inspecting} onOpenChange={setInspecting} />
+      </>
     )
   }
 
-  const value: AgentChoice = pending ?? "general"
-  const current = AGENT_META[value]
+  // A pending agent that was deleted since falls back to the general chat.
+  const value: AgentChoice = pending && agentView(pending, agents, t) ? pending : "general"
+  const current = agentView(value, agents, t)!
   const CurrentIcon = current.icon
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="sm" className="h-7 shrink-0 gap-1.5 rounded-full px-2 text-xs" />}
+        render={<Button variant="ghost" size="sm" className="h-7 max-w-48 shrink-0 gap-1.5 rounded-full px-2 text-xs" />}
       >
-        <CurrentIcon className={cn("size-3.5", current.color)} />
-        {t(current.name)}
-        <ChevronDown className="size-3 text-muted-foreground" />
+        <CurrentIcon className={cn("size-3.5 shrink-0", current.color)} />
+        <span className="truncate">{current.name}</span>
+        <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        {CHOICES.map((choice) => {
-          const meta = AGENT_META[choice]
-          const Icon = meta.icon
-          return (
-            <DropdownMenuItem key={choice} onClick={() => setPending(choice === "general" ? null : choice)}>
-              <Icon className={cn("size-4", meta.color)} />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm">{t(meta.name)}</div>
-                <div className="text-xs text-muted-foreground">{t(meta.description)}</div>
-              </div>
-              {value === choice && <Check className="size-3.5" />}
-            </DropdownMenuItem>
-          )
-        })}
+        <DropdownMenuLabel>{t("agent.group.builtin")}</DropdownMenuLabel>
+        {BUILTIN_CHOICES.map((choice) => (
+          <AgentItem
+            key={choice}
+            view={agentView(choice, agents, t)!}
+            selected={value === choice}
+            onSelect={() => setPending(choice === "general" ? null : choice)}
+          />
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("agent.group.mine")}</DropdownMenuLabel>
+        {agents.map((agent) => (
+          <AgentItem
+            key={agent.id}
+            view={userAgentView(agent, t)}
+            selected={value === userProfileId(agent.id)}
+            onSelect={() => setPending(userProfileId(agent.id))}
+          />
+        ))}
+        <DropdownMenuItem onClick={manage}>
+          {agents.length === 0 ? <Plus className="size-4" /> : <Settings2 className="size-4" />}
+          <span className="text-sm">{agents.length === 0 ? t("agent.create") : t("agent.manage")}</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
