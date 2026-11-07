@@ -3022,6 +3022,7 @@
   },
   "fragments": {
     "reload": "Reload",
+    "model": "Model",
     "unavailable": "Fragment unavailable",
     "pickerTitle": "Fragments",
     "pickerEmpty": "No fragments yet. Ask the agent to build one — a tracker, a small tool, a dashboard.",

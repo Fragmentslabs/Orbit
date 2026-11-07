@@ -5,16 +5,18 @@ import { Hint } from "@/components/ui/hint"
 import { cn } from "@/lib/utils"
 import type { FragmentManifest } from "@shared/fragments"
 import { useFragment } from "@/src/components/fragment-tab"
-import { ModelPicker } from "@/src/components/model-picker"
 import { ThinkingMenu } from "@/src/components/thinking-menu"
+import { useFragmentHeaderCompact } from "@/src/hooks/use-fragment-header-compact"
 import { useArtifactActivity } from "@/src/hooks/use-artifact-activity"
 import { fragmentApi } from "@/src/lib/ipc"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
+import { FragmentModelPicker } from "./fragment-model-picker"
 
 /**
  * The controls of the open fragment, on the right of the app header: whether an agent is
- * working on it, the model it uses, whether it may use the AI, reload, and edit mode. The
+ * working on it, the model it uses, whether it may use the AI, reload, and edit mode. Under a width threshold the model and reload
+ * move into the actions menu of the title (`FragmentHeaderTitle`). The
  * fragment page has no bar of its own — the fragment gets the whole area.
  */
 export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
@@ -24,6 +26,7 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
   const toggleEditing = useFragmentsStore((s) => s.toggleEditing)
   const reload = useFragmentsStore((s) => s.reload)
   const { working } = useArtifactActivity({ kind: "fragment", id: fragmentId })
+  const compact = useFragmentHeaderCompact()
   if (!manifest) return null
 
   const asksAi = manifest.requests.includes("ai")
@@ -34,19 +37,9 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
       {working && <Loader2 aria-label={t("artifact.working")} className="mr-1 size-4 animate-spin text-primary" />}
       {/* The fragment's AI. Allowed: its model and thinking. Not allowed: only a small badge
           (clicking it allows) — the controls of a model nobody can use would be noise. */}
-      {asksAi && aiOn && (
+      {asksAi && aiOn && !compact && (
         <>
-          <ModelPicker
-            value={manifest.model ?? null}
-            onValueChange={(model) =>
-              void fragmentApi.update(manifest.id, {
-                model: model ? { providerId: model.providerId, modelId: model.modelId } : null,
-              })
-            }
-            nullLabel={t("fragments.modelFollowChat")}
-            hideRotationOptions
-            triggerClassName="h-7 text-xs"
-          />
+          <FragmentModelPicker manifest={manifest} />
           {/* Next to the model it belongs to: the thinking level of the fragment's own model. */}
           <FragmentThinkingMenu manifest={manifest} />
         </>
@@ -73,7 +66,7 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
         <Pencil className="size-3.5" />
         {t("fragments.edit")}
       </Button>
-      <HeaderIconButton icon={RotateCw} label={t("fragments.reload")} onClick={reload} />
+      {!compact && <HeaderIconButton icon={RotateCw} label={t("fragments.reload")} onClick={reload} />}
     </div>
   )
 }

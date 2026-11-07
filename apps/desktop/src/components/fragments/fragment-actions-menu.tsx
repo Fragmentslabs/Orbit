@@ -22,12 +22,15 @@ export function FragmentActionsMenu({
   triggerClassName,
   align = "end",
   icon,
+  extraItems,
 }: {
   fragment: FragmentManifest
   /** Class of the trigger button, or a function of whether the menu is open (a card keeps it visible while open). */
   triggerClassName: string | ((open: boolean) => string)
   align?: "start" | "end"
   icon?: ReactNode
+  /** Items the caller adds at the top (the header moves controls here when it runs out of room). */
+  extraItems?: ReactNode
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -44,6 +47,8 @@ export function FragmentActionsMenu({
           {icon ?? <MoreHorizontal className="size-4" />}
         </DropdownMenuTrigger>
         <DropdownMenuContent align={align} className="min-w-56">
+          {extraItems}
+          {extraItems && <DropdownMenuSeparator />}
           <DropdownMenuItem onClick={() => update({ pinned: { sidebar: !fragment.pinned.sidebar } })}>
             {fragment.pinned.sidebar ? <Check className="size-3.5" /> : <Pin className="size-3.5" />}
             {t("fragments.pinSidebar")}
