@@ -38,6 +38,22 @@ import { usePanelStore } from "@/src/stores/panel-store"
 
 const SANDBOX = "allow-scripts"
 
+/** What inspect mode reports about the clicked element. */
+export interface InspectedElement {
+  tag: string
+  selector: string
+  text: string
+  html: string
+}
+
+/** The page is untrusted: keep only strings, clipped. `null` = the person cancelled. */
+function readInspected(raw: unknown): InspectedElement | null {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  if (value.cancel === true || typeof value.tag !== "string") return null
+  const clip = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "")
+  return { tag: clip(value.tag, 30), selector: clip(value.selector, 400), text: clip(value.text, 300), html: clip(value.html, 1000) }
+}
+
 /** The manifest of a fragment, kept fresh while it is on screen. */
 export function useFragment(fragmentId: string) {
   const [manifest, setManifest] = useState<FragmentManifest | null>(null)
@@ -74,11 +90,17 @@ export function FragmentFrame({
   reloads,
   className,
   preview = false,
+  inspecting = false,
+  onInspect,
 }: {
   manifest: FragmentManifest
   sessionId?: string
   reloads: number
   className?: string
+  /** Inspect mode: the page highlights what is under the pointer and reports the click. */
+  inspecting?: boolean
+  /** The element the person clicked (`null` = they pressed Escape). Only called while `inspecting`. */
+  onInspect?: (element: InspectedElement | null) => void
   /**
    * A thumbnail in the gallery: the page runs, but it is a picture — it can never reach
    * Orbit (every `window.orbit` call is refused here, so a card can not spend tokens or
@@ -87,6 +109,10 @@ export function FragmentFrame({
   preview?: boolean
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const inspectingRef = useRef(inspecting)
+  const onInspectRef = useRef(onInspect)
+  inspectingRef.current = inspecting
+  onInspectRef.current = onInspect
   const fragmentId = manifest.id
   const loadKey = `${fragmentId}:${manifest.revision}:${reloads}`
   // New token per load: only the page THIS load produced can talk to Orbit.
@@ -104,6 +130,7 @@ export function FragmentFrame({
         method?: string
         params?: unknown
         log?: { level?: string; message?: unknown }
+        inspect?: unknown
       } | null
       if (!data || data.__orbit !== 1 || data.t !== token) return
       if (preview) {
@@ -113,6 +140,11 @@ export function FragmentFrame({
         return
       }
 
+      if (data.inspect) {
+        // Only while the person has inspect mode on: a page cannot push elements into the composer on its own.
+        if (inspectingRef.current) onInspectRef.current?.(readInspected(data.inspect))
+        return
+      }
       if (data.log) {
         const level = data.log.level === "warn" || data.log.level === "error" || data.log.level === "info" ? data.log.level : "log"
         fragmentApi.log(fragmentId, { at: Date.now(), level, message: String(data.log.message ?? "") })
@@ -137,6 +169,13 @@ export function FragmentFrame({
     const theme = document.documentElement.classList.contains("dark") ? "dark" : "light"
     frameRef.current?.contentWindow?.postMessage({ type: "orbit:theme", theme }, "*")
   }, [])
+  // Inspect mode is switched on in the page by a message; a freshly loaded page asks again.
+  const sendInspect = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({ type: "orbit:inspect", on: inspectingRef.current }, "*")
+  }, [])
+  useEffect(() => {
+    sendInspect()
+  }, [inspecting, sendInspect])
   useEffect(() => {
     const observer = new MutationObserver(sendTheme)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
@@ -152,7 +191,10 @@ export function FragmentFrame({
       sandbox={SANDBOX}
       allow=""
       referrerPolicy="no-referrer"
-      onLoad={sendTheme}
+      onLoad={() => {
+        sendTheme()
+        sendInspect()
+      }}
       tabIndex={preview ? -1 : undefined}
       className={className ?? "w-full flex-1 border-0 bg-white"}
     />

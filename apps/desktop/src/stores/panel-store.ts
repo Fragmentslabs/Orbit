@@ -65,6 +65,8 @@ export interface BrowserSelection {
   text: string
   html: string
   url: string
+  /** Where the element was picked, in words, when it is not the panel browser ("the fragment …"). */
+  where?: string
 }
 
 /**

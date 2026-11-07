@@ -961,9 +961,9 @@ async function preprocessAttachment(
     let text = `[Element selected in the panel browser — ${file.filename || 'element'}]`
     if (raw) {
       try {
-        const sel = JSON.parse(raw) as { tag?: string; url?: string; selector?: string; text?: string; html?: string }
+        const sel = JSON.parse(raw) as { tag?: string; url?: string; selector?: string; text?: string; html?: string; where?: string }
         text = [
-          `[Element selected in the panel browser — <${sel.tag ?? '?'}> on ${sel.url ?? ''}]`,
+          `[Element selected in ${sel.where ?? 'the panel browser'} — <${sel.tag ?? '?'}> on ${sel.url ?? ''}]`,
           `selector: ${sel.selector ?? ''}`,
           `text: ${sel.text || '(no text)'}`,
           `html: ${sel.html ?? ''}`,

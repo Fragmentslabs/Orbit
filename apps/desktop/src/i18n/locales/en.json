@@ -3183,7 +3183,8 @@
       "databaseEmpty": "Nothing saved yet.",
       "packages": "Third-party packages",
       "packagesEmpty": "None."
-    }
+    },
+    "inspect": "Pick an element to change"
   },
   "motion": {
     "unavailable": "Composition unavailable",

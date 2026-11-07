@@ -1,3 +1,5 @@
+import { FRAGMENT_INSPECTOR } from './fragment-inspector'
+
 /**
  * `window.orbit` — the only door out of a fragment page.
  *
@@ -121,7 +123,7 @@ export function injectFragmentSdk(html: string): string {
   const head = /<head(\s[^>]*)?>/i.exec(html)
   if (head) {
     const at = head.index + head[0].length
-    return html.slice(0, at) + '\n' + FRAGMENT_SDK + '\n' + html.slice(at)
+    return html.slice(0, at) + '\n' + FRAGMENT_SDK + '\n' + FRAGMENT_INSPECTOR + '\n' + html.slice(at)
   }
-  return FRAGMENT_SDK + '\n' + html
+  return FRAGMENT_SDK + '\n' + FRAGMENT_INSPECTOR + '\n' + html
 }

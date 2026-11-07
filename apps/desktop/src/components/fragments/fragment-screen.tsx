@@ -21,9 +21,12 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
   const { t } = useTranslation()
   const { manifest, missing } = useFragment(fragmentId)
   const leave = useFragmentsStore((s) => s.leave)
+  const pickElement = useFragmentsStore((s) => s.pickElement)
+  const stopInspecting = useFragmentsStore((s) => s.toggleInspecting)
   const reloads = useFragmentsStore((s) => s.reloads)
   const editing = useFragmentsStore((s) => s.editing)
   const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
+  const inspecting = useFragmentsStore((s) => s.inspecting)
   const [composerPinned, setComposerPinned] = useState(true)
   const [feedPinned, setFeedPinned] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -59,6 +62,11 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
         manifest={manifest}
         sessionId={manifest.sessionId}
         reloads={reloads}
+        inspecting={inspecting}
+        onInspect={(element) => {
+          if (element) pickElement({ id: manifest.id, name: manifest.name }, element)
+          else stopInspecting()
+        }}
         className="absolute inset-0 size-full border-0 bg-white"
       />
 

@@ -1,6 +1,8 @@
 import { create } from "zustand"
 import type { FragmentKind, FragmentManifest } from "@shared/fragments"
+import { FRAGMENT_SCHEME } from "@shared/fragments"
 import { fragmentApi } from "@/src/lib/ipc"
+import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
  * The fragments the app knows about, and what the Fragments page is showing.
@@ -27,6 +29,8 @@ interface FragmentsState {
   composing: boolean
   /** Edit mode of the open fragment (its prompt and feeds). Lives here because the header turns it on. */
   editing: boolean
+  /** Inspect mode: the next click on the open fragment picks an element to talk about. */
+  inspecting: boolean
   /** The details panel of the open fragment is showing. */
   detailsOpen: boolean
   /** Bumped to reload the open fragment's frame. */
@@ -42,6 +46,9 @@ interface FragmentsState {
   open: (id: string | null) => void
   toggleEditing: () => void
   toggleDetails: () => void
+  toggleInspecting: () => void
+  /** An element was picked in inspect mode: it becomes an attachment of the next message and edit mode opens. */
+  pickElement: (fragment: { id: string; name: string }, element: { tag: string; selector: string; text: string; html: string }) => void
   reload: () => void
   startComposing: () => void
   startCreating: (creating: { sessionId: string; kind: FragmentKind }) => void
@@ -67,6 +74,7 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
   creating: null,
   composing: false,
   editing: false,
+  inspecting: false,
   detailsOpen: false,
   reloads: 0,
   creations: [],
@@ -90,9 +98,20 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
     })
   },
 
-  open: (id) => set({ activeId: id, composing: false, creating: null, editing: false, detailsOpen: false, reloads: 0 }),
+  open: (id) => set({ activeId: id, composing: false, creating: null, editing: false, inspecting: false, detailsOpen: false, reloads: 0 }),
   toggleEditing: () => set((state) => ({ editing: !state.editing })),
   toggleDetails: () => set((state) => ({ detailsOpen: !state.detailsOpen })),
+  toggleInspecting: () => set((state) => ({ inspecting: !state.inspecting })),
+  pickElement: (fragment, element) => {
+    // The same attachment the panel browser makes for a selected element: the composer shows
+    // its chip and the engine turns it into text for the agent.
+    usePanelStore.getState().addSelection({
+      ...element,
+      url: `${FRAGMENT_SCHEME}://${fragment.id}/`,
+      where: `the fragment "${fragment.name}"`,
+    })
+    set({ inspecting: false, editing: true })
+  },
   reload: () => set((state) => ({ reloads: state.reloads + 1 })),
   startComposing: () => set({ composing: true, activeId: null, creating: null, editing: false }),
   startCreating: (creating) =>
@@ -115,7 +134,7 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
       creations: state.creations.filter((c) => c.sessionId !== sessionId),
       creating: state.creating?.sessionId === sessionId ? null : state.creating,
     })),
-  leave: () => set({ activeId: null, composing: false, creating: null, editing: false, detailsOpen: false }),
+  leave: () => set({ activeId: null, composing: false, creating: null, editing: false, inspecting: false, detailsOpen: false }),
 
   claim: ({ id, sessionId }) => {
     const { creating, activeId } = get()
