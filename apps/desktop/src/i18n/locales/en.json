@@ -3184,7 +3184,14 @@
       "packages": "Third-party packages",
       "packagesEmpty": "None."
     },
-    "inspect": "Pick an element to change"
+    "inspect": "Pick an element to change",
+    "data": {
+      "view": "View data",
+      "title": "Saved data",
+      "description": "What this fragment saved with orbit.store. Read-only.",
+      "refresh": "Refresh",
+      "truncated": "Shown only in part."
+    }
   },
   "motion": {
     "unavailable": "Composition unavailable",

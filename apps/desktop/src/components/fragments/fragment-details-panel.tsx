@@ -44,7 +44,7 @@ export function FragmentDetailsPanel({ manifest }: { manifest: FragmentManifest 
           <>
             <WeightSection details={details} />
             <TokensSection details={details} />
-            <DatabaseSection details={details} />
+            <DatabaseSection details={details} fragmentId={manifest.id} />
             <PackagesSection details={details} />
             <OriginSection details={details} />
           </>

@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { FRAGMENT_CAPABILITIES } from "@shared/fragments"
 import type { FragmentDetails } from "@shared/fragment-details"
@@ -7,6 +8,7 @@ import { formatBytes, formatCost, formatTokens } from "@/src/lib/format"
 import { fragmentApi } from "@/src/lib/ipc"
 import { KIND_META } from "../kind-meta"
 import { DetailRow, DetailsSection } from "./details-section"
+import { FragmentDataDialog } from "./fragment-data-dialog"
 import { FragmentProvenanceView } from "./fragment-provenance-view"
 
 /** The sections of the details panel, one small component each. */
@@ -94,14 +96,19 @@ export function TokensSection({ details }: { details: FragmentDetails }) {
   )
 }
 
-export function DatabaseSection({ details }: { details: FragmentDetails }) {
+export function DatabaseSection({ details, fragmentId }: { details: FragmentDetails; fragmentId: string }) {
   const { t } = useTranslation()
+  const [viewing, setViewing] = useState(false)
   return (
     <DetailsSection title={t("fragments.details.database")}>
       {details.dataKeys.length === 0 && <span className="text-muted-foreground">{t("fragments.details.databaseEmpty")}</span>}
       {details.dataKeys.map((k) => (
         <DetailRow key={k.key} label={k.key} value={formatBytes(k.bytes)} />
       ))}
+      <Button size="sm" variant="outline" className="mt-1 h-7 self-start text-xs" onClick={() => setViewing(true)}>
+        {t("fragments.data.view")}
+      </Button>
+      <FragmentDataDialog fragmentId={fragmentId} open={viewing} onOpenChange={setViewing} />
     </DetailsSection>
   )
 }

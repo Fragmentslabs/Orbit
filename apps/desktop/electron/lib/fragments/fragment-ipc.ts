@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import type { FragmentCallInput, FragmentLogEntry, FragmentMetaPatch, FragmentUpdatedEvent } from '@shared/fragments'
 import { FRAGMENT_CAPABILITIES } from '@shared/fragments'
 import { handleFragmentCall } from './fragment-bridge'
-import { getFragmentDetails } from './fragment-details'
+import { getFragmentData, getFragmentDetails } from './fragment-details'
 import { getProvenance } from './fragment-provenance'
 import {
   appendFragmentLog,
@@ -39,6 +39,7 @@ export function registerFragmentIpc(): void {
   })
   // Read-only numbers for the details panel (weight, data keys, token spend, origin).
   ipcMain.handle('fragment:details', (_event, id: string) => (isFragmentId(id) ? getFragmentDetails(id) : null))
+  ipcMain.handle('fragment:data', (_event, id: string) => (isFragmentId(id) ? getFragmentData(id) : null))
   ipcMain.handle('fragment:call', (_event, input: FragmentCallInput) => handleFragmentCall(input))
 
   // The ONLY place a capability is granted: a click of the user in the tab.

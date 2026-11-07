@@ -59,7 +59,19 @@ describe('getFragmentDetails', () => {
     expect(found?.packages).toEqual([])
   })
 
+  it('shows the stored data read-only, key by key, and clips what is huge', async () => {
+    const made = await store.createFragment({ name: 'Data view', html: '<p>x</p>' })
+    await store.storeSet(made.id, 'small', { a: [1, 2] })
+    await store.storeSet(made.id, 'big', 'x'.repeat(30_000))
+    const entries = await details.getFragmentData(made.id)
+    expect(entries?.map((e) => e.key)).toEqual(['big', 'small'])
+    expect(entries?.[0]).toMatchObject({ truncated: true, bytes: 30_002 })
+    expect(entries?.[0].json.length).toBe(20_000)
+    expect(entries?.[1]).toMatchObject({ truncated: false, json: '{\n  "a": [\n    1,\n    2\n  ]\n}' })
+  })
+
   it('returns null for a fragment that does not exist', async () => {
     expect(await details.getFragmentDetails('frag-nope-000000')).toBeNull()
+    expect(await details.getFragmentData('frag-nope-000000')).toBeNull()
   })
 })

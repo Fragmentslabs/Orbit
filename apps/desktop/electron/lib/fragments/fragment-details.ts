@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { ChatMessage } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import type { FragmentDetails, FragmentFileWeight, FragmentTokenSpend } from '@shared/fragment-details'
+import type { FragmentDataEntry, FragmentDetails, FragmentFileWeight, FragmentTokenSpend } from '@shared/fragment-details'
 import { listArtifactChats } from '../artifacts/chat-registry'
 import { readJson } from '../storage'
 import { getProvenance } from './fragment-provenance'
@@ -68,4 +68,25 @@ export async function getFragmentDetails(id: string): Promise<FragmentDetails | 
     packages: [],
     provenance,
   }
+}
+
+/** Per entry, what the data view shows of a value: enough to read, never a data dump in the UI. */
+const MAX_SHOWN_CHARS = 20_000
+
+/** The fragment's stored data, for the read-only data view. Nothing here can change it. */
+export async function getFragmentData(id: string): Promise<FragmentDataEntry[] | null> {
+  if (!(await getFragment(id))) return null
+  const data = await readFragmentData(id)
+  return Object.keys(data)
+    .sort()
+    .map((key) => {
+      const pretty = JSON.stringify(data[key], null, 2) ?? 'null'
+      const truncated = pretty.length > MAX_SHOWN_CHARS
+      return {
+        key,
+        bytes: Buffer.byteLength(JSON.stringify(data[key]) ?? 'null', 'utf8'),
+        json: truncated ? pretty.slice(0, MAX_SHOWN_CHARS) : pretty,
+        truncated,
+      }
+    })
 }

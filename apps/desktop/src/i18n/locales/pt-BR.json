@@ -3184,7 +3184,14 @@
       "packages": "Pacotes de terceiros",
       "packagesEmpty": "Nenhum."
     },
-    "inspect": "Escolher um elemento para mudar"
+    "inspect": "Escolher um elemento para mudar",
+    "data": {
+      "view": "Ver dados",
+      "title": "Dados salvos",
+      "description": "O que este fragmento guardou com orbit.store. Somente leitura.",
+      "refresh": "Atualizar",
+      "truncated": "Mostrado só em parte."
+    }
   },
   "motion": {
     "unavailable": "Composição indisponível",

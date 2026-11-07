@@ -35,3 +35,12 @@ export interface FragmentDetails {
   packages: FragmentPackageInfo[]
   provenance: FragmentProvenance
 }
+
+/** One `orbit.store` entry as the read-only data view shows it. */
+export interface FragmentDataEntry {
+  key: string
+  bytes: number
+  /** The value as pretty JSON, clipped to a size a dialog can show. */
+  json: string
+  truncated: boolean
+}
