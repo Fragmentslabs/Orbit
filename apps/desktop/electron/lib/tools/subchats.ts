@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { SendMessageInput, SessionInfo, SpecialistProfile } from '@shared/chat'
+import { FRAGMENT_KINDS, type FragmentKind } from '@shared/fragments'
 import { dispatchAsk } from '../ask-dispatch'
 import { newRequestId } from '../ask-broker'
 import { getRunningSessionIds, runChat } from '../chat-engine'
@@ -76,6 +77,7 @@ async function openAndStart(
   brief: string,
   scope: Scope = 'subchat',
   profile?: SpecialistProfile,
+  fragmentKind?: FragmentKind,
 ): Promise<string> {
   let child
   if (scope === 'chat') {
@@ -85,7 +87,7 @@ async function openAndStart(
     // this turn: nested under a worker it shows up with the worker's icon, as if an
     // agent had opened it — when it is a conversation the user authorized.
     const parentId = input.parentSessionId ?? input.sessionId
-    child = await createSubchatRecord({ parentId, title, body: brief, profile })
+    child = await createSubchatRecord({ parentId, title, body: brief, profile, fragmentKind })
   }
   if (!child) return 'Error: the current conversation could not be found, so nothing was opened.'
   if (win && scope === 'chat') pinModel(win, child.id, input.providerId, input.modelId)
@@ -253,6 +255,12 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
   }
 }
 
+/** The kind a `fragment_create` call asked for; anything else means the default. */
+function fragmentKindOf(args: unknown): FragmentKind | undefined {
+  const kind = (args as { kind?: unknown })?.kind
+  return FRAGMENT_KINDS.find((k) => k === kind)
+}
+
 /** Per (conversation, craft): the person already answered the offer, so it is not repeated. */
 const offerDecided = new Set<string>()
 
@@ -285,12 +293,13 @@ export function withSpecialistOffer(tools: ToolSet, input: SendMessageInput, win
         const piece = typeof (args as { name?: unknown })?.name === 'string' ? (args as { name: string }).name : ''
         const title = piece ? `${label}: ${piece}` : label
         const brief = (input.text ?? '').trim().slice(0, 1500) || title
+        const fragmentKind = profile === 'fragment' ? fragmentKindOf(args) : undefined
         const requestId = newRequestId()
         let answer: string
         try {
           answer = await dispatchAsk<string>(
             input.sessionId,
-            { requestId, kind: 'subchat', subchat: { title, brief, scope: 'subchat', profile } },
+            { requestId, kind: 'subchat', subchat: { title, brief, scope: 'subchat', profile, fragmentKind } },
             options?.abortSignal,
           )
         } catch {
@@ -299,7 +308,7 @@ export function withSpecialistOffer(tools: ToolSet, input: SendMessageInput, win
           broadcastChatEvent({ type: 'ask:done', sessionId: input.sessionId, requestId })
         }
         offerDecided.add(key)
-        if (answer === 'new') return openAndStart(input, win, title, brief, 'subchat', profile)
+        if (answer === 'new') return openAndStart(input, win, title, brief, 'subchat', profile, fragmentKind)
         if (answer === 'here') return run(args, options)
         return 'The user declined the specialist chat and does not want this created now: leave that work aside.'
       },

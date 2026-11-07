@@ -407,7 +407,7 @@ describe('withSpecialistOffer', () => {
 
   const make = () => {
     const run = vi.fn(async () => 'written')
-    const tools = { motion_write: { description: 'x', execute: run }, other: { description: 'y', execute: vi.fn() } } as never
+    const tools = { motion_write: { description: 'x', execute: run }, fragment_create: { description: 'f', execute: run }, other: { description: 'y', execute: vi.fn() } } as never
     return { run, tools }
   }
   const call = (tools: Record<string, unknown>, name: string, args: unknown) =>
@@ -432,6 +432,14 @@ describe('withSpecialistOffer', () => {
     expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'motion' }))
     expect(String(result)).toContain('motion chat')
     expect(run).not.toHaveBeenCalled()
+  })
+
+  it('passes the fragment kind the agent asked for into the new subchat', async () => {
+    mocks.dispatchAsk.mockResolvedValue('new')
+    const { tools } = make()
+    const wrapped = withSpecialistOffer(tools, input({ sessionId: 'offer-kind' }), win)
+    await call(wrapped, 'fragment_create', { name: 'clock', kind: 'widget' })
+    expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'fragment', fragmentKind: 'widget' }))
   })
 
   it('on "here" runs the original tool and does not ask again in that conversation', async () => {

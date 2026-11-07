@@ -117,6 +117,8 @@ describe('createSubchatRecord', () => {
     const fragment = await createSubchatRecord({ parentId: 'parent', title: 'F', body: 'b', profile: 'fragment' })
     expect(fragment!.fragment).toEqual({ kind: 'screen' })
     expect(fragment!.profile).toBeUndefined()
+    const widget = await createSubchatRecord({ parentId: 'parent', title: 'W', body: 'b', profile: 'fragment', fragmentKind: 'widget' })
+    expect(widget!.fragment).toEqual({ kind: 'widget' })
     const plain = await createSubchatRecord({ parentId: 'parent', title: 'P', body: 'b' })
     expect(plain!.profile).toBeUndefined()
     expect(plain!.fragment).toBeUndefined()

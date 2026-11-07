@@ -1124,6 +1124,8 @@ export interface AskItem {
     /** The specialist agent this suggestion would open: the card offers "a Motion chat"
      *  instead of a plain subchat. */
     profile?: "fragment" | "motion" | "design"
+    /** For a fragment suggestion: the kind the agent asked for, carried into the new chat. */
+    fragmentKind?: "screen" | "panel" | "widget"
   }
 }
 
