@@ -10,11 +10,13 @@ export interface DraftPayload {
   files?: FilePart[]
   /** A ready-made message with [fields]: the input selects the first one and Tab walks the rest. */
   fields?: boolean
+  /** Which kind of piece the template creates, for the composer's badge. */
+  template?: string
 }
 
 interface DraftInputState {
   drafts: Record<string, DraftPayload>
-  setDraft: (sessionId: string | null | undefined, text: string, files?: FilePart[], options?: { fields?: boolean }) => void
+  setDraft: (sessionId: string | null | undefined, text: string, files?: FilePart[], options?: { fields?: boolean; template?: string }) => void
   consume: (sessionId: string | null | undefined) => DraftPayload | null
   adopt: (sessionId: string) => void
 }
@@ -23,7 +25,7 @@ export const useDraftInput = create<DraftInputState>((set, get) => ({
   drafts: {},
   setDraft: (sessionId, text, files, options) => {
     const key = sessionId ?? DRAFT_KEY
-    set((s) => ({ drafts: { ...s.drafts, [key]: { text, files, fields: options?.fields } } }))
+    set((s) => ({ drafts: { ...s.drafts, [key]: { text, files, fields: options?.fields, template: options?.template } } }))
   },
   consume: (sessionId) => {
     const key = sessionId ?? DRAFT_KEY

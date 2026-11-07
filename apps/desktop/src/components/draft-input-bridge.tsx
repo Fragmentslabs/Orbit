@@ -59,6 +59,7 @@ async function restoreAttachments(parts: FilePart[]): Promise<{
 
 export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
   const controller = usePromptInputController()
+  const { setTemplate, textareaRef } = controller
   const key = sessionId ?? "draft"
   const draft = useDraftInput((s) => s.drafts[key])
   const pendingInput = usePanelStore((s) => s.pendingInput)
@@ -68,12 +69,13 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
     const payload = useDraftInput.getState().consume(sessionId)
     if (payload === null) return
     controller.textInput.setInput(payload.text)
+    setTemplate(payload.template ?? null)
     if (payload.fields) {
       // After React has written the text into the field: two frames, one for the commit and
       // one for the layout, so the selection lands on the new value and not on the old one.
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          const node = controller.textareaRef.current
+          const node = textareaRef.current
           if (node) armTemplateInput(node)
         }),
       )
@@ -85,7 +87,7 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
         if (files.length > 0) controller.attachments.add(files)
       })
     }
-  }, [draft, controller.textInput, controller.attachments, controller.textareaRef, sessionId])
+  }, [draft, controller.textInput, controller.attachments, textareaRef, setTemplate, sessionId])
 
   useEffect(() => {
     if (!pendingInput) return

@@ -38,6 +38,11 @@ export function armTemplateInput(node: HTMLTextAreaElement): void {
   node.setSelectionRange(first.start, first.end)
 }
 
+/** Gives Tab back to the browser (the person dismissed the template's badge). */
+export function disarmTemplateInput(node: HTMLTextAreaElement): void {
+  templateInputs.delete(node)
+}
+
 /** The next field after the caret, only for an armed input that still has text. */
 export function nextArmedField(node: HTMLTextAreaElement): FieldRange | null {
   if (!templateInputs.has(node)) return null

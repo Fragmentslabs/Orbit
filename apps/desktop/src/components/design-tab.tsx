@@ -81,6 +81,7 @@ import {
 } from "@/src/components/design/design-protocol"
 import { designApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { TabHeader } from "@/src/components/tab-header"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { FloatingSidebar, FullscreenComposer } from "@/src/components/fullscreen-dock"
@@ -1700,19 +1701,12 @@ function DesignEditor({
       )}
     >
       {/* Header: the canvas on the left; tools, zoom and view on the right. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <LayoutGrid className="size-3.5 shrink-0 text-muted-foreground" />
-          <Truncate text={title}>
-            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
-          </Truncate>
-          {wide && boards.length > 0 && (
-            <Badge variant="outline" className="shrink-0">
-              {t("design.boardsCount", { count: boards.length })}
-            </Badge>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+      <TabHeader
+        icon={LayoutGrid}
+        iconClassName="text-violet-400"
+        title={title}
+        tag={wide && boards.length > 0 ? <Badge variant="outline" className="shrink-0">{t("design.boardsCount", { count: boards.length })}</Badge> : undefined}
+      >
           <Hint label={t("design.tools.select")}>
             <Button
               variant="ghost"
@@ -1813,8 +1807,7 @@ function DesignEditor({
               onClick={() => setInspectorOpen((v) => !v)}
             />
           )}
-        </div>
-      </div>
+        </TabHeader>
 
       {state.status === "error" && (
         <div className="flex shrink-0 items-center gap-2 border-b border-border/60 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">

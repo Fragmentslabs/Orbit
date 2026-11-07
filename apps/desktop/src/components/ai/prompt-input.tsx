@@ -216,6 +216,9 @@ export interface PromptInputControllerProps {
   attachments: AttachmentsContext
   /** The message field, for focusing and selecting from outside it. */
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
+  /** The ready-made message in the input, by kind ("slides"…), or null. */
+  template: string | null
+  setTemplate: (kind: string | null) => void
   /** INTERNAL: Allows PromptInput to register its file textInput + "open" callback */
   __registerFileInput: (ref: RefObject<HTMLInputElement | null>, open: () => void) => void
 }
@@ -313,6 +316,12 @@ export function PromptInputProvider({
   // The field of this provider, so whoever puts a template in the input (DraftInputBridge) can
   // select its first [field] without hunting the textarea in the page.
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  // Which ready-made message is in the input (its badge shows above the field). It lasts while
+  // there is text: once the input is emptied (sent or cleared) the message is no longer a template.
+  const [template, setTemplate] = useState<string | null>(null)
+  useEffect(() => {
+    if (textInput === "") setTemplate(null)
+  }, [textInput])
 
   const add = useCallback((files: File[] | FileList) => {
     const incoming = readableAttachments(Array.from(files))
@@ -424,9 +433,11 @@ export function PromptInputProvider({
       },
       attachments,
       textareaRef,
+      template,
+      setTemplate,
       __registerFileInput,
     }),
-    [textInput, clearInput, attachments, __registerFileInput],
+    [textInput, clearInput, attachments, template, __registerFileInput],
   )
 
   return (

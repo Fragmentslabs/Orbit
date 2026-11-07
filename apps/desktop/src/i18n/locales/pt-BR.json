@@ -106,6 +106,11 @@
     "overlayHint": "Solte a pasta para criar um novo chat no modo código"
   },
   "input": {
+    "template": {
+      "badge": "Modelo: {{name}}",
+      "hint": "Tab pula para o próximo campo",
+      "dismiss": "Remover modelo"
+    },
     "placeholder": "Pergunte qualquer coisa...",
     "attachFiles": "Anexar arquivos",
     "submit": "Enviar",
@@ -610,6 +615,7 @@
     },
     "processes": {
       "title": "Terminais",
+      "pid": "PID {{pid}}",
       "none": "Nenhum",
       "scopeChat": "Este chat",
       "scopeAll": "Todos",
@@ -1526,11 +1532,6 @@
     "showMoreLines_one": "Mostrar mais {{count}} linha",
     "showMoreLines_other": "Mostrar as outras {{count}} linhas",
     "openFile": "Abrir arquivo",
-    "filters": {
-      "kind": "Tipo",
-      "period": "Período",
-      "scope": "Onde"
-    },
     "refresh": "Atualizar",
     "commitsTab": "Commits",
     "loadingCommits": "Carregando commits...",
@@ -2383,6 +2384,12 @@
   },
   "media": {
     "searchPlaceholder": "Buscar por nome ou tarefa",
+    "filters": {
+      "kind": "Tipo",
+      "scope": "Onde",
+      "show": "Mostrar filtros",
+      "hide": "Ocultar filtros"
+    },
     "refresh": "Atualizar",
     "loading": "Carregando imagens...",
     "empty": "Nenhuma imagem por aqui ainda.",
@@ -2412,12 +2419,6 @@
       "design": "Design",
       "slides": "Apresentação",
       "gif": "GIF"
-    },
-    "period": {
-      "all": "Qualquer data",
-      "today": "24h",
-      "week": "7 dias",
-      "month": "30 dias"
     },
     "scope": {
       "all": "Tudo",

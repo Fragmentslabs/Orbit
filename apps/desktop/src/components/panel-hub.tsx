@@ -1,25 +1,19 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, ImageOff, Presentation, LayoutGrid, FileText, Clapperboard } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
-import { mediaKind, thumbUrl, type MediaEntry } from "@shared/media"
+import { ChevronRight, ImageOff } from "lucide-react"
+import { assetUrl, mediaKind, thumbUrl, type MediaEntry } from "@shared/media"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useTheme } from "@/components/theme-provider"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 import { mediaApi } from "@/src/lib/ipc"
 import { groupMediaByRoot } from "@/src/lib/media-groups"
 import { KIND_ICON } from "@/src/lib/media-kind-icon"
-import { startCreation, type CreationKind } from "@/src/lib/start-creation"
+import { CREATIONS } from "@/src/lib/creation-kinds"
+import { startCreation } from "@/src/lib/start-creation"
 import { useSessionStore } from "@/src/stores/session-store"
 
 const RECENT_COUNT = 4
-
-const CREATIONS: { kind: CreationKind; Icon: LucideIcon; tone: string }[] = [
-  { kind: "document", Icon: FileText, tone: "bg-sky-500/15 text-sky-400" },
-  { kind: "design", Icon: LayoutGrid, tone: "bg-violet-500/15 text-violet-400" },
-  { kind: "slides", Icon: Presentation, tone: "bg-amber-500/15 text-amber-400" },
-  { kind: "motion", Icon: Clapperboard, tone: "bg-emerald-500/15 text-emerald-400" },
-]
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{children}</p>
@@ -41,7 +35,7 @@ export function CreateCards() {
             key={kind}
             type="button"
             title={t("panel.hub.createHint")}
-            onClick={() => void startCreation(mode, t(`panel.hub.${kind}.prompt`))}
+            onClick={() => void startCreation(mode, kind, t(`panel.hub.${kind}.prompt`))}
             className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-sidebar-border bg-card px-1 pt-3.5 pb-3 text-xs transition-colors hover:bg-sidebar-accent"
           >
             <span className={cn("flex size-8 items-center justify-center rounded-lg", tone)}>
@@ -84,14 +78,15 @@ function RecentTile({ entry, onOpen }: { entry: MediaEntry; onOpen: () => void }
 
 /**
  * "Recent": the last pieces generated in the current mode. A piece with a tab of its own opens
- * there (`onOpenEntry` answers false for the ones that need the gallery's viewer, and then the
- * gallery opens instead); "see all" goes to the Media tab.
+ * there (`onOpenEntry` answers false for image, video and audio, which open in a viewer right here);
+ * "see all" goes to the Media tab.
  */
 export function RecentMedia({ onOpenEntry, onSeeAll }: { onOpenEntry: (entry: MediaEntry) => boolean; onSeeAll: () => void }) {
   const { t } = useTranslation()
   const { mode } = useWorkspace()
   const sessions = useSessionStore((s) => s.sessions)
   const [entries, setEntries] = useState<MediaEntry[]>([])
+  const [preview, setPreview] = useState<MediaEntry | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -130,10 +125,23 @@ export function RecentMedia({ onOpenEntry, onSeeAll }: { onOpenEntry: (entry: Me
       ) : (
         <div className="grid grid-cols-4 gap-2">
           {recent.map((entry) => (
-            <RecentTile key={entry.id} entry={entry} onOpen={() => { if (!onOpenEntry(entry)) onSeeAll() }} />
+            <RecentTile key={entry.id} entry={entry} onOpen={() => { if (!onOpenEntry(entry)) setPreview(entry) }} />
           ))}
         </div>
       )}
+      {/* What has no tab of its own (image, video, audio) opens right here, like in the gallery. */}
+      <Dialog open={!!preview} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="max-w-5xl p-2">
+          <DialogTitle className="sr-only">{preview?.name ?? preview?.id ?? ""}</DialogTitle>
+          {preview && mediaKind(preview) === "video" && preview.videoUrl ? (
+            <video key={preview.id} src={preview.videoUrl} controls autoPlay className="max-h-[76vh] w-full rounded-md bg-black object-contain" />
+          ) : preview && mediaKind(preview) === "audio" ? (
+            <audio key={preview.id} src={assetUrl(preview)} controls autoPlay className="w-full" />
+          ) : preview ? (
+            <img src={`orbit-media://${preview.id}`} alt={preview.name ?? preview.id} className="max-h-[76vh] w-full rounded-md object-contain" />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

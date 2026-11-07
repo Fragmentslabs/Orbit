@@ -452,7 +452,7 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
         />
         <section className="flex flex-col gap-2.5">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("panel.hub.open")}</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 @[30rem]:grid-cols-3">
             {availableTabs.map(([type, { icon: Icon, label, description }]) => {
               // Folders follow the repository selected in the workspace: with no active
               // chat it is still possible to open (new chat), as long as there is a project.

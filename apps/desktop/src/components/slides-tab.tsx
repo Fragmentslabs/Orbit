@@ -13,12 +13,12 @@ import {
   RotateCw,
   StickyNote,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { IconAction } from "@/src/components/ai/artifact-part"
 import { FloatingSidebar } from "@/src/components/fullscreen-dock"
 import { useSlidesDeck } from "@/src/components/slides/use-slides-deck"
 import { slidesApi } from "@/src/lib/ipc"
+import { TabHeader, TabHeaderSeparator } from "@/src/components/tab-header"
 import { cn } from "@/lib/utils"
 import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
 import { Truncate } from "@/components/ui/truncated-text"
@@ -192,19 +192,7 @@ export function SlidesTab({
     >
       {/* Header: deck + file on the left; list, notes, reload and full
           screen on the right. Same breathing room as the motion header. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
-          <Truncate text={title}>
-            <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
-          </Truncate>
-          <Truncate>
-              <Badge variant="outline" className="max-w-44 shrink-0 truncate font-mono" title={entry}>
-              {baseName(entry)}
-            </Badge>
-          </Truncate>
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+      <TabHeader icon={Presentation} iconClassName="text-amber-400" title={title} tag={baseName(entry)}>
           {/* In fullscreen what opens and closes the list is the button of the floating
               sidebar, next to it (same drawing as the Design tab). */}
           {!fullscreen && (
@@ -221,6 +209,7 @@ export function SlidesTab({
             active={showNotes}
             onClick={() => setShowNotes((v) => !v)}
           />
+          <TabHeaderSeparator />
           <IconAction
             icon={exporting ? Loader2 : Download}
             label={exporting ? t("slides.exporting") : t("slides.exportPdf")}
@@ -233,8 +222,7 @@ export function SlidesTab({
             label={t(fullscreen ? "slides.exitFullscreen" : "slides.fullscreen")}
             onClick={() => setFullscreen((value) => !value)}
           />
-        </div>
-      </div>
+        </TabHeader>
 
       {/* The PDF failure cannot replace the stage: a thin strip warns and the
           deck stays navigable. */}

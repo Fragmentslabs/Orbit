@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, Download, Library, Loader2 } from "lucide-react"
@@ -70,7 +71,7 @@ export function DocumentDownloadMenu({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7"
+                className="size-6 text-muted-foreground"
                 disabled={busy !== null}
                 aria-label={t("documents.download")}
 
@@ -109,11 +110,14 @@ export function DocumentSourceBadge({
   sessionId,
   onError,
   beforeAdd,
+  compact = false,
 }: {
   documentId: string
   sessionId: string
   onError: (message: string) => void
   beforeAdd?: () => Promise<void>
+  /** Icon only, for a tab header: the state ("is a source") is the highlighted button. */
+  compact?: boolean
 }) {
   const { t } = useTranslation()
   const [isSource, setIsSource] = useState(false)
@@ -138,6 +142,24 @@ export function DocumentSourceBadge({
       setBusy(false)
     }
   }, [sessionId, documentId, beforeAdd, onError])
+
+  if (compact) {
+    const label = isSource ? t("documents.isSource") : t("documents.useAsSource")
+    return (
+      <Hint label={label}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("size-6", isSource ? "bg-primary/15 text-primary hover:bg-primary/20" : "text-muted-foreground")}
+          disabled={busy || isSource}
+          aria-label={label}
+          onClick={() => void add()}
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Library className="size-3.5" />}
+        </Button>
+      </Hint>
+    )
+  }
 
   return (
     <Hint label={isSource ? t("documents.isSource") : t("documents.useAsSource")}>

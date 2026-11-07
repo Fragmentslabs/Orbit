@@ -9,7 +9,7 @@ export type CreationKind = "document" | "design" | "slides" | "motion"
  * fills the [fields] and presses Enter. The chat is opened first so the message lands in the
  * new conversation's input, and not in the one that was open.
  */
-export async function startCreation(mode: SessionMode, text: string): Promise<void> {
+export async function startCreation(mode: SessionMode, kind: CreationKind, text: string): Promise<void> {
   await useSessionStore.getState().selectSession(mode, null)
-  useDraftInput.getState().setDraft(null, text, undefined, { fields: true })
+  useDraftInput.getState().setDraft(null, text, undefined, { fields: true, template: kind })
 }

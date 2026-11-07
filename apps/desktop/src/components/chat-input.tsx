@@ -27,6 +27,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
+import { TemplateBadge } from "@/src/components/template-badge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
@@ -359,6 +360,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           {/* The microphone is anchored to the LINE of the textarea, and not to the top of the
               box: that way it follows the text where it starts, even if some
               line comes in above the box. */}
+          <TemplateBadge />
           <div className="relative w-full">
             {/* TOP right corner, at the level of the first line of the text:
                 absolute so it does not push the content, with the slack on the right
