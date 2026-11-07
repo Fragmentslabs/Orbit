@@ -5,6 +5,7 @@ import {
   type SourceAttachmentRef,
 } from "@/src/components/ai/prompt-input"
 import { isFetchableAttachmentUrl } from "@/src/lib/attachment-url"
+import { armTemplateInput } from "@/src/lib/template-fields"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { usePanelStore } from "@/src/stores/panel-store"
 import type { FilePart } from "@shared/chat"
@@ -67,6 +68,16 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
     const payload = useDraftInput.getState().consume(sessionId)
     if (payload === null) return
     controller.textInput.setInput(payload.text)
+    if (payload.fields) {
+      // After React has written the text into the field: two frames, one for the commit and
+      // one for the layout, so the selection lands on the new value and not on the old one.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const node = controller.textareaRef.current
+          if (node) armTemplateInput(node)
+        }),
+      )
+    }
     if (payload.files?.length) {
       void restoreAttachments(payload.files).then(({ files, media, sources }) => {
         for (const ref of media) controller.attachments.addMedia(ref)
@@ -74,7 +85,7 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
         if (files.length > 0) controller.attachments.add(files)
       })
     }
-  }, [draft, controller.textInput, controller.attachments, sessionId])
+  }, [draft, controller.textInput, controller.attachments, controller.textareaRef, sessionId])
 
   useEffect(() => {
     if (!pendingInput) return

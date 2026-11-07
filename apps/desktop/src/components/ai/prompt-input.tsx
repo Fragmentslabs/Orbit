@@ -27,12 +27,15 @@ import {
   type HTMLAttributes,
   isValidElement,
   type KeyboardEventHandler,
+  type MutableRefObject,
   type PropsWithChildren,
   type ReactNode,
   type RefObject,
   useCallback,
   useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -71,6 +74,7 @@ import {
 import { cn } from "@/lib/utils"
 import i18n from "@/src/i18n"
 import { historyKeyInput, type HistoryInput } from "@/src/lib/input-history"
+import { nextArmedField } from "@/src/lib/template-fields"
 import {
   MAX_PASTED_VIDEO_BYTES,
   blobUrlsToDataUrls,
@@ -210,6 +214,8 @@ export interface TextInputContext {
 export interface PromptInputControllerProps {
   textInput: TextInputContext
   attachments: AttachmentsContext
+  /** The message field, for focusing and selecting from outside it. */
+  textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   /** INTERNAL: Allows PromptInput to register its file textInput + "open" callback */
   __registerFileInput: (ref: RefObject<HTMLInputElement | null>, open: () => void) => void
 }
@@ -304,6 +310,9 @@ export function PromptInputProvider({
   const [attachmentFiles, setAttachmentFiles] = useState<PromptInputFile[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const openRef = useRef<() => void>(() => {})
+  // The field of this provider, so whoever puts a template in the input (DraftInputBridge) can
+  // select its first [field] without hunting the textarea in the page.
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const add = useCallback((files: File[] | FileList) => {
     const incoming = readableAttachments(Array.from(files))
@@ -414,6 +423,7 @@ export function PromptInputProvider({
         clear: clearInput,
       },
       attachments,
+      textareaRef,
       __registerFileInput,
     }),
     [textInput, clearInput, attachments, __registerFileInput],
@@ -1094,6 +1104,18 @@ export const PromptInputTextarea = ({
   const attachments = usePromptInputAttachments()
   const [isComposing, setIsComposing] = useState(false)
 
+  // The textarea components of the UI kit do not forward refs (React 18), so the element is
+  // found by a unique attribute and handed to the provider (see textareaRef).
+  const fieldId = useId()
+  const textareaRef = controller?.textareaRef
+  useLayoutEffect(() => {
+    if (!textareaRef) return
+    textareaRef.current = document.querySelector<HTMLTextAreaElement>(`textarea[data-field-id="${fieldId}"]`)
+    return () => {
+      textareaRef.current = null
+    }
+  }, [textareaRef, fieldId])
+
   const empty = (controller?.textInput.value ?? "") === ""
   const showSuggestion = Boolean(suggestion && controller && empty)
 
@@ -1104,6 +1126,17 @@ export const PromptInputTextarea = ({
       e.preventDefault()
       controller.textInput.setInput(suggestion)
       return
+    }
+    // Tab walks through the [fields] of a ready-made message. Past the last one it gives up,
+    // so the key goes back to moving the focus.
+    if (e.key === "Tab" && !e.shiftKey && controller) {
+      const node = e.currentTarget
+      const field = nextArmedField(node)
+      if (field) {
+        e.preventDefault()
+        node.setSelectionRange(field.start, field.end)
+        return
+      }
     }
     // ↑/↓ bring back what was already sent (useInputHistory), but only at the
     // EDGE of the field: in any other position the arrow belongs to the caret — including
@@ -1227,6 +1260,7 @@ export const PromptInputTextarea = ({
       onCompositionStart={() => setIsComposing(true)}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
+      data-field-id={fieldId}
       placeholder={showSuggestion ? `${suggestion}  ⇥ Tab` : (placeholder ?? t("input.placeholderDefault"))}
       {...props}
       {...controlledProps}
