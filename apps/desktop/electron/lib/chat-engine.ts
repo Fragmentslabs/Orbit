@@ -124,7 +124,8 @@ import { forwardToOverlay, getOverlayWindow } from './overlay/window'
 import { globalMode } from './permission/global-mode'
 import { perfSpan } from './perf'
 import { rememberSessionModel } from './fragments/session-model'
-import { fragmentProfileOf, fragmentTurnBlock } from './fragments/fragment-profile'
+import { isSpecialistTurn, leanOptions, profileOf, profileTurnBlock } from './profiles'
+import { describeChatArtifacts } from './artifacts/describe'
 
 // Tools whose input (still streaming) opens the matching tab LIVE, as
 // soon as the `name` field shows up in the JSON — before the model ends
@@ -1702,25 +1703,10 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   // Fragments answer `orbit.ai` with the model the person is using right now.
   rememberSessionModel(input.sessionId, input.providerId, input.modelId)
-  // A fragment's own chat runs lean (see fragments/fragment-profile.ts): the profile is
+  // A specialist chat (fragment, motion, design) runs lean (see profiles/index.ts): the profile is
   // decided here, from the session on disk, never trusted from the UI.
-  const fragmentProfile = await fragmentProfileOf(input.sessionId).catch(() => null)
-  if (fragmentProfile) {
-    input = {
-      ...input,
-      options: {
-        ...input.options,
-        fragment: true,
-        brainContext: false,
-        research: false,
-        browser: false,
-        computer: false,
-        subagents: false,
-        orchestrate: undefined,
-        plan: false,
-      },
-    }
-  }
+  const specialist = await profileOf(input.sessionId).catch(() => null)
+  if (specialist) input = { ...input, options: leanOptions(input.options, specialist) }
   // The turn's media journal (pieces and gallery) is what lets the message
   // revert undo what the agent produced outside the working folder.
   // The write journal records what the turn's tools wrote in the working
@@ -2353,11 +2339,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Subchats' latest results and the chats that continue this one: they change between
     // turns, so they ride in the message like the memories (see subchats.ts).
     const subchatsBlock =
-      input.orchestrationRole !== 'worker' && !input.options.fragment ? await subchatsTurnBlock(input.sessionId).catch(() => '') : ''
-    const skillsBlock = input.options.fragment ? '' : await skillsTurnBlock(input, recentTurns(history), turnEmbed)
-    // A fragment's chat only needs to know which fragment it is looking at.
-    const fragmentBlock = input.options.fragment
-      ? await fragmentTurnBlock(input.sessionId).catch(() => '')
+      input.orchestrationRole !== 'worker' && !isSpecialistTurn(input) ? await subchatsTurnBlock(input.sessionId, describeChatArtifacts).catch(() => '') : ''
+    const skillsBlock = isSpecialistTurn(input) ? '' : await skillsTurnBlock(input, recentTurns(history), turnEmbed)
+    // A specialist chat only needs to know the state of the artifact it is working on.
+    const profileBlock = input.options.profile
+      ? await profileTurnBlock(input.options.profile, input.sessionId).catch(() => '')
       : ''
     const modelHistory = input.options.overlay ? recentOverlayHistory(history.slice(0, -1)) : history.slice(0, -1)
     let autoContinues = 0
@@ -2411,7 +2397,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // without this the model would call motion_write having never read how.
     const guidesBlock = onDemand && initialActive ? activeFamilyGuides(onDemand.families, initialActive.families) : ''
     const turnBlock = [
-      fragmentBlock,
+      profileBlock,
       memoryBlock,
       skillsBlock,
       guidesBlock,

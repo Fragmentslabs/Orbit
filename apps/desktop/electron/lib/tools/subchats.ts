@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import type { SendMessageInput, SessionInfo } from '@shared/chat'
+import type { SendMessageInput, SessionInfo, SpecialistProfile } from '@shared/chat'
 import { dispatchAsk } from '../ask-dispatch'
 import { newRequestId } from '../ask-broker'
 import { getRunningSessionIds, runChat } from '../chat-engine'
@@ -75,6 +75,7 @@ async function openAndStart(
   title: string,
   brief: string,
   scope: Scope = 'subchat',
+  profile?: SpecialistProfile,
 ): Promise<string> {
   let child
   if (scope === 'chat') {
@@ -84,12 +85,15 @@ async function openAndStart(
     // this turn: nested under a worker it shows up with the worker's icon, as if an
     // agent had opened it — when it is a conversation the user authorized.
     const parentId = input.parentSessionId ?? input.sessionId
-    child = await createSubchatRecord({ parentId, title, body: brief })
+    child = await createSubchatRecord({ parentId, title, body: brief, profile })
   }
   if (!child) return 'Error: the current conversation could not be found, so nothing was opened.'
   if (win && scope === 'chat') pinModel(win, child.id, input.providerId, input.modelId)
   broadcastSessionEvent({ type: 'session', sessionId: child.id, session: child })
   if (win) startChildTurn(input, win, child, tNow('subchat.kickoff'))
+  if (profile) {
+    return `A ${profile} chat was opened for this: "${child.title}" (#${child.id}). It is a specialist chat attached to this conversation and is already working on it. Do NOT create the piece here — tell the user in one sentence that the work went to the ${profile} chat.`
+  }
   if (scope === 'chat') {
     return `New chat opened: "${child.title}" (#${child.id}). It is a top-level conversation in the same folder — not a subchat — starts from your brief and is already working on it in parallel. Tell the user where the work went.`
   }
@@ -247,4 +251,59 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
       },
     }),
   }
+}
+
+/** Per (conversation, craft): the person already answered the offer, so it is not repeated. */
+const offerDecided = new Set<string>()
+
+const OFFERED: Array<{ tool: string; profile: SpecialistProfile; label: string }> = [
+  { tool: 'fragment_create', profile: 'fragment', label: 'Fragment' },
+  { tool: 'motion_write', profile: 'motion', label: 'Motion' },
+  { tool: 'design_write', profile: 'design', label: 'Design' },
+]
+
+/**
+ * The moment a general chat is about to CREATE a motion piece or a design canvas, the person
+ * is offered a specialist chat for it (a lean agent of that craft, attached to this one).
+ * It is detected here, at the gesture, so the general prompt carries no instruction about it.
+ *
+ * Once per conversation and craft: "continue here" (or declining) stands until the chat ends.
+ * Specialist chats, workers and plan turns never see the offer.
+ */
+export function withSpecialistOffer(tools: ToolSet, input: SendMessageInput, win?: BrowserWindow): ToolSet {
+  if (!win || input.options.profile || input.orchestrationRole === 'worker' || input.options.plan) return tools
+  const wrapped: ToolSet = { ...tools }
+  for (const { tool: name, profile, label } of OFFERED) {
+    const original = tools[name]
+    if (!original || typeof original.execute !== 'function') continue
+    const run = original.execute.bind(original) as (args: unknown, options: unknown) => Promise<unknown>
+    wrapped[name] = {
+      ...original,
+      execute: async (args: unknown, options: { abortSignal?: AbortSignal }) => {
+        const key = `${input.sessionId}:${profile}`
+        if (offerDecided.has(key)) return run(args, options)
+        const piece = typeof (args as { name?: unknown })?.name === 'string' ? (args as { name: string }).name : ''
+        const title = piece ? `${label}: ${piece}` : label
+        const brief = (input.text ?? '').trim().slice(0, 1500) || title
+        const requestId = newRequestId()
+        let answer: string
+        try {
+          answer = await dispatchAsk<string>(
+            input.sessionId,
+            { requestId, kind: 'subchat', subchat: { title, brief, scope: 'subchat', profile } },
+            options?.abortSignal,
+          )
+        } catch {
+          return 'The offer was cancelled before the user answered — do not create anything and leave that work aside.'
+        } finally {
+          broadcastChatEvent({ type: 'ask:done', sessionId: input.sessionId, requestId })
+        }
+        offerDecided.add(key)
+        if (answer === 'new') return openAndStart(input, win, title, brief, 'subchat', profile)
+        if (answer === 'here') return run(args, options)
+        return 'The user declined the specialist chat and does not want this created now: leave that work aside.'
+      },
+    } as ToolSet[string]
+  }
+  return wrapped
 }

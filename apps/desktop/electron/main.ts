@@ -165,6 +165,8 @@ import {
 } from './lib/media'
 import { registerFragmentProtocol } from './lib/fragments/fragment-protocol'
 import { registerFragmentIpc } from './lib/fragments/fragment-ipc'
+import { registerArtifactIpc } from './lib/artifacts/artifact-ipc'
+import { claimInstance } from './lib/instance-lock'
 import { readWebImage, registerWebImageProtocol } from './lib/web-images/store'
 import {
   fontFaceCss,
@@ -399,11 +401,10 @@ function quitApp(): void {
 
 // A termination signal is a real exit, never "close the window". On macOS the app is
 // resident (see `before-quit`), and without this a SIGTERM was turned into hiding the
-// window: the old process stayed alive holding the single-instance lock, so in
-// `vite dev` — which restarts Electron by killing the old one with SIGTERM — the new
-// instance found the lock taken and quit, the dev server went down with it and the old
-// window stayed open and black, with nothing behind it. The timer is the way out if some
-// cleanup in `before-quit` hangs, so the lock is never left behind.
+// window: the old process stayed alive for good. `vite dev` restarts Electron by killing
+// the old one with SIGTERM and spawning the new one at once; the new instance waits for the
+// old one to be gone (lib/instance-lock.ts). The timer is the way out if some cleanup in
+// `before-quit` hangs, so the old process never outlives that wait.
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
   process.once(signal, () => {
     quitApp()
@@ -510,10 +511,18 @@ if (!app.isPackaged) {
 
 // The lock has to be requested before ready; the secondary instance hands the
 // argv (folder path) to the primary via event.
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
-if (!gotSingleInstanceLock) {
+// Packaged: Electron's lock. Dev: wait for the previous instance to be gone instead of
+// quitting (see lib/instance-lock.ts — a restart by the dev server used to take it down).
+const instanceClaim = claimInstance({
+  packaged: app.isPackaged,
+  requestLock: () => app.requestSingleInstanceLock(),
+  profileDir: app.getPath('userData'),
+})
+void instanceClaim.then((owned) => {
+  if (owned) return
+  if (!app.isPackaged) console.error('[dev] another Orbit dev instance is still running on this profile; close it and try again.')
   app.quit()
-}
+})
 
 let pendingOpenFolder: string | null = null
 
@@ -984,7 +993,7 @@ const IMAGE_EXTENSIONS = new Set(
  *  would fill the renderer memory with base64 without anyone asking. */
 const MAX_MARKDOWN_IMAGES = 60
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Electron's WM_CLASS comes from the package.json desktopName ("orbit.desktop"),
   // and electron-builder names the .desktop and the StartupWMClass from the
   // SAME field (linux.syncDesktopName). That match is what makes the environment
@@ -1017,8 +1026,9 @@ app.whenReady().then(() => {
     if (existsSync(dockIcon)) app.dock?.setIcon(dockIcon)
   }
 
-  // Secondary instance: the lock was not obtained and the app is already quitting.
-  if (!gotSingleInstanceLock) return
+  // Secondary instance: the claim was not obtained and the app is already quitting. In dev
+  // this is also where a restart waits for the previous instance to leave.
+  if (!(await instanceClaim)) return
 
   // Persisted renderer language: loaded before any native notification, which
   // can fire (scheduled routine) without any request coming from the UI.
@@ -2172,6 +2182,7 @@ app.whenReady().then(() => {
   ipcMain.handle('docs:clearFolder', (_event, folderId: string) => deleteFolderDocuments(folderId))
 
   registerFragmentIpc()
+  registerArtifactIpc()
 
   // HTML artifacts: the renderer never reads the file directly (it is served by
   // orbit-artifact://) — it only needs the content to export.

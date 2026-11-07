@@ -42,7 +42,7 @@ export function buildCatalog(
   )
   // A worker has no bridges: it gets the whole static set, with no map and no
   // trimming — a round-trip costs it proportionally more (§6.7 of the plan).
-  const onDemand = input.orchestrationRole !== 'worker' && !input.options.fragment
+  const onDemand = input.orchestrationRole !== 'worker' && !input.options.profile
   // The bridges come in AFTER the classification: they are core, not a family.
   if (onDemand) {
     Object.assign(tools, createToolBridgeTools({ families, tools }))

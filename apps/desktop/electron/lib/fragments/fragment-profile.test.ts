@@ -50,7 +50,7 @@ function input(sessionId: string, fragment: boolean): SendMessageInput {
     text: 'hi',
     providerId: 'p',
     modelId: 'm',
-    options: fragment ? { fragment: true } : {},
+    options: fragment ? { profile: 'fragment' } : {},
   } as unknown as SendMessageInput
 }
 

@@ -10,6 +10,7 @@ import type {
   FragmentManifest,
   FragmentMetaPatch,
   FragmentModel,
+  FragmentReasoning,
   FragmentPins,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
@@ -125,6 +126,7 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
       kind,
       pinned: sanitizePins(parsed.pinned, kind),
       model: sanitizeModel(parsed.model),
+      reasoning: sanitizeReasoning(parsed.reasoning),
       sdk: 1,
       requests: sanitizeCaps(parsed.requests),
       grants: sanitizeCaps(parsed.grants),
@@ -166,6 +168,14 @@ function sanitizeModel(value: unknown): FragmentModel | undefined {
   if (typeof raw.providerId !== 'string' || typeof raw.modelId !== 'string') return undefined
   if (!raw.providerId || !raw.modelId) return undefined
   return { providerId: raw.providerId.slice(0, 120), modelId: raw.modelId.slice(0, 200) }
+}
+
+function sanitizeReasoning(value: unknown): FragmentReasoning | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Partial<FragmentReasoning>
+  if (raw.enabled !== true) return undefined
+  const variantId = typeof raw.variantId === 'string' && /^[a-z0-9_-]{1,40}$/i.test(raw.variantId) ? raw.variantId : undefined
+  return { enabled: true, ...(variantId ? { variantId } : {}) }
 }
 
 function sanitizeCaps(value: unknown): FragmentCapability[] {
@@ -276,7 +286,12 @@ export async function updateFragmentMeta(id: string, patch: FragmentMetaPatch): 
     if (patch.pinned) next.pinned = { ...manifest.pinned, ...sanitizePins(patch.pinned, manifest.kind) }
     if (patch.model === null) delete next.model
     else if (patch.model) next.model = sanitizeModel(patch.model) ?? manifest.model
-    if (typeof patch.sessionId === 'string' && patch.sessionId) next.sessionId = patch.sessionId
+    if (patch.reasoning === null) delete next.reasoning
+    else if (patch.reasoning) {
+      const reasoning = sanitizeReasoning(patch.reasoning)
+      if (reasoning) next.reasoning = reasoning
+      else delete next.reasoning
+    }
     await writeManifestFile(next)
     emitUpdated(next)
     return next

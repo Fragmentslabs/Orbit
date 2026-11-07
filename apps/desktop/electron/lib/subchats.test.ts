@@ -108,9 +108,39 @@ describe('createSubchatRecord', () => {
     expect(body).toContain('Swap the split.')
   })
 
+  it('marks a specialist subchat: motion/design by profile, a fragment chat by its own field', async () => {
+    store.clear()
+    store.set('session/parent', session('parent', undefined, { mode: 'chat' }))
+    const motion = await createSubchatRecord({ parentId: 'parent', title: 'M', body: 'b', profile: 'motion' })
+    expect(motion!.profile).toBe('motion')
+    expect(motion!.fragment).toBeUndefined()
+    const fragment = await createSubchatRecord({ parentId: 'parent', title: 'F', body: 'b', profile: 'fragment' })
+    expect(fragment!.fragment).toEqual({ kind: 'screen' })
+    expect(fragment!.profile).toBeUndefined()
+    const plain = await createSubchatRecord({ parentId: 'parent', title: 'P', body: 'b' })
+    expect(plain!.profile).toBeUndefined()
+    expect(plain!.fragment).toBeUndefined()
+  })
+
   it('creates nothing when the parent does not exist', async () => {
     store.clear()
     expect(await createSubchatRecord({ parentId: 'fantasma', title: 'X', body: 'Y' })).toBeNull()
+  })
+})
+
+describe('formatSubchatsBlock with artifacts', () => {
+  const child = { id: 'c1', title: 'Logo animation', createdAt: Date.now() } as never
+
+  it('lists what a specialist subchat made and says the parent can act on it', () => {
+    const block = formatSubchatsBlock([{ session: child, result: 'Done', artifacts: ['motion "logo" (id mv_9 — pass it as `id`)'] }])
+    expect(block).toContain('Made: motion "logo"')
+    expect(block).toContain('no need to send it back')
+  })
+
+  it('stays as before when no subchat made anything', () => {
+    const block = formatSubchatsBlock([{ session: child, result: 'Done' }])
+    expect(block).not.toContain('Made:')
+    expect(block).not.toContain('no need to send it back')
   })
 })
 

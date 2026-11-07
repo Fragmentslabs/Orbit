@@ -51,6 +51,7 @@ function emitSingle(target: string, item: AskItem): void {
       title: item.subchat?.title ?? '',
       brief: item.subchat?.brief ?? '',
       scope: item.subchat?.scope,
+      profile: item.subchat?.profile,
       origin: item.origin,
     })
     return

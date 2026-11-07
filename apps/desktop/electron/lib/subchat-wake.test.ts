@@ -44,6 +44,15 @@ describe('wakeText', () => {
     expect(wakeText(child, undefined)).toContain('subchat.finishedEmpty')
   })
 
+  it('tells the parent what a specialist subchat made, with how to reach it', () => {
+    const text = wakeText(child, msg('assistant', {}, 'Done'), ['motion "intro" (id mv_1 — pass it as `id` to the motion tools)'])
+    expect(text).toContain('Done')
+    expect(text).toContain('Made by this subchat')
+    expect(text).toContain('mv_1')
+    // nothing made: the text is exactly as before
+    expect(wakeText(child, msg('assistant', {}, 'Done'), [])).toBe('subchat.finished Fix login\n\nDone')
+  })
+
   it('caps a long answer', () => {
     expect(wakeText(child, msg('assistant', {}, 'x'.repeat(10_000))).length).toBeLessThan(4_200)
   })

@@ -1,4 +1,4 @@
-import type { ChatMessage, SessionInfo } from '@shared/chat'
+import type { ChatMessage, SessionInfo, SpecialistProfile } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { listKeys, readJson, writeJson } from './storage'
 import { SUMMARY_PREFIX } from './compaction'
@@ -58,6 +58,8 @@ export interface SubchatSummary {
   session: SessionInfo
   /** What the child produced last — or the brief, if it has not run yet. */
   result?: string
+  /** What a specialist child made (motion, design, fragment), described so the parent can reach it. */
+  artifacts?: string[]
 }
 
 /** Children of a conversation, from the most recent to the oldest. */
@@ -136,6 +138,8 @@ export interface NewSubchat {
   title: string
   /** The text that opens the new chat (the brief). It becomes the summary message. */
   body: string
+  /** A specialist chat: it runs the lean profile of that craft for its whole life. */
+  profile?: SpecialistProfile
 }
 
 export interface NewContinuation {
@@ -158,6 +162,7 @@ async function createRecord({
   parentId,
   continuedFrom,
   fallbackTitle,
+  profile,
 }: {
   source: SessionInfo
   title: string
@@ -165,6 +170,7 @@ async function createRecord({
   parentId?: string
   continuedFrom?: string
   fallbackTitle: string
+  profile?: SpecialistProfile
 }): Promise<SessionInfo> {
   const now = Date.now()
   const session: SessionInfo = {
@@ -178,6 +184,8 @@ async function createRecord({
     extraDirectories: source.extraDirectories,
     ...(parentId ? { parentId } : {}),
     ...(continuedFrom ? { continuedFrom } : {}),
+    // The fragment chat keeps its own field (see specialistProfileOf); the others use `profile`.
+    ...(profile === 'fragment' ? { fragment: { kind: 'screen' as const } } : profile ? { profile } : {}),
     createdAt: now,
     updatedAt: now,
   }
@@ -204,10 +212,10 @@ async function createRecord({
 }
 
 /** Conversation attached to `parentId` — the subchat of the tools and of the card. */
-export async function createSubchatRecord({ parentId, title, body }: NewSubchat): Promise<SessionInfo | null> {
+export async function createSubchatRecord({ parentId, title, body, profile }: NewSubchat): Promise<SessionInfo | null> {
   const parent = await readJson<SessionInfo>(StorageKeys.session(parentId))
   if (!parent) return null
-  return createRecord({ source: parent, title, body, parentId, fallbackTitle: 'Subchat' })
+  return createRecord({ source: parent, title, body, parentId, fallbackTitle: 'Subchat', profile })
 }
 
 /**
@@ -225,15 +233,19 @@ export async function createContinuationRecord({ sourceId, title, body }: NewCon
 /** The turn block: the parent sees the RESULT of each child. */
 export function formatSubchatsBlock(summaries: SubchatSummary[]): string {
   if (summaries.length === 0) return ''
-  const lines = summaries.map(({ session, result }) => {
+  const lines = summaries.map(({ session, result, artifacts }) => {
     const capped = result && result.length > MAX_RESULT
       ? `${result.slice(0, MAX_RESULT).replace(/\s+/g, ' ')}…`
       : result?.replace(/\s+/g, ' ')
-    return `- **${session.title}** (id: ${session.id}, opened ${relativeTime(session.createdAt)})${capped ? `\n  Latest: ${capped}` : ''}`
+    const made = artifacts?.length ? `\n  Made: ${artifacts.join('; ')}` : ''
+    return `- **${session.title}** (id: ${session.id}, opened ${relativeTime(session.createdAt)})${capped ? `\n  Latest: ${capped}` : ''}${made}`
   })
+  const reachable = summaries.some((s) => s.artifacts?.length)
+    ? ' What a specialist subchat made is listed under "Made": you can read and change it yourself with the tools of its craft, passing the id — no need to send it back to the subchat for a small change.'
+    : ''
   return [
     '## Subchats opened from this conversation',
-    'Separate conversations with their own context, attached to this one. You see each one\'s LATEST result here, not its history: read_subchat reads more when you need it. Stay consistent with what they did and do not redo their work; when the user asks about one, answer from this line and point them to the chat. To give one a new instruction use send_to_subchat — the user is asked before it goes.',
+    'Separate conversations with their own context, attached to this one. You see each one\'s LATEST result here, not its history: read_subchat reads more when you need it. Stay consistent with what they did and do not redo their work; when the user asks about one, answer from this line and point them to the chat. To give one a new instruction use send_to_subchat — the user is asked before it goes.' + reachable,
     ...lines,
   ].join('\n')
 }
@@ -253,8 +265,15 @@ export async function listContinuations(sessionId: string): Promise<SessionInfo[
  * the system prompt — a child answering would otherwise throw away the cache prefix of
  * the whole conversation.
  */
-export async function subchatsTurnBlock(sessionId: string): Promise<string> {
-  const [children, continuations] = await Promise.all([listSubchats(sessionId), listContinuations(sessionId)])
+export async function subchatsTurnBlock(
+  sessionId: string,
+  /** What a child made (artifacts/describe.ts); injected so this module stays free of the artifact stores. */
+  artifactsOf: (childId: string) => Promise<string[]> = async () => [],
+): Promise<string> {
+  const [found, continuations] = await Promise.all([listSubchats(sessionId), listContinuations(sessionId)])
+  const children = await Promise.all(
+    found.map(async (child) => ({ ...child, artifacts: await artifactsOf(child.session.id).catch(() => []) })),
+  )
   const parts = [formatSubchatsBlock(children)]
   if (continuations.length > 0) {
     parts.push(

@@ -42,8 +42,12 @@ export function fragmentSystemPrompt(language?: string): string {
  * user message, so a fresh chat editing an old fragment starts oriented.
  */
 export async function fragmentTurnBlock(sessionId: string): Promise<string> {
-  const kind = (await fragmentProfileOf(sessionId).catch(() => null))?.kind
-  const own = (await listFragments()).find((f) => f.sessionId === sessionId)
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId)).catch(() => null)
+  const kind = session?.fragment?.kind
+  // A chat made for an existing fragment (from its card) names it; the chat a fragment was
+  // born in is found by the link the fragment keeps to it.
+  const bound = session?.artifact?.id
+  const own = (await listFragments()).find((f) => (bound ? f.id === bound : f.sessionId === sessionId))
   if (!own) {
     return `<fragment-context>\nNo fragment exists in this conversation yet. Create it with fragment_create${kind ? ` (kind: "${kind}")` : ''}.\n</fragment-context>`
   }

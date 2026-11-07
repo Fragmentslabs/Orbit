@@ -1,3 +1,4 @@
+import { describeChatArtifacts } from './artifacts/describe'
 import type { BrowserWindow } from 'electron'
 import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
@@ -62,13 +63,15 @@ async function waitIdle(sessionId: string): Promise<boolean> {
 }
 
 /** The parent's message: who finished, and what it said. */
-export function wakeText(child: SessionInfo, last: ChatMessage | undefined): string {
+export function wakeText(child: SessionInfo, last: ChatMessage | undefined, made: readonly string[] = []): string {
   const head = tNow('subchat.finished', { title: child.title, id: child.id })
-  if (!last) return `${head}\n\n${tNow('subchat.finishedEmpty')}`
-  if (last.error) return `${head}\n\n${tNow('subchat.finishedError')} ${last.error}`
+  // What a specialist subchat made, with the id to reach it: the parent can act on it directly.
+  const madeBlock = made.length ? `\n\nMade by this subchat (you can read and change it with the tools of its craft):\n${made.map((m) => `- ${m}`).join('\n')}` : ''
+  if (!last) return `${head}\n\n${tNow('subchat.finishedEmpty')}${madeBlock}`
+  if (last.error) return `${head}\n\n${tNow('subchat.finishedError')} ${last.error}${madeBlock}`
   const text = textOf(last)
-  if (!text) return `${head}\n\n${tNow('subchat.finishedEmpty')}`
-  return `${head}\n\n${text.length > MAX_RESULT ? `${text.slice(0, MAX_RESULT)}… [read_subchat for the rest]` : text}`
+  if (!text) return `${head}\n\n${tNow('subchat.finishedEmpty')}${madeBlock}`
+  return `${head}\n\n${text.length > MAX_RESULT ? `${text.slice(0, MAX_RESULT)}… [read_subchat for the rest]` : text}${madeBlock}`
 }
 
 async function wake(win: BrowserWindow, opener: SendMessageInput, child: SessionInfo): Promise<void> {
@@ -86,7 +89,7 @@ async function wake(win: BrowserWindow, opener: SendMessageInput, child: Session
   const o = opener.options
   await runChat(win, {
     sessionId: parentId,
-    text: wakeText(child, last),
+    text: wakeText(child, last, await describeChatArtifacts(child.id).catch(() => [])),
     messageOrigin: 'subchat',
     providerId: opener.providerId,
     modelId: opener.modelId,

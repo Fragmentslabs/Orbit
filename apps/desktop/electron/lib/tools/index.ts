@@ -3,6 +3,8 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
+import { profileTools } from '../profiles'
+import { withArtifactTracking } from '../artifacts/tracking'
 import { createFragmentTools } from './fragment'
 import { createDocumentTools, createPdfViewTool } from './documents'
 import { createSheetQueryTool } from './sheet'
@@ -19,7 +21,7 @@ import { createRoutinesTool } from './routines'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
 import { createChatSearchTools } from './chat-search'
-import { createSubchatTools } from './subchats'
+import { createSubchatTools, withSpecialistOffer } from './subchats'
 import { createUsageTools } from './usage'
 import type { ToolContext } from './context'
 import {
@@ -93,8 +95,8 @@ export function buildToolSet(
    *  Absent in ephemeral workers — there the tool is not registered. */
   win?: BrowserWindow,
 ): ToolSet {
-  // A fragment's chat gets the fragment tools and nothing else.
-  if (input.options.fragment) return { ...createFragmentTools(input.sessionId) }
+  // A specialist chat gets the tools of its craft and nothing else.
+  if (input.options.profile) return withArtifactTracking(profileTools(input.options.profile, input, modelVision), input)
   const tools: ToolSet = {}
   // Computer control: two switches (Preferences + conversation mode),
   // main session only and only where there is a driver. When off, the tools do not
@@ -559,5 +561,5 @@ export function buildToolSet(
   }
 
   // Last: the user's post_tool_call hooks wrap every tool assembled above, run_tools included.
-  return attachPostToolHooks(tools, { sessionId: input.sessionId, directory: ctx?.directory ?? null })
+  return attachPostToolHooks(withArtifactTracking(withSpecialistOffer(tools, input, win), input), { sessionId: input.sessionId, directory: ctx?.directory ?? null })
 }

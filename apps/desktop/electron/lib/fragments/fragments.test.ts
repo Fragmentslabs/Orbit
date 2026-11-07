@@ -26,6 +26,16 @@ vi.mock('../media', () => ({
   injectArtifactChrome: (html: string) => html + '<!--chrome-->',
 }))
 
+// The model call itself: what is under test is what the bridge hands to it.
+const ai = vi.hoisted(() => ({ generateText: vi.fn(async (_args: unknown) => ({ text: 'ok' })) }))
+vi.mock('ai', async (importOriginal) => ({ ...(await importOriginal<typeof import('ai')>()), generateText: ai.generateText }))
+vi.mock('../providers', () => ({ resolveModel: async () => ({ id: 'model' }) }))
+vi.mock('../reasoning', () => ({
+  buildProviderOptions: async (input: { providerId: string; options: { reasoning?: { variantId?: string } } }) => ({
+    [input.providerId]: { effort: input.options.reasoning?.variantId ?? 'default' },
+  }),
+}))
+
 let store: typeof import('./fragment-store')
 let bridge: typeof import('./fragment-bridge')
 let scheme: typeof import('./fragment-protocol')
@@ -167,6 +177,23 @@ describe('fragment kind, pins and model', () => {
     expect(cleared?.model).toBeUndefined()
   })
 
+  it('stores the thinking level of the fragment\'s model, turns it off, and refuses anything malformed', async () => {
+    const m = await store.createFragment({ name: 'think', html: 'x', requests: ['ai'] })
+    expect(m.reasoning).toBeUndefined()
+    const on = await store.updateFragmentMeta(m.id, { reasoning: { enabled: true, variantId: 'high' } })
+    expect(on?.reasoning).toEqual({ enabled: true, variantId: 'high' })
+    expect((await store.getFragment(m.id))?.reasoning).toEqual({ enabled: true, variantId: 'high' })
+    // a level with characters that do not belong to a variant id is dropped, the switch stays on
+    const odd = await store.updateFragmentMeta(m.id, { reasoning: { enabled: true, variantId: '../x' } })
+    expect(odd?.reasoning).toEqual({ enabled: true })
+    // "disabled" is the same as none
+    const disabled = await store.updateFragmentMeta(m.id, { reasoning: { enabled: false, variantId: 'low' } })
+    expect(disabled?.reasoning).toBeUndefined()
+    await store.updateFragmentMeta(m.id, { reasoning: { enabled: true } })
+    const off = await store.updateFragmentMeta(m.id, { reasoning: null })
+    expect(off?.reasoning).toBeUndefined()
+  })
+
   it('keeps the icon the agent picked, and falls back for anything that is not a lucide-style name', async () => {
     expect((await store.createFragment({ name: 'i1', html: 'x', icon: 'chart-bar' })).icon).toBe('chart-bar')
     expect((await store.createFragment({ name: 'i2', html: 'x' })).icon).toBe('app-window')
@@ -207,6 +234,22 @@ describe('fragment bridge', () => {
       expect(res.ok).toBe(false)
       if (!res.ok) expect(res.error.code).toBe('unknown_method')
     }
+  })
+
+  it('gives orbit.ai the thinking level the person chose for the fragment\'s model', async () => {
+    const m = await store.createFragment({ name: 'thinking-call', html: 'x', requests: ['ai'] })
+    await store.setGrant(m.id, 'ai', true)
+    await store.updateFragmentMeta(m.id, { model: { providerId: 'anthropic', modelId: 'claude-x' } })
+    const call = () => bridge.handleFragmentCall({ fragmentId: m.id, method: 'ai.generate', params: { prompt: 'hi' } })
+
+    ai.generateText.mockClear()
+    expect((await call()).ok).toBe(true)
+    expect((ai.generateText.mock.calls[0][0] as { providerOptions?: unknown }).providerOptions).toBeUndefined()
+
+    await store.updateFragmentMeta(m.id, { reasoning: { enabled: true, variantId: 'high' } })
+    ai.generateText.mockClear()
+    expect((await call()).ok).toBe(true)
+    expect((ai.generateText.mock.calls[0][0] as { providerOptions?: unknown }).providerOptions).toEqual({ anthropic: { effort: 'high' } })
   })
 
   it('refuses orbit.ai when not declared, and when declared but not allowed by the user', async () => {

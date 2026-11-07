@@ -1,5 +1,5 @@
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
-import { fragmentSystemPrompt } from './fragments/fragment-profile'
+import { profileSystemPrompt } from './profiles'
 import { StorageKeys } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { PERSONA_MIRROR, personaPromptLines } from '@shared/persona'
@@ -821,8 +821,8 @@ export async function buildSystemPrompt(
   /** Map of the tool catalog on demand — see `tools/catalog.ts`. */
   toolsMap?: string,
 ): Promise<string> {
-  // A fragment's chat: its own short prompt and nothing else (see fragments/fragment-profile.ts).
-  if (input.options.fragment) return fragmentSystemPrompt(input.language)
+  // A specialist chat: the prompt of its craft and nothing else (see profiles/index.ts).
+  if (input.options.profile) return profileSystemPrompt(input.options.profile, input)
   const parts: string[] = []
 
   if (input.mode === 'code') {

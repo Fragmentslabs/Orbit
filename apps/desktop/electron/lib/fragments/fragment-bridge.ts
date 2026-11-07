@@ -3,6 +3,8 @@ import type { FragmentCallInput, FragmentCallResult, FragmentCapability, Fragmen
 import { resolveModel } from '../providers'
 import { getFragment, storeDelete, storeGet, storeKeys, storeSet } from './fragment-store'
 import { modelForSession } from './session-model'
+import { buildProviderOptions } from '../reasoning'
+import type { SendMessageInput } from '@shared/chat'
 
 /**
  * The broker: every `window.orbit` call of a fragment lands here, in the main process.
@@ -68,8 +70,21 @@ async function aiGenerate(manifest: FragmentManifest, input: FragmentCallInput, 
   aiInFlight.set(manifest.id, (aiInFlight.get(manifest.id) ?? 0) + 1)
   try {
     const model = await resolveModel(remembered.providerId, remembered.modelId, { sessionId: input.sessionId })
+    // The thinking level the person chose for this fragment's model (same translation to the
+    // provider's options as every other call in the app).
+    const providerOptions = manifest.reasoning?.enabled
+      ? await buildProviderOptions({
+          sessionId: input.sessionId ?? 'fragment',
+          text: '',
+          providerId: remembered.providerId,
+          modelId: remembered.modelId,
+          mode: 'chat',
+          options: { reasoning: manifest.reasoning },
+        } satisfies SendMessageInput)
+      : undefined
     const { text } = await generateText({
       model,
+      providerOptions,
       system,
       prompt,
       maxOutputTokens: AI_MAX_OUTPUT_TOKENS,
