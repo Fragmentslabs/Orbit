@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { tool } from 'ai'
 import { z } from 'zod'
 import {
@@ -9,9 +10,10 @@ import {
   listFragments,
   readFragmentFile,
   readFragmentLogs,
-  requestCapabilities,
+  setRequested,
   writeFragmentFile,
 } from '../fragments/fragment-store'
+import { withRevision } from '../fragments/fragment-history'
 import { panelFragmentOpen } from '../panel-browser'
 import { applyTextEditsDetailed } from './piece-common'
 
@@ -28,6 +30,7 @@ const SDK_REFERENCE = `
 window.orbit is already loaded in every fragment page (do not add a script for it):
 - orbit.store.get(key) / set(key, value) / delete(key) / keys() — persistent JSON storage for this fragment (survives reloads; values are JSON, up to 256KB each). Use it for anything the user would expect to still be there tomorrow.
 - orbit.ai.generate({ prompt, system? }) → Promise<{ text }> — asks the user's own model. Only works when the fragment was created with usesAi: true AND the user turned it on in the tab (until then it rejects with err.code === "permission_denied": catch it and show a clear message in the UI). Limited to a few calls per minute: never call it in a loop or on every keystroke.
+- orbit.models.list() → Promise<[{ providerId, providerName, modelId, name, reasoning }]>, orbit.models.get() → Promise<{ providerId, modelId } | null>, orbit.models.set({ providerId, modelId }) (or set(null) to follow the chat) — lets YOUR screen offer the choice of the model that orbit.ai uses. Only after you call fragment_set_models AND the user allows it; then the app header no longer shows a model control, so build one.
 - orbit.theme ("light" | "dark") and orbit.on("theme", fn) — the app theme. The Orbit CSS variables are already defined and follow it: --background, --foreground, --card, --card-foreground, --primary, --primary-foreground, --secondary, --muted, --muted-foreground, --accent, --border, --input, --ring, --radius and --font-sans. Style with them (e.g. body { background: var(--background) }) so the screen looks native in light and dark.
 Errors from orbit calls carry err.code.
 
@@ -44,6 +47,10 @@ function notFound(id: string): string {
 }
 
 export function createFragmentTools(sessionId: string) {
+  // The tools are built once per agent turn, so every write below shares this id: it is what
+  // the history groups by and what the person reverts ("undo this turn").
+  const turnContext = { turn: randomUUID(), sessionId }
+
   /** Opens/focuses the tab and builds the part of the result that is the same everywhere. */
   async function opened(id: string, revision: number, lead: string): Promise<string> {
     const manifest = await getFragment(id)
@@ -102,7 +109,7 @@ export function createFragmentTools(sessionId: string) {
       execute: async ({ fragmentId, path: rel, content }) => {
         if (!(await getFragment(fragmentId))) return notFound(fragmentId)
         try {
-          const manifest = await writeFragmentFile(fragmentId, rel, content)
+          const manifest = await withRevision(fragmentId, turnContext, { path: rel }, () => writeFragmentFile(fragmentId, rel, content))
           return await opened(fragmentId, manifest.revision, `Wrote ${rel}`)
         } catch (err) {
           return `Could not write ${rel}: ${err instanceof Error ? err.message : String(err)}`
@@ -132,7 +139,7 @@ export function createFragmentTools(sessionId: string) {
         if (current === null) return `File not found in the fragment: ${rel}. See fragment_read_file for the file list.`
         try {
           const { text, applied } = applyTextEditsDetailed(current, edits)
-          const manifest = await writeFragmentFile(fragmentId, rel, text)
+          const manifest = await withRevision(fragmentId, turnContext, { path: rel }, () => writeFragmentFile(fragmentId, rel, text))
           return await opened(fragmentId, manifest.revision, `Edited ${rel} (${applied.length} edit${applied.length === 1 ? '' : 's'})`)
         } catch (err) {
           return `Could not edit ${rel}: ${err instanceof Error ? err.message : String(err)}`
@@ -171,7 +178,7 @@ export function createFragmentTools(sessionId: string) {
       execute: async ({ fragmentId, path: rel }) => {
         if (!(await getFragment(fragmentId))) return notFound(fragmentId)
         try {
-          const manifest = await deleteFragmentFile(fragmentId, rel)
+          const manifest = await withRevision(fragmentId, turnContext, { path: rel, deleting: true }, () => deleteFragmentFile(fragmentId, rel))
           return await opened(fragmentId, manifest.revision, `Removed ${rel}`)
         } catch (err) {
           return `Could not remove ${rel}: ${err instanceof Error ? err.message : String(err)}`
@@ -200,12 +207,26 @@ export function createFragmentTools(sessionId: string) {
         'Declares whether the fragment uses orbit.ai. This only ASKS: the user still has to turn "AI" on in the tab toolbar, you cannot allow it.',
       inputSchema: z.object({ fragmentId: FragmentIdSchema, usesAi: z.boolean() }),
       execute: async ({ fragmentId, usesAi }) => {
-        const manifest = await requestCapabilities(fragmentId, usesAi ? ['ai'] : [])
+        const manifest = await setRequested(fragmentId, 'ai', usesAi)
         if (!manifest) return notFound(fragmentId)
         panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
         return usesAi
           ? 'Declared. The user must turn on "AI" in the tab toolbar before orbit.ai.generate works.'
           : 'orbit.ai is no longer requested by this fragment.'
+      },
+    }),
+
+    fragment_set_models: tool({
+      description:
+        'Declares whether the fragment offers its OWN model picker through orbit.models (list/get/set). This only ASKS: the user still has to allow it. When allowed, the app header stops showing the model control for this fragment, so the fragment must provide one. Use it only when the user wants the choice inside the screen.',
+      inputSchema: z.object({ fragmentId: FragmentIdSchema, usesModels: z.boolean() }),
+      execute: async ({ fragmentId, usesModels }) => {
+        const manifest = await setRequested(fragmentId, 'models', usesModels)
+        if (!manifest) return notFound(fragmentId)
+        panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
+        return usesModels
+          ? 'Declared. The user must allow "models" for this fragment before orbit.models works; build the picker so it handles err.code === "permission_denied".'
+          : 'orbit.models is no longer requested by this fragment; the header model control is back.'
       },
     }),
 

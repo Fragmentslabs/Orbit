@@ -1,3 +1,5 @@
+import { FRAGMENT_INSPECTOR } from './fragment-inspector'
+
 /**
  * `window.orbit` — the only door out of a fragment page.
  *
@@ -61,6 +63,12 @@ export const FRAGMENT_SDK = `${FRAGMENT_SDK_MARK}
     ai: {
       generate: function (options) { return call('ai.generate', options) }
     },
+    // The fragment's own model picker. Needs "models" requested AND allowed by the user.
+    models: {
+      list: function () { return call('models.list') },
+      get: function () { return call('models.get') },
+      set: function (model) { return call('models.set', model || {}) }
+    },
     on: function (name, fn) {
       (listeners[name] = listeners[name] || []).push(fn)
       return function () {
@@ -121,7 +129,7 @@ export function injectFragmentSdk(html: string): string {
   const head = /<head(\s[^>]*)?>/i.exec(html)
   if (head) {
     const at = head.index + head[0].length
-    return html.slice(0, at) + '\n' + FRAGMENT_SDK + '\n' + html.slice(at)
+    return html.slice(0, at) + '\n' + FRAGMENT_SDK + '\n' + FRAGMENT_INSPECTOR + '\n' + html.slice(at)
   }
-  return FRAGMENT_SDK + '\n' + html
+  return FRAGMENT_SDK + '\n' + FRAGMENT_INSPECTOR + '\n' + html
 }

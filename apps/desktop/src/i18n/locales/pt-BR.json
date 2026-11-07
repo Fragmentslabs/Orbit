@@ -3032,8 +3032,6 @@
     "aiOn": "IA ligada",
     "aiAllow": "Permitir que este fragmento use seu modelo de IA",
     "aiRevoke": "Parar de permitir IA neste fragmento",
-    "aiBanner": "Este fragmento quer usar o seu modelo de IA.",
-    "aiAllowButton": "Permitir IA",
     "delete": "Excluir fragmento",
     "deleteTitle": "Excluir este fragmento?",
     "deleteDescription": "A tela e tudo o que ela guardou serão removidos. Não dá para desfazer.",
@@ -3117,7 +3115,8 @@
       "read": "Lendo o fragmento",
       "remove": "Removendo {{path}}",
       "logs": "Conferindo erros da página",
-      "ai": "Declarando o uso de IA"
+      "ai": "Declarando o uso de IA",
+      "models": "Declarando um seletor de modelo"
     },
     "chat": {
       "show": "Mostrar conversa",
@@ -3133,7 +3132,89 @@
     "card": "Fragmento",
     "gone": "Este fragmento não existe mais.",
     "fullscreen": "Abrir em tela cheia",
-    "aiEnable": "Habilitar IA"
+    "aiEnable": "Habilitar IA",
+    "provenance": {
+      "title": "Origem",
+      "local": "Criado neste computador",
+      "thirdParty": "De terceiros",
+      "owner": "Autor",
+      "source": "Fonte",
+      "arrival": "Chegou por",
+      "arrivals": {
+        "mcp": "uma integração",
+        "link": "um link",
+        "repository": "um repositório",
+        "file": "um arquivo"
+      },
+      "importedFile": "Arquivo importado",
+      "recordedAt": "Adicionado em {{date}}",
+      "modified": "Alterado desde que chegou",
+      "commit": "Commit"
+    },
+    "details": {
+      "title": "Detalhes",
+      "weight": "Peso",
+      "code": "Código",
+      "data": "Dados salvos",
+      "settings": "Configurações",
+      "model": "Modelo",
+      "thinking": "Raciocínio",
+      "on": "Ligado",
+      "off": "Desligado",
+      "pins": "Fixado em",
+      "pinSidebar": "barra lateral",
+      "pinPanel": "painel lateral",
+      "none": "lugar nenhum",
+      "revision": "Revisão",
+      "capabilities": "Capacidades",
+      "cap": {
+        "ai": "Usar seu modelo de IA",
+        "models": "Escolher o modelo dentro da própria tela"
+      },
+      "allowed": "Permitido",
+      "allow": "Permitir",
+      "notRequested": "Não pedido",
+      "tokens": "Gasto pelos chats",
+      "chats": "Chats",
+      "input": "Entrada",
+      "output": "Saída",
+      "cost": "Custo",
+      "database": "Banco local",
+      "databaseEmpty": "Nada salvo ainda.",
+      "packages": "Pacotes de terceiros",
+      "packagesEmpty": "Nenhum.",
+      "pinHome": "tela inicial",
+      "history": "Histórico"
+    },
+    "inspect": "Escolher um elemento para mudar",
+    "data": {
+      "view": "Ver dados",
+      "title": "Dados salvos",
+      "description": "O que este fragmento guardou com orbit.store. Somente leitura.",
+      "refresh": "Atualizar",
+      "truncated": "Mostrado só em parte."
+    },
+    "pinHome": "Mostrar na tela inicial",
+    "openFull": "Abrir o fragmento",
+    "ask": {
+      "ai": "Este fragmento quer usar o seu modelo de IA.",
+      "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela."
+    },
+    "askAllow": "Permitir",
+    "history": {
+      "title": "Histórico",
+      "hint": "Cada alteração que o agente fez nos arquivos, turno a turno.",
+      "open": "Ver histórico",
+      "description": "O que o agente alterou, do mais novo ao mais antigo. Desfazer volta ao estado anterior àquele turno e descarta ele e tudo o que veio depois.",
+      "empty": "O agente ainda não alterou nada.",
+      "undo": "Desfazer daqui",
+      "confirm": "Desfazer",
+      "kind": {
+        "create": "Criou",
+        "edit": "Editou",
+        "delete": "Apagou"
+      }
+    }
   },
   "motion": {
     "unavailable": "Composição indisponível",

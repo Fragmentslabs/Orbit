@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AppWindow, Maximize2, RotateCw, Sparkles, Trash2, X } from "lucide-react"
-import { FRAGMENT_SCHEME } from "@shared/fragments"
+import { FRAGMENT_CAPABILITIES, FRAGMENT_READ_ONLY_METHODS, FRAGMENT_SCHEME } from "@shared/fragments"
 import type { FragmentManifest } from "@shared/fragments"
 import {
   Dialog,
@@ -37,6 +37,22 @@ import { usePanelStore } from "@/src/stores/panel-store"
  */
 
 const SANDBOX = "allow-scripts"
+
+/** What inspect mode reports about the clicked element. */
+export interface InspectedElement {
+  tag: string
+  selector: string
+  text: string
+  html: string
+}
+
+/** The page is untrusted: keep only strings, clipped. `null` = the person cancelled. */
+function readInspected(raw: unknown): InspectedElement | null {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  if (value.cancel === true || typeof value.tag !== "string") return null
+  const clip = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "")
+  return { tag: clip(value.tag, 30), selector: clip(value.selector, 400), text: clip(value.text, 300), html: clip(value.html, 1000) }
+}
 
 /** The manifest of a fragment, kept fresh while it is on screen. */
 export function useFragment(fragmentId: string) {
@@ -74,19 +90,36 @@ export function FragmentFrame({
   reloads,
   className,
   preview = false,
+  readOnly = false,
+  inspecting = false,
+  onInspect,
 }: {
   manifest: FragmentManifest
   sessionId?: string
   reloads: number
   className?: string
+  /** Inspect mode: the page highlights what is under the pointer and reports the click. */
+  inspecting?: boolean
+  /** The element the person clicked (`null` = they pressed Escape). Only called while `inspecting`. */
+  onInspect?: (element: InspectedElement | null) => void
   /**
    * A thumbnail in the gallery: the page runs, but it is a picture — it can never reach
    * Orbit (every `window.orbit` call is refused here, so a card can not spend tokens or
    * write data just by being on screen), it takes no input, and it is hidden from tab order.
    */
   preview?: boolean
+  /**
+   * A widget on the home screen: it may read what it saved (so it shows real data) but
+   * everything else is refused — no writes, no model — because a card must never spend or
+   * change anything just by being on screen.
+   */
+  readOnly?: boolean
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const inspectingRef = useRef(inspecting)
+  const onInspectRef = useRef(onInspect)
+  inspectingRef.current = inspecting
+  onInspectRef.current = onInspect
   const fragmentId = manifest.id
   const loadKey = `${fragmentId}:${manifest.revision}:${reloads}`
   // New token per load: only the page THIS load produced can talk to Orbit.
@@ -104,6 +137,7 @@ export function FragmentFrame({
         method?: string
         params?: unknown
         log?: { level?: string; message?: unknown }
+        inspect?: unknown
       } | null
       if (!data || data.__orbit !== 1 || data.t !== token) return
       if (preview) {
@@ -113,6 +147,11 @@ export function FragmentFrame({
         return
       }
 
+      if (data.inspect) {
+        // Only while the person has inspect mode on: a page cannot push elements into the composer on its own.
+        if (inspectingRef.current) onInspectRef.current?.(readInspected(data.inspect))
+        return
+      }
       if (data.log) {
         const level = data.log.level === "warn" || data.log.level === "error" || data.log.level === "info" ? data.log.level : "log"
         fragmentApi.log(fragmentId, { at: Date.now(), level, message: String(data.log.message ?? "") })
@@ -120,6 +159,10 @@ export function FragmentFrame({
       }
       if (typeof data.id !== "number" || typeof data.method !== "string") return
       const id = data.id
+      if (readOnly && !FRAGMENT_READ_ONLY_METHODS.includes(data.method)) {
+        frame.contentWindow?.postMessage({ __orbit: 1, id, ok: false, error: { code: "read_only", message: "this card is read-only" } }, "*")
+        return
+      }
       const reply = (payload: object) => frame.contentWindow?.postMessage({ __orbit: 1, id, ...payload }, "*")
       fragmentApi
         .call({ fragmentId, sessionId, method: data.method, params: data.params })
@@ -130,13 +173,20 @@ export function FragmentFrame({
     }
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [fragmentId, sessionId, token, preview])
+  }, [fragmentId, sessionId, token, preview, readOnly])
 
   // Mirrors the app theme into the page (it is an opaque origin and does not see our classes).
   const sendTheme = useCallback(() => {
     const theme = document.documentElement.classList.contains("dark") ? "dark" : "light"
     frameRef.current?.contentWindow?.postMessage({ type: "orbit:theme", theme }, "*")
   }, [])
+  // Inspect mode is switched on in the page by a message; a freshly loaded page asks again.
+  const sendInspect = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({ type: "orbit:inspect", on: inspectingRef.current }, "*")
+  }, [])
+  useEffect(() => {
+    sendInspect()
+  }, [inspecting, sendInspect])
   useEffect(() => {
     const observer = new MutationObserver(sendTheme)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
@@ -152,7 +202,10 @@ export function FragmentFrame({
       sandbox={SANDBOX}
       allow=""
       referrerPolicy="no-referrer"
-      onLoad={sendTheme}
+      onLoad={() => {
+        sendTheme()
+        sendInspect()
+      }}
       tabIndex={preview ? -1 : undefined}
       className={className ?? "w-full flex-1 border-0 bg-white"}
     />
@@ -167,21 +220,23 @@ export function FragmentFrame({
 export function FragmentAiBadge({ manifest }: { manifest: FragmentManifest }) {
   const { t } = useTranslation()
   const [dismissed, dismiss] = useDismissed(`orbit-fragment-ai-badge:${manifest.id}`)
-  // Closing only hides the ask: the fragment's menu still offers to allow its AI.
-  if (dismissed || !manifest.requests.includes("ai") || manifest.grants.includes("ai")) return null
+  // One ask at a time: the first capability the fragment wants and the person has not allowed.
+  // Closing only hides the ask: the fragment's menu and details still offer to allow it.
+  const pending = FRAGMENT_CAPABILITIES.find((c) => manifest.requests.includes(c) && !manifest.grants.includes(c))
+  if (dismissed || !pending) return null
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
       <div className="pointer-events-auto flex max-w-full animate-in items-center gap-2.5 rounded-full border border-primary/25 bg-background/90 py-1.5 pl-2 pr-1.5 shadow-lg ring-1 ring-black/5 backdrop-blur-md duration-300 fade-in-0 slide-in-from-top-2">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
           <Sparkles className="size-3.5" />
         </span>
-        <span className="min-w-0 truncate text-xs text-foreground">{t("fragments.aiBanner")}</span>
+        <span className="min-w-0 truncate text-xs text-foreground">{t(`fragments.ask.${pending}`)}</span>
         <Button
           size="sm"
           className="h-6 shrink-0 rounded-full px-3 text-xs"
-          onClick={() => void fragmentApi.grant(manifest.id, "ai", true)}
+          onClick={() => void fragmentApi.grant(manifest.id, pending, true)}
         >
-          {t("fragments.aiAllowButton")}
+          {t("fragments.askAllow")}
         </Button>
         <button
           type="button"

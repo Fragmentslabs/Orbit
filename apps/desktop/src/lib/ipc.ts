@@ -64,6 +64,8 @@ import type {
   FragmentMetaPatch,
   FragmentUpdatedEvent,
 } from "@shared/fragments"
+import type { FragmentDataEntry, FragmentDetails, FragmentRevisionInfo } from "@shared/fragment-details"
+import type { FragmentProvenance } from "@shared/fragment-provenance"
 
 export type { SearchHit }
 
@@ -830,6 +832,13 @@ export const artifactApi = {
 export const fragmentApi = {
   list: () => window.ipcRenderer.invoke("fragment:list") as Promise<FragmentManifest[]>,
   get: (id: string) => window.ipcRenderer.invoke("fragment:get", id) as Promise<FragmentManifest | null>,
+  provenance: (id: string) => window.ipcRenderer.invoke("fragment:provenance", id) as Promise<FragmentProvenance | null>,
+  details: (id: string) => window.ipcRenderer.invoke("fragment:details", id) as Promise<FragmentDetails | null>,
+  data: (id: string) => window.ipcRenderer.invoke("fragment:data", id) as Promise<FragmentDataEntry[] | null>,
+  history: (id: string) => window.ipcRenderer.invoke("fragment:history", id) as Promise<FragmentRevisionInfo[]>,
+  /** Puts the files back as they were before `revision`. Only the history dialog calls it. */
+  revert: (id: string, revision: number) =>
+    window.ipcRenderer.invoke("fragment:revert", id, revision) as Promise<FragmentManifest | null>,
   call: (input: FragmentCallInput) =>
     window.ipcRenderer.invoke("fragment:call", input) as Promise<FragmentCallResult>,
   /** Only the user, through the tab toolbar, allows a capability. */

@@ -3032,8 +3032,6 @@
     "aiOn": "AI on",
     "aiAllow": "Allow this fragment to ask your AI model",
     "aiRevoke": "Stop allowing AI for this fragment",
-    "aiBanner": "This fragment wants to use your AI model.",
-    "aiAllowButton": "Allow AI",
     "delete": "Delete fragment",
     "deleteTitle": "Delete this fragment?",
     "deleteDescription": "The screen and everything it saved will be removed. This cannot be undone.",
@@ -3117,7 +3115,8 @@
       "read": "Reading the fragment",
       "remove": "Removing {{path}}",
       "logs": "Checking the page for errors",
-      "ai": "Declaring AI use"
+      "ai": "Declaring AI use",
+      "models": "Declaring a model picker"
     },
     "chat": {
       "show": "Show conversation",
@@ -3133,7 +3132,89 @@
     "card": "Fragment",
     "gone": "This fragment no longer exists.",
     "fullscreen": "Open full screen",
-    "aiEnable": "Enable AI"
+    "aiEnable": "Enable AI",
+    "provenance": {
+      "title": "Origin",
+      "local": "Created on this computer",
+      "thirdParty": "From a third party",
+      "owner": "Owner",
+      "source": "Source",
+      "arrival": "Arrived by",
+      "arrivals": {
+        "mcp": "an integration",
+        "link": "a link",
+        "repository": "a repository",
+        "file": "a file"
+      },
+      "importedFile": "Imported file",
+      "recordedAt": "Added {{date}}",
+      "modified": "Changed since it arrived",
+      "commit": "Commit"
+    },
+    "details": {
+      "title": "Details",
+      "weight": "Weight",
+      "code": "Code",
+      "data": "Saved data",
+      "settings": "Settings",
+      "model": "Model",
+      "thinking": "Thinking",
+      "on": "On",
+      "off": "Off",
+      "pins": "Pinned in",
+      "pinSidebar": "sidebar",
+      "pinPanel": "side panel",
+      "none": "nowhere",
+      "revision": "Revision",
+      "capabilities": "Capabilities",
+      "cap": {
+        "ai": "Use your AI model",
+        "models": "Choose the model inside its screen"
+      },
+      "allowed": "Allowed",
+      "allow": "Allow",
+      "notRequested": "Not requested",
+      "tokens": "Spent by its chats",
+      "chats": "Chats",
+      "input": "Input",
+      "output": "Output",
+      "cost": "Cost",
+      "database": "Local database",
+      "databaseEmpty": "Nothing saved yet.",
+      "packages": "Third-party packages",
+      "packagesEmpty": "None.",
+      "pinHome": "home screen",
+      "history": "History"
+    },
+    "inspect": "Pick an element to change",
+    "data": {
+      "view": "View data",
+      "title": "Saved data",
+      "description": "What this fragment saved with orbit.store. Read-only.",
+      "refresh": "Refresh",
+      "truncated": "Shown only in part."
+    },
+    "pinHome": "Show on the home screen",
+    "openFull": "Open the fragment",
+    "ask": {
+      "ai": "This fragment wants to use your AI model.",
+      "models": "This fragment wants to let you pick the AI model inside its screen."
+    },
+    "askAllow": "Allow",
+    "history": {
+      "title": "History",
+      "hint": "Every change the agent made to the files, turn by turn.",
+      "open": "View history",
+      "description": "What the agent changed, newest first. Undoing goes back to before that turn and drops it and everything after it.",
+      "empty": "No changes by the agent yet.",
+      "undo": "Undo from here",
+      "confirm": "Undo",
+      "kind": {
+        "create": "Created",
+        "edit": "Edited",
+        "delete": "Deleted"
+      }
+    }
   },
   "motion": {
     "unavailable": "Composition unavailable",

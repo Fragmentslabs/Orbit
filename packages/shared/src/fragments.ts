@@ -9,10 +9,22 @@
 
 export const FRAGMENT_SCHEME = "orbit-fragment"
 
-/** Capabilities a fragment can ask for. The USER grants them, never the agent. */
-export type FragmentCapability = "ai"
+/** `frag-<slug>-<hex>`: lowercase letters, digits and hyphens, because it is a URL host and a folder name. */
+export const FRAGMENT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,47}$/
 
-export const FRAGMENT_CAPABILITIES: readonly FragmentCapability[] = ["ai"]
+export function isFragmentId(id: unknown): id is string {
+  return typeof id === "string" && FRAGMENT_ID_PATTERN.test(id)
+}
+
+/**
+ * Capabilities a fragment can ask for. The USER grants them, never the agent.
+ * - `ai`: call the user's model through `orbit.ai`.
+ * - `models`: let the fragment's own UI list and pick the model of `orbit.ai` (`orbit.models`).
+ *   Granted, it is the fragment — not the app header — that offers the choice.
+ */
+export type FragmentCapability = "ai" | "models"
+
+export const FRAGMENT_CAPABILITIES: readonly FragmentCapability[] = ["ai", "models"]
 
 /**
  * Where a fragment is meant to live:
@@ -47,6 +59,8 @@ export interface FragmentPins {
   sidebar: boolean
   /** Listed as its own card in the side panel's "Open" hub. */
   panel: boolean
+  /** Shown as a small live card on the home screen (the natural home of a `widget`). */
+  home: boolean
 }
 
 /** What the UI (never the agent) may change about a fragment. */
@@ -88,8 +102,33 @@ export interface FragmentManifest {
   sessionId?: string
 }
 
+/**
+ * What a read-only frame (a widget on the home screen) may still ask Orbit: reading its own
+ * saved data. Never writes, never the model — a card on the home screen must not spend
+ * tokens or change data just by being on screen.
+ */
+export const FRAGMENT_READ_ONLY_METHODS: readonly string[] = ["store.get", "store.keys"]
+
 /** Methods the page can call through `window.orbit`. */
-export type FragmentMethod = "store.get" | "store.set" | "store.delete" | "store.keys" | "ai.generate"
+export type FragmentMethod =
+  | "store.get"
+  | "store.set"
+  | "store.delete"
+  | "store.keys"
+  | "ai.generate"
+  | "models.list"
+  | "models.get"
+  | "models.set"
+
+/** A model the fragment may offer in its own UI. Names only: never a key, endpoint or price. */
+export interface FragmentModelOption {
+  providerId: string
+  providerName: string
+  modelId: string
+  name: string
+  /** The model can think (the fragment may want to show that). */
+  reasoning: boolean
+}
 
 export interface FragmentCallInput {
   fragmentId: string

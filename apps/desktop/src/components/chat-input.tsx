@@ -58,6 +58,8 @@ import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useToolsServers } from "@/src/stores/session-tools"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
 import { closestVariant } from "@shared/chat"
+import { BrowserSelectionChips } from "@/src/components/browser-selection-chips"
+import { selectionsToFileParts } from "@/src/lib/browser-selection"
 import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
 import { toFileParts } from "@/src/lib/message-utils"
 import { useInputHistory } from "@/src/hooks/use-input-history"
@@ -82,6 +84,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const replyKey = draftKey ?? sessionId ?? "draft"
   // ↑/↓ bring back the texts already sent in this chat.
   const navigateHistory = useInputHistory(sessionId, replyKey)
+  const selections = usePanelStore((s) => s.selections)
+  const removeSelection = usePanelStore((s) => s.removeSelection)
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
@@ -258,6 +262,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
     <PendingAttachmentSync sessionId={sessionId} draftKey={draftKey} />
     <div className="w-full max-w-2xl mx-auto pb-4 @container">
+      <BrowserSelectionChips selections={selections} onRemove={removeSelection} />
       {quotes.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
           {quotes.map((q) => (
@@ -317,6 +322,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           const files = toFileParts(message.files ?? [])
           // Excerpts quoted from the viewer become an attachment with its own MIME: the
           // bubble shows the chip and the model receives the text with the quote.
+          // Elements picked on a page (the panel browser, a fragment in inspect mode) go the same way.
+          if (selections.length > 0) {
+            files.push(...selectionsToFileParts(selections))
+            usePanelStore.getState().clearSelections()
+          }
           const quoteFiles = quotesToFileParts(quotes)
           if (quoteFiles.length > 0) {
             files.push(...quoteFiles)

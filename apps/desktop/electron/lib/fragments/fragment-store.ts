@@ -14,7 +14,14 @@ import type {
   FragmentPins,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
-import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, FRAGMENT_KINDS } from '@shared/fragments'
+import {
+  FRAGMENT_CAPABILITIES,
+  FRAGMENT_DEFAULT_ICON,
+  FRAGMENT_ICON_PATTERN,
+  FRAGMENT_KINDS,
+  isFragmentId,
+} from '@shared/fragments'
+import { noteProvenanceModified, recordLocalProvenance, removeProvenance } from './fragment-provenance'
 
 /**
  * Fragments on disk — `orbit-data/fragments/<id>/`:
@@ -28,7 +35,6 @@ import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, FR
  * to the page, because it only serves `src/`.
  */
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,47}$/
 const ENTRY = 'index.html'
 
 /** Per-file cap. The page is written by a model: above this it is a data dump. */
@@ -59,16 +65,16 @@ function fragmentsRoot(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'fragments')
 }
 
-export function isFragmentId(id: unknown): id is string {
-  return typeof id === 'string' && ID_PATTERN.test(id)
-}
+export { isFragmentId }
 
-function fragmentDir(id: string): string {
+/** The folder of one fragment (history keeps its `.history/` next to `src/`). */
+export function fragmentDir(id: string): string {
   if (!isFragmentId(id)) throw new Error(`invalid fragment id: ${String(id).slice(0, 60)}`)
   return path.join(fragmentsRoot(), id)
 }
 
-function srcDir(id: string): string {
+/** The folder of the fragment's code (for modules that measure it; the scheme never uses this). */
+export function srcDir(id: string): string {
   return path.join(fragmentDir(id), 'src')
 }
 
@@ -149,7 +155,7 @@ export function sanitizeIcon(value: unknown): string {
 
 /** A new fragment is pinned where its kind lives; an old manifest without pins gets the same. */
 function defaultPins(kind: FragmentKind): FragmentPins {
-  return { sidebar: kind === 'screen', panel: kind === 'panel' }
+  return { sidebar: kind === 'screen', panel: kind === 'panel', home: kind === 'widget' }
 }
 
 function sanitizePins(value: unknown, kind: FragmentKind): FragmentPins {
@@ -159,6 +165,7 @@ function sanitizePins(value: unknown, kind: FragmentKind): FragmentPins {
   return {
     sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : base.sidebar,
     panel: typeof raw.panel === 'boolean' ? raw.panel : base.panel,
+    home: typeof raw.home === 'boolean' ? raw.home : base.home,
   }
 }
 
@@ -258,6 +265,8 @@ export async function createFragment(input: {
   await fsp.mkdir(srcDir(id), { recursive: true })
   await fsp.writeFile(path.join(srcDir(id), ENTRY), input.html, 'utf8')
   await writeManifestFile(manifest)
+  // Born here through the creation flow: the only way a fragment is recorded as local.
+  await recordLocalProvenance(id)
   emitUpdated(manifest)
   return manifest
 }
@@ -266,6 +275,7 @@ export async function removeFragment(id: string): Promise<boolean> {
   if (!isFragmentId(id)) return false
   const existed = (await readManifestFile(id)) !== null
   await fsp.rm(fragmentDir(id), { recursive: true, force: true })
+  await removeProvenance(id)
   logs.delete(id)
   return existed
 }
@@ -283,7 +293,11 @@ export async function updateFragmentMeta(id: string, patch: FragmentMetaPatch): 
     const next: FragmentManifest = { ...manifest }
     if (typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim().slice(0, 80)
     if (typeof patch.icon === 'string') next.icon = sanitizeIcon(patch.icon)
-    if (patch.pinned) next.pinned = { ...manifest.pinned, ...sanitizePins(patch.pinned, manifest.kind) }
+    if (patch.pinned) {
+      // Only the pins the patch names: a pin it leaves out keeps its value, not its kind's default.
+      const named = Object.fromEntries(Object.entries(patch.pinned).filter(([, v]) => typeof v === 'boolean'))
+      next.pinned = { ...manifest.pinned, ...sanitizePins({ ...manifest.pinned, ...named }, manifest.kind) }
+    }
     if (patch.model === null) delete next.model
     else if (patch.model) next.model = sanitizeModel(patch.model) ?? manifest.model
     if (patch.reasoning === null) delete next.reasoning
@@ -331,6 +345,14 @@ export async function requestCapabilities(id: string, requests: FragmentCapabili
     await writeManifestFile(next)
     return next
   })
+}
+
+/** Asks for (or stops asking for) ONE capability, leaving the others as they are. */
+export async function setRequested(id: string, capability: FragmentCapability, on: boolean): Promise<FragmentManifest | null> {
+  const manifest = await readManifestFile(id)
+  if (!manifest) return null
+  const rest = manifest.requests.filter((c) => c !== capability)
+  return requestCapabilities(id, on ? [...rest, capability] : rest)
 }
 
 // ─── Files (src/) ────────────────────────────────────────────────────────────
@@ -389,6 +411,7 @@ export async function writeFragmentFile(id: string, rel: string, content: string
     }
     await fsp.mkdir(path.dirname(full), { recursive: true })
     await fsp.writeFile(full, content, 'utf8')
+    await noteProvenanceModified(id)
     const next = { ...manifest, revision: manifest.revision + 1, updatedAt: Date.now() }
     await writeManifestFile(next)
     emitUpdated(next)
@@ -402,6 +425,7 @@ export async function deleteFragmentFile(id: string, rel: string): Promise<Fragm
     const manifest = await readManifestFile(id)
     if (!manifest) throw new Error(`Fragment not found: ${id}`)
     await fsp.rm(resolveSrcPath(id, rel), { force: true })
+    await noteProvenanceModified(id)
     const next = { ...manifest, revision: manifest.revision + 1, updatedAt: Date.now() }
     await writeManifestFile(next)
     emitUpdated(next)
@@ -411,7 +435,8 @@ export async function deleteFragmentFile(id: string, rel: string): Promise<Fragm
 
 // ─── Store (orbit.store) ─────────────────────────────────────────────────────
 
-async function readData(id: string): Promise<Record<string, unknown>> {
+/** Everything `orbit.store` saved, parsed (read-only views use it; writes go through storeSet). */
+export async function readFragmentData(id: string): Promise<Record<string, unknown>> {
   try {
     const parsed = JSON.parse(await fsp.readFile(dataFile(id), 'utf8'))
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
@@ -421,12 +446,12 @@ async function readData(id: string): Promise<Record<string, unknown>> {
 }
 
 export async function storeGet(id: string, key: string): Promise<unknown> {
-  const data = await readData(id)
+  const data = await readFragmentData(id)
   return Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null
 }
 
 export async function storeKeys(id: string): Promise<string[]> {
-  return Object.keys(await readData(id)).sort()
+  return Object.keys(await readFragmentData(id)).sort()
 }
 
 export async function storeSet(id: string, key: string, value: unknown): Promise<void> {
@@ -437,7 +462,7 @@ export async function storeSet(id: string, key: string, value: unknown): Promise
   }
   await serialized(id, async () => {
     if (!(await readManifestFile(id))) throw new Error(`Fragment not found: ${id}`)
-    const data = await readData(id)
+    const data = await readFragmentData(id)
     if (!Object.prototype.hasOwnProperty.call(data, key) && Object.keys(data).length >= MAX_STORE_KEYS) {
       throw new Error(`too many keys (limit ${MAX_STORE_KEYS})`)
     }
@@ -452,7 +477,7 @@ export async function storeSet(id: string, key: string, value: unknown): Promise
 
 export async function storeDelete(id: string, key: string): Promise<void> {
   await serialized(id, async () => {
-    const data = await readData(id)
+    const data = await readFragmentData(id)
     if (!Object.prototype.hasOwnProperty.call(data, key)) return
     delete data[key]
     await fsp.writeFile(dataFile(id), JSON.stringify(data), 'utf8')

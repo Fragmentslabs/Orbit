@@ -69,6 +69,7 @@ import { useSimpleMode } from "@/src/stores/simple-prefs"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { pickWelcomeTitle } from "@shared/welcome-title"
+import { HomeWidgets } from "@/src/components/fragments/home-widgets"
 import { VOICE_DEFAULTS } from "@shared/voice"
 
 import { Hint } from "@/components/ui/hint"
@@ -1518,6 +1519,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                   </button>
                 </div>
               )}
+              {/* Widgets the person pinned to the home screen (nothing when there are none). */}
+              {!hasChat && <HomeWidgets />}
               <CapabilitiesDialog
                 open={capabilitiesOpen}
                 onOpenChange={setCapabilitiesOpen}

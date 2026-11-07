@@ -6,6 +6,12 @@ export function formatTokens(n: number): string {
   return String(n)
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${bytes} B`
+}
+
 export function formatCost(cost: number): string {
   if (cost >= 0.01) return `$${cost.toFixed(2)}`
   return `$${cost.toFixed(4)}`

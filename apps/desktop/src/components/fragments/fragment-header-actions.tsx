@@ -1,4 +1,4 @@
-import { Loader2, Pencil, RotateCw, Sparkles, type LucideIcon } from "lucide-react"
+import { Info, Loader2, MousePointerClick, Pencil, RotateCw, Sparkles, type LucideIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Hint } from "@/components/ui/hint"
@@ -23,18 +23,25 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
   const editing = useFragmentsStore((s) => s.editing)
   const toggleEditing = useFragmentsStore((s) => s.toggleEditing)
   const reload = useFragmentsStore((s) => s.reload)
+  const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
+  const toggleDetails = useFragmentsStore((s) => s.toggleDetails)
+  const inspecting = useFragmentsStore((s) => s.inspecting)
+  const toggleInspecting = useFragmentsStore((s) => s.toggleInspecting)
   const { working } = useArtifactActivity({ kind: "fragment", id: fragmentId })
   if (!manifest) return null
 
   const asksAi = manifest.requests.includes("ai")
   const aiOn = manifest.grants.includes("ai")
+  // When the fragment offers the model choice in its own screen (and the person allowed it),
+  // the header must not show a second, competing control.
+  const appPicksModel = manifest.requests.includes("models") && manifest.grants.includes("models")
 
   return (
     <div className="flex shrink-0 items-center gap-1">
       {working && <Loader2 aria-label={t("artifact.working")} className="mr-1 size-4 animate-spin text-primary" />}
       {/* The fragment's AI. Allowed: its model and thinking. Not allowed: only a small badge
           (clicking it allows) — the controls of a model nobody can use would be noise. */}
-      {asksAi && aiOn && (
+      {asksAi && aiOn && !appPicksModel && (
         <>
           <ModelPicker
             value={manifest.model ?? null}
@@ -73,6 +80,8 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
         <Pencil className="size-3.5" />
         {t("fragments.edit")}
       </Button>
+      <HeaderIconButton icon={MousePointerClick} label={t("fragments.inspect")} onClick={toggleInspecting} active={inspecting} />
+      <HeaderIconButton icon={Info} label={t("fragments.details.title")} onClick={toggleDetails} active={detailsOpen} />
       <HeaderIconButton icon={RotateCw} label={t("fragments.reload")} onClick={reload} />
     </div>
   )

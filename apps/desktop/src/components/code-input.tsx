@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, LayoutGrid, Monitor, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, LayoutGrid, Monitor, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,7 +68,9 @@ import { useToolsServers } from "@/src/stores/session-tools"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@shared/chat"
-import { BROWSER_SELECTION_MIME, closestVariant } from "@shared/chat"
+import { closestVariant } from "@shared/chat"
+import { BrowserSelectionChips } from "@/src/components/browser-selection-chips"
+import { selectionsToFileParts } from "@/src/lib/browser-selection"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { Hint } from "@/components/ui/hint"
@@ -378,27 +380,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     // engine converts it into text for the model — the bubble shows only the chip.
     const currentSelections = selections
     if (currentSelections.length > 0) {
-      files.push(
-        ...currentSelections.map<FilePart>((sel) => {
-          const payload = encodeURIComponent(
-            JSON.stringify({
-              tag: sel.tag,
-              url: sel.url,
-              selector: sel.selector,
-              text: sel.text,
-              html: sel.html,
-            }),
-          )
-          const label = sel.text ? `"${sel.text.slice(0, 40)}${sel.text.length > 40 ? "…" : ""}"` : ""
-          return {
-            id: sel.id,
-            type: "file",
-            mime: BROWSER_SELECTION_MIME,
-            filename: `<${sel.tag}>${label ? ` ${label}` : ""}`,
-            url: `data:${BROWSER_SELECTION_MIME},${payload}`,
-          }
-        }),
-      )
+      files.push(...selectionsToFileParts(currentSelections))
       usePanelStore.getState().clearSelections()
     }
     if (quotes.length > 0) {
@@ -528,29 +510,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           </div>
         )}
         {/* Elements selected in the panel browser (selection mode) */}
-        {selections.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
-            {selections.map((sel) => (
-              <span
-                key={sel.id}
-                title={`${sel.selector}\n"${sel.text}"`}
-                className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400"
-              >
-                <MousePointerClick className="size-3" />
-                {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : t("codeInput.selected")}
-                <Hint label={t("common.remove")}>
-                  <button
-                    type="button"
-                    onClick={() => removeSelection(sel.id)}
-                    className="ml-0.5 rounded-sm hover:bg-emerald-500/20"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Hint>
-              </span>
-            ))}
-          </div>
-        )}
+        <BrowserSelectionChips selections={selections} onRemove={removeSelection} />
         <QueueIndicator sessionId={sessionId} />
         <PromptInput
           multiple
