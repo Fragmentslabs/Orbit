@@ -84,9 +84,21 @@ What the MVP does:
 - `orbit.ai` needs the fragment to *ask* (`usesAi`) **and** the user to turn it on
   with a button in the tab. Budget: 12 calls/minute and 2 in flight per fragment.
 
-See section 6 for how the page works. Deliberately **not** in the MVP: connections and a secret vault, declared queries,
-`refresh`/`alerts`, `orbit.http`, MCP, packages, per-message history/revert, global
-toast host, sidebar page, widgets, import/export.
+Added after the MVP (all of it checked with typecheck, lint and tests only, not in the real window):
+
+| What | Where |
+|---|---|
+| Provenance record (outside the fragment folder, derived owner) | `…/fragments/fragment-provenance.ts`, `packages/shared/src/fragment-provenance.ts` |
+| Details panel: weight, settings, capabilities, token spend, local database, packages, origin | `…/fragments/fragment-details.ts`, `src/components/fragments/fragment-details-panel.tsx`, `…/details/` |
+| Data view (read-only keys and values of `orbit.store`) | `getFragmentData`, `details/fragment-data-dialog.tsx` |
+| Inspect mode (pick an element, attach it to the next message) | `…/fragments/fragment-inspector.ts` (page side), `FragmentFrame` + `fragments-store.pickElement` (host side), `src/lib/browser-selection.ts` (shared with the code composer) |
+| Home-screen widgets (third pin `home`, read-only live cards) | `src/components/fragments/home-widgets.tsx`, `FragmentPreview` (`readOnly`, `fit="aspect"`) |
+| `orbit.models` and the `models` capability | `…/fragments/fragment-models.ts`, `fragment-bridge.ts`, tool `fragment_set_models` |
+| Per-turn history and revert of the agent's file writes | `…/fragments/fragment-history.ts`, `details/fragment-history-dialog.tsx` |
+
+See section 6 for how the page works. Deliberately **not** built yet: connections and a secret vault, declared queries,
+`refresh`/`alerts`, `orbit.http`, MCP, packages, global toast host, import/export (and so the third-party
+side of provenance has no writer yet).
 
 ## 3. Anatomy on disk
 
@@ -96,7 +108,10 @@ orbit-data/fragments/<id>/
   src/              what the scheme serves; index.html is the entry
   data.json         the fragment's own state (orbit.store) — never served
   packages.lock.json  (planned) resolved dependency tree (section 8)
-  .history/         (planned) code versions, one per agent turn
+  .history/         one file per agent write: the file as it was BEFORE it (section 12)
+
+orbit-data/fragment-provenance/<id>.json   where the fragment came from; outside the
+                    fragment folder on purpose and never exported (section 11)
 
 orbit-data/packages/          (planned) shared package cache (section 8)
   <name>@<version>/
@@ -131,7 +146,9 @@ Native fragments (planned) live in `resources/fragments/`, read-only, with a
 ```
 
 `requests` is written by the agent; `grants` only by the UI. Dropping a request also
-drops its grant.
+drops its grant. Capabilities today: `ai` (call the model) and `models` (the fragment
+offers the model choice in its own screen). `pinned` has three flags: `sidebar`, `panel`
+and `home` (a small card on the home screen; on by default for the `widget` kind).
 
 **Target (v1)** — what the manifest grows into:
 
@@ -180,6 +197,7 @@ forwards it to the main process.
 |---|---|
 | `orbit.store.get/set/delete/keys` | Persistent JSON key-value (≤256KB per key, ≤500 keys, ≤2MB total) |
 | `orbit.ai.generate({ prompt, system? })` → `{ text }` | The user's own model. Needs `ai` requested + granted. Rejects with `err.code` |
+| `orbit.models.list/get/set` | The fragment's own model picker for `orbit.ai`. Needs `models` requested + granted. `list` returns only connected, text-producing models (`providerId`, `providerName`, `modelId`, `name`, `reasoning`); `set` is re-checked against that list in the broker; `set(null)` follows the chat again |
 | `orbit.theme`, `orbit.on('theme', fn)` | Current theme; the Orbit CSS variables are already defined |
 | (automatic) console + errors | Forwarded to the tab, readable by the agent with `fragment_logs` |
 
@@ -205,7 +223,7 @@ Errors from `orbit.*` always carry a `code` (`permission_denied`, `rate_limited`
 | **Panel tab** (`TabType "fragment"`) | Implemented. One tab per fragment per conversation; an empty picker tab is reused |
 | **Page** (`WorkspaceView "fragments"`): gallery + one fragment per screen, pinnable in the sidebar | Implemented |
 | **Global toast** rendered by Orbit, outside the fragment | Planned (Orbit has no global toast host yet) |
-| **Widgets** on the home screen, read-only from cache | Planned |
+| **Widgets** on the home screen | Implemented: the `home` pin shows a small live card under the welcome invitation. The card is a read-only frame (see below) and a click opens the fragment. Not "from cache" yet: the page runs, there is no `refresh` |
 
 ### The Fragments page
 
@@ -257,17 +275,34 @@ generic window icon, so a wrong guess never breaks the manifest.
 
 What the screen deliberately leaves out, and why:
 
-- **Inspect** (pick an element on the page and reference it in the chat): planned. It
-  needs an inspector script injected by the scheme and a way to attach the picked element
-  to the composer; the Design tab already has the second half.
-- **Data** (the SQL behind the fragment, in the side panel): hidden until fragments have
-  queries; it should appear only for fragments that declare any.
+- **Data from queries** (the SQL behind the fragment): hidden until fragments have
+  queries; it should appear only for fragments that declare any. (The read-only view of
+  what the fragment saved with `orbit.store` exists, in the details panel.)
 - **Share/export**: waits for the package format (section 11).
 
-**Model per fragment.** Today: *header* mode — the person picks the model of `orbit.ai`
-for this fragment in the header (default: the model of the chat), and its **thinking level**, next to it (`reasoning` in the manifest, applied to every `orbit.ai` call; the agent that edits the fragment has its own model and thinking in the edit prompt). Planned: *app*
-mode — the fragment's own UI offers the choice through an `orbit.models` call, and the
-bar's control disappears. A fragment will declare which mode it uses.
+**Inspect, details and history.** The header has an **Inspect** button: the page highlights the
+element under the pointer and the click becomes the same attachment the panel browser makes for
+a selected element (`BROWSER_SELECTION_MIME`, now serialized in one place for both composers),
+opens edit mode and waits for the instruction. The picker is a small script injected next to the
+SDK (the page is an opaque origin, so the host cannot read its DOM); it is dormant until the host
+asks, and the host accepts a pick only while inspect mode is on. The **Details** button opens a
+panel with weight (code, data, history), settings, capabilities requested and granted (the only
+place besides the banner and menu where the user allows or revokes), what the fragment's chats
+spent, the keys of its local database (with a read-only *View data* dialog), third-party
+packages (always empty today), the **history** dialog and the provenance.
+
+**Read-only frames.** A widget on the home screen runs the page in a frame that only forwards
+`store.get` and `store.keys` (`FRAGMENT_READ_ONLY_METHODS`); everything else is refused by the
+courier with `read_only`, so a card never spends tokens or changes data by being on screen.
+Gallery thumbnails stay stricter: `preview` refuses every call.
+
+**Model per fragment.** Two modes. *Header* mode — the person picks the model of `orbit.ai`
+for this fragment in the header (default: the model of the chat), and its **thinking level**, next to it (`reasoning` in the manifest, applied to every `orbit.ai` call; the agent that edits the fragment has its own model and thinking in the edit prompt). *App* mode
+(implemented): the fragment's own UI offers the choice through `orbit.models`. A fragment declares
+it by requesting the `models` capability (the agent's tool `fragment_set_models`); once the user
+allows it, the header's model and thinking controls disappear for that fragment. Not decided yet:
+the thinking level has no `orbit.models` call, so in app mode it is left at what the person last
+set in the header.
 
 Contextual panel tabs (a fragment that receives the current session/folder, with a
 declared and granted `context`) are a planned follow-up.
@@ -492,7 +527,7 @@ This format is the base for repository import, the MCP flow and a future registr
 and it is built first because everything else reuses it. It must carry
 `dependencies` and `network` from the start.
 
-### Provenance (planned)
+### Provenance (record and UI built; no import yet)
 
 Where a fragment came from is a record **kept by Orbit, outside the fragment folder**
 and never exported. Nothing inside the package can claim an origin, because whoever
@@ -509,9 +544,16 @@ packs it would choose what it says.
   URL Orbit fetched itself is shown as "Imported file", with no derived owner.
 - **Editing a third-party fragment** does not make it local. The record notes it was
   modified and keeps the original commit, for "changed since origin".
-- **Details panel:** the fragment's side panel (opened from the header) shows
-  weight, settings, capabilities requested and granted, token spend, the local
-  database, third-party packages (when any) and this provenance.
+- **Details panel:** built (see section 6). It shows weight, settings, capabilities requested and
+  granted, token spend, the local database, third-party packages (when any) and this provenance.
+
+**What exists:** `fragment-provenance.ts` keeps `orbit-data/fragment-provenance/<id>.json`. Only
+`createFragment` writes `local`; `recordThirdPartyProvenance` (source URL Orbit fetched, arrival,
+commit) and the "modified since origin" mark on edits are built and tested but have no caller until
+import exists. The owner is never stored: `deriveOwner` computes it when the record is read. A
+fragment with no record reads as local, which is true for everything created before import; the
+import flow must write its record **before** the fragment appears so that fallback can never
+mislabel an import.
 
 ### Install from the terminal: `npx` (planned)
 
@@ -541,8 +583,17 @@ every write. The tool descriptions teach the agent the SDK and its limits (no
 network, no CDN, vanilla JS, Orbit CSS variables, read `fragment_logs` after
 writing).
 
-Planned: a revision per agent turn in `.history/` with revert per message (the same
-guarantee chats already have for media); a dedicated split view (live preview + chat
+**History and revert (implemented).** Every write the agent makes is a revision in `.history/`: the
+file as it was before the write (`null` when the write created it), tagged with the agent turn
+(`createFragmentTools` is built once per turn, so its writes share a turn id). The history dialog
+lists turns newest first; *Undo from here* restores the files as they were before that turn and
+drops it and every later turn (the history is a line, not a tree). Only the person reverts; the
+agent has no tool for it. It keeps the last 80 revisions and 12MB, and failing to keep history
+never fails a write. Known limits: the person's own changes (name, pins, grants) and the data the
+page saves are not versioned; a revert is not atomic against an agent write happening at the
+same instant.
+
+Planned: a dedicated split view (live preview + chat
 bound to the `fragmentId`); `fragment_test_query` for declared queries; suggesting a
 fragment when an official integration connects (for example a task summary after
 connecting Fracta), as **prompt templates** rather than prebuilt fragments, so the
@@ -583,7 +634,7 @@ companion showing fragments.
 | **3 — Bundler and packages** | esbuild in main, shared package cache, Orbit set, third-party packages with consent, TSX |
 | **4 — Network and MCP** | `orbit.http` with host approval; `orbit.mcp` (read-only first) |
 | **5 — Discovery** | `fragments` tool detection on integration connect; curated list; the spec repository and badge |
-| **6 — Surfaces and history** | Page in the sidebar, global toast, per-turn history and revert, `refresh`/`alerts`, widgets |
+| **6 — Surfaces and history** | Page in the sidebar, per-turn history and revert, widgets (done); global toast, `refresh`/`alerts` (planned) |
 | **Later** | Declared queries and database connections (possibly through MCP), community registry, mobile |
 
 ## 16. Open questions
@@ -607,7 +658,12 @@ companion showing fragments.
 - **Scope of the MVP's `orbit.ai` model:** the last chat model is a pragmatic choice;
   a per-fragment choice may be wanted.
 - **Not verified:** everything above has been checked with typecheck, lint and tests
-  (including the SDK running in a simulated page), but not by driving the real Electron
-  window — including the Fragments page.
-- **Widgets:** the home-screen host does not exist; `widget` fragments are recorded and
-  listed but not shown anywhere else yet.
+  (including the SDK and the inspector running in a simulated page), but not by driving the
+  real Electron window — including the Fragments page, the details panel, inspect mode, the
+  home-screen widgets, `orbit.models` and the history dialog.
+- **Widgets:** the home-screen row exists and runs the live page; there is no cached,
+  refreshed snapshot yet, so a widget that needs the model or the network shows its empty state
+  there. `refresh` is what would fix that.
+- **Inspect on a page that re-renders:** the picked selector is a best effort (id, classes,
+  `nth-of-type`, five levels); a page that rebuilds its DOM may need the agent to find the element
+  by its text and html, which the attachment carries.
