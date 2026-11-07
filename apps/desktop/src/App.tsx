@@ -10,9 +10,11 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { FolderOpen } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
-import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
+import { resolvePanelSession } from "@/src/lib/panel-session"
+import { ORPHAN_KEY, usePanelStore, type PanelEvent } from "@/src/stores/panel-store"
 import { usePipelineStore } from "@/src/stores/pipeline-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
+import type { SessionMode } from "@shared/chat"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { RemoteChatView } from "@/src/components/peers/remote-chat-view"
@@ -89,6 +91,19 @@ function UsageHeaderControls() {
   )
 }
 
+/**
+ * A specialist subchat makes its artifact under its own id; the tab belongs in the panel
+ * of the chat being looked at (the parent), not in the hidden child's bucket.
+ */
+function retargetToVisibleChat(event: PanelEvent, mode: SessionMode): PanelEvent {
+  if (event.type !== "motion" && event.type !== "design" && event.type !== "slides" && event.type !== "fragment") return event
+  if (!event.sessionId) return event
+  const { sessions, activeIds } = useSessionStore.getState()
+  const parents = new Map(sessions.map((s) => [s.id, s.parentId]))
+  const sessionId = resolvePanelSession(event.sessionId, activeIds[mode] ?? null, (id) => parents.get(id))
+  return sessionId === event.sessionId ? event : { ...event, sessionId }
+}
+
 function Layout() {
   const { t } = useTranslation()
   const { open, setOpen } = useSidebar()
@@ -134,7 +149,7 @@ function Layout() {
         (event.type === "motion" || event.type === "design" || event.type === "slides") && !event.sessionId
           ? { ...event, sessionId: remoteBucket ?? useSessionStore.getState().activeIds[modeRef.current] ?? undefined }
           : event
-      store.applyEvent(resolved)
+      store.applyEvent(retargetToVisibleChat(resolved, modeRef.current))
       if (event.type === "ensure") {
         ensureAgentBrowser(event.sessionId, event.url)
       }
