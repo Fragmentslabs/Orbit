@@ -5,6 +5,7 @@ import { ArtifactChatFeed } from "@/src/components/artifact/artifact-chat-feed"
 import { useArtifactChat } from "@/src/hooks/use-artifact-chat"
 import { useMarkArtifactSeen } from "@/src/hooks/use-artifact-activity"
 import { FragmentComposer } from "@/src/components/fragments/fragment-composer"
+import { FragmentDetailsPanel } from "@/src/components/fragments/fragment-details-panel"
 import { ActionsFeed } from "@/src/components/fullscreen-dock"
 import { FragmentAiBadge, FragmentFrame, useFragment } from "@/src/components/fragment-tab"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
@@ -22,6 +23,7 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
   const leave = useFragmentsStore((s) => s.leave)
   const reloads = useFragmentsStore((s) => s.reloads)
   const editing = useFragmentsStore((s) => s.editing)
+  const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
   const [composerPinned, setComposerPinned] = useState(true)
   const [feedPinned, setFeedPinned] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -62,6 +64,8 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
 
       {/* The fragment asked for the model: only the person can say yes. */}
       <FragmentAiBadge manifest={manifest} />
+
+      {detailsOpen && <FragmentDetailsPanel manifest={manifest} />}
 
       {editing && sessionId && (
         <>

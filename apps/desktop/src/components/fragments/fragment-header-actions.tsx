@@ -1,4 +1,4 @@
-import { Loader2, Pencil, RotateCw, Sparkles, type LucideIcon } from "lucide-react"
+import { Info, Loader2, Pencil, RotateCw, Sparkles, type LucideIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Hint } from "@/components/ui/hint"
@@ -23,6 +23,8 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
   const editing = useFragmentsStore((s) => s.editing)
   const toggleEditing = useFragmentsStore((s) => s.toggleEditing)
   const reload = useFragmentsStore((s) => s.reload)
+  const detailsOpen = useFragmentsStore((s) => s.detailsOpen)
+  const toggleDetails = useFragmentsStore((s) => s.toggleDetails)
   const { working } = useArtifactActivity({ kind: "fragment", id: fragmentId })
   if (!manifest) return null
 
@@ -73,6 +75,7 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
         <Pencil className="size-3.5" />
         {t("fragments.edit")}
       </Button>
+      <HeaderIconButton icon={Info} label={t("fragments.details.title")} onClick={toggleDetails} active={detailsOpen} />
       <HeaderIconButton icon={RotateCw} label={t("fragments.reload")} onClick={reload} />
     </div>
   )

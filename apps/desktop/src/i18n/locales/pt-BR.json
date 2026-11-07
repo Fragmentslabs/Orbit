@@ -3151,6 +3151,38 @@
       "recordedAt": "Adicionado em {{date}}",
       "modified": "Alterado desde que chegou",
       "commit": "Commit"
+    },
+    "details": {
+      "title": "Detalhes",
+      "weight": "Peso",
+      "code": "Código",
+      "data": "Dados salvos",
+      "settings": "Configurações",
+      "model": "Modelo",
+      "thinking": "Raciocínio",
+      "on": "Ligado",
+      "off": "Desligado",
+      "pins": "Fixado em",
+      "pinSidebar": "barra lateral",
+      "pinPanel": "painel lateral",
+      "none": "lugar nenhum",
+      "revision": "Revisão",
+      "capabilities": "Capacidades",
+      "cap": {
+        "ai": "Usar seu modelo de IA"
+      },
+      "allowed": "Permitido",
+      "allow": "Permitir",
+      "notRequested": "Não pedido",
+      "tokens": "Gasto pelos chats",
+      "chats": "Chats",
+      "input": "Entrada",
+      "output": "Saída",
+      "cost": "Custo",
+      "database": "Banco local",
+      "databaseEmpty": "Nada salvo ainda.",
+      "packages": "Pacotes de terceiros",
+      "packagesEmpty": "Nenhum."
     }
   },
   "motion": {

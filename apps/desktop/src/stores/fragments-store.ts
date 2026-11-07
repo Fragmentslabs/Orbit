@@ -27,6 +27,8 @@ interface FragmentsState {
   composing: boolean
   /** Edit mode of the open fragment (its prompt and feeds). Lives here because the header turns it on. */
   editing: boolean
+  /** The details panel of the open fragment is showing. */
+  detailsOpen: boolean
   /** Bumped to reload the open fragment's frame. */
   reloads: number
   /**
@@ -39,6 +41,7 @@ interface FragmentsState {
   load: () => Promise<void>
   open: (id: string | null) => void
   toggleEditing: () => void
+  toggleDetails: () => void
   reload: () => void
   startComposing: () => void
   startCreating: (creating: { sessionId: string; kind: FragmentKind }) => void
@@ -64,6 +67,7 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
   creating: null,
   composing: false,
   editing: false,
+  detailsOpen: false,
   reloads: 0,
   creations: [],
 
@@ -86,8 +90,9 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
     })
   },
 
-  open: (id) => set({ activeId: id, composing: false, creating: null, editing: false, reloads: 0 }),
+  open: (id) => set({ activeId: id, composing: false, creating: null, editing: false, detailsOpen: false, reloads: 0 }),
   toggleEditing: () => set((state) => ({ editing: !state.editing })),
+  toggleDetails: () => set((state) => ({ detailsOpen: !state.detailsOpen })),
   reload: () => set((state) => ({ reloads: state.reloads + 1 })),
   startComposing: () => set({ composing: true, activeId: null, creating: null, editing: false }),
   startCreating: (creating) =>
@@ -110,7 +115,7 @@ export const useFragmentsStore = create<FragmentsState>((set, get) => ({
       creations: state.creations.filter((c) => c.sessionId !== sessionId),
       creating: state.creating?.sessionId === sessionId ? null : state.creating,
     })),
-  leave: () => set({ activeId: null, composing: false, creating: null, editing: false }),
+  leave: () => set({ activeId: null, composing: false, creating: null, editing: false, detailsOpen: false }),
 
   claim: ({ id, sessionId }) => {
     const { creating, activeId } = get()

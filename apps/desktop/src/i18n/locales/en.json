@@ -3151,6 +3151,38 @@
       "recordedAt": "Added {{date}}",
       "modified": "Changed since it arrived",
       "commit": "Commit"
+    },
+    "details": {
+      "title": "Details",
+      "weight": "Weight",
+      "code": "Code",
+      "data": "Saved data",
+      "settings": "Settings",
+      "model": "Model",
+      "thinking": "Thinking",
+      "on": "On",
+      "off": "Off",
+      "pins": "Pinned in",
+      "pinSidebar": "sidebar",
+      "pinPanel": "side panel",
+      "none": "nowhere",
+      "revision": "Revision",
+      "capabilities": "Capabilities",
+      "cap": {
+        "ai": "Use your AI model"
+      },
+      "allowed": "Allowed",
+      "allow": "Allow",
+      "notRequested": "Not requested",
+      "tokens": "Spent by its chats",
+      "chats": "Chats",
+      "input": "Input",
+      "output": "Output",
+      "cost": "Cost",
+      "database": "Local database",
+      "databaseEmpty": "Nothing saved yet.",
+      "packages": "Third-party packages",
+      "packagesEmpty": "None."
     }
   },
   "motion": {
