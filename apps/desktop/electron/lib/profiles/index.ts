@@ -35,8 +35,6 @@ import { createMotionTools, motionPiecesDir } from '../tools/motion'
  * is fixed for the life of the conversation.
  */
 
-export const SPECIALIST_PROFILES: readonly SpecialistProfile[] = ['fragment', 'motion', 'design']
-
 /** The profile of a session, read from disk at the start of a turn (null = a general chat). */
 export async function profileOf(sessionId: string): Promise<SpecialistProfile | null> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))

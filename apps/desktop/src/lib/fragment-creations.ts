@@ -8,7 +8,7 @@ export interface Creation {
   startedAt: number
 }
 
-export const CREATIONS_STORAGE_KEY = "orbit-fragment-creations"
+const CREATIONS_STORAGE_KEY = "orbit-fragment-creations"
 
 /** A creation whose chat never produced a fragment is not worth keeping for ever. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000

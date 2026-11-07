@@ -86,7 +86,7 @@ function dataFile(id: string): string {
  * extensions the scheme would not serve are refused — the same function guards the
  * agent's writes and the scheme's reads.
  */
-export function resolveSrcPath(id: string, rel: string): string {
+function resolveSrcPath(id: string, rel: string): string {
   if (typeof rel !== 'string' || !rel.trim()) throw new Error('path is empty')
   const clean = rel.replace(/\\/g, '/').replace(/^\/+/, '')
   const parts = clean.split('/')
@@ -142,7 +142,7 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
 }
 
 /** A lucide name in kebab-case, or the default — an agent's guess never poisons the manifest. */
-export function sanitizeIcon(value: unknown): string {
+function sanitizeIcon(value: unknown): string {
   if (typeof value !== 'string') return FRAGMENT_DEFAULT_ICON
   const name = value.trim().toLowerCase()
   return name.length <= 48 && FRAGMENT_ICON_PATTERN.test(name) ? name : FRAGMENT_DEFAULT_ICON
