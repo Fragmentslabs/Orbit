@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, CheckIcon, Film, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, Presentation, RefreshCw, Search, Trash2, X } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
-import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
+import { AudioLines, CheckIcon, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
   Dialog,
@@ -12,24 +11,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Hint } from "@/components/ui/hint"
 import { Input } from "@/components/ui/input"
-import { artifactApi, designApi, mediaApi, motionApi, slidesApi } from "@/src/lib/ipc"
+import { artifactApi, mediaApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useTheme } from "@/components/theme-provider"
-import { openDocumentInPanel } from "@/src/lib/open-document"
+import { KIND_ICON } from "@/src/lib/media-kind-icon"
+import { openMediaEntryInPanel } from "@/src/lib/open-media-entry"
 import { useWorkspace } from "@/lib/workspace-context"
+import { useViewScope } from "@/src/stores/view-scope-store"
+import { ViewScopeToggle } from "@/src/components/view-scope-toggle"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { expandToGroups, groupMediaByRoot } from "@/src/lib/media-groups"
 import { scrollToMessage } from "@/src/lib/message-jump"
@@ -50,27 +44,10 @@ import { Truncate } from "@/components/ui/truncated-text"
  * deletes in bulk and sees the disk usage.
  */
 
-type SourceFilter = "all" | MediaSource
 type PeriodFilter = "all" | "today" | "week" | "month"
 /** Filter by TYPE: what the grid shows — image, page, document, audio,
  *  motion piece or video. */
 type KindFilter = "all" | MediaKind
-
-/**
- * The icon of each type, in a single place: it is the SAME drawing in the tile badge and in the
- * filter chip, and that is what makes the filter look like a filter of what one sees
- * in the grid. A type missing in an old record counts as "image" (see mediaKind).
- */
-const KIND_ICON: Record<MediaKind, LucideIcon> = {
-  image: ImageIcon,
-  artifact: CodeXml,
-  document: FileText,
-  audio: AudioLines,
-  motion: Clapperboard,
-  video: Film,
-  design: LayoutGrid,
-  slides: Presentation,
-}
 
 /**
  * SCOPE of the gallery — a single filter, with four natures.
@@ -188,7 +165,7 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   return (
     <div
       className={cn(
-        "group relative aspect-video overflow-hidden rounded-lg border bg-muted/30 transition-colors",
+        "group relative aspect-square overflow-hidden rounded-xl border bg-muted/30 transition-colors",
         selected ? "border-primary ring-1 ring-primary" : "border-sidebar-border hover:border-ring",
       )}
     >
@@ -273,195 +250,11 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   )
 }
 
-/** Chip of the scope filter. */
-function ScopeChip({
-  active,
-  onClick,
-  label,
-  Icon,
-}: {
-  active: boolean
-  onClick: () => void
-  label: string
-  Icon?: LucideIcon
-}) {
-  return (
-    <Hint label={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
-          active
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "text-muted-foreground hover:bg-sidebar-accent/50",
-        )}
-      >
-        {
-    Icon && <Icon className="size-3 shrink-0" />}
-      <span className="truncate">{label}</span>
-    </button>
-    </Hint>
-  )
-}
-
-/**
- * Folders and repositories in a dropdown, and not a chip per item: with a project
- * active the scope bar became a wall of buttons. "Everything" and "In
- * this chat" stay as chips — they are always the two most used options —
- * and the rest (specific folder, specific repository, loose ones) lives here.
- */
-function ScopeFilterMenu({
-  scope,
-  folderOptions,
-  projectOptions,
-  hasLoose,
-  onSelect,
-}: {
-  scope: string
-  folderOptions: { id: string; name: string }[]
-  projectOptions: { key: string; label: string }[]
-  hasLoose: boolean
-  onSelect: (value: string) => void
-}) {
-  const { t } = useTranslation()
-  if (folderOptions.length === 0 && projectOptions.length === 0 && !hasLoose) return null
-
-  const activeFolder = folderOptions.find((f) => scope === `${FOLDER_PREFIX}${f.id}`)
-  const activeProject = projectOptions.find((p) => scope === `${PROJECT_PREFIX}${p.key}`)
-  const activeLoose = hasLoose && scope === SCOPE_LOOSE
-  const active = !!activeFolder || !!activeProject || activeLoose
-  const ActiveIcon = activeFolder ? Folder : activeProject ? FolderGit2 : Filter
-  const label = activeFolder?.name ?? activeProject?.label ?? (activeLoose ? t("media.scope.loose") : t("media.scope.filters"))
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className={cn(
-          "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
-          active
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "text-muted-foreground hover:bg-sidebar-accent/50",
-        )}
-      >
-        <ActiveIcon className="size-3 shrink-0" />
-        <Truncate text={label}>
-          <span className="truncate">{label}</span>
-        </Truncate>
-        <ChevronDown className="size-3 shrink-0" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
-        {hasLoose && (
-          <DropdownMenuItem onClick={() => onSelect(SCOPE_LOOSE)}>
-            {t("media.scope.loose")}
-          </DropdownMenuItem>
-        )}
-        {folderOptions.length > 0 && (
-          <>
-            {hasLoose && <DropdownMenuSeparator />}
-            {/* The label needs a group: outside a Menu.Group Base UI takes the screen down on opening. */}
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-                {t("media.scope.folders")}
-              </DropdownMenuLabel>
-              {folderOptions.map((folder) => (
-                <DropdownMenuItem key={folder.id} onClick={() => onSelect(`${FOLDER_PREFIX}${folder.id}`)}>
-                  <Folder className="size-3.5" />
-                  <Truncate text={folder.name}>
-                    <span className="truncate">{folder.name}</span>
-                  </Truncate>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-          </>
-        )}
-        {projectOptions.length > 0 && (
-          <>
-            {(hasLoose || folderOptions.length > 0) && <DropdownMenuSeparator />}
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-                {t("media.scope.projects")}
-              </DropdownMenuLabel>
-              {projectOptions.map((project) => (
-                <DropdownMenuItem key={project.key} onClick={() => onSelect(`${PROJECT_PREFIX}${project.key}`)}>
-                  <FolderGit2 className="size-3.5" />
-                  <Truncate text={project.label}>
-                    <span className="truncate">{project.label}</span>
-                  </Truncate>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/**
- * Filter by media TYPE, in the same mold as the scope filter: a single chip, which
- * shows the active type — with the SAME icon the tile carries in the badge — and opens the
- * list.
- *
- * A chip per type would be a wall of buttons: there are five, and each one would repeat in the
- * bar what the badge already says in the grid. The menu is also where "all types" fits
- * as an explicit choice, instead of becoming a sixth chip glued to the "Everything" of the
- * scope — which means something else.
- */
-function KindFilterMenu({
-  kind,
-  onSelect,
-}: {
-  kind: KindFilter
-  onSelect: (value: KindFilter) => void
-}) {
-  const { t } = useTranslation()
-  const kinds = Object.keys(KIND_ICON) as MediaKind[]
-  const ActiveIcon = kind === "all" ? LayoutGrid : KIND_ICON[kind]
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        title={t(`media.kind.${kind}`)}
-        className={cn(
-          "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
-          kind !== "all"
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "text-muted-foreground hover:bg-sidebar-accent/50",
-        )}
-      >
-        <ActiveIcon className="size-3 shrink-0" />
-        <Truncate text={t(`media.kind.${kind}`)}>
-          <span className="truncate">{t(`media.kind.${kind}`)}</span>
-        </Truncate>
-        <ChevronDown className="size-3 shrink-0" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
-        <DropdownMenuItem onClick={() => onSelect("all")}>
-          <LayoutGrid className="size-3.5" />
-          <Truncate text={t("media.kind.all")}>
-            <span className="truncate">{t("media.kind.all")}</span>
-          </Truncate>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {kinds.map((value) => {
-          const Icon = KIND_ICON[value]
-          return (
-            <DropdownMenuItem key={value} onClick={() => onSelect(value)}>
-              <Icon className="size-3.5" />
-              <Truncate text={t(`media.kind.${value}`)}>
-                <span className="truncate">{t(`media.kind.${value}`)}</span>
-              </Truncate>
-            </DropdownMenuItem>
-          )
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 export function MediaGallery() {
   const { t, i18n } = useTranslation()
   const { mode, setMode, folders } = useWorkspace()
+  // The page's own Chat | Code | All toggle; until it is chosen it follows the workspace mode.
+  const [viewScope, setViewScope] = useViewScope("media", mode)
   const sessions = useSessionStore((s) => s.sessions)
   /** Sidebar folders (grouping of conversations) — different from the workspace working
    *  folders, which are repositories. */
@@ -470,7 +263,6 @@ export function MediaGallery() {
   const [entries, setEntries] = useState<MediaEntry[]>([])
   const [usage, setUsage] = useState({ count: 0, bytes: 0 })
   const [loading, setLoading] = useState(true)
-  const [source, setSource] = useState<SourceFilter>("all")
   const [period, setPeriod] = useState<PeriodFilter>("all")
   const [kind, setKind] = useState<KindFilter>("all")
   /** Explicit user choice; null = follows the default of the current context. */
@@ -536,8 +328,8 @@ export function MediaGallery() {
 
   /** Sessions of the current mode — gallery scope (chat shows only chat, etc). */
   const modeSessionIds = useMemo(
-    () => new Set(sessions.filter((s) => s.mode === mode).map((s) => s.id)),
-    [sessions, mode],
+    () => new Set(sessions.filter((s) => viewScope === "all" || s.mode === viewScope).map((s) => s.id)),
+    [sessions, viewScope],
   )
 
   /**
@@ -697,7 +489,6 @@ export function MediaGallery() {
     const needle = query.trim().toLowerCase()
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
     const filtrados = scopedEntries.filter((entry) => {
-      if (source !== "all" && entry.source !== source) return false
       // Type is the most direct filter that exists here ("where are the pieces?"): it goes
       // along with the scope, before the date, because it is usually the one that is wrong
       // when the grid looks empty.
@@ -709,7 +500,7 @@ export function MediaGallery() {
     })
     const { covers, versions } = groupMediaByRoot(scopedEntries, filtrados)
     return { visible: covers, versionsByHead: versions }
-  }, [scopedEntries, source, period, kind, query, scope, matchesScope])
+  }, [scopedEntries, period, kind, query, scope, matchesScope])
 
   /** Deleting a grid item takes its group — see expandToGroups. */
   const withVersions = useCallback(
@@ -758,46 +549,17 @@ export function MediaGallery() {
   const openEntry = useCallback(
     (entry: MediaEntry) => {
       const kind = mediaKind(entry)
-      // A document opens in the panel tab just like the artifact: its preview is
-      // HTML, and the lightbox only knows how to show <img>.
       // Audio plays in the tile itself (see Thumb) — there is no viewer for it.
       if (kind === "audio") return
-      // Motion piece: the click opens the TAB, and not the viewer — the cover is only the
-      // cover, and what one wants to see is the presentation running. The link to the
-      // composition is the motionId, and the one that knows how to reopen it is the main process.
-      if (kind === "motion") {
-        if (entry.motionId) void motionApi.open({ id: entry.motionId })
-        return
-      }
-      // Design canvas: same case as motion — the click opens the TAB, not the
-      // viewer; the link is the designId, and the one that knows how to reopen it is the main process.
-      if (kind === "design") {
-        if (entry.designId) void designApi.open({ id: entry.designId })
-        return
-      }
-      // Slides deck: same — the click reopens the TAB, and the cover is only the cover.
-      if (kind === "slides") {
-        if (entry.slidesId) void slidesApi.open({ id: entry.slidesId })
-        return
-      }
-      if (kind !== "artifact" && kind !== "document") {
-        setPreview(entry)
-        // The chain is fixed on opening: switching version inside the viewer cannot
-        // rewrite the list one is navigating through.
-        setPreviewChain(versionsByHead.get(entry.id) ?? null)
-        return
-      }
-      // Same key with which the panel chooses the bucket it shows.
-      const sessionId = useSessionStore.getState().activeIds[mode] ?? ORPHAN_KEY
-      // A living document opens in the Markdown canvas, a requested file opens in the
-      // viewer — what decides is openDocumentInPanel, so the gallery and the
-      // conversation card agree. The artifact stays in the tab that renders the
-      // HTML page.
-      if (kind === "document") {
-        void openDocumentInPanel(sessionId, entry.id, entry.name || entry.id)
-        return
-      }
-      usePanelStore.getState().openArtifactTab(sessionId, entry.id, entry.name || entry.id)
+      // Pieces with a tab of their own (motion, design, slides, document, artifact) open in the
+      // panel that is ON SCREEN, and not in the origin conversation's: opened there, the tab went
+      // to a hidden panel and the click seemed to do nothing.
+      const bucketKey = useSessionStore.getState().activeIds[mode] ?? ORPHAN_KEY
+      if (openMediaEntryInPanel(entry, bucketKey)) return
+      setPreview(entry)
+      // The chain is fixed on opening: switching version inside the viewer cannot
+      // rewrite the list one is navigating through.
+      setPreviewChain(versionsByHead.get(entry.id) ?? null)
     },
     [mode, versionsByHead],
   )
@@ -853,91 +615,73 @@ export function MediaGallery() {
     [entries, selected],
   )
 
-  const sourceFilters: SourceFilter[] = ["all", "user", "chat", "screenshot", "script", "batch"]
   const periodFilters: PeriodFilter[] = ["all", "today", "week", "month"]
+  const kindFilters: KindFilter[] = ["all", ...(Object.keys(KIND_ICON) as MediaKind[])]
+
+  /** The "where" select: everything, this chat, the loose ones, then folders and repositories. */
+  const scopeOptions = [
+    { value: SCOPE_ALL, label: t("media.scope.all") },
+    ...(activeSessionId ? [{ value: SCOPE_SESSION, label: t("media.scope.session") }] : []),
+    ...(hasLoose ? [{ value: SCOPE_LOOSE, label: t("media.scope.loose") }] : []),
+    ...folderOptions.map((f) => ({ value: `${FOLDER_PREFIX}${f.id}`, label: f.name })),
+    ...projectOptions.map((p) => ({ value: `${PROJECT_PREFIX}${p.key}`, label: p.label })),
+  ]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-col gap-2 border-b border-sidebar-border px-3 py-2">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+      <div className="@container flex flex-col gap-2 px-4 pt-3 pb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-40 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("media.searchPlaceholder")}
-              className="h-7 pl-7 text-xs"
+              className="h-8 pl-8 text-xs"
             />
           </div>
+          <ViewScopeToggle value={viewScope} onChange={setViewScope} />
           <Hint label={t("media.refresh")}>
             <button
               type="button"
               onClick={() => void refresh()}
-              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <RefreshCw className="size-3.5" />
             </button>
           </Hint>
         </div>
-        {/* Scope: "Everything" and "In this chat" are the two most used and stay
-            always visible; folder/repository/loose ones — which may be many —
-            go in the dropdown next to it, otherwise the bar becomes a wall of chips. */}
-        <div className="flex flex-wrap items-center gap-1">
-          <ScopeChip
-            active={scope === SCOPE_ALL}
-            onClick={() => setScopeOverride(SCOPE_ALL)}
-            label={t("media.scope.all")}
-          />
-          {activeSessionId && (
-            <ScopeChip
-              active={scope === SCOPE_SESSION}
-              onClick={() => setScopeOverride(SCOPE_SESSION)}
-              label={t("media.scope.session")}
-              Icon={MessageSquare}
-            />
-          )}
-          <ScopeFilterMenu
-            scope={scope}
-            folderOptions={folderOptions}
-            projectOptions={projectOptions}
-            hasLoose={hasLoose}
-            onSelect={(value) => setScopeOverride(value)}
-          />
-          <span className="mx-1 h-3 w-px bg-sidebar-border" />
-          <KindFilterMenu kind={kind} onSelect={setKind} />
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
-          {sourceFilters.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setSource(value)}
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[11px] transition-colors",
-                source === value
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/50",
-              )}
-            >
-              {t(`media.source.${value}`)}
-            </button>
-          ))}
-          <span className="mx-1 h-3 w-px bg-sidebar-border" />
-          {periodFilters.map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPeriod(value)}
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[11px] transition-colors",
-                period === value
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/50",
-              )}
-            >
-              {t(`media.period.${value}`)}
-            </button>
-          ))}
+        <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
+          <Select value={kind} onValueChange={(value) => setKind((value ?? "all") as KindFilter)}>
+            <SelectTrigger className="h-8 w-full text-xs" aria-label={t("media.filters.kind")}>
+              <SelectValue>{t(`media.kind.${kind}`)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {kindFilters.map((value) => (
+                <SelectItem key={value} value={value}>{t(`media.kind.${value}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={period} onValueChange={(value) => setPeriod((value ?? "all") as PeriodFilter)}>
+            <SelectTrigger className="h-8 w-full text-xs" aria-label={t("media.filters.period")}>
+              <SelectValue>{t(`media.period.${period}`)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {periodFilters.map((value) => (
+                <SelectItem key={value} value={value}>{t(`media.period.${value}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={scope} onValueChange={(value) => setScopeOverride(value ?? SCOPE_ALL)}>
+            <SelectTrigger className="h-8 w-full text-xs" aria-label={t("media.filters.scope")}>
+              <SelectValue>{scopeOptions.find((o) => o.value === scope)?.label}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {scopeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -966,13 +710,13 @@ export function MediaGallery() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="@container min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {loading ? (
           <p className="py-8 text-center text-xs text-muted-foreground">{t("media.loading")}</p>
         ) : visible.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">{t("media.empty")}</p>
         ) : (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-3">
             {visible.map((entry) => (
               <Thumb
                 key={entry.id}
