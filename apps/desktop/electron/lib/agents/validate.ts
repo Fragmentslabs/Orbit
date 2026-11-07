@@ -16,7 +16,13 @@ import {
 const clean = (value: unknown, max: number): string => (typeof value === 'string' ? value.slice(0, max) : '')
 
 /** Control characters other than tab and newline have no place in a name or a prompt. */
-const stripControl = (text: string): string => text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+const stripControl = (text: string): string =>
+  Array.from(text)
+    .filter((ch) => {
+      const code = ch.codePointAt(0)!
+      return code === 9 || code === 10 || (code >= 32 && code !== 127)
+    })
+    .join('')
 
 export function sanitizeAgentInput(raw: unknown): AgentInput {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
