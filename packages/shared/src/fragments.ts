@@ -31,6 +31,13 @@ export interface FragmentModel {
   modelId: string
 }
 
+/** How much the fragment's model thinks when the page calls `orbit.ai` (the person's choice). */
+export interface FragmentReasoning {
+  enabled: boolean
+  /** The level the model offers (low, high…); absent = the model's default. */
+  variantId?: string
+}
+
 /** A lucide icon name in kebab-case ("chart-bar", "wallet"). The UI falls back to a generic one for an unknown name. */
 export const FRAGMENT_ICON_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
 export const FRAGMENT_DEFAULT_ICON = "app-window"
@@ -50,8 +57,8 @@ export interface FragmentMetaPatch {
   pinned?: Partial<FragmentPins>
   /** `null` = follow the model of the chat. */
   model?: FragmentModel | null
-  /** The chat that edits this fragment. */
-  sessionId?: string
+  /** `null` = thinking off. */
+  reasoning?: FragmentReasoning | null
 }
 
 export interface FragmentManifest {
@@ -64,6 +71,8 @@ export interface FragmentManifest {
   pinned: FragmentPins
   /** Model for `orbit.ai`; absent = the model of the chat the person last used. */
   model?: FragmentModel
+  /** Thinking level of that model for `orbit.ai`; absent = off. */
+  reasoning?: FragmentReasoning
   /** Major version of the `window.orbit` API this fragment was written against. */
   sdk: 1
   /** What the fragment asked for (written by the agent when it creates the fragment). */
@@ -74,7 +83,8 @@ export interface FragmentManifest {
   revision: number
   createdAt: number
   updatedAt: number
-  /** Chat the fragment was born in. */
+  /** The chat the fragment was born in. Which chats worked on it since lives in the artifact
+   *  registry (artifacts/chat-registry.ts), the same for every kind of artifact. */
   sessionId?: string
 }
 

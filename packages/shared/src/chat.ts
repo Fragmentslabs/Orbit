@@ -117,6 +117,16 @@ export interface SessionMediaRevert {
   error?: string
 }
 
+/** The crafts that have a lean, specialist chat. */
+export type SpecialistProfile = 'fragment' | 'motion' | 'design'
+
+/** Which specialist profile a session runs with (the fragment chat keeps its own field). */
+export function specialistProfileOf(session: Pick<SessionInfo, 'fragment' | 'profile'> | null | undefined): SpecialistProfile | null {
+  if (!session) return null
+  if (session.fragment) return 'fragment'
+  return session.profile ?? null
+}
+
 export interface SessionInfo {
   id: string
   title: string
@@ -150,6 +160,18 @@ export interface SessionInfo {
    * opens on demand in the side panel. `kind` is where the person asked it to live.
    */
   fragment?: { kind: 'screen' | 'panel' | 'widget' }
+  /**
+   * A specialist chat: it runs with the lean profile of its craft (a focused prompt, only the
+   * tools of the craft, none of the usual memory/skills blocks). The Fragment chat is the
+   * same thing with its own field (`fragment`) when it is embedded in a fragment; a fragment
+   * agent picked for a new chat uses `profile: 'fragment'`. Use `specialistProfileOf` to read both.
+   */
+  profile?: SpecialistProfile
+  /**
+   * Marks a chat made inside an artifact (see artifacts.ts). `id` is the artifact it was made
+   * for; absent while the artifact does not exist yet (the first chat of a new fragment).
+   */
+  artifact?: { kind: SpecialistProfile; id?: string }
   /** Active revert (code mode) — cleared when undoing or sending a new message */
   revert?: SessionRevert
   createdAt: number
@@ -1099,6 +1121,9 @@ export interface AskItem {
      * Absent = "subchat".
      */
     scope?: "subchat" | "chat"
+    /** The specialist agent this suggestion would open: the card offers "a Motion chat"
+     *  instead of a plain subchat. */
+    profile?: "fragment" | "motion" | "design"
   }
 }
 
@@ -1111,9 +1136,9 @@ export interface PlanReview {
 }
 
 export interface SendMessageOptions {
-  /** Set by the main process (never the UI) for a Fragment's own chat: the lean profile —
-   *  minimal prompt, fragment tools only, no memory/skills blocks. */
-  fragment?: boolean
+  /** Set by the main process (never the UI) for a specialist chat: the lean profile of
+   *  its craft — focused prompt, the craft's tools only, no memory/skills blocks. */
+  profile?: SpecialistProfile
   /** Deep research mode (deep research prompt + web tools) */
   research?: boolean
   /** Enables native browser tools */
@@ -1625,6 +1650,7 @@ export type ChatEvent =
       title: string
       brief: string
       scope?: "subchat" | "chat"
+      profile?: "fragment" | "motion" | "design"
       origin?: AskOrigin
     }
   /** Batch of worker requests grouped in a batching window (single card) */
