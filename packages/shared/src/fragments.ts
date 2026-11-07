@@ -9,6 +9,13 @@
 
 export const FRAGMENT_SCHEME = "orbit-fragment"
 
+/** `frag-<slug>-<hex>`: lowercase letters, digits and hyphens, because it is a URL host and a folder name. */
+export const FRAGMENT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,47}$/
+
+export function isFragmentId(id: unknown): id is string {
+  return typeof id === "string" && FRAGMENT_ID_PATTERN.test(id)
+}
+
 /** Capabilities a fragment can ask for. The USER grants them, never the agent. */
 export type FragmentCapability = "ai"
 

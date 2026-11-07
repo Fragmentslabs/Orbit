@@ -14,7 +14,14 @@ import type {
   FragmentPins,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
-import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, FRAGMENT_KINDS } from '@shared/fragments'
+import {
+  FRAGMENT_CAPABILITIES,
+  FRAGMENT_DEFAULT_ICON,
+  FRAGMENT_ICON_PATTERN,
+  FRAGMENT_KINDS,
+  isFragmentId,
+} from '@shared/fragments'
+import { noteProvenanceModified, recordLocalProvenance, removeProvenance } from './fragment-provenance'
 
 /**
  * Fragments on disk — `orbit-data/fragments/<id>/`:
@@ -28,7 +35,6 @@ import { FRAGMENT_CAPABILITIES, FRAGMENT_DEFAULT_ICON, FRAGMENT_ICON_PATTERN, FR
  * to the page, because it only serves `src/`.
  */
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,47}$/
 const ENTRY = 'index.html'
 
 /** Per-file cap. The page is written by a model: above this it is a data dump. */
@@ -59,9 +65,7 @@ function fragmentsRoot(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'fragments')
 }
 
-export function isFragmentId(id: unknown): id is string {
-  return typeof id === 'string' && ID_PATTERN.test(id)
-}
+export { isFragmentId }
 
 function fragmentDir(id: string): string {
   if (!isFragmentId(id)) throw new Error(`invalid fragment id: ${String(id).slice(0, 60)}`)
@@ -258,6 +262,8 @@ export async function createFragment(input: {
   await fsp.mkdir(srcDir(id), { recursive: true })
   await fsp.writeFile(path.join(srcDir(id), ENTRY), input.html, 'utf8')
   await writeManifestFile(manifest)
+  // Born here through the creation flow: the only way a fragment is recorded as local.
+  await recordLocalProvenance(id)
   emitUpdated(manifest)
   return manifest
 }
@@ -266,6 +272,7 @@ export async function removeFragment(id: string): Promise<boolean> {
   if (!isFragmentId(id)) return false
   const existed = (await readManifestFile(id)) !== null
   await fsp.rm(fragmentDir(id), { recursive: true, force: true })
+  await removeProvenance(id)
   logs.delete(id)
   return existed
 }
@@ -389,6 +396,7 @@ export async function writeFragmentFile(id: string, rel: string, content: string
     }
     await fsp.mkdir(path.dirname(full), { recursive: true })
     await fsp.writeFile(full, content, 'utf8')
+    await noteProvenanceModified(id)
     const next = { ...manifest, revision: manifest.revision + 1, updatedAt: Date.now() }
     await writeManifestFile(next)
     emitUpdated(next)
@@ -402,6 +410,7 @@ export async function deleteFragmentFile(id: string, rel: string): Promise<Fragm
     const manifest = await readManifestFile(id)
     if (!manifest) throw new Error(`Fragment not found: ${id}`)
     await fsp.rm(resolveSrcPath(id, rel), { force: true })
+    await noteProvenanceModified(id)
     const next = { ...manifest, revision: manifest.revision + 1, updatedAt: Date.now() }
     await writeManifestFile(next)
     emitUpdated(next)

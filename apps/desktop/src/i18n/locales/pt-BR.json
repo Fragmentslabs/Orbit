@@ -3133,7 +3133,25 @@
     "card": "Fragmento",
     "gone": "Este fragmento não existe mais.",
     "fullscreen": "Abrir em tela cheia",
-    "aiEnable": "Habilitar IA"
+    "aiEnable": "Habilitar IA",
+    "provenance": {
+      "title": "Origem",
+      "local": "Criado neste computador",
+      "thirdParty": "De terceiros",
+      "owner": "Autor",
+      "source": "Fonte",
+      "arrival": "Chegou por",
+      "arrivals": {
+        "mcp": "uma integração",
+        "link": "um link",
+        "repository": "um repositório",
+        "file": "um arquivo"
+      },
+      "importedFile": "Arquivo importado",
+      "recordedAt": "Adicionado em {{date}}",
+      "modified": "Alterado desde que chegou",
+      "commit": "Commit"
+    }
   },
   "motion": {
     "unavailable": "Composição indisponível",

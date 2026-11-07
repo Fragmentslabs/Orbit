@@ -63,6 +63,7 @@ import type {
   FragmentMetaPatch,
   FragmentUpdatedEvent,
 } from "@shared/fragments"
+import type { FragmentProvenance } from "@shared/fragment-provenance"
 
 export type { SearchHit }
 
@@ -829,6 +830,7 @@ export const artifactApi = {
 export const fragmentApi = {
   list: () => window.ipcRenderer.invoke("fragment:list") as Promise<FragmentManifest[]>,
   get: (id: string) => window.ipcRenderer.invoke("fragment:get", id) as Promise<FragmentManifest | null>,
+  provenance: (id: string) => window.ipcRenderer.invoke("fragment:provenance", id) as Promise<FragmentProvenance | null>,
   call: (input: FragmentCallInput) =>
     window.ipcRenderer.invoke("fragment:call", input) as Promise<FragmentCallResult>,
   /** Only the user, through the tab toolbar, allows a capability. */

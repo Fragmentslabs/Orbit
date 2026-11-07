@@ -3133,7 +3133,25 @@
     "card": "Fragment",
     "gone": "This fragment no longer exists.",
     "fullscreen": "Open full screen",
-    "aiEnable": "Enable AI"
+    "aiEnable": "Enable AI",
+    "provenance": {
+      "title": "Origin",
+      "local": "Created on this computer",
+      "thirdParty": "From a third party",
+      "owner": "Owner",
+      "source": "Source",
+      "arrival": "Arrived by",
+      "arrivals": {
+        "mcp": "an integration",
+        "link": "a link",
+        "repository": "a repository",
+        "file": "a file"
+      },
+      "importedFile": "Imported file",
+      "recordedAt": "Added {{date}}",
+      "modified": "Changed since it arrived",
+      "commit": "Commit"
+    }
   },
   "motion": {
     "unavailable": "Composition unavailable",

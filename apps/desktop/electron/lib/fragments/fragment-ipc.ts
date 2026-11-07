@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import type { FragmentCallInput, FragmentLogEntry, FragmentMetaPatch, FragmentUpdatedEvent } from '@shared/fragments'
 import { FRAGMENT_CAPABILITIES } from '@shared/fragments'
 import { handleFragmentCall } from './fragment-bridge'
+import { getProvenance } from './fragment-provenance'
 import {
   appendFragmentLog,
   fragmentEvents,
@@ -30,6 +31,11 @@ export function registerFragmentIpc(): void {
 
   ipcMain.handle('fragment:list', () => listFragments())
   ipcMain.handle('fragment:get', (_event, id: string) => getFragment(id))
+  // Read-only: the record is written by Orbit's own flows, never through IPC.
+  ipcMain.handle('fragment:provenance', async (_event, id: string) => {
+    const manifest = await getFragment(id)
+    return manifest ? getProvenance(id, manifest.createdAt) : null
+  })
   ipcMain.handle('fragment:call', (_event, input: FragmentCallInput) => handleFragmentCall(input))
 
   // The ONLY place a capability is granted: a click of the user in the tab.
