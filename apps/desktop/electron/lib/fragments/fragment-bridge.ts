@@ -1,7 +1,8 @@
 import { generateText } from 'ai'
 import type { FragmentCallInput, FragmentCallResult, FragmentCapability, FragmentManifest } from '@shared/fragments'
 import { resolveModel } from '../providers'
-import { getFragment, storeDelete, storeGet, storeKeys, storeSet } from './fragment-store'
+import { isUsableModel, listUsableModels } from './fragment-models'
+import { getFragment, storeDelete, storeGet, storeKeys, storeSet, updateFragmentMeta } from './fragment-store'
 import { modelForSession } from './session-model'
 import { buildProviderOptions } from '../reasoning'
 import type { SendMessageInput } from '@shared/chat'
@@ -21,6 +22,10 @@ const METHOD_CAPABILITY: Record<string, FragmentCapability | undefined> = {
   'store.delete': undefined,
   'store.keys': undefined,
   'ai.generate': 'ai',
+  // The fragment's own UI offers the model choice — still the user's grant.
+  'models.list': 'models',
+  'models.get': 'models',
+  'models.set': 'models',
 }
 
 const AI_MAX_PROMPT_CHARS = 30_000
@@ -100,6 +105,23 @@ async function aiGenerate(manifest: FragmentManifest, input: FragmentCallInput, 
   }
 }
 
+/**
+ * `orbit.models.set`: the page picks the model of ITS OWN `orbit.ai`. The id pair is checked
+ * against the models the person has connected, so a page cannot name a provider they never
+ * set up. `null` goes back to following the model of the chat.
+ */
+async function setModel(manifest: FragmentManifest, params: Record<string, unknown>): Promise<FragmentCallResult> {
+  if (params.providerId === null || params.providerId === undefined) {
+    await updateFragmentMeta(manifest.id, { model: null })
+    return { ok: true, value: null }
+  }
+  if (!(await isUsableModel(params.providerId, params.modelId))) {
+    return fail('invalid_params', 'That model is not available — pick one from orbit.models.list().')
+  }
+  await updateFragmentMeta(manifest.id, { model: { providerId: String(params.providerId), modelId: String(params.modelId) } })
+  return { ok: true, value: null }
+}
+
 export async function handleFragmentCall(input: FragmentCallInput): Promise<FragmentCallResult> {
   const manifest = await getFragment(input.fragmentId)
   if (!manifest) return fail('not_found', 'This fragment no longer exists.')
@@ -130,6 +152,12 @@ export async function handleFragmentCall(input: FragmentCallInput): Promise<Frag
         return { ok: true, value: await storeKeys(manifest.id) }
       case 'ai.generate':
         return await aiGenerate(manifest, input, params)
+      case 'models.list':
+        return { ok: true, value: await listUsableModels() }
+      case 'models.get':
+        return { ok: true, value: manifest.model ?? null }
+      case 'models.set':
+        return await setModel(manifest, params)
       default:
         return fail('unknown_method', 'Unknown method.')
     }

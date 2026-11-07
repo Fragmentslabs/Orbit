@@ -3032,8 +3032,6 @@
     "aiOn": "IA ligada",
     "aiAllow": "Permitir que este fragmento use seu modelo de IA",
     "aiRevoke": "Parar de permitir IA neste fragmento",
-    "aiBanner": "Este fragmento quer usar o seu modelo de IA.",
-    "aiAllowButton": "Permitir IA",
     "delete": "Excluir fragmento",
     "deleteTitle": "Excluir este fragmento?",
     "deleteDescription": "A tela e tudo o que ela guardou serão removidos. Não dá para desfazer.",
@@ -3117,7 +3115,8 @@
       "read": "Lendo o fragmento",
       "remove": "Removendo {{path}}",
       "logs": "Conferindo erros da página",
-      "ai": "Declarando o uso de IA"
+      "ai": "Declarando o uso de IA",
+      "models": "Declarando um seletor de modelo"
     },
     "chat": {
       "show": "Mostrar conversa",
@@ -3169,7 +3168,8 @@
       "revision": "Revisão",
       "capabilities": "Capacidades",
       "cap": {
-        "ai": "Usar seu modelo de IA"
+        "ai": "Usar seu modelo de IA",
+        "models": "Escolher o modelo dentro da própria tela"
       },
       "allowed": "Permitido",
       "allow": "Permitir",
@@ -3194,7 +3194,12 @@
       "truncated": "Mostrado só em parte."
     },
     "pinHome": "Mostrar na tela inicial",
-    "openFull": "Abrir o fragmento"
+    "openFull": "Abrir o fragmento",
+    "ask": {
+      "ai": "Este fragmento quer usar o seu modelo de IA.",
+      "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela."
+    },
+    "askAllow": "Permitir"
   },
   "motion": {
     "unavailable": "Composição indisponível",

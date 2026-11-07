@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AppWindow, Maximize2, RotateCw, Sparkles, Trash2, X } from "lucide-react"
-import { FRAGMENT_READ_ONLY_METHODS, FRAGMENT_SCHEME } from "@shared/fragments"
+import { FRAGMENT_CAPABILITIES, FRAGMENT_READ_ONLY_METHODS, FRAGMENT_SCHEME } from "@shared/fragments"
 import type { FragmentManifest } from "@shared/fragments"
 import {
   Dialog,
@@ -220,21 +220,23 @@ export function FragmentFrame({
 export function FragmentAiBadge({ manifest }: { manifest: FragmentManifest }) {
   const { t } = useTranslation()
   const [dismissed, dismiss] = useDismissed(`orbit-fragment-ai-badge:${manifest.id}`)
-  // Closing only hides the ask: the fragment's menu still offers to allow its AI.
-  if (dismissed || !manifest.requests.includes("ai") || manifest.grants.includes("ai")) return null
+  // One ask at a time: the first capability the fragment wants and the person has not allowed.
+  // Closing only hides the ask: the fragment's menu and details still offer to allow it.
+  const pending = FRAGMENT_CAPABILITIES.find((c) => manifest.requests.includes(c) && !manifest.grants.includes(c))
+  if (dismissed || !pending) return null
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
       <div className="pointer-events-auto flex max-w-full animate-in items-center gap-2.5 rounded-full border border-primary/25 bg-background/90 py-1.5 pl-2 pr-1.5 shadow-lg ring-1 ring-black/5 backdrop-blur-md duration-300 fade-in-0 slide-in-from-top-2">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
           <Sparkles className="size-3.5" />
         </span>
-        <span className="min-w-0 truncate text-xs text-foreground">{t("fragments.aiBanner")}</span>
+        <span className="min-w-0 truncate text-xs text-foreground">{t(`fragments.ask.${pending}`)}</span>
         <Button
           size="sm"
           className="h-6 shrink-0 rounded-full px-3 text-xs"
-          onClick={() => void fragmentApi.grant(manifest.id, "ai", true)}
+          onClick={() => void fragmentApi.grant(manifest.id, pending, true)}
         >
-          {t("fragments.aiAllowButton")}
+          {t("fragments.askAllow")}
         </Button>
         <button
           type="button"

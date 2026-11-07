@@ -32,13 +32,16 @@ export function FragmentHeaderActions({ fragmentId }: { fragmentId: string }) {
 
   const asksAi = manifest.requests.includes("ai")
   const aiOn = manifest.grants.includes("ai")
+  // When the fragment offers the model choice in its own screen (and the person allowed it),
+  // the header must not show a second, competing control.
+  const appPicksModel = manifest.requests.includes("models") && manifest.grants.includes("models")
 
   return (
     <div className="flex shrink-0 items-center gap-1">
       {working && <Loader2 aria-label={t("artifact.working")} className="mr-1 size-4 animate-spin text-primary" />}
       {/* The fragment's AI. Allowed: its model and thinking. Not allowed: only a small badge
           (clicking it allows) — the controls of a model nobody can use would be noise. */}
-      {asksAi && aiOn && (
+      {asksAi && aiOn && !appPicksModel && (
         <>
           <ModelPicker
             value={manifest.model ?? null}

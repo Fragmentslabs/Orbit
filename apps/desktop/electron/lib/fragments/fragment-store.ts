@@ -346,6 +346,14 @@ export async function requestCapabilities(id: string, requests: FragmentCapabili
   })
 }
 
+/** Asks for (or stops asking for) ONE capability, leaving the others as they are. */
+export async function setRequested(id: string, capability: FragmentCapability, on: boolean): Promise<FragmentManifest | null> {
+  const manifest = await readManifestFile(id)
+  if (!manifest) return null
+  const rest = manifest.requests.filter((c) => c !== capability)
+  return requestCapabilities(id, on ? [...rest, capability] : rest)
+}
+
 // ─── Files (src/) ────────────────────────────────────────────────────────────
 
 export async function listFragmentFiles(id: string): Promise<string[]> {

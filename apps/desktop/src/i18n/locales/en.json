@@ -3032,8 +3032,6 @@
     "aiOn": "AI on",
     "aiAllow": "Allow this fragment to ask your AI model",
     "aiRevoke": "Stop allowing AI for this fragment",
-    "aiBanner": "This fragment wants to use your AI model.",
-    "aiAllowButton": "Allow AI",
     "delete": "Delete fragment",
     "deleteTitle": "Delete this fragment?",
     "deleteDescription": "The screen and everything it saved will be removed. This cannot be undone.",
@@ -3117,7 +3115,8 @@
       "read": "Reading the fragment",
       "remove": "Removing {{path}}",
       "logs": "Checking the page for errors",
-      "ai": "Declaring AI use"
+      "ai": "Declaring AI use",
+      "models": "Declaring a model picker"
     },
     "chat": {
       "show": "Show conversation",
@@ -3169,7 +3168,8 @@
       "revision": "Revision",
       "capabilities": "Capabilities",
       "cap": {
-        "ai": "Use your AI model"
+        "ai": "Use your AI model",
+        "models": "Choose the model inside its screen"
       },
       "allowed": "Allowed",
       "allow": "Allow",
@@ -3194,7 +3194,12 @@
       "truncated": "Shown only in part."
     },
     "pinHome": "Show on the home screen",
-    "openFull": "Open the fragment"
+    "openFull": "Open the fragment",
+    "ask": {
+      "ai": "This fragment wants to use your AI model.",
+      "models": "This fragment wants to let you pick the AI model inside its screen."
+    },
+    "askAllow": "Allow"
   },
   "motion": {
     "unavailable": "Composition unavailable",

@@ -9,7 +9,7 @@ import {
   listFragments,
   readFragmentFile,
   readFragmentLogs,
-  requestCapabilities,
+  setRequested,
   writeFragmentFile,
 } from '../fragments/fragment-store'
 import { panelFragmentOpen } from '../panel-browser'
@@ -28,6 +28,7 @@ const SDK_REFERENCE = `
 window.orbit is already loaded in every fragment page (do not add a script for it):
 - orbit.store.get(key) / set(key, value) / delete(key) / keys() — persistent JSON storage for this fragment (survives reloads; values are JSON, up to 256KB each). Use it for anything the user would expect to still be there tomorrow.
 - orbit.ai.generate({ prompt, system? }) → Promise<{ text }> — asks the user's own model. Only works when the fragment was created with usesAi: true AND the user turned it on in the tab (until then it rejects with err.code === "permission_denied": catch it and show a clear message in the UI). Limited to a few calls per minute: never call it in a loop or on every keystroke.
+- orbit.models.list() → Promise<[{ providerId, providerName, modelId, name, reasoning }]>, orbit.models.get() → Promise<{ providerId, modelId } | null>, orbit.models.set({ providerId, modelId }) (or set(null) to follow the chat) — lets YOUR screen offer the choice of the model that orbit.ai uses. Only after you call fragment_set_models AND the user allows it; then the app header no longer shows a model control, so build one.
 - orbit.theme ("light" | "dark") and orbit.on("theme", fn) — the app theme. The Orbit CSS variables are already defined and follow it: --background, --foreground, --card, --card-foreground, --primary, --primary-foreground, --secondary, --muted, --muted-foreground, --accent, --border, --input, --ring, --radius and --font-sans. Style with them (e.g. body { background: var(--background) }) so the screen looks native in light and dark.
 Errors from orbit calls carry err.code.
 
@@ -200,12 +201,26 @@ export function createFragmentTools(sessionId: string) {
         'Declares whether the fragment uses orbit.ai. This only ASKS: the user still has to turn "AI" on in the tab toolbar, you cannot allow it.',
       inputSchema: z.object({ fragmentId: FragmentIdSchema, usesAi: z.boolean() }),
       execute: async ({ fragmentId, usesAi }) => {
-        const manifest = await requestCapabilities(fragmentId, usesAi ? ['ai'] : [])
+        const manifest = await setRequested(fragmentId, 'ai', usesAi)
         if (!manifest) return notFound(fragmentId)
         panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
         return usesAi
           ? 'Declared. The user must turn on "AI" in the tab toolbar before orbit.ai.generate works.'
           : 'orbit.ai is no longer requested by this fragment.'
+      },
+    }),
+
+    fragment_set_models: tool({
+      description:
+        'Declares whether the fragment offers its OWN model picker through orbit.models (list/get/set). This only ASKS: the user still has to allow it. When allowed, the app header stops showing the model control for this fragment, so the fragment must provide one. Use it only when the user wants the choice inside the screen.',
+      inputSchema: z.object({ fragmentId: FragmentIdSchema, usesModels: z.boolean() }),
+      execute: async ({ fragmentId, usesModels }) => {
+        const manifest = await setRequested(fragmentId, 'models', usesModels)
+        if (!manifest) return notFound(fragmentId)
+        panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
+        return usesModels
+          ? 'Declared. The user must allow "models" for this fragment before orbit.models works; build the picker so it handles err.code === "permission_denied".'
+          : 'orbit.models is no longer requested by this fragment; the header model control is back.'
       },
     }),
 

@@ -20,6 +20,8 @@ export function describeFragmentAction(t: TFunction, part: ToolPart): string {
       return t("fragments.action.logs")
     case "fragment_set_ai":
       return t("fragments.action.ai")
+    case "fragment_set_models":
+      return t("fragments.action.models")
     default:
       return part.title || part.tool
   }

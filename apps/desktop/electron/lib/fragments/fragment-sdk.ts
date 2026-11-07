@@ -63,6 +63,12 @@ export const FRAGMENT_SDK = `${FRAGMENT_SDK_MARK}
     ai: {
       generate: function (options) { return call('ai.generate', options) }
     },
+    // The fragment's own model picker. Needs "models" requested AND allowed by the user.
+    models: {
+      list: function () { return call('models.list') },
+      get: function () { return call('models.get') },
+      set: function (model) { return call('models.set', model || {}) }
+    },
     on: function (name, fn) {
       (listeners[name] = listeners[name] || []).push(fn)
       return function () {

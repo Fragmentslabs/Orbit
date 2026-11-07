@@ -38,7 +38,7 @@ function byIdOrName(lookup: (sessionId: string, name: string) => Promise<string 
 export const ARTIFACT_KIND_DESCRIPTORS: readonly ArtifactKindDescriptor[] = [
   {
     kind: 'fragment',
-    tools: ['fragment_create', 'fragment_write_file', 'fragment_edit_file', 'fragment_delete_file', 'fragment_set_ai'],
+    tools: ['fragment_create', 'fragment_write_file', 'fragment_edit_file', 'fragment_delete_file', 'fragment_set_ai', 'fragment_set_models'],
     // create returns the new id; the others take it as an argument.
     resolveId: async ({ args, result }) => str(field(args, 'fragmentId')) ?? str(field(result, 'fragmentId')),
     nameOf: async (id) => (await getFragment(id))?.name ?? null,
