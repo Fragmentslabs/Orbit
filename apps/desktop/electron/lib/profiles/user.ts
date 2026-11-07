@@ -1,5 +1,5 @@
-import type { AgentDefinition, ProfileBlocks } from '@shared/agents'
-import { userProfileId } from '@shared/agents'
+import type { AgentDefinition } from '@shared/agents'
+import { agentBlocks, userProfileId } from '@shared/agents'
 import type { ProfileDefinition } from './types'
 
 /**
@@ -12,24 +12,12 @@ import type { ProfileDefinition } from './types'
  * composer: the agent neither forces them on nor needs to turn them off.
  */
 export function profileOfAgent(agent: AgentDefinition): ProfileDefinition {
-  const blocks: ProfileBlocks = {
-    memories: agent.features.memories,
-    subagents: agent.features.subagents,
-    orchestra: agent.features.orchestra,
-    loop: agent.features.loop,
-    vision: agent.features.vision,
-    web: true,
-    computer: true,
-    plan: true,
-    // Skills and project context are part of the general prompt, which a user agent replaces.
-    skills: false,
-  }
   return {
     id: userProfileId(agent.id),
     builtin: false,
     systemPrompt: () => agent.prompt,
     allowedTools: agent.allowedTools,
-    blocks,
+    blocks: agentBlocks(agent.features),
     defaultModel: agent.defaultModel,
     thinking: agent.thinking,
   }

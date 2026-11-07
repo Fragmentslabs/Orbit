@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
   Blocks,
+  Bot,
   Cable,
   ChevronDown,
   ExternalLink,
@@ -48,10 +49,14 @@ import { useStacked } from "@/src/hooks/use-stacked"
 import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { HooksPanel } from "@/src/components/hooks-panel"
+import { SpecialistsPanel } from "@/src/components/specialists/specialists-panel"
+import { useAgents } from "@/src/stores/agents-store"
+import { useToolsNavStore, type ToolsSection } from "@/src/stores/tools-nav-store"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { SkillRow } from "@/src/components/skill-row"
+import { BUILTIN_PROFILES } from "@shared/agents"
 import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
 import type { FractaStatus } from "@shared/fracta"
 import type { NodaraStatus } from "@shared/nodara"
@@ -829,7 +834,8 @@ export function McpSkillsPanel() {
   const [askMcpOpen, setAskMcpOpen] = useState(false)
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   // The page shows one section at a time; the menu on the right switches it.
-  const [section, setSection] = useState<ToolsSection>("integrations")
+  const [section, setSection] = useState<ToolsSection>(() => useToolsNavStore.getState().consume() ?? "integrations")
+  const agentCount = useAgents().length
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const stacked = useStacked(root, STACK_BELOW_PX)
   // Search of the page filters the open section; the skills also have an origin filter.
@@ -1062,6 +1068,14 @@ export function McpSkillsPanel() {
         active={section === "hooks"}
         compact={compact}
         onClick={() => pickSection("hooks")}
+      />
+      <ToolsNavItem
+        icon={Bot}
+        label={t("specialists.title")}
+        count={BUILTIN_PROFILES.length + agentCount}
+        active={section === "specialists"}
+        compact={compact}
+        onClick={() => pickSection("specialists")}
       />
     </>
   )
@@ -1368,6 +1382,7 @@ export function McpSkillsPanel() {
         )}
 
         {section === "hooks" && <HooksPanel query={query} />}
+        {section === "specialists" && <SpecialistsPanel query={query} />}
       </div>
 
       {!stacked && (
@@ -1407,8 +1422,6 @@ export function McpSkillsPanel() {
     </div>
   )
 }
-
-type ToolsSection = "integrations" | "mcp" | "skills" | "hooks"
 
 /** Below this width of the page the section menu becomes a row of tabs above the content. */
 const STACK_BELOW_PX = 700

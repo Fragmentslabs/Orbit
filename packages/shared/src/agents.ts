@@ -121,6 +121,26 @@ export interface ProfileBlocks {
 }
 
 /**
+ * The blocks of a user-made agent: its five switches, plus the things it leaves under the
+ * person's own toggles (web, computer, plan). Shared so the engine and the page that shows
+ * what the agent injects read the same rule.
+ */
+export function agentBlocks(features: AgentInput['features']): ProfileBlocks {
+  return {
+    memories: features.memories,
+    subagents: features.subagents,
+    orchestra: features.orchestra,
+    loop: features.loop,
+    vision: features.vision,
+    web: true,
+    computer: true,
+    plan: true,
+    // Skills and project context belong to the general prompt, which an agent replaces.
+    skills: false,
+  }
+}
+
+/**
  * Everything a profile injects, for the Specialists page. Built from the same definition the
  * engine runs, so the page cannot drift from what the model really receives.
  */
@@ -136,6 +156,18 @@ export interface ProfileDescription {
   blocks: ProfileBlocks
   /** A one-line description of the block injected at every turn, if any. */
   turnContext?: string
+}
+
+/** What an agent made by the person injects — the same description the built-ins have. */
+export function describeUserAgent(agent: AgentInput & { id: string }): ProfileDescription {
+  return {
+    id: userProfileId(agent.id),
+    builtin: false,
+    systemPrompt: agent.prompt,
+    tools: agent.allowedTools ?? [],
+    generalTools: !agent.allowedTools,
+    blocks: agentBlocks(agent.features),
+  }
 }
 
 /** The list the Specialists page shows. */
