@@ -30,6 +30,7 @@ import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
+import { TemplateBadge } from "@/src/components/template-badge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
@@ -577,6 +578,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           <PromptInputBody>
             {/* The microphone is anchored to the LINE of the textarea, and not to the top of the
                 box — the same position as the chat input. */}
+            <TemplateBadge />
             <div className="relative w-full">
               {/* TOP right corner, at the level of the first line of the text —
                   the same position as the chat input: absolute so it does not push the

@@ -106,6 +106,11 @@
     "overlayHint": "Drop the folder to create a new code-mode chat"
   },
   "input": {
+    "template": {
+      "badge": "Template: {{name}}",
+      "hint": "Tab jumps to the next field",
+      "dismiss": "Remove template"
+    },
     "placeholder": "Ask anything...",
     "attachFiles": "Attach files",
     "submit": "Submit",
@@ -610,6 +615,7 @@
     },
     "processes": {
       "title": "Terminals",
+      "pid": "PID {{pid}}",
       "none": "None",
       "scopeChat": "This chat",
       "scopeAll": "All",
@@ -1526,11 +1532,6 @@
     "showMoreLines_one": "Show {{count}} more line",
     "showMoreLines_other": "Show the remaining {{count}} lines",
     "openFile": "Open file",
-    "filters": {
-      "kind": "Type",
-      "period": "Period",
-      "scope": "Where"
-    },
     "refresh": "Refresh",
     "commitsTab": "Commits",
     "loadingCommits": "Loading commits...",
@@ -2383,6 +2384,12 @@
   },
   "media": {
     "searchPlaceholder": "Search by name or task",
+    "filters": {
+      "kind": "Type",
+      "scope": "Where",
+      "show": "Show filters",
+      "hide": "Hide filters"
+    },
     "refresh": "Refresh",
     "loading": "Loading images...",
     "empty": "No images here yet.",
@@ -2412,12 +2419,6 @@
       "design": "Design",
       "slides": "Deck",
       "gif": "GIF"
-    },
-    "period": {
-      "all": "Any time",
-      "today": "24h",
-      "week": "7 days",
-      "month": "30 days"
     },
     "scope": {
       "all": "Everything",
