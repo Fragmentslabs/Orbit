@@ -2196,6 +2196,10 @@
       "off": "Off",
       "times_one": "{{count}} time",
       "times_other": "{{count}} times",
+      "embeddings": {
+        "title": "Semantic search (local model)",
+        "description": "A small model on this computer finds memories, skills and tools by meaning. It loads only when needed and frees its memory after 5 idle minutes. Off = word matching only."
+      },
       "suggestions": {
         "title": "Prompt suggestions",
         "description": "Suggests your next message in the input after each answer. Tab completes it."

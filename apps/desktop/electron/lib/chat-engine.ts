@@ -106,6 +106,7 @@ import { notifyChatError, notifyNewMessage } from './notifications'
 import type { ImageToolHooks, ToolContext, TurnSnapshot } from './tools'
 import { buildCatalog } from './tools/catalog-turn'
 import { DEFAULT_ACTIVE_FAMILIES, buildMap, type ToolFamily } from './tools/catalog'
+import { shortlistFamilies } from './tools/family-shortlist'
 import { deriveActive, familiesMentionedInText, priorToolCalls } from './tools/active'
 import { activeFamilyGuides } from './tools/guides'
 import { queryFamily } from './tools/load'
@@ -2369,12 +2370,19 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // Deterministic self-activation (`@mcp:<server>` in the message). The
     // plan's fragile heuristics (attachment, "folder with video") only enter afterwards
     // of measurement — without a number, they give tools back on a "hi" for free.
-    const autoFamilies = [
+    const namedFamilies = [
       ...familiesMentionedInText(input.text ?? '', onDemand?.families ?? []),
       // Families the prompt asks for by name: without them declared, the
       // instruction exists and the tool does not.
       ...(onDemand ? DEFAULT_ACTIVE_FAMILIES : []),
     ]
+    // Semantic shortlist on top of the words: a message that never says "pdf" or "slides" but
+    // is about one still gets the family. Only with the model already up (it never wakes it
+    // or waits more than a moment), so with it off, loading or missing this adds nothing.
+    const semanticFamilyIds = onDemand
+      ? await shortlistFamilies(turnEmbed, input.text ?? '', onDemand.families, new Set(namedFamilies)).catch(() => [])
+      : []
+    const autoFamilies = [...namedFamilies, ...semanticFamilyIds]
     // The model history carries no tool parts of previous turns: what keeps a
     // family loaded in turn N active in N+1 are the ToolParts of the chat itself,
     // in the same window the model sees (a compaction takes them along).

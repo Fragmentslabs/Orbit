@@ -16,6 +16,12 @@ const input = (fromBrowser?: boolean): SendMessageInput => ({
 })
 
 describe('normalizeAppSettings', () => {
+  it('embeddings are on by default and only a boolean turns them off', () => {
+    expect(normalizeAppSettings(undefined).embeddings).toBe(true)
+    expect(normalizeAppSettings({ embeddings: false }).embeddings).toBe(false)
+    expect(normalizeAppSettings({ embeddings: 'no' }).embeddings).toBe(true)
+  })
+
   it('with nothing saved, the behavior from before the options existed applies', () => {
     expect(normalizeAppSettings(undefined)).toEqual(DEFAULT_APP_SETTINGS)
   })

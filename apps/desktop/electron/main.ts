@@ -186,6 +186,7 @@ import { registerPanelWebContents, unregisterPanelWebContents } from './lib/pane
 import { registerPanelStateIpc } from './lib/panel-state'
 import { registerVoiceIpc, syncWhisperServer } from './lib/voice'
 import { registerGitIpc } from './lib/git'
+import { stopWorker as stopEmbeddingWorker } from './lib/memory/embedding'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { startSessionIndex } from './lib/session-index'
 import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
@@ -2464,6 +2465,12 @@ app.whenReady().then(async () => {
   onAppSettingsChange((next, prev) => {
     if (next.closeToTray !== prev.closeToTray) void syncTray()
     if (next.launchAtLogin !== prev.launchAtLogin) void applyLaunchAtLogin(next.launchAtLogin)
+    // Turning the model off gives its ~400 MB back at once; turning it on catches the memory
+    // index up (nothing else needs a nudge: the next turn finds the worker asleep and uses words).
+    if (next.embeddings !== prev.embeddings) {
+      if (next.embeddings) memoryService.scheduleIndexSync(0)
+      else void stopEmbeddingWorker()
+    }
     // A change made IN THE MAIN PROCESS — today the agent's `set_user_name` tool — has to
     // go back to the renderer, which is the source of truth: without this the Preference
     // would show the old name and the next `settings:sync` would erase what the

@@ -2196,6 +2196,10 @@
       "off": "Desligado",
       "times_one": "{{count}} vez",
       "times_other": "{{count}} vezes",
+      "embeddings": {
+        "title": "Busca semântica (modelo local)",
+        "description": "Um modelo pequeno neste computador encontra memórias, skills e ferramentas pelo sentido. Só carrega quando precisa e libera a memória após 5 minutos parado. Desligado = só busca por palavras."
+      },
       "suggestions": {
         "title": "Sugestões de prompt",
         "description": "Sugere a próxima mensagem no campo de texto depois de cada resposta. Tab completa."

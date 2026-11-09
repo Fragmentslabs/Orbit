@@ -93,6 +93,11 @@ export interface AppSettings {
     /** Free adjustment (≤ PERSONA_NOTE_MAX). Empty = only the style. */
     note: string
   }
+  /**
+   * Local embedding model (memory retrieval, skill hints, tool-family shortlist). Off = the
+   * lexical behaviour from before it existed, and the worker is never started.
+   */
+  embeddings: boolean
   /** Suggests the next message in the input (Tab completes it). */
   promptSuggestions: boolean
   chatView: ChatViewMode
@@ -165,6 +170,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   userName: null,
   // No style and no adjustment: the prompt stays exactly as it was before the option.
   persona: { style: 'default', note: '' },
+  // On: the model ships with the app and only ever runs in a separate process.
+  embeddings: true,
   promptSuggestions: false,
   chatView: 'summary',
   autoArchiveDays: null,
@@ -330,6 +337,7 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
         note: typeof p.note === 'string' ? p.note.slice(0, PERSONA_NOTE_MAX) : '',
       }
     })(),
+    embeddings: typeof value.embeddings === 'boolean' ? value.embeddings : d.embeddings,
     promptSuggestions: typeof value.promptSuggestions === 'boolean' ? value.promptSuggestions : d.promptSuggestions,
     chatView: oneOf(value.chatView, ['summary', 'steps', 'detailed'], d.chatView),
     autoArchiveDays: dayOption(value.autoArchiveDays, AUTO_ARCHIVE_DAY_OPTIONS),

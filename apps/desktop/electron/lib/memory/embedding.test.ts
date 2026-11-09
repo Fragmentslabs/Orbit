@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Memory } from '@shared/memory'
 
 let userData: string
+let embeddingsOn = true
 
 vi.mock('electron', () => ({
   app: {
@@ -24,6 +25,8 @@ vi.mock('electron', () => ({
     },
   },
 }))
+
+vi.mock('../app-settings', () => ({ getAppSettings: () => ({ embeddings: embeddingsOn }) }))
 
 const memory = (id: string, text: string): Memory => ({
   id,
@@ -44,6 +47,7 @@ const write = (payload: unknown) => {
 
 beforeEach(() => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-embed-'))
+  embeddingsOn = true
   vi.resetModules()
 })
 
@@ -193,5 +197,18 @@ describe('model that came in the package', () => {
     expect(await downloadModel()).toBe(true)
     // Nothing was written in userData — it would be a second 130 MB copy.
     expect(fs.existsSync(path.join(userData, 'memory', 'models'))).toBe(false)
+  })
+})
+
+describe('the user switch', () => {
+  it('off: nothing starts, no vector is read or written, every consumer falls back', async () => {
+    const mod = await import('./embedding')
+    embeddingsOn = false
+    await expect(mod.embedTexts(['hello'])).rejects.toThrow('turned off')
+    expect(mod.workerActive()).toBe(false)
+    expect(await mod.createTurnEmbedder()('hello')).toBeNull()
+    expect((await mod.vectorsById()).size).toBe(0)
+    expect(await mod.syncIndex([memory('a', 'um')])).toEqual({ indexed: 0, removed: 0, failed: false })
+    expect((await mod.embeddingStatus([])).enabled).toBe(false)
   })
 })
