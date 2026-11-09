@@ -54,6 +54,7 @@ import type {
   RoutineEvent,
   RoutineRun,
   ScriptActivity,
+  WebhookInfo,
   ScriptTestResult,
 } from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
@@ -791,6 +792,10 @@ export const routinesApi = {
   pruneRuns: (sessionIds: string[]) =>
     window.ipcRenderer.invoke("routines:pruneRuns", sessionIds) as Promise<number>,
   /** Agent proposals (tool routines_manage) waiting for the card. */
+  /** Local address, secret and latest calls of a webhook-triggered routine. */
+  webhook: (id: string) => window.ipcRenderer.invoke("routines:webhook", id) as Promise<WebhookInfo | null>,
+  /** New address for the webhook; the old one stops working. */
+  rotateWebhook: (id: string) => window.ipcRenderer.invoke("routines:rotateWebhook", id) as Promise<WebhookInfo | null>,
   pending: () => window.ipcRenderer.invoke("routines:pending") as Promise<PendingRoutine[]>,
   approvePending: (id: string) =>
     window.ipcRenderer.invoke("routines:approvePending", id) as Promise<Routine | null>,

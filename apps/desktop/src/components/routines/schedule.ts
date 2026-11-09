@@ -44,6 +44,7 @@ export function describeWhen(routine: Pick<Routine, "schedule" | "trigger">, t: 
       ? t("routines.trigger.watchingHours", { count: everyMinutes / 60 })
       : t("routines.trigger.watchingMinutes", { count: everyMinutes })
   }
+  if (trigger?.kind === "webhook") return t(trigger.signed ? "routines.trigger.webhookSigned" : "routines.trigger.webhook")
   return describeSchedule(routine.schedule, t)
 }
 

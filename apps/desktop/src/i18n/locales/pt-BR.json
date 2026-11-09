@@ -2984,7 +2984,9 @@
       "watchingMinutes_one": "Observa a cada minuto",
       "watchingMinutes_other": "Observa a cada {{count}} minutos",
       "watchingHours_one": "Observa a cada hora",
-      "watchingHours_other": "Observa a cada {{count}} horas"
+      "watchingHours_other": "Observa a cada {{count}} horas",
+      "webhook": "Roda quando o endereço é chamado",
+      "webhookSigned": "Roda quando o endereço é chamado (assinado)"
     },
     "scripts": {
       "triggerBadge": "Gatilho",
@@ -3015,6 +3017,25 @@
       "remove": "Remover",
       "editTitle": "Script {{script}}",
       "editStarter": "Quero mudar o script \"{{script}}\" da rotina \"{{routine}}\" (id: {{id}}): [o que mudar]."
+    },
+    "webhook": {
+      "title": "Webhook",
+      "address": "Endereço local",
+      "secret": "Segredo da assinatura",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "rotate": "Novo endereço",
+      "rotateHint": "O endereço atual deixa de funcionar na hora.",
+      "notListening": "Não está escutando: a rotina está pausada ou o receptor não conseguiu iniciar.",
+      "deliveries": "Últimas chamadas",
+      "none": "Ninguém chamou ainda.",
+      "accepted": "Aceita",
+      "pending_one": "{{count}} chamada esperando uma execução",
+      "pending_other": "{{count}} chamadas esperando uma execução",
+      "only": "O Orbit escuta só neste computador (127.0.0.1), enquanto estiver aberto. Para receber chamadas da internet, aponte o seu próprio túnel para este endereço; o Orbit nunca abre portas para a internet por conta própria.",
+      "signHint": "Assine o corpo com HMAC-SHA256 usando o segredo e envie no cabeçalho X-Hub-Signature-256 (ou X-Orbit-Signature) como sha256=<hex>.",
+      "gap": "Chamadas próximas são reunidas em uma única execução, no máximo uma a cada 5 minutos.",
+      "whenCalled": "Quando for chamada"
     },
     "secrets": {
       "title": "Segredos para scripts",
@@ -4632,7 +4653,8 @@
     "invoke": "Chamar com",
     "files": "Arquivos",
     "skillScriptsNote": "Esta skill vem com scripts que podem rodar no seu computador quando ela for usada.",
-    "routineScriptNote": "Esta rotina leva scripts. Criar a rotina aprova exatamente o código mostrado aqui, que roda no seu computador, em segundo plano, enquanto o Orbit estiver aberto."
+    "routineScriptNote": "Esta rotina leva scripts. Criar a rotina aprova exatamente o código mostrado aqui, que roda no seu computador, em segundo plano, enquanto o Orbit estiver aberto.",
+    "routineWebhookNote": "Criar esta rotina faz o Orbit escutar chamadas HTTP somente neste computador (127.0.0.1, porta aleatória) enquanto estiver aberto. Nada é exposto à internet; para receber chamadas de fora você configura o seu próprio túnel. O que cada chamada envia chega ao agente como dado, nunca como instrução."
   },
   "creation": {
     "routine": {

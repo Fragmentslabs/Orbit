@@ -1,10 +1,10 @@
 import { BrowserWindow, Notification } from 'electron'
 import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import type { Routine, RoutineEvent, RoutineRun } from '@shared/routines'
+import type { Routine, RoutineEvent, RoutineRun, WebhookActivity } from '@shared/routines'
 import { listAgentsSync, loadAgents } from '../agents/store'
 import { userProfileId } from '@shared/agents'
-import { applyAgentModes, hasTeam, isScriptTriggered, nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
+import { applyAgentModes, hasTeam, isEventTriggered, nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
 import { runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration, runTeam } from '../orchestrator'
@@ -15,6 +15,7 @@ import { t } from '../i18n'
 import { listRoutines, listRuns, saveRun, updateRoutine } from './repo'
 import { promptWithEvents } from './scripts/event-prompt'
 import { superviseScripts, type SupervisorDeps } from './scripts/supervisor'
+import { stopWebhooks, tickWebhooks } from './webhooks/service'
 
 /**
  * Routines scheduler: a one-minute tick in the main process, no cron library.
@@ -276,6 +277,12 @@ const supervisorDeps: SupervisorDeps = {
   },
 }
 
+const webhookDeps = {
+  startRun: supervisorDeps.startRun,
+  isRunning: supervisorDeps.isRunning,
+  onActivity: (activity: WebhookActivity) => emit({ type: 'webhook-activity', activity }),
+}
+
 async function tick(): Promise<void> {
   const now = Date.now()
   let routines: Routine[]
@@ -288,9 +295,11 @@ async function tick(): Promise<void> {
 
   void superviseScripts(routines, supervisorDeps).catch((err) => console.error('[routines] script supervision failed:', err))
 
+  void tickWebhooks(routines, webhookDeps).catch((err) => console.error('[routines] webhook supervision failed:', err))
+
   for (const routine of routines) {
-    // A script decides when these run (superviseScripts above), not the calendar.
-    if (!routine.active || running.has(routine.id) || isScriptTriggered(routine)) continue
+    // A script or a webhook decides when these run (above), not the calendar.
+    if (!routine.active || running.has(routine.id) || isEventTriggered(routine)) continue
     // The floor drops the missed windows at once: with the app closed for days,
     // the routine goes back to the calendar on the next time of day instead of
     // trying to recover every firing that did not happen.
@@ -339,4 +348,5 @@ export function stopScheduler(): void {
   if (!timer) return
   clearInterval(timer)
   timer = null
+  stopWebhooks()
 }

@@ -5,6 +5,7 @@ import type {
   RoutineEvent,
   RoutineRun,
   ScriptActivity,
+  WebhookActivity,
 } from "@shared/routines"
 import { DEFAULT_ROUTINES, LEGACY_DEFAULT_ROUTINE_IDS } from "@shared/routines-default"
 import { routinesApi } from "@/src/lib/ipc"
@@ -31,6 +32,8 @@ interface RoutinesState {
   runs: RoutineRun[]
   /** Check log of the routines woken by a script, by routine id. */
   activity: Record<string, ScriptActivity>
+  /** Latest webhook calls per routine, kept live by the main process. */
+  webhookActivity: Record<string, WebhookActivity>
   loaded: boolean
 
   load: () => Promise<void>
@@ -110,6 +113,7 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
   routines: [],
   runs: [],
   activity: {},
+  webhookActivity: {},
   loaded: false,
 
   load: async () => {
@@ -146,6 +150,9 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
         break
       case "script-activity":
         set((state) => ({ activity: { ...state.activity, [event.activity.routineId]: event.activity } }))
+        break
+      case "webhook-activity":
+        set((state) => ({ webhookActivity: { ...state.webhookActivity, [event.activity.routineId]: event.activity } }))
         break
       case "run":
         set((state) => {

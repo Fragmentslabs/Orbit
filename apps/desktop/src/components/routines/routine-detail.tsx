@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import { userProfileId } from "@shared/agents"
 import type { SessionInfo } from "@shared/chat"
-import { isScriptTriggered, nextRoutineRun, ROUTINE_CHAT_MODES, scriptApproved, type Routine, type RoutineRun } from "@shared/routines"
+import { isEventTriggered, isScriptTriggered, nextRoutineRun, ROUTINE_CHAT_MODES, scriptApproved, type Routine, type RoutineRun } from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import {
@@ -36,6 +36,7 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { EditRoutineDialog } from "./edit-routine-dialog"
 import { LastResult } from "./last-result"
 import { ScriptActivityCard } from "./script-activity"
+import { WebhookCard } from "./webhook-card"
 import { ScriptCard } from "./script-card"
 import { ScriptSecrets } from "./script-secrets"
 import { describeWhen } from "./schedule"
@@ -98,12 +99,13 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
 
   const scripts = routine.scripts ?? []
   const watched = isScriptTriggered(routine)
+  const eventDriven = isEventTriggered(routine)
   const unapproved = scripts.filter((s) => !scriptApproved(s)).length
 
   const numbers = [
     {
       label: t("routines.detail.next"),
-      value: watched ? t("routines.scripts.whenItFires") : next ? formatWhen(next, i18n.language) : t("routines.list.paused"),
+      value: eventDriven ? t(watched ? "routines.scripts.whenItFires" : "routines.webhook.whenCalled") : next ? formatWhen(next, i18n.language) : t("routines.list.paused"),
     },
     {
       label: t("routines.detail.success"),
@@ -174,6 +176,7 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
 
         <TabsContent value="overview" className="flex min-h-0 flex-col gap-3 overflow-y-auto">
           {watched && <ScriptActivityCard activity={activity} />}
+          {routine.trigger?.kind === "webhook" && <WebhookCard routineId={routine.id} signed={!!routine.trigger.signed} />}
           <LastResult run={stats.last} />
           <div className="grid shrink-0 grid-cols-3 gap-2">
             {numbers.map((n) => (

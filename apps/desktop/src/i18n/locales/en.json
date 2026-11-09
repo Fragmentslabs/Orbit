@@ -2984,7 +2984,9 @@
       "watchingMinutes_one": "Watches every minute",
       "watchingMinutes_other": "Watches every {{count}} minutes",
       "watchingHours_one": "Watches every hour",
-      "watchingHours_other": "Watches every {{count}} hours"
+      "watchingHours_other": "Watches every {{count}} hours",
+      "webhook": "Runs when its address is called",
+      "webhookSigned": "Runs when its address is called (signed)"
     },
     "scripts": {
       "triggerBadge": "Trigger",
@@ -3015,6 +3017,25 @@
       "remove": "Remove",
       "editTitle": "Script {{script}}",
       "editStarter": "I want to change the script \"{{script}}\" of the routine \"{{routine}}\" (id: {{id}}): [what to change]."
+    },
+    "webhook": {
+      "title": "Webhook",
+      "address": "Local address",
+      "secret": "Signing secret",
+      "copy": "Copy",
+      "copied": "Copied",
+      "rotate": "New address",
+      "rotateHint": "The current address stops working at once.",
+      "notListening": "Not listening: the routine is paused or the listener could not start.",
+      "deliveries": "Latest calls",
+      "none": "Nothing has called it yet.",
+      "accepted": "Accepted",
+      "pending_one": "{{count}} call waiting for a run",
+      "pending_other": "{{count}} calls waiting for a run",
+      "only": "Orbit listens on this computer only (127.0.0.1), while it is open. To receive calls from the internet, point your own tunnel at this address; Orbit never opens ports to the internet by itself.",
+      "signHint": "Sign the body with HMAC-SHA256 using the secret and send it in the X-Hub-Signature-256 (or X-Orbit-Signature) header as sha256=<hex>.",
+      "gap": "Calls close together are gathered into one run, at most one every 5 minutes.",
+      "whenCalled": "When it is called"
     },
     "secrets": {
       "title": "Secrets for scripts",
@@ -4632,7 +4653,8 @@
     "invoke": "Invoke with",
     "files": "Files",
     "skillScriptsNote": "This skill comes with scripts that can run on your computer when it is used.",
-    "routineScriptNote": "This routine carries scripts. Creating it approves exactly the code shown here, which runs on your computer in the background while Orbit is open."
+    "routineScriptNote": "This routine carries scripts. Creating it approves exactly the code shown here, which runs on your computer in the background while Orbit is open.",
+    "routineWebhookNote": "Creating this routine makes Orbit listen for HTTP calls on this computer only (127.0.0.1, a random port) while it is open. Nothing is exposed to the internet; to receive calls from outside you set up your own tunnel. What each call sends is handed to the agent as data, never as instructions."
   },
   "creation": {
     "routine": {

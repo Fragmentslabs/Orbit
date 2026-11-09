@@ -267,7 +267,14 @@ export function scriptApproved(script: RoutineScript): boolean {
  * What wakes the routine. `schedule` (the default) is the routine's days and times; `script`
  * runs one of the routine's scripts every few minutes, and the routine runs when the script fires.
  */
-export type RoutineTrigger = { kind: 'schedule' } | { kind: 'script'; scriptId: string; everyMinutes: number }
+export type RoutineTrigger =
+  | { kind: 'schedule' }
+  | { kind: 'script'; scriptId: string; everyMinutes: number }
+  /**
+   * An HTTP request to a private local address wakes the routine. `signed` also demands a valid
+   * HMAC signature made with the routine's own secret.
+   */
+  | { kind: 'webhook'; signed?: boolean }
 
 export const MIN_SCRIPT_EVERY_MINUTES = 1
 export const MAX_SCRIPT_EVERY_MINUTES = 24 * 60
@@ -282,6 +289,16 @@ export function triggerScript(routine: Pick<Routine, 'trigger' | 'scripts'>): Ro
 /** Does a script, not the calendar, decide when this routine runs? */
 export function isScriptTriggered(routine: Pick<Routine, 'trigger'>): boolean {
   return routine.trigger?.kind === 'script'
+}
+
+/** Does a webhook call decide when this routine runs? */
+export function isWebhookTriggered(routine: Pick<Routine, 'trigger'>): boolean {
+  return routine.trigger?.kind === 'webhook'
+}
+
+/** Does something other than the calendar (a script or a webhook) decide when this routine runs? */
+export function isEventTriggered(routine: Pick<Routine, 'trigger'>): boolean {
+  return isScriptTriggered(routine) || isWebhookTriggered(routine)
 }
 
 /** One agent of a routine's team and what it must do. */
@@ -471,6 +488,44 @@ export const SCRIPT_FAILING_AFTER = 3
 export const MIN_FIRE_GAP_MS = 5 * 60 * 1000
 export const MAX_SCRIPT_CHECKS_KEPT = 288
 
+// ─── Webhook activity ────────────────────────────────────────────────────────
+
+/** One call that reached a routine's webhook address. */
+export interface WebhookDelivery {
+  at: number
+  accepted: boolean
+  /** Why it was refused (never the content of the call). */
+  error?: string
+  /** Size of the body that was read. */
+  bytes: number
+}
+
+/** What the person sees of a webhook-triggered routine: the latest calls and what waits for a run. */
+export interface WebhookActivity {
+  routineId: string
+  /** Newest last, capped. */
+  deliveries: WebhookDelivery[]
+  lastFireAt?: number
+  /** Accepted payloads no execution has picked up yet (the routine was busy, or the fire gap). */
+  pending: string[]
+}
+
+/** What the routine screen needs to show the address of a webhook. */
+export interface WebhookInfo {
+  /** The listener is up; false = the app is not receiving (routine paused or listener failed). */
+  listening: boolean
+  /** Local address that receives the calls; absent while not listening. */
+  url?: string
+  /** Secret the sender signs the body with (only when the routine requires a signature). */
+  secret?: string
+  activity: WebhookActivity
+}
+
+export const WEBHOOK_MAX_BODY_BYTES = 64 * 1024
+/** The payload the agent reads is cut to this many characters. */
+export const WEBHOOK_MAX_PAYLOAD_CHARS = 8000
+export const MAX_WEBHOOK_DELIVERIES_KEPT = 50
+
 // ─── Events (main → renderer) ──────────────────────────────────────────────── ────────────────────────────────────────────────
 
 export type RoutineEvent =
@@ -479,6 +534,7 @@ export type RoutineEvent =
   | { type: 'routine-removed'; id: string }
   | { type: 'run'; run: RoutineRun }
   | { type: 'script-activity'; activity: ScriptActivity }
+  | { type: 'webhook-activity'; activity: WebhookActivity }
 
 // ─── Next firing computation ─────────────────────────────────────────────────
 
@@ -589,8 +645,8 @@ export function nextRun(schedule: Schedule, after: number, lastRun?: number): nu
 
 /** Next run of an active routine (null when it is off or the schedule is invalid). */
 export function nextRoutineRun(routine: Routine, now = Date.now()): number | null {
-  // A script decides when it runs, not the calendar.
-  if (!routine.active || isScriptTriggered(routine)) return null
+  // A script or a webhook decides when it runs, not the calendar.
+  if (!routine.active || isEventTriggered(routine)) return null
   return nextRun(routine.schedule, now, routine.lastRun)
 }
 
@@ -610,7 +666,7 @@ export function upcomingRuns(
   options: { limit?: number; includeInactive?: boolean } = {},
 ): number[] {
   // A script decides when it runs: there is no calendar to draw.
-  if (isScriptTriggered(routine) || (!routine.active && !options.includeInactive)) return []
+  if (isEventTriggered(routine) || (!routine.active && !options.includeInactive)) return []
   const limit = options.limit ?? 200
   const out: number[] = []
   let cursor = from - 1
