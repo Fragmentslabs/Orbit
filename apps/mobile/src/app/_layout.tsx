@@ -36,7 +36,8 @@ import { useModeOverrides } from "../stores/mode-overrides";
 import { useSimplePrefs } from "../stores/simple-prefs";
 import { useBrainPrefs } from "../stores/brain-prefs";
 import { usePermissionPrefs } from "../stores/permission-prefs";
-import { useSessionReasoning } from "../stores/session-reasoning";
+import { useSessionReasoning } from "../stores/session-reasoning"
+import { useSessionTools } from "../stores/session-tools";
 import { useModelRotationStore } from "../stores/model-rotation-store";
 import { hydrateInputDrafts } from "../stores/chat-draft-store";
 import { loadLastSessionId, saveLastSessionId } from "../stores/last-chat-store";

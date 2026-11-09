@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { sessionToolsApi } from "@/src/lib/ipc"
 
 /**
  * MCP servers per conversation.
@@ -86,4 +87,34 @@ export const useSessionTools = create<SessionToolsState>((set) => ({
 /** `null` = all servers on in the app. */
 export function useToolsServers(sessionId: string | null | undefined): string[] | null {
   return useSessionTools((s) => s.bySession[sessionId ?? DRAFT_KEY] ?? null)
+}
+
+// ─── Sync with the companions (mobile) ─────────────────────────────────────
+// The selection of each chat lives here (the renderer's localStorage), same as the
+// model and the modes: it goes to main (HTTP + WS 'session:tools-change') on every
+// change, so a conversation opened on the phone arrives with the same tools, and the
+// selection made there comes back through 'companion:tools-select'.
+
+/** The draft is a different new chat on each device: it does not travel. */
+function withoutDraft(bySession: ToolsMap): ToolsMap {
+  const out: ToolsMap = {}
+  for (const [key, value] of Object.entries(bySession)) {
+    if (key === DRAFT_KEY) continue
+    out[key] = value
+  }
+  return out
+}
+
+function sync() {
+  sessionToolsApi.sync(withoutDraft(useSessionTools.getState().bySession))
+}
+
+if (typeof window !== "undefined" && window.ipcRenderer) {
+  // Initial push: after a renderer reload the main cache is empty and a phone
+  // connecting before the first change would receive nothing.
+  sync()
+  useSessionTools.subscribe(sync)
+  sessionToolsApi.onSelect(({ sessionId, servers }) => {
+    useSessionTools.getState().setServers(sessionId ?? null, servers)
+  })
 }

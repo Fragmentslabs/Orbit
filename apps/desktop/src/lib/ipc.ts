@@ -372,6 +372,23 @@ export const rotationApi = {
   },
 }
 
+/** Tools per chat (the subset of MCP servers): same path as sessionModelsApi. The
+ *  renderer pushes the whole map and listens to the selections made in the companions
+ *  (WS 'tools:select'). */
+export const sessionToolsApi = {
+  sync: (overrides: Record<string, string[] | null>) => {
+    window.ipcRenderer?.send("companion:session-tools", overrides)
+  },
+  onSelect: (
+    listener: (data: { sessionId?: string | null; servers: string[] | null }) => void,
+  ) => {
+    const wrapper = window.ipcRenderer.on("companion:tools-select", (data) =>
+      listener(data as { sessionId?: string | null; servers: string[] | null }),
+    )
+    return () => window.ipcRenderer.off("companion:tools-select", wrapper)
+  },
+}
+
 /** Thinking per model: same path as sessionModelsApi. The renderer pushes the
  *  reasoning-prefs map and listens to the toggles made in the companions
  *  (WS 'reasoning:select'). */

@@ -275,6 +275,22 @@ export function getSessionModesCache(): SessionModeOverrides {
   return sessionModesCache
 }
 
+// Same mechanics again, for the tools of each chat (the subset of MCP servers that
+// enters the conversation): the renderer's selection, cached here for the connect.
+let sessionToolsCache: Record<string, string[] | null> = {}
+
+export function setSessionToolsCache(overrides: Record<string, string[] | null>): void {
+  sessionToolsCache = overrides ?? {}
+}
+
+export function getSessionToolsCache(): Record<string, string[] | null> {
+  return sessionToolsCache
+}
+
+async function handleGetSessionTools(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, { overrides: getSessionToolsCache() })
+}
+
 async function handleGetSessionModes(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { overrides: getSessionModesCache() })
 }
@@ -880,6 +896,7 @@ function createRouter(
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
     { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
+    { pattern: /^GET \/api\/session-tools$/, paramNames: [], handler: handleGetSessionTools },
     { pattern: /^GET \/api\/session-prefs$/, paramNames: [], handler: handleGetSessionPrefs },
     { pattern: /^GET \/api\/reasoning-prefs$/, paramNames: [], handler: handleGetReasoningPrefs },
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },

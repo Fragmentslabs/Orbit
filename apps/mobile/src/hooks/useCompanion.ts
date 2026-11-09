@@ -20,6 +20,7 @@ import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
 import { useModelRotationStore } from '~/stores/model-rotation-store'
+import { useSessionTools } from '~/stores/session-tools'
 import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync'
 import { applyRemoteSessionPrefs, fetchSessionPrefs } from '~/stores/session-prefs-sync'
 import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-sync'
@@ -122,6 +123,9 @@ export function useCompanion() {
         void useModelRotationStore.getState().hydrate()
         // Active modes per chat (same path: snapshot of the renderer)
         void fetchSessionModes()
+        // Tools (MCP servers) per chat — same path again, so the chat opens on the
+        // phone with the same tools that are on in the desktop
+        void useSessionTools.getState().hydrate()
         // Thinking per model (toggle + variant) — it lives in the desktop renderer
         void fetchReasoningPrefs()
         // Thinking and autonomy PER CHAT (same path: snapshot of the renderer)
@@ -175,6 +179,12 @@ export function useCompanion() {
     const unsubModes = conn.onEvent('session:mode-change', (event) => {
       const msg = event as { overrides?: SessionModeOverrides }
       if (msg?.overrides) applyRemoteModes(msg.overrides, true)
+    })
+
+    // session:tools-change → tools (MCP servers) of a chat changed on the desktop
+    const unsubTools = conn.onEvent('session:tools-change', (event) => {
+      const msg = event as { overrides?: Record<string, string[] | null> }
+      if (msg?.overrides) useSessionTools.getState().applySync(msg.overrides, true)
     })
 
     // session:prefs-change → thinking/autonomy of a chat changed on the desktop
@@ -231,6 +241,7 @@ export function useCompanion() {
       unsubModels()
       unsubRotation()
       unsubModes()
+      unsubTools()
       unsubSessionPrefs()
       unsubReasoning()
       unsubWorkerConfig()
