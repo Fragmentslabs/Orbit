@@ -76,6 +76,15 @@ beforeAll(async () => {
   )
   await fsp.writeFile(`${ORBIT_DATA}/artifacts/art_a.html`, '<!doctype html><h1>hi</h1>')
   await fsp.writeFile(`${ORBIT_DATA}/artifacts/art_font.html`, ARTIFACT_WITH_FONT)
+  await fsp.writeFile(
+    `${ORBIT_DATA}/artifacts/art_head.html`,
+    '<!doctype html><html><head><title>t</title></head><body><h1>hi</h1></body></html>',
+  )
+  // A page that already carries the token layer: the injection must not double it.
+  await fsp.writeFile(
+    `${ORBIT_DATA}/artifacts/art_marked.html`,
+    '<!-- orbit-tokens --><style>:root{--background:#000}</style><h1>hi</h1>',
+  )
   // 10 bytes with known values, to check the Range slice.
   await fsp.writeFile(`${ORBIT_DATA}/audio/aud_z1.wav`, Buffer.from('0123456789'))
   // A fake font: the test is of the transport (MIME, token, URL), not of the glyph.
@@ -152,6 +161,27 @@ describe('files', () => {
     expect((await get('motion', 'mv_missing')).status).toBe(404)
     expect((await get('design', 'dsg_missing')).status).toBe(404)
     expect((await get('slides', 'sld_missing')).status).toBe(404)
+  })
+})
+
+describe('theme', () => {
+  it('the HTML goes out with the Orbit token layer — without it the page is black on the phone', async () => {
+    const res = await get('artifact', 'art_head.html')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    // The artifact is written against `var(--background)`, `var(--foreground)`... and an
+    // undefined variable discards the declaration: transparent background, inherited black
+    // text, which over the dark app in the WebView is a completely black screen.
+    expect(html).toContain('--background:')
+    expect(html).toContain('--foreground:')
+    expect(html).toContain('--font-sans:')
+    // Inside the head, so the page never paints in the wrong palette first.
+    expect(html.indexOf('--background:')).toBeLessThan(html.indexOf('</head>'))
+  })
+
+  it('does not inject the layer twice', async () => {
+    const html = await (await get('artifact', 'art_marked.html')).text()
+    expect(html.match(/orbit-tokens/g)?.length).toBe(1)
   })
 })
 

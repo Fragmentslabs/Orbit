@@ -972,6 +972,28 @@ function injectArtifactChrome(html: string): string {
   return html.slice(0, at) + ARTIFACT_CHROME + html.slice(at)
 }
 
+const ARTIFACT_TOKENS_MARK = '<!-- orbit-tokens -->'
+
+/**
+ * The token layer alone, for the page that is NOT going into the desktop iframe — the
+ * phone's WebView.
+ *
+ * The artifact is written counting on the `--background`, `--foreground`, `--card` and
+ * the rest that the iframe receives from outside. An undefined variable invalidates the
+ * whole declaration: the page stayed with a transparent background and inherited black
+ * text, which over the dark app in the WebView is a completely black screen.
+ *
+ * It goes inside the `head`, before the artifact's own styles. Everything is inside
+ * `@layer orbit-tokens`, and a layered declaration loses to an unlayered one — the page
+ * that defines its own palette keeps winning, as on the desktop.
+ */
+function injectArtifactTokens(html: string): string {
+  if (html.includes(ARTIFACT_TOKENS_MARK)) return html
+  const block = `${ARTIFACT_TOKENS_MARK}\n<style>\n${ARTIFACT_TOKENS_CSS}\n</style>\n`
+  const at = [...html.matchAll(/<\/head\s*>/gi)][0]?.index
+  return at === undefined ? block + html : html.slice(0, at) + block + html.slice(at)
+}
+
 async function handleArtifactRequest(request: Request): Promise<Response> {
   // Standard scheme: the URL has host + path (orbit-artifact://art_x.html/?rev=2),
   // unlike orbit-media://, where the whole id falls on the host and there is no query.
@@ -1026,9 +1048,10 @@ export function registerArtifactProtocol(): void {
  * (.png), the source (.md) or a rendering (.pdf/.docx).
  *
  * It serves the companion HTTP server (the phone has no
- * orbit-artifact:// protocol). The file goes out AS IT IS: the scrollbar that
- * handleArtifactRequest injects exists to match the iframe frame on the
- * desktop, and in the phone's WebView it would only get in the way.
+ * orbit-artifact:// protocol). The scrollbar that handleArtifactRequest injects exists
+ * to match the iframe frame on the desktop and in the phone's WebView it would only get
+ * in the way — but the theme tokens go WITH the page: they are not decoration, they are
+ * the palette the artifact was written against (see injectArtifactTokens).
  */
 export async function readArtifactAsset(
   id: string,
@@ -1037,7 +1060,13 @@ export async function readArtifactAsset(
   try {
     const buffer = await fsp.readFile(path.join(assetFileDir(id), id))
     const ext = id.split('.').pop() ?? ''
-    return { buffer, contentType: ARTIFACT_CONTENT_TYPES[ext] ?? 'application/octet-stream' }
+    return {
+      buffer:
+        ext === 'html'
+          ? Buffer.from(injectArtifactTokens(buffer.toString('utf8')), 'utf8')
+          : buffer,
+      contentType: ARTIFACT_CONTENT_TYPES[ext] ?? 'application/octet-stream',
+    }
   } catch {
     return null
   }

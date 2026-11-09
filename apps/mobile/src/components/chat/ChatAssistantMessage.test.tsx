@@ -241,6 +241,17 @@ describe('ChatAssistantMessage — artifact', () => {
     expect(screen.queryByText('chatAssistant.artifactDesktopOnly')).toBeNull()
   })
 
+  it('tells the page which theme is in force before it paints, instead of the system one', () => {
+    renderMessage([artifactPart(ARTIFACT_SRC)])
+
+    // The token layer served by the desktop follows `prefers-color-scheme`; the app's
+    // theme (dark, here) is the one that has to win — otherwise an artifact opens in the
+    // opposite palette and the text of a light page lands on the dark WebView.
+    const injected = String(webviews.props.at(-1)?.injectedJavaScriptBeforeContentLoaded ?? '')
+    expect(injected).toContain("'orbit-dark'")
+    expect(injected).toContain('document.documentElement')
+  })
+
   it('expands to fullscreen', () => {
     renderMessage([artifactPart(ARTIFACT_SRC)])
 
