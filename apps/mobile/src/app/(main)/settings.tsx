@@ -62,7 +62,7 @@ export default function SettingsScreen() {
   const handleDisconnect = async () => {
     disconnect()
     await clearSavedConfig()
-    router.replace('/(connection)')
+    router.replace('/connect')
   }
 
   const selectedModelName =

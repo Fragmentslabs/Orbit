@@ -8,6 +8,15 @@ import { useDraftInput } from "@/src/stores/draft-input"
 
 const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 
+/** What a queued item carries besides the text and the options. */
+interface QueueExtra {
+  directory?: string
+  extraDirectories?: string[]
+  files?: FilePart[]
+  providerId?: string
+  modelId?: string
+}
+
 interface MessageQueueState {
   queues: Record<string, QueuedMessage[]>
   /** sessionId → id of the item the main input is editing right now */
@@ -43,7 +52,7 @@ interface MessageQueueState {
     text: string,
     options: SendMessageOptions,
     mode: SessionMode,
-    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
+    extra?: QueueExtra,
   ) => void
   /** Enqueues for scheduled send */
   enqueueScheduled: (
@@ -52,7 +61,7 @@ interface MessageQueueState {
     options: SendMessageOptions,
     mode: SessionMode,
     scheduledAt: number,
-    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
+    extra?: QueueExtra,
   ) => void
   /** Handler called by the session-store when status → idle or error */
   onSessionIdle: (sessionId: string) => void
@@ -274,6 +283,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       options,
       mode,
       sessionId,
+      providerId: extra?.providerId,
+      modelId: extra?.modelId,
       directory: extra?.directory,
       extraDirectories: extra?.extraDirectories,
       createdAt: Date.now(),
@@ -290,6 +301,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       mode,
       sessionId,
       scheduledAt,
+      providerId: extra?.providerId,
+      modelId: extra?.modelId,
       directory: extra?.directory,
       extraDirectories: extra?.extraDirectories,
       createdAt: Date.now(),
@@ -331,6 +344,11 @@ function send(sessionId: string, msg: QueuedMessage) {
   void useSessionStore.getState().sendMessage(msg.mode, msg.text, {
     options: { ...msg.options, retries: useAppSettings.getState().settings.transientRetries },
     sessionId: msg.sessionId ?? sessionId,
+    // The model the item was written under (see QueuedMessage.providerId): it is
+    // what keeps a message queued on the phone from leaving with another model.
+    ...(msg.providerId && msg.modelId
+      ? { providerId: msg.providerId, modelId: msg.modelId }
+      : {}),
     directory: msg.directory,
     extraDirectories: msg.extraDirectories,
     files: msg.files,

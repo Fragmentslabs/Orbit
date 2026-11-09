@@ -49,10 +49,15 @@ interface SessionModelPrefsState {
   /** Last models used (global, most recent first, max. 5) */
   recents: SelectedModel[]
   hydrated: boolean
-  /** Applies a snapshot coming from the desktop (HTTP or WS). Only a key the
-   *  mobile does not have locally enters — the local choice wins in a conflict. */
-  applySync: (remote: SessionModelOverrides) => void
+  /** Applies a snapshot coming from the desktop (HTTP or WS). In the connect snapshot
+   *  (`authoritative`) the desktop wins for the chats that already exist — it is the source of
+   *  truth of the per-chat choice; only the draft key (a different new chat in each
+   *  device) stays local. Without it a chat whose model was changed on the desktop kept
+   *  opening on the phone with the old model forever. */
+  applySync: (remote: SessionModelOverrides, authoritative?: boolean) => void
   hydrate: () => Promise<void>
+  /** Re-reads the desktop snapshot (API + live event 'session:model-change'). */
+  fetchRemote: () => Promise<void>
   selectModel: (sessionId: string | null | undefined, providerId: string, modelId: string) => void
   /** Moves the override of the draft (new chat) to the session created on the 1st send */
   adopt: (sessionId: string, fallback?: SelectedModel) => void
@@ -69,8 +74,21 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
   recents: [],
   hydrated: false,
 
-  applySync: (remote) => {
+  applySync: (remote, authoritative) => {
     if (!remote || typeof remote !== 'object') return
+    if (authoritative) {
+      const next: SessionModelOverrides = {}
+      for (const [key, value] of Object.entries(remote)) {
+        if (key === DRAFT_KEY || !value || typeof value !== 'object') continue
+        next[key] = { providerId: value.providerId, modelId: value.modelId }
+      }
+      const draft = get().overrides[DRAFT_KEY]
+      if (draft) next[DRAFT_KEY] = draft
+      if (JSON.stringify(next) === JSON.stringify(get().overrides)) return
+      void Storage.setItem(STORAGE_KEY, JSON.stringify(next))
+      set({ overrides: next })
+      return
+    }
     let changed = false
     const next = { ...get().overrides }
     for (const [key, value] of Object.entries(remote)) {
@@ -86,23 +104,31 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
   },
 
   hydrate: async () => {
-    try {
-      const raw = await Storage.getItem(STORAGE_KEY)
-      if (raw) set({ overrides: JSON.parse(raw) as SessionModelOverrides })
-    } catch {
-      // corrupted prefs — stays empty
+    // The read of the device is asynchronous: applying it over a choice made meanwhile
+    // (the person picking a model right after opening the app) erased the choice.
+    if (!get().hydrated) {
+      try {
+        const raw = await Storage.getItem(STORAGE_KEY)
+        if (raw) set({ overrides: JSON.parse(raw) as SessionModelOverrides })
+      } catch {
+        // corrupted prefs — stays empty
+      }
+      set({ recents: await loadRecents() })
+      set({ hydrated: true })
     }
-    set({ recents: await loadRecents() })
-    set({ hydrated: true })
+    await get().fetchRemote()
+  },
 
-    // Snapshot of the per-session overrides of the desktop (renderer → main → HTTP)
+  /** Snapshot of the per-session overrides of the desktop (renderer → main → HTTP).
+   *  Run on connect: the desktop is the source of truth for the chats that exist. */
+  fetchRemote: async () => {
     const { http } = useConnectionStore.getState()
     if (!http) return
     try {
       const res = await http.getSessionModels()
       if (res.ok && res.data) {
         const remote = (res.data as { overrides?: SessionModelOverrides }).overrides
-        if (remote) get().applySync(remote)
+        if (remote) get().applySync(remote, true)
       }
     } catch {
       // Offline — keeps the local cache
@@ -135,18 +161,30 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
 
   adopt: (sessionId, fallback) => {
     const overrides = { ...get().overrides }
+    let chosen: SelectedModel | undefined
     if (overrides[DRAFT_KEY] !== undefined) {
-      overrides[sessionId] = overrides[DRAFT_KEY]
+      chosen = overrides[DRAFT_KEY]
+      overrides[sessionId] = chosen
       delete overrides[DRAFT_KEY]
     } else if (fallback) {
       // Without an explicit choice in the draft, it fixes the model actually used
       // (inherited from the last chat) so the session stays with it.
+      chosen = fallback
       overrides[sessionId] = fallback
     } else {
       return
     }
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    // The session was born on the desktop without any choice of its own, and the
+    // desktop is the source of truth of the per-chat model — it has to know this one,
+    // otherwise its next snapshot (authoritative on connect) erases it.
+    if (chosen) {
+      const { wsClient } = useConnectionStore.getState()
+      void wsClient
+        .send({ type: 'models:select', providerId: chosen.providerId, modelId: chosen.modelId, sessionId })
+        .catch(() => {})
+    }
   },
 
   markUsed: (providerId, modelId) => {

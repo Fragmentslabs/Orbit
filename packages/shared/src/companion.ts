@@ -165,6 +165,27 @@ export interface SelectSessionModeRequest {
   sessionId?: string | null
 }
 
+/** MCP servers of each chat (the "tools" selection of the conversation):
+ *  `null` = every server enabled in the app, `[...]` = only those (empty = none).
+ *  Same design as SessionModeOverrides — the desktop renderer is the source of truth
+ *  and the 'draft' key is a different new chat on each device. */
+export type SessionToolsOverrides = Record<string, string[] | null>
+
+/** Tool selection of ONE chat changed in a companion: the desktop renderer applies it
+ *  in its store and sends the whole map back through 'session:tools-change'. */
+export interface SelectSessionToolsRequest {
+  type: 'tools:select'
+  /** Target session — absent/null = new chat (draft). */
+  sessionId?: string | null
+  servers: string[] | null
+}
+
+/** Complete map of tools per chat pushed by the desktop to the companions. */
+export interface SessionToolsChangeEvent {
+  type: 'session:tools-change'
+  overrides: SessionToolsOverrides
+}
+
 /** Model per chat pushed by the desktop to the companions. It was being emitted
  *  and consumed without a type on both sides (`as any`), so a change in the format
  *  would go unnoticed. */
@@ -822,6 +843,7 @@ export type CompanionRequest =
   | GetModelsRequest
   | SelectModelRequest
   | SelectSessionModeRequest
+  | SelectSessionToolsRequest
   | SelectReasoningRequest
   | SelectSessionPrefsRequest
   | SelectRotationRequest
@@ -986,6 +1008,7 @@ export type CompanionEvent =
   | NewMessageNotification
   | SessionModelChangeEvent
   | SessionModeChangeEvent
+  | SessionToolsChangeEvent
   | ReasoningPrefsChangeEvent
   | SessionPrefsChangeEvent
   | RotationChangeEvent

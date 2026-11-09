@@ -82,11 +82,18 @@ export class CompanionHttp {
     return this.get('/api/session-models')
   }
 
-  /** Thinking and autonomy PER CHAT (maps sessionId → preference) kept
-   *  by the desktop renderer. The mobile inherits on connect and then follows
-   *  through the WS event 'session:prefs-change'. */
+  /** Active modes per chat (sessionId → mode → boolean) kept by the desktop
+   *  renderer. The mobile inherits on connect and then follows through the WS event
+   *  'session:mode-change'. */
   async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
     return this.get('/api/session-modes')
+  }
+
+  /** MCP servers per chat (sessionId → list) kept by the desktop renderer — the
+   *  "tools" selection of the conversation. The mobile inherits on connect and then
+   *  follows through the WS event 'session:tools-change'. */
+  async getSessionTools(): Promise<HttpResult<{ overrides: Record<string, string[] | null> }>> {
+    return this.get('/api/session-tools')
   }
 
   /** Thinking per model (toggle + variant) kept by the desktop renderer.

@@ -77,7 +77,7 @@ export function Sidebar() {
     disconnect()
     await clearSavedConfig()
     closeSidebar()
-    router.replace('/(connection)')
+    router.replace('/connect')
   }
 
   const handleNewChat = () => {

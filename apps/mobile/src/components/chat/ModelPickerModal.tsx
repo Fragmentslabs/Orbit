@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, SectionList, Platform } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { X, Search, Check, Brain, RefreshCw, ListRestart, ChevronRight } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from 'expo-router'
@@ -66,12 +67,21 @@ interface RotationRowItem {
   rotation: ModelRotation
 }
 
+/** Model in use, pinned at the top when it is not among the recents. */
+interface SelectedRowItem {
+  key: string
+  model: CatalogModel
+  provider: CatalogProvider
+  selected: SelectedModel
+}
+
 /** Item of any of the sections — annotated explicitly in the SectionList,
  *  which otherwise infers the type of the first member of the union and rejects the others. */
-type ModelSectionItem = RotationRowItem | RecentRowItem | ModelRowItem
+type ModelSectionItem = RotationRowItem | SelectedRowItem | RecentRowItem | ModelRowItem
 
 type ModelSection =
   | { kind: 'rotations'; data: RotationRowItem[] }
+  | { kind: 'selected'; data: SelectedRowItem[] }
   | { kind: 'recents'; data: RecentRowItem[] }
   | { kind: 'provider'; provider: CatalogProvider; data: ModelRowItem[] }
 
@@ -281,6 +291,9 @@ function ModelPickerSheet({
 
   const resolved = useThemeStore((s) => s.resolved)
   const tokens = getThemeTokens(resolved)
+  // Drawer glued to the bottom edge: without the safe area it sits on top of the
+  // home indicator / gesture bar of the phone.
+  const insets = useSafeAreaInsets()
   const [search, setSearch] = useState('')
 
   const isWeb = Platform.OS === 'web'
@@ -357,12 +370,42 @@ function ModelPickerSheet({
           .filter((r) => !q || r.name.toLowerCase().includes(q))
           .map((r) => ({ key: `rotation-${r.id}`, rotation: r }))
 
+    // The model in use gets a section of its own when it is not among the recents: the
+    // recents list is short on the phone and the current model could sit far down in
+    // its provider.
+    const selectedProvider = selectedModel ? catalog[selectedModel.providerId] : undefined
+    const selectedCatalogModel =
+      selectedModel && selectedProvider ? selectedProvider.models[selectedModel.modelId] : undefined
+    const isAmongRecents =
+      !!selectedModel &&
+      recentRows.some(
+        (r) =>
+          r.recent.providerId === selectedModel.providerId &&
+          r.recent.modelId === selectedModel.modelId,
+      )
+    const selectedRows: SelectedRowItem[] =
+      selectedModel &&
+      selectedProvider &&
+      selectedCatalogModel &&
+      !isAmongRecents &&
+      matches(selectedCatalogModel, selectedProvider)
+        ? [
+            {
+              key: `selected-${selectedModel.providerId}/${selectedModel.modelId}`,
+              model: selectedCatalogModel,
+              provider: selectedProvider,
+              selected: selectedModel,
+            },
+          ]
+        : []
+
     return [
       ...(rotationRows.length > 0 ? [{ kind: 'rotations' as const, data: rotationRows }] : []),
+      ...(selectedRows.length > 0 ? [{ kind: 'selected' as const, data: selectedRows }] : []),
       ...(recentRows.length > 0 ? [{ kind: 'recents' as const, data: recentRows }] : []),
       ...providerSections,
     ]
-  }, [catalog, search, connectedProviders, recents, onSelect, rotations])
+  }, [catalog, search, connectedProviders, recents, onSelect, rotations, selectedModel])
 
   // Stable identity: the row is memoized and receives this as a prop.
   const handleSelect = useCallback(
@@ -424,7 +467,12 @@ function ModelPickerSheet({
               ? "w-full max-w-md h-[550px] rounded-2xl"
               : "w-full h-[80%] rounded-t-3xl"
           )}
-          style={{ backgroundColor: tokens.background, borderColor: tokens.border, borderWidth: isWeb ? 1 : 0 }}
+          style={{
+            backgroundColor: tokens.background,
+            borderColor: tokens.border,
+            borderWidth: isWeb ? 1 : 0,
+            paddingBottom: isWeb ? 0 : insets.bottom,
+          }}
         >
           {/* Mobile top handle indicator */}
           {!isWeb && (
@@ -443,14 +491,15 @@ function ModelPickerSheet({
 
           {/* Search */}
           <View className="px-4 py-2 mt-1 flex-row items-center gap-2">
-            <View className="flex-1 flex-row items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: tokens.muted }}>
-              <Search size={16} color={tokens.mutedForeground} />
+            {/* Same shape and height as the main input: a round pill of 44px. */}
+            <View className="flex-1 flex-row items-center gap-2.5 px-4 h-11 rounded-full" style={{ backgroundColor: tokens.muted }}>
+              <Search size={17} color={tokens.mutedForeground} />
               <TextInput
                 value={search}
                 onChangeText={setSearch}
                 placeholder={t('modelPickerModal.searchPlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
-                className="flex-1 text-sm py-0.5"
+                className="flex-1 text-base py-0"
                 style={{ color: tokens.foreground }}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -464,11 +513,11 @@ function ModelPickerSheet({
             <Pressable
               onPress={() => void fetchCatalog()}
               disabled={loading}
-              className="h-9 w-9 items-center justify-center rounded-lg"
+              className="h-11 w-11 items-center justify-center rounded-full"
               style={{ backgroundColor: tokens.muted }}
             >
               <Spin active={loading}>
-                <RefreshCw size={16} color={tokens.mutedForeground} />
+                <RefreshCw size={18} color={tokens.mutedForeground} />
               </Spin>
             </Pressable>
           </View>
@@ -507,6 +556,21 @@ function ModelPickerSheet({
                       isSelected={activeRotation?.id === row.rotation.id}
                       tokens={tokens}
                       onPress={handleSelectRotation}
+                    />
+                  )
+                }
+                if (section.kind === 'selected') {
+                  const row = item as SelectedRowItem
+                  return (
+                    <ModelRow
+                      provider={row.provider}
+                      model={row.model}
+                      index={index}
+                      count={section.data.length}
+                      isSelected
+                      tokens={tokens}
+                      subtitle={row.provider.name}
+                      onPress={handleSelect}
                     />
                   )
                 }
@@ -549,9 +613,11 @@ function ModelPickerSheet({
                 <Text className="text-xs font-semibold uppercase tracking-wider mb-2 pt-1 pl-1" style={{ color: tokens.mutedForeground }}>
                   {section.kind === 'rotations'
                     ? t('modelPicker.rotation')
-                    : section.kind === 'recents'
-                      ? t('modelPickerModal.recent')
-                      : section.provider.name}
+                    : section.kind === 'selected'
+                      ? t('modelPickerModal.selected')
+                      : section.kind === 'recents'
+                        ? t('modelPickerModal.recent')
+                        : section.provider.name}
                 </Text>
               )}
               SectionSeparatorComponent={() => <View className="h-4" />}

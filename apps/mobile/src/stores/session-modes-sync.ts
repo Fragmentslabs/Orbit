@@ -10,10 +10,12 @@ import { useBrainPrefs } from '~/stores/brain-prefs'
  * truth: it pushes the whole map on connect (GET /api/session-modes) and on every
  * change (WS event 'session:mode-change').
  *
- * `authoritative` separates the two cases: in the connect snapshot the choice made
- * on the phone wins (only keys the mobile does not have enter), as already happens
- * with the per-chat model; in the live event the desktop has just changed, so
- * it overwrites.
+ * `authoritative` separates the two cases, and BOTH are authoritative for the chats
+ * that already exist: the desktop is the source of truth of the per-chat modes, so on
+ * connect its snapshot replaces the local one (only the draft, which is a different
+ * new chat in each device, stays). Before, the phone's copy won the snapshot and a chat
+ * whose mode was switched on in the desktop opened off here; the phone's own toggles
+ * reach the desktop through 'modes:select' and come back in the snapshot.
  */
 
 const MODE_OVERRIDE_KEYS: OverridableMode[] = [
@@ -112,7 +114,7 @@ export async function fetchSessionModes(): Promise<void> {
     const res = await http.getSessionModes()
     if (res.ok && res.data) {
       const remote = (res.data as { overrides?: SessionModeOverrides }).overrides
-      if (remote) applyRemoteModes(remote, false)
+      if (remote) applyRemoteModes(remote, true)
     }
   } catch {
     // Offline — keeps what is already on the device.

@@ -34,6 +34,8 @@ import type {
   BranchesResponse,
   SessionModeOverrides,
   SessionModeChangeEvent,
+  SessionToolsOverrides,
+  SessionToolsChangeEvent,
   SessionPrefsSnapshot,
   SessionPrefsChangeEvent,
   ReasoningPrefsMap,
@@ -865,6 +867,22 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
               mode: req.mode,
               value: req.value,
               sessionId: req.sessionId ?? null,
+            })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'tools:select': {
+        // Mirror of modes:select, for the tools of the chat (the subset of MCP
+        // servers): it lives in the renderer, so the choice made on the phone is
+        // applied there and comes back to every companion through the broadcast.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:tools-select', {
+              sessionId: req.sessionId ?? null,
+              servers: req.servers ?? null,
             })
           }
         }
@@ -1762,6 +1780,15 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
     if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
+  }
+}
+
+/** Tools per chat (sessionId → subset of MCP servers) pushed to the companions —
+ *  it keeps the same selection open on the phone as on the desktop. */
+export function broadcastSessionTools(overrides: SessionToolsOverrides): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.kind !== 'phone' || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'session:tools-change', overrides } satisfies SessionToolsChangeEvent))
   }
 }
 

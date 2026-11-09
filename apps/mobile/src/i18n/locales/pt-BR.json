@@ -201,7 +201,6 @@
   },
   "promptInput": {
     "placeholder": "Pergunte qualquer coisa...",
-    "loadingFile": "Carregando arquivo...",
     "voice": {
       "record": "Ditar",
       "stop": "Parar de gravar",
@@ -211,7 +210,9 @@
       "empty": "Nada foi gravado",
       "noSpeech": "Nada foi reconhecido — tente falar mais perto do microfone",
       "offline": "Sem conexão com o desktop — o ditado roda lá",
-      "failed": "Falha ao transcrever o áudio"
+      "failed": "Falha ao transcrever o áudio",
+      "call": "Ligação ao vivo",
+      "live": "Ouvindo — toque no telefone para encerrar e enviar"
     },
     "modes": {
       "research": "Pesquisa",
@@ -269,6 +270,9 @@
   "chatAssistant": {
     "reasoning": "Raciocínio",
     "thinking": "Pensando…",
+    "thoughtFewSeconds": "Pensou por alguns segundos",
+    "thoughtFor_one": "Pensou por {{count}} segundo",
+    "thoughtFor_other": "Pensou por {{count}} segundos",
     "usingBrowser": "Usando o browser…",
     "searchingLabel": "Pesquisando",
     "readingPageLabel": "Lendo página",
@@ -640,6 +644,7 @@
     "configureProviderHint": "Por favor, configure as credenciais de um provedor nas configurações do desktop.",
     "trySearchHint": "Tente pesquisar por outro nome de modelo.",
     "recent": "Recentes",
+    "selected": "Em uso",
     "removeRecent": "Remover dos recentes"
   },
   "scheduleSheet": {
@@ -675,7 +680,20 @@
     "openWith": "Abrir com…",
     "image": "Imagem",
     "enlarge": "Ampliar imagem",
-    "close": "Fechar"
+    "close": "Fechar",
+    "model": "Modelo",
+    "settings": "Configurações",
+    "modes": "Modos",
+    "moreSettings": "Mais configurações",
+    "more": "Mais",
+    "thinking": "Thinking",
+    "permissions": "Permissões",
+    "branch": "Branch",
+    "on": "Ativado",
+    "off": "Desligado",
+    "tools": "Ferramentas",
+    "activeCount": "{{count}} ativos",
+    "noTools": "Nenhum servidor MCP ligado no app"
   },
   "memoryMeta": {
     "kind": {

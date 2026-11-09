@@ -12,7 +12,7 @@ import { useReply } from '~/stores/reply-store'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
-import { useSessionStore } from '~/stores/session-store'
+import { sessionModelFor, useSessionStore } from '~/stores/session-store'
 import { useChatStore, type PendingAsk } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -114,10 +114,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   // an equally stable value, readable during render (react-hooks/refs forbids reading a
   // ref here) and allocated only once.
   const [chatProgress] = useState(() => new Animated.Value(isEmpty ? 0 : 1))
-  // Small persona of the header: it only shows up after the one in the center finishes
-  // disappearing (same two-step logic as the desktop) — hence the delay equal
-  // to the duration of the animation of the center.
-  const [headerPersonaOpacity] = useState(() => new Animated.Value(isEmpty ? 0 : 1))
 
   useEffect(() => {
     Animated.timing(chatProgress, {
@@ -125,18 +121,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       duration: 400,
       useNativeDriver: true,
     }).start()
-
-    if (isEmpty) {
-      headerPersonaOpacity.setValue(0)
-    } else {
-      Animated.timing(headerPersonaOpacity, {
-        toValue: 1,
-        duration: 300,
-        delay: 400,
-        useNativeDriver: true,
-      }).start()
-    }
-  }, [isEmpty, chatProgress, headerPersonaOpacity])
+  }, [isEmpty, chatProgress])
 
   useEffect(() => {
     void selectSession(sessionId ?? null)
@@ -242,6 +227,10 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       }
       setCreating(true)
       try {
+        // Model on screen at the moment of the send. It is pinned into the session by
+        // createSession and goes explicitly in the first message: the model chosen for a
+        // new chat cannot depend on the adoption order.
+        const draftModel = sessionModelFor(null)
         const created = await createSession(useWorkspaceStore.getState().mode)
         if (!created) {
           devolver()
@@ -295,7 +284,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           }
         }
 
-        sendMessage(text, { options, files, sessionId: created.id, ...dirConfig })
+        sendMessage(text, {
+          options,
+          files,
+          sessionId: created.id,
+          providerId: draftModel?.providerId,
+          modelId: draftModel?.modelId,
+          ...dirConfig,
+        })
         // It only takes you to the new chat if the person is still in the draft: if they
         // already went to another conversation, pulling them back looked like the message
         // had fallen into the wrong chat.
@@ -490,7 +486,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     router.replace('/(main)')
   }, [sessionId, deleteSession, router])
 
-  const personaState = isEmpty ? 'idle' : isStreaming ? 'thinking' : 'idle'
+  // Persona of the welcome screen only: the header shows the name of the chat and the
+  // model, with no persona (it used to show up there as soon as the conversation started).
   const personaVisible = showsPersonaOnWelcome(useAppearanceStore((s) => s.personaVisibility))
 
   // The bottom inset does NOT enter SafeScreen: with the keyboard open it was left over
@@ -520,8 +517,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       >
         <ChatHeader
           session={session}
-          personaState={personaState}
-          personaOpacity={headerPersonaOpacity}
           onRename={handleRename}
           onTogglePin={handleTogglePin}
           onToggleArchive={handleToggleArchive}

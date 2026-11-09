@@ -82,10 +82,10 @@ export function SendButtonGroup({
     return (
       <Pressable
         onPress={onStop}
-        className="h-9 w-9 rounded-full items-center justify-center"
+        className="h-10 w-10 rounded-full items-center justify-center"
         style={{ backgroundColor: tokens.destructive ?? '#ef4444' }}
       >
-        <Square size={13} color="#fff" fill="#fff" />
+        <Square size={15} color="#fff" fill="#fff" />
       </Pressable>
     )
   }
@@ -97,16 +97,16 @@ export function SendButtonGroup({
         onLongPress={handleLongPress}
         delayLongPress={400}
         disabled={!canAct && !isStreaming}
-        className={cn('h-9 w-9 rounded-full items-center justify-center')}
+        className={cn('h-10 w-10 rounded-full items-center justify-center')}
         style={{
           backgroundColor: canAct || isStreaming ? tokens.primary : tokens.muted,
           opacity: canAct || isStreaming ? 1 : 0.4,
         }}
       >
         {isStreaming ? (
-          <ListPlus size={16} color={tokens.primaryForeground} />
+          <ListPlus size={19} color={tokens.primaryForeground} />
         ) : (
-          <ArrowUp size={18} color={tokens.primaryForeground} />
+          <ArrowUp size={21} color={tokens.primaryForeground} />
         )}
       </Pressable>
 

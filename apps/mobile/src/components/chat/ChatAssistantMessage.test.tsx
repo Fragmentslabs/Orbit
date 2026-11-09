@@ -241,6 +241,17 @@ describe('ChatAssistantMessage — artifact', () => {
     expect(screen.queryByText('chatAssistant.artifactDesktopOnly')).toBeNull()
   })
 
+  it('tells the page which theme is in force before it paints, instead of the system one', () => {
+    renderMessage([artifactPart(ARTIFACT_SRC)])
+
+    // The token layer served by the desktop follows `prefers-color-scheme`; the app's
+    // theme (dark, here) is the one that has to win — otherwise an artifact opens in the
+    // opposite palette and the text of a light page lands on the dark WebView.
+    const injected = String(webviews.props.at(-1)?.injectedJavaScriptBeforeContentLoaded ?? '')
+    expect(injected).toContain("'orbit-dark'")
+    expect(injected).toContain('document.documentElement')
+  })
+
   it('expands to fullscreen', () => {
     renderMessage([artifactPart(ARTIFACT_SRC)])
 
@@ -291,6 +302,25 @@ describe('ChatAssistantMessage — document', () => {
 
     expect(open).toHaveBeenCalledWith(DOC_SRC, '_blank')
     open.mockRestore()
+  })
+})
+
+// ── Summary view (the only one on the phone) ────────────────────────────────
+
+describe('ChatAssistantMessage — summary view', () => {
+  it('folds every reasoning pass and the separated actions into one accordion each', () => {
+    renderMessage([
+      { id: 'r1', type: 'reasoning', text: 'primeiro', state: 'done', durationMs: 1000 },
+      { id: 't1', type: 'tool', tool: 'read', state: 'done' },
+      { id: 'r2', type: 'reasoning', text: 'segundo', state: 'done', durationMs: 2000 },
+      { id: 't2', type: 'tool', tool: 'bash', state: 'done' },
+      { id: 'x', type: 'text', text: 'resposta', state: 'done' },
+    ] as MessagePart[])
+
+    // One reasoning label for the whole turn (the seconds of both passes are summed inside it)...
+    expect(screen.getAllByText('chatAssistant.thoughtFor')).toHaveLength(1)
+    // ...and the two actions, separated only by the second reasoning, fall into one accordion.
+    expect(screen.getAllByText('chatAssistant.actionsExecuted')).toHaveLength(1)
   })
 })
 

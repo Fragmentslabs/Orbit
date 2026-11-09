@@ -1,47 +1,33 @@
-import { useState, useRef, useCallback, useEffect, memo, type ReactNode } from 'react'
-import { View, TextInput, Pressable, Text, ScrollView, ActivityIndicator, Platform, TouchableOpacity } from 'react-native'
-import {
-  Search,
-  Globe,
-  AlignLeft,
-  BrainCircuit,
-  Plus,
-  Bot,
-  Network,
-  FileText,
-  Settings2,
-  RefreshCw,
-  Eye,
-  Mic,
-  X,
-} from 'lucide-react-native'
-import {  } from 'expo-image'
+import { useState, useRef, useCallback, useEffect, memo, useMemo, type ReactNode } from 'react'
+import { View, TextInput, Text, ActivityIndicator, Platform, TouchableOpacity, Keyboard } from 'react-native'
+import { Plus, Mic, X, AudioLines } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import * as DocumentPicker from 'expo-document-picker'
+import * as ImagePicker from 'expo-image-picker'
 import type { SendMessageOptions, FilePart, SessionInfo } from '@orbit/shared'
 import { resolveSlashAction } from '@orbit/shared'
-import {  } from '~/lib/utils'
-import { ContextMeter } from './ContextMeter'
-import { ModelPicker } from './ModelPicker'
-import { AttachmentSheet } from './AttachmentSheet'
+import { AttachmentSheet, type ModeItem, type ToolItem } from './AttachmentSheet'
+import { useSessionTools, useToolsServers } from '~/stores/session-tools'
+import { useToolsStore } from '~/stores/tools-store'
 import { WorkerModelModal } from './WorkerModelModal'
 import { VisionConfigModal } from './VisionConfigModal'
 import { LoopConfigModal } from './LoopConfigModal'
+import { ModelPickerModal } from './ModelPickerModal'
 import { InputAttachment } from './Attachment'
-import { ConfigSheet } from './ConfigSheet'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands'
 import { useDictation } from '~/hooks/useDictation'
+import { useChatModes } from '~/hooks/useChatModes'
+import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
 import { useConnectionStore } from '~/stores/connection-store'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
-import { useAppearanceStore, type ModeId } from '~/stores/appearance-store'
 import { useSessionReasoningPref } from '~/stores/session-reasoning'
 import { usePermissionMode, usePermissionPrefs } from '~/stores/permission-prefs'
 import { useModelModePrefs } from '~/stores/model-mode-prefs'
-import { useModeActive, useModeOverrides } from '~/stores/mode-overrides'
-import { useSimpleMode, useSimplePrefs } from '~/stores/simple-prefs'
-import { useBrainEnabled, useBrainPrefs } from '~/stores/brain-prefs'
+import { useModeOverrides } from '~/stores/mode-overrides'
+import { useLoopPrefs } from '~/stores/loop-prefs'
 import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useBottomBreathing } from '~/lib/keyboard'
@@ -50,7 +36,7 @@ import { SendButtonGroup } from './SendButtonGroup'
 import { QueueIndicator } from './QueueIndicator'
 import { ScheduleSheet } from './ScheduleSheet'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
-import { useSessionStore, useSessionModel } from '~/stores/session-store'
+import { sessionModelFor, useSessionStore, useSessionModel } from '~/stores/session-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { setInputDraft, getInputDraft, hydrateInputDrafts } from '~/stores/chat-draft-store'
 import { ReplyBar } from '~/components/chat/ReplyBar'
@@ -77,6 +63,25 @@ async function fileToFilePart(asset: any): Promise<FilePart> {
 // without a configured worker; "use the same model as the chat" is valid (persisted)
 const WORKER_CONFIG_PROMPTED_KEY = 'orbit_worker_config_prompted'
 
+/** Line height of the field (text-base = 16/24, set explicitly). */
+const INPUT_LINE_HEIGHT = 24
+
+/**
+ * The field grows with its content up to 10 lines; past that the height is fixed and the
+ * text scrolls inside it — multiline + maxHeight does both, natively.
+ */
+const INPUT_MAX_LINES = 10
+/**
+ * Vertical padding, held by the WRAPPER around the field rather than by the field itself.
+ * The field then measures exactly one lineHeight per line, so at one line the wrapper is
+ * the same height as the buttons and the row's bottom alignment centres the icons on the
+ * text; as the field grows the buttons stay anchored to the bottom of the card.
+ */
+const INPUT_VERTICAL_PADDING = 8
+
+/** Side of the round action buttons (+ / mic / send). The field's resting height matches it. */
+const ACTION_SIZE = 40
+
 export function PromptInput({
   onSend,
   onAbort,
@@ -88,26 +93,12 @@ export function PromptInput({
   onNavigateToSession,
 }: PromptInputProps) {
   const { t } = useTranslation()
-  // Active modes per chat: override (mode-overrides/simple/brain) ?? default
-  // (model-mode-prefs, separated by chat/code mode) — mirror of the desktop.
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const modeDefaults = useModelModePrefs((s) =>
     workspaceMode === 'code' ? s.codeActiveModes : s.chatActiveModes,
   )
-  const search = useModeActive('search', sessionId, modeDefaults.search)
-  const browser = useModeActive('browser', sessionId, modeDefaults.browser)
-  const simple = useSimpleMode(sessionId, modeDefaults.simple)
-  const brain = useBrainEnabled(sessionId, modeDefaults.brain)
-  const plan = useModeActive('plan', sessionId, modeDefaults.plan)
-  const subagents = useModeActive('subagents', sessionId, modeDefaults.subagents)
-  const orchestra = useModeActive('orchestra', sessionId, modeDefaults.orchestra)
-  const vision = useModeActive('vision', sessionId, modeDefaults.vision)
-  const setModeActive = useModeOverrides((s) => s.setMode)
-  const setSimple = useSimplePrefs((s) => s.setEnabled)
-  const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
 
   const [text, setText] = useState('')
-  const [loop, setLoop] = useState(false)
   const prevSessionIdRef = useRef(sessionId)
   const textRef = useRef(text)
   // Last text loaded/persisted for the current session: the persist effect
@@ -132,6 +123,8 @@ export function PromptInput({
   // Plan accepted → turns off the plan mode toggle: the next message must
   // not generate another plan.
   const planReview = useSessionStore((s) => (sessionId ? s.planReviews[sessionId] : undefined))
+
+  const setModeActive = useModeOverrides((s) => s.setMode)
   useEffect(() => {
     if (planReview?.status === 'implementing') setModeActive('plan', sessionId, false)
   }, [planReview, sessionId, setModeActive])
@@ -162,12 +155,22 @@ export function PromptInput({
     return () => { cancelled = true }
   }, [sessionId])
   const [attachments, setAttachments] = useState<FilePart[]>([])
-  const [isLoadingFile, setIsLoadingFile] = useState(false)
+
+  const clearText = useCallback(() => {
+    setText('')
+  }, [])
+
   const [plusOpen, setPlusOpen] = useState(false)
-  const [configOpen, setConfigOpen] = useState(false)
   const [workerConfigOpen, setWorkerConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
+  // Small lift applied to the action buttons so their centre matches the text centre. The
+  // native field ends up a few px taller than one lineHeight, so a bottom-anchored button
+  // sits below the text; measuring the resting height lets us lift it by exactly half the
+  // excess instead of guessing a fixed offset. Zero when field and buttons already match.
+  const [actionLift, setActionLift] = useState(0)
+  const oneLineFieldHeightRef = useRef(0)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   // FIXED padding: the KeyboardAvoidingView discounts this same value from the keyboard
   // height (negative keyboardVerticalOffset, in ChatScreen), so there is a single
@@ -216,18 +219,18 @@ export function PromptInput({
     ? catalog[selected.providerId]?.models[selected.modelId]
     : undefined
   // Thinking PER CHAT: without a choice in this conversation, the level of the model applies.
-  const { enabled, variantId, update, hydrate, hydrated } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
+  const { enabled, variantId, isExplicit, update, hydrate, hydrated } = useSessionReasoningPref(sessionId, selected?.providerId, selected?.modelId)
   // Thinking: the default of the preferences defines the default; reasoning of the model
   // and models with reasoningAlwaysOn keep applying as before
-  const thinking = modeDefaults.thinking || enabled || !!model?.reasoningAlwaysOn
-  const workerModel = useSettingsStore((s) => s.workerModel)
-  const workerModelLabel = workerModel && catalog
-    ? catalog[workerModel.providerId]?.models[workerModel.modelId]?.name ?? `${workerModel.providerId}/${workerModel.modelId}`
-    : null
-  const visionModel = useSettingsStore((s) => s.visionModel)
+  // An explicit choice in this chat wins over the model default — that is what makes
+  // "Off" in the sheet actually turn it off when the preference is on.
+  const thinking = model?.reasoningAlwaysOn
+    ? true
+    : isExplicit
+      ? enabled
+      : modeDefaults.thinking
   const visionConfigOpen = useSettingsStore((s) => s.visionConfigOpen)
   const setVisionConfigOpen = useSettingsStore((s) => s.setVisionConfigOpen)
-  const modesInRow = useAppearanceStore((s) => s.modesInRow)
 
   useEffect(() => {
     if (!hydrated) hydrate()
@@ -253,65 +256,88 @@ export function PromptInput({
 
   const inputRef = useRef<TextInput>(null)
 
-  // Dictation: records on the device (PCM16 mono 16 kHz) and asks the desktop for the
-  // transcription (the phone does not run a voice model). The text comes back to the input
-  // as if it had been typed, respecting the per-chat draft.
-  const insertDictation = useCallback((dictated: string) => {
-    setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${dictated}` : dictated))
-    inputRef.current?.focus()
-  }, [])
-  const dictation = useDictation(insertDictation)
-
   // Workers: first-time notice — it only opens on the 1st activation without a configured
   // worker ("use the same model" is valid); after that, never again.
   const [workerConfigPrompted, setWorkerConfigPrompted] = useState(false)
 
-  // Declared before toggleMode because it routes subagents/orchestra to
-  // here — and reading a ref during render is not allowed.
-  const toggleWorkerMode = useCallback((id: 'subagents' | 'orchestra', next: boolean) => {
-    setModeActive(id, sessionId, next)
-    if (next && !workerModel && !workerConfigPrompted) {
+  // Configuration gates: turning a mode on can require its own setup (a vision model,
+  // a worker model). They are the only part of the toggle that needs the modals of this
+  // component — the state of the modes lives in the hook, shared with the header.
+  const modeGates = useMemo(() => ({
+    onVisionNeedsConfig: () => setVisionConfigOpen(true),
+    onWorkerNeedsConfig: () => {
+      if (workerConfigPrompted) return
       setWorkerConfigPrompted(true)
       Storage.setItem(WORKER_CONFIG_PROMPTED_KEY, '1').catch(() => {})
       setWorkerConfigOpen(true)
-    }
-  }, [workerModel, workerConfigPrompted, sessionId, setModeActive])
+    },
+  }), [workerConfigPrompted, setVisionConfigOpen])
 
-  const toggleMode = useCallback((id: string) => {
-    // Vision mode is per-chat (mode-overrides); turning it on without a configured model
-    // opens the configuration (same gate as the desktop).
-    if (id === 'vision') {
-      const next = !vision
-      if (next && !visionModel) {
-        setVisionConfigOpen(true)
-        return
-      }
-      setModeActive('vision', sessionId, next)
-      return
-    }
-    if (id === 'research') return setModeActive('search', sessionId, !search)
-    if (id === 'browser') return setModeActive('browser', sessionId, !browser)
-    if (id === 'simple') return setSimple(sessionId, !simple)
-    if (id === 'brain') return setBrainEnabled(sessionId, !brain)
-    if (id === 'plan') return setModeActive('plan', sessionId, !plan)
-    if (id === 'subagents') return toggleWorkerMode('subagents', !subagents)
-    if (id === 'orchestra') return toggleWorkerMode('orchestra', !orchestra)
-    if (id === 'loop') return setLoop((v) => !v)
-  }, [vision, visionModel, sessionId, search, browser, simple, brain, plan, subagents, orchestra, setModeActive, setSimple, setBrainEnabled, setVisionConfigOpen, setLoop, toggleWorkerMode])
+  const { modes, states } = useChatModes(sessionId, modeGates)
 
-  // Configuration gate: only opens the modal when the user TURNS ON the mode.
+  // MCP servers of this chat: as on the desktop, the tools exist while a server is
+  // enabled in the app — here we choose only WHICH ones enter the context.
+  const mcpServers = useToolsStore((s) => s.mcpServers)
+  const toolsSelection = useToolsServers(sessionId)
+  const setToolServers = useSessionTools((s) => s.setServers)
+
+  useEffect(() => {
+    if (!useSessionTools.getState().hydrated) void useSessionTools.getState().hydrate()
+  }, [])
+
+  const availableTools = useMemo(
+    () => mcpServers.filter((server) => server.config.enabled !== false),
+    [mcpServers],
+  )
+  const selectedTools = useMemo(
+    () => toolsSelection ?? availableTools.map((server) => server.config.name),
+    [toolsSelection, availableTools],
+  )
+  const sheetTools = useMemo<ToolItem[]>(
+    () =>
+      availableTools.map((server) => ({
+        name: server.config.name,
+        active: selectedTools.includes(server.config.name),
+        connected: server.state === 'connected',
+      })),
+    [availableTools, selectedTools],
+  )
+  const handleToolToggle = useCallback(
+    (name: string) => {
+      const next = selectedTools.includes(name)
+        ? selectedTools.filter((item) => item !== name)
+        : [...selectedTools, name]
+      // Selecting every server again goes back to "all": the choice then follows a new one.
+      setToolServers(sessionId, next.length === availableTools.length ? null : next)
+    },
+    [selectedTools, availableTools.length, setToolServers, sessionId],
+  )
+  const { search, browser, simple, brain, plan: planMode, subagents, orchestra } = states
+  const loop = useLoopPrefs((s) => s.enabled)
+  const modelLabel = useSessionModelLabel(sessionId)
+
+  // The sheet lists every mode; the ones with their own setup get the gear when active.
+  const sheetModes = useMemo<ModeItem[]>(() => modes.map((mode) => ({
+    ...mode,
+    onConfigure:
+      mode.id === 'vision'
+        ? () => { setPlusOpen(false); setVisionConfigOpen(true) }
+        : mode.id === 'subagents' || mode.id === 'orchestra'
+          ? () => { setPlusOpen(false); setWorkerConfigOpen(true) }
+          : mode.id === 'loop'
+            ? () => { setPlusOpen(false); setLoopConfigOpen(true) }
+            : undefined,
+  })), [modes, setVisionConfigOpen])
+
   useEffect(() => {
     Storage.getItem(WORKER_CONFIG_PROMPTED_KEY)
       .then((v) => { if (v === '1') setWorkerConfigPrompted(true) })
       .catch(() => {})
   }, [])
 
-
   const handlePickFiles = async () => {
     setPlusOpen(false)
-    setIsLoadingFile(true)
     try {
-      const DocumentPicker = await import('expo-document-picker')
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
@@ -326,19 +352,17 @@ export function PromptInput({
       }
     } catch (err) {
       console.error('Failed to pick files:', err)
-    } finally {
-      setIsLoadingFile(false)
     }
   }
 
   const handleTakePhoto = async () => {
     setPlusOpen(false)
-    setIsLoadingFile(true)
     try {
-      // The import and the permission stay INSIDE the try: outside it, a failure to
-      // load the module became an unhandled rejection (red screen in dev)
-      // instead of a handled error, and the loading was never turned off.
-      const ImagePicker = await import('expo-image-picker')
+      // `ImagePicker` comes from the top of the file, not from a lazy `import()` here:
+      // a dynamic import resolves by the module id of the running bundle, and after a
+      // Fast Refresh that id is stale — that is the "Requiring unknown module" that
+      // showed up when opening the camera, followed by "undefined is not a function"
+      // because the module came back without its exports.
       const perm = await ImagePicker.requestCameraPermissionsAsync()
       if (!perm.granted) return
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
@@ -349,16 +373,12 @@ export function PromptInput({
       }
     } catch (err) {
       console.error('Failed to take photo:', err)
-    } finally {
-      setIsLoadingFile(false)
     }
   }
 
   const handlePickPhotos = async () => {
     setPlusOpen(false)
-    setIsLoadingFile(true)
     try {
-      const ImagePicker = await import('expo-image-picker')
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (!perm.granted) return
       const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8, allowsMultipleSelection: true })
@@ -372,8 +392,6 @@ export function PromptInput({
       }
     } catch (err) {
       console.error('Failed to pick photos:', err)
-    } finally {
-      setIsLoadingFile(false)
     }
   }
 
@@ -381,7 +399,7 @@ export function PromptInput({
     setAttachments((prev) => prev.filter((item) => item.id !== id))
   }
 
-  const buildOptions = useCallback(() => {
+  const buildOptions = useCallback((live = false) => {
     const modeNow = useWorkspaceStore.getState().mode
     return {
       research: search,
@@ -389,7 +407,7 @@ export function PromptInput({
       simple,
       brain,
       reasoning: { enabled: thinking, variantId },
-      plan: modeNow === 'code' ? plan : undefined,
+      plan: modeNow === 'code' ? planMode : undefined,
       subagents,
       orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
       loop,
@@ -397,42 +415,54 @@ export function PromptInput({
       // Mode coming from the selector: on the desktop it applies already to the next tool of the
       // answer in progress. Now the main resolves by the level of THIS chat, so the
       // same contract applies here without leaking to the others.
+      // Slice of MCP servers of this chat — absent = every server enabled in the app.
+      toolsServers: toolsSelection ?? undefined,
       followGlobalPermission: modeNow === 'code' ? true : undefined,
+      // Live call: the answer should be SPEAKABLE (the desktop reads it aloud in a call).
+      ...(live ? { voiceCall: true } : {}),
     } satisfies SendMessageOptions
-  }, [search, browser, simple, brain, thinking, variantId, plan, subagents, orchestra, loop, permissionMode])
+  }, [search, browser, simple, brain, thinking, variantId, planMode, subagents, orchestra, loop, permissionMode, toolsSelection])
 
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
 
-  const handleQueue = useCallback(() => {
-    const trimmed = text.trim()
-    if (!trimmed || !sessionId) return
+  const queueText = useCallback((trimmed: string, live = false) => {
+    if (!sessionId) return
     const modeNow = useWorkspaceStore.getState().mode
     const resolved = resolveSlashAction(trimmed, modeNow)
     // The quote comes in AFTER the "/" command is resolved: in front of it, the
     // text would stop starting with "/" and the command would become conversation.
-    enqueueForSend(sessionId, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, {
+    // The model of the chat goes WITH the item: the desktop delivers the queue, and a
+    // chat born on the phone has no per-chat model there.
+    const model = sessionModelFor(sessionId)
+    enqueueForSend(sessionId, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(live), modeNow, {
       files: attachments.length > 0 ? attachments : undefined,
+      providerId: model?.providerId,
+      modelId: model?.modelId,
     })
-    setText('')
+    clearText()
     setAttachments([])
-  }, [text, sessionId, enqueueForSend, buildOptions, attachments])
+  }, [sessionId, enqueueForSend, buildOptions, attachments, clearText])
+
+  const handleQueue = useCallback(() => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    queueText(trimmed)
+  }, [text, queueText])
 
   const handleStopAndSend = useCallback(() => {
     const trimmed = text.trim()
     if (!trimmed || !sessionId) return
-    const modeNow = useWorkspaceStore.getState().mode
-    const resolved = resolveSlashAction(trimmed, modeNow)
     onAbort()
-    enqueueForSend(sessionId, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, {
-      files: attachments.length > 0 ? attachments : undefined,
-    })
-    setText('')
-    setAttachments([])
-  }, [text, sessionId, onAbort, enqueueForSend, buildOptions, attachments])
+    queueText(trimmed)
+  }, [text, sessionId, onAbort, queueText])
 
-  const handleSend = useCallback(() => {
-    const trimmed = text.trim()
+  /**
+   * The only path that actually sends: the text may come from the field (send button) or
+   * from the dictation of a live call, which arrives ready to go.
+   */
+  const submitText = useCallback((raw: string, live = false) => {
+    const trimmed = raw.trim()
     if (!trimmed || disabled || sendDisabled) return
 
     // Agent running: instead of blocking the send (it made the text get stuck
@@ -441,26 +471,31 @@ export function PromptInput({
     // user can keep typing while the agent works.
     if (isStreaming) {
       if (sessionId) {
-        handleQueue()
+        queueText(trimmed, live)
       } else {
-        setText('')
+        clearText()
         setAttachments([])
       }
       return
     }
 
     const modeNow = useWorkspaceStore.getState().mode
-    const options: SendMessageOptions = buildOptions()
+    const options: SendMessageOptions = buildOptions(live)
 
     // "/" commands become the prompt of the corresponding pipeline
     const resolved = resolveSlashAction(trimmed, modeNow)
     const finalText = withReplyPrefix(sessionId, resolved?.prompt ?? trimmed)
 
     onSend(finalText, options, attachments.length > 0 ? attachments : undefined)
-    setText('')
+    clearText()
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, sendDisabled, onSend, handleQueue, sessionId, buildOptions, attachments])
+    // Sending closes the keyboard: the answer appears with the whole conversation
+    // in view instead of a strip of it above the keyboard.
+    Keyboard.dismiss()
+  }, [disabled, sendDisabled, isStreaming, sessionId, queueText, buildOptions, onSend, attachments, clearText])
+
+  const handleSend = useCallback(() => submitText(text), [submitText, text])
 
   const handleSchedule = useCallback(() => {
     setScheduleSheetVisible(true)
@@ -482,65 +517,101 @@ export function PromptInput({
 
       const modeNow = useWorkspaceStore.getState().mode
       const resolved = resolveSlashAction(trimmed, modeNow)
+      const model = sessionModelFor(sid)
       enqueueScheduled(sid, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, timestamp, {
+        providerId: model?.providerId,
+        modelId: model?.modelId,
         files: attachments.length > 0 ? attachments : undefined,
       })
-      setText('')
+      clearText()
       setAttachments([])
+      Keyboard.dismiss()
     },
-    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, attachments],
+    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, attachments, clearText],
   )
 
-  // Single row, in the SAME order as the desktop code-input (search, plan,
-  // simple, brain, subagents, orchestra, loop, vision). The advanced ones were a
-  // separate row, but the desktop order interleaves them — plan comes before
-  // simple —, so there is no way to keep two blocks.
-  //
-  // Browser stays out of code mode: there it does not even exist on the desktop (the browser
-  // of the right panel is another thing).
-  const isCodeMode = workspaceMode === 'code'
-  const modesList = [
-    { id: 'research', icon: Search, label: t('promptInput.modes.research') },
-    ...(isCodeMode
-      ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan') }]
-      : [{ id: 'browser', icon: Globe, label: t('promptInput.modes.browser') }]),
-    { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple') },
-    { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain') },
-    { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents') },
-    ...(isCodeMode
-      ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra') }]
-      : []),
-    { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop') },
-    { id: 'vision', icon: Eye, label: t('promptInput.modes.vision') },
-  ]
+  // Live call: the phone has no call engine of its own — the dictation records and the
+  // desktop transcribes. What it does today is the turn: speak, stop, and the text
+  // already goes as a message (marked as a call, so the answer comes back speakable).
+  // `liveActive` is state (and not a ref) because the banner and the icons render it.
+  const [liveActive, setLiveActive] = useState(false)
+  const insertDictation = useCallback((dictated: string) => {
+    if (liveActive) {
+      setLiveActive(false)
+      submitText(dictated, true)
+      return
+    }
+    setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${dictated}` : dictated))
+    inputRef.current?.focus()
+  }, [liveActive, submitText])
+  const dictation = useDictation(insertDictation)
 
-  // Maps the row id to the modesInRow id (mirror of the desktop) — the row
-  // shows only the modes checked in the preferences; the "+" always shows all of them.
-  const ROW_TO_MODE_ID: Record<string, ModeId> = {
-    research: 'search',
-    browser: 'browser',
-    plan: 'plan',
-    simple: 'simple',
-    brain: 'brain',
-    subagents: 'subagents',
-    orchestra: 'orchestra',
-    loop: 'loop',
-    vision: 'vision',
-  }
-  const visibleModes = modesList.filter((m) => modesInRow.includes(ROW_TO_MODE_ID[m.id]))
+  const handleLiveCall = useCallback(() => {
+    setLiveActive(true)
+    dictation.toggle()
+  }, [dictation])
 
-  // Effective state of each toggle in the row
-  const simpleActive: Record<string, boolean> = {
-    research: search,
-    browser,
-    plan,
-    simple,
-    brain,
-    subagents,
-    orchestra,
-    loop,
-    vision,
-  }
+  const hasText = text.trim().length > 0
+  const showSend = hasText || !!isStreaming
+
+  // Built once, on the left of the field.
+  const plusButton = (
+    <TouchableOpacity
+      onPress={() => setPlusOpen(true)}
+      activeOpacity={0.7}
+      className="h-10 w-10 items-center justify-center rounded-full"
+      accessibilityLabel={t('attachment.more')}
+    >
+      <Plus size={22} color={tokens.mutedForeground} />
+    </TouchableOpacity>
+  )
+
+  // Right slot while there is nothing to send: dictation next to the live call — the same
+  // control as the desktop (primary with the dark icon), in the place of "send".
+  const voiceSlot = (
+    <View className="flex-row items-center gap-0.5">
+      <TouchableOpacity
+        onPress={() => { setLiveActive(false); dictation.toggle() }}
+        disabled={disabled || dictation.transcribing}
+        activeOpacity={0.75}
+        className="h-10 w-10 items-center justify-center rounded-full"
+        accessibilityLabel={dictation.recording ? t('promptInput.voice.stop') : t('promptInput.voice.record')}
+      >
+        {dictation.transcribing
+          ? <ActivityIndicator size="small" color={tokens.mutedForeground} />
+          : <Mic size={22} color={dictation.recording ? tokens.destructive : tokens.mutedForeground} />}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={handleLiveCall}
+        disabled={disabled || dictation.transcribing}
+        activeOpacity={0.8}
+        className="h-10 w-10 items-center justify-center rounded-full"
+        style={{ backgroundColor: dictation.recording && liveActive ? tokens.destructive : tokens.primary }}
+        accessibilityLabel={t('promptInput.voice.call')}
+      >
+        {dictation.transcribing && liveActive
+          ? <ActivityIndicator size="small" color={tokens.primaryForeground} />
+          : <AudioLines size={20} color={tokens.primaryForeground} />}
+      </TouchableOpacity>
+    </View>
+  )
+
+  // Same slot in both layouts: "send" while there is text, "voice" while there is not.
+  const rightSlot = showSend ? (
+    <SendButtonGroup
+      onSend={handleSend}
+      onStop={onAbort}
+      onQueue={handleQueue}
+      onStopAndSend={handleStopAndSend}
+      onSchedule={handleSchedule}
+      isStreaming={!!isStreaming}
+      hasText={hasText}
+      disabled={disabled || sendDisabled}
+    />
+  ) : (
+    voiceSlot
+  )
 
   return (
     <View className="px-3 pt-1.5 relative overflow-visible"
@@ -559,237 +630,128 @@ export function PromptInput({
         </View>
       )}
 
+      {/* Attachments — outside the pill, as chips above it (variant A) */}
+      {attachments.length > 0 && (
+        <View className="flex-row flex-wrap gap-2 mb-2">
+          {attachments.map((file) => (
+            <InputAttachment key={file.id} file={file} onRemove={() => handleRemoveAttachment(file.id)} />
+          ))}
+        </View>
+      )}
+
+      {/* Reply quote and dictation status — above the pill, never inside it */}
+      <ReplyBar sessionId={sessionId} />
+      {dictation.recording && (
+        <View className="flex-row items-center gap-2 mb-1.5">
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tokens.destructive }} />
+          <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
+            {t(liveActive ? 'promptInput.voice.live' : 'promptInput.voice.recording')}
+          </Text>
+        </View>
+      )}
+      {dictation.error && (
+        <View className="flex-row items-center gap-2 mb-1.5">
+          <Text className="text-xs flex-1" style={{ color: tokens.destructive }}>{dictation.error}</Text>
+          <TouchableOpacity onPress={dictation.clearError} activeOpacity={0.7}>
+            <X size={14} color={tokens.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Attachments & Input border box */}
       <SlashPaletteShell value={text} setText={setText}>
       <View
-        className="rounded-2xl overflow-hidden px-3 py-1 mb-2"
+        className="overflow-hidden px-2 py-1"
         style={{
           borderWidth: 1,
           backgroundColor: tokens.card,
           borderColor: isFocused ? tokens.mutedForeground : tokens.border,
+          borderRadius: 24,
         }}
       >
-        {/* Attachments horizontal list */}
-        {attachments.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            className="pt-1.5 pb-3 mb-1"
-            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
-            contentContainerStyle={{ gap: 8 }}
-          >
-            {attachments.map((file) => (
-              <InputAttachment key={file.id} file={file} onRemove={() => handleRemoveAttachment(file.id)} />
-            ))}
-          </ScrollView>
-        )}
-
-        {/* Loading Indicator for Files */}
-        {isLoadingFile && (
-          <View className="flex-row items-center gap-2 py-1 mb-1"
-            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
-          >
-            <ActivityIndicator size="small" color={tokens.primary} />
-            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('promptInput.loadingFile')}</Text>
-          </View>
-        )}
-
-        {/* Replied message — quote above the field, as in WhatsApp */}
-        <ReplyBar sessionId={sessionId} />
-
-        {/* Dictation: recording now */}
-        {dictation.recording && (
-          <View className="flex-row items-center gap-2 py-1 mb-1"
-            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
-          >
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tokens.destructive }} />
-            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('promptInput.voice.recording')}</Text>
-          </View>
-        )}
-
-        {/* Dictation: visible error (permission, offline, voice engine unavailable) */}
-        {dictation.error && (
-          <View className="flex-row items-center gap-2 py-1 mb-1"
-            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
-          >
-            <Text className="text-xs flex-1" style={{ color: tokens.destructive }}>{dictation.error}</Text>
-            <TouchableOpacity onPress={dictation.clearError} activeOpacity={0.7}>
-              <X size={14} color={tokens.mutedForeground} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Text Area Input */}
+        {/* Field and actions on one row, bottom-anchored: the buttons stay put and the
+            field grows upward as it gains lines (the card grows up, the bottom is fixed). */}
         <View className="flex-row items-end">
-          <TextInput
-            ref={inputRef}
-            value={text}
-            onChangeText={setText}
-            placeholder={t('promptInput.placeholder')}
-            placeholderTextColor={tokens.mutedForeground}
-            multiline
-            maxLength={4096}
-            editable={!disabled}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            submitBehavior="newline"
-            style={[
-              { color: tokens.foreground, outlineStyle: 'none' } as any,
-              Platform.OS === 'web' ? { outlineStyle: 'none' } : undefined,
-            ]}
-            className="flex-1 py-1.5 text-base max-h-24 min-h-[36px]"
-          />
-        </View>
-
-        {/* Footer Row — no separator, same as the desktop */}
-        <View className="flex-row items-center justify-between pt-1.5 pb-1 mt-1">
-          {/* Plus + Config actions */}
-          <View className="flex-row items-center gap-1">
-            <TouchableOpacity
-              onPress={() => setPlusOpen(true)}
-              activeOpacity={0.7}
-              className="p-1.5 rounded-md cursor-pointer"
-            >
-              <Plus size={20} color={tokens.mutedForeground} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setConfigOpen(true)}
-              activeOpacity={0.7}
-              className="p-1.5 rounded-md cursor-pointer"
-            >
-              <Settings2 size={18} color={tokens.mutedForeground} />
-            </TouchableOpacity>
-            {/* Dictation: tap to record, tap again to stop and transcribe */}
-            <TouchableOpacity
-              onPress={dictation.toggle}
-              disabled={disabled || dictation.transcribing}
-              activeOpacity={0.7}
-              className="p-1.5 rounded-md cursor-pointer"
-              accessibilityLabel={dictation.recording ? t('promptInput.voice.stop') : t('promptInput.voice.record')}
-            >
-              {dictation.transcribing
-                ? <ActivityIndicator size="small" color={tokens.mutedForeground} />
-                : <Mic size={20} color={dictation.recording ? tokens.destructive : tokens.mutedForeground} />}
-            </TouchableOpacity>
-          </View>
-
-          {/* Model picker & controls */}
-          <View className="flex-row items-center gap-2">
-            {/* Model Picker */}
-            <ModelPicker sessionId={sessionId} />
-
-            {/* Send/Stop Button */}
-            <SendButtonGroup
-              onSend={handleSend}
-              onStop={onAbort}
-              onQueue={handleQueue}
-              onStopAndSend={handleStopAndSend}
-              onSchedule={handleSchedule}
-              isStreaming={!!isStreaming}
-              hasText={text.trim().length > 0}
-              disabled={disabled || sendDisabled}
+          <View style={{ marginBottom: actionLift }}>{plusButton}</View>
+          {/* The vertical padding lives on this wrapper, NOT on the field. It is measured
+              once at rest (one line) and the actions are lifted by half the excess over their
+              own height, so the icon centre lands on the text centre; as the field grows the
+              buttons stay anchored to the bottom of the card. */}
+          <View
+            style={{ flex: 1, paddingTop: INPUT_VERTICAL_PADDING, paddingBottom: INPUT_VERTICAL_PADDING }}
+            onLayout={(event) => {
+              const height = event.nativeEvent.layout.height
+              // The resting height is the smallest measured (one line) — growing never lowers
+              // it, so it is a safe single-line baseline to derive the lift from.
+              if (oneLineFieldHeightRef.current === 0 || height < oneLineFieldHeightRef.current) {
+                oneLineFieldHeightRef.current = height
+                setActionLift(Math.max(0, (height - ACTION_SIZE) / 2))
+              }
+            }}
+          >
+            <TextInput
+              ref={inputRef}
+              value={text}
+              onChangeText={setText}
+              placeholder={t('promptInput.placeholder')}
+              placeholderTextColor={tokens.mutedForeground}
+              multiline
+              maxLength={4096}
+              editable={!disabled}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              submitBehavior="newline"
+              style={[
+                {
+                  color: tokens.foreground,
+                  fontSize: 16,
+                  lineHeight: INPUT_LINE_HEIGHT,
+                  includeFontPadding: false,
+                  paddingTop: 0,
+                  paddingBottom: 0,
+                  maxHeight: INPUT_MAX_LINES * INPUT_LINE_HEIGHT,
+                  outlineStyle: 'none',
+                } as any,
+                Platform.OS === 'web' ? { outlineStyle: 'none' } : undefined,
+              ]}
             />
           </View>
+          <View style={{ marginBottom: actionLift }}>{rightSlot}</View>
         </View>
       </View>
       </SlashPaletteShell>
 
-      {/* Mode Toggles Row — always visible on mobile (toggles + "+" fixed) */}
-      <View className="flex-row items-center justify-between px-1">
-        <View className="flex-row items-center gap-2">
-          {/* Thinking does not come in here: its control (with the choice of
-              variant) already lives in the settings sheet. */}
-          {visibleModes.map((mode) => {
-            const isActive = simpleActive[mode.id] ?? false
-            const IconComponent = mode.icon
-            return (
-              <Pressable
-                key={mode.id}
-                onPress={() => toggleMode(mode.id)}
-                disabled={isStreaming}
-                className="p-2 rounded-md"
-                style={isActive ? { backgroundColor: tokens.muted } : { opacity: 0.4 }}
-              >
-                <IconComponent
-                  size={17}
-                  // Every active mode lights up the same (white), with the muted background
-                  // marking the state — the advanced ones no longer light up in amber,
-                  // which gave the impression of two kinds of toggle in the row.
-                  color={isActive ? tokens.foreground : tokens.mutedForeground}
-                />
-              </Pressable>
-            )
-          })}
-        </View>
-        <ContextMeter sessionId={sessionId} />
-      </View>
-
-      {/* Bottom sheet */}
+      {/* Bottom sheet: attachments, model and settings — the settings slide to the modes */}
       <AttachmentSheet
         visible={plusOpen}
         onClose={() => setPlusOpen(false)}
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
-        // The cut between the two groups is having a gear or not: at the top the plain
-        // toggles, below the ones that open their own configuration. Thinking
-        // stays out — it lives in ConfigSheet, where one can choose the
-        // reasoning variant.
-        simpleModes={[
-          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setModeActive('plan', sessionId, !plan) }] : []),
-          { id: 'research', icon: Search, label: t('promptInput.modes.research'), active: search, onToggle: () => toggleMode('research') },
-          // Browser only in chat mode, same as the row and the desktop.
-          ...(workspaceMode === 'code'
-            ? []
-            : [{ id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: browser, onToggle: () => toggleMode('browser') }]),
-          { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple'), active: simple, onToggle: () => toggleMode('simple') },
-          { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain'), active: brain, onToggle: () => toggleMode('brain') },
-        ]}
-        configModes={[
-          { id: 'vision', icon: Eye, label: t('promptInput.modes.vision'), active: vision, onToggle: () => toggleMode('vision'), onConfigure: () => { setPlusOpen(false); setVisionConfigOpen(true) } },
-          { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => toggleWorkerMode('subagents', !subagents), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
-          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => toggleWorkerMode('orchestra', !orchestra), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
-          { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
-        ]}
-      />
-
-      <ConfigSheet
-        visible={configOpen}
-        onClose={() => setConfigOpen(false)}
-        permissionMode={permissionMode}
-        onPermissionModeChange={(mode) => setPermissionMode(sessionId, mode)}
+        modelLabel={modelLabel}
+        modelProviderId={selected?.providerId}
+        onOpenModel={() => { setPlusOpen(false); setModelPickerOpen(true) }}
+        modes={sheetModes}
+        tools={sheetTools}
+        onToolToggle={handleToolToggle}
         thinking={thinking}
-        onThinkingToggle={() => update({ enabled: !enabled, variantId })}
         reasoningVariants={model?.variants ?? []}
         reasoningSelected={variantId}
-        onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
         reasoningAlwaysOn={model?.reasoningAlwaysOn}
-        subagents={subagents}
-        onSubagentsToggle={() => toggleWorkerMode('subagents', !subagents)}
-        orchestra={orchestra}
-        onOrchestraToggle={() => toggleWorkerMode('orchestra', !orchestra)}
-        loop={loop}
-        onLoopToggle={() => setLoop((prev) => !prev)}
-        workerModelLabel={workerModelLabel}
-        onConfigureWorkers={() => {
-          setConfigOpen(false)
-          setWorkerConfigOpen(true)
-        }}
-        vision={vision}
-        onVisionToggle={() => toggleMode('vision')}
-        onConfigureVision={() => {
-          setConfigOpen(false)
-          setVisionConfigOpen(true)
-        }}
-        onConfigureLoop={() => {
-          setConfigOpen(false)
-          setLoopConfigOpen(true)
-        }}
-        mode={workspaceMode}
+        onThinkingOff={() => update({ enabled: false, variantId })}
+        onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
+        permissionMode={permissionMode}
+        onPermissionModeChange={(mode) => setPermissionMode(sessionId, mode)}
         gitBranches={gitBranches}
         gitCurrent={gitCurrent}
         onGitBranchChange={handleGitBranchChange}
         gitBranchLoading={gitBranchLoading}
+      />
+
+      <ModelPickerModal
+        visible={modelPickerOpen}
+        onClose={() => setModelPickerOpen(false)}
+        sessionId={sessionId}
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />

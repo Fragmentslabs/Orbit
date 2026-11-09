@@ -178,8 +178,8 @@ import {
 } from './lib/fonts/store'
 import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, SessionPrefsSnapshot, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
-import { setSessionModelsCache, setSessionModesCache, setSessionPrefsCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastSessionTools, broadcastSessionPrefs, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
+import { setSessionModelsCache, setSessionModesCache, setSessionToolsCache, setSessionPrefsCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setSessionModes } from './lib/permission/global-mode'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
@@ -1599,6 +1599,13 @@ app.whenReady().then(async () => {
   ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
     setSessionModesCache(overrides)
     broadcastSessionModes(overrides)
+  })
+
+  // Tools per chat (the subset of MCP servers): same path again — HTTP cache for the
+  // connect plus 'session:tools-change' for whoever is already connected.
+  ipcMain.on('companion:session-tools', (_event, overrides: Record<string, string[] | null>) => {
+    setSessionToolsCache(overrides)
+    broadcastSessionTools(overrides)
   })
 
   // Thinking and autonomy per chat: same path as the modes. Besides the HTTP cache and

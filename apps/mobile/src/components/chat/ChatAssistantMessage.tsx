@@ -51,7 +51,7 @@ import {
 import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
-import { parseMessageReply, replySnippet, splitMemoryIds } from '@orbit/shared'
+import { arrangeForView, parseMessageReply, replySnippet, splitMemoryIds } from '@orbit/shared'
 import { useReplyLabel } from '~/components/chat/ReplyBar'
 
 interface ChatAssistantMessageProps {
@@ -168,23 +168,36 @@ function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onR
 
 function ReasoningPartView({ part }: { part: ReasoningPart }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(true)
+  // Only the reasoning arriving now is born open (and it closes by itself when it
+  // finishes). The finished one is born CLOSED — same rule as the desktop: open, every
+  // block mounted its whole markdown only to close 1s later, which is both render work
+  // and a wall of open thoughts when the answer arrives.
+  const [openAtMount] = useState(part.state === 'streaming')
+  const [open, setOpen] = useState(openAtMount)
+  const [hasAutoClosed, setHasAutoClosed] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  // Closes automatically 1s after the streaming ends (mirrors the desktop)
   const isStreaming = part.state === 'streaming'
-  const wasStreaming = useRef(isStreaming)
   useEffect(() => {
-    if (wasStreaming.current && !isStreaming) {
-      const timer = setTimeout(() => setOpen(false), 1000)
+    // The whole summary block is one accordion for the turn: it opens while the model
+    // thinks and folds once, 1s after it stops. A block the person opens by hand stays open.
+    if (openAtMount && !isStreaming && open && !hasAutoClosed) {
+      const timer = setTimeout(() => {
+        setOpen(false)
+        setHasAutoClosed(true)
+      }, 1000)
       return () => clearTimeout(timer)
     }
-    wasStreaming.current = isStreaming
-  }, [isStreaming])
+  }, [openAtMount, isStreaming, open, hasAutoClosed])
 
   if (!part.text) return null
 
   const seconds = part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined
+  const label = isStreaming
+    ? t('chatAssistant.thinking')
+    : seconds === undefined
+      ? t('chatAssistant.thoughtFewSeconds')
+      : t('chatAssistant.thoughtFor', { count: seconds })
 
   return (
     <View style={{ marginVertical: 4, width: '100%' }}>
@@ -196,7 +209,7 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
         <Brain size={13} color={tokens.mutedForeground} />
         {isStreaming ? (
           <View style={{ flex: 1 }}>
-            <Shimmer className="text-xs font-semibold">{t('chatAssistant.reasoning')}</Shimmer>
+            <Shimmer className="text-xs font-semibold">{label}</Shimmer>
           </View>
         ) : (
           <Text
@@ -207,7 +220,7 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
               flex: 1,
             }}
           >
-            {t('chatAssistant.reasoning')}{seconds !== undefined ? ` · ${seconds}s` : ''}
+            {label}
           </Text>
         )}
         {open ? (
@@ -427,12 +440,16 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
   const { t } = useTranslation()
   const working = parts.some((p) => p.state === 'running')
   const errors = parts.filter((p) => p.state === 'error').length
-  const [open, setOpen] = useState(false)
-  const [showAll, setShowAll] = useState(false)
+  // Same rule as the desktop ActionsGroup: born open only if it is working now; it
+  // follows the work (open while anything runs) and folds 1s after the last action.
+  const [open, setOpen] = useState(working)
+  const [showAllFor, setShowAllFor] = useState<number | null>(null)
   const prevWorking = useRef(working)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
   const isOpen = working || open
+  // "Show all" belongs to the list it was opened on: a new action arrives and it folds back.
+  const showAll = showAllFor === parts.length
 
   useEffect(() => {
     if (prevWorking.current && !working) {
@@ -443,7 +460,7 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
   }, [working])
 
   const visibleParts = showAll ? parts : parts.slice(-MAX_VISIBLE_TOOLS)
-  const hiddenCount = parts.length - MAX_VISIBLE_TOOLS
+  const hiddenCount = parts.length - visibleParts.length
 
   const title = working
     ? t('chatAssistant.working')
@@ -483,7 +500,7 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
             <ToolActionRow key={part.id} part={part} />
           ))}
           {hiddenCount > 0 && !showAll && (
-            <Pressable onPress={() => setShowAll(true)} style={{ marginVertical: 4 }}>
+            <Pressable onPress={() => setShowAllFor(parts.length)} style={{ marginVertical: 4 }}>
               <Text style={{ fontSize: 11, color: tokens.mutedForeground }}>
                 {t('chatAssistant.hiddenActions', { count: hiddenCount })}
               </Text>
@@ -703,7 +720,15 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   const handleReply = useCallback(() => onReply?.(message), [onReply, message])
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  const segments = useMemo(() => segmentParts(message.parts), [message.parts])
+  // The phone has ONE reading of the answer: the desktop's summary mode. All reasoning
+  // becomes a single accordion at the top (with the seconds summed) and the actions it
+  // separated become a single accordion; the intermediate narration leaves the reading and
+  // the final answer takes its place. There is no view picker on the phone — this is
+  // the only mode, so it does not follow the desktop's `chatView` setting either.
+  const segments = useMemo(
+    () => segmentParts(arrangeForView(message.parts, 'summary')),
+    [message.parts],
+  )
   const finished = message.error === undefined
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
 

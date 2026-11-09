@@ -332,7 +332,7 @@ export function Sidebar() {
     disconnect()
     await clearSavedConfig()
     closeSidebar()
-    router.replace('/(connection)')
+    router.replace('/connect')
   }, [disconnect, clearSavedConfig, closeSidebar, router])
 
   const handleNewChat = useCallback(() => {

@@ -201,7 +201,6 @@
   },
   "promptInput": {
     "placeholder": "Ask anything...",
-    "loadingFile": "Loading file...",
     "voice": {
       "record": "Dictate",
       "stop": "Stop recording",
@@ -211,7 +210,9 @@
       "empty": "Nothing was recorded",
       "noSpeech": "Nothing was recognized — try speaking closer to the microphone",
       "offline": "No connection to the desktop — dictation runs there",
-      "failed": "Could not transcribe the audio"
+      "failed": "Could not transcribe the audio",
+      "call": "Live call",
+      "live": "Listening — tap the phone to end and send"
     },
     "modes": {
       "research": "Research",
@@ -269,6 +270,9 @@
   "chatAssistant": {
     "reasoning": "Reasoning",
     "thinking": "Thinking…",
+    "thoughtFewSeconds": "Thought for a few seconds",
+    "thoughtFor_one": "Thought for {{count}} second",
+    "thoughtFor_other": "Thought for {{count}} seconds",
     "usingBrowser": "Using browser…",
     "searchingLabel": "Searching",
     "readingPageLabel": "Reading page",
@@ -640,6 +644,7 @@
     "configureProviderHint": "Please configure a provider's credentials in Orbit Desktop's settings.",
     "trySearchHint": "Try searching for a different model name.",
     "recent": "Recent",
+    "selected": "In use",
     "removeRecent": "Remove from recents"
   },
   "scheduleSheet": {
@@ -675,7 +680,20 @@
     "openWith": "Open with…",
     "image": "Image",
     "enlarge": "Enlarge image",
-    "close": "Close"
+    "close": "Close",
+    "model": "Model",
+    "settings": "Settings",
+    "modes": "Modes",
+    "moreSettings": "More settings",
+    "more": "More",
+    "thinking": "Thinking",
+    "permissions": "Permissions",
+    "branch": "Branch",
+    "on": "On",
+    "off": "Off",
+    "tools": "Tools",
+    "activeCount": "{{count}} active",
+    "noTools": "No MCP server enabled in the app"
   },
   "memoryMeta": {
     "kind": {

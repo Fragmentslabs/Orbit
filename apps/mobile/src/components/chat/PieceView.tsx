@@ -106,7 +106,8 @@ export function PieceView({
   onReady,
 }: PieceViewProps) {
   const { t } = useTranslation()
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const resolved = useThemeStore((s) => s.resolved)
+  const tokens = getThemeTokens(resolved)
   const insets = useSafeAreaInsets()
 
   // Each part speaks its own language ("Artifact preview", "Loading document").
@@ -127,13 +128,23 @@ export function PieceView({
   // would leave an intermediate render showing the state of the previous source.
   // With `html` the identity of the source is the document itself — the diagram is
   // assembled here, it has no URL. Changing the theme or the diagram remounts the WebView.
-  const sourceKey = src ? `${src}#${revision ?? 0}` : `html:${html ?? ''}`
+  const sourceKey = `${src ? `${src}#${revision ?? 0}` : `html:${html ?? ''}`}#${resolved}`
+
   const [seenSource, setSeenSource] = useState(sourceKey)
   if (seenSource !== sourceKey) {
     setSeenSource(sourceKey)
     setState('loading')
     setErrorDetail(null)
   }
+
+  // The token layer the desktop puts in the page follows `prefers-color-scheme`; here the
+  // app's theme is the one in force, so the document is told which one it is before painting
+  // (the class that layer listens to) instead of landing in the opposite palette.
+  const themeScript =
+    `(function(){var c='${resolved === 'dark' ? 'orbit-dark' : 'orbit-light'}';` +
+    `var d=document.documentElement;` +
+    `if(d)d.classList.add(c);` +
+    `else document.addEventListener('DOMContentLoaded',function(){document.documentElement.classList.add(c)});})()`
 
   const fail = useCallback(
     (detail: string | null) => {
@@ -187,6 +198,7 @@ export function PieceView({
         else web.inline = instance
       }}
       source={html ? { html } : { uri: src as string }}
+      injectedJavaScriptBeforeContentLoaded={themeScript}
       style={styles.web}
       // The page of the piece pulls its own assets by relative path (CSS,
       // font, clip) and may point outside — no restrictive whitelist.
