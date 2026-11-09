@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Archive, Brain, LayoutList, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
+import { Archive, Brain, LayoutList, ScanSearch, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
 import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type ChatViewMode, type MemoryRoutineMode } from "@shared/app-settings"
 import { USER_NAME_MAX } from "@shared/user-name"
 import { ModelField } from "@/src/components/model-field"
@@ -101,6 +101,18 @@ export function GeneralSettings() {
               ["daily+weekly", "dailyWeekly"],
             ] as const
           ).map(([value, key]) => ({ value, label: t(`memories.routine.${key}`) }))}
+        />
+      </SettingRow>
+
+      <SettingRow
+        icon={ScanSearch}
+        title={t("preferences.general.embeddings.title")}
+        description={t("preferences.general.embeddings.description")}
+      >
+        <SettingSwitch
+          checked={settings.embeddings}
+          onChange={(embeddings) => update({ embeddings })}
+          label={t("preferences.general.embeddings.title")}
         />
       </SettingRow>
 

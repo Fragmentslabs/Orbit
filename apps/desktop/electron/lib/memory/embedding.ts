@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import type { Memory } from '@shared/memory'
 import { INDEX_SCHEMA_VERSION, buildRetrievalText, indexSignature } from '@shared/memory-retrieval'
 import { readJson, writeJson } from '../storage'
+import { getAppSettings } from '../app-settings'
 
 /**
  * Memory embedding index, on the main side.
@@ -59,6 +60,8 @@ interface VectorsPayload {
 }
 
 export interface EmbeddingStatus {
+  /** The user's switch (Preferences). Off = the worker never starts and every consumer falls back. */
+  enabled: boolean
   /** The model files are on disk */
   installed: boolean
   /** The worker is up */
@@ -133,6 +136,14 @@ function modelSearchPath(id: string): string[] {
   dirs.push(path.join(app.getPath('userData'), 'memory', 'models', id))
   dirs.push(devCacheDir(id))
   return dirs
+}
+
+/**
+ * The user's switch. Every entry point below checks it, so turning it off is enough to get
+ * back the lexical behaviour everywhere (memory, skills, tool families) with no other flag.
+ */
+export function embeddingsEnabled(): boolean {
+  return getAppSettings().embeddings
 }
 
 export function modelInstalled(): boolean {
@@ -372,7 +383,7 @@ export async function stopWorker(): Promise<void> {
  * minutes and waking it costs ~400 MB of RSS plus latency — not worth it for a hint.
  */
 export function workerActive(): boolean {
-  return Boolean(child && ready)
+  return embeddingsEnabled() && Boolean(child && ready)
 }
 
 /** Embeds one text for the turn. `wake: false` never starts the worker; null = no vector. */
@@ -387,6 +398,7 @@ export function createTurnEmbedder(): TurnEmbedder {
   return (text, options = {}) => {
     const hit = done.get(text)
     if (hit) return hit
+    if (!embeddingsEnabled()) return Promise.resolve(null)
     if (options.wake === false && !workerActive()) return Promise.resolve(null)
     const run = embedTexts([text]).then(([vec]) => vec ?? null).catch(() => null)
     done.set(text, run)
@@ -397,6 +409,7 @@ export function createTurnEmbedder(): TurnEmbedder {
 /** Vectors for a list of texts. Throws when the model is not available. */
 export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
   if (texts.length === 0) return []
+  if (!embeddingsEnabled()) throw new Error('embeddings are turned off')
   await startWorker()
   clearIdle()
   return new Promise<Float32Array[]>((resolve, reject) => {
@@ -458,6 +471,7 @@ let decoded: { payload: VectorsPayload; map: Map<string, Float32Array> } | null 
  * (syncIndex), the same table is reused on every turn.
  */
 export async function vectorsById(): Promise<Map<string, Float32Array>> {
+  if (!embeddingsEnabled()) return new Map()
   const index = await loadIndex()
   if (decoded && decoded.payload === index) return decoded.map
   const map = new Map<string, Float32Array>()
@@ -486,6 +500,7 @@ export interface SyncResult {
  * a large reindex does not hold up the process or flood the worker.
  */
 export async function syncIndex(memories: Memory[], options: { batch?: number } = {}): Promise<SyncResult> {
+  if (!embeddingsEnabled()) return { indexed: 0, removed: 0, failed: false }
   const index = await loadIndex()
   const alive = new Set(memories.map((m) => m.id))
   let removed = 0
@@ -565,6 +580,7 @@ export async function embeddingStatus(memories: Memory[]): Promise<EmbeddingStat
     if (item.sig === indexSignature(memory, { id: MEMORY_MODEL_ID, dim: MEMORY_MODEL_DIM })) valid++
   }
   return {
+    enabled: embeddingsEnabled(),
     installed: modelInstalled(),
     running: Boolean(child && ready),
     indexed: valid,

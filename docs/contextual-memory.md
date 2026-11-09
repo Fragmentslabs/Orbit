@@ -799,3 +799,30 @@ Composition finding: the real collection is dominated by `decision` (100), `lear
 `structure` (71) and `convention` (20); `preference` has only 7. The synthetic fixture, on
 the contrary, was rich in personal preferences — the recalibration done on it may not
 transfer to this profile.
+
+---
+
+## 15. Tool-family shortlist and the on/off switch
+
+The same model (Bekko a8m, 256 dim) also shortlists **tool families** for the turn. Each
+family is a document (`label. description. tags.`); the message's query vector (the one memory
+and skills already share) is ranked against them in `tools/family-rank.ts`, and the hits are
+added to the families activated by words (`familiesMentionedInText`), nothing more.
+
+- **Threshold per collection**, as in §6: the highest cosine of the 37 off-topic `NOISE_PROBES`
+  against the family documents, plus `delta` (0.04). The floor is stored with the cached
+  vectors and recomputed whenever the set of documents changes (another MCP server, mode or
+  description).
+- **Never blocks, never wakes**: it runs only when the worker is already up, shares the turn's
+  query vector, and gives up after 600 ms. Idle, off, loading, no noise floor → no shortlist,
+  which is exactly the previous behaviour (the model loads families on demand).
+- **Cache**: document vectors on disk (`tools/family-vectors`), keyed by the hash of the text
+  and discarded when the model or dimension changes.
+- **Switch**: Preferences → General → "Semantic search (local model)" (`embeddings`, on by
+  default). Off stops the worker at once and makes memory, skills and tools fall back to words.
+
+Measured on 30 families, 32 pt/en queries (24 with an expected family, 8 off-topic), a
+fixture written by the author: floor 0.339; `delta` 0.04 → 13 right, 11 missed, 0 wrong family,
+0 false positives; 0.02 already brings 1 false positive and 2 wrong families; 0.08 → 8 right.
+Top-1 by raw cosine was right in 18 of 24, so recall is limited by the strict threshold, not by
+the ranking. **Not validated on real usage**; `delta` is a starting point.
