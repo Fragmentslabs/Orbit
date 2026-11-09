@@ -1,10 +1,9 @@
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, FileCode2, Sparkles } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Sparkles } from "lucide-react"
 import type { ToolPart } from "@shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { ProposalCard, type ProposalFact } from "@/src/components/proposal-card"
 import { useSkillsStore } from "@/src/stores/skills-store"
 
 /**
@@ -59,50 +58,23 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
   const description = (part.input?.description as string) ?? proposal?.description ?? ""
   const files = proposal?.files ?? (part.input?.files as Array<{ path: string }> | undefined)?.map((f) => f.path) ?? []
 
+  const state = installed ? "created" : actionable ? "pending" : "discarded"
+  const facts: ProposalFact[] = []
+  if (description) facts.push({ label: t("proposal.whenToUse"), value: description })
+  facts.push({ label: t("proposal.invoke"), value: `@${slug}`, mono: true })
+  if (files.length > 0) facts.push({ label: t("proposal.files"), value: files.join(", "), mono: true })
+
   return (
-    <div className="not-prose my-2 flex w-full flex-col gap-2 rounded-lg border bg-card p-3">
-      <div className="flex items-start gap-2">
-        <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{name}</span>
-            <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
-              @{slug}
-            </Badge>
-          </div>
-          {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-          {files.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {files.map((file) => (
-                <span
-                  key={file}
-                  className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                >
-                  <FileCode2 className="size-3" />
-                  {file}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      {installed ? (
-        <p className="flex items-center gap-1.5 text-xs text-emerald-500">
-          <Check className="size-3.5" /> {t("skillProposal.installed", { slug })}
-        </p>
-      ) : actionable ? (
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => void discard(slug)}>
-            {t("skillProposal.discard")}
-          </Button>
-          <Button size="sm" className="gap-1.5" onClick={() => void approve(slug)}>
-            <Sparkles className="size-3.5" />
-            {t("skillProposal.add")}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">{t("skillProposal.discarded")}</p>
-      )}
-    </div>
+    <ProposalCard
+      icon={Sparkles}
+      kind={t("proposal.kind.skill")}
+      state={state}
+      title={name}
+      facts={facts}
+      note={files.length > 0 ? t("proposal.skillScriptsNote") : undefined}
+      confirmLabel={t("skillProposal.add")}
+      onConfirm={() => void approve(slug)}
+      onDiscard={() => void discard(slug)}
+    />
   )
 }

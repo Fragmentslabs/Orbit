@@ -2808,8 +2808,13 @@
       "generating": "Generating…",
       "noModel": "Pick a model to generate the routine.",
       "title": "New routine",
+      "foldersCodeHint": "With a folder the routine can read and edit its files.",
+      "foldersChatHint": "Folders are optional: without one, the routine runs as a chat.",
       "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
-      "modeChatHint": "Chat mode: the routine runs with no working folders — just the conversation and the chat tools."
+      "viaChat": "Describe it in a chat",
+      "viaChatHint": "Orbit asks what it needs and you confirm in a card",
+      "viaForm": "Fill in the form",
+      "viaFormHint": "Everything by hand"
     },
     "reuseChat": {
       "label": "Keep every run in one chat",
@@ -2828,8 +2833,7 @@
       "modesHint": "The agent suggested these based on the work described. Toggle them freely.",
       "suggested": "suggested",
       "folders": "Working folders",
-      "foldersHint": "Chosen in this step — the routine always runs in them.",
-      "noFolders": "No folder open. Open a folder in code mode before creating the routine.",
+      "foldersHint": "Optional. With a folder the routine can read and edit files; without one it runs as a chat.",
       "create": "Create routine"
     },
     "schedule": {
@@ -4182,17 +4186,17 @@
     "menu": {
       "manual": "Create manually",
       "mcp": {
-        "title": "Ask Orbit",
-        "description": "Name the service and the model sets it up",
+        "title": "Describe it in a chat",
+        "description": "Name the service; Orbit asks what it needs",
         "manualDescription": "Name, type, command or URL"
       },
       "skills": {
-        "title": "Ask Orbit",
-        "description": "Describe the skill and the model writes the instructions"
+        "title": "Describe it in a chat",
+        "description": "Say what the skill should know; Orbit writes it"
       },
       "hooks": {
-        "title": "Ask Orbit",
-        "description": "Describe what should happen and the model writes the command",
+        "title": "Describe it in a chat",
+        "description": "Say what should happen; Orbit writes the command",
         "manualDescription": "Event, tool and command yourself"
       },
       "agents": {

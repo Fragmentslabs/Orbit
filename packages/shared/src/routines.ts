@@ -132,6 +132,21 @@ export const ROUTINE_CHAT_MODES: (keyof Omit<RoutineModes, 'permissionMode'>)[] 
   'vision',
 ]
 
+/**
+ * A routine's mode follows its folders: with at least one it runs as code, without any it runs
+ * as a chat. The person never picks a mode — they attach folders, or not.
+ */
+export function routineModeFor(folders: readonly string[]): 'chat' | 'code' {
+  return folders.length > 0 ? 'code' : 'chat'
+}
+
+/** The modes a chat routine can keep: the code-only ones are dropped, the permission stays. */
+export function restrictModesToChat(modes: RoutineModes): RoutineModes {
+  const out: RoutineModes = { permissionMode: modes.permissionMode }
+  for (const key of ROUTINE_CHAT_MODES) if (modes[key]) out[key] = true
+  return out
+}
+
 /** Permission modes offered to a routine, in the order they are displayed. */
 export const ROUTINE_PERMISSIONS: PermissionMode[] = ['approve', 'full', 'ask']
 

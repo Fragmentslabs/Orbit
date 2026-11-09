@@ -1,4 +1,5 @@
 import { tool } from 'ai'
+import { ASK_WHEN_VAGUE } from './proposal-guidance'
 import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
 import type { PendingRoutine, RoutineModes, Schedule } from '@shared/routines'

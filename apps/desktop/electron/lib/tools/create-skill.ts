@@ -1,4 +1,5 @@
 import { tool } from 'ai'
+import { ASK_WHEN_VAGUE } from './proposal-guidance'
 import { z } from 'zod'
 import { notifySkillsChanged } from '../skills'
 import { SKILL_SUMMARY_LIMIT, SKILL_TAGS_MAX, SKILL_TAGS_MIN } from '@shared/skills'
@@ -12,7 +13,7 @@ import { proposeSkill } from '../skills/pending'
 export function createSkillTool(language?: string) {
   return tool({
     description:
-      'Proposes a new Orbit skill: curated knowledge in markdown, optionally accompanied by helper scripts/files the skill uses. The proposal appears as an "Add skill" card in the conversation and is only activated once the user approves it. After calling, briefly explain what the skill does and how it was structured.',
+      'Proposes a new Orbit skill: curated knowledge in markdown, optionally accompanied by helper scripts/files the skill uses. The proposal appears as an "Add skill" card in the conversation and is only activated once the user approves it. After calling, briefly explain what the skill does and how it was structured. ' + ASK_WHEN_VAGUE,
     inputSchema: z.object({
       name: z.string().describe('Display name (e.g.: API Deploy)'),
       description: z.string().describe('Short description of what the skill covers'),

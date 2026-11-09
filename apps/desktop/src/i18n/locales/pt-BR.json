@@ -2808,8 +2808,13 @@
       "generating": "Gerando…",
       "noModel": "Escolha um modelo para gerar a rotina.",
       "title": "Nova rotina",
+      "foldersCodeHint": "Com uma pasta, a rotina pode ler e editar os arquivos dela.",
+      "foldersChatHint": "As pastas são opcionais: sem nenhuma, a rotina roda como chat.",
       "placeholderChat": "Ex.: todo dia às 8h, monte um briefing matinal com as notícias de tecnologia do dia e um resumo das minhas memórias recentes.",
-      "modeChatHint": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
+      "viaChat": "Descrever no chat",
+      "viaChatHint": "O Orbit pergunta o que precisar e você confirma num cartão",
+      "viaForm": "Preencher o formulário",
+      "viaFormHint": "Tudo na mão"
     },
     "reuseChat": {
       "label": "Manter todas as execuções em um chat",
@@ -2828,8 +2833,7 @@
       "modesHint": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
       "suggested": "sugerido",
       "folders": "Pastas de trabalho",
-      "foldersHint": "Escolhidas nesta etapa — a rotina sempre roda nelas.",
-      "noFolders": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
+      "foldersHint": "Opcional. Com pasta, a rotina pode ler e editar arquivos; sem pasta, roda como chat.",
       "create": "Criar rotina"
     },
     "schedule": {
@@ -4182,17 +4186,17 @@
     "menu": {
       "manual": "Criar manualmente",
       "mcp": {
-        "title": "Pedir ao Orbit",
-        "description": "Diga o serviço e o modelo monta a configuração",
+        "title": "Descrever no chat",
+        "description": "Diga o serviço; o Orbit pergunta o que precisar",
         "manualDescription": "Nome, tipo, comando ou URL"
       },
       "skills": {
-        "title": "Pedir ao Orbit",
-        "description": "Descreva a skill e o modelo escreve as instruções"
+        "title": "Descrever no chat",
+        "description": "Diga o que a skill deve saber; o Orbit escreve"
       },
       "hooks": {
-        "title": "Pedir ao Orbit",
-        "description": "Descreva o que deve acontecer e o modelo escreve o comando",
+        "title": "Descrever no chat",
+        "description": "Diga o que deve acontecer; o Orbit escreve o comando",
         "manualDescription": "Evento, tool e comando você mesmo"
       },
       "agents": {

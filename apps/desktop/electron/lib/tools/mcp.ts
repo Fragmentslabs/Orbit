@@ -1,4 +1,5 @@
 import { tool, type ToolSet } from 'ai'
+import { ASK_WHEN_VAGUE } from './proposal-guidance'
 import { z } from 'zod'
 import { listMcpStatus } from '../mcp'
 
@@ -67,7 +68,7 @@ function proposedText(entry: string, extra?: string): string {
 export function createMcpConnectTool() {
   return tool({
     description:
-      'Proposes connecting a NEW MCP server to Orbit. Nothing is saved: the proposal appears as a card in the conversation and only the user can accept it there (and complete the login when the server requires OAuth). Call mcp_servers first to check whether the server is already configured — an existing connection must be changed with mcp_update. After calling, tell the user in one or two sentences what they need to decide in the card.',
+      'Proposes connecting a NEW MCP server to Orbit. Nothing is saved: the proposal appears as a card in the conversation and only the user can accept it there (and complete the login when the server requires OAuth). Call mcp_servers first to check whether the server is already configured — an existing connection must be changed with mcp_update. After calling, tell the user in one or two sentences what they need to decide in the card. ' + ASK_WHEN_VAGUE,
     inputSchema: z.object({
       name: z
         .string()

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertCircleIcon, ArrowLeftIcon, FolderIcon, MessageSquareIcon, SparklesIcon } from "lucide-react"
-import type { RoutineModes, RoutineSuggestion, Schedule } from "@shared/routines"
-import { DEFAULT_ROUTINE_PERMISSION, parseTime, ROUTINE_CHAT_MODES } from "@shared/routines"
+import { AlertCircleIcon, ArrowLeftIcon, SparklesIcon } from "lucide-react"
+import type { PendingRoutine, RoutineModes, RoutineSuggestion, Schedule } from "@shared/routines"
+import { DEFAULT_ROUTINE_PERMISSION, parseTime, restrictModesToChat, ROUTINE_CHAT_MODES, routineModeFor } from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -36,13 +36,18 @@ export function CreateRoutineDialog({
   onOpenChange,
   onCreated,
   defaultMode = "code",
+  proposal,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (routineId: string) => void
-  /** Mode of the page that opened the modal: chat or code. The routine is born
-   *  in that mode and does not switch later — folders only exist in code mode. */
+  /** Mode of the page that opened the modal. It only seeds the folders: a code page starts with
+   *  the workspace's folders attached, a chat page with none. The routine's own mode is derived
+   *  from the folders (see `routineModeFor`), so adding or removing one changes it. */
   defaultMode: "chat" | "code"
+  /** A routine the chat proposed: the modal opens straight on the review, filled in with it, and
+   *  creating keeps the proposal's id so its card recognises the routine. */
+  proposal?: PendingRoutine
 }) {
   const { t } = useTranslation()
   const { folders: workspaceFolders } = useWorkspace()
@@ -56,10 +61,7 @@ export function CreateRoutineDialog({
 
   const [description, setDescription] = useState("")
   const [model, setModel] = useState<SelectedModel | null>(null)
-  // The mode comes from the page that opened the modal (the chat page creates
-  // chat routines) — in chat mode there are no working folders nor a picker
-  // for them.
-  const [mode, setMode] = useState<"chat" | "code">(defaultMode)
+  // The folders are optional. The routine's mode follows them: any folder, code; none, chat.
   // The folder is picked IN STEP 1, together with the model — the generation
   // already uses those folders as prompt context. Seeded from the current
   // workspace (the common case is a routine for the repository already open),
@@ -67,6 +69,7 @@ export function CreateRoutineDialog({
   // cannot change the routine being created.
   const [folders, setFolders] = useState<string[]>([])
   const [generating, setGenerating] = useState(false)
+  const mode = routineModeFor(folders)
   const [error, setError] = useState<string | null>(null)
   const [suggestion, setSuggestion] = useState<RoutineSuggestion | null>(null)
 
@@ -101,9 +104,18 @@ export function CreateRoutineDialog({
     setError(null)
     setGenerating(false)
     setModel(fallback)
-    setMode(defaultMode)
     setReuseChat(false)
     setFolders(defaultMode === "chat" ? [] : workspaceFolders)
+    if (proposal) {
+      const filled = { title: proposal.title, prompt: proposal.prompt, schedule: proposal.schedule, modes: proposal.modes }
+      setSuggestion(filled)
+      setTitle(filled.title)
+      setPrompt(filled.prompt)
+      setSchedule(filled.schedule)
+      setModes(filled.modes)
+      setFolders(proposal.folders)
+      setModel(proposal.model)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fallback])
 
@@ -132,11 +144,7 @@ export function CreateRoutineDialog({
     }
   }
 
-  // A folder is required only in code mode: the scheduler refuses to fire a
-  // routine without a working folder (electron/lib/routines/scheduler.ts) —
-  // without this check here, the routine would be created and would never run,
-  // with no warning at the time. A chat routine runs without folders by
-  // definition.
+  // No folder is fine: without one the routine simply runs as a chat.
   const canCreate =
     !!model &&
     title.trim().length > 0 &&
@@ -158,12 +166,18 @@ export function CreateRoutineDialog({
         // turned the badge on in the review without one, the mode comes out
         // disabled from creation (the scheduler would have nothing to send in
         // `visionModel`).
-        modes: modes.vision && !visionModel ? { ...modes, vision: undefined } : modes,
+        modes: (() => {
+          const base = modes.vision && !visionModel ? { ...modes, vision: undefined } : modes
+          // Folders removed in the review: the code-only modes cannot ride along into a chat routine.
+          return mode === "chat" ? restrictModesToChat(base) : base
+        })(),
         mode,
-        folders: mode === "chat" ? [] : folders,
+        folders,
         visionModel: modes.vision ? (visionModel ?? undefined) : undefined,
         reuseChat: reuseChat || undefined,
         active: true,
+        // The proposal's own id: its card finds the routine and turns into "created".
+        ...(proposal ? { id: proposal.id } : {}),
       })
       // Recents are global and shared with the chats. The model enters the list
       // here — creating the routine is the moment it starts being used for real
@@ -182,7 +196,7 @@ export function CreateRoutineDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl overflow-hidden">
         <div className="flex items-center gap-2">
-          {reviewing && (
+          {reviewing && !proposal && (
             <Button variant="ghost" size="icon-sm" onClick={() => setSuggestion(null)} aria-label={t("routines.review.back")}>
               <ArrowLeftIcon className="size-3.5" />
             </Button>
@@ -247,8 +261,8 @@ export function CreateRoutineDialog({
             </div>
 
             <div className="mt-3 flex justify-end gap-2 border-t pt-3">
-              <Button variant="ghost" size="sm" onClick={() => setSuggestion(null)}>
-                {t("routines.review.back")}
+              <Button variant="ghost" size="sm" onClick={() => (proposal ? onOpenChange(false) : setSuggestion(null))}>
+                {proposal ? t("common.cancel") : t("routines.review.back")}
               </Button>
               <Button size="sm" disabled={!canCreate} onClick={() => void handleCreate()}>
                 {t("routines.review.create")}
@@ -282,19 +296,13 @@ export function CreateRoutineDialog({
             )}
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-              {mode === "chat" ? (
-                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <MessageSquareIcon className="size-3.5" />
-                  {t("routines.create.modeChatHint")}
-                </p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <FolderSelector folders={folders} onFoldersChange={setFolders} />
-                  {folders[0] && <BranchSelector repoPath={folders[0]} />}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <FolderSelector folders={folders} onFoldersChange={setFolders} />
+                {folders[0] && <BranchSelector repoPath={folders[0]} />}
+              </div>
               <ModelPicker value={model} onValueChange={setModel} />
             </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{t(folders.length > 0 ? "routines.create.foldersCodeHint" : "routines.create.foldersChatHint")}</p>
             {!model && <p className="mt-1.5 text-[11px] text-muted-foreground">{t("routines.create.noModel")}</p>}
 
             <div className="mt-2 flex justify-end">

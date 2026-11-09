@@ -33,6 +33,7 @@ import {
   createWriteTool,
 } from './files'
 import { createCodeTools } from './code'
+import { createAgentTool } from './create-agent'
 import { createSkillTool } from './create-skill'
 import { createSkillReadTool } from './skill-read'
 import { createSkillSearchTool } from './skill-search'
@@ -332,6 +333,7 @@ export function buildToolSet(
     // so they are not a toggle: they hold in any conversation, like the
     // pipeline and the chats.
     if (input.orchestrationRole !== 'worker') {
+      tools.create_agent = createAgentTool()
       Object.assign(tools, createMcpTools())
       // Hooks: "every time you X, do Y". Creating one always goes through the card
       // (see permission/rules.ts) — global only here, there is no folder to scope to.
@@ -362,6 +364,7 @@ export function buildToolSet(
   )
   if (input.orchestrationRole !== 'worker') {
     tools.create_skill = createSkillTool(input.language)
+    tools.create_agent = createAgentTool()
     // MCP connections: propose a new connection, fix an existing one and read the
     // state. They only propose — what applies it is the card in the conversation.
     Object.assign(tools, createMcpTools())

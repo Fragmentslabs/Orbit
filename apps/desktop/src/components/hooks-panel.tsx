@@ -14,7 +14,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
 import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
 import { hooksApi } from "@/src/lib/ipc"
@@ -178,7 +178,7 @@ export function HooksPanel({ query = "" }: { query?: string }) {
   const [editing, setEditing] = useState<HookWithRun | null | undefined>(undefined)
   // Suggestion from "ask Orbit" being reviewed in the form of a new hook.
   const [draft, setDraft] = useState<HookInput | undefined>()
-  const [askOpen, setAskOpen] = useState(false)
+  const startCreation = useStartCreationChat()
 
   const refresh = useCallback(() => {
     void hooksApi.list().then(setHooks)
@@ -226,7 +226,7 @@ export function HooksPanel({ query = "" }: { query?: string }) {
               icon: Wand2,
               title: t("askOrbit.menu.hooks.title"),
               description: t("askOrbit.menu.hooks.description"),
-              onSelect: () => setAskOpen(true),
+              onSelect: () => void startCreation("hook"),
             },
             {
               id: "manual",
@@ -304,13 +304,6 @@ export function HooksPanel({ query = "" }: { query?: string }) {
           {editing !== undefined && <HookForm initial={editing ?? undefined} draft={draft} onDone={done} />}
         </DialogContent>
       </Dialog>
-      <AskOrbitDialog
-        kind="hooks"
-        open={askOpen}
-        onOpenChange={setAskOpen}
-        generate={hooksApi.generate}
-        onGenerated={(suggestion: HookInput) => { setDraft(suggestion); setEditing(null) }}
-      />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { tool, type ToolSet } from 'ai'
+import { ASK_WHEN_VAGUE } from './proposal-guidance'
 import { z } from 'zod'
 import type { HookWithRun } from '@shared/hooks'
 import { HOOK_MAX_TIMEOUT_MS } from '@shared/hooks'
@@ -21,7 +22,7 @@ const CREATE_DESCRIPTION =
   'The command receives the call as JSON on stdin ({event, tool, input, output (post only), sessionId, directory, file}) and the env vars ' +
   'ORBIT_TOOL_NAME, ORBIT_HOOK_EVENT, ORBIT_PROJECT_DIR and ORBIT_FILE (absolute path of the file the call touches, when there is one); ' +
   'it runs in the project folder. Prefer a one-liner on those env vars or jq over writing a script file into the project. ' +
-  'The user approves the exact command in a card before the hook exists.'
+  'The user approves the exact command in a card before the hook exists. ' + ASK_WHEN_VAGUE
 
 function describe(h: HookWithRun): string {
   const scope = h.directory ? `project ${h.directory}` : 'global'

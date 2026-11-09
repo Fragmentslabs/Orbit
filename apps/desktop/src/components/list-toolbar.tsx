@@ -1,19 +1,22 @@
 import { Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { CreateMenu, type CreateMenuOption } from "@/src/components/create-menu"
 
 /**
  * The top row of the list pages (Routines, Pipeline, ...): a search field that takes the
  * width and the page's main action on the right. The title and the filters live in the
  * page header, so the body starts straight in the content.
  */
-export function ListToolbar({ query, onQueryChange, placeholder, actionLabel, actionIcon: ActionIcon, onAction, children }: {
+export function ListToolbar({ query, onQueryChange, placeholder, actionLabel, actionIcon: ActionIcon, onAction, actionOptions, children }: {
   query: string
   onQueryChange: (query: string) => void
   placeholder: string
   actionLabel: string
   actionIcon?: React.ComponentType<{ className?: string }>
   onAction: () => void
+  /** More than one way to create: the action becomes a menu with these, and `onAction` is unused. */
+  actionOptions?: CreateMenuOption[]
   /** Extra controls between the search and the action (filters). */
   children?: React.ReactNode
 }) {
@@ -30,10 +33,14 @@ export function ListToolbar({ query, onQueryChange, placeholder, actionLabel, ac
         />
       </div>
       {children}
-      <Button size="sm" className="h-8 shrink-0 gap-1 px-3 text-xs" onClick={onAction}>
-        {ActionIcon && <ActionIcon className="size-3.5" />}
-        {actionLabel}
-      </Button>
+      {actionOptions ? (
+        <CreateMenu label={actionLabel} options={actionOptions} />
+      ) : (
+        <Button size="sm" className="h-8 shrink-0 gap-1 px-3 text-xs" onClick={onAction}>
+          {ActionIcon && <ActionIcon className="size-3.5" />}
+          {actionLabel}
+        </Button>
+      )}
     </div>
   )
 }

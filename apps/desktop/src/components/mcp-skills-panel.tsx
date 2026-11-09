@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { fractaApi, hooksApi, mcpApi, nodaraApi, permissionsApi, skillsApi } from "@/src/lib/ipc"
-import { AskOrbitDialog } from "@/src/components/ask-orbit-dialog"
+import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
 import { useStacked } from "@/src/hooks/use-stacked"
 import { CardMenu } from "@/src/components/card-menu"
 import { CreateMenu } from "@/src/components/create-menu"
@@ -60,7 +60,7 @@ import { BUILTIN_PROFILES } from "@shared/agents"
 import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
 import type { FractaStatus } from "@shared/fracta"
 import type { NodaraStatus } from "@shared/nodara"
-import type { Skill, SkillSuggestion } from "@shared/skills"
+import type { Skill } from "@shared/skills"
 import nodaraLogo from "@/src/assets/nodara-logo.png"
 import fractaLogo from "@/src/assets/fracta-logo.png"
 import { Hint } from "@/components/ui/hint"
@@ -831,7 +831,7 @@ export function McpSkillsPanel() {
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
   // The open form holds a suggestion from "ask Orbit" (a new item to review), not an edit.
   const [mcpDraft, setMcpDraft] = useState(false)
-  const [askMcpOpen, setAskMcpOpen] = useState(false)
+  const startCreation = useStartCreationChat()
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   // The page shows one section at a time; the menu on the right switches it.
   const [section, setSection] = useState<ToolsSection>(() => useToolsNavStore.getState().consume() ?? "integrations")
@@ -854,7 +854,6 @@ export function McpSkillsPanel() {
   }, [])
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [skillDraft, setSkillDraft] = useState<Pick<Skill, "name" | "slug" | "description" | "content"> | undefined>()
-  const [askSkillOpen, setAskSkillOpen] = useState(false)
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
   const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
@@ -975,25 +974,6 @@ export function McpSkillsPanel() {
     const result = await skillsApi.import()
     if (result.error) setImportError(result.error)
     if (result.imported) await refresh()
-  }
-
-  // The model's suggestions open the normal forms, filled in. A name/slug that already
-  // exists gets a numeric suffix: saving a suggestion must never overwrite what is there.
-  const uniqueName = (base: string, taken: string[], sep: string) => {
-    if (!taken.includes(base)) return base
-    let n = 2
-    while (taken.includes(`${base}${sep}${n}`)) n++
-    return `${base}${sep}${n}`
-  }
-  const reviewMcp = (suggestion: McpServerConfig) => {
-    setMcpEdit({ ...suggestion, name: uniqueName(suggestion.name, mcpServers.map((s) => s.config.name), "-") })
-    setMcpDraft(true)
-    setMcpDialogOpen(true)
-  }
-  const reviewSkill = (suggestion: SkillSuggestion) => {
-    setSkillEdit(undefined)
-    setSkillDraft({ ...suggestion, slug: uniqueName(suggestion.slug, skills.map((s) => s.slug), "_") })
-    setSkillDialogOpen(true)
   }
 
   const needle = query.trim().toLowerCase()
@@ -1144,7 +1124,7 @@ export function McpSkillsPanel() {
                 icon: Wand2,
                 title: t("askOrbit.menu.mcp.title"),
                 description: t("askOrbit.menu.mcp.description"),
-                onSelect: () => setAskMcpOpen(true),
+                onSelect: () => void startCreation("mcp"),
               },
               {
                 id: "manual",
@@ -1310,7 +1290,7 @@ export function McpSkillsPanel() {
                 icon: Wand2,
                 title: t("askOrbit.menu.skills.title"),
                 description: t("askOrbit.menu.skills.description"),
-                onSelect: () => setAskSkillOpen(true),
+                onSelect: () => void startCreation("skill"),
               },
               {
                 id: "manual",
@@ -1399,20 +1379,6 @@ export function McpSkillsPanel() {
         onOpenChange={setSkillDialogOpen}
         initial={skillDraft ?? skillEdit}
         draft={!!skillDraft}
-      />
-      <AskOrbitDialog
-        kind="mcp"
-        open={askMcpOpen}
-        onOpenChange={setAskMcpOpen}
-        generate={mcpApi.generate}
-        onGenerated={reviewMcp}
-      />
-      <AskOrbitDialog
-        kind="skills"
-        open={askSkillOpen}
-        onOpenChange={setAskSkillOpen}
-        generate={skillsApi.generate}
-        onGenerated={reviewSkill}
       />
       <SkillContentDialog
         skill={viewSkill}

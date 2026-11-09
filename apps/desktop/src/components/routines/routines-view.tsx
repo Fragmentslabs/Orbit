@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PlusIcon } from "lucide-react"
+import { MessageSquarePlusIcon, PenLineIcon, PlusIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useStacked } from "@/src/hooks/use-stacked"
+import { useStartCreationChat } from "@/src/hooks/use-creation-chat"
 import { ListToolbar } from "@/src/components/list-toolbar"
 import { useViewScope } from "@/src/stores/view-scope-store"
 import { useRoutinesStore } from "@/src/stores/routines-store"
@@ -56,6 +57,7 @@ export function RoutinesView() {
   const sessions = useSessionStore((s) => s.sessions)
   const sessionsLoaded = useSessionStore((s) => s.initialized)
   const [createOpen, setCreateOpen] = useState(false)
+  const startCreation = useStartCreationChat()
 
   // What the page lists is chosen in the header (chat, code or both); until then it follows
   // the workspace mode, as it always did.
@@ -137,7 +139,8 @@ export function RoutinesView() {
           query=""
           selectedId={null}
           onSelect={openRoutine}
-          onCreateNew={() => setCreateOpen(true)}
+          onCreateNew={() => void startCreation("routine")}
+          onCreateManual={() => setCreateOpen(true)}
         />
         {dialog}
       </div>
@@ -154,7 +157,23 @@ export function RoutinesView() {
           placeholder={t("routines.list.search")}
           actionLabel={t("routines.list.new")}
           actionIcon={PlusIcon}
-          onAction={() => setCreateOpen(true)}
+          onAction={() => void startCreation("routine")}
+          actionOptions={[
+            {
+              id: "chat",
+              icon: MessageSquarePlusIcon,
+              title: t("routines.create.viaChat"),
+              description: t("routines.create.viaChatHint"),
+              onSelect: () => void startCreation("routine"),
+            },
+            {
+              id: "form",
+              icon: PenLineIcon,
+              title: t("routines.create.viaForm"),
+              description: t("routines.create.viaFormHint"),
+              onSelect: () => setCreateOpen(true),
+            },
+          ]}
         >
           <SegmentedControl<RoutinesLayout>
             size="sm"
@@ -173,7 +192,8 @@ export function RoutinesView() {
             query={query}
             selectedId={openedId ?? null}
             onSelect={openRoutine}
-            onCreateNew={() => setCreateOpen(true)}
+            onCreateNew={() => void startCreation("routine")}
+            onCreateManual={() => setCreateOpen(true)}
           />
         ) : (
           <RoutinesAgenda routines={filtered} selectedId={openedId ?? null} onSelect={openRoutine} />
