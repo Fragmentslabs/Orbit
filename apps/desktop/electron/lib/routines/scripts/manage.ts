@@ -6,7 +6,13 @@ import { runScript, type ScriptOutcome } from './runner'
 import { readScriptRecord } from './store'
 
 /** What an agent may write; the id and the approval are never its to set. */
-export type ScriptDraft = Pick<RoutineScript, 'name' | 'summary' | 'code' | 'hosts' | 'readFiles'>
+export type ScriptDraft = Pick<RoutineScript, 'name' | 'summary' | 'code' | 'hosts' | 'readFiles' | 'databases'>
+
+/** Database paths as the script will ask for them: trimmed, no duplicates. */
+export function cleanDatabases(paths: readonly string[] | undefined): string[] | undefined {
+  const clean = [...new Set((paths ?? []).map((p) => p.trim()).filter(Boolean))]
+  return clean.length > 0 ? clean : undefined
+}
 
 export function newScriptId(): string {
   return `scr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -39,6 +45,7 @@ export async function saveScriptFromAgent(routineId: string, draft: ScriptDraft)
       code: draft.code,
       hosts: cleanHosts(draft.hosts),
       readFiles: draft.readFiles || undefined,
+      databases: cleanDatabases(draft.databases),
       // approvedFingerprint stays out: a new or changed script waits for the person.
     }
     return { ...routine, scripts: existing ? scripts.map((s) => (s.id === existing.id ? next : s)) : [...scripts, next] }

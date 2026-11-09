@@ -519,3 +519,30 @@ the payload reaches the agent fenced as data. **Not yet**: secrets for scripts (
 only), webhooks (needs a receiver), databases (no drivers; files and HTTP only). On the Scripts tab each script has "Test now"
 (runs once, keeps nothing, wakes nobody), "Edit with Orbit" (a chat started on that script) and
 "Remove" (not for the trigger script).
+
+### Scripts and databases (read-only SQLite)
+
+A routine script can query SQLite files with `await db.query(file, sql, params?)` →
+`{ columns, rows, truncated }`. The file is declared as `RoutineScript.databases` (paths relative to the
+first routine folder), is part of `scriptFingerprint` (added only when present, so earlier approvals stay
+valid) and shows in the proposal card and the Scripts tab as "Reads database … (read-only)". `routines_manage`
+takes it as `databases` in `scriptSchema`.
+
+**Engines.** SQLite uses the `node:sqlite` built-in of Electron's Node: no native dependency to ship. Postgres
+and MySQL are **not built**: a pure-JS driver (`pg`, `mysql2`) is small, but a connection string is a
+credential and must come from the secrets work through a host-side lookup, never from the script. The shape
+when that lands: `databases` entries gain an engine and a secret name, the host op looks the string up and the
+sandbox only ever sees rows. The person's job there is a read-only role, and the card must say so, because
+the host cannot prove read-only on a server it does not own.
+
+**Read-only is enforced in layers** (`scripts/sqlite.ts`), none trusting the SQL: the file opens with
+`readOnly: true`; an authorizer allows only SELECT, READ, FUNCTION and RECURSIVE, so INSERT/UPDATE/DELETE,
+DDL, PRAGMA (read or write), ATTACH, transactions and extension loading are denied; the path must equal a
+declared one after both go through `resolveInsideFolders` (symlinks resolved, nothing outside the routine
+folders); only the first statement runs (SQLite ignores any tail).
+**Limits:** 5 s per query, 5,000 rows, ~2 MB of JSON, 10,000 characters of SQL, 100 bound parameters (text,
+number, boolean, null). Blobs come back as `<blob N bytes>`, integers beyond 2^53 as strings. The query runs
+in its own worker thread, terminated on timeout, because `node:sqlite` is synchronous and a runaway recursive
+query would otherwise freeze the main process.
+**Not covered:** a SELECT may read any table of a declared file (no per-table grants); a database that is
+being written by another process is read as SQLite allows (WAL files need their `-shm`/`-wal` beside them).

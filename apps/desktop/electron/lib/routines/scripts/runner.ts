@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads'
 import * as XLSX from 'xlsx'
 import type { RoutineScript } from '@shared/routines'
 import { checkFetchUrl, resolveInsideFolders, safeHeaders } from './guards'
+import { queryDatabase } from './sqlite'
 import { BOOT_SOURCE, WORKER_SOURCE } from './sandbox-source'
 
 /** What a script keeps between runs: free values and the ids it has already handled. */
@@ -33,6 +34,7 @@ interface Capabilities {
   hosts: readonly string[]
   folders: readonly string[]
   readFiles: boolean
+  databases: readonly string[]
   fetchImpl: typeof fetch
 }
 
@@ -57,6 +59,9 @@ async function perform(caps: Capabilities, op: string, args: Record<string, unkn
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     return { status: response.status, body: (await response.text()).slice(0, MAX_BODY_CHARS) }
+  }
+  if (op === 'dbQuery') {
+    return await queryDatabase({ requested: String(args.path), sql: args.sql, params: args.params, declared: caps.databases, folders: caps.folders })
   }
   if (!caps.readFiles) throw new Error('The script did not declare that it reads files.')
   if (op === 'listFiles') {
@@ -85,7 +90,7 @@ async function perform(caps: Capabilities, op: string, args: Record<string, unkn
  * process, from what the script declared — never from what the script asks.
  */
 export function runScript(options: {
-  script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles'>
+  script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles' | 'databases'>
   folders: readonly string[]
   state?: ScriptState
   input?: unknown
@@ -96,6 +101,7 @@ export function runScript(options: {
     hosts: options.script.hosts,
     folders: options.folders,
     readFiles: !!options.script.readFiles,
+    databases: options.script.databases ?? [],
     fetchImpl: options.fetchImpl ?? fetch,
   }
   return new Promise((resolve) => {

@@ -217,13 +217,20 @@ export interface RoutineScript {
   hosts: string[]
   /** May read files and spreadsheets inside the routine's folders (read-only). */
   readFiles?: boolean
+  /**
+   * SQLite files (paths inside the routine folders) the script may query, read-only, with
+   * `db.query`. Anything else it asks for is refused.
+   */
+  databases?: string[]
   /** The fingerprint of the version the person approved; absent = never approved. */
   approvedFingerprint?: string
 }
 
 /** Everything that decides what a script can do and does, as one comparable string. */
-export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles'>): string {
-  return JSON.stringify([script.code, [...script.hosts].sort(), !!script.readFiles])
+export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles' | 'databases'>): string {
+  const base = [script.code, [...script.hosts].sort(), !!script.readFiles]
+  // Appended only when present, so approvals of scripts without databases stay valid.
+  return JSON.stringify(script.databases?.length ? [...base, [...script.databases].sort()] : base)
 }
 
 /** Is this exact version (code and abilities) the one the person approved? */

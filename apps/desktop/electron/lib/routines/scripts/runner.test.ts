@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
 import { runScript } from './runner'
@@ -68,5 +69,24 @@ describe('runScript', () => {
     expect(undeclared.ok).toBe(false)
     const outside = await runScript({ script: { code: `return await readFile('/etc/hosts')`, hosts: [], readFiles: true }, folders: [dir] })
     expect(outside.ok).toBe(false)
+  })
+
+  it('queries a declared SQLite file through db.query, read-only', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-run-db-'))
+    try {
+      const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')
+      const db = new DatabaseSync(path.join(dir, 'r.sqlite'))
+      db.exec("CREATE TABLE t (n INTEGER); INSERT INTO t VALUES (1), (2), (3)")
+      db.close()
+      const run = (code: string, databases?: string[]) => runScript({ script: { ...base, code, databases }, folders: [dir] })
+      const ok = await run("const r = await db.query('r.sqlite', 'SELECT SUM(n) AS s FROM t WHERE n > ?', [1]); return r.rows[0].s", ['r.sqlite'])
+      expect(ok.ok && ok.result).toBe(5)
+      const write = await run("await db.query('r.sqlite', 'DELETE FROM t')", ['r.sqlite'])
+      expect(write.ok).toBe(false)
+      const undeclared = await run("await db.query('r.sqlite', 'SELECT 1')")
+      expect(!undeclared.ok && undeclared.error).toMatch(/did not declare/)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
