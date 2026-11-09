@@ -73,6 +73,8 @@ export interface ExecutionDeps {
    * is starting now and would redo the work of the ones that were already done.
    */
   keepAccepted?: boolean
+  /** No worker may be added during the review (a routine's team is a contract). */
+  fixedTeam?: boolean
   /** Workers at the same time; absent = MAX_PARALLEL. A routine's team may ask for fewer or more. */
   parallel?: number
   newId?(): string
@@ -217,6 +219,7 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
       return `"${t.title}" marked as failed.`
     },
     createWorker({ title, prompt, dependsOn }) {
+      if (d.fixedTeam) return 'The team is fixed: no workers can be added. Ask the worker the work belongs to.'
       if (plan.tasks.length >= MAX_TASKS_TOTAL) return `Limit of ${MAX_TASKS_TOTAL} workers in the plan reached.`
       if (review.adjustmentsUsed >= review.maxAdjustments) return 'No budget left: a new worker counts as an adjustment, and the total is exhausted.'
       const key = title.trim().toLowerCase()

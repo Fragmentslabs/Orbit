@@ -1122,6 +1122,7 @@ async function approvePlanTurn(
       signal: controller.signal,
       keepAccepted: opts?.resume === true,
       parallel: input.options.orchestrate?.unattended?.maxParallel,
+      fixedTeam: !!input.options.orchestrate?.unattended,
       extraOptions: { subagents: input.options.subagents === true },
       persist,
       runWorker: async (task, text) => {
@@ -1190,6 +1191,8 @@ async function approvePlanTurn(
                   originalRequest: input.text,
                   plan,
                   config,
+                  // A routine's team is a contract: the reviewer cannot add workers to it.
+                  fixedTeam: !!input.options.orchestrate?.unattended,
                   signal: controller.signal,
                   diff: taskDiff,
                   touchedFiles: taskFiles,

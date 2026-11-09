@@ -660,3 +660,8 @@ and replay protection (the signature has no timestamp). Calls arriving while Orb
 - **Estimate.** `src/lib/team-estimate.ts`: with history, the range of the last 5 successful runs (one run is widened by 25%); without, 20-60k tokens per member plus 10-20k for the closing summary, a third more with review; rounded outward to 10k. Shown in the agents editor (`AgentsEditor`), with its basis stated.
 - **Teammate notes.** `message_teammate` (`tools/teammates.ts`, backed by `orchestration/mailbox.ts`): a worker leaves a note for another worker of the same plan. Limits: same plan only, 600 characters, 8 messages per sender, 2 s between messages, 4 unread per recipient, nothing to a worker that finished. Delivered with the first prompt if the recipient has not started, otherwise added to its context at its next step (kept for the rest of that turn). No reply is awaited; results still go in files.
 - **Not done / merge notes.** `routines_manage` accepts a team only when the chat has folders (that guard lives in the uncommitted `tools/routines.ts`); remove that refusal and the scratch folder covers the rest. The proposal card cannot yet carry `review`.
+
+- **A routine's team is a contract.** In an unattended run (`options.orchestrate.unattended`) the
+  reviewer, when the routine opted into review, can accept, ask the same worker again within the
+  adjustment budget, or mark it failed; it cannot add workers (`fixedTeam` in `reviewer.ts` and
+  `execution.ts`). Review stays off by default.

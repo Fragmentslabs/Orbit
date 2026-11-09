@@ -48,6 +48,18 @@ describe('executePlan', () => {
     expect(p.tasks.map((t) => t.phase)).toEqual(['accepted', 'accepted'])
   })
 
+  it('a fixed team (a routine) cannot get workers from the reviewer, and the plan keeps its size', async () => {
+    const p = plan([task('a')])
+    const w = workers()
+    const answers: string[] = []
+    const review = async (request: ReviewRequest, actions: ReviewActions) => {
+      if (request.type === 'worker') answers.push(actions.createWorker({ title: 'Extra', prompt: 'more' }))
+    }
+    await executePlan({ ...base(p), runWorker: w.runWorker, review, fixedTeam: true })
+    expect(answers[0]).toMatch(/team is fixed/)
+    expect(p.tasks).toHaveLength(1)
+  })
+
   it('reviews each worker when it finishes and accepts when the reviewer does not decide', async () => {
     const p = plan([task('a'), task('b')])
     const w = workers()

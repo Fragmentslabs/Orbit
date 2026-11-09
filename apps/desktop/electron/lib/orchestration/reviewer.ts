@@ -39,9 +39,14 @@ export interface ReviewerDeps {
   runCheck?(task: OrchestrationTask, check: Check): Promise<{ ok: boolean; output: string }>
   /** Token usage of the review (added to the plan) */
   onUsage?(usage: unknown): void
+  /**
+   * The team is a contract (a routine's team): the reviewer may accept, ask the SAME worker again
+   * within the adjustment budget, or mark it failed, but it cannot add workers.
+   */
+  fixedTeam?: boolean
 }
 
-const SYSTEM = (config: OrchestrationSettings) => `You are the Orbit orchestrator, reviewing the work of the workers you dispatched. Decide with your tools — your text reply is not read by anyone.
+const SYSTEM = (config: OrchestrationSettings, fixedTeam = false) => `You are the Orbit orchestrator, reviewing the work of the workers you dispatched. Decide with your tools — your text reply is not read by anyone.
 
 How to review:
 - Judge the WORK, not the worker's story: look at the diff (show_diff) before accepting anything that should have changed files. If the summary claims something the diff does not show, that is a problem.
@@ -49,8 +54,7 @@ How to review:
 - accept when the task is done well enough for the user's request.
 - request_adjustment with a concrete, actionable instruction (what is wrong, where, what to do) when something is missing or broken. The same worker continues in its own chat, so it remembers what it did.
 - mark_failed when the task cannot be fixed within the budget or went in a wrong direction — say why, so the final answer can tell the user.
-- create_worker only for work that is genuinely missing and belongs to no existing worker (it also costs budget).
-- Each task owns a list of files. When the review lists files changed OUTSIDE that list, judge them: a small, necessary touch (an import, an export, a shared string) is fine; reworking a file another task owns is not — request_adjustment to undo it or to explain why it was needed. In a shared folder, a file owned by another task may simply be that worker's change: check the diff before blaming this one.
+${fixedTeam ? '- The team is fixed by the person who set this up: you cannot add workers. If something is missing, ask the worker it belongs to with request_adjustment, or say so in the failure reason.\n' : '- create_worker only for work that is genuinely missing and belongs to no existing worker (it also costs budget).\n'}- Each task owns a list of files. When the review lists files changed OUTSIDE that list, judge them: a small, necessary touch (an import, an export, a shared string) is fine; reworking a file another task owns is not — request_adjustment to undo it or to explain why it was needed. In a shared folder, a file owned by another task may simply be that worker's change: check the diff before blaming this one.
 ${config.behavior === 'rigorous' ? '- RIGOROUS mode: before accepting a task that changed code, run at least one relevant verification with run_check. A failing check means request_adjustment (or mark_failed without budget), never accept.\n' : '- run_check is available in this mode: run one of the project checks (typecheck, tests, lint) when the diff is unavailable or when reading the diff is not enough to decide.\n'}- Workers may share the same folder: a diff can include changes from other workers running at the same time. Judge only what belongs to this task.`
 
 function budgetText(plan: OrchestrationPlan, config: OrchestrationSettings, task?: OrchestrationTask): string {
@@ -140,7 +144,7 @@ export async function reviewWithModel(d: ReviewerDeps, request: ReviewRequest, a
         return typeof t === 'string' ? t : actions.markFailed(t.id, args.reason)
       },
     }),
-    create_worker: tool({
+    ...(d.fixedTeam ? {} : { create_worker: tool({
       description: 'Creates an additional worker for missing work that belongs to no existing worker. Costs one adjustment from the budget.',
       inputSchema: z.object({
         title: z.string().describe("2-5 words naming the area or deliverable, in the user's language"),
@@ -148,7 +152,7 @@ export async function reviewWithModel(d: ReviewerDeps, request: ReviewRequest, a
         dependsOn: z.array(z.string()).optional().describe('Titles of tasks that must be accepted before it starts'),
       }),
       execute: async (args: { title: string; prompt: string; dependsOn?: string[] }) => actions.createWorker(args),
-    }),
+    }) }),
   }
 
   if (d.checks && d.runCheck) {
@@ -186,7 +190,7 @@ export async function reviewWithModel(d: ReviewerDeps, request: ReviewRequest, a
           `## Worker's reply${request.result.error ? ` (ERROR: ${request.result.error})` : ''}\n${clip(request.result.text || '(no reply)', MAX_RESULT)}`,
           `## Other tasks\n${tasksSummary(plan)}`,
           budgetText(plan, config, request.task),
-          'Review this task and decide: accept, request_adjustment or mark_failed (and create_worker if something is missing).',
+          d.fixedTeam ? 'Review this task and decide: accept, request_adjustment or mark_failed.' : 'Review this task and decide: accept, request_adjustment or mark_failed (and create_worker if something is missing).',
         ]
       : [
           `## Original request\n${d.originalRequest}`,
@@ -195,12 +199,12 @@ export async function reviewWithModel(d: ReviewerDeps, request: ReviewRequest, a
             .map((t) => `### ${t.title}\n${clip(resultFor(request.results, t)?.text || '(no reply)', 2500)}`)
             .join('\n\n')}`,
           budgetText(plan, config),
-          'INTEGRATION review: do the parts, together, deliver what the user asked? Look for gaps between tasks, contradictions and missing glue. If everything is fine, do nothing (or accept). Otherwise use request_adjustment / create_worker on what is missing.',
+          'INTEGRATION review: do the parts, together, deliver what the user asked? Look for gaps between tasks, contradictions and missing glue. If everything is fine, do nothing (or accept). Otherwise use request_adjustment ' + (d.fixedTeam ? 'on the worker the missing part belongs to.' : '/ create_worker on what is missing.'),
         ]
 
   const { usage } = await generateText({
     model: d.model,
-    system: SYSTEM(config),
+    system: SYSTEM(config, d.fixedTeam),
     messages: [{ role: 'user', content: content.filter(Boolean).join('\n\n') }],
     tools,
     stopWhen: stepCountIs(MAX_STEPS),
