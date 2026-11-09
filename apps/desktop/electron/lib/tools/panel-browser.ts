@@ -392,7 +392,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
           const notes: string[] = []
           let times: number[]
           let labels: number[]
-          let frames: Buffer[] = []
+          const frames: Buffer[] = []
 
           if (mode === 'video') {
             const probe = (await panelRunScript(ctx.sessionId, videoProbeScript(selector))) as Record<string, unknown>
