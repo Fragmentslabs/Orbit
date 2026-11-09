@@ -19,12 +19,13 @@ import { AGENT_ICON_COMPONENTS } from "@/src/components/agent-meta"
 import { CraftField } from "./craft-field"
 import { ToolLimitField } from "./tool-limit-field"
 import { PinnedSkillsPicker } from "./pinned-skills-picker"
+import { SectionsField } from "./sections-field"
 import { WhenToUseField } from "./when-to-use-field"
 
 /** The editable part of a saved agent. */
 function inputOf(agent: AgentDefinition): AgentInput {
-  const { name, icon, prompt, whenToUse, pinnedSkills, features, allowedTools, craft, defaultModel, thinking } = agent
-  return { name, icon, prompt, whenToUse, pinnedSkills: [...pinnedSkills], features: { ...features }, allowedTools, craft, defaultModel, thinking }
+  const { name, icon, prompt, whenToUse, pinnedSkills, features, allowedTools, craft, sections, defaultModel, thinking } = agent
+  return { name, icon, prompt, whenToUse, pinnedSkills: [...pinnedSkills], features: { ...features }, allowedTools, craft, sections, defaultModel, thinking }
 }
 
 /**
@@ -116,6 +117,8 @@ export function AgentEditorDialog({ agent, draft: initial, open, onOpenChange }:
           <CraftField value={draft.craft} onChange={(craft) => setDraft({ ...draft, craft })} />
           <WhenToUseField value={draft.whenToUse} onChange={(whenToUse) => setDraft({ ...draft, whenToUse })} />
           <PinnedSkillsPicker value={draft.pinnedSkills} onChange={(pinnedSkills) => setDraft({ ...draft, pinnedSkills })} />
+
+          {!draft.craft && <SectionsField value={draft.sections ?? []} onChange={(sections) => setDraft({ ...draft, sections })} />}
 
           <ToolLimitField value={draft.allowedTools} onChange={(allowedTools) => setDraft({ ...draft, allowedTools })} />
 

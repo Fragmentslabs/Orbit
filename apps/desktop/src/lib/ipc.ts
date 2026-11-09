@@ -883,6 +883,8 @@ export const agentsApi = {
   toolNames: () => window.ipcRenderer.invoke(AGENT_CHANNELS.toolNames) as Promise<string[]>,
   saveBuiltin: (id: string, override: BuiltinOverride) => window.ipcRenderer.invoke(AGENT_CHANNELS.saveBuiltin, id, override) as Promise<boolean>,
   resetBuiltin: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.resetBuiltin, id) as Promise<boolean>,
+  /** "Save as agent" for a temporary agent: copies it into the agents list. */
+  saveEphemeral: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.saveEphemeral, id) as Promise<AgentSaveResult>,
   remove: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.remove, id) as Promise<boolean>,
   onChanged: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on(AGENT_CHANNELS.changed, () => listener())

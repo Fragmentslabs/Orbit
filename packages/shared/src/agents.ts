@@ -38,6 +38,15 @@ export const AGENT_ICONS = [
 ] as const
 export type AgentIcon = (typeof AGENT_ICONS)[number]
 
+/**
+ * Parts of the general chat's system prompt an agent may take on top of its own prompt (ids of
+ * `buildPromptSections`). Only the ones that make sense without the rest of the general prompt:
+ * who the person is, how they like to be addressed, how to show things and read documents, and
+ * the memories (which still need the agent's `memories` switch to be injected).
+ */
+export const AGENT_PROMPT_SECTIONS = ['identity', 'persona', 'visuals', 'documents', 'memory'] as const
+export type AgentPromptSection = (typeof AGENT_PROMPT_SECTIONS)[number]
+
 /** Size caps, enforced where the agents are saved. */
 export const AGENT_LIMITS = {
   agents: 50,
@@ -48,6 +57,21 @@ export const AGENT_LIMITS = {
   whenToUse: 300,
   pinnedSkills: 20,
   skillSlug: 80,
+} as const
+
+/**
+ * Caps of the temporary agents an orchestrator defines for one plan. Tighter than a saved
+ * agent's: nobody reviewed them yet, and they may run before anyone reads them.
+ */
+export const EPHEMERAL_LIMITS = {
+  /** Per orchestrating chat. */
+  perSession: 5,
+  /** Across the app: the oldest are dropped past this. */
+  total: 60,
+  prompt: 4_000,
+  allowedTools: 40,
+  /** Days a temporary agent is kept without being saved. */
+  keepDays: 30,
 } as const
 
 /** The current version of the definition format. Bumped when a field changes meaning. */
@@ -87,6 +111,11 @@ export interface AgentInput {
    * Absent = a plain agent on the conversation's usual toolset.
    */
   craft?: SpecialistProfile
+  /**
+   * Parts of the general chat's prompt this agent also takes (see AGENT_PROMPT_SECTIONS), added
+   * after its own prompt. Absent or empty = only its own prompt.
+   */
+  sections?: AgentPromptSection[]
   /** Optional model to start new chats with. Applies only when the person has that model. */
   defaultModel?: { providerId: string; modelId: string }
   /** Optional thinking default for new chats. */
@@ -103,6 +132,21 @@ export interface AgentDefinition extends AgentInput {
   origin: 'user' | 'imported'
   createdAt: number
   updatedAt: number
+}
+
+/**
+ * An agent an orchestrator defined for one plan. It lives apart from the person's agents, is
+ * never listed as one and is never suggested; "Save as agent" copies it into the real list
+ * (`savedAs` then points at the saved agent, so chats already running it keep working).
+ */
+export interface EphemeralAgent {
+  /** `eph_…`: the profile id is `agent:<id>`, like any agent. */
+  id: string
+  /** The chat whose orchestrator defined it. */
+  ownerSessionId: string
+  input: AgentInput
+  createdAt: number
+  savedAs?: string
 }
 
 /** The profile id of a chat run by a user-made agent. */
@@ -171,6 +215,13 @@ export function agentBlocks(features: AgentInput['features']): ProfileBlocks {
  * How much a profile puts in front of the model on every turn, in characters (a token is
  * about four). Measured on the real system prompt, so the editor can show what pinning costs.
  */
+/** One piece of a prompt and what it weighs, in tokens (about four characters each). */
+export interface PromptPieceWeight {
+  /** `agent` (its own prompt), `pinned-skills`, or a general section id. */
+  id: string
+  tokens: number
+}
+
 export interface ProfileWeight {
   prompt: number
   pinnedSkills: number
@@ -195,6 +246,10 @@ export interface ProfileDescription {
   whenToUse: string
   pinnedSkills: string[]
   weight: ProfileWeight
+  /** The prompt piece by piece, in the order it is sent (the "what a chat injects" view). */
+  pieces: PromptPieceWeight[]
+  /** Temporary agent: defined for one plan and not saved yet. */
+  temporary?: boolean
   /** Built-ins only: the person changed something, so "restore default" applies. */
   edited?: boolean
 }
@@ -202,6 +257,10 @@ export interface ProfileDescription {
 /** The list the Specialists page shows. */
 export interface AgentsSnapshot {
   agents: AgentDefinition[]
+  /** Temporary agents of orchestrated plans, not saved yet (or saved since: see `savedAs`). */
+  ephemeral: EphemeralAgent[]
+  /** What each general section weighs, in tokens, for the picker in the editor. */
+  sectionWeights: Record<AgentPromptSection, number>
   builtins: ProfileDescription[]
   /** What each of the person's agents injects, by profile id (`agent:<id>`). */
   described: Record<string, ProfileDescription>
@@ -218,6 +277,7 @@ export const AGENT_CHANNELS = {
   saveBuiltin: 'agents:save-builtin',
   resetBuiltin: 'agents:reset-builtin',
   remove: 'agents:remove',
+  saveEphemeral: 'agents:save-ephemeral',
   changed: 'agents:changed',
 } as const
 

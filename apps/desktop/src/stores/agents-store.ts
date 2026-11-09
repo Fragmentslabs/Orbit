@@ -1,6 +1,6 @@
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { create } from "zustand"
-import type { AgentDefinition, ProfileDescription } from "@shared/agents"
+import { AGENT_FORMAT_VERSION, userProfileId, type AgentDefinition, type AgentPromptSection, type EphemeralAgent, type ProfileDescription } from "@shared/agents"
 import { agentsApi } from "@/src/lib/ipc"
 
 /**
@@ -9,6 +9,8 @@ import { agentsApi } from "@/src/lib/ipc"
  */
 interface AgentsState {
   agents: AgentDefinition[]
+  ephemeral: EphemeralAgent[]
+  sectionWeights: Partial<Record<AgentPromptSection, number>>
   builtins: ProfileDescription[]
   described: Record<string, ProfileDescription>
   loaded: boolean
@@ -21,12 +23,14 @@ let listening = false
 
 export const useAgentsStore = create<AgentsState>((set, get) => ({
   agents: [],
+  ephemeral: [],
+  sectionWeights: {},
   builtins: [],
   described: {},
   loaded: false,
   refresh: async () => {
     const snapshot = await agentsApi.snapshot()
-    set({ agents: snapshot.agents, builtins: snapshot.builtins, described: snapshot.described, loaded: true })
+    set({ agents: snapshot.agents, ephemeral: snapshot.ephemeral, sectionWeights: snapshot.sectionWeights, builtins: snapshot.builtins, described: snapshot.described, loaded: true })
   },
   ensure: () => {
     if (listening) return
@@ -42,4 +46,28 @@ export function useAgents(): AgentDefinition[] {
   const ensure = useAgentsStore((s) => s.ensure)
   useEffect(() => ensure(), [ensure])
   return agents
+}
+
+/**
+ * Every agent a chat may be running, for showing it: the saved ones plus the temporary ones
+ * an orchestrator defined. A temporary agent that was saved answers to its old id as the saved
+ * agent, so chats that started with it keep their badge. Not for lists the person picks from.
+ */
+export function useAgentLookup(): AgentDefinition[] {
+  const agents = useAgents()
+  const ephemeral = useAgentsStore((s) => s.ephemeral)
+  return useMemo(() => {
+    const aliases = ephemeral.flatMap((e): AgentDefinition[] => {
+      const saved = e.savedAs ? agents.find((a) => a.id === e.savedAs) : undefined
+      if (saved) return [{ ...saved, id: e.id }]
+      if (e.savedAs) return []
+      return [{ ...e.input, version: AGENT_FORMAT_VERSION, id: e.id, origin: "user", createdAt: e.createdAt, updatedAt: e.createdAt }]
+    })
+    return [...agents, ...aliases]
+  }, [agents, ephemeral])
+}
+
+/** True when the profile is a temporary agent that has not been saved. */
+export function useIsTemporary(profile: string | undefined): boolean {
+  return useAgentsStore((s) => Boolean(profile) && s.ephemeral.some((e) => !e.savedAs && userProfileId(e.id) === profile))
 }

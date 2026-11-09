@@ -57,6 +57,17 @@ export function ProfileView({ description }: { description: ProfileDescription }
         </p>
       </Section>
 
+      <Section title={t("specialists.view.pieces")} hint={t("specialists.view.piecesHint")}>
+        <ul className="flex flex-col gap-1">
+          {description.pieces.map((piece) => (
+            <li key={piece.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
+              <span>{t(`specialists.piece.${piece.id}`, { defaultValue: piece.id })}</span>
+              <span className="tabular-nums text-muted-foreground">~{piece.tokens} tok</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
       <Section title={t("specialists.view.tools")}>
         {tools.length > 0 ? (
           <div className="flex flex-wrap gap-1">

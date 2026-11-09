@@ -456,6 +456,31 @@ changes behaviour.
 Steps 1–3 carry most of the value at low risk. Steps 4–5 are the large ones; measure token cost
 before allowing parallel agents in routines.
 
+Step 6 (ephemeral agents) and the use of the prompt sections are done, with tests; nothing was checked in the real window.
+
+- **Ephemeral agents.** The orchestrator's planning pass has a `define_agent` tool (name, icon, a
+  prompt of at most 4,000 characters, optionally a narrower tool list); it returns an
+  `agent:eph_…` id that `create_task({agent})` accepts, but only for ids defined by that same chat.
+  They live in `agents-ephemeral` (`agents/ephemeral.ts`), apart from the agents list, and are
+  never listed or suggested. Rules: only that tool creates them (nothing is read from a tool
+  result, a web page or the renderer); at most 5 per chat, 60 in the app, expiring after 30 days;
+  they can only narrow — no craft, pinned skills, model, sections or features, so a worker's
+  modes still come from its task and the orchestrator's ceiling. The worker row and the chat badge
+  show a "Temporary" mark; the badge opens the usual view of the agent with a "Save as agent"
+  strip above the prompt. Saving goes through `saveAgent` (the normal validation and limits) and
+  leaves `savedAs` on the record, so chats that started with the temporary id keep running the
+  saved agent. Not done: dropping a chat's temporary agents when the chat is deleted (they expire
+  instead), and the person reading the prompt on the plan card before the plan starts (with
+  auto-approve on, workers run first; the prompt is readable from any worker's badge).
+- **Sections as a feature.** `AgentInput.sections` lets an agent take parts of the general prompt
+  (`identity`, `persona`, `visuals`, `documents`, `memory`) after its own prompt;
+  `buildSystemPrompt` filters `buildPromptSections` by those ids. The editor has a switch per part
+  with its weight, and the "what a chat injects" view lists the prompt piece by piece (own prompt,
+  pinned skills, each taken section) in tokens. Craft agents and built-ins take no sections.
+  Weights are measured on the chat-mode general prompt without the tool catalog, so they are
+  estimates. The `prompts-weight` ceilings are unchanged: nothing in the general prompt grew. Not
+  done: a view of the general chat's own sections (it has no badge to open from).
+
 ### 8.6 Open questions
 
 - Whether "promote a worker to a normal subchat" (so the person can keep talking to it) is needed,

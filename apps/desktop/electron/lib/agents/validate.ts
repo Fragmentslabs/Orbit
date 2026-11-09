@@ -2,10 +2,12 @@ import {
   AGENT_FEATURES,
   AGENT_ICONS,
   AGENT_LIMITS,
+  AGENT_PROMPT_SECTIONS,
   BUILTIN_PROFILES,
   emptyAgentInput,
   type AgentIcon,
   type AgentInput,
+  type AgentPromptSection,
   type BuiltinOverride,
 } from '@shared/agents'
 
@@ -80,6 +82,10 @@ export function sanitizeAgentInput(raw: unknown): AgentInput {
     out.defaultModel = { providerId: model.providerId.slice(0, 120), modelId: model.modelId.slice(0, 200) }
   }
   if ((BUILTIN_PROFILES as readonly unknown[]).includes(source.craft)) out.craft = source.craft as AgentInput['craft']
+  if (Array.isArray(source.sections)) {
+    const wanted = AGENT_PROMPT_SECTIONS.filter((id) => (source.sections as unknown[]).includes(id))
+    if (wanted.length > 0) out.sections = wanted as AgentPromptSection[]
+  }
   if (typeof source.thinking === 'boolean') out.thinking = source.thinking
   return out
 }

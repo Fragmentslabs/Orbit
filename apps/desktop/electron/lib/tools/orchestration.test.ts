@@ -21,7 +21,7 @@ function task(id: string, files?: string[], extra: Partial<OrchestrationTask> = 
 }
 
 /** Plan being assembled with both tools, the way the orchestrator assembles it. */
-function plan() {
+function plan(temporary: string[] = []) {
   const tasks: OrchestrationTask[] = []
   const create = createTaskTool(
     (task, replaces) => {
@@ -33,6 +33,7 @@ function plan() {
     ceiling,
     () => false,
     () => tasks,
+    (id) => temporary.includes(id),
   )
   const remove = createRemoveTaskTool(
     () => tasks,
@@ -98,6 +99,13 @@ describe('create_task', () => {
     const p = plan()
     expect(await p.run({ title: 'Review auth', prompt: 'review src/auth', agent: 'agent:rev' })).toBe('Task "Review auth" registered in the plan.')
     expect(p.tasks[0].agent).toBe('agent:rev')
+  })
+
+  it('a task can run as a temporary agent of this plan, and only one of this plan', async () => {
+    const p = plan(['agent:eph_0123456789abcdef'])
+    expect(await p.run({ title: 'Audit', prompt: 'x', agent: 'agent:eph_0123456789abcdef' })).toBe('Task "Audit" registered in the plan.')
+    expect(p.tasks[0].agent).toBe('agent:eph_0123456789abcdef')
+    expect(await p.run({ title: 'Other', prompt: 'x', agent: 'agent:eph_ffffffffffffffff' })).toContain('NOT registered')
   })
 
   it('refuses an agent that is not listed, registering nothing', async () => {

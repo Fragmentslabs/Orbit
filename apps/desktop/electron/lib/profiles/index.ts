@@ -9,6 +9,7 @@ import {
 } from '@shared/chat'
 import { getOverrideSync, loadOverrides } from '../agents/overrides'
 import { refreshPinnedSkills } from '../agents/pinned-skills'
+import { loadEphemeral, resolveEphemeralSync } from '../agents/ephemeral'
 import { getAgentSync, loadAgents } from '../agents/store'
 import { readJson } from '../storage'
 import { BUILTIN_DEFINITIONS, withOverride } from './builtin'
@@ -31,7 +32,7 @@ export type { ProfileDefinition } from './types'
 /** The definition behind a profile id, or null when it does not exist (a deleted agent). */
 export function resolveProfile(id: ProfileId): ProfileDefinition | null {
   if (isUserProfileId(id)) {
-    const agent = getAgentSync(agentIdOf(id))
+    const agent = getAgentSync(agentIdOf(id)) ?? resolveEphemeralSync(agentIdOf(id))
     return agent ? profileOfAgent(agent) : null
   }
   const builtin = BUILTIN_DEFINITIONS[id]
@@ -46,7 +47,7 @@ export async function profileOf(sessionId: string): Promise<ProfileId | null> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
   const id = specialistProfileOf(session)
   if (!id) return null
-  await Promise.all([loadAgents(), loadOverrides()])
+  await Promise.all([loadAgents(), loadEphemeral(), loadOverrides()])
   const def = resolveProfile(id)
   if (!def) return null
   await refreshPinnedSkills(def.pinnedSkills ?? [])
@@ -122,4 +123,9 @@ export function profileTools(profile: ProfileId, input: SendMessageInput, modelV
 /** What this turn needs to know about the artifact: per turn, in the user message. */
 export async function profileTurnBlock(profile: ProfileId, sessionId: string): Promise<string> {
   return (await resolveProfile(profile)?.turnBlock?.(sessionId)) ?? ''
+}
+
+/** The sections of the general prompt a profile also takes (none for a built-in craft). */
+export function profileSections(profile: ProfileId): readonly string[] {
+  return resolveProfile(profile)?.sections ?? []
 }
