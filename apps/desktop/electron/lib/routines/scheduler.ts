@@ -2,10 +2,10 @@ import { BrowserWindow, Notification } from 'electron'
 import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { Routine, RoutineEvent, RoutineRun } from '@shared/routines'
-import { nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
+import { hasTeam, isScriptTriggered, nextRun, routineOptions, ROUTINE_SESSION_PREFIX } from '@shared/routines'
 import { continuationBrief, getRunningSessionIds, runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
-import { runOrchestration } from '../orchestrator'
+import { runOrchestration, runTeam } from '../orchestrator'
 import { broadcastChatEvent, broadcastRoutineEvent } from '../broadcast'
 import { readJson, writeJson } from '../storage'
 import { readAppLanguage } from '../app-language'
@@ -235,7 +235,12 @@ export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'
   const updated = await updateRoutine(routine.id, (r) => ({ ...r, lastRun: start }))
   if (updated) emit({ type: 'routine', routine: updated })
 
-  const options = routineOptions(routine.modes)
+  // A team makes the routine an orchestration whatever its modes say: the members are the plan.
+  const team = hasTeam(routine) ? routine.team : undefined
+  const options = routineOptions(team ? { ...routine.modes, orchestrate: true } : routine.modes, {
+    tokenBudget: routine.tokenBudget,
+    maxParallel: team?.maxParallel,
+  })
   // A chat routine only knows the chat modes: not even a hand-edited
   // routines.json should be able to turn orchestration/loop/subagents/plan on in
   // a mode that does not support them (the orchestrator, for instance, pins
@@ -273,7 +278,8 @@ export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'
   console.log(`[routines] firing "${routine.title}" (${reason}) in session ${session.id}`)
 
   try {
-    if (options.orchestrate) await runOrchestration(win, input)
+    if (options.orchestrate && team) await runTeam(win, input, team)
+    else if (options.orchestrate) await runOrchestration(win, input)
     else if (options.loop) await runChatWithLoop(win, input, input.loopConfig!)
     else await runChat(win, input)
     const { tokens, cost, error } = await collectResult(session.id, start)

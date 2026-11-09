@@ -47,6 +47,9 @@ import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
 import { getWorkerConfigCache } from './companion-http'
 import { folderDiff, turnDiffs } from './orchestration/diff'
+import { budgetExhausted } from './orchestration/budget'
+import { planFromTeam } from './orchestration/team-plan'
+import type { RoutineTeam } from '@shared/routines'
 import { MAX_PARALLEL, executePlan } from './orchestration/execution'
 import { reviewWithModel } from './orchestration/reviewer'
 import { discoverChecks, runCheck } from './orchestration/checks'
@@ -340,6 +343,24 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
   // Write scope of the turn: the workers it awaits open child scopes, so what
   // they record also counts as this turn's work.
   return runWithWriteScope(() => withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input)))
+}
+
+/**
+ * A routine's own team: the plan comes from the members the author defined, so there is no
+ * planning pass, and it runs unattended (see `unattended` in SendMessageOptions). With no folder
+ * there is nowhere for the workers to work, so it falls back to a plain turn like the planner does.
+ */
+export async function runTeam(win: BrowserWindow, input: SendMessageInput, team: RoutineTeam): Promise<void> {
+  const plan = input.directory ? planFromTeam(team, newId) : null
+  if (!plan) return runChat(win, input)
+  const { sessionId } = input
+  controllers.get(sessionId)?.abort()
+  pending.set(sessionId, { input, plan, assistantMessageId: '' })
+  try {
+    await withProviderSession(sessionId, () => approvePlanTurn(win, sessionId, plan.id))
+  } finally {
+    if (pending.get(sessionId)?.plan === plan) pending.delete(sessionId)
+  }
 }
 
 async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
@@ -827,7 +848,8 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         emit(win, { type: 'status', sessionId, status: 'idle' })
         // A single-worker plan with the option on: the card shows up (it is the
         // record of what will run), but it does not wait for the click.
-        if (tasks.length === 1 && normalizeOrchestrationSettings(getWorkerConfigCache().orchestration).approveSingleTask) {
+        const approval = normalizeOrchestrationSettings(getWorkerConfigCache().orchestration)
+        if (input.options.orchestrate?.unattended || approval.autoApprove || (tasks.length === 1 && approval.approveSingleTask)) {
           autoApprove = plan.id
         }
         break
@@ -1074,9 +1096,15 @@ async function approvePlanTurn(
       config,
       signal: controller.signal,
       keepAccepted: opts?.resume === true,
+      parallel: input.options.orchestrate?.unattended?.maxParallel,
       extraOptions: { subagents: input.options.subagents === true },
       persist,
       runWorker: async (task, text) => {
+        // An unattended run (a routine) stops starting turns once its budget is spent; the task
+        // fails with that reason and the other branches carry on.
+        if (budgetExhausted(plan.usage, input.options.orchestrate?.unattended?.tokenBudget)) {
+          return { text: '', error: 'The token budget of this execution is spent.' }
+        }
         const worker = workerSessions.get(task.id) ?? (await createSession(task))
         const r = await runWorkerTurn(win, input, worker, text)
         // Every turn (the first one and the adjustments) goes into the plan's cost.

@@ -2992,6 +2992,56 @@
     },
     "tab": {
       "notFound": "Esta rotina não existe mais."
+    },
+    "team": {
+      "title": "Equipe",
+      "add": "Adicionar agente",
+      "empty": "Sem equipe: um único agente faz tudo. Adicione agentes para dividir o trabalho.",
+      "namePlaceholder": "Nome (por exemplo Roteirista)",
+      "taskPlaceholder": "O que este agente faz",
+      "agent": "Agente",
+      "general": "Configuração geral",
+      "remove": "Remover",
+      "after": "Espera por",
+      "unnamed": "(sem nome)",
+      "parallel": "Ao mesmo tempo",
+      "budget": "Orçamento",
+      "budgetUnit": "mil tokens",
+      "note": "A equipe roda sozinha, sem aprovação. Se um agente falhar, os outros seguem e só quem esperava por ele é descartado."
+    },
+    "trigger": {
+      "watchingMinutes_one": "Observa a cada minuto",
+      "watchingMinutes_other": "Observa a cada {{count}} minutos",
+      "watchingHours_one": "Observa a cada hora",
+      "watchingHours_other": "Observa a cada {{count}} horas"
+    },
+    "scripts": {
+      "triggerBadge": "Gatilho",
+      "approved": "Aprovado",
+      "approve": "Aprovar",
+      "notApproved": "Ainda não aprovado: não roda até você aprovar.",
+      "changed": "Este script mudou depois que você aprovou: não roda até você aprovar esta versão.",
+      "readsFiles": "Lê arquivos nas pastas da rotina",
+      "noAccess": "Não acessa nada fora de si",
+      "code": "Código",
+      "checks": "Checagens do script",
+      "checksCount": "{{checks}} checagens · {{fires}} acordaram a rotina",
+      "noChecks": "Ainda não checou.",
+      "lastCheck": "Última checagem: {{when}}",
+      "failing": "O script continua falhando: {{error}}",
+      "onlyWhileOpen": "O script roda no seu computador, em segundo plano, só enquanto o Orbit estiver aberto. Se o computador dormir, as checagens param e voltam ao acordar.",
+      "tab": "Scripts",
+      "empty": "Nenhum script.",
+      "whenItFires": "Quando o script disparar",
+      "test": "Testar agora",
+      "testOk": "Rodou. Nada foi guardado e ninguém foi acordado.",
+      "testFailed": "Falhou: {{error}}",
+      "testFires_one": "Teria acordado a rotina uma vez.",
+      "testFires_other": "Teria acordado a rotina {{count}} vezes.",
+      "edit": "Editar com o Orbit",
+      "remove": "Remover",
+      "editTitle": "Script {{script}}",
+      "editStarter": "Quero mudar o script \"{{script}}\" da rotina \"{{routine}}\" (id: {{id}}): [o que mudar]."
     }
   },
   "queue": {

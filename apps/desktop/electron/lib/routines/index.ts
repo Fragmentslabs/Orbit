@@ -47,6 +47,12 @@ export async function createRoutine(input: NewRoutineInput): Promise<Routine> {
     folders: [...input.folders],
     visionModel: input.visionModel,
     reuseChat: input.reuseChat,
+    tokenBudget: input.tokenBudget,
+    team: input.team,
+    // A script only runs when the person approved this exact version: creating the routine from
+    // the confirmation card (or the form) is that approval.
+    scripts: input.scripts?.map((s) => ({ ...s, approvedFingerprint: scriptFingerprint(s) })),
+    trigger: input.trigger,
     active: input.active ?? true,
     createdAt: Date.now(),
   }

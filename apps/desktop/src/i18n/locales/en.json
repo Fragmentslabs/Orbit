@@ -2992,6 +2992,56 @@
     },
     "tab": {
       "notFound": "This routine no longer exists."
+    },
+    "team": {
+      "title": "Team",
+      "add": "Add agent",
+      "empty": "No team: a single agent does the whole job. Add agents to split it.",
+      "namePlaceholder": "Name (for example Scriptwriter)",
+      "taskPlaceholder": "What this agent does",
+      "agent": "Agent",
+      "general": "General setup",
+      "remove": "Remove",
+      "after": "Waits for",
+      "unnamed": "(no name)",
+      "parallel": "At the same time",
+      "budget": "Budget",
+      "budgetUnit": "thousand tokens",
+      "note": "The team runs on its own, with no approval. If one agent fails, the others carry on and only the ones waiting for it are dropped."
+    },
+    "trigger": {
+      "watchingMinutes_one": "Watches every minute",
+      "watchingMinutes_other": "Watches every {{count}} minutes",
+      "watchingHours_one": "Watches every hour",
+      "watchingHours_other": "Watches every {{count}} hours"
+    },
+    "scripts": {
+      "triggerBadge": "Trigger",
+      "approved": "Approved",
+      "approve": "Approve",
+      "notApproved": "Not approved yet: it will not run until you approve it.",
+      "changed": "This script changed after you approved it: it will not run until you approve this version.",
+      "readsFiles": "Reads files in the routine folders",
+      "noAccess": "Touches nothing outside itself",
+      "code": "Code",
+      "checks": "Script checks",
+      "checksCount": "{{checks}} checks · {{fires}} woke the routine",
+      "noChecks": "It has not checked yet.",
+      "lastCheck": "Last check: {{when}}",
+      "failing": "The script keeps failing: {{error}}",
+      "onlyWhileOpen": "The script runs on your computer, in the background, only while Orbit is open. If the computer sleeps, checks stop and resume when it wakes.",
+      "tab": "Scripts",
+      "empty": "No scripts.",
+      "whenItFires": "When the script fires",
+      "test": "Test now",
+      "testOk": "It ran. Nothing was kept and nobody was woken.",
+      "testFailed": "It failed: {{error}}",
+      "testFires_one": "It would have woken the routine once.",
+      "testFires_other": "It would have woken the routine {{count}} times.",
+      "edit": "Edit with Orbit",
+      "remove": "Remove",
+      "editTitle": "Script {{script}}",
+      "editStarter": "I want to change the script \"{{script}}\" of the routine \"{{routine}}\" (id: {{id}}): [what to change]."
     }
   },
   "queue": {

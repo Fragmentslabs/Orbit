@@ -18,6 +18,8 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { ModesEditor, ReuseChatField, ScheduleEditor } from "./schedule-editor"
+import { describeWhen } from "./schedule"
+import { EMPTY_TEAM, TeamEditor, teamIsValid, type TeamDraft } from "./team-editor"
 import { Truncate } from "@/components/ui/truncated-text"
 
 /**
@@ -79,6 +81,7 @@ export function CreateRoutineDialog({
   const [schedule, setSchedule] = useState<Schedule>({ time: "09:00" })
   const [modes, setModes] = useState<RoutineModes>({ permissionMode: DEFAULT_ROUTINE_PERMISSION })
   const [reuseChat, setReuseChat] = useState(false)
+  const [teamDraft, setTeamDraft] = useState<TeamDraft>(EMPTY_TEAM)
   const [saving, setSaving] = useState(false)
 
   /**
@@ -150,7 +153,7 @@ export function CreateRoutineDialog({
     title.trim().length > 0 &&
     prompt.trim().length > 0 &&
     !!parseTime(schedule.time) &&
-    (mode === "chat" || folders.length > 0) &&
+    teamIsValid(teamDraft) &&
     !saving
 
   const handleCreate = async () => {
@@ -175,6 +178,12 @@ export function CreateRoutineDialog({
         folders,
         visionModel: modes.vision ? (visionModel ?? undefined) : undefined,
         reuseChat: reuseChat || undefined,
+        // Scripts and their trigger ride along from the agent's proposal (the form has no editor for them).
+        ...(proposal?.scripts?.length ? { scripts: proposal.scripts, trigger: proposal.trigger } : {}),
+        // The team only exists in a code routine (its workers need a folder to work in).
+        ...(mode === "code" && teamDraft.team.members.length > 0
+          ? { team: teamDraft.team, tokenBudget: teamDraft.tokenBudget }
+          : {}),
         active: true,
         // The proposal's own id: its card finds the routine and turns into "created".
         ...(proposal ? { id: proposal.id } : {}),
@@ -240,24 +249,11 @@ export function CreateRoutineDialog({
 
               <ReuseChatField value={reuseChat} onChange={setReuseChat} />
 
-              {mode === "code" && (
-                <Field label={t("routines.review.folders")} hint={t("routines.review.foldersHint")}>
-                  {folders.length === 0 ? (
-                    <p className="text-[11px] text-destructive">{t("routines.review.noFolders")}</p>
-                  ) : (
-                    <ul className="space-y-0.5">
-                      {folders.map((folder) => (
-                        <li key={folder} className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-                          <FolderIcon className="size-3 shrink-0" />
-                          <Truncate text={folder}>
-                            <span className="truncate">{folder}</span>
-                          </Truncate>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Field>
-              )}
+              <Field label={t("routines.review.folders")} hint={t("routines.review.foldersHint")}>
+                <FolderSelector folders={folders} onFoldersChange={setFolders} />
+              </Field>
+
+              {mode === "code" && <TeamEditor value={teamDraft} onChange={setTeamDraft} />}
             </div>
 
             <div className="mt-3 flex justify-end gap-2 border-t pt-3">

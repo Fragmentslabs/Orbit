@@ -22,7 +22,7 @@
  * shows the "Routines" group of the matching mode.
  */
 
-import type { PermissionMode, SendMessageOptions } from './chat'
+import type { PermissionMode, ProfileId, SendMessageOptions } from './chat'
 
 /** Prefix of the session ids created by a routine. */
 export const ROUTINE_SESSION_PREFIX = 'routine_'
@@ -153,7 +153,7 @@ export const ROUTINE_PERMISSIONS: PermissionMode[] = ['approve', 'full', 'ask']
 export const DEFAULT_ROUTINE_PERMISSION: PermissionMode = 'approve'
 
 /** Modes → chat options. Mirrors the rules of the `chat:send` handler. */
-export function routineOptions(modes: RoutineModes): SendMessageOptions {
+export function routineOptions(modes: RoutineModes, limits: RoutineLimits = {}): SendMessageOptions {
   const options: SendMessageOptions = {
     // "Autonomy" runs on its own and only stops on a critical action. When it
     // stops, the request shows up in that execution's chat and the session gets
@@ -169,7 +169,13 @@ export function routineOptions(modes: RoutineModes): SendMessageOptions {
   // (the routine stores its own vision model, just as it stores the main one).
   if (modes.orchestrate) {
     // Orchestration turns plan off and loop/subagents on, as in chat:send
-    options.orchestrate = {}
+    // A routine has nobody to click "Approve": the team starts on its own, inside its limits.
+    options.orchestrate = {
+      unattended: {
+        ...(limits.tokenBudget ? { tokenBudget: limits.tokenBudget } : {}),
+        ...(limits.maxParallel ? { maxParallel: limits.maxParallel } : {}),
+      },
+    }
     options.loop = modes.loop !== false
     options.subagents = modes.subagents !== false
     return options
@@ -181,6 +187,96 @@ export function routineOptions(modes: RoutineModes): SendMessageOptions {
 }
 
 // ─── Routine ─────────────────────────────────────────────────────────────────
+
+/** Limits of a routine that runs a team unattended. */
+export interface RoutineLimits {
+  /** Tokens the whole team may spend in one execution; absent = no ceiling. */
+  tokenBudget?: number
+  /** Members working at the same time; absent = the engine's default. */
+  maxParallel?: number
+}
+
+// ─── Scripts ─────────────────────────────────────────────────────────────────
+
+/**
+ * A script attached to a routine: a small program that runs in the background of Orbit, with only
+ * the abilities it declares. It is generic on purpose — the same script can be the routine's
+ * trigger (it watches something and wakes the agent) or a tool the agent calls during a run (read
+ * the report template from a spreadsheet, fetch a number from an API). Written by an agent, so it
+ * never runs before the person approved exactly this code with exactly these abilities.
+ */
+export interface RoutineScript {
+  id: string
+  /** How the agent calls it ("read_report_template"). */
+  name: string
+  /** One sentence for the person (and the agent): what it does. */
+  summary: string
+  /** Body of an async function; see the script API in electron/lib/routines/scripts. */
+  code: string
+  /** Hosts the script may fetch over https (a subdomain of a listed host is allowed too). */
+  hosts: string[]
+  /** May read files and spreadsheets inside the routine's folders (read-only). */
+  readFiles?: boolean
+  /** The fingerprint of the version the person approved; absent = never approved. */
+  approvedFingerprint?: string
+}
+
+/** Everything that decides what a script can do and does, as one comparable string. */
+export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles'>): string {
+  return JSON.stringify([script.code, [...script.hosts].sort(), !!script.readFiles])
+}
+
+/** Is this exact version (code and abilities) the one the person approved? */
+export function scriptApproved(script: RoutineScript): boolean {
+  return script.approvedFingerprint === scriptFingerprint(script)
+}
+
+/**
+ * What wakes the routine. `schedule` (the default) is the routine's days and times; `script`
+ * runs one of the routine's scripts every few minutes, and the routine runs when the script fires.
+ */
+export type RoutineTrigger = { kind: 'schedule' } | { kind: 'script'; scriptId: string; everyMinutes: number }
+
+export const MIN_SCRIPT_EVERY_MINUTES = 1
+export const MAX_SCRIPT_EVERY_MINUTES = 24 * 60
+
+/** The script that triggers the routine, when it has one that exists. */
+export function triggerScript(routine: Pick<Routine, 'trigger' | 'scripts'>): RoutineScript | undefined {
+  const trigger = routine.trigger
+  if (trigger?.kind !== 'script') return undefined
+  return routine.scripts?.find((s) => s.id === trigger.scriptId)
+}
+
+/** Does a script, not the calendar, decide when this routine runs? */
+export function isScriptTriggered(routine: Pick<Routine, 'trigger'>): boolean {
+  return routine.trigger?.kind === 'script'
+}
+
+/** One agent of a routine's team and what it must do. */
+export interface TeamMember {
+  /** Stable inside the team: the other members point at it in `dependsOn`. */
+  id: string
+  /** What the member is called in the run ("Scriptwriter"). */
+  name: string
+  /** Self-contained instruction for this member. */
+  task: string
+  /** The agent that runs it (`agent:<id>` or a built-in); absent = the general setup. */
+  agent?: ProfileId
+  /** Members that must finish first; their result reaches this one. */
+  dependsOn?: string[]
+}
+
+/** A routine's own team: runs unattended, in the order the dependencies say. */
+export interface RoutineTeam {
+  members: TeamMember[]
+  /** Members working at the same time; absent = the engine's default. */
+  maxParallel?: number
+}
+
+/** Does this routine run a team of its own (as opposed to a single agent)? */
+export function hasTeam(routine: { team?: RoutineTeam }): boolean {
+  return (routine.team?.members.length ?? 0) > 0
+}
 
 export interface RoutineModel {
   providerId: string
@@ -213,6 +309,14 @@ export interface Routine {
    * Absent/false = the original behaviour (a session per execution).
    */
   reuseChat?: boolean
+  /** Ceiling of a team's execution (only matters with the orchestrate mode). */
+  tokenBudget?: number
+  /** The routine's own team; absent = a single agent does the work. */
+  team?: RoutineTeam
+  /** Scripts attached to the routine (see RoutineScript). */
+  scripts?: RoutineScript[]
+  /** What wakes the routine; absent = its schedule. */
+  trigger?: RoutineTrigger
   /**
    * The chat the next execution continues (only with `reuseChat`). Written by
    * the scheduler; when the session is gone or archived the next execution
@@ -236,6 +340,10 @@ export interface NewRoutineInput {
   folders: string[]
   visionModel?: RoutineModel
   reuseChat?: boolean
+  tokenBudget?: number
+  team?: RoutineTeam
+  scripts?: RoutineScript[]
+  trigger?: RoutineTrigger
   active?: boolean
   /**
    * Only whoever already has an identity of its own passes it: the proposal

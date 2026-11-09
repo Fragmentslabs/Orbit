@@ -73,6 +73,8 @@ export interface ExecutionDeps {
    * is starting now and would redo the work of the ones that were already done.
    */
   keepAccepted?: boolean
+  /** Workers at the same time; absent = MAX_PARALLEL. A routine's team may ask for fewer or more. */
+  parallel?: number
   newId?(): string
 }
 
@@ -105,6 +107,7 @@ function promptWithDependencies(task: OrchestrationTask, plan: OrchestrationPlan
 
 export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerResult>> {
   const { plan, config } = d
+  const parallel = Math.max(1, Math.floor(d.parallel ?? MAX_PARALLEL))
   const supervises = config.behavior !== 'orchestrate' && !!d.review
   const results = new Map<string, WorkerResult>()
   const running = new Map<string, Promise<void>>()
@@ -142,7 +145,7 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
     task.status = 'streaming'
     // Concurrency over time is the number that explains an orchestra that ran for
     // hours: MAX_PARALLEL slots, but how many were actually busy?
-    perfEvent('scheduler:start', { task: task.title, adjustment, running: running.size, parallel: MAX_PARALLEL })
+    perfEvent('scheduler:start', { task: task.title, adjustment, running: running.size, parallel })
     const execution = (async () => {
       if (!prepared.has(task.id)) {
         prepared.add(task.id)
@@ -282,13 +285,13 @@ export async function executePlan(d: ExecutionDeps): Promise<Map<string, WorkerR
 
     // Adjustments first (the worker already has context), then the ready tasks.
     for (const [id, instruction] of pendingAdjustments) {
-      if (running.size >= MAX_PARALLEL) break
+      if (running.size >= parallel) break
       pendingAdjustments.delete(id)
       const t = byId(id)
       if (t) start(t, `[Adjustment requested by the orchestrator]\n${instruction}`, true)
     }
     for (const t of plan.tasks) {
-      if (running.size >= MAX_PARALLEL) break
+      if (running.size >= parallel) break
       if (t.phase !== 'queued') continue
       if (!(t.dependsOn ?? []).every((id) => byId(id)?.phase === 'accepted')) continue
       start(t, t.prompt, false)

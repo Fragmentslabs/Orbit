@@ -1182,7 +1182,15 @@ export interface SendMessageOptions {
    *  per-conversation Memory toggle. */
   skillHints?: boolean
   /** Orchestra mode: splits into a task plan + workers in child sessions */
-  orchestrate?: { plan?: OrchestrationPlan }
+  orchestrate?: {
+    plan?: OrchestrationPlan
+    /**
+     * A run nobody watches (a routine with a team): the plan starts without waiting for the
+     * card's "Approve", and the workers stop starting once `tokenBudget` is spent. A worker that
+     * fails never stops the others; only what depends on it is dropped.
+     */
+    unattended?: { tokenBudget?: number; maxParallel?: number }
+  }
   /** Loop mode: the agent reviews and iterates until the task is complete (configurable max N iterations) */
   loop?: boolean
   /**
