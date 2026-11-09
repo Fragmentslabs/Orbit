@@ -6,6 +6,7 @@ import path from 'node:path'
 import type {
   FragmentCapability,
   FragmentKind,
+  FragmentMcpAccess,
   FragmentLogEntry,
   FragmentManifest,
   FragmentMetaPatch,
@@ -20,7 +21,11 @@ import {
   FRAGMENT_DEFAULT_ICON,
   FRAGMENT_ICON_PATTERN,
   FRAGMENT_KINDS,
+  hostsAreSubset,
   isFragmentId,
+  mcpIsSubset,
+  sanitizeFragmentHosts,
+  sanitizeFragmentMcp,
 } from '@shared/fragments'
 import { noteProvenanceModified, recordLocalProvenance, removeProvenance } from './fragment-provenance'
 
@@ -137,6 +142,8 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
       sdk: 1,
       requests: sanitizeCaps(parsed.requests),
       grants: sanitizeCaps(parsed.grants),
+      hosts: sanitizeFragmentHosts(parsed.hosts),
+      mcp: sanitizeFragmentMcp(parsed.mcp),
       revision: typeof parsed.revision === 'number' ? parsed.revision : 1,
       createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : 0,
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0,
@@ -251,6 +258,8 @@ export async function createFragment(input: {
     sdk: 1,
     requests: sanitizeCaps(input.requests),
     grants: [],
+    hosts: [],
+    mcp: [],
     revision: 1,
     createdAt: now,
     updatedAt: now,
@@ -337,6 +346,37 @@ export async function requestCapabilities(id: string, requests: FragmentCapabili
     // Dropping a request also drops its grant: nothing stays allowed that was not asked.
     next.grants = next.grants.filter((c) => next.requests.includes(c))
     await writeManifestFile(next)
+    return next
+  })
+}
+
+/**
+ * The agent declares which hosts `orbit.http` may reach. Declaring only asks: if the list
+ * grows past what was there, a standing "http" grant is dropped so the person approves the
+ * new list (narrowing keeps it). Returns null when the fragment does not exist.
+ */
+export function setFragmentHosts(id: string, hosts: unknown): Promise<FragmentManifest | null> {
+  return serialized(id, async () => {
+    const manifest = await readManifestFile(id)
+    if (!manifest) return null
+    const next = { ...manifest, hosts: sanitizeFragmentHosts(hosts) }
+    if (!hostsAreSubset(next.hosts, manifest.hosts)) next.grants = next.grants.filter((c) => c !== 'http')
+    await writeManifestFile(next)
+    emitUpdated(next)
+    return next
+  })
+}
+
+/** Same for the MCP server/tool pairs `orbit.mcp` may call. */
+export function setFragmentMcp(id: string, access: unknown): Promise<FragmentManifest | null> {
+  return serialized(id, async () => {
+    const manifest = await readManifestFile(id)
+    if (!manifest) return null
+    const mcp: FragmentMcpAccess[] = sanitizeFragmentMcp(access)
+    const next = { ...manifest, mcp }
+    if (!mcpIsSubset(mcp, manifest.mcp)) next.grants = next.grants.filter((c) => c !== 'mcp')
+    await writeManifestFile(next)
+    emitUpdated(next)
     return next
   })
 }

@@ -16,6 +16,7 @@ import { ArtifactToolbar, IconAction } from "@/src/components/ai/artifact-part"
 import { fragmentApi } from "@/src/lib/ipc"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
+import { describeAccess } from "@/src/components/fragments/access-text"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
@@ -230,7 +231,7 @@ export function FragmentAiBadge({ manifest }: { manifest: FragmentManifest }) {
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
           <Sparkles className="size-3.5" />
         </span>
-        <span className="min-w-0 truncate text-xs text-foreground">{t(`fragments.ask.${pending}`)}</span>
+        <span className="min-w-0 truncate text-xs text-foreground">{t(`fragments.ask.${pending}`, { what: describeAccess(manifest, pending) })}</span>
         <Button
           size="sm"
           className="h-6 shrink-0 rounded-full px-3 text-xs"

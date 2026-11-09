@@ -6,6 +6,7 @@ import type { FragmentManifest } from "@shared/fragments"
 import { Button } from "@/components/ui/button"
 import { formatBytes, formatCost, formatTokens } from "@/src/lib/format"
 import { fragmentApi } from "@/src/lib/ipc"
+import { describeAccess } from "../access-text"
 import { KIND_META } from "../kind-meta"
 import { DetailRow, DetailsSection } from "./details-section"
 import { FragmentDataDialog } from "./fragment-data-dialog"
@@ -69,7 +70,12 @@ export function CapabilitiesSection({ manifest }: { manifest: FragmentManifest }
         const granted = manifest.grants.includes(cap)
         return (
           <div key={cap} className="flex items-center justify-between gap-3">
-            <span className="text-foreground">{t(`fragments.details.cap.${cap}`)}</span>
+            <span className="text-foreground">
+              {t(`fragments.details.cap.${cap}`)}
+              {asked && (cap === "http" || cap === "mcp") && (
+                <span className="block break-words text-[11px] text-muted-foreground">{describeAccess(manifest, cap)}</span>
+              )}
+            </span>
             {asked ? (
               <Button
                 size="sm"

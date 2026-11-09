@@ -69,6 +69,20 @@ export const FRAGMENT_SDK = `${FRAGMENT_SDK_MARK}
       get: function () { return call('models.get') },
       set: function (model) { return call('models.set', model || {}) }
     },
+    // Network and MCP go through Orbit's main process; they need "http" / "mcp" requested AND allowed.
+    http: {
+      fetch: function (url, options) {
+        options = options || {}
+        return call('http.fetch', { url: url, method: options.method, headers: options.headers, body: options.body }).then(function (r) {
+          r.json = function () { return JSON.parse(r.text) }
+          return r
+        })
+      }
+    },
+    mcp: {
+      list: function () { return call('mcp.list') },
+      call: function (server, tool, args) { return call('mcp.call', { server: server, tool: tool, args: args || {} }) }
+    },
     on: function (name, fn) {
       (listeners[name] = listeners[name] || []).push(fn)
       return function () {

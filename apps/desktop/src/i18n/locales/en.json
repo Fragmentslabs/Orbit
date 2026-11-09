@@ -3246,7 +3246,9 @@
       "capabilities": "Capabilities",
       "cap": {
         "ai": "Use your AI model",
-        "models": "Choose the model inside its screen"
+        "models": "Choose the model inside its screen",
+        "http": "Reach these internet hosts",
+        "mcp": "Use these connected MCP tools"
       },
       "allowed": "Allowed",
       "allow": "Allow",
@@ -3275,7 +3277,9 @@
     "openFull": "Open the fragment",
     "ask": {
       "ai": "This fragment wants to use your AI model.",
-      "models": "This fragment wants to let you pick the AI model inside its screen."
+      "models": "This fragment wants to let you pick the AI model inside its screen.",
+      "http": "This fragment wants to reach the internet: {{what}}.",
+      "mcp": "This fragment wants to use your connected MCP tools: {{what}}."
     },
     "askAllow": "Allow",
     "history": {
