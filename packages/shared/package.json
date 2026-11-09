@@ -16,6 +16,8 @@
     "./orbit-expr": "./src/orbit-expr.ts",
     "./orbit-ui": "./src/orbit-ui.ts",
     "./persona": "./src/persona.ts",
+    "./fragments": "./src/fragments.ts",
+    "./fragment-rules": "./src/fragment-rules.ts",
     "./skills": "./src/skills.ts",
     "./mcp": "./src/mcp.ts",
     "./analytics": "./src/analytics.ts"

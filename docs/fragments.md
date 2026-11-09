@@ -667,3 +667,37 @@ companion showing fragments.
 - **Inspect on a page that re-renders:** the picked selector is a best effort (id, classes,
   `nth-of-type`, five levels); a page that rebuilds its DOM may need the agent to find the element
   by its text and html, which the attachment carries.
+
+## 17. npm side: `orbit-fragments-api` and `orbit-fragments` (local, not published)
+
+Two packages under `packages/`, built and packed locally only. Nothing is published to npm: the
+name still has to be reserved by hand when the first release is decided.
+
+- **`orbit-fragments-api`** — the typed `window.orbit` API (`Orbit`, `OrbitStore`, `OrbitAi`,
+  `OrbitModels`, error codes, capabilities) as a global `orbit` for editors, plus
+  `ORBIT_SDK_VERSION`, `ORBIT_BRIDGE_METHODS` and `isCompatibleSdk(sdk)`. The SDK version is the
+  bridge protocol major, the same number as `sdk` in `manifest.json`; a test fails if the package,
+  `FRAGMENT_SDK_VERSION` and the methods the app enforces ever drift apart. Built with `tsc`.
+- **`orbit-fragments`** — the CLI, bundled by esbuild into one dependency-free file
+  (`dist/orbit-fragments.js`):
+
+  ```bash
+  npx orbit-fragments init my-notes --kind panel   # manifest.json, src/{index.html,app.js,style.css}, jsconfig.json
+  npx orbit-fragments validate my-notes [--json]   # exit 1 on errors; warnings do not fail
+  ```
+
+  `init` writes a working sample that uses `orbit.store` and types `orbit` through
+  `orbit-fragments-api`. `validate` checks the manifest (fields, `sdk` compatibility, capabilities;
+  `grants` must be empty because only the person grants) and `src/` (allowed file types, 1MB per
+  file, 60 files, no hidden files or symlinks, `index.html` present), and warns about remote URLs
+  that the closed CSP would block.
+- **One set of rules.** They live in `packages/shared/src/fragment-rules.ts` (no Node or Electron
+  dependency). The app's `fragment-store.ts` uses the same path check, limits, served types and
+  sanitizers, so the CLI cannot disagree with what the app enforces.
+- **Not built yet: `pack`.** The `.orbitfrag` format did not exist in the repo when this was done, so
+  the CLI only scaffolds and validates. When the format lands, `pack` should reuse
+  `validateFragmentManifest` / `validateFragmentFiles` before writing the archive. The authoring
+  manifest has no `id`, pins or timestamps; the app assigns those on import.
+- **Scripts:** `npm run fragments:build`, `fragments:test`, `fragments:pack` (builds, then
+  `npm pack --dry-run` for both packages; the CLI tarball holds `dist/orbit-fragments.js`, the
+  API's holds `dist/index.{js,d.ts}`).
