@@ -4380,7 +4380,8 @@
     },
     "create": "Criar um agente…",
     "manage": "Gerenciar agentes…",
-    "inspect": "Ver o que este agente injeta"
+    "inspect": "Ver o que este agente injeta",
+    "temporary": "Temporário"
   },
   "artifact": {
     "chats": "Chats deste artefato",
@@ -4439,7 +4440,9 @@
       "toolLimit": "Limitar ferramentas",
       "toolLimitOff": "Todas as ferramentas que o chat teria.",
       "toolLimitOn": "Só as escolhidas, e só se o chat as tiver.",
-      "toolLimitAdd": "Outro nome de ferramenta, depois Enter"
+      "toolLimitAdd": "Outro nome de ferramenta, depois Enter",
+      "sections": "Partes do prompt geral",
+      "sectionsHint": "Leva estas partes das instruções do chat geral além do seu prompt. Cada uma custa tokens em todo turno."
     },
     "block": {
       "memories": {
@@ -4495,7 +4498,9 @@
       "noTurn": "Nada.",
       "weight": "Peso",
       "weightHint": "Aproximadamente o que isso soma a cada turno (tokens estimados em quatro caracteres).",
-      "weightLine": "Prompt ~{{prompt}} tokens · skills fixas ~{{pinned}} tokens"
+      "weightLine": "Prompt ~{{prompt}} tokens · skills fixas ~{{pinned}} tokens",
+      "pieces": "Peças do prompt",
+      "piecesHint": "O que compõe o prompt de sistema, na ordem em que é enviado, com o peso de cada uma."
     },
     "error": {
       "name": "Dê um nome ao agente.",
@@ -4524,6 +4529,27 @@
         "name": "Pesquisador",
         "description": "Responde uma pergunta a partir de fontes."
       }
+    },
+    "temporary": {
+      "title": "Agente temporário",
+      "description": "O orquestrador criou este agente para um plano. Leia o prompt abaixo; salvar adiciona aos seus agentes com exatamente este prompt.",
+      "save": "Salvar como agente"
+    },
+    "piece": {
+      "agent": "Prompt próprio",
+      "pinned-skills": "Skills fixadas",
+      "identity": "Seu nome",
+      "persona": "Como te tratar",
+      "visuals": "Visuais e imagens",
+      "documents": "Documentos",
+      "memory": "Memórias"
+    },
+    "pieceHint": {
+      "identity": "Usa o nome que você contou ao Orbit.",
+      "persona": "Tom e estilo das suas preferências.",
+      "visuals": "Peças interativas, exibição e busca de imagens.",
+      "documents": "Como ler e escrever documentos.",
+      "memory": "Memórias injetadas (precisa também do interruptor Memórias)."
     },
     "share": {
       "importButton": "Importar",

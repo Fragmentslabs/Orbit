@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useToolsNavStore } from "@/src/stores/tools-nav-store"
-import { useAgents } from "@/src/stores/agents-store"
+import { useAgentLookup, useAgents, useIsTemporary } from "@/src/stores/agents-store"
 import { agentView, userAgentView, type AgentChoice, type AgentView } from "@/src/components/agent-meta"
 import { ProfileDialog } from "@/src/components/specialists/profile-dialog"
 
@@ -46,11 +46,13 @@ function AgentItem({ view, selected, onSelect }: { view: AgentView; selected: bo
 export function AgentSelector({ session }: { session?: SessionInfo }) {
   const { t } = useTranslation()
   const agents = useAgents()
+  const lookup = useAgentLookup()
   const pending = useSessionStore((s) => s.pendingProfile)
   const setPending = useSessionStore((s) => s.setPendingProfile)
   const { setView } = useWorkspace()
   const requestSection = useToolsNavStore((s) => s.request)
   const [inspecting, setInspecting] = useState(false)
+  const temporary = useIsTemporary(session ? specialistProfileOf(session) ?? undefined : undefined)
 
   const manage = () => {
     requestSection("specialists")
@@ -61,7 +63,7 @@ export function AgentSelector({ session }: { session?: SessionInfo }) {
     // A general chat shows nothing — and neither does one whose agent has since been deleted,
     // because it runs the general setup again.
     const profile = specialistProfileOf(session)
-    const view = profile ? agentView(profile, agents, t) : null
+    const view = profile ? agentView(profile, lookup, t) : null
     if (!profile || !view) return null
     const Icon = view.icon
     return (
@@ -74,6 +76,7 @@ export function AgentSelector({ session }: { session?: SessionInfo }) {
         >
           <Icon className={cn("size-3", view.color)} />
           {view.name}
+          {temporary && <span className="rounded bg-amber-500/10 px-1 text-[10px] text-amber-600 dark:text-amber-400">{t("agent.temporary")}</span>}
         </button>
         <ProfileDialog profile={profile} open={inspecting} onOpenChange={setInspecting} />
       </>

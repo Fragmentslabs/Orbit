@@ -25,6 +25,7 @@ export function profileOfAgent(agent: AgentDefinition): ProfileDefinition {
     whenToUse: agent.whenToUse,
     pinnedSkills: agent.pinnedSkills,
     allowedTools: agent.allowedTools,
+    sections: agent.sections,
     blocks: craft ? craft.blocks : agentBlocks(agent.features),
     defaultModel: agent.defaultModel,
     thinking: agent.thinking,

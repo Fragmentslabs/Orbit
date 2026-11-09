@@ -220,6 +220,8 @@ export function createTaskTool(
   titleTaken: (title: string) => boolean = () => false,
   /** Tasks already registered in this plan (dependsOn, replacement, disputes). */
   planTasks: () => OrchestrationTask[] = () => [],
+  /** Is this profile id a temporary agent the orchestrator defined for this chat? */
+  isTemporaryAgent: (profileId: string) => boolean = () => false,
 ) {
   const inPlan = (title: string) => taskByTitle(planTasks(), title)
   return tool({
@@ -255,7 +257,7 @@ export function createTaskTool(
       agent: z
         .string()
         .optional()
-        .describe('The id of one of the user\'s agents (from "AGENTS YOU CAN USE FOR A TASK"), when the task is exactly its job. Leave out for the general worker.'),
+        .describe('The id of one of the user\'s agents (from "AGENTS YOU CAN USE FOR A TASK") or of a temporary agent you made with define_agent, when the task is exactly its job. Leave out for the general worker.'),
       dependsOn: z
         .array(z.string())
         .optional()
@@ -263,7 +265,7 @@ export function createTaskTool(
     }),
     execute: async ({ title, prompt, files, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn, agent }: CreateTaskArgs) => {
       const previous = inPlan(title)
-      const chosen = agent ? suggestibleAgent(agent) : null
+      const chosen = agent ? (suggestibleAgent(agent) ?? (isTemporaryAgent(agent) ? agent : null)) : null
       if (agent && !chosen) {
         return `Task "${title}" was NOT registered: there is no agent "${agent}" to use. Pick an id from "AGENTS YOU CAN USE FOR A TASK", or register it again without an agent.`
       }

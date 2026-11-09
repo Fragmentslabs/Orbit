@@ -1,5 +1,5 @@
 import type { ToolSet } from 'ai'
-import type { ProfileBlocks, AgentInput } from '@shared/agents'
+import type { ProfileBlocks, AgentInput, AgentPromptSection } from '@shared/agents'
 import type { ProfileId, SendMessageInput } from '@shared/chat'
 
 /**
@@ -23,6 +23,8 @@ export interface ProfileDefinition {
   /** Narrows the toolset to these names. Absent = no narrowing. */
   allowedTools?: string[]
   blocks: ProfileBlocks
+  /** Sections of the general prompt added after the profile's own prompt (see `AgentInput.sections`). */
+  sections?: AgentPromptSection[]
   /** When this agent is the right one (drives suggestions and, later, the orchestrator). */
   whenToUse?: string
   /** Skills whose full text is part of the system prompt. */

@@ -6,7 +6,7 @@ import { Truncate } from "@/components/ui/truncated-text"
 import { agentView } from "@/src/components/agent-meta"
 import type { TaskItem } from "@/src/components/task-progress"
 import { workerActivity } from "@/src/lib/worker-activity"
-import { useAgentsStore } from "@/src/stores/agents-store"
+import { useAgentLookup, useIsTemporary } from "@/src/stores/agents-store"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
@@ -16,7 +16,8 @@ import { useSessionStore } from "@/src/stores/session-store"
  */
 export function WorkerRow({ task, live }: { task: TaskItem; live: boolean }) {
   const { t } = useTranslation()
-  const agents = useAgentsStore((s) => s.agents)
+  const agents = useAgentLookup()
+  const temporary = useIsTemporary(task.agent)
   const messages = useSessionStore((s) => (task.sessionId ? s.messages[task.sessionId] : undefined))
   const activity = useMemo(() => workerActivity(messages), [messages])
 
@@ -51,6 +52,7 @@ export function WorkerRow({ task, live }: { task: TaskItem; live: boolean }) {
       <Truncate text={task.title}>
         <span className={cn("w-32 shrink-0 truncate font-medium", waiting && "text-muted-foreground")}>{task.title}</span>
       </Truncate>
+      {temporary && <span className="shrink-0 rounded bg-amber-500/10 px-1 text-[10px] text-amber-600 dark:text-amber-400">{t("agent.temporary")}</span>}
       {task.extra && <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{t("taskProgress.extra")}</span>}
       <span
         className={cn(

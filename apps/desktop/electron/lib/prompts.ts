@@ -1,5 +1,5 @@
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
-import { profileSystemPrompt } from './profiles'
+import { profileSections, profileSystemPrompt } from './profiles'
 import { StorageKeys } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { PERSONA_MIRROR, personaPromptLines } from '@shared/persona'
@@ -828,8 +828,14 @@ export async function buildSystemPrompt(
   // A specialist chat: the prompt of its craft and nothing else (see profiles/index.ts).
   if (input.options.profile) {
     const own = profileSystemPrompt(input.options.profile, input)
+    // Sections of the general prompt the agent chose to take, after its own words.
+    const chosen = profileSections(input.options.profile)
+    const borrowed = chosen.length
+      ? (await buildPromptSections(input, modelVision, toolsMap)).filter((s) => chosen.includes(s.id)).map((s) => s.text)
+      : []
+    const prompt = [own, ...borrowed].filter(Boolean).join('\n\n')
     // An agent that runs as an orchestra worker keeps its own words and adds only the contract.
-    return input.orchestrationRole === 'worker' ? `${own}\n\n${WORKER_AGENT_CONTRACT}` : own
+    return input.orchestrationRole === 'worker' ? `${prompt}\n\n${WORKER_AGENT_CONTRACT}` : prompt
   }
   return (await buildPromptSections(input, modelVision, toolsMap)).map((s) => s.text).join('\n\n')
 }

@@ -1,4 +1,5 @@
 import { agentIdOf, isUserProfileId, userProfileId, type AgentDefinition } from '@shared/agents'
+import { resolveEphemeralSync } from './ephemeral'
 import { getAgentSync, listAgentsSync, loadAgents } from './store'
 
 /**
@@ -27,7 +28,8 @@ export function suggestibleAgent(id: string): AgentDefinition | null {
 /** What a chat with this profile is called in text the model reads. */
 export function profileLabel(profile: string): string {
   if (!isUserProfileId(profile)) return profile
-  return getAgentSync(agentIdOf(profile))?.name ?? 'agent'
+  const id = agentIdOf(profile)
+  return (getAgentSync(id) ?? resolveEphemeralSync(id))?.name ?? 'agent'
 }
 
 const RULES = `Suggest one with suggest_subchat({ agent: "<id>", title, brief }) — it shows the user a card; nothing opens unless they accept. Rules:

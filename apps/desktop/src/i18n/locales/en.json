@@ -4380,7 +4380,8 @@
     },
     "create": "Create an agent…",
     "manage": "Manage agents…",
-    "inspect": "See what this agent injects"
+    "inspect": "See what this agent injects",
+    "temporary": "Temporary"
   },
   "artifact": {
     "chats": "Chats of this artifact",
@@ -4439,7 +4440,9 @@
       "toolLimit": "Limit tools",
       "toolLimitOff": "Every tool the chat would have.",
       "toolLimitOn": "Only the chosen ones, and only if the chat has them.",
-      "toolLimitAdd": "Another tool name, then Enter"
+      "toolLimitAdd": "Another tool name, then Enter",
+      "sections": "Parts of the general prompt",
+      "sectionsHint": "Take these parts of the general chat’s instructions on top of your own prompt. Each one costs tokens on every turn."
     },
     "block": {
       "memories": {
@@ -4495,7 +4498,9 @@
       "noTurn": "Nothing.",
       "weight": "Weight",
       "weightHint": "About what this adds to every turn (tokens are estimated at four characters).",
-      "weightLine": "Prompt ~{{prompt}} tokens · pinned skills ~{{pinned}} tokens"
+      "weightLine": "Prompt ~{{prompt}} tokens · pinned skills ~{{pinned}} tokens",
+      "pieces": "Prompt pieces",
+      "piecesHint": "What makes up the system prompt, in the order it is sent, with its weight."
     },
     "error": {
       "name": "Give the agent a name.",
@@ -4524,6 +4529,27 @@
         "name": "Researcher",
         "description": "Answers a question from sources."
       }
+    },
+    "temporary": {
+      "title": "Temporary agent",
+      "description": "The orchestrator made this agent for one plan. Read its prompt below; saving adds it to your agents with exactly this prompt.",
+      "save": "Save as agent"
+    },
+    "piece": {
+      "agent": "Own prompt",
+      "pinned-skills": "Pinned skills",
+      "identity": "Your name",
+      "persona": "How to address you",
+      "visuals": "Visuals and images",
+      "documents": "Documents",
+      "memory": "Memories"
+    },
+    "pieceHint": {
+      "identity": "Uses the name you told Orbit.",
+      "persona": "Tone and style from your preferences.",
+      "visuals": "Interactive pieces, image display and image search rules.",
+      "documents": "How to read and write documents.",
+      "memory": "Injected memories (also needs the Memories switch)."
     },
     "share": {
       "importButton": "Import",
