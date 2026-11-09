@@ -294,6 +294,25 @@ describe('ChatAssistantMessage — document', () => {
   })
 })
 
+// ── Summary view (the only one on the phone) ────────────────────────────────
+
+describe('ChatAssistantMessage — summary view', () => {
+  it('folds every reasoning pass and the separated actions into one accordion each', () => {
+    renderMessage([
+      { id: 'r1', type: 'reasoning', text: 'primeiro', state: 'done', durationMs: 1000 },
+      { id: 't1', type: 'tool', tool: 'read', state: 'done' },
+      { id: 'r2', type: 'reasoning', text: 'segundo', state: 'done', durationMs: 2000 },
+      { id: 't2', type: 'tool', tool: 'bash', state: 'done' },
+      { id: 'x', type: 'text', text: 'resposta', state: 'done' },
+    ] as MessagePart[])
+
+    // One reasoning label for the whole turn (the seconds of both passes are summed inside it)...
+    expect(screen.getAllByText('chatAssistant.thoughtFor')).toHaveLength(1)
+    // ...and the two actions, separated only by the second reasoning, fall into one accordion.
+    expect(screen.getAllByText('chatAssistant.actionsExecuted')).toHaveLength(1)
+  })
+})
+
 // ── Degradation ─────────────────────────────────────────────────────────────
 
 describe('ChatAssistantMessage — part with an empty src', () => {

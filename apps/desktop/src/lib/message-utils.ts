@@ -1,7 +1,7 @@
-import type { ChatViewMode } from "@shared/app-settings"
 import { parseMessageReply } from "@shared/chat"
 import { isEngineText, lastTextRunStart } from "@shared/chat-text"
-import type { ChatMessage, FilePart, MessagePart, ReasoningPart, ToolPart } from "@shared/chat"
+import { arrangeForView } from "@shared/chat-view"
+import type { ChatMessage, FilePart, MessagePart, ToolPart } from "@shared/chat"
 
 /**
  * Real path, on disk, of each attachment whose content must NOT cross the
@@ -73,6 +73,9 @@ export const WEB_TOOLS = new Set(["websearch", "webfetch", "browser_open", "brow
 // the SAME notion of "final answer" — and the banner already diverged from it, announcing
 // the turn's narration. Re-exported so the consumers here do not have to change.
 export { isEngineText, lastTextRunStart }
+// The summary arrangement lives in shared (@shared/chat-view): the phone reads the
+// same turn with the same rule (its only view mode), so the two sides cannot drift.
+export { arrangeForView }
 
 export interface WebSource {
   url: string
@@ -268,70 +271,4 @@ export function parseTestSummary(output: string): TestSummary | null {
   }
 
   return null
-}
-
-/**
- * Orders the parts of the answer for the chosen view mode.
- *
- * - `summary`: the reasoning of all steps becomes a single block, at the top, and the
- *   actions it separated come together in a single accordion. It is the reading from before:
- *   thought → answer → summary of the actions. The intermediate narration ("thinking
- *   out loud": the text before the last block) leaves the reading and the final answer
- *   takes the place of its first stretch — which is how the message looked before,
- *   when the final text overwrote the first one and only it appeared. What the
- *   person does not see here remains whole in `steps`/`detailed`.
- * - `steps` and `detailed`: each part in the place where it happened; what changes
- *   between the two is only whether the blocks come collapsed or open.
- */
-export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): MessagePart[] {
-  if (mode !== "summary") return parts
-
-  const reasoning = parts.filter((p): p is ReasoningPart => p.type === "reasoning" && p.text.trim() !== "")
-  const merged: ReasoningPart | null =
-    reasoning.length > 0
-      ? {
-          id: reasoning[0].id,
-          type: "reasoning",
-          text: reasoning.map((p) => p.text.trim()).join("\n\n"),
-          state: reasoning.some((p) => p.state === "streaming") ? "streaming" : "done",
-          durationMs: reasoning.reduce((sum, p) => sum + (p.durationMs ?? 0), 0) || undefined,
-        }
-      : null
-
-  // Only the text written by the model without a source (the prose) counts as narration or
-  // answer: the engine text ('nudge'/'todo'/'internal') and the vision text stay
-  // where they are, with the treatment they already have in the UI.
-  const isProse = (part: MessagePart) => part.type === "text" && part.source === undefined
-  const lastRunStart = lastTextRunStart(
-    parts.map((part) => ({ kind: "part", part })),
-    true,
-  )
-
-  const rest: MessagePart[] = []
-  let narrationAt = -1
-  parts.forEach((part, index) => {
-    if (part.type === "reasoning") return
-    // Intermediate narration: out of the summary (the step-by-step mode shows it)
-    if (isProse(part) && index < lastRunStart) {
-      if (narrationAt === -1) narrationAt = rest.length
-      return
-    }
-    rest.push(part)
-  })
-
-  // With no reasoning to move up and no narration to remove, nothing changes
-  if (!merged && narrationAt === -1) return parts
-
-  // Without narration the answer is already in its place; with narration, it moves up to where
-  // the first narrated stretch was
-  const ordered =
-    narrationAt === -1
-      ? rest
-      : [
-          ...rest.slice(0, narrationAt).filter((p) => !isProse(p)),
-          ...rest.filter(isProse),
-          ...rest.slice(narrationAt).filter((p) => !isProse(p)),
-        ]
-
-  return merged ? [merged, ...ordered] : ordered
 }
