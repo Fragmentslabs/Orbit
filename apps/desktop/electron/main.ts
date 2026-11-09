@@ -168,6 +168,7 @@ import { registerFragmentIpc } from './lib/fragments/fragment-ipc'
 import { registerArtifactIpc } from './lib/artifacts/artifact-ipc'
 import { registerAgentsIpc } from './lib/agents/agents-ipc'
 import { claimInstance } from './lib/instance-lock'
+import { isDevRun, watchDevLauncher } from './lib/dev-lifecycle'
 import { readWebImage, registerWebImageProtocol } from './lib/web-images/store'
 import {
   fontFaceCss,
@@ -430,7 +431,8 @@ function trayHandlers() {
  * close keeps quitting: hiding the window would be losing the app.
  */
 async function syncTray(): Promise<void> {
-  if (!getAppSettings().closeToTray) {
+  // In dev the app never lives without a window (see lib/dev-lifecycle.ts): no tray to hide into.
+  if (isDevRun() || !getAppSettings().closeToTray) {
     destroyTray()
     // Preference off with the window hidden: without a tray there would be no
     // way back, so it reappears.
@@ -807,10 +809,11 @@ function createAppMenu() {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // In dev closing the last window quits on every platform, macOS included.
+  if (process.platform !== 'darwin' || isDevRun()) {
     // With the tray active the app stays alive without a window — quitting from here would destroy
     // the icon along with it and the app would become unreachable.
-    if (getAppSettings().closeToTray && hasTray()) return
+    if (!isDevRun() && getAppSettings().closeToTray && hasTray()) return
     app.quit()
     win = null
   }
@@ -1030,6 +1033,15 @@ app.whenReady().then(async () => {
   // Secondary instance: the claim was not obtained and the app is already quitting. In dev
   // this is also where a restart waits for the previous instance to leave.
   if (!(await instanceClaim)) return
+
+  // In dev the app lives only as long as the dev server that launched it.
+  if (isDevRun()) {
+    watchDevLauncher(() => {
+      console.log('[dev] the dev server is gone, closing the app')
+      quitApp()
+      setTimeout(() => app.exit(0), 4000).unref()
+    })
+  }
 
   // Persisted renderer language: loaded before any native notification, which
   // can fire (scheduled routine) without any request coming from the UI.
@@ -2812,12 +2824,13 @@ app.whenReady().then(async () => {
   )
 
   app.on('before-quit', (event) => {
-    // Resident by design: on macOS closing the window is not the app leaving —
+    // Resident by design (packaged builds; dev quits for real, see lib/dev-lifecycle.ts): on
+    // macOS closing the window is not the app leaving —
     // routines fire with no window at all, and ⌘Q or the Dock taking the process
     // down would take the scheduler with it. A real exit is asked for explicitly
     // (`quitApp`: the menu item and the tray) or by the system, which warns here
     // through `powerMonitor` on the way out.
-    if (process.platform === 'darwin' && !quitting) {
+    if (process.platform === 'darwin' && !quitting && !isDevRun()) {
       event.preventDefault()
       if (win && !win.isDestroyed()) win.close()
       return
