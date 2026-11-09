@@ -16,7 +16,7 @@ import type { Memory } from '@shared/memory'
 const userData = path.join(os.tmpdir(), `orbit-init-commit-test-${process.pid}`)
 
 vi.mock('electron', () => ({
-  app: { getPath: () => userData },
+  app: { getPath: () => userData, getAppPath: () => userData },
   BrowserWindow: { getAllWindows: () => [] },
 }))
 
