@@ -4,6 +4,8 @@ import type { RoutineTeam } from "@shared/routines"
 export interface TeamDraft {
   team: RoutineTeam
   tokenBudget?: number
+  /** The model reviews each member's work (costs more); absent = the routine runs without review. */
+  review?: boolean
 }
 
 export const EMPTY_TEAM: TeamDraft = { team: { members: [] } }

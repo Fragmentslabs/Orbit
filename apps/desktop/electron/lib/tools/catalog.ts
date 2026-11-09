@@ -80,6 +80,8 @@ export const CORE: readonly string[] = [
   'code_refs',
   'todowrite',
   'question',
+  // Only exists inside an orchestra plan; there it must be at hand, or no worker would think of it.
+  'message_teammate',
   'verify_changes',
   'session_context',
   'doc_list',

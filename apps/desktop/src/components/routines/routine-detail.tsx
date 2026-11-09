@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   FolderIcon,
+  FolderOpenIcon,
   Loader2,
   MoreHorizontalIcon,
   PauseIcon,
@@ -380,6 +381,16 @@ function RunRow({ session, run, steps }: { session: SessionInfo; run?: RoutineRu
         <span className="block font-medium text-foreground">{run && run.cost > 0 ? formatCost(run.cost) : "—"}</span>
       </span>
     </button>
+    {run?.folder && (
+      <button
+        type="button"
+        onClick={() => void window.ipcRenderer.invoke("shell:showItemInFolder", run.folder)}
+        className="flex w-full items-center gap-1.5 px-4 pb-2 pl-9 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <FolderOpenIcon className="size-3" aria-hidden />
+        {t("routines.runs.openFolder")}
+      </button>
+    )}
     {steps.map((step) => (
       <StepRow key={step.id} step={step} onOpen={openRun} />
     ))}

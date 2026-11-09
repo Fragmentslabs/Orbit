@@ -6,6 +6,8 @@ import type { RoutineTeam, TeamMember } from "@shared/routines"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { estimateTeamTokens } from "@/src/lib/team-estimate"
+import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useAgents } from "@/src/stores/agents-store"
 import { EMPTY_TEAM, teamIsValid, withoutMember, type TeamDraft } from "@/src/lib/team-draft"
 
@@ -21,10 +23,15 @@ const NUMBER_INPUT = "h-8 w-24 text-sm"
  * name, an instruction, an agent and the members it waits for; the limits are how many work at the
  * same time and how many tokens one execution may spend.
  */
-export function TeamEditor({ value, onChange }: { value: TeamDraft; onChange: (next: TeamDraft) => void }) {
+export function TeamEditor({ value, onChange, routineId }: { value: TeamDraft; onChange: (next: TeamDraft) => void; routineId?: string }) {
   const { t } = useTranslation()
   const agents = useAgents()
+  const allRuns = useRoutinesStore((s) => s.runs)
   const { members } = value.team
+  const estimate = estimateTeamTokens(members.length, {
+    review: value.review,
+    pastRuns: routineId ? allRuns.filter((r) => r.routineId === routineId) : [],
+  })
 
   const setTeam = (team: RoutineTeam) => onChange({ ...value, team })
   const patch = (id: string, change: Partial<TeamMember>) =>
@@ -142,6 +149,27 @@ export function TeamEditor({ value, onChange }: { value: TeamDraft; onChange: (n
               <span className="text-muted-foreground">{t("routines.team.budgetUnit")}</span>
             </label>
           </div>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={value.review === true}
+              onChange={(e) => onChange({ ...value, review: e.target.checked || undefined })}
+              className="size-3.5"
+            />
+            <span>{t("routines.team.review")}</span>
+          </label>
+          <p className="text-[11px] text-muted-foreground">{t("routines.team.reviewHint")}</p>
+          {estimate && (
+            <p className="text-xs">
+              <span className="font-medium">{t("routines.team.estimate")}</span>{" "}
+              {t("routines.team.estimateRange", { low: Math.round(estimate.low / 1000), high: Math.round(estimate.high / 1000) })}
+              <span className="block text-[11px] text-muted-foreground">
+                {estimate.basis === "history"
+                  ? t("routines.team.estimateHistory", { count: estimate.runs })
+                  : t("routines.team.estimateGuess")}
+              </span>
+            </p>
+          )}
           <p className="text-[11px] text-muted-foreground">{t("routines.team.note")}</p>
         </>
       )}

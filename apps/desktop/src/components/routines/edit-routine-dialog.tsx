@@ -29,7 +29,7 @@ export function EditRoutineDialog({
   const [modes, setModes] = useState<RoutineModes>(routine.modes)
   const [model, setModel] = useState<SelectedModel | null>(routine.model)
   const [reuseChat, setReuseChat] = useState(!!routine.reuseChat)
-  const draftOf = (): TeamDraft => ({ team: routine.team ?? EMPTY_TEAM.team, tokenBudget: routine.tokenBudget })
+  const draftOf = (): TeamDraft => ({ team: routine.team ?? EMPTY_TEAM.team, tokenBudget: routine.tokenBudget, review: routine.review })
   const [teamDraft, setTeamDraft] = useState<TeamDraft>(draftOf)
 
   // Reopening the dialog starts over from the persisted routine (the scheduler
@@ -62,6 +62,7 @@ export function EditRoutineDialog({
       reuseChat,
       team: teamDraft.team.members.length > 0 ? teamDraft.team : undefined,
       tokenBudget: teamDraft.team.members.length > 0 ? teamDraft.tokenBudget : undefined,
+      review: teamDraft.team.members.length > 0 && teamDraft.review ? true : undefined,
     })
     onOpenChange(false)
   }
@@ -96,7 +97,7 @@ export function EditRoutineDialog({
             <ModelPicker value={model} onValueChange={setModel} />
           </div>
           <ReuseChatField value={reuseChat} onChange={setReuseChat} />
-          {routine.mode === "code" && <TeamEditor value={teamDraft} onChange={setTeamDraft} />}
+          <TeamEditor value={teamDraft} onChange={setTeamDraft} routineId={routine.id} />
         </div>
         <div className="flex justify-end gap-2 border-t pt-3">
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>

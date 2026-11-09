@@ -2944,7 +2944,8 @@
       "running": "Rodando…",
       "ok": "Concluída",
       "error": "Falhou",
-      "tokens": "{{value}} tokens"
+      "tokens": "{{value}} tokens",
+      "openFolder": "Abrir a pasta desta execução"
     },
     "mode": {
       "chat": "Modo chat",
@@ -3017,7 +3018,14 @@
       "parallel": "Ao mesmo tempo",
       "budget": "Orçamento",
       "budgetUnit": "mil tokens",
-      "note": "A equipe roda sozinha, sem aprovação. Se um agente falhar, os outros seguem e só quem esperava por ele é descartado."
+      "note": "A equipe roda sozinha, sem aprovação. Se um agente falhar, os outros seguem e só quem esperava por ele é descartado.",
+      "review": "Pedir ao modelo que revise o trabalho de cada agente",
+      "reviewHint": "Desligado por padrão: a rotina roda enquanto você está fora, e a revisão deixa o custo e a duração menos previsíveis.",
+      "estimate": "Estimativa por execução:",
+      "estimateRange": "{{low}} a {{high}} mil tokens",
+      "estimateHistory_one": "Com base na última execução desta rotina.",
+      "estimateHistory_other": "Com base nas últimas {{count}} execuções desta rotina.",
+      "estimateGuess": "Um palpite aproximado pelo número de agentes: esta rotina ainda não rodou."
     },
     "trigger": {
       "watchingMinutes_one": "Observa a cada minuto",

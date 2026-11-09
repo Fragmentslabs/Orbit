@@ -2944,7 +2944,8 @@
       "running": "Running…",
       "ok": "Done",
       "error": "Failed",
-      "tokens": "{{value}} tokens"
+      "tokens": "{{value}} tokens",
+      "openFolder": "Open the folder of this run"
     },
     "mode": {
       "chat": "Chat mode",
@@ -3017,7 +3018,14 @@
       "parallel": "At the same time",
       "budget": "Budget",
       "budgetUnit": "thousand tokens",
-      "note": "The team runs on its own, with no approval. If one agent fails, the others carry on and only the ones waiting for it are dropped."
+      "note": "The team runs on its own, with no approval. If one agent fails, the others carry on and only the ones waiting for it are dropped.",
+      "review": "Have the model review each agent's work",
+      "reviewHint": "Off by default: a routine runs while you are away, and a review makes its cost and duration less predictable.",
+      "estimate": "Estimate per run:",
+      "estimateRange": "{{low}} to {{high}} thousand tokens",
+      "estimateHistory_one": "Based on the last run of this routine.",
+      "estimateHistory_other": "Based on the last {{count}} runs of this routine.",
+      "estimateGuess": "A rough guess from the number of agents: this routine has not run yet."
     },
     "trigger": {
       "watchingMinutes_one": "Watches every minute",

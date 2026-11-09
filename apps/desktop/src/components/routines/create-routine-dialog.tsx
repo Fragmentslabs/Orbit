@@ -180,9 +180,9 @@ export function CreateRoutineDialog({
         reuseChat: reuseChat || undefined,
         // Scripts and their trigger ride along from the agent's proposal (the form has no editor for them).
         ...(proposal?.scripts?.length ? { scripts: proposal.scripts, trigger: proposal.trigger } : {}),
-        // The team only exists in a code routine (its workers need a folder to work in).
-        ...(mode === "code" && teamDraft.team.members.length > 0
-          ? { team: teamDraft.team, tokenBudget: teamDraft.tokenBudget }
+        // A team with no folder works in a scratch folder the run makes for itself.
+        ...(teamDraft.team.members.length > 0
+          ? { team: teamDraft.team, tokenBudget: teamDraft.tokenBudget, review: teamDraft.review || undefined }
           : {}),
         active: true,
         // The proposal's own id: its card finds the routine and turns into "created".
@@ -258,7 +258,7 @@ export function CreateRoutineDialog({
                 <FolderSelector folders={folders} onFoldersChange={setFolders} />
               </Field>
 
-              {mode === "code" && <TeamEditor value={teamDraft} onChange={setTeamDraft} />}
+              <TeamEditor value={teamDraft} onChange={setTeamDraft} />
             </div>
 
             <div className="mt-3 flex justify-end gap-2 border-t pt-3">
