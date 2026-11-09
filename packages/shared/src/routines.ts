@@ -7,12 +7,10 @@
  * orchestration, per-message diff, permissions and the existing chat UI all
  * come for free.
  *
- * By default every execution is a session of its own (`routine_<id>_<ts>`,
- * carrying `routineId`), not a single conversation that keeps growing: that is
- * what makes the run history in the panel and the individual deletion from the
- * sidebar possible. A routine with `reuseChat` trades that for one chat that all
- * its executions continue (`chatSessionId`), for routines that fire often. "Remembering the previous day" is the Brain's job, enabled
- * through the routine's modes.
+ * Every execution is a session of its own (`routine_<id>_<ts>`, carrying
+ * `routineId`), never one conversation that keeps growing: that is what makes the run
+ * history on the routine screen and the individual deletion from the sidebar possible.
+ * "Remembering the previous day" is the Brain's job, enabled through the routine's modes.
  *
  * The `mode` field separates the two worlds:
  *   - 'code': runs inside the working `folders`; every mode is available.
@@ -37,19 +35,6 @@ export const LEGACY_ROUTINE_SESSION_PREFIX = 'rotina_'
 /** True when the session id was minted by a routine run (current or legacy prefix). */
 export function isRoutineSessionId(id: string): boolean {
   return id.startsWith(ROUTINE_SESSION_PREFIX) || id.startsWith(LEGACY_ROUTINE_SESSION_PREFIX)
-}
-
-/**
- * A routine that keeps one chat has no ceiling on executions, but the history
- * is compacted as it grows. From this many compactions on, the next summary
- * would be a summary of a summary (same rule as the compaction card), so the
- * chat offers to be replaced by a fresh one.
- */
-export const ROUTINE_CHAT_SUMMARY_LIMIT = 2
-
-/** True when a reused routine chat has been compacted enough to offer a new one. */
-export function routineChatIsFull(summaries: number): boolean {
-  return summaries >= ROUTINE_CHAT_SUMMARY_LIMIT
 }
 
 // ─── Schedule ────────────────────────────────────────────────────────────────
@@ -304,11 +289,8 @@ export interface Routine {
    * self-contained.
    */
   visionModel?: RoutineModel
-  /**
-   * Keep every execution in ONE chat instead of opening a new chat per firing.
-   * Absent/false = the original behaviour (a session per execution).
-   */
-  reuseChat?: boolean
+  /** The agent (`agent:<id>`) that does the work; absent = the general setup. Its features decide the abilities. */
+  agent?: ProfileId
   /** Ceiling of a team's execution (only matters with the orchestrate mode). */
   tokenBudget?: number
   /** The routine's own team; absent = a single agent does the work. */
@@ -317,12 +299,6 @@ export interface Routine {
   scripts?: RoutineScript[]
   /** What wakes the routine; absent = its schedule. */
   trigger?: RoutineTrigger
-  /**
-   * The chat the next execution continues (only with `reuseChat`). Written by
-   * the scheduler; when the session is gone or archived the next execution
-   * opens a fresh one and updates this field.
-   */
-  chatSessionId?: string
   active: boolean
   createdAt: number
   lastRun?: number
@@ -339,7 +315,7 @@ export interface NewRoutineInput {
   mode?: 'chat' | 'code'
   folders: string[]
   visionModel?: RoutineModel
-  reuseChat?: boolean
+  agent?: ProfileId
   tokenBudget?: number
   team?: RoutineTeam
   scripts?: RoutineScript[]

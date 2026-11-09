@@ -777,9 +777,6 @@ export const routinesApi = {
   remove: (id: string) => window.ipcRenderer.invoke("routines:remove", id) as Promise<void>,
   runNow: (id: string) =>
     window.ipcRenderer.invoke("routines:runNow", id) as Promise<string | null>,
-  /** Opens a fresh chat for a routine that keeps one and archives the current one. */
-  rotateChat: (id: string) =>
-    window.ipcRenderer.invoke("routines:rotateChat", id) as Promise<string | null>,
   /** Discards metrics of executions whose chat has already been deleted. */
   pruneRuns: (sessionIds: string[]) =>
     window.ipcRenderer.invoke("routines:pruneRuns", sessionIds) as Promise<number>,

@@ -32,9 +32,6 @@ import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { CompactionSuggestionCard } from "@/src/components/compaction-suggestion-card"
-import { RoutineChatFullCard } from "@/src/components/routine-chat-full-card"
-import { useRoutinesStore } from "@/src/stores/routines-store"
-import { routineChatIsFull } from "@shared/routines"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { TaskProgress } from "@/src/components/task-progress"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
@@ -1275,18 +1272,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     !compactionSuggestion.dismissed &&
     compactionSuggestion.summaries === summaryCount
 
-  // The single chat of a routine that keeps one: once it has been compacted
-  // enough, opening it offers a fresh chat (and archives this one). Derived from
-  // the history, so unlike the compaction card it shows on ENTERING the chat.
-  const fullRoutineId = useRoutinesStore((s) => {
-    if (!session?.routineId || session.archived) return undefined
-    const routine = s.routines.find((r) => r.id === session.routineId)
-    return routine?.reuseChat && routine.chatSessionId === session.id ? routine.id : undefined
-  })
-  const showRoutineChatFull = !!fullRoutineId && routineChatIsFull(summaryCount)
-
   const hasInlineCards =
-    !!session?.revert || planInFlow || pendingAsks.length > 0 || showCompactionSuggestion || showRoutineChatFull
+    !!session?.revert || planInFlow || pendingAsks.length > 0 || showCompactionSuggestion
 
   // -mt-4 eats half of ConversationContent's gap-8: the card stays near
   // the turn that generated it, without sticking to the last message.
@@ -1342,10 +1329,6 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           sessionId={session.id}
           summaries={compactionSuggestion.summaries}
         />
-      )}
-      {/* Single chat of a routine, compacted enough times: offers a new one. */}
-      {session && showRoutineChatFull && fullRoutineId && (
-        <RoutineChatFullCard routineId={fullRoutineId} summaries={summaryCount} />
       )}
       {/* Requests waiting for an answer (permission / question): the card is the last
           thing in the conversation — it is where the turn stopped waiting. Items with batchId
