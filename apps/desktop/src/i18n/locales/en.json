@@ -1397,7 +1397,9 @@
       "worktrees": "Isolate workers in worktrees",
       "worktreesHint": "Each worker works on its own branch and copy, and the orchestrator merges everything at the end. Keeps workers from touching each other's files; git repositories only.",
       "approveSingleTask": "Auto-approve single-task plans",
-      "approveSingleTaskHint": "When the plan has a single worker, it starts right away instead of waiting for you to approve the card."
+      "approveSingleTaskHint": "When the plan has a single worker, it starts right away instead of waiting for you to approve the card.",
+      "autoApprove": "Start every plan without asking",
+      "autoApproveHint": "The orchestra runs its workers as soon as it plans them, without waiting for you to approve the card. Workers still ask about anything critical in Ask mode."
     }
   },
   "orchestration": {
@@ -1482,7 +1484,8 @@
     "created": "Routine created — find it in the Routines panel.",
     "discard": "Discard",
     "create": "Create routine",
-    "discarded": "Proposal discarded."
+    "discarded": "Proposal discarded.",
+    "fallbackTitle": "Routine"
   },
   "mcpProposal": {
     "building": "Preparing the connection.",
@@ -1509,6 +1512,15 @@
     "continue": "Continue",
     "adjustments": "Adjustments: {{used}}/{{cap}}",
     "extra": "extra",
+    "workers_one": "{{count}} worker",
+    "workers_other": "{{count}} workers",
+    "runningCount_one": "{{count}} running",
+    "runningCount_other": "{{count}} running",
+    "errorCount_one": "{{count}} with an error",
+    "errorCount_other": "{{count}} with errors",
+    "working": "Working…",
+    "waitsFor": "Waits for {{tasks}}",
+    "openWorker": "Open this worker's chat",
     "phase": {
       "queue": "queued",
       "review": "in review",

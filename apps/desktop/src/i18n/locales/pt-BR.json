@@ -1397,7 +1397,9 @@
       "worktrees": "Isolar workers em worktrees",
       "worktreesHint": "Cada worker trabalha num branch e numa cópia próprios, e o orquestrador junta tudo no fim. Evita um worker mexer no arquivo do outro; só em repositório git.",
       "approveSingleTask": "Aprovar sozinho plano de uma tarefa",
-      "approveSingleTaskHint": "Quando o plano tem um worker só, ele começa direto, sem esperar você aprovar o card."
+      "approveSingleTaskHint": "Quando o plano tem um worker só, ele começa direto, sem esperar você aprovar o card.",
+      "autoApprove": "Iniciar todo plano sem perguntar",
+      "autoApproveHint": "A orquestra roda os workers assim que planeja, sem esperar você aprovar o card. No modo Ask, os workers ainda perguntam o que for crítico."
     }
   },
   "orchestration": {
@@ -1482,7 +1484,8 @@
     "created": "Rotina criada — aparece no painel Rotinas.",
     "discard": "Descartar",
     "create": "Criar rotina",
-    "discarded": "Proposta descartada."
+    "discarded": "Proposta descartada.",
+    "fallbackTitle": "Rotina"
   },
   "mcpProposal": {
     "building": "Preparando a conexão.",
@@ -1509,6 +1512,15 @@
     "continue": "Continuar",
     "adjustments": "Ajustes: {{used}}/{{cap}}",
     "extra": "extra",
+    "workers_one": "{{count}} worker",
+    "workers_other": "{{count}} workers",
+    "runningCount_one": "{{count}} rodando",
+    "runningCount_other": "{{count}} rodando",
+    "errorCount_one": "{{count}} com erro",
+    "errorCount_other": "{{count}} com erro",
+    "working": "Trabalhando…",
+    "waitsFor": "Espera {{tasks}}",
+    "openWorker": "Abrir a conversa deste worker",
     "phase": {
       "queue": "na fila",
       "review": "em revisão",

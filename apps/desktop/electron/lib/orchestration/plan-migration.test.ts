@@ -73,6 +73,7 @@ const currentPlan = {
     adjustmentsPerWorker: 3,
     worktrees: true,
     approveSingleTask: false,
+    autoApprove: false,
   },
   review: {
     adjustmentsUsed: 1,

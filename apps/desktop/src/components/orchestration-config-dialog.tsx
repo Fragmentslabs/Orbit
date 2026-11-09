@@ -288,6 +288,14 @@ function BehaviorSection() {
         </div>
         <Switch checked={settings.approveSingleTask} onCheckedChange={(v) => update({ approveSingleTask: v })} />
       </label>
+
+      <label className="flex cursor-pointer items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.autoApprove")}</p>
+          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.autoApproveHint")}</p>
+        </div>
+        <Switch checked={settings.autoApprove} onCheckedChange={(v) => update({ autoApprove: v })} />
+      </label>
     </Section>
   )
 }

@@ -2,11 +2,12 @@
 
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, Loader2Icon, MessageSquareIcon, PlayIcon, TerminalIcon, WrenchIcon, X, XCircleIcon } from "lucide-react"
-import type { OrchestrationPlan, OrchestrationTask } from "@shared/chat"
+import { CheckIcon, ChevronDown, ClockIcon, EyeIcon, Loader2Icon, PlayIcon, X, XCircleIcon } from "lucide-react"
+import type { OrchestrationPlan, OrchestrationTask, ProfileId } from "@shared/chat"
 import { cn } from "@/lib/utils"
 import { Hint } from "@/components/ui/hint"
 import { Truncate } from "@/components/ui/truncated-text"
+import { WorkerRow } from "@/src/components/worker-row"
 
 /** Step of a task in the orchestration follow-up (shared with the plan). */
 type TaskPhase = NonNullable<OrchestrationTask["phase"]>
@@ -16,6 +17,12 @@ export interface TaskItem {
   title: string
   status: "idle" | "submitted" | "streaming" | "cancelling" | "fallback" | "error"
   mode?: "chat" | "code"
+  /** The worker's own chat: the strip reads what it is doing from there, and opens it on click. */
+  sessionId?: string
+  /** The agent that runs this worker (its icon leads the row); absent = the general worker. */
+  agent?: ProfileId
+  /** Titles of the tasks this one waits for. */
+  waitsFor?: string[]
   /** Step in the orchestra follow-up — when present, it rules the icon and "done" */
   phase?: TaskPhase
   /** Worker created by the orchestrator during review */
@@ -74,7 +81,9 @@ export function TaskProgress({
   )
   const running = live ?? (openTask || !!followUp?.activity)
   const hasErrors = tasks.some((t) => (t.phase ? t.phase === "failed" : t.status === "error"))
-  const progress = total > 0 ? Math.round((done / total) * 100) : 0
+  const failedCount = tasks.filter((t) => (t.phase ? t.phase === "failed" : t.status === "error")).length
+  // Working right now: open and not just waiting its turn.
+  const workingNow = tasks.filter((t) => (t.phase ? t.phase === "running" || t.phase === "review" || t.phase === "adjustment" : t.status === "submitted" || t.status === "streaming" || t.status === "fallback")).length
   // Nothing is running and the work did not end: where the run stopped. The
   // interrupted flag covers the plan whose tasks all closed but whose accepted
   // work was never merged.
@@ -92,7 +101,8 @@ export function TaskProgress({
         >
           <ChevronDown className={cn("size-3 shrink-0 transition-transform text-muted-foreground", !expanded && "-rotate-90")} />
           {running ? (
-            <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+            // One bullet while it works: the summary says how many, the rows say what.
+            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary ring-4 ring-primary/15" />
           ) : hasErrors ? (
             <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
           ) : stopped ? (
@@ -100,27 +110,25 @@ export function TaskProgress({
           ) : (
             <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
           )}
-          <span className="font-medium text-foreground">
-            {running
-              ? t("taskProgress.inProgress", { title: title ?? t("taskProgress.title") })
-              : hasErrors
-                ? t("taskProgress.errors", { title: title ?? t("taskProgress.title") })
-                : stopped
-                  ? t("taskProgress.interrupted", { title: title ?? t("taskProgress.title") })
-                  : t("taskProgress.done", { title: title ?? t("taskProgress.title") })}
-          </span>
-          <span className="text-muted-foreground">
-            {done}/{total}
-          </span>
-          <div className="ml-auto h-1.5 min-w-16 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-500",
-                hasErrors ? "bg-destructive" : stopped ? "bg-amber-500" : "bg-primary",
-              )}
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          {running ? (
+            <span className="min-w-0 truncate">
+              <span className="font-medium text-foreground">{t("taskProgress.workers", { count: total })}</span>
+              <span className="text-muted-foreground"> · {t("taskProgress.runningCount", { count: workingNow })}</span>
+              {/* A failure must not hide behind a closed strip. */}
+              {failedCount > 0 && <span className="text-destructive"> · {t("taskProgress.errorCount", { count: failedCount })}</span>}
+            </span>
+          ) : (
+            <span className="min-w-0 truncate">
+              <span className="font-medium text-foreground">
+                {hasErrors
+                  ? t("taskProgress.errors", { title: title ?? t("taskProgress.title") })
+                  : stopped
+                    ? t("taskProgress.interrupted", { title: title ?? t("taskProgress.title") })
+                    : t("taskProgress.done", { title: title ?? t("taskProgress.title") })}
+              </span>
+              <span className="text-muted-foreground"> · {done}/{total}</span>
+            </span>
+          )}
         </button>
         {/* The X exists whenever nothing is running — done, failed OR stopped
             halfway. It used to wait for `allDoneOrError`, so a plan that lost its
@@ -177,53 +185,9 @@ export function TaskProgress({
 
       {expanded && (
         <div className="border-t border-sidebar-border px-1 pb-1.5 pt-1">
-          {tasks.map((task) => {
-            const isDone = task.phase ? task.phase === "accepted" : task.status === "idle"
-            return (
-              <div
-                key={task.id}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1",
-                  isDone && "opacity-60",
-                )}
-                title={task.note}
-              >
-                {task.phase ? <PhaseIcon phase={task.phase} live={running} /> : <TaskIcon status={task.status} live={running} />}
-                {task.mode === "code" ? (
-                  <TerminalIcon className="size-3 shrink-0 text-muted-foreground" />
-                ) : task.mode === "chat" ? (
-                  <MessageSquareIcon className="size-3 shrink-0 text-muted-foreground" />
-                ) : null}
-                <Truncate text={task.title}>
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate",
-                      isDone && "line-through text-muted-foreground",
-                    )}
-                  >
-                    {task.title}
-                  </span>
-                </Truncate>
-                {task.extra && (
-                  <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{t("taskProgress.extra")}</span>
-                )}
-                {/* A step that is open while nothing is running (a plan cut short)
-                    says where it stopped instead of staying silent. */}
-                {task.phase && task.phase !== "accepted" && (task.phase !== "running" || !running) && (
-                  <span className={cn("shrink-0 text-[10px]", task.phase === "failed" ? "text-destructive" : "text-muted-foreground")}>
-                    {/* The phase ids and the catalog keys are not the same word
-                        ("queued" → phase.queue): map them explicitly instead of
-                        building the key from the id. */}
-                    {task.phase === "adjustment" && t("taskProgress.phase.adjustment", { n: task.revisions ?? 1 })}
-                    {task.phase === "review" && t("taskProgress.phase.review")}
-                    {task.phase === "failed" && t("taskProgress.phase.failed")}
-                    {task.phase === "queued" && t("taskProgress.phase.queue")}
-                    {task.phase === "running" && t("taskProgress.phase.stopped")}
-                  </span>
-                )}
-              </div>
-            )
-          })}
+          {tasks.map((task) => (
+            <WorkerRow key={task.id} task={task} live={running} />
+          ))}
         </div>
       )}
 
@@ -248,56 +212,4 @@ export function TaskProgress({
       )}
     </div>
   )
-}
-
-function TaskIcon({ status, live }: { status: TaskItem["status"]; live: boolean }) {
-  switch (status) {
-    case "submitted":
-    case "streaming":
-    case "fallback":
-      // Not running: the status is what it was when the run was cut, not a turn
-      // happening now — so no spinner.
-      return live ? (
-        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
-      ) : (
-        <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-      )
-    case "error":
-      return <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
-    case "idle":
-      return <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
-    default:
-      return <div className="size-3.5 shrink-0 rounded-full border border-muted-foreground/30" />
-  }
-}
-
-function PhaseIcon({ phase, live }: { phase: TaskPhase; live: boolean }) {
-  switch (phase) {
-    case "queued":
-      return <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-    // The open steps keep their meaning while nothing runs — the worker was
-    // running/reviewed when the run was cut — but they stop animating.
-    case "running":
-      return live ? (
-        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
-      ) : (
-        <ClockIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-      )
-    case "review":
-      return live ? (
-        <EyeIcon className="size-3.5 shrink-0 animate-pulse text-primary" />
-      ) : (
-        <EyeIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-      )
-    case "adjustment":
-      return live ? (
-        <WrenchIcon className="size-3.5 shrink-0 animate-pulse text-amber-500" />
-      ) : (
-        <WrenchIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-      )
-    case "accepted":
-      return <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
-    case "failed":
-      return <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
-  }
 }

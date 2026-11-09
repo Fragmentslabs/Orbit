@@ -12,6 +12,8 @@ import type { ToolContext } from './context'
 import { buildToolSet } from './index'
 import { globalMode } from '../permission/global-mode'
 import { fileDisputes, normalizePath, waitsFor } from '../orchestration/ownership'
+import { suggestibleAgent } from '../agents/suggestions'
+import type { ProfileId } from '@shared/chat'
 
 /**
  * Delegation tools:
@@ -179,6 +181,7 @@ export interface CreateTaskArgs {
   vision?: boolean
   subagents?: boolean
   dependsOn?: string[]
+  agent?: string
 }
 
 /** "Login Screen " and "login screen" are the same name in the sidebar. */
@@ -249,13 +252,21 @@ export function createTaskTool(
       simple: z.boolean().optional().describe('Direct answers with no formatting. Good for short lookups, bad for specs and documentation'),
       vision: z.boolean().optional().describe('Lets the worker describe attached images'),
       subagents: z.boolean().optional().describe('Lets the worker delegate to its own background subagents. Costly — only for broad tasks'),
+      agent: z
+        .string()
+        .optional()
+        .describe('The id of one of the user\'s agents (from "AGENTS YOU CAN USE FOR A TASK"), when the task is exactly its job. Leave out for the general worker.'),
       dependsOn: z
         .array(z.string())
         .optional()
         .describe('Titles of tasks ALREADY registered in this plan that must be accepted before this one starts. Only for real order (tests after the feature, integration after its parts).'),
     }),
-    execute: async ({ title, prompt, files, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn }: CreateTaskArgs) => {
+    execute: async ({ title, prompt, files, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn, agent }: CreateTaskArgs) => {
       const previous = inPlan(title)
+      const chosen = agent ? suggestibleAgent(agent) : null
+      if (agent && !chosen) {
+        return `Task "${title}" was NOT registered: there is no agent "${agent}" to use. Pick an id from "AGENTS YOU CAN USE FOR A TASK", or register it again without an agent.`
+      }
       // A dependency only on an already registered task: besides giving the id,
       // this makes a cycle impossible (nobody depends on what does not exist
       // yet). On a replacement the same holds, except depending on itself.
@@ -301,6 +312,7 @@ export function createTaskTool(
         status: 'idle',
         ...(dependsOnIds.length > 0 ? { dependsOn: dependsOnIds } : {}),
         ...(owned.length > 0 ? { files: owned } : {}),
+        ...(chosen ? { agent: agent as ProfileId } : {}),
       }
       if (!register(task, previous?.id)) return 'Plan task limit reached — do not register more tasks.'
       const notices: string[] = []

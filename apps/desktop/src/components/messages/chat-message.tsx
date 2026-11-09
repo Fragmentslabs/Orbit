@@ -27,6 +27,7 @@ import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
+import { AgentProposalCard } from "@/src/components/agent-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import { isRoutineProposal, RoutineProposalCard } from "@/src/components/routines/routine-proposal-card"
 import {
@@ -141,6 +142,7 @@ type Segment =
 const RENDER_PROPRIO = new Set([
   "subagent",
   "create_skill",
+  "create_agent",
   // MCP connection and a user decision in the card — just like the skill proposal.
   "mcp_connect",
   "mcp_update",
@@ -287,6 +289,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.tool === "create_agent" ? (
+          <AgentProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "routines_manage" ? (
           <RoutineProposalCard key={segment.id} part={segment.part} />
         ) : isPieceCardTool(segment.part.tool) ? (

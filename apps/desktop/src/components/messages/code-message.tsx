@@ -28,6 +28,7 @@ import { DiffBadge } from "@/src/components/messages/diff-badge"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
 import { McpProposalCard } from "@/src/components/mcp-proposal-card"
+import { AgentProposalCard } from "@/src/components/agent-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import { isRoutineProposal, RoutineProposalCard } from "@/src/components/routines/routine-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
@@ -212,6 +213,7 @@ function segmentParts(parts: MessagePart[], cardPart: (part: MessagePart) => boo
       part.tool !== "subagent" &&
       part.tool !== "todowrite" &&
       part.tool !== "create_skill" &&
+      part.tool !== "create_agent" &&
       part.tool !== "mcp_connect" &&
       part.tool !== "mcp_update" &&
       part.tool !== "show_image" &&
@@ -339,6 +341,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" && segment.part.tool === "create_agent" ? (
+          <AgentProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" && segment.part.tool === "routines_manage" ? (
           <RoutineProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" &&

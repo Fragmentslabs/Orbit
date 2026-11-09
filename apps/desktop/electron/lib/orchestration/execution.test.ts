@@ -14,6 +14,7 @@ const config = (c: Partial<OrchestrationSettings> = {}): OrchestrationSettings =
   behavior: 'supervise',
   adjustmentsPerWorker: 2,
   approveSingleTask: false,
+  autoApprove: false,
   worktrees: false,
   ...c,
 })

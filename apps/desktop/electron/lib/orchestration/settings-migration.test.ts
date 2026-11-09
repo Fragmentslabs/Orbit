@@ -37,6 +37,7 @@ describe('normalizeOrchestrationSettings — settings renamed to English', () =>
       adjustmentsPerWorker: 4,
       worktrees: true,
       approveSingleTask: true,
+      autoApprove: false,
     })
     // Idempotent over the migrated object as well.
     expect(normalizeOrchestrationSettings(migrated)).toEqual(migrated)
@@ -68,6 +69,13 @@ describe('normalizeOrchestrationSettings — settings renamed to English', () =>
       adjustmentsPerWorker: DEFAULT_ORCHESTRATION_SETTINGS.adjustmentsPerWorker,
       worktrees: DEFAULT_ORCHESTRATION_SETTINGS.worktrees,
       approveSingleTask: DEFAULT_ORCHESTRATION_SETTINGS.approveSingleTask,
+      autoApprove: DEFAULT_ORCHESTRATION_SETTINGS.autoApprove,
     })
+  })
+
+  it('auto-approve is off unless set, and only a boolean turns it on', () => {
+    expect(normalizeOrchestrationSettings({}).autoApprove).toBe(false)
+    expect(normalizeOrchestrationSettings({ autoApprove: true }).autoApprove).toBe(true)
+    expect(normalizeOrchestrationSettings({ autoApprove: 'yes' }).autoApprove).toBe(false)
   })
 })

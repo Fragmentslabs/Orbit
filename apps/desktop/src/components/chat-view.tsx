@@ -1311,6 +1311,12 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
             extra: t.extra,
             revisions: t.revisions,
             note: t.reviewNote,
+            sessionId: t.workerSessionId,
+            agent: t.agent,
+            waitsFor: (t.dependsOn ?? [])
+              .map((id) => plan.tasks.find((x) => x.id === id))
+              .filter((x): x is NonNullable<typeof x> => !!x && x.phase !== "accepted")
+              .map((x) => x.title),
           }))}
           followUp={plan.review}
           onMergeAgain={() => chatApi.mergeOrchestration(session.id)}
@@ -1322,7 +1328,8 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           live={plan.status === "approved" || plan.status === "running"}
           interrupted={plan.interrupted}
           onContinue={() => useSessionStore.getState().resumeOrchestration(session.id)}
-          defaultExpanded={plan.status !== "done" || !!plan.interrupted}
+          // Collapsed: the summary ("5 workers · 3 running") is the point; a failure shows in it.
+          defaultExpanded={false}
           onDismiss={() => useSessionStore.getState().dismissOrchestration(session.id)}
         />
       )}

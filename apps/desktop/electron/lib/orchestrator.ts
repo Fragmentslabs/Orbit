@@ -20,6 +20,7 @@ import { classifyProviderError, errorToText, isRecoverableErrorKind } from './er
 import { hasStreamedContent, resolveRotation } from './model-rotation'
 import { conductorInput } from './orchestrator-conductor'
 import { registerOrchestrator } from './orchestration/questions'
+import { workerAgentsForPlan } from './agents/suggestions'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
@@ -543,6 +544,8 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // research/browser and only finds out it does not have it in the tool reply,
     // task by task.
     const enabled = Object.entries(ceiling).filter(([, v]) => v).map(([k]) => k)
+    // The user's agents a task may run as (empty when none qualifies).
+    const agentsNote = await workerAgentsForPlan()
     const contextNote = [
       `\n\nWorking folder: ${input.directory}. Every worker runs there, in code mode.`,
       enabled.length > 0
@@ -604,7 +607,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       }
       const stream = streamText({
         model,
-        system: ORCHESTRATOR_PLAN_PROMPT + contextNote,
+        system: ORCHESTRATOR_PLAN_PROMPT + agentsNote + contextNote,
         messages,
         tools: planTools,
         toolApproval,
@@ -971,6 +974,8 @@ async function approvePlanTurn(
         folderId: null,
         directory: input.directory,
         extraDirectories: input.extraDirectories,
+        // An agent worker runs that agent's setup (profile is read from the session each turn).
+        ...(task.agent ? { profile: task.agent } : {}),
         // The modes come from the plan: the orchestrator chose them task by task,
         // within the session ceiling. They stay on the session so whoever continues
         // the conversation later (review, message_worker) uses the same ones.

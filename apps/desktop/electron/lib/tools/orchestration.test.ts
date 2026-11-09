@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { OrchestrationTask } from '@shared/chat'
 
+vi.mock('../agents/suggestions', () => ({ suggestibleAgent: (id: string) => (id === 'agent:rev' ? { id: 'rev', name: 'Reviewer' } : null) }))
 vi.mock('../permission', () => ({ createToolApproval: vi.fn() }))
 vi.mock('../permission/global-mode', () => ({ globalMode: vi.fn() }))
 vi.mock('../prompts', () => ({ buildSystemPrompt: vi.fn() }))
@@ -91,6 +92,19 @@ describe('create_task', () => {
     expect(notice).toContain('shares files')
     expect(notice).toContain('"Tela"')
     expect(p.tasks.map((t) => t.files)).toEqual([['src/ui'], ['src/ui/button.tsx']])
+  })
+
+  it('a task can run as a listed agent, and the worker is recorded on the task', async () => {
+    const p = plan()
+    expect(await p.run({ title: 'Review auth', prompt: 'review src/auth', agent: 'agent:rev' })).toBe('Task "Review auth" registered in the plan.')
+    expect(p.tasks[0].agent).toBe('agent:rev')
+  })
+
+  it('refuses an agent that is not listed, registering nothing', async () => {
+    const p = plan()
+    const result = await p.run({ title: 'Review auth', prompt: 'x', agent: 'agent:ghost' })
+    expect(result).toContain('NOT registered')
+    expect(p.tasks).toHaveLength(0)
   })
 
   it('repeating the title replaces the task and keeps the id (dependencies still hold)', async () => {

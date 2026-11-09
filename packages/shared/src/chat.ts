@@ -1240,6 +1240,8 @@ export interface OrchestrationTask {
    *  the "ownership" that lets workers run in parallel without stepping on
    *  each other. */
   files?: string[]
+  /** The agent (`agent:<id>`) that runs this worker instead of the general setup. */
+  agent?: ProfileId
   /** Created by the orchestrator during the review (it was not in the approved plan) */
   extra?: boolean
   /** Last note from the review: what the adjustment asked for, or why it failed */
@@ -1277,6 +1279,8 @@ export interface OrchestrationSettings {
   worktrees: boolean
   /** A single-task plan starts without waiting for the card's "Approve" */
   approveSingleTask: boolean
+  /** Every plan starts without waiting for the card's "Approve" (the orchestra does not ask to run) */
+  autoApprove: boolean
 }
 
 export const DEFAULT_ORCHESTRATION_SETTINGS: OrchestrationSettings = {
@@ -1284,6 +1288,7 @@ export const DEFAULT_ORCHESTRATION_SETTINGS: OrchestrationSettings = {
   adjustmentsPerWorker: 2,
   worktrees: false,
   approveSingleTask: false,
+  autoApprove: false,
 }
 
 export const MAX_ADJUSTMENTS_PER_WORKER = 5
@@ -1325,6 +1330,7 @@ export function normalizeOrchestrationSettings(raw: unknown): OrchestrationSetti
     adjustmentsPerWorker: adjustments,
     worktrees: typeof v.worktrees === "boolean" ? v.worktrees : d.worktrees,
     approveSingleTask: typeof rawSingleTask === "boolean" ? rawSingleTask : d.approveSingleTask,
+    autoApprove: typeof v.autoApprove === "boolean" ? v.autoApprove : d.autoApprove,
   }
 }
 
