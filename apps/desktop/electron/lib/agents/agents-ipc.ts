@@ -6,6 +6,7 @@ import { generateAgent } from './generator'
 import { describeAgents, describeBuiltins } from '../profiles/describe'
 import { refreshPinnedSkills } from './pinned-skills'
 import { loadOverrides, resetOverride, saveOverride } from './overrides'
+import { registerAgentShareIpc } from './share-ipc'
 import { agentEvents, duplicateAgent, loadAgents, removeAgent, saveAgent } from './store'
 
 /** IPC of the Specialists page: the person's agents plus the description of the built-ins. */
@@ -23,6 +24,7 @@ export function registerAgentsIpc(): void {
       if (!win.isDestroyed()) win.webContents.send(CH.changed)
     }
   })
+  registerAgentShareIpc()
   ipcMain.handle(CH.snapshot, snapshot)
   // `id` absent creates; present replaces the editable part. The renderer's payload is untrusted:
   // the store validates and clamps it.

@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PlusIcon } from "lucide-react"
+import { PlusIcon, Upload } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import type { FragmentKind, FragmentManifest } from "@shared/fragments"
 import { ListToolbar } from "@/src/components/list-toolbar"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { FragmentCard } from "./fragment-card"
 import { CreatingCard } from "./fragment-creating-card"
+import { FragmentImportDialog, FragmentImportProblemNote } from "./share/fragment-import-dialog"
+import { useFragmentImport } from "./share/use-fragment-import"
 
 type Filter = "all" | FragmentKind
 
@@ -24,6 +27,8 @@ export function FragmentGallery() {
   const startComposing = useFragmentsStore((s) => s.startComposing)
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
+  const importer = useFragmentImport()
+  const [dragging, setDragging] = useState(false)
 
   const { pinned, others } = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -37,7 +42,21 @@ export function FragmentGallery() {
   const nothingMatches = pinned.length + others.length === 0
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="relative flex min-h-0 flex-1 flex-col"
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(e) => e.currentTarget === e.target && setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        const file = e.dataTransfer.files[0]
+        if (file) void importer.start(file)
+      }}
+    >
       <ListToolbar
         query={query}
         onQueryChange={setQuery}
@@ -57,7 +76,18 @@ export function FragmentGallery() {
             { value: "widget", label: t("fragments.kind.widget.name") },
           ]}
         />
+        <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1 px-3 text-xs" onClick={importer.pickFile} disabled={importer.busy}>
+          <Upload className="size-3.5" />
+          {t("fragments.share.importButton")}
+        </Button>
       </ListToolbar>
+      <FragmentImportProblemNote problem={importer.problem} onDismiss={importer.dismissProblem} />
+      <FragmentImportDialog preview={importer.preview} busy={importer.busy} onConfirm={importer.confirm} onCancel={importer.cancel} />
+      {dragging && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/80 text-sm font-medium">
+          {t("fragments.share.drop")}
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loaded && items.length === 0 && creations.length === 0 ? (

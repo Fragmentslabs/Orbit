@@ -10,6 +10,7 @@ import { ActionsFeed } from "@/src/components/actions-feed"
 import { FragmentAiBadge, FragmentFrame, useFragment } from "@/src/components/fragment-tab"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import { describeFragmentAction } from "./fragment-actions"
+import { FragmentUntrustedBanner } from "./share/fragment-untrusted-banner"
 
 /**
  * One fragment on the page: the whole area is the fragment — no border, no bar of its own
@@ -72,6 +73,8 @@ export function FragmentScreen({ fragmentId }: { fragmentId: string }) {
 
       {/* The fragment asked for the model: only the person can say yes. */}
       <FragmentAiBadge manifest={manifest} />
+
+      <FragmentUntrustedBanner fragmentId={manifest.id} />
 
       {detailsOpen && <FragmentDetailsPanel manifest={manifest} />}
 

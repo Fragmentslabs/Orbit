@@ -10,6 +10,7 @@ import type {
   FragmentLogEntry,
   FragmentManifest,
   FragmentMetaPatch,
+  FragmentPins,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
@@ -188,6 +189,12 @@ export async function createFragment(input: {
   icon?: string
   requests?: FragmentCapability[]
   sessionId?: string
+  /** Extra files of `src/` (an import). Already validated by the caller; written as they are. */
+  files?: Array<{ path: string; data: Buffer }>
+  /** Writes the provenance record. Default: local. An import passes its third-party record. */
+  recordProvenance?: (id: string) => Promise<void>
+  /** Pins the new fragment gets. Default: where its kind lives; an import passes none. */
+  pinned?: FragmentPins
 }): Promise<FragmentManifest> {
   if (Buffer.byteLength(input.html, 'utf8') > MAX_FILE_BYTES) {
     throw new Error(`index.html too large (limit ${Math.round(MAX_FILE_BYTES / 1024)}KB)`)
@@ -200,7 +207,7 @@ export async function createFragment(input: {
     name: input.name.trim().slice(0, 80) || 'Fragment',
     icon: sanitizeFragmentIcon(input.icon),
     kind,
-    pinned: defaultFragmentPins(kind),
+    pinned: input.pinned ?? defaultFragmentPins(kind),
     sdk: 1,
     requests: sanitizeFragmentCaps(input.requests),
     grants: [],
@@ -213,9 +220,16 @@ export async function createFragment(input: {
   }
   await fsp.mkdir(srcDir(id), { recursive: true })
   await fsp.writeFile(path.join(srcDir(id), ENTRY), input.html, 'utf8')
+  for (const file of input.files ?? []) {
+    const full = resolveSrcPath(id, file.path)
+    await fsp.mkdir(path.dirname(full), { recursive: true })
+    await fsp.writeFile(full, file.data)
+  }
+  // The record goes down BEFORE the manifest: a fragment is listed only once its manifest
+  // exists, so nothing ever sees an import without its origin (no record would read as
+  // local). Born here through the creation flow = local, the default.
+  await (input.recordProvenance ?? recordLocalProvenance)(id)
   await writeManifestFile(manifest)
-  // Born here through the creation flow: the only way a fragment is recorded as local.
-  await recordLocalProvenance(id)
   emitUpdated(manifest)
   return manifest
 }

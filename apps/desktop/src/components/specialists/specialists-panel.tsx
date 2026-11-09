@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Copy, Eye, Pencil, PenLine, Trash2, Wand2 } from "lucide-react"
+import { Copy, Eye, Pencil, PenLine, Share, Trash2, Upload, Wand2 } from "lucide-react"
 import { BUILTIN_PROFILES, type AgentDefinition, type AgentInput } from "@shared/agents"
 import { userProfileId } from "@shared/agents"
 import type { ProfileId } from "@shared/chat"
@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils"
 import { AgentEditorDialog } from "./agent-editor-dialog"
 import { ProfileDialog } from "./profile-dialog"
 import { TemplatesMenu } from "./templates-menu"
+import { AgentImportDialog, AgentImportProblemNote, useAgentImport } from "./agent-import-dialog"
+import { Button } from "@/components/ui/button"
 import { BuiltinEditorDialog } from "./builtin-editor-dialog"
 
 function AgentCard({ view, badge, description, onOpen, menu }: {
@@ -51,6 +53,7 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
   const [editing, setEditing] = useState<AgentDefinition | null | undefined>(undefined)
   const builtinDescriptions = useAgentsStore((s) => s.builtins)
   const startCreation = useStartCreationChat()
+  const importer = useAgentImport()
   const [draft, setDraft] = useState<AgentInput | undefined>()
   const [editingBuiltin, setEditingBuiltin] = useState<ProfileId | null>(null)
   const [viewing, setViewing] = useState<ProfileId | null>(null)
@@ -97,6 +100,10 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
             <p className="mt-0.5 text-xs text-muted-foreground">{t("specialists.mine.description")}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" onClick={importer.pickFile} disabled={importer.busy}>
+              <Upload className="size-3.5" />
+              {t("specialists.share.importButton")}
+            </Button>
             <TemplatesMenu />
           <CreateMenu
             label={t("specialists.mine.new")}
@@ -119,6 +126,7 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
           />
           </div>
         </div>
+        <AgentImportProblemNote problem={importer.problem} onDismiss={importer.dismissProblem} />
         {agents.length === 0 ? (
           <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t("specialists.mine.empty")}</div>
         ) : mine.length === 0 ? (
@@ -131,6 +139,7 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
               <AgentCard
                 key={agent.id}
                 view={userAgentView(agent, t)}
+                badge={agent.origin === "imported" ? t("specialists.share.badge") : undefined}
                 description={agent.prompt.trim() || t("specialists.mine.noPrompt")}
                 onOpen={() => setViewing(userProfileId(agent.id))}
                 menu={
@@ -144,6 +153,7 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
                         icon: Copy,
                         onSelect: () => void agentsApi.duplicate(agent.id, t("specialists.menu.copySuffix")),
                       },
+                      { id: "export", label: t("specialists.share.export"), icon: Share, onSelect: () => void agentsApi.exportFile(agent.id) },
                       { id: "remove", label: t("common.remove"), icon: Trash2, destructive: true, onSelect: () => void agentsApi.remove(agent.id) },
                     ]}
                   />
@@ -167,6 +177,7 @@ export function SpecialistsPanel({ query = "" }: { query?: string }) {
           onOpenChange={(open) => !open && setEditingBuiltin(null)}
         />
       )}
+      <AgentImportDialog preview={importer.preview} busy={importer.busy} onConfirm={importer.confirm} onCancel={importer.cancel} />
       {viewing && <ProfileDialog profile={viewing} open onOpenChange={(open) => !open && setViewing(null)} />}
     </div>
   )

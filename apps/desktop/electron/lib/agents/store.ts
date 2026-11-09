@@ -98,6 +98,31 @@ export function saveAgent(raw: unknown, id?: string): Promise<SaveResult> {
   })
 }
 
+/**
+ * Saves an agent that came from a shared file, after the person confirmed the consent card.
+ * It is always `imported` — the file cannot pick its own origin or id — and it is not
+ * selected or switched on anywhere: it is just one more entry in the list.
+ */
+export function importAgent(raw: unknown): Promise<SaveResult> {
+  return serialized(async () => {
+    const input = sanitizeAgentInput(raw)
+    if (agentInputProblem(input)) return { ok: false, reason: 'name' }
+    const list = await loadAgents()
+    if (list.length >= AGENT_LIMITS.agents) return { ok: false, reason: 'limit' }
+    const now = Date.now()
+    const agent: AgentDefinition = {
+      ...input,
+      version: AGENT_FORMAT_VERSION,
+      id: `ag_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+      origin: 'imported',
+      createdAt: now,
+      updatedAt: now,
+    }
+    await persist([...list, agent])
+    return { ok: true, agent }
+  })
+}
+
 /** A copy with a new id; a duplicate is always the person's own, whatever the original was. */
 export function duplicateAgent(id: string, copyLabel: string): Promise<SaveResult> {
   return serialized(async () => {

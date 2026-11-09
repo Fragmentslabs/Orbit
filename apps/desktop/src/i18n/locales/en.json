@@ -3230,7 +3230,13 @@
       "importedFile": "Imported file",
       "recordedAt": "Added {{date}}",
       "modified": "Changed since it arrived",
-      "commit": "Commit"
+      "commit": "Commit",
+      "fileName": "File",
+      "fileHash": "File checksum",
+      "author": "Author (stated)",
+      "untrusted": "Not reviewed yet. It arrived from outside, so nothing can be allowed until you have read what it does and asks for.",
+      "markReviewed": "I reviewed it",
+      "reviewed": "Reviewed"
     },
     "details": {
       "title": "Details",
@@ -3298,6 +3304,50 @@
         "create": "Created",
         "edit": "Edited",
         "delete": "Deleted"
+      }
+    },
+    "share": {
+      "importButton": "Import",
+      "export": "Export as file…",
+      "drop": "Drop a .orbitfrag file to import it",
+      "importTitle": "Import “{{name}}”?",
+      "importDescription": "This file contains a fragment made by someone else. Nothing is saved until you import it.",
+      "file": "File",
+      "author": "Author",
+      "authorClaim": "{{author}} (stated by the file, not verified)",
+      "noAuthor": "Not stated",
+      "kind": "Kind",
+      "hash": "SHA-256",
+      "asks": "It asks to use",
+      "asksNothing": "Nothing: it asks for no capability.",
+      "capabilities": {
+        "ai": "Your AI model (orbit.ai) — it spends your tokens",
+        "models": "List and pick your models (orbit.models)"
+      },
+      "files_one": "{{count}} file · {{size}}",
+      "files_other": "{{count}} files · {{size}}",
+      "warning": "It will arrive marked as not reviewed, with nothing allowed and not pinned anywhere. Its code runs in a sandbox, but read what it asks for before you allow anything. Saved data and settings of the original are never included.",
+      "import": "Import",
+      "untrustedBanner": "Imported and not reviewed. Nothing can be allowed until you review it.",
+      "review": "Review",
+      "lockedHint": "Review this fragment before allowing anything.",
+      "errors": {
+        "not_orbitfrag": "That is not a .orbitfrag file.",
+        "failed": "The import did not finish. Try again.",
+        "too_large": "The file is too large to import.",
+        "not_an_archive": "The file is damaged or is not a fragment package.",
+        "missing_manifest": "The package has no manifest.",
+        "bad_manifest": "The package manifest is invalid.",
+        "unsupported_version": "This package was made by a newer version of Orbit. Update Orbit to import it.",
+        "forbidden_entry": "The package contains files that a fragment may not carry.",
+        "bad_path": "The package contains an unsafe file path.",
+        "bad_file_type": "The package contains a file type that fragments cannot use.",
+        "file_too_large": "A file inside the package is too large.",
+        "too_many_files": "The package has too many files.",
+        "size_mismatch": "A file in the package does not match its declared size.",
+        "hash_mismatch": "A file in the package was altered: its checksum does not match.",
+        "missing_entry": "The package has no index.html.",
+        "duplicate_path": "The package lists the same file twice."
       }
     }
   },
@@ -4473,6 +4523,37 @@
       "research": {
         "name": "Researcher",
         "description": "Answers a question from sources."
+      }
+    },
+    "share": {
+      "importButton": "Import",
+      "export": "Export as file…",
+      "badge": "Imported",
+      "importTitle": "Import the agent “{{name}}”?",
+      "importDescription": "From {{file}}. This is everything the agent will do. Nothing is saved until you confirm.",
+      "whenToUse": "When to use",
+      "neverSuggested": "Empty: it is never suggested.",
+      "prompt": "Full prompt",
+      "noPrompt": "Empty: nothing is injected.",
+      "features": "Orbit features it switches on",
+      "tools": "Tool limits",
+      "allTools": "No limit: every tool the chat would have.",
+      "noTools": "None: it may use no tools.",
+      "craft": "Works in the {{craft}} craft, with that craft’s tools.",
+      "skills": "Pinned skills",
+      "noSkills": "None.",
+      "ignored": "The file also carried a model or thinking default. Orbit ignores them: that choice is yours.",
+      "warning": "An agent writes the instructions the model follows. Read the prompt above; it is saved as imported and is used only when you pick it for a chat.",
+      "import": "Import agent",
+      "errors": {
+        "not_agent_file": "That is not a .orbitagent file.",
+        "too_large": "The file is too large.",
+        "not_json": "The file could not be read.",
+        "bad_format": "The file is not an Orbit agent.",
+        "unsupported_version": "This agent was made by a newer version of Orbit. Update Orbit to import it.",
+        "bad_agent": "The agent in the file is not valid (it needs a name).",
+        "limit": "You have reached the limit of agents.",
+        "failed": "The import did not finish. Try again."
       }
     }
   },

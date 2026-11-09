@@ -22,6 +22,13 @@ export type FragmentProvenanceRecord =
       sourceUrl?: string
       /** The pinned commit it was imported at, for "changed since origin". */
       commit?: string
+      /** A file import: the name Orbit was handed and the SHA-256 of the archive it verified. */
+      fileName?: string
+      fileHash?: string
+      /** What the package's manifest CLAIMS. Shown as a claim; it never decides the owner. */
+      author?: string
+      /** Set when the person reviewed the fragment. Until then it is untrusted. */
+      reviewedAt?: number
       recordedAt: number
       /** Set when the fragment was edited after the import. Editing never makes it local. */
       modifiedAt?: number
@@ -66,4 +73,9 @@ export function safeSourceLink(sourceUrl: string | undefined): string | undefine
   } catch {
     return undefined
   }
+}
+
+/** A third-party fragment the person has not reviewed yet: it cannot be granted anything. */
+export function isUntrusted(provenance: FragmentProvenanceRecord): boolean {
+  return provenance.origin === "third_party" && provenance.reviewedAt === undefined
 }

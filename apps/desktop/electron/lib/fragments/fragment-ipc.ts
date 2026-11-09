@@ -4,7 +4,8 @@ import { FRAGMENT_CAPABILITIES } from '@shared/fragments'
 import { handleFragmentCall } from './fragment-bridge'
 import { getFragmentData, getFragmentDetails } from './fragment-details'
 import { listRevisions, revertToBefore } from './fragment-history'
-import { getProvenance } from './fragment-provenance'
+import { getProvenance, isFragmentUntrusted } from './fragment-provenance'
+import { registerFragmentShareIpc } from './share/fragment-share-ipc'
 import {
   appendFragmentLog,
   fragmentEvents,
@@ -31,6 +32,8 @@ const LOG_LEVELS = new Set(['log', 'info', 'warn', 'error'])
 export function registerFragmentIpc(): void {
   fragmentEvents.on('updated', (event: FragmentUpdatedEvent) => sendToWindows('fragment:updated', event))
 
+  registerFragmentShareIpc()
+
   ipcMain.handle('fragment:list', () => listFragments())
   ipcMain.handle('fragment:get', (_event, id: string) => getFragment(id))
   // Read-only: the record is written by Orbit's own flows, never through IPC.
@@ -53,6 +56,8 @@ export function registerFragmentIpc(): void {
     if (!isFragmentId(id)) return null
     const cap = FRAGMENT_CAPABILITIES.find((c) => c === capability)
     if (!cap) return null
+    // An imported fragment nobody reviewed cannot be granted anything yet (turning off is always fine).
+    if (on === true && (await isFragmentUntrusted(id))) return null
     const manifest = await setGrant(id, cap, on === true)
     if (manifest) sendToWindows('fragment:updated', { fragmentId: id, revision: manifest.revision } satisfies FragmentUpdatedEvent)
     return manifest
