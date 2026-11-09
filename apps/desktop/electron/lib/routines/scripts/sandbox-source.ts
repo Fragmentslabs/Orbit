@@ -28,7 +28,7 @@ export const BOOT_SOURCE = `(function (bridge, stateJson, inputJson) {
   var api = {
     input: JSON.parse(inputJson),
     fetch: async function (url, init) {
-      var r = await call('fetch', { url: String(url), headers: init && init.headers ? init.headers : undefined });
+      var r = await call('fetch', { url: String(url), headers: init && init.headers ? init.headers : undefined, auth: init && init.auth ? init.auth : undefined });
       return {
         ok: r.status >= 200 && r.status < 300,
         status: r.status,

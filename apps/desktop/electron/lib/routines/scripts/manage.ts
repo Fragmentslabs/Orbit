@@ -1,12 +1,12 @@
 import type { Routine, RoutineScript, ScriptTestResult } from '@shared/routines'
-import { scriptFingerprint } from '@shared/routines'
+import { SECRET_NAME_PATTERN, scriptFingerprint } from '@shared/routines'
 import { listRoutines, updateRoutine } from '../repo'
 import { emit } from '../scheduler'
 import { runScript, type ScriptOutcome } from './runner'
 import { readScriptRecord } from './store'
 
 /** What an agent may write; the id and the approval are never its to set. */
-export type ScriptDraft = Pick<RoutineScript, 'name' | 'summary' | 'code' | 'hosts' | 'readFiles'>
+export type ScriptDraft = Pick<RoutineScript, 'name' | 'summary' | 'code' | 'hosts' | 'readFiles' | 'secrets'>
 
 export function newScriptId(): string {
   return `scr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -20,6 +20,12 @@ export function validScriptName(name: string): boolean {
 /** Hosts as bare domains, lower case, no duplicates. */
 export function cleanHosts(hosts: readonly string[]): string[] {
   return [...new Set(hosts.map((h) => h.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(Boolean))]
+}
+
+/** Secret names a script asks for: valid, no duplicates; absent when none. */
+export function cleanSecretNames(names: readonly string[] | undefined): string[] | undefined {
+  const clean = [...new Set((names ?? []).map((n) => n.trim()).filter((n) => SECRET_NAME_PATTERN.test(n)))]
+  return clean.length > 0 ? clean : undefined
 }
 
 /**
@@ -39,6 +45,7 @@ export async function saveScriptFromAgent(routineId: string, draft: ScriptDraft)
       code: draft.code,
       hosts: cleanHosts(draft.hosts),
       readFiles: draft.readFiles || undefined,
+      secrets: cleanSecretNames(draft.secrets),
       // approvedFingerprint stays out: a new or changed script waits for the person.
     }
     return { ...routine, scripts: existing ? scripts.map((s) => (s.id === existing.id ? next : s)) : [...scripts, next] }

@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads'
 import * as XLSX from 'xlsx'
 import type { RoutineScript } from '@shared/routines'
 import { checkFetchUrl, resolveInsideFolders, safeHeaders } from './guards'
+import { applyAuth, redactDeep, redactText, type SecretReader } from './secrets-guard'
 import { BOOT_SOURCE, WORKER_SOURCE } from './sandbox-source'
 
 /** What a script keeps between runs: free values and the ids it has already handled. */
@@ -33,8 +34,15 @@ interface Capabilities {
   hosts: readonly string[]
   folders: readonly string[]
   readFiles: boolean
+  secrets: readonly string[]
+  readSecret: SecretReader
+  /** Values of the secrets this run used: scrubbed from everything that comes back. */
+  used: Set<string>
   fetchImpl: typeof fetch
 }
+
+/** Loaded on demand: the store needs Electron, which the pure parts of the runner do not. */
+const defaultReadSecret: SecretReader = async (name) => (await import('./secrets-store')).readSecretValue(name)
 
 /** Answers one bridge call. Never throws: a refusal travels as `{ error }`. */
 async function answer(caps: Capabilities, op: string, rawArgs: string): Promise<string> {
@@ -42,7 +50,7 @@ async function answer(caps: Capabilities, op: string, rawArgs: string): Promise<
     const args = JSON.parse(rawArgs) as Record<string, unknown>
     return JSON.stringify({ value: await perform(caps, op, args) })
   } catch (error) {
-    return JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+    return JSON.stringify({ error: redactText(error instanceof Error ? error.message : String(error), caps.used) })
   }
 }
 
@@ -50,13 +58,15 @@ async function perform(caps: Capabilities, op: string, args: Record<string, unkn
   if (op === 'fetch') {
     const checked = checkFetchUrl(String(args.url), caps.hosts)
     if (!checked.ok) throw new Error(checked.error)
+    const headers = safeHeaders(args.headers)
+    if (args.auth !== undefined) await applyAuth(args.auth, caps.secrets, caps.readSecret, caps.used, headers)
     const response = await caps.fetchImpl(checked.url, {
       method: 'GET',
-      headers: safeHeaders(args.headers),
+      headers,
       redirect: 'error',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
-    return { status: response.status, body: (await response.text()).slice(0, MAX_BODY_CHARS) }
+    return { status: response.status, body: redactText((await response.text()).slice(0, MAX_BODY_CHARS), caps.used) }
   }
   if (!caps.readFiles) throw new Error('The script did not declare that it reads files.')
   if (op === 'listFiles') {
@@ -85,17 +95,22 @@ async function perform(caps: Capabilities, op: string, args: Record<string, unkn
  * process, from what the script declared — never from what the script asks.
  */
 export function runScript(options: {
-  script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles'>
+  script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles' | 'secrets'>
   folders: readonly string[]
   state?: ScriptState
   input?: unknown
   fetchImpl?: typeof fetch
+  /** Looks up a stored secret; defaults to the keychain-backed store. */
+  readSecret?: SecretReader
 }): Promise<ScriptOutcome> {
   const state = options.state ?? EMPTY_SCRIPT_STATE
   const caps: Capabilities = {
     hosts: options.script.hosts,
     folders: options.folders,
     readFiles: !!options.script.readFiles,
+    secrets: options.script.secrets ?? [],
+    readSecret: options.readSecret ?? defaultReadSecret,
+    used: new Set<string>(),
     fetchImpl: options.fetchImpl ?? fetch,
   }
   return new Promise((resolve) => {
@@ -115,7 +130,7 @@ export function runScript(options: {
       settled = true
       clearTimeout(timer)
       void worker.terminate()
-      resolve(outcome)
+      resolve(redactDeep(outcome, caps.used))
     }
     const timer = setTimeout(
       () => finish({ ok: false, error: 'The script took too long and was stopped.', logs: [], state }),

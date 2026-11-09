@@ -3052,6 +3052,15 @@
       "remove": "Remover",
       "editTitle": "Script {{script}}",
       "editStarter": "Quero mudar o script \"{{script}}\" da rotina \"{{routine}}\" (id: {{id}}): [o que mudar]."
+    },
+    "secrets": {
+      "title": "Segredos para scripts",
+      "hint": "Ficam no chaveiro do sistema. Um script pode pedir ao Orbit que envie um segredo aos hosts que declarou, mas nunca vê o valor, e os agentes do Orbit também não conseguem lê-lo.",
+      "missing": "Scripts daqui precisam de segredos que ainda não foram guardados: {{names}}.",
+      "delete": "Apagar {{name}}",
+      "namePlaceholder": "GITHUB_TOKEN",
+      "valuePlaceholder": "Valor",
+      "save": "Salvar"
     }
   },
   "queue": {

@@ -217,14 +217,25 @@ export interface RoutineScript {
   hosts: string[]
   /** May read files and spreadsheets inside the routine's folders (read-only). */
   readFiles?: boolean
+  /**
+   * Names of stored secrets the script may use (`fetch(url, { auth: { secret } })`). The value
+   * never reaches the script: the main process adds it to the request, to declared hosts only.
+   */
+  secrets?: string[]
   /** The fingerprint of the version the person approved; absent = never approved. */
   approvedFingerprint?: string
 }
 
 /** Everything that decides what a script can do and does, as one comparable string. */
-export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles'>): string {
-  return JSON.stringify([script.code, [...script.hosts].sort(), !!script.readFiles])
+export function scriptFingerprint(script: Pick<RoutineScript, 'code' | 'hosts' | 'readFiles' | 'secrets'>): string {
+  const base: unknown[] = [script.code, [...script.hosts].sort(), !!script.readFiles]
+  // Added only when present, so scripts approved before secrets existed stay approved.
+  if (script.secrets?.length) base.push([...script.secrets].sort())
+  return JSON.stringify(base)
 }
+
+/** A secret name: upper case letters, digits and underscores ("GITHUB_TOKEN"). */
+export const SECRET_NAME_PATTERN = /^[A-Z][A-Z0-9_]{1,39}$/
 
 /** Is this exact version (code and abilities) the one the person approved? */
 export function scriptApproved(script: RoutineScript): boolean {
