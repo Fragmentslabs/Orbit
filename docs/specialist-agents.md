@@ -519,3 +519,50 @@ the payload reaches the agent fenced as data. **Not yet**: secrets for scripts (
 only), webhooks (needs a receiver), databases (no drivers; files and HTTP only). On the Scripts tab each script has "Test now"
 (runs once, keeps nothing, wakes nobody), "Edit with Orbit" (a chat started on that script) and
 "Remove" (not for the trigger script).
+
+### Webhook trigger for routines
+
+`RoutineTrigger { kind: 'webhook'; signed?: boolean }`: an HTTP request wakes the routine, through
+the same `startRun` the script triggers use. Code: `electron/lib/routines/webhooks/`
+(`guard.ts` pure rules, `receiver.ts` decisions over a tiny request layer, `store.ts`, `supervisor.ts`
+drain into runs, `service.ts` the listener).
+
+**Design.** Orbit is a desktop app with no public address, so the receiver is local and the person
+brings the internet.
+- *Listener.* One `http` server in the main process, bound to `127.0.0.1` only, on a random port
+  (the last port is tried first so the address survives a restart; it changes if that port is
+  taken). It exists only while at least one active routine has a webhook trigger: the scheduler
+  tick brings it up or down, `stopScheduler` stops it. Request timeout 10 s, headers timeout 5 s,
+  one request per connection.
+- *Address.* `http://127.0.0.1:<port>/hooks/<token>`; the token is 32 random bytes (base64url), one
+  per routine. It is derived (`HMAC(app key, routineId:epoch)`) from a random key kept in
+  `orbit-data/.../webhooks/key` (mode 0600), and only its SHA-256 is stored with the routine's
+  record, so no file holds a raw token; the routine screen recomputes it to show it.
+  "New address" bumps the epoch and the old one dies at once. A wrong token, a paused routine and a
+  routine with another trigger all answer the same plain 404.
+- *Signature (optional).* `signed: true` generates a per-routine secret (shown on the card) and
+  requires `X-Hub-Signature-256: sha256=<hmac-sha256 of the raw body>` (or `X-Orbit-Signature`),
+  compared in constant time. Without it the unguessable path is the only credential.
+- *Limits.* Body cap 64 KB (checked on `Content-Length` and while streaming; the rest is never
+  read), POST only, 20 calls/min per routine, 120/min for the listener, 30/min for addresses that
+  do not exist. Accepted payloads are not dropped for being close together: they wait in
+  `pending` (max 5, oldest dropped) and ONE run takes everything that gathered, at most one run
+  every 5 minutes (`MIN_FIRE_GAP_MS`) and only when the routine is not running.
+- *Payload.* JSON with the arrival time, a few safe headers (content type, user agent, event and
+  delivery ids; never authorization or cookies) and the body (parsed when JSON), cut to 8000
+  characters with `truncated: true`. It reaches the agent fenced as `<event>` data (`event-prompt.ts`,
+  wording now says "trigger", not "script").
+- *Log.* `WebhookActivity` (last 50 deliveries with accepted/refused reason and size, never the
+  content; the pending payloads), pushed as the `webhook-activity` event. Calls to unknown addresses
+  are not logged.
+- *Internet.* The app never opens a port to the internet and ships no hosted relay. The routine card
+  shows the local URL with a copy button and says so; the person points their own tunnel (Cloudflare
+  Tunnel, ngrok, Tailscale Funnel…) at it and gives the sender the tunnel's public URL plus the
+  path. Only works while Orbit is open.
+- *Agent.* `routines_manage` "create" takes `webhook: { signed? }` (excluded with a script
+  `trigger`); the proposal card note states exactly what listens (127.0.0.1, random port, while Orbit
+  is open, nothing exposed). `approvePendingRoutine` now also carries `scripts` and `trigger`.
+
+**Not done / the person's call.** A tunnel integration (bundling one or managing its process) is a
+product and security decision and was left out; so were a configurable port, a per-sender allowlist
+and replay protection (the signature has no timestamp). Calls arriving while Orbit is closed are lost.

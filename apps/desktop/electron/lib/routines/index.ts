@@ -1,6 +1,7 @@
 import type { NewRoutineInput, Routine, RoutineRun, ScriptActivity } from '@shared/routines'
 import { isScriptTriggered, scriptFingerprint } from '@shared/routines'
 import { readScriptRecord, removeScriptRecord } from './scripts/store'
+import { removeWebhookRecord } from './webhooks/store'
 import {
   addRoutine,
   listRoutines,
@@ -87,6 +88,7 @@ export async function removeRoutineCompletely(id: string): Promise<void> {
   await removeRoutine(id)
   await removeRoutineRuns(id)
   await removeScriptRecord(id)
+  await removeWebhookRecord(id)
   emit({ type: 'routine-removed', id })
 }
 

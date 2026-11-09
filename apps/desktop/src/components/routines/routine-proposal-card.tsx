@@ -93,7 +93,7 @@ export function RoutineProposalCard({ part }: { part: ToolPart }) {
         state={state}
         title={title}
         facts={facts}
-        note={scripts.length > 0 ? t("proposal.routineScriptNote") : mode === "code" ? t("proposal.routineCodeNote") : undefined}
+        note={proposal?.trigger?.kind === "webhook" ? t("proposal.routineWebhookNote") : scripts.length > 0 ? t("proposal.routineScriptNote") : mode === "code" ? t("proposal.routineCodeNote") : undefined}
         confirmLabel={t("routineProposal.create")}
         onConfirm={() => void confirm()}
         onDiscard={() => void discard(id)}

@@ -238,6 +238,7 @@ import { folderInMainRepository } from './lib/worktrees/main'
 import * as routines from './lib/routines'
 import { removeLegacyBackgroundAgent } from './lib/routines/legacy-agent'
 import { approveScript, removeScript, testScript } from './lib/routines/scripts/manage'
+import { rotateWebhook, webhookInfo } from './lib/routines/webhooks/service'
 import { approvePendingRoutine, discardPendingRoutine, listPendingRoutines } from './lib/routines/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
@@ -2049,6 +2050,8 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('routines:testScript', (_e, routineId: string, scriptId: string) => testScript(routineId, scriptId))
   ipcMain.handle('routines:removeScript', (_e, routineId: string, scriptId: string) => removeScript(routineId, scriptId))
+  ipcMain.handle('routines:webhook', (_e, id: string) => webhookInfo(id))
+  ipcMain.handle('routines:rotateWebhook', (_e, id: string) => rotateWebhook(id))
   ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
   ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
   ipcMain.handle('routines:rotateChat', (_e, id: string) => routines.rotateChat(id))
