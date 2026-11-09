@@ -263,12 +263,18 @@ export function ModelPickerModal({ visible, ...props }: ModelPickerModalProps) {
   return <ModelPickerSheet {...props} />
 }
 
-function ModelPickerSheet({
+/** Body of the model picker — search, catalog and rotations. It is a page of the "+"
+ *  sheet in the chat and the content of the drawer the routine/pipeline forms still use. */
+export function ModelPickerContent({
   onClose,
   sessionId,
   selected: selectedOverride,
   onSelect,
-}: Omit<ModelPickerModalProps, 'visible'>) {
+  inline,
+}: Omit<ModelPickerModalProps, 'visible'> & {
+  /** Inside the "+" sheet: the sheet already pads the sides, so the body drops its own. */
+  inline?: boolean
+}) {
   const { t } = useTranslation()
   const catalog = useSettingsStore((s) => s.catalog)
   const sessionModel = useSessionModel(sessionId)
@@ -291,9 +297,6 @@ function ModelPickerSheet({
 
   const resolved = useThemeStore((s) => s.resolved)
   const tokens = getThemeTokens(resolved)
-  // Drawer glued to the bottom edge: without the safe area it sits on top of the
-  // home indicator / gesture bar of the phone.
-  const insets = useSafeAreaInsets()
   const [search, setSearch] = useState('')
 
   const isWeb = Platform.OS === 'web'
@@ -443,54 +446,9 @@ function ModelPickerSheet({
   }, [onClose, router])
 
   return (
-    <Modal
-      visible
-      transparent
-      animationType={isWeb ? 'fade' : 'slide'}
-      onRequestClose={onClose}
-    >
-      <View
-        className={cn(
-          "flex-1",
-          isWeb ? "justify-center items-center p-4" : "justify-end"
-        )}
-        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-      >
-        {/* Backdrop press to close */}
-        <Pressable className="absolute inset-0" onPress={onClose} />
-
-        {/* Modal/Drawer Container */}
-        <View
-          className={cn(
-            "shadow-2xl overflow-hidden",
-            isWeb
-              ? "w-full max-w-md h-[550px] rounded-2xl"
-              : "w-full h-[80%] rounded-t-3xl"
-          )}
-          style={{
-            backgroundColor: tokens.background,
-            borderColor: tokens.border,
-            borderWidth: isWeb ? 1 : 0,
-            paddingBottom: isWeb ? 0 : insets.bottom,
-          }}
-        >
-          {/* Mobile top handle indicator */}
-          {!isWeb && (
-            <View className="items-center py-2">
-              <View className="w-10 h-1.5 rounded-full" style={{ backgroundColor: hslToRgba(tokens.mutedForeground.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), 0.3) }} />
-            </View>
-          )}
-
-          {/* Header */}
-          <View className="flex-row items-center justify-between px-4 py-3.5" style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: tokens.foreground }}>{t('modelPickerModal.title')}</Text>
-            <Pressable onPress={onClose} className="p-1 rounded-md" style={({ pressed }) => pressed ? { backgroundColor: tokens.muted } : undefined}>
-              <X size={20} color={tokens.foreground} />
-            </Pressable>
-          </View>
-
-          {/* Search */}
-          <View className="px-4 py-2 mt-1 flex-row items-center gap-2">
+    <View className="flex-1">
+      {/* Search */}
+          <View className={cn('py-2 mt-1 flex-row items-center gap-2', !inline && 'px-4')}>
             {/* Same shape and height as the main input: a round pill of 44px. */}
             <View className="flex-1 flex-row items-center gap-2.5 px-4 h-11 rounded-full" style={{ backgroundColor: tokens.muted }}>
               <Search size={17} color={tokens.mutedForeground} />
@@ -524,16 +482,16 @@ function ModelPickerSheet({
 
           {/* Catalog List */}
           {sections.length === 0 && loading ? (
-            <View className="gap-1 px-4 mt-2">
+            <View className={cn('gap-1 mt-2', !inline && 'px-4')}>
               <ModelRowSkeleton tokens={tokens} />
               <ModelRowSkeleton tokens={tokens} />
               <ModelRowSkeleton tokens={tokens} />
               <ModelRowSkeleton tokens={tokens} />
             </View>
           ) : sections.length === 0 ? (
-            <View className="py-12 px-4 mt-2 items-center">
+            <View className={cn('py-12 mt-2 items-center', !inline && 'px-4')}>
               <Text className="text-sm mb-1 text-center font-medium" style={{ color: tokens.mutedForeground }}>{t('modelPickerModal.noModelsAvailable')}</Text>
-              <Text className="text-xs text-center px-4 leading-relaxed" style={{ color: tokens.mutedForeground, opacity: 0.75 }}>
+              <Text className={cn('text-xs text-center leading-relaxed', !inline && 'px-4')} style={{ color: tokens.mutedForeground, opacity: 0.75 }}>
                 {connectedProviders.length === 0
                   ? t('modelPickerModal.configureProviderHint')
                   : t('modelPickerModal.trySearchHint')}
@@ -542,7 +500,7 @@ function ModelPickerSheet({
           ) : (
             <SectionList<ModelSectionItem, ModelSection>
               className="flex-1"
-              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}
+              contentContainerStyle={{ paddingHorizontal: inline ? 0 : 16, paddingTop: 8, paddingBottom: 16 }}
               sections={sections}
               keyExtractor={(item) => item.key}
               renderItem={({ item, index, section }) => {
@@ -641,7 +599,7 @@ function ModelPickerSheet({
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: 10,
-                paddingHorizontal: 16,
+                paddingHorizontal: inline ? 0 : 16,
                 paddingVertical: 14,
                 borderTopWidth: 1,
                 borderTopColor: tokens.border,
@@ -655,6 +613,79 @@ function ModelPickerSheet({
               <ChevronRight size={16} color={tokens.mutedForeground} />
             </Pressable>
           )}
+    </View>
+  )
+}
+
+/** Drawer of the model picker — the chrome around ModelPickerContent, kept for the
+ *  routine, pipeline and rotation forms, which are not inside the "+" sheet. */
+function ModelPickerSheet({
+  onClose,
+  sessionId,
+  selected,
+  onSelect,
+}: Omit<ModelPickerModalProps, 'visible'>) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const insets = useSafeAreaInsets()
+  const isWeb = Platform.OS === 'web'
+
+  return (
+    <Modal visible transparent animationType={isWeb ? 'fade' : 'slide'} onRequestClose={onClose}>
+      <View
+        className={cn('flex-1', isWeb ? 'justify-center items-center p-4' : 'justify-end')}
+        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+      >
+        <Pressable className="absolute inset-0" onPress={onClose} />
+
+        <View
+          className={cn(
+            'shadow-2xl overflow-hidden',
+            isWeb ? 'w-full max-w-md h-[550px] rounded-2xl' : 'w-full h-[80%] rounded-t-3xl',
+          )}
+          style={{
+            backgroundColor: tokens.background,
+            borderColor: tokens.border,
+            borderWidth: isWeb ? 1 : 0,
+            paddingBottom: isWeb ? 0 : insets.bottom,
+          }}
+        >
+          {!isWeb && (
+            <View className="items-center py-2">
+              <View
+                className="w-10 h-1.5 rounded-full"
+                style={{
+                  backgroundColor: hslToRgba(
+                    tokens.mutedForeground.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
+                    0.3,
+                  ),
+                }}
+              />
+            </View>
+          )}
+
+          <View
+            className="flex-row items-center justify-between px-4 py-3.5"
+            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '600', color: tokens.foreground }}>
+              {t('modelPickerModal.title')}
+            </Text>
+            <Pressable
+              onPress={onClose}
+              className="p-1 rounded-md"
+              style={({ pressed }) => (pressed ? { backgroundColor: tokens.muted } : undefined)}
+            >
+              <X size={20} color={tokens.foreground} />
+            </Pressable>
+          </View>
+
+          <ModelPickerContent
+            onClose={onClose}
+            sessionId={sessionId}
+            selected={selected}
+            onSelect={onSelect}
+          />
         </View>
       </View>
     </Modal>

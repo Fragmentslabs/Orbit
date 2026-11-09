@@ -12,7 +12,6 @@ import { useToolsStore } from '~/stores/tools-store'
 import { WorkerModelModal } from './WorkerModelModal'
 import { VisionConfigModal } from './VisionConfigModal'
 import { LoopConfigModal } from './LoopConfigModal'
-import { ModelPickerModal } from './ModelPickerModal'
 import { InputAttachment } from './Attachment'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands'
@@ -170,7 +169,6 @@ export function PromptInput({
   const [plusOpen, setPlusOpen] = useState(false)
   const [workerConfigOpen, setWorkerConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
-  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   // Small lift applied to the action buttons so their centre matches the text centre. The
   // native field ends up a few px taller than one lineHeight, so a bottom-anchored button
@@ -723,7 +721,7 @@ export function PromptInput({
         onFiles={handlePickFiles}
         modelLabel={modelLabel}
         modelProviderId={selected?.providerId}
-        onOpenModel={() => { setPlusOpen(false); setModelPickerOpen(true) }}
+        sessionId={sessionId}
         folders={folders}
         onFoldersChange={onFoldersChange}
         startOnFolders={startOnFolders}
@@ -738,12 +736,6 @@ export function PromptInput({
         onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
         permissionMode={permissionMode}
         onPermissionModeChange={(mode) => setPermissionMode(sessionId, mode)}
-      />
-
-      <ModelPickerModal
-        visible={modelPickerOpen}
-        onClose={() => setModelPickerOpen(false)}
-        sessionId={sessionId}
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />

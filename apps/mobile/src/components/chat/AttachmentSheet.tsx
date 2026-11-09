@@ -8,8 +8,11 @@ import {
   ActivityIndicator,
   StyleSheet,
   ScrollView,
+  Keyboard,
+  Platform,
   useWindowDimensions,
 } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   Camera,
@@ -39,9 +42,11 @@ import { ProviderLogo } from '~/components/ui/provider-logo'
 import { useConnectionStore } from '~/stores/connection-store'
 import { folderName } from '~/lib/folder-name'
 import { saveRecentFolder } from '~/lib/folder-recents'
+import { useBottomBreathing } from '~/lib/keyboard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { DirBrowserBody } from './DirBrowserBody'
+import { ModelPickerContent } from './ModelPickerModal'
 
 export type PermissionModeValue = 'ask' | 'approve' | 'full'
 
@@ -76,6 +81,7 @@ const PAGE_PERMISSIONS = 3
 const PAGE_TOOLS = 4
 const PAGE_FOLDERS = 5
 const PAGE_BROWSE = 6
+const PAGE_MODEL = 7
 
 type Page =
   | typeof PAGE_ATTACHMENTS
@@ -85,20 +91,25 @@ type Page =
   | typeof PAGE_TOOLS
   | typeof PAGE_FOLDERS
   | typeof PAGE_BROWSE
+  | typeof PAGE_MODEL
 
 /** Height of the content of each page: the sheet grows while the pages slide. */
 const PAGE_HEIGHT: Record<Page, number> = {
-  [PAGE_ATTACHMENTS]: 444,
+  // Taller on purpose: in a code chat the page has six rows plus the three action
+  // buttons, and all of it has to fit without scrolling.
+  [PAGE_ATTACHMENTS]: 520,
   [PAGE_MODES]: 500,
   [PAGE_THINKING]: 420,
   [PAGE_PERMISSIONS]: 300,
   [PAGE_TOOLS]: 420,
   [PAGE_FOLDERS]: 460,
   [PAGE_BROWSE]: 500,
+  [PAGE_MODEL]: 500,
 }
 
-/** Off-screen offset of the entrance/exit animation — bigger than any page. */
-const SHEET_HEIGHT = 560
+/** Off-screen offset of the entrance/exit animation — bigger than any page plus the
+ *  sheet's own padding and the safe area of the home indicator. */
+const SHEET_HEIGHT = 640
 
 /** Travel of the knob inside the 44px track (44 - 6 of padding - 20 of knob). */
 const SWITCH_KNOB_OFFSET = 18
@@ -121,10 +132,11 @@ interface AttachmentSheetProps {
   onCamera: () => void
   onPhotos: () => void
   onFiles: () => void
-  /** Name of the model of this chat — the row opens the picker. */
+  /** Name of the model of this chat — the row opens the picker page. */
   modelLabel: string
   modelProviderId?: string
-  onOpenModel: () => void
+  /** Session that owns the model choice — undefined/null = draft. */
+  sessionId?: string | null
   /** Every mode of the chat: the settings page turns each one on and off. */
   modes: ModeItem[]
   /** MCP servers of the chat: the tools page turns each one on and off. */
@@ -158,7 +170,7 @@ export function AttachmentSheet({
   onFiles,
   modelLabel,
   modelProviderId,
-  onOpenModel,
+  sessionId,
   modes,
   tools,
   onToolToggle,
@@ -177,13 +189,53 @@ export function AttachmentSheet({
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
-  const { width: screenWidth } = useWindowDimensions()
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions()
 
   // Width of the page viewport, measured on layout: the padding and the border of the
   // sheet make it 2px narrower than `screenWidth - 32`, and those 2px are enough for the
   // second page to peek at the right edge. The subtraction below is only the first frame.
   const [innerWidth, setInnerWidth] = useState(Math.max(1, screenWidth - 34))
   const [page, setPage] = useState<Page>(PAGE_ATTACHMENTS)
+
+  // The sheet is a Modal: the keyboard would cover it whole, and the lift belongs to the
+  // KeyboardAvoidingView of react-native-keyboard-controller (same convention as the
+  // ChatScreen). The height read here only caps the body of the page below.
+  const [kbHeight, setKbHeight] = useState(0)
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKbHeight(e.endCoordinates.height),
+    )
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKbHeight(0),
+    )
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+
+  // Foot of the sheet, the same convention as the chat input (lib/keyboard): the padding
+  // is FIXED and the same value goes to the KAV as a negative `keyboardVerticalOffset`,
+  // so the keyboard lifts the drawer by (height - padding). While it is open that
+  // padding ends up behind the keyboard — the body reaches the keyboard with no dead
+  // margin — and on the way back the 46px come out with the keyboard's own animation
+  // instead of being added after it ends (one animation, in phase, no flick).
+  const sheetBottomPad = useBottomBreathing() + 12
+
+  // The keyboard is up only in the pages with an input (the model search): the drawer
+  // cannot pass the status bar, so the body shrinks and the page's ScrollView/List takes
+  // over (18 = the sheet's paddingTop plus breathing room). Open, the bottom padding is
+  // under the keyboard and does not count.
+  const pageMaxHeight = Math.max(
+    240,
+    screenHeight - kbHeight - insets.top - (kbHeight > 0 ? 0 : sheetBottomPad) - 18,
+  )
+
+  // Body height of the moment: the page's own height, capped by the space available.
+  const bodyHeight = Math.min(PAGE_HEIGHT[page], pageMaxHeight)
 
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
   const [backdropAnim] = useState(() => new Animated.Value(0))
@@ -207,30 +259,51 @@ export function AttachmentSheet({
 
   useEffect(() => {
     // Only the page on screen is mounted: the sheet fades the new one in and never
-    // travels across the others. The height is a layout property and cannot go with the
-    // native driver, hence the two animations on two different nodes.
+    // travels across the others.
     pageFade.setValue(0)
-    Animated.parallel([
-      Animated.timing(pageFade, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-      Animated.timing(heightAnim, {
-        toValue: PAGE_HEIGHT[page],
-        duration: 220,
-        useNativeDriver: false,
-      }),
-    ]).start()
-  }, [page, pageFade, heightAnim])
+    Animated.timing(pageFade, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start()
+  }, [page, pageFade])
+
+  useEffect(() => {
+    // The opening fades the page in again. The fade started on the way out is lost when
+    // the sheet closes, and on the next opening `page` is already back to the attachments
+    // — it does not change, so the effect above never runs again and the sheet came back
+    // as a bare gray card, page at opacity 0.
+    if (!visible || startOnFolders) return
+    pageFade.setValue(0)
+    Animated.timing(pageFade, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start()
+  }, [visible, startOnFolders, pageFade])
+
+  useEffect(() => {
+    // The body follows the page AND the keyboard: shrinking on the way in and growing on
+    // the way out in one animation, never snapping when the closing finishes. `height` is
+    // a layout property and cannot go with the native driver, hence its own JS node.
+    Animated.timing(heightAnim, {
+      toValue: bodyHeight,
+      duration: 220,
+      useNativeDriver: false,
+    }).start()
+  }, [bodyHeight, heightAnim])
 
   // Back to the attachments on every exit: the next "+" opens on the first page.
   const closeSheet = useCallback(() => {
+    Keyboard.dismiss()
     setPage(PAGE_ATTACHMENTS)
     onClose()
   }, [onClose])
 
-  const backToAttachments = useCallback(() => setPage(PAGE_ATTACHMENTS), [])
+  const backToAttachments = useCallback(() => {
+    Keyboard.dismiss()
+    setPage(PAGE_ATTACHMENTS)
+  }, [])
 
   const wsClient = useConnectionStore((s) => s.wsClient)
   const [browseTarget, setBrowseTarget] = useState<'main' | 'extra'>('main')
@@ -335,434 +408,454 @@ export function AttachmentSheet({
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={closeSheet}>
-      <Animated.View style={[s.backdrop, { opacity: backdropAnim }]}>
-        <Pressable style={{ flex: 1 }} onPress={closeSheet} />
-      </Animated.View>
-
-      {/* Two animated nodes on purpose: `translateY` runs on the native driver and `height`
-          cannot (it is a layout property). On the same node the native module rejects
-          `height`, and the JS animation is refused on a node already moved to native. */}
-      <Animated.View
-        style={[
-          s.sheet,
-          {
-            paddingBottom: insets.bottom + 12,
-            transform: [{ translateY: slideAnim }],
-            backgroundColor: tokens.card,
-            borderColor: tokens.border,
-          },
-        ]}
+      {/* KAV of react-native-keyboard-controller: the sheet is a Modal, so without it the
+          keyboard opens over the drawer instead of pushing it (same as the ChatScreen). */}
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={-sheetBottomPad}
+        style={s.overlay}
       >
-        <Animated.View style={{ height: heightAnim }}>
-          <View style={[s.handle, { backgroundColor: tokens.muted }]} />
+        <Animated.View style={[s.backdrop, { opacity: backdropAnim }]}>
+          <Pressable style={{ flex: 1 }} onPress={closeSheet} />
+        </Animated.View>
 
-          <View
-            style={{ flex: 1, overflow: 'hidden' }}
-            onLayout={(e) => setInnerWidth(Math.round(e.nativeEvent.layout.width))}
-          >
-            <Animated.View
-              style={{
-                height: '100%',
-                width: innerWidth,
-                opacity: pageFade,
-              }}
+        {/* Two animated nodes on purpose: `translateY` runs on the native driver and `height`
+            cannot (it is a layout property). On the same node the native module rejects
+            `height`, and the JS animation is refused on a node already moved to native. */}
+        <Animated.View
+          style={[
+            s.sheet,
+            {
+              paddingBottom: sheetBottomPad,
+              transform: [{ translateY: slideAnim }],
+              backgroundColor: tokens.card,
+              borderColor: tokens.border,
+            },
+          ]}
+        >
+          <Animated.View style={{ height: heightAnim }}>
+            <View style={[s.handle, { backgroundColor: tokens.muted }]} />
+
+            <View
+              style={{ flex: 1, overflow: 'hidden' }}
+              onLayout={(e) => setInnerWidth(Math.round(e.nativeEvent.layout.width))}
             >
-              {/* ── Attachments, model, thinking, permissions ─────────────────── */}
-              {page === PAGE_ATTACHMENTS && (
-                // Rola: a altura da página é uma meta, não um limite — com fonte maior (ou
-                // tela pequena) as últimas linhas eram cortadas no rodapé e "Modos"/
-                // "Ferramentas" simplesmente não apareciam.
-                <ScrollView
-                  style={{ width: innerWidth, height: '100%' }}
-                  contentContainerStyle={{ paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <View style={[s.actionsRow, { borderBottomColor: tokens.border }]}>
-                  <SheetAction
-                    icon={Camera}
-                    label={t('attachment.camera')}
-                    color={tokens.foreground}
-                    background={tokens.muted}
-                    onPress={onCamera}
-                  />
-                  <SheetAction
-                    icon={ImageIcon}
-                    label={t('attachment.photos')}
-                    color={tokens.foreground}
-                    background={tokens.muted}
-                    onPress={onPhotos}
-                  />
-                  <SheetAction
-                    icon={Paperclip}
-                    label={t('attachment.files')}
-                    color={tokens.foreground}
-                    background={tokens.muted}
-                    onPress={onFiles}
-                  />
-                </View>
+              <Animated.View
+                style={{
+                  height: '100%',
+                  width: innerWidth,
+                  opacity: pageFade,
+                }}
+              >
+                {/* ── Attachments, model, thinking, permissions ─────────────────── */}
+                {page === PAGE_ATTACHMENTS && (
+                  // Rola: a altura da página é uma meta, não um limite — com fonte maior (ou
+                  // tela pequena) as últimas linhas eram cortadas no rodapé e "Modos"/
+                  // "Ferramentas" simplesmente não apareciam.
+                  <ScrollView
+                    style={{ width: innerWidth, height: '100%' }}
+                    contentContainerStyle={{ paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <View style={[s.actionsRow, { borderBottomColor: tokens.border }]}>
+                    <SheetAction
+                      icon={Camera}
+                      label={t('attachment.camera')}
+                      color={tokens.foreground}
+                      background={tokens.muted}
+                      onPress={onCamera}
+                    />
+                    <SheetAction
+                      icon={ImageIcon}
+                      label={t('attachment.photos')}
+                      color={tokens.foreground}
+                      background={tokens.muted}
+                      onPress={onPhotos}
+                    />
+                    <SheetAction
+                      icon={Paperclip}
+                      label={t('attachment.files')}
+                      color={tokens.foreground}
+                      background={tokens.muted}
+                      onPress={onFiles}
+                    />
+                  </View>
 
-                <View style={s.rows}>
-                  {/* Folder + branch of the chat: a page of this same sheet, like the
-                      modes and the permissions (code mode only). */}
-                  {folders !== undefined && (
+                  <View style={s.rows}>
+                    {/* Folder + branch of the chat: a page of this same sheet, like the
+                        modes and the permissions (code mode only). */}
+                    {folders !== undefined && (
+                      <SheetRow
+                        tokens={tokens}
+                        leading={<Folder size={20} color={tokens.mutedForeground} />}
+                        label={t('workspace.title')}
+                        value={workspaceLabel}
+                        onPress={() => setPage(PAGE_FOLDERS)}
+                      />
+                    )}
                     <SheetRow
                       tokens={tokens}
-                      leading={<Folder size={20} color={tokens.mutedForeground} />}
-                      label={t('workspace.title')}
-                      value={workspaceLabel}
-                      onPress={() => setPage(PAGE_FOLDERS)}
+                      leading={
+                        modelProviderId ? (
+                          <ProviderLogo
+                            providerId={modelProviderId}
+                            size={20}
+                            color={tokens.mutedForeground}
+                          />
+                        ) : (
+                          <Brain size={20} color={tokens.mutedForeground} />
+                        )
+                      }
+                      label={t('attachment.model')}
+                      value={modelLabel}
+                      onPress={() => setPage(PAGE_MODEL)}
                     />
-                  )}
-                  <SheetRow
-                    tokens={tokens}
-                    leading={
-                      modelProviderId ? (
-                        <ProviderLogo
-                          providerId={modelProviderId}
-                          size={20}
-                          color={tokens.mutedForeground}
-                        />
-                      ) : (
-                        <Brain size={20} color={tokens.mutedForeground} />
-                      )
-                    }
-                    label={t('attachment.model')}
-                    value={modelLabel}
-                    onPress={onOpenModel}
-                  />
-                  <SheetRow
-                    tokens={tokens}
-                    leading={<Brain size={20} color={tokens.mutedForeground} />}
-                    label={t('attachment.thinking')}
-                    value={thinkingLabel}
-                    onPress={() => setPage(PAGE_THINKING)}
-                  />
-                  <SheetRow
-                    tokens={tokens}
-                    leading={<ShieldCheck size={20} color={tokens.mutedForeground} />}
-                    label={t('attachment.permissions')}
-                    value={t(PERMISSION_LABEL_KEY[permissionMode])}
-                    onPress={() => setPage(PAGE_PERMISSIONS)}
-                  />
-                  <SheetRow
-                    tokens={tokens}
-                    leading={<Settings2 size={20} color={tokens.mutedForeground} />}
-                    label={t('attachment.modes')}
-                    value={t('attachment.activeCount', {
+                    <SheetRow
+                      tokens={tokens}
+                      leading={<Brain size={20} color={tokens.mutedForeground} />}
+                      label={t('attachment.thinking')}
+                      value={thinkingLabel}
+                      onPress={() => setPage(PAGE_THINKING)}
+                    />
+                    <SheetRow
+                      tokens={tokens}
+                      leading={<ShieldCheck size={20} color={tokens.mutedForeground} />}
+                      label={t('attachment.permissions')}
+                      value={t(PERMISSION_LABEL_KEY[permissionMode])}
+                      onPress={() => setPage(PAGE_PERMISSIONS)}
+                    />
+                    <SheetRow
+                      tokens={tokens}
+                      leading={<Settings2 size={20} color={tokens.mutedForeground} />}
+                      label={t('attachment.modes')}
+                      value={t('attachment.activeCount', {
+                        count: modes.filter((mode) => mode.active).length,
+                      })}
+                      onPress={() => setPage(PAGE_MODES)}
+                    />
+                    <SheetRow
+                      tokens={tokens}
+                      leading={<Wrench size={20} color={tokens.mutedForeground} />}
+                      label={t('attachment.tools')}
+                      value={t('attachment.activeCount', {
+                        count: tools.filter((tool) => tool.active).length,
+                      })}
+                      onPress={() => setPage(PAGE_TOOLS)}
+                    />
+                  </View>
+                  </ScrollView>
+                )}
+
+                {/* ── Modes ─────────────────────────────────────────────────────── */}
+                {page === PAGE_MODES && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('attachment.modes')}
+                    onBack={backToAttachments}
+                    color={tokens.foreground}
+                    trailing={t('attachment.activeCount', {
                       count: modes.filter((mode) => mode.active).length,
                     })}
-                    onPress={() => setPage(PAGE_MODES)}
+                    mutedColor={tokens.mutedForeground}
                   />
-                  <SheetRow
-                    tokens={tokens}
-                    leading={<Wrench size={20} color={tokens.mutedForeground} />}
-                    label={t('attachment.tools')}
-                    value={t('attachment.activeCount', {
+
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {modes.map((mode) => (
+                      <ModeRow
+                        key={mode.id}
+                        mode={mode}
+                        tokens={tokens}
+                        onConfigure={mode.onConfigure}
+                      />
+                    ))}
+
+                  </ScrollView>
+                </View>
+                )}
+
+                {/* ── Thinking levels ───────────────────────────────────────────── */}
+                {page === PAGE_THINKING && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('attachment.thinking')}
+                    onBack={backToAttachments}
+                    color={tokens.foreground}
+                  />
+
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <OptionRow
+                      label={t('attachment.off')}
+                      selected={!thinking}
+                      disabled={reasoningAlwaysOn}
+                      tokens={tokens}
+                      onPress={onThinkingOff}
+                    />
+                    {reasoningVariants.map((variant) => (
+                      <OptionRow
+                        key={variant.id}
+                        label={variant.label}
+                        hint={variant.description}
+                        selected={thinking && reasoningSelected === variant.id}
+                        tokens={tokens}
+                        onPress={() => onReasoningSelect(variant.id)}
+                      />
+                    ))}
+                    {reasoningAlwaysOn && (
+                      <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                        {t('configSheet.reasoningAlwaysOnHint')}
+                      </Text>
+                    )}
+                  </ScrollView>
+                </View>
+                )}
+
+                {/* ── Permission levels ─────────────────────────────────────────── */}
+                {page === PAGE_PERMISSIONS && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('attachment.permissions')}
+                    onBack={backToAttachments}
+                    color={tokens.foreground}
+                  />
+
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {(Object.keys(PERMISSION_ICON) as PermissionModeValue[]).map((mode) => (
+                      <OptionRow
+                        key={mode}
+                        label={t(PERMISSION_LABEL_KEY[mode])}
+                        icon={PERMISSION_ICON[mode]}
+                        selected={permissionMode === mode}
+                        tokens={tokens}
+                        onPress={() => onPermissionModeChange(mode)}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+                )}
+
+                {/* ── Tools (MCP servers of this chat) ───────────────────────────── */}
+                {page === PAGE_TOOLS && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('attachment.tools')}
+                    onBack={backToAttachments}
+                    color={tokens.foreground}
+                    trailing={t('attachment.activeCount', {
                       count: tools.filter((tool) => tool.active).length,
                     })}
-                    onPress={() => setPage(PAGE_TOOLS)}
+                    mutedColor={tokens.mutedForeground}
                   />
-                </View>
-                </ScrollView>
-              )}
 
-              {/* ── Modes ─────────────────────────────────────────────────────── */}
-              {page === PAGE_MODES && (
-              <View style={{ width: innerWidth, height: '100%' }}>
-                <PageHeader
-                  title={t('attachment.modes')}
-                  onBack={backToAttachments}
-                  color={tokens.foreground}
-                  trailing={t('attachment.activeCount', {
-                    count: modes.filter((mode) => mode.active).length,
-                  })}
-                  mutedColor={tokens.mutedForeground}
-                />
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {modes.map((mode) => (
-                    <ModeRow
-                      key={mode.id}
-                      mode={mode}
-                      tokens={tokens}
-                      onConfigure={mode.onConfigure}
-                    />
-                  ))}
-
-                </ScrollView>
-              </View>
-              )}
-
-              {/* ── Thinking levels ───────────────────────────────────────────── */}
-              {page === PAGE_THINKING && (
-              <View style={{ width: innerWidth, height: '100%' }}>
-                <PageHeader
-                  title={t('attachment.thinking')}
-                  onBack={backToAttachments}
-                  color={tokens.foreground}
-                />
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <OptionRow
-                    label={t('attachment.off')}
-                    selected={!thinking}
-                    disabled={reasoningAlwaysOn}
-                    tokens={tokens}
-                    onPress={onThinkingOff}
-                  />
-                  {reasoningVariants.map((variant) => (
-                    <OptionRow
-                      key={variant.id}
-                      label={variant.label}
-                      hint={variant.description}
-                      selected={thinking && reasoningSelected === variant.id}
-                      tokens={tokens}
-                      onPress={() => onReasoningSelect(variant.id)}
-                    />
-                  ))}
-                  {reasoningAlwaysOn && (
-                    <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                      {t('configSheet.reasoningAlwaysOnHint')}
-                    </Text>
-                  )}
-                </ScrollView>
-              </View>
-              )}
-
-              {/* ── Permission levels ─────────────────────────────────────────── */}
-              {page === PAGE_PERMISSIONS && (
-              <View style={{ width: innerWidth, height: '100%' }}>
-                <PageHeader
-                  title={t('attachment.permissions')}
-                  onBack={backToAttachments}
-                  color={tokens.foreground}
-                />
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {(Object.keys(PERMISSION_ICON) as PermissionModeValue[]).map((mode) => (
-                    <OptionRow
-                      key={mode}
-                      label={t(PERMISSION_LABEL_KEY[mode])}
-                      icon={PERMISSION_ICON[mode]}
-                      selected={permissionMode === mode}
-                      tokens={tokens}
-                      onPress={() => onPermissionModeChange(mode)}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-              )}
-
-              {/* ── Tools (MCP servers of this chat) ───────────────────────────── */}
-              {page === PAGE_TOOLS && (
-              <View style={{ width: innerWidth, height: '100%' }}>
-                <PageHeader
-                  title={t('attachment.tools')}
-                  onBack={backToAttachments}
-                  color={tokens.foreground}
-                  trailing={t('attachment.activeCount', {
-                    count: tools.filter((tool) => tool.active).length,
-                  })}
-                  mutedColor={tokens.mutedForeground}
-                />
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {tools.length === 0 ? (
-                    <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                      {t('attachment.noTools')}
-                    </Text>
-                  ) : (
-                    tools.map((tool) => (
-                      <ToolRow
-                        key={tool.name}
-                        tool={tool}
-                        tokens={tokens}
-                        onToggle={() => onToolToggle(tool.name)}
-                      />
-                    ))
-                  )}
-                </ScrollView>
-              </View>
-              )}
-
-              {/* ── Folder & branch (page, like modes and permissions) ──────────── */}
-              {page === PAGE_FOLDERS && (
-              <View style={{ width: innerWidth, height: '100%' }}>
-                <PageHeader
-                  title={t('workspace.title')}
-                  onBack={backToAttachments}
-                  color={tokens.foreground}
-                />
-
-                <ScrollView
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ paddingBottom: 8 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
-                    {t('workspace.main')}
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      setBrowseTarget('main')
-                      setPage(PAGE_BROWSE)
-                    }}
-                    style={s.wsRow}
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
                   >
-                    <Folder size={18} color={tokens.mutedForeground} />
-                    <View style={s.wsRowText}>
-                      <Text style={[s.wsName, { color: tokens.foreground }]} numberOfLines={1}>
-                        {mainFolder ? folderName(mainFolder) : t('folderSelector.associateFolder')}
+                    {tools.length === 0 ? (
+                      <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                        {t('attachment.noTools')}
                       </Text>
-                      {mainFolder ? (
-                        <Text style={[s.wsPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
-                          {mainFolder}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <ChevronRight size={16} color={tokens.mutedForeground} />
-                  </Pressable>
+                    ) : (
+                      tools.map((tool) => (
+                        <ToolRow
+                          key={tool.name}
+                          tool={tool}
+                          tokens={tokens}
+                          onToggle={() => onToolToggle(tool.name)}
+                        />
+                      ))
+                    )}
+                  </ScrollView>
+                </View>
+                )}
 
-                  <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
-                    {extras.length > 0
-                      ? `${t('workspace.additional')} · ${extras.length}`
-                      : t('workspace.additional')}
-                  </Text>
-                  {extras.map((path) => (
-                    <View key={path} style={s.wsRow}>
+                {/* ── Folder & branch (page, like modes and permissions) ──────────── */}
+                {page === PAGE_FOLDERS && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('workspace.title')}
+                    onBack={backToAttachments}
+                    color={tokens.foreground}
+                  />
+
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 8 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                      {t('workspace.main')}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        setBrowseTarget('main')
+                        setPage(PAGE_BROWSE)
+                      }}
+                      style={s.wsRow}
+                    >
                       <Folder size={18} color={tokens.mutedForeground} />
                       <View style={s.wsRowText}>
                         <Text style={[s.wsName, { color: tokens.foreground }]} numberOfLines={1}>
-                          {folderName(path)}
+                          {mainFolder ? folderName(mainFolder) : t('folderSelector.associateFolder')}
                         </Text>
-                        <Text style={[s.wsPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
-                          {path}
-                        </Text>
+                        {mainFolder ? (
+                          <Text style={[s.wsPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
+                            {mainFolder}
+                          </Text>
+                        ) : null}
                       </View>
-                      <Pressable onPress={() => removeExtra(path)} hitSlop={10} style={{ padding: 4 }}>
-                        <X size={16} color={tokens.mutedForeground} />
-                      </Pressable>
-                    </View>
-                  ))}
-                  <Pressable
-                    onPress={() => {
-                      setBrowseTarget('extra')
-                      setPage(PAGE_BROWSE)
-                    }}
-                    style={s.wsRow}
-                  >
-                    <View style={[s.wsPlus, { borderColor: tokens.border }]}>
-                      <Plus size={13} color={tokens.mutedForeground} />
-                    </View>
-                    <Text style={[s.wsAdd, { color: tokens.mutedForeground }]}>
-                      {t('workspace.addFolder')}
+                      <ChevronRight size={16} color={tokens.mutedForeground} />
+                    </Pressable>
+
+                    <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                      {extras.length > 0
+                        ? `${t('workspace.additional')} · ${extras.length}`
+                        : t('workspace.additional')}
                     </Text>
-                  </Pressable>
-
-                  <View style={[s.wsDivider, { backgroundColor: tokens.border }]} />
-
-                  <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
-                    {t('workspace.branch')}
-                  </Text>
-                  <Pressable onPress={() => setBranchOpen((o) => !o)} style={s.wsRow}>
-                    <GitBranch size={18} color={tokens.mutedForeground} />
-                    <Text style={[s.wsBranch, { color: tokens.foreground }]} numberOfLines={1}>
-                      {branchCurrent || (branchLoading ? '…' : '—')}
-                    </Text>
-                    {branchOpen ? (
-                      <ChevronUp size={15} color={tokens.mutedForeground} />
-                    ) : (
-                      <ChevronDown size={15} color={tokens.mutedForeground} />
-                    )}
-                  </Pressable>
-
-                  {branchOpen && (
-                    <View style={s.wsBranchList}>
-                      {branchLoading ? (
-                        <View style={{ paddingVertical: 14, alignItems: 'center' }}>
-                          <ActivityIndicator color={tokens.primary} />
+                    {extras.map((path) => (
+                      <View key={path} style={s.wsRow}>
+                        <Folder size={18} color={tokens.mutedForeground} />
+                        <View style={s.wsRowText}>
+                          <Text style={[s.wsName, { color: tokens.foreground }]} numberOfLines={1}>
+                            {folderName(path)}
+                          </Text>
+                          <Text style={[s.wsPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
+                            {path}
+                          </Text>
                         </View>
-                      ) : branches.length === 0 ? (
-                        <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                          {t('branch.none')}
-                        </Text>
-                      ) : (
-                        branches.map((branch) => {
-                          const active = branch === branchCurrent
-                          return (
-                            <Pressable
-                              key={branch}
-                              onPress={() => void checkout(branch)}
-                              style={s.wsBranchRow}
-                            >
-                              <GitBranch size={14} color={tokens.mutedForeground} />
-                              <Text
-                                style={[
-                                  s.wsBranchItem,
-                                  { color: active ? tokens.foreground : tokens.mutedForeground },
-                                  active && { fontWeight: '600' },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {branch}
-                              </Text>
-                              {branchSwitching === branch ? (
-                                <ActivityIndicator size="small" color={tokens.primary} />
-                              ) : active ? (
-                                <Check size={15} color={tokens.primary} />
-                              ) : null}
-                            </Pressable>
-                          )
-                        })
-                      )}
-                    </View>
-                  )}
+                        <Pressable onPress={() => removeExtra(path)} hitSlop={10} style={{ padding: 4 }}>
+                          <X size={16} color={tokens.mutedForeground} />
+                        </Pressable>
+                      </View>
+                    ))}
+                    <Pressable
+                      onPress={() => {
+                        setBrowseTarget('extra')
+                        setPage(PAGE_BROWSE)
+                      }}
+                      style={s.wsRow}
+                    >
+                      <View style={[s.wsPlus, { borderColor: tokens.border }]}>
+                        <Plus size={13} color={tokens.mutedForeground} />
+                      </View>
+                      <Text style={[s.wsAdd, { color: tokens.mutedForeground }]}>
+                        {t('workspace.addFolder')}
+                      </Text>
+                    </Pressable>
 
-                  {branchError ? (
-                    <Text style={[s.hint, { color: tokens.destructive }]}>{branchError}</Text>
-                  ) : null}
+                    <View style={[s.wsDivider, { backgroundColor: tokens.border }]} />
 
-                  <View style={s.wsNote}>
-                    <Info size={14} color={tokens.mutedForeground} style={{ marginTop: 1 }} />
-                    <Text style={[s.wsNoteText, { color: tokens.mutedForeground }]}>
-                      {t('workspace.note')}
+                    <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                      {t('workspace.branch')}
                     </Text>
-                  </View>
-                </ScrollView>
-              </View>
-              )}
+                    <Pressable onPress={() => setBranchOpen((o) => !o)} style={s.wsRow}>
+                      <GitBranch size={18} color={tokens.mutedForeground} />
+                      <Text style={[s.wsBranch, { color: tokens.foreground }]} numberOfLines={1}>
+                        {branchCurrent || (branchLoading ? '…' : '—')}
+                      </Text>
+                      {branchOpen ? (
+                        <ChevronUp size={15} color={tokens.mutedForeground} />
+                      ) : (
+                        <ChevronDown size={15} color={tokens.mutedForeground} />
+                      )}
+                    </Pressable>
 
-              {/* ── Folder browser (the system folders, inside the sheet) ───────── */}
-              {page === PAGE_BROWSE && (
-              <View style={{ width: innerWidth, height: '100%' }}>
-                <PageHeader
-                  title={t('folderSelector.selectFolderTitle')}
-                  onBack={() => setPage(PAGE_FOLDERS)}
-                  color={tokens.foreground}
-                />
-                <DirBrowserBody active onPick={handlePicked} />
-              </View>
-              )}
-            </Animated.View>
-          </View>
+                    {branchOpen && (
+                      <View style={s.wsBranchList}>
+                        {branchLoading ? (
+                          <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+                            <ActivityIndicator color={tokens.primary} />
+                          </View>
+                        ) : branches.length === 0 ? (
+                          <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                            {t('branch.none')}
+                          </Text>
+                        ) : (
+                          branches.map((branch) => {
+                            const active = branch === branchCurrent
+                            return (
+                              <Pressable
+                                key={branch}
+                                onPress={() => void checkout(branch)}
+                                style={s.wsBranchRow}
+                              >
+                                <GitBranch size={14} color={tokens.mutedForeground} />
+                                <Text
+                                  style={[
+                                    s.wsBranchItem,
+                                    { color: active ? tokens.foreground : tokens.mutedForeground },
+                                    active && { fontWeight: '600' },
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {branch}
+                                </Text>
+                                {branchSwitching === branch ? (
+                                  <ActivityIndicator size="small" color={tokens.primary} />
+                                ) : active ? (
+                                  <Check size={15} color={tokens.primary} />
+                                ) : null}
+                              </Pressable>
+                            )
+                          })
+                        )}
+                      </View>
+                    )}
+
+                    {branchError ? (
+                      <Text style={[s.hint, { color: tokens.destructive }]}>{branchError}</Text>
+                    ) : null}
+
+                    <View style={s.wsNote}>
+                      <Info size={14} color={tokens.mutedForeground} style={{ marginTop: 1 }} />
+                      <Text style={[s.wsNoteText, { color: tokens.mutedForeground }]}>
+                        {t('workspace.note')}
+                      </Text>
+                    </View>
+                  </ScrollView>
+                </View>
+                )}
+
+                {/* ── Folder browser (the system folders, inside the sheet) ───────── */}
+                {page === PAGE_BROWSE && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('folderSelector.selectFolderTitle')}
+                    onBack={() => setPage(PAGE_FOLDERS)}
+                    color={tokens.foreground}
+                  />
+                  <DirBrowserBody active onPick={handlePicked} />
+                </View>
+                )}
+
+                {/* ── Model picker (the drawer's body, as a page of this same sheet) ── */}
+                {page === PAGE_MODEL && (
+                <View style={{ width: innerWidth, height: '100%' }}>
+                  <PageHeader
+                    title={t('modelPickerModal.title')}
+                    onBack={backToAttachments}
+                    color={tokens.foreground}
+                  />
+                  <ModelPickerContent onClose={backToAttachments} sessionId={sessionId} inline />
+                </View>
+                )}
+              </Animated.View>
+            </View>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   )
 }
@@ -1013,12 +1106,9 @@ function OptionRow({
 }
 
 const s = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     borderWidth: 1,
