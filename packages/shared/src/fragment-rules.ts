@@ -30,6 +30,9 @@ export const FRAGMENT_METHODS = [
   "models.list",
   "models.get",
   "models.set",
+  "http.fetch",
+  "mcp.list",
+  "mcp.call",
 ] as const
 
 // Compile-time guard: the runtime list and the `FragmentMethod` type must name the same methods.

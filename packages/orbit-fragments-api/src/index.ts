@@ -25,12 +25,15 @@ export const ORBIT_BRIDGE_METHODS = [
   'models.list',
   'models.get',
   'models.set',
+  'http.fetch',
+  'mcp.list',
+  'mcp.call',
 ] as const
 
 export type OrbitBridgeMethod = (typeof ORBIT_BRIDGE_METHODS)[number]
 
 /** What a fragment can ask for in its manifest's `requests`. The person grants them, never the fragment. */
-export type OrbitCapability = 'ai' | 'models'
+export type OrbitCapability = 'ai' | 'models' | 'http' | 'mcp'
 
 /** True when a manifest written for `sdk` runs on the API these declarations describe. */
 export function isCompatibleSdk(sdk: unknown): boolean {
@@ -46,6 +49,11 @@ export type OrbitErrorCode =
   | 'no_model'
   | 'rate_limited'
   | 'ai_failed'
+  | 'http_failed'
+  | 'tool_not_allowed'
+  | 'mcp_unavailable'
+  | 'mcp_tool_error'
+  | 'mcp_failed'
   | 'failed'
   | 'timeout'
 
@@ -100,6 +108,43 @@ export interface OrbitModels {
   set(model?: Partial<OrbitModelChoice>): Promise<null>
 }
 
+export interface OrbitHttpOptions {
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** Harmless headers only: credentials and cookies are never forwarded. */
+  headers?: Record<string, string>
+  /** A string; stringify JSON yourself. Not allowed with GET or HEAD. */
+  body?: string
+}
+
+export interface OrbitHttpResponse {
+  status: number
+  ok: boolean
+  url: string
+  headers: Record<string, string>
+  text: string
+  /** The body was cut at the size cap. */
+  truncated: boolean
+  json<T = unknown>(): T
+}
+
+export interface OrbitHttp {
+  /** Needs "http" in `requests`, the host in the manifest's `hosts` (https), and the person's permission. */
+  fetch(url: string, options?: OrbitHttpOptions): Promise<OrbitHttpResponse>
+}
+
+export interface OrbitMcpServer {
+  server: string
+  /** The server is connected right now. */
+  connected: boolean
+  tools: { name: string; available: boolean }[]
+}
+
+export interface OrbitMcp {
+  /** Needs "mcp" in `requests`: the servers and tools the manifest declared, and whether each is up. */
+  list(): Promise<OrbitMcpServer[]>
+  call(server: string, tool: string, args?: Record<string, unknown>): Promise<{ text: string; truncated: boolean }>
+}
+
 export interface OrbitEvents {
   theme: OrbitTheme
 }
@@ -112,6 +157,8 @@ export interface Orbit {
   readonly store: OrbitStore
   readonly ai: OrbitAi
   readonly models: OrbitModels
+  readonly http: OrbitHttp
+  readonly mcp: OrbitMcp
   /** Subscribe to an event; returns the function that unsubscribes. */
   on<K extends keyof OrbitEvents>(name: K, listener: (data: OrbitEvents[K]) => void): () => void
 }
