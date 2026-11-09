@@ -667,3 +667,53 @@ companion showing fragments.
 - **Inspect on a page that re-renders:** the picked selector is a best effort (id, classes,
   `nth-of-type`, five levels); a page that rebuilds its DOM may need the agent to find the element
   by its text and html, which the attachment carries.
+
+## Sharing: `.orbitfrag` and `.orbitagent` (implemented)
+
+Section 11 describes the long-term package format; this is the part that exists, for sharing one
+file between people. It adds no registry, no URL import and no `npx` flow.
+
+**`.orbitfrag` (a zip).** `manifest.json` (`format: "orbitfrag"`, `version: 1`, name, kind, icon,
+`requests`, optional author and description, and every file with its size and SHA-256) plus
+`src/**`. Never `data.json`, history, grants, chats, the provenance record or any key. Allowed file
+types are exactly what the scheme serves (`html css js mjs json svg txt csv md`), so there are no
+binary assets yet. Codec: `electron/lib/fragments/share/package-codec.ts` (pure, tested with
+hostile archives); constants and types: `packages/shared/src/fragment-package.ts`.
+
+**Import validates before it writes anything:** archive 5MB, file 1MB, total 5MB, 60 files, sizes
+checked from the central directory before inflating and again after, path traversal / absolute /
+backslash / drive / hidden / control characters refused, any entry outside `manifest.json` and
+`src/` refused (so a `data.json` is an error, not ignored), duplicate paths ignoring case, the
+manifest as the complete list of files, SHA-256 of each file, `index.html` required, an unknown
+`format` or a higher `version` refused (never guessed). Author and description are cleaned and
+clamped; unknown capabilities are dropped; `grants` in a manifest are never read.
+
+**Two steps, with consent.** The renderer sends the file's bytes (file picker or drop on the
+gallery); the main process verifies and holds the result under a token (`electron/lib/share/pending.ts`,
+10 minutes, spent once). The card shows file, hash, author (as an unverified claim), capabilities
+asked and every file; "Import" sends the token back. An import creates the fragment with **no grant,
+no pin**, no data, and a `third_party` / `arrival: "file"` provenance record **written before the
+manifest**, so it can never read as local. Export: "Export as file…" in the fragment actions menu
+(gallery card and header), destination chosen in a native dialog.
+
+**Provenance and trust.** The record now also keeps the file name, the archive SHA-256, the
+author the file *claimed* (it never sets the owner) and `reviewedAt`. A third-party fragment
+without `reviewedAt` is **untrusted**: a banner on its page, a prompt in the details panel ("I
+reviewed it"), and `fragment:grant` with `on = true` is refused in the main process until it is
+reviewed (turning a grant off always works). Editing keeps it third party and "changed since it arrived".
+
+**`.orbitagent` (JSON, `AGENT_FORMAT_VERSION`).** `{ format: "orbit-agent", version, agent }` with
+the editable fields only: no id, dates, origin, default model or thinking (those are ignored on
+import and the card says so). Import runs the same `sanitizeAgentInput` as the editor, so unknown
+features and bad tool names cannot get in; the card shows the full prompt, "when to use", every
+feature on/off, tool limits, craft and pinned skills; confirming saves it with `origin: "imported"`
+(the file cannot choose id or origin; a duplicate of it is the person's own). Nothing is selected
+or switched on anywhere by importing. Code: `electron/lib/agents/share.ts`, `share-ipc.ts`.
+
+**Not built (product decisions):** a public gallery or registry, import by URL / GitHub / MCP,
+`npx orbit-fragments`, signing or verified publishers, exporting with data ("backup"),
+binary assets (images, fonts), packages and `packages.lock.json`, sharing built-in agent overrides,
+and a trust gate on the side-panel tab's own "allow AI" button (the main process refuses the grant;
+only the page banner and the details panel explain why).
+**Not verified:** the UI was typechecked and linted but not driven in the real Electron window
+(file picker, drag-drop, native save dialog).

@@ -1,5 +1,6 @@
 import { X } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { isUntrusted } from "@shared/fragment-provenance"
 import type { FragmentManifest } from "@shared/fragments"
 import { useFragmentsStore } from "@/src/stores/fragments-store"
 import {
@@ -40,7 +41,7 @@ export function FragmentDetailsPanel({ manifest }: { manifest: FragmentManifest 
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SettingsSection manifest={manifest} />
-        <CapabilitiesSection manifest={manifest} />
+        <CapabilitiesSection manifest={manifest} locked={details ? isUntrusted(details.provenance) : false} />
         {details && (
           <>
             <WeightSection details={details} />
@@ -48,7 +49,7 @@ export function FragmentDetailsPanel({ manifest }: { manifest: FragmentManifest 
             <DatabaseSection details={details} fragmentId={manifest.id} />
             <HistorySection fragmentId={manifest.id} />
             <PackagesSection details={details} />
-            <OriginSection details={details} />
+            <OriginSection details={details} fragmentId={manifest.id} />
           </>
         )}
       </div>

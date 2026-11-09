@@ -60,7 +60,8 @@ function pinsLabel(manifest: FragmentManifest, t: (key: string) => string): stri
 }
 
 /** What the fragment asked for and what the person allowed. Only the person's click grants. */
-export function CapabilitiesSection({ manifest }: { manifest: FragmentManifest }) {
+/** `locked`: an imported fragment nobody reviewed — turning things on waits for the review. */
+export function CapabilitiesSection({ manifest, locked = false }: { manifest: FragmentManifest; locked?: boolean }) {
   const { t } = useTranslation()
   return (
     <DetailsSection title={t("fragments.details.capabilities")}>
@@ -75,6 +76,8 @@ export function CapabilitiesSection({ manifest }: { manifest: FragmentManifest }
                 size="sm"
                 variant={granted ? "secondary" : "outline"}
                 className="h-6 px-2 text-[11px]"
+                disabled={locked && !granted}
+                title={locked && !granted ? t("fragments.share.lockedHint") : undefined}
                 onClick={() => void fragmentApi.grant(manifest.id, cap, !granted)}
               >
                 {granted ? t("fragments.details.allowed") : t("fragments.details.allow")}
@@ -131,11 +134,11 @@ export function PackagesSection({ details }: { details: FragmentDetails }) {
   )
 }
 
-export function OriginSection({ details }: { details: FragmentDetails }) {
+export function OriginSection({ details, fragmentId }: { details: FragmentDetails; fragmentId: string }) {
   const { t } = useTranslation()
   return (
     <DetailsSection title={t("fragments.provenance.title")}>
-      <FragmentProvenanceView provenance={details.provenance} />
+      <FragmentProvenanceView provenance={details.provenance} fragmentId={fragmentId} />
     </DetailsSection>
   )
 }

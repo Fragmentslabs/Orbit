@@ -16,7 +16,14 @@ import type {
   SessionRevert,
   UnrevertResult,
 } from "@shared/chat"
+import {
+  FRAGMENT_SHARE_CHANNELS,
+  type FragmentExportResult,
+  type FragmentImportConfirmResult,
+  type FragmentImportPreviewResult,
+} from "@shared/fragment-package"
 import { normalizeAppSettings, type AppSettings } from "@shared/app-settings"
+import { AGENT_SHARE_CHANNELS, type AgentExportResult, type AgentImportConfirmResult, type AgentImportPreviewResult } from "@shared/agent-share"
 import { AGENT_CHANNELS, type AgentDefinition, type AgentGenerationResult, type AgentInput, type AgentsSnapshot, type BuiltinOverride } from "@shared/agents"
 import { ARTIFACT_CHATS_CHANNELS, type ArtifactChats, type ArtifactChatsEvent, type ArtifactRef } from "@shared/artifacts"
 import type { ComputerActivity, ComputerEvent, ComputerShot, ComputerStatus, ComputerTestResult } from "@shared/computer"
@@ -858,6 +865,16 @@ export const fragmentApi = {
   update: (id: string, patch: FragmentMetaPatch) =>
     window.ipcRenderer.invoke("fragment:update", id, patch) as Promise<FragmentManifest | null>,
   remove: (id: string) => window.ipcRenderer.invoke("fragment:remove", id) as Promise<boolean>,
+  /** Saves a `.orbitfrag` where the person picks in a native dialog: code and requests, never data. */
+  exportFile: (id: string) => window.ipcRenderer.invoke(FRAGMENT_SHARE_CHANNELS.export, id) as Promise<FragmentExportResult>,
+  /** Reads and verifies a file; writes nothing. The consent card shows the result. */
+  importPreview: (fileName: string, bytes: Uint8Array) =>
+    window.ipcRenderer.invoke(FRAGMENT_SHARE_CHANNELS.importPreview, fileName, bytes) as Promise<FragmentImportPreviewResult>,
+  importConfirm: (token: string) =>
+    window.ipcRenderer.invoke(FRAGMENT_SHARE_CHANNELS.importConfirm, token) as Promise<FragmentImportConfirmResult>,
+  importCancel: (token: string) => window.ipcRenderer.invoke(FRAGMENT_SHARE_CHANNELS.importCancel, token) as Promise<void>,
+  /** The person reviewed an imported fragment: it may be granted things from now on. */
+  markReviewed: (id: string) => window.ipcRenderer.invoke(FRAGMENT_SHARE_CHANNELS.markReviewed, id) as Promise<boolean>,
   log: (id: string, entry: FragmentLogEntry) => window.ipcRenderer.send("fragment:log", id, entry),
   /** The fragment was rewritten (or its grants changed): reload / re-read the manifest. */
   onUpdated: (listener: (payload: FragmentUpdatedEvent) => void) => {
@@ -884,6 +901,13 @@ export const agentsApi = {
   saveBuiltin: (id: string, override: BuiltinOverride) => window.ipcRenderer.invoke(AGENT_CHANNELS.saveBuiltin, id, override) as Promise<boolean>,
   resetBuiltin: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.resetBuiltin, id) as Promise<boolean>,
   remove: (id: string) => window.ipcRenderer.invoke(AGENT_CHANNELS.remove, id) as Promise<boolean>,
+  /** Saves an agent as a `.orbitagent` file where the person picks (native dialog). */
+  exportFile: (id: string) => window.ipcRenderer.invoke(AGENT_SHARE_CHANNELS.export, id) as Promise<AgentExportResult>,
+  /** Reads and validates a shared agent; saves nothing. The consent card shows the result. */
+  importPreview: (fileName: string, text: string) =>
+    window.ipcRenderer.invoke(AGENT_SHARE_CHANNELS.importPreview, fileName, text) as Promise<AgentImportPreviewResult>,
+  importConfirm: (token: string) => window.ipcRenderer.invoke(AGENT_SHARE_CHANNELS.importConfirm, token) as Promise<AgentImportConfirmResult>,
+  importCancel: (token: string) => window.ipcRenderer.invoke(AGENT_SHARE_CHANNELS.importCancel, token) as Promise<void>,
   onChanged: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on(AGENT_CHANNELS.changed, () => listener())
     return () => window.ipcRenderer.off(AGENT_CHANNELS.changed, wrapper)

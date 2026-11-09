@@ -2,7 +2,7 @@ import { app } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { FragmentArrival, FragmentProvenance, FragmentProvenanceRecord } from '@shared/fragment-provenance'
-import { FRAGMENT_ARRIVALS, deriveOwner } from '@shared/fragment-provenance'
+import { FRAGMENT_ARRIVALS, deriveOwner, isUntrusted } from '@shared/fragment-provenance'
 import { isFragmentId } from '@shared/fragments'
 
 /**
@@ -11,7 +11,7 @@ import { isFragmentId } from '@shared/fragments'
  * It lives OUTSIDE `orbit-data/fragments/<id>/` on purpose. That folder is what gets
  * exported, and nothing inside a package may claim an origin for itself. Only Orbit's own
  * code writes here: the creation flow (`local`) and, once import exists, the import flow
- * (`third_party`, with the URL Orbit itself fetched). The agent's tools and the page have
+ * (`third_party`, with the URL or file Orbit itself read). The agent's tools and the page have
  * no way to reach it.
  */
 
@@ -40,6 +40,10 @@ async function readRecord(id: string): Promise<FragmentProvenanceRecord | null> 
       commit: typeof raw.commit === 'string' && /^[0-9a-f]{7,64}$/i.test(raw.commit) ? raw.commit : undefined,
       recordedAt,
       modifiedAt: typeof raw.modifiedAt === 'number' ? raw.modifiedAt : undefined,
+      fileName: typeof raw.fileName === 'string' ? raw.fileName.slice(0, 200) : undefined,
+      fileHash: typeof raw.fileHash === 'string' && /^[0-9a-f]{64}$/i.test(raw.fileHash) ? raw.fileHash : undefined,
+      author: typeof raw.author === 'string' ? raw.author.slice(0, 80) : undefined,
+      reviewedAt: typeof raw.reviewedAt === 'number' ? raw.reviewedAt : undefined,
     }
   } catch {
     return null
@@ -58,15 +62,33 @@ export async function recordLocalProvenance(id: string): Promise<void> {
  */
 export async function recordThirdPartyProvenance(
   id: string,
-  source: { arrival: FragmentArrival; sourceUrl?: string; commit?: string },
+  source: { arrival: FragmentArrival; sourceUrl?: string; commit?: string; fileName?: string; fileHash?: string; author?: string },
 ): Promise<void> {
   await writeRecord(id, {
     origin: 'third_party',
     arrival: source.arrival,
     sourceUrl: source.sourceUrl,
     commit: source.commit,
+    fileName: source.fileName,
+    fileHash: source.fileHash,
+    author: source.author,
     recordedAt: Date.now(),
   })
+}
+
+/** The person looked at the code and what it asks for: from now on it may be granted things. */
+export async function markReviewed(id: string): Promise<boolean> {
+  const record = await readRecord(id)
+  if (!record || record.origin !== 'third_party') return false
+  if (record.reviewedAt === undefined) await writeRecord(id, { ...record, reviewedAt: Date.now() })
+  return true
+}
+
+/** True for a third-party fragment nobody reviewed. Unknown or local fragments are not untrusted. */
+export async function isFragmentUntrusted(id: string): Promise<boolean> {
+  if (!isFragmentId(id)) return false
+  const record = await readRecord(id)
+  return record !== null && isUntrusted(record)
 }
 
 /**

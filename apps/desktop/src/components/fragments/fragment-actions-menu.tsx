@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, House, MoreHorizontal, PanelRight, Pin, Sparkles, Trash2 } from "lucide-react"
+import { Check, House, MoreHorizontal, Share, PanelRight, Pin, Sparkles, Trash2 } from "lucide-react"
 import type { FragmentManifest } from "@shared/fragments"
 import {
   DropdownMenu,
@@ -68,6 +68,10 @@ export function FragmentActionsMenu({
               {t("fragments.aiEnable")}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem onClick={() => void fragmentApi.exportFile(fragment.id)}>
+            <Share className="size-3.5" />
+            {t("fragments.share.export")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="size-3.5" />

@@ -3226,7 +3226,13 @@
       "importedFile": "Arquivo importado",
       "recordedAt": "Adicionado em {{date}}",
       "modified": "Alterado desde que chegou",
-      "commit": "Commit"
+      "commit": "Commit",
+      "fileName": "Arquivo",
+      "fileHash": "Checksum do arquivo",
+      "author": "Autor (informado)",
+      "untrusted": "Ainda não revisado. Veio de fora, então nada pode ser permitido até você ler o que ele faz e pede.",
+      "markReviewed": "Revisei",
+      "reviewed": "Revisado"
     },
     "details": {
       "title": "Detalhes",
@@ -3290,6 +3296,50 @@
         "create": "Criou",
         "edit": "Editou",
         "delete": "Apagou"
+      }
+    },
+    "share": {
+      "importButton": "Importar",
+      "export": "Exportar como arquivo…",
+      "drop": "Solte um arquivo .orbitfrag para importar",
+      "importTitle": "Importar “{{name}}”?",
+      "importDescription": "Este arquivo contém um fragmento feito por outra pessoa. Nada é salvo até você importar.",
+      "file": "Arquivo",
+      "author": "Autor",
+      "authorClaim": "{{author}} (informado pelo arquivo, não verificado)",
+      "noAuthor": "Não informado",
+      "kind": "Tipo",
+      "hash": "SHA-256",
+      "asks": "Ele pede para usar",
+      "asksNothing": "Nada: não pede nenhuma capacidade.",
+      "capabilities": {
+        "ai": "Seu modelo de IA (orbit.ai) — gasta seus tokens",
+        "models": "Listar e escolher seus modelos (orbit.models)"
+      },
+      "files_one": "{{count}} arquivo · {{size}}",
+      "files_other": "{{count}} arquivos · {{size}}",
+      "warning": "Ele chega marcado como não revisado, sem nada permitido e sem fixar em lugar nenhum. O código roda em uma área isolada, mas leia o que ele pede antes de permitir qualquer coisa. Dados salvos e ajustes do original nunca vêm junto.",
+      "import": "Importar",
+      "untrustedBanner": "Importado e não revisado. Nada pode ser permitido até você revisar.",
+      "review": "Revisar",
+      "lockedHint": "Revise este fragmento antes de permitir qualquer coisa.",
+      "errors": {
+        "not_orbitfrag": "Este não é um arquivo .orbitfrag.",
+        "failed": "A importação não terminou. Tente de novo.",
+        "too_large": "O arquivo é grande demais para importar.",
+        "not_an_archive": "O arquivo está corrompido ou não é um pacote de fragmento.",
+        "missing_manifest": "O pacote não tem manifesto.",
+        "bad_manifest": "O manifesto do pacote é inválido.",
+        "unsupported_version": "Este pacote foi feito por uma versão mais nova do Orbit. Atualize o Orbit para importar.",
+        "forbidden_entry": "O pacote contém arquivos que um fragmento não pode carregar.",
+        "bad_path": "O pacote contém um caminho de arquivo inseguro.",
+        "bad_file_type": "O pacote contém um tipo de arquivo que fragmentos não podem usar.",
+        "file_too_large": "Um arquivo dentro do pacote é grande demais.",
+        "too_many_files": "O pacote tem arquivos demais.",
+        "size_mismatch": "Um arquivo do pacote não bate com o tamanho declarado.",
+        "hash_mismatch": "Um arquivo do pacote foi alterado: o checksum não confere.",
+        "missing_entry": "O pacote não tem index.html.",
+        "duplicate_path": "O pacote lista o mesmo arquivo duas vezes."
       }
     }
   },
@@ -4465,6 +4515,37 @@
       "research": {
         "name": "Pesquisador",
         "description": "Responde uma pergunta a partir de fontes."
+      }
+    },
+    "share": {
+      "importButton": "Importar",
+      "export": "Exportar como arquivo…",
+      "badge": "Importado",
+      "importTitle": "Importar o agente “{{name}}”?",
+      "importDescription": "De {{file}}. Isto é tudo o que o agente vai fazer. Nada é salvo até você confirmar.",
+      "whenToUse": "Quando usar",
+      "neverSuggested": "Vazio: nunca é sugerido.",
+      "prompt": "Prompt completo",
+      "noPrompt": "Vazio: nada é injetado.",
+      "features": "Recursos do Orbit que ele liga",
+      "tools": "Limite de ferramentas",
+      "allTools": "Sem limite: todas as ferramentas que o chat teria.",
+      "noTools": "Nenhuma: não pode usar ferramentas.",
+      "craft": "Trabalha no ofício {{craft}}, com as ferramentas dele.",
+      "skills": "Skills fixadas",
+      "noSkills": "Nenhuma.",
+      "ignored": "O arquivo também trazia modelo ou raciocínio padrão. O Orbit ignora: essa escolha é sua.",
+      "warning": "Um agente escreve as instruções que o modelo segue. Leia o prompt acima; ele é salvo como importado e só é usado quando você o escolhe para um chat.",
+      "import": "Importar agente",
+      "errors": {
+        "not_agent_file": "Este não é um arquivo .orbitagent.",
+        "too_large": "O arquivo é grande demais.",
+        "not_json": "Não foi possível ler o arquivo.",
+        "bad_format": "O arquivo não é um agente do Orbit.",
+        "unsupported_version": "Este agente foi feito por uma versão mais nova do Orbit. Atualize o Orbit para importar.",
+        "bad_agent": "O agente do arquivo não é válido (precisa de um nome).",
+        "limit": "Você chegou ao limite de agentes.",
+        "failed": "A importação não terminou. Tente de novo."
       }
     }
   },
