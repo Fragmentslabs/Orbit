@@ -35,6 +35,7 @@ import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel } from './session-m
 import { useModelRotationStore } from './model-rotation-store'
 import { sessionReasoningFor, useSessionReasoning } from './session-reasoning'
 import { usePermissionPrefs } from './permission-prefs'
+import { useSessionTools } from './session-tools'
 import { saveLastSessionId } from './last-chat-store'
 
 export interface RevertResponse {
@@ -536,6 +537,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const sessionId = config?.sessionId ?? get().activeSessionId
     if (!sessionId) return
 
+    // Model: explicit in the config, otherwise the one of the SESSION (per-chat override >
+    // draft > last chat > global default of the desktop) — same pattern as the
+    // desktop, where the model follows the session, not the whole app. It is resolved
+    // before any exit: the queue also carries it (see QueuedMessage.providerId).
+    const settings = useSettingsStore.getState()
+    const selected = config?.providerId && config?.modelId
+      ? { providerId: config.providerId, modelId: config.modelId }
+      : sessionModelFor(sessionId) ?? settings.selectedModel
+
     const { wsClient, connection } = useConnectionStore.getState()
     const isOnline = connection.status === 'connected'
 
@@ -547,6 +557,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         directory: config?.directory,
         extraDirectories: config?.extraDirectories,
         files: config?.files,
+        providerId: selected?.providerId,
+        modelId: selected?.modelId,
       })
       // Shows a friendly error status
       set((state) => ({
@@ -565,11 +577,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId]: true } }))
     }
 
-    // Model: explicit in the config, otherwise the one of the SESSION (per-chat override >
-    // draft > last chat > global default of the desktop) — same pattern as the
-    // desktop, where the model follows the session, not the whole app.
-    const settings = useSettingsStore.getState()
-    const selected = sessionModelFor(sessionId) ?? settings.selectedModel
     const usesWorkers = config?.options?.subagents || config?.options?.orchestrate
     const workerModel = usesWorkers && settings.workerModel
       ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
@@ -621,6 +628,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           options: config?.options ?? {},
           mode: sessionMode,
           sessionId,
+          providerId: selected?.providerId,
+          modelId: selected?.modelId,
           directory: config?.directory,
           extraDirectories: config?.extraDirectories,
           createdAt: Date.now(),
@@ -645,6 +654,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createSession: async (mode, title) => {
+    // The model the new chat is showing, captured BEFORE the session exists: after
+    // the insert below, "last chat" is the one being born (with no override yet) and
+    // the inherited model would be lost — the first message then went out with the
+    // global default instead of the model on screen.
+    const draftModel = sessionModelFor(undefined)
+    const draftReasoning = sessionReasoningFor(
+      undefined,
+      draftModel?.providerId,
+      draftModel?.modelId,
+    )
     const { wsClient, connection } = useConnectionStore.getState()
     // Without a connection there is nowhere to create it: it fails right away (whoever
     // called gives the text back to the input) instead of waiting for the socket to return.
@@ -674,19 +693,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // The model chosen in the new chat (draft) becomes the one of the session;
         // without an explicit choice, it fixes the model actually used (inherited from the
         // last chat) so the picker and the send stay consistent.
-        useSessionModelPrefs.getState().adopt(session.id, sessionModelFor(undefined) ?? undefined)
+        useSessionModelPrefs.getState().adopt(session.id, draftModel ?? undefined)
         // Same for the rotation chosen in the new chat — without this it would stay
         // stuck in the draft and the first turn of the session would run without a rotation.
         useModelRotationStore.getState().adoptRotation(session.id)
         // Thinking and autonomy of the new chat also become the ones of the session:
         // without a choice in the draft, it fixes the level in force (the one of the model / the
         // default), so the chat does not change when the default is touched later.
-        const sessionModel = sessionModelFor(undefined)
-        useSessionReasoning.getState().adopt(
-          session.id,
-          sessionReasoningFor(undefined, sessionModel?.providerId, sessionModel?.modelId),
-        )
+        useSessionReasoning.getState().adopt(session.id, draftReasoning)
         usePermissionPrefs.getState().adopt(session.id)
+        useSessionTools.getState().adopt(session.id)
         return session
       }
     } catch {

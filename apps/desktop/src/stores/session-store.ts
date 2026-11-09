@@ -73,6 +73,11 @@ export interface SendConfig {
   /** Id of the answer that failed: the turn is REDONE over the same user
    *  message, instead of sending a new one (see SendMessageInput.retryOf). */
   retryOf?: string
+  /** Model the message was written under. A message that waited in the queue
+   *  travels with its own model (it may come from the phone, in a chat that has no
+   *  override here) — absent = the one of the session. */
+  providerId?: string
+  modelId?: string
 }
 
 /** Size of the context of the turn in progress (see `liveContext`). */
@@ -1302,7 +1307,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // The model follows the session: chat override (or new chat draft)
     // > provider global default.
     const targetSessionId = config.sessionId ?? get().activeIds[mode]
-    const selected = sessionModelFor(targetSessionId) ?? provider.selectedModel
+    const selected =
+      (config.providerId && config.modelId
+        ? { providerId: config.providerId, modelId: config.modelId }
+        : undefined) ??
+      sessionModelFor(targetSessionId) ??
+      provider.selectedModel
     if (!selected) {
       throw new Error(i18n.t("chat.noModelSelected"))
     }

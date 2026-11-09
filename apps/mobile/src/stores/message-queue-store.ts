@@ -41,7 +41,7 @@ interface MessageQueueState {
     text: string,
     options: SendMessageOptions,
     mode: SessionMode,
-    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
+    extra?: QueueExtra,
   ) => void
   enqueueScheduled: (
     sessionId: string,
@@ -49,11 +49,21 @@ interface MessageQueueState {
     options: SendMessageOptions,
     mode: SessionMode,
     scheduledAt: number,
-    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
+    extra?: QueueExtra,
   ) => void
   /** Item that was meant to go out now, but the session was busy: it jumps the queue. */
   enqueueFront: (sessionId: string, msg: QueuedMessage) => void
   remove: (sessionId: string, msgId: string) => void
+}
+
+/** What a queued item carries besides the text and the options — the model
+ *  travels with it because the desktop is the one that delivers the queue. */
+interface QueueExtra {
+  directory?: string
+  extraDirectories?: string[]
+  files?: FilePart[]
+  providerId?: string
+  modelId?: string
 }
 
 export function newQueueId(): string {
@@ -133,7 +143,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
     text: string,
     options: SendMessageOptions,
     mode: SessionMode,
-    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
+    extra?: QueueExtra,
     scheduledAt?: number,
   ): QueuedMessage {
     return {
@@ -144,6 +154,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
       mode,
       sessionId,
       scheduledAt,
+      providerId: extra?.providerId,
+      modelId: extra?.modelId,
       directory: extra?.directory,
       extraDirectories: extra?.extraDirectories,
       createdAt: Date.now(),

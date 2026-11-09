@@ -1859,6 +1859,14 @@ export interface QueuedMessage {
   options: SendMessageOptions
   mode: SessionMode
   sessionId?: string
+  /**
+   * Model the message was written under. It travels with the item because the queue
+   * is sent by whoever owns it on the desktop, and a chat born on the phone has no
+   * per-chat override there — without this the message would leave with the desktop
+   * default instead of the model shown in the app.
+   */
+  providerId?: string
+  modelId?: string
   directory?: string
   extraDirectories?: string[]
   /** MS timestamp for scheduled sending; undefined = sends as soon as possible */

@@ -12,7 +12,7 @@ import { useReply } from '~/stores/reply-store'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
-import { useSessionStore } from '~/stores/session-store'
+import { sessionModelFor, useSessionStore } from '~/stores/session-store'
 import { useChatStore, type PendingAsk } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -227,6 +227,10 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       }
       setCreating(true)
       try {
+        // Model on screen at the moment of the send. It is pinned into the session by
+        // createSession and goes explicitly in the first message: the model chosen for a
+        // new chat cannot depend on the adoption order.
+        const draftModel = sessionModelFor(null)
         const created = await createSession(useWorkspaceStore.getState().mode)
         if (!created) {
           devolver()
@@ -280,7 +284,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           }
         }
 
-        sendMessage(text, { options, files, sessionId: created.id, ...dirConfig })
+        sendMessage(text, {
+          options,
+          files,
+          sessionId: created.id,
+          providerId: draftModel?.providerId,
+          modelId: draftModel?.modelId,
+          ...dirConfig,
+        })
         // It only takes you to the new chat if the person is still in the draft: if they
         // already went to another conversation, pulling them back looked like the message
         // had fallen into the wrong chat.
