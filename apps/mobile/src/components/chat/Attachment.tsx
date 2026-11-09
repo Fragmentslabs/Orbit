@@ -19,7 +19,7 @@ export function InputAttachment({ file, onRemove }: { file: FilePart; onRemove: 
       <Pressable
         onPress={() => (isImage ? setLightboxOpen(true) : void openFilePart(file))}
         accessibilityLabel={isImage ? t('attachment.enlarge') : t('attachment.defaultFilename')}
-        style={[s.inputChip, { borderColor: tokens.border, backgroundColor: tokens.border }]}
+        style={[s.inputChip, { borderColor: tokens.border, backgroundColor: tokens.card }]}
       >
         {isImage ? (
           <Image source={file.url} style={s.inputThumb} contentFit="cover" />
@@ -101,15 +101,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    maxWidth: 170,
-    borderRadius: 10,
+    height: 32,
+    maxWidth: 200,
+    borderRadius: 8,
     borderWidth: 1,
-    paddingLeft: 8,
+    paddingLeft: 6,
     paddingRight: 6,
-    paddingVertical: 6,
   },
-  inputThumb: { width: 22, height: 22, borderRadius: 5 },
-  inputChipText: { flex: 1, fontSize: 12, fontWeight: '500' },
+  inputThumb: { width: 20, height: 20, borderRadius: 4 },
+  inputChipText: { flexShrink: 1, fontSize: 13, fontWeight: '500' },
   removeBtn: {
     width: 18,
     height: 18,

@@ -1,26 +1,23 @@
 import { memo, useCallback, useState } from 'react'
-import { View, Animated, Pressable, Alert, StyleSheet } from 'react-native'
+import { View, Pressable, Alert, StyleSheet, Text } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2 } from 'lucide-react-native'
-import { showsPersonaInChat, type SessionInfo, type BranchesResponse } from '@orbit/shared'
-import { Persona, type PersonaState } from '~/components/ai/Persona'
+import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
-import { useAppearanceStore } from '~/stores/appearance-store'
 import { ActionMenu } from '~/components/ui/action-menu'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
 import { BranchSheet } from '~/components/chat/BranchSheet'
+import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
+import { useChatModes } from '~/hooks/useChatModes'
+import { ContextMeter } from './ContextMeter'
 
 interface ChatHeaderProps {
   /** Current session — undefined while the chat is a draft (not sent yet). */
   session?: SessionInfo
-  personaState: PersonaState
-  /** Animated opacity of the small persona — it only shows up after the 1st message
-   *  and only after the large persona in the center finishes fading out. */
-  personaOpacity: Animated.Value
   onRename: (title: string) => void
   onTogglePin: () => void
   onToggleArchive: () => void
@@ -30,12 +27,10 @@ interface ChatHeaderProps {
   searchEnabled?: boolean
 }
 
-// memo: the header carries the native Rive view (Persona) — without memo it
-// re-rendered on every delta flush of the streaming.
+// memo: the header reads stores that change with the streaming (context meter) — without
+// it the whole column would re-render on every delta flush.
 export const ChatHeader = memo(function ChatHeader({
   session,
-  personaState,
-  personaOpacity,
   onRename,
   onTogglePin,
   onToggleArchive,
@@ -45,11 +40,14 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
-  // Only the persona at the top: the one of the greeting is another choice (see PersonaVisibility).
-  const personaVisible = showsPersonaInChat(useAppearanceStore((s) => s.personaVisibility))
   const [menuOpen, setMenuOpen] = useState(false)
   const [branchOpen, setBranchOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const toggleChatSearch = useChatSearchStore((s) => s.toggle)
+
+  const modelLabel = useSessionModelLabel(session?.id)
+  const { activeModes } = useChatModes(session?.id)
 
   // Current branch of the working folder, only to label the menu item. Fetched
   // when opening the menu (and not on mount) so as not to run git on every chat shown.
@@ -61,8 +59,6 @@ export const ChatHeader = memo(function ChatHeader({
     if (res.ok && res.data) setBranch((res.data as BranchesResponse).current || null)
   }, [session?.directory])
   const [renaming, setRenaming] = useState(false)
-  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const toggleChatSearch = useChatSearchStore((s) => s.toggle)
 
   const handleDeletePress = () => {
     Alert.alert(
@@ -76,25 +72,51 @@ export const ChatHeader = memo(function ChatHeader({
   }
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: personaVisible ? 8 : 2, borderBottomWidth: 1, borderBottomColor: tokens.border, backgroundColor: tokens.background }}>
-      <Pressable onPress={openSidebar} style={s.iconButton}>
-        <Menu size={22} color={tokens.foreground} />
-      </Pressable>
-
-      {personaVisible && (
-        <View style={s.center}>
-          <Animated.View style={{ opacity: personaOpacity }}>
-            <Persona state={personaState} size={36} />
-          </Animated.View>
-        </View>
-      )}
-
-      {session ? (
-        <Pressable onPress={() => { setMenuOpen(true); void loadBranch() }} style={s.iconButton}>
-          <Ellipsis size={22} color={tokens.foreground} />
+    <View style={{ backgroundColor: tokens.background }}>
+      <View
+        style={[
+          s.top,
+          // With no mode on the divider falls back to the bottom of the title row.
+          activeModes.length === 0 && { borderBottomWidth: 1, borderBottomColor: tokens.border },
+        ]}
+      >
+        <Pressable onPress={openSidebar} style={s.iconButton}>
+          <Menu size={22} color={tokens.foreground} />
         </Pressable>
-      ) : (
-        <View style={s.iconButton} />
+
+        {/* Name of the chat and, below it, the model answering here — the persona is
+            gone with the first message (it lives in the welcome screen). */}
+        <View style={s.center}>
+          <Text numberOfLines={1} style={[s.title, { color: tokens.foreground }]}>
+            {session?.title ?? t('chatScreen.newConversationTitle')}
+          </Text>
+          <Text numberOfLines={1} style={[s.model, { color: tokens.mutedForeground }]}>
+            {modelLabel}
+          </Text>
+        </View>
+
+        {session ? (
+          <Pressable onPress={() => { setMenuOpen(true); void loadBranch() }} style={s.iconButton}>
+            <Ellipsis size={22} color={tokens.foreground} />
+          </Pressable>
+        ) : (
+          <View style={s.iconButton} />
+        )}
+      </View>
+
+      {/* The modes that are on, centred in grey under the divider, with the context of
+          the conversation pinned at the right so it does not throw the centre off. */}
+      {activeModes.length > 0 && (
+        <View style={[s.modesRow, { borderTopWidth: 1, borderTopColor: tokens.border }]}>
+          <View style={s.modes}>
+            {activeModes.map((mode) => (
+              <mode.icon key={mode.id} size={14} color={tokens.mutedForeground} />
+            ))}
+          </View>
+          <View style={s.meterSlot}>
+            <ContextMeter sessionId={session?.id} />
+          </View>
+        </View>
       )}
 
       <ActionMenu
@@ -143,6 +165,20 @@ export const ChatHeader = memo(function ChatHeader({
 })
 
 const s = StyleSheet.create({
+  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingTop: 4, paddingBottom: 2 },
   iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 1, paddingHorizontal: 4 },
+  title: { fontSize: 15, fontWeight: '600' },
+  model: { fontSize: 11.5 },
+  modesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 26,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 5,
+  },
+  modes: { flexDirection: 'row', alignItems: 'center', gap: 14, opacity: 0.75 },
+  meterSlot: { position: 'absolute', right: 16, top: 0, bottom: 0, justifyContent: 'center' },
 })

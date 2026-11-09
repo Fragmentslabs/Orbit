@@ -1,6 +1,6 @@
 import { View, Text, Pressable, ScrollView, StyleSheet, useColorScheme } from 'react-native'
 import { useRouter } from 'expo-router'
-import { ArrowLeft, Sun, Moon, Monitor, ChevronRight, Smile } from 'lucide-react-native'
+import { ArrowLeft, Sun, Moon, Monitor, Smile } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { PERSONA_VISIBILITY, type PersonaVisibility } from '@orbit/shared'
@@ -76,21 +76,6 @@ export default function AppearanceScreen() {
             })}
           </View>
         </View>
-
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.bottomModes.title')}</Text>
-
-        <Pressable
-          onPress={() => router.push('/(main)/modes')}
-          style={[s.card, s.rowCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14, color: tokens.foreground }}>{t('appearanceScreen.bottomModes.entry')}</Text>
-            <Text style={[s.hint, { color: tokens.mutedForeground, marginTop: 4 }]}>
-              {t('appearanceScreen.bottomModes.hint')}
-            </Text>
-          </View>
-          <ChevronRight size={18} color={tokens.mutedForeground} />
-        </Pressable>
 
         <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.personaSection')}</Text>
 

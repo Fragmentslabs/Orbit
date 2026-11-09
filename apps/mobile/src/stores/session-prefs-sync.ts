@@ -8,9 +8,10 @@ import { usePermissionPrefs } from './permission-prefs'
  * truth: it pushes the whole snapshot on connect (GET /api/session-prefs) and on
  * every change (WS event 'session:prefs-change').
  *
- * `authoritative` separates the two cases, as in the per-chat modes: on connect the
- * choice made on the phone wins (only what is missing enters); in the live event the
- * desktop has just changed, so it replaces.
+ * `authoritative` separates the two cases, as in the per-chat modes — and both are
+ * authoritative for the chats that already exist: the phone's own choices reach the
+ * desktop through 'session:prefs-select' and come back, so what is in the snapshot is
+ * richer than a local cache that can be weeks old. The draft stays local.
  */
 
 /** The draft is per device — it never travels in either direction. */
@@ -43,8 +44,6 @@ export function applyRemoteSessionPrefs(prefs: SessionPrefsSnapshot, authoritati
   const permission = withoutDraft(prefs.permission)
   const permissionState = usePermissionPrefs.getState()
   for (const [sessionId, mode] of Object.entries(permission)) {
-    // On connect, what the phone has already chosen wins; live, the desktop rules.
-    if (!authoritative && permissionState.modes[sessionId] !== undefined) continue
     if (permissionState.modes[sessionId] === mode) continue
     permissionState.applyRemoteMode(sessionId, mode)
   }
@@ -57,7 +56,7 @@ export async function fetchSessionPrefs(): Promise<void> {
   await ensureHydrated()
   try {
     const res = await http.getSessionPrefs()
-    if (res.ok && res.data) applyRemoteSessionPrefs(res.data, false)
+    if (res.ok && res.data) applyRemoteSessionPrefs(res.data, true)
   } catch {
     // Offline — keeps what is already on the device.
   }

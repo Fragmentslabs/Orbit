@@ -155,6 +155,8 @@ export function useSessionReasoningPref(
   return {
     enabled: pref?.enabled ?? false,
     variantId: pref?.variantId,
+    /** true when this chat has already chosen (on or off) — the choice wins over the default */
+    isExplicit: !!override,
     update: (next: ModelReasoningPref) => setPref(sessionId ?? null, next),
     hydrate,
     hydrated,
