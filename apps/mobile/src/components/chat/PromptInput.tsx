@@ -317,9 +317,15 @@ export function PromptInput({
   })), [modes, setVisionConfigOpen])
 
   useEffect(() => {
+    // Mounts with the chat and can be gone before the storage answers (the app opens on
+    // the new chat and replaces it), so the continuation checks that it is still alive.
+    let cancelled = false
     Storage.getItem(WORKER_CONFIG_PROMPTED_KEY)
-      .then((v) => { if (v === '1') setWorkerConfigPrompted(true) })
+      .then((v) => { if (!cancelled && v === '1') setWorkerConfigPrompted(true) })
       .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handlePickFiles = async () => {

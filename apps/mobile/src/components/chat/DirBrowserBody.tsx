@@ -30,20 +30,21 @@ export function DirBrowserBody({ active, onPick }: DirBrowserBodyProps) {
   const [recent, setRecent] = useState<string[]>([])
 
   const browse = useCallback(
-    async (path?: string) => {
+    async (path?: string, isCancelled?: () => boolean) => {
       setLoading(true)
       setError(null)
       try {
         const res = await wsClient.send({ type: 'fs:list-dirs', path })
+        if (isCancelled?.()) return
         if (res.ok && res.data) {
           setListing(res.data as ListDirsResponse)
         } else {
           setError(res.error ?? t('folderSelector.listError'))
         }
       } catch (err) {
-        setError(String(err))
+        if (!isCancelled?.()) setError(String(err))
       } finally {
-        setLoading(false)
+        if (!isCancelled?.()) setLoading(false)
       }
     },
     [wsClient, t],
@@ -51,12 +52,18 @@ export function DirBrowserBody({ active, onPick }: DirBrowserBodyProps) {
 
   useEffect(() => {
     if (!active) return
+    let cancelled = false
     // Fetching/syncing data in an effect is the documented React pattern;
     // the setState the rule flags is the loading/reset marker that
     // MUST happen before the await, otherwise the screen shows stale data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void browse()
-    void loadRecentFolders().then(setRecent)
+    void browse(undefined, () => cancelled)
+    void loadRecentFolders().then((list) => {
+      if (!cancelled) setRecent(list)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [active, browse])
 
   return (

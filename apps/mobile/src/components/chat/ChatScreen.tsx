@@ -154,12 +154,18 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     // Draft (no session) inherits the folder of the last code chat; the existing
     // session rules in the selector, including when it has no folder.
     if (!session) {
+      let cancelled = false
       void useDraftFolders.getState().hydrate().then((recentes) => {
+        // The app opens on the new chat and replaces it with the last one: the hydration
+        // can land after this screen is gone, so it must not set state then.
+        if (cancelled) return
         if (recentes.length > 0 && foldersRef.current.length === 0) {
           applyFolders(recentes, false)
         }
       })
-      return
+      return () => {
+        cancelled = true
+      }
     }
     // Fetching/syncing data in an effect is the documented React pattern;
     // the setState the rule flags is the loading/reset marker that

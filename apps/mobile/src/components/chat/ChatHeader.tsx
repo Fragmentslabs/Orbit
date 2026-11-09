@@ -75,21 +75,28 @@ export const ChatHeader = memo(function ChatHeader({
   // Branch of the working folder: the strip shows it on open, and the menu item labels it.
   // Reads the folder selected in the screen (not session.directory), so switching folders
   // in the sheet already reflects the new branch, before the next send.
-  const loadBranch = useCallback(async () => {
+  const loadBranch = useCallback(async (isCancelled?: () => boolean) => {
     if (!directory) return
     try {
       const res = await useConnectionStore.getState().wsClient.send({ type: 'git:branches', directory })
+      if (isCancelled?.()) return
       setBranch(res.ok && res.data ? (res.data as BranchesResponse).current || null : null)
     } catch {
-      setBranch(null)
+      if (!isCancelled?.()) setBranch(null)
     }
   }, [directory])
   const [renaming, setRenaming] = useState(false)
 
   useEffect(() => {
     // One git call per opened chat, only in code mode — the strip needs the branch.
+    // The answer can land after this header is gone (the app opens on the new chat and
+    // replaces it with the last one), so the continuation checks that it is still alive.
     if (!code) return
-    void loadBranch()
+    let alive = true
+    void loadBranch(() => !alive)
+    return () => {
+      alive = false
+    }
   }, [code, loadBranch])
 
   useEffect(() => {
