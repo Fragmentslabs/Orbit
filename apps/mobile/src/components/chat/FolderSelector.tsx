@@ -1,36 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
+import { useCallback, useState } from 'react'
+import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Folder, FolderUp, Plus, X, Check, History, Layers, ChevronDown } from 'lucide-react-native'
+import { Folder, Plus, X, Layers, ChevronDown } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import type { ListDirsResponse } from '@orbit/shared'
-import { useConnectionStore } from '~/stores/connection-store'
-import { Storage } from '~/lib/storage'
+import { folderName } from '~/lib/folder-name'
+import { saveRecentFolder } from '~/lib/folder-recents'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-
-const RECENT_FOLDERS_KEY = 'orbit_recent_folders'
-const MAX_RECENT = 6
-
-function folderName(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/')
-  return parts[parts.length - 1] || path
-}
-
-async function loadRecentFolders(): Promise<string[]> {
-  try {
-    const raw = await Storage.getItem(RECENT_FOLDERS_KEY)
-    return raw ? (JSON.parse(raw) as string[]) : []
-  } catch {
-    return []
-  }
-}
-
-async function saveRecentFolder(path: string): Promise<void> {
-  const current = await loadRecentFolders()
-  const next = [path, ...current.filter((p) => p !== path)].slice(0, MAX_RECENT)
-  await Storage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(next))
-}
+import { DirBrowserBody } from './DirBrowserBody'
 
 interface FolderSelectorProps {
   folders: string[]
@@ -183,7 +160,7 @@ function ExtraFoldersSheet({
   )
 }
 
-function DirBrowserModal({
+export function DirBrowserModal({
   visible,
   onClose,
   onPick,
@@ -195,42 +172,6 @@ function DirBrowserModal({
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
-  const wsClient = useConnectionStore((s) => s.wsClient)
-  const [listing, setListing] = useState<ListDirsResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [recent, setRecent] = useState<string[]>([])
-
-  const browse = useCallback(
-    async (path?: string) => {
-      setLoading(true)
-      setError(null)
-      try {
-        const res = await wsClient.send({ type: 'fs:list-dirs', path })
-        if (res.ok && res.data) {
-          setListing(res.data as ListDirsResponse)
-        } else {
-          setError(res.error ?? t('folderSelector.listError'))
-        }
-      } catch (err) {
-        setError(String(err))
-      } finally {
-        setLoading(false)
-      }
-    },
-    [wsClient, t],
-  )
-
-  useEffect(() => {
-    if (visible) {
-    // Fetching/syncing data in an effect is the documented React pattern;
-    // the setState the rule flags is the loading/reset marker that
-    // MUST happen before the await, otherwise the screen shows stale data.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-      void browse()
-      void loadRecentFolders().then(setRecent)
-    }
-  }, [visible, browse])
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -247,59 +188,7 @@ function DirBrowserModal({
             </Pressable>
           </View>
 
-          {recent.length > 0 && (
-            <View style={s.recentsRow}>
-              <History size={12} color={tokens.mutedForeground} />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                {recent.map((path) => (
-                  <Pressable key={path} onPress={() => onPick(path)} style={[s.recentChip, { borderColor: tokens.muted, backgroundColor: tokens.border }]}>
-                    <Folder size={11} color={tokens.mutedForeground} />
-                    <Text style={[s.recentChipText, { color: tokens.foreground }]} numberOfLines={1}>{folderName(path)}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={[s.currentRow, { backgroundColor: tokens.border }]}>
-            <Text style={[s.currentPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
-              {listing?.path ?? '…'}
-            </Text>
-            <Pressable
-              onPress={() => listing && onPick(listing.path)}
-              disabled={!listing}
-              style={[s.useBtn, { backgroundColor: tokens.primary }]}
-            >
-              <Check size={14} color={tokens.primaryForeground} />
-              <Text style={[s.useBtnText, { color: tokens.primaryForeground }]}>{t('folderSelector.useThis')}</Text>
-            </Pressable>
-          </View>
-
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
-            {listing?.parent && (
-              <Pressable onPress={() => void browse(listing.parent!)} style={s.dirRow}>
-                <FolderUp size={16} color={tokens.mutedForeground} />
-                <Text style={[s.dirName, { color: tokens.foreground }]}>..</Text>
-              </Pressable>
-            )}
-            {loading ? (
-              <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                <ActivityIndicator color={tokens.primary} />
-              </View>
-            ) : error ? (
-              <Text style={[s.errorText, { color: tokens.destructive }]}>{error}</Text>
-            ) : (
-              listing?.dirs.map((dir) => (
-                <Pressable key={dir.path} onPress={() => void browse(dir.path)} style={s.dirRow}>
-                  <Folder size={16} color={tokens.mutedForeground} />
-                  <Text style={[s.dirName, { color: tokens.foreground }]} numberOfLines={1}>{dir.name}</Text>
-                </Pressable>
-              ))
-            )}
-            {!loading && !error && listing?.dirs.length === 0 && (
-              <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>{t('folderSelector.noSubfolders')}</Text>
-            )}
-          </ScrollView>
+          <DirBrowserBody active={visible} onPick={onPick} />
         </View>
       </View>
     </Modal>
@@ -365,41 +254,4 @@ const s = StyleSheet.create({
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   sheetTitle: { fontSize: 16, fontWeight: '600' },
 
-  recentsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  recentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 9999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    maxWidth: 140,
-  },
-  recentChipText: { fontSize: 12 },
-
-  currentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  currentPath: { flex: 1, fontSize: 12, fontFamily: 'monospace' },
-  useBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  useBtnText: { fontSize: 12, fontWeight: '600' },
-
-  dirRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 11, borderRadius: 10 },
-  dirName: { flex: 1, fontSize: 14 },
-  errorText: { padding: 16, fontSize: 13 },
-  emptyText: { padding: 16, fontSize: 13 },
 })

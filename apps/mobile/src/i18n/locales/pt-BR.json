@@ -665,6 +665,7 @@
     "associateFolder": "Associar pasta",
     "selectFolderTitle": "Selecionar pasta no desktop",
     "useThis": "Usar esta",
+    "recentFolders": "Recentes",
     "noSubfolders": "Nenhuma subpasta aqui.",
     "listError": "Não foi possível listar as pastas.",
     "extraCount_one": "+{{count}} pasta",

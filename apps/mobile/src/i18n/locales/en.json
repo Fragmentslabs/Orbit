@@ -665,6 +665,7 @@
     "associateFolder": "Attach folder",
     "selectFolderTitle": "Select folder on desktop",
     "useThis": "Use this",
+    "recentFolders": "Recent folders",
     "noSubfolders": "No subfolders here.",
     "listError": "Could not list the folders.",
     "extraCount_one": "{{count}} more folder",
