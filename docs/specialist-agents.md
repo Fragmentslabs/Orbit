@@ -259,6 +259,7 @@ A fragment from a third party that ships a profile is covered by the same card.
 6. The editor for user-made agents and the header selector (done), once two or
    three built-in profiles proved the abstraction.
 7. Importing and sharing agents with the consent card (not done).
+8. Agents as one definition used in chats, suggestions and orchestra (section 8, design only).
 
 ## 7. Open questions
 
@@ -266,3 +267,255 @@ A fragment from a third party that ships a profile is covered by the same card.
   is the artifact's own state.
 - Whether Design and Motion get their own tool sets or share a base with fragments.
 - Whether the "continue here" choice is per chat (what is built) or remembered per artifact kind.
+
+## 8. Direction: one agent, used in three places
+
+Status: **design, not built.** Sections 1–7 describe what exists. This one records where it goes next.
+
+Terms, so they are not mixed up:
+
+- **Subagent**: the existing subagent mode. Unchanged by everything below.
+- **Subchat**: a child chat the *current chat suggests* (an ask card). Specialist subchats are the
+  ones started with an agent.
+- **Worker**: a child chat the *orchestrator creates* in orchestra mode.
+
+A worker and a subchat are the same thing: **a child chat running an agent**. They differ only in
+who decides to create it.
+
+| Where | Who decides | Asks the person? | Agent |
+|---|---|---|---|
+| Normal chat | The chat suggests | Yes, a suggestion card | Any agent in the catalog |
+| Orchestra mode | The orchestrator | No, it just runs | Any agent, or the default one |
+| Routine with orchestra | The orchestrator | Nobody to ask | Same |
+
+The generic worker stops being a concept of its own: it becomes "a child chat with the default
+agent". Subchats with specialists (section 4) are already this mechanism, so it needs no new one.
+
+### 8.1 The agent is one definition
+
+- **Built-ins are ordinary, editable definitions.** Fragment, Motion and Design are shipped as
+  pre-made agents edited exactly like the person's own, with "restore default". The person can
+  have several agents of one craft (for example one Motion agent per kind of video).
+- **A default arsenal** ships as well: code review, security, infrastructure, validation and
+  research. They serve as orchestra workers and as phases of a pipeline.
+- **Minimal base prompt, then one block per active capability.** The base is identity, language
+  and how to answer. Every capability (skills, browser, routines, memories, ...) is a module that
+  adds its tools *and* its usage instructions only while it is on. The general chat becomes the
+  agent with everything on; today's two paths (general and lean) become one.
+- **Allow-lists.** Tools, skills and MCP servers are each "all" or a chosen list. As in section 5,
+  a definition only restricts; it never grants more than the person already has.
+- **Pinned skills.** A skill can be fixed on an agent: its full text goes into the system prompt.
+  The others stay an index read on demand. Pinning costs tokens every turn, so the agent screen
+  shows the weight of the prompt, the pinned skills and the tools.
+- **A "when to use" line.** It drives routing, both for suggestions and for the orchestrator. It
+  is drafted when the agent is created and the person can edit it.
+- **Created from a prompt, like routines.** The person describes the agent; Orbit proposes name,
+  description, prompt, modules, lists and the "when to use" line, and the person approves a card
+  before anything is saved. The card is required: the generated prompt speaks with system
+  authority.
+- **Fixed per chat, as today.** The agent is stored on the session at creation, so the cache holds.
+
+### 8.2 The normal chat suggests, and does not become an orchestrator
+
+The risk is a chat that keeps trying to delegate. The rules are explicit, not left to judgment:
+
+- The chat sees a **compact catalog**: name plus the "when to use" line. Never whole prompts.
+- It suggests only when the task **clearly matches** an agent *and* produces something worth its
+  own chat (an artifact, a long review, a large research). A simple question or a small edit never
+  triggers a suggestion.
+- **One suggestion at a time**, never again for the same task. "Don't suggest again" is stored,
+  like the existing offer decisions (`specialist-offers`).
+- Each agent has a "can be suggested" switch.
+- Any agent can be suggested, not only the built-ins. Today's gesture-based offer
+  (`withSpecialistOffer`) stays for the craft tools and the catalog extends it.
+
+### 8.3 Orchestra mode
+
+- **It runs without asking.** Turning orchestra on is the authorization. Permission modes (ask,
+  autonomy) still apply inside each worker, and a critical question reaches the parent chat.
+- **Workers are child chats with an agent**, picked from the catalog by the "when to use" line, or
+  the default agent when none fits.
+- **Ephemeral agents.** The orchestrator may build an agent for one run, with its own prompt and
+  tools, never with more permission than the orchestrator itself has. It is not saved; the run
+  ends with a "save as agent" button. This keeps the flexibility without piling up permanent
+  definitions nobody approved.
+- **The interface is in the conversation, not a fixed panel.** Each worker is a card in the
+  message flow that runs live: thinking, the answer streaming, expandable to the full chat,
+  like Claude's subchats. Messages between workers appear in the flow too; they talk through a
+  message tool that is always visible, not through hidden shared memory.
+- **Results return as a summary plus references** to what the worker made ("Made:" lines, as in
+  section 3), not the worker's whole transcript.
+
+### 8.4 Routines and pipelines
+
+A routine can turn on orchestra and run many agents at once (for example a video: script, voice,
+image research and design in parallel). Because nobody is watching, it needs:
+
+- **A plan with dependencies.** Independent steps run together; a step waits for what it depends on
+  (the voice waits for the script).
+- **A concurrency limit and a token or cost budget per run.** Without one, ten agents can spend a
+  lot before anyone notices.
+- **Permissions fixed when the routine is created.** There is nobody to answer a card at 3 a.m.
+- **A failure policy per routine:** retry, continue without that step, or abort.
+- **Pipeline phases can name an agent**, so a phase runs as, say, the security agent.
+
+### 8.5 Order
+
+1. The agent as a single definition: editable built-ins, pinned skills, tool and skill lists, the
+   "when to use" line, the weight display.
+2. The prompt in modules, with the general chat as "everything on". Done gradually, starting with
+   the modules already well separated (browser, skills, routines, memories), and measured before
+   and after: the general prompt is large and tuned, so this is the riskiest step.
+3. The catalog and the suggestion rules in the normal chat.
+4. Orchestra workers as agent chats, and the inline interface.
+5. Routines and pipelines with agents: dependency plan, limits, budget.
+6. Ephemeral agents with "save as agent".
+
+Step 1 is **built except creation from a prompt**:
+
+- `whenToUse` and `pinnedSkills` on every agent (`agents/validate.ts`; pinned bodies read by
+  `agents/pinned-skills.ts` when the turn's profile is resolved). Pinned skills are an agent's
+  skill allow-list: an agent has no skills index, so it knows only what is pinned.
+- Built-ins editable through a small override layered on the shipped definition
+  (`agents/overrides.ts`, `withOverride` in `profiles/builtin.ts`); "restore default" deletes it.
+- **Craft agents:** `AgentInput.craft` (motion, design, fragment) gives a user agent that craft's
+  tools, blocks and artifact while the prompt, "when to use" and pinned skills are its own, so a
+  person can have several Motion agents. Not yet done: the suggestion card and the artifact
+  offer still name the built-in craft, not these agents (step 3).
+- **Tool limit** in the editor: off = every tool of the chat, on = a chosen list. The picker
+  offers the always-on tools plus any name typed in, because family tools depend on the turn.
+- **Starting agents** (`agent-templates.ts`): code review, security, infrastructure, validation
+  and research, added from the Specialists tab as ordinary agents the person then owns.
+- The weight is shown in the profile view and in the editors; descriptions of the person's agents
+  are now built in the main process (`describeAgents`) from the definition the engine runs.
+
+- **Creating an agent from a prompt**, two ways, both only *proposing*:
+  - **Tools → Specialists → New agent → Ask Orbit** opens the same modal as skills and hooks
+    (`AskOrbitDialog`, `kind="agents"`). `agents/generator.ts` makes one headless model call
+    and the draft goes through `sanitizeAgentInput` (unknown craft, non-literal switches and
+    pinned skills that do not exist are dropped); the editor opens filled in and the person
+    reviews and saves.
+  - **The `create_agent` chat tool** (`tools/create-agent.ts`, in chat and code mode, not for
+    workers or for agents other than the general chat) proposes an agent. Nothing is saved when
+    it runs; an "Add agent" card shows the whole prompt and the agent exists only after the
+    person clicks. The card derives "added" from the agents list, so it survives a restart.
+
+Step 1 is complete. Nothing was checked in the real window.
+
+Step 2, first half, is done: `buildSystemPrompt` now assembles `buildPromptSections()`, a list of
+`{ id, text }` pieces (`mode`, `permissions`, `visuals`, `documents`, `tools-map`, `subchats`,
+`memory`, `closing`, …) whose joined text is byte-identical to the old prompt (checked over 13
+turns — chat, code, plan, worker, web, brain, simple, `/create-skill` — before the baseline test
+was removed). Measured with the tool catalog on, in tokens (chars / 4): chat ≈ 3.0k, code ≈ 5.5k.
+The heaviest chat parts are `visuals` (1.2k, the orbit-ui syntax and image rules), `documents`
+(0.8k) and `mode` (0.3k); in code mode the code prompt itself is 2.2k. `prompts-weight.test.ts`
+holds ceilings (chat 3.5k, code 6.2k) so growth is a decision.
+
+Step 3 is done for the user's own agents. The general chat's prompt gets an `agents` section
+(`agents/suggestions.ts`) when at least one agent has a "when to use" line and a prompt: one line
+per agent (`agent:<id> — name: when`, at most 20, never the prompt) plus rules that keep it quiet
+— only on a clear match with real work, one at a time, silence by default. `suggest_subchat` takes
+an optional `agent`; the card shows the agent's name and icon, and accepting opens a chat that
+runs that agent. The answer, whatever it is, is recorded per conversation (the same record the
+craft offers use), so an agent is never suggested twice in one chat. An empty "when to use" is the
+"can be suggested" switch — there is no second one. Built-in crafts are still offered at the
+gesture that creates their piece, not through the catalog. The catalog costs nothing without
+agents and about 40 tokens per agent. Worker, plan and specialist chats never see it.
+Not done: a global "don't suggest this again" beyond the conversation, and the real window check.
+
+Step 4 is done in two of its four parts. (a) **Workers as agent chats.** `create_task` takes an
+optional `agent` (an id from the catalog the orchestrator is given when it plans, built by
+`workerAgentsBlock`); the task records it (`OrchestrationTask.agent`), the worker's session is
+created with that `profile`, and every turn of the worker runs the agent's own setup. An agent
+worker keeps its own prompt and gets only `WORKER_AGENT_CONTRACT` (one task, no clarifying
+questions, narrow checks, end with a summary) instead of the general worker prompt. An unknown
+agent id refuses the task rather than silently using the general worker. (b) **No ask to run.**
+`OrchestrationSettings.autoApprove`, a switch in the orchestra settings: every plan starts as soon
+as it is planned (the card still appears as the record). It is OFF by default, so nothing changes
+for anyone until they turn it on; routines (step 5) will force it.
+
+(c) **Live workers in the chat.** The orchestra's progress card (`TaskProgress`) is now a strip:
+collapsed by default, one bullet and "5 workers · 3 running" (plus "· 1 with an error" in red,
+so a failure never hides behind it); open, one row per worker (`worker-row.tsx`) with its agent's
+icon, its name and the line of what it is doing now, read from the worker's own chat by the pure
+`workerActivity()` (`lib/worker-activity.ts`: tool in use, thought in progress, stretch of the
+answer being written; for a finished worker, what it last said). A waiting worker keeps its
+icon, muted, and says what it waits for; a finished one gets a check; clicking a row opens that
+worker's chat. The design was chosen from variation 6C of the design canvas.
+
+Not done in step 4: the message tool between workers (so nothing to show of messages between
+them yet) and ephemeral agents created by the orchestrator (step 6). The strip was not looked at
+in the real window, and a component-level test is missing because the app has no component test
+setup — only the activity logic is tested. In Ask mode a worker still has the question tool, as before.
+
+Not done yet, and deliberately: letting an agent pick which sections it takes. Nothing consumes
+the ids except the weight test. Next is choosing the first consumers (for example a profile that
+wants `documents` or `memory` but not `visuals`), and only then trimming wording, since that
+changes behaviour.
+
+Steps 1–3 carry most of the value at low risk. Steps 4–5 are the large ones; measure token cost
+before allowing parallel agents in routines.
+
+### 8.6 Open questions
+
+- Whether "promote a worker to a normal subchat" (so the person can keep talking to it) is needed,
+  or the worker chat is simply openable from its card.
+- The default concurrency limit and budget for routines.
+- Whether the catalog shown to the chat is the same list as the orchestrator's, or has its own
+  per-agent switch.
+
+### 8.7 Routines as automations (decided, partly built)
+
+A routine is an automation: a **trigger**, a **plan** (one agent, or a team), a **policy**
+(limits, budget, failure, permissions) and an **output** (the routine's own screen, a
+notification, files). Time is one kind of trigger — the only one with its own controls (days and
+a time). Anything else ("when I deploy", "when the price drops") is described in words: the agent
+asks what it needs in the chat and builds a script that runs in the background and wakes the
+agent only when something fires. It runs only while Orbit is open; that is shown, not hidden.
+
+Decisions:
+- **No chat/code switch.** The mode follows the folders: any folder, code; none, chat
+  (`routineModeFor`). Folders are optional in both steps of the modal. A team with no folder works
+  in a folder of its own per run, where the steps leave their files.
+- **Creation is chat-first, the form is the destination of "see details".** A button opens a chat
+  with the text ready; the agent asks when the request is vague; a standard proposal card
+  (type, state, facts, a dashed note when it runs something on the person's behalf, "see details"
+  and "create") confirms. The same card for routine, agent, skill, hook and MCP server. The
+  creation chat is archived after the card is answered.
+- **A team is optional** (a collapsed section; the common routine is one agent). With one: a
+  coordinator (the orchestrator), results pass through dependencies and the run folder, no free
+  messages between workers, no approval, a limit of concurrent workers, a token budget and a
+  failure policy ("carry on with the others" by default).
+- **A run's steps are hidden from the sidebar** (conversations owned by the run) and shown on the
+  routine's screen; a step can be opened as a chat.
+- **Detail screen adapts** to the kind of routine: tabs for a simple one, stages for a team, a
+  watcher with its script and checks, or a timeline of results. Designs: canvas boards 8A–11D.
+
+Step 2 (chat-first creation) is built for routine, agent, skill, MCP server and hook: "create" in
+each panel opens a new chat with a sentence to complete (`useStartCreationChat`, fields selected
+with Tab), and the five proposal tools now tell the model to ask when the request is vague
+(`tools/proposal-guidance.ts`). The standard card (`proposal-card.tsx`) is in use for routine,
+agent and skill; "see details" opens the full form filled in for routine and agent. Not done: the
+MCP card and the hook's permission card still have their own layout; "see details" for skill, MCP
+and hook; archiving the creation chat once the card is answered. The "Ask Orbit" modal was
+removed from the panels; the headless generators behind it (`agents/generator.ts`, the hook, MCP
+and skill `generate` handlers) are now unused.
+
+Ladder, in order: (1) folders optional, mode derived — **done**; (2) chat-first creation and the
+standard card — **done, except the items above**; (3) the detail screen — **done for the single-agent, scheduled routine**: three tabs (overview with the last answer, the numbers and the latest runs; all runs; settings), no chat/code badge, a folder chip only when there are folders. The team stages (11B) and the watcher script (11C) wait for steps 5 and 7; (4) hidden run steps — **done**: the workers of a run no longer nest under it in the sidebar; the routine screen lists them under their run (each opens as a chat). The runs themselves still sit in the sidebar's Routines group, where the running spinner and unread dots live; (5) teams in routines — **engine done**: a routine with the orchestrate mode starts its plan with no approval (`options.orchestrate.unattended`), stops starting workers once `Routine.tokenBudget` is spent, and a failed worker only drops what depends on it (the engine already did that); the concurrency limit is the existing `MAX_PARALLEL`. **Not yet**: the per-run folder for a team with no folder (without folders it still falls back to a plain chat), a UI for the budget, and coordinator-written results (no approval,
+budget, failure policy); (6) the editor for the team — **done**: `Routine.team` (members with a name, an instruction, an agent and `dependsOn`; `maxParallel`) plus `tokenBudget`, edited in the create and edit dialogs of a code routine; the scheduler builds the plan from the members (`planFromTeam`) and runs it with `runTeam`, skipping the planning pass. The per-run folder for a team without a folder is still open; (7) event triggers and watchers — **done as generic scripts**:
+a routine carries `scripts` (name, summary, code, declared `hosts`, `readFiles`) and an optional
+`trigger: { kind: 'script', scriptId, everyMinutes }` that replaces the calendar. The same script
+can be the trigger (it checks, calls `fire()`, the agent runs only then) or a tool the agent calls
+during a run (`run_script`: read a report template from a spreadsheet, fetch a number from an API).
+Scripts run in a worker thread with a null-prototype `vm` context and a JSON-only bridge
+(`routines/scripts/`); the main process enforces the abilities (https + declared hosts, read-only
+files inside the routine folders, SheetJS for spreadsheets). A script runs only when the person
+approved this exact version (`approvedFingerprint` = code + hosts + file access): the form and the
+confirmation card approve what they show, an agent's `save_script` never does. The supervisor
+(`scripts/supervisor.ts`) runs in the scheduler tick: backoff after failures, "failing" after 3 and
+one notification, a 5-minute gap between fires, pending fires kept while the routine is busy, and
+the payload reaches the agent fenced as data. **Not yet**: secrets for scripts (public endpoints
+only), webhooks (needs a receiver), databases (no drivers; files and HTTP only). On the Scripts tab each script has "Test now"
+(runs once, keeps nothing, wakes nobody), "Edit with Orbit" (a chat started on that script) and
+"Remove" (not for the trigger script).
