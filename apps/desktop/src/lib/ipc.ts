@@ -771,6 +771,11 @@ export const routinesApi = {
   /** Runs a script once for the screen; nothing is kept or fired. */
   testScript: (routineId: string, scriptId: string) =>
     window.ipcRenderer.invoke("routines:testScript", routineId, scriptId) as Promise<ScriptTestResult>,
+  /** Secrets scripts can use by name. Values go in and never come back. */
+  listSecrets: () => window.ipcRenderer.invoke("routines:secrets:list") as Promise<string[]>,
+  setSecret: (name: string, value: string) =>
+    window.ipcRenderer.invoke("routines:secrets:set", name, value) as Promise<{ ok: true } | { ok: false; error: string }>,
+  removeSecret: (name: string) => window.ipcRenderer.invoke("routines:secrets:remove", name) as Promise<void>,
   removeScript: (routineId: string, scriptId: string) =>
     window.ipcRenderer.invoke("routines:removeScript", routineId, scriptId) as Promise<Routine | null>,
   /** The person approves the current version of a routine script. */

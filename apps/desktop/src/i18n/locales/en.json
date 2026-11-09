@@ -3014,6 +3014,15 @@
       "editTitle": "Script {{script}}",
       "editStarter": "I want to change the script \"{{script}}\" of the routine \"{{routine}}\" (id: {{id}}): [what to change]."
     },
+    "secrets": {
+      "title": "Secrets for scripts",
+      "hint": "Stored in your system keychain. A script can ask Orbit to send a secret to the hosts it declared, but never sees the value, and Orbit's agents cannot read it either.",
+      "missing": "Scripts here need secrets that are not stored yet: {{names}}.",
+      "delete": "Delete {{name}}",
+      "namePlaceholder": "GITHUB_TOKEN",
+      "valuePlaceholder": "Value",
+      "save": "Save"
+    },
     "form": {
       "step1": "What and when",
       "step2": "Review",

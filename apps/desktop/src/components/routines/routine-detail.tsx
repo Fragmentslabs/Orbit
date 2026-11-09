@@ -37,6 +37,7 @@ import { EditRoutineDialog } from "./edit-routine-dialog"
 import { LastResult } from "./last-result"
 import { ScriptActivityCard } from "./script-activity"
 import { ScriptCard } from "./script-card"
+import { ScriptSecrets } from "./script-secrets"
 import { describeWhen } from "./schedule"
 import { ModeBadges } from "./schedule-editor"
 import { useOpenRun } from "./use-open-run"
@@ -227,6 +228,7 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
                 void startChat(
                   t("routines.scripts.editTitle", { script: script.name }),
                   t("routines.scripts.editStarter", { script: script.name, routine: routine.title, id: routine.id }),
+                  routine.folders,
                 )
               }
               onRemove={
@@ -236,6 +238,7 @@ export function RoutineDetail({ routine, onClose }: { routine: Routine; /** Abse
               }
             />
           ))}
+          <ScriptSecrets wanted={scripts.flatMap((s) => s.secrets ?? [])} />
         </TabsContent>
 
         <TabsContent value="config" className="flex min-h-0 flex-col gap-3 overflow-y-auto">

@@ -21,12 +21,19 @@ export function useStartCreationChat(): (kind: CreationKind) => Promise<void> {
   return useCallback((kind) => startChat(t(`creation.${kind}.title`), t(`creation.${kind}.starter`)), [t, startChat])
 }
 
-/** A new chat with a title and the first words already in the composer (fields to fill with Tab). */
-export function useStartChatWith(): (title: string, starter: string) => Promise<void> {
+/**
+ * A new chat with a title and the first words already in the composer (fields to fill with Tab).
+ * With `folders` the chat opens on them (the first is the working directory), so what the agent
+ * tries there — a script that reads files — sees the same folders as the thing being edited.
+ */
+export function useStartChatWith(): (title: string, starter: string, folders?: readonly string[]) => Promise<void> {
   const { setMode, setView } = useWorkspace()
   return useCallback(
-    async (title, starter) => {
-      const session = await useSessionStore.getState().createSession("chat", { title })
+    async (title, starter, folders) => {
+      const [directory, ...extraDirectories] = folders ?? []
+      const session = await useSessionStore
+        .getState()
+        .createSession("chat", { title, ...(directory ? { directory, extraDirectories } : {}) })
       // Like any new chat, it starts from the last chat used (model, thinking, autonomy, modes).
       inheritChatSettings(session.id, "chat")
       useDraftInput.getState().setDraft(session.id, starter, undefined, { fields: true })

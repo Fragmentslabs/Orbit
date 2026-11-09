@@ -545,6 +545,9 @@ only), webhooks (needs a receiver), databases (no drivers; files and HTTP only).
 (runs once, keeps nothing, wakes nobody), "Edit with Orbit" (a chat started on that script) and
 "Remove" (not for the trigger script).
 
+**Secrets for scripts.** A script declares `secrets: ['GITHUB_TOKEN']` next to `hosts`; the names are part of `scriptFingerprint` (added only when present, so scripts approved earlier stay approved) and show as chips on the script card. The person stores a secret once, in the Scripts tab (`script-secrets.tsx`); values go to `routines/scripts/secrets-store.ts` (`routine-secrets.json`, encrypted with Electron `safeStorage` when available, else the file's 0600 permission, apart from `auth.json` so exports never carry them). The screen and the agents only ever get names (`routines:secrets:list|set|remove`, `routines_manage` action `list_secrets`); no channel returns a value. A script uses one only through the host: `fetch(url, { auth: { secret, scheme: 'Bearer' | 'Basic' | 'Token', header? } })`. The main process (`secrets-guard.ts`) checks the secret is declared and stored, adds the header after the host check (redirects stay off, so it reaches only a declared host) and scrubs the value — raw, JSON-escaped, URL-encoded and base64 — from the response body, errors, logs, result, fires and state of the run. A server that echoes the token back therefore shows `[secret]`. Limit: a script can still transform data it is allowed to see, but it never sees the token itself, so only a server-side echo of a transformed token could get past the scrubbing.
+
+**Editing a script with Orbit** now opens the chat on the routine's folders (`useStartChatWith(title, starter, folders)`), and `routines_manage` `test_script` takes the `routineId` to try a script against that routine's folders wherever the chat is.
 
 ### 8.8 Routine form, agents and one chat per run
 

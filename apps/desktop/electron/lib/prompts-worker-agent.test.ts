@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SendMessageInput } from '@shared/chat'
 
-vi.mock('./profiles', () => ({ profileSystemPrompt: () => 'AGENT OWN PROMPT' }))
+vi.mock('./profiles', () => ({ profileSystemPrompt: () => 'AGENT OWN PROMPT', profileSections: () => [] }))
 vi.mock('./memory/service', () => ({ loadPromptContext: async () => null }))
 vi.mock('./skills', () => ({ loadSkills: async () => [] }))
 vi.mock('./mcp', () => ({ listMcpToolDescriptions: () => [] }))

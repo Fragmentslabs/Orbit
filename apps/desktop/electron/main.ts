@@ -83,6 +83,7 @@ import fs from 'node:fs/promises'
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
+import { listSecretNames, removeSecret, setSecret } from './lib/routines/scripts/secrets-store'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog, ensureCustomProvidersSeeded, onCatalogRefreshed } from './lib/catalog'
 import { saveExport } from './lib/export-dialog'
@@ -2049,6 +2050,10 @@ app.whenReady().then(async () => {
     approveScript(routineId, scriptId),
   )
   ipcMain.handle('routines:testScript', (_e, routineId: string, scriptId: string) => testScript(routineId, scriptId))
+  // Secrets for scripts: names in, names out. No channel ever returns a value.
+  ipcMain.handle('routines:secrets:list', () => listSecretNames())
+  ipcMain.handle('routines:secrets:set', (_e, name: string, value: string) => setSecret(String(name), String(value)))
+  ipcMain.handle('routines:secrets:remove', (_e, name: string) => removeSecret(String(name)))
   ipcMain.handle('routines:removeScript', (_e, routineId: string, scriptId: string) => removeScript(routineId, scriptId))
   ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
   ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
