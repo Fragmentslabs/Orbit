@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { CalendarClockIcon } from "lucide-react"
 import { useRoutinesStore } from "@/src/stores/routines-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
-import { RoutineDetail } from "./my-routines"
+import { RoutineDetail } from "./routine-detail"
 
 /**
  * Side panel tab with a routine opened from the Routines page: the same detail the page used to

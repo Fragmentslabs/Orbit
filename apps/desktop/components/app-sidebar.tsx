@@ -1451,11 +1451,9 @@ function ChatHistory() {
         <AccordionGroup label={t("sidebar.groups.routines")}>
           <SidebarMenu>
             {routineSessions.map((session) => (
-              <SessionItem
-                key={session.id}
-                session={session}
-                childSessions={childrenByParent[session.id]}
-              />
+              // The steps of a run (its workers) are not listed here: they show on the routine
+              // screen, under the run, so a team does not fill the sidebar on every firing.
+              <SessionItem key={session.id} session={session} />
             ))}
           </SidebarMenu>
         </AccordionGroup>

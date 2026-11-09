@@ -2966,7 +2966,17 @@
       "runsCount_one": "{{count}} execution",
       "runsCount_other": "{{count}} executions",
       "showMore": "Show all",
-      "showLess": "Show less"
+      "showLess": "Show less",
+      "overview": "Overview",
+      "config": "Settings",
+      "lastRun": "Last execution",
+      "openAsChat": "Open as chat",
+      "noAnswer": "This execution left no written answer.",
+      "success": "Success, 30 days",
+      "model": "Model",
+      "folders": "Folders",
+      "recent": "Latest executions",
+      "seeAll": "See all"
     },
     "agenda": {
       "prev": "Previous week",
