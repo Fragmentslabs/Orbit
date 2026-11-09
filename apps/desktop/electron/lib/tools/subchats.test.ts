@@ -62,6 +62,10 @@ vi.mock('./specialist-offers', () => {
     recordOfferDecision: async (sessionId: string, profile: string) => void decided.add(`${sessionId}:${profile}`),
   }
 })
+vi.mock('../agents/suggestions', () => ({
+  suggestibleAgent: (id: string) => (id === 'agent:vid' ? { id: 'vid', name: 'Video agent' } : null),
+  profileLabel: (id: string) => (id === 'agent:vid' ? 'Video agent' : id),
+}))
 vi.mock('../ask-dispatch', () => ({ dispatchAsk: mocks.dispatchAsk }))
 vi.mock('../subchat-wake', () => ({ wakeParentOf: mocks.wakeParentOf }))
 vi.mock('../subchats', () => ({
@@ -120,6 +124,40 @@ describe('suggest_subchat', () => {
     expect(request.subchat).toEqual({ title: 'CSV parser', brief: BRIEF, scope: 'subchat' })
     expect(mocks.createSubchatRecord).not.toHaveBeenCalled()
     expect(mocks.runChat).not.toHaveBeenCalled()
+  })
+
+  it('suggests a listed agent: the card carries its id, and accepting opens that agent\'s chat', async () => {
+    mocks.dispatchAsk.mockResolvedValue('new')
+    const result = await exec(createSubchatTools(input({ sessionId: 'ses_pai' }), win), 'suggest_subchat')(
+      { title: 'Video', brief: BRIEF, agent: 'agent:vid' },
+      {},
+    )
+    const request = mocks.dispatchAsk.mock.calls[0][1] as { subchat: { profile?: string } }
+    expect(request.subchat.profile).toBe('agent:vid')
+    expect(mocks.createSubchatRecord).toHaveBeenCalledWith(expect.objectContaining({ profile: 'agent:vid' }))
+    expect(String(result)).toContain('Video agent chat was opened')
+  })
+
+  it('refuses an agent that is not in the catalog, without asking the user', async () => {
+    const result = await exec(createSubchatTools(input(), win), 'suggest_subchat')({ title: 'X', brief: BRIEF, agent: 'agent:nope' }, {})
+    expect(String(result)).toContain('no agent')
+    expect(mocks.dispatchAsk).not.toHaveBeenCalled()
+  })
+
+  it('never suggests the same agent twice in a conversation, whatever the first answer was', async () => {
+    mocks.dispatchAsk.mockResolvedValue('deny')
+    const tools = createSubchatTools(input({ sessionId: 'ses_once' }), win)
+    await exec(tools, 'suggest_subchat')({ title: 'Video', brief: BRIEF, agent: 'agent:vid' }, {})
+    const again = await exec(tools, 'suggest_subchat')({ title: 'Video', brief: BRIEF, agent: 'agent:vid' }, {})
+    expect(mocks.dispatchAsk).toHaveBeenCalledTimes(1)
+    expect(String(again)).toContain('do not suggest it again')
+  })
+
+  it('a specialist chat or a worker does not suggest agents', async () => {
+    const tools = createSubchatTools(input({ orchestrationRole: 'worker' }), win)
+    const result = await exec(tools, 'suggest_subchat')({ title: 'Video', brief: BRIEF, agent: 'agent:vid' }, {})
+    expect(String(result)).toContain('not suggested from here')
+    expect(mocks.dispatchAsk).not.toHaveBeenCalled()
   })
 
   it('a long conversation suggests a NEW chat, not a subchat', async () => {

@@ -1,4 +1,4 @@
-import { StorageKeys, type SpecialistProfile } from '@shared/chat'
+import { StorageKeys, type ProfileId } from '@shared/chat'
 import { readJson, writeJson } from '../storage'
 
 /**
@@ -10,16 +10,16 @@ import { readJson, writeJson } from '../storage'
 /** Serializes the read-modify-write per conversation: two tools can answer in the same step. */
 const queues = new Map<string, Promise<unknown>>()
 
-async function decidedCrafts(sessionId: string): Promise<SpecialistProfile[]> {
-  const saved = await readJson<SpecialistProfile[]>(StorageKeys.specialistOffers(sessionId)).catch(() => null)
-  return Array.isArray(saved) ? saved.filter((p): p is SpecialistProfile => typeof p === 'string') : []
+async function decidedCrafts(sessionId: string): Promise<ProfileId[]> {
+  const saved = await readJson<ProfileId[]>(StorageKeys.specialistOffers(sessionId)).catch(() => null)
+  return Array.isArray(saved) ? saved.filter((p): p is ProfileId => typeof p === 'string') : []
 }
 
-export async function offerDecided(sessionId: string, profile: SpecialistProfile): Promise<boolean> {
+export async function offerDecided(sessionId: string, profile: ProfileId): Promise<boolean> {
   return (await decidedCrafts(sessionId)).includes(profile)
 }
 
-export function recordOfferDecision(sessionId: string, profile: SpecialistProfile): Promise<void> {
+export function recordOfferDecision(sessionId: string, profile: ProfileId): Promise<void> {
   const run = (queues.get(sessionId) ?? Promise.resolve()).then(async () => {
     const crafts = await decidedCrafts(sessionId)
     if (!crafts.includes(profile)) await writeJson(StorageKeys.specialistOffers(sessionId), [...crafts, profile])

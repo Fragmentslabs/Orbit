@@ -1,7 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import type { SendMessageInput, SessionInfo, SpecialistProfile } from '@shared/chat'
+import type { ProfileId, SendMessageInput, SessionInfo, SpecialistProfile } from '@shared/chat'
 import { FRAGMENT_KINDS, type FragmentKind } from '@shared/fragments'
 import { dispatchAsk } from '../ask-dispatch'
 import { newRequestId } from '../ask-broker'
@@ -13,6 +13,7 @@ import { detachFromTurn } from '../session/write-journal'
 import { tNow } from '../i18n'
 import { offerDecided, recordOfferDecision } from './specialist-offers'
 import { wakeParentOf } from '../subchat-wake'
+import { profileLabel, suggestibleAgent } from '../agents/suggestions'
 
 // The first message of the new chat (`subchat.kickoff`) is in the voice of whoever
 // authorized the opening: the child starts working on its own, so the summary
@@ -77,7 +78,7 @@ async function openAndStart(
   title: string,
   brief: string,
   scope: Scope = 'subchat',
-  profile?: SpecialistProfile,
+  profile?: ProfileId,
   fragmentKind?: FragmentKind,
 ): Promise<string> {
   let child
@@ -95,7 +96,7 @@ async function openAndStart(
   broadcastSessionEvent({ type: 'session', sessionId: child.id, session: child })
   if (win) startChildTurn(input, win, child, tNow('subchat.kickoff'))
   if (profile) {
-    return `A ${profile} chat was opened for this: "${child.title}" (#${child.id}). It is a specialist chat attached to this conversation and is already working on it. Do NOT create the piece here — tell the user in one sentence that the work went to the ${profile} chat.`
+    return `A ${profileLabel(profile)} chat was opened for this: "${child.title}" (#${child.id}). It is a specialist chat attached to this conversation and is already working on it. Do NOT create the piece here — tell the user in one sentence that the work went to the ${profileLabel(profile)} chat.`
   }
   if (scope === 'chat') {
     return `New chat opened: "${child.title}" (#${child.id}). It is a top-level conversation in the same folder — not a subchat — starts from your brief and is already working on it in parallel. Tell the user where the work went.`
@@ -146,18 +147,39 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
         'directly instead of announcing that you are separating the work: the card is the announcement.',
         'One card per subject — do not pile them up.',
       ].join(' '),
-      inputSchema: z.object({ title: TITLE_INPUT, brief: BRIEF_INPUT, scope: SCOPE_INPUT }),
-      execute: async ({ title, brief, scope: requestedScope }, { abortSignal }) => {
+      inputSchema: z.object({
+        title: TITLE_INPUT,
+        brief: BRIEF_INPUT,
+        scope: SCOPE_INPUT,
+        agent: z
+          .string()
+          .optional()
+          .describe('The id of one of the user\'s agents (from "AGENTS THE USER HAS"), to open the chat with that agent. Leave out for a plain subchat.'),
+      }),
+      execute: async ({ title, brief, scope: requestedScope, agent }, { abortSignal }) => {
         // `subchat` is the concrete default, not only the schema's: a caller that does not
         // name the destination is suggesting a different subject, never a new top-level chat.
         const scope = requestedScope ?? 'subchat'
         if (!win) return 'Error: the suggestion needs the app window.'
+        // An agent suggestion: only a listed agent, and only once per conversation.
+        let profile: ProfileId | undefined
+        if (agent) {
+          if (input.options.profile || input.orchestrationRole === 'worker' || input.options.plan) {
+            return 'Agents are not suggested from here: do the work yourself, or call suggest_subchat without an agent.'
+          }
+          const found = suggestibleAgent(agent)
+          if (!found) return `There is no agent "${agent}" to suggest. Pick an id from "AGENTS THE USER HAS", or call suggest_subchat without an agent.`
+          profile = agent as ProfileId
+          if (await offerDecided(input.sessionId, profile)) {
+            return `The user already answered a suggestion for "${found.name}" in this conversation: do not suggest it again. Do the work here, or continue what they chose.`
+          }
+        }
         const requestId = newRequestId()
         let answer: string
         try {
           answer = await dispatchAsk<string>(
             input.sessionId,
-            { requestId, kind: 'subchat', subchat: { title, brief, scope } },
+            { requestId, kind: 'subchat', subchat: { title, brief, scope, ...(profile ? { profile } : {}) } },
             abortSignal,
           )
         } catch {
@@ -170,7 +192,9 @@ export function createSubchatTools(input: SendMessageInput, win?: BrowserWindow)
           // (and came back when the chat was reopened).
           broadcastChatEvent({ type: 'ask:done', sessionId: input.sessionId, requestId })
         }
-        if (answer === 'new') return openAndStart(input, win, title, brief, scope)
+        // Whatever the answer, an agent suggestion is not repeated in this conversation.
+        if (profile) await recordOfferDecision(input.sessionId, profile)
+        if (answer === 'new') return openAndStart(input, win, title, brief, scope, profile)
         // Restates the task: after a long brief and a card, a small model answered "ok"
         // and lost track of what "it" was.
         if (answer === 'here') return doItHere(title, brief)

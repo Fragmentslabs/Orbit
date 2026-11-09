@@ -1,4 +1,5 @@
-import { AGENT_META } from "@/src/components/agent-meta"
+import { agentView } from "@/src/components/agent-meta"
+import { useAgentsStore } from "@/src/stores/agents-store"
 import type { TFunction } from "i18next"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -354,16 +355,17 @@ function SubchatBody({ ask, submitted, onReply }: {
   // A new top-level chat (conversation got long) is not a subchat: it does not nest
   // under this one, and the card says so — with a chat icon, not the two-bubble one.
   const newChat = sugestao.scope === "chat"
+  const agents = useAgentsStore((s) => s.agents)
+  const agentOffer = sugestao.profile ? agentView(sugestao.profile, agents, t) : null
   // A specialist chat (Motion, Design): a lean agent of that craft. The card says what it gains
   // and what is passed, and the alternative is simply to keep going here.
-  if (sugestao.profile) {
-    const meta = AGENT_META[sugestao.profile]
-    const AgentIcon = meta.icon
-    const agent = t(meta.name)
+  if (agentOffer) {
+    const AgentIcon = agentOffer.icon
+    const agent = agentOffer.name
     return (
       <>
         <div className="flex items-start gap-2">
-          <AgentIcon className={cn("mt-0.5 size-4 shrink-0", meta.color)} />
+          <AgentIcon className={cn("mt-0.5 size-4 shrink-0", agentOffer.color)} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{t("ask.specialist.title", { agent })}</p>
             <p className="mt-1 text-xs text-muted-foreground">{t("ask.specialist.body")}</p>

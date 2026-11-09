@@ -1127,9 +1127,9 @@ export interface AskItem {
      * Absent = "subchat".
      */
     scope?: "subchat" | "chat"
-    /** The specialist agent this suggestion would open: the card offers "a Motion chat"
-     *  instead of a plain subchat. */
-    profile?: "fragment" | "motion" | "design"
+    /** The agent this suggestion would open — a built-in craft or `agent:<id>`: the card offers
+     *  "a Motion chat" (or the agent's name) instead of a plain subchat. */
+    profile?: ProfileId
     /** For a fragment suggestion: the kind the agent asked for, carried into the new chat. */
     fragmentKind?: "screen" | "panel" | "widget"
   }
@@ -1658,7 +1658,7 @@ export type ChatEvent =
       title: string
       brief: string
       scope?: "subchat" | "chat"
-      profile?: "fragment" | "motion" | "design"
+      profile?: ProfileId
       origin?: AskOrigin
     }
   /** Batch of worker requests grouped in a batching window (single card) */

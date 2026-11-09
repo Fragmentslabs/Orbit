@@ -1,4 +1,4 @@
-import type { ChatMessage, SessionInfo, SpecialistProfile } from '@shared/chat'
+import type { ChatMessage, SessionInfo, ProfileId } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { FragmentKind } from '@shared/fragments'
 import { listKeys, readJson, writeJson } from './storage'
@@ -140,7 +140,7 @@ export interface NewSubchat {
   /** The text that opens the new chat (the brief). It becomes the summary message. */
   body: string
   /** A specialist chat: it runs the lean profile of that craft for its whole life. */
-  profile?: SpecialistProfile
+  profile?: ProfileId
   /** For a fragment chat: the kind of fragment it was asked to make. Defaults to a screen. */
   fragmentKind?: FragmentKind
 }
@@ -174,7 +174,7 @@ async function createRecord({
   parentId?: string
   continuedFrom?: string
   fallbackTitle: string
-  profile?: SpecialistProfile
+  profile?: ProfileId
   fragmentKind?: FragmentKind
 }): Promise<SessionInfo> {
   const now = Date.now()

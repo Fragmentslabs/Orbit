@@ -22,6 +22,7 @@ import { folderInMainRepository } from './worktrees/main'
 import { conversationOriginBlock } from './subchats'
 import { readJson } from './storage'
 import { projectContextBlock } from './project-context'
+import { agentCatalogForPrompt } from './agents/suggestions'
 
 /**
  * System prompts per mode, adapted from opencode's agents
@@ -233,6 +234,9 @@ RULES:
 - If you research documentation or web references, cite the sources inline in the format [1](https://url).
 - Do NOT include time estimates, days, costs, or any business metric.
 - End by asking whether the user approves the plan.`
+
+/** What an agent running as an orchestra worker adds to its own prompt: the contract, not the setup. */
+export const WORKER_AGENT_CONTRACT = `You are running as a worker for an orchestrator: you received one task, and your final response is consumed by another model. Do not ask for clarification — decide the most reasonable way and proceed. Other workers run at the same time on this machine, so check narrowly and run any full suite at most once, at the end. End with a clear, complete summary of what you did and found.`
 
 export const WORKER_PROMPT = `You are an Orbit worker executing a subtask delegated by an orchestrator. Focus exclusively on the task you received, without asking for clarification — if something is ambiguous, make the most reasonable decision and proceed.
 
@@ -822,9 +826,44 @@ export async function buildSystemPrompt(
   toolsMap?: string,
 ): Promise<string> {
   // A specialist chat: the prompt of its craft and nothing else (see profiles/index.ts).
-  if (input.options.profile) return profileSystemPrompt(input.options.profile, input)
-  const parts: string[] = []
+  if (input.options.profile) {
+    const own = profileSystemPrompt(input.options.profile, input)
+    // An agent that runs as an orchestra worker keeps its own words and adds only the contract.
+    return input.orchestrationRole === 'worker' ? `${own}\n\n${WORKER_AGENT_CONTRACT}` : own
+  }
+  return (await buildPromptSections(input, modelVision, toolsMap)).map((s) => s.text).join('\n\n')
+}
 
+/** One labelled piece of the system prompt: what the weight report and the modules speak of. */
+export interface PromptSection {
+  /** Stable name of the capability the text belongs to (`mode`, `permissions`, `tools-map`, …). */
+  id: string
+  text: string
+}
+
+/**
+ * The general chat's prompt as labelled sections, in the order they are sent. Joining their texts
+ * is the prompt; keeping them apart is what lets each capability be measured, and later chosen
+ * by a setup that needs only some of them.
+ */
+export async function buildPromptSections(
+  input: SendMessageInput,
+  modelVision = true,
+  toolsMap?: string,
+): Promise<PromptSection[]> {
+  const sections: PromptSection[] = []
+  let section = 'mode'
+  /** Everything pushed from here on belongs to this capability. */
+  const into = (id: string) => {
+    section = id
+  }
+  const parts = {
+    push: (...texts: string[]) => {
+      for (const text of texts) sections.push({ id: section, text })
+    },
+  }
+
+  into('mode')
   if (input.mode === 'code') {
     if (input.options.planReview?.status === "revising") {
       parts.push(revisePlanPrompt(input.language))
@@ -856,12 +895,14 @@ export async function buildSystemPrompt(
         )
       }
     }
+    into('families-code')
     // Family guides only without the catalog (see familyGuides); the craft guide
     // comes on demand either way (video_guide).
     if (input.directory && resolveFfmpeg()) parts.push(...familyGuides(toolsMap, 'video', 'media'))
     // Download by link exists with or without ffmpeg (audio and subtitles do not need
     // it) and is registered whenever there is a folder — see tools/index.ts.
     if (input.directory) parts.push(...familyGuides(toolsMap, 'ytdlp'))
+    into('run-tools')
     // The one instruction that changes more than a tool description can: it is about
     // the SHAPE of the loop. Same condition as the registration in tools/index.ts.
     if (input.directory && !input.options.plan && input.orchestrationRole !== 'worker') {
@@ -869,9 +910,11 @@ export async function buildSystemPrompt(
     }
     // bash_background exists wherever bash does (see tools/index.ts); the panel it
     // feeds belongs to the user, so how to leave it readable is worth a paragraph.
+    into('background')
     if (input.directory && !input.options.plan) {
       parts.push(BACKGROUND_INSTRUCTION)
     }
+    into('pieces')
     // Orbit pieces: the same tools and the same instructions as the chat, plus the
     // code contract (the piece does not live in the repository). Motion also enters
     // the workers; design and slides, only in the main session (see tools/index.ts).
@@ -882,18 +925,22 @@ export async function buildSystemPrompt(
         parts.push(PIECES_CODE_INSTRUCTION)
       }
     }
+    into('permissions')
     const permissionMode = input.options.permissionMode ?? 'ask'
     if (permissionMode === 'ask') parts.push(PERMISSION_ASK_INSTRUCTION)
     else if (permissionMode === 'approve') parts.push(PERMISSION_APPROVE_INSTRUCTION)
     else parts.push(PERMISSION_FULL_INSTRUCTION)
   } else {
+    into('mode')
     parts.push(input.options.research ? researchPrompt(input.language) : chatPrompt(input.language))
+    into('families')
     if (input.orchestrationRole !== 'worker') {
       // The media tool only exists in the turn when ffmpeg is present (see tools/index.ts).
       parts.push(
         ...familyGuides(toolsMap, 'motion', 'video', 'design', 'slides', ...(resolveFfmpeg() ? ['media'] : []), 'ytdlp'),
       )
     }
+    into('browser')
     if (input.options.browser) {
       parts.push(
         'You also have browser_open and browser_links to navigate JavaScript-powered pages like a real browser, and browser_images to list the pictures of the open page.',
@@ -901,6 +948,7 @@ export async function buildSystemPrompt(
     }
   }
 
+  into('identity')
   // Identity: the name the user told in the conversation (learned, never
   // read from the operating system). It goes as a FACT — not as an order to use it. The
   // parsimony instruction exists because an agent that repeats the name on every
@@ -921,6 +969,7 @@ export async function buildSystemPrompt(
     )
   }
 
+  into('persona')
   // How the user asked to be addressed (Preferences → Behavior). It comes
   // as an ORDER from them: it counts above what the agent inferred in memory and below only
   // the tool and safety rules. Workers stay out — they do not speak
@@ -930,6 +979,7 @@ export async function buildSystemPrompt(
     parts.push(...personaPromptLines(persona.style, persona.note, input.mode))
   }
 
+  into('visuals')
   // HTML artifacts — the tool exists in both modes, but never in the workers
   // (whoever answers the user is the main session).
   if (input.orchestrationRole !== 'worker') {
@@ -949,12 +999,14 @@ export async function buildSystemPrompt(
     if (input.options.research || input.options.browser) parts.push(IMAGE_SEARCH_INSTRUCTION, WEB_IMAGE_INSTRUCTION)
   }
 
+  into('documents')
   // Documents: the doc_* tools exist in both modes (the attachment may arrive in
   // either); reading a repository document is code mode only.
   parts.push(input.mode === 'code' ? DOCUMENT_INSTRUCTION_CODE : DOCUMENT_INSTRUCTION_CHAT)
 
   parts.push(...(await buildSkillsBlock(input)))
 
+  into('tools-map')
   // Tool catalog on demand: the map replaces the list per family. It
   // says what exists, what each family solves and — the point that matters —
   // which ones are DISABLED in this turn and WHY. The model should not discover
@@ -975,6 +1027,7 @@ export async function buildSystemPrompt(
     }
   }
 
+  into('memory')
   // Automatic context: injects memories into the prompt
   if (input.options.brainContext && input.orchestrationRole !== 'worker') {
     parts.push(...(await buildBrainBlock(input)))
@@ -988,18 +1041,26 @@ export async function buildSystemPrompt(
     )
   }
 
+  into('subchats')
   // Subchats: when to propose one. The RESULT of the ones already attached is NOT here:
   // it changes every time a child answers, and the system prompt is the cache prefix
   // of the whole conversation — it travels in the turn's message (chat-engine).
   if (input.orchestrationRole !== 'worker') {
     parts.push(SUBCHAT_INSTRUCTION)
     parts.push(PAST_CHATS_INSTRUCTION)
+    // The user's own agents the chat may suggest (empty when none qualifies, and in plan turns).
+    into('agents')
+    if (!input.options.plan) {
+      const catalog = await agentCatalogForPrompt()
+      if (catalog) parts.push(catalog)
+    }
     // A subchat knows its parent reads its answers; a continuation knows where its
     // history lives. Fixed for the conversation's life, so it may sit in the system.
     const origin = await conversationOriginBlock(await readJson<SessionInfo>(StorageKeys.session(input.sessionId)).catch(() => null))
     if (origin) parts.push(origin)
   }
 
+  into('past-chats')
   // Past conversations: injects snippets of previous chats only when the user
   // asks explicitly about them (detected intent) — never automatically
   if (input.orchestrationRole !== 'worker' && detectPastChatsIntent(input.text)) {
@@ -1007,12 +1068,14 @@ export async function buildSystemPrompt(
     if (past) parts.push(past)
   }
 
+  into('mentions')
   if (input.text.includes('@mcp:')) {
     parts.push(
       '@mcp:<server> references in the message mean you MUST use that MCP server\'s tools (prefixed with <server>_) to fulfill the request.',
     )
   }
 
+  into('flows')
   if (input.text.trimStart().startsWith('/create-skill')) {
     parts.push(CREATE_SKILL_INSTRUCTION)
   }
@@ -1020,6 +1083,7 @@ export async function buildSystemPrompt(
     parts.push(DOCUMENT_INSTRUCTION)
   }
 
+  into('worker')
   if (input.orchestrationRole === 'worker') {
     parts.push(WORKER_PROMPT)
     // In "ask" the worker has the question tool — the question reaches the user
@@ -1030,11 +1094,13 @@ export async function buildSystemPrompt(
       )
     }
   }
+  into('computer')
   // Computer: the tools exist only with both keys; with the mode requested in the
   // conversation and the capability off/unavailable, the agent explains how to turn it on.
   if (agentMayControlComputer(input, isComputerAvailable())) parts.push(computerInstruction())
   else if (input.options.computer && input.orchestrationRole !== 'worker') parts.push(COMPUTER_OFF_INSTRUCTION)
   else if (isComputerAvailable() && input.orchestrationRole !== 'worker') parts.push(COMPUTER_HINT)
+  into('modes')
   if (input.options.simple) parts.push(SIMPLE_INSTRUCTION)
   if (input.options.voiceCall) parts.push(VOICE_CALL_INSTRUCTION)
   if (input.options.overlay) {
@@ -1042,6 +1108,7 @@ export async function buildSystemPrompt(
     const opened = overlayOpenContextLine(overlayOpenContext())
     if (opened) parts.push(opened)
   }
+  into('audio')
   // Audio: only whoever talks to the user needs to explain a disabled feature.
   if (input.orchestrationRole !== 'worker') {
     const voice = getAppSettings().voice
@@ -1049,10 +1116,11 @@ export async function buildSystemPrompt(
     if (!voice.stt.enabled) parts.push(AUDIO_TRANSCRIBE_OFF)
   }
 
+  into('closing')
   parts.push(VISUAL_CHECK_INSTRUCTION)
   parts.push(VERIFIED_RECORD_INSTRUCTION)
   parts.push(`Current date: ${new Date().toISOString().slice(0, 10)}`)
-  return parts.join('\n\n')
+  return sections
 }
 
 /**
