@@ -10,6 +10,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -93,25 +94,30 @@ export function AgentSelector({ session }: { session?: SessionInfo }) {
         <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel>{t("agent.group.builtin")}</DropdownMenuLabel>
-        {BUILTIN_CHOICES.map((choice) => (
-          <AgentItem
-            key={choice}
-            view={agentView(choice, agents, t)!}
-            selected={value === choice}
-            onSelect={() => setPending(choice === "general" ? null : choice)}
-          />
-        ))}
+        {/* A group label must live inside a group (Base UI throws otherwise). */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t("agent.group.builtin")}</DropdownMenuLabel>
+          {BUILTIN_CHOICES.map((choice) => (
+            <AgentItem
+              key={choice}
+              view={agentView(choice, agents, t)!}
+              selected={value === choice}
+              onSelect={() => setPending(choice === "general" ? null : choice)}
+            />
+          ))}
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>{t("agent.group.mine")}</DropdownMenuLabel>
-        {agents.map((agent) => (
-          <AgentItem
-            key={agent.id}
-            view={userAgentView(agent, t)}
-            selected={value === userProfileId(agent.id)}
-            onSelect={() => setPending(userProfileId(agent.id))}
-          />
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t("agent.group.mine")}</DropdownMenuLabel>
+          {agents.map((agent) => (
+            <AgentItem
+              key={agent.id}
+              view={userAgentView(agent, t)}
+              selected={value === userProfileId(agent.id)}
+              onSelect={() => setPending(userProfileId(agent.id))}
+            />
+          ))}
+        </DropdownMenuGroup>
         <DropdownMenuItem onClick={manage}>
           {agents.length === 0 ? <Plus className="size-4" /> : <Settings2 className="size-4" />}
           <span className="text-sm">{agents.length === 0 ? t("agent.create") : t("agent.manage")}</span>

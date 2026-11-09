@@ -43,6 +43,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -1813,17 +1814,21 @@ function DesignEditor({
               </DropdownMenuTrigger>
             </Hint>
             <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuLabel>{t("design.exportAll")}</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => exportDesign("pdf")}>{t("design.exportPdf")}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportDesign("png")}>{t("design.exportPng")}</DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t("design.exportAll")}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => exportDesign("pdf")}>{t("design.exportPdf")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportDesign("png")}>{t("design.exportPng")}</DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>{t("design.exportSelection")}</DropdownMenuLabel>
-              <DropdownMenuItem disabled={!selection} onClick={() => exportDesign("pdf", selection ? [selection.file] : undefined)}>
-                {t("design.exportPdf")}
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled={!selection} onClick={() => exportDesign("png", selection ? [selection.file] : undefined)}>
-                {t("design.exportPng")}
-              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t("design.exportSelection")}</DropdownMenuLabel>
+                <DropdownMenuItem disabled={!selection} onClick={() => exportDesign("pdf", selection ? [selection.file] : undefined)}>
+                  {t("design.exportPdf")}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!selection} onClick={() => exportDesign("png", selection ? [selection.file] : undefined)}>
+                  {t("design.exportPng")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
           <IconAction
