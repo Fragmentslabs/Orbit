@@ -1189,7 +1189,12 @@ export interface SendMessageOptions {
      * card's "Approve", and the workers stop starting once `tokenBudget` is spent. A worker that
      * fails never stops the others; only what depends on it is dropped.
      */
-    unattended?: { tokenBudget?: number; maxParallel?: number }
+    unattended?: {
+      tokenBudget?: number
+      maxParallel?: number
+      /** The routine opted in to the model reviewing each worker; absent = no review, whatever the global setting. */
+      review?: boolean
+    }
   }
   /** Loop mode: the agent reviews and iterates until the task is complete (configurable max N iterations) */
   loop?: boolean

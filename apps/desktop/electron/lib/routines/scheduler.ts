@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { BrowserWindow, Notification } from 'electron'
 import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
@@ -9,10 +10,11 @@ import { runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration, runTeam } from '../orchestrator'
 import { broadcastChatEvent, broadcastRoutineEvent } from '../broadcast'
-import { readJson, writeJson } from '../storage'
+import { dataDir, readJson, writeJson } from '../storage'
 import { readAppLanguage } from '../app-language'
 import { t } from '../i18n'
 import { listRoutines, listRuns, saveRun, updateRoutine } from './repo'
+import { createRunFolder } from './run-folder'
 import { promptWithEvents } from './scripts/event-prompt'
 import { superviseScripts, type SupervisorDeps } from './scripts/supervisor'
 import { stopWebhooks, tickWebhooks } from './webhooks/service'
@@ -63,16 +65,17 @@ function stamp(when: number): string {
  * session inherits the routine's mode: that is what makes the sidebar separate
  * chat routines from code routines.
  */
-async function createSession(routine: Routine, when: number): Promise<SessionInfo> {
-  const chat = routine.mode === 'chat'
+async function createSession(routine: Routine, when: number, scratch?: string): Promise<SessionInfo> {
+  // A team with no folder of its own works in the scratch folder of the run, so it is code.
+  const chat = routine.mode === 'chat' && !scratch
   const session: SessionInfo = {
     id: `${ROUTINE_SESSION_PREFIX}${routine.id}_${when.toString(36)}`,
     title: `${routine.title} — ${stamp(when)}`,
-    mode: routine.mode,
+    mode: chat ? 'chat' : 'code',
     pinned: false,
     archived: false,
     folderId: null,
-    directory: chat ? undefined : routine.folders[0],
+    directory: scratch ?? (chat ? undefined : routine.folders[0]),
     extraDirectories: chat ? undefined : routine.folders.slice(1),
     routineId: routine.id,
     // A routine run by an agent opens its chats as that agent's chats.
@@ -154,13 +157,17 @@ export async function runRoutine(
 
   running.add(routine.id)
   const start = Date.now()
-  const session = await createSession(routine, start)
+  // A team has to write somewhere: with no folder of its own it gets one for this run only,
+  // kept afterwards (the run row opens it).
+  const scratch = hasTeam(routine) && !routine.folders[0] ? await createRunFolder(path.join(dataDir(), 'routine-runs'), routine.id, start).catch(() => undefined) : undefined
+  const session = await createSession(routine, start, scratch)
 
   let run: RoutineRun = {
     routineId: routine.id,
     sessionId: session.id,
     startedAt: start,
     status: 'running',
+    ...(scratch ? { folder: scratch } : {}),
     tokens: 0,
     cost: 0,
   }
@@ -182,12 +189,13 @@ export async function runRoutine(
   const options = routineOptions(team ? { ...modes, orchestrate: true } : modes, {
     tokenBudget: routine.tokenBudget,
     maxParallel: team?.maxParallel,
+    review: routine.review,
   })
   // A chat routine only knows the chat modes: not even a hand-edited
   // routines.json should be able to turn orchestration/loop/subagents/plan on in
   // a mode that does not support them (the orchestrator, for instance, pins
   // worker sessions to mode 'code' — orchestration simply does not run in chat).
-  if (routine.mode === 'chat') {
+  if (routine.mode === 'chat' && !scratch) {
     options.orchestrate = undefined
     options.loop = undefined
     options.subagents = undefined
@@ -199,10 +207,10 @@ export async function runRoutine(
     text: promptWithEvents(routine.prompt, events),
     providerId: routine.model.providerId,
     modelId: routine.model.modelId,
-    mode: routine.mode,
+    mode: scratch ? 'code' : session.mode,
     options,
     ...(routine.scripts?.length ? { routineContext: { id: routine.id, folders: routine.folders, scripts: routine.scripts } } : {}),
-    directory: session.directory,
+    directory: scratch ?? session.directory,
     extraDirectories: session.extraDirectories,
     // Subagents/orchestration need a worker model; the routine uses its own,
     // which is the only model it knows.
@@ -221,7 +229,7 @@ export async function runRoutine(
   console.log(`[routines] firing "${routine.title}" (${reason}) in session ${session.id}`)
 
   try {
-    if (options.orchestrate && team) await runTeam(win, input, team)
+    if (options.orchestrate && team) await runTeam(win, input, team, { scratch: !!scratch })
     else if (options.orchestrate) await runOrchestration(win, input)
     else if (options.loop) await runChatWithLoop(win, input, input.loopConfig!)
     else await runChat(win, input)

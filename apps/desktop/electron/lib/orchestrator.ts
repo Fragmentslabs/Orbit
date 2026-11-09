@@ -51,6 +51,8 @@ import { addTokenUsage, toTokenUsage } from './usage'
 import { getWorkerConfigCache } from './companion-http'
 import { folderDiff, turnDiffs } from './orchestration/diff'
 import { budgetExhausted } from './orchestration/budget'
+import { closeMailbox, drainMail, joinMailbox, mailboxOf, openMailbox } from './orchestration/mailbox'
+import { settingsForUnattended } from './orchestration/unattended'
 import { planFromTeam } from './orchestration/team-plan'
 import type { RoutineTeam } from '@shared/routines'
 import { MAX_PARALLEL, executePlan } from './orchestration/execution'
@@ -354,11 +356,18 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
 
 /**
  * A routine's own team: the plan comes from the members the author defined, so there is no
- * planning pass, and it runs unattended (see `unattended` in SendMessageOptions). With no folder
- * there is nowhere for the workers to work, so it falls back to a plain turn like the planner does.
+ * planning pass, and it runs unattended (see `unattended` in SendMessageOptions). The scheduler
+ * gives a team with no folder of its own a scratch folder per run; if there is still no
+ * directory, there is nowhere for the workers to work and it falls back to a plain turn.
  */
-export async function runTeam(win: BrowserWindow, input: SendMessageInput, team: RoutineTeam): Promise<void> {
-  const plan = input.directory ? planFromTeam(team, newId) : null
+export async function runTeam(
+  win: BrowserWindow,
+  input: SendMessageInput,
+  team: RoutineTeam,
+  /** `scratch`: the folder was made for this run only, so members may leave their results in it. */
+  opts: { scratch?: boolean } = {},
+): Promise<void> {
+  const plan = input.directory ? planFromTeam(team, newId, { handoff: opts.scratch }) : null
   if (!plan) return runChat(win, input)
   const { sessionId } = input
   controllers.get(sessionId)?.abort()
@@ -965,7 +974,10 @@ async function approvePlanTurn(
     // changed since, and a half-done plan is finished the way it started.
     const config = opts?.resume
       ? normalizeOrchestrationSettings(plan.config ?? getWorkerConfigCache().orchestration)
-      : normalizeOrchestrationSettings(getWorkerConfigCache().orchestration)
+      : settingsForUnattended(
+          normalizeOrchestrationSettings(getWorkerConfigCache().orchestration),
+          input.options.orchestrate?.unattended,
+        )
     plan.config = config
     // One worktree per worker only makes sense in a git repository.
     const chatRepo = config.worktrees ? await chatRepository(input.directory!) : null
@@ -983,6 +995,7 @@ async function approvePlanTurn(
     // Child sessions of the workers. Each worker is registered in activeWorkers
     // ALREADY AT CREATION — an abort in this window has to reach them.
     activeWorkers.set(sessionId, [])
+    openMailbox(sessionId)
     const workerSessions = new Map<string, SessionInfo>()
     const createSession = async (task: OrchestrationTask): Promise<SessionInfo> => {
       // Resuming: this task already has a worker — a session with the conversation
@@ -993,6 +1006,7 @@ async function approvePlanTurn(
         if (existing) {
           workerSessions.set(task.id, existing)
           activeWorkers.get(sessionId)?.push(existing.id)
+          joinMailbox(sessionId, existing.id, task.title)
           return existing
         }
       }
@@ -1020,6 +1034,7 @@ async function approvePlanTurn(
       workerSessions.set(task.id, worker)
       task.workerSessionId = worker.id
       activeWorkers.get(sessionId)?.push(worker.id)
+      joinMailbox(sessionId, worker.id, task.title)
       emit(win, { type: 'session', sessionId: worker.id, session: worker })
       return worker
     }
@@ -1116,7 +1131,17 @@ async function approvePlanTurn(
           return { text: '', error: 'The token budget of this execution is spent.' }
         }
         const worker = workerSessions.get(task.id) ?? (await createSession(task))
-        const r = await runWorkerTurn(win, input, worker, text)
+        // Notes a teammate left before this turn start with the task; the ones that arrive
+        // during the turn reach the worker at its next step (chat-engine).
+        const box = mailboxOf(worker.id)
+        box?.start(worker.id)
+        const mail = drainMail(worker.id)
+        let r: Awaited<ReturnType<typeof runWorkerTurn>>
+        try {
+          r = await runWorkerTurn(win, input, worker, mail ? `${mail}\n\n${text}` : text)
+        } finally {
+          box?.finish(worker.id)
+        }
         // Every turn (the first one and the adjustments) goes into the plan's cost.
         if (r.tokens) plan.usage = addTokenUsage(plan.usage, r.tokens)
         return r
@@ -1302,6 +1327,7 @@ async function approvePlanTurn(
     })
   } finally {
     unregisterQuestions?.()
+    closeMailbox(sessionId)
     activeWorkers.delete(sessionId)
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId)
   }

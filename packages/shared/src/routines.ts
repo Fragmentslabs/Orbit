@@ -186,6 +186,7 @@ export function routineOptions(modes: RoutineModes, limits: RoutineLimits = {}):
       unattended: {
         ...(limits.tokenBudget ? { tokenBudget: limits.tokenBudget } : {}),
         ...(limits.maxParallel ? { maxParallel: limits.maxParallel } : {}),
+        ...(limits.review ? { review: true } : {}),
       },
     }
     options.loop = modes.loop !== false
@@ -206,6 +207,8 @@ export interface RoutineLimits {
   tokenBudget?: number
   /** Members working at the same time; absent = the engine's default. */
   maxParallel?: number
+  /** The model reviews each member's work (costs more, catches more); absent = no review. */
+  review?: boolean
 }
 
 // ─── Scripts ─────────────────────────────────────────────────────────────────
@@ -357,6 +360,8 @@ export interface Routine {
   agent?: ProfileId
   /** Ceiling of a team's execution (only matters with the orchestrate mode). */
   tokenBudget?: number
+  /** A team's work is reviewed by the model (the global supervise setting); absent = unattended runs skip the review. */
+  review?: boolean
   /** The routine's own team; absent = a single agent does the work. */
   team?: RoutineTeam
   /** Scripts attached to the routine (see RoutineScript). */
@@ -381,6 +386,7 @@ export interface NewRoutineInput {
   visionModel?: RoutineModel
   agent?: ProfileId
   tokenBudget?: number
+  review?: boolean
   team?: RoutineTeam
   scripts?: RoutineScript[]
   trigger?: RoutineTrigger
@@ -434,6 +440,8 @@ export interface RoutineRun {
   completedAt?: number
   status: RoutineRunStatus
   error?: string
+  /** Scratch folder of a team that had no folder of its own: kept after the run, so the files can be opened. */
+  folder?: string
   tokens: number
   cost: number
 }

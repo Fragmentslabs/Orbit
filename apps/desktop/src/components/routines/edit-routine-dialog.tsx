@@ -67,8 +67,8 @@ export function EditRoutineDialog({
     const selectedAgent = agents.find((a) => userProfileId(a.id) === stored.agent)
     const withAgent = selectedAgent ? applyAgentModes(modes, selectedAgent.features) : modes
     const effective = mode === "chat" ? restrictModesToChat(withAgent) : withAgent
-    // A team needs a folder to work in; without one only a single agent is kept.
-    const keepsTeam = mode === "code" && !!stored.team
+    // A team with no folder works in a scratch folder the run makes for itself.
+    const keepsTeam = !!stored.team
     await update(routine.id, {
       title: title.trim(),
       prompt: prompt.trim(),
@@ -81,6 +81,7 @@ export function EditRoutineDialog({
       visionModel: routine.visionModel ?? visionModel ?? undefined,
       team: keepsTeam ? stored.team : undefined,
       tokenBudget: keepsTeam ? stored.tokenBudget : undefined,
+      review: keepsTeam ? stored.review : undefined,
     })
     onOpenChange(false)
   }
@@ -107,7 +108,7 @@ export function EditRoutineDialog({
             <ModelPicker value={model} onValueChange={setModel} />
           </Field>
           <FoldersField folders={folders} onChange={setFolders} />
-          <AgentsEditor value={draft} onChange={setDraft} canBeTeam={mode === "code"} />
+          <AgentsEditor value={draft} onChange={setDraft} routineId={routine.id} />
           <details className="rounded-lg border px-3 py-2">
             <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("routines.form.advanced")}</summary>
             <div className="mt-2.5">

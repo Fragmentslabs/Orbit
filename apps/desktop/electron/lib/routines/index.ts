@@ -55,6 +55,7 @@ export async function createRoutine(input: NewRoutineInput): Promise<Routine> {
     visionModel: input.visionModel,
     agent: input.agent,
     tokenBudget: input.tokenBudget,
+    review: input.review,
     team: input.team,
     // A script only runs when the person approved this exact version: creating the routine from
     // the confirmation card (or the form) is that approval.

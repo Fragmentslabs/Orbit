@@ -12,6 +12,8 @@ export interface AgentsDraft {
   maxParallel?: number
   /** Tokens one execution may spend (a team only); absent = no ceiling. */
   tokenBudget?: number
+  /** The model reviews each agent's work (a team only; costs more); absent = no review. */
+  review?: boolean
 }
 
 let counter = 0
@@ -47,16 +49,16 @@ export function agentsAreValid(draft: AgentsDraft): boolean {
 }
 
 /** The draft of a routine (or of a proposal) as it is stored. */
-export function draftOf(source: Pick<Routine, "agent" | "team" | "tokenBudget">): AgentsDraft {
+export function draftOf(source: Pick<Routine, "agent" | "team" | "tokenBudget" | "review">): AgentsDraft {
   const members = source.team?.members ?? []
   if (members.length >= 2) {
-    return { members: members.map((m) => ({ ...m })), maxParallel: source.team?.maxParallel, tokenBudget: source.tokenBudget }
+    return { members: members.map((m) => ({ ...m })), maxParallel: source.team?.maxParallel, tokenBudget: source.tokenBudget, review: source.review }
   }
   return { members: [newMember({ agent: source.agent ?? members[0]?.agent })] }
 }
 
 /** What goes into the routine record: `agent` for a single agent, `team` (and a budget) for a team. */
-export function storedFields(draft: AgentsDraft): { agent?: ProfileId; team?: RoutineTeam; tokenBudget?: number } {
+export function storedFields(draft: AgentsDraft): { agent?: ProfileId; team?: RoutineTeam; tokenBudget?: number; review?: boolean } {
   if (!isTeam(draft)) {
     const agent = soloAgent(draft)
     return agent ? { agent } : {}
@@ -64,6 +66,7 @@ export function storedFields(draft: AgentsDraft): { agent?: ProfileId; team?: Ro
   return {
     team: { members: draft.members, ...(draft.maxParallel ? { maxParallel: draft.maxParallel } : {}) },
     ...(draft.tokenBudget ? { tokenBudget: draft.tokenBudget } : {}),
+    ...(draft.review ? { review: true } : {}),
   }
 }
 

@@ -20,8 +20,9 @@ describe("agents draft", () => {
       members: [newMember({ id: "a", name: "A", task: "x" }), newMember({ id: "b", name: "B", task: "y", dependsOn: ["a"] })],
       maxParallel: 2,
       tokenBudget: 1000,
+      review: true,
     }
-    expect(storedFields(draft)).toEqual({ team: { members: draft.members, maxParallel: 2 }, tokenBudget: 1000 })
+    expect(storedFields(draft)).toEqual({ team: { members: draft.members, maxParallel: 2 }, tokenBudget: 1000, review: true })
   })
 
   it("a team needs a name and an instruction on every member", () => {

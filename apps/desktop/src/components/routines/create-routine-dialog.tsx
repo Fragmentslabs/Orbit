@@ -151,8 +151,8 @@ export function CreateRoutineDialog({
         folders,
         // Kept whenever there is one: an agent that allows vision may switch it on later.
         visionModel: visionModel ?? undefined,
-        // A team needs a folder to work in; without one only a single agent is stored.
-        ...(mode === "code" ? stored : stored.agent ? { agent: stored.agent } : {}),
+        // A team with no folder works in a scratch folder the run makes for itself.
+        ...stored,
         // Scripts and their trigger ride along from the agent's proposal (the form has no editor for them).
         ...(proposal?.scripts?.length ? { scripts: proposal.scripts, trigger: proposal.trigger } : {}),
         active: true,
@@ -259,7 +259,7 @@ export function CreateRoutineDialog({
                 {folders[0] && <BranchSelector repoPath={folders[0]} />}
               </div>
 
-              <AgentsEditor value={agents} onChange={setAgents} canBeTeam={mode === "code"} />
+              <AgentsEditor value={agents} onChange={setAgents} />
 
               <details className="rounded-lg border px-3 py-2">
                 <summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t("routines.form.advanced")}</summary>

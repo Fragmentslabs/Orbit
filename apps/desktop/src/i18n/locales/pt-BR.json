@@ -2921,7 +2921,8 @@
       "running": "Rodando…",
       "ok": "Concluída",
       "error": "Falhou",
-      "tokens": "{{value}} tokens"
+      "tokens": "{{value}} tokens",
+      "openFolder": "Abrir a pasta desta execução"
     },
     "mode": {
       "chat": "Modo chat",
@@ -3072,7 +3073,6 @@
       "title": "Agentes",
       "add": "Adicionar agente",
       "solo": "Um agente cuida de todo o trabalho. Adicione outro para dividir.",
-      "needsFolder": "Uma equipe trabalha numa pasta: anexe uma para adicionar mais agentes.",
       "first": "Agente 1",
       "namePlaceholder": "Nome (por exemplo Roteirista)",
       "taskPlaceholder": "O que este agente faz",
@@ -3087,7 +3087,14 @@
       "stageFirst": "etapa 1",
       "stageAfter": "depois de {{names}}",
       "waitsNone": "Começa logo",
-      "waitsFor": "Espera por {{names}}"
+      "waitsFor": "Espera por {{names}}",
+      "review": "Pedir ao modelo que revise o trabalho de cada agente",
+      "reviewHint": "Desligado por padrão: a rotina roda enquanto você está fora, e a revisão deixa o custo e a duração menos previsíveis.",
+      "estimate": "Estimativa por execução:",
+      "estimateRange": "{{low}} a {{high}} mil tokens",
+      "estimateHistory_one": "Com base na última execução desta rotina.",
+      "estimateHistory_other": "Com base nas últimas {{count}} execuções desta rotina.",
+      "estimateGuess": "Um palpite aproximado pelo número de agentes: esta rotina ainda não rodou."
     }
   },
   "queue": {

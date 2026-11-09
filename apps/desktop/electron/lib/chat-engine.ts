@@ -1,3 +1,4 @@
+import { drainMail } from './orchestration/mailbox'
 import { generateText, stepCountIs, streamText, type ModelMessage, type UserContent } from 'ai'
 import fs from 'node:fs/promises'
 import { basename } from 'node:path'
@@ -2052,6 +2053,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         // the continuations below, which resend the same tool calls.
         const maxSteps = maxStepsFor(catalogModel)
         const stepPreparer = createStepPreparer(provider, primary.modelId, { directory: input.directory })
+        // Notes teammates left for this worker: kept for the rest of the turn, because the SDK
+        // rebuilds each step's messages from the turn's own history, which does not hold them.
+        const teammateMail: string[] = []
 
     // Automatic compaction: the real tokens of the last answer indicate that the
     // context is near the limit → it summarizes the old stretch a single time.
@@ -2487,7 +2491,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // meter, because the base64 in the result inflated the bill without serving
           // any purpose.
           const hoisted = hoistToolImages(prepared)
-          const preparedWithImages = hoisted.messages
+          // Notes a teammate left for this worker (orchestra plans only) join its context here.
+          const mail = input.orchestrationRole === 'worker' ? drainMail(input.sessionId) : null
+          if (mail) teammateMail.push(mail)
+          const preparedWithImages =
+            teammateMail.length > 0
+              ? [...hoisted.messages, ...teammateMail.map((content) => ({ role: 'user' as const, content }))]
+              : hoisted.messages
           if (stepPreparer.dropped > droppedBefore) {
             console.warn(
               `[context] step ${stepNumber}: ${stepPreparer.dropped - droppedBefore} tool result(s) dropped (working ceiling ${stepPreparer.workingBudget}, safety ${stepPreparer.budget} tokens)`,

@@ -13,6 +13,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { isTeam, newMember, waitsFor, withoutMember, type AgentsDraft } from "@/src/lib/agents-draft"
+import { estimateTeamTokens } from "@/src/lib/team-estimate"
+import { useRoutinesStore } from "@/src/stores/routines-store"
 import { useAgents } from "@/src/stores/agents-store"
 import { AgentMenu } from "./agent-menu"
 
@@ -24,16 +26,20 @@ const NUMBER_INPUT = "h-8 w-20 text-sm"
  * starts right away or after others) that opens to edit; the limits appear below (how many work at
  * once, how many tokens one execution may spend).
  */
-export function AgentsEditor({ value, onChange, canBeTeam }: {
+export function AgentsEditor({ value, onChange, routineId }: {
   value: AgentsDraft
   onChange: (next: AgentsDraft) => void
-  /** A team's agents work in a folder: without one the team is not offered. */
-  canBeTeam: boolean
+  /** The routine being edited: its past runs make the token estimate honest. */
+  routineId?: string
 }) {
   const { t } = useTranslation()
   const agents = useAgents()
   const { members } = value
   const team = isTeam(value)
+  const allRuns = useRoutinesStore((s) => s.runs)
+  const estimate = team
+    ? estimateTeamTokens(members.length, { review: value.review, pastRuns: routineId ? allRuns.filter((r) => r.routineId === routineId) : [] })
+    : null
   const [openId, setOpenId] = useState<string | null>(null)
   const agentName = (m: TeamMember) => agents.find((a) => userProfileId(a.id) === m.agent)?.name
 
@@ -142,18 +148,14 @@ export function AgentsEditor({ value, onChange, canBeTeam }: {
         </div>
       )}
 
-      {canBeTeam ? (
-        <button
-          type="button"
-          onClick={add}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
-        >
-          <PlusIcon className="size-3.5" />
-          {t("routines.agents.add")}
-        </button>
-      ) : (
-        <p className="text-[11px] text-muted-foreground">{t("routines.agents.needsFolder")}</p>
-      )}
+      <button
+        type="button"
+        onClick={add}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+      >
+        <PlusIcon className="size-3.5" />
+        {t("routines.agents.add")}
+      </button>
 
       {team && (
         <>
@@ -183,6 +185,25 @@ export function AgentsEditor({ value, onChange, canBeTeam }: {
               <span className="text-muted-foreground">{t("routines.agents.budgetUnit")}</span>
             </label>
           </div>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={value.review === true}
+              onChange={(e) => onChange({ ...value, review: e.target.checked || undefined })}
+              className="size-3.5"
+            />
+            <span>{t("routines.agents.review")}</span>
+          </label>
+          <p className="text-[11px] text-muted-foreground">{t("routines.agents.reviewHint")}</p>
+          {estimate && (
+            <p className="text-xs">
+              <span className="font-medium">{t("routines.agents.estimate")}</span>{" "}
+              {t("routines.agents.estimateRange", { low: Math.round(estimate.low / 1000), high: Math.round(estimate.high / 1000) })}
+              <span className="block text-[11px] text-muted-foreground">
+                {estimate.basis === "history" ? t("routines.agents.estimateHistory", { count: estimate.runs }) : t("routines.agents.estimateGuess")}
+              </span>
+            </p>
+          )}
           <p className="text-[11px] text-muted-foreground">{t("routines.agents.note")}</p>
         </>
       )}

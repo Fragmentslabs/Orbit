@@ -68,6 +68,8 @@ import { createPieceExportTool } from './piece-export'
 import { createHookTools } from './hooks'
 import { attachPostToolHooks } from '../hooks/run'
 import { hasOrchestrator } from '../orchestration/questions'
+import { mailboxOf } from '../orchestration/mailbox'
+import { createTeammateTool } from './teammates'
 import { createPanelTools } from './panel'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { createWebImageTools } from './web-images'
@@ -562,6 +564,8 @@ export function buildToolSet(
     if (ctx) Object.assign(tools, createWorktreeTools(ctx))
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
+  // A worker of an orchestra plan can leave a short note for another worker of the same plan.
+  if (input.orchestrationRole === 'worker' && mailboxOf(input.sessionId)) tools.message_teammate = createTeammateTool(input.sessionId)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
   // Vision mode: seeing the attached images is the agent's decision — the
   // describe_image tool describes on demand (with the context it passes).
