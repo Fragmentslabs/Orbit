@@ -519,3 +519,34 @@ the payload reaches the agent fenced as data. **Not yet**: secrets for scripts (
 only), webhooks (needs a receiver), databases (no drivers; files and HTTP only). On the Scripts tab each script has "Test now"
 (runs once, keeps nothing, wakes nobody), "Edit with Orbit" (a chat started on that script) and
 "Remove" (not for the trigger script).
+
+
+### 8.8 Routine form, agents and one chat per run
+
+- **One chat per run, always.** The "keep every run in one chat" switch and everything behind it
+  (`reuseChat`, `chatSessionId`, `rotateChat`, the "chat is full" card) are gone: each execution
+  is its own session, listed on the routine screen. Old values in `routines.json` are ignored.
+- **The form has two steps** (what and when; who does it and where). Folders are optional and say
+  so: without one the routine runs as a chat, with one it can read and edit files. The "describe it
+  and a model drafts the routine" step is gone from the desktop (the phone still uses it); creating
+  by description happens in the creation chat.
+- **A routine is run by one agent or by a team.** `Routine.agent` (`agent:<id>`) opens every run as
+  that agent's chat. The agent's features decide the routine's abilities (`applyAgentModes`: vision,
+  sub-agents, orchestra, loop, memories); the routine only keeps its autonomy level and, for the
+  general setup, its own ability switches. It is read at run time, so editing the agent changes its
+  routines.
+- **A new creation chat starts from the last chat used** (`inheritChatSettings`): model, thinking
+  level, autonomy and modes are copied, then the chat is individual. Removing the model and modes
+  defaults from the Preferences altogether (always inherit) is still open.
+
+- **Agents, not "team" (after designs 10A–10C).** The form's second step has an *Agents* section:
+  with one it is just which agent does the job; *Add agent* turns it into a team (name, own
+  instruction, agent, the agents it waits for, how many at once, a token budget). It is stored as
+  `Routine.agent` for one and `Routine.team` for two or more (`lib/agents-draft.ts`). Step 1 is the
+  instruction plus *on days and times* / *when something happens*; the second needs questions and a
+  script, so it continues in the chat. The name is derived from the instruction and can be edited.
+- **The creation chat proposes the split.** `routines_manage` takes a `team` (names, tasks, agent
+  ids, dependencies by name; `routines/team-validate.ts` refuses unknown agents, missing
+  dependencies and cycles), and its description tells the model to ask once, before creating,
+  whether the person wants a team, which pieces could go to specialists, and whether to create
+  agents (`create_agent`) for something specific first. A team still needs a folder.
