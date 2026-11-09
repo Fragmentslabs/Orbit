@@ -542,6 +542,35 @@ function findServer(name: string): ServerRuntime | undefined {
   return [...servers.values()].find((runtime) => runtime.config.name === name)
 }
 
+/**
+ * Door for `orbit.mcp` of a fragment: the tools (as the server names them) of a server the
+ * person connected and has enabled, or null while it is off, missing or not connected.
+ * It does not apply the conversation's slice or the server's permission mode — a fragment's
+ * own per-tool approval (manifest + the person's grant) is what gates it.
+ */
+export function listMcpServerToolNames(serverName: string): string[] | null {
+  const runtime = findServer(serverName)
+  if (!runtime || runtime.config.enabled === false || runtime.state !== 'connected' || !runtime.client) return null
+  return runtime.tools.map((t) => t.mcpName)
+}
+
+/** Calls one tool of a connected server and returns the raw MCP result (see mcpResultToText). */
+export async function callMcpToolByName(
+  serverName: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<unknown> {
+  const runtime = findServer(serverName)
+  if (!runtime || runtime.config.enabled === false || runtime.state !== 'connected' || !runtime.client) {
+    throw new Error(`The MCP server "${serverName}" is not connected`)
+  }
+  if (!runtime.tools.some((t) => t.mcpName === toolName)) {
+    throw new Error(`The MCP server "${serverName}" has no tool "${toolName}"`)
+  }
+  return runtime.client.callTool({ name: toolName, arguments: args }, undefined, { timeout: timeoutMs })
+}
+
 /** State of the description optimization, for the server's card. */
 export function mcpDescriptionsState(name: string): {
   optimized: boolean

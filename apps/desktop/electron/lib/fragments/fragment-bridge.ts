@@ -3,6 +3,9 @@ import type { FragmentCallInput, FragmentCallResult, FragmentCapability, Fragmen
 import { resolveModel } from '../providers'
 import { isUsableModel, listUsableModels } from './fragment-models'
 import { getFragment, storeDelete, storeGet, storeKeys, storeSet, updateFragmentMeta } from './fragment-store'
+import { createBudget } from './fragment-budget'
+import { fragmentHttpFetch } from './fragment-http'
+import { fragmentMcpCall, fragmentMcpList } from './fragment-mcp'
 import { modelForSession } from './session-model'
 import { buildProviderOptions } from '../reasoning'
 import type { SendMessageInput } from '@shared/chat'
@@ -26,17 +29,19 @@ const METHOD_CAPABILITY: Record<string, FragmentCapability | undefined> = {
   'models.list': 'models',
   'models.get': 'models',
   'models.set': 'models',
+  'http.fetch': 'http',
+  'mcp.list': 'mcp',
+  'mcp.call': 'mcp',
 }
 
 const AI_MAX_PROMPT_CHARS = 30_000
 const AI_MAX_OUTPUT_TOKENS = 4_000
 const AI_TIMEOUT_MS = 90_000
-/** Budget per fragment so a loop in the page cannot drain the user's quota. */
 const AI_MAX_PER_MINUTE = 12
 const AI_MAX_CONCURRENT = 2
 
-const aiWindow = new Map<string, number[]>()
-const aiInFlight = new Map<string, number>()
+/** Budget per fragment so a loop in the page cannot drain the user's quota. */
+const aiBudget = createBudget({ label: 'orbit.ai', perMinute: AI_MAX_PER_MINUTE, concurrent: AI_MAX_CONCURRENT })
 
 function fail(code: string, message: string): FragmentCallResult {
   return { ok: false, error: { code, message } }
@@ -44,18 +49,6 @@ function fail(code: string, message: string): FragmentCallResult {
 
 function objectParams(params: unknown): Record<string, unknown> {
   return params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {}
-}
-
-function overBudget(fragmentId: string): string | null {
-  if ((aiInFlight.get(fragmentId) ?? 0) >= AI_MAX_CONCURRENT) {
-    return `at most ${AI_MAX_CONCURRENT} orbit.ai calls at the same time`
-  }
-  const now = Date.now()
-  const recent = (aiWindow.get(fragmentId) ?? []).filter((t) => now - t < 60_000)
-  aiWindow.set(fragmentId, recent)
-  if (recent.length >= AI_MAX_PER_MINUTE) return `at most ${AI_MAX_PER_MINUTE} orbit.ai calls per minute`
-  recent.push(now)
-  return null
 }
 
 async function aiGenerate(manifest: FragmentManifest, input: FragmentCallInput, params: Record<string, unknown>): Promise<FragmentCallResult> {
@@ -69,10 +62,8 @@ async function aiGenerate(manifest: FragmentManifest, input: FragmentCallInput, 
   if (!remembered) {
     return fail('no_model', 'No model available yet — send a message in any chat first, then try again.')
   }
-  const busy = overBudget(manifest.id)
-  if (busy) return fail('rate_limited', busy)
-
-  aiInFlight.set(manifest.id, (aiInFlight.get(manifest.id) ?? 0) + 1)
+  const slot = aiBudget.take(manifest.id)
+  if ('refused' in slot) return fail('rate_limited', slot.refused)
   try {
     const model = await resolveModel(remembered.providerId, remembered.modelId, { sessionId: input.sessionId })
     // The thinking level the person chose for this fragment's model (same translation to the
@@ -99,9 +90,7 @@ async function aiGenerate(manifest: FragmentManifest, input: FragmentCallInput, 
   } catch (err) {
     return fail('ai_failed', err instanceof Error ? err.message : String(err))
   } finally {
-    const left = (aiInFlight.get(manifest.id) ?? 1) - 1
-    if (left <= 0) aiInFlight.delete(manifest.id)
-    else aiInFlight.set(manifest.id, left)
+    slot.release()
   }
 }
 
@@ -158,6 +147,12 @@ export async function handleFragmentCall(input: FragmentCallInput): Promise<Frag
         return { ok: true, value: manifest.model ?? null }
       case 'models.set':
         return await setModel(manifest, params)
+      case 'http.fetch':
+        return await fragmentHttpFetch(manifest, params)
+      case 'mcp.list':
+        return fragmentMcpList(manifest)
+      case 'mcp.call':
+        return await fragmentMcpCall(manifest, params)
       default:
         return fail('unknown_method', 'Unknown method.')
     }

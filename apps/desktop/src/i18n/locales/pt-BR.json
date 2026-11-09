@@ -3250,7 +3250,9 @@
       "capabilities": "Capacidades",
       "cap": {
         "ai": "Usar seu modelo de IA",
-        "models": "Escolher o modelo dentro da própria tela"
+        "models": "Escolher o modelo dentro da própria tela",
+        "http": "Acessar estes endereços da internet",
+        "mcp": "Usar estas ferramentas MCP conectadas"
       },
       "allowed": "Permitido",
       "allow": "Permitir",
@@ -3279,7 +3281,9 @@
     "openFull": "Abrir o fragmento",
     "ask": {
       "ai": "Este fragmento quer usar o seu modelo de IA.",
-      "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela."
+      "models": "Este fragmento quer deixar você escolher o modelo de IA dentro da própria tela.",
+      "http": "Este fragmento quer acessar a internet: {{what}}.",
+      "mcp": "Este fragmento quer usar suas ferramentas MCP conectadas: {{what}}."
     },
     "askAllow": "Permitir",
     "history": {

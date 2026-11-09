@@ -22,9 +22,85 @@ export function isFragmentId(id: unknown): id is string {
  * - `models`: let the fragment's own UI list and pick the model of `orbit.ai` (`orbit.models`).
  *   Granted, it is the fragment — not the app header — that offers the choice.
  */
-export type FragmentCapability = "ai" | "models"
+export type FragmentCapability = "ai" | "models" | "http" | "mcp"
 
-export const FRAGMENT_CAPABILITIES: readonly FragmentCapability[] = ["ai", "models"]
+export const FRAGMENT_CAPABILITIES: readonly FragmentCapability[] = ["ai", "models", "http", "mcp"]
+
+/**
+ * - `http`: fetch over https from the hosts the manifest declares (`orbit.http`), performed by
+ *   the main process. Allowing it allows exactly those hosts.
+ * - `mcp`: call the tools of MCP servers the person already connected (`orbit.mcp`), only the
+ *   server/tool pairs the manifest declares. Allowing it allows exactly those pairs.
+ * In both, widening the declaration afterwards drops the grant: the person approves again.
+ */
+
+/** An MCP server and the tools of it that a fragment declared (tool names as the server reports them). */
+export interface FragmentMcpAccess {
+  server: string
+  tools: string[]
+}
+
+export const FRAGMENT_MAX_HOSTS = 10
+export const FRAGMENT_MAX_MCP_SERVERS = 8
+export const FRAGMENT_MAX_MCP_TOOLS = 20
+
+/**
+ * A bare, lowercase DNS name from what the agent wrote ("api.example.com" or a full URL),
+ * or null. IP literals, `localhost`, single-label and internal-looking names, ports,
+ * credentials and wildcards are refused: a declaration must name a public host.
+ */
+export function normalizeFragmentHost(raw: unknown): string | null {
+  if (typeof raw !== "string") return null
+  let value = raw.trim().toLowerCase()
+  if (!value || value.length > 253) return null
+  if (value.includes("://")) {
+    try {
+      const url = new URL(value)
+      if (url.protocol !== "https:" || url.username || url.password || url.port) return null
+      value = url.hostname
+    } catch {
+      return null
+    }
+  }
+  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/.test(value)) return null
+  if (/^[0-9.]+$/.test(value)) return null
+  const tld = value.slice(value.lastIndexOf(".") + 1)
+  if (/^[0-9]+$/.test(tld) || ["local", "localhost", "internal", "lan", "home", "corp", "intranet"].includes(tld)) return null
+  return value
+}
+
+export function sanitizeFragmentHosts(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const hosts = value.map(normalizeFragmentHost).filter((h): h is string => h !== null)
+  return [...new Set(hosts)].slice(0, FRAGMENT_MAX_HOSTS)
+}
+
+export function sanitizeFragmentMcp(value: unknown): FragmentMcpAccess[] {
+  if (!Array.isArray(value)) return []
+  const byServer = new Map<string, Set<string>>()
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const { server, tools } = entry as Partial<FragmentMcpAccess>
+    if (typeof server !== "string" || !server.trim() || server.length > 80 || !Array.isArray(tools)) continue
+    const set = byServer.get(server) ?? new Set<string>()
+    for (const tool of tools) {
+      if (typeof tool === "string" && tool.trim() && tool.length <= 120) set.add(tool)
+    }
+    if (set.size > 0) byServer.set(server, set)
+  }
+  return [...byServer.entries()]
+    .slice(0, FRAGMENT_MAX_MCP_SERVERS)
+    .map(([server, tools]) => ({ server, tools: [...tools].slice(0, FRAGMENT_MAX_MCP_TOOLS) }))
+}
+
+/** True when `next` asks for nothing `prev` did not already ask for (narrowing keeps a grant). */
+export function hostsAreSubset(next: string[], prev: string[]): boolean {
+  return next.every((h) => prev.includes(h))
+}
+
+export function mcpIsSubset(next: FragmentMcpAccess[], prev: FragmentMcpAccess[]): boolean {
+  return next.every((n) => prev.some((p) => p.server === n.server && n.tools.every((t) => p.tools.includes(t))))
+}
 
 /**
  * Where a fragment is meant to live:
@@ -93,6 +169,10 @@ export interface FragmentManifest {
   requests: FragmentCapability[]
   /** What the user allowed (written only by the UI, never by the agent's tools). */
   grants: FragmentCapability[]
+  /** Hosts `orbit.http` may reach (https only) — meaningful once "http" is requested and allowed. */
+  hosts: string[]
+  /** MCP servers and tools `orbit.mcp` may call — meaningful once "mcp" is requested and allowed. */
+  mcp: FragmentMcpAccess[]
   /** Bumped on every write; the tab uses it to reload. */
   revision: number
   createdAt: number
@@ -119,6 +199,9 @@ export type FragmentMethod =
   | "models.list"
   | "models.get"
   | "models.set"
+  | "http.fetch"
+  | "mcp.list"
+  | "mcp.call"
 
 /** A model the fragment may offer in its own UI. Names only: never a key, endpoint or price. */
 export interface FragmentModelOption {

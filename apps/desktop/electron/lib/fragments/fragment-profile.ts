@@ -30,6 +30,7 @@ export function fragmentSystemPrompt(language?: string): string {
     '- Start with a complete, working, good-looking first version, then improve it. Do not ask questions you can answer with a sensible default.',
     '- Pick a fitting lucide icon for the fragment (the `icon` field of fragment_create), in kebab-case, e.g. "wallet", "chart-bar", "timer".',
     '- Honor the kind the person asked for: "screen" (a full page), "panel" (a compact column that sits next to a chat) or "widget" (a small glanceable card).',
+    '- The page has no network of its own: for the internet declare hosts with fragment_set_http and use orbit.http; for the person\'s connected MCP tools declare them with fragment_set_mcp and use orbit.mcp. Both only ask; the person allows.',
     '- You only ever touch fragments. You have no other tools, and that is on purpose.',
     '',
     `${reply}briefly: say what you built or changed in one or two sentences. The person sees the result, so never paste code in the answer.`,

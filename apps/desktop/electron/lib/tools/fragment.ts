@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { tool } from 'ai'
 import { z } from 'zod'
+import { FRAGMENT_MAX_HOSTS } from '@shared/fragments'
+import { listMcpServerNames, listMcpServerToolNames } from '../mcp'
 import {
   clearFragmentLogs,
   createFragment,
@@ -9,8 +11,11 @@ import {
   getFragment,
   listFragmentFiles,
   listFragments,
+  readFragmentData,
   readFragmentFile,
   readFragmentLogs,
+  setFragmentHosts,
+  setFragmentMcp,
   setRequested,
   writeFragmentFile,
 } from '../fragments/fragment-store'
@@ -33,13 +38,17 @@ window.orbit is already loaded in every fragment page (do not add a script for i
 - orbit.ai.generate({ prompt, system? }) → Promise<{ text }> — asks the user's own model. Only works when the fragment was created with usesAi: true AND the user turned it on in the tab (until then it rejects with err.code === "permission_denied": catch it and show a clear message in the UI). Limited to a few calls per minute: never call it in a loop or on every keystroke.
 - orbit.models.list() → Promise<[{ providerId, providerName, modelId, name, reasoning }]>, orbit.models.get() → Promise<{ providerId, modelId } | null>, orbit.models.set({ providerId, modelId }) (or set(null) to follow the chat) — lets YOUR screen offer the choice of the model that orbit.ai uses. Only after you call fragment_set_models AND the user allows it; then the app header no longer shows a model control, so build one.
 - orbit.theme ("light" | "dark") and orbit.on("theme", fn) — the app theme. The Orbit CSS variables are already defined and follow it: --background, --foreground, --card, --card-foreground, --primary, --primary-foreground, --secondary, --muted, --muted-foreground, --accent, --border, --input, --ring, --radius and --font-sans. Style with them (e.g. body { background: var(--background) }) so the screen looks native in light and dark.
+- orbit.http.fetch(url, { method?, headers?, body? }) → Promise<{ status, ok, url, headers, text, truncated, json() }> — the ONLY way to reach the internet. https only, and only hosts you declared with fragment_set_http AND the user allowed (until then: err.code "permission_denied"; an undeclared host: "host_not_allowed"). The app does the request: no cookies, no Authorization/Cookie headers, response capped at 2MB, 20s, 30 calls/minute. body is a string (JSON.stringify it).
+- orbit.mcp.list() → [{ server, connected, tools: [{ name, available }] }] and orbit.mcp.call(server, tool, args) → Promise<{ text, truncated }> — uses tools of MCP servers the user already connected. Only server/tool pairs you declared with fragment_set_mcp AND the user allowed. Errors: "mcp_unavailable" (server not connected), "tool_not_allowed", "mcp_tool_error" (the tool failed; err.message has its text). 20 calls/minute; result is text, capped.
 Errors from orbit calls carry err.code.
 
-Hard limits of the page (a closed sandbox): NO network of any kind — no fetch to the internet, no CDN scripts, no external images, fonts or iframes. Write plain HTML/CSS/JavaScript (ES modules between your own files are fine); draw charts with inline SVG or <canvas>. Files: index.html is the entry; add style.css, app.js, etc. with fragment_write_file and reference them relatively (<link href="style.css">, <script src="app.js">). Allowed file types: html, css, js, mjs, json, svg, txt, csv, md.
+Hard limits of the page (a closed sandbox): NO direct network — no fetch to the internet from the page (use orbit.http), no CDN scripts, no external images, fonts or iframes. Write plain HTML/CSS/JavaScript (ES modules between your own files are fine); draw charts with inline SVG or <canvas>. Files: index.html is the entry; add style.css, app.js, etc. with fragment_write_file and reference them relatively (<link href="style.css">, <script src="app.js">). Allowed file types: html, css, js, mjs, json, svg, txt, csv, md.
 After writing, the panel reloads by itself. Call fragment_logs to read the page's console and errors and fix what is broken.`
 
 const CREATE_DESCRIPTION = `Creates a FRAGMENT: a small interactive screen that opens in the side panel next to the chat and that the user can keep using — a tool, tracker, dashboard, mini-app or utility, not a one-off illustration of an answer (for that, create_artifact). It is saved, shows up again later, and can store data and ask Orbit's model through window.orbit. Send a complete index.html (inline CSS/JS is fine, or split into files afterwards). From then on, keep refining it with fragment_edit_file / fragment_write_file as the user asks: the panel reloads on every write, so they watch it change live.
 ${SDK_REFERENCE}`
+
+const MAX_READ_DATA_CHARS = 30_000
 
 class FileMissing extends Error {}
 
@@ -67,7 +76,9 @@ export function createFragmentTools(sessionId: string) {
       manifest && manifest.requests.includes('ai') && !manifest.grants.includes('ai')
         ? ' This fragment uses orbit.ai: it works only after the user turns on "AI" in the tab toolbar — tell them so.'
         : ''
-    return `${lead} (revision ${revision}). The person is looking at it live (on the Fragments page, or in a Fragment tab of the side panel) and it reloads on every write.${aiNote} Call fragment_logs to check the page for runtime errors.`
+    const waiting = manifest ? manifest.requests.filter((c) => (c === 'http' || c === 'mcp') && !manifest.grants.includes(c)) : []
+    const accessNote = waiting.length ? ` Still waiting for the user to allow: ${waiting.join(', ')} (the tab shows an Allow button) — tell them so.` : ''
+    return `${lead} (revision ${revision}). The person is looking at it live (on the Fragments page, or in a Fragment tab of the side panel) and it reloads on every write.${aiNote}${accessNote} Call fragment_logs to check the page for runtime errors.`
   }
 
   return {
@@ -244,13 +255,88 @@ export function createFragmentTools(sessionId: string) {
       },
     }),
 
+    fragment_set_http: tool({
+      description: `Declares the hosts the fragment reaches with orbit.http.fetch (up to ${FRAGMENT_MAX_HOSTS}, bare DNS names such as "api.open-meteo.com" — no IPs, no localhost, no wildcards, https only). This only ASKS: the user sees the list and must allow it. Adding hosts later withdraws the allowance, so declare every host the page needs at once. An empty list stops asking.`,
+      inputSchema: z.object({ fragmentId: FragmentIdSchema, hosts: z.array(z.string()).max(FRAGMENT_MAX_HOSTS) }),
+      execute: async ({ fragmentId, hosts }) => {
+        const declared = await setFragmentHosts(fragmentId, hosts)
+        if (!declared) return notFound(fragmentId)
+        const manifest = await setRequested(fragmentId, 'http', declared.hosts.length > 0)
+        panelFragmentOpen({ id: fragmentId, title: declared.name, sessionId })
+        const dropped = hosts.length - declared.hosts.length
+        const note = dropped > 0 ? ` ${dropped} entr${dropped === 1 ? 'y was' : 'ies were'} refused (not a public DNS name, or duplicate).` : ''
+        return declared.hosts.length === 0
+          ? `orbit.http is no longer requested.${note}`
+          : `Declared: ${declared.hosts.join(', ')}.${note} The user must allow "http" in the tab before orbit.http.fetch works (${manifest?.grants.includes('http') ? 'already allowed' : 'not yet'}).`
+      },
+    }),
+
+    fragment_set_mcp: tool({
+      description:
+        'Declares which tools of which MCP servers the fragment calls with orbit.mcp.call. Server names and tool names are exactly as Orbit connected them (the tool name WITHOUT the "<server>_" prefix). This only ASKS: the user sees the list and must allow it; adding pairs later withdraws the allowance. An empty list stops asking.',
+      inputSchema: z.object({
+        fragmentId: FragmentIdSchema,
+        access: z.array(z.object({ server: z.string(), tools: z.array(z.string()).min(1) })).max(8),
+      }),
+      execute: async ({ fragmentId, access }) => {
+        const declared = await setFragmentMcp(fragmentId, access)
+        if (!declared) return notFound(fragmentId)
+        await setRequested(fragmentId, 'mcp', declared.mcp.length > 0)
+        panelFragmentOpen({ id: fragmentId, title: declared.name, sessionId })
+        if (declared.mcp.length === 0) return 'orbit.mcp is no longer requested.'
+        const missing = declared.mcp.flatMap(({ server, tools }) => {
+          const live = listMcpServerToolNames(server)
+          if (live === null) return [`${server} (not connected)`]
+          return tools.filter((t) => !live.includes(t)).map((t) => `${server}/${t} (no such tool)`)
+        })
+        const connected = listMcpServerNames()
+        const warn = missing.length ? ` Not usable right now: ${missing.join(', ')}. Connected servers: ${connected.join(', ') || 'none'}.` : ''
+        return `Declared. The user must allow "mcp" in the tab before orbit.mcp.call works.${warn}`
+      },
+    }),
+
+    fragment_open: tool({
+      description: 'Opens (or focuses) an existing fragment in the side panel so the person sees it.',
+      inputSchema: z.object({ fragmentId: FragmentIdSchema }),
+      execute: async ({ fragmentId }) => {
+        const manifest = await getFragment(fragmentId)
+        if (!manifest) return notFound(fragmentId)
+        panelFragmentOpen({ id: fragmentId, title: manifest.name, sessionId })
+        return `Opened "${manifest.name}" (revision ${manifest.revision}).`
+      },
+    }),
+
+    fragment_read_data: tool({
+      description:
+        'Reads what a fragment saved with orbit.store (its data, never its code). Read-only. Without `key` it lists the keys with their size; with `key` it returns that value (long values are cut).',
+      inputSchema: z.object({ fragmentId: FragmentIdSchema, key: z.string().optional() }),
+      execute: async ({ fragmentId, key }) => {
+        if (!(await getFragment(fragmentId))) return notFound(fragmentId)
+        const data = await readFragmentData(fragmentId)
+        if (key === undefined) {
+          const keys = Object.entries(data).map(([k, v]) => ({ key: k, bytes: Buffer.byteLength(JSON.stringify(v), 'utf8') }))
+          return keys.length === 0 ? 'Nothing saved yet.' : keys
+        }
+        if (!Object.prototype.hasOwnProperty.call(data, key)) return `No such key: ${key}`
+        const text = JSON.stringify(data[key], null, 2)
+        return text.length > MAX_READ_DATA_CHARS ? `${text.slice(0, MAX_READ_DATA_CHARS)}\n[… cut: ${text.length - MAX_READ_DATA_CHARS} more characters]` : text
+      },
+    }),
+
     fragment_list: tool({
-      description: 'Lists the fragments that exist (id, name, last change), newest first.',
+      description: 'Lists the fragments that exist (id, name, kind, last change, what each asked for and what the user allowed), newest first.',
       inputSchema: z.object({}),
       execute: async () => {
         const all = await listFragments()
         if (all.length === 0) return 'There are no fragments yet.'
-        return all.map((m) => ({ fragmentId: m.id, name: m.name, updatedAt: new Date(m.updatedAt).toISOString() }))
+        return all.map((m) => ({
+          fragmentId: m.id,
+          name: m.name,
+          kind: m.kind,
+          updatedAt: new Date(m.updatedAt).toISOString(),
+          asked: m.requests,
+          allowedByUser: m.grants,
+        }))
       },
     }),
   }
