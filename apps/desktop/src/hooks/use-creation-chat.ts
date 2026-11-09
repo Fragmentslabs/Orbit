@@ -1,6 +1,7 @@
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { useWorkspace } from "@/lib/workspace-context"
+import { inheritChatSettings } from "@/src/lib/inherit-chat-settings"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 
@@ -26,6 +27,8 @@ export function useStartChatWith(): (title: string, starter: string) => Promise<
   return useCallback(
     async (title, starter) => {
       const session = await useSessionStore.getState().createSession("chat", { title })
+      // Like any new chat, it starts from the last chat used (model, thinking, autonomy, modes).
+      inheritChatSettings(session.id, "chat")
       useDraftInput.getState().setDraft(session.id, starter, undefined, { fields: true })
       setMode("chat")
       setView("chat")
