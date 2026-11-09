@@ -26,6 +26,9 @@
     "mobile:web": "npm run web --workspace=@orbit/mobile",
     "mobile:android:dev": "npm run android:dev --workspace=@orbit/mobile",
     "mobile:ios:dev": "npm run ios:dev --workspace=@orbit/mobile",
+    "fragments:build": "npm run build --workspace=orbit-fragments-api --workspace=orbit-fragments",
+    "fragments:test": "npm run test --workspace=orbit-fragments",
+    "fragments:pack": "npm run fragments:build && npm pack --dry-run --workspace=orbit-fragments-api --workspace=orbit-fragments",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"

@@ -9,19 +9,23 @@ import type {
   FragmentLogEntry,
   FragmentManifest,
   FragmentMetaPatch,
-  FragmentModel,
-  FragmentReasoning,
-  FragmentPins,
   FragmentUpdatedEvent,
 } from '@shared/fragments'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
+import { FRAGMENT_KINDS, isFragmentId } from '@shared/fragments'
 import {
-  FRAGMENT_CAPABILITIES,
-  FRAGMENT_DEFAULT_ICON,
-  FRAGMENT_ICON_PATTERN,
-  FRAGMENT_KINDS,
-  isFragmentId,
-} from '@shared/fragments'
+  FRAGMENT_ENTRY,
+  FRAGMENT_MAX_FILES,
+  FRAGMENT_MAX_FILE_BYTES,
+  FRAGMENT_SERVED_TYPES,
+  checkFragmentSrcPath,
+  defaultFragmentPins,
+  sanitizeFragmentCaps,
+  sanitizeFragmentIcon,
+  sanitizeFragmentModel,
+  sanitizeFragmentPins,
+  sanitizeFragmentReasoning,
+} from '@shared/fragment-rules'
 import { noteProvenanceModified, recordLocalProvenance, removeProvenance } from './fragment-provenance'
 
 /**
@@ -36,28 +40,18 @@ import { noteProvenanceModified, recordLocalProvenance, removeProvenance } from 
  * to the page, because it only serves `src/`.
  */
 
-const ENTRY = 'index.html'
+const ENTRY = FRAGMENT_ENTRY
 
 /** Per-file cap. The page is written by a model: above this it is a data dump. */
-export const MAX_FILE_BYTES = 1024 * 1024
-const MAX_FILES = 60
+export const MAX_FILE_BYTES = FRAGMENT_MAX_FILE_BYTES
+const MAX_FILES = FRAGMENT_MAX_FILES
 const MAX_STORE_KEYS = 500
 const MAX_STORE_VALUE_BYTES = 256 * 1024
 const MAX_STORE_TOTAL_BYTES = 2 * 1024 * 1024
 const LOG_CAPACITY = 80
 
 /** Extensions the scheme may serve — text the page loads, plus small static assets. */
-export const SERVED_TYPES: Record<string, string> = {
-  html: 'text/html; charset=utf-8',
-  css: 'text/css; charset=utf-8',
-  js: 'text/javascript; charset=utf-8',
-  mjs: 'text/javascript; charset=utf-8',
-  json: 'application/json; charset=utf-8',
-  svg: 'image/svg+xml',
-  txt: 'text/plain; charset=utf-8',
-  csv: 'text/csv; charset=utf-8',
-  md: 'text/markdown; charset=utf-8',
-}
+export const SERVED_TYPES = FRAGMENT_SERVED_TYPES
 
 /** Fires `updated` ({fragmentId, revision}) on every write; the IPC layer turns it into a UI event. */
 export const fragmentEvents = new EventEmitter()
@@ -93,16 +87,9 @@ function dataFile(id: string): string {
  * agent's writes and the scheme's reads.
  */
 function resolveSrcPath(id: string, rel: string): string {
-  if (typeof rel !== 'string' || !rel.trim()) throw new Error('path is empty')
-  const clean = rel.replace(/\\/g, '/').replace(/^\/+/, '')
-  const parts = clean.split('/')
-  if (parts.some((p) => p === '' || p === '.' || p === '..' || p.startsWith('.'))) {
-    throw new Error(`path not allowed: ${rel}`)
-  }
-  const ext = path.extname(clean).slice(1).toLowerCase()
-  if (!SERVED_TYPES[ext]) {
-    throw new Error(`file type .${ext || '(none)'} is not allowed — use ${Object.keys(SERVED_TYPES).join(', ')}`)
-  }
+  const checked = checkFragmentSrcPath(rel)
+  if (!checked.ok) throw new Error(checked.reason)
+  const parts = checked.parts
   const base = srcDir(id)
   const full = path.join(base, ...parts)
   if (!full.startsWith(base + path.sep)) throw new Error(`path not allowed: ${rel}`)
@@ -129,14 +116,14 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
     return {
       id,
       name: parsed.name,
-      icon: sanitizeIcon(parsed.icon),
+      icon: sanitizeFragmentIcon(parsed.icon),
       kind,
-      pinned: sanitizePins(parsed.pinned, kind),
-      model: sanitizeModel(parsed.model),
-      reasoning: sanitizeReasoning(parsed.reasoning),
+      pinned: sanitizeFragmentPins(parsed.pinned, kind),
+      model: sanitizeFragmentModel(parsed.model),
+      reasoning: sanitizeFragmentReasoning(parsed.reasoning),
       sdk: 1,
-      requests: sanitizeCaps(parsed.requests),
-      grants: sanitizeCaps(parsed.grants),
+      requests: sanitizeFragmentCaps(parsed.requests),
+      grants: sanitizeFragmentCaps(parsed.grants),
       revision: typeof parsed.revision === 'number' ? parsed.revision : 1,
       createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : 0,
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0,
@@ -145,50 +132,6 @@ async function readManifestFile(id: string): Promise<FragmentManifest | null> {
   } catch {
     return null
   }
-}
-
-/** A lucide name in kebab-case, or the default — an agent's guess never poisons the manifest. */
-function sanitizeIcon(value: unknown): string {
-  if (typeof value !== 'string') return FRAGMENT_DEFAULT_ICON
-  const name = value.trim().toLowerCase()
-  return name.length <= 48 && FRAGMENT_ICON_PATTERN.test(name) ? name : FRAGMENT_DEFAULT_ICON
-}
-
-/** A new fragment is pinned where its kind lives; an old manifest without pins gets the same. */
-function defaultPins(kind: FragmentKind): FragmentPins {
-  return { sidebar: kind === 'screen', panel: kind === 'panel', home: kind === 'widget' }
-}
-
-function sanitizePins(value: unknown, kind: FragmentKind): FragmentPins {
-  const base = defaultPins(kind)
-  if (!value || typeof value !== 'object') return base
-  const raw = value as Partial<FragmentPins>
-  return {
-    sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : base.sidebar,
-    panel: typeof raw.panel === 'boolean' ? raw.panel : base.panel,
-    home: typeof raw.home === 'boolean' ? raw.home : base.home,
-  }
-}
-
-function sanitizeModel(value: unknown): FragmentModel | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const raw = value as Partial<FragmentModel>
-  if (typeof raw.providerId !== 'string' || typeof raw.modelId !== 'string') return undefined
-  if (!raw.providerId || !raw.modelId) return undefined
-  return { providerId: raw.providerId.slice(0, 120), modelId: raw.modelId.slice(0, 200) }
-}
-
-function sanitizeReasoning(value: unknown): FragmentReasoning | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const raw = value as Partial<FragmentReasoning>
-  if (raw.enabled !== true) return undefined
-  const variantId = typeof raw.variantId === 'string' && /^[a-z0-9_-]{1,40}$/i.test(raw.variantId) ? raw.variantId : undefined
-  return { enabled: true, ...(variantId ? { variantId } : {}) }
-}
-
-function sanitizeCaps(value: unknown): FragmentCapability[] {
-  if (!Array.isArray(value)) return []
-  return FRAGMENT_CAPABILITIES.filter((c) => value.includes(c))
 }
 
 async function writeManifestFile(manifest: FragmentManifest): Promise<void> {
@@ -245,11 +188,11 @@ export async function createFragment(input: {
   const manifest: FragmentManifest = {
     id,
     name: input.name.trim().slice(0, 80) || 'Fragment',
-    icon: sanitizeIcon(input.icon),
+    icon: sanitizeFragmentIcon(input.icon),
     kind,
-    pinned: defaultPins(kind),
+    pinned: defaultFragmentPins(kind),
     sdk: 1,
-    requests: sanitizeCaps(input.requests),
+    requests: sanitizeFragmentCaps(input.requests),
     grants: [],
     revision: 1,
     createdAt: now,
@@ -286,17 +229,17 @@ export async function updateFragmentMeta(id: string, patch: FragmentMetaPatch): 
     if (!manifest) return null
     const next: FragmentManifest = { ...manifest }
     if (typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim().slice(0, 80)
-    if (typeof patch.icon === 'string') next.icon = sanitizeIcon(patch.icon)
+    if (typeof patch.icon === 'string') next.icon = sanitizeFragmentIcon(patch.icon)
     if (patch.pinned) {
       // Only the pins the patch names: a pin it leaves out keeps its value, not its kind's default.
       const named = Object.fromEntries(Object.entries(patch.pinned).filter(([, v]) => typeof v === 'boolean'))
-      next.pinned = { ...manifest.pinned, ...sanitizePins({ ...manifest.pinned, ...named }, manifest.kind) }
+      next.pinned = { ...manifest.pinned, ...sanitizeFragmentPins({ ...manifest.pinned, ...named }, manifest.kind) }
     }
     if (patch.model === null) delete next.model
-    else if (patch.model) next.model = sanitizeModel(patch.model) ?? manifest.model
+    else if (patch.model) next.model = sanitizeFragmentModel(patch.model) ?? manifest.model
     if (patch.reasoning === null) delete next.reasoning
     else if (patch.reasoning) {
-      const reasoning = sanitizeReasoning(patch.reasoning)
+      const reasoning = sanitizeFragmentReasoning(patch.reasoning)
       if (reasoning) next.reasoning = reasoning
       else delete next.reasoning
     }
@@ -333,7 +276,7 @@ export async function requestCapabilities(id: string, requests: FragmentCapabili
   return serialized(id, async () => {
     const manifest = await readManifestFile(id)
     if (!manifest) return null
-    const next = { ...manifest, requests: sanitizeCaps(requests) }
+    const next = { ...manifest, requests: sanitizeFragmentCaps(requests) }
     // Dropping a request also drops its grant: nothing stays allowed that was not asked.
     next.grants = next.grants.filter((c) => next.requests.includes(c))
     await writeManifestFile(next)
