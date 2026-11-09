@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next"
-import type { Schedule } from "@shared/routines"
-import { parseTime } from "@shared/routines"
+import type { Routine, Schedule } from "@shared/routines"
+import { isScriptTriggered, parseTime } from "@shared/routines"
 
 /** Pure schedule helpers — kept apart from the components because of fast refresh. */
 
@@ -33,6 +33,18 @@ const WEEKEND = "0,6"
 function formatDate(date: string): string {
   const [year, month, day] = date.split("-")
   return `${day}/${month}/${year}`
+}
+
+/** What wakes the routine, as a sentence: its schedule, or "watches every N minutes" for a script. */
+export function describeWhen(routine: Pick<Routine, "schedule" | "trigger">, t: TFunction): string {
+  const trigger = routine.trigger
+  if (trigger?.kind === "script" && isScriptTriggered(routine)) {
+    const { everyMinutes } = trigger
+    return everyMinutes % 60 === 0
+      ? t("routines.trigger.watchingHours", { count: everyMinutes / 60 })
+      : t("routines.trigger.watchingMinutes", { count: everyMinutes })
+  }
+  return describeSchedule(routine.schedule, t)
 }
 
 /** Card sentence: "Every day at 09:00", "Mon, Wed, Fri at 18:30"… */

@@ -237,6 +237,7 @@ import { createChatWorktree, listWorktrees, removeChatWorktree, validateWorktree
 import { folderInMainRepository } from './lib/worktrees/main'
 import * as routines from './lib/routines'
 import { removeLegacyBackgroundAgent } from './lib/routines/legacy-agent'
+import { approveScript, removeScript, testScript } from './lib/routines/scripts/manage'
 import { approvePendingRoutine, discardPendingRoutine, listPendingRoutines } from './lib/routines/pending'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
@@ -2043,6 +2044,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('routines:update', (_e, id: string, patch: Partial<Routine>) =>
     routines.updateRoutineFields(id, patch),
   )
+  ipcMain.handle('routines:approveScript', (_e, routineId: string, scriptId: string) =>
+    approveScript(routineId, scriptId),
+  )
+  ipcMain.handle('routines:testScript', (_e, routineId: string, scriptId: string) => testScript(routineId, scriptId))
+  ipcMain.handle('routines:removeScript', (_e, routineId: string, scriptId: string) => removeScript(routineId, scriptId))
   ipcMain.handle('routines:remove', (_e, id: string) => routines.removeRoutineCompletely(id))
   ipcMain.handle('routines:runNow', (_e, id: string) => routines.runNow(id))
   ipcMain.handle('routines:rotateChat', (_e, id: string) => routines.rotateChat(id))

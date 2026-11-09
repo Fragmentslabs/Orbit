@@ -45,6 +45,11 @@ function baseDir(): string {
   return path.join(dataRoot(), DATA_DIR)
 }
 
+/** Where each script-triggered routine keeps its script state and its check log. */
+export function scriptsDir(): string {
+  return path.join(baseDir(), 'scripts')
+}
+
 export function proposalsDir(): string {
   return path.join(dataRoot(), PROPOSALS_DIR)
 }

@@ -359,6 +359,8 @@ export interface NewRoutineInput {
  * has no createdAt or lastRun, and it only exists while unapproved.
  */
 export interface PendingRoutine {
+  scripts?: RoutineScript[]
+  trigger?: RoutineTrigger
   /** Id of the proposal AND of the routine it becomes on approval. */
   id: string
   title: string
@@ -407,13 +409,50 @@ export type GenerationResult =
   | { ok: true; suggestion: RoutineSuggestion }
   | { ok: false; error: string }
 
-// ─── Events (main → renderer) ────────────────────────────────────────────────
+/** What a manual test run of a script returns to the screen (nothing was kept or fired). */
+export type ScriptTestResult =
+  | { ok: true; result: unknown; fires: string[]; logs: string[] }
+  | { ok: false; error: string; logs: string[] }
+
+// ─── Script activity ─────────────────────────────────────────────────────────
+
+/** One check of a trigger script. */
+export interface ScriptCheck {
+  at: number
+  ok: boolean
+  /** How many times the script woke the routine in this check. */
+  fired: number
+  error?: string
+  logs?: string[]
+}
+
+/** What the person sees of a script-triggered routine: the recent checks and its health. */
+export interface ScriptActivity {
+  routineId: string
+  /** Newest last, capped. */
+  checks: ScriptCheck[]
+  /** Consecutive failed checks; the routine says "failing" from {@link SCRIPT_FAILING_AFTER}. */
+  failures: number
+  /** The earliest the next check may run (backoff after failures). */
+  nextCheckAt: number
+  lastFireAt?: number
+  /** Payloads the script fired that no execution has picked up yet (the routine was busy). */
+  pending: string[]
+}
+
+export const SCRIPT_FAILING_AFTER = 3
+/** The script cannot wake the routine more often than this: a broken script must not loop the agent. */
+export const MIN_FIRE_GAP_MS = 5 * 60 * 1000
+export const MAX_SCRIPT_CHECKS_KEPT = 288
+
+// ─── Events (main → renderer) ──────────────────────────────────────────────── ────────────────────────────────────────────────
 
 export type RoutineEvent =
   | { type: 'routines'; routines: Routine[] }
   | { type: 'routine'; routine: Routine }
   | { type: 'routine-removed'; id: string }
   | { type: 'run'; run: RoutineRun }
+  | { type: 'script-activity'; activity: ScriptActivity }
 
 // ─── Next firing computation ─────────────────────────────────────────────────
 
@@ -524,7 +563,8 @@ export function nextRun(schedule: Schedule, after: number, lastRun?: number): nu
 
 /** Next run of an active routine (null when it is off or the schedule is invalid). */
 export function nextRoutineRun(routine: Routine, now = Date.now()): number | null {
-  if (!routine.active) return null
+  // A script decides when it runs, not the calendar.
+  if (!routine.active || isScriptTriggered(routine)) return null
   return nextRun(routine.schedule, now, routine.lastRun)
 }
 
@@ -543,7 +583,8 @@ export function upcomingRuns(
   until: number,
   options: { limit?: number; includeInactive?: boolean } = {},
 ): number[] {
-  if (!routine.active && !options.includeInactive) return []
+  // A script decides when it runs: there is no calendar to draw.
+  if (isScriptTriggered(routine) || (!routine.active && !options.includeInactive)) return []
   const limit = options.limit ?? 200
   const out: number[] = []
   let cursor = from - 1

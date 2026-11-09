@@ -1553,6 +1553,11 @@ export interface RotationFallbackInfo {
 export interface SendMessageInput {
   sessionId: string
   text: string
+  /**
+   * Set by the routines scheduler on the execution of a routine that has scripts: the scripts the
+   * agent may call with `run_script`, and the folders they may read. Never typed by the person.
+   */
+  routineContext?: { id: string; folders: string[]; scripts: import('./routines').RoutineScript[] }
   /** Files attached to the user message */
   files?: FilePart[]
   /**

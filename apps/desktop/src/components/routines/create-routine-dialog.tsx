@@ -235,8 +235,13 @@ export function CreateRoutineDialog({
                 <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="max-h-56 min-h-28" />
               </Field>
 
+              {/* A script decides when this one runs: there is no calendar to edit. */}
               <Field label={t("routines.review.schedule")}>
-                <ScheduleEditor schedule={schedule} onChange={setSchedule} />
+                {proposal?.trigger ? (
+                  <p className="text-xs text-muted-foreground">{describeWhen({ schedule, trigger: proposal.trigger }, t)}</p>
+                ) : (
+                  <ScheduleEditor schedule={schedule} onChange={setSchedule} />
+                )}
               </Field>
 
               <Field label={t("routines.review.modes")} hint={t("routines.review.modesHint")}>

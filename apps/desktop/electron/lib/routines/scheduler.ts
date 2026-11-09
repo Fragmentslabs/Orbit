@@ -11,6 +11,8 @@ import { readJson, writeJson } from '../storage'
 import { readAppLanguage } from '../app-language'
 import { t } from '../i18n'
 import { listRoutines, listRuns, saveRun, updateRoutine } from './repo'
+import { promptWithEvents } from './scripts/event-prompt'
+import { superviseScripts, type SupervisorDeps } from './scripts/supervisor'
 
 /**
  * Routines scheduler: a one-minute tick in the main process, no cron library.
@@ -195,7 +197,12 @@ export async function rotateChat(routineId: string): Promise<string | null> {
  * Runs the routine now. Returns the created sessionId, or null when the routine
  * is already running or has no working folder.
  */
-export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'): Promise<string | null> {
+export async function runRoutine(
+  routine: Routine,
+  reason: 'schedule' | 'manual' | 'event',
+  /** What the trigger script found (reason 'event'). */
+  events: readonly string[] = [],
+): Promise<string | null> {
   if (running.has(routine.id)) return null
   const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
   if (!win) return null
@@ -254,11 +261,12 @@ export async function runRoutine(routine: Routine, reason: 'schedule' | 'manual'
   const language = await readAppLanguage()
   const input: SendMessageInput = {
     sessionId: session.id,
-    text: routine.prompt,
+    text: promptWithEvents(routine.prompt, events),
     providerId: routine.model.providerId,
     modelId: routine.model.modelId,
     mode: routine.mode,
     options,
+    ...(routine.scripts?.length ? { routineContext: { id: routine.id, folders: routine.folders, scripts: routine.scripts } } : {}),
     directory: session.directory,
     extraDirectories: session.extraDirectories,
     // Subagents/orchestration need a worker model; the routine uses its own,
@@ -322,6 +330,18 @@ export async function runNow(id: string): Promise<string | null> {
 
 // ─── Tick ────────────────────────────────────────────────────────────────────
 
+const supervisorDeps: SupervisorDeps = {
+  startRun: (routine, payloads) => runRoutine(routine, 'event', payloads),
+  isRunning: (routineId) => running.has(routineId),
+  onActivity: (activity) => emit({ type: 'script-activity', activity }),
+  onFailing: (routine, error) => {
+    if (!Notification.isSupported()) return
+    void t('notif.routine.scriptFailing', { error: error.slice(0, 120) }).then((body) =>
+      new Notification({ title: routine.title, body }).show(),
+    )
+  },
+}
+
 async function tick(): Promise<void> {
   const now = Date.now()
   let routines: Routine[]
@@ -332,8 +352,11 @@ async function tick(): Promise<void> {
     return
   }
 
+  void superviseScripts(routines, supervisorDeps).catch((err) => console.error('[routines] script supervision failed:', err))
+
   for (const routine of routines) {
-    if (!routine.active || running.has(routine.id)) continue
+    // A script decides when these run (superviseScripts above), not the calendar.
+    if (!routine.active || running.has(routine.id) || isScriptTriggered(routine)) continue
     // The floor drops the missed windows at once: with the app closed for days,
     // the routine goes back to the calendar on the next time of day instead of
     // trying to recover every firing that did not happen.

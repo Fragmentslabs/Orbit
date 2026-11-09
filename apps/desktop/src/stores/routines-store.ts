@@ -6,6 +6,7 @@ import type {
   RoutineEvent,
   RoutineModel,
   RoutineRun,
+  ScriptActivity,
 } from "@shared/routines"
 import { DEFAULT_ROUTINES, LEGACY_DEFAULT_ROUTINE_IDS } from "@shared/routines-default"
 import { routinesApi } from "@/src/lib/ipc"
@@ -30,6 +31,8 @@ import { useSessionStore } from "@/src/stores/session-store"
 interface RoutinesState {
   routines: Routine[]
   runs: RoutineRun[]
+  /** Check log of the routines woken by a script, by routine id. */
+  activity: Record<string, ScriptActivity>
   loaded: boolean
 
   load: () => Promise<void>
@@ -46,6 +49,9 @@ interface RoutinesState {
   create: (input: NewRoutineInput) => Promise<Routine>
   update: (id: string, patch: Partial<Routine>) => Promise<void>
   remove: (id: string) => Promise<void>
+  /** The person approves the current version of one of a routine's scripts. */
+  approveScript: (routineId: string, scriptId: string) => Promise<void>
+  removeScript: (routineId: string, scriptId: string) => Promise<void>
   runNow: (id: string) => Promise<string | null>
   /** Fresh chat for a routine that keeps one; archives the current one. Returns the new session id. */
   rotateChat: (id: string) => Promise<string | null>
@@ -115,11 +121,17 @@ async function seedDefaultRoutines(): Promise<void> {
 export const useRoutinesStore = create<RoutinesState>((set, get) => ({
   routines: [],
   runs: [],
+  activity: {},
   loaded: false,
 
   load: async () => {
     const data = await routinesApi.load()
-    set({ routines: data.routines, runs: data.runs, loaded: true })
+    set({
+      routines: data.routines,
+      runs: data.runs,
+      activity: Object.fromEntries(data.activities.map((a) => [a.routineId, a])),
+      loaded: true,
+    })
     await seedDefaultRoutines()
   },
 
@@ -143,6 +155,9 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
           routines: state.routines.filter((r) => r.id !== event.id),
           runs: state.runs.filter((r) => r.routineId !== event.id),
         }))
+        break
+      case "script-activity":
+        set((state) => ({ activity: { ...state.activity, [event.activity.routineId]: event.activity } }))
         break
       case "run":
         set((state) => {
@@ -172,6 +187,15 @@ export const useRoutinesStore = create<RoutinesState>((set, get) => ({
 
   update: async (id, patch) => {
     await routinesApi.update(id, patch)
+  },
+
+  approveScript: async (routineId, scriptId) => {
+    // The routine comes back through the event; nothing to patch here.
+    await routinesApi.approveScript(routineId, scriptId)
+  },
+
+  removeScript: async (routineId, scriptId) => {
+    await routinesApi.removeScript(routineId, scriptId)
   },
 
   remove: async (id) => {

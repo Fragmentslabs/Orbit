@@ -1,4 +1,6 @@
-import type { NewRoutineInput, Routine, RoutineRun } from '@shared/routines'
+import type { NewRoutineInput, Routine, RoutineRun, ScriptActivity } from '@shared/routines'
+import { isScriptTriggered, scriptFingerprint } from '@shared/routines'
+import { readScriptRecord, removeScriptRecord } from './scripts/store'
 import {
   addRoutine,
   listRoutines,
@@ -28,9 +30,13 @@ function newId(): string {
  * firing — after a renderer reload the panel comes back with the right spinner
  * without asking anything else.
  */
-export async function loadAll(): Promise<{ routines: Routine[]; runs: RoutineRun[] }> {
+export async function loadAll(): Promise<{ routines: Routine[]; runs: RoutineRun[]; activities: ScriptActivity[] }> {
   const [routines, runs] = await Promise.all([listRoutines(), listRuns()])
-  return { routines, runs }
+  // Only routines woken by a script have a check log worth sending.
+  const activities = await Promise.all(
+    routines.filter((r) => isScriptTriggered(r)).map(async (r) => (await readScriptRecord(r.id)).activity),
+  )
+  return { routines, runs, activities }
 }
 
 export async function createRoutine(input: NewRoutineInput): Promise<Routine> {
@@ -80,6 +86,7 @@ export async function updateRoutineFields(
 export async function removeRoutineCompletely(id: string): Promise<void> {
   await removeRoutine(id)
   await removeRoutineRuns(id)
+  await removeScriptRecord(id)
   emit({ type: 'routine-removed', id })
 }
 

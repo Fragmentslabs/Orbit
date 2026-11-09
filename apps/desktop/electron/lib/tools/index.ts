@@ -18,6 +18,7 @@ import { createBrowserScriptTools } from './browser-script'
 import { createBrowserRecordTools } from './browser-record'
 import { createPipelineTools } from './pipeline'
 import { createRoutinesTool } from './routines'
+import { createRunScriptTool } from './routine-scripts'
 import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
 import { createChatSearchTools } from './chat-search'
@@ -182,6 +183,11 @@ export function buildToolSet(
   // person) and out of plan mode (it writes the proposal to disk).
   if (input.orchestrationRole !== 'worker' && !input.options.plan) {
     tools.routines_manage = createRoutinesTool(input)
+  }
+
+  // The scripts of the routine this execution belongs to (set by the scheduler).
+  if (input.routineContext && input.routineContext.scripts.length > 0) {
+    tools.run_script = createRunScriptTool(input.routineContext)
   }
 
   if (input.mode === 'chat') {

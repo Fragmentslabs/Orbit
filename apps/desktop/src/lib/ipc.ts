@@ -48,6 +48,8 @@ import type {
   RoutineEvent,
   RoutineModel,
   RoutineRun,
+  ScriptActivity,
+  ScriptTestResult,
 } from "@shared/routines"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillCard, SkillGenerationResult, SkillMetaView, SkillProposal } from "@shared/skills"
@@ -760,7 +762,15 @@ export interface NewPipelineInput {
 /** Routines — scheduled chats of the chat and code modes (orbit-data/routines). */
 export const routinesApi = {
   load: () =>
-    window.ipcRenderer.invoke("routines:load") as Promise<{ routines: Routine[]; runs: RoutineRun[] }>,
+    window.ipcRenderer.invoke("routines:load") as Promise<{ routines: Routine[]; runs: RoutineRun[]; activities: ScriptActivity[] }>,
+  /** Runs a script once for the screen; nothing is kept or fired. */
+  testScript: (routineId: string, scriptId: string) =>
+    window.ipcRenderer.invoke("routines:testScript", routineId, scriptId) as Promise<ScriptTestResult>,
+  removeScript: (routineId: string, scriptId: string) =>
+    window.ipcRenderer.invoke("routines:removeScript", routineId, scriptId) as Promise<Routine | null>,
+  /** The person approves the current version of a routine script. */
+  approveScript: (routineId: string, scriptId: string) =>
+    window.ipcRenderer.invoke("routines:approveScript", routineId, scriptId) as Promise<Routine | null>,
   create: (input: NewRoutineInput) => window.ipcRenderer.invoke("routines:create", input) as Promise<Routine>,
   update: (id: string, patch: Partial<Routine>) =>
     window.ipcRenderer.invoke("routines:update", id, patch) as Promise<Routine | null>,

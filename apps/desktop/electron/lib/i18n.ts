@@ -115,6 +115,10 @@ export const MESSAGES = {
     'pt-BR': 'Rotina falhou: {{error}}',
     en: 'Routine failed: {{error}}',
   },
+  'notif.routine.scriptFailing': {
+    'pt-BR': 'O script que observa esta rotina continua falhando: {{error}}',
+    en: 'The script that watches this routine keeps failing: {{error}}',
+  },
   'notif.routine.unknownError': {
     'pt-BR': 'erro desconhecido',
     en: 'unknown error',
