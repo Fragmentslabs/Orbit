@@ -5,9 +5,9 @@ import {
   Text,
   Pressable,
   Animated,
+  ActivityIndicator,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   useWindowDimensions,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -18,20 +18,30 @@ import {
   Settings2,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Brain,
   Shield,
   ShieldCheck,
   ShieldOff,
-  GitBranch,
   Check,
   Wrench,
+  Folder,
+  GitBranch,
+  Info,
+  Plus,
+  X,
 } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
-import type { ModelVariant } from '@orbit/shared'
+import type { BranchesResponse, ModelVariant } from '@orbit/shared'
 import { useTranslation } from 'react-i18next'
 import { ProviderLogo } from '~/components/ui/provider-logo'
+import { useConnectionStore } from '~/stores/connection-store'
+import { folderName } from '~/lib/folder-name'
+import { saveRecentFolder } from '~/lib/folder-recents'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { DirBrowserBody } from './DirBrowserBody'
 
 export type PermissionModeValue = 'ask' | 'approve' | 'full'
 
@@ -64,6 +74,8 @@ const PAGE_MODES = 1
 const PAGE_THINKING = 2
 const PAGE_PERMISSIONS = 3
 const PAGE_TOOLS = 4
+const PAGE_FOLDERS = 5
+const PAGE_BROWSE = 6
 
 type Page =
   | typeof PAGE_ATTACHMENTS
@@ -71,6 +83,8 @@ type Page =
   | typeof PAGE_THINKING
   | typeof PAGE_PERMISSIONS
   | typeof PAGE_TOOLS
+  | typeof PAGE_FOLDERS
+  | typeof PAGE_BROWSE
 
 /** Height of the content of each page: the sheet grows while the pages slide. */
 const PAGE_HEIGHT: Record<Page, number> = {
@@ -79,6 +93,8 @@ const PAGE_HEIGHT: Record<Page, number> = {
   [PAGE_THINKING]: 420,
   [PAGE_PERMISSIONS]: 300,
   [PAGE_TOOLS]: 420,
+  [PAGE_FOLDERS]: 460,
+  [PAGE_BROWSE]: 500,
 }
 
 /** Off-screen offset of the entrance/exit animation — bigger than any page. */
@@ -122,10 +138,11 @@ interface AttachmentSheetProps {
   onReasoningSelect: (variantId: string) => void
   permissionMode: PermissionModeValue
   onPermissionModeChange: (mode: PermissionModeValue) => void
-  gitBranches?: string[]
-  gitCurrent?: string
-  onGitBranchChange?: (branch: string) => void
-  gitBranchLoading?: boolean
+  /** Code mode: folders of the chat, main first — the "Folder & branch" page. */
+  folders?: string[]
+  onFoldersChange?: (folders: string[]) => void
+  /** Opens straight on the folder page (the folder strip of the header). */
+  startOnFolders?: boolean
 }
 
 /**
@@ -153,10 +170,9 @@ export function AttachmentSheet({
   onReasoningSelect,
   permissionMode,
   onPermissionModeChange,
-  gitBranches,
-  gitCurrent,
-  onGitBranchChange,
-  gitBranchLoading,
+  folders,
+  onFoldersChange,
+  startOnFolders,
 }: AttachmentSheetProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -215,6 +231,102 @@ export function AttachmentSheet({
   }, [onClose])
 
   const backToAttachments = useCallback(() => setPage(PAGE_ATTACHMENTS), [])
+
+  const wsClient = useConnectionStore((s) => s.wsClient)
+  const [browseTarget, setBrowseTarget] = useState<'main' | 'extra'>('main')
+  const [branchOpen, setBranchOpen] = useState(false)
+  const [branches, setBranches] = useState<string[]>([])
+  const [branchCurrent, setBranchCurrent] = useState('')
+  const [branchLoading, setBranchLoading] = useState(false)
+  const [branchError, setBranchError] = useState<string | null>(null)
+  const [branchSwitching, setBranchSwitching] = useState<string | null>(null)
+
+  const mainFolder = folders?.[0]
+  const extras = folders?.slice(1) ?? []
+  const workspaceLabel = mainFolder
+    ? `${folderName(mainFolder)}${extras.length > 0 ? ` •${extras.length}` : ''}`
+    : t('folderSelector.associateFolder')
+
+  // The folder strip of the header opens the sheet straight on the folder page.
+  useEffect(() => {
+    if (!visible || !startOnFolders) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(PAGE_FOLDERS)
+  }, [visible, startOnFolders])
+
+  useEffect(() => {
+    if (!mainFolder || page !== PAGE_FOLDERS) return
+    let cancelled = false
+    // The current branch shows before the list expands, so it is read as soon as the
+    // page opens; switching goes through the same git call the branch sheet used.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBranchLoading(true)
+    setBranchError(null)
+    const run = async () => {
+      try {
+        const res = await wsClient.send({ type: 'git:branches', directory: mainFolder })
+        if (cancelled) return
+        if (res.ok && res.data) {
+          const data = res.data as BranchesResponse
+          setBranches(data.branches)
+          setBranchCurrent(data.current)
+        } else {
+          setBranchError(res.error ?? t('branch.loadError'))
+        }
+      } catch (err) {
+        if (!cancelled) setBranchError(String(err))
+      } finally {
+        if (!cancelled) setBranchLoading(false)
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [mainFolder, page, wsClient, t])
+
+  const handlePicked = useCallback(
+    (path: string) => {
+      void saveRecentFolder(path)
+      if (browseTarget === 'main') {
+        if (folders && folders[0] !== path) {
+          onFoldersChange?.([path, ...folders.filter((f) => f !== path)])
+        }
+      } else if (folders && !folders.includes(path)) {
+        onFoldersChange?.([...folders, path])
+      }
+      setPage(PAGE_FOLDERS)
+    },
+    [browseTarget, folders, onFoldersChange],
+  )
+
+  const removeExtra = (path: string) => {
+    if (!folders) return
+    onFoldersChange?.(folders.filter((f) => f !== path))
+  }
+
+  const checkout = async (branch: string) => {
+    if (!mainFolder) return
+    if (branch === branchCurrent) {
+      setBranchOpen(false)
+      return
+    }
+    setBranchSwitching(branch)
+    setBranchError(null)
+    try {
+      const res = await wsClient.send({ type: 'git:checkout', directory: mainFolder, branch })
+      if (res.ok) {
+        setBranchCurrent(branch)
+        setBranchOpen(false)
+      } else {
+        setBranchError(res.error ?? t('branch.switchError'))
+      }
+    } catch (err) {
+      setBranchError(String(err))
+    } finally {
+      setBranchSwitching(null)
+    }
+  }
 
   const selectedVariant = reasoningVariants.find((v) => v.id === reasoningSelected)
   const thinkingLabel = thinking
@@ -290,6 +402,17 @@ export function AttachmentSheet({
                 </View>
 
                 <View style={s.rows}>
+                  {/* Folder + branch of the chat: a page of this same sheet, like the
+                      modes and the permissions (code mode only). */}
+                  {folders !== undefined && (
+                    <SheetRow
+                      tokens={tokens}
+                      leading={<Folder size={20} color={tokens.mutedForeground} />}
+                      label={t('workspace.title')}
+                      value={workspaceLabel}
+                      onPress={() => setPage(PAGE_FOLDERS)}
+                    />
+                  )}
                   <SheetRow
                     tokens={tokens}
                     leading={
@@ -370,48 +493,6 @@ export function AttachmentSheet({
                     />
                   ))}
 
-                  {gitBranches && gitBranches.length > 0 && (
-                    <View style={s.branchBlock}>
-                      <View style={s.branchTitle}>
-                        <GitBranch size={16} color={tokens.mutedForeground} />
-                        <Text style={[s.branchLabel, { color: tokens.mutedForeground }]}>
-                          {t('attachment.branch')}
-                        </Text>
-                      </View>
-                      {gitBranchLoading ? (
-                        <ActivityIndicator size="small" color={tokens.primary} />
-                      ) : (
-                        <View style={s.branchChips}>
-                          {gitBranches.map((branch) => {
-                            const active = branch === gitCurrent
-                            return (
-                              <Pressable
-                                key={branch}
-                                onPress={() => onGitBranchChange?.(branch)}
-                                style={[
-                                  s.branchChip,
-                                  {
-                                    backgroundColor: tokens.muted,
-                                    borderColor: active ? tokens.primary : tokens.border,
-                                  },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    s.branchChipLabel,
-                                    { color: active ? tokens.primary : tokens.mutedForeground },
-                                  ]}
-                                >
-                                  {branch}
-                                </Text>
-                                {active && <Check size={14} color={tokens.primary} />}
-                              </Pressable>
-                            )
-                          })}
-                        </View>
-                      )}
-                    </View>
-                  )}
                 </ScrollView>
               </View>
               )}
@@ -517,6 +598,165 @@ export function AttachmentSheet({
                     ))
                   )}
                 </ScrollView>
+              </View>
+              )}
+
+              {/* ── Folder & branch (page, like modes and permissions) ──────────── */}
+              {page === PAGE_FOLDERS && (
+              <View style={{ width: innerWidth, height: '100%' }}>
+                <PageHeader
+                  title={t('workspace.title')}
+                  onBack={backToAttachments}
+                  color={tokens.foreground}
+                />
+
+                <ScrollView
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                    {t('workspace.main')}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      setBrowseTarget('main')
+                      setPage(PAGE_BROWSE)
+                    }}
+                    style={s.wsRow}
+                  >
+                    <Folder size={18} color={tokens.mutedForeground} />
+                    <View style={s.wsRowText}>
+                      <Text style={[s.wsName, { color: tokens.foreground }]} numberOfLines={1}>
+                        {mainFolder ? folderName(mainFolder) : t('folderSelector.associateFolder')}
+                      </Text>
+                      {mainFolder ? (
+                        <Text style={[s.wsPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
+                          {mainFolder}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <ChevronRight size={16} color={tokens.mutedForeground} />
+                  </Pressable>
+
+                  <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                    {extras.length > 0
+                      ? `${t('workspace.additional')} · ${extras.length}`
+                      : t('workspace.additional')}
+                  </Text>
+                  {extras.map((path) => (
+                    <View key={path} style={s.wsRow}>
+                      <Folder size={18} color={tokens.mutedForeground} />
+                      <View style={s.wsRowText}>
+                        <Text style={[s.wsName, { color: tokens.foreground }]} numberOfLines={1}>
+                          {folderName(path)}
+                        </Text>
+                        <Text style={[s.wsPath, { color: tokens.mutedForeground }]} numberOfLines={1}>
+                          {path}
+                        </Text>
+                      </View>
+                      <Pressable onPress={() => removeExtra(path)} hitSlop={10} style={{ padding: 4 }}>
+                        <X size={16} color={tokens.mutedForeground} />
+                      </Pressable>
+                    </View>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setBrowseTarget('extra')
+                      setPage(PAGE_BROWSE)
+                    }}
+                    style={s.wsRow}
+                  >
+                    <View style={[s.wsPlus, { borderColor: tokens.border }]}>
+                      <Plus size={13} color={tokens.mutedForeground} />
+                    </View>
+                    <Text style={[s.wsAdd, { color: tokens.mutedForeground }]}>
+                      {t('workspace.addFolder')}
+                    </Text>
+                  </Pressable>
+
+                  <View style={[s.wsDivider, { backgroundColor: tokens.border }]} />
+
+                  <Text style={[s.sectLabel, { color: tokens.mutedForeground }]}>
+                    {t('workspace.branch')}
+                  </Text>
+                  <Pressable onPress={() => setBranchOpen((o) => !o)} style={s.wsRow}>
+                    <GitBranch size={18} color={tokens.mutedForeground} />
+                    <Text style={[s.wsBranch, { color: tokens.foreground }]} numberOfLines={1}>
+                      {branchCurrent || (branchLoading ? '…' : '—')}
+                    </Text>
+                    {branchOpen ? (
+                      <ChevronUp size={15} color={tokens.mutedForeground} />
+                    ) : (
+                      <ChevronDown size={15} color={tokens.mutedForeground} />
+                    )}
+                  </Pressable>
+
+                  {branchOpen && (
+                    <View style={s.wsBranchList}>
+                      {branchLoading ? (
+                        <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+                          <ActivityIndicator color={tokens.primary} />
+                        </View>
+                      ) : branches.length === 0 ? (
+                        <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                          {t('branch.none')}
+                        </Text>
+                      ) : (
+                        branches.map((branch) => {
+                          const active = branch === branchCurrent
+                          return (
+                            <Pressable
+                              key={branch}
+                              onPress={() => void checkout(branch)}
+                              style={s.wsBranchRow}
+                            >
+                              <GitBranch size={14} color={tokens.mutedForeground} />
+                              <Text
+                                style={[
+                                  s.wsBranchItem,
+                                  { color: active ? tokens.foreground : tokens.mutedForeground },
+                                  active && { fontWeight: '600' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {branch}
+                              </Text>
+                              {branchSwitching === branch ? (
+                                <ActivityIndicator size="small" color={tokens.primary} />
+                              ) : active ? (
+                                <Check size={15} color={tokens.primary} />
+                              ) : null}
+                            </Pressable>
+                          )
+                        })
+                      )}
+                    </View>
+                  )}
+
+                  {branchError ? (
+                    <Text style={[s.hint, { color: tokens.destructive }]}>{branchError}</Text>
+                  ) : null}
+
+                  <View style={s.wsNote}>
+                    <Info size={14} color={tokens.mutedForeground} style={{ marginTop: 1 }} />
+                    <Text style={[s.wsNoteText, { color: tokens.mutedForeground }]}>
+                      {t('workspace.note')}
+                    </Text>
+                  </View>
+                </ScrollView>
+              </View>
+              )}
+
+              {/* ── Folder browser (the system folders, inside the sheet) ───────── */}
+              {page === PAGE_BROWSE && (
+              <View style={{ width: innerWidth, height: '100%' }}>
+                <PageHeader
+                  title={t('folderSelector.selectFolderTitle')}
+                  onBack={() => setPage(PAGE_FOLDERS)}
+                  color={tokens.foreground}
+                />
+                <DirBrowserBody active onPick={handlePicked} />
               </View>
               )}
             </Animated.View>
@@ -856,18 +1096,35 @@ const s = StyleSheet.create({
   },
   switchKnob: { width: 20, height: 20, borderRadius: 10 },
   hint: { fontSize: 12, lineHeight: 17, paddingHorizontal: 4, paddingTop: 4 },
-  branchBlock: { gap: 8, paddingTop: 8 },
-  branchTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  branchLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  branchChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  branchChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
+
+  // Folder & branch page — the sections of the desktop's workspace menu.
+  sectLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+    paddingTop: 14,
+    paddingBottom: 4,
   },
-  branchChipLabel: { fontSize: 13, fontWeight: '500' },
+  wsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 2 },
+  wsRowText: { flex: 1, minWidth: 0, gap: 1 },
+  wsName: { fontSize: 14, fontWeight: '600' },
+  wsPath: { fontSize: 10.5, fontFamily: 'monospace' },
+  wsPlus: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -2,
+  },
+  wsAdd: { fontSize: 13 },
+  wsDivider: { height: 1, marginTop: 10 },
+  wsBranch: { flex: 1, minWidth: 0, fontSize: 13, fontFamily: 'monospace' },
+  wsBranchList: { paddingLeft: 30, paddingBottom: 2 },
+  wsBranchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 40 },
+  wsBranchItem: { flex: 1, minWidth: 0, fontSize: 13, fontFamily: 'monospace' },
+  wsNote: { flexDirection: 'row', gap: 8, paddingTop: 14, paddingBottom: 4 },
+  wsNoteText: { flex: 1, fontSize: 11.5, lineHeight: 17 },
 })

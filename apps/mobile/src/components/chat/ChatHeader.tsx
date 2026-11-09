@@ -1,7 +1,7 @@
-import { memo, useCallback, useState } from 'react'
-import { View, Pressable, Alert, StyleSheet, Text } from 'react-native'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { View, Pressable, Alert, StyleSheet, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2 } from 'lucide-react-native'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2, Folder, ChevronDown } from 'lucide-react-native'
 import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -10,7 +10,7 @@ import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
-import { BranchSheet } from '~/components/chat/BranchSheet'
+import { folderName } from '~/lib/folder-name'
 import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
 import { useChatModes } from '~/hooks/useChatModes'
 import { ContextMeter } from './ContextMeter'
@@ -25,7 +25,16 @@ interface ChatHeaderProps {
   onDelete: () => void
   /** Search in the conversation is exclusive to chat mode. */
   searchEnabled?: boolean
+  /** Code mode: the row under the title opens with the folder and the branch. */
+  code?: boolean
+  /** Folders of the chat: the main one first, then the extra ones. */
+  folders?: string[]
+  /** Opens the folder & branch sheet — it belongs to the screen, so the "+" reaches it too. */
+  onOpenWorkspace?: () => void
 }
+
+/** Stable identity for the default — the effect below compares the list by reference. */
+const NO_FOLDERS: string[] = []
 
 // memo: the header reads stores that change with the streaming (context meter) — without
 // it the whole column would re-render on every delta flush.
@@ -37,28 +46,70 @@ export const ChatHeader = memo(function ChatHeader({
   onFork,
   onDelete,
   searchEnabled,
+  code,
+  folders,
+  onOpenWorkspace,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [branchOpen, setBranchOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
+  const folderList = folders ?? NO_FOLDERS
+  const directory = folderList[0]
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
 
   const modelLabel = useSessionModelLabel(session?.id)
   const { activeModes } = useChatModes(session?.id)
 
-  // Current branch of the working folder, only to label the menu item. Fetched
-  // when opening the menu (and not on mount) so as not to run git on every chat shown.
+  // G1 → G2: the conversation opens with the folder and its branch in the strip that is
+  // the modes row; ~2.5 s later the same strip crossfades into modes + context (same
+  // space, no reflow). Without a folder the picker stays above the input.
+  const [intro, setIntro] = useState(true)
+  const introOpacity = useRef(new Animated.Value(1)).current
+  const modesOpacity = useRef(new Animated.Value(0)).current
+  const introPlayedRef = useRef(false)
+  const showFolderStrip = !!code && !!directory && intro
+  const hasBottomRow = activeModes.length > 0 || showFolderStrip
+
+  // Branch of the working folder: the strip shows it on open, and the menu item labels it.
+  // Reads the folder selected in the screen (not session.directory), so switching folders
+  // in the sheet already reflects the new branch, before the next send.
   const loadBranch = useCallback(async () => {
-    if (!session?.directory) return
-    const res = await useConnectionStore
-      .getState()
-      .wsClient.send({ type: 'git:branches', directory: session.directory })
-    if (res.ok && res.data) setBranch((res.data as BranchesResponse).current || null)
-  }, [session?.directory])
+    if (!directory) return
+    try {
+      const res = await useConnectionStore.getState().wsClient.send({ type: 'git:branches', directory })
+      setBranch(res.ok && res.data ? (res.data as BranchesResponse).current || null : null)
+    } catch {
+      setBranch(null)
+    }
+  }, [directory])
   const [renaming, setRenaming] = useState(false)
+
+  useEffect(() => {
+    // One git call per opened chat, only in code mode — the strip needs the branch.
+    if (!code) return
+    void loadBranch()
+  }, [code, loadBranch])
+
+  useEffect(() => {
+    // Once per opened conversation: creating the session on the first send must not
+    // replay the intro.
+    if (!code || !directory || introPlayedRef.current) return
+    introPlayedRef.current = true
+    setIntro(true)
+    introOpacity.setValue(1)
+    modesOpacity.setValue(0)
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(introOpacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+        Animated.timing(modesOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished) setIntro(false)
+      })
+    }, 2500)
+    return () => clearTimeout(timer)
+  }, [code, directory, introOpacity, modesOpacity])
 
   const handleDeletePress = () => {
     Alert.alert(
@@ -76,8 +127,8 @@ export const ChatHeader = memo(function ChatHeader({
       <View
         style={[
           s.top,
-          // With no mode on the divider falls back to the bottom of the title row.
-          activeModes.length === 0 && { borderBottomWidth: 1, borderBottomColor: tokens.border },
+          // The divider only exists when the row below has something to show.
+          !hasBottomRow && { borderBottomWidth: 1, borderBottomColor: tokens.border },
         ]}
       >
         <Pressable onPress={openSidebar} style={s.iconButton}>
@@ -104,18 +155,50 @@ export const ChatHeader = memo(function ChatHeader({
         )}
       </View>
 
-      {/* The modes that are on, centred in grey under the divider, with the context of
-          the conversation pinned at the right so it does not throw the centre off. */}
-      {activeModes.length > 0 && (
+      {/* Under the divider: on open, the folder and its branch; ~2.5 s later the modes
+          that are on and the context. Both live in the same space, so nothing shifts. */}
+      {hasBottomRow && (
         <View style={[s.modesRow, { borderTopWidth: 1, borderTopColor: tokens.border }]}>
-          <View style={s.modes}>
-            {activeModes.map((mode) => (
-              <mode.icon key={mode.id} size={14} color={tokens.mutedForeground} />
-            ))}
-          </View>
-          <View style={s.meterSlot}>
-            <ContextMeter sessionId={session?.id} />
-          </View>
+          {showFolderStrip && (
+            <Animated.View style={[s.layer, { opacity: introOpacity }]}>
+              <Pressable onPress={onOpenWorkspace} style={s.folderStrip}>
+                <Folder size={13} color={tokens.mutedForeground} />
+                <Text numberOfLines={1} style={[s.folderName, { color: tokens.foreground }]}>
+                  {directory ? folderName(directory) : ''}
+                </Text>
+                {folderList.length > 1 && (
+                  <View style={s.folderCount}>
+                    <View style={[s.folderDot, { backgroundColor: tokens.mutedForeground }]} />
+                    <Text style={[s.folderCountText, { color: tokens.mutedForeground }]}>
+                      {folderList.length - 1}
+                    </Text>
+                  </View>
+                )}
+                {branch ? (
+                  <>
+                    <Text style={[s.folderSep, { color: tokens.mutedForeground }]}>·</Text>
+                    <Text numberOfLines={1} style={[s.folderBranch, { color: tokens.mutedForeground }]}>
+                      {branch}
+                    </Text>
+                  </>
+                ) : null}
+                <ChevronDown size={11} color={tokens.mutedForeground} />
+              </Pressable>
+            </Animated.View>
+          )}
+
+          {activeModes.length > 0 && (
+            <Animated.View style={[s.layer, { opacity: showFolderStrip ? modesOpacity : 1 }]}>
+              <View style={s.modes}>
+                {activeModes.map((mode) => (
+                  <mode.icon key={mode.id} size={14} color={tokens.mutedForeground} />
+                ))}
+              </View>
+              <View style={s.meterSlot}>
+                <ContextMeter sessionId={session?.id} />
+              </View>
+            </Animated.View>
+          )}
         </View>
       )}
 
@@ -135,22 +218,12 @@ export const ChatHeader = memo(function ChatHeader({
             label: session?.archived ? t('sidebar.unarchive') : t('sidebar.archive'),
             onPress: onToggleArchive,
           },
-          ...(session?.directory
-            ? [{
-                icon: GitBranch,
-                label: branch ? t('branch.menuWith', { branch }) : t('branch.menu'),
-                onPress: () => setBranchOpen(true),
-              }]
+          ...(code
+            ? [{ icon: GitBranch, label: t('workspace.menu'), onPress: () => onOpenWorkspace?.() }]
             : []),
           { icon: GitFork, label: t('chatHeader.fork'), onPress: onFork },
           { icon: Trash2, label: t('sidebar.delete'), destructive: true, onPress: handleDeletePress },
         ]}
-      />
-
-      <BranchSheet
-        visible={branchOpen}
-        directory={session?.directory}
-        onClose={() => { setBranchOpen(false); void loadBranch() }}
       />
 
       <RenamePrompt
@@ -171,14 +244,29 @@ const s = StyleSheet.create({
   title: { fontSize: 15, fontWeight: '600' },
   model: { fontSize: 11.5 },
   modesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'relative',
     minHeight: 26,
-    paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 5,
   },
+  // Folder and modes are two layers of the same row: one fades out over the other.
+  layer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modes: { flexDirection: 'row', alignItems: 'center', gap: 14, opacity: 0.75 },
   meterSlot: { position: 'absolute', right: 16, top: 0, bottom: 0, justifyContent: 'center' },
+  folderStrip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
+  folderName: { fontSize: 11.5, fontWeight: '600', maxWidth: 120 },
+  folderCount: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  folderDot: { width: 3, height: 3, borderRadius: 1.5 },
+  folderCountText: { fontSize: 11 },
+  folderSep: { fontSize: 11.5 },
+  folderBranch: { fontSize: 11, fontFamily: 'monospace', maxWidth: 140 },
 })

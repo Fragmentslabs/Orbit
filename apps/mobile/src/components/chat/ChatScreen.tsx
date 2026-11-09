@@ -25,7 +25,6 @@ import { VisionHintCard } from '~/components/chat/VisionHintCard'
 import { Suggestions } from '~/components/chat/Suggestion'
 import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
-import { FolderSelector } from '~/components/chat/FolderSelector'
 import { useDraftFolders } from '~/stores/draft-folders-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { useBottomBreathing } from '~/lib/keyboard'
@@ -180,6 +179,12 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   // Code mode without a folder has nothing to work in: the send stays blocked until
   // one is chosen (the text stays editable).
   const needsFolder = isCode && folders.length === 0
+
+  // Folder & branch live inside the "+" sheet now, as a page like modes and permissions.
+  // The strip of the header asks for it by bumping this counter: PromptInput opens the
+  // sheet on that page (a number, not a boolean, so two taps in a row both arrive).
+  const [foldersRequest, setFoldersRequest] = useState(0)
+  const openFoldersSheet = useCallback(() => setFoldersRequest((n) => n + 1), [])
 
   // Suggestions of the empty state — translated and per mode, as on the desktop
   const chatSuggestions = t('chatScreen.suggestions.chat', { returnObjects: true }) as string[]
@@ -517,6 +522,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       >
         <ChatHeader
           session={session}
+          code={isCode}
+          folders={folders}
+          onOpenWorkspace={openFoldersSheet}
           onRename={handleRename}
           onTogglePin={handleTogglePin}
           onToggleArchive={handleToggleArchive}
@@ -580,18 +588,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </View>
         )}
 
-        {/* Code mode: selection of the main folder + additional ones (as on the desktop) */}
-        {isCode && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <FolderSelector folders={folders} onFoldersChange={updateFolders} />
-            {needsFolder && (
-              <Text style={{ fontSize: 11, marginTop: 6, color: tokens.mutedForeground }}>
-                {t('chatScreen.folderRequired')}
-              </Text>
-            )}
-          </View>
-        )}
-
         {/* Pending out of view: the request card is in the conversation (footer
             of the list), and this shortcut takes you to it. It only exists when the person
             scrolled up in the history — with the card in view it would be noise. */}
@@ -633,6 +629,11 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           sendDisabled={needsFolder}
           onCreateSession={onCreateSession}
           onNavigateToSession={onNavigateToSession}
+          // Only in code mode: in chat there is no folder to choose, and the page would
+          // just be another settings item (the screen knows the mode, the sheet does not).
+          folders={isCode ? folders : undefined}
+          onFoldersChange={updateFolders}
+          foldersRequest={foldersRequest}
         />
       </KeyboardAvoidingView>
     </SafeScreen>

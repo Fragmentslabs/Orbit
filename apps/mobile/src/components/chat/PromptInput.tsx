@@ -19,7 +19,6 @@ import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands
 import { useDictation } from '~/hooks/useDictation'
 import { useChatModes } from '~/hooks/useChatModes'
 import { useSessionModelLabel } from '~/hooks/useSessionModelLabel'
-import { useConnectionStore } from '~/stores/connection-store'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -53,6 +52,11 @@ interface PromptInputProps {
   sendDisabled?: boolean
   onCreateSession?: () => Promise<SessionInfo | null>
   onNavigateToSession?: (sessionId: string) => void
+  /** Code mode: folders of the chat (main first) — the "Folder & branch" page. */
+  folders?: string[]
+  onFoldersChange?: (folders: string[]) => void
+  /** Bumped when the header strip asks the "+" sheet to open on the folder page. */
+  foldersRequest?: number
 }
 
 async function fileToFilePart(asset: any): Promise<FilePart> {
@@ -91,6 +95,9 @@ export function PromptInput({
   sendDisabled,
   onCreateSession,
   onNavigateToSession,
+  folders,
+  onFoldersChange,
+  foldersRequest,
 }: PromptInputProps) {
   const { t } = useTranslation()
   const workspaceMode = useWorkspaceStore((s) => s.mode)
@@ -181,34 +188,14 @@ export function PromptInput({
   const permissionMode = usePermissionMode(sessionId)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
-
-  const http = useConnectionStore((s) => s.http)
-  const [gitBranches, setGitBranches] = useState<string[]>([])
-  const [gitCurrent, setGitCurrent] = useState<string>('')
-  const [gitBranchLoading, setGitBranchLoading] = useState(false)
-
+  // The folder strip of the header asks the "+" sheet to open on the folder page.
+  const [startOnFolders, setStartOnFolders] = useState(false)
   useEffect(() => {
-    if (!http) return
-    let cancelled = false
-    const fetch = async () => {
-      setGitBranchLoading(true)
-      const res = await http.getBranches('')
-      if (cancelled) return
-      setGitBranchLoading(false)
-      if (res.ok && res.data) {
-        setGitBranches(res.data.branches)
-        setGitCurrent(res.data.current)
-      }
-    }
-    fetch()
-    return () => { cancelled = true }
-  }, [http])
-
-  const handleGitBranchChange = useCallback(async (branch: string) => {
-    if (!http) return
-    setGitCurrent(branch)
-    await http.checkoutBranch('', branch)
-  }, [http])
+    if (!foldersRequest) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStartOnFolders(true)
+    setPlusOpen(true)
+  }, [foldersRequest])
 
   const catalog = useSettingsStore((s) => s.catalog)
   // EFFECTIVE model of the session (per-chat override > draft > global default) —
@@ -724,13 +711,16 @@ export function PromptInput({
       {/* Bottom sheet: attachments, model and settings — the settings slide to the modes */}
       <AttachmentSheet
         visible={plusOpen}
-        onClose={() => setPlusOpen(false)}
+        onClose={() => { setPlusOpen(false); setStartOnFolders(false) }}
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
         modelLabel={modelLabel}
         modelProviderId={selected?.providerId}
         onOpenModel={() => { setPlusOpen(false); setModelPickerOpen(true) }}
+        folders={folders}
+        onFoldersChange={onFoldersChange}
+        startOnFolders={startOnFolders}
         modes={sheetModes}
         tools={sheetTools}
         onToolToggle={handleToolToggle}
@@ -742,10 +732,6 @@ export function PromptInput({
         onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
         permissionMode={permissionMode}
         onPermissionModeChange={(mode) => setPermissionMode(sessionId, mode)}
-        gitBranches={gitBranches}
-        gitCurrent={gitCurrent}
-        onGitBranchChange={handleGitBranchChange}
-        gitBranchLoading={gitBranchLoading}
       />
 
       <ModelPickerModal

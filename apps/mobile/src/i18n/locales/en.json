@@ -1483,6 +1483,16 @@
     "plan_loading": "Planning…",
     "planFailed": "The planner could not propose tasks."
   },
+  "workspace": {
+    "title": "Folder & branch",
+    "menu": "Folder & branch",
+    "main": "Main folder",
+    "additional": "Additional folders",
+    "addFolder": "Add folder",
+    "removeFolder": "Remove folder",
+    "branch": "Branch",
+    "note": "Changing the main folder stitches the conversation to this project; the extras come in as additional context."
+  },
   "branch": {
     "title": "Branch",
     "menu": "Branch",
